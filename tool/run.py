@@ -8,10 +8,13 @@
   python3 tool/run.py -s 序列号 chan-scan          只读：列出开着的营销通知渠道 → backups/.../channels.tsv
   python3 tool/run.py -s 序列号 chan-off 清单.tsv   关掉清单里的渠道
   python3 tool/run.py -s 序列号 chan-on  清单.tsv   还原
+  python3 tool/run.py -s 序列号 notif-off 包名 …    整包关通知（走 POST_NOTIFICATIONS 权限，不用 root）
+  python3 tool/run.py -s 序列号 notif-on  [包名 …]  整包恢复通知（不给包名=恢复 notif-off.txt 里的全部）
   python3 tool/run.py -s 序列号 suspend 包名 …       挂起广告包（先征得机主同意），记录到 backups/.../suspended.txt
   python3 tool/run.py -s 序列号 unsuspend [包名 …]   解除挂起（不给包名=解除记录里的全部）
   python3 tool/run.py -s 序列号 quickapp          只读：检测快应用组件（装没装、挂没挂、在不在跑、用没用过）
-  python3 tool/run.py -s 序列号 quickapp off      关闭快应用：挂起全部快应用组件（先征得机主同意）
+  python3 tool/run.py -s 序列号 quickapp off      关闭快应用（vivo/iQOO 改总开关 switch_quick_app_service，
+                                                  其他品牌挂起组件；先征得机主同意）
   python3 tool/run.py -s 序列号 quickapp on       恢复快应用
   python3 tool/run.py -s 序列号 finish             收尾：插电常亮改回备份时的值，提醒关闭开发者模式
   python3 tool/run.py -s 序列号 dev-off --yes      从电脑上关闭开发者模式和 USB 调试（执行后电脑与手机断开）
@@ -41,6 +44,8 @@ AD_PKGS = {
 
 # 快应用组件：免安装的「轻 App」，广告常用 hap:// 链接把人跳进去。
 # (包名, 名称, 品牌, 是否实测过挂起)
+# vivo / iQOO 例外：suspend / disable-user / uninstall --user 0 一律要求 root，
+# 真正能关掉快应用的是 secure 里的 switch_quick_app_service（见 quickapp_switch）。
 QUICKAPP = [
     ("com.nearme.instant.platform", "快应用平台", "OPPO / 一加 / realme", True),
     ("com.oppo.instant.local.service", "快应用本地服务", "OPPO / 一加 / realme", True),
@@ -117,6 +122,27 @@ def suspended(serial, pkg):
 
 def installed(serial, pkg):
     return "package:" in sh(serial, f"pm path {pkg}")
+
+
+QUICKAPP_SWITCH = "switch_quick_app_service"      # vivo / iQOO：快应用总开关（secure），0=关 1=开
+SUSPEND_ERR = ("挂起失败：这台机器的 pm suspend 需要 root（SecurityException: Cannot suspend … no root permission）。"
+               "vivo / iQOO 用 quickapp off 走总开关，别用 suspend")
+
+
+def quickapp_switch(serial):
+    """vivo / iQOO 的快应用总开关值；读不到（其他品牌）返回 None。"""
+    v = sh(serial, f"settings get secure {QUICKAPP_SWITCH}")
+    return v if v in ("0", "1") else None
+
+
+def app_notif_states(serial, pkgs):
+    """整包通知状态：importance=NONE 就是关。一次 dumpsys 覆盖多个包（它将近 1MB，别循环读）。"""
+    out = sh(serial, "dumpsys notification --noredact")
+    res = {}
+    for p in pkgs:
+        m = re.search(rf"AppSettings: {re.escape(p)} \(\d+\) importance=(\w+)", out)
+        res[p] = m.group(1) if m else ""
+    return res
 
 
 def quickapps(serial):
@@ -207,13 +233,19 @@ def main():
             print(f"  广告包 {p}：{'未安装' if not exists else ('已挂起' if suspended(s, p) else '未挂起')}")
         for q in quickapps(s):
             print(f"  快应用 {q['pkg']}（{q['name']}）：{'已挂起' if q['suspended'] else '未挂起'}")
+        swc = quickapp_switch(s)
+        if swc is not None:
+            print(f"  快应用总开关 {QUICKAPP_SWITCH}：{swc}（{'已关闭' if swc == '0' else '开着'}）")
         print(f"插电常亮：{sh(s, 'settings get global stay_on_while_plugged_in')}")
 
     elif cmd == "backup":
         d = latest_backup(s, create=True)
         open(os.path.join(d, "info.txt"), "w", encoding="utf-8").write("\n".join(f"{k}={v}" for k, v in info(s).items()))
-        for name, c in [("sys.txt", "pm list packages -s"), ("user.txt", "pm list packages -3"),
-                        ("disabled.txt", "pm list packages -d"), ("notif.txt", "dumpsys notification --noredact")]:
+        # 一律带 --user 0：不带的话 pm 会遍历所有用户，遇到分身/隐私空间（vivo 是 666/999）
+        # 没权限就返回 "Error: Shell does not have permission to access user 666"，
+        # 这行会写进备份文件，任何按行解析备份的脚本都会读脏。
+        for name, c in [("sys.txt", "pm list packages -s --user 0"), ("user.txt", "pm list packages -3 --user 0"),
+                        ("disabled.txt", "pm list packages -d --user 0"), ("notif.txt", "dumpsys notification --noredact")]:
             open(os.path.join(d, name), "w", encoding="utf-8").write(sh(s, c))
         st = "\n".join(f"## {n}\n" + sh(s, f"settings list {n}") for n in ("system", "secure", "global"))
         open(os.path.join(d, "settings-before.txt"), "w", encoding="utf-8").write(st)
@@ -248,11 +280,19 @@ def main():
         if bad:
             sys.exit(f"这些包挂了会坏功能，不挂：{bad}")
         d = latest_backup(s)
+        ok = 0
         with open(os.path.join(d, "suspended.txt"), "a", encoding="utf-8") as f:
             for p in rest:
-                print(p, sh(s, f"pm suspend --user 0 {p}").splitlines()[-1:] or "")
+                out = sh(s, f"pm suspend --user 0 {p}")
                 if suspended(s, p):
                     f.write(p + "\n")
+                    ok += 1
+                    print(f"  {p} 已挂起")
+                else:
+                    last = next((l.strip() for l in out.splitlines() if "Exception" in l or "Error" in l), "")
+                    print(f"  {p} 挂起失败" + (f"：{last}" if last else ""))
+        if not ok:
+            sys.exit(SUSPEND_ERR)
 
     elif cmd == "unsuspend":
         pk = rest
@@ -266,6 +306,27 @@ def main():
     elif cmd == "quickapp":
         sub = rest[0] if rest else "check"
         qs = quickapps(s)
+        sw = quickapp_switch(s)
+        # vivo / iQOO：pm suspend、pm disable-user、pm uninstall --user 0 全都要 root，
+        # 真正生效的是这个总开关；关掉之后 hap:// 会停在「快应用服务已关闭」页，进不去应用。
+        if sw is not None and sub in ("off", "on"):
+            f = os.path.join(latest_backup(s), "quickapp.txt")
+            if sub == "off":
+                if not os.path.exists(f):
+                    open(f, "w", encoding="utf-8").write(sw + "\n")     # 记原值，供 on 还原
+                sh(s, f"settings put secure {QUICKAPP_SWITCH} 0")
+                for q in qs:
+                    sh(s, f"am force-stop {q['pkg']}")
+                now = quickapp_switch(s)
+                print(f"  快应用总开关 {QUICKAPP_SWITCH}：{sw} → {now}")
+                if now != "0":
+                    sys.exit("关闭失败：开关没写成 0。见 docs/清单/README.md 的排查表")
+                print("快应用已关闭：hap:// 链接和快应用入口都会停在「快应用服务已关闭」页。恢复：quickapp on")
+                return
+            old = open(f, encoding="utf-8").read().strip() if os.path.exists(f) else "1"
+            sh(s, f"settings put secure {QUICKAPP_SWITCH} {old or 1}")
+            print(f"  快应用总开关已恢复为 {quickapp_switch(s)}")
+            return
         if not qs:
             print("没有检测到快应用组件。"); return
         if sub == "check":
@@ -275,10 +336,12 @@ def main():
                       f"{'后台在跑' if q['running'] else '没在跑'}  "
                       f"{'近期打开过 %d 次' % q['used'] if q['used'] else '近期没打开过'}"
                       f"{'' if q['tested'] else '  （这个包的挂起效果还没实测）'}")
+            if sw is not None:
+                print(f"  快应用总开关 {QUICKAPP_SWITCH}={sw}（vivo/iQOO 真正起作用的是它，挂包在这类机型上要 root）")
             h = sh(s, "pm query-activities --brief -a android.intent.action.VIEW -d hap://app/x")
             who = re.findall(r"^\s*(\S+/\S+)$", h, re.M)
-            if all(q["suspended"] for q in qs):
-                print("快应用已全部关闭。广告里的 hap:// 链接会弹「应用无法使用」，不会跳进快应用。恢复：quickapp on")
+            if sw == "0" or (sw is None and all(q["suspended"] for q in qs)):
+                print("快应用已关闭：hap:// 链接会停在「快应用服务已关闭」页，不会跳进快应用。恢复：quickapp on")
             else:
                 if who:
                     print(f"hap:// 链接由 {who[0]} 接管：网页或 App 里的广告可以用这类链接跳进快应用。")
@@ -292,6 +355,8 @@ def main():
             record(s, done)
             for q in qs:
                 print(f"  {q['name']:<10} {q['pkg']:<34} {'已挂起' if suspended(s, q['pkg']) else '挂起失败'}")
+            if not done:
+                sys.exit(SUSPEND_ERR)
             print("快应用已关闭。广告里的 hap:// 链接会弹「应用无法使用」，不会跳进快应用。恢复：quickapp on")
         elif sub == "on":
             for q in qs:
@@ -299,6 +364,34 @@ def main():
                 print(f"  {q['name']:<10} {q['pkg']:<34} {'已挂起' if suspended(s, q['pkg']) else '已恢复'}")
         else:
             sys.exit("quickapp 后面跟 check / off / on")
+
+    elif cmd in ("notif-off", "notif-on"):
+        # 整包关通知，走运行时权限 POST_NOTIFICATIONS：不需要 root，pm grant 可原样还原。
+        # vivo / iQOO 没有真正的渠道级开关（它家渠道页那个「允许通知」是全 App 的总开关），
+        # 要压掉某个 App 的营销推送就用这个。
+        pk = rest
+        if not pk:
+            f = os.path.join(latest_backup(s), "notif-off.txt")
+            pk = sorted(set(open(f, encoding="utf-8").read().split())) if (cmd == "notif-on" and os.path.exists(f)) else []
+        if not pk:
+            sys.exit("要给包名，比如：notif-off com.bbk.appstore com.vivo.browser")
+        for p in pk:
+            out = sh(s, f"pm {'revoke' if cmd == 'notif-off' else 'grant'} {p} android.permission.POST_NOTIFICATIONS")
+            bad = next((l.strip() for l in out.splitlines() if "Exception" in l or "Error" in l or "Unknown" in l), "")
+            if bad:
+                print(f"  {p} 失败：{bad}")
+        st = app_notif_states(s, pk)
+        for p in pk:
+            v = st[p]
+            print(f"  {p}: {'关' if v == 'NONE' else ('开' if v else '读不到状态')}")
+        if cmd == "notif-off":
+            off = [p for p in pk if st[p] == "NONE"]
+            f = os.path.join(latest_backup(s), "notif-off.txt")
+            if off:
+                with open(f, "a", encoding="utf-8") as fh:
+                    for p in off:
+                        fh.write(p + "\n")
+        return
 
     elif cmd == "finish":
         f = os.path.join(latest_backup(s), "stay_on.txt")
@@ -326,7 +419,7 @@ def main():
         print(json.dumps({
             "info": i, "locked": locked(s),
             "recipe": os.path.relpath(r, ROOT) if r else None, "recipe_build": rb, "recipe_ok": ok, "steps": steps,
-            "ads": ads, "quickapps": quickapps(s),
+            "ads": ads, "quickapps": quickapps(s), "quickapp_switch": quickapp_switch(s),
             "stay_on": sh(s, "settings get global stay_on_while_plugged_in"),
             "dev": sh(s, "settings get global development_settings_enabled") == "1",
             "backup": os.path.relpath(latest_backup(s), BACKUPS) if glob.glob(os.path.join(BACKUPS, f"{i['model']}-*")) else None,

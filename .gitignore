@@ -1,4 +1,6 @@
 backups/
+# 跑机型脚本时自动生成在 recipes/<机型>/ 下，git add -A 会顺手带进去
+run-log.txt
 __pycache__/
 *.pyc
 .DS_Store
