@@ -20,6 +20,10 @@ jobs:
           python-version: "3.12"
       - name: 安装依赖
         run: pip install pywebview pyinstaller uiautomator2 pillow
+      - name: 设备无关回归测试
+        run: |
+          $env:ADB = "$env:ANDROID_HOME\platform-tools\adb.exe"
+          python -m unittest discover -s tests -v
       - name: 读版本号
         id: ver
         run: |
@@ -27,11 +31,11 @@ jobs:
           "ver=$v" >> $env:GITHUB_OUTPUT
       - name: PyInstaller 打包
         run: pyinstaller --noconfirm --distpath gui/dist --workpath gui/build gui/windows.spec
-      - name: 冒烟测试（命令行模式经管道输出，和客户端调用方式一致）
+      - name: 冒烟测试（命令行、GUI 页面、图片与 JS API）
         run: |
           $env:ADB = "$env:ANDROID_HOME\platform-tools\adb.exe"
           $env:ADBUTILS_ADB_PATH = $env:ADB
-          python gui/smoke_test.py gui\dist\AndroidAdCleaner\aac-cli.exe
+          python gui/smoke_test.py gui\dist\AndroidAdCleaner\aac-cli.exe --gui
       - name: 便携版 zip
         run: Compress-Archive -Path gui/dist/AndroidAdCleaner -DestinationPath "gui/dist/AndroidAdCleaner-${{ steps.ver.outputs.ver }}-windows-portable.zip"
       - name: 安装程序（Inno Setup）

@@ -5,10 +5,6 @@
   chan_fast.py -s SERIAL off 清单.tsv      逐个打开渠道页关掉
   chan_fast.py -s SERIAL on  清单.tsv      还原
 清单.tsv：包名<TAB>渠道id<TAB>说明，一行一个；# 开头是注释。
-
-注意 vivo / iQOO：渠道设置页由 com.vivo.systemuiplugin 渲染，页面上那个「允许通知」
-是**应用级**总开关（关它=整个 App 的通知全关），没有真正的渠道级开关，所以这里会直接跳过。
-这类机型请按「应用级」关通知（应用信息 → 通知），别按渠道关。
 """
 import re, shlex, sys, time, os
 for _st in (sys.stdout, sys.stderr):
@@ -20,11 +16,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fast import Phone, bounds
 
 KW = re.compile(r"营销|活动|推荐|推广|热点|热门|资讯|新闻|福利|优惠|特惠|精选|精彩|运营|促销|红包|直播|种草|内容|头条|猜你|好物|权益|会员|签到|广告|recommend|promo|market|deal|news|topstory|upsell|offer", re.I)
-SKIP = re.compile(r"下载|更新|安装|上传|订单|物流|快递|交易|支付|账号|安全|验证|通话|来电|消息|聊天|私信|评论|互动|提醒|闹钟|日程|天气预警|系统|前台|后台|服务运行|播放|媒体", re.I)
+SKIP = re.compile(r"下载|更新|安装|上传|订单|物流|快递|交易|支付|账号|安全|验证|通话|来电|消息|聊天|私信|评论|互动|提醒|闹钟|日程|天气预警|系统|前台|后台|服务运行|播放|媒体"
+                  r"|热点和网络共享|智能热点|红包助手|盗窃|驾驶状态|权限建议|运营商", re.I)   # 后一行：服务类，不是营销
 
 
 def parse(p):
     txt = p.d.shell("dumpsys notification --noredact", timeout=60).output
+    if "PackagePreferences:" not in txt:
+        raise RuntimeError("读不到通知渠道状态，停止操作；请检查 USB 调试连接和系统权限")
     txt = txt[txt.find("PackagePreferences:"):]
     cur, app_off, d = None, {}, {}
     for line in txt.splitlines():
@@ -39,11 +38,14 @@ def parse(p):
 
 def load(path):
     out = []
-    for line in open(path, encoding="utf-8"):
-        line = line.rstrip("\n")
-        if line.strip() and not line.startswith("#"):
-            pk, cid, label = (line.split("\t") + ["", ""])[:3]
-            out.append((pk, cid, label or cid))
+    with open(path, encoding="utf-8-sig") as f:
+        for lineno, line in enumerate(f, 1):
+            line = line.rstrip("\r\n")
+            if line.strip() and not line.lstrip().startswith("#"):
+                pk, cid, label = (line.split("\t") + ["", ""])[:3]
+                if not re.fullmatch(r"[\w.]+", pk) or not cid:
+                    raise ValueError(f"清单第 {lineno} 行缺少有效包名或渠道 ID")
+                out.append((pk, cid, label or cid))
     return out
 
 
@@ -57,68 +59,118 @@ def state(d, app_off, pk, cid):
     return "ON"
 
 
-def allow_switch(p):
-    """渠道页「允许通知」那一行的开关位置与当前状态：(x, y, on) / None。
+ALLOW = {"允许通知", "显示通知", "Allow notifications", "Show notifications"}
 
-    不能直接用 p.switches()[0]：
-      · vivo 的渠道页由 com.vivo.systemuiplugin 渲染，同一行上有「整行 Switch（content-desc=允许通知）」
-        和「开关本体」两个 checkable 节点，标题还会串到相邻行 —— sw[0] 可能是「智能静默」，点了等于
-        改了别的设置，而且不报错。
-      · 所以按标题行对齐：找 text/content-desc 为「允许通知」且最靠上的那一行，取该行最右的开关。
-    """
+
+def notification_focus(p):
+    focus = p.focus()
+    if "com.vivo.systemuiplugin" in focus:
+        raise RuntimeError("此 vivo 通知页的开关会影响整个 App，已跳过以保留订单、聊天等通知")
+    package, _, activity = focus.partition("/")
+    return focus if "settings" in package.lower() and ("notification" in activity.lower() or "SubSettings" in activity) else ""
+
+
+def channel_switch(p, name):
+    """同时确认渠道标题、设置页身份和明确的通知开关；绝不取页面第一个开关。"""
+    focus = notification_focus(p)
+    if not focus or "AppNotification" in focus or not name:
+        return None
     root = p.tree()
-    p.switches(root)                      # 让引擎先标出自绘开关
-    titles, knobs = [], []
-    for n in root.iter("node"):
-        cls = n.get("class") or ""
-        if "Radio" in cls:
-            continue
-        l, t, r, b = bounds(n)
-        if r - l <= 0 or b - t <= 0:
-            continue
-        s = (n.get("text") or n.get("content-desc") or "").strip()
-        cy = (t + b) // 2
-        if s in ("允许通知", "通知", "Allow notifications"):
-            titles.append((cy, l))
-        if n.get("checkable") == "true":
-            knobs.append(((l + r) // 2, cy, n.get("checked") == "true"))
-    if not titles or not knobs:
+    if not any(t == name and b[1] < p.H * 0.22 for t, b, _ in p.texts(root)):
         return None
-    ty = min(titles)[0]                   # 最上面那个才是渠道总开关
-    row = [k for k in knobs if abs(k[1] - ty) <= 60]
-    if not row:
+    switches = [s for s in p.switches(root) if s[0] in ALLOW]
+    return switches[0] if len(switches) == 1 else None
+
+
+def wait_page(p, name, rounds=12):
+    previous, stable = None, 0
+    for _ in range(rounds):
+        if p.locked():
+            raise RuntimeError("手机锁屏了，请机主解锁后再跑")
+        sw = channel_switch(p, name)
+        stable = stable + 1 if sw and sw == previous else (1 if sw else 0)
+        previous = sw
+        if stable >= 3:
+            return sw
+        time.sleep(0.2)
+    return None
+
+
+def via_app_page(p, pk, name):
+    """HyperOS 拦截渠道深链时，从应用通知页进入已确认的渠道行。"""
+    p.d.shell("am start -f 0x10008000 -a android.settings.APP_NOTIFICATION_SETTINGS"
+              f" --es android.provider.extra.APP_PACKAGE {shlex.quote(pk)}")
+    for _ in range(15):
+        if notification_focus(p):
+            break
+        time.sleep(0.2)
+    else:
         return None
-    return max(row, key=lambda k: k[0])   # 同行取最右
+    for _ in range(9):
+        if p.locked() or not notification_focus(p):
+            return None
+        root = p.tree()
+        parents = {c: n for n in root.iter() for c in n}
+        for text, b, n in p.texts(root):
+            if text != name or b[1] < p.H * 0.22:
+                continue
+            row = n
+            while row is not None and row.get("clickable") != "true" and row.get("checkable") != "true":
+                row = parents.get(row)
+            # 内联开关不当作导航行点，避免在应用总页拨到其他开关。
+            if row is None or any(x.get("checkable") == "true" for x in row.iter()):
+                return None
+            before = p.sig()
+            l, t, r, btm = bounds(n)
+            p.click((l + r) // 2, (t + btm) // 2)
+            if not p.settle(before):
+                return None
+            return wait_page(p, name)
+        if not p.scroll_more():
+            break
+    return None
 
 
 def toggle(p, pk, cid, want_on, name=""):
-    # -f NEW_TASK|CLEAR_TASK：不加的话荣耀/OPPO 会复用上一个渠道页
-    p.d.shell("am start -f 0x10008000 -a android.settings.CHANNEL_NOTIFICATION_SETTINGS"
-              f" --es android.provider.extra.APP_PACKAGE {shlex.quote(pk)}"
-              f" --es android.provider.extra.CHANNEL_ID {shlex.quote(cid)}")
-    sw, foc = None, ""
-    for _ in range(12):
-        foc = p.focus()
-        if "NotificationSettings" in foc:            # 确认真进了渠道页，不是停在上一页
-            sw = allow_switch(p)
-            if sw:
-                break
-        time.sleep(0.25)
-    if not sw:
-        return "没进到渠道页或找不到「允许通知」开关，跳过"
-    # vivo 的渠道页是自家 systemuiplugin 画的，页面顶部的「允许通知」其实是**应用级**总开关
-    # （关掉后 dumpsys 里 AppSettings importance 变 NONE，而该渠道 mImportance 一动不动），
-    # 在这里做「渠道级」操作等于把这个 App 的通知全部关掉 —— 直接跳过，不冒这个险。
-    if "com.vivo.systemuiplugin" in foc:
-        return ("vivo 的渠道页只有应用级总开关（关它=整个 App 的通知全关），"
-                "不是只关这个渠道；已跳过，要关就整个 App 关：应用信息 → 通知")
-    for attempt in range(3):                # 页面动画没完时点击会被吞：点完读回来，没变就再点
-        if sw[2] == want_on:
-            return "already" if attempt == 0 else None
-        time.sleep(0.25 + 0.3 * attempt)
-        p.click(sw[0], sw[1]); time.sleep(0.5); p.confirm()
-        sw = allow_switch(p) or sw
-    return "点了 3 次没变"
+    try:
+        if p.locked():
+            return "手机锁屏了，请机主解锁后再跑"
+        before, apps_before = parse(p)
+        if state(before, apps_before, pk, cid) in ("--", "del", "app"):
+            return "渠道不存在、已删除或应用通知已关闭，未操作"
+        # NEW_TASK|CLEAR_TASK 避免复用旧渠道；仍需核对真实页面。
+        p.d.shell("am start -f 0x10008000 -a android.settings.CHANNEL_NOTIFICATION_SETTINGS"
+                  f" --es android.provider.extra.APP_PACKAGE {shlex.quote(pk)}"
+                  f" --es android.provider.extra.CHANNEL_ID {shlex.quote(cid)}")
+        sw = wait_page(p, name)
+        if not sw:
+            sw = via_app_page(p, pk, name)
+        if not sw:
+            return f"未确认「{name}」渠道页及通知开关，跳过"
+        desired = "ON" if want_on else "off"
+        for attempt in range(3):
+            # 每次重取页面，开关消失时不能复用旧坐标。
+            if p.locked():
+                return "手机锁屏了，停止操作"
+            sw = wait_page(p, name, rounds=6)
+            if not sw:
+                return "渠道页或开关已变化，停止操作"
+            if sw[1] != want_on:
+                p.click(*sw[2]); time.sleep(0.4); p.confirm()
+            current, apps = parse(p)
+            if apps.get(pk, False) != apps_before.get(pk, False):
+                raise RuntimeError("应用通知总开关发生变化，停止；请先在手机上核对并还原该 App 的通知")
+            if state(current, apps, pk, cid) == desired:
+                return None
+            if sw[1] == want_on:
+                return "界面状态与渠道实际状态不一致，未继续点击"
+            time.sleep(0.25 + 0.3 * attempt)
+        return "点击后渠道状态未改变"
+    except RuntimeError as e:
+        # 总开关异常必须终止整批；其他页面不兼容只跳过本渠道。
+        if "总开关发生变化" in str(e):
+            raise
+        return str(e)
 
 
 
@@ -135,22 +187,22 @@ def main():
     if cmd in ("off", "on"):
         want = cmd == "on"
         d, app_off = parse(p)
-        t0 = time.time(); n = 0; fail = 0
+        t0 = time.time(); n = 0; failures = 0
         for pk, cid, label in items:
             st = state(d, app_off, pk, cid)
             if st in ("--", "del", "app"):
+                print(f"  · 未操作 {label}（渠道不存在、已删除或应用通知已关闭）")
+                if want or st == "--":
+                    failures += 1
+                continue
+            if (st == "off") == (not want):
                 continue
             err = toggle(p, pk, cid, want, d[(pk, cid)][0])
             n += 1
-            if err == "already":
-                print(f"  · 本来就是{'开' if want else '关'}  {label}")
-            elif err:
-                fail += 1
-                print(f"  ✗ {err}  {label}")
-            else:
-                print(f"  {'开' if want else '关'}  {label}")
+            failures += bool(err)
+            print(f"  {'✗ '+err if err else ('开' if want else '关')}  {label}")
         p.d.shell("input keyevent HOME")   # 别走 u2 的 press：连接断过一次
-        print(f"处理 {n} 个（失败 {fail}），{time.time()-t0:.0f} 秒")
+        print(f"拨了 {n} 个，{time.time()-t0:.0f} 秒")
     d, app_off = parse(p)
     bad = 0
     for pk, cid, label in items:
@@ -159,9 +211,13 @@ def main():
         if cmd == "verify":
             print(f"{st:4} {label}")
     print(f"营销渠道仍开着: {bad} 个")
-    if bad and cmd == "verify":
-        print("（dumpsys 与手机通知设置页可能不一致：vivo/部分机型把开关存在自家通知服务里，"
-              "dumpsys notification 不跟着变——以手机页面为准）")
+    if cmd == "on":
+        pending = sum(state(d, app_off, pk, cid) != "ON" for pk, cid, _ in items)
+        print(f"未恢复的渠道: {pending} 个")
+        if pending or failures:
+            sys.exit(1)
+    if cmd == "off" and (bad or failures):
+        sys.exit(1)                  # 让客户端把这一步标成失败（Issue #7：以前失败了也显示成功）
 
 
 if __name__ == "__main__":

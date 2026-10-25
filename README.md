@@ -8,6 +8,10 @@
 
 插上手机，点几下按钮。不需要 Python，也不需要 AI 工具。
 
+> **2026-10-25 源码已更新，安装包仍为 0.2.0。** 小米搜索输入、机型脚本、vivo 清单链接及打包子进程等修复尚未进入下方安装包。改动、验证结果和待处理问题见 [更新记录](CHANGELOG.md)；提前使用可[从源码运行](docs/08-桌面客户端.md#从源码运行和打包)。
+
+本轮还处理了 Windows 本地页面超时、荣耀截图越界、通知渠道误操作风险、vivo 快应用与备份问题。各 Issue 的处理范围和待验证项见 [社区问题处理记录](docs/09-社区问题处理.md)。仅支持通过 adb 连接的安卓设备，暂不支持使用 HDC 的原生鸿蒙。
+
 | 电脑 | 下载 | 说明 |
 |---|---|---|
 | Mac · Apple 芯片（M1 及以后） | [AndroidAdCleaner-0.2.0-mac-arm64.dmg](https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.2.0/AndroidAdCleaner-0.2.0-mac-arm64.dmg) | 已签名、通过苹果公证，双击就能打开 |
@@ -55,7 +59,7 @@
 
 ---
 
-## 三种用法
+## 四种用法
 
 <p align="center"><img src="images/ways.png" width="460" alt="三种用法"></p>
 
@@ -89,10 +93,12 @@
 | OPPO | Find X10 Pro Max（PMX110） | ColorOS 17 | — | ✅ | ✅ |
 | OPPO | Find X9 Ultra（PMA120） | ColorOS 16.0.10 | ❌ 页面和 N6 不同，待补 | 部分 | ✅ 27 个渠道 |
 | OPPO | Find N3 典藏版（PHN110） | ColorOS 16.0.5 | ❌ 待补 | 部分 | ✅ 27 个渠道 |
-| 小米 | 18 Pro Max（M154FF） | HyperOS 4 | ⚠️ 路径实测，整段待验证 | ✅ | ✅ |
-| vivo | X300 Ultra（V2547DA） | OriginOS 6 | — | ✅ | ✅ |
+| 小米 | 18 Pro Max（M154FF） | HyperOS 4.0.24 | ✅ 2026-10-25 九段重跑通过，173 秒 | ✅ | ✅ |
+| vivo | X300 Ultra（V2547DA） | OriginOS 6 | ⚠️ 脚本已补，整段待真机验证 | ✅ | ✅ |
 
-- 营销通知和广告跟踪两项是通用的，任何安卓手机都能跑。
+表格反映当前源码。上述小米回归修复、vivo 机型脚本和客户端清单链接修复尚未进入已发布的 0.2.0 安装包，详细验证范围见 [更新记录](CHANGELOG.md)。
+
+- 可先运行通用检测；通知渠道能否安全关闭取决于系统页面和权限，部分 vivo 页面会被跳过。广告跟踪入口也随品牌变化。
 - 同一个品牌，系统小版本不同，设置页的名字和层级也会变。机型脚本按型号和系统版本存放，版本对不上时引擎会提示，找不到入口的步骤会跳过，不会乱点。
 - 你的机型不在表里：照 [docs/04-给新机型写脚本.md](docs/04-给新机型写脚本.md) 做一份，欢迎提 PR。
 
@@ -126,6 +132,7 @@ python3 tool/run.py -s <序列号> dev-off --yes  # 从电脑关闭开发者模�
 
 ```text
 AGENTS.md            给 AI 智能体读的操作规范
+CHANGELOG.md         源码更新、验证结果与安装包发布状态
 docs/
   00-打开开发者模式.md 带截图的分步教程
   01-准备工作.md      装 adb、连电脑、无线调试
@@ -135,7 +142,8 @@ docs/
   05-还原.md
   06-常见问题.md
   07-快应用.md        什么是快应用、怎么检测和关闭
-  08-桌面客户端.md     Mac 客户端的用法、数据位置、打包
+  08-桌面客户端.md     Mac / Windows 客户端的用法、数据位置、打包
+  09-社区问题处理.md   Issue / PR 处理范围及待验证项
   清单/               各品牌的手动清单
 prompts/             复制给聊天 AI 的提示词
 tool/
@@ -146,6 +154,7 @@ tool/
 gui/                 桌面客户端（pywebview 界面 + PyInstaller 打包）
 recipes/<品牌>-<型号>/recipe.py   各机型的机型脚本
 images/              文档配图
+tests/               不连接手机的引擎回归测试
 ```
 
 ## 反馈

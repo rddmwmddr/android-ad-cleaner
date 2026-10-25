@@ -10,3 +10,5 @@ gui/build/
 gui/dist/
 gui/ChineseSimplified.isl
 发布/
+recipes/zztest-*/
+recipes/*/run-log.txt

@@ -6,6 +6,7 @@
 打包后没有独立的 Python，子进程用「本程序 --cli 脚本名 参数…」的方式启动。
 """
 import json, os, platform, re, runpy, shutil, subprocess, sys, threading, time, urllib.request, zipfile
+from pathlib import Path
 
 APP_NAME = "安卓去广告"
 VERSION = "0.2.0"
@@ -41,15 +42,15 @@ def _fix_stdio():
                                                     errors="replace", line_buffering=True, write_through=True))
             except OSError:
                 setattr(sys, name, open(os.devnull, "w", encoding="utf-8"))
-
-
-def cli_main():
-    _fix_stdio()
     for st in (sys.stdout, sys.stderr):        # Windows 控制台默认 cp1252/GBK，中文和 ✗ ▶ 会报错；打包后 PYTHONIOENCODING 不生效
         try:
             st.reconfigure(encoding="utf-8", errors="replace")
         except Exception:
             pass
+
+
+def cli_main():
+    _fix_stdio()
     script, args = sys.argv[2], sys.argv[3:]
     sys.path.insert(0, TOOL)
     sys.argv = [os.path.join(TOOL, script)] + args
@@ -205,6 +206,8 @@ class Api:
 
     def chan_scan(self, serial):
         out, err, rc = self._run("chan_fast.py", "-s", serial, "scan", timeout=120)
+        if rc:
+            return {"error": (err or out or "通知扫描失败，请检查连接与权限")[-600:]}
         rows = []
         for line in out.splitlines():
             parts = line.split("\t")
@@ -223,7 +226,8 @@ class Api:
             if plan.get("backup", True):
                 tasks.append(("存改动前的快照", "run.py", ["-s", serial, "backup"]))
             if plan.get("steps"):
-                tasks.append(("关闭各 App 里的广告开关", "run.py", ["-s", serial, "recipe", *plan["steps"]]))
+                tasks.append(("关闭各 App 里的广告开关", "run.py",
+                              ["-s", serial, "recipe", *plan["steps"], *(["--ref"] if plan.get("ref") else [])]))
             if plan.get("channels"):
                 tasks.append(("关闭营销通知", "@channels", plan["channels"]))
             if plan.get("quickapp"):
@@ -374,8 +378,40 @@ class Api:
             subprocess.Popen(["open", path])
 
     def open_url(self, url):
-        import webbrowser
-        webbrowser.open(url)
+        """网址里的中文先转成 %XX：macOS 经 AppleScript、Windows 经 shell 打开中文网址会出错。"""
+        import webbrowser, urllib.parse
+        webbrowser.open(urllib.parse.quote(url, safe=":/?#[]@!$&'()*+,;=%~"))
+
+
+def smoke_gui(window, result):
+    """只验证本地页面、图片和 JS→Python 桥；不连接或修改手机。"""
+    try:
+        if not window.events.loaded.wait(30):
+            raise RuntimeError("页面加载超时")
+        deadline = time.monotonic() + 25
+        while time.monotonic() < deadline:
+            ready = window.evaluate_js("typeof api !== 'undefined' && !!api && !!document.querySelector('#tutbox')")
+            if ready:
+                break
+            time.sleep(0.1)
+        else:
+            raise RuntimeError("JS API 桥初始化超时")
+        window.evaluate_js("window.__smokeEnv = null; api.env().then(x => window.__smokeEnv = x.version)")
+        while time.monotonic() < deadline:
+            report = window.evaluate_js("({url: location.href, version: window.__smokeEnv, images: [...document.querySelectorAll('#tutbox img')].every(i => i.complete && i.naturalWidth > 0)})")
+            if report.get("version") == VERSION and report.get("images") and report.get("url", "").startswith("file://"):
+                from webview import http
+                if http.global_server is not None:
+                    raise RuntimeError("不应启动本地 HTTP 服务")
+                result["ok"] = True
+                print("GUI smoke: file 页面、教程图片、JS API 桥通过；未启动 HTTP 服务", flush=True)
+                return
+            time.sleep(0.1)
+        raise RuntimeError("教程图片或 JS API 调用未通过")
+    except Exception as e:
+        print(f"GUI smoke failed: {e}", file=sys.stderr, flush=True)
+    finally:
+        window.destroy()
 
 
 def main():
@@ -383,12 +419,24 @@ def main():
         cli_main(); return
     import webview
     api = Api()
-    w = webview.create_window(APP_NAME, os.path.join(BASE, "gui", "web", "index.html"), js_api=api,
+    smoke = "--smoke-gui" in sys.argv
+    if smoke:
+        _fix_stdio()
+        api.adb = None                     # 不枚举真机，不自动下载 adb
+    result = {"ok": False}
+    # 明确 file://：裸文件路径会启动 Bottle HTTP 服务，部分 Windows 环境回环连接超时（#18）。
+    url = Path(BASE, "gui", "web", "index.html").resolve().as_uri()
+    w = webview.create_window(APP_NAME, url, js_api=api, hidden=smoke,
                               width=1080, height=780, min_size=(900, 640))
+    options = {"debug": "--debug" in sys.argv, "http_server": False}
+    if smoke:
+        options.update(func=smoke_gui, args=(w, result))
     if IS_WIN:
         try:
-            webview.start(gui="edgechromium", debug="--debug" in sys.argv)
+            webview.start(gui="edgechromium", **options)
         except Exception as e:      # 缺 WebView2 运行时（部分 Windows 10）
+            if smoke:
+                raise
             import ctypes, webbrowser
             url = "https://developer.microsoft.com/microsoft-edge/webview2/"
             ctypes.windll.user32.MessageBoxW(0, "这台电脑缺少微软 Edge WebView2 运行时，界面没法显示。\n\n"
@@ -396,7 +444,9 @@ def main():
                                                 f"（{e}）", APP_NAME, 0x40)
             webbrowser.open(url)
     else:
-        webview.start(debug="--debug" in sys.argv)
+        webview.start(**options)
+    if smoke:
+        sys.exit(0 if result["ok"] else 1)
 
 
 if __name__ == "__main__":
