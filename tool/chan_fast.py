@@ -35,7 +35,8 @@ def parse(p):
 
 def load(path):
     out = []
-    for line in open(path, encoding="utf-8"):
+    # utf-8-sig：Windows PowerShell 另存的 tsv 带 UTF-8 BOM，否则首行包名会带上 \ufeff 而被静默跳过
+    for line in open(path, encoding="utf-8-sig"):
         line = line.rstrip("\n")
         if line.strip() and not line.startswith("#"):
             pk, cid, label = (line.split("\t") + ["", ""])[:3]
@@ -54,6 +55,17 @@ def state(d, app_off, pk, cid):
 
 
 def toggle(p, pk, cid, want_on, name=""):
+    """开/关一个渠道。优先深链直跳（旧 MIUI/荣耀/OPPO 正常）。
+    HyperOS 会拦截 CHANNEL_NOTIFICATION_SETTINGS 深链导致跳不过去，
+    此时自动回退到「App 通知页 → 点渠道行 → 拨开关」。"""
+    err = _toggle_deeplink(p, pk, cid, want_on, name)
+    if err is None:
+        return None
+    err2 = _toggle_app_page(p, pk, name, want_on)
+    return None if err2 is None else err2
+
+
+def _toggle_deeplink(p, pk, cid, want_on, name=""):
     # -f NEW_TASK|CLEAR_TASK：不加的话荣耀/OPPO 会复用上一个渠道页
     p.d.shell("am start -f 0x10008000 -a android.settings.CHANNEL_NOTIFICATION_SETTINGS"
               f" --es android.provider.extra.APP_PACKAGE {shlex.quote(pk)}"
@@ -67,7 +79,7 @@ def toggle(p, pk, cid, want_on, name=""):
                 break
         time.sleep(0.2)
     if not sw:
-        return f"页面不是「{name}」或没开关，跳过"
+        return f"页面不是「{name}」或没开关"
     for attempt in range(3):                   # 页面动画没完时点击会被吞：点完读回来，没变就再点
         t, c, xy = sw[0]                       # 渠道页第一个开关=允许通知
         if c == want_on:
@@ -76,6 +88,36 @@ def toggle(p, pk, cid, want_on, name=""):
         p.click(*xy); time.sleep(0.4); p.confirm()
         sw = p.switches() or sw
     return "点了 3 次没变"
+
+
+def _toggle_app_page(p, pk, name, want_on):
+    """HyperOS 回退路径：开 App 通知设置页 → 按名字点渠道行进详情 → 拨「允许通知」开关。"""
+    if not name:
+        return "无渠道名，无法回退"
+    p.d.shell("input keyevent KEYCODE_HOME"); time.sleep(0.6)
+    # 0x10008000=NEW_TASK|CLEAR_TASK：不加会恢复上次深潜的详情页而非顶层列表
+    p.d.shell("am start -f 0x10008000 -a android.settings.APP_NOTIFICATION_SETTINGS"
+              f" --es android.provider.extra.APP_PACKAGE {shlex.quote(pk)}")
+    time.sleep(2.2)
+    for _scroll in range(8):                   # 渠道行靠页尾，最多翻 8 屏
+        el = p.d(text=name)                    # 不加 clickable：文字节点本身不可点，u2 会点到其可点父容器
+        if el.exists:
+            el.click(); time.sleep(1.6)
+            for _try in range(4):              # 详情页第一个 checkable 开关 = 允许通知
+                sw = next((n for n in p.tree().iter("node") if n.get("checkable") == "true"), None)
+                if sw is None:
+                    time.sleep(0.4); continue
+                if (sw.get("checked") == "true") == want_on:
+                    return None
+                m = re.findall(r"\d+", sw.get("bounds"))
+                p.click((int(m[0]) + int(m[2])) // 2, (int(m[1]) + int(m[3])) // 2)
+                time.sleep(0.7)
+                sw2 = next((n for n in p.tree().iter("node") if n.get("checkable") == "true"), None)
+                if sw2 is not None and (sw2.get("checked") == "true") == want_on:
+                    return None
+            return "详情页开关未拨动"
+        p.d.swipe_ext("up", 0.6); time.sleep(0.6)
+    return f"App 通知页无「{name}」行"
 
 
 
