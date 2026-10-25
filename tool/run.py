@@ -323,7 +323,10 @@ def main():
                     sys.exit("关闭失败：开关没写成 0。见 docs/清单/README.md 的排查表")
                 print("快应用已关闭：hap:// 链接和快应用入口都会停在「快应用服务已关闭」页。恢复：quickapp on")
                 return
-            old = open(f, encoding="utf-8").read().strip() if os.path.exists(f) else "1"
+            old = open(f, encoding="utf-8").read().strip() if os.path.exists(f) else ""
+            if not old:
+                print(f"  没找到 {os.path.relpath(f, ROOT)}（quickapp off 没在这台机器上跑过？），按默认值 1 还原")
+                old = "1"
             sh(s, f"settings put secure {QUICKAPP_SWITCH} {old or 1}")
             print(f"  快应用总开关已恢复为 {quickapp_switch(s)}")
             return
@@ -335,7 +338,7 @@ def main():
                 print(f"  {q['name']:<10} {q['pkg']:<34} {'已挂起' if q['suspended'] else '未挂起'}  "
                       f"{'后台在跑' if q['running'] else '没在跑'}  "
                       f"{'近期打开过 %d 次' % q['used'] if q['used'] else '近期没打开过'}"
-                      f"{'' if q['tested'] else '  （这个包的挂起效果还没实测）'}")
+                      f"{'' if (q['tested'] or sw is not None) else '  （这个包的挂起效果还没实测）'}")
             if sw is not None:
                 print(f"  快应用总开关 {QUICKAPP_SWITCH}={sw}（vivo/iQOO 真正起作用的是它，挂包在这类机型上要 root）")
             h = sh(s, "pm query-activities --brief -a android.intent.action.VIEW -d hap://app/x")
