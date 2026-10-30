@@ -1,9 +1,9 @@
-"""华为 ALN-AL00 通知渠道：只处理人工审核清单，按应用连续操作。
+# 华为 ALN-AL00 / HarmonyOS 4.2 通知路径，2026-10-30 逐项实测。
+# 由 tool/fast.py 注入 p 和 ONLY；新参数化配方未整轮真机重跑。
+BUILD = "ALN-AL00 4.2.0.223(C00E215R5P16)"
+MODELS = ["ALN-AL00"]
 
-用法：python tool/huawei_channels.py -s SERIAL off|on|verify approved.tsv
-第四列必须为当前应用显示名。verify 只读；on/off 限定已验证的型号和版本。
-"""
-import argparse
+import os
 from collections import defaultdict
 from dataclasses import dataclass, field
 import datetime
@@ -16,12 +16,11 @@ import time
 import adb_link
 from chan_fast import ShellPhone, parse, truncated
 from channel_policy import protected_channel
-from fast import Phone, ScreenLocked
+from fast import ScreenLocked
 from row import bounds
 import wait
 
 MODEL = "ALN-AL00"
-BUILD = "ALN-AL00 4.2.0.223(C00E215R5P16)"
 APP_PAGE = "com.android.settings/com.android.settings.Settings$AppNotificationSettingsActivity"
 HEADER = "com.android.settings:id/entity_header_title"
 CHECKBOX = "com.android.settings:id/checkboxWidget"
@@ -178,13 +177,12 @@ def restore_modes(reader, modes):
         raise RuntimeError("通知权限模式未恢复原值：" + "、".join(failures))
 
 
-def execute(serial, items, want_on=False, verify=False, phone=None, reader=None):
-    """phone 可由现有 recipe 引擎提供，避免重复启动读屏服务。"""
+def execute(phone, items, want_on=False, verify=False, reader=None):
+    """只使用配方引擎提供的读屏会话，不创建第二个会话。"""
+    serial = phone.serial
     result = Result()
     if not items:
         return result
-    if phone is not None and phone.serial != serial:
-        raise ValueError("读屏设备和指定序列号不一致，未修改")
     reader = reader or ShellPhone(serial)
     if not verify:
         require_device(reader)
@@ -220,12 +218,10 @@ def execute(serial, items, want_on=False, verify=False, phone=None, reader=None)
     if not awake.isdigit():
         raise RuntimeError("读不到插电常亮原值，未修改")
     save_snapshot(serial, before, apps_before, modes, awake)
-    owned = phone is None
     active = phone
     opened_modes = {}
     try:
         reader.shell("settings put global stay_on_while_plugged_in 7")
-        active = active or Phone(serial, log=False)
         if active.locked():
             raise ScreenLocked("手机锁屏，请机主解锁后重跑")
         for app_items in groups.values():
@@ -269,15 +265,11 @@ def execute(serial, items, want_on=False, verify=False, phone=None, reader=None)
         active.d.shell("input keyevent HOME")
     finally:
         try:
-            if owned and active is not None:
-                active.close()
+            restore_modes(reader, opened_modes)
         finally:
-            try:
-                restore_modes(reader, opened_modes)
-            finally:
-                reader.shell("settings put global stay_on_while_plugged_in " + awake)
-                if reader.shell("settings get global stay_on_while_plugged_in").output.strip() != awake:
-                    raise RuntimeError("插电常亮未恢复，请按备份手动核对")
+            reader.shell("settings put global stay_on_while_plugged_in " + awake)
+            if reader.shell("settings get global stay_on_while_plugged_in").output.strip() != awake:
+                raise RuntimeError("插电常亮未恢复，请按备份手动核对")
     current, apps = parse(reader)
     guard(before, apps_before, current, apps, allowed)
     if any(permission_mode(reader, package) != original for package, original in modes.items()):
@@ -290,23 +282,46 @@ def execute(serial, items, want_on=False, verify=False, phone=None, reader=None)
     return result
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("-s", "--serial", required=True)
-    parser.add_argument("action", choices=("off", "on", "verify"))
-    parser.add_argument("list", type=Path)
-    args = parser.parse_args(argv)
-    try:
-        result = execute(args.serial, load_items(args.list), want_on=args.action == "on",
-                         verify=args.action == "verify")
-    except (OSError, ValueError, RuntimeError, ScreenLocked, adb_link.DeviceLost) as error:
-        print("未完成：" + str(error))
-        return 1
-    print(f"调整 {result.changed} 项，已是目标状态 {result.already} 项，原有总通知屏蔽 {result.blocked} 项")
-    for failure in dict.fromkeys(result.failed):
-        print("未完成：" + failure)
-    return int(bool(result.failed))
+p = globals().get("p")
+ONLY = globals().get("ONLY") or []
+FAILED_STEPS = []
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+def run_channels():
+    selected = os.environ.get("AAC_HUAWEI_CHANNELS")
+    action = os.environ.get("AAC_HUAWEI_CHANNEL_ACTION", "off")
+    if action not in {"off", "on", "verify"}:
+        raise ValueError("AAC_HUAWEI_CHANNEL_ACTION 只能为 off、on 或 verify")
+    if p is None or not selected:
+        raise ValueError("通过机型入口执行，并用 AAC_HUAWEI_CHANNELS 指定人工审核清单")
+    result = execute(p, load_items(Path(selected)), want_on=action == "on", verify=action == "verify")
+    if result.failed:
+        raise RuntimeError("；".join(dict.fromkeys(result.failed)))
+    print(f"调整 {result.changed} 项，原有总通知屏蔽 {result.blocked} 项")
+    return result
+
+
+def step(name):
+    def decorate(action):
+        if ONLY and name not in ONLY:
+            return action
+        print("\n== " + name)
+        if p is not None:
+            p.miss = 0
+        try:
+            action()
+        except adb_link.DeviceLost:
+            raise
+        except (OSError, ValueError, RuntimeError) as error:
+            FAILED_STEPS.append(name)
+            print("未完成：" + str(error))
+        return action
+    return decorate
+
+
+@step("营销通知")
+def _():
+    if not os.environ.get("AAC_HUAWEI_CHANNELS"):
+        print("跳过：未提供人工审核的通知清单，使用方法见本机型 README")
+        return
+    run_channels()

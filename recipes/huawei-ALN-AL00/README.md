@@ -1,4 +1,4 @@
-# 华为 ALN-AL00 / HarmonyOS 4.2 营销通知工具（命令行）
+# 华为 ALN-AL00 / HarmonyOS 4.2 通知脚本
 
 限定 `ALN-AL00 4.2.0.223(C00E215R5P16)`、Android 12 / SDK 31。其他型号或版本拒绝修改通知，不套用荣耀路径。
 
@@ -8,7 +8,7 @@
 
 这是路径实测记录。参数化后的新代码只做离线回归，尚未在手机上整轮重跑，不填写新脚本的真机耗时，也不宣称长期不被系统重同步。
 
-范围是源码里的命令行工具 `tool/huawei_channels.py`。它要先人工审核清单，桌面客户端没有清单选择流程，所以不注册成机型脚本，客户端不会自动运行它（合并 PR #332 时调整：作为机型脚本时，没有清单就报失败，Mate 60 Pro 用户在客户端里每次都会多一个失败步骤）。没有验证打包版。
+实现和离线测试均放在本机型配方目录内，由现有机型入口执行；未新增桌面客户端的清单选择流程，也未验证打包版。
 
 ## 使用
 
@@ -17,19 +17,24 @@
 ```bash
 python3 "tool/run.py" -s "<序列号>" backup
 python3 "tool/run.py" -s "<序列号>" chan-scan
-python3 "tool/huawei_channels.py" -s "<序列号>" verify "<审核后的清单.tsv>"
-python3 "tool/huawei_channels.py" -s "<序列号>" off "<审核后的清单.tsv>"
+AAC_HUAWEI_CHANNELS="<审核后的清单.tsv>" AAC_HUAWEI_CHANNEL_ACTION="verify" \
+  python3 "tool/run.py" -s "<序列号>" recipe 营销通知
+AAC_HUAWEI_CHANNELS="<审核后的清单.tsv>" AAC_HUAWEI_CHANNEL_ACTION="off" \
+  python3 "tool/run.py" -s "<序列号>" recipe 营销通知
 python3 "tool/run.py" -s "<序列号>" finish
 ```
 
-不带清单不会选择备份里的历史应用列表。这个步骤不暂停快应用，也不修改其他广告/隐私开关；快应用仍使用独立的检测、确认及 `quickapp off/on` 流程。
+清单和动作参数只对当前命令生效，不修改系统环境配置。`AAC_HUAWEI_CHANNEL_ACTION` 支持 `off`（默认关闭）、`on`（恢复开启）、`verify`（核查关闭目标状态）；未知动作直接报错。核查不打开通知页或拨动开关，但外层机型引擎仍会管理读屏会话和临时插电常亮，并在退出时恢复。
+
+不带清单时提示并跳过，不记为失败步骤，也不会选择备份里的历史应用列表。这个步骤不暂停快应用，也不修改其他广告/隐私开关；快应用仍使用独立的检测、确认及 `quickapp off/on` 流程。
 
 ## 恢复
 
 仅将本次确实关闭且原来开启的渠道整理成恢复清单，不要将原已关闭的渠道一并开启：
 
 ```bash
-python3 "tool/huawei_channels.py" -s "<序列号>" on "<本次实际关闭的清单.tsv>"
+AAC_HUAWEI_CHANNELS="<本次实际关闭的清单.tsv>" AAC_HUAWEI_CHANNEL_ACTION="on" \
+  python3 "tool/run.py" -s "<序列号>" recipe 营销通知
 python3 "tool/run.py" -s "<序列号>" finish
 ```
 
@@ -48,12 +53,12 @@ python3 "tool/run.py" -s "<序列号>" finish
 
 ## 离线验证
 
-本轮新增 `tests/test_huawei_channels.py` 的 21 项设备无关回归全部通过。仓库全量回归计 406 项：404 通过、2 项按条件跳过（Windows 剪贴板、仓库外服务端契约）。macOS 测试时仅在进程内将 GUI 默认数据目录定向到临时目录，未修改 GUI 源码或用户配置。
+本机型的离线测试位于 `recipes/huawei-ALN-AL00/tests/test_recipe.py`，覆盖实际机型执行入口的关闭、恢复、核查分派，以及渠道名、通知页身份、清单外渠道、权限和临时设置恢复等保护。`tests/test_recipe_suites.py` 只负责将 `recipes/*/tests/test_*.py` 接入仓库现有的 unittest 入口，不包含厂商逻辑。
 
 ```bash
-python3 -m unittest discover -s "tests" -p "test_huawei_channels.py" -v
+python3 -m unittest discover -s "recipes/huawei-ALN-AL00/tests" -v
 python3 -m unittest discover -s "tests"
-python3 -m ruff check --select F,E9 "tool" "tests" "gui"
+python3 -m ruff check --select F,E9 "tool" "tests" "gui" "recipes/huawei-ALN-AL00"
 ```
 
-静态检查使用仓库 CI 指定的 ruff 0.17.3。以上是本地离线结果，不代表已运行 GitHub Actions、打包或真机复跑。
+静态检查使用仓库 CI 指定的 ruff 0.17.3。本地离线结果不代表已运行 GitHub Actions、打包或真机复跑。

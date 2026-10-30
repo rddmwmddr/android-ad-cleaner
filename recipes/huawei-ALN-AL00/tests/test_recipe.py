@@ -2,6 +2,7 @@
 from contextlib import ExitStack, redirect_stdout
 import copy
 import io
+import importlib.util
 from pathlib import Path
 import sys
 import tempfile
@@ -10,11 +11,20 @@ import unittest
 from unittest.mock import Mock, patch
 import xml.etree.ElementTree as ET
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "tool"))
-import huawei_channels as hw
+RECIPE = Path(__file__).resolve().parents[1] / "recipe.py"
+spec = importlib.util.spec_from_file_location("huawei_aln_recipe", RECIPE)
+hw = importlib.util.module_from_spec(spec)
+hw.ONLY = ["__no_steps__"]
+sys.modules[spec.name] = hw
+spec.loader.exec_module(hw)
 import adb_link
 import run
+import fast
+import chan_fast
+sys.path.insert(0, str(ROOT / "tests"))
+from fixtures import phone_stub
 
 
 class OfflineDevice:
@@ -34,7 +44,7 @@ class OfflineDevice:
         self.on_restore = None
         self.clock = 0
         self.reader = SimpleNamespace(shell=self.shell)
-        self.phone = SimpleNamespace(serial="offline-device", W=1080, H=2400, changed=[],
+        self.phone = phone_stub("offline-device", W=1080, H=2400, changed=[],
                                      locked=Mock(return_value=False), close=Mock(),
                                      focus=lambda: hw.APP_PAGE, tree=self.tree,
                                      top=Mock(), scroll_more=Mock(return_value=False),
@@ -102,7 +112,6 @@ class OfflineDevice:
         stack = ExitStack()
         stack.enter_context(patch.object(hw, "parse", side_effect=lambda reader: (
             copy.deepcopy(self.channels), dict(self.apps))))
-        stack.enter_context(patch.object(hw, "Phone", return_value=self.phone))
         stack.enter_context(patch.object(hw, "save_snapshot", return_value=Path("offline.json")))
         stack.enter_context(patch.object(hw, "time", SimpleNamespace(
             monotonic=lambda: self.clock, sleep=self.sleep)))
@@ -131,7 +140,7 @@ class HuaweiChannelsTests(unittest.TestCase):
     def test_same_app_channels_share_one_page_and_permission_is_restored(self):
         device = OfflineDevice()
         with device.patches():
-            result = hw.execute("offline-device", self.items(), reader=device.reader)
+            result = hw.execute(device.phone, self.items(), reader=device.reader)
         self.assertEqual(result.changed, 2)
         self.assertFalse(result.failed)
         self.assertEqual(len([c for c in device.ui_commands if c.startswith("am start ")]), 1)
@@ -139,14 +148,13 @@ class HuaweiChannelsTests(unittest.TestCase):
         self.assertEqual(device.channels[("com.example.a", "service")][1], 3)
         self.assertEqual(device.modes["com.example.a"], "default")
         self.assertEqual(device.awake, "0")
-        device.phone.close.assert_called_once()
+        device.phone.close.assert_not_called()
 
     def test_readonly_verify_respects_existing_global_ban(self):
         device = OfflineDevice()
         device.modes["com.example.a"] = "ignore"
         with device.patches():
-            result = hw.execute("offline-device", self.items(), verify=True, reader=device.reader)
-            hw.Phone.assert_not_called()
+            result = hw.execute(device.phone, self.items(), verify=True, reader=device.reader)
             hw.save_snapshot.assert_not_called()
         self.assertEqual(result.blocked, 2)
         self.assertFalse(result.failed)
@@ -158,7 +166,7 @@ class HuaweiChannelsTests(unittest.TestCase):
         device.channels[("com.example.a", "ad1")] = ("营销通知", 0, False)
         device.channels[("com.example.a", "ad2")] = ("活动通知", 0, False)
         with device.patches():
-            result = hw.execute("offline-device", self.items(), want_on=True, reader=device.reader)
+            result = hw.execute(device.phone, self.items(), want_on=True, reader=device.reader)
         self.assertEqual(result.changed, 2)
         self.assertFalse(result.failed)
         self.assertTrue(all(device.channels[item.key][1] != 0 for item in self.items()))
@@ -181,7 +189,7 @@ class HuaweiChannelsTests(unittest.TestCase):
                 self.assertEqual(device.awake, "0")
                 self.assertFalse(device.ui_commands)
             with patch.object(hw, "save_snapshot", side_effect=snapshot):
-                hw.execute("offline-device", self.items(), reader=device.reader)
+                hw.execute(device.phone, self.items(), reader=device.reader)
 
     def test_permission_cleanup_attempts_remaining_apps_after_a_failure(self):
         modes = {"com.example.a": "allow", "com.example.b": "allow"}
@@ -205,8 +213,7 @@ class HuaweiChannelsTests(unittest.TestCase):
         device = OfflineDevice()
         device.modes["com.example.a"] = "foreground"
         with device.patches():
-            result = hw.execute("offline-device", self.items(), reader=device.reader)
-            hw.Phone.assert_not_called()
+            result = hw.execute(device.phone, self.items(), reader=device.reader)
             hw.save_snapshot.assert_not_called()
         self.assertEqual(len(result.failed), 2)
         self.assertFalse(device.ui_commands)
@@ -215,31 +222,25 @@ class HuaweiChannelsTests(unittest.TestCase):
     def test_verify_reports_still_open_without_mutating_any_setting(self):
         device = OfflineDevice()
         with device.patches():
-            result = hw.execute("offline-device", self.items(), verify=True, reader=device.reader)
-            hw.Phone.assert_not_called()
+            result = hw.execute(device.phone, self.items(), verify=True, reader=device.reader)
         self.assertEqual(len(result.failed), 2)
         self.assertFalse(device.ui_commands)
         self.assertFalse(any(command.startswith("settings put") for command in device.commands))
 
-    def test_wrong_device_or_build_stops_before_settings_writes(self):
+    def test_wrong_build_stops_before_settings_writes(self):
         device = OfflineDevice()
-        with device.patches():
-            with self.assertRaises(ValueError):
-                hw.execute("another-device", self.items(), phone=device.phone, reader=device.reader)
-        self.assertFalse(device.commands)
         reader = Mock()
         reader.shell.side_effect = [SimpleNamespace(output=hw.MODEL), SimpleNamespace(output="another-build")]
         with self.assertRaises(ValueError):
-            hw.execute("offline-device", self.items(), reader=reader)
+            hw.execute(device.phone, self.items(), reader=reader)
         self.assertEqual(reader.shell.call_count, 2)
 
     def test_renamed_or_missing_channels_never_open_phone_ui(self):
         device = OfflineDevice()
         with device.patches():
-            result = hw.execute("offline-device", [
+            result = hw.execute(device.phone, [
                 hw.Item("com.example.a", "ad1", "旧名称", "样例应用"),
                 hw.Item("com.example.a", "missing", "营销通知", "样例应用")], reader=device.reader)
-            hw.Phone.assert_not_called()
         self.assertEqual(len(result.failed), 2)
         self.assertFalse(device.ui_commands)
 
@@ -247,9 +248,8 @@ class HuaweiChannelsTests(unittest.TestCase):
         device = OfflineDevice()
         device.channels[("com.example.a", "ad1")] = ("找机位推荐", 1, False)
         with device.patches():
-            result = hw.execute("offline-device", [hw.Item(
+            result = hw.execute(device.phone, [hw.Item(
                 "com.example.a", "ad1", "找机位推荐", "样例应用")], reader=device.reader)
-            hw.Phone.assert_not_called()
         self.assertIn("受保护", result.failed[0])
 
     def test_unselected_change_stops_and_cleanup_still_restores_runtime_settings(self):
@@ -257,7 +257,7 @@ class HuaweiChannelsTests(unittest.TestCase):
         device.on_tap = lambda d: d.channels.__setitem__(
             ("com.example.a", "service"), ("服务通知", 0, False))
         with device.patches(), self.assertRaisesRegex(RuntimeError, "清单外渠道"):
-            hw.execute("offline-device", self.items(), reader=device.reader)
+            hw.execute(device.phone, self.items(), reader=device.reader)
         self.assertEqual(device.tap_count, 1)
         self.assertEqual(device.awake, "0")
         self.assertEqual(device.modes["com.example.a"], "default")
@@ -269,22 +269,14 @@ class HuaweiChannelsTests(unittest.TestCase):
                 d.channels[("com.example.a", "ad1")] = ("营销通知", 1, False)
         device.on_tap = reopen_first
         with device.patches(), self.assertRaisesRegex(RuntimeError, "清单外渠道"):
-            hw.execute("offline-device", self.items(), reader=device.reader)
+            hw.execute(device.phone, self.items(), reader=device.reader)
         self.assertEqual(device.tap_count, 2)
         self.assertEqual(device.awake, "0")
-
-    def test_close_failure_cannot_prevent_permission_and_awake_restoration(self):
-        device = OfflineDevice()
-        device.phone.close.side_effect = RuntimeError("读屏退出失败")
-        with device.patches(), self.assertRaisesRegex(RuntimeError, "读屏退出失败"):
-            hw.execute("offline-device", self.items(), reader=device.reader)
-        self.assertEqual(device.awake, "0")
-        self.assertEqual(device.modes["com.example.a"], "default")
 
     def test_caller_owned_phone_is_not_closed(self):
         device = OfflineDevice()
         with device.patches():
-            hw.execute("offline-device", self.items(), phone=device.phone, reader=device.reader)
+            hw.execute(device.phone, self.items(), reader=device.reader)
         device.phone.close.assert_not_called()
 
     def test_final_verification_catches_changes_after_earlier_success(self):
@@ -292,14 +284,14 @@ class HuaweiChannelsTests(unittest.TestCase):
         device.on_restore = lambda d: d.channels.__setitem__(
             ("com.example.a", "ad1"), ("营销通知", 1, False))
         with device.patches():
-            result = hw.execute("offline-device", self.items(), reader=device.reader)
+            result = hw.execute(device.phone, self.items(), reader=device.reader)
         self.assertTrue(any("最终复查" in failure for failure in result.failed))
 
     def test_snapshot_failure_prevents_first_mutation(self):
         device = OfflineDevice()
         with device.patches(), patch.object(hw, "save_snapshot", side_effect=OSError("no space")):
             with self.assertRaises(OSError):
-                hw.execute("offline-device", self.items(), reader=device.reader)
+                hw.execute(device.phone, self.items(), reader=device.reader)
         self.assertFalse(device.ui_commands)
         self.assertFalse(any(command.startswith("settings put") for command in device.commands))
 
@@ -332,13 +324,72 @@ class HuaweiChannelsTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "离开"):
             hw.checkbox(device.phone, "样例应用", "营销通知")
 
-    def test_client_does_not_run_it_as_a_recipe(self):
-        # 合并 #332 时调整：当成机型脚本时，没有人工审核清单就报失败，
-        # 客户端里 ALN-AL00 用户每次都会多一个失败步骤。只作为命令行工具，需显式给清单
-        self.assertEqual(run.recipe_for(hw.MODEL, "HUAWEI"), (None, False))
-        with redirect_stdout(io.StringIO()):
-            with self.assertRaises(SystemExit):
-                hw.main(["-s", "offline-device", "off"])            # 不给清单直接退出，不碰手机
+    def test_recipe_is_discoverable_and_skips_without_reviewed_list(self):
+        path, reference = run.recipe_for(hw.MODEL, "HUAWEI")
+        self.assertFalse(reference)
+        self.assertEqual(Path(path), RECIPE)
+        self.assertEqual(run.recipe_meta(path)["build"], hw.BUILD)
+        self.assertEqual(run.recipe_meta(path)["steps"], ["营销通知"])
+        scope = {"__name__": "__recipe__", "p": Mock(serial="offline-device"), "ONLY": []}
+        with patch.dict("os.environ", {}, clear=True), redirect_stdout(io.StringIO()):
+            exec(compile(RECIPE.read_text(encoding="utf-8"), str(RECIPE), "exec"), scope)
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        scope["p"].d.shell.assert_not_called()
+
+    def test_recipe_entry_rejects_invalid_action_and_reports_channel_failures(self):
+        with patch.object(hw, "p", Mock()), patch.object(hw, "execute") as execute:
+            with patch.dict("os.environ", {}, clear=True), self.assertRaises(ValueError):
+                hw.run_channels()
+            with patch.dict("os.environ", {"AAC_HUAWEI_CHANNEL_ACTION": "invalid"}, clear=True):
+                with self.assertRaises(ValueError):
+                    hw.run_channels()
+            execute.assert_not_called()
+            with tempfile.TemporaryDirectory() as folder:
+                path = Path(folder) / "reviewed.tsv"
+                path.write_text("com.example.a\tad1\t营销通知\t样例应用\n", encoding="utf-8")
+                execute.return_value = hw.Result(failed=["未达目标"])
+                with patch.dict("os.environ", {"AAC_HUAWEI_CHANNELS": str(path)}, clear=True):
+                    with self.assertRaisesRegex(RuntimeError, "未达目标"):
+                        hw.run_channels()
+
+    def test_engine_dispatches_recipe_off_restore_and_verify(self):
+        for action in ("off", "on", "verify"):
+            with self.subTest(action=action), tempfile.TemporaryDirectory() as folder:
+                device = OfflineDevice()
+                if action != "off":
+                    for item in self.items():
+                        device.channels[item.key] = (item.name, 0, False)
+                device.phone.wait_unlocked = lambda: True
+                def shell(command):
+                    if command == "getprop ro.mi.os.version.incremental":
+                        return SimpleNamespace(output="")
+                    if command.startswith("getprop "):
+                        return device.shell(command)
+                    return device.ui_shell(command)
+                device.phone.d.shell = shell
+                path = Path(folder) / "reviewed.tsv"
+                path.write_text("".join("\t".join((i.package, i.channel, i.name, i.app)) + "\n"
+                                        for i in self.items()), encoding="utf-8")
+                env = {"AAC_HUAWEI_CHANNELS": str(path), "AAC_BACKUPS": folder,
+                       "AAC_HUAWEI_CHANNEL_ACTION": action}
+                with patch.dict("os.environ", env, clear=True), redirect_stdout(io.StringIO()), \
+                        patch.object(chan_fast, "ShellPhone", return_value=device.reader), \
+                        patch.object(chan_fast, "parse", side_effect=lambda reader: (
+                            copy.deepcopy(device.channels), dict(device.apps))), \
+                        patch.object(run, "latest_backup", return_value=folder), \
+                        patch("time.monotonic", side_effect=lambda: device.clock), \
+                        patch("time.sleep", side_effect=device.sleep):
+                    fast.execute(device.phone, "run", [str(RECIPE), "营销通知"])
+                self.assertEqual(device.channels[("com.example.a", "service")][1], 3)
+                self.assertEqual(device.awake, "0")
+                self.assertEqual(device.modes["com.example.a"], "default")
+                self.assertTrue(all((device.channels[i.key][1] != 0) == (action == "on")
+                                    for i in self.items()))
+                self.assertEqual(device.tap_count, 0 if action == "verify" else 2)
+                if action == "verify":
+                    self.assertFalse(device.ui_commands)
+                    self.assertFalse(any(c.startswith("settings put") for c in device.commands))
+                device.phone.close.assert_not_called()
 
 
 if __name__ == "__main__":

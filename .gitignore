@@ -14,6 +14,3 @@ recipes/*/run-log.txt
 # 本机私有：运维记录、服务端部署代码
 CLAUDE.local.md
 .private/
-# 单机操作工具含个人设备序列号和备份路径，不进入公开源码
-/session_grouped_channels.py
-/session_checkbox_adapter.py
