@@ -23,7 +23,7 @@
 - 找「等页面认得出」先看 [tool/wait.py](tool/wait.py)：`settle` / `setting` / `ChannelPage.refresh` / `off` 都消费 `until()`，不要另写轮询循环。
 - 找「怎么走到渠道页、认出哪一行的开关」先看 [tool/chan_fast.py](tool/chan_fast.py) 的 `ChannelPage.open()`：直达 / 转应用通知页 / 内联行 / 同名放弃四类只在那里定义（[ADR-0007](docs/adr/0007-channel-page.md)）；`channel_switch` / `inline_switch` / `wait_page` / `via_app_page` 是一行前向壳，不要往里加逻辑。
 - 找「引擎报给客户端的状态」先看 [tool/events.py](tool/events.py)：五个 kind 与事件行格式只在那里定义（[ADR-0004](docs/adr/0004-engine-state-events.md)），引擎侧 `emit()`、`gui/app.py` 的 `_log()` 都走它；不要再按中文文案判断状态。
-- 找「渠道怎么判营销 / 服务 / 受保护」先看 [tool/channel_policy.py](tool/channel_policy.py) 的 `classify()`：营销候选、扫描排除、默认不勾、受保护、厂商营销 ID 五组判定只在那里定义（[ADR-0006](docs/adr/0006-channel-classification.md)）；`chan_fast` 的扫描分支与 `gui/app.py` 的 `chan_scan()` 都消费它，不要另写词表。
+- 找「渠道怎么判营销 / 服务 / 受保护」先看 [tool/channel_policy.py](tool/channel_policy.py) 的 `classify()`：营销候选、扫描排除、默认不勾、受保护、厂商营销 ID、广告网络 ID 六组判定只在那里定义（[ADR-0006](docs/adr/0006-channel-classification.md)）；`chan_fast` 的扫描分支与 `gui/app.py` 的 `chan_scan()` 都消费它，不要另写词表。
 - 改「一行输出怎么进界面」先看两处：`gui/app.py` 的 `_log()` 决定它进 `Job.lines` 还是只当事件；[gui/web/index.html](gui/web/index.html) 的 `summarize()` 在认不出模式时直接显示 `results[].tail` 末行——`tail` 是第二个落点，机器行不能进。
 - 造不连手机的 `Phone` 用 [tests/fixtures.py](tests/fixtures.py) 的 `phone_stub()`（`fake_phone()` 就是它加一条时间轴），装配只此一处。纯重构要给对拍证据时，同一文件还有 `all_pages()` 取 `tests/` 里的页面样本、`Clock` 假时钟、`Timeline` + `Device` 按时间轴换页。
 - 改「认渠道页」这类读屏逻辑要做改前改后对拍时，驱动器是 [tests/compare_chan_pages.py](tests/compare_chan_pages.py)：认页 / 进页 / 编排三层 × 两种屏尺寸，同一份探针分别跑冻结基线与当前 `tool/`，守卫数字非零才算测到。

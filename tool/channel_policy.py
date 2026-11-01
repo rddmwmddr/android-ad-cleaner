@@ -19,6 +19,12 @@ SKIP = re.compile(r"下载|更新|安装|上传|订单|物流|快递|交易|支�
 # 营销关键词仍要命中，否则同 ID 下的服务类渠道会混进客户端默认勾选（#337）。
 VIVO_MARKETING = re.compile(r"^VPushChannel_(?:0|4|6)$", re.I)
 
+# 厂商把广告网络名直接编进渠道 ID（#456：桌面 TencentAdNetCH1 / ADroiUnion），渠道名不带营销词。
+# 词条取得足够长以避开大多数普通英文；只匹配渠道 ID，渠道名仍交给 KW。与 VIVO_MARKETING 不同，
+# 命中本身就是营销证据，不再要求 KW 命中，也越过 SKIP——ID 是厂商固定车道，比渠道名可靠。
+AD_NETWORK_TERMS = ("tencentadnet", "adroi", "pangle", "admob", "applovin", "unityads", "mintegral")
+AD_NETWORK = re.compile("|".join(AD_NETWORK_TERMS), re.I)
+
 # 「已进清单但默认不勾」的服务 / 含糊类别，匹配任一字段（包名、渠道 ID、渠道名、应用名）。
 SERVICE_TERMS = re.compile(r"TETHERING|热点|ENVELOPE|红包|Auto lock|盗窃|hotspot|drive_mode|驾驶|securitypermission|权限建议|直播|ig_live|警告|告警|实时活动|赛事|护眼|清理加速|普通通知|推送通知|个性化提示", re.I)
 # 旧实现里还有两个依赖 TSV 形状的词条，改写成字段规则：前者是「包名尾部 youtube + ID 2」，
@@ -32,6 +38,7 @@ class ChannelJudgement:
     default_unchecked: bool = False
     protected: bool = False
     vivo_marketing_id: bool = False
+    ad_network_id: bool = False
 
 
 def protected_channel(name, channel_id="", list_label=""):
@@ -50,6 +57,7 @@ def _youtube_channel_two(fields):
 
 def classify(name, channel_id="", list_label="", package="", app=""):
     vivo = bool(VIVO_MARKETING.match(channel_id))
+    ad_network = bool(AD_NETWORK.search(channel_id))
     # scan 只在读到应用名时打第四列；没有第四列时，最后一个字段就是渠道名。
     fields = [package, channel_id, name] + ([app] if app else [])
     default_unchecked = (
@@ -58,9 +66,10 @@ def classify(name, channel_id="", list_label="", package="", app=""):
         or fields[-1] == "其他"
     )
     return ChannelJudgement(
-        marketing_candidate=bool(KW.search(name + " " + channel_id)),
-        scan_excluded=bool(SKIP.search(name)) and not vivo,
+        marketing_candidate=ad_network or bool(KW.search(name + " " + channel_id)),
+        scan_excluded=bool(SKIP.search(name)) and not vivo and not ad_network,
         default_unchecked=default_unchecked,
         protected=protected_channel(name, channel_id, list_label),
         vivo_marketing_id=vivo,
+        ad_network_id=ad_network,
     )
