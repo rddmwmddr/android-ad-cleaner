@@ -16,7 +16,7 @@ jobs:
           python-version: "3.12"
       - name: 安装依赖
         run: pip install -r requirements.txt
-      - name: 准备 adb（不用手机；`tool/` 下的脚本按需解析 adb，缺了会走「找不到 adb」那条分支）
+      - name: 准备 adb（不用手机，但套件里有用例在入口就解析 adb，缺了直接报「找不到 adb」）
         run: |
           adb="$(command -v adb || true)"
           sdk="${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb"
@@ -28,6 +28,31 @@ jobs:
           fi
           echo "ADB=$adb" >> "$GITHUB_ENV"
           "$adb" version
+      - name: 静态检查（未定义名 / 未使用导入；recipes/ 靠注入作用域执行，查不了）
+        run: |
+          pip install ruff==0.17.3
+          ruff check --select F,E9 tool tests gui
+      - name: 设备无关回归测试
+        run: python -m unittest discover -s tests -v
+
+  # Windows 专属的用例（expanduser 靠 USERPROFILE、open() 默认 cp1252）只在打 Windows 包时才暴露，
+  # 每轮发版才发现太晚，所以 PR 阶段也跑一遍。步骤与 Linux job 对齐，差别只在 adb 从哪来。
+  unittest-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+      - name: 准备 adb（镜像自带 Android SDK，不额外安装；缺了跟 Linux 一样会有一批用例报「找不到 adb」）
+        run: |
+          $adb = (Get-Command adb.exe -ErrorAction SilentlyContinue).Source
+          if (-not $adb) { $adb = "$env:ANDROID_HOME\platform-tools\adb.exe" }
+          if (-not (Test-Path $adb)) { throw "找不到 adb：PATH 和 ANDROID_HOME 下都没有" }
+          "ADB=$adb" >> $env:GITHUB_ENV
+          & $adb version
       - name: 静态检查（未定义名 / 未使用导入；recipes/ 靠注入作用域执行，查不了）
         run: |
           pip install ruff==0.17.3

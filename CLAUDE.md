@@ -11,7 +11,7 @@
 - 数基线总数用干净副本：先 `git rev-parse origin/main` 记下 `<sha>`，再 `git archive <sha> | tar -x -C /tmp/x`，在 `/tmp/x` 里跑同一套。主副本里可能躺着别的会话没提交的用例。
 - 改动面与审查对比用分支基点的固定 SHA（`git merge-base HEAD origin/main` 的结果，`git diff <sha>`），不用 `origin/main` 尖端——并行会话会推进它。
 - 主副本的当前分支随时被别的会话切走（`main` 只是其中一种状态），所以切分支、丢弃改动（`git checkout --`、`restore`、`reset`、`stash`）都在 `git worktree add` 出来的目录里做；主副本只做合并与只读操作。
-- CI：`.github/workflows/test.yml` 在 PR 和 main 推送时自动跑同一套；`build-windows.yml` 只在 `v*` 标签或手动触发时打包，不守 PR。
+- CI：`.github/workflows/test.yml` 在 PR 和 main 推送时自动跑同一套，Linux（`unittest`）与 Windows（`unittest-windows`）各一个 job；两边 skip 的用例不一样，判断覆盖时看 `-v` 输出里的 skipped 行，别假设两边跑的是同一批。`build-windows.yml` 只在 `v*` 标签或手动触发时打包，不守 PR。
 - 静态检查：`uvx ruff@0.17.3 check --select F,E9 tool tests gui`，本地与 CI 同一个版本（CI 就钉 0.17.3，`.venv` 里没有 ruff）。不查 `recipes/`——机型脚本靠注入作用域执行，静态分析看到的全是未定义名；也不开格式与行长规则。
 - CHANGELOG 的新行加在 `## 未发布` 一节；rebase 后先 `git rebase --continue` 把提交落完、再跑回归与对拍，并确认 `## 未发布` 没有被已发版的小节吸收（main 刚发过版时要重新开出来）。
 - 审查标准：见 [CODING_STANDARDS.md](CODING_STANDARDS.md)，只放判断项；机械规则交给 CI。

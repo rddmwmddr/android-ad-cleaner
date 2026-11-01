@@ -26,6 +26,11 @@ import tempfile
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager
 from pathlib import Path
+for _st in (sys.stdout, sys.stderr):
+    try:
+        _st.reconfigure(encoding="utf-8", errors="replace")   # Windows 控制台默认不是 UTF-8
+    except Exception:
+        pass
 
 TESTS = Path(__file__).resolve().parent
 
