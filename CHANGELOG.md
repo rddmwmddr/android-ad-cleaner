@@ -10,12 +10,13 @@
 
 ### 修复
 
-- ColorOS 11/12 的渠道页宿主是 `coloros` 包，`chan-off` 6 条渠道全跳过；停在应用通知页时点名是哪个包挡着（#415、#422）
+- ColorOS 11/12 的渠道页宿主是 `coloros` 包，6 条渠道全跳过；跳过时点名是哪个包挡着（#415、#422）
 - 华为 / 荣耀应用通知被系统整体关掉时渠道行本就不存在，引擎却记成「未确认」（#426）
+- Windows 便携版报「缺少 WebView2 运行时」，实际是解压文件带「来自网络」标记（#228）
 
 ### 内部
 
-- 渠道开关的挑选收成 `plan_switches()`，点击与回读仍在 `off()`，行为不变（#423）
+- 渠道开关的挑选收进 `plan_switches()`，点击与回读不变（#430，ADR-0008）
 - `quickapp` 系列少发 89 条 adb，`suspended.txt` 写前去重，`hap://` 应答组件全列（#335）
 
 ## 0.3.0 · 2026-11-01
@@ -24,9 +25,9 @@
 
 ### 新增
 
-- 机型脚本：vivo X Fold6（V2545A，#54）、Redmi Note 14 5G（24094RAD4C）
-- 机型脚本：一加 Ace 6T（PLR110）、小米 14 Pro（23116PN5BC，与 13 Ultra 共用，#317）
-- `run.py adapt`：新机型适配辅助，探路 → 人工勾选 → 生成草稿 → 安全模式自检（#61）
+- 机型脚本：vivo X Fold6（V2545A，#54）、Redmi Note 14 5G（24094RAD4C，#354）
+- 机型脚本：一加 Ace 6T（PLR110，#380）、小米 14 Pro（23116PN5BC，与 13 Ultra 共用，#406）
+- `run.py adapt`：新机型适配辅助，探路 → 人工勾选 → 生成草稿 → 安全模式自检（#377）
 
 ### 修复
 
@@ -41,14 +42,13 @@
 - 检测页 Android 版本为空（#195）
 - 魅族 21 Pro 以外的机型连「同品牌参考」都不提示，改为可借用参考脚本（#379）
 - OPPO Find X8s 主题商店弹出更新提示后整段失败（#286）
-- Windows 便携版报「缺少 WebView2 运行时」，实际是解压文件带「来自网络」标记（#228）
 
 ### 内部
 
-- 客户端改用结构化事件判断暂停 / 锁屏 / 读屏被占用 / 断开，不再匹配中文文案（ADR-0004）
-- `run.py` 每条命令一个 handler，退出码由 handler 返回（ADR-0005）
-- 渠道的营销 / 服务 / 受保护判定收进 `channel_policy.classify()`（ADR-0006）
-- 渠道页到达与开关识别收进 `ChannelPage`，行为逐字不变（#399，ADR-0007）
-- `fast.Phone` 的 interface 全部在构造处声明，读屏 adapter 收进 `tool/reader.py`（#344，ADR-0002）
-- `gui.app` 的 import 期副作用移除，备份目录收进 `Backups`（#355，ADR-0003）
-- 测试装配统一到 `phone_stub()` / `phone_mock()`，静态检查钉 ruff 0.17.3（#355）
+- 客户端改用结构化事件判断暂停 / 锁屏 / 读屏被占用 / 断开，不再匹配中文文案（#371，ADR-0004）
+- `run.py` 每条命令一个 handler，退出码由 handler 返回（#373，ADR-0005）
+- 渠道的营销 / 服务 / 受保护判定收进 `channel_policy.classify()`（#385，ADR-0006）
+- 渠道页到达与开关识别收进 `ChannelPage`，行为逐字不变（#416，ADR-0007）
+- `Phone` 的 interface 全部在构造处声明，读屏 adapter 收进 `tool/reader.py`（#349，ADR-0002）
+- `gui.app` 的 import 期副作用移除，备份目录收进 `Backups`（#361，ADR-0003）
+- 测试装配统一到 `phone_mock()`，冒充 `Phone` 不再静默走真值分支（#351）

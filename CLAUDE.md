@@ -13,7 +13,7 @@
 - 主副本的当前分支随时被别的会话切走（`main` 只是其中一种状态），所以切分支、丢弃改动（`git checkout --`、`restore`、`reset`、`stash`）都在 `git worktree add` 出来的目录里做；主副本只做合并与只读操作。
 - CI：`.github/workflows/test.yml` 在 PR 和 main 推送时自动跑同一套，Linux（`unittest`）与 Windows（`unittest-windows`）各一个 job；两边 skip 的用例不一样，判断覆盖时看 `-v` 输出里的 skipped 行，别假设两边跑的是同一批。`build-windows.yml` 只在 `v*` 标签或手动触发时打包，不守 PR。
 - 静态检查：`uvx ruff@0.17.3 check --select F,E9 tool tests gui`，本地与 CI 同一个版本（CI 就钉 0.17.3，`.venv` 里没有 ruff）。不查 `recipes/`——机型脚本靠注入作用域执行，静态分析看到的全是未定义名；也不开格式与行长规则。
-- CHANGELOG 一条一行、≤ 80 字，落在 `## 未发布` 的 `### 新增` / `### 修复` / `### 内部` 之一，结尾挂 `(#PR)`（内部重构再挂 ADR 号）。不写测试数、基线 SHA、对拍组数、函数名与机制说明——那些在 PR 描述与 ADR 里。`## 未发布` 期间不写验证行，发版时才补。rebase 后先 `git rebase --continue` 把提交落完、再跑回归与对拍，并确认 `## 未发布` 没有被已发版的小节吸收（main 刚发过版时要重新开出来）。
+- CHANGELOG 一条一行、≤ 80 字，落在 `## 未发布` 的 `### 新增` / `### 修复` / `### 内部` 之一，结尾挂一个编号（有 PR 挂 PR 号，只有 issue 的挂 issue 号；内部重构再加 ADR 号）。内部条目允许点一个符号名，但不展开机制；测试数、基线 SHA、对拍组数一律不写——那些在 PR 描述与 ADR 里。`## 未发布` 期间不写验证行，发版时才补。rebase 后先 `git rebase --continue` 把提交落完、再跑回归与对拍，并确认 `## 未发布` 没有被已发版的小节吸收（main 刚发过版时要重新开出来）。
 - 审查标准：见 [CODING_STANDARDS.md](CODING_STANDARDS.md)，只放判断项；机械规则交给 CI。
 - 社区问题的归类与真机缺口见 [docs/09](docs/09-社区问题处理.md)：那里只记 GitHub 上看不到的判据与缺口，逐条回复与 issue 编号留在 issue 里。
 - 找「命令怎么分派、退出码怎么定」先看 [tool/run.py](tool/run.py) 的 `dispatch()` 与 `COMMANDS`：一条命令一个 `cmd_*(serial, rest) -> int`，`sys.exit` 只在 `__main__` 一处；退出码语义见 [ADR-0005](docs/adr/0005-run-command-handlers.md)。
@@ -63,4 +63,4 @@ GitHub Issues（`gh` CLI）。**开工前先有票**：任何实现 / 重构 / �
 
 ### Domain docs
 
-single-context：根目录 `CONTEXT.md` + `docs/adr/`。见 `docs/agents/domain.md`。`CONTEXT.md` 只放术语表（命令 / 脚本 / 执行 / 连接 / 事件 / 等待 / 通知 / issue 状态八组定义）；模块边界的决定写进 `docs/adr/`（现有 `0001` 手机连接、`0002` Phone 状态、`0003` 客户端 import 与依赖、`0004` 引擎状态事件、`0005` 命令与退出码、`0006` 渠道判定、`0007` 渠道到达），架构描述仍不写，等主流程整体重构。
+single-context：根目录 `CONTEXT.md` + `docs/adr/`。见 `docs/agents/domain.md`。`CONTEXT.md` 只放术语表（命令 / 脚本 / 执行 / 连接 / 事件 / 等待 / 通知 / issue 状态 / 文档九组定义）；模块边界的决定写进 `docs/adr/`（现有 `0001` 手机连接、`0002` Phone 状态、`0003` 客户端 import 与依赖、`0004` 引擎状态事件、`0005` 命令与退出码、`0006` 渠道判定、`0007` 渠道到达），架构描述仍不写，等主流程整体重构。

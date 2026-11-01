@@ -4,7 +4,7 @@
 
 ## 用户可见文档里的数字要能复现
 
-README、PR 描述、Release Note 里的计数，必须交代它在什么样本上、怎么数出来的。CHANGELOG 不受这条约束：它只写一条一行的变更，验证信息每版记一行。
+README、PR 描述、Release Note 里的计数，必须交代它在什么样本上、怎么数出来的。CHANGELOG 的验证行可省基线：它只写 `python -m unittest discover -s tests` 当次跑出来的项数，任何人在那个 tag 上重跑就能得到同一个数；拼接或推算出来的复合计数不进 CHANGELOG，只进 PR 描述，且照样要标基线。
 
 反例：「`switch_row` 14 处由假变真」——14 是「7 个文字节点 × 2 种屏尺寸」的记录条数，写进文档后读者无法复现，评审只能重数才发现。
 
