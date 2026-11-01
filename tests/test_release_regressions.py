@@ -149,6 +149,44 @@ class MsaTests(unittest.TestCase):
             self.assertIn(run.MSA, Path(directory, "suspended.txt").read_text())
 
 
+class GlobalMsaNetTests(unittest.TestCase):
+    """海外版 HyperOS 的 msa 是 com.miui.msa.global（Redmi Note 13 俄区实测）：
+    挂起后照样断网，断网和回读的命令写的是这个包名，不是国行的 run.MSA。"""
+
+    GLOBAL = "com.miui.msa.global"
+
+    def test_network_commands_name_the_global_package(self):
+        with patch.object(run, "sh_all", side_effect=[HELP, "Disabled networking", "", self.GLOBAL + ":deny",
+                                                      "chain:enabled"]) as shell:
+            self.assertTrue(run.msa_net("test", False, self.GLOBAL)["ok"])
+        sent = [c.args[1] for c in shell.call_args_list]
+        self.assertIn("cmd connectivity set-package-networking-enabled false " + self.GLOBAL, sent)
+        self.assertIn("cmd connectivity get-package-networking-enabled " + self.GLOBAL, sent)
+        self.assertFalse(any(run.MSA in c for c in sent))
+
+    def test_suspend_global_msa_also_cuts_network(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(run, "latest_backup", return_value=directory), \
+             patch.object(run, "suspended", return_value=True), \
+             patch.object(run, "sh_all", return_value="success"), patch.object(run, "sh"), \
+             patch.object(run, "msa_net", autospec=True,
+                          return_value={"ok": True, "supported": True, "reason": ""}) as net, \
+             patch.object(sys, "argv", ["run.py", "-s", "test", "suspend", self.GLOBAL]), \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(run.main(), 0)
+        net.assert_called_once_with("test", False, self.GLOBAL)
+        self.assertIn("已禁止联网", output.getvalue())
+
+    def test_unsuspend_global_msa_restores_network(self):
+        with patch.object(run, "suspended", return_value=False), patch.object(run, "sh"), \
+             patch.object(run, "msa_net", autospec=True,
+                          return_value={"ok": True, "supported": True, "reason": ""}) as net, \
+             patch.object(sys, "argv", ["run.py", "-s", "test", "unsuspend", self.GLOBAL]), \
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(run.main(), 0)
+        net.assert_called_once_with("test", True, self.GLOBAL)
+
+
 class NotificationSelectionTests(unittest.TestCase):
     def test_scan_excludes_honor_service_channels(self):
         names = ["警告", "实时活动", "赛事资讯", "护眼推荐", "活动优惠"]

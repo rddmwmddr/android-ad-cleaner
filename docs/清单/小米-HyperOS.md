@@ -9,6 +9,7 @@
 | Xiaomi 18 Fold（2608BPX34C） | CP2A.260605.016，Android 17 | 2026-10-24 社区实测（[Issue #2](https://github.com/rddmwmddr/android-ad-cleaner/issues/2)） |
 | Xiaomi 17 Ultra（2512BPNDAC，标准版） | HyperOS OS4.0.5.0.XPACNXM，Android 17 | 2026-10-28 真机实测；专用脚本九段全通过（176 秒，`recipes/xiaomi-2512BPNDAC`） |
 | Xiaomi 17（25113PN0EC） | HyperOS 4，Android 17 | 2026-11-01 社区实测（[PR #400](https://github.com/rddmwmddr/android-ad-cleaner/pull/400)）；无专用脚本，差异见[文末](#xiaomi-1725113pn0ecos4的差异) |
+| Redmi Note 13（23124RA7EO，**海外版 / 俄区**） | HyperOS OS2.0.213.0.VNHRUXM，Android 15 | 2026-11-01 社区实测（[Issue #474](https://github.com/rddmwmddr/android-ad-cleaner/issues/474)，adb + 手动，未登录小米账号）；无专用脚本，差异见[文末](#海外版hyperosredmi-note-1323124ra7eo的差异) |
 | Xiaomi 15（24129PN74C） | HyperOS OS4.0.0.22.XOCCNXM，Android 17 | 2026-10-29 真机实测；专用脚本九段全通过（164 秒，`recipes/xiaomi-24129PN74C/recipe_os4.py`） |
 | Xiaomi Pad 7（2410CRP4CC） | HyperOS OS2.0.208.0.VOZCNXM，Android 15 | 2026-10-28 实测；四段脚本复跑通过，约 61 秒 |
 | REDMI K80 至尊版（25060RK16C） | HyperOS 2（BP2A.250605.031.A3），Android 16 | 2026-10-27 真机实测；专用脚本九段全通过并回读（recipes/redmi-25060RK16C） |
@@ -172,7 +173,7 @@ REDMI K80 至尊版（HyperOS 2 / Android 16）结构差异：「隐私与安全
 
 ## 11. 系统广告组件 msa（要 adb，要你同意）
 
-`com.miui.systemAdSolution` 负责天气、日历、商店等系统 App 里的开屏和内置广告。
+`com.miui.systemAdSolution` 负责天气、日历、商店等系统 App 里的开屏和内置广告。海外版 HyperOS 上同一个组件叫 `com.miui.msa.global`，下面的命令把包名换成它即可，`run.py suspend` 两个都认。
 
 0.2.1 客户端和 `run.py -s S suspend com.miui.systemAdSolution` 会挂起它，并在系统提供接口时尝试禁止联网，回读包规则和防火墙状态。Android 13 等旧系统可能没有这些命令，此时明确显示「部分完成」并返回失败：挂起保留，广告仍可能出现。0.2.0 不含断网处理，见[归档记录](../归档/CHANGELOG-0.3.0及更早.md)。下面的手动命令仅适用于 `cmd connectivity help` 列出对应接口的系统：
 
@@ -280,3 +281,30 @@ java.lang.SecurityException: Injecting input events requires the caller (or the 
 - **负一屏**：没有文字入口，长按也唤不出设置，可直达 `com.miui.personalassistant/.settings.PASettingActivity`；实机的推荐卡片、热门活动、个性化推荐默认全关。
 - **浏览器**：结构与本清单完全一致，小米账号登录框同样会弹，点「取消」。
 - **营销通知**：实机扫描出 1 个候选，属服务类渠道，已跳过；没有营销渠道要关。
+
+---
+
+## 海外版 HyperOS（Redmi Note 13，23124RA7EO）的差异
+
+Redmi Note 13（`sapphiren_ru_global`，HyperOS OS2.0.213.0.VNHRUXM / Android 15，俄区）2026-11-01 社区实测。手机没有登录小米账号，打不开「USB 调试（安全设置）」，所以全程是 adb 读屏 + 直达页面 + 机主手动点。下面是和国行不一样、照本清单会走空或走偏的地方：
+
+- **引擎用不上**：界面是俄语（其他海外版是当地语言），引擎按中文文字找入口，机型脚本和 `recipe --ref` 一项也找不到。只能照本清单手动关；adb 负责挂起、断网、直达页面和读屏核对。
+- **没有小米账号时 adb 能做的有限**：`input` 被拒（`INJECT_EVENTS`），`settings put global/secure` 也被拒（`WRITE_SECURE_SETTINGS`），连「私人 DNS」都只能手动设（机主另外手动设了 `dns.adguard-dns.com`；网络拦截不在本项目范围，仅作记录）。`uiautomator dump` 读屏、`am start` 直达、`pm suspend`、`cmd connectivity` 不受影响。
+- **msa 包名是 `com.miui.msa.global`**：国行的 `com.miui.systemAdSolution` 不存在。挂起和断网接口都可用，回读 `com.miui.msa.global:deny`、`chain:enabled`。**重启后断网规则复位**（回到 `allow`，`chain3` 回到 `disabled`），挂起保留；被系统 App 拉起的进程照样会出现，与上面「只挂起拦不住」一致。
+- **广告不只走 msa**：安全中心 `com.miui.securitycenter` 和文件管理 `com.mi.android.globalFileexplorer` 自带 Yandex Mobile Ads 和 `miglobaladsdk`（包里有 `MobileAdsInitializeProvider`、`SdkInitProvider`），挂起 msa 关不掉它们，必须关应用内开关。
+
+| 项 | 入口（能直达的写了 Activity） | 关什么 |
+|---|---|---|
+| 安全中心 | `com.miui.securitycenter/com.miui.securityscan.ui.settings.SettingsActivity` | 🔴 Получать рекомендации（接收推荐），出厂开 |
+| 清理 | `com.miui.cleaner/com.miui.optimizecenter.settings.SettingsActivity` | 🔴 Получать рекомендации，出厂开 |
+| 负一屏（Лента виджетов） | `com.mi.globalminusscreen/.settings.PASettingActivity` | 🔴 Рекомендации приложений（应用推荐）、Предложение（热门应用推广），出厂都开 |
+| 应用商店 GetApps | `com.xiaomi.mipicks/com.xiaomi.market.ui.MarketPreferenceActivity` | 🔴 Постоянные уведомления（常驻通知）、Всплывающие уведомления（悬浮通知）；隐私里 Персональные рекомендации 出厂已关；🟢 Удалять установочные пакеты（安装后删安装包） |
+| 下载管理 | 应用内 右上「更多」→ 设置（未导出） | 🔴 Получать рекомендации，关时弹确认点「ОК」 |
+| 主题 | 我的（Мой аккаунт）→ 设置 | 🔴 Показывать рекламу（显示广告）、Персональные рекомендации |
+| 文件管理 | 右上「更多」→ 设置（未导出） | 本版本没有推荐开关。⚠️ Отзыв согласия 是撤回隐私协议，不是广告开关，不要动 |
+| 浏览器 `com.mi.globalbrowser` | `com.mi.globalbrowser/com.android.browser.BrowserSettingsActivity`（子页未导出） | 🔴 Показывать игры на панели навигации（导航栏游戏入口）；主页设置选 Упрощённый вид（简洁版，资讯流消失）；⚠️ 隐私保护里的 Блокировать рекламу 是保护类开关，要**打开** |
+| Google 广告 | `am start -a com.google.android.gms.settings.ADS_PRIVACY` | 本机出厂已关个性化，广告 ID 全零 |
+
+- 直达被拒（未导出或要签名权限）：安装器设置（要 `com.miui.securitycenter.permission.GLOBAL_PACKAGEINSTALLER`）、Mi 音乐 `MusicSettings`、文件管理设置页。
+- 预装应用里的 Facebook 三件套（`com.facebook.appmanager` / `services` / `system`）、没用过的 Mi 音乐和预装游戏，机主同意后同样 `pm suspend`，可一条命令还原。
+- 两次重启后复查：挂起状态与上表所有应用内开关都保持关闭。

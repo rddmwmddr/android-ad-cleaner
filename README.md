@@ -117,6 +117,7 @@
 | 小米 | REDMI K80 Pro（24122RKC7C） | HyperOS OS3.0.304.0.WOMCNXM / Android 16 | ✅ 10-29 九段实测，首轮关 20 项，复跑 172 秒；[实测记录](docs/15-红米K80Pro实测.md) | ✅ | ✅ 48 个渠道（54 候选） |
 | 小米 | Redmi Note 14 Pro（24090RA29C） | HyperOS 3.0.309.0 / Android 16 | ✅ 10-26 八段实测通过，整轮约 5 分钟 | ✅ | ✅ 11 个渠道 |
 | 小米 | Redmi Note 14 5G（24094RAD4C） | HyperOS OS3.0.306.0.WOQCNXM / Android 16 | ✅ 10-30 八段实测：20 项新关闭（记账修复前统计，不含普通点击关掉的 4 项），复跑 291 秒、21 项回读、调整 0 项 | ✅ | ✅ 3 个渠道，全部关闭 |
+| 小米 | Redmi Note 13 海外版 / 俄区（23124RA7EO） | HyperOS OS2.0.213.0.VNHRUXM / Android 15 | — 无专用脚本（界面是俄语，引擎按中文找不到入口） | ✅ 见[清单](docs/清单/小米-HyperOS.md#海外版hyperosredmi-note-1323124ra7eo的差异)（11-01 社区实测，adb + 手动） | —（未跑） |
 | Redmi | Note 12 Turbo（23049RAD8C） | HyperOS OS3.0.5.0 | ✅ 实测通过，九段 3.5 分钟 | ✅ | ✅ |
 | Redmi | K70（23113RKC6C） | HyperOS 3.0.307.0 / Android 16 | ⚠️ 9 段专用脚本，目标 20 项；[实测记录](docs/13-红米K70实测.md) | ✅ | —（未测通知） |
 | Redmi | K70 Pro（23117RK66C） | HyperOS OS3.0.306.0.WNMCNXM / Android 16 | ✅ 10-30 九段整轮 235 秒，25 项回读、0 调整、0 异常；[实测记录](docs/14-红米K70Pro实测.md) | ✅ | ✅ 17 个渠道，其他已有渠道和总开关不变 |

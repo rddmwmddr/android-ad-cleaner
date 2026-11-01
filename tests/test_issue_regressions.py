@@ -795,16 +795,15 @@ class RepeatedChannelNameTests(unittest.TestCase):
                          ("营销通知", True, (950, 980)))
 
 
-class AdPackagesTests(unittest.TestCase):
-    """#367：AD_PKGS 以 ro.product.brand 原值取键，POCO 取不到小米家族的广告包。
-    客户端「挂起广告组件」读的是 status-json 的 ads，所以 check 与 status-json 两个入口都守。"""
+class AdPackagesHarness:
+    """check 与 status-json 两个入口的假手机；INSTALLED 决定哪些广告包「装着」。"""
 
-    INFO = {"brand": "", "model": "M2012K11AC", "name": "POCO F3", "build": "OS1.0.1.0", "os": "", "android": "13"}
+    INFO ={"brand": "", "model": "M2012K11AC", "name": "POCO F3", "build": "OS1.0.1.0", "os": "", "android": "13"}
+    INSTALLED = ("com.miui.systemAdSolution",)       # 国行；海外版只装 com.miui.msa.global
 
-    @staticmethod
-    def shell(_s, cmd):
+    def shell(self, _s, cmd):
         """假 adb：只回答广告包装没装，其余命令回空。"""
-        return "package:/product/app/AdServices/base.apk" if cmd == "pm path com.miui.systemAdSolution" else ""
+        return "package:/product/app/AdServices/base.apk" if cmd in {"pm path " + p for p in self.INSTALLED} else ""
 
     def check_output(self, brand):
         out = io.StringIO()
@@ -836,6 +835,11 @@ class AdPackagesTests(unittest.TestCase):
             run.main()
         return json.loads(out.getvalue())
 
+
+class AdPackagesTests(AdPackagesHarness, unittest.TestCase):
+    """#367：AD_PKGS 以 ro.product.brand 原值取键，POCO 取不到小米家族的广告包。
+    客户端「挂起广告组件」读的是 status-json 的 ads，所以 check 与 status-json 两个入口都守。"""
+
     def test_check_lists_xiaomi_ad_package_for_poco_brand(self):
         self.assertIn("广告包 com.miui.systemAdSolution：未挂起", self.check_output("POCO"))
 
@@ -850,10 +854,29 @@ class AdPackagesTests(unittest.TestCase):
     def test_existing_brands_resolve_to_the_same_packages(self):
         self.assertEqual({b: run.ad_packages(b) for b in
                           ("Xiaomi", "Redmi", "OPPO", "OnePlus", "realme", "HONOR", "vivo")},
-                         {"Xiaomi": ["com.miui.systemAdSolution"], "Redmi": ["com.miui.systemAdSolution"],
+                         {"Xiaomi": ["com.miui.systemAdSolution", "com.miui.msa.global"],
+                          "Redmi": ["com.miui.systemAdSolution", "com.miui.msa.global"],
                           "OPPO": ["com.opos.ads", "com.heytap.pictorial"],
                           "OnePlus": ["com.opos.ads", "com.heytap.pictorial"],
                           "realme": ["com.opos.ads", "com.heytap.pictorial"], "HONOR": [], "vivo": []})
+
+
+class GlobalMsaTests(AdPackagesHarness, unittest.TestCase):
+    """海外版 HyperOS（Redmi Note 13 23124RA7EO，OS2.0.213.0.VNHRUXM 俄区实测）的 msa 包名是
+    com.miui.msa.global，国行包名不存在：check 与 status-json 要认出它，国行不多出一行。"""
+
+    INFO = dict(AdPackagesHarness.INFO, model="23124RA7EO", name="Redmi Note 13")
+    INSTALLED = ("com.miui.msa.global",)
+
+    def test_check_lists_global_msa_on_global_rom(self):
+        self.assertIn("广告包 com.miui.msa.global：未挂起", self.check_output("Redmi"))
+
+    def test_status_json_lists_global_msa_on_global_rom(self):
+        self.assertEqual(self.status_json("Redmi")["ads"], [{"pkg": "com.miui.msa.global", "suspended": False}])
+
+    def test_check_on_china_rom_does_not_mention_global_msa(self):
+        self.INSTALLED = AdPackagesHarness.INSTALLED
+        self.assertNotIn("com.miui.msa.global", self.check_output("Redmi"))
 
 
 if __name__ == "__main__":
