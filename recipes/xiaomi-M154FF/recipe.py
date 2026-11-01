@@ -164,6 +164,10 @@ def _():
 def _():
     # 首页「默认 / 探索版 / 自定义主页」不改：自定义主页要填网址，按机主喜好
     p.start("com.android.browser")
+    if "basicmode" in p.focus().lower():
+        # 拒绝浏览器协议后落到基本模式设置页，四个设置入口都不在这条路径上，找下去只会报「入口未找到」（#414）
+        print("  · 浏览器处在基本模式，设置入口不在这条路径上，本段跳过")
+        return
     if not browser_settings():
         raise RuntimeError("浏览器设置入口未找到；未点击正文中的文字")
     if maybe("隐私和安全"):
