@@ -34,6 +34,14 @@
 
 **对拍。** 测试内冻结基线实现（旧 `KW` / `SKIP` / `VIVO_MARKETING` / `SERVICE` 原文与旧组合式），配一份覆盖每个词条与序列化边界的语料，逐条比对旧判定与新 `classify()`，差异必须为零。语料要能证伪：故意包含带第四列的「其他」行、`youtube` 渠道行、包名/应用名误命中行。
 
+## 增补：广告网络渠道 ID 直接进候选（#456）
+
+**新字段 `ad_network_id`，与 `vivo_marketing_id` 同构但优先级更宽。** `com.freeme.launcher` 的 `TencentAdNetCH1`、`ADroiUnion` 与渠道名都不带营销词，只认营销关键词会漏（#455 真机反馈）。新增 `AD_NETWORK` 词表（tencentadnet、adroi、pangle、admob、applovin、unityads、mintegral），**子串匹配、大小写不敏感、只匹配渠道 ID**——广告网络 ID 常带前后缀（`CH1`、`_union`），整段锚定认不出来；渠道名仍交给营销关键词，`unionpay` / `update` 这类普通 ID 不误伤。
+
+**与 vivo 的优先级差异是刻意的。** `VPushChannel_0/4/6` 同 ID 下混着服务类渠道，所以营销关键词仍要命中（#337）；广告网络 ID 只承载广告，命中即营销候选，不再要求关键词。两者都越过 `SKIP` 的服务类排除（`scan_excluded = skip_hit and not (vivo or ad_network)`）；`default_unchecked` 不动——SERVICE_TERMS 命中的渠道即便在广告网络车道上，默认不勾的语义保持原样，用例钉住。
+
+**对拍基线不变的原因。** 冻结语料里没有广告网络 ID，新判定只在该类 ID 上生效，其余判定逐条不漂移；`unionpay` 等反例进独立用例，不进对拍语料。
+
 ## Considered Options
 
 - **具名判定集**（采纳）vs **单一类别枚举**（否）。枚举无法在不改变行为的前提下同时表达两级服务语义；报告的价值在「一处加词」，不在类别数。

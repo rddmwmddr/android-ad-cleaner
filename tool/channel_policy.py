@@ -19,6 +19,13 @@ SKIP = re.compile(r"下载|更新|安装|上传|订单|物流|快递|交易|支�
 # 营销关键词仍要命中，否则同 ID 下的服务类渠道会混进客户端默认勾选（#337）。
 VIVO_MARKETING = re.compile(r"^VPushChannel_(?:0|4|6)$", re.I)
 
+# 广告网络渠道 ID 是厂商固定车道（#456，来自 #455 的真机反馈）：TencentAdNetCH1、
+# ADroiUnion 这类 ID 与渠道名都不带营销词，只认中文营销词会漏。ID 常带前后缀
+# （CH1、_union），整段锚定认不出来——子串匹配、大小写不敏感；只匹配渠道 ID，
+# 渠道名仍交给营销关键词。与 vivo 的差别：广告网络 ID 只承载广告，命中即营销候选，
+# 不再要求营销关键词；SKIP 的服务类排除同样越过。
+AD_NETWORK = re.compile(r"tencentadnet|adroi|pangle|admob|applovin|unityads|mintegral", re.I)
+
 # 「已进清单但默认不勾」的服务 / 含糊类别，匹配任一字段（包名、渠道 ID、渠道名、应用名）。
 SERVICE_TERMS = re.compile(r"TETHERING|热点|ENVELOPE|红包|Auto lock|盗窃|hotspot|drive_mode|驾驶|securitypermission|权限建议|直播|ig_live|警告|告警|实时活动|赛事|护眼|清理加速|普通通知|推送通知|个性化提示", re.I)
 # 旧实现里还有两个依赖 TSV 形状的词条，改写成字段规则：前者是「包名尾部 youtube + ID 2」，
@@ -32,6 +39,7 @@ class ChannelJudgement:
     default_unchecked: bool = False
     protected: bool = False
     vivo_marketing_id: bool = False
+    ad_network_id: bool = False
 
 
 def protected_channel(name, channel_id="", list_label=""):
@@ -50,6 +58,7 @@ def _youtube_channel_two(fields):
 
 def classify(name, channel_id="", list_label="", package="", app=""):
     vivo = bool(VIVO_MARKETING.match(channel_id))
+    ad_network = bool(AD_NETWORK.search(channel_id))
     # scan 只在读到应用名时打第四列；没有第四列时，最后一个字段就是渠道名。
     fields = [package, channel_id, name] + ([app] if app else [])
     default_unchecked = (
@@ -58,9 +67,10 @@ def classify(name, channel_id="", list_label="", package="", app=""):
         or fields[-1] == "其他"
     )
     return ChannelJudgement(
-        marketing_candidate=bool(KW.search(name + " " + channel_id)),
-        scan_excluded=bool(SKIP.search(name)) and not vivo,
+        marketing_candidate=ad_network or bool(KW.search(name + " " + channel_id)),
+        scan_excluded=bool(SKIP.search(name)) and not (vivo or ad_network),
         default_unchecked=default_unchecked,
         protected=protected_channel(name, channel_id, list_label),
         vivo_marketing_id=vivo,
+        ad_network_id=ad_network,
     )
