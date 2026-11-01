@@ -13,6 +13,7 @@ import unittest
 from unittest.mock import Mock, patch
 import xml.etree.ElementTree as ET
 
+from fixtures import job_stub
 from gui import app
 from gui.bundle_data import bundle_data
 
@@ -342,7 +343,7 @@ class GuiTests(unittest.TestCase):
 
     def api(self, directory):
         api = self.app.Api(directory)
-        api.job = {"running": True, "cancel": False, "lines": [], "results": [], "serial": "test", "t0": 0, "model": "M"}
+        api.job = job_stub(model="M")
         return api
 
     def test_stop_is_not_a_failure_and_finish_still_runs(self):
@@ -350,14 +351,14 @@ class GuiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             api = self.api(directory)
             stopped = Mock(stdout=io.StringIO("正在连接手机读屏服务……\n"))
-            stopped.wait.side_effect = lambda: (api.job.__setitem__("cancel", True), -15)[1]
+            stopped.wait.side_effect = lambda: (api.job.request_stop(), -15)[1]
             finish = Mock(stdout=io.StringIO("插电常亮已改回 0\n")); finish.wait.return_value = 0
             with patch.object(self.app.subprocess, "Popen", side_effect=[stopped, finish]) as popen:
                 api._work([self.app.Task("关闭营销通知", "run.py", ["-s", "test", "x"]),
                            self.app.Task("关闭快应用", "run.py", ["-s", "test", "quickapp", "off"]),
                            self.app.Task("收尾", "run.py", ["-s", "test", "finish"])])
             self.assertEqual(popen.call_count, 2)
-            self.assertEqual([(r["title"], r.get("stopped", False)) for r in api.job["results"]], [("关闭营销通知", True), ("收尾", False)])
+            self.assertEqual([(r["title"], r.get("stopped", False)) for r in api.job.results], [("关闭营销通知", True), ("收尾", False)])
             self.assertIsNone(api.last_error)
             self.assertEqual([s["result"] for s in api.report_payload()["steps"]], ["已停止", "成功"])
 
@@ -438,8 +439,7 @@ class PauseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             api = app.Api(directory)
             self.assertFalse(api.pause())                                # 没在执行
-            api.job = {"running": True, "cancel": False, "lines": [], "results": [], "serial": "t", "t0": 0,
-                       "idx": 1, "total": 2, "title": "x"}
+            api.job = job_stub(serial="t", idx=1, total=2, title="x")
             self.assertTrue(api.pause())
             self.assertTrue(Path(directory, "pause").exists())
             api._log('#aac:event {"kind": "paused"}')
@@ -456,7 +456,7 @@ class PauseTests(unittest.TestCase):
     def test_gui_waits_between_steps_and_passes_the_flag_to_engines(self):
         with tempfile.TemporaryDirectory() as directory:
             api = app.Api(directory)
-            api.job = {"running": True, "cancel": False, "lines": [], "results": [], "serial": "t", "t0": 0}
+            api.job = job_stub(serial="t")
             envs = []
 
             def proc(cmd, **kw):
@@ -471,7 +471,7 @@ class PauseTests(unittest.TestCase):
                 api._work([app.Task("存改动前的快照", "run.py", ["-s", "t", "backup"]),
                            app.Task("收尾", "run.py", ["-s", "t", "finish"])])
             self.assertEqual(envs, [str(Path(directory, "pause"))] * 2)
-            log = "\n".join(api.job["lines"])
+            log = "\n".join(api.job.lines)
             self.assertLess(log.index("⏸ 已暂停"), log.index("▶ 收尾"))
             self.assertIn("▶ 继续执行", log)
             self.assertFalse(Path(directory, "pause").exists())

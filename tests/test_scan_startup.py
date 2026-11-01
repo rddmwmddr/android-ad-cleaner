@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
+from fixtures import job_stub
 from gui import app
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -132,20 +133,20 @@ class ErrorTests(unittest.TestCase):
         self.api._run.assert_called_once_with("fast.py", "-s", "test", "check", timeout=75)
 
     def test_read_screen_check_does_not_run_during_job(self):
-        self.api.job = {"running": True}
+        self.api.job = job_stub()
         self.api._run = Mock()
         self.assertIn("正在执行", self.api.ui_check("test")["error"])
         self.api._run.assert_not_called()
 
     def test_failed_task_keeps_first_exception_not_only_tail(self):
         detail = "java.lang.IllegalStateException: first cause\n" + f"at {Path.home()}/frame\n" * 100
-        self.api.job = {"running": True, "cancel": False, "lines": [], "results": [], "serial": "test", "t0": 0}
+        self.api.job = job_stub()
         process = Mock(stdout=io.StringIO(detail))
         process.wait.return_value = 1
         with patch.object(self.app.subprocess, "Popen", return_value=process):
             self.api._work([self.app.Task("关闭广告", "run.py", [])])
-        self.assertFalse(self.api.job["running"])
-        self.assertEqual(self.api.job["results"][0]["rc"], 1)
+        self.assertFalse(self.api.job.running)
+        self.assertEqual(self.api.job.results[0]["rc"], 1)
         self.assertIn("first cause", self.api.last_error["detail"])
         self.assertNotIn(str(Path.home()), self.api.diagnostics())
 

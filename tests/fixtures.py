@@ -177,6 +177,20 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
     return p
 
 
+def job_stub(**fields):
+    """造一个「一次执行」的测试状态（ADR-0010）。默认刚开始、空日志、计时从 0 起，按关键字覆盖字段。
+
+    `serial` / `model` / `total` / `t0` 走构造器，其余字段（lines / results / paused / cancel …）
+    构造后直接赋值——测试里没有并发写者，不需要持锁。
+    """
+    from gui import app
+    job = app.Job(serial=fields.pop("serial", "test"), model=fields.pop("model", "m"),
+                  total=fields.pop("total", 0), t0=fields.pop("t0", 0))
+    for name, value in fields.items():
+        setattr(job, name, value)
+    return job
+
+
 def phone_mock(fast_mod=None, **fields):
     """以 Mock 冒充 Phone（配方脚本、只读命令这类不需要真页面的用例）。
 

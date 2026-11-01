@@ -13,6 +13,7 @@ import time
 import uuid
 from unittest.mock import Mock, patch
 
+from fixtures import job_stub
 from gui import app
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -158,7 +159,7 @@ class TaskTests(unittest.TestCase):
     def test_conflict_skips_following_ui_task_but_keeps_cleanup_and_first_error(self):
         with tempfile.TemporaryDirectory() as directory:
             api = app.Api(directory)
-            api.job = {"running": True, "cancel": False, "lines": [], "results": [], "serial": "test", "t0": 0}
+            api.job = job_stub()
             failed = Mock(stdout=io.StringIO('#aac:event {"kind": "ui_busy"}\nUIAUTOMATION_BUSY: first failure\n'))
             failed.wait.return_value = 1
             finish = Mock(stdout=io.StringIO("插电常亮已改回 7\n")); finish.wait.return_value = 0
@@ -167,11 +168,11 @@ class TaskTests(unittest.TestCase):
                            app.Task("通知", "chan_fast.py", uses_ui=True, channels=[]),
                            app.Task("收尾", "run.py", ["-s", "test", "finish"])])
             self.assertEqual(popen.call_count, 2)
-            self.assertTrue(api.job["results"][1]["skipped"])
-            self.assertEqual(api.job["results"][2]["rc"], 0)
-            self.assertIn("GKD", api.job["recovery"])
-            api.job["total"] = 3
-            self.assertEqual(api.poll()["recovery"], api.job["recovery"])
+            self.assertTrue(api.job.results[1]["skipped"])
+            self.assertEqual(api.job.results[2]["rc"], 0)
+            self.assertIn("GKD", api.job.recovery)
+            api.job.total = 3
+            self.assertEqual(api.poll()["recovery"], api.job.recovery)
             self.assertEqual(api.last_error["operation"], "广告开关")
             self.assertIn("first failure", api.last_error["detail"])
 
