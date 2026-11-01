@@ -619,11 +619,16 @@ class Api:
         return {"ok": True, "total": len(tasks)}
 
     def _log(self, s):
-        """记一行输出。事件行只改状态、不进日志，返回 None；人话返回存下来的文本。"""
+        """记一行输出。事件行只改状态、不进日志，返回 None；人话返回存下来的文本。
+        载荷行（页面骨架）单独收着，上报时拼在末尾：不进界面日志与步骤摘要，也不会在
+        「最近失败的完整诊断」里重复一遍。"""
         s = s.rstrip("\n")
         events = _tool("events")
         if events.is_event(s):
             self._event(events.parse(s))
+            return None
+        if events.is_payload(s):
+            self.job.setdefault("payloads", []).append(events.strip_payload(s))
             return None
         self.job["lines"].append(s)
         return s
@@ -838,6 +843,10 @@ class Api:
         log = "\n".join(l for l in j.get("lines", []) if l.strip())
         if self.last_error:
             log += f"\n\n[最近失败：{self.last_error['operation']}]\n{self.last_error['detail']}"
+        payloads = [x for x in j.get("payloads", []) if x.strip()]
+        if payloads:
+            # 放在末尾：日志只留最后 2 万字，骨架跟着失败日志一起留下，不会被早先的成功步骤挤掉
+            log += "\n\n[页面骨架]\n" + "\n".join(payloads)
         steps = [{"title": scrub(r["title"])[:40], "sec": int(r.get("sec") or 0),
                   "result": "跳过" if r.get("skipped") else "已停止" if r.get("stopped") else ("成功" if r["rc"] == 0 else "失败")}
                  for r in j.get("results", [])][:12]

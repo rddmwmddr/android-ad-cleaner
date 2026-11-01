@@ -8,7 +8,7 @@
   chan_fast.py -s SERIAL on  清单.tsv      还原
 清单.tsv：包名<TAB>渠道id<TAB>说明[<TAB>应用名]，一行一个；# 开头是注释。
 """
-import re, shlex, sys, time, os
+import hashlib, re, shlex, sys, time, os
 from dataclasses import dataclass
 for _st in (sys.stdout, sys.stderr):
     try:
@@ -17,10 +17,11 @@ for _st in (sys.stdout, sys.stderr):
         pass
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fast import Phone, ScreenLocked, pause_point
-from row import PATH_DEPTH, bounds, link, own
+from row import PATH_DEPTH, bounds, link, own, skeleton
 from channel_policy import classify, protected_channel
 from troubleshooting import XIAOMI_INPUT
 import adb_link
+import events
 import wait
 
 
@@ -74,6 +75,8 @@ def app_labels(reader, packages):
     return out
 
 RETRY_MAX = 10
+ROW_NOT_FOUND = "应用通知页里没找到这一行"     # #427 / #428 的共同卡点：名字挂在了认不出的地方
+SKELETON_PER_RUN = 2                            # 一次运行最多带两份不同布局的骨架，防止占满上报预算
 
 # ---------- 一项的结局 ----------
 # 每个出口返回一个 Outcome；怎么记账（算不算失败、要不要重试、算不算拨动了、复查是否豁免）
@@ -97,6 +100,7 @@ ERROR = "error"                        # 意外异常，原文进 detail
 class Outcome:
     kind: str
     detail: str = ""
+    payload: str = ""        # 进上报日志的机器行（页面骨架），不参与判读
 
 
 # 怎么记账由这一张表决定，不由返回值的形状暗示。键是结局，值是它对整批的四件事：
@@ -165,10 +169,12 @@ def render(outcome, label, want_on):
 
 
 def show(outcome, label, want_on):
-    """打印这一项的结局；不打印的项静默通过。"""
+    """打印这一项的结局；不打印的项静默通过。机器行（骨架）跟在人话后面，由客户端分流。"""
     line = render(outcome, label, want_on)
     if line:
         print(line)
+    if outcome.payload:
+        events.payload(outcome.payload)
 
 
 def truncated(cid):
@@ -358,6 +364,7 @@ class Unreached:
     why: str = ""
     hint: str = ""
     no_row: bool = False
+    skeleton: str = ""       # 脱敏页面骨架（#428）：只进上报，不进人话
 
     @property
     def text(self):
@@ -383,6 +390,7 @@ class ChannelPage:
         self.p, self.name, self.pk, self.cid, self.vivo_app = p, name, pk, cid, vivo_app
         self.stage, self.why, self.raw_focus = "", "", ""
         self.no_row = False
+        self.skeleton = ""
 
     # ---------- 认页与认行 ----------
     def _focus(self):
@@ -530,15 +538,45 @@ class ChannelPage:
 
     # ---------- 诊断 ----------
     def _hint(self):
-        """跳过时附上页面结构（不含页面文字）：标题在不在、有几个开关。适配新系统靠它。"""
+        """跳过时附上页面结构（不含页面文字）：标题在不在、有几个开关。适配新系统靠它。
+        「应用通知页里没找到这一行」再附一份脱敏骨架（#428）：名字到底挂在哪。"""
         p, name = self.p, self.name
         try:
             root = p.tree()
             at = [b[1] < p.H * 0.22 for t, b, _ in p.texts(root) if t == name]
             title = "顶部" if any(at) else ("列表" if at else "无")
+            self.skeleton = self._skeleton(root)
             return f"标题{title}，允许通知开关 {len(allow_switches(p, root))} 个，开关 {len(p.switches(root))} 个"
         except Exception:
             return ""
+
+    def _skeleton(self, root):
+        """#427 要的答案：名字挂在哪个节点上。同一次运行里同一布局只留第一份，最多两份。"""
+        p = self.p
+        if self.stage != ROW_NOT_FOUND:
+            return ""
+        if self.no_row:
+            return ""            # 应用通知整体关着：页面上确实没有这一行（#426），不是没认出来
+        if p.skeleton_count >= SKELETON_PER_RUN:
+            return ""
+        try:
+            # 用 _focus() 刚读到的前台原文：再调一次 p.focus() 会多一次 dumpsys（ADR-0007），
+            # 而且读到的可能已经是另一页（#422）
+            text = skeleton(root, self.name, p.W, p.H, self.raw_focus)
+        except Exception:
+            return ""
+        if not text:
+            return ""
+        # 布局签名取页面结构本身：骨架正文里的 N / M / P 随目标名变化，拿它去重等于每个渠道都算新布局
+        sig = hashlib.sha1("\n".join(
+            "|".join((n.get("class") or "", n.get("bounds") or "", n.get("resource-id") or "",
+                      n.get("clickable") or "", n.get("checkable") or "", n.get("scrollable") or ""))
+            for n in root.iter("node")).encode("utf-8")).hexdigest()
+        if sig in p.skeleton_sigs:
+            return ""
+        p.skeleton_sigs.add(sig)
+        p.skeleton_count += 1
+        return text
 
     # ---------- 到页 ----------
     def _enter_app_page(self):
@@ -562,7 +600,7 @@ class ChannelPage:
         if not shown and not self._focus():
             self.stage = self._unopened_stage()
             return None
-        self.stage = "应用通知页里没找到这一行"
+        self.stage = ROW_NOT_FOUND
         for _ in range(9):
             if p.locked():
                 raise ScreenLocked("手机锁屏了")
@@ -637,7 +675,7 @@ class ChannelPage:
             switch = self._enter_app_page()
         if switch:
             return Reached(switch)
-        return Unreached(self.stage, self.why, self._hint(), self.no_row)
+        return Unreached(self.stage, self.why, self._hint(), self.no_row, self.skeleton)
 
 
 def _switch_of(reached):
@@ -763,7 +801,8 @@ def toggle(p, pk, cid, want_on, name="", allowed=()):
                 return Outcome(APP_DENIED)
             # 只记 Activity、卡在哪一环和开关数量，不记页面内容；适配新系统靠它。
             return Outcome(NOT_CONFIRMED,
-                           f"未确认「{name}」渠道页及通知开关，跳过（停在 {p.focus() or '未知页面'}；{reached.text}）")
+                           f"未确认「{name}」渠道页及通知开关，跳过（停在 {p.focus() or '未知页面'}；{reached.text}）",
+                           reached.skeleton)
         if disabled_at(p, reached.switch[2]):
             return Outcome(GREYED)
         desired = "ON" if want_on else "off"

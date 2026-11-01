@@ -171,6 +171,8 @@ class Phone:
         self.vivo_seen = False              # 见过 vivo 的通知页：渠道页与应用通知页是同一个 Activity，只从应用列表进
         self.changed = []          # (页面, 标题) 记录本次关掉的
         self.miss = 0              # 本段已经没找到几次；>0 说明路径对不上，后面只看当前屏、不再翻页找
+        self.skeleton_sigs = set()  # 本次运行已上报的骨架布局（#428）：同布局只留第一份
+        self.skeleton_count = 0     # 本次运行已上报的骨架份数，上限见 chan_fast.SKELETON_PER_RUN
 
     @property
     def d(self):
