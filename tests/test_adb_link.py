@@ -147,11 +147,6 @@ class InvokeTests(unittest.TestCase):
         self.assertEqual(out, "Android Debug Bridge version 1.0.41")
 
 
-# 清空环境变量时留下家目录：Windows 的 expanduser 靠 USERPROFILE / HOMEDRIVE+HOMEPATH，
-# 清空后程序里拼不出家目录，和测试算出的路径对不上（v0.2.9 的 Windows 打包测试在这里失败）
-HOME_ENV = {k: os.environ[k] for k in ("HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH") if k in os.environ}
-
-
 class CandidateTests(unittest.TestCase):
     """三份查找列表收成一份：客户端下载的那份排最前，`~/platform-tools` 与 `ADBUTILS_ADB_PATH` 都不再漏。"""
 
@@ -159,22 +154,22 @@ class CandidateTests(unittest.TestCase):
         return patch.object(adb_link.os.path, "exists", side_effect=lambda p: p in paths)
 
     def test_adb_utils_path_env_is_honoured(self):
-        with patch.dict(os.environ, {**HOME_ENV, "ADBUTILS_ADB_PATH": "/from/adbutils"}, clear=True), \
+        with patch.dict(os.environ, {"ADBUTILS_ADB_PATH": "/from/adbutils"}, clear=True), \
              patch.object(adb_link.shutil, "which", return_value=None), self.only("/from/adbutils"):
             self.assertEqual(adb_link.adb_path(), "/from/adbutils")
 
     def test_platform_tools_in_home_is_a_fallback(self):
         home_adb = os.path.expanduser("~/platform-tools/adb")
-        with patch.dict(os.environ, {**HOME_ENV}, clear=True), patch.object(adb_link.shutil, "which", return_value=None), \
+        with patch.dict(os.environ, {}, clear=True), patch.object(adb_link.shutil, "which", return_value=None), \
              self.only(home_adb):
             self.assertEqual(adb_link.adb_path(), home_adb)
 
     def test_the_clients_own_download_wins(self):
-        with patch.dict(os.environ, {**HOME_ENV, "ADB": "/env/adb"}, clear=True), self.only("/env/adb", "/data/pt/adb"):
+        with patch.dict(os.environ, {"ADB": "/env/adb"}, clear=True), self.only("/env/adb", "/data/pt/adb"):
             self.assertEqual(adb_link.adb_path(first=("/data/pt/adb",)), "/data/pt/adb")
 
     def test_candidates_are_deduplicated_in_priority_order(self):
-        with patch.dict(os.environ, {**HOME_ENV, "ADB": "/env/adb"}, clear=True), \
+        with patch.dict(os.environ, {"ADB": "/env/adb"}, clear=True), \
              patch.object(adb_link.shutil, "which", return_value="/env/adb"), \
              patch.object(adb_link.os.path, "exists", return_value=True):
             found = adb_link.adb_candidates()
@@ -315,7 +310,7 @@ class ParityTests(unittest.TestCase):
 
     def test_chan_shell_phone(self):
         seen = {}
-        with patch.dict(os.environ, {**HOME_ENV, "ADB": self.ADB}, clear=True):
+        with patch.dict(os.environ, {"ADB": self.ADB}, clear=True):
             for name, (script, wait_ok) in CASES.items():
                 with self.subTest(name):
                     seen[name] = self.drive(
@@ -371,7 +366,7 @@ class ParityTests(unittest.TestCase):
                  patch.object(adb_link, "wait_for", return_value=False):
                 return outcome(lambda: reader.shell("a")), outcome(lambda: reader.shell("b"))
 
-        with patch.dict(os.environ, {**HOME_ENV, "ADB": self.ADB}, clear=True):
+        with patch.dict(os.environ, {"ADB": self.ADB}, clear=True):
             self.assertEqual(sequence(OldShellPhone("S", self.ADB)), sequence(chan.ShellPhone("S")))
 
     def test_gui_adb_present(self):
@@ -396,7 +391,7 @@ class ParityTests(unittest.TestCase):
 
     def test_the_unified_candidate_order_is_pinned(self):
         """三份列表收成一份之后，客户端顺序是：下载目录 → ADB → ADBUTILS_ADB_PATH → PATH → 系统 SDK → 家目录。"""
-        with patch.dict(os.environ, {**HOME_ENV, "ADB": "/env/adb", "ADBUTILS_ADB_PATH": "/env/adbutils"}, clear=True), \
+        with patch.dict(os.environ, {"ADB": "/env/adb", "ADBUTILS_ADB_PATH": "/env/adbutils"}, clear=True), \
              patch.object(adb_link.shutil, "which", return_value="/path/adb"), \
              patch.object(adb_link.os.path, "exists", return_value=True):
             found = adb_link.adb_candidates(first=("/data/pt/adb",), last=("/opt/homebrew/bin/adb",))

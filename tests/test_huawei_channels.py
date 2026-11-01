@@ -172,7 +172,7 @@ class HuaweiChannelsTests(unittest.TestCase):
                 with redirect_stdout(io.StringIO()):
                     path = hw.save_snapshot("offline-device", device.channels, device.apps, device.modes, "0")
             import json
-            data = json.loads(path.read_text(encoding="utf-8"))      # Windows 默认 cp1252，读不了中文
+            data = json.loads(path.read_text())
             self.assertEqual(data["stay_on"], "0")
             self.assertEqual(data["permissions"], device.modes)
             self.assertEqual(len(data["channels"]), 3)
