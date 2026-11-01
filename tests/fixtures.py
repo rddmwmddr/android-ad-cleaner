@@ -171,6 +171,7 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
     p.log, p.miss, p.changed = False, 0, []
     p.pause_at_lock_check = False
     p.systemui_text, p.vivo_seen, p.safe_mode = False, False, False
+    p.skeleton_sigs, p.skeleton_count = set(), 0
     for name, value in fields.items():
         setattr(p, name, value)
     return p
@@ -189,6 +190,7 @@ def phone_mock(fast_mod=None, **fields):
         import fast as fast_mod
     p = Mock(name="Phone")
     p.pause_at_lock_check, p.systemui_text, p.vivo_seen, p.safe_mode = False, False, False, False
+    p.skeleton_sigs, p.skeleton_count = set(), 0
     p.reader = p.d = Mock(name="reader")
     for name, value in fields.items():
         setattr(p, name, value)
