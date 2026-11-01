@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-from fixtures import job_stub
+from fixtures import fake_adb, job_stub
 from gui import app
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,6 +30,7 @@ def dump(importance=3):
 
 class ReadOnlyTests(unittest.TestCase):
     def invoke(self, args, output):
+        fake_adb(self)
         result = SimpleNamespace(returncode=0, stdout=output, stderr="")
         with patch.object(fast, "connect", side_effect=AssertionError("只读操作不应启动 UiAutomation")) as connect, \
              patch.object(subprocess, "run", return_value=result) as shell, \
@@ -83,7 +84,8 @@ class ReadOnlyTests(unittest.TestCase):
 
     def test_adb_failure_is_not_empty_success(self):
         result = SimpleNamespace(returncode=1, stdout="", stderr="device unauthorized")
-        with patch.object(subprocess, "run", return_value=result):
+        with patch.object(adb_link, "adb_path", return_value="/fake/adb"), \
+             patch.object(subprocess, "run", return_value=result):
             with self.assertRaisesRegex(RuntimeError, "unauthorized"):
                 chan.parse(chan.ShellPhone("test"))
 

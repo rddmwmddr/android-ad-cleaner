@@ -16,7 +16,7 @@ import fast
 import run
 import chan_fast as chan
 from bundle_data import bundle_data, stage
-from fixtures import phone_stub
+from fixtures import fake_adb, phone_stub
 
 
 def recipe(p, only="__no_steps__"):
@@ -94,6 +94,9 @@ HELP = "\n".join("  " + name for name in (
 
 
 class MsaTests(unittest.TestCase):
+    def setUp(self):
+        fake_adb(self)
+
     def test_old_android_missing_interface_does_not_issue_writes(self):
         with patch.object(run, "sh_all", return_value="Connectivity service commands:\n  help") as shell:
             result = run.msa_net("test", False)

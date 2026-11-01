@@ -20,7 +20,7 @@ import chan_fast as chan
 import fast
 import run
 import troubleshooting
-from fixtures import phone_stub
+from fixtures import fake_adb, phone_stub
 
 
 def page(xml, focus, w=1080, h=2340):
@@ -393,6 +393,9 @@ class XiaomiInputTests(unittest.TestCase):
 
 
 class AdbLinkTests(unittest.TestCase):
+    def setUp(self):
+        fake_adb(self)
+
     def test_client_errors_are_recognised_but_remote_stderr_is_not(self):
         self.assertTrue(adb_link.client_gone("adb.exe: device 'ABC' not found"))
         self.assertTrue(adb_link.client_gone("error: device offline"))
