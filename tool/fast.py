@@ -173,6 +173,7 @@ class Phone:
         self.miss = 0              # 本段已经没找到几次；>0 说明路径对不上，后面只看当前屏、不再翻页找
         self.skeleton_sigs = set()  # 本次运行已上报的骨架布局（#428）：同布局只留第一份
         self.skeleton_count = 0     # 本次运行已上报的骨架份数，上限见 chan_fast.SKELETON_PER_RUN
+        self.promoted = set()      # 点过才发现是推广位的 ✕：同一处不再点第二次（#420）
 
     @property
     def d(self):
@@ -479,11 +480,14 @@ class Phone:
             if n.get("clickable") != "true" or n.get("package") == "com.android.systemui":
                 continue
             key = (n.get("content-desc") or "") + " " + (n.get("resource-id") or "")
+            if key.strip() in self.promoted:
+                continue                    # 同一处已经判定为推广位：再点还是跳走
             if self.CLOSE.search(key) and not (n.get("text") or "").strip() and not in_list(n):
                 l, t, r, b = bounds(n)
                 # 只点屏幕内的图标：屏幕外还留着上一层的节点，点它会抛「点击坐标在屏幕外」把整段打断
                 if 0 < r - l < self.W * 0.3 and 0 < b - t < self.H * 0.12 and self.on_screen(n):
-                    self.click((l + r) // 2, (t + b) // 2); time.sleep(0.6)
+                    if self._promoted_click((l + r) // 2, (t + b) // 2, key.strip()):
+                        return None         # 没关掉弹窗，调用方按「这次什么也没关」处理
                     self.say(f"  · 弹窗点了 ✕（{key.strip()[:40]}）")
                     return "✕"
         tx = self.texts(root)
@@ -509,6 +513,21 @@ class Phone:
         if any(n.get("checkable") == "true" or n.get("scrollable") == "true" for n in root.iter("node")):
             return None
         return refuse()
+
+    def _promoted_click(self, x, y, key):
+        """点 ✕ 之后前台换了 App：多半是页面里的推广位（#420），退回原 App 并记下这一处。
+        返回真表示这次没关掉弹窗；前台没变、或点击后读不到前台时返回假，调用方照旧算关闭。"""
+        before = self.focus().split("/", 1)[0]
+        self.click(x, y); time.sleep(0.6)
+        after = self.focus().split("/", 1)[0]
+        if not (before and after and after != before):
+            return False
+        self.promoted.add(key)
+        self.back(); time.sleep(.4)
+        if self.focus().split("/", 1)[0] != before:      # 一次返回还没退回来，再退一次
+            self.back(); time.sleep(.4)
+        self.say(f"  · 点了 ✕ 后跳到 {after}，疑似推广位，已退回（{key[:40]}）")
+        return True
 
     def tap(self, text, exact=False, scrolls=6, wait=0.6, quiet=False):
         """找到就点。往下翻着找；翻到底没有，就回顶部再找一遍。
@@ -865,8 +884,61 @@ class Phone:
         time.sleep(0.3)                      # 结果页起来了，给它的内容留一拍
         return True
 
-    def start(self, pkg, activity=None, settle=1.2, foreground=None):
-        """拉起 App；之后 settle 秒内冒出来的更新/推荐弹窗顺手点掉。"""
+    def start(self, pkg, activity=None, settle=1.2, foreground=None, expect=None):
+        """拉起 App；之后 settle 秒内冒出来的更新/推荐弹窗顺手点掉。
+
+        expect：预期页面的判据——给一段文字就要看见它，给一组时全部出现才算落在页面上。
+        有开屏 / 推广页的 App 用它：落在别处时先退出去重新拉起一次，仍不对就结束本段（#420）。
+        判据由调用方给（如该 App 的底部标签栏文字），引擎不认具体是哪一家的文案。"""
+        self.promoted.clear()
+        self._launch(pkg, activity, settle, foreground)
+        if expect is None or self.expect_page(expect):
+            return
+        self.say(self._landing_note(expect))
+        self.back()
+        time.sleep(0.8)
+        if self.focus().split("/", 1)[0] != (foreground or pkg):
+            self._launch(pkg, activity, settle, foreground)     # 返回退出了 App：重新拉起一次
+        if self.expect_page(expect):
+            self.say(f"  · 退出非预期页面重进后，已落在 {pkg} 的预期页面")
+            return
+        raise RuntimeError(f"{pkg} 启动后停在非预期页面，跳过本段")
+
+    def expect_hits(self, words):
+        """这一屏命中了哪些判据词。包含匹配：底栏常读作「我的，有新消息」。"""
+        items = [t for t, _, _ in self.texts()]
+        return [w for w in words if any(w in t for t in items)]
+
+    def expect_page(self, expect, timeout=4.0, poll=0.2):
+        """等 expect 里的字全部出现在页面上；超时返回假。
+        断线照常上抛（blocked 只把「已确认断线」带出来），不当成「页面没认出来」。"""
+        words = [expect] if isinstance(expect, str) else list(expect)
+
+        def hit():
+            found = self.expect_hits(words)
+            return found if len(found) == len(words) else None
+
+        return bool(wait.until(hit, timeout=timeout, poll=poll,
+                               now=time.time, sleep=time.sleep, blocked=self.check_alive))
+
+    def _landing_note(self, expect):
+        """落点不对时的一条诊断：停在哪个前台、期望看到什么、实际命中了哪些判据，再给页面结构摘要。
+        不打印页面文字，与 note_miss 同一风格。"""
+        words = [expect] if isinstance(expect, str) else list(expect)
+        hits = self.expect_hits(words)
+        missed = [w for w in words if w not in hits]
+        where = self.focus() or "未知页面"
+        try:
+            detail = summary(self.tree(), self.W, self.H)
+        except ET.ParseError:
+            detail = "页面结构读不到"
+        note = f"  · 启动后没落在预期页面：停在 {where}；期望看到「{'、'.join(words)}」"
+        if missed:
+            note += f"，没看到「{'、'.join(missed)}」"
+        return f"{note}；{detail}"
+
+    def _launch(self, pkg, activity, settle, foreground):
+        """发启动命令、等前台回到目标 App、顺手关掉可识别的弹窗。落点对不对由 start() 判。"""
         self.check_alive()
         self.miss = 0
         if activity:
