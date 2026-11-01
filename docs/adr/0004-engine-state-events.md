@@ -60,4 +60,4 @@
 - `tool/events.py` 是词表唯一定义（纯 stdlib，import 期不读环境、不建目录）：`emit(kind)` / `is_event(line)` / `parse(line)`。引擎侧裸 `import events`，客户端用既有的 `_tool("events")` 惰性取。`bundle_data` 按 `tool/*.py` 收，打包清单不用改。
 - 测试面：两处喂中文串的用例改为喂事件行；「人话不变」用两个守卫——五个发送点各设 / 不设 `AAC_EVENTS` 跑一遍，去掉事件行后逐字对拍（`DeviceLost` 与两处占用比的是异常文案）；三条打印行（暂停、继续、锁屏）另写字面量断言，两条异常文案由既有用例盯着短语。
 - 没有 Windows、没有打包环境、没有真机：`--cli` 与 `_fix_stdio` 这条依据是「`print(flush=True)` 一行一次」加上已有的 `line_buffering` / `write_through` / `PYTHONUNBUFFERED=1`，**未在打包件上验证**；验证范围是本机单测。
-- CHANGELOG 的「未发布」一行加在实现那一笔，本 ADR 只落决策。
+- CHANGELOG 的「未发布」一条加在实现那一笔，本 ADR 只落决策。

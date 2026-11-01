@@ -403,7 +403,7 @@ footer a:hover { color: var(--ink); }
     <span>安卓去广告 · MIT 开源</span>
     <nav aria-label="页脚链接">
       <a href="https://github.com/rddmwmddr/android-ad-cleaner" target="_blank" rel="noopener">源代码</a>
-      <a href="https://github.com/rddmwmddr/android-ad-cleaner/blob/main/CHANGELOG.md" target="_blank" rel="noopener">更新记录</a>
+      <a href="https://github.com/rddmwmddr/android-ad-cleaner/releases" target="_blank" rel="noopener">更新说明</a>
       <a href="https://github.com/rddmwmddr/android-ad-cleaner/tree/main/docs/%E6%B8%85%E5%8D%95" target="_blank" rel="noopener">手动清单</a>
       <a href="https://github.com/rddmwmddr/android-ad-cleaner/blob/main/docs/12-%E9%94%99%E8%AF%AF%E6%97%A5%E5%BF%97%E4%B8%8A%E6%8A%A5.md" target="_blank" rel="noopener">错误日志上报说明</a>
       <a href="https://github.com/rddmwmddr/android-ad-cleaner/issues" target="_blank" rel="noopener">反馈问题</a>
@@ -508,7 +508,7 @@ async function copy(text, button, doneText){
     </article>`;
   }).join("");
   const all = REL.baidu.url ? `<span>百度网盘全部版本：<a href="${esc(panUrl(REL.baidu))}" target="_blank" rel="noopener">打开</a>${REL.baidu.code ? `　提取码 <code>${esc(REL.baidu.code)}</code>` : ""}</span>` : "";
-  $("#dl-after").innerHTML = `${all}<span><a href="${REPO}/releases" target="_blank" rel="noopener">GitHub 全部版本</a></span><span><a href="${REPO}/blob/main/CHANGELOG.md" target="_blank" rel="noopener">v${esc(REL.version)} 更新记录</a></span>`;
+  $("#dl-after").innerHTML = `${all}<span><a href="${REPO}/releases" target="_blank" rel="noopener">GitHub 全部版本</a></span><span><a href="${REPO}/releases/tag/v${esc(REL.version)}" target="_blank" rel="noopener">v${esc(REL.version)} 更新说明</a></span>`;
   $("#sums").innerHTML = REL.files.map((f) => `${esc(f.sha)}  ${esc(f.file)}`).join("<br>");
   $("#hero-meta").textContent = `v${REL.version} · ${RELEASED} · Mac（Apple / Intel 芯片）· Windows 10 / 11`;
 

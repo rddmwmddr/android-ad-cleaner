@@ -56,4 +56,4 @@
   - 覆盖盲区（本票已知）：基线里没有「先成功后中途断线」，也没有 vivo 的 `method == "setting"` 路径——上面两条陷阱是这样漏掉的，靠的是评审与新增的进程内用例，不是对拍。
 - **范围**：只动 `tool/run.py` 与新增测试。`recipes/` 冻结；命令行参数与 GUI 的调用方式（`gui/app.py` 的 `_work` / `Task` / `_run`）一律不改。`status-json` 的 `print(json.dumps(...))` 一行不动，GUI 仍然解析末行。
 - **未验证**：没有 Windows、没有打包环境、没有真机。`raise SystemExit(main())` 这条依据是 `run.py` 本来就直调 `main()`，打包壳只换入口路径；验证范围是本机单测与子进程对拍。
-- CHANGELOG 的「## 未发布」一行加在实现那一笔，本 ADR 只落决策。
+- CHANGELOG 的「## 未发布」一条加在实现那一笔，本 ADR 只落决策。

@@ -111,7 +111,7 @@ class OppoPkt110RecipeTests(unittest.TestCase):
         self.assertEqual(scope["VERIFIED_SWITCHES"], 2)
 
     def test_recipe_never_suspends_disables_or_uninstalls_packages(self):
-        """挂起、停用、卸载和整包关通知都不该出现在机型脚本里（CHANGELOG 0.2.6 记录过问题写法）。"""
+        """挂起、停用、卸载和整包关通知都不该出现在机型脚本里（归档记录 0.2.6 记过问题写法）。"""
         source = (ROOT / "recipes/oppo-PKT110/recipe.py").read_text(encoding="utf-8")
         for forbidden in ("pm suspend", "pm uninstall", "pm disable-user", "pm revoke", "notif-off"):
             self.assertNotIn(forbidden, source)

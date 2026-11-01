@@ -174,7 +174,7 @@ REDMI K80 至尊版（HyperOS 2 / Android 16）结构差异：「隐私与安全
 
 `com.miui.systemAdSolution` 负责天气、日历、商店等系统 App 里的开屏和内置广告。
 
-0.2.1 客户端和 `run.py -s S suspend com.miui.systemAdSolution` 会挂起它，并在系统提供接口时尝试禁止联网，回读包规则和防火墙状态。Android 13 等旧系统可能没有这些命令，此时明确显示「部分完成」并返回失败：挂起保留，广告仍可能出现。0.2.0 不含断网处理，见[更新记录](../../CHANGELOG.md)。下面的手动命令仅适用于 `cmd connectivity help` 列出对应接口的系统：
+0.2.1 客户端和 `run.py -s S suspend com.miui.systemAdSolution` 会挂起它，并在系统提供接口时尝试禁止联网，回读包规则和防火墙状态。Android 13 等旧系统可能没有这些命令，此时明确显示「部分完成」并返回失败：挂起保留，广告仍可能出现。0.2.0 不含断网处理，见[归档记录](../归档/CHANGELOG-0.3.0及更早.md)。下面的手动命令仅适用于 `cmd connectivity help` 列出对应接口的系统：
 
 ```bash
 adb -s S shell pm suspend --user 0 com.miui.systemAdSolution

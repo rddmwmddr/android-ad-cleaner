@@ -6,7 +6,7 @@
 - vivo X300 Ultra（V2547A，OriginOS 7，Android 17），2026-10-25。
 - vivo X Fold6（V2545A，OriginOS 6 Fold，Android 16），2026-10-26。
 
-iQOO 结构相近。当前源码有 `recipes/vivo-V2547DA/`、`recipes/vivo-V2547A/`、`recipes/vivo-V2545A/` 三份机型脚本，均已真机整段跑通验证（V2547DA 124 秒，V2547A 126 秒，V2545A 121 秒）。三份脚本对应不同机型与系统版本，入口差异见下文「OriginOS 7（Android 17）的不同之处」和「X Fold6 的差异」；版本对不上时引擎会走安全模式。发布与验证范围见[更新记录](../../CHANGELOG.md)。
+iQOO 结构相近。当前源码有 `recipes/vivo-V2547DA/`、`recipes/vivo-V2547A/`、`recipes/vivo-V2545A/` 三份机型脚本，均已真机整段跑通验证（V2547DA 124 秒，V2547A 126 秒，V2545A 121 秒）。三份脚本对应不同机型与系统版本，入口差异见下文「OriginOS 7（Android 17）的不同之处」和「X Fold6 的差异」；版本对不上时引擎会走安全模式。发布与验证范围见[归档记录](../归档/CHANGELOG-0.3.0及更早.md)。
 符号：🔴 关掉　🟢 保留　⚠️ 注意
 
 ---

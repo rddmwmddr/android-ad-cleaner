@@ -119,3 +119,11 @@
 **`out-of-scope`** — 明确拒绝的需求，理由写在 `.out-of-scope/<概念>.md`。和 `wontfix` 的区别：`wontfix` 是这次不做，`out-of-scope` 是**这个方向不做**，理由要能被后来者读懂，同一个需求再出现时直接引用而不是重新论证。
 
 目前只有一条：`.out-of-scope/app-splash-ads.md`（App 自身的开屏广告）。
+
+## 文档
+
+**CHANGELOG** — `CHANGELOG.md`。面向维护者与本仓库 agent 的逐版变更记录：一条一行、按 `新增 / 修复 / 内部` 分类、结尾挂 PR 号（内部重构再挂 ADR 号）。验证信息每版记一行，不逐条记。不是用户看的更新说明。
+
+**Release Note** — GitHub Release 的正文。面向用户的更新说明，发版时从这一版合并的 PR 与 CHANGELOG 汇聚生成，写法见 `docs/agents/release.md`。repo 内不留副本，`README.md` 的版本摘要从它复制。
+
+**归档记录** — `docs/归档/CHANGELOG-0.3.0及更早.md`。0.3.0 及更早的逐次详细记录，含基线 SHA、对拍组数、逐字不变清单这类从 PR 复现不出来的证据。它是 2026-11-02 的原文快照，只读、不再追加；其中标题为 `## 未发布` 的一节已经搬进新的 CHANGELOG，留在原处是当时的原样。
