@@ -2,6 +2,8 @@
 
 Issues labelled `waiting-for-verify` have a fix on `main` that the reporter has not confirmed on hardware yet. Nothing closes them except the reporter's own reply after installing the release that contains the fix. This file is the queue of what each release owes.
 
+发版本身——跑验证、打 tag、写 Release 正文、同步 README / `index.html` / `latest.json` / 网盘——见 [release.md](release.md)。这份文件只管发版**之后**。
+
 ## 每次发版后照做
 
 1. 取出当前队列：
