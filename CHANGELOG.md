@@ -7,6 +7,7 @@
 ### 新增
 
 - 机型脚本：OPPO Find X9 Pro（PLG110，ColorOS 16.0.10）（#436）
+- 渠道页认不出时上报附一份脱敏页面骨架，不用再等报告者导 `uiautomator dump`（#428，ADR-0009）
 
 ### 修复
 
@@ -18,6 +19,8 @@
 
 - 渠道开关的挑选收进 `plan_switches()`，点击与回读不变（#430，ADR-0008）
 - `quickapp` 系列少发 89 条 adb，`suspended.txt` 写前去重，`hap://` 应答组件全列（#335）
+- PR 阶段也跑 Windows 回归，Windows 专属用例不再等到打包才暴露（#421、#440）
+- CHANGELOG 改成一版一条的短条目，用户更新说明统一到 GitHub Release（#448）
 
 ## 0.3.0 · 2026-11-01
 
