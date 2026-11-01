@@ -169,6 +169,7 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
     p = fast_mod.Phone.__new__(fast_mod.Phone)
     p.link = fast_mod.adb_link.Connection(serial, transport=shell or _silent_shell)
     p.log, p.miss, p.changed, p.promoted = False, 0, [], set()
+    p.app = ""
     p.pause_at_lock_check = False
     p.systemui_text, p.vivo_seen, p.safe_mode = False, False, False
     p.skeleton_sigs, p.skeleton_count = set(), 0
