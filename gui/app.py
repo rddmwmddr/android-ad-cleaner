@@ -1011,11 +1011,11 @@ class Api:
     def start(self, serial, plan):
         return self.dispatcher.start(serial, plan)
 
-    def _log(self, s):
-        return self.dispatcher._log(s)
+    def _log(self, s, job=None):
+        return self.dispatcher._log(s, job)
 
-    def _event(self, kind):
-        return self.dispatcher._event(kind)
+    def _event(self, kind, job=None):
+        return self.dispatcher._event(kind, job)
 
     def _work(self, tasks):
         return self.dispatcher._work(tasks)
