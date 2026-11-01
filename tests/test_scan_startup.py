@@ -51,6 +51,11 @@ class ReadOnlyTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(self.invoke(["scan"], dump().replace("活动优惠", name)), "")
 
+    def test_ad_network_channel_is_listed(self):
+        body = (dump().replace("com.example", "com.freeme.launcher")
+                .replace("'promo', mName=活动优惠", "'TencentAdNetCH1', mName=频道"))
+        self.assertEqual(self.invoke(["scan"], body), "com.freeme.launcher\tTencentAdNetCH1\t频道\n")
+
     def test_verify_and_noop_close_never_initialize_or_navigate(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory, "channels.tsv")
