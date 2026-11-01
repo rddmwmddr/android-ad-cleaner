@@ -168,6 +168,10 @@ class SerializationEdgeTests(unittest.TestCase):
         self.assertTrue(policy.classify("营销通知", "promo", package="com.x", app="热点资讯").default_unchecked)
 
 
+# 广告网络词表在测试侧冻结：只遍历实现自己的元组时，删词会连样例一起消失。
+AD_NETWORK_TERMS = ("tencentadnet", "adroi", "pangle", "admob", "applovin", "unityads", "mintegral")
+
+
 class AdNetworkTests(unittest.TestCase):
     """厂商把广告网络写在渠道 ID 里（#456）：ID 命中即营销，且越过服务词。"""
 
@@ -179,9 +183,12 @@ class AdNetworkTests(unittest.TestCase):
                 self.assertTrue(j.marketing_candidate)
                 self.assertFalse(j.scan_excluded)
 
+    def test_implementation_terms_match_the_frozen_list(self):
+        self.assertEqual(tuple(policy.AD_NETWORK_TERMS), AD_NETWORK_TERMS)
+
     def test_every_token_has_a_case(self):
         # 词表里漏一个、抄错一个，这里就红；与基线词表的 TERM_CASES 同一思路。
-        for term in policy.AD_NETWORK_TERMS:
+        for term in AD_NETWORK_TERMS:
             with self.subTest(term=term):
                 self.assertTrue(policy.classify("频道", f"vendor_{term}_ch1").ad_network_id)
 
