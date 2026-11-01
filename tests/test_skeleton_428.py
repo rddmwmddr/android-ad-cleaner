@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 import chan_fast as chan
 import events
 import row
-from fixtures import phone_stub
+from fixtures import job_stub, phone_stub
 
 FOCUS = "com.huawei.android.settings/.SubSettings"
 
@@ -317,9 +317,7 @@ class ClientLogTests(unittest.TestCase):
     def setUp(self):
         self._dir = tempfile.TemporaryDirectory()
         self.api = app.Api(self._dir.name)
-        self.api.job = {"running": True, "cancel": False, "lines": [], "results": [],
-                        "step_events": set(), "serial": "test", "t0": 0, "idx": 0,
-                        "total": 0, "title": "", "model": "m"}
+        self.api.job = job_stub()
 
     def tearDown(self):
         self._dir.cleanup()
@@ -327,7 +325,7 @@ class ClientLogTests(unittest.TestCase):
     def test_payload_reaches_the_report_but_not_the_step_summary(self):
         shown = self.api._log("#aac:payload 骨架 v1 页=com.huawei.android.settings/.SubSettings")
         self.assertIsNone(shown)                 # 进不了 tail（步骤摘要）
-        self.assertEqual(self.api.job["lines"], [])          # 也不进界面日志
+        self.assertEqual(self.api.job.lines, [])          # 也不进界面日志
         report = self.api.report_payload()
         self.assertEqual(report["log"].count("骨架 v1"), 1)  # 只出现一次
         self.assertIn("[页面骨架]", report["log"])
@@ -335,4 +333,4 @@ class ClientLogTests(unittest.TestCase):
 
     def test_events_still_stay_out_of_the_log(self):
         self.api._log('#aac:event {"kind": "paused"}')
-        self.assertEqual(self.api.job["lines"], [])
+        self.assertEqual(self.api.job.lines, [])

@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import Mock, patch
 import xml.etree.ElementTree as ET
 
+from fixtures import job_stub
 from gui import app
 from gui.bundle_data import bundle_data
 
@@ -211,7 +212,7 @@ class GuiTests(unittest.TestCase):
     def test_chime_moments(self):
         with tempfile.TemporaryDirectory() as d, patch.object(self.app, "chime") as chime:
             api = self.app.Api(d)
-            api.job = {"running": True, "cancel": False, "lines": [], "results": [], "serial": "t", "t0": 0}
+            api.job = job_stub(serial="t")
             api._log('#aac:event {"kind": "locked"}')
             api._log('#aac:event {"kind": "paused"}')
             api._log("  关  营销通知")

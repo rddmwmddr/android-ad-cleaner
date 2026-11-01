@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 import urllib.error
 
+from fixtures import job_stub
 from gui import app
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,12 +30,12 @@ class ReportTests(unittest.TestCase):
         home = str(Path.home())
         self.api.last_status = {"info": {"brand": "Xiaomi", "name": "Xiaomi 17", "model": "25113PN0EC",
                                          "os": "OS3.0.40.0", "build": "BP2A", "android": "16"}}
-        self.api.job = {"serial": "TESTSERIAL01", "results": [
+        self.api.job = job_stub(serial="TESTSERIAL01", results=[
             {"title": "关闭营销通知", "rc": 1, "sec": 12},
             {"title": "收尾", "rc": 0, "sec": 1},
             {"title": "关闭各 App 里的广告开关", "rc": 3, "sec": 0, "skipped": True}],
-            "lines": ["▶ 关闭营销通知", f"device 'TESTSERIAL01' 读取 {home}/AppData/x", "联系 a.b@qq.com 13900001111",
-                      "adb connect 192.0.2.10:5555"]}
+            lines=["▶ 关闭营销通知", f"device 'TESTSERIAL01' 读取 {home}/AppData/x", "联系 a.b@qq.com 13900001111",
+                   "adb connect 192.0.2.10:5555"])
 
     def test_payload_scrubs_private_values(self):
         payload = self.api.report_payload()
@@ -47,8 +48,8 @@ class ReportTests(unittest.TestCase):
         self.assertNotIn("install_id", payload)
 
     def test_payload_fits_server_limits(self):
-        self.api.job["lines"] = ["x" * 500] * 200
-        self.api.job["results"] = [{"title": "步骤" * 30, "rc": 0, "sec": 1}] * 20
+        self.api.job.lines = ["x" * 500] * 200
+        self.api.job.results = [{"title": "步骤" * 30, "rc": 0, "sec": 1}] * 20
         payload = self.api.report_payload()
         self.assertLessEqual(len(payload["log"]), 20000)
         self.assertEqual(len(payload["steps"]), 12)

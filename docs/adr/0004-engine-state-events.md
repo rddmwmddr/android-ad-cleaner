@@ -14,7 +14,7 @@
 
 - 事件行格式：`#aac:event {"kind": "paused"}`，一行、`print(..., flush=True)`。
 - 只有客户端设了 `AAC_EVENTS` 才发。设置点是 `_work()` 启动子进程时传的 `env_extra`（那里已经在传 `AAC_PAUSE_FILE`），走 `Runner.run` 的那些调用（`_run()` 消费的 `ui_check` / `restore` / `dev_off`）不设；`child_env()` 还会把继承来的同名变量删掉，用户 shell 里碰巧导出也进不来。
-- 客户端 `Api._log()` 是唯一消费者：行首命中前缀就**先剥掉再解析**——无论解析成功与否都不进 `job["lines"]`，于是界面、`diagnostics()`、`report_payload()`、`last-error.txt` 里都不会出现机器行。
+- 客户端 `Api._log()` 是唯一消费者：行首命中前缀就**先剥掉再解析**——无论解析成功与否都不进 `Job.lines`，于是界面、`diagnostics()`、`report_payload()`、`last-error.txt` 里都不会出现机器行。
 - 引擎那五句人话照旧无条件打印，事件是紧邻的额外一行；客户端不依赖两者的先后。
 - 前缀 `#aac:event ` 与现有行首字符不冲突：现有行以空格、`▶`、`✗`、`==`、`·`、`!` 或中文开头。
 
@@ -34,7 +34,7 @@
 
 **客户端把「这一步发生过什么」记成事件集合，不再查文本。**
 
-`_log()` 把事件记进当前步骤的集合，并按 kind 施加即时副作用（`paused` / `resumed` 改 `job["paused"]`，`paused` / `locked` 响铃）。因为事件已经从 `lines` 里剥掉，`detail` 不再含事件文本，所以 `_work()` 的两处判定改成查集合：`ui_busy in step_events`、`link_lost in step_events`。客户端自己打印的暂停 / 继续行直接置状态并响铃，不再经过嗅探。
+`_log()` 把事件记进当前步骤的集合，并按 kind 施加即时副作用（`paused` / `resumed` 改 `Job.paused`，`paused` / `locked` 响铃）。因为事件已经从 `lines` 里剥掉，`detail` 不再含事件文本，所以 `_work()` 的两处判定改成查集合：`ui_busy in step_events`、`link_lost in step_events`。客户端自己打印的暂停 / 继续行直接置状态并响铃，不再经过嗅探。
 
 **任务从裸元组变成描述符。**
 
