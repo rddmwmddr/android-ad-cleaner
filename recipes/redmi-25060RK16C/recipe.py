@@ -195,6 +195,10 @@ def _():
 def _():
     # 只关机主点名的（见文件头注释）；「隐私防护」页的保护类开关不碰
     p.start("com.android.browser")
+    if "basicmode" in p.focus().lower():
+        # 拒绝浏览器协议后落到基本模式设置页，设置入口都不在这条路径上，找下去只会空转报错（#414、#460）
+        print("  · 浏览器处在基本模式，设置入口不在这条路径上，本段跳过")
+        return
     if not browser_settings():
         raise RuntimeError("浏览器设置入口未找到；未点击正文中的文字")
     if maybe("隐私和安全"):
