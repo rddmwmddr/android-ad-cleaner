@@ -750,6 +750,12 @@ class Api:
                                                                 "AAC_EVENTS": "1"})
                 with j.lock:
                     j.proc = p
+                if j.cancel:
+                    # 停止可能恰好落在 spawn 返回与登记之间（#452-1）：request_stop
+                    # 那一刻读到的还是 None、漏了杀。句柄刚登记就补杀一次，引擎进程
+                    # 不会再把本步骤跑完；真进程被 terminate 后 stdout 收口，下面的
+                    # stopped 分支照常接管。
+                    p.terminate()
                 tail = []
                 for line in p.stdout:
                     shown = self._log(line)     # 事件行返回 None：不进步骤摘要（前端会展示 tail）
@@ -782,10 +788,13 @@ class Api:
         self.resume()
         if not j.cancel:
             chime()                     # 执行结束（成功或有步骤没成功都响，提醒回来看结果）
+        # 先写收尾行、再收 running（#452-2/#452-3）：前端 tick() 看到 !running 就停轮询，
+        # 两步之间落进去的收尾行永远不显示；running=True 也挡住 start() 换 Job，收尾行
+        # 才不会写进下一次执行的日志开头。
+        self._log(f"\n执行结束，用时 {round(time.time() - j.t0)} 秒" if not j.cancel else "\n已停止")
         with j.lock:
             j.running = False
             j.proc = None
-        self._log(f"\n执行结束，用时 {round(time.time() - j.t0)} 秒" if not j.cancel else "\n已停止")
 
     def poll(self, since=0):
         j = self.job
