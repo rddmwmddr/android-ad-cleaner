@@ -229,6 +229,11 @@ class Task:
         self.uses_ui, self.channels = uses_ui, channels
 
 
+def runs_after_stop(task):
+    """停止后仍要跑的一步：收尾（把手机改回插电常亮，以前停止会让手机一直亮着）。"""
+    return task.title == "收尾"
+
+
 class Job:
     """一次执行的状态（ADR-0010）。工作线程写，HTTP 线程经 snapshot() 读一致视图。"""
 
@@ -669,40 +674,43 @@ class Api:
         threading.Thread(target=self._work, args=(tasks,), daemon=True).start()
         return {"ok": True, "total": len(tasks)}
 
-    def _log(self, s):
+    def _log(self, s, job=None):
         """记一行输出。事件行只改状态、不进日志，返回 None；人话返回存下来的文本。
         载荷行（页面骨架）单独收着，上报时拼在末尾：不进界面日志与步骤摘要，也不会在
-        「最近失败的完整诊断」里重复一遍。"""
+        「最近失败的完整诊断」里重复一遍。工作线程传入自己那一次的 Job：它比 `Api.job`
+        活得久，收尾时不能写进下一次执行。"""
+        job = self.job if job is None else job
         s = s.rstrip("\n")
         events = _tool("events")
         if events.is_event(s):
-            self._event(events.parse(s))
+            self._event(events.parse(s), job)
             return None
         if events.is_payload(s):
-            with self.job.lock:
-                self.job.payloads.append(events.strip_payload(s))
+            with job.lock:
+                job.payloads.append(events.strip_payload(s))
             return None
-        with self.job.lock:
-            self.job.lines.append(s)
+        with job.lock:
+            job.lines.append(s)
         return s
 
-    def _event(self, kind):
+    def _event(self, kind, job=None):
         """引擎事件（ADR-0004）：暂停 / 继续 / 锁屏改提示状态，其余记进本步骤的事件集合；
         都不进日志、不上报。"""
+        job = self.job if job is None else job
         if kind is None:                # 前缀对上但解析不出来：当没有这个事件
             return
         if kind == "paused":
-            with self.job.lock:
-                self.job.paused = True
+            with job.lock:
+                job.paused = True
             chime()                     # 可以拿手机了
         elif kind == "resumed":
-            with self.job.lock:
-                self.job.paused = False
+            with job.lock:
+                job.paused = False
         elif kind == "locked":
             chime()                     # 要机主来解锁
         else:
-            with self.job.lock:
-                self.job.step_events.add(kind)
+            with job.lock:
+                job.step_events.add(kind)
 
     def _work(self, tasks):
         j = self.job
@@ -716,21 +724,21 @@ class Api:
                 with j.lock:
                     j.paused = True
                 chime()                 # 可以拿手机了：与引擎侧暂停点的提醒一致
-                self._log("⏸ 已暂停：现在可以操作手机。操作完回到桌面、保持解锁，再点「继续」")
+                self._log("⏸ 已暂停：现在可以操作手机。操作完回到桌面、保持解锁，再点「继续」", j)
                 while j.pause and not j.cancel:
                     time.sleep(0.5)
                 with j.lock:
                     j.paused = False
                 if not j.cancel:
-                    self._log("▶ 继续执行")
-            if j.cancel and task.title != "收尾":
-                continue                # 停止后仍跑收尾：改回插电常亮（以前停止会让手机一直亮着）
+                    self._log("▶ 继续执行", j)
+            if j.cancel and not runs_after_stop(task):
+                continue
             with j.lock:
                 j.idx, j.title = i + 1, task.title
-            self._log(f"\n▶ {task.title}")
+            self._log(f"\n▶ {task.title}", j)
             if ui_busy and task.uses_ui:
                 reason = "读屏服务仍被占用，跳过本步骤；请先解决读屏连接再重试。"
-                self._log(reason)
+                self._log(reason, j)
                 j.add_result({"title": task.title, "rc": 3, "skipped": True, "sec": 0, "tail": [reason]})
                 continue
             line_start = len(j.lines)
@@ -745,21 +753,26 @@ class Api:
                         name = re.sub(r"[\t\r\n]+", " ", str(c.get("app") or "")).strip()
                         f.write(f"{c['pkg']}\t{c['id']}\t{c['name']}\t{name}\n")
                 args = ["-s", j.serial, "off", fn]
+            killed = False
             try:
                 p = self.runner.spawn(script, *args, env_extra={"AAC_PAUSE_FILE": self.data.pause,
                                                                 "AAC_EVENTS": "1"})
                 with j.lock:
                     j.proc = p
+                    # 停止落在 spawn 返回、登记之前：request_stop 看不到这个进程，由登记的一方补杀
+                    killed = j.cancel and not runs_after_stop(task)
+                if killed:
+                    p.terminate()
                 tail = []
                 for line in p.stdout:
-                    shown = self._log(line)     # 事件行返回 None：不进步骤摘要（前端会展示 tail）
+                    shown = self._log(line, j)  # 事件行返回 None：不进步骤摘要（前端会展示 tail）
                     if shown is not None:
                         tail.append(shown.strip()); tail = tail[-80:]
                 rc = p.wait()
             except Exception as e:
                 rc, tail = -1, [str(e)]
-                self._log(f"✗ {e}")
-            if rc and j.cancel and task.title != "收尾":
+                self._log(f"✗ {e}", j)
+            if (rc or killed) and j.cancel and not runs_after_stop(task):
                 # 用户点了停止：不是出错，不记诊断、不提示上报（错误日志 10-28：4 份是停止后上报的）
                 j.add_result({"title": task.title, "rc": rc, "stopped": True, "sec": round(time.time() - t), "tail": tail})
                 continue
@@ -772,7 +785,7 @@ class Api:
                     self._remember_error(task.title, j.serial, detail)
                     reason = "手机和电脑已断开，这一步没有执行。重新连接手机后点「重试」。"
                     for later in tasks[i + 1:]:
-                        self._log(f"\n▶ {later.title}\n{reason}")
+                        self._log(f"\n▶ {later.title}\n{reason}", j)
                         j.add_result({"title": later.title, "rc": 3, "skipped": True, "sec": 0, "tail": [reason]})
                     break
                 error = self._remember_error(task.title, j.serial, detail)
@@ -783,9 +796,12 @@ class Api:
         if not j.cancel:
             chime()                     # 执行结束（成功或有步骤没成功都响，提醒回来看结果）
         with j.lock:
+            # 收尾行与「结束」同一个临界区：看到 running=False 的快照一定已经带着这一行，
+            # 且下一次执行要等它发布完才能接管。收尾行按同一个临界区里的 cancel 取，别在锁外算
+            final = f"\n执行结束，用时 {round(time.time() - j.t0)} 秒" if not j.cancel else "\n已停止"
+            self._log(final, j)
             j.running = False
             j.proc = None
-        self._log(f"\n执行结束，用时 {round(time.time() - j.t0)} 秒" if not j.cancel else "\n已停止")
 
     def poll(self, since=0):
         j = self.job
