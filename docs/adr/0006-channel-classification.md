@@ -21,6 +21,7 @@
 | `default_unchecked` | 已进清单但默认不勾 | `SERVICE` |
 | `protected` | 找机位一类，始终不动 | `protected_channel()` |
 | `vivo_marketing_id` | 按 cid 认的 vivo 营销分类 | `VIVO_MARKETING` |
+| `ad_network_id` | 渠道 ID 命中广告网络名，命中即营销并越过服务词（见增补） | `AD_NETWORK` |
 
 不采用报告里的单一 `category` 枚举：它装不下 `scan_excluded` 与 `default_unchecked` 的差异，压平任何一级都会改变用户可见行为。
 
