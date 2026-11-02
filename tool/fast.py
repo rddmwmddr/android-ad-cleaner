@@ -28,7 +28,7 @@ import events
 import wait
 from reader import Reader
 from row import (SWITCH_ROW_DEPTH, bounds, control, dedupe, disabled_at, is_switch, own,
-                 summary, switches_in, title_of)
+                 summary, switches_in, title_of, unique)
 
 DISMISS = ("以后再说", "暂不更新", "暂不", "取消", "我知道了", "跳过", "禁止", "不再提示", "不同意")
 # 应用内更新弹窗的标题（主题商店 17.22.0beta2 是「检测到新版本」，#286）。它通常把更新说明放进可滚动容器，
@@ -292,7 +292,8 @@ class Phone:
     def texts(self, root=None):
         root = root if root is not None else self.tree()
         out = []
-        for n in root.iter("node"):
+        # 华为 HarmonyOS 4 把同一个控件吐出两次；按节点身份数行时会变成「同名 2 行」（#510）
+        for n in unique(root.iter("node")):
             if n.get("package") == "com.android.systemui" and not self.systemui_text:
                 continue                      # 状态栏/通知栏文字不算
             t = (n.get("text") or n.get("content-desc") or "").strip()
@@ -319,7 +320,7 @@ class Phone:
         parent = {c: p for p in root.iter() for c in p}
         out = []
         shot = None
-        for n in root.iter("node"):
+        for n in unique(root.iter("node")):
             if not self.on_screen(n) or "RadioButton" in n.get("class", ""):
                 continue
             if n.get("checkable") != "true":
