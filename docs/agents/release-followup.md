@@ -41,8 +41,12 @@ Issues labelled `waiting-for-verify` have a fix on `main` that the reporter has 
 | #337 | @KujouShiori | vivo V1986A / Funtouch 13.0 / Android 12 | #360（0.3.0） | `chan-scan` 列出 `VPushChannel_0` 的「运营消息」，`VPushChannel_1`（系统消息）/ `VPushChannel_2`（即时消息）仍不出现 |
 | #357 | 机主（证据来自 #348） | 华为 M30 / HarmonyOS | #358（0.3.0） | USB 提示按带调试接口的设备取品牌，不再把别的 USB 外设说成「华硕手机」；由 #348 的报告者在下一版插线确认 |
 | #367 | 机主 | POCO（`ro.product.brand=POCO`） | #369（0.3.0） | `run.py check` 的广告包一行出现 `com.miui.systemAdSolution`；`status-json` 的 `ads` 同步 |
+| #278 | @axibaqimingzhenna | OPPO Find N5 / PKH110 / ColorOS 17.0.0.103 | #277（0.2.9） | 不带 `--ref` 直接跑 `recipe`，七段逐段跑完、不再整段「✗ 没找到」，广告跟踪报出真实核对项数。负一屏仍提示需机主手动，属已知限制 |
+| #280 | @afive956 | OPPO Find X10 Pro Max / PMX110 / ColorOS 17.0.0.116 | #279（0.2.9） | 不带 `--ref` 直接跑 `recipe`，九段逐段跑完、不再整段「✗ 没找到」。摇一摇广告与软件商店「推荐卡片」点了没反应、下拉搜索需手动，都是已记录的系统限制，不算回归 |
 
 最新发布版仍是 v0.2.9（2026-10-30T09:58Z），只包含 #296 / #297。0.2.9 之后合入 `main` 的 #347、#358、#359、#360、#369 都还没进任何安装包，所以这些票现在不发复测请求——让报告者拿旧版验新代码只会再收一份重复上报。下一版发布后一次性 @ 各自报告者。
+
+2026-11-02：#278 / #280 从 `ready-for-human` 改为 `waiting-for-verify`，同日按 0.3.0 发了复测请求。这两张票的机型脚本随 0.2.9 进包，之前挂着 `ready-for-human` 是因为 PR #277 / #279 合并时没有回归队列。
 
 0.3.0（2026-11-01T05:53Z）包含 #347、#358、#359、#360、#369。同日发复测请求：#286 @xicong（#292 / #293 一并确认）、#335 @afive956、#337 @KujouShiori、#348 @cyf3580（代 #357）；#367 是机主自己开的票，没有外部报告者可催；#397 按待真机反馈一节 @wowbbs 要数据。
 
