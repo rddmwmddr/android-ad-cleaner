@@ -108,6 +108,50 @@ class BoxesTests(unittest.TestCase):
         self.assertIs(row.control(card, on_screen()), card)
 
 
+class DisabledAtTests(unittest.TestCase):
+    """灰态判定（#333）：整卡禁用、内层开关禁用、不可见副本都要分清。"""
+
+    def test_a_greyed_switch_is_disabled(self):
+        root, _ = page('''<hierarchy>
+          <node class="android.widget.Switch" checkable="true" checked="true" enabled="false" bounds="[900,700][1000,800]"/>
+        </hierarchy>''')
+        self.assertTrue(row.disabled_at(root, (950, 750)))
+
+    def test_a_disabled_card_makes_its_inner_switch_grey(self):
+        # 卡片整体 checkable 且 enabled=false，内层 Switch 不带 enabled
+        root, _ = page('''<hierarchy>
+          <node class="android.widget.LinearLayout" checkable="true" clickable="true" enabled="false" bounds="[0,600][1080,860]">
+            <node text="摇一摇广告" bounds="[60,620][600,700]"/>
+            <node class="android.widget.Switch" checked="true" bounds="[900,620][1000,700]"/>
+          </node>
+        </hierarchy>''')
+        self.assertTrue(row.disabled_at(root, (950, 660)))
+
+    def test_a_disabled_inner_switch_under_an_enabled_card_is_grey(self):
+        # 卡片可勾选但不带 enabled，灰态落在内层 Switch 上
+        root, _ = page('''<hierarchy>
+          <node class="android.widget.LinearLayout" checkable="true" clickable="true" bounds="[0,600][1080,860]">
+            <node text="摇一摇广告" bounds="[60,620][600,700]"/>
+            <node class="android.widget.Switch" checked="true" enabled="false" bounds="[900,620][1000,700]"/>
+          </node>
+        </hierarchy>''')
+        self.assertTrue(row.disabled_at(root, (950, 660)))
+
+    def test_a_hidden_copy_does_not_make_a_normal_switch_grey(self):
+        # 折叠屏合上时 dump 里留着内屏那份（Issue #2）：它盖住落点也不算
+        root, _ = page('''<hierarchy>
+          <node class="android.widget.Switch" checkable="true" checked="true" bounds="[900,700][1000,800]"/>
+          <node class="android.widget.Switch" checkable="true" enabled="false" visible-to-user="false" bounds="[880,680][1020,820]"/>
+        </hierarchy>''')
+        self.assertFalse(row.disabled_at(root, (950, 750)))
+
+    def test_a_point_off_the_switch_is_not_grey(self):
+        root, _ = page('''<hierarchy>
+          <node class="android.widget.Switch" checkable="true" enabled="false" bounds="[900,700][1000,800]"/>
+        </hierarchy>''')
+        self.assertFalse(row.disabled_at(root, (100, 100)))
+
+
 class DedupeTests(unittest.TestCase):
     """dedupe 直接吃 bounds：同一水平带里的两个候选什么时候算一行、什么时候算两列。"""
 

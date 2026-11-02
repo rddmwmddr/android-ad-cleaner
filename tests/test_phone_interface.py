@@ -137,6 +137,49 @@ class SafeModeTests(unittest.TestCase):
         self.assertFalse(any("安全模式不做整页全关" in line for line in self.lines))
 
 
+# 一加 7T 浏览器（#333）：上级广告开关关掉后「摇一摇广告」这一行是灰的（enabled="false"）
+GREY_LIST_PAGE = '''<hierarchy rotation="0">
+  <node package="com.android.settings" clickable="true" bounds="[0,500][1080,580]">
+    <node text="摇一摇广告" bounds="[60,510][400,570]"/>
+    <node class="android.widget.Switch" checkable="true" checked="true" enabled="false" bounds="[950,500][1060,580]"/>
+  </node>
+</hierarchy>'''
+
+
+# 卡片整体 checkable，灰态只落在内层 Switch 上（#403 的双列布局）
+GREY_CARD_PAGE = '''<hierarchy rotation="0">
+  <node class="android.widget.LinearLayout" checkable="true" clickable="true" bounds="[0,500][1080,760]">
+    <node text="摇一摇广告" bounds="[60,520][600,600]"/>
+    <node class="android.widget.Switch" checked="true" enabled="false" bounds="[900,520][1000,600]"/>
+  </node>
+</hierarchy>'''
+
+
+class DisabledSwitchTests(unittest.TestCase):
+    """开关是灰的：不点、不报「关不掉」，单独说明被上级开关禁用（#333）。"""
+
+    def test_a_greyed_inner_switch_is_not_clicked(self):
+        lines = []
+        clock = Clock()
+        install_clock(fast, clock)
+        p = fake_phone(clock=clock, stages=[(0.0, GREY_CARD_PAGE)], say=lines.append)
+        self.assertEqual(p.off(page="页"), 0)
+        self.assertEqual(clock.clicks, 0)
+        self.assertTrue(any("被上级开关禁用（开关是灰的），未改动 摇一摇广告" in line for line in lines))
+
+    def test_a_greyed_row_is_not_clicked_and_is_not_reported_as_unclosable(self):
+        lines = []
+        clock = Clock()
+        install_clock(fast, clock)
+        p = fake_phone(clock=clock, stages=[(0.0, GREY_LIST_PAGE)], say=lines.append)
+        self.assertEqual(p.off(page="页"), 0)
+        self.assertEqual(clock.clicks, 0)                              # 守卫：一下都没点
+        self.assertTrue(any("被上级开关禁用（开关是灰的），未改动 摇一摇广告" in line for line in lines))
+        self.assertFalse(any("关不掉 摇一摇广告" in line for line in lines))
+        self.assertEqual(p.changed, [])
+        self.assertIn("  · 页：核对 1 项，调整 0 项", lines)             # 不是「本页未找到目标开关」
+
+
 class OffDriverTests(unittest.TestCase):
     """off() 的点击节奏、回读重试、离页与记账；策略面在 tests/test_switch_plan.py。"""
 
@@ -248,6 +291,52 @@ class OffDriverTests(unittest.TestCase):
         self.assertEqual(p.switches.call_count, 7)  # 三次回读与两次重试的次数
         for pause in (0.25, 0.8, 0.4):
             sleep.assert_any_call(pause)            # 收尾统一确认与二次重试的节奏
+
+    def test_a_row_that_turns_grey_after_the_batch_is_not_retried_again(self):
+        # 同一屏先关父级、后关子级：子级在回读时已经变灰，不能再连点、也不能报成「关不掉」
+        rows = [("开屏广告", True, (500, 800)), ("摇一摇广告", True, (500, 1000))]
+        after = [("开屏广告", False, (500, 800)), ("摇一摇广告", True, (500, 1000))]
+        p = self.phone([rows, rows, rows] + [after] * 20)   # 第三次是首击后的重排探测
+        plain, grey = ET.fromstring("<hierarchy/>"), ET.fromstring(
+            '<hierarchy><node class="android.widget.Switch" checkable="true" checked="true"'
+            ' enabled="false" bounds="[400,950][600,1050]"/></hierarchy>')
+        p.tree = Mock(side_effect=[plain, plain] + [grey] * 10)
+        with patch.object(fast.time, "sleep"):
+            done = p.off(page="页")
+        clicks = [c.args for c in p.click.call_args_list]
+        self.assertEqual(clicks[0], (500, 1000))                  # #480 起先点下面那行
+        self.assertEqual(clicks[1:], [(500, 800)])                # 回读里的重试没有再点灰掉的那个
+        p.say.assert_any_call("  · 被上级开关禁用（开关是灰的），未改动 摇一摇广告")
+        p.say.assert_any_call("  关 开屏广告")
+        self.assertNotIn("  ✗ 关不掉 摇一摇广告", [c.args[0] for c in p.say.call_args_list])
+        self.assertEqual((done, p.changed), (1, [("页", "开屏广告")]))
+
+    def test_a_grey_twin_does_not_swallow_the_other_twins_failure(self):
+        # 同名两行（双列）：一个灰、一个点了没反应。只有全部同名行都灰才算灰态
+        rows = [("个性化推荐", True, (500, 800)), ("个性化推荐", True, (800, 800))]
+        p = self.phone([rows] * 20)
+        grey = ET.fromstring('<hierarchy><node class="android.widget.Switch" checkable="true"'
+                             ' checked="true" enabled="false" bounds="[400,750][600,850]"/></hierarchy>')
+        p.tree = Mock(return_value=grey)
+        with patch.object(fast.time, "sleep"):
+            done = p.off(page="页")
+        self.assertEqual(done, 0)
+        p.say.assert_any_call("  ✗ 关不掉 个性化推荐")
+        self.assertNotIn("  · 被上级开关禁用（开关是灰的），未改动 个性化推荐",
+                         [c.args[0] for c in p.say.call_args_list])
+
+    def test_the_same_grey_row_is_reported_once_across_screens(self):
+        rows = [("摇一摇广告", True, (500, 800))]
+        p = self.phone([rows] * 5)
+        p.scroll_more = Mock(side_effect=[True, False])
+        p.tree = Mock(return_value=ET.fromstring(
+            '<hierarchy><node class="android.widget.Switch" checkable="true" checked="true"'
+            ' enabled="false" bounds="[400,750][600,850]"/></hierarchy>'))
+        with patch.object(fast.time, "sleep"):
+            done = p.off(page="页")
+        self.assertEqual(done, 0)
+        self.assertEqual([c.args[0] for c in p.say.call_args_list].count(
+            "  · 被上级开关禁用（开关是灰的），未改动 摇一摇广告"), 1)
 
     def test_three_failed_readbacks_on_a_protection_switch_say_it_will_not_open(self):
         rows = [("限制广告跟踪", False, (500, 800))]
