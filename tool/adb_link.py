@@ -114,7 +114,9 @@ def detached(serial, adb=None):
 
 
 # 锁屏判断。只认字段名，不整行找 true（HyperOS 3 同一行有别的 =true 字段，#115）。
-# ColorOS 16/17 没有 isKeyguardShowing：锁屏时焦点窗口是 NotificationShade（错误日志 10-27，9 份报告）。
+# ColorOS 16（realme RMX3700 / 16.0.5.1300 / Android 16，2026-11-02 实测）：解锁态输出里有
+# `isKeyguardShowing=false` 和 `mDreamingLockscreen=false`；锁屏且息屏时是 `mDreamingLockscreen=true`
+# 加焦点 `NotificationShade`。两种状态 keyguard_showing() 都判对。ColorOS 17 是否有该字段未测。
 # 管道末端不能提前退出（head -n / grep -m）：dumpsys 会收到 SIGPIPE 并报 Broken pipe，
 # adbutils 因此判「shell output invalid」整段中断（#205 HyperOS 3 / Android 16）。
 # sed 会读完整个输入再输出前几行，所以能截断行数而不提前退出。
