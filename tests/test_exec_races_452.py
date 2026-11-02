@@ -8,40 +8,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from fixtures import job_stub
+from fixtures import FakeRunner, job_stub
 from gui import app
-
-
-class FakeProc:
-    """假引擎进程：wait 返回设定值，terminate 只记一笔。"""
-
-    def __init__(self, rc=0):
-        self.stdout = iter(())
-        self.returncode = None
-        self._rc = rc
-        self.terminated = False
-
-    def terminate(self):
-        self.terminated = True
-
-    def wait(self):
-        return self._rc
-
-
-class FakeRunner:
-    """spawn 交出假进程；before_return 在 spawn 返回之前执行，用来把交错点钉死。"""
-
-    def __init__(self, before_return=None, rc=0):
-        self.before_return = before_return
-        self.rc = rc
-        self.procs = []
-
-    def spawn(self, script, *args, env_extra=None):
-        proc = FakeProc(self.rc)
-        self.procs.append(proc)
-        if self.before_return:
-            self.before_return()
-        return proc
 
 
 class ObservingLock:
@@ -105,7 +73,7 @@ class StopRaceTests(Base):
             stopped.append(True)
             api.job.request_stop()
 
-        api.runner = FakeRunner(before_return=stop_at_first_spawn)
+        api.runner = FakeRunner(on_spawn=stop_at_first_spawn)
         api._work([app.Task("关闭营销通知", "chan_fast.py"), app.Task("收尾", "run.py")])
         self.assertTrue(api.runner.procs[0].terminated, "停止后这次执行启动的引擎进程没有被终止")
         self.assertTrue(api.job.results[0].get("stopped"), api.job.results[0])

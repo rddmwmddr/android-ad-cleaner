@@ -13,7 +13,7 @@ import time
 import uuid
 from unittest.mock import Mock, patch
 
-from fixtures import job_stub
+from fixtures import FakeProc, FakeRunner, job_stub
 from gui import app
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -158,16 +158,14 @@ class LifecycleTests(unittest.TestCase):
 class TaskTests(unittest.TestCase):
     def test_conflict_skips_following_ui_task_but_keeps_cleanup_and_first_error(self):
         with tempfile.TemporaryDirectory() as directory:
-            api = app.Api(directory)
+            api = app.Api(directory, runner=FakeRunner(spawns=[
+                FakeProc('#aac:event {"kind": "ui_busy"}\nUIAUTOMATION_BUSY: first failure\n', rc=1),
+                FakeProc("插电常亮已改回 7\n")]))
             api.job = job_stub()
-            failed = Mock(stdout=io.StringIO('#aac:event {"kind": "ui_busy"}\nUIAUTOMATION_BUSY: first failure\n'))
-            failed.wait.return_value = 1
-            finish = Mock(stdout=io.StringIO("插电常亮已改回 7\n")); finish.wait.return_value = 0
-            with patch.object(app.subprocess, "Popen", side_effect=[failed, finish]) as popen:
-                api._work([app.Task("广告开关", "run.py", ["-s", "test", "recipe"], uses_ui=True),
-                           app.Task("通知", "chan_fast.py", uses_ui=True, channels=[]),
-                           app.Task("收尾", "run.py", ["-s", "test", "finish"])])
-            self.assertEqual(popen.call_count, 2)
+            api._work([app.Task("广告开关", "run.py", ["-s", "test", "recipe"], uses_ui=True),
+                       app.Task("通知", "chan_fast.py", uses_ui=True, channels=[]),
+                       app.Task("收尾", "run.py", ["-s", "test", "finish"])])
+            self.assertEqual(len(api.runner.spawn_calls), 2)
             self.assertTrue(api.job.results[1]["skipped"])
             self.assertEqual(api.job.results[2]["rc"], 0)
             self.assertIn("GKD", api.job.recovery)

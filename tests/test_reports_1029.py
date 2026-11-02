@@ -12,7 +12,7 @@ import unittest
 from unittest.mock import Mock, patch
 import xml.etree.ElementTree as ET
 
-from fixtures import job_stub
+from fixtures import FakeProc, FakeRunner, job_stub
 from gui import app
 from gui.bundle_data import bundle_data
 
@@ -211,30 +211,38 @@ class GuiTests(unittest.TestCase):
 
     def test_chime_moments(self):
         with tempfile.TemporaryDirectory() as d, patch.object(self.app, "chime") as chime:
-            api = self.app.Api(d)
+            api = self.app.Api(d, runner=FakeRunner(spawns=[FakeProc()]))
             api.job = job_stub(serial="t")
             api._log('#aac:event {"kind": "locked"}')
             api._log('#aac:event {"kind": "paused"}')
             api._log("  关  营销通知")
             self.assertEqual(chime.call_count, 2)
-            done = Mock(stdout=io.StringIO("")); done.wait.return_value = 0
-            with patch.object(self.app.subprocess, "Popen", return_value=done):
-                api._work([self.app.Task("收尾", "run.py", ["-s", "t", "finish"])])
+            api._work([self.app.Task("收尾", "run.py", ["-s", "t", "finish"])])
             self.assertEqual(chime.call_count, 3)
 
     def test_chime_plays_once_for_close_events_and_never_in_tests(self):
-        with patch.dict(os.environ, {"AAC_NO_SOUND": ""}), patch.object(self.app, "IS_WIN", False), \
-             patch.object(self.app.platform, "system", return_value="Darwin"), \
-             patch.object(self.app.subprocess, "Popen") as popen:
+        with patch.dict(os.environ, {"AAC_NO_SOUND": ""}), patch.object(self.app, "play_sound") as play:
             self.app._last_chime[0] = 0
             self.app.chime(); self.app.chime()
-        self.assertEqual(popen.call_count, 1)
-        self.assertEqual(popen.call_args.args[0][0], "afplay")
-        self.assertTrue(popen.call_args.args[0][1].endswith("chime.wav"))
-        with patch.object(self.app.subprocess, "Popen") as popen:
+        self.assertEqual(play.call_count, 1)
+        self.assertTrue(play.call_args.args[0].endswith("chime.wav"))
+        with patch.object(self.app, "play_sound") as play:
             self.app._last_chime[0] = 0
             self.app.chime()
-        popen.assert_not_called()
+        play.assert_not_called()
+
+    @unittest.skipIf(os.name == "nt", "假播放器是 POSIX 脚本")
+    def test_macos_plays_the_wav_with_afplay(self):
+        # 真的起一个叫 afplay 的假播放器，不去打桩 subprocess：放的就是传进来的那个文件
+        with tempfile.TemporaryDirectory() as d:
+            played = Path(d, "played.txt")
+            player = Path(d, "afplay")
+            player.write_text(f'#!/bin/sh\nprintf "%s" "$1" > "{played}"\n', encoding="utf-8")
+            player.chmod(0o755)
+            with patch.dict(os.environ, {"PATH": d}), \
+                 patch.object(self.app.platform, "system", return_value="Darwin"):
+                self.app.play_sound("/any/chime.wav").wait(5)
+            self.assertEqual(played.read_text(encoding="utf-8"), "/any/chime.wav")
 
     def test_chime_file_is_short_soft_and_shipped(self):
         import wave

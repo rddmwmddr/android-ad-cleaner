@@ -499,12 +499,14 @@ class GuiTests(unittest.TestCase):
 
     def test_old_adb_on_path_is_not_used(self):
         # #25 #75：PATH 里的 1.0.32（手机助手自带）被客户端拿来用，挂起、快应用全部失败
-        old = subprocess.CompletedProcess([], 0, "Android Debug Bridge version 1.0.32\nRevision 09a0d98bebce-android\n", "")
-        new = subprocess.CompletedProcess([], 0, "Android Debug Bridge version 1.0.41\nVersion 36.0.0-13206524\n", "")
-        with patch.object(self.app.subprocess, "run", return_value=old):
+        old = "Android Debug Bridge version 1.0.32\nRevision 09a0d98bebce-android\n"
+        new = "Android Debug Bridge version 1.0.41\nVersion 36.0.0-13206524\n"
+        with patch.object(adb_link, "invoke", return_value=old) as invoke:
             self.assertFalse(self.app.adb_ok("adb"))
-        with patch.object(self.app.subprocess, "run", return_value=new):
+        invoke.assert_called_once_with("adb", "version", timeout=8)
+        with patch.object(adb_link, "invoke", return_value=new) as invoke:
             self.assertTrue(self.app.adb_ok("adb"))
+        invoke.assert_called_once_with("adb", "version", timeout=8)
 
     @unittest.skipUnless(sys.platform == "win32", "Windows 剪贴板")
     def test_windows_clipboard_round_trips_chinese(self):
