@@ -27,6 +27,13 @@ class VariantTests(unittest.TestCase):
         self.assertEqual(self.pick("PHK110", "OnePlus", "", "PHK110_15.0.0.601(CN01)"), "oneplus-PHK110/recipe_android15.py")
         self.assertEqual(self.pick("PHK110", "OnePlus", "", "PHK110_16.0.5.701(CN01)"), "oneplus-PHK110/recipe.py")
 
+    def test_vivo_x300_ultra_satellite_android_17(self):
+        # #220：同一型号升到 Android 17 后商店入口换了，路径按系统版本分开
+        self.assertEqual(self.pick("V2547DA", "vivo", "", "PD2547D_A_17.1.10.2.W10"),
+                         "vivo-V2547DA/recipe_android17.py")
+        self.assertEqual(self.pick("V2547DA", "vivo", "", "PD2547D_A_16.0.22.14.W10"),
+                         "vivo-V2547DA/recipe.py")
+
     def test_variants_are_packaged(self):
         shipped = {Path(src).relative_to(ROOT).as_posix() for src, _ in bundle_data(ROOT)}
         for variant in ROOT.glob("recipes/*/recipe_*.py"):
