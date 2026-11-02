@@ -14,7 +14,7 @@ for pkg in ("uiautomator2", "adbutils", "webview"):
     d, b, h = collect_all(pkg)
     datas += d; binaries += b; hidden += h
 
-a = Analysis([os.path.join(ROOT, "gui", "app.py")], pathex=[ROOT], binaries=binaries, datas=datas, hiddenimports=hidden)
+a = Analysis([os.path.join(ROOT, "gui", "launch.py")], pathex=[ROOT], binaries=binaries, datas=datas, hiddenimports=hidden)
 pyz = PYZ(a.pure)
 icon = os.path.join(ROOT, "gui", "icon.ico")
 gui = EXE(pyz, a.scripts, [], exclude_binaries=True, name="AndroidAdCleaner", console=False, icon=icon)

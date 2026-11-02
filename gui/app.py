@@ -1280,49 +1280,6 @@ def version_key(text):
     return tuple(map(int, m.groups())) if m else ()
 
 
-def smoke_gui(window, result):
-    """验证本地页面、图片、JS→Python 桥和模拟失败提示；不连接或修改手机。"""
-    try:
-        if not window.events.loaded.wait(30):
-            raise RuntimeError("页面加载超时")
-        deadline = time.monotonic() + 25
-        while time.monotonic() < deadline:
-            ready = window.evaluate_js("typeof api !== 'undefined' && !!api && !!document.querySelector('#tutbox')")
-            if ready:
-                break
-            time.sleep(0.1)
-        else:
-            raise RuntimeError("JS API 桥初始化超时")
-        window.evaluate_js("window.__smokeEnv = null; api.env().then(x => window.__smokeEnv = x.version)")
-        while time.monotonic() < deadline:
-            report = window.evaluate_js("({url: location.href, version: window.__smokeEnv, images: [...document.querySelectorAll('#tutbox img')].every(i => i.complete && i.naturalWidth > 0)})")
-            if report.get("version") == VERSION and report.get("images") and report.get("url", "").startswith("file://"):
-                from webview import http
-                if http.global_server is not None:
-                    raise RuntimeError("不应启动本地 HTTP 服务")
-                simulated = {"sec": 0, "cancel": False, "recovery": _tool("troubleshooting").UI_RECOVERY,
-                             "results": [{"rc": 1, "title": "读屏检查（模拟）", "sec": 0,
-                                          "tail": ["UIAUTOMATION_BUSY: simulated"]}]}
-                window.evaluate_js("showDone(" + json.dumps(simulated, ensure_ascii=False) + ")")
-                hint_ok = window.evaluate_js("""(() => {
-                    const box = document.querySelector('#ui-recovery');
-                    return !!box && box.offsetHeight > 0 && box.textContent.includes('GKD') &&
-                        box.textContent.includes('自动记账') && box.textContent.includes('检查读屏连接') &&
-                        box.textContent.includes('复制完整诊断');
-                })()""")
-                if not hint_ok:
-                    raise RuntimeError("读屏冲突排查提示未显示")
-                result["ok"] = True
-                print("GUI smoke: file 页面、教程图片、JS API 桥、读屏失败排查提示通过；未启动 HTTP 服务", flush=True)
-                return
-            time.sleep(0.1)
-        raise RuntimeError("教程图片或 JS API 调用未通过")
-    except Exception as e:
-        print(f"GUI smoke failed: {e}", file=sys.stderr, flush=True)
-    finally:
-        window.destroy()
-
-
 def startup_advice(state, blocked, error):
     """窗口起不来时给用户看的文案，以及要不要跳微软官网（#228）。
 
@@ -1367,36 +1324,9 @@ def startup_failed(error, preflight=None, notify=None, open_url=None):
         (open_url or webbrowser.open)("https://developer.microsoft.com/microsoft-edge/webview2/")
 
 
-def main():
-    if len(sys.argv) > 2 and sys.argv[1] == "--cli":
-        cli_main(); return
-    import webview
-    api = client_api()
-    smoke = "--smoke-gui" in sys.argv
-    if smoke:
-        _fix_stdio()
-        api.adb = None                     # 不枚举真机，不自动下载 adb
-    result = {"ok": False}
-    # 明确 file://：裸文件路径会启动 Bottle HTTP 服务，部分 Windows 环境回环连接超时（#18）。
-    url = Path(BASE, "gui", "web", "index.html").resolve().as_uri()
-    w = webview.create_window(APP_NAME, url, js_api=api, hidden=smoke,
-                              width=1080, height=780, min_size=(900, 640))
-    options = {"debug": "--debug" in sys.argv, "http_server": False}
-    if smoke:
-        options.update(func=smoke_gui, args=(w, result))
-    if IS_WIN:
-        try:
-            webview.start(gui="edgechromium", **options)
-        except Exception as e:      # 启动失败：缺 WebView2、程序文件被 MOTW 拦、其他（#228）
-            if smoke:
-                print(f"startup: {winpreflight.describe(BASE)}", flush=True)
-                raise
-            startup_failed(e)
-    else:
-        webview.start(**options)
-    if smoke:
-        sys.exit(0 if result["ok"] else 1)
-
-
-if __name__ == "__main__":
+if __name__ == "__main__":          # `python -m gui.app` / `python gui/app.py` 仍从这里进
+    try:
+        from .launch import main
+    except ImportError:                 # 直接跑本文件时没有包上下文
+        from launch import main
     main()

@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 
 from PIL import Image
 
-from gui import app
+from gui import app, launch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -744,7 +744,7 @@ class DesktopTests(unittest.TestCase):
              patch.dict(sys.modules, {"webview": fake}), patch.object(app, "IS_WIN", True), \
              patch.object(app, "data_dir", return_value=directory), \
              patch.object(app, "find_adb", return_value=None), patch.object(sys, "argv", ["app.py"]):
-            app.main()
+            launch.main()
         url = fake.create_window.call_args.args[1]
         self.assertTrue(url.startswith("file:///"))
         self.assertIn("index.html", url)
