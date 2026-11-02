@@ -34,6 +34,7 @@
 | 功能管理 | 搜索框提示词 | — |
 | 账号与隐私 → 隐私 | 个性化推荐 | — |
 
+- ⚠️ 部分 ColorOS 17 机型的桌面搜索页没有「设置」入口（Find X9 Ultra 实测；Find N5 / 一加 Ace 6T 仍有，需先收起键盘），`SearchSettingActivity` 也未导出；用 `am start -a android.intent.action.VIEW -d 'gs://search/setting'` 直达。参考脚本 `oppo-PLP120` 先试 scheme，认不出设置页再退回桌面下滑的旧入口。
 - ⚠️ 「APP内搜索」必须开着，关了搜不到本机应用。
 - ⚠️ 搜索页顶部会提示「搜索结果受限，开启全部搜索范围」，不要点「去开启」。
 - ⚠️ 搜索设置子页往下拉会退出，翻页用手指上滑。
