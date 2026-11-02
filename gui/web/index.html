@@ -91,8 +91,8 @@ label.chk small{color:var(--sub);display:block}
 .fb-types label{flex:1;border:1px solid var(--line);border-radius:10px;padding:10px;cursor:pointer;text-align:center;font-weight:600}
 .fb-types input{display:none}
 .fb-types label:has(input:checked){border-color:var(--accent);background:var(--accent-weak);color:var(--accent)}
-textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;background:var(--bg);color:var(--text);resize:vertical}
-textarea.mono{font-family:var(--mono);font-size:12px}
+textarea,input[type=text]{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;background:var(--bg);color:var(--text);resize:vertical}
+textarea.mono,input[type=text].mono{font-family:var(--mono);font-size:12px}
 pre.report{background:var(--log);color:var(--logtext);font-family:var(--mono);font-size:12px;border-radius:10px;padding:14px;max-height:300px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin:12px 0 0}
 .modal .box.wide{width:min(640px,92vw);max-height:88vh;overflow:auto}
 </style>
@@ -109,6 +109,7 @@ pre.report{background:var(--log);color:var(--logtext);font-family:var(--mono);fo
     <div class="side-foot">
       <button class="link" onclick="openRestore()">↺ 还原改动</button>
       <button class="link" onclick="api.open_path('backups')">📁 打开备份文件夹</button>
+      <button class="link" onclick="openSettings()">⚙ 设置</button>
       <button class="link" onclick="openFeedback()">💬 反馈问题</button>
       <button class="link" onclick="api.open_url('https://github.com/rddmwmddr/android-ad-cleaner')">？使用说明</button>
       <button class="link newver hide" id="newver"></button>
@@ -164,6 +165,7 @@ function showConnect(){
     <h1>连接手机</h1>
     <p class="lead">用数据线把手机连到这台电脑。手机要打开开发者模式和 USB 调试。</p>
     <div class="note info"><b>设备支持范围</b>：支持通过 adb 连接的安卓设备。使用 HDC 的华为原生鸿蒙暂不支持；升级客户端也不会获得鸿蒙适配。荣耀 MagicOS 属于另一种情况，可先连接检测，没有本型号脚本时可自选同品牌参考脚本。</div>
+    <div id="adbwarn"></div>
     <div id="adbbox"></div>
     <div id="devbox"></div>
     <details class="card" id="tutbox">
@@ -171,14 +173,25 @@ function showConnect(){
       <div class="tut" style="margin-top:14px">${TUT.map(([f,c]) => `<figure><img src="img/${f}" alt=""><figcaption>${c}</figcaption></figure>`).join("")}</div>
       <p class="lead" style="margin:14px 0 0">插线后：手机下拉通知栏，USB 用途选「传输文件」；弹出「允许 USB 调试吗？」时勾「始终允许」，点「允许」。</p>
     </details>`;
+  adbWarning();
   if (!ENV.adb){ renderAdb(); return; }
   refreshDevices(); pollDev = setInterval(refreshDevices, 2000);
+}
+function adbWarning(){
+  /* 手填的 adb 后来被挪走或卸载时，说清楚现在用的是哪一份，不要静默换掉（#311）。 */
+  api.adb_info().then(i => {
+    const box = $("#adbwarn");
+    if (!box) return;
+    const now = i.path ? `，当前用的是：${esc(i.path)}${ADB_SRC[i.source] ? `（${ADB_SRC[i.source]}）` : ""}` : "";
+    box.innerHTML = i.manual_error ? `<div class="note warn">${esc(i.manual_error)}${now}</div>` : "";
+  }).catch(() => {});
 }
 function renderAdb(){
   $("#adbbox").innerHTML = `<div class="card"><h3>第一次使用：需要 adb 工具</h3>
     <p class="lead" style="margin:0 0 12px">adb 是 Google 官方的安卓调试工具，用来和手机通信。点下面的按钮下载（约 10 MB）：先从 Google 官网下，下不了再换腾讯云镜像，下完核对文件校验值。下载即表示同意 Android SDK 平台工具的使用条款。</p>
     <div class="row"><button class="btn" id="dlbtn" onclick="dlAdb()">下载 adb</button><span id="dlmsg" class="lead" style="margin:0"></span></div>
-    <div class="bar hide" id="dlbar" style="margin-top:12px"><i style="width:0"></i></div></div>`;
+    <div class="bar hide" id="dlbar" style="margin-top:12px"><i style="width:0"></i></div>
+    <p class="lead" style="margin:14px 0 0">电脑上已经装了 adb？<a href="#" onclick="openSettings();return false" style="color:var(--accent)">手动指定它的位置</a></p></div>`;
 }
 async function dlAdb(){
   $("#dlbtn").disabled = true; $("#dlbar").classList.remove("hide");
@@ -506,6 +519,53 @@ function openRestore(){
     <div class="actions"><button class="btn plain" onclick="closeModal()">关闭</button></div>`);
 }
 async function restore(w){ $("#rmsg").textContent = "处理中……"; $("#rmsg").textContent = await api.restore(S.serial, w); }
+
+/* ---------- 设置：手动指定 adb（#311） ---------- */
+const ADB_SRC = {manual: "手动指定", downloaded: "客户端下载", system: "系统已安装", none: ""};
+async function openSettings(){
+  modal(`<h3>设置</h3>
+    <p class="lead" style="margin:0 0 12px">自动找不到 adb 时（自己装在别的目录、公司电脑不让下载），在这里指定 adb 的完整路径。指定后会优先用它。</p>
+    <div id="adbcur"></div>
+    <label class="lead" for="adbpath" style="display:block;margin:0 0 6px">adb 路径</label>
+    <div class="row"><input type="text" id="adbpath" class="mono" placeholder="例如 /Users/你/Software/AndroidSDK/platform-tools/adb"><button class="btn ghost" onclick="browseAdb()">浏览…</button></div>
+    <div id="adbmsg" class="note hide" style="margin-top:12px"></div>
+    <div class="actions"><button class="btn plain" onclick="clearAdb()">恢复自动查找</button><button class="btn plain" onclick="closeModal()">关闭</button><button class="btn" onclick="saveAdb()">保存</button></div>`);
+  renderAdbInfo(await api.adb_info());
+}
+function renderAdbInfo(info){
+  const where = info.path ? `${esc(info.path)}${info.version ? `（版本 ${esc(info.version)}）` : ""}` : "还没有找到 adb";
+  const src = ADB_SRC[info.source] ? `，来源：${ADB_SRC[info.source]}` : "";
+  const cur = $("#adbcur");
+  if (cur) cur.innerHTML = `<div class="note ${info.manual_error ? "warn" : "info"}">当前使用：${where}${src}${info.manual_error ? `<br>${esc(info.manual_error)}` : ""}</div>`;
+  const box = $("#adbpath");
+  if (box && !box.value) box.value = info.manual || "";
+}
+function adbMessage(text, kind){
+  const el = $("#adbmsg");
+  if (!el) return;
+  el.className = "note " + kind;
+  el.textContent = text;
+}
+async function saveAdb(){
+  const r = await api.set_adb_path($("#adbpath").value);
+  if (!r.ok){ adbMessage(r.error, "bad"); return; }
+  adbMessage(`已保存：${r.path}（版本 ${r.version || "未知"}）${r.running ? "。正在执行，本步骤结束后生效" : ""}`, "ok");
+  renderAdbInfo(r);
+  ENV = await api.env();
+  if (S.step === 1) showConnect();
+}
+async function browseAdb(){
+  const picked = await api.pick_adb_file();
+  if (picked) $("#adbpath").value = picked;
+}
+async function clearAdb(){
+  $("#adbpath").value = "";
+  const info = await api.clear_adb_path();
+  renderAdbInfo(info);
+  adbMessage(info.path ? "已恢复自动查找。" : "已恢复自动查找，但电脑上还是没找到 adb，请下载或指定路径。", info.path ? "ok" : "warn");
+  ENV = await api.env();
+  if (S.step === 1) showConnect();
+}
 </script>
 </body>
 </html>
