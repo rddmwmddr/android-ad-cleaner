@@ -95,6 +95,18 @@ class BoxesTests(unittest.TestCase):
         found = row.switches_in(container, on_screen())
         self.assertEqual([row.bounds(n) for n in found], [(900, 320, 1000, 380)])
 
+    def test_control_is_the_innermost_switch_not_the_card_holding_it(self):
+        # 卡片整体 checkable 时，卡片中心落在标题与开关之间的空白里，点它不生效（#403）
+        root, _ = page(CARD)
+        row_line = root[0][0][0][0]
+        self.assertEqual(row.bounds(row.control(row_line, on_screen())), (900, 600, 1000, 680))
+
+    def test_a_card_with_several_switches_stays_the_control(self):
+        # 同一层两个开关：认不出点哪个，退回卡片，由调用方按行归属决定
+        root, _ = page(FLAT_CARD)
+        card = root[0][0][0]
+        self.assertIs(row.control(card, on_screen()), card)
+
 
 # 华为 / 旧版荣耀：几个渠道排在同一张卡片里，卡片是列表的直接子项，行本身不可点
 CARD = '''<hierarchy><node class="android.widget.FrameLayout" bounds="[0,0][1080,2340]">
