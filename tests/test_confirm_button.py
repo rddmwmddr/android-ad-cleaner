@@ -14,9 +14,9 @@ import fast
 from fixtures import phone_stub
 
 
-def phone():
+def phone(size=(1080, 2400)):
     p = phone_stub("test", d=Mock())
-    p.W, p.H = 1080, 2400
+    p.W, p.H = size
     return p
 
 
@@ -61,6 +61,83 @@ class ConfirmButtonTests(unittest.TestCase):
         p.tree, p.click = Mock(return_value=root), Mock()
         self.assertIsNone(p.confirm())
         p.click.assert_not_called()
+
+    @patch.object(fast.time, "sleep")
+    def test_clickable_text_view_is_a_confirm_button(self, _sleep):
+        """HyperOS 4（小米 17）热榜页：确认键是可点击的 TextView，不是 Button（#500 / PR #408）。
+
+        弹窗里同时有说明文字与「取消」，点必须落在「关闭」上。
+        """
+        p = phone()
+        root = ET.fromstring('''<hierarchy>
+          <node class="android.widget.TextView" text="关闭热榜后将不再显示榜单内容" clickable="false" bounds="[60,1900][1020,2100]"/>
+          <node class="android.widget.TextView" text="取消" clickable="true" bounds="[120,2200][480,2320]"/>
+          <node class="android.widget.TextView" text="关闭" clickable="true" bounds="[600,2200][960,2320]"/>
+        </hierarchy>''')
+        p.tree, p.click = Mock(return_value=root), Mock()
+        self.assertEqual(p.confirm(), "关闭")
+        p.click.assert_called_once_with(780, 2260)
+
+    @patch.object(fast.time, "sleep")
+    def test_button_class_wins_over_clickable_text_view(self, _sleep):
+        """严格档优先：同一页既有 Button 又有可点击 TextView 时点 Button。"""
+        p = phone()
+        root = ET.fromstring('''<hierarchy>
+          <node class="android.widget.TextView" text="确定" clickable="true" bounds="[600,2200][960,2320]"/>
+          <node class="android.widget.Button" text="确定" clickable="true" bounds="[120,2200][480,2320]"/>
+        </hierarchy>''')
+        p.tree, p.click = Mock(return_value=root), Mock()
+        self.assertEqual(p.confirm(), "确定")
+        p.click.assert_called_once_with(300, 2260)
+
+    @patch.object(fast.time, "sleep")
+    def test_text_view_fallback_skips_wide_or_tall_nodes(self, _sleep):
+        """兜底档只认按钮级尺寸：整行宽度和整段高度各守一个阈值。"""
+        for bounds in ("[60,2000][1020,2320]", "[300,1600][600,2100]"):
+            with self.subTest(bounds=bounds):
+                p = phone()
+                root = ET.fromstring(
+                    f'<hierarchy><node class="android.widget.TextView" text="关闭" '
+                    f'clickable="true" bounds="{bounds}"/></hierarchy>')
+                p.tree, p.click = Mock(return_value=root), Mock()
+                self.assertIsNone(p.confirm())
+                p.click.assert_not_called()
+
+    @patch.object(fast.time, "sleep")
+    def test_text_view_fallback_skips_bounds_at_the_threshold(self, _sleep):
+        """阈值是严格小于：宽 540（0.5W）、高 288（0.12H）恰好卡线时都不点。"""
+        for bounds in ("[270,2000][810,2100]", "[300,2000][600,2288]"):
+            with self.subTest(bounds=bounds):
+                p = phone()
+                root = ET.fromstring(
+                    f'<hierarchy><node class="android.widget.TextView" text="关闭" '
+                    f'clickable="true" bounds="{bounds}"/></hierarchy>')
+                p.tree, p.click = Mock(return_value=root), Mock()
+                self.assertIsNone(p.confirm())
+                p.click.assert_not_called()
+
+    @patch.object(fast.time, "sleep")
+    def test_text_view_fallback_skips_offscreen_nodes(self, _sleep):
+        """屏外残留的 TextView 不点。"""
+        p = phone()
+        root = ET.fromstring('''<hierarchy>
+          <node class="android.widget.TextView" text="关闭" clickable="true" bounds="[600,2500][960,2700]"/>
+        </hierarchy>''')
+        p.tree, p.click = Mock(return_value=root), Mock()
+        self.assertIsNone(p.confirm())
+        p.click.assert_not_called()
+
+    @patch.object(fast.time, "sleep")
+    def test_text_view_fallback_scales_with_the_screen(self, _sleep):
+        """阈值按当前屏尺寸算：窄屏上整行文字仍被排除，按钮级文字仍能命中。"""
+        p = phone((720, 1600))
+        root = ET.fromstring('''<hierarchy>
+          <node class="android.widget.TextView" text="关闭" clickable="true" bounds="[40,1320][680,1420]"/>
+          <node class="android.widget.TextView" text="关闭" clickable="true" bounds="[380,1200][700,1300]"/>
+        </hierarchy>''')
+        p.tree, p.click = Mock(return_value=root), Mock()
+        self.assertEqual(p.confirm(), "关闭")
+        p.click.assert_called_once_with(540, 1250)
 
 
 if __name__ == "__main__":
