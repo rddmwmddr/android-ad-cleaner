@@ -2,6 +2,7 @@
 
 旧实现（69cfc4d 的 chan_fast.KW/SKIP/VIVO_MARKETING 与 gui.SERVICE）逐字冻结在这里
 作为对拍基线；改前改后判定必须逐条相同。判定是值，判据是纯函数，不用手机。
+繁体词条不在冻结基线里，另由 test_traditional_chinese_498.py 按单词样例与繁简成对验证（#498）。
 """
 import re
 import sys
