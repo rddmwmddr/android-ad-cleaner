@@ -195,7 +195,8 @@ class CheckLineTests(unittest.TestCase):
             write_recipe(root, "xiaomi-REF", recorded, 9)
             recipe = str(Path(root, "recipes", "xiaomi-REF", "recipe.py"))
             out = io.StringIO()
-            with patch.object(run, "info", return_value=dict(self.INFO)) as info, \
+            with patch.object(run, "ROOT", root), \
+                 patch.object(run, "info", return_value=dict(self.INFO)) as info, \
                  patch.object(run, "recipe_for", return_value=(recipe, True)) as recipe_for, \
                  patch.object(run, "locked", return_value=False) as locked, \
                  patch.object(run, "input_blocked", return_value=False) as input_blocked, \
@@ -233,7 +234,8 @@ class CheckLineTests(unittest.TestCase):
             recipe = str(Path(root, "recipes", "xiaomi-REF", "recipe.py"))
             out = io.StringIO()
             unknown = dict(self.INFO, build="", os="")
-            with patch.object(run, "info", return_value=unknown), \
+            with patch.object(run, "ROOT", root), \
+                 patch.object(run, "info", return_value=unknown), \
                  patch.object(run, "recipe_for", return_value=(recipe, True)), \
                  patch.object(run, "locked", return_value=False), \
                  patch.object(run, "input_blocked", return_value=False), \
