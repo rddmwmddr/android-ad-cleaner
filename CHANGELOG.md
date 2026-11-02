@@ -8,6 +8,7 @@
 
 - 机型脚本：OPPO Find X9 Pro（PLG110，ColorOS 16.0.10）（#436）
 - 机型脚本：realme GT Neo5 SE（RMX3700，ColorOS 16.0.5.1300），六段（#479）
+- 清单：Redmi Note 13 海外版（23124RA7EO，HyperOS 2 俄区）的差异与应用内开关（#474）
 - 渠道页认不出时上报附一份脱敏页面骨架，不用再等报告者导 `uiautomator dump`（#428，ADR-0009）
 
 ### 修复
@@ -21,6 +22,7 @@
 - 挂起 `com.oplus.appdetail` 后第三方安装永久停在「正在安装」：`suspend` 拒绝它，`check` 说出被别处挂起的功能包（#479）
 - 执行中的三处竞态：停止不再漏杀刚启动的引擎进程，收尾行不再丢失或串进下一次执行（#452）
 - 应用商店开屏页挡住底栏时整段在推广页里空转到超时：启动后校验落点，点 ✕ 跳到别的 App 就退回（#420）
+- 海外版 HyperOS 的 msa 叫 `com.miui.msa.global`，`check` 看不到、`suspend` 不断网（#474）
 
 ### 内部
 

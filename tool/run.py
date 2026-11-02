@@ -43,7 +43,8 @@ BACKUPS = root_from_env() or os.path.join(ROOT, "backups")
 AD_PKGS = {
     "oppo": ["com.opos.ads", "com.heytap.pictorial"],
     "honor": [],
-    "xiaomi": ["com.miui.systemAdSolution"],
+    # 第二个是海外版（global / 俄区等）HyperOS 上同一个系统广告组件的包名，国行没有
+    "xiaomi": ["com.miui.systemAdSolution", "com.miui.msa.global"],
     "vivo": [],
 }
 
@@ -118,9 +119,10 @@ def sh_all(serial, cmd):
 
 
 MSA = "com.miui.systemAdSolution"
+MSA_PKGS = (MSA, "com.miui.msa.global")      # 国行 / 海外版的 msa，挂起后都要断网
 
 
-def msa_net(serial, enable):
+def msa_net(serial, enable, pkg=MSA):
     """仅用本系统确实提供的接口；Android 13 等旧系统不伪报断网成功。"""
     help_text = sh_all(serial, "cmd connectivity help")
     required = ["set-package-networking-enabled", "get-package-networking-enabled"]
@@ -128,16 +130,16 @@ def msa_net(serial, enable):
         required += ["set-chain3-enabled", "get-chain3-enabled"]
     if not all(re.search(r"(?m)^\s*" + re.escape(command) + r"(?:\s|$)", help_text) for command in required):
         return {"ok": False, "supported": False, "reason": "本系统不支持 msa 断网接口；仅挂起仍可能出现广告"}
-    commands = [f"cmd connectivity set-package-networking-enabled {'true' if enable else 'false'} {MSA}"]
+    commands = [f"cmd connectivity set-package-networking-enabled {'true' if enable else 'false'} {pkg}"]
     if not enable:
         commands.append("cmd connectivity set-chain3-enabled true")
     for command in commands:
         result = sh_all(serial, command)
         if re.search(r"unknown command|exception|permission denial|error|not supported|denied", result, re.I):
             return {"ok": False, "supported": True, "reason": "系统拒绝更改 msa 网络状态：" + result[-180:]}
-    result = sh_all(serial, f"cmd connectivity get-package-networking-enabled {MSA}").strip().lower()
+    result = sh_all(serial, f"cmd connectivity get-package-networking-enabled {pkg}").strip().lower()
     # HyperOS 实机返回「包名:allow/deny」，部分接口返回布尔值；不接受错误信息中的碰巧匹配。
-    expected = {"true", f"{MSA}:allow".lower()} if enable else {"false", f"{MSA}:deny".lower()}
+    expected = {"true", f"{pkg}:allow".lower()} if enable else {"false", f"{pkg}:deny".lower()}
     ok = result in expected
     if ok and not enable:
         chain = sh_all(serial, "cmd connectivity get-chain3-enabled").strip().lower()
@@ -475,6 +477,8 @@ def cmd_check(serial, rest):
         print("机型脚本：没有。可跑：通知渠道 chan-scan/chan-off、广告包挂起；其余照 docs/清单 手动做，或用 tool/explore.py 探路")
     for p in ad_packages(i["brand"]):
         exists = "package:" in sh(serial, f"pm path {p}")
+        if not exists and p in MSA_PKGS:     # msa 在国行 / 海外版是两个包名，只装一个，另一个不提
+            continue
         print(f"  广告包 {p}：{'未安装' if not exists else ('已挂起' if suspended(serial, p) else '未挂起')}")
     # 别处（雹、冰箱、别的脚本）冻掉的功能包：run.py 管不了，但机型脚本的段会跟着一起失败，
     # 报出来的现象却是「没找到入口」，很容易被当成没适配。RMX3700 上就这样误判了三段。
@@ -573,9 +577,9 @@ def cmd_suspend(serial, rest):
         if suspended(serial, p):
             record(serial, [p], backup=d)
             extra = ""
-            if p == MSA:
+            if p in MSA_PKGS:
                 sh(serial, f"am force-stop {p}")
-                network = msa_net(serial, False)
+                network = msa_net(serial, False, p)
                 if network["ok"]:
                     extra = "，已禁止联网"
                 elif not network["supported"]:
@@ -600,8 +604,8 @@ def cmd_unsuspend(serial, rest):
     for p in pk:
         sh(serial, f"pm unsuspend --user 0 {p}")
         extra = ""
-        if p == MSA:
-            network = msa_net(serial, True)
+        if p in MSA_PKGS:
+            network = msa_net(serial, True, p)
             if network["supported"] and not network["ok"]:
                 failures += 1
                 extra = "；联网还原失败：" + network["reason"]
