@@ -24,7 +24,7 @@ import adb_link
 import chan_fast as chan
 import fast
 import run
-from fixtures import phone_stub
+from fixtures import fake_adb, phone_stub
 
 
 def channel_phone():
@@ -92,6 +92,9 @@ class ScreenshotTests(unittest.TestCase):
 
 @patch.object(chan.time, "sleep")
 class ChannelTests(unittest.TestCase):
+    def setUp(self):
+        fake_adb(self)
+
     def scan(self, *channels):
         """喂一份 dumpsys 渠道行，跑一次完整的 scan；假设备，不连手机。"""
         rows = "".join(
@@ -370,6 +373,7 @@ class ChannelTests(unittest.TestCase):
 
 class QuickappTests(unittest.TestCase):
     def setUp(self):
+        fake_adb(self)
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.backup = Path(self.directory.name, "vivo-test")
@@ -451,6 +455,9 @@ class QuickappTests(unittest.TestCase):
 
 
 class BackupTests(unittest.TestCase):
+    def setUp(self):
+        fake_adb(self)
+
     def test_backup_path_on_another_windows_drive(self):
         with patch.object(run, "ROOT", r"D:\app"), \
              patch.object(run.os.path, "relpath", side_effect=ntpath.relpath), \
@@ -566,6 +573,9 @@ class ExternalAdbServerTests(unittest.TestCase):
 class PackageListTests(unittest.TestCase):
     """#192：HyperOS 4 上 `pm list packages` 任何参数都无输出且 exit 0；要回退 `cmd package list`。"""
 
+    def setUp(self):
+        fake_adb(self)
+
     def test_pm_list_without_output_falls_back_to_cmd_package(self):
         with patch.object(run, "sh", side_effect=lambda _s, c: "package:com.example" if c.startswith("cmd package") else ""):
             self.assertEqual(run.pkg_list("test", "--user 0 -s"), "package:com.example")
@@ -646,6 +656,9 @@ class QuickappKeepTests(unittest.TestCase):
     """Issue #335：快应用平台承载负一屏快递详情页，quickapp off 必须保留它。"""
     PKGS = ("com.nearme.instant.platform", "com.oppo.instant.local.service", "com.nearme.instant.card")
     HAP = "com.nearme.instant.platform/.dispatch.activity.HapDispatcherActivity"
+
+    def setUp(self):
+        fake_adb(self)
 
     def phone(self, hap=HAP):
         state = {"suspended": set()}
@@ -798,6 +811,9 @@ class RepeatedChannelNameTests(unittest.TestCase):
 class AdPackagesTests(unittest.TestCase):
     """#367：AD_PKGS 以 ro.product.brand 原值取键，POCO 取不到小米家族的广告包。
     客户端「挂起广告组件」读的是 status-json 的 ads，所以 check 与 status-json 两个入口都守。"""
+
+    def setUp(self):
+        fake_adb(self)
 
     INFO = {"brand": "", "model": "M2012K11AC", "name": "POCO F3", "build": "OS1.0.1.0", "os": "", "android": "13"}
 

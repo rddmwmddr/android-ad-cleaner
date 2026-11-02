@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))
 import adb_link
 import fast
 import run
-from fixtures import phone_stub
+from fixtures import fake_adb, phone_stub
 
 
 def phone():
@@ -165,6 +165,9 @@ class InputTests(unittest.TestCase):
 
 
 class LaunchTests(unittest.TestCase):
+    def setUp(self):
+        fake_adb(self)
+
     def test_settings_panel_cancel_is_not_dismissed_as_popup(self):
         p = phone()
         p.tree = Mock(return_value=ET.fromstring('''<hierarchy>

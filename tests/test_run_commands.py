@@ -29,6 +29,7 @@ import adb_link
 import run
 import run_cli_cases
 import run_cli_driver
+from fixtures import fake_adb
 
 BASELINE = ROOT / "tests" / "baselines" / "run_cli.json"
 
@@ -219,6 +220,9 @@ class RoundTripTests(unittest.TestCase):
     """多余往返与冗余写入（#335 复测时发现）：每条去掉对应优化即红。"""
 
     PKGS = ("com.nearme.instant.platform", "com.oppo.instant.local.service", "com.nearme.instant.card")
+
+    def setUp(self):
+        fake_adb(self)
 
     def drive(self, argv, listed=True):
         """跑一条 quickapp 子命令，返回 (输出, 假 shell 收到的命令, 挂起集合)。"""
