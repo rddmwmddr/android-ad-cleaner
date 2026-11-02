@@ -47,12 +47,14 @@ def line(node, parents, max_depth=None):
     return None
 
 
+def is_switch(node):
+    """开关控件本体。RadioButton 是互斥选项、不是开关，拨它等于替用户改选另一项。"""
+    return node.get("checkable") == "true" and "RadioButton" not in (node.get("class") or "")
+
+
 def switches_in(node, on_screen):
-    """node 子树里的开关。RadioButton 是互斥选项、不是开关，拨它等于替用户改选另一项；
-    node 自己不算——问的是「一行里有几个开关」。"""
-    return [x for x in node.iter()
-            if x is not node and x.get("checkable") == "true"
-            and "RadioButton" not in (x.get("class") or "") and on_screen(x)]
+    """node 子树里的开关。node 自己不算——问的是「一行里有几个开关」。"""
+    return [x for x in node.iter() if x is not node and is_switch(x) and on_screen(x)]
 
 
 def switch_class(node):
@@ -234,9 +236,6 @@ def summary(root, screen_w, screen_h):
                 return True
             cur = parents.get(cur)
         return False
-
-    def is_switch(n):
-        return n.get("checkable") == "true" and "RadioButton" not in (n.get("class") or "")
 
     titles = sum(1 for n in nodes if shown(n) and not in_list(n)
                  and (n.get("text") or n.get("content-desc") or "").strip()
