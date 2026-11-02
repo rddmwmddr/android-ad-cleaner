@@ -8,7 +8,7 @@
 - vivo X Fold6（V2545A，OriginOS 6 Fold，Android 16），2026-10-26。
 - iQOO Z11 Turbo（V2536A，OriginOS 6，Android 16），2026-11-01，无专用脚本，`--ref` 安全模式实测。
 
-iQOO 结构相近。当前源码有 `recipes/vivo-V2547DA/`、`recipes/vivo-V2547A/`、`recipes/vivo-V2545A/` 三份机型脚本，均已真机整段跑通验证（V2547DA 124 秒，V2547A 126 秒，V2545A 121 秒）。V2547DA 另有 Android 17 变体 `recipes/vivo-V2547DA/recipe_android17.py`，系统版本对上 `PD2547D_A_17` 时自动选它；入口按 #220 的报告者实测写，本仓库未复测。三份脚本对应不同机型与系统版本，入口差异见下文「OriginOS 7（Android 17）的不同之处」、「X Fold6 的差异」和「V2536A 的差异」；版本对不上时引擎会走安全模式。发布与验证范围见[归档记录](../归档/CHANGELOG-0.3.0及更早.md)。
+iQOO 结构相近。当前源码有 `recipes/vivo-V2547DA/`、`recipes/vivo-V2547A/`、`recipes/vivo-V2545A/` 三份机型脚本，均已真机整段跑通验证（V2547DA 124 秒，V2547A 126 秒，V2545A 121 秒）。V2547DA 另有 Android 17 变体 `recipes/vivo-V2547DA/recipe_android17.py`，系统版本对上 `PD2547D_A_17.1.10.2` 时自动选它（其余 17.x 小版本对不上，仍走 Android 16 脚本并进安全模式）；入口按 #220 的报告者实测写，本仓库未复测。三份脚本对应不同机型与系统版本，入口差异见下文「OriginOS 7（Android 17）的不同之处」、「X Fold6 的差异」和「V2536A 的差异」；版本对不上时引擎会走安全模式。发布与验证范围见[归档记录](../归档/CHANGELOG-0.3.0及更早.md)。
 符号：🔴 关掉　🟢 保留　⚠️ 注意
 
 ---
@@ -147,7 +147,7 @@ Failure [only root can delete system app for a particular user]
 
 - 系统设置搜索框：`com.android.settings:id/vigour_search_edit`。首页那个「搜索设置项」本身是个 EditText，
   输入关键词后它自己也含这几个字，按文字查找会先命中它，点上去页面根本不跳、也不报错。
-- 应用商店设置：`com.bbk.appstore/.ui.menu.AppstoreSettingsActivity`。Android 17 上商店（V10.5.20.0）的「我的」页没有能读到的齿轮入口，只能按这个 Activity 直达（[#220](https://github.com/rddmwmddr/android-ad-cleaner/issues/220)）；直达失败时退回「我的 → 设置」。
+- 应用商店设置：`com.bbk.appstore/.ui.menu.AppstoreSettingsActivity`。V2547DA 的 Android 17 上商店（V10.5.20.0）「我的」页没有能读到的齿轮入口，只能按这个 Activity 直达（[#220](https://github.com/rddmwmddr/android-ad-cleaner/issues/220)）；直达失败时退回「我的 → 设置」。V2547A 的商店版本仍能按「我的 → 设置」文字进入。
 - 浏览器菜单按钮：`com.vivo.browser:id/menu_btn`，设置页 `...setting.common.activity.SettingActivity`
 - 负一屏设置面板：`com.vivo.hiboard/.settings.AppletSettingActivity`
 - 阅图锁屏：`com.vivo.magazine/.ui.MagazineSettings`
@@ -157,9 +157,10 @@ Failure [only root can delete system app for a particular user]
 （悬浮 / 经典 / 卡片形态）也是 checkable，按「找 checkable 节点」的通用写法会把它当开关一起拨掉。
 机型脚本 `recipes/vivo-V2547A/recipe.py` 里已按行还原标题、排除单选钮。
 
-⚠️ 商店「设置 → 关于 → 个性化推荐」页的两个开关，Android 17 上读屏里 content-desc 只有「开启，开关」、
-行内没有标题。引擎的 `p.off()` 按标题匹配，空标题的行整行跳过——不会关，也不会报「关不掉」。
-V2547DA 的 Android 17 变体里用 `off_unnamed()` 按开关位置逐个点、每次点完点「确认关闭」，再回读核对。
+⚠️ V2547DA 的 Android 17 上，商店「设置 → 关于 → 个性化推荐」页的两个开关读屏里 content-desc 只有
+「开启，开关」、行内没有标题。引擎的 `p.off()` 按标题匹配，空标题的行整行跳过——不会关，也不会报「关不掉」。
+变体脚本里用 `off_unnamed()` 按开关位置逐个点、每次点完点「确认关闭」，再回读核对；灰的行不点，
+回读读不到开关时按「关不掉」记账。
 
 ---
 
@@ -179,7 +180,7 @@ V2547DA 的 Android 17 变体里用 `off_unnamed()` 按开关位置逐个点、�
 | 位置 | 本机实际路径 | 备注 |
 |---|---|---|
 | 应用商店·服务管理 | 商店 → 我的 → 设置 → **关于** → 下滑到「服务管理」 | 不在设置页第一层；页面是 `FunctionManagerActivity`，7 个营销开关 + 「管理页-我的服务」「空间清理」保留 |
-| 应用商店·个性化推荐 | 设置 → 关于 → 「个性化推荐」 | `SettingUserRecommendActivity`；⚠️ 两个开关读屏里没有标题（只有「关闭，开关」），引擎会按保护类开关跳过，属安全策略，不绕过 |
+| 应用商店·个性化推荐 | 设置 → 关于 → 「个性化推荐」 | `SettingUserRecommendActivity`；⚠️ 两个开关读屏里没有标题（只有「关闭，开关」），本机脚本不处理、引擎按保护类开关跳过，要关只能人工点（V2547DA 的 Android 17 变体对另一条同类页面按位置关，见上文） |
 | 应用商店·通知 | 设置 → 「应用商店提醒类型」 | 「消息通知设置」是标题行、点不动；提醒类型页 9 个开关 |
 | 浏览器·设置入口 | 首页右上角 **菜单** → 设置 | 没有底部「我的」；`SettingActivity` |
 | 浏览器·隐私 | 设置 → 隐私权限设置 | 是 `SettingActivity` 内的子页，4 个开关（含个性化广告推荐）|

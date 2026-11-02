@@ -45,28 +45,33 @@ def gear():
 
 
 def off_unnamed(page):
-    """这一页上没有标题的开关：按位置一个个关，关完回读核对。
+    """这一页上没有标题的开关：按位置一个个关，点一次回读一次。
     商店「个性化推荐」页的两个开关 content-desc 只有「开启，开关」（#220）：p.off() 按标题匹配，
-    空标题的行整行跳过，它们既进不了名单，也不会出现在「关不掉」里。"""
-    before = [xy for title, on, xy in p.switches() if not title and on]
-    if not before:
+    空标题的行整行跳过——既关不到，也不会报「关不掉」，所以只有这一页自己点。
+    灰的行不点（#333）；点完读不到开关（被确认框挡住）不算关掉（#486 的教训：读空不等于成功）。"""
+    from row import disabled_at
+    root = p.tree()
+    targets = [xy for title, on, xy in p.switches(root) if not title and on]
+    if not targets:
         print(f"  · {page}：没有开着且无标题的开关")
         return 0
-    left = before
-    for _ in range(2):
-        for xy in left:
-            p.click(*xy)
-            p.confirm()
-            time.sleep(0.3)
-        left = [xy for title, on, xy in p.switches() if not title and on]
-        if not left:
-            break
-    for _ in left:
-        print("  ✗ 关不掉 一个无标题开关")
-    done = max(0, len(before) - len(left))
-    for _ in range(done):
-        p.changed.append((page, "无标题开关"))
-    print(f"  · {page}：核对 {len(before)} 项，调整 {done} 项")
+    done = 0
+    for i, xy in enumerate(targets, 1):
+        if disabled_at(root, xy):
+            print(f"  · 被上级开关禁用（开关是灰的），未改动 无标题开关 {i}")
+            continue
+        was = sum(1 for title, on, _ in p.switches() if not title and on)
+        p.click(*xy)
+        p.confirm()
+        time.sleep(0.3)
+        rows = p.switches()
+        if not rows or sum(1 for title, on, _ in rows if not title and on) >= was:
+            print(f"  ✗ 关不掉 无标题开关 {i}")
+            continue
+        print(f"  关 无标题开关 {i}")
+        p.changed.append((page, f"无标题开关 {i}"))
+        done += 1
+    print(f"  · {page}：核对 {len(targets)} 项，调整 {done} 项")
     return done
 
 
@@ -104,10 +109,15 @@ def _():
 
 @step("应用商店")
 def _():
-    # 「我的」页没有能读到的齿轮入口，设置页只能按 Activity 直达（#220）
-    p.start("com.bbk.appstore", ".ui.menu.AppstoreSettingsActivity")
-    if "AppstoreSettingsActivity" not in p.focus():
-        # 商店换了版本、这个 Activity 不在了：退回「我的 → 设置」，别整段空跑
+    # 「我的」页没有能读到的齿轮入口，设置页只能按 Activity 直达（#220）。
+    # Activity 不存在时 Phone.start 会直接抛出来，接住再退回「我的 → 设置」，别整段空跑。
+    try:
+        p.start("com.bbk.appstore", ".ui.menu.AppstoreSettingsActivity")
+        reached = "AppstoreSettingsActivity" in p.focus()
+    except RuntimeError as e:
+        print(f"  · 直达商店设置页失败（{e}），改走「我的 → 设置」")
+        reached = False
+    if not reached:
         p.start("com.bbk.appstore", expect=("我的",))
         p.tap("我的", exact=True, scrolls=0)
         time.sleep(0.8)
@@ -115,6 +125,7 @@ def _():
     if maybe("关于"):
         if maybe("个性化推荐"):
             p.off(only=["个性化推荐", "个性化广告推荐"], page="商店·个性化推荐")
+            p.top()                     # p.off 会往下翻；这一页的开关在上面时别错过
             off_unnamed("商店·个性化推荐")
             p.back(); time.sleep(0.5)
         if maybe("服务管理"):
