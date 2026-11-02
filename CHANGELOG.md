@@ -9,6 +9,7 @@
 - 机型脚本：OPPO Find X9 Pro（PLG110，ColorOS 16.0.10）（#436）
 - 机型脚本：realme GT Neo5 SE（RMX3700，ColorOS 16.0.5.1300），六段（#479）
 - 清单：Redmi Note 13 海外版（23124RA7EO，HyperOS 2 俄区）的差异与应用内开关（#474）
+- 清单：OPPO Pad Mini（ColorOS 17）与 Reno5 Z（ColorOS 13 海外版）的入口差异（#236、#264）
 - 渠道页认不出时上报附一份脱敏页面骨架，不用再等报告者导 `uiautomator dump`（#428，ADR-0009）
 
 ### 修复
