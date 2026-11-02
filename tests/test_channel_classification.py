@@ -168,6 +168,53 @@ class SerializationEdgeTests(unittest.TestCase):
         self.assertTrue(policy.classify("营销通知", "promo", package="com.x", app="热点资讯").default_unchecked)
 
 
+# 广告网络词表在测试侧冻结：只遍历实现自己的元组时，删词会连样例一起消失。
+AD_NETWORK_TERMS = ("tencentadnet", "adroi", "pangle", "admob", "applovin", "unityads", "mintegral")
+
+
+class AdNetworkTests(unittest.TestCase):
+    """厂商把广告网络写在渠道 ID 里（#456）：ID 命中即营销，且越过服务词。"""
+
+    def test_ad_network_id_alone_is_a_marketing_candidate(self):
+        for cid in ("TencentAdNetCH1", "ADroiUnion"):
+            with self.subTest(cid=cid):
+                j = policy.classify("频道", cid)
+                self.assertTrue(j.ad_network_id)
+                self.assertTrue(j.marketing_candidate)
+                self.assertFalse(j.scan_excluded)
+
+    def test_implementation_terms_match_the_frozen_list(self):
+        self.assertEqual(tuple(policy.AD_NETWORK_TERMS), AD_NETWORK_TERMS)
+
+    def test_every_token_has_a_case(self):
+        # 词表里漏一个、抄错一个，这里就红；与基线词表的 TERM_CASES 同一思路。
+        for term in AD_NETWORK_TERMS:
+            with self.subTest(term=term):
+                self.assertTrue(policy.classify("频道", f"vendor_{term}_ch1").ad_network_id)
+
+    def test_ad_network_id_is_case_insensitive(self):
+        for cid in ("tencentadnetch1", "adroiunion", "ADROI_UNION"):
+            with self.subTest(cid=cid):
+                self.assertTrue(policy.classify("频道", cid).ad_network_id)
+
+    def test_lookalike_ids_are_not_ad_network(self):
+        for cid in ("unionpay_notify", "update_channel", "payments"):
+            with self.subTest(cid=cid):
+                j = policy.classify("频道", cid)
+                self.assertFalse(j.ad_network_id, cid)
+                self.assertFalse(j.marketing_candidate, cid)
+
+    def test_ad_network_overrides_service_word_skip(self):
+        j = policy.classify("更新提醒", "ADroiUnion")
+        self.assertTrue(j.marketing_candidate)
+        self.assertFalse(j.scan_excluded)
+
+    def test_ad_network_tokens_do_not_leak_into_channel_names(self):
+        j = policy.classify("adroi union", "neutral_channel")
+        self.assertFalse(j.ad_network_id)
+        self.assertFalse(j.marketing_candidate)
+
+
 class InterfaceTests(unittest.TestCase):
     def test_vendor_id_suppresses_scan_exclusion_but_not_marketing_keywords(self):
         j = policy.classify("运营消息", "VPushChannel_0")

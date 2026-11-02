@@ -74,7 +74,8 @@ def _():
 
 @step("应用商店")
 def _():
-    p.start("com.bbk.appstore")
+    # 开屏推荐页会挡住底部标签栏（#420）：先确认「我的」在，不在就退一次重进，仍不在就跳过本段
+    p.start("com.bbk.appstore", expect=("我的",))
     p.tap("我的", exact=True, scrolls=0)
     time.sleep(0.8)
     gear()

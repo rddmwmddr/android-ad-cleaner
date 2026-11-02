@@ -99,7 +99,7 @@ python3 tool/run.py devices
 
 ## 5. 营销通知渠道怎么挑
 
-`chan-scan` 按渠道名里的关键词挑候选，会混进服务类渠道。厂商固定的营销分类号（如 vivo `VPushChannel_0/4/6`）按 ID 直接列入清单，不受名字里的跳过词影响。删掉下面这些再关：
+`chan-scan` 按渠道名里的关键词挑候选，会混进服务类渠道。厂商固定的营销分类号（如 vivo `VPushChannel_0/4/6`）按 ID 直接列入清单，不受名字里的跳过词影响；渠道 ID 带广告网络名（`TencentAdNetCH1`、`ADroiUnion` 一类）的渠道本身就按营销处理，同样直接列入。删掉下面这些再关：
 
 | 删掉（服务类） | 例子 |
 |---|---|
@@ -111,7 +111,7 @@ python3 tool/run.py devices
 
 | 保留在清单里（营销类） | 例子 |
 |---|---|
-| 厂商推送分类 | `push_oplus_category_content`（内容与营销）、vivo `VPushChannel_0/4/6` |
+| 厂商推送分类 | `push_oplus_category_content`（内容与营销）、vivo `VPushChannel_0/4/6`、广告网络 ID（`TencentAdNetCH1`、`ADroiUnion` 一类） |
 | 活动 | 活动优惠、福利通知、专享优惠、权益福利、流量套餐优惠 |
 | 资讯 | 热门资讯、突发新闻、热点推荐、精彩推荐、推荐内容 |
 
