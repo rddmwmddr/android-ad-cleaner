@@ -27,7 +27,8 @@ import backups
 import events
 import wait
 from reader import Reader
-from row import SWITCH_ROW_DEPTH, bounds, control, dedupe, disabled_at, own, summary, title_of
+from row import (SWITCH_ROW_DEPTH, bounds, control, dedupe, disabled_at, is_switch, own,
+                 summary, switches_in, title_of)
 
 DISMISS = ("以后再说", "暂不更新", "暂不", "取消", "我知道了", "跳过", "禁止", "不再提示", "不同意")
 # 应用内更新弹窗的标题（主题商店 17.22.0beta2 是「检测到新版本」，#286）。它通常把更新说明放进可滚动容器，
@@ -503,11 +504,17 @@ class Phone:
                 n = parent.get(n)
             return False
 
+        # 设置页里含「关闭」的说明行本身可能就是开关，点它等于替用户拨一次（#378）。
+        # 按候选子树判定而不是整屏——ColorOS 17 隐私页的浮层 ✕ 盖在带开关的页面上，仍然要能点。
+        def is_switch_row(n):
+            return is_switch(n) or bool(switches_in(n, self.on_screen))
+
         for n in root.iter("node"):
             if n.get("clickable") != "true" or n.get("package") == "com.android.systemui":
                 continue
             key = (n.get("content-desc") or "") + " " + (n.get("resource-id") or "")
-            if self.CLOSE.search(key) and not (n.get("text") or "").strip() and not in_list(n):
+            if (self.CLOSE.search(key) and not (n.get("text") or "").strip()
+                    and not in_list(n) and not is_switch_row(n)):
                 l, t, r, b = bounds(n)
                 # 只点屏幕内的图标：屏幕外还留着上一层的节点，点它会抛「点击坐标在屏幕外」把整段打断
                 if 0 < r - l < self.W * 0.3 and 0 < b - t < self.H * 0.12 and self.on_screen(n):
