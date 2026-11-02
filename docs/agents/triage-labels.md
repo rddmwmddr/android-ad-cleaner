@@ -18,6 +18,12 @@ The repo adds one role the five do not cover:
 
 `waiting-for-verify` outranks the five roles above — an issue carrying it must not also carry `ready-for-agent`, `ready-for-human`, or `needs-info`. It moves to a closed state only after the reporter confirms on a real device; the checks owed at each release are listed in [release-followup.md](release-followup.md).
 
+## 分类标签
+
+分类只有两个：`bug`（坏了）与 `enhancement`（新功能或改进）。**每张票必须恰好带其中一个。**
+
+`新机型` 不是分类，是主题标签，用来标出「这台机器没有专用机型脚本」。它和 `enhancement` 同时出现是常态 —— 机型请求按 `enhancement` 处理，并保留 `新机型` 以便按主题检索；只有内容确实是报障（例如同一型号跑通了但某项没关掉）时才标 `bug`。
+
 ## Triage 与 grilling 的边界
 
 需要 grilling 的票标 `needs-triage`，把待定的决定逐条写进票面；`/triage` 不自行发起 grilling，那一步由用户单独触发。
