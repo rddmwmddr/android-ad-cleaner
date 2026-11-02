@@ -64,20 +64,57 @@ def _():
     p.back(2)
 
 
-@step("下拉搜索")
-def _():
+SEARCH_SETTING = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"
+# 设置页上的标题；搜索首页也有「搜索范围」这类文字，所以还要看前台 Activity（SearchSettingActivity）。
+SEARCH_TITLES = {"搜索范围", "功能管理", "搜索引擎", "消息管理", "账号与隐私"}
+
+
+def wait_search_settings(tries=30):
+    from wait import until
+
+    def sample():
+        focus = p.focus()
+        if "com.heytap.quicksearchbox" not in focus or "Setting" not in focus:
+            return False
+        return bool(SEARCH_TITLES & {text for text, _, _ in p.texts()})
+
+    return bool(until(sample, tries=tries, same=2, now=time.monotonic, sleep=time.sleep))
+
+
+def search_settings():
+    """先走 scheme，打不开再退回桌面下滑进搜索页、点底部「设置」的旧入口（#165）。"""
+    p.d.shell(SEARCH_SETTING)
+    if wait_search_settings():
+        return True
+    # ColorOS 16 及更早版本：桌面下滑进搜索页，底部「设置」。别往下拉，会退出。
     p.d.shell("input keyevent HOME"); time.sleep(0.6)
     p.d.shell(f"input swipe {p.W//2} {p.H*3//10} {p.W//2} {p.H*7//10} 300"); time.sleep(1.5)
     p.d.shell("input keyevent BACK"); time.sleep(0.4)      # 收键盘
-    if not p.tap("设置", exact=True):                       # 搜索页底部「设置」；别往下拉，会退出
+    return p.tap("设置", exact=True) and wait_search_settings()
+
+
+def search_sources():
+    """借给别的机型（安全模式）时只关推荐位：ColorOS 17 上榜单 / 小说 / 购物是内容源，关掉会搜不到东西。"""
+    if p.safe_mode:
+        return ["个性化推荐", "精选资讯"]
+    return ["榜单", "小说", "购物", "个性化推荐", "精选资讯"]
+
+
+@step("下拉搜索")
+def _():
+    if not search_settings():
+        print("  · 跳过：没有认出全局搜索设置页（入口不可用或被系统限制）", flush=True)
         return
     if p.tap("搜索范围", exact=True):
-        p.off(only=["榜单", "小说", "购物", "个性化推荐", "精选资讯"], page="下拉搜索·搜索范围")
+        p.off(only=search_sources(), page="下拉搜索·搜索范围")
         p.back()
     if p.tap("功能管理", exact=True):
         p.off(only=["搜索框提示词"], page="下拉搜索·功能管理")
         p.back()
-    if p.tap("账号与隐私", exact=True) and p.tap("隐私", exact=True):
+    p.miss = 0
+    if not p.tap("账号与隐私", exact=True):
+        p.miss = 0                     # ColorOS 17：「账号与隐私」只是分组标题，直接找「隐私」
+    if p.tap("隐私", exact=True):
         p.off(only=["个性化推荐"], page="下拉搜索·隐私")
         p.back(2)
     p.back(2)
