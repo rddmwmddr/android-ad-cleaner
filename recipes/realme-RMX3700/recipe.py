@@ -10,8 +10,12 @@
 #   · 小布建议叫「NEXT AI」（不是「OPPO AI」）。
 #   · 下拉搜索全局搜索页的 Activity 不可导出、拉不起设置页；桌面下滑手势是「通知与控制中心」。
 #   · 负一屏（桌面首屏右滑）没有设置入口，页面上也没有齿轮。
-#   · 本机没有独立视频 App（com.coloros.video 无桌面入口，com.heytap.yoli 未安装）→ 视频段跳过。
-#   · 主题商店 com.heytap.themestore 出厂 manifest 就是 android:enabled="false" → 主题段跳过。
+#   · 本机没有独立视频 App（com.coloros.video 有包但没有 LAUNCHER 入口，com.heytap.yoli 未安装）→ 视频段跳过。
+#   · 主题商店的包名是 com.oplus.themestore（/product/priv-app/KeKeOplusThemeStore-CN/），
+#     不是 com.heytap.themestore —— 本机没有后者。它没有 LAUNCHER 入口，oaps://theme 落到
+#     .entrance.BasicEntranceActivity。enabled=0 是 COMPONENT_ENABLED_STATE_DEFAULT（正常状态），
+#     不是「被禁用」；显式禁用是 enabled=2。录制时它 suspended=true（被别人冻结了），
+#     所以主题段跳过，原因记在这里：不是出厂禁用。
 BUILD = "RMX3700_16.0.5.1300"
 
 import time

@@ -61,9 +61,16 @@ QUICKAPP = [
     ("com.miui.hybrid.accessory", "快应用服务框架辅件", "小米 / Redmi", False),
     ("com.vivo.hybrid", "快应用", "vivo / iQOO", False),
 ]
-# 挂了会坏功能的包，不许挂
+# 挂了会坏功能的包，不许挂。
+# com.oplus.appdetail 是 OPPO / realme 的安装与卸载收尾页：它持有
+# appdetail.intent.action.INSTALL_FINISH（InstallFinishActivity）、UNINSTALL_COMPONENT、
+# InstallGuideActivity、AuthenticateActivity。挂起它以后，第三方安装器（应用商店、Aurora 等）
+# 发出的安装完成广播没有接收者，界面停在「正在安装」不动，卸载同理。
+# 2026-10-31 在 realme GT Neo5 SE（RMX3700 / ColorOS 16.0.5.1300 / Android 16）实测：
+# 挂起期间所有第三方安装永久卡住，pm unsuspend 后立刻恢复正常。
 NEVER = {"com.heytap.quicksearchbox", "com.coloros.assistantscreen", "com.android.systemui",
-         "com.vivo.systemuiplugin", "com.heytap.market", "com.xiaomi.market", "com.hihonor.appmarket"}
+         "com.vivo.systemuiplugin", "com.heytap.market", "com.xiaomi.market", "com.hihonor.appmarket",
+         "com.oplus.appdetail"}
 
 # 快应用里挂起会误伤系统功能的组件，quickapp off 不挂。PMX110 / ColorOS 17 逐个单独挂起实测
 # （2026-10-30，Issue #335）：只剩 platform 挂起时，负一屏快递卡片能显示缓存，点「全部」打不开详情页，

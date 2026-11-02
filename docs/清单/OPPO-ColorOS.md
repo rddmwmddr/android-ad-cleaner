@@ -191,7 +191,7 @@ PMX110 / ColorOS 17 上逐个单独挂起实测（Issue #335，2026-10-30）。
 | 段 | 为什么跳过 |
 |---|---|
 | 视频 | 没有独立视频 App。`com.coloros.video` 有包但没有桌面入口（monkey 报 No activities found），`com.heytap.yoli` 未安装 |
-| 主题商店 | `com.heytap.themestore` 出厂 manifest 就是 `android:enabled="false"`（enabled=2），不是被人关掉的；强开可能破坏定制化服务 |
+| 主题商店 | 包名是 `com.oplus.themestore`（`/product/priv-app/KeKeOplusThemeStore-CN/`），本机没有 `com.heytap.themestore`。没有 LAUNCHER 入口，`am start -a android.intent.action.VIEW -d oaps://theme` 落到 `.entrance.BasicEntranceActivity`。`dumpsys package` 里 `enabled=0` 是 `COMPONENT_ENABLED_STATE_DEFAULT`（正常），不是「被禁用」（显式禁用是 `enabled=2`）；录制时它是 `suspended=true`——被别人冻结才拉不起来，主题段因此跳过 |
 | 下拉搜索 | 全局搜索的设置 Activity 未导出、am start 拉不起来；本机「桌面下滑」手势被设成「通知与控制中心」，没有可用的手势唤起路径。桌面搜索框设置（`DesktopSearchbarSettingsActivity`）能直达，但只有功能排序、没有开关 |
 | 负一屏 | 桌面首屏右滑是「速览」。页面上既没有头像节点也没有齿轮，找不到设置入口；速览里的「推荐服务」是卡片内容、不是设置项 |
 | 桌面设置 | 路径为 设置 → 桌面、锁屏与个性化 → 桌面设置（`com.android.launcher.settings.LauncherSettingsActivity`）。GT5 Pro 那台的「桌面上滑看看点」开关本机没有；余下开关都不是广告位，不动 |
