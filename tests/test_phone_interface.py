@@ -212,7 +212,7 @@ class OffDriverTests(unittest.TestCase):
         self.assertEqual([c.args for c in p.click.call_args_list], [(500, 1000), (500, 800)])
         self.assertEqual(p.confirm.call_count, 2)   # 首击单独确认一次 + 收尾统一确认
         self.assertEqual(p.focus.call_count, 2)     # start + 首击后的离页检查，第二下不再检查
-        self.assertEqual((done, p.switches.call_count), (2, 6))  # 多读的一次是首击后的坐标核对
+        self.assertEqual((done, p.switches.call_count), (2, 5))  # 多读的一次是首击后的坐标核对；没有要补的目标就不再读
 
     def test_a_confirmation_makes_every_following_click_slow(self):
         rows = [("广告甲", True, (500, 800)), ("广告乙", True, (500, 1000))]
@@ -252,12 +252,13 @@ class OffDriverTests(unittest.TestCase):
     def test_a_reflow_that_moves_a_remaining_target_is_re_read_before_clicking_it(self):
         """关掉一项后剩下的行也挪了位置（顶部提示条收起等）：点前重读，不用计划坐标。"""
         rows = [("广告甲", True, (500, 800)), ("广告乙", True, (500, 1000))]
-        moved = [("广告甲", True, (500, 600))]
-        after = [("广告甲", False, (500, 600))]
+        moved = [("广告甲", True, (500, 600)), ("广告乙", False, (500, 1100))]
+        after = [("广告甲", False, (500, 600)), ("广告乙", False, (500, 1100))]
         p = self.phone([rows, rows, moved, moved] + [after] * 5)
         done = self.run_off(p, page="页")
         self.assertEqual([c.args for c in p.click.call_args_list], [(500, 1000), (500, 600)])
-        self.assertEqual((done, p.changed), (1, [("页", "广告甲")]))
+        # 两行都点了、回读里都还在且已是关：记两项。这一页不测「点后消失」（见 #486 的用例）
+        self.assertEqual((done, sorted(p.changed)), (2, [("页", "广告乙"), ("页", "广告甲")]))
 
     def test_a_duplicated_title_is_clicked_by_state_not_by_name(self):
         """同一张卡片里的两个开关同名：重读时要找还开着的那个，不能按标题取到已关的那行。"""
@@ -279,6 +280,7 @@ class OffDriverTests(unittest.TestCase):
         self.assertEqual(p.changed, [("页", "广告推荐")])
 
     def test_three_failed_readbacks_are_reported_as_not_closed(self):
+        """点过之后整页读空：这一页已无法核对，不能当成功（#486 的边界）。"""
         rows = [("广告推荐", True, (500, 800))]
         p = self.phone([rows, rows, rows] + [[]] * 4)
         with patch.object(fast.time, "sleep") as sleep:
@@ -291,6 +293,95 @@ class OffDriverTests(unittest.TestCase):
         self.assertEqual(p.switches.call_count, 7)  # 三次回读与两次重试的次数
         for pause in (0.25, 0.8, 0.4):
             sleep.assert_any_call(pause)            # 收尾统一确认与二次重试的节奏
+
+    def test_a_row_that_vanishes_after_being_switched_off_counts_as_closed(self):
+        """关掉一项这一行就从列表消失的页面（#486，RMX3700「首页卡片管理」）。
+
+        点击本身已经正确（#480），但收尾回读找不到这一行：以前读成「关不掉」，
+        整页汇总成「调整 0 项」。点过、且页面仍读得到别的开关时按已关处理。"""
+        rows = [("甲", True, (500, 800)), ("推荐位", True, (500, 1000))]
+        after = [("甲", True, (500, 800))]
+        p = self.phone([rows, rows] + [after] * 5)
+        done = self.run_off(p, page="页", only=["推荐位"])
+        self.assertEqual((done, p.changed), (1, [("页", "推荐位")]))
+        self.assertEqual([c.args for c in p.click.call_args_list], [(500, 1000)])
+        p.say.assert_any_call("  关 推荐位（点后从列表消失）")
+        p.say.assert_any_call("  · 页：核对 1 项，调整 1 项")
+        self.assertNotIn("  ✗ 关不掉 推荐位", [c.args[0] for c in p.say.call_args_list])
+
+    def test_a_duplicated_title_is_judged_by_state_not_by_its_last_read_row(self):
+        """同名两行（双列卡片，#403）：一行还开着、一行已关。判定与补点都按状态挑行，
+        不取最后读到的那行——否则补点取决于读屏顺序，开着的那行一次也不点。"""
+        rows = [("营销通知", True, (500, 800)), ("营销通知", False, (500, 1000))]
+        p = self.phone([rows] * 20)
+        done = self.run_off(p, page="页")
+        self.assertEqual([c.args for c in p.click.call_args_list], [(500, 800)] * 3)  # 首击 + 两次补点
+        self.assertEqual((done, p.changed), (0, []))
+        p.say.assert_any_call("  ✗ 关不掉 营销通知")
+
+    def test_a_vanished_target_that_was_never_clicked_is_still_reported_unclosable(self):
+        """重排分支里因为读不到而跳过的目标：没点过就消失，不能当成点掉了。"""
+        rows = [("广告甲", True, (500, 800)), ("广告乙", True, (500, 1000)), ("常驻行", False, (500, 1200))]
+        moved = [("常驻行", False, (500, 700))]      # 点掉 广告乙 后整页重排，广告甲 也不在回读里了
+        p = self.phone([rows, rows, moved, moved] + [moved] * 10)
+        done = self.run_off(p, page="页")
+        self.assertEqual([c.args for c in p.click.call_args_list], [(500, 1000)])
+        self.assertEqual((done, p.changed), (1, [("页", "广告乙")]))
+        p.say.assert_any_call("  ✗ 关不掉 广告甲")
+
+    def test_a_row_clicked_only_by_the_retry_counts_as_closed_when_it_vanishes(self):
+        """计划后被跳过、只由补点点过的行，点后从列表消失同样算关（补点也是「点过」）。"""
+        rows = [("广告甲", True, (500, 800)), ("广告乙", True, (500, 1000)), ("常驻行", False, (500, 1200))]
+        away = [("广告甲", True, (500, 2320)), ("常驻行", False, (500, 1200))]    # 重排时广告甲滚到带外
+        back = [("广告甲", True, (500, 800)), ("常驻行", False, (500, 1200))]
+        after = [("广告乙", False, (500, 1000)), ("常驻行", False, (500, 700))]   # 补点后广告甲消失
+        p = self.phone([rows, rows, away, away, back, back] + [after] * 10)
+        done = self.run_off(p, page="页")
+        self.assertEqual([c.args for c in p.click.call_args_list], [(500, 1000), (500, 800)])
+        self.assertEqual((done, p.changed), (2, [("页", "广告甲"), ("页", "广告乙")]))   # 广告乙 回读确认
+        p.say.assert_any_call("  关 广告甲（点后从列表消失）")
+        self.assertNotIn("  ✗ 关不掉 广告甲", [c.args[0] for c in p.say.call_args_list])
+
+    def test_a_sub_page_with_fresh_titles_is_not_read_as_closed(self):
+        """同一个 Activity 里换成子页（标题全新、前台名不变）：本屏计划时的行一个都不在了，
+        不能把「找不到」当成关掉了。"""
+        rows = [("广告推荐", True, (500, 800)), ("常驻行", False, (500, 1000))]
+        sub_page = [("别的开关", False, (500, 700))]
+        p = self.phone([rows, rows] + [sub_page] * 10)
+        done = self.run_off(p, page="页", only=["广告推荐"])
+        self.assertEqual((done, p.changed), (0, []))
+        p.say.assert_any_call("  ✗ 关不掉 广告推荐")
+
+    def test_a_click_that_takes_the_page_away_is_not_read_as_closed(self):
+        """点过之后页面跳走：回读来自别的页，找不到这一行不等于关掉了。"""
+        rows = [("广告推荐", True, (500, 800))]
+        elsewhere = [("别的开关", True, (500, 700))]
+        p = self.phone([rows, rows] + [elsewhere] * 10)
+        p.focus = Mock(side_effect=["app/settings", "app/settings"] + ["other/app"] * 10)
+        done = self.run_off(p, page="页")
+        self.assertEqual((done, p.changed), (0, []))
+        self.assertEqual([c.args for c in p.click.call_args_list], [(500, 800)])   # 不在新页上补点
+        self.assertEqual(p.focus.call_count, 7)     # 守卫：回读确实查过是否跳走（start / 首击 / 三次回读 / 两次重试）
+        p.say.assert_any_call("  ✗ 关不掉 广告推荐")
+
+    def test_a_retry_does_not_click_a_same_named_row_on_another_page(self):
+        """跳走之后新页上恰好也有同名开关：补点不能落到新页上。"""
+        rows = [("广告推荐", True, (500, 800))]
+        elsewhere = [("广告推荐", True, (500, 700))]
+        p = self.phone([rows, rows] + [elsewhere] * 10)
+        p.focus = Mock(side_effect=["app/settings", "app/settings"] + ["other/app"] * 10)
+        done = self.run_off(p, page="页")
+        self.assertEqual([c.args for c in p.click.call_args_list], [(500, 800)])
+        self.assertEqual((done, p.changed), (0, []))
+
+    def test_a_protection_switch_that_vanishes_is_not_reported_as_opened(self):
+        """保护类开关是「主动打开」：行消失证明不了它开了，仍报打不开（#486 只定义了关闭方向）。"""
+        rows = [("甲", True, (500, 800)), ("限制广告跟踪", False, (500, 1000))]
+        after = [("甲", True, (500, 800))]
+        p = self.phone([rows, rows] + [after] * 10)
+        done = self.run_off(p, page="页", only=["限制广告跟踪"])
+        self.assertEqual((done, p.changed), (0, []))
+        p.say.assert_any_call("  ✗ 打不开 限制广告跟踪")
 
     def test_a_row_that_turns_grey_after_the_batch_is_not_retried_again(self):
         # 同一屏先关父级、后关子级：子级在回读时已经变灰，不能再连点、也不能报成「关不掉」
@@ -324,6 +415,40 @@ class OffDriverTests(unittest.TestCase):
         p.say.assert_any_call("  ✗ 关不掉 个性化推荐")
         self.assertNotIn("  · 被上级开关禁用（开关是灰的），未改动 个性化推荐",
                          [c.args[0] for c in p.say.call_args_list])
+
+    def test_a_retry_skips_the_grey_twin_and_clicks_the_usable_one(self):
+        """同名两行都开着、其中一行灰（#333 的双列形态）：补点落在可用那行，灰行一次也不点。
+        两次重试各补一次，所以可用行共三次点击（首击 + 两次补点），都在同一坐标。"""
+        rows = [("个性化推荐", True, (500, 800)), ("个性化推荐", True, (800, 800))]
+        moved = [("个性化推荐", True, (500, 820)), ("个性化推荐", True, (800, 800))]   # 点完首屏微调了行位置
+        p = self.phone([rows, rows, moved] + [moved] * 20)
+        plain = ET.fromstring("<hierarchy/>")
+        grey = ET.fromstring(
+            '<hierarchy><node class="android.widget.Switch" checkable="true" checked="true"'
+            ' enabled="false" bounds="[400,750][600,850]"/></hierarchy>')   # 只盖住左列 (500,800)
+        p.tree = Mock(side_effect=[plain] + [grey] * 10)   # 首屏计划后（首击起）就只剩灰树
+        with patch.object(fast.time, "sleep"):
+            done = p.off(page="页")
+        # 首击 + 两次补点，都落在可用那行；灰行一次不碰（#480 按计划逆序先点后一个）
+        self.assertEqual([c.args for c in p.click.call_args_list], [(800, 800)] * 3)
+        self.assertEqual(done, 0)
+        p.say.assert_any_call("  ✗ 关不掉 个性化推荐")
+
+    def test_a_duplicate_title_whose_open_twin_turned_grey_is_reported_as_disabled(self):
+        """同名两行：一行已关、另一行点击后变灰。灰态只看还没到目标态的行，判据仍是「一个灰不吞掉别的失败」。"""
+        rows = [("营销通知", True, (500, 800)), ("营销通知", False, (500, 1000))]
+        p = self.phone([rows] * 20)
+        plain = ET.fromstring("<hierarchy/>")
+        grey = ET.fromstring(
+            '<hierarchy><node class="android.widget.Switch" checkable="true" checked="true"'
+            ' enabled="false" bounds="[400,750][600,850]"/></hierarchy>')
+        p.tree = Mock(side_effect=[plain, plain] + [grey] * 10)
+        with patch.object(fast.time, "sleep"):
+            done = p.off(page="页")
+        self.assertEqual(done, 0)
+        self.assertEqual([c.args for c in p.click.call_args_list], [(500, 800)])  # 灰行一次也不补点
+        p.say.assert_any_call("  · 被上级开关禁用（开关是灰的），未改动 营销通知")
+        self.assertNotIn("  ✗ 关不掉 营销通知", [c.args[0] for c in p.say.call_args_list])
 
     def test_the_same_grey_row_is_reported_once_across_screens(self):
         rows = [("摇一摇广告", True, (500, 800))]
