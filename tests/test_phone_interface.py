@@ -162,34 +162,68 @@ class OffDriverTests(unittest.TestCase):
 
     def test_first_target_is_clicked_alone_then_the_rest_follow(self):
         rows = [("广告甲", True, (500, 800)), ("广告乙", True, (500, 1000))]
+        mid = [("广告甲", True, (500, 800)), ("广告乙", False, (500, 1000))]
         after = [("广告甲", False, (500, 800)), ("广告乙", False, (500, 1000))]
-        p = self.phone([rows, rows, after, after, after])
+        p = self.phone([rows, rows, mid, after, after, after])
         done = self.run_off(p, clock=Clock(click_cost=0.0), page="页")
-        self.assertEqual([c.args for c in p.click.call_args_list], [(500, 800), (500, 1000)])
+        self.assertEqual([c.args for c in p.click.call_args_list], [(500, 1000), (500, 800)])
         self.assertEqual(p.confirm.call_count, 2)   # 首击单独确认一次 + 收尾统一确认
         self.assertEqual(p.focus.call_count, 2)     # start + 首击后的离页检查，第二下不再检查
-        self.assertEqual((done, p.switches.call_count), (2, 5))
+        self.assertEqual((done, p.switches.call_count), (2, 6))  # 多读的一次是首击后的坐标核对
 
     def test_a_confirmation_makes_every_following_click_slow(self):
         rows = [("广告甲", True, (500, 800)), ("广告乙", True, (500, 1000))]
+        mid = [("广告甲", True, (500, 800)), ("广告乙", False, (500, 1000))]
         after = [("广告甲", False, (500, 800)), ("广告乙", False, (500, 1000))]
-        p = self.phone([rows, rows, after, after, after])
+        p = self.phone([rows, rows, mid, after, after, after])
         p.confirm = Mock(return_value="确定")       # 第一个目标弹出确认框
         self.run_off(p, clock=Clock(click_cost=0.0), page="页")
-        self.assertEqual([c.args for c in p.click.call_args_list], [(500, 800), (500, 1000)])
+        self.assertEqual([c.args for c in p.click.call_args_list], [(500, 1000), (500, 800)])
         self.assertEqual(p.confirm.call_count, 3)   # 首击 + 第二个目标各确认一次，收尾再一次
         self.assertEqual(p.focus.call_count, 1)     # 确认分支不再走离页检查
 
     def test_non_slow_targets_are_clicked_with_a_short_pause_after_each(self):
         rows = [("广告甲", True, (500, 800)), ("广告乙", True, (500, 1000)), ("广告丙", True, (500, 1200))]
+        mid = [("广告甲", True, (500, 800)), ("广告乙", True, (500, 1000)), ("广告丙", False, (500, 1200))]
         after = [(t, False, xy) for t, _, xy in rows]
-        p = self.phone([rows, rows, after, after, after])
+        p = self.phone([rows, rows, mid, after, after, after, after])
         clock = Clock(click_cost=0.0)
         moments = []
         p.click = Mock(side_effect=lambda *a: moments.append(clock.t))
         self.run_off(p, clock=clock, page="页")
-        self.assertEqual(moments[:2], [0.0, 0.0])                  # 首击与第二下之间不等确认
+        self.assertEqual(round(moments[1] - moments[0], 2), 0.3)   # 首击后只核对坐标，不等确认框
         self.assertEqual(round(moments[2] - moments[1], 2), 0.06)  # 非 slow 的点击后停 0.06
+
+    def test_a_row_that_disappears_after_being_switched_off_does_not_take_its_neighbour(self):
+        """关掉一项这一行就消失、下面的行整体上移（#480 realme RMX3700「首页卡片管理」）。
+
+        先点下面的行，上移的只可能是已经点过的行；首击后剩下的「推荐位」仍在原坐标，继续连着点。
+        改前是自上而下点：关掉「推荐位」后第二次点击落在上移后的「便捷服务」上，把它误关了。"""
+        rows = [("推荐位", True, (500, 800)), ("热搜", True, (500, 1000)), ("便捷服务", True, (500, 1200))]
+        after_热搜 = [("推荐位", True, (500, 800)), ("便捷服务", True, (500, 1000))]
+        after_推荐位 = [("便捷服务", True, (500, 800))]
+        p = self.phone([rows, rows, after_热搜] + [after_推荐位] * 5)
+        self.run_off(p, page="页", only=["推荐位", "热搜"])
+        self.assertEqual([c.args for c in p.click.call_args_list], [(500, 1000), (500, 800)])
+
+    def test_a_reflow_that_moves_a_remaining_target_is_re_read_before_clicking_it(self):
+        """关掉一项后剩下的行也挪了位置（顶部提示条收起等）：点前重读，不用计划坐标。"""
+        rows = [("广告甲", True, (500, 800)), ("广告乙", True, (500, 1000))]
+        moved = [("广告甲", True, (500, 600))]
+        after = [("广告甲", False, (500, 600))]
+        p = self.phone([rows, rows, moved, moved] + [after] * 5)
+        done = self.run_off(p, page="页")
+        self.assertEqual([c.args for c in p.click.call_args_list], [(500, 1000), (500, 600)])
+        self.assertEqual((done, p.changed), (1, [("页", "广告甲")]))
+
+    def test_a_duplicated_title_is_clicked_by_state_not_by_name(self):
+        """同一张卡片里的两个开关同名：重读时要找还开着的那个，不能按标题取到已关的那行。"""
+        rows = [("营销通知", True, (500, 800)), ("营销通知", False, (500, 1000)), ("广告乙", True, (500, 1200))]
+        moved = [("营销通知", True, (500, 600)), ("营销通知", False, (500, 1000))]
+        after = [("营销通知", False, (500, 600)), ("营销通知", False, (500, 1000))]
+        p = self.phone([rows, rows, moved, moved] + [after] * 5)
+        self.run_off(p, page="页")
+        self.assertEqual([c.args for c in p.click.call_args_list], [(500, 1200), (500, 600)])
 
     def test_a_wrong_readback_retries_at_the_fresh_coordinates(self):
         rows = [("广告推荐", True, (500, 800))]
@@ -228,7 +262,7 @@ class OffDriverTests(unittest.TestCase):
         p.focus = Mock(side_effect=["app/settings", "other/app", "other/app"])
         done = self.run_off(p, page="页")
         self.assertEqual(done, 0)
-        p.click.assert_called_once_with(500, 800)
+        p.click.assert_called_once_with(500, 1000)
         p.back.assert_called_once_with()
         p.scroll_more.assert_not_called()
         p.say.assert_any_call("  ! 页面变了（other/app），停")
