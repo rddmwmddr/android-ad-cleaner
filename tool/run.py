@@ -475,9 +475,9 @@ def cmd_check(serial, rest):
         print(f"机型脚本：{os.path.relpath(r, ROOT)}；录制版本 {rb or '未标'}，{'版本一致' if ok else '版本不同：用安全模式跑，部分步骤可能找不到入口'}")
     else:
         print("机型脚本：没有。可跑：通知渠道 chan-scan/chan-off、广告包挂起；其余照 docs/清单 手动做，或用 tool/explore.py 探路")
-    for n, p in enumerate(ad_packages(i["brand"])):
+    for p in ad_packages(i["brand"]):
         exists = "package:" in sh(serial, f"pm path {p}")
-        if n and not exists:        # 同族的其他地区包名（海外版 msa）没装就不提，国行不多出一行「未安装」
+        if not exists and p in MSA_PKGS:     # msa 在国行 / 海外版是两个包名，只装一个，另一个不提
             continue
         print(f"  广告包 {p}：{'未安装' if not exists else ('已挂起' if suspended(serial, p) else '未挂起')}")
     # 别处（雹、冰箱、别的脚本）冻掉的功能包：run.py 管不了，但机型脚本的段会跟着一起失败，

@@ -894,6 +894,20 @@ class GlobalMsaTests(AdPackagesHarness, unittest.TestCase):
         self.INSTALLED = AdPackagesHarness.INSTALLED
         self.assertNotIn("com.miui.msa.global", self.check_output("Redmi"))
 
+    def test_check_on_global_rom_does_not_report_the_china_package(self):
+        self.assertNotIn("com.miui.systemAdSolution", self.check_output("Redmi"))
+
+
+class OppoSecondAdPackageTests(AdPackagesHarness, unittest.TestCase):
+    """「没装就不提」只针对 msa 的两个地区包名；OPPO 族的第二项不是一个组件的别名，
+    没装时仍要报「未安装」。"""
+
+    INFO = dict(AdPackagesHarness.INFO, model="PKT110", name="OPPO Find X8s")
+    INSTALLED = ("com.opos.ads",)
+
+    def test_missing_heytap_pictorial_is_still_reported(self):
+        self.assertIn("广告包 com.heytap.pictorial：未安装", self.check_output("OPPO"))
+
 
 if __name__ == "__main__":
     unittest.main()
