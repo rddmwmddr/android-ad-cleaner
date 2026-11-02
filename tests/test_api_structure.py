@@ -1,6 +1,7 @@
 """窗口桥契约与三块的责任边界（ADR-0011）。
 
-窗口桥清单从改前的 `Api` 抄死：内部怎么拆都可以变，这 22 个名字与参数不能变。
+窗口桥清单从改前的 `Api` 抄死：内部怎么拆都可以变，这些名字与参数不能变
+（改前 22 个，之后新增的桥方法一并钉进 `BRIDGE`，别写死总数）。
 三块之间不许互相点名，也不许 `self.<别的块>` 去读对方的状态。
 """
 import ast
@@ -27,6 +28,10 @@ BRIDGE = {
     "resume": (),
     "download_adb": (),
     "download_state": (),
+    "adb_info": (),
+    "pick_adb_file": (),
+    "set_adb_path": ("text",),
+    "clear_adb_path": (),
     "dev_off": ("serial",),
     "restore": ("serial", "what"),
     "diagnostics": (),

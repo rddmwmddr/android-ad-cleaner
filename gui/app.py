@@ -69,6 +69,43 @@ class ClientData:
     def adb_zip(self):
         return os.path.join(self.root, "platform-tools.zip")
 
+    @property
+    def settings(self):
+        return os.path.join(self.root, "settings.json")
+
+    def setting(self, key, default=None):
+        """settings.json 里的一项。文件不在、读不动或被改坏都按「没设置过」处理。"""
+        try:
+            with open(self.settings, encoding="utf-8") as f:
+                return json.load(f).get(key, default)
+        except (OSError, ValueError, AttributeError):
+            return default
+
+    def put_setting(self, key, value):
+        """写一项设置；value 为 None 表示删掉这一项。先写临时文件再替换，读的时候不会看到半截。"""
+        try:
+            with open(self.settings, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+        if value is None:
+            data.pop(key, None)
+        else:
+            data[key] = value
+        if not data:                      # 一项设置都不剩就别留个空文件：「没设置过」就是文件不存在
+            try:
+                os.remove(self.settings)
+            except OSError:
+                pass
+            return
+        self.ensure()
+        tmp = self.settings + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        os.replace(tmp, self.settings)
+
     def ensure(self):
         os.makedirs(self.root, exist_ok=True)
         return self
@@ -135,20 +172,51 @@ def adb_ok(path):
     return bool(m) and int(m.group(1)) >= 41
 
 
-def find_adb(platform_tools):
-    exe = "adb.exe" if IS_WIN else "adb"
+def adb_exe():
+    return "adb.exe" if IS_WIN else "adb"
+
+
+ADB_VERSION_HINT = "跑不出 Android Debug Bridge 的版本号，或者版本太旧（需要 1.0.41 及以上）"
+
+
+def find_adb(platform_tools, manual=None):
+    """手动指定的 adb 排第一：用户填了就是要它压过客户端下载的那份和其他来源（#311）。
+    不存在或版本不够的候选由 adb_candidates / adb_ok 跳过，于是自动回退到后面的来源。"""
     last = (os.path.join(os.environ.get("LOCALAPPDATA", ""), "Android", "Sdk", "platform-tools", "adb.exe"),
             "/opt/homebrew/bin/adb", "/usr/local/bin/adb")
-    for c in _tool("adb_link").adb_candidates(first=(os.path.join(platform_tools, exe),), last=last):
+    first = tuple(p for p in (manual, os.path.join(platform_tools, adb_exe())) if p)
+    for c in _tool("adb_link").adb_candidates(first=first, last=last):
         if adb_ok(c):
             return c
     return None
 
 
+def adb_from_input(text):
+    """手填或文件对话框给的路径 → adb 可执行文件。目录补上 adb / adb.exe，去掉粘贴时带进来的引号。"""
+    path = (text or "").strip().strip("\"'")
+    if not path:
+        return ""
+    path = os.path.abspath(os.path.expanduser(path))
+    if os.path.isdir(path):
+        path = os.path.join(path, adb_exe())
+    return path
+
+
+def adb_source(adb, manual, platform_tools):
+    """当前生效的这份 adb 从哪来：manual / downloaded / system / none。"""
+    if not adb:
+        return "none"
+    if manual and os.path.normcase(adb) == os.path.normcase(manual):
+        return "manual"
+    if os.path.normcase(adb) == os.path.normcase(os.path.join(platform_tools, adb_exe())):
+        return "downloaded"
+    return "system"
+
+
 def client_api():
-    """入口（窗口与截图脚本）共用的构造：数据目录建好，adb 按既定顺序找。"""
+    """入口（窗口与截图脚本）共用的构造：数据目录建好，adb 按既定顺序找，手填的那份排第一。"""
     data = ClientData(data_dir()).ensure()
-    return Api(data.root, adb=find_adb(data.platform_tools))
+    return Api(data.root, adb=find_adb(data.platform_tools, manual=data.setting("adb")))
 
 
 def adb_present(adb, serial):
@@ -495,7 +563,7 @@ class AdbDownloader:
             with zipfile.ZipFile(zp) as z:
                 z.extractall(self.data.root)
             os.remove(zp)
-            adb = os.path.join(self.data.platform_tools, "adb.exe" if IS_WIN else "adb")
+            adb = os.path.join(self.data.platform_tools, adb_exe())
             if not IS_WIN:
                 os.chmod(adb, 0o755)
             self.adb = adb
@@ -929,6 +997,58 @@ class Api:
 
     def download_state(self):
         return self.downloader.download_state()
+
+    # ----- 手动指定 adb -----
+    def adb_info(self):
+        """设置里显示的那几项：当前生效的 adb、来源、版本，以及手填的那份是不是已经不可用。"""
+        manual = self.data.setting("adb") or ""
+        info = {"ok": False, "path": self.adb or "", "source": adb_source(self.adb, manual, self.data.platform_tools),
+                "version": "", "error": "", "manual": manual, "manual_error": "",
+                "running": self._job_running()}
+        if self.adb:
+            try:
+                m = re.search(r"Android Debug Bridge version ([\d.]+)", self._adb("version", timeout=8))
+                info["version"] = m.group(1) if m else ""
+                info["ok"] = bool(m)
+            except Exception as e:
+                info["error"] = str(e)
+        if manual and info["source"] != "manual":
+            info["manual_error"] = ("你指定的 adb 已不可用（文件不在了）" if not os.path.isfile(manual)
+                                    else f"你指定的 adb {ADB_VERSION_HINT}")
+        return info
+
+    def _job_running(self):
+        with self.dispatcher.exclusive():
+            return self.dispatcher.busy()
+
+    def set_adb_path(self, text):
+        """保存手填的 adb。校验不通过就不写配置，原设置原样保留（#311）。"""
+        path = adb_from_input(text)
+        if not path:
+            return {"ok": False, "error": "请填写 adb 的完整路径"}
+        if not os.path.isfile(path):
+            return {"ok": False, "error": f"找不到这个文件：{path}"}
+        if not adb_ok(path):
+            return {"ok": False, "error": f"这个文件{ADB_VERSION_HINT}。"}
+        self.data.put_setting("adb", path)
+        self.adb = path                     # 手填的排第一且刚验过，解析结果就是它，不再重跑一遍 adb_ok
+        info = self.adb_info()
+        info["ok"] = True                   # 界面把 ok 读成「保存成功」；adb 本身能不能用由 version / error 说明
+        return info
+
+    def clear_adb_path(self):
+        self.data.put_setting("adb", None)
+        self.adb = find_adb(self.data.platform_tools)
+        return self.adb_info()
+
+    def pick_adb_file(self):
+        """文件对话框选 adb。没有窗口（测试、截图脚本）或没装 pywebview 时返回空串，界面退回手填。"""
+        try:
+            import webview
+            picked = webview.windows[0].create_file_dialog(webview.OPEN_DIALOG)
+        except Exception:
+            return ""
+        return picked[0] if picked else ""
 
     # ----- 设备 -----
     def devices(self):

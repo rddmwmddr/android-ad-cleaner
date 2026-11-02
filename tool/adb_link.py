@@ -39,8 +39,9 @@ def invoke(adb, *args, timeout=20):
 
 
 def adb_candidates(first=(), last=()):
-    """按优先级排好的候选 adb（去重、只留存在的）。`first` 是客户端自己下载并校验过的那份，
-    `last` 是客户端独有的兜底位置（Windows 默认安装目录、homebrew 等），排在共用候选之后。"""
+    """按优先级排好的候选 adb（去重、只留存在的）。`first` 是客户端要紧挨着排在最前的几份
+    （用户手动指定的、客户端自己下载的），`last` 是客户端独有的兜底位置（Windows 默认安装目录、
+    homebrew 等），排在共用候选之后。"""
     seen, found = set(), []
     for c in (*first, os.environ.get("ADB"), os.environ.get("ADBUTILS_ADB_PATH"), shutil.which("adb"),
               os.path.expanduser("~/Library/Android/sdk/platform-tools/adb"),
