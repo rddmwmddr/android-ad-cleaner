@@ -258,7 +258,7 @@ def state(d, app_off, pk, cid):
     return "ON"
 
 
-ALLOW = {"允许通知", "显示通知", "Allow notifications", "Show notifications"}
+ALLOW = {"允许通知", "显示通知", "允許通知", "顯示通知", "Allow notifications", "Show notifications"}
 
 # 通知页不在 com.android.settings 里的系统：只接受这些 Activity，页面内容仍由 ChannelPage._recognise() 复核。
 NOTIFY_HOSTS = {
@@ -306,11 +306,11 @@ def top_title(p, root):
     return min(wide)[2] if wide else None
 
 
-CHANNEL_GROUP = ("类别", "Categories")   # vivo 旧系统把渠道行收在「类别」分组下面（#336）
+CHANNEL_GROUP = ("类别", "類別", "Categories")   # vivo 旧系统把渠道行收在「类别」分组下面（#336）；繁体界面是「類別」（#498）
 
 
 def group_floor(texts):
-    """「类别」分组标题的上沿。分组以上只有应用名和「允许通知」总开关，同名文字在那里不是渠道行。"""
+    """「类别」/「類別」分组标题的上沿。分组以上只有应用名和「允许通知」总开关，同名文字在那里不是渠道行。"""
     return min((b[1] for t, b, _ in texts if t in CHANNEL_GROUP), default=None)
 
 
