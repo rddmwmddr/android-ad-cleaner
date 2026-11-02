@@ -197,6 +197,9 @@ def ad_packages(brand):
 REFERENCE = {"oppo": "oppo-PLP120", "honor": "honor-PNM-AN10", "xiaomi": "xiaomi-M154FF", "vivo": "vivo-V2547DA",
              "meizu": "meizu-MEIZU 21 Pro"}
 
+# 把脚本 BUILD 或设备版本抽成版本核心时要先切掉的机型名标记（#319）。
+VERSION_MARKER = {"oppo": "_", "vivo": "_A_", "honor": " ", "meizu": "Flyme"}
+
 
 def recipe_meta(path):
     with open(path, encoding="utf-8") as f:
@@ -205,6 +208,61 @@ def recipe_meta(path):
     models = re.search(r'^MODELS\s*=\s*\[([^\]]*)\]', src, re.M)
     return {"build": m.group(1) if m else "", "steps": re.findall(r'^@step\("([^"]+)"\)', src, re.M),
             "models": re.findall(r'"([^"]+)"', models.group(1)) if models else []}
+
+
+def version_core(value, fam):
+    """抽出可比的版本号：切掉机型名、去掉括号。抽不出来返回空串，空值不参与比对。"""
+    v = (value or "").strip()
+    marker = VERSION_MARKER.get(fam)
+    if marker:
+        if marker not in v:
+            return ""
+        v = v.split(marker, 1)[1]
+    return re.sub(r"\(.*$", "", v).strip()
+
+
+def matching_device_version(device_info, core, fam):
+    """设备版本核心以 core 开头的那段原值；core 为空或对不上返回空串。"""
+    if not core:
+        return ""
+    for field in ("build", "os"):
+        raw = (device_info or {}).get(field) or ""
+        if version_core(raw, fam).startswith(core):
+            return raw
+    return ""
+
+
+def version_match(device_info, recorded, fam):
+    """返回和录制版本对得上的那段设备版本；对不上返回空串。只做前缀比较（#319）。
+
+    与 build_ok 不同：这里没标录制版本就算对不上、不参与挑选；build_ok 把没标的当成不告警。
+    """
+    return matching_device_version(device_info, version_core(recorded, fam), fam)
+
+
+def _dir_family(path):
+    return FAMILY.get(os.path.basename(os.path.dirname(path)).split("-", 1)[0].lower(), "")
+
+
+def same_version_family_recipe(allr, fam, preferred, device_info):
+    """同族里挑一份录制版本相同的专用脚本，且不比固定参考窄；挑不到返回 None。
+
+    段数门槛是硬条件：版本对得上但更窄的脚本会让一次运行少关一类广告（#319）。
+    """
+    ref_steps = len(recipe_meta(preferred)["steps"])
+    ranked = []
+    for r in allr:
+        if _dir_family(r) != fam:
+            continue
+        meta = recipe_meta(r)
+        core = version_core(meta["build"], fam)
+        if not matching_device_version(device_info, core, fam):
+            continue
+        if len(meta["steps"]) < ref_steps:
+            continue
+        # 录制得越具体越贴这台；同长度按目录名，不随遍历顺序变。
+        ranked.append((-len(core), os.path.basename(os.path.dirname(r)), r))
+    return sorted(ranked)[0][2] if ranked else None
 
 
 def recipe_for(model, brand="", device_info=None):
@@ -224,6 +282,11 @@ def recipe_for(model, brand="", device_info=None):
     fam = FAMILY.get((brand or "").lower())
     preferred = os.path.join(ROOT, "recipes", REFERENCE.get(fam, ""), "recipe.py")
     if fam in REFERENCE and os.path.exists(preferred):
+        # 固定参考是按别的版本录的就先在同族里找一份同版本的；同版本的那份更可能对得上入口（#319）。
+        if device_info and not version_match(device_info, recipe_meta(preferred)["build"], fam):
+            picked = same_version_family_recipe(allr, fam, preferred, device_info)
+            if picked:
+                return picked, True
         return preferred, True
     for r in allr:
         if fam and os.path.basename(os.path.dirname(r)).startswith(fam + "-"):
@@ -468,7 +531,19 @@ def cmd_check(serial, rest):
     if input_blocked(serial, i["brand"]):
         print("电脑点击：被系统拒绝。" + troubleshooting.XIAOMI_INPUT)
     if r and ref:
-        print(f"机型脚本：本型号没有；同品牌参考 {os.path.relpath(r, ROOT)}。要用：recipe --ref（安全模式：只关脚本里点名的开关，找不到就跳过）")
+        rb = recipe_meta(r)["build"]
+        matched = version_match(i, rb, FAMILY.get((i["brand"] or "").lower()))
+        this = matched or i["build"] or i["os"]
+        if not rb:
+            ver = "录制版本 未标"
+        elif not this:
+            ver = f"录制版本 {rb}，这台版本未读到"
+        else:
+            # 「相同」只陈述版本对得上，不说这份脚本适配套过了（CONTEXT.md 的「参考脚本」）。
+            same = "相同" if matched else "不同"
+            ver = f"录制版本 {rb}，这台 {this}（{same}）"
+        print(f"机型脚本：本型号没有；同品牌参考 {os.path.relpath(r, ROOT)}，{ver}。"
+              f"要用：recipe --ref（安全模式：只关脚本里点名的开关，找不到就跳过）")
     elif r:
         rb = recipe_meta(r)["build"]
         ok = build_ok(i, rb)
