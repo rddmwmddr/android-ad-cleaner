@@ -62,6 +62,46 @@ class ConfirmButtonTests(unittest.TestCase):
         self.assertIsNone(p.confirm())
         p.click.assert_not_called()
 
+    @patch.object(fast.time, "sleep")
+    def test_clickable_text_view_is_a_confirm_button(self, _sleep):
+        """HyperOS 4（小米 17）热榜页：确认键是可点击的 TextView，不是 Button（#500 / PR #408）。
+
+        弹窗里同时有说明文字与「取消」，点必须落在「关闭」上。
+        """
+        p = phone()
+        root = ET.fromstring('''<hierarchy>
+          <node class="android.widget.TextView" text="关闭热榜后将不再显示榜单内容" clickable="false" bounds="[60,1900][1020,2100]"/>
+          <node class="android.widget.TextView" text="取消" clickable="true" bounds="[120,2200][480,2320]"/>
+          <node class="android.widget.TextView" text="关闭" clickable="true" bounds="[600,2200][960,2320]"/>
+        </hierarchy>''')
+        p.tree, p.click = Mock(return_value=root), Mock()
+        self.assertEqual(p.confirm(), "关闭")
+        p.click.assert_called_once_with(780, 2260)
+
+    @patch.object(fast.time, "sleep")
+    def test_button_class_wins_over_clickable_text_view(self, _sleep):
+        """严格档优先：同一页既有 Button 又有可点击 TextView 时点 Button。"""
+        p = phone()
+        root = ET.fromstring('''<hierarchy>
+          <node class="android.widget.TextView" text="确定" clickable="true" bounds="[600,2200][960,2320]"/>
+          <node class="android.widget.Button" text="确定" clickable="true" bounds="[120,2200][480,2320]"/>
+        </hierarchy>''')
+        p.tree, p.click = Mock(return_value=root), Mock()
+        self.assertEqual(p.confirm(), "确定")
+        p.click.assert_called_once_with(300, 2260)
+
+    @patch.object(fast.time, "sleep")
+    def test_offscreen_or_oversized_text_view_is_skipped(self, _sleep):
+        """兜底档不点整行尺寸的 TextView，也不点屏外节点。"""
+        p = phone()
+        root = ET.fromstring('''<hierarchy>
+          <node class="android.widget.TextView" text="关闭" clickable="true" bounds="[60,2000][1020,2320]"/>
+          <node class="android.widget.TextView" text="关闭" clickable="true" bounds="[600,2500][960,2700]"/>
+        </hierarchy>''')
+        p.tree, p.click = Mock(return_value=root), Mock()
+        self.assertIsNone(p.confirm())
+        p.click.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -764,22 +764,35 @@ class Phone:
         按钮文字不一定在 text 上：vivo 阅图锁屏的 Button text 为空、文字在 content-desc（#246 / PR #249）；
         vivo / iQOO 另一种弹窗把文字放在 Button 下级的 TextView（vbutton_title，PR #239）。
         都要整段等于确认词，避免点到说明文字。
-        屏幕外的节点跳过：页面里常留着上一层对话框的按钮，点它会抛「点击坐标在屏幕外」把整段打断（PR #248）。"""
+        屏幕外的节点跳过：页面里常留着上一层对话框的按钮，点它会抛「点击坐标在屏幕外」把整段打断（PR #248）。
+        严格档全没命中再退一档：HyperOS 4 的部分弹窗把确认键画成可点击的 TextView（小米 17 热榜页，PR #408 / #500）。
+        ColorOS 的状态文字是 View 且占整行，落在兜底档之外。"""
         time.sleep(0.2)
         root = self.tree()
-        for c in CONFIRM:
-            for n in root.iter("node"):
-                if "Button" not in (n.get("class") or ""):
-                    continue
-                label = (n.get("text") or "").strip() or (n.get("content-desc") or "").strip()
-                inner = {(x.get("text") or "").strip() for x in n.iter("node") if x is not n}
-                if label != c and not (not label and c in inner):
-                    continue
-                l, t, r, b = bounds(n)
-                if r > l and b > t and self.on_screen(n):
-                    self.click((l + r) // 2, (t + b) // 2)
-                    time.sleep(0.3)
-                    return c
+        for tier in ("button", "textview"):
+            for c in CONFIRM:
+                for n in root.iter("node"):
+                    if tier == "button":
+                        if "Button" not in (n.get("class") or ""):
+                            continue
+                        label = (n.get("text") or "").strip() or (n.get("content-desc") or "").strip()
+                        inner = {(x.get("text") or "").strip() for x in n.iter("node") if x is not n}
+                        if label != c and not (not label and c in inner):
+                            continue
+                    else:
+                        if "TextView" not in (n.get("class") or ""):
+                            continue
+                        if (n.get("text") or "").strip() != c or n.get("clickable") != "true":
+                            continue
+                    l, t, r, b = bounds(n)
+                    if r <= l or b <= t:
+                        continue
+                    if tier != "button" and (r - l > self.W * 0.5 or b - t > self.H * 0.12):
+                        continue
+                    if self.on_screen(n):
+                        self.click((l + r) // 2, (t + b) // 2)
+                        time.sleep(0.3)
+                        return c
         return None
 
     def off(self, keep=(), only=None, page="", max_screens=40):
