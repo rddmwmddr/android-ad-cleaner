@@ -199,6 +199,10 @@ def _():
 @step("浏览器")
 def _():
     p.start("com.android.browser")
+    if "basicmode" in p.focus().lower():
+        # 拒绝浏览器协议后落到基本模式设置页，设置入口都不在这条路径上，找下去只会空转报错（#414、#460）
+        print("  · 浏览器处在基本模式，设置入口不在这条路径上，本段跳过")
+        return
     require(p.tap("我的", exact=True, scrolls=0), "未找到浏览器「我的」")
     require(p.tap("设置", exact=True, scrolls=0), "未找到浏览器「设置」")
     if maybe("主页设置"):
