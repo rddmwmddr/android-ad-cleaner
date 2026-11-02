@@ -183,6 +183,10 @@ def _():
     p.d.shell("am force-stop com.android.browser"); time.sleep(1)
     p.d.shell("monkey -p com.android.browser -c android.intent.category.LAUNCHER 1")
     time.sleep(3)
+    if "basicmode" in p.focus().lower():
+        # 拒绝浏览器协议后落到基本模式设置页，设置入口都不在这条路径上，找下去只会空转报错（#414、#460）
+        print("  · 浏览器处在基本模式，设置入口不在这条路径上，本段跳过")
+        return
     # 底栏按钮是 ViewGroup，只认 80 毫秒短按；input tap 点了没反应
     if not p.tap("菜单", exact=True, scrolls=0):
         raise RuntimeError("浏览器底栏「菜单」未找到")

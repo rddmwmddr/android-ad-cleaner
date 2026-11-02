@@ -187,6 +187,10 @@ def _():
 @step("浏览器")
 def _():
     p.start("com.android.browser")
+    if "basicmode" in p.focus().lower():
+        # 拒绝浏览器协议后落到基本模式设置页，设置入口都不在这条路径上，找下去只会空转报错（#414、#460）
+        print("  · 浏览器处在基本模式，设置入口不在这条路径上，本段跳过")
+        return
     # 工具栏最右那个「设置」按钮点进去是「页面布局」子页（这版特有）。
     # 正确路径：底部「菜单」→ 弹窗右上角「设置」，用 resource-id 定位。
     if not by_id("com.android.browser:id/action_more"):

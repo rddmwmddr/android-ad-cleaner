@@ -1,9 +1,9 @@
 """#460：其余小米 / 红米脚本在浏览器基本模式页也要说明原因并跳过。
 
-#414 只给了 xiaomi-M154FF 这条判定；另外四份同款浏览器段（两份 browser_settings()
-形状、两份 require(p.tap(...)) 形状）在拒绝协议落到 `BasicModeSettingActivity` 时
-仍会整段空转后报「入口未找到 / 未找到浏览器…」。加载方式与 #414 的测试相同——
-机型脚本按约定在注入的 `p` 上运行，这里用 runpy 按文件路径执行并注入假设备。
+#414 只给了 xiaomi-M154FF 这条判定；其余七份同款浏览器段（browser_settings()、
+require(p.tap(...))、by_id 与 recipe_os4.py 的 monkey 拉起几种形状）在拒绝协议落到
+`BasicModeSettingActivity` 时仍会整段空转后报「入口未找到 / 未找到浏览器…」。加载方式与
+#414 的测试相同——机型脚本按约定在注入的 `p` 上运行，这里用 runpy 按文件路径执行并注入假设备。
 """
 import contextlib
 import io
@@ -23,10 +23,14 @@ BASIC = "com.android.browser/com.android.browser.basicmode.BasicModeSettingActiv
 HOME = "com.android.browser/com.android.browser.MainActivity"
 
 RECIPES = (
-    ROOT / "recipes/xiaomi-25102RKBEC/recipe.py",
-    ROOT / "recipes/redmi-25060RK16C/recipe.py",
-    ROOT / "recipes/xiaomi-24129PN74C/recipe.py",
-    ROOT / "recipes/redmi-23113RKC6C/recipe.py",
+    (ROOT / "recipes/xiaomi-25102RKBEC/recipe.py", ("com.android.browser",)),
+    (ROOT / "recipes/redmi-25060RK16C/recipe.py", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi-24129PN74C/recipe.py", ("com.android.browser",)),
+    (ROOT / "recipes/redmi-23113RKC6C/recipe.py", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi-2512BPNDAC/recipe.py", ("com.android.browser",)),
+    # 这份不走 p.start：强停后用 monkey 拉起
+    (ROOT / "recipes/xiaomi-24129PN74C/recipe_os4.py", None),
+    (ROOT / "recipes/redmi-24122RKC7C/recipe.py", ("com.android.browser", ".BrowserActivity")),
 )
 
 
@@ -45,22 +49,27 @@ class BrowserBasicMode460(unittest.TestCase):
         return p, out.getvalue()
 
     def test_basic_mode_page_is_skipped_with_a_readable_reason(self):
-        for recipe in RECIPES:
+        for recipe, start_args in RECIPES:
             with self.subTest(recipe=str(recipe)):
                 p, out = self.run_browser_step(recipe, BASIC)
-                p.start.assert_called_once_with("com.android.browser")
+                if start_args:
+                    p.start.assert_called_once_with(*start_args)
+                self.assertIn("== 浏览器", out)
                 self.assertIn("基本模式", out)
                 self.assertNotIn("出错", out)
+                self.assertNotIn("未完成", out)
                 p.click.assert_not_called()
                 p.tap.assert_not_called()
                 p.back.assert_not_called()
                 p.entry.assert_not_called()
 
     def test_normal_home_page_still_goes_through_the_settings_entries(self):
-        for recipe in RECIPES:
+        for recipe, start_args in RECIPES:
             with self.subTest(recipe=str(recipe)):
                 p, out = self.run_browser_step(recipe, HOME)
-                p.start.assert_called_once_with("com.android.browser")
+                if start_args:
+                    p.start.assert_called_once_with(*start_args)
+                self.assertIn("== 浏览器", out)
                 self.assertNotIn("基本模式", out)
 
 
