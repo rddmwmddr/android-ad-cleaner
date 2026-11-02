@@ -324,7 +324,8 @@ class Phone:
                 continue
             ctrl = control(n, self.on_screen)       # 卡片整体 checkable 时点在卡片中心不生效
             l, t, r, b = bounds(ctrl)
-            checked = ctrl.get("checked") if ctrl.get("checked") is not None else n.get("checked")
+            # 卡片自己报状态时以卡片为准；缺这个属性才读内层开关，别把缺属性当成「关」
+            checked = n.get("checked") if n.get("checked") is not None else ctrl.get("checked")
             out.append((title_of(n, parent, self.on_screen, self.H), checked == "true", (l, t, r, b)))
         return [(title, on, ((l + r) // 2, (t + b) // 2)) for title, on, (l, t, r, b) in dedupe(out)]
 

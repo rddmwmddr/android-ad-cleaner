@@ -95,8 +95,8 @@ class BoxesTests(unittest.TestCase):
         found = row.switches_in(container, on_screen())
         self.assertEqual([row.bounds(n) for n in found], [(900, 320, 1000, 380)])
 
-    def test_control_is_the_innermost_switch_not_the_card_holding_it(self):
-        # 卡片整体 checkable 时，卡片中心落在标题与开关之间的空白里，点它不生效（#403）
+    def test_control_is_the_innermost_switch_not_the_container_holding_it(self):
+        # 卡片中心落在标题与开关之间的空白里，点它不生效（#403）
         root, _ = page(CARD)
         row_line = root[0][0][0][0]
         self.assertEqual(row.bounds(row.control(row_line, on_screen())), (900, 600, 1000, 680))
@@ -106,6 +106,32 @@ class BoxesTests(unittest.TestCase):
         root, _ = page(FLAT_CARD)
         card = root[0][0][0]
         self.assertIs(row.control(card, on_screen()), card)
+
+
+class DedupeTests(unittest.TestCase):
+    """dedupe 直接吃 bounds：同一水平带里的两个候选什么时候算一行、什么时候算两列。"""
+
+    def test_a_whole_row_and_its_inline_switch_collapse_to_the_rightmost(self):
+        rows = row.dedupe([("营销通知", True, (40, 500, 1040, 540)),
+                           ("营销通知", True, (940, 500, 1040, 540))])
+        self.assertEqual(rows, [("营销通知", True, (940, 500, 1040, 540))])
+
+    def test_the_band_is_thirty_pixels(self):
+        # 旧实现里写死的 30px 搬进常量：边界两侧各放一组，改成别的数就要红
+        same = row.dedupe([("甲", True, (900, 300, 1000, 340)), ("甲", True, (900, 329, 1000, 369))])
+        apart = row.dedupe([("甲", True, (900, 300, 1000, 340)), ("甲", True, (900, 331, 1000, 371))])
+        self.assertEqual(len(same), 1)
+        self.assertEqual(len(apart), 2)
+
+    def test_two_columns_keep_both_when_each_has_its_own_title(self):
+        rows = row.dedupe([("微博热搜榜", True, (54, 234, 525, 526)),
+                           ("千问热议", False, (555, 234, 1026, 526))])
+        self.assertEqual([t for t, _, _ in rows], ["微博热搜榜", "千问热议"])
+
+    def test_a_column_without_a_title_is_still_merged_away(self):
+        rows = row.dedupe([("", True, (54, 234, 525, 526)),
+                           ("千问热议", False, (555, 234, 1026, 526))])
+        self.assertEqual(rows, [("千问热议", False, (555, 234, 1026, 526))])
 
 
 # 华为 / 旧版荣耀：几个渠道排在同一张卡片里，卡片是列表的直接子项，行本身不可点

@@ -56,18 +56,36 @@ class TwoColumnTests(unittest.TestCase):
 
     def test_checked_state_comes_from_the_inner_switch_not_the_untagged_card(self):
         # 卡片只有 checkable、没有 checked；读卡片会一律当成「关」，方向反了
-        w, h = fixtures.SIZES[0]
-        xml, _ = two_column_page(w, h)
-        got = fake_phone(size=(w, h)).switches(ET.fromstring(xml))
-        self.assertEqual([(t, c) for t, c, _ in got],
-                         [("微博热搜榜", True), ("千问热议", False),
-                          ("微博智搜榜", True), ("全网热搜榜", False)])
+        for size in fixtures.SIZES:
+            with self.subTest(size=size):
+                xml, _ = two_column_page(*size)
+                got = fake_phone(size=size).switches(ET.fromstring(xml))
+                self.assertEqual([(t, c) for t, c, _ in got],
+                                 [("微博热搜榜", True), ("千问热议", False),
+                                  ("微博智搜榜", True), ("全网热搜榜", False)])
+
+    def test_a_card_that_reports_its_own_state_is_not_overridden_by_the_inner_switch(self):
+        # 内层控件可能只是装饰、带着过期的 checked；卡片自己报了状态就以卡片为准
+        for size in fixtures.SIZES:
+            with self.subTest(size=size):
+                w = size[0]
+                xml = (f'<hierarchy><node class="android.widget.LinearLayout" checkable="true"'
+                       f' clickable="true" checked="true" bounds="[0,300][{w},560]">'
+                       f'<node text="营销通知" bounds="[60,320][700,380]"/>'
+                       f'<node class="android.widget.Switch" checked="false"'
+                       f' bounds="[{w - 180},420][{w - 80},500]"/></node></hierarchy>')
+                self.assertEqual(fake_phone(size=size).switches(ET.fromstring(xml)),
+                                 [("营销通知", True, (w - 130, 460))])
 
 
 class OffReadbackTests(unittest.TestCase):
     def test_a_left_column_switch_that_will_not_turn_off_is_reported(self):
         # 页面不随点击变化：左列那个开关关不掉，不能计入「调整 N 项」
-        size = fixtures.SIZES[0]
+        for size in fixtures.SIZES:
+            with self.subTest(size=size):
+                self._check(size)
+
+    def _check(self, size):
         xml, cards = two_column_page(*size)
         clicks, said = [], []
         p = fake_phone(size=size, stages=[(0.0, xml)], click=lambda x, y: clicks.append((x, y)),
@@ -81,7 +99,8 @@ class OffReadbackTests(unittest.TestCase):
 
 
 def old_switches(p, root):
-    """改动前（bfff436）`Phone.switches()` 的逐字副本，只用于对拍，不要按新行为改它。"""
+    """改动前（bfff436）`Phone.switches()` 的逐字副本，只用于对拍，不要按新行为改它。
+    它仍调用现行的 `title_of()`：对拍守的是分带合并与落点，标题规则的改前改后要另备基线。"""
     parent = {c: q for q in root.iter() for c in q}
     out = []
     shot = None
@@ -174,6 +193,9 @@ class SameLayoutTests(unittest.TestCase):
                     if wraps_switch(root, size):
                         cards += 1
                         centres = switch_centres(root, size)
+                        # 唯一允许的差异：旧实现给卡片中心单独记一行（落点不是开关本体），
+                        # 新实现落在内层开关上；标题与状态逐条照抄旧输出。
+                        self.assertEqual(new, [r for r in old if isinstance(r, tuple) and r[2] in centres])
                         self.assertTrue(new and all(xy in centres for _, _, xy in new))
                         moved += new != old
                         continue

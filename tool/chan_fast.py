@@ -17,7 +17,7 @@ for _st in (sys.stdout, sys.stderr):
         pass
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fast import Phone, ScreenLocked, pause_point
-from row import PATH_DEPTH, bounds, link, own, skeleton
+from row import PATH_DEPTH, SAME_LINE, bounds, link, own, skeleton
 from channel_policy import classify, protected_channel
 from troubleshooting import XIAOMI_INPUT
 import adb_link
@@ -337,7 +337,7 @@ def allow_switches(p, root):
             continue
         l, t, r, b = bounds(n)
         xy = ((l + r) // 2, (t + b) // 2)
-        if not any(abs(s[2][1] - xy[1]) < 30 for s in found):
+        if not any(abs(s[2][1] - xy[1]) < SAME_LINE for s in found):
             found.append((label, n.get("checked") == "true", xy))
     return found
 
@@ -531,7 +531,7 @@ class ChannelPage:
     def undo(self, xy, want_on):
         """只在同一位置仍是刚拨过去的那个开关时再点一次，不沿用已消失的坐标。"""
         switch = _switch_of(self.refresh(rounds=6))
-        if switch and abs(switch[2][1] - xy[1]) < 30 and switch[1] == want_on:
+        if switch and abs(switch[2][1] - xy[1]) < SAME_LINE and switch[1] == want_on:
             self.p.click(*switch[2]); time.sleep(0.4); self.p.confirm()
             return True
         return False
