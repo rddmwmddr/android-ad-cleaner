@@ -222,6 +222,10 @@ def _():
     # 2026-10-29 实测：底栏是 主页/视频/AI搜索/菜单/我的，没有「我的」标签；
     # 入口是底部「菜单」→ 弹窗右上「设置」。
     p.start("com.android.browser")
+    if "basicmode" in p.focus().lower():
+        # 拒绝浏览器协议后落到基本模式设置页，设置入口都不在这条路径上，找下去只会空转报错（#414、#460）
+        print("  · 浏览器处在基本模式，设置入口不在这条路径上，本段跳过")
+        return
     time.sleep(2)
     require(p.tap("菜单", exact=True, scrolls=0), "未找到浏览器底部「菜单」")
     time.sleep(1.2)

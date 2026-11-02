@@ -149,6 +149,7 @@ python3 tool/run.py devices
 | 打开 App 后仍停在上一页 | 部分系统 App 没有 LAUNCHER，或直达 Activity 复用了旧任务 | `start()` 检查启动结果和前台包；少量文字不能当空白广告；空白限时等待，读取 / 处理弹窗前后核对前台。手机管家、全局搜索用已验证的 Activity |
 | 一加旧版商店短暂打开后退出 | 直达启动及复用旧任务与本机商店行为不匹配；也可能被系统权限页挡住 | 商店沿用先停止再从桌面启动；浏览器使用实测 Activity 并清理旧任务。权限页只拒绝，前台仍不对就停止，不能把每次失败都判断成崩溃 |
 | ColorOS 14 挂起后后台进程再次出现 | 实测运行应用后广告服务、乐划、快应用平台被重新拉起，具体机制未定位 | 分别回读挂起和进程状态；只能报告实际结果，不能把挂起写成永久停止。不升级为卸载、disable-user 或 root |
+| ColorOS / realme 挂起 `com.oplus.appdetail` 后，所有第三方安装永久卡在「正在安装」，卸载也一样 | 它承载安装与卸载的收尾页（`appdetail.intent.action.INSTALL_FINISH` → `InstallFinishActivity`，另有 `UNINSTALL_COMPONENT`、`InstallGuideActivity`），挂起后安装完成广播没有接收者 | 不挂。`run.py suspend` 已把它列进 `NEVER` 直接拒绝；已经被别的工具挂起的，用 `run.py -s S unsuspend com.oplus.appdetail` 还原（RMX3700 / ColorOS 16 实测，解冻后立刻恢复） |
 | `backup` 快照里 `sys.txt` / `user.txt` / `disabled.txt` 是 0 字节 | 部分 ROM（HyperOS 4）上 `pm list packages` 任何参数都无输出且 exit 0 | `pkg_list()` 读不到包名时回退 `cmd package list packages`；`backup` 先用不带参数的完整清单探活，都读不到就报失败、不留半成品快照（Issue #192） |
 | 关掉手机助手 / 投屏类工具后整轮中断，后面几段都报「本机没有安装 xxx」 | 复用了对方在 5037 上起的 adb server，对方退出后连接消失；断开时 `pm path` 也没输出，被当成没装 | 首次确认断连时报「adb 连接断开」，本轮剩余段快速跳过；按提示退出手机助手类软件、拔插数据线后重跑（Issue #293） |
 | 游戏中心报「未找到入口「设置」」，日志里没有更多线索 | 游戏中心 14.43.3 把「设置」做成「我的」页右上角没有文字的齿轮图标，只有切到「我的」tab 才显示 | 文字优先、失败后用 `tap_icon()` 在右上角找没有文字的可点图标，点完要求精确出现「隐私开关设置」/「隐私」才算成功，等 2.4 秒页面仍不对就退回换下一个，全失败打印当前页文字；「我的」用会校验的 `p.tap()`，不用 `d(text=).click()`（Issue #292） |

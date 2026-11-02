@@ -127,14 +127,14 @@ PMX110 / ColorOS 17 上逐个单独挂起实测（Issue #335，2026-10-30）。
 
 ## 不同机型的差异
 
-| 项 | Find N6（16.0.9） | Find X9 Ultra（16.0.10） | Find N3 典藏版（16.0.5） | 一加 Ace 5（PKG110，16.0.10.500） |
-|---|---|---|---|---|
-| 浏览器设置入口 | 底部 ☰ → 齿轮 | 底部「我的」→ 设置 | 待补 | 底部栏图标无文字标注，无法按文字定位；可直达 `am start -n com.heytap.browser/.settings.component.BrowserPreferencesPage` |
-| 商店设置页 | 有「隐私」「服务管理」 | 有 | 齿轮进去是「应用与服务」，入口待补 | 无「隐私」「服务管理」子页；个性化推荐藏在「账号与隐私 → 隐私授权管理 → 个性化推荐」子页（二级入口是跳转箭头，不是开关） |
-| 视频、游戏中心 | 我的 → 设置 | 找不到「我的」，待补 | 待补 | 视频 App 无启动入口（monkey 报 No activities found）；游戏中心「我的 → 设置」直达「隐私开关设置 → 个性化推荐管理」 |
-| 下拉搜索「搜索范围」 | 榜单、小说、购物等推荐项 | 待补 | 待补 | 该页是数据源列表（本机应用/相册等）；推荐项在「首页卡片管理」（推荐卡片等）和「功能管理」（搜索框提示词） |
-| 小布建议 | — | — | — | 路径「OPPO AI → 小布建议」正常；资讯服务在「内容资讯」分组，行点击进二级页才有开关；服务行用文字「已开启」标注，非标准开关，`fast.py only/off` 在列表页无效 |
-| OAID 广告跟踪列表 | — | — | — | 约 40 个 App、5 屏；用 250ms 慢滑翻页无效，需 120ms 快滑 |
+| 项 | Find N6（16.0.9） | Find X9 Ultra（16.0.10） | Find N3 典藏版（16.0.5） | 一加 Ace 5（PKG110，16.0.10.500） | realme GT Neo5 SE（RMX3700，16.0.5.1300） |
+|---|---|---|---|---|---|
+| 浏览器设置入口 | 底部 ☰ → 齿轮 | 底部「我的」→ 设置 | 待补 | 底部栏图标无文字标注，无法按文字定位；可直达 `am start -n com.heytap.browser/.settings.component.BrowserPreferencesPage` | 主页是「简洁」模式，既没有底部「我的」也没有菜单；只能直达 `am start -n com.heytap.browser/com.heytap.browser.settings.component.BrowserPreferencesPage` |
+| 商店设置页 | 有「隐私」「服务管理」 | 有 | 齿轮进去是「应用与服务」，入口待补 | 无「隐私」「服务管理」子页；个性化推荐藏在「账号与隐私 → 隐私授权管理 → 个性化推荐」子页（二级入口是跳转箭头，不是开关） | 有「服务管理」（46 项）；没有「隐私」子页，个性化推荐在「账号与隐私 → 隐私授权管理 → 个性化推荐」 |
+| 视频、游戏中心 | 我的 → 设置 | 找不到「我的」，待补 | 待补 | 视频 App 无启动入口（monkey 报 No activities found）；游戏中心「我的 → 设置」直达「隐私开关设置 → 个性化推荐管理」 | 没有独立视频 App（`com.coloros.video` 有包但无桌面入口，`com.heytap.yoli` 未安装）；游戏中心未安装 → 两段都跳过 |
+| 下拉搜索「搜索范围」 | 榜单、小说、购物等推荐项 | 待补 | 待补 | 该页是数据源列表（本机应用/相册等）；推荐项在「首页卡片管理」（推荐卡片等）和「功能管理」（搜索框提示词） | `am start -n` 未导出，用 `gs://search/setting` 进；搜索范围只关个性化推荐 / 精选资讯 / 搜索建议，功能管理关搜索框提示词，首页卡片管理 9 项全关（「便捷服务」保留） |
+| 小布建议 | — | — | — | 路径「OPPO AI → 小布建议」正常；资讯服务在「内容资讯」分组，行点击进二级页才有开关；服务行用文字「已开启」标注，非标准开关，`fast.py only/off` 在列表页无效 | 入口叫「NEXT AI → 小布建议」；列表页同样是文字「已开启」，要进「资讯服务」二级页才有开关 |
+| OAID 广告跟踪列表 | — | — | — | 约 40 个 App、5 屏；用 250ms 慢滑翻页无效，需 120ms 快滑 | 54 个 App、5 屏；没有总开关，新装 App 默认开 |
 
 欢迎补充：提 PR 改这张表。
 
@@ -173,6 +173,31 @@ PMX110 / ColorOS 17 上逐个单独挂起实测（Issue #335，2026-10-30）。
 | 营销通知 | `chan-scan` 候选 46 条，剔掉负一屏「最新服务资讯通知」、钉钉「内容通知」、X「直播空间」后关 42 个，复查 0 个仍开着 |
 | 广告包与快应用 | 经机主同意挂起 `com.opos.ads`、`com.heytap.pictorial`，关闭 3 个快应用组件；挂起后可用 `unsuspend` / `quickapp on` 还原 |
 
+
+### realme GT Neo5 SE（RMX3700 / ColorOS 16.0.5.1300(CN01)）
+
+2026-10-30 在真机上逐段实测，机型脚本：`recipes/realme-RMX3700/`。这是仓库里第一个 realme 机型脚本。
+
+| 位置 | 路径与处理 |
+|---|---|
+| 系统广告跟踪 | 设置 → 隐私 → 设备标识与广告 → 广告跟踪。ColorOS 16 叫「隐私」，17 才改叫「隐私与安全」。本机 54 个 App 开关、5 屏，没有总开关，新装 App 默认开，整页关掉即可 |
+| 软件商店 | 「服务管理」存在，共 46 项，比 OPPO 那套 30 多项还多；没有「隐私」子页，个性化推荐在「账号与隐私 → 隐私授权管理 → 个性化推荐」 |
+| 浏览器 | 主页是「简洁」模式：没有底部「我的」，也没有菜单。只能直达 `am start -n com.heytap.browser/com.heytap.browser.settings.component.BrowserPreferencesPage`。广告管理三项：开屏广告、资讯列表广告、摇一摇广告 |
+| 下拉搜索 | `am start -a android.intent.action.VIEW -d 'gs://search/setting'`（`-n` 组件名没导出，会被拒）。搜索范围关 个性化推荐 / 精选资讯 / 搜索建议 三项，功能管理关 搜索框提示词，首页卡片管理 9 项全关（「便捷服务」保留），消息管理本来已关。**运行前 `com.heytap.quicksearchbox` 不能被挂起**，否则拉到的是系统「应用已被暂停」页 |
+| 小布建议 | 入口叫「NEXT AI」，不叫「OPPO AI」。列表页用文字「已开启」标注、不是标准开关，要进「资讯服务」二级页才有开关；关掉主开关即连带视界日报、AI快讯、小红书资讯 |
+| 应用建议 | 「小布建议」滚到底有「应用建议」，会跳到 `com.oplus.metis` 的设置页，每个已装 App 一个开关（本机 53 个），关掉即该 App 不再出现在推荐位 |
+
+本机没有对应页面、直接跳过的几段，以及原因：
+
+| 段 | 为什么跳过 |
+|---|---|
+| 视频 | `com.coloros.video` 是本机的视频**播放器**（`am start -n com.coloros.video/.VideoListActivity` 能起来），只列手机里的本地文件，没有在线资讯流、也没有个性化推荐开关；`com.heytap.yoli` 未安装。这段没有可关的广告位 |
+| 主题商店 | 包名是 `com.oplus.themestore`（`/product/priv-app/KeKeOplusThemeStore-CN/`），本机没有 `com.heytap.themestore`。没有 LAUNCHER 入口，`am start -a android.intent.action.VIEW -d oaps://theme` 落到 `.entrance.BasicEntranceActivity`；那是入口引导页，点「打开主题商店」会弹「使用个性化服务需要安装“主题商店”」（安装 / 取消）——主商店没预装、要联网下载，所以这段没法自动做。`dumpsys package` 里 `enabled=0` 是 `COMPONENT_ENABLED_STATE_DEFAULT`（正常），不是「被禁用」（显式禁用是 `enabled=2`）；录制时它是 `suspended=true`——被别人冻结才拉不起来 |
+| 下拉搜索 | 设置页 `SearchSettingActivity` 确实没有导出（`am start -n` 抛 `SecurityException: Permission Denial … not exported`），但用应用自己的 scheme 能进：`am start -a android.intent.action.VIEW -d 'gs://search/setting'`，和 ColorOS 17 的 PKT110 一致。**前提是 `com.heytap.quicksearchbox` 没被挂起**：它一挂，这个 scheme 落到系统的 `SuspendedAppActivity`「应用已被暂停」页，整个全局搜索不可用。首页本身 0 个开关，6 个入口都要进子页：搜索范围（`SearchSourceActivity`，24 项，只关个性化推荐 / 精选资讯 / 搜索建议）、功能管理（`SearchFunctionManagerActivity`，4 项，只关搜索框提示词）、首页卡片管理（`SearchModuleManagerActivity`，9 项，全是推荐位，「便捷服务」要留）、消息管理（`SearchPushManagerActivity`，消息通知）。「账号与隐私」是分组标题，点不进去 |
+| 负一屏 | 设置页 `com.coloros.assistantscreen/com.heytap.iflow.main.setting.SettingsActivity` 存在，但 `am start` 被 `SecurityException: … requires oppo.permission.OPPO_COMPONENT_SAFE` 拒绝——那是 OPPO 私有权限，只有系统应用持有，adb 起不来；速览界面上也找不到设置入口（没有头像节点、没有齿轮）。这段在这台机器上做不了 |
+| 桌面设置 | 路径为 设置 → 桌面、锁屏与个性化 → 桌面设置（`com.android.launcher.settings.LauncherSettingsActivity`）。GT5 Pro 那台的「桌面上滑看看点」开关本机没有；余下开关都不是广告位，不动 |
+
+另外：`ro.build.version.opporom` 在 realme 上是空的，桌面客户端里「系统版本」一栏空白，不是 bug。
 
 ### OPPO Pad Mini（OPD2515 / ColorOS 16.1.0）
 

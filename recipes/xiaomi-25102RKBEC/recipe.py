@@ -200,6 +200,10 @@ def _():
     # 脚本判定「离开前台」整段停（单独跑这段从来不出问题）。先回桌面、等稳了再拉。
     p.d.shell("input keyevent KEYCODE_HOME"); time.sleep(2)
     p.start("com.android.browser")
+    if "basicmode" in p.focus().lower():
+        # 拒绝浏览器协议后落到基本模式设置页，设置入口都不在这条路径上，找下去只会空转报错（#414、#460）
+        print("  · 浏览器处在基本模式，设置入口不在这条路径上，本段跳过")
+        return
     if not browser_settings():
         raise RuntimeError("浏览器设置入口未找到；未点击正文中的文字")
     if maybe("隐私和安全"):

@@ -258,3 +258,21 @@ def drive(call, modules=(), size=SIZES[0], stages=((0.0, EMPTY_PAGE),),
     p = fake_phone(clock=clock, size=size, stages=stages, focus=focus, **fields)
     out = call(p)
     return out, round(clock.t, 2), clock.page_reads, clock.clicks
+
+
+def fake_adb(case):
+    """adb-less 机器上让用例走到目标分支（#438）：adb 解析统一替换成假路径。
+
+    `run.adb()` 是 `adb_link.adb_path()` 的薄封装，Connection 在 `adb_path()`
+    落空时才去找真二进制，所以这一个 patch 点覆盖 run / chan_fast / Connection
+    三条路。adb 解析本身由 test_adb_link 守着；这里的用例只关心分派与引擎分支，
+    不关心装没装 adb。返回的 patcher 已 start，并挂到 case 的 cleanup 上。
+    """
+    from unittest.mock import patch
+
+    load_tool()
+    import adb_link
+
+    patcher = patch.object(adb_link, "adb_path", return_value="adb")
+    patcher.start()
+    case.addCleanup(patcher.stop)
