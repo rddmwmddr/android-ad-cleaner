@@ -35,7 +35,7 @@ $RUN $PY -m PyInstaller --noconfirm --windowed --name "$NAME" \
   --add-data "$DATA/images:images" --add-data "$DATA/gui/web:gui/web" \
   --collect-all uiautomator2 --collect-all adbutils \
   --hidden-import uiautomator2 --hidden-import adbutils --hidden-import PIL --hidden-import fcntl \
-  gui/app.py >/dev/null 2>gui/build/pyinstaller-$ARCH.log
+  gui/launch.py >/dev/null 2>gui/build/pyinstaller-$ARCH.log
 APP="$OUT/$NAME.app"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VER" "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :LSMinimumSystemVersion string 11.0" "$APP/Contents/Info.plist"
