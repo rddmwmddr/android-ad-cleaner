@@ -43,7 +43,8 @@ def step(name):
 
 
 def tap(name, scrolls=4, exact=True):
-    require(p.tap(name, exact=exact, scrolls=scrolls), f"未找到入口「{name}」")
+    if not p.tap(name, exact=exact, scrolls=scrolls):
+        raise RuntimeError(f"未找到入口「{name}」；当前页：{p.page_text()}")
 
 
 def read_switches(max_screens, first=None):
@@ -188,18 +189,19 @@ def _():
 def _():
     """主题商店 → 我的 → 设置：服务管理 → 消息与广告；隐私 → 个性化推荐设置。
     「个性化推荐设置」点下去先弹确认框，确认后页面退回「设置」，回读前要重新进一次。
-    首页的「检测到新版本」弹窗盖住底部标签栏，「我的」要用会关弹窗的 p.tap（#286）。"""
+    首页的「检测到新版本」弹窗盖住底部标签栏，关弹窗的动画会把紧跟着的点击吞掉，
+    所以每一跳都用会确认换页的 p.enter（#286）。"""
     def to_privacy():
         p.start("com.heytap.themestore")
-        require(p.tap("我的", exact=True, scrolls=0), "没找到底部「我的」")
-        tap("设置", scrolls=0)
-        tap("隐私", scrolls=0)
+        p.enter("我的")
+        p.enter("设置")
+        p.enter("隐私")
 
     p.start("com.heytap.themestore")
-    require(p.tap("我的", exact=True, scrolls=0), "没找到底部「我的」")
-    tap("设置", scrolls=0)
-    tap("服务管理", scrolls=0)
-    tap("消息与广告", scrolls=0)
+    p.enter("我的")
+    p.enter("设置")
+    p.enter("服务管理")
+    p.enter("消息与广告")
     close_named(["消息通知", "开屏广告"], "主题·消息与广告")
     p.back(2)
     to_privacy()
@@ -210,9 +212,9 @@ def _():
 def _():
     """OPPO 视频 → 我的（底部标签）→ 设置 → 个性化管理。"""
     p.start("com.heytap.yoli")
-    require(p.tap("我的", exact=True, scrolls=0), "没找到底部「我的」")
-    tap("设置", scrolls=0)
-    tap("个性化管理")
+    p.enter("我的")
+    p.enter("设置")
+    p.enter("个性化管理", scrolls=6)
     close_named(["个性化广告推荐", "个性化内容推荐"], "视频·个性化管理")
 
 

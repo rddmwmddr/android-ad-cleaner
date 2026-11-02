@@ -35,9 +35,7 @@ Issues labelled `waiting-for-verify` have a fix on `main` that the reporter has 
 
 | Issue | 报告者 | 机型 / 系统 | 修复（进入的版本） | 要观察的输出 |
 | ----- | ------ | ----------- | ------------------ | ------------ |
-| #286 | @xicong | OPPO Find X8s / PKT110 / ColorOS 17.0.0.102 | #296 #297（0.2.9）、#347（0.3.0） | 母 issue：0.2.8 复测里除主题商店外各段已过、游戏中心已修；剩主题商店不再以 `-32002 Selector [text='我的']` 失败，等 0.3.0 复测 |
-| #292 | @xicong | 同上 | #297（0.2.9） | 游戏中心已在 0.2.8 复测确认（「核对 1 项，调整 1 项」）；差广告跟踪段不再打印「✗ 没找到『隐私』」这句假失败，与 #286 一并确认后关闭 |
-| #293 | @xicong | 同上 | #296（0.2.9） | 复用外部 adb server 后再关掉对方程序，报「手机和电脑的 adb 连接断开了」、后续段跳过，不再出现「本机没有安装 com.heytap.yoli」。0.2.8 复测没有触发这个场景，仍无真机证据 |
+| #293 | @xicong | OPPO Find X8s / PKT110 / ColorOS 17.0.0.102 | #296（0.2.9） | 复用外部 adb server 后再关掉对方程序，报「手机和电脑的 adb 连接断开了」、后续段跳过，不再出现「本机没有安装 com.heytap.yoli」。0.2.8 复测没有触发这个场景，仍无真机证据 |
 | #335 | @afive956 | OPPO Find X10 Pro Max / PMX110 / ColorOS 17 | #359（0.3.0） | `quickapp off` 后负一屏快递卡片能打开详情页；输出里 `com.nearme.instant.platform` 标「保留」，并提示 `hap://` 广告仍可能拉起快应用 |
 | #337 | @KujouShiori | vivo V1986A / Funtouch 13.0 / Android 12 | #360（0.3.0） | `chan-scan` 列出 `VPushChannel_0` 的「运营消息」，`VPushChannel_1`（系统消息）/ `VPushChannel_2`（即时消息）仍不出现 |
 | #357 | 机主（证据来自 #348） | 华为 M30 / HarmonyOS | #358（0.3.0） | USB 提示按带调试接口的设备取品牌，不再把别的 USB 外设说成「华硕手机」；由 #348 的报告者在下一版插线确认 |

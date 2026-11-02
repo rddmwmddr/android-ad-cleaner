@@ -281,6 +281,11 @@ class Phone:
                 out.append((t, bounds(n), n))
         return out
 
+    def page_text(self):
+        """失败诊断用：当前屏可见文字拼成一行。入口找不到时说明停在哪个页面，光报「没找到」分不清
+        是点击被吞还是这个版本换了布局（#286）。"""
+        return " / ".join(t for t, _, _ in self.texts()[:20])
+
     def on_screen(self, n):
         """折叠屏合上时，dump 里还留着内屏那份节点，坐标在外屏之外（Issue #2）；点上去没反应。"""
         if n.get("visible-to-user") == "false":
@@ -545,17 +550,21 @@ class Phone:
         self.say(f"  · 点了 ✕ 后跳到 {after}，疑似推广位，已退回（{key[:40]}）")
         return True
 
-    def tap(self, text, exact=False, scrolls=6, wait=0.6, quiet=False):
+    def tap(self, text, exact=False, scrolls=6, wait=0.6, quiet=False, seen=None):
         """找到就点。往下翻着找；翻到底没有，就回顶部再找一遍。
         scrolls=0（点底栏/按钮）：不翻页，但 6 秒内边等边关弹窗——应用内更新弹窗要等版本检查
         回来才冒出来，3 秒够不着（#286）。
-        quiet=True 时不打印「没找到」：入口探测会自己重试并给出诊断，中间的失败不该各报一行。"""
+        quiet=True 时不打印「没找到」：入口探测会自己重试并给出诊断，中间的失败不该各报一行。
+        seen：传一个 list，点击前把当时的页面签名放进去。翻页找入口时翻页本身就会改变页面，
+        调用方要拿「点击那一刻」的页面当基准，才分得清是翻到了还是换页了（#286）。"""
         if scrolls == 0:
             t0 = time.time()
             while time.time() - t0 < 6.0:
                 xy = self.find(text, exact, edge_ok="tab", nav=True)
                 if xy:
                     b = self.sig(); self.click(*xy); self.settle(b, wait + 0.4)
+                    if seen is not None:
+                        seen.append(b)
                     return True
                 self.dismiss() or time.sleep(0.2)
             if not quiet:
@@ -565,6 +574,8 @@ class Phone:
             xy = self.find(text, exact, nav=True)
             if xy:
                 b = self.sig(); self.click(*xy); self.settle(b, wait + 0.4)
+                if seen is not None:
+                    seen.append(b)
                 self.miss = 0
                 return True
             self.miss += 1
@@ -579,10 +590,15 @@ class Phone:
                     xy = self.find(text, exact, edge_ok=edge, nav=True)
                 if xy:
                     b = self.sig(); self.click(*xy); self.settle(b, wait + 0.4)
+                    if seen is not None:
+                        seen.append(b)
                     return True
                 if i < scrolls and not self.scroll_more():
                     xy = self.find(text, exact, edge_ok=True, nav=True)
                     if xy:
+                        b = self.sig()
+                        if seen is not None:
+                            seen.append(b)
                         self.click(*xy); time.sleep(wait)
                         return True
                     break
@@ -678,8 +694,24 @@ class Phone:
             if self.focus() != focus or self.sig() != sig:
                 self.back()
                 time.sleep(0.6)
-        self.say("  · 当前页文字：" + " / ".join(t for t, _, _ in self.texts()[:20]))
+        self.say("  · 当前页文字：" + self.page_text())
         return False
+
+    def enter(self, text, scrolls=0, tries=3):
+        """点开一个会换页的入口，并确认页面真的换了：点击常被弹窗淡出动画吞掉，页面没换就再点（#286）。
+        基准取「点击那一刻」的页面：入口要翻页才找得到时，翻页本身会改页面，不能当成换页。
+        只给会换页的入口用——没换页会再点一次，所以别用在开关行上。
+        精确匹配找不到时退回包含匹配（底栏常读作「我的，有新消息」）；换没换页仍由页面变化判定。"""
+        exact = True
+        if not self.find(text, exact=True, edge_ok="tab", nav=True):
+            exact = False
+        for _ in range(tries):
+            seen = []
+            if not self.tap(text, exact=exact, scrolls=scrolls, seen=seen):
+                raise RuntimeError(f"未找到入口「{text}」；当前页：{self.page_text()}")
+            if self.settle(seen[0], 2.0):
+                return
+        raise RuntimeError(f"点「{text}」后页面没有变化；当前页：{self.page_text()}")
 
     def go(self, text, expect, tries=3, exact=True):
         """点 text，直到 expect 出现在屏幕上（被弹窗吞掉就再点）。
