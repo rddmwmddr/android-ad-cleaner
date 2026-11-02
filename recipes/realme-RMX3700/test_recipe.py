@@ -9,7 +9,7 @@ import unittest
 
 RECIPE = Path(__file__).with_name("recipe.py")
 
-STEPS = ["广告跟踪", "软件商店", "浏览器", "小布建议", "应用建议"]
+STEPS = ["广告跟踪", "软件商店", "浏览器", "下拉搜索", "小布建议", "应用建议"]
 
 
 class FakePhone:

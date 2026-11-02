@@ -1,5 +1,6 @@
 # realme GT Neo5 SE（RMX3700，ColorOS 16.0.5.1300(CN01)）机型脚本。
-# 路径实测：2026-10-30。只收录已走通的：广告跟踪、软件商店、浏览器、小布建议、应用建议。
+# 路径实测：2026-10-30，下拉搜索 2026-11-02 补测。只收录已走通的：
+# 广告跟踪、软件商店、浏览器、下拉搜索、小布建议、应用建议。
 # 不挂包、不动通知渠道；这些操作仍走 run.py 的独立、需确认流程。
 #
 # 本机实测与其它机型的差异（务必保留在注释里，别照抄别家机型）：
@@ -8,14 +9,18 @@
 #     隐私相关不在「隐私」页，而在「账号与隐私 → 隐私授权管理 → 个性化推荐」。
 #   · 浏览器主页是「简洁」模式，没有底部「我的」和菜单；必须用 BrowserPreferencesPage 直达。
 #   · 小布建议叫「NEXT AI」（不是「OPPO AI」）。
-#   · 下拉搜索全局搜索页的 Activity 不可导出、拉不起设置页；桌面下滑手势是「通知与控制中心」。
-#   · 负一屏（桌面首屏右滑）没有设置入口，页面上也没有齿轮。
-#   · 本机没有独立视频 App（com.coloros.video 有包但没有 LAUNCHER 入口，com.heytap.yoli 未安装）→ 视频段跳过。
-#   · 主题商店的包名是 com.oplus.themestore（/product/priv-app/KeKeOplusThemeStore-CN/），
-#     不是 com.heytap.themestore —— 本机没有后者。它没有 LAUNCHER 入口，oaps://theme 落到
-#     .entrance.BasicEntranceActivity。enabled=0 是 COMPONENT_ENABLED_STATE_DEFAULT（正常状态），
-#     不是「被禁用」；显式禁用是 enabled=2。录制时它 suspended=true（被别人冻结了），
-#     所以主题段跳过，原因记在这里：不是出厂禁用。
+#   · 下拉搜索的设置页 SearchSettingActivity 没导出，用 `-n` 组件名会被系统拒绝；
+#     走应用自己的 gs://search/setting。前提是 com.heytap.quicksearchbox 没被挂起——
+#     它一挂，这个 scheme 落到系统的 SuspendedAppActivity「应用已被暂停」页。
+#   · 负一屏的设置页 com.heytap.iflow.main.setting.SettingsActivity 存在，但 am start 要
+#     oppo.permission.OPPO_COMPONENT_SAFE（OPPO 私有权限，只有系统应用持有），adb 起不来；
+#     速览界面上也没有头像或齿轮 → 负一屏段做不了。
+#   · 本机没有独立视频 App：com.coloros.video 是本地播放器（只列手机里的文件，没有在线资讯流），
+#     com.heytap.yoli 未安装 → 视频段没有可关的广告位。
+#   · 主题商店 com.oplus.themestore 在 /product/priv-app/KeKeOplusThemeStore-CN/，是个入口壳：
+#     oaps://theme 进 .entrance.BasicEntranceActivity，点「打开主题商店」弹
+#     「使用个性化服务需要安装“主题商店”」——主商店没预装、要联网下载 → 主题段没法自动做。
+#     注意包名不是 com.heytap.themestore（本机没有这个包），enabled=0 是 DEFAULT 不是禁用。
 BUILD = "RMX3700_16.0.5.1300"
 
 import time
@@ -29,6 +34,19 @@ STORE_KEEP = [
     "我的专区：我的资产", "我的专区：安全守护", "我的专区：小i客服",
     "应用使用记录", "首页：AI搜索",
 ]
+
+# 全局搜索的设置页 SearchSettingActivity 没有导出：am start -n 直接被系统拒绝
+# （SecurityException: not exported，和 ColorOS 17 的 PKT110 一样），只能用它自己的 scheme 打开。
+# 前置条件：com.heytap.quicksearchbox 不能被挂起——它一挂，这个 scheme 落到系统的
+# SuspendedAppActivity「应用已被暂停」页，全局搜索整个不可用，本段也做不了。
+SEARCH_SETTING = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"
+# 搜索范围：只关推荐位。「榜单」「小红书」「购物」「小说」「视频」「小程序」「便捷服务」
+# 是内容源，用户主动去点才用得到，保持不动；「本机应用」「设置」「相册」等是数据源，更不能关。
+SEARCH_SOURCES = ["个性化推荐", "精选资讯", "搜索建议"]
+# 首页卡片管理的推荐位，全是推荐，没有要留的。
+SEARCH_CARDS = ["应用建议", "热搜应用", "精选推荐", "热搜榜单", "活动皮肤", "推荐卡片"]
+# 这两个是「应用建议」的子项：父开关一关，这两行直接从页面上消失，所以要先关它们。
+SEARCH_CARD_CHILDREN = ["未下载应用推荐", "应用建议小卡"]
 
 
 def step(name):
@@ -119,6 +137,50 @@ def settings_page(*path):
     return True
 
 
+def open_search_setting():
+    """打开全局搜索的设置首页。包被挂起时拉起的是系统「应用已被暂停」页，要区分出来。"""
+    p.d.shell(SEARCH_SETTING)
+    time.sleep(1.8)
+    if "SuspendedAppActivity" in p.focus():
+        print("  ! com.heytap.quicksearchbox 被挂起了，全局搜索整个不可用；"
+              "先 run.py unsuspend com.heytap.quicksearchbox 再跑本段")
+        return False
+    return wait_page("com.heytap.quicksearchbox.ui.activity.SearchSettingActivity", "搜索设置")
+
+
+def close_rows(names, page):
+    """逐项关掉列表里的这些开关。
+
+    首页卡片管理这一类页面，关掉一项这一行就从列表里消失、下面的行整体上移，
+    拿一批旧坐标连点会点到邻居——2026-11-02 实测就是这样误关了本该保留的「便捷服务」。
+    所以每关一项都重新读一次坐标。
+    """
+    done = []
+    for _ in range(len(names) * 3 + 4):
+        todo = [(t, xy) for t, on, xy in p.switches() if t in names and on]
+        if not todo:
+            break
+        title, xy = todo[0]
+        p.click(*xy)
+        time.sleep(0.9)
+        done.append(title)
+    print(f"  · {page}：关了 {len(done)} 项" + (f"（{'、'.join(done)}）" if done else ""))
+    return len(done)
+
+
+def open_search_sub(name, activity):
+    """从搜索设置首页进一个子页。每页都重新打开首页，不靠 back 一层层退。"""
+    if not open_search_setting():
+        return False
+    if not tap_by_scroll(name):
+        print(f"  ! 没找到「{name}」")
+        return False
+    if not wait_page(activity, name):
+        print(f"  ! 没到「{name}」页")
+        return False
+    return True
+
+
 @step("广告跟踪")
 def _():
     # 每个 App 一个 OAID 开关、没有总开关，新装 App 默认开。
@@ -200,6 +262,27 @@ def _():
         print("  ! 没找到「广告管理」")
         return False
     p.off(only=["开屏广告", "资讯列表广告", "摇一摇广告"], page="浏览器·广告管理")
+    return True
+
+
+@step("下拉搜索")
+def _():
+    # 搜索设置首页本身 0 个开关，全部开关都在子页里。「账号与隐私」是分组标题，点它没反应。
+    if not open_search_setting():
+        return False
+    # 搜索范围 24 个开关：只有 3 个推荐位要关，其余是内容源和数据源。
+    if open_search_sub("搜索范围", "com.heytap.quicksearchbox.ui.activity.SearchSourceActivity"):
+        p.off(only=SEARCH_SOURCES, page="搜索范围")
+    # 功能管理：只关「搜索框提示词」。语音搜索、扫一扫是功能，搜索历史是用户自己的记录。
+    if open_search_sub("功能管理", "com.heytap.quicksearchbox.ui.activity.SearchFunctionManagerActivity"):
+        p.off(only=["搜索框提示词"], page="功能管理")
+    # 首页卡片管理：先关「应用建议」的两个子项，否则父项一关它们就从页面上消失，关不掉。
+    if open_search_sub("首页卡片管理", "com.heytap.quicksearchbox.ui.activity.SearchModuleManagerActivity"):
+        close_rows(SEARCH_CARD_CHILDREN, "首页卡片·子项")
+        close_rows(SEARCH_CARDS, "首页卡片")
+    # 消息管理：本机录制时「消息通知」已经是关的，这里只做回读兜底。
+    if open_search_sub("消息管理", "com.heytap.quicksearchbox.ui.activity.SearchPushManagerActivity"):
+        p.off(only=["消息通知"], page="消息管理")
     return True
 
 
