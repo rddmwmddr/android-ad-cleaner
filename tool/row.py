@@ -55,6 +55,61 @@ def switches_in(node, on_screen):
             and "RadioButton" not in (x.get("class") or "") and on_screen(x)]
 
 
+def switch_class(node):
+    """类名里带 Switch 的控件（含各家 HwSwitch）；TextSwitcher 是文字轮播，不是开关。"""
+    cls = node.get("class") or ""
+    return "Switch" in cls and "Switcher" not in cls
+
+
+def control(node, on_screen):
+    """开关控件的本体。checkable 标在整张卡片上时，卡片中心落在标题与开关之间的空白里，点它不生效；
+    取卡片里最内层的开关类控件。同一层出现不止一个时认不出是哪一个，退回卡片自己。"""
+    depth, found = -1, []
+    stack = [(node, 0)]
+    while stack:
+        cur, d = stack.pop()
+        if cur is not node and switch_class(cur) and on_screen(cur):
+            if d > depth:
+                depth, found = d, [cur]
+            elif d == depth:
+                found.append(cur)
+        stack.extend((child, d + 1) for child in cur)
+    return found[0] if len(found) == 1 else node
+
+
+# 同一水平带：两列卡片里的开关、整行可点与行内开关，中心线高差都不到这个像素数
+SAME_LINE = 30
+
+
+def same_line(a, b):
+    """两条 bounds 是否在同一水平带上。"""
+    return abs((a[1] + a[3]) // 2 - (b[1] + b[3]) // 2) < SAME_LINE
+
+
+def same_row(a, b, title_a, title_b):
+    """同一水平带上的两个候选是不是同一个开关：x 区间重叠（整行可点 + 行内开关）或有一边读不出标题时
+    算同一个，只留最靠右的那个；两列卡片的 x 区间分开、各自有标题，是两个开关。"""
+    if not (title_a and title_b):
+        return True
+    return a[0] < b[2] and b[0] < a[2]
+
+
+def dedupe(items):
+    """同一行只留最靠右的候选：整行可点与行内开关会各读到一个，整行那个的落点是卡片中心。
+    items 与返回都是 [(标题, checked, bounds)]；两列各自成行，都保留。"""
+    rows = []
+    for sw in sorted(items, key=lambda s: (s[2][1] + s[2][3]) // 2):
+        if rows and same_line(rows[-1][2], sw[2]):
+            if same_row(rows[-1][2], sw[2], rows[-1][0], sw[0]):
+                if (sw[2][0] + sw[2][2]) // 2 > (rows[-1][2][0] + rows[-1][2][2]) // 2:
+                    rows[-1] = sw if sw[0] else (rows[-1][0], sw[1], sw[2])
+            else:
+                rows.append(sw)
+        else:
+            rows.append(sw)
+    return rows
+
+
 def own(node, parents, on_screen, max_depth=None):
     """node 所在的行和行里的开关。行里不止一个开关时（几个渠道排在同一张卡片里），
     从 node 往上找第一个含开关的控件；它只含一个开关才算这一行。
@@ -87,8 +142,7 @@ def title_of(switch, parents, on_screen, screen_h, max_depth=SWITCH_ROW_DEPTH):
         # 这里数的是控件类名里的 Switch（含各家 HwSwitch），问的是「这是不是一张公共列表」；
         # 与 switches_in 判「这是不是一个能拨的开关」是两个问题，不要合并。
         if label and node is not switch and sum(
-                1 for x in node.iter("node") if "Switch" in (x.get("class") or "")
-                and "Switcher" not in (x.get("class") or "") and on_screen(x)) > 1:
+                1 for x in node.iter("node") if switch_class(x) and on_screen(x)) > 1:
             title = label
             break
         cand = []

@@ -18,7 +18,7 @@
 - 审查标准：见 [CODING_STANDARDS.md](CODING_STANDARDS.md)，只放判断项；机械规则交给 CI。
 - 社区问题的归类与真机缺口见 [docs/09](docs/09-社区问题处理.md)：那里只记 GitHub 上看不到的判据与缺口，逐条回复与 issue 编号留在 issue 里。
 - 找「命令怎么分派、退出码怎么定」先看 [tool/run.py](tool/run.py) 的 `dispatch()` 与 `COMMANDS`：一条命令一个 `cmd_*(serial, rest) -> int`，`sys.exit` 只在 `__main__` 一处；退出码语义见 [ADR-0005](docs/adr/0005-run-command-handlers.md)。
-- 找「开关所属的行」先看 [tool/row.py](tool/row.py)：`line` 结构定界、`own` 多开关容器收窄、`title_of` 平铺列表按竖直距离分带；`fast.py` 与 `chan_fast.py` 消费它，不要另写一份。
+- 找「开关所属的行」先看 [tool/row.py](tool/row.py)：`line` 结构定界、`own` 多开关容器收窄、`title_of` 平铺列表按竖直距离分带、`dedupe` 同一水平带（整行留最靠右、双列各成一行）、`control` 开关本体（卡片整体 checkable 时落点取内层 Switch）；`fast.py` 的 `switches()` 消费 `dedupe` / `control`，`chan_fast.py` 共用 `SAME_LINE` 与 `own`，不要另写一份。
 - 找「这一页该拨哪些开关」先看 [tool/fast.py](tool/fast.py) 的 `plan_switches()` 与 `SwitchPlan`：目标选择、屏带过滤、`checked` / `kept` 只在那里定义；`off()` 只做点击 → 回读 → 重试 → 报告。
 - 找「等页面认得出」先看 [tool/wait.py](tool/wait.py)：`settle` / `setting` / `ChannelPage.refresh` / `off` 都消费 `until()`，不要另写轮询循环。
 - 找「怎么走到渠道页、认出哪一行的开关」先看 [tool/chan_fast.py](tool/chan_fast.py) 的 `ChannelPage.open()`：直达 / 转应用通知页 / 内联行 / 同名放弃四类只在那里定义（[ADR-0007](docs/adr/0007-channel-page.md)）；`channel_switch` / `inline_switch` / `wait_page` / `via_app_page` 是一行前向壳，不要往里加逻辑。

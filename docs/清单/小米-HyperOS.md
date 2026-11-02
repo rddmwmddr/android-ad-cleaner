@@ -277,7 +277,7 @@ java.lang.SecurityException: Injecting input events requires the caller (or the 
 - **应用商店**：设置页没有「隐私」入口，「个性化服务」无从关起，只能跳过；极简模式、通知设置正常。
 - **主题**：`com.android.thememanager` 没有 LAUNCHER 入口，桌面入口起的是 `com.miui.themestore`（主题商店），进去后的设置项与本清单一致。
 - **手机管家**：monkey 启动失败，改用 `am start` 直达 `com.miui.securitycenter` 的主 Activity。
-- **全局搜索**：热榜管理是**双列布局**，按标题行执行 `fast.py only` / `off` 点不动，要 dump 层级找到 Switch 控件本体坐标逐个点（点标题行无效）。实际榜单 7 项：微博热搜榜、千问热议、微博智搜榜、全网热搜榜、小米好物、音乐热搜榜、知乎热搜榜。这台机器上桌面下滑会拉下通知栏，设置页可直达 `com.android.quicksearchbox/.preferences.SearchSettingsPreferenceActivity`。
+- **全局搜索**：热榜管理是**双列布局**，旧引擎按标题行执行 `fast.py only` / `off` 点不动（左列还被同一水平带合并吞掉）。引擎现在把左右两列各算一个开关、落点取卡片内层 Switch 的中心（#403，未在本机复测）；仍点不动时再 dump 层级逐个点。实际榜单 7 项：微博热搜榜、千问热议、微博智搜榜、全网热搜榜、小米好物、音乐热搜榜、知乎热搜榜。这台机器上桌面下滑会拉下通知栏，设置页可直达 `com.android.quicksearchbox/.preferences.SearchSettingsPreferenceActivity`。
 - **负一屏**：没有文字入口，长按也唤不出设置，可直达 `com.miui.personalassistant/.settings.PASettingActivity`；实机的推荐卡片、热门活动、个性化推荐默认全关。
 - **浏览器**：结构与本清单完全一致，小米账号登录框同样会弹，点「取消」。
 - **营销通知**：实机扫描出 1 个候选，属服务类渠道，已跳过；没有营销渠道要关。

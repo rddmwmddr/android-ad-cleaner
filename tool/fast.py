@@ -27,7 +27,7 @@ import backups
 import events
 import wait
 from reader import Reader
-from row import SWITCH_ROW_DEPTH, bounds, own, summary, title_of
+from row import SWITCH_ROW_DEPTH, bounds, control, dedupe, own, summary, title_of
 
 DISMISS = ("以后再说", "暂不更新", "暂不", "取消", "我知道了", "跳过", "禁止", "不再提示", "不同意")
 # 应用内更新弹窗的标题（主题商店 17.22.0beta2 是「检测到新版本」，#286）。它通常把更新说明放进可滚动容器，
@@ -322,18 +322,12 @@ class Phone:
             l, t, r, b = bounds(n)
             if r - l <= 0 or b - t <= 0 or not self.on_screen(n):
                 continue
-            cy = (t + b) // 2
-            out.append((title_of(n, parent, self.on_screen, self.H),
-                        n.get("checked") == "true", ((l + r) // 2, cy)))
-        # 同一行有「整行」和「开关」两个 checkable 时，留最靠右的那个
-        rows = []
-        for sw in sorted(out, key=lambda s: s[2][1]):
-            if rows and abs(rows[-1][2][1] - sw[2][1]) < 30:
-                if sw[2][0] > rows[-1][2][0]:
-                    rows[-1] = sw if sw[0] else (rows[-1][0], sw[1], sw[2])
-            else:
-                rows.append(sw)
-        return rows
+            ctrl = control(n, self.on_screen)       # 卡片整体 checkable 时点在卡片中心不生效
+            l, t, r, b = bounds(ctrl)
+            # 卡片自己报状态时以卡片为准；缺这个属性才读内层开关，别把缺属性当成「关」
+            checked = n.get("checked") if n.get("checked") is not None else ctrl.get("checked")
+            out.append((title_of(n, parent, self.on_screen, self.H), checked == "true", (l, t, r, b)))
+        return [(title, on, ((l + r) // 2, (t + b) // 2)) for title, on, (l, t, r, b) in dedupe(out)]
 
     def locked(self):
         if self.pause_at_lock_check and pause_point():
