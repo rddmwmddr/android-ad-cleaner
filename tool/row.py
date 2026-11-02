@@ -61,6 +61,29 @@ def switch_class(node):
     return "Switch" in cls and "Switcher" not in cls
 
 
+def disabled_at(root, xy, depth=SWITCH_ROW_DEPTH):
+    """点这个位置拨的是不是一个灰掉的开关：落点上的开关控件，或它往上 depth 层以内的所在行，
+    带 enabled="false" 就算。灰态可能落在整张卡片上，也可能只落在内层 Switch 上，两边都认（#333）。
+    灰掉的开关点了也不会变（多由上级开关禁用），调用方据此不点、也不报成拨不动。
+    visible-to-user="false" 的节点不算：折叠屏合上时 dump 里留着另一块屏的副本，会盖住真实落点（Issue #2）。"""
+    parents = {c: p for p in root.iter("node") for c in p}
+    for n in root.iter("node"):
+        if n.get("visible-to-user") == "false":
+            continue
+        if n.get("checkable") != "true" and not switch_class(n):
+            continue
+        l, t, r, b = bounds(n)
+        if not (l <= xy[0] <= r and t <= xy[1] <= b):
+            continue
+        cur, steps = n, 0
+        while cur is not None and steps <= depth:
+            if cur.get("enabled") == "false":
+                return True
+            cur = parents.get(cur)
+            steps += 1
+    return False
+
+
 def control(node, on_screen):
     """开关控件的本体。checkable 标在整张卡片上时，卡片中心落在标题与开关之间的空白里，点它不生效；
     取卡片里最内层的开关类控件。同一层出现不止一个时认不出是哪一个，退回卡片自己。"""

@@ -27,7 +27,7 @@ import backups
 import events
 import wait
 from reader import Reader
-from row import SWITCH_ROW_DEPTH, bounds, control, dedupe, own, summary, title_of
+from row import SWITCH_ROW_DEPTH, bounds, control, dedupe, disabled_at, own, summary, title_of
 
 DISMISS = ("以后再说", "暂不更新", "暂不", "取消", "我知道了", "跳过", "禁止", "不再提示", "不同意")
 # 应用内更新弹窗的标题（主题商店 17.22.0beta2 是「检测到新版本」，#286）。它通常把更新说明放进可滚动容器，
@@ -90,10 +90,11 @@ def want_state(title):
 
 @dataclass(frozen=True)
 class SwitchPlan:
-    """一页的拨动计划：要拨的目标、核对过的开关、安全模式放过的开关。"""
+    """一页的拨动计划：要拨的目标、核对过的开关、安全模式放过的开关、被上级开关禁用的开关。"""
     targets: tuple
     checked: frozenset
     kept: frozenset
+    disabled: frozenset = frozenset()
 
 
 def in_band(xy, screen_h):
@@ -101,12 +102,13 @@ def in_band(xy, screen_h):
     return screen_h * 0.08 <= xy[1] <= screen_h * 0.985
 
 
-def plan_switches(rows, keep=(), only=None, safe_mode=False, *, screen_h):
+def plan_switches(rows, keep=(), only=None, safe_mode=False, *, screen_h, disabled=None):
     """这一页该拨哪些开关。rows 是 `Phone.switches()` 的输出；函数不读屏、不点击。
 
-    targets 只含需要点击的行；checked 是过了筛选的标题，含已在目标态与落在屏带外的；
-    kept 是安全模式放过的普通开关。screen_h 无默认值：带过滤是这一页几何的一部分。"""
-    targets, checked, kept = [], set(), set()
+    targets 只含需要点击的行；checked 是过了筛选的标题，含已在目标态、落在屏带外与被禁用的；
+    kept 是安全模式放过的普通开关。disabled 是按坐标判「这一行的开关是灰的」的谓词：
+    命中的行不进 targets，也不报成拨不动。screen_h 无默认值：带过滤是这一页几何的一部分。"""
+    checked, kept, candidates = set(), set(), []
     for title, state, xy in rows:
         if not title:
             continue
@@ -125,8 +127,19 @@ def plan_switches(rows, keep=(), only=None, safe_mode=False, *, screen_h):
             continue
         if not in_band(xy, screen_h):
             continue
-        targets.append((title, xy, want))
-    return SwitchPlan(tuple(targets), frozenset(checked), frozenset(kept))
+        candidates.append((title, xy, want))
+    greyed = greyed_titles(((t, xy) for t, xy, _ in candidates), disabled) if disabled else set()
+    targets = tuple(c for c in candidates if c[0] not in greyed)
+    return SwitchPlan(targets, frozenset(checked), frozenset(kept), frozenset(greyed))
+
+
+def greyed_titles(pairs, disabled):
+    """这些 (标题, 落点) 里同名行全部被判灰的标题。同一屏可能有两个同名开关（双列卡片），
+    一个灰一个正常时，不能因为一个灰就把另一个的失败也当成灰态吞掉（#333）。"""
+    flags = {}
+    for title, xy in pairs:
+        flags.setdefault(title, []).append(disabled(xy))
+    return {title for title, found in flags.items() if all(found)}
 
 
 def _shell_transport(shell):
@@ -766,18 +779,28 @@ class Phone:
         """当前列表：关掉开着的开关。keep=标题含这些词的不动；only=只关含这些词的。
         每屏第一下单独点、看有没有弹窗/跳页；没有就把这一屏剩下的连着点完，最后统一核对。
         关掉一项这一行就消失的页面（下面的行整体上移）：从下往上点，上移的只可能是已经点过的行；
-        首击后剩下的目标若已不在原坐标，这一屏剩下的改成每点一项前重读坐标（#480）。"""
+        首击后剩下的目标若已不在原坐标，这一屏剩下的改成每点一项前重读坐标（#480）。
+        开关是灰的（被上级开关禁用）的行不点、也不算失败：点了也不会变，以前报成「关不掉」（#333）。"""
         # 页面刚打开还没画完：等开关出现，最多试 10 次（本段已走丢就不等）
         wait.until(self.switches, tries=2 if self.miss else 10, poll=0.2,
                    now=time.time, sleep=time.sleep)
         start = self.focus()
-        done, slow, checked, kept = 0, False, set(), set()
+        done, slow, checked, kept, greyed = 0, False, set(), set(), set()
+
+        def plan_page(root):
+            return plan_switches(self.switches(root), keep, only, self.safe_mode, screen_h=self.H,
+                                 disabled=lambda xy: disabled_at(root, xy))
+
         for _ in range(max_screens):
             root = self.tree()
-            rows = self.switches(root)
-            plan = plan_switches(rows, keep, only, self.safe_mode, screen_h=self.H)
+            plan = plan_page(root)
+            if plan.disabled:
+                # 开关可能在页面加载中短暂不可用：复读一次再定，别把恢复可用的开关整屏跳过（#333）
+                root = self.tree()
+                plan = plan_page(root)
             checked |= plan.checked
             kept |= plan.kept
+            page_greyed = set(plan.disabled)
             targets = plan.targets
             order = list(reversed(targets))             # 先点下面的：它消失时上移的只可能是已点过的行
             shift = False                               # 剩下的目标是不是还准在计划坐标上
@@ -785,10 +808,12 @@ class Phone:
                 if i and shift:
                     # 页面重排过：每点一项前重读，旧坐标可能已经指向邻行
                     time.sleep(0.3)                     # 等行消失、列表上移的动画走完
-                    row = next(((on, at) for title, on, at in self.switches()
+                    root = self.tree()
+                    rows = self.switches(root)
+                    row = next(((on, at) for title, on, at in rows
                                 if title == t and on != w), None)
-                    if row is None or not in_band(row[1], self.H):
-                        continue                        # 已不在、已到位或不在可点带内：交给收尾回读
+                    if row is None or not in_band(row[1], self.H) or disabled_at(root, row[1]):
+                        continue                        # 已不在、已到位、已在带外或已变灰：交给收尾回读
                     xy = row[1]
                 self.click(*xy)
                 if i == 0 or slow:
@@ -808,31 +833,45 @@ class Phone:
                 time.sleep(0.25)
                 self.confirm()
 
-                def wrong():                            # 还没到目标状态的标题
-                    now = {t: c for t, c, _ in self.switches()}
-                    return {t for t, _, w in targets if now.get(t) != w}
+                def wrong():                            # 还没到目标状态的标题，以及其中灰掉的
+                    root = self.tree()
+                    rows = self.switches(root)
+                    now = {t: c for t, c, _ in rows}
+                    still = {t for t, _, w in targets if now.get(t) != w}
+                    return still, still & greyed_titles(
+                        ((t, xy) for t, _, xy in rows), lambda xy: disabled_at(root, xy))
 
                 def retry(still):
-                    # 只重试当前仍能识别的开关，不能在节点消失后沿用旧坐标。
-                    now = {t: (c, xy) for t, c, xy in self.switches()}
+                    # 只重试当前仍能识别的开关，不能在节点消失后沿用旧坐标；灰掉的点了也不会变。
+                    root = self.tree()
+                    rows = self.switches(root)
+                    now = {t: (c, xy) for t, c, xy in rows}
+                    grey = still & greyed_titles(
+                        ((t, xy) for t, _, xy in rows), lambda xy: disabled_at(root, xy))
                     for t, _, w in targets:
-                        if t in still and t in now and now[t][0] != w:
+                        if t in still and t not in grey and t in now and now[t][0] != w:
                             self.click(*now[t][1]); self.confirm()
-                still = wrong()
+                still, grey = wrong()
                 retry(still)
-                still = wrong()
+                still, grey = wrong()
                 if still:                               # 还有没拨过去的：等动画结束再点一次
                     time.sleep(0.8)
                     retry(still)
                     time.sleep(0.4)
-                    still = wrong()
+                    still, grey = wrong()
+                page_greyed |= grey                     # 这一屏关到一半才变灰的，同样不报成拨不动
                 for t, _, w in targets:
+                    if t in still and t in grey:
+                        continue                        # 下面单独说明
                     if t in still:
                         self.say(f"  ✗ {'打不开' if w else '关不掉'} {t}")
                     else:
                         self.say(f"  {'开（保护类开关）' if w else '关'} {t}")
                         self.changed.append((page, t))
                         done += 1
+            for t in page_greyed - greyed:
+                self.say(f"  · 被上级开关禁用（开关是灰的），未改动 {t}")
+            greyed |= page_greyed
             if not self.scroll_more():
                 break
         if page:

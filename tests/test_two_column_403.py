@@ -193,6 +193,13 @@ class SameLayoutTests(unittest.TestCase):
                     if wraps_switch(root, size):
                         cards += 1
                         centres = switch_centres(root, size)
+                        if old and not any(r[2] in centres for r in old if isinstance(r, tuple)):
+                            # 卡片自己 checkable、内层 Switch 不标 checkable（#333 的页面样本）：
+                            # 旧实现只按卡片记一行，落点与状态都不是开关本体，只比标题与顺序。
+                            self.assertEqual([t for t, _, _ in new], [t for t, _, _ in old])
+                            self.assertTrue(all(xy in centres for _, _, xy in new))
+                            moved += new != old
+                            continue
                         # 唯一允许的差异：旧实现给卡片中心单独记一行（落点不是开关本体），
                         # 新实现落在内层开关上；标题与状态逐条照抄旧输出。
                         self.assertEqual(new, [r for r in old if isinstance(r, tuple) and r[2] in centres])

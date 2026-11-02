@@ -17,7 +17,7 @@ for _st in (sys.stdout, sys.stderr):
         pass
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fast import Phone, ScreenLocked, pause_point
-from row import PATH_DEPTH, SAME_LINE, bounds, link, own, skeleton
+from row import PATH_DEPTH, SAME_LINE, bounds, disabled_at as row_disabled_at, link, own, skeleton
 from channel_policy import classify, protected_channel
 from troubleshooting import XIAOMI_INPUT
 import adb_link
@@ -772,13 +772,9 @@ def appops_denied(p, pk):
 
 
 def disabled_at(p, xy):
-    """开关是灰的（系统锁定的渠道）：点了也不会变，不再连点三次再报「状态未改变」。"""
-    for n in p.tree().iter("node"):
-        if n.get("checkable") == "true" and n.get("enabled") == "false":
-            l, t, r, b = bounds(n)
-            if l <= xy[0] <= r and t <= xy[1] <= b:
-                return True
-    return False
+    """开关是灰的（系统锁定的渠道）：点了也不会变，不再连点三次再报「状态未改变」。
+    判定只有一份，在 `row.disabled_at()`；这里保留按 Phone 取页面的旧签名。"""
+    return row_disabled_at(p.tree(), xy)
 
 
 def toggle(p, pk, cid, want_on, name="", allowed=()):

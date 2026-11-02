@@ -93,7 +93,7 @@ class SwitchTests(unittest.TestCase):
         p.click.assert_called_once_with(1000, 500)
         p.confirm.assert_called()
         p.focus.assert_called()
-        p.tree.assert_called_once_with()
+        p.tree.assert_called()          # 回读时取灰态也要 dump；switches 被 mock 了，tree 的次数不说明读屏次数
         p.scroll_more.assert_called_once_with()
 
 

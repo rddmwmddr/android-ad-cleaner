@@ -80,6 +80,32 @@ class SafeModeTests(unittest.TestCase):
         self.assertEqual(plan.targets, (("运营任务", (500, 1200), False),))
 
 
+class DisabledRowTests(unittest.TestCase):
+    """被上级开关禁用的行（#333）：开关是灰的，点了也不会变，不进 targets。"""
+
+    def test_a_greyed_row_is_checked_but_not_a_target(self):
+        plan = fast.plan_switches([("摇一摇广告", True, (500, 800))], screen_h=2340,
+                                  disabled=lambda xy: xy == (500, 800))
+        self.assertEqual(plan.targets, ())
+        self.assertEqual(plan.disabled, frozenset({"摇一摇广告"}))
+        self.assertEqual(plan.checked, frozenset({"摇一摇广告"}))   # 读过这一行，不算「未找到目标开关」
+
+    def test_a_row_already_at_the_target_state_is_not_reported_as_greyed(self):
+        plan = fast.plan_switches([("摇一摇广告", False, (500, 800))], screen_h=2340,
+                                  disabled=lambda xy: True)
+        self.assertEqual((plan.targets, plan.disabled), ((), frozenset()))
+
+    def test_rows_outside_the_vertical_band_are_not_reported_as_greyed(self):
+        plan = fast.plan_switches([("顶部广告", True, (500, 150))], screen_h=2000,
+                                  disabled=lambda xy: True)
+        self.assertEqual((plan.targets, plan.disabled), ((), frozenset()))
+
+    def test_without_the_predicate_nothing_is_marked_greyed(self):
+        plan = fast.plan_switches([("摇一摇广告", True, (500, 800))], screen_h=2340)
+        self.assertEqual(plan.targets, (("摇一摇广告", (500, 800), False),))
+        self.assertEqual(plan.disabled, frozenset())
+
+
 class ScreenBandTests(unittest.TestCase):
     def test_rows_outside_the_vertical_band_are_checked_but_not_clicked(self):
         plan = fast.plan_switches([("顶部广告", True, (500, 150)),
