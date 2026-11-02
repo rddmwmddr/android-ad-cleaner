@@ -96,6 +96,11 @@ class SwitchPlan:
     kept: frozenset
 
 
+def in_band(xy, screen_h):
+    """行的落点在可点带内：避开顶部标题栏与底部栏。"""
+    return screen_h * 0.08 <= xy[1] <= screen_h * 0.985
+
+
 def plan_switches(rows, keep=(), only=None, safe_mode=False, *, screen_h):
     """这一页该拨哪些开关。rows 是 `Phone.switches()` 的输出；函数不读屏、不点击。
 
@@ -118,7 +123,7 @@ def plan_switches(rows, keep=(), only=None, safe_mode=False, *, screen_h):
         checked.add(title)
         if state == want:
             continue
-        if xy[1] < screen_h * 0.08 or xy[1] > screen_h * 0.985:
+        if not in_band(xy, screen_h):
             continue
         targets.append((title, xy, want))
     return SwitchPlan(tuple(targets), frozenset(checked), frozenset(kept))
@@ -759,7 +764,9 @@ class Phone:
 
     def off(self, keep=(), only=None, page="", max_screens=40):
         """当前列表：关掉开着的开关。keep=标题含这些词的不动；only=只关含这些词的。
-        每屏第一下单独点、看有没有弹窗/跳页；没有就把这一屏剩下的连着点完，最后统一核对。"""
+        每屏第一下单独点、看有没有弹窗/跳页；没有就把这一屏剩下的连着点完，最后统一核对。
+        关掉一项这一行就消失的页面（下面的行整体上移）：从下往上点，上移的只可能是已经点过的行；
+        首击后剩下的目标若已不在原坐标，这一屏剩下的改成每点一项前重读坐标（#480）。"""
         # 页面刚打开还没画完：等开关出现，最多试 10 次（本段已走丢就不等）
         wait.until(self.switches, tries=2 if self.miss else 10, poll=0.2,
                    now=time.time, sleep=time.sleep)
@@ -767,11 +774,22 @@ class Phone:
         done, slow, checked, kept = 0, False, set(), set()
         for _ in range(max_screens):
             root = self.tree()
-            plan = plan_switches(self.switches(root), keep, only, self.safe_mode, screen_h=self.H)
+            rows = self.switches(root)
+            plan = plan_switches(rows, keep, only, self.safe_mode, screen_h=self.H)
             checked |= plan.checked
             kept |= plan.kept
             targets = plan.targets
-            for i, (t, xy, _) in enumerate(targets):
+            order = list(reversed(targets))             # 先点下面的：它消失时上移的只可能是已点过的行
+            shift = False                               # 剩下的目标是不是还准在计划坐标上
+            for i, (t, xy, w) in enumerate(order):
+                if i and shift:
+                    # 页面重排过：每点一项前重读，旧坐标可能已经指向邻行
+                    time.sleep(0.3)                     # 等行消失、列表上移的动画走完
+                    row = next(((on, at) for title, on, at in self.switches()
+                                if title == t and on != w), None)
+                    if row is None or not in_band(row[1], self.H):
+                        continue                        # 已不在、已到位或不在可点带内：交给收尾回读
+                    xy = row[1]
                 self.click(*xy)
                 if i == 0 or slow:
                     if self.confirm():
@@ -780,7 +798,11 @@ class Phone:
                         self.say(f"  ! 页面变了（{self.focus()}），停")
                         self.back()
                         return done
-                else:
+                if i == 0 and len(order) > 1:
+                    time.sleep(0.3)                     # 等动画走完，再看剩下的是不是还在原处
+                    now = {(title, on, at) for title, on, at in self.switches()}
+                    shift = any((t2, not w2, xy2) not in now for t2, xy2, w2 in order[1:])
+                elif i and not slow:
                     time.sleep(0.06)
             if targets:
                 time.sleep(0.25)
