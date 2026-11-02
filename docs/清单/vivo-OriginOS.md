@@ -231,7 +231,7 @@ Failure [only root can delete system app for a particular user]
 
 ## V2417A（OriginOS 6 / Android 16）差异
 
-2026-10-30 在 `PD2417D_A_16.2.14.1.W10` 真机逐页实测，专用脚本为 `recipes/vivo-V2417A/recipe.py`。应用版本、验证范围及执行记录见[适配说明](../../recipes/vivo-V2417A/README.md)。
+2026-10-30 贡献者在 `PD2417D_A_16.2.14.1.W10` 真机逐页实测（社区实测，维护方未复跑），专用脚本为 `recipes/vivo-V2417A/recipe.py`。应用版本、验证范围及执行记录见[适配说明](../../recipes/vivo-V2417A/README.md)。
 
 | 位置 | 本机路径或差异 |
 |---|---|
