@@ -61,9 +61,16 @@ QUICKAPP = [
     ("com.miui.hybrid.accessory", "快应用服务框架辅件", "小米 / Redmi", False),
     ("com.vivo.hybrid", "快应用", "vivo / iQOO", False),
 ]
-# 挂了会坏功能的包，不许挂
+# 挂了会坏功能的包，不许挂。
+# com.oplus.appdetail 是 OPPO / realme 的安装与卸载收尾页：它持有
+# appdetail.intent.action.INSTALL_FINISH（InstallFinishActivity）、UNINSTALL_COMPONENT、
+# InstallGuideActivity、AuthenticateActivity。挂起它以后，第三方安装器（应用商店、Aurora 等）
+# 发出的安装完成广播没有接收者，界面停在「正在安装」不动，卸载同理。
+# 2026-10-31 在 realme GT Neo5 SE（RMX3700 / ColorOS 16.0.5.1300 / Android 16）实测：
+# 挂起期间所有第三方安装永久卡住，pm unsuspend 后立刻恢复正常。
 NEVER = {"com.heytap.quicksearchbox", "com.coloros.assistantscreen", "com.android.systemui",
-         "com.vivo.systemuiplugin", "com.heytap.market", "com.xiaomi.market", "com.hihonor.appmarket"}
+         "com.vivo.systemuiplugin", "com.heytap.market", "com.xiaomi.market", "com.hihonor.appmarket",
+         "com.oplus.appdetail"}
 
 # 快应用里挂起会误伤系统功能的组件，quickapp off 不挂。PMX110 / ColorOS 17 逐个单独挂起实测
 # （2026-10-30，Issue #335）：只剩 platform 挂起时，负一屏快递卡片能显示缓存，点「全部」打不开详情页，
@@ -469,6 +476,12 @@ def cmd_check(serial, rest):
     for p in ad_packages(i["brand"]):
         exists = "package:" in sh(serial, f"pm path {p}")
         print(f"  广告包 {p}：{'未安装' if not exists else ('已挂起' if suspended(serial, p) else '未挂起')}")
+    # 别处（雹、冰箱、别的脚本）冻掉的功能包：run.py 管不了，但机型脚本的段会跟着一起失败，
+    # 报出来的现象却是「没找到入口」，很容易被当成没适配。RMX3700 上就这样误判了三段。
+    frozen = [p for p in sorted(NEVER) if suspended(serial, p)]
+    if frozen:
+        print(f"  被挂起的功能包：{'、'.join(frozen)}"
+              f"（用到这些功能的段会跳过；还原：run.py -s {serial} unsuspend {' '.join(frozen)}）")
     for q in quickapps(serial, with_usage=False):
         print(f"  快应用 {q['pkg']}（{q['name']}）：{'已关闭' if q['closed'] else '未关闭'}"
               f"（{'系统服务开关' if q['method'] == 'setting' else '挂起状态'}）")
