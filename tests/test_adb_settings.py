@@ -18,9 +18,9 @@ class TempRoot(unittest.TestCase):
         self.root = self._tmp.name
         self.addCleanup(self._tmp.cleanup)
         self.platform_tools = os.path.join(self.root, "platform-tools")
-        self.downloaded = self._touch(self.platform_tools, "adb")
-        self.manual = self._touch(os.path.join(self.root, "my-sdk"), "adb")
-        self.env_adb = self._touch(os.path.join(self.root, "env"), "adb")
+        self.downloaded = self._touch(self.platform_tools, app.adb_exe())
+        self.manual = self._touch(os.path.join(self.root, "my-sdk"), app.adb_exe())
+        self.env_adb = self._touch(os.path.join(self.root, "env"), app.adb_exe())
 
     def _touch(self, folder, name):
         os.makedirs(folder, exist_ok=True)
@@ -133,8 +133,11 @@ class SetAdbPathTests(TempRoot):
 
     def test_relative_path_is_stored_absolute(self):
         api = self.api()
+        cwd = os.getcwd()
+        os.chdir(self.root)
+        self.addCleanup(os.chdir, cwd)
         with patch.object(app, "adb_ok", return_value=True):
-            result = api.set_adb_path(os.path.relpath(self.manual))
+            result = api.set_adb_path(os.path.join("my-sdk", app.adb_exe()))
         self.assertTrue(result["ok"])
         self.assertTrue(os.path.isabs(app.ClientData(self.root).setting("adb")))
 
