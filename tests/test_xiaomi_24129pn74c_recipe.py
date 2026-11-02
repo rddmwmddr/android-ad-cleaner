@@ -9,16 +9,31 @@ import io
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
+sys.path.insert(0, str(ROOT / "tests"))
+import fast
 import run
+from fixtures import Clock, fake_phone, install_clock, phone_mock
+
+GEAR_PAGE = """<hierarchy rotation="0">
+  <node class="android.widget.FrameLayout" package="com.android.calendar" bounds="[0,0][1080,2340]">
+    <node class="android.widget.ImageView" content-desc="设置" clickable="true" bounds="[950,120][1040,210]" />
+  </node>
+</hierarchy>"""
+
+CALENDAR = "com.android.calendar/com.android.calendar.AllInOneActivity"
+CALENDAR_SETTINGS = "com.android.calendar/com.android.calendar.settings.SettingsActivity"
+WEATHER_SETTINGS = "com.miui.weather2/com.miui.weather2.settings.WeatherSettingsActivity"
+POPUP = "PopupWindow:9e12e45"
+RECIPES = ("recipe.py", "recipe_os4.py")
 
 
 class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
-    def load(self, phone):
-        path = ROOT / "recipes/xiaomi-24129PN74C/recipe.py"
+    def load(self, phone, recipe="recipe.py"):
+        path = ROOT / "recipes/xiaomi-24129PN74C" / recipe
         scope = {"p": phone, "ONLY": ["__no_steps__"]}
         with contextlib.redirect_stdout(io.StringIO()):
             exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), scope)
@@ -112,6 +127,76 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
         source = (ROOT / "recipes/xiaomi-24129PN74C/recipe.py").read_text(encoding="utf-8")
         for protective in ("限制广告跟踪", "防止广告追踪", "阻止广告跟踪"):
             self.assertNotIn(protective, source)
+
+    def gear_phone(self, focus_stages, recipe="recipe.py"):
+        clock = Clock()
+        original = fast.time
+        install_clock(fast, clock)
+        self.addCleanup(setattr, fast, "time", original)
+        p = fake_phone(clock=clock, stages=[(0.0, GEAR_PAGE)], focus=focus_stages)
+        p.back = Mock()
+        scope = self.load(p, recipe)
+        scope["time"] = clock
+        return p, scope
+
+    def test_gear_rejects_a_click_that_lands_on_a_popup(self):
+        """#407：日历的齿轮打开 PopupWindow，不能当成进了设置页。两份同型号脚本一致。"""
+        for recipe in RECIPES:
+            with self.subTest(recipe=recipe):
+                p, scope = self.gear_phone([(0.0, CALENDAR), (0.5, POPUP)], recipe)
+                self.assertFalse(scope["gear"](toolbar_only=True))
+                p.back.assert_called_once()
+
+    def test_gear_keeps_the_page_when_the_click_is_swallowed(self):
+        """点击被吞、页面没换：判失败但不按返回，别把用户从原页退出去（#331）。"""
+        for recipe in RECIPES:
+            with self.subTest(recipe=recipe):
+                p, scope = self.gear_phone([(0.0, CALENDAR)], recipe)
+                self.assertFalse(scope["gear"](toolbar_only=True))
+                p.back.assert_not_called()
+
+    def test_gear_accepts_calendar_and_weather_settings_pages(self):
+        """日历与天气的设置页都含 Setting，同一条判定对两段都成立。"""
+        for recipe in RECIPES:
+            for activity in (CALENDAR_SETTINGS, WEATHER_SETTINGS):
+                with self.subTest(recipe=recipe, activity=activity):
+                    p, scope = self.gear_phone([(0.0, CALENDAR), (0.5, activity)], recipe)
+                    self.assertTrue(scope["gear"](toolbar_only=True))
+                    p.back.assert_not_called()
+
+    def calendar_section(self):
+        p = phone_mock()
+        p.locked = lambda: False
+        scope = self.load(p)
+        return p, scope
+
+    def test_calendar_section_skips_instead_of_searching_inside_the_popup(self):
+        p, scope = self.calendar_section()
+        gear = scope["gear"] = Mock(return_value=False)
+        entry = scope["maybe"] = Mock(return_value=True)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), patch.object(scope["time"], "sleep"):
+            scope["_"]()
+        self.assertIn("日历没有可识别的设置入口，跳过", out.getvalue())
+        # 天气、日历各试一次工具栏齿轮 + 一次全页齿轮，失败后都不进 maybe。
+        self.assertEqual(gear.call_count, 4)
+        entry.assert_not_called()
+
+    def test_weather_section_still_opens_the_user_experience_plan(self):
+        """天气齿轮进的是真设置页：校验不能把这一段拦下来。
+
+        gear() 在天气设置页焦点下返回 True 由 test_gear_accepts_calendar_and_weather_settings_pages
+        证明；这条只管「gear 成功之后两段都照常处理」。
+        """
+        p, scope = self.calendar_section()
+        gear = scope["gear"] = Mock(return_value=True)
+        scope["maybe"] = Mock(return_value=True)
+        with contextlib.redirect_stdout(io.StringIO()), patch.object(scope["time"], "sleep"):
+            scope["_"]()
+        self.assertEqual(gear.call_count, 2)
+        pages = [call.kwargs["page"] for call in p.off.call_args_list]
+        self.assertIn("天气·用户体验计划", pages)
+        self.assertIn("日历·用户体验计划", pages)
 
 
 if __name__ == "__main__":
