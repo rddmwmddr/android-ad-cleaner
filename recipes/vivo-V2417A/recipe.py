@@ -178,9 +178,15 @@ def _():
 
 
 @step("浏览器")
-def _():
+def browser():
     p.start("com.vivo.browser", settle=2.0)
-    require(p.go("菜单", "设置"), "未打开浏览器菜单（权限申请只拒绝）")
+    # 入口随浏览器版本变：31.1.3.1 是底部「菜单」→「设置」；31.3.0.0 起底部标签栏改成
+    # 首页/视频/AI/影视小说/我的，没有「菜单」，「设置」挂在「我的」页右上角，文字只在
+    # content-desc 里（texts() 取 text 或 content-desc，按「设置」能找到，不用 tap_icon——
+    # 它只挑文字与 desc 都为空的节点）。SettingActivity 未导出，am start 直达抛
+    # SecurityException: not exported from uid，只能从界面走。
+    if not p.entry("菜单", scrolls=0):
+        require(p.go("我的", "设置"), "未打开浏览器设置入口（「菜单」与「我的」都试过；权限申请只拒绝）")
     require(p.go("设置", "首页设置"), "未进入浏览器设置")
     require("SettingActivity" in p.focus(), "浏览器设置页面不符")
     tap("首页设置")
