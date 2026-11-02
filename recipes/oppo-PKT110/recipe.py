@@ -190,16 +190,23 @@ def _():
     """主题商店 → 我的 → 设置：服务管理 → 消息与广告；隐私 → 个性化推荐设置。
     「个性化推荐设置」点下去先弹确认框，确认后页面退回「设置」，回读前要重新进一次。
     首页的「检测到新版本」弹窗盖住底部标签栏，关弹窗的动画会把紧跟着的点击吞掉，
-    所以每一跳都用会确认换页的 p.enter（#286）。"""
+    所以每一跳都用会确认换页的 p.enter（#286）。
+    「我的」页的「设置」是右上角的齿轮图标、没有文字（17.22 截图，#286），文字找不到就用图标，
+    点开要求出现「服务管理」或「隐私」才算进对了页——和游戏中心一样的文字优先、图标兜底。"""
+    def enter_settings():
+        if p.find("设置", exact=True) and p.tap("设置", exact=True, scrolls=0):
+            return
+        require(p.tap_icon(["服务管理", "隐私"]), "没找到「设置」入口：文字与右上角图标都试过")
+
     def to_privacy():
         p.start("com.heytap.themestore")
         p.enter("我的")
-        p.enter("设置")
+        enter_settings()
         p.enter("隐私")
 
     p.start("com.heytap.themestore")
     p.enter("我的")
-    p.enter("设置")
+    enter_settings()
     p.enter("服务管理")
     p.enter("消息与广告")
     close_named(["消息通知", "开屏广告"], "主题·消息与广告")

@@ -122,11 +122,27 @@ class ThemeStoreStepTests(unittest.TestCase):
         scope, _ = load_step(p, ["主题商店"])
         self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertEqual([c.args[0] for c in p.enter.call_args_list],
-                         ["我的", "设置", "服务管理", "消息与广告",     # 主路径
-                          "我的", "设置", "隐私",                    # to_privacy
-                          "我的", "设置", "隐私"])                    # 确认后退回，回读前重进
-        p.tap.assert_not_called()                                      # 入口只经 enter，不再另点一次
+                         ["我的", "服务管理", "消息与广告",              # 主路径
+                          "我的", "隐私",                             # to_privacy
+                          "我的", "隐私"])                            # 确认后退回，回读前重进
         self.assertEqual(scope["VERIFIED_SWITCHES"], 3)
+
+    def test_theme_store_falls_back_to_the_settings_gear_icon(self):
+        """17.22 的「设置」是右上角没有文字的齿轮：文字找不到就用图标，并用设置页的内容确认（#286）。"""
+        p = self.make()
+        p.tap.side_effect = lambda text, **kw: text != "设置"
+        p.tap_icon.return_value = True
+        scope, _ = load_step(p, ["主题商店"])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        p.tap_icon.assert_called_with(["服务管理", "隐私"])
+
+    def test_theme_store_reports_when_neither_text_nor_icon_opens_settings(self):
+        p = self.make()
+        p.tap.side_effect = lambda text, **kw: text != "设置"
+        p.tap_icon.return_value = False
+        scope, out = load_step(p, ["主题商店"])
+        self.assertEqual(scope["FAILED_STEPS"], ["主题商店"])
+        self.assertIn("没找到「设置」入口", out)
 
     def test_theme_store_fails_when_a_hop_does_not_land(self):
         p = self.make()
