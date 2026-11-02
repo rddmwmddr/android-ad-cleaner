@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
+from fixtures import FakeRunner
 from gui import app
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -125,7 +126,8 @@ class GuiFeedbackTests(unittest.TestCase):
         self.api = self.app.Api(self.directory.name)
 
     def test_gui_filters_old_scan_results_so_select_all_cannot_reinclude_feature(self):
-        self.api._run = Mock(return_value=("com.example\trecommend\t找机位通知\ncom.shop\tpromo\t活动优惠\n", "", 0))
+        self.api = self.app.Api(self.directory.name, runner=FakeRunner(
+            runs=("com.example\trecommend\t找机位通知\ncom.shop\tpromo\t活动优惠\n", "", 0)))
         self.assertEqual(self.api.chan_scan("test"), [{"pkg": "com.shop", "id": "promo", "name": "活动优惠", "app": "", "checked": True}])
 
     def test_recovery_is_visible_before_long_stack_and_full_cause_is_preserved(self):

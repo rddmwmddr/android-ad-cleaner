@@ -16,7 +16,7 @@ import fast
 import run
 import chan_fast as chan
 from bundle_data import bundle_data, stage
-from fixtures import fake_adb, phone_stub
+from fixtures import FakeRunner, fake_adb, phone_stub
 
 
 def recipe(p, only="__no_steps__"):
@@ -203,8 +203,8 @@ class NotificationSelectionTests(unittest.TestCase):
     def test_gui_does_not_preselect_ambiguous_channels(self):
         names = ["其他", "普通通知", "推送通知", "清理加速", "个性化提示", "活动优惠"]
         with tempfile.TemporaryDirectory() as directory:
-            api = app.Api(directory)
-            api._run = Mock(return_value=("\n".join(f"com.example\tpromo{i}\t{name}" for i, name in enumerate(names)), "", 0))
+            api = app.Api(directory, runner=FakeRunner(
+                runs=("\n".join(f"com.example\tpromo{i}\t{name}" for i, name in enumerate(names)), "", 0)))
             rows = api.chan_scan("test")
         self.assertEqual([r["name"] for r in rows if r["checked"]], ["活动优惠"])
 

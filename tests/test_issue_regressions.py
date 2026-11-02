@@ -24,7 +24,7 @@ import adb_link
 import chan_fast as chan
 import fast
 import run
-from fixtures import fake_adb, phone_stub
+from fixtures import FakeRunner, fake_adb, phone_stub
 
 
 def channel_phone():
@@ -735,8 +735,7 @@ class DesktopTests(unittest.TestCase):
 
     def test_failed_scan_reaches_gui_as_error(self):
         with tempfile.TemporaryDirectory() as directory:
-            api = app.Api(directory)
-            api._run = Mock(return_value=("", "读取失败", 1))
+            api = app.Api(directory, runner=FakeRunner(runs=("", "读取失败", 1)))
             self.assertEqual(api.chan_scan("test"), {"error": "读取失败", "detail": "读取失败"})
 
     def test_gui_loads_file_uri_without_http_server(self):

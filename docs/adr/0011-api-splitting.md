@@ -39,7 +39,7 @@
 
 - 窗口桥 22 个方法名与签名逐项不变。测试与入口实际用到的私有名（`_run` / `_adb` / `_log` / `_work` / `_remember_error` / `_install_id` / `_download` / `_event` / `_child_env` / `adb_sources`）保留在门面转发。
 - `Api._fetch` 的转发壳与 `Api.dl` 的 setter 删除：全仓库没有调用者，留着只会骗下一个 patch 它的人（CODING_STANDARDS.md「改不动的桩直接删掉」）。下载器内部的 `_fetch` 仍在，`dl` 只有 getter。
-- `_run` / `_adb` 是门面上可被实例属性赋值覆盖的真实方法，不是 property：7 处 `api._run = Mock(...)` 与 1 处 `patch.object(api, "_adb", ...)` 靠这一点生效。
+- `_run` / `_adb` 是门面上可被实例属性赋值覆盖的真实方法，不是 property：1 处 `patch.object(api, "_adb", ...)` 靠这一点生效。使用 `api._run = Mock(...)` 的 7 处已在 #392 改成 `Api(runner=…)` 注入假 `Runner`；门面转发 `_run → runner.run` 保留，新用例不再靠实例属性覆盖它。
 - `job` / `adb` / `last_error` 是可写 property（setter 转发给对应块），`dl` / `report_times` 是只读 property；13 个直接构造 `app.Api(dir)` 的测试文件一行不改。
 
 ### 三块不互读的守卫

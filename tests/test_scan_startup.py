@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-from fixtures import fake_adb, job_stub
+from fixtures import FakeProc, FakeRunner, fake_adb, job_stub
 from gui import app
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -108,13 +108,16 @@ class ErrorTests(unittest.TestCase):
         self.app = app
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
-        self.api = self.app.Api(self.directory.name)
-        self.api._adb = Mock(return_value="Android Debug Bridge version 1.0.41")
+
+    def make_api(self, runs=None, **runner):
+        api = self.app.Api(self.directory.name, runner=FakeRunner(runs=runs, **runner))
+        api._adb = Mock(return_value="Android Debug Bridge version 1.0.41")
+        return api
 
     def test_scan_failure_keeps_root_cause_and_redacts_before_saving(self):
         home = str(Path.home())
         detail = f"java.lang.IllegalStateException: root cause; device-123; {home}/private\n" + "at QueryController.java:95\n" * 100
-        self.api._run = Mock(return_value=("", detail, 1))
+        self.api = self.make_api(runs=("", detail, 1))
         result = self.api.chan_scan("device-123")
         self.assertIn("root cause", result["error"])
         self.assertGreater(len(result["detail"]), 600)
@@ -125,33 +128,31 @@ class ErrorTests(unittest.TestCase):
         self.assertIn("root cause", self.api.diagnostics())  # 扫描失败时还没有执行 job
 
     def test_scan_timeout_is_reported_and_saved(self):
-        self.api._run = Mock(side_effect=subprocess.TimeoutExpired(["scan", "device-123"], 120))
+        self.api = self.make_api(runs=subprocess.TimeoutExpired(["scan", "device-123"], 120))
         result = self.api.chan_scan("device-123")
         self.assertIn("timed out", result["detail"])
         self.assertNotIn("device-123", result["detail"])
 
     def test_read_screen_check_preserves_full_failure_and_os_version(self):
+        self.api = self.make_api(runs=("", "UiAutomation failed at QueryController", 1))
         self.api.last_status = {"info": {"brand": "Xiaomi", "model": "M154FF", "name": "Xiaomi 18 Pro Max",
                                         "build": "CP2A.260605.016", "os": "OS4.0.27", "android": "17"}}
-        self.api._run = Mock(return_value=("", "UiAutomation failed at QueryController", 1))
         result = self.api.ui_check("test")
         self.assertIn("UiAutomation", result["detail"])
         self.assertIn("OS4.0.27", self.api.diagnostics())
-        self.api._run.assert_called_once_with("fast.py", "-s", "test", "check", timeout=75)
+        self.assertEqual(self.api.runner.run_calls, [("fast.py", ("-s", "test", "check"), 75)])
 
     def test_read_screen_check_does_not_run_during_job(self):
+        self.api = self.make_api()
         self.api.job = job_stub()
-        self.api._run = Mock()
         self.assertIn("正在执行", self.api.ui_check("test")["error"])
-        self.api._run.assert_not_called()
+        self.assertEqual(self.api.runner.run_calls, [])
 
     def test_failed_task_keeps_first_exception_not_only_tail(self):
         detail = "java.lang.IllegalStateException: first cause\n" + f"at {Path.home()}/frame\n" * 100
+        self.api = self.make_api(spawns=[FakeProc(detail, rc=1)])
         self.api.job = job_stub()
-        process = Mock(stdout=io.StringIO(detail))
-        process.wait.return_value = 1
-        with patch.object(self.app.subprocess, "Popen", return_value=process):
-            self.api._work([self.app.Task("关闭广告", "run.py", [])])
+        self.api._work([self.app.Task("关闭广告", "run.py", [])])
         self.assertFalse(self.api.job.running)
         self.assertEqual(self.api.job.results[0]["rc"], 1)
         self.assertIn("first cause", self.api.last_error["detail"])

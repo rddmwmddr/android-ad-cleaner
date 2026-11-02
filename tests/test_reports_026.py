@@ -13,7 +13,7 @@ import unittest
 from unittest.mock import Mock, patch
 import xml.etree.ElementTree as ET
 
-from fixtures import job_stub
+from fixtures import FakeProc, FakeRunner, job_stub
 from gui import app
 from gui.bundle_data import bundle_data
 
@@ -341,8 +341,8 @@ class GuiTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = app
 
-    def api(self, directory):
-        api = self.app.Api(directory)
+    def api(self, directory, **runner):
+        api = self.app.Api(directory, runner=FakeRunner(**runner))
         api.job = job_stub(model="M")
         return api
 
@@ -350,14 +350,13 @@ class GuiTests(unittest.TestCase):
         # 4 份报告是用户点了停止后上报的；停止以前也让插电常亮一直开着
         with tempfile.TemporaryDirectory() as directory:
             api = self.api(directory)
-            stopped = Mock(stdout=io.StringIO("正在连接手机读屏服务……\n"))
-            stopped.wait.side_effect = lambda: (api.job.request_stop(), -15)[1]
-            finish = Mock(stdout=io.StringIO("插电常亮已改回 0\n")); finish.wait.return_value = 0
-            with patch.object(self.app.subprocess, "Popen", side_effect=[stopped, finish]) as popen:
-                api._work([self.app.Task("关闭营销通知", "run.py", ["-s", "test", "x"]),
-                           self.app.Task("关闭快应用", "run.py", ["-s", "test", "quickapp", "off"]),
-                           self.app.Task("收尾", "run.py", ["-s", "test", "finish"])])
-            self.assertEqual(popen.call_count, 2)
+            stopped = FakeProc("正在连接手机读屏服务……\n", wait=lambda: (api.job.request_stop(), -15)[1])
+            finish = FakeProc("插电常亮已改回 0\n")
+            api.runner.spawns = [stopped, finish]
+            api._work([self.app.Task("关闭营销通知", "run.py", ["-s", "test", "x"]),
+                       self.app.Task("关闭快应用", "run.py", ["-s", "test", "quickapp", "off"]),
+                       self.app.Task("收尾", "run.py", ["-s", "test", "finish"])])
+            self.assertEqual(len(api.runner.spawn_calls), 2)
             self.assertEqual([(r["title"], r.get("stopped", False)) for r in api.job.results], [("关闭营销通知", True), ("收尾", False)])
             self.assertIsNone(api.last_error)
             self.assertEqual([s["result"] for s in api.report_payload()["steps"]], ["已停止", "成功"])
@@ -371,11 +370,9 @@ class GuiTests(unittest.TestCase):
 
     def test_channel_list_file_keeps_app_names_for_people(self):
         with tempfile.TemporaryDirectory() as directory:
-            api = self.api(directory)
-            done = Mock(stdout=io.StringIO("")); done.wait.return_value = 0
-            with patch.object(self.app.subprocess, "Popen", return_value=done):
-                api._work([self.app.Task("关闭营销通知", "chan_fast.py", uses_ui=True,
-                                         channels=[{"pkg": "com.taobao.taobao", "id": "promo", "name": "活动优惠", "app": "淘\t宝"}])])
+            api = self.api(directory, spawns=[FakeProc()])
+            api._work([self.app.Task("关闭营销通知", "chan_fast.py", uses_ui=True,
+                                     channels=[{"pkg": "com.taobao.taobao", "id": "promo", "name": "活动优惠", "app": "淘\t宝"}])])
             text = Path(directory, "backups", "M-gui", "channels.tsv").read_text(encoding="utf-8")
             self.assertIn("com.taobao.taobao\tpromo\t活动优惠\t淘 宝\n", text)
 
@@ -455,22 +452,19 @@ class PauseTests(unittest.TestCase):
 
     def test_gui_waits_between_steps_and_passes_the_flag_to_engines(self):
         with tempfile.TemporaryDirectory() as directory:
-            api = app.Api(directory)
-            api.job = job_stub(serial="t")
-            envs = []
+            first = []
 
-            def proc(cmd, **kw):
-                envs.append(kw["env"].get("AAC_PAUSE_FILE"))
-                if len(envs) == 1:
+            def on_spawn():
+                if not first:
+                    first.append(True)
                     api.pause()                                          # 第一步执行中点了暂停
                     import threading
                     threading.Timer(0.3, api.resume).start()
-                done = Mock(stdout=io.StringIO("")); done.wait.return_value = 0
-                return done
-            with patch.object(app.subprocess, "Popen", side_effect=proc):
-                api._work([app.Task("存改动前的快照", "run.py", ["-s", "t", "backup"]),
-                           app.Task("收尾", "run.py", ["-s", "t", "finish"])])
-            self.assertEqual(envs, [str(Path(directory, "pause"))] * 2)
+            api = app.Api(directory, runner=FakeRunner(spawns=[FakeProc(), FakeProc()], on_spawn=on_spawn))
+            api.job = job_stub(serial="t")
+            api._work([app.Task("存改动前的快照", "run.py", ["-s", "t", "backup"]),
+                       app.Task("收尾", "run.py", ["-s", "t", "finish"])])
+            self.assertEqual([s.env_extra["AAC_PAUSE_FILE"] for s in api.runner.spawn_calls], [str(Path(directory, "pause"))] * 2)
             log = "\n".join(api.job.lines)
             self.assertLess(log.index("⏸ 已暂停"), log.index("▶ 收尾"))
             self.assertIn("▶ 继续执行", log)

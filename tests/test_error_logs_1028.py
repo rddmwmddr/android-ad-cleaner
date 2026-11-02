@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 import adb_link
 import chan_fast as chan
 import fast
-from fixtures import job_stub, phone_stub
+from fixtures import FakeProc, FakeRunner, job_stub, phone_stub
 import run
 
 
@@ -290,15 +290,14 @@ class ScrubTests(unittest.TestCase):
     def test_disconnect_skips_remaining_steps_once(self):
         # 断线后快应用、挂起、收尾各打一遍同样的排查说明（约 20 份报告）
         with tempfile.TemporaryDirectory() as directory:
-            api = self.app.Api(directory)
+            api = self.app.Api(directory, runner=FakeRunner(
+                spawns=[FakeProc('#aac:event {"kind": "link_lost"}\n' + adb_link.HINT + "\n", rc=1)]))
             api.job = job_stub()
-            failed = Mock(stdout=io.StringIO('#aac:event {"kind": "link_lost"}\n' + adb_link.HINT + "\n")); failed.wait.return_value = 1
-            with patch.object(self.app.subprocess, "Popen", side_effect=[failed]) as popen, \
-                 patch.object(self.app, "adb_present", return_value=False):
+            with patch.object(self.app, "adb_present", return_value=False):
                 api._work([self.app.Task("关闭营销通知", "run.py", ["-s", "test", "x"]),
                            self.app.Task("关闭快应用", "run.py", ["-s", "test", "quickapp", "off"]),
                            self.app.Task("收尾", "run.py", ["-s", "test", "finish"])])
-            self.assertEqual(popen.call_count, 1)
+            self.assertEqual(len(api.runner.spawn_calls), 1)
             self.assertEqual([r.get("skipped", False) for r in api.job.results], [False, True, True])
             self.assertEqual("\n".join(api.job.lines).count("adb 连接断开了"), 1)
 

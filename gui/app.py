@@ -128,8 +128,7 @@ def adb_ok(path):
     """只用 1.0.41 及以上的 adb。手机助手自带的 1.0.32 等旧版会让挂起、快应用等命令失败，
     和新版同时运行还会互相顶掉服务（#25 #75）。"""
     try:
-        out = subprocess.run([path, "version"], capture_output=True, text=True, encoding="utf-8",
-                             errors="replace", timeout=8, creationflags=NOWIN).stdout
+        out = _tool("adb_link").invoke(path, "version", timeout=8)
     except (OSError, subprocess.TimeoutExpired):
         return False
     m = re.search(r"version 1\.0\.(\d+)", out)
@@ -163,6 +162,18 @@ CHIME_GAP = 3       # 秒：几件事挤在一起时只响一次
 _last_chime = [0.0]
 
 
+def play_sound(path):
+    """放一个 wav：Windows 用 winsound，macOS 用 afplay。放不出来就算了，不影响执行。
+    返回 mac 上起的播放进程（Windows 走 winsound，返回 None），调用方可以不管。"""
+    if IS_WIN:
+        import winsound
+        winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
+        return None
+    if platform.system() == "Darwin":
+        return subprocess.Popen(["afplay", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return None
+
+
 def chime():
     """提示音（gui/web/chime.wav，两个柔和的音，不到 1 秒，由 gui/make_chime.py 生成）：
     执行结束、暂停生效、手机锁屏要解锁时各响一次。放不出来就算了，不影响执行。"""
@@ -172,11 +183,7 @@ def chime():
     _last_chime[0] = now
     path = os.path.join(BASE, "gui", "web", "chime.wav")
     try:
-        if IS_WIN:
-            import winsound
-            winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
-        elif platform.system() == "Darwin":
-            subprocess.Popen(["afplay", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        play_sound(path)
     except Exception:
         pass
 

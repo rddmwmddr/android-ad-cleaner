@@ -1,7 +1,7 @@
-"""纯重构要「改前改后对拍」时用的现成材料：页面样本、假时钟、按时间轴换页的假设备、假 Phone。
+"""纯重构要「改前改后对拍」时用的现成材料：页面样本、假时钟、按时间轴换页的假设备、假 Phone、假 Runner。
 
 CODING_STANDARDS.md 要求纯重构给出对拍证据，页面样本取 tests/ 里所有 <hierarchy>、至少两种屏尺寸。
-以前每做一次同类重构都要现场把这四样东西重搭一遍，现在 import 一下就有：
+以前每做一次同类重构都要现场把这五样东西重搭一遍，现在 import 一下就有：
 
     from fixtures import EMPTY_PAGE, SIZES, all_pages, drive
     for label, xml in all_pages():
@@ -9,10 +9,13 @@ CODING_STANDARDS.md 要求纯重构给出对拍证据，页面样本取 tests/ �
             print(label, size, drive(lambda p: p.settle("", 1.0), size=size,
                                      stages=[(0.0, EMPTY_PAGE), (0.2, xml)]))
 
-写新测试不要用它 —— 测试要照实现之外的事实断言，夹具是为了让两份实现吃同一份输入。
+对拍用的页面样本别拿来断言新行为 —— 测试要照实现之外的事实断言，夹具是为了让两份实现吃同一份输入；
+假 Phone / 假 Runner 不在此列，单元测试直接用它们装配。
 """
+import io
 import re
 import sys
+from collections import namedtuple
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
@@ -258,6 +261,72 @@ def drive(call, modules=(), size=SIZES[0], stages=((0.0, EMPTY_PAGE),),
     p = fake_phone(clock=clock, size=size, stages=stages, focus=focus, **fields)
     out = call(p)
     return out, round(clock.t, 2), clock.page_reads, clock.clicks
+
+
+class FakeProc:
+    """`Runner.spawn()` 的返回值：stdout 供客户端逐行读，wait() 给返回码。"""
+
+    def __init__(self, output="", rc=0, wait=None):
+        self.stdout = io.StringIO(output)
+        self.rc = rc
+        self._wait = wait
+        self.terminated = False
+
+    def wait(self):
+        return self._wait() if self._wait else self.rc
+
+    def terminate(self):
+        self.terminated = True
+
+
+Call = namedtuple("Call", "script args timeout")
+Spawn = namedtuple("Spawn", "script args env_extra")
+
+
+class MissingReply(BaseException):
+    """用例没给这条命令的回答或输出。继承 BaseException 是有意的：`_work()` 里
+    `except Exception` 会把普通异常收成「这一步失败」，夹具漏配就会伪装成引擎报错。"""
+
+
+class FakeRunner:
+    """假 Runner：用例只描述「这条命令返回什么」，子进程怎么起由真 Runner 自己管。
+
+    runs 给 run()：("输出", "错误输出", 返回码)、要抛出的异常，或 (script, *args) -> 这两者之一的函数。
+    spawns 给 spawn()：按调用顺序交出的 FakeProc；不给（None）时每次 spawn 都是一个空输出、返回 0
+    的 proc——竞态类用例只关心交错点，不关心输出。
+    on_spawn 在 spawn 返回之前回调（无参数），给「停止 / 暂停恰好落在 spawn 与登记之间」这类时序用。
+    run_calls / spawn_calls 记下客户端请它跑过什么（Call / Spawn）；procs 是交出去的 proc。
+    """
+
+    def __init__(self, runs=None, spawns=None, on_spawn=None):
+        self.runs = runs
+        self.spawns = None if spawns is None else list(spawns)
+        self.on_spawn = on_spawn
+        self.run_calls = []
+        self.spawn_calls = []
+        self.procs = []
+
+    def run(self, script, *args, timeout=180):
+        self.run_calls.append(Call(script, args, timeout))
+        reply = self.runs(script, *args) if callable(self.runs) else self.runs
+        if reply is None:
+            raise MissingReply(f"用例没有给这条命令的回答：{script} {args}")
+        if isinstance(reply, BaseException):
+            raise reply
+        return reply
+
+    def spawn(self, script, *args, env_extra=None):
+        self.spawn_calls.append(Spawn(script, args, env_extra))
+        if self.spawns is None:
+            proc = FakeProc()
+        else:
+            if not self.spawns:
+                raise MissingReply(f"用例没有给这条命令的输出：{script} {args}")
+            proc = self.spawns.pop(0)
+        self.procs.append(proc)
+        if self.on_spawn:
+            self.on_spawn()
+        return proc
 
 
 def fake_adb(case):

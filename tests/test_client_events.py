@@ -1,13 +1,13 @@
 """客户端只认引擎事件（ADR-0004）：事件行不进日志、不上报；人话本身不再改变状态。"""
 import os
 os.environ.setdefault("AAC_NO_SOUND", "1")     # 客户端提示音：测试里不出声
-import io
 import json
+import sys
 import tempfile
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
-from fixtures import job_stub
+from fixtures import FakeProc, FakeRunner, job_stub
 from gui import app
 
 PREFIX = "#aac:event "
@@ -20,16 +20,13 @@ def event(kind):
 class Base(unittest.TestCase):
     def setUp(self):
         self._dir = tempfile.TemporaryDirectory()
-        self.api = app.Api(self._dir.name)
-        self.api.job = job_stub()
+        self.addCleanup(self._dir.cleanup)
+        self.api = self.make_api()
 
-    def tearDown(self):
-        self._dir.cleanup()
-
-    def fake(self, output, rc=1):
-        p = Mock(stdout=io.StringIO(output))
-        p.wait.return_value = rc
-        return p
+    def make_api(self, **runner):
+        api = app.Api(self._dir.name, runner=FakeRunner(**runner))
+        api.job = job_stub()
+        return api
 
 
 class LogTests(Base):
@@ -76,13 +73,12 @@ class StepPauseTests(Base):
     def test_step_boundary_pause_rings_the_phone_free(self):
         started = []
 
-        def proc(cmd, **kw):
+        def on_spawn():
             if not started:
                 started.append(True)
                 self.api.pause()                   # 第一步执行中点了暂停：暂停点不在这一步里
-            return self.fake("", 0)
+        self.api = self.make_api(spawns=[FakeProc(), FakeProc()], on_spawn=on_spawn)
         with patch.object(app, "chime") as chime, \
-             patch.object(app.subprocess, "Popen", side_effect=proc), \
              patch.object(app.time, "sleep", side_effect=lambda _s: self.api.resume()):
             self.api._work([app.Task("存改动前的快照", "run.py", ["-s", "t", "backup"]),
                             app.Task("收尾", "run.py", ["-s", "t", "finish"])])
@@ -91,66 +87,74 @@ class StepPauseTests(Base):
     def test_only_the_job_path_turns_events_on(self):
         with patch.dict(os.environ, {"AAC_EVENTS": "1"}):
             self.assertNotIn("AAC_EVENTS", app.child_env(None, "/tmp/backups"))
-        seen = {}
+        self.api = self.make_api(spawns=[FakeProc()])
+        self.api._work([app.Task("收尾", "run.py", ["-s", "t", "finish"])])
+        self.assertEqual(self.api.runner.spawn_calls[0].env_extra["AAC_EVENTS"], "1")
 
-        def proc(cmd, **kw):
-            seen.update(kw["env"])
-            return self.fake("", 0)
-        with patch.object(app.subprocess, "Popen", side_effect=proc):
-            self.api._work([app.Task("收尾", "run.py", ["-s", "t", "finish"])])
-        self.assertEqual(seen.get("AAC_EVENTS"), "1")
+
+class RunnerTests(unittest.TestCase):
+    def test_spawn_merges_the_child_env_with_the_step_extras(self):
+        # 客户端只把 AAC_EVENTS 放进 env_extra，和 child_env 合并是真 Runner 的事：
+        # 真起一个子进程把它读出来，合并坏了不能没人发现
+        probe = [sys.executable, "-c",
+                 "import json, os; print(json.dumps([os.environ.get('ADB'), os.environ.get('AAC_EVENTS')]))"]
+        with patch.object(app, "cmd_for", return_value=probe):
+            proc = app.Runner(lambda: {"ADB": "adb-path"}).spawn(
+                "run.py", "check", env_extra={"AAC_EVENTS": "1"})
+            out = proc.stdout.read()
+            proc.stdout.close()
+            self.assertEqual(proc.wait(), 0)
+        self.assertEqual(json.loads(out), ["adb-path", "1"])
 
 
 class SkipTests(Base):
     def test_busy_skips_later_ui_steps_but_still_runs_cleanup(self):
-        with patch.object(app.subprocess, "Popen", side_effect=[
-                self.fake(event("ui_busy") + "\nUIAUTOMATION_BUSY：已占用\n"), self.fake("", 0)]) as popen:
-            self.api._work([app.Task("广告开关", "run.py", [], uses_ui=True),
-                            app.Task("通知", "chan_fast.py", uses_ui=True),
-                            app.Task("收尾", "run.py")])
-        self.assertEqual(popen.call_count, 2)
+        self.api = self.make_api(spawns=[FakeProc(event("ui_busy") + "\nUIAUTOMATION_BUSY：已占用\n", rc=1),
+                                         FakeProc()])
+        self.api._work([app.Task("广告开关", "run.py", [], uses_ui=True),
+                        app.Task("通知", "chan_fast.py", uses_ui=True),
+                        app.Task("收尾", "run.py")])
+        self.assertEqual(len(self.api.runner.spawn_calls), 2)
         self.assertTrue(self.api.job.results[1]["skipped"])
         self.assertEqual(self.api.job.results[2]["rc"], 0)
 
     def test_event_lines_stay_out_of_the_step_tail(self):
         # 前端 summarize() 在认不出模式时直接显示 tail 最后一行
-        with patch.object(app.subprocess, "Popen", side_effect=[self.fake("人话\n" + event("ui_busy") + "\n")]):
-            self.api._work([app.Task("广告开关", "run.py", [], uses_ui=True)])
+        self.api = self.make_api(spawns=[FakeProc("人话\n" + event("ui_busy") + "\n", rc=1)])
+        self.api._work([app.Task("广告开关", "run.py", [], uses_ui=True)])
         self.assertEqual(self.api.job.results[0]["tail"], ["人话"])
 
     def test_confirmed_disconnect_skips_the_rest_when_the_phone_is_really_gone(self):
-        with patch.object(app, "adb_present", return_value=False), \
-             patch.object(app.subprocess, "Popen", side_effect=[
-                 self.fake(event("link_lost") + "\n手机和电脑的 adb 连接断开了\n")]) as popen:
+        self.api = self.make_api(spawns=[FakeProc(event("link_lost") + "\n手机和电脑的 adb 连接断开了\n", rc=1)])
+        with patch.object(app, "adb_present", return_value=False):
             self.api._work([app.Task("广告开关", "run.py"), app.Task("收尾", "run.py")])
-        self.assertEqual(popen.call_count, 1)
+        self.assertEqual(len(self.api.runner.spawn_calls), 1)
         self.assertTrue(self.api.job.results[1]["skipped"])
         self.assertEqual(self.api.last_error["operation"], "广告开关")
         self.assertIn("adb 连接断开了", self.api.last_error["detail"])
 
     def test_busy_text_without_an_event_skips_nothing(self):
         # 旧实现按文案判占用；事件制下同样的句子不该再改变后续步骤
-        with patch.object(app.subprocess, "Popen", side_effect=[
-                self.fake("UIAUTOMATION_BUSY：手机读屏服务已被占用\n"), self.fake("", 0)]) as popen:
-            self.api._work([app.Task("广告开关", "run.py", [], uses_ui=True),
-                            app.Task("通知", "chan_fast.py", uses_ui=True)])
-        self.assertEqual(popen.call_count, 2)
+        self.api = self.make_api(spawns=[FakeProc("UIAUTOMATION_BUSY：手机读屏服务已被占用\n", rc=1),
+                                         FakeProc()])
+        self.api._work([app.Task("广告开关", "run.py", [], uses_ui=True),
+                        app.Task("通知", "chan_fast.py", uses_ui=True)])
+        self.assertEqual(len(self.api.runner.spawn_calls), 2)
         self.assertNotIn("skipped", self.api.job.results[1])
 
     def test_disconnect_text_without_an_event_skips_nothing(self):
-        with patch.object(app, "adb_present", return_value=False), \
-             patch.object(app.subprocess, "Popen", side_effect=[
-                 self.fake("手机和电脑的 adb 连接断开了，本步骤没有完成。\n"), self.fake("", 0)]) as popen:
+        self.api = self.make_api(spawns=[FakeProc("手机和电脑的 adb 连接断开了，本步骤没有完成。\n", rc=1),
+                                         FakeProc()])
+        with patch.object(app, "adb_present", return_value=False):
             self.api._work([app.Task("广告开关", "run.py"), app.Task("收尾", "run.py")])
-        self.assertEqual(popen.call_count, 2)
+        self.assertEqual(len(self.api.runner.spawn_calls), 2)
         self.assertNotIn("skipped", self.api.job.results[1])
 
     def test_phone_back_on_the_bus_means_no_suppression(self):
-        with patch.object(app, "adb_present", return_value=True), \
-             patch.object(app.subprocess, "Popen", side_effect=[
-                 self.fake(event("link_lost")), self.fake("", 0)]) as popen:
+        self.api = self.make_api(spawns=[FakeProc(event("link_lost"), rc=1), FakeProc()])
+        with patch.object(app, "adb_present", return_value=True):
             self.api._work([app.Task("广告开关", "run.py"), app.Task("收尾", "run.py")])
-        self.assertEqual(popen.call_count, 2)
+        self.assertEqual(len(self.api.runner.spawn_calls), 2)
         self.assertEqual(self.api.job.results[1]["rc"], 0)
 
 
