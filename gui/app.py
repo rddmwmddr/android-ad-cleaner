@@ -137,7 +137,7 @@ def cli_main():
     try:
         runpy.run_path(os.path.join(TOOL, script), run_name="__main__")
     except Exception:
-        # 保留完整原因；避免异常逸出 PyInstaller 后只剩「Failed to execute script app」。
+        # 保留完整原因；避免异常逸出 PyInstaller 后只剩「Failed to execute script launch」。
         import traceback
         traceback.print_exc()
         sys.exit(1)
@@ -1325,8 +1325,10 @@ def startup_failed(error, preflight=None, notify=None, open_url=None):
 
 
 if __name__ == "__main__":          # `python -m gui.app` / `python gui/app.py` 仍从这里进
-    try:
+    if __package__:
         from .launch import main
-    except ImportError:                 # 直接跑本文件时没有包上下文
+    else:
+        # 直接跑本文件时它是 `__main__`；登记成 `app` 免得 launch 把本模块再执行一遍
+        sys.modules.setdefault("app", sys.modules[__name__])
         from launch import main
     main()

@@ -5,6 +5,7 @@
 """
 import ast
 import re
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -27,10 +28,14 @@ def mac_entry():
     return m.group(1)[len("gui/"):] if m else ""
 
 
-def version_source():
-    """version.py 从哪个文件里读版本号。"""
-    src = (ROOT / "gui" / "version.py").read_text(encoding="utf-8")
-    m = re.search(r'os\.path\.join\(.*?"([\w.]+\.py)"\)', src)
+VERSION_READERS = ("gui/version.py", "gui/build_mac.sh", "gui/upload_baidu.sh")
+
+
+def version_source(rel):
+    """这一处从哪个文件里读版本号。"""
+    src = (ROOT / rel).read_text(encoding="utf-8")
+    m = re.search(r"""open\(\s*['"]([^'"]*[\w.]+\.py)['"]""", src) \
+        or re.search(r'os\.path\.join\(.*?"([\w.]+\.py)"\)', src)
     return m.group(1) if m else ""
 
 
@@ -55,9 +60,12 @@ class PackagingEntryTests(unittest.TestCase):
     def test_both_packaging_entries_package_the_same_file(self):
         self.assertEqual(spec_entry(), mac_entry(), "Windows 与 Mac 打了不同的入口文件")
 
-    def test_version_source_defines_version(self):
-        name = version_source()
-        self.assertTrue(name, "version.py 里找不到读取版本号的目标文件")
+    def test_every_version_reader_reads_the_same_file(self):
+        sources = {rel: version_source(rel) for rel in VERSION_READERS}
+        self.assertTrue(all(sources.values()), f"有读取处没认出来：{sources}")
+        names = {Path(v).name for v in sources.values()}
+        self.assertEqual(len(names), 1, f"版本号从多个文件读：{sources}")
+        name = names.pop()
         src = (ROOT / "gui" / name).read_text(encoding="utf-8")
         self.assertRegex(src, r'(?m)^VERSION = "([^"]+)"', f"gui/{name} 里没有 VERSION，版本号会读空")
 
@@ -66,6 +74,26 @@ class PackagingEntryTests(unittest.TestCase):
         import importlib
         module = importlib.import_module("gui." + Path(spec_entry()).stem)
         self.assertTrue(callable(getattr(module, "main", None)))
+
+    def assert_entry_forwards_cli(self, *argv):
+        """以子进程跑一种启动方式：命令行必须真的转到 `tool/run.py`。
+
+        `--cli` 是打包后子进程的调用形状；这条同时守住 `__main__` 转发有没有被删掉
+        （删掉时进程以 0 退出、什么都不打印），以及入口模块在无父包时的 import 兜底。
+        """
+        r = subprocess.run([sys.executable, *argv, "--cli", "run.py", "--help"], cwd=ROOT,
+                           capture_output=True, text=True, encoding="utf-8", timeout=180)
+        self.assertEqual(r.returncode, 0, f"{' '.join(argv)} 退出码 {r.returncode}：{r.stderr[-800:]}")
+        self.assertIn("tool/run.py", r.stdout, f"{' '.join(argv)} 没有转发到 tool/run.py")
+
+    def test_module_entry_forwards_cli(self):
+        self.assert_entry_forwards_cli("-m", "gui.app")
+
+    def test_app_script_entry_forwards_cli(self):
+        self.assert_entry_forwards_cli("gui/app.py")
+
+    def test_launch_script_entry_forwards_cli(self):
+        self.assert_entry_forwards_cli("gui/launch.py")
 
 
 if __name__ == "__main__":

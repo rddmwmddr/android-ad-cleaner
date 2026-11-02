@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """客户端入口：命令行转发、起窗口、打包冒烟。
 
-`gui/windows.spec`、`gui/build_mac.sh` 与 `python -m gui.app` 都落到这里的 `main()`。
+四种启动方式都落到这里的 `main()`：打包件（`gui/windows.spec`、`gui/build_mac.sh`）、
+`python -m gui.app`、`python gui/launch.py`、`python gui/app.py`。
 界面、adb 与运行时的其余部分仍在 `gui/app.py`；打包入口认的就是本文件。
 """
 import json, sys, time
 from pathlib import Path
 
-try:                                # 当包导入（测试、`python -m`）；直接跑脚本、打包时它是顶层模块
+if __package__:                     # `python -m gui.app`、被测试当包 import
     from . import app
-except ImportError:
+else:                               # 打包件与 `python gui/launch.py`：没有父包，gui/ 在 sys.path 上
     import app
 
 
