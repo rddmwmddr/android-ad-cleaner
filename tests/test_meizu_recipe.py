@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 from xml.etree import ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +26,12 @@ class MeizuRecipeTests(unittest.TestCase):
         p.tree.return_value = ET.Element("hierarchy")
         p.texts.return_value = []
         return p
+
+    def device(self, phone):
+        """按本机型号与录制版本应答 getprop；要验不符时由用例自己覆盖。"""
+        phone.d.shell.side_effect = lambda command: Mock(
+            output="MEIZU 21 Pro" if "model" in command else "Flyme 12.6.0.0A")
+        return phone
 
     def load(self, phone, only=None):
         scope = {"p": phone, "ONLY": only or ["__none__"]}
@@ -90,6 +96,68 @@ class MeizuRecipeTests(unittest.TestCase):
             scope["tap_text"]("入口", scrolls=1)
         p.scroll_more.assert_called_once()
         p.click.assert_called_once_with(500, 1240)
+
+    def test_open_app_hands_the_landmark_to_start(self):
+        # 启动后不认页，落在开屏/推广页就只能整段放弃（#523）
+        p = self.phone()
+        p.focus.return_value = "com.android.browser/BrowserActivity"
+        scope = self.load(p)
+        scope["open_app"]("com.android.browser", "工具")
+        p.start.assert_called_once_with("com.android.browser", expect="工具")
+
+    def test_browser_reaches_settings_by_retrying_until_the_panel_opens(self):
+        p = self.device(self.phone())
+        main = "com.android.browser/com.android.browser.BrowserActivity"
+        settings = "com.android.browser/com.android.browser.activity.BrowserPreferencesPage"
+        node = ET.Element("node", {"package": "com.android.browser"})
+        p.texts.side_effect = lambda *args: [
+            ("工具", (100, 1700, 300, 1800), node),
+            ("主页展示", (100, 300, 600, 380), node),
+            ("极简版", (100, 400, 600, 480), node),
+        ]
+        p.switches.return_value = []
+        p.focus.side_effect = lambda: main if p.go.call_count == 0 else settings
+        with patch("time.sleep"):
+            self.load(p, ["浏览器"])
+        self.assertEqual(p.go.call_args_list, [call("工具", "设置"), call("设置", "主页展示")])
+
+    def test_app_store_enters_the_profile_tab_through_the_engine_tab_entry(self):
+        # 「我的」在底栏，不能交给按屏高百分比拒点的 tap_text（#523）
+        p = self.device(self.phone())
+        main = "com.meizu.mstore/com.meizu.flyme.appcenter.activitys.AppMainActivity"
+        settings = "com.meizu.mstore/com.meizu.flyme.appcenter.activitys.AppSettingsPreferenceActivity"
+        node = ET.Element("node", {"package": "com.meizu.mstore"})
+        p.texts.side_effect = lambda *args: [
+            ("我的", (400, 1900, 600, 1980), node),
+            ("设置", (100, 500, 300, 580), node),
+            ("应用更新通知", (100, 300, 600, 380), node),
+        ]
+        p.switches.return_value = []
+        p.focus.side_effect = lambda: settings if p.click.call_count else main
+        with patch("time.sleep"):
+            self.load(p, ["应用商店"])
+        p.tab.assert_called_once_with("我的")
+
+    def test_failed_step_reports_page_shape_without_page_text(self):
+        # 报错要能让报告者自证停在哪一页，同时不把账号页文字带出去
+        p = self.phone()
+        p.safe_mode = True
+        node = ET.Element("node", {"package": "com.android.browser"})
+        p.texts.return_value = [("账号：13800000000", (0, 100, 200, 200), node),
+                                ("我的", (100, 1900, 300, 1980), node)]
+        p.switches.return_value = []
+        scope = self.load(p, ["探针"])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            @scope["step"]("探针")
+            def probe():
+                raise RuntimeError("未找到「设置」")
+        printed = out.getvalue()
+        self.assertIn("未找到「设置」", printed)
+        self.assertIn("app/Settings", printed)
+        self.assertIn("标题 2 条", printed)
+        self.assertIn("底栏 1 条", printed)
+        self.assertNotIn("13800000000", printed)
 
     def test_missing_or_duplicate_target_stops_before_click(self):
         for switches in ([('其他', True, (1, 2))],

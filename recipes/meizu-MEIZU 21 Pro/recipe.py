@@ -1,5 +1,6 @@
 # 魅族 21 Pro（MEIZU 21 Pro，Flyme 12.6.0.0A / Android 16）。
-# 2026-10-30 真机分段验证：所有目标已读到关闭；手机管家入口修复后单独复测通过。
+# 2026-10-30 真机分段验证：除下列两段外，其余目标已读到关闭；手机管家入口修复后单独复测通过。
+# 浏览器、应用商店两段的启动落点与中间跳转在 #523 改过，尚未真机复测。
 # 不处理通知渠道、快应用或广告包；不修改服务类通知和负一屏卡片。
 BUILD = "Flyme 12.6.0.0A"
 MODELS = ["MEIZU 21 Pro"]
@@ -35,8 +36,22 @@ def step(name):
         except Exception as error:
             FAILED_STEPS.append(name)
             print(f"  ✗ 未完成：{error}", flush=True)
+            print(f"  · {page_summary()}", flush=True)
         return action
     return decorate
+
+
+def page_summary():
+    """失败时的页面结构：只报 Activity 与计数，不带页面文字（账号页不外泄）。"""
+    try:
+        root = p.tree()
+        texts = p.texts(root)
+        bottom = sum(1 for _text, (_l, top, _r, bottom_edge), _node in texts
+                     if (top + bottom_edge) // 2 >= p.H * .92)
+        return (f"当前页 {p.focus() or '未知'}；标题 {len(texts)} 条，"
+                f"开关 {len(p.switches(root))} 个，底栏 {bottom} 条")
+    except Exception:
+        return "当前页面结构读取失败"
 
 
 def wait_page(activity, title, timeout=8):
@@ -110,8 +125,9 @@ def open_intent(action, package):
             ("Error", "Exception", "Permission Denial")), "设置入口启动失败")
 
 
-def open_app(package):
-    p.start(package)
+def open_app(package, expect):
+    """expect 是目标 App 首屏的锚点：落在开屏 / 推广页时由 Phone.start 退一次再重新拉起（#523）。"""
+    p.start(package, expect=expect)
     require(p.focus().split("/", 1)[0] == package, "目标应用不在前台")
 
 
@@ -214,8 +230,8 @@ def _():
     main = pkg + "/com.android.browser.BrowserActivity"
     settings = pkg + "/com.android.browser.activity.BrowserPreferencesPage"
     recommend = pkg + "/com.android.browser.activity.PersonalizedActivity"
-    open_app(pkg); wait_page(main, "工具")
-    tap_text("工具"); tap_text("设置")
+    open_app(pkg, "工具"); wait_page(main, "工具")
+    p.go("工具", "设置"); p.go("设置", "主页展示")
     wait_page(settings, "主页展示")
     texts = [t for t, _, _ in p.texts(p.tree())]
     if "极简版" not in texts:
@@ -239,8 +255,10 @@ def _():
     main = pkg + "/com.meizu.flyme.appcenter.activitys.AppMainActivity"
     settings = pkg + "/com.meizu.flyme.appcenter.activitys.AppSettingsPreferenceActivity"
     recommend = pkg + "/com.meizu.cloud.app.settings.PersonalizedPreferenceActivity"
-    open_app(pkg); wait_page(main, "我的")
-    tap_text("我的"); wait_page(main, "设置")  # 不读开关、不截图账号页
+    open_app(pkg, "我的"); wait_page(main, "我的")
+    # 「我的」在底栏：交给 Phone.tab()，它只在底部带里找、等遮挡弹窗散开，找不到就响亮失败（#523）
+    require(p.tab("我的"), "应用商店底部没有「我的」标签")
+    wait_page(main, "设置")  # 不读开关、不截图账号页
     goto("设置", settings, "应用更新通知")
     goto("个性化推荐", recommend, "个性化推荐")
     close_named(["个性化内容推荐", "个性化广告推荐"], "应用商店·推荐", recommend)
@@ -253,7 +271,7 @@ def _():
     account = pkg + "/com.meizu.customizecenter.frame.modules.myAccount.view.AccountActivity"
     settings = pkg + "/com.meizu.customizecenter.frame.modules.settingactivity.view.SettingActivity"
     recommend = pkg + "/com.meizu.customizecenter.frame.modules.privacysettingactivity.PersonalizedRecommendationActivity"
-    open_app(pkg); wait_page(main, "主题")
+    open_app(pkg, "主题"); wait_page(main, "主题")
     tap_id(pkg + ":id/account_avatar"); wait_page(account, "设置")  # 不截图账号页
     goto("设置", settings, "主题字体动态壁纸更新通知")
     goto("个性化推荐", recommend, "个性化推荐")
@@ -267,7 +285,7 @@ def _():
     settings = pkg + "/com.hy.weather.mz.WeatherSettingActivity"
     content = pkg + "/com.hy.weather.mz.WeatherPersonalizationSettingActivity"
     recommend = pkg + "/com.hy.weather.mz.RecommendSettingActivity"
-    open_app(pkg); wait_page(main, "更多选项")
+    open_app(pkg, "更多选项"); wait_page(main, "更多选项")
     tap_text("更多选项"); tap_text("设置"); wait_page(settings, "预警管理")
     goto("内容推荐", content, "内容推荐")
     close_named(["本地资讯", "精选内容推送", "允许展示开屏推荐"], "天气·内容", content)
