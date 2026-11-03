@@ -194,6 +194,7 @@ class OppoPkt110ParentChildTests(unittest.TestCase):
         phone.switches.side_effect = [[("个性化推荐", True, (1, 2))], [("个性化推荐", False, (1, 2))]]
         phone.scroll_more.return_value = False
         scope = self.load_only(phone, ["游戏中心"])
+        phone.enter.assert_called_once_with("我的")
         phone.tap_icon.assert_called_once_with(["隐私开关设置", "隐私"])
         self.assertEqual(scope["FAILED_STEPS"], [])
 
@@ -206,6 +207,40 @@ class OppoPkt110ParentChildTests(unittest.TestCase):
         scope = self.load_only(phone, ["游戏中心"])
         self.assertEqual(scope["FAILED_STEPS"], ["游戏中心"])
         self.assertNotIn("隐私开关设置", [c.args[0] for c in phone.tap.call_args_list])
+
+    def test_settings_entry_with_notification_badge_is_found_by_text(self):
+        """17.22 的主题商店把「设置」读作「设置,有1条新通知」：精确匹配落空，包含匹配要能进去（#286）。"""
+        phone = Mock()
+        phone.find.side_effect = lambda text, exact=False, **kw: (
+            (1, 1) if text == "设置" and not exact
+            else ((2, 2) if text in ("服务管理", "隐私") and exact else None))
+        phone.tap.side_effect = lambda text, **kw: text == "设置"
+        phone.sig.return_value = "mine"
+        scope = self.load(phone)
+        self.assertTrue(scope["open_settings"]())
+        phone.tap_icon.assert_not_called()
+        phone.back.assert_not_called()
+
+    def test_settings_entry_retreats_and_tries_the_icon_when_text_lands_elsewhere(self):
+        """文字点进去不是设置页：先退回来再试右上角图标，不能留在错页上找「服务管理」（#286）。"""
+        phone = Mock()
+        phone.find.side_effect = lambda text, exact=False, **kw: (1, 1) if text == "设置" else None
+        phone.tap.side_effect = lambda text, **kw: text == "设置"
+        phone.sig.side_effect = ["mine", "other", "mine", "mine"]
+        phone.tap_icon.return_value = True
+        scope = self.load(phone)
+        self.assertTrue(scope["open_settings"]())
+        phone.back.assert_called_once()
+        phone.tap_icon.assert_called_once_with(["服务管理", "隐私"])
+
+    def test_game_center_reports_a_stuck_tab_instead_of_clicking_icons(self):
+        """底栏点击被开屏吞掉、没切到「我的」时要报未完成，不能停在首页上点右上角（#286）。"""
+        phone = Mock()
+        phone.locked.return_value = False
+        phone.enter.side_effect = RuntimeError("未找到入口「我的」")
+        scope = self.load_only(phone, ["游戏中心"])
+        self.assertEqual(scope["FAILED_STEPS"], ["游戏中心"])
+        phone.tap_icon.assert_not_called()
 
     def test_ad_tracking_tries_the_renamed_entry_first(self):
         """ColorOS 17 叫「隐私与安全」：先试新名字，不要在旧名字上白翻一轮再打一行失败（#292）。"""
