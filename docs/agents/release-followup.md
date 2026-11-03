@@ -49,6 +49,7 @@ Issues labelled `waiting-for-verify` have a fix on `main` that the reporter has 
 | #367 | 机主 | POCO（`ro.product.brand=POCO`） | #369（0.3.0） | `run.py check` 的广告包一行出现 `com.miui.systemAdSolution`；`status-json` 的 `ads` 同步 |
 | #278 | @axibaqimingzhenna | OPPO Find N5 / PKH110 / ColorOS 17.0.0.103 | #277（0.2.9） | 不带 `--ref` 直接跑 `recipe`，七段逐段跑完、不再整段「✗ 没找到」，广告跟踪报出真实核对项数。负一屏仍提示需机主手动，属已知限制 |
 | #280 | @afive956 | OPPO Find X10 Pro Max / PMX110 / ColorOS 17.0.0.116 | #279（0.2.9） | 不带 `--ref` 直接跑 `recipe`，九段逐段跑完、不再整段「✗ 没找到」。摇一摇广告与软件商店「推荐卡片」点了没反应、下拉搜索需手动，都是已记录的系统限制，不算回归 |
+| #238 | @dgphust | HONOR PTP-AN20 / MagicOS 10.0.0.175 / Android 16 | #548（未发布） | 参考脚本主题段不再以「✗ 没找到『我的』/『设置』」结束，出现「主题·通知」「主题·个性化服务」两行核对；音乐段进到「音乐·消息和隐私」。市场 / 桌面文件夹段不在本次修复内（等 #547）。报告者跑 `main` 源码，不必等发版，2026-11-04 已发复测请求 |
 
 2026-11-02：#278 / #280 从 `ready-for-human` 改为 `waiting-for-verify`，同日按 0.3.0 发了复测请求。这两张票的机型脚本随 0.2.9 进包，之前挂着 `ready-for-human` 是因为 PR #277 / #279 合并时没有回归队列。
 
