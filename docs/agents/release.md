@@ -79,8 +79,6 @@ gh search prs --repo "$REPO" --closed ">=$LAST" is:unmerged --json author,author
 
 GitHub 搜索索引有延迟，刚合上没几小时的 PR 可能还查不到；对着本版 PR 列表手工补一遍。
 
-2026-11-03 这次发版必须具名 `@xunguangzlj-cloud`（#470、#472、#473 已合并，#462、#513 的分析被本仓库重新实现）。发完删掉这一句。
-
 ## 一轮发版的产物顺序
 
 1. **跑验证**：`python -m unittest discover -s tests`（本机 `.venv`）与 `uv run --python 3.12 --with-requirements requirements.txt python -m unittest discover -s tests` 各一套，加 `uvx ruff@0.17.3 check --select F,E9 tool tests gui`。这一步的数字就是正文验证行与 CHANGELOG 那一行的来源，只跑一次。
