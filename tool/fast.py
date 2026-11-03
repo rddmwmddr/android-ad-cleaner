@@ -291,13 +291,21 @@ class Phone:
 
     def texts(self, root=None):
         root = root if root is not None else self.tree()
-        out = []
+        out, seen = [], set()
         for n in root.iter("node"):
             if n.get("package") == "com.android.systemui" and not self.systemui_text:
                 continue                      # 状态栏/通知栏文字不算
             t = (n.get("text") or n.get("content-desc") or "").strip()
-            if t and self.on_screen(n):
-                out.append((t, bounds(n), n))
+            if not (t and self.on_screen(n)):
+                continue
+            # 读屏层偶发同坐标重复节点：华为 HarmonyOS 4 的 dump 会把同一个节点列出两份
+            # （resource-id、文字、坐标完全相同，#330/#510）。按身份三项视为同一个节点，
+            # 只算一次；坐标不同的真实两行不受影响，同名分带判定照旧。
+            key = (n.get("resource-id"), n.get("text"), n.get("content-desc"), bounds(n))
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append((t, bounds(n), n))
         return out
 
     def page_text(self):

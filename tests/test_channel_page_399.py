@@ -71,6 +71,18 @@ INLINE_PAGE = page(
     '<node class="android.widget.Switch" checkable="true" checked="true" bounds="[900,720][1040,800]"/></node>',
 )
 
+# 读屏层偶发同坐标重复节点（华为 #330/#510）：同一个节点在 dump 里出现两份，逐字相同。
+# 按身份三项（resource-id、文字、坐标）去重后这是一行，不是「同名 2 行」。
+DUP_INLINE_PAGE = page(
+    '<node class="android.widget.TextView" text="示例应用" bounds="[0,111][1080,360]"/>',
+    '<node clickable="true" bounds="[0,700][1080,860]">'
+    f'<node class="android.widget.TextView" text="{NAME}" bounds="[60,720][700,800]"/>'
+    '<node class="android.widget.Switch" checkable="true" checked="true" bounds="[900,720][1040,800]"/></node>',
+    '<node clickable="true" bounds="[0,700][1080,860]">'
+    f'<node class="android.widget.TextView" text="{NAME}" bounds="[60,720][700,800]"/>'
+    '<node class="android.widget.Switch" checkable="true" checked="true" bounds="[900,720][1040,800]"/></node>',
+)
+
 # 华为 HarmonyOS 4 那种：列表里两处同名，都带开关，无法判断哪一行是渠道
 SAME_NAME_PAGE = page(
     '<node class="android.widget.TextView" text="示例应用" bounds="[0,111][1080,360]"/>',
@@ -120,6 +132,16 @@ class ReachedTests(unittest.TestCase):
             got = chan.ChannelPage(p, NAME, PK, CID).open()
         self.assertIsInstance(got, chan.Unreached)
         self.assertIn("同名 2 行", got.why)          # 守卫：真的走到了「同名放弃」这一支
+        p.click.assert_not_called()
+
+    def test_duplicate_dump_nodes_are_counted_once(self):
+        # 读屏层同坐标重复节点（华为 #510）：数行按身份三项去重，认出唯一开关，
+        # 不再报「同名 2 行」；坐标不同的真实两行照旧走「同名放弃」。
+        p = phone([DUP_INLINE_PAGE], focus=APP_FOCUS)
+        with patch.object(chan.time, "sleep"):
+            got = chan.ChannelPage(p, NAME, PK, CID).open()
+        self.assertIsInstance(got, chan.Reached)
+        self.assertEqual(got.switch, (NAME, True, (970, 760)))
         p.click.assert_not_called()
 
     def test_refresh_does_not_navigate_again(self):
