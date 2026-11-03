@@ -156,6 +156,21 @@ def switch_centres(root, size):
     return out
 
 
+def shell_around_switch(root, size):
+    """这一页有没有「可点、resource-id 带 switch、自己不 checkable 的外层里包着真开关」：AOSP 渠道页的
+    main_switch_bar。旧实现把外层当自绘开关、截图按颜色猜状态，猜出的状态盖过里面的真开关；
+    修复后外层不再参与，只剩真开关（0.3.1 发版前模拟器发现，见 test_main_switch_bar）。"""
+    p = fixtures.phone_stub("test")
+    p.W, p.H = size
+    for n in root.iter("node"):
+        rid = (n.get("resource-id") or "").lower()
+        if (n.get("checkable") != "true" and n.get("clickable") == "true" and "switch" in rid
+                and "switcher" not in rid and p.on_screen(n)
+                and any(x is not n and x.get("checkable") == "true" for x in n.iter("node"))):
+            return True
+    return False
+
+
 def wraps_switch(root, size):
     """这一页有没有「checkable 容器里包着屏幕内的 Switch」：本票要改的卡片形态。
     旧实现把这一行记在卡片中心（点上去是标题与开关之间的空白），新实现落在内层开关上。"""
@@ -182,7 +197,7 @@ class SameLayoutTests(unittest.TestCase):
             except Exception as e:          # noqa: BLE001 - 对拍要看到异常本身
                 return ["ERROR", type(e).__name__]
 
-        seen, cards, moved = 0, 0, 0
+        seen, cards, moved, shells = 0, 0, 0, 0
         for label, xml in fixtures.all_pages():
             for size in fixtures.SIZES:
                 with self.subTest(page=label, size=size):
@@ -190,6 +205,12 @@ class SameLayoutTests(unittest.TestCase):
                     root = ET.fromstring(xml)
                     old = result(lambda: old_switches(p, root))
                     new = result(lambda: p.switches(ET.fromstring(xml)))
+                    if shell_around_switch(root, size):
+                        # 有意的差异：旧实现去截图猜外层颜色（假手机不能截图，这里会报错），新实现只报真开关
+                        shells += 1
+                        self.assertNotIn("ERROR", new)
+                        self.assertTrue(all(xy in switch_centres(root, size) for _, _, xy in new))
+                        continue
                     if wraps_switch(root, size):
                         cards += 1
                         centres = switch_centres(root, size)
@@ -211,6 +232,7 @@ class SameLayoutTests(unittest.TestCase):
         self.assertGreater(seen, 10)        # 对拍不能是空跑
         self.assertGreater(cards, 0)        # 卡片形态的样本必须真的走到上面的分支
         self.assertGreater(moved, 0)        # 而且新旧确实不同，否则这个分支什么也没守住
+        self.assertGreater(shells, 0)       # main_switch_bar 形态的样本也要真的走到它的分支
 
 
 if __name__ == "__main__":

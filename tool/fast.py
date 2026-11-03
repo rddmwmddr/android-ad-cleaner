@@ -325,7 +325,10 @@ class Phone:
                 continue
             if n.get("checkable") != "true":
                 rid = (n.get("resource-id") or "").lower()
-                if "switch" in rid and "switcher" not in rid and n.get("clickable") == "true":      # 自绘开关：看颜色；TextSwitcher 是文字轮播
+                # 自绘开关：看颜色；TextSwitcher 是文字轮播。里面已经有真开关的（AOSP 渠道页的 main_switch_bar）不算：
+                # 按颜色猜出的状态会盖过里面那个真开关，关着的渠道被读成开着，还原营销通知失败（0.3.1 发版前模拟器发现）
+                if ("switch" in rid and "switcher" not in rid and n.get("clickable") == "true"
+                        and not any(c is not n and c.get("checkable") == "true" for c in n.iter("node"))):
                     l, t, r, b = bounds(n)
                     if r - l > 0 and b - t > 0:
                         if shot is None:
