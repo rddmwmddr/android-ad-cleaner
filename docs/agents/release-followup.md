@@ -37,6 +37,8 @@ Issues labelled `waiting-for-verify` have a fix on `main` that the reporter has 
 
 2026-11-03：#228 由 @WET1AND 用 `AndroidAdCleaner-0.3.1-windows-portable` 按原场景复测通过（`startup: webview2=installed motw=yes`、MOTW 提示文案正确、解除标记后 smoke 正常），当日摘掉 `waiting-for-verify` 并关闭；原始报告者 @AbyssOvO 未回复，这段确认来自同症状的独立报告者。
 
+2026-11-03：#523 由 @gehongyan 在魅族 21 Pro（Flyme 12.6.0.0A）上拉取 `main` 最新代码重跑，浏览器与应用商店两段都能自己走完，原两条失败不再出现；报告者自行关闭，同日摘掉 `waiting-for-verify`。这次验证跑的是 `main` 源码而非发布版（修复随下一版发布），该票当时未登记进下表。
+
 | Issue | 报告者 | 机型 / 系统 | 修复（进入的版本） | 要观察的输出 |
 | ----- | ------ | ----------- | ------------------ | ------------ |
 | #286 | @xicong | OPPO Find X8s / PKT110 / ColorOS 17.0.0.102 | #482、#519（未发布） | 主题商店与视频两段不再以「未找到入口」结束。主题商店 17.22 的「设置」读作「设置,有1条新通知」，脚本按文字包含或右上角图标都能进，落地页出现「服务管理 / 隐私」才算成功；游戏中心切「我的」会确认换了页，失败不再停在首页推荐流。失败时会打印停在哪一页 |
