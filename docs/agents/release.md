@@ -60,13 +60,34 @@ sed -n '/^## 未发布/,/^## /p' CHANGELOG.md
 - 「没有真机复测」不许省略成「已验证」，也不许写成「应该没问题」。
 - 不写用例数以外的任何数字；用例数只写一次，放在「其他」的验证一行里，且必须是第 1 步那次 `discover` 跑出来的数，不写拼接或推算的复合计数。
 
+### 致谢谁
+
+名单从 PR 作者取，不凭印象：
+
+```bash
+LAST=$(gh release view --json publishedAt -q .publishedAt)
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+gh search prs --repo "$REPO" --merged --merged-at ">=$LAST" --json author,authorAssociation \
+  --jq '.[] | select(.authorAssociation | IN("OWNER", "MEMBER", "COLLABORATOR") | not) | .author.login' | sort -u
+gh search prs --repo "$REPO" --closed ">=$LAST" is:unmerged --json author,authorAssociation \
+  --jq '.[] | select(.authorAssociation | IN("OWNER", "MEMBER", "COLLABORATOR") | not) | .author.login' | sort -u
+```
+
+- 合并的 PR 与「分析被采纳、本仓库重新实现后关闭」的 PR 都算：前者交了代码，后者交了分析。
+- 去掉 `OWNER` / `MEMBER` / `COLLABORATOR`；同一个人只写一次。
+- 写 GitHub 用户名（`@handle`），不用「提交机型脚本和报告问题的朋友」这类笼统说法；机型脚本作者照旧逐人列出。
+
+GitHub 搜索索引有延迟，刚合上没几小时的 PR 可能还查不到；对着本版 PR 列表手工补一遍。
+
+2026-11-03 这次发版必须具名 `@xunguangzlj-cloud`（#470、#472、#473 已合并，#462、#513 的分析被本仓库重新实现）。发完删掉这一句。
+
 ## 一轮发版的产物顺序
 
 1. **跑验证**：`python -m unittest discover -s tests`（本机 `.venv`）与 `uv run --python 3.12 --with-requirements requirements.txt python -m unittest discover -s tests` 各一套，加 `uvx ruff@0.17.3 check --select F,E9 tool tests gui`。这一步的数字就是正文验证行与 CHANGELOG 那一行的来源，只跑一次。
 2. **补齐 `## 未发布`**：确认这一版的每一笔都在里面、都是一行一条。这时还没写验证行。
 3. **建 Release 草稿并推 tag**：`build-windows.yml` 由 `v*` 标签触发，要求对应 Release **先存在**（草稿即可，否则 workflow 报「请先创建对应的 Release 草稿」）。它打包两个 Windows 安装包、跑冒烟测试、把产物传进草稿。草稿已公开时它保留已验证的文件、不重建。
 4. **上传 macOS 安装包**到同一个草稿（本机打包与公证步骤在 `CLAUDE.local.md`）。
-5. **写正文并发布**。正文可以在草稿阶段写好；发布前核对四个安装包的 SHA256 与 `SHA256SUMS.txt` 一致。
+5. **写正文并发布**。正文可以在草稿阶段写好；发布前核对四个安装包的 SHA256 与 `SHA256SUMS.txt` 一致，并按「致谢谁」核对待致谢名单。
 6. **同步用户侧文本**：
    - `README.md` 的版本摘要：首段从 Release 正文首段复制，后面接「旧版不会自动更新……」；下载表格换版本号与链接。
    - `index.html` 的 `REL`（`version` / `github` / `files[].file` / `size` / `sha`）与 `RELEASED` 日期。
