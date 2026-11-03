@@ -47,6 +47,22 @@ def tap(name, scrolls=4, exact=True):
         raise RuntimeError(f"未找到入口「{name}」；当前页：{p.page_text()}")
 
 
+def open_settings(expect=("服务管理", "隐私")):
+    """进「设置」入口，落地页出现 expect 之一才算成功。
+    17.22 的主题商店把这一行读作「设置,有1条新通知」：精确匹配「设置」落空，它又带文字，
+    右上角图标的兜底只收无文字节点，同样收不到；游戏中心 14.43.3 反过来是纯齿轮图标。
+    按「文字精确 → 文字包含 → 右上角图标」三级走，点错页先退回来再换下一级（#286）。"""
+    for exact in (True, False):
+        if not p.find("设置", exact=exact):
+            continue
+        before = p.sig()
+        if p.tap("设置", exact=exact, scrolls=0) and any(p.find(w, exact=True) for w in expect):
+            return True
+        if p.sig() != before:
+            p.back()
+    return p.tap_icon(list(expect))
+
+
 def read_switches(max_screens, first=None):
     """读这一页的开关。first 是刚读到的第一屏，复用它，不多读一遍。"""
     current = {}
@@ -191,12 +207,10 @@ def _():
     「个性化推荐设置」点下去先弹确认框，确认后页面退回「设置」，回读前要重新进一次。
     首页的「检测到新版本」弹窗盖住底部标签栏，关弹窗的动画会把紧跟着的点击吞掉，
     所以每一跳都用会确认换页的 p.enter（#286）。
-    「我的」页的「设置」是右上角的齿轮图标、没有文字（17.22 截图，#286），文字找不到就用图标，
-    点开要求出现「服务管理」或「隐私」才算进对了页——和游戏中心一样的文字优先、图标兜底。"""
+    「我的」页的「设置」在 17.22 上带通知角标（读作「设置,有1条新通知」），别的版本是纯齿轮，
+    两种都要能进——见 open_settings()。"""
     def enter_settings():
-        if p.find("设置", exact=True) and p.tap("设置", exact=True, scrolls=0):
-            return
-        require(p.tap_icon(["服务管理", "隐私"]), "没找到「设置」入口：文字与右上角图标都试过")
+        require(open_settings(), "没找到「设置」入口：文字与右上角图标都试过")
 
     def to_privacy():
         p.start("com.heytap.themestore")
@@ -231,15 +245,15 @@ def _():
     「设置」在 14.43.3 上是「我的」页右上角的齿轮图标，没有文字（#292）；旧版是「设置,有新通知」文字行。
     「我的」页还带「页面升级」弹窗，先关掉。"""
     p.start("com.nearme.gamecenter")
-    require(p.tap("我的", exact=True, scrolls=0), "没找到底部「我的」")
+    # 底栏点下去被开屏动画吞掉时页面不换，p.tap 照样返回成功，接着就整段失败；换页要确认（#286）。
+    p.enter("我的")
     time.sleep(1.2)
     # dismiss() 遇到带滚动列表的页面就不点文字按钮，「页面升级」弹窗的「我知道了」只能点名点。
     if p.find("我知道了", exact=True):
         p.tap("我知道了", exact=True, scrolls=0); time.sleep(1.2)
     else:
         p.dismiss()
-    if not p.tap("设置", exact=False, scrolls=0):
-        require(p.tap_icon(["隐私开关设置", "隐私"]), "没找到设置入口：右上角图标都点过")
+    require(open_settings(("隐私开关设置", "隐私")), "没找到设置入口：右上角图标都点过")
     tap("隐私开关设置")
     tap("个性化推荐管理")
     close_named(["个性化推荐"], "游戏中心·个性化推荐")
