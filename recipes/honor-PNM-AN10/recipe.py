@@ -4,6 +4,9 @@ BUILD = ""
 import re
 import time
 
+import adb_link
+from fast import ScreenLocked
+
 ONLY = globals().get("ONLY") or []
 
 
@@ -34,6 +37,36 @@ def dismiss(*words):
 
 
 NO = ("取消", "以后再说", "禁止", "暂不", "跳过", "我知道了")
+
+
+def open_settings(expect=("个性化服务", "通知")):
+    """进「设置」入口，落地页出现 expect 之一才算成功。
+    MagicOS 10 把入口放在「我的」页内部，位置与读法各版本不同：文字精确 → 文字包含
+    （「设置,有1条新通知」）→ 右上角图标，点错页先退回来再换下一级（#286 / #238）。"""
+    for exact in (True, False):
+        if not p.find("设置", exact=exact):
+            continue
+        before = p.sig()
+        if p.tap("设置", exact=exact, scrolls=0) and any(p.find(w, exact=True) for w in expect):
+            return True
+        if p.sig() != before:
+            p.back()
+    return p.tap_icon(list(expect))
+
+
+def open_entry(text, scrolls=0):
+    """点开会换页的菜单项，点不进去就记下停在哪一页并跳过本段。
+    p.enter 先精确匹配、落空退包含匹配，再用页面变化确认真的进去了——p.entry 只点不确认（#238）。
+    断线与锁屏照常上抛：它们不能记成「入口改名」。"""
+    try:
+        p.enter(text, scrolls=scrolls)
+    except (adb_link.DeviceLost, ScreenLocked):
+        raise
+    except RuntimeError as error:
+        print(f"  · {error}")
+        p.note_miss(text)
+        return False
+    return True
 
 
 @step("广告跟踪")
@@ -198,13 +231,18 @@ def _():
 def _():
     p.start("com.hihonor.android.thememanager")
     p.dismiss()
-    p.tap("我的", exact=True, scrolls=0)
+    # 底栏标签只在屏幕最下方找，比原来的全屏点击严；底栏不在最下方的机型退回原写法，
+    # 到没到「我的」页由 open_settings() 的落点校验兜底（#238）。
+    if not p.tab("我的"):
+        p.tap("我的", exact=True, scrolls=0)
     p.dismiss()
-    p.tap("设置", exact=True)
-    p.tap("通知", exact=True, scrolls=0)
+    if not open_settings(("个性化服务", "通知")):
+        p.note_miss("设置")
+        return
+    p.enter("通知")
     p.off(page="主题·通知")            # 消息/短信/邮件 三项都是「内容推荐和活动信息」
     p.back()
-    p.tap("个性化服务", exact=True, scrolls=0)
+    p.enter("个性化服务")
     p.off(page="主题·个性化服务")
     p.back(3)
 
@@ -234,10 +272,14 @@ def _():
     time.sleep(1); p.dismiss()
     p.d(text="我的").click(); time.sleep(1); p.dismiss()
     p.d(resourceId="com.hihonor.cloudmusic:id/ic_setting").click(); time.sleep(1.2)
-    p.d(text="更多设置").click(); time.sleep(1.2)       # 抽屉里别翻，翻了会误点到扫一扫
-    p.tap("消息和隐私设置", exact=True)
+    if not open_entry("更多设置"):      # 抽屉里别翻，翻了会误点到扫一扫
+        return
+    # 「更多设置」页里这两个入口要滚到中部才看得到（#88 同一 build 实测），翻页保留
+    if not open_entry("消息和隐私设置", scrolls=6):
+        return
     p.off(only=["朋友页显示推荐动态"], page="音乐·消息和隐私")
-    p.tap("第三方推送服务开关", exact=True)
+    if not open_entry("第三方推送服务开关", scrolls=6):
+        return
     p.off(page="音乐·第三方推送（活动、中奖信息）")
     p.back(3)
 
