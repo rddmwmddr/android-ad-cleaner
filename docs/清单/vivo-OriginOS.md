@@ -294,7 +294,7 @@ Failure [only root can delete system app for a particular user]
 
 ## V2309A 的差异
 
-实测：vivo V2309A，OriginOS 6 / Android 16，`PD2309E_A_16.2.15.0.W10`，商店 V10.5.31.0，2026-11-03（[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530)），社区实测，维护方未在本机复跑。专用脚本 `recipes/vivo-V2309A/`，七段整轮 167 秒；这一轮所有开关此前已关（调整 0 项），脚本实际关闭开关的路径未在这台机器上执行到。上面 1–10 节的开关本身与 X300 Ultra 一致，差别都在「怎么走到那个页面」，脚本里各有一处对应写法：
+实测：vivo V2309A，OriginOS 6 / Android 16，`PD2309E_A_16.2.15.0.W10`，商店 V10.5.31.0，2026-11-03（[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530)），社区实测，维护方未在本机复跑。专用脚本 `recipes/vivo-V2309A/`，七段整轮 167 秒（首次运行时开关已关，调整 0 项）；2026-11-03 从开启状态复跑，26 个点名开关逐个关闭、每页末尾回读核对，213 秒，紧接着的复跑轮调整 0 项、165 秒。上面 1–10 节的开关本身与 X300 Ultra 一致，差别都在「怎么走到那个页面」，脚本里各有一处对应写法：
 
 | 位置 | 其它 vivo 机型 | V2309A |
 |---|---|---|
