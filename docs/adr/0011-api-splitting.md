@@ -21,12 +21,12 @@
 | `AdbDownloader` | `adb_sources` / `_fetch` / `_download` / `download_state` | `dl`、`adb` |
 | `Reporter` | `remember_error` / `report_payload` / `send_report` / `_install_id` | `last_error`、`report_times` |
 | `Dispatcher` | `start` / `_work` / `_log` / `_event` / `poll` / `stop` / `pause` / `resume` | `job`、`lock` |
-| `Api`（门面） | 其余 13 个方法（`env` / `latest_version` / `devices` / `usb_hint` / `status` / `chan_scan` / `ui_check` / `dev_off` / `restore` / `diagnostics` / `copy_text` / `open_path` / `open_url`） | `last_status`、`last_devices` |
+| `Api`（门面） | 其余 13 个方法（`env` / `latest_version` / `devices` / `usb_hint` / `status` / `chan_scan` / `ui_check` / `dev_off` / `restore` / `diagnostics` / `copy_text` / `open_path` / `open_url`） | `last_status`、`last_devices`、`last_scan_notes` |
 
 - `adb` 归 `AdbDownloader`：只有 `_download()` 会把新路径写回来。`Api.adb` 是转发到 `downloader.adb` 的可写 property，`--smoke-gui` 的 `api.adb = None` 与测试里的赋值照旧。
 - `download_adb()` 的线程入口留在门面：它只是「判 running 再起一个线程」，调用的仍是门面的 `_download`，所以 `patch.object(api, "_download")` 与改前一样有效。
 - `last_error` 归 `Reporter`：它是 `remember_error()` 的唯一写者，也属于上报语义。`diagnostics()` 通过公开字段读它。
-- `last_status` / `last_devices` 留门面：写者 `status()` / `devices()` 本来就在门面里，读者只有门面自己的 `diagnostics()` 与传给 `Reporter` 的参数。
+- `last_status` / `last_devices` / `last_scan_notes` 留门面：写者 `status()` / `devices()` / `chan_scan()` 本来就在门面里，读者只有门面自己的 `diagnostics()` 与传给 `Reporter` 的参数。
 - 锁随 `start()` 归 `Dispatcher`。`ui_check()` 经 `Dispatcher.busy()` 在锁内判断「有没有任务在跑」，与 `start()` 互斥的语义不变。
 
 ### 跨块传参

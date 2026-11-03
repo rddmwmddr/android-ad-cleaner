@@ -109,6 +109,23 @@ class HandlerInterfaceTests(unittest.TestCase):
             self.assertEqual(run.main(["-s", "S", "chan-scan"]), 7)
         self.assertIn("读取失败", err.getvalue())
 
+    def test_chan_scan_success_keeps_the_engine_notes_on_stderr(self):
+        """#521：引擎成功时把三条排除计数写在 stderr，命令行不能只在失败时转发。"""
+        ok = SimpleNamespace(returncode=0, stdout="com.shop\tpromo\t活动优惠\n",
+                             stderr="另有 3 个前台服务渠道未列入清单\n")
+        out, err = io.StringIO(), io.StringIO()
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(run, "latest_backup", return_value=directory) as backup, \
+             patch.object(run.subprocess, "run", autospec=True, return_value=ok) as child, \
+             contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            self.assertEqual(run.main(["-s", "S", "chan-scan"]), 0)
+            saved = Path(directory, "channels.tsv").read_text(encoding="utf-8")
+        backup.assert_called_once_with("S")
+        child.assert_called_once()
+        self.assertIn("另有 3 个前台服务渠道未列入清单", err.getvalue())
+        self.assertNotIn("另有", out.getvalue())
+        self.assertNotIn("另有", saved)
+
     def test_chan_off_without_a_list_fails_before_starting_anything(self):
         err = io.StringIO()
         with patch.object(run, "py") as child, contextlib.redirect_stderr(err):

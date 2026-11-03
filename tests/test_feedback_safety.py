@@ -128,7 +128,7 @@ class GuiFeedbackTests(unittest.TestCase):
     def test_gui_filters_old_scan_results_so_select_all_cannot_reinclude_feature(self):
         self.api = self.app.Api(self.directory.name, runner=FakeRunner(
             runs=("com.example\trecommend\t找机位通知\ncom.shop\tpromo\t活动优惠\n", "", 0)))
-        self.assertEqual(self.api.chan_scan("test"), [{"pkg": "com.shop", "id": "promo", "name": "活动优惠", "app": "", "checked": True}])
+        self.assertEqual(self.api.chan_scan("test")["chans"], [{"pkg": "com.shop", "id": "promo", "name": "活动优惠", "app": "", "checked": True}])
 
     def test_recovery_is_visible_before_long_stack_and_full_cause_is_preserved(self):
         detail = "AccessibilityServiceAlreadyRegisteredError: first cause\n" + "java.lang.IllegalStateException: stack\n" * 100

@@ -912,6 +912,7 @@ class Api:
                                      lambda: self.adb, self._on_error)
         self.last_status = None
         self.last_devices = ""
+        self.last_scan_notes = []
 
     @property
     def adb(self):
@@ -1094,12 +1095,15 @@ class Api:
             return {"error": (err or out)[-600:]}
 
     def chan_scan(self, serial):
+        self.last_scan_notes = []     # 任何失败（含未预期的异常）都不留上一次的附注
         try:
             out, err, rc = self._run("chan_fast.py", "-s", serial, "scan", timeout=120)
         except (subprocess.TimeoutExpired, OSError) as e:
             return self._remember_error("通知扫描", serial, str(e))
         if rc:
             return self._remember_error("通知扫描", serial, err or out or "通知扫描失败，请检查连接与权限")
+        # 成功路径上的 stderr 是引擎的排除计数（#521）：不按文案挑行，流里给什么就带什么。
+        self.last_scan_notes = [line for line in (err or "").splitlines() if line.strip()]
         policy = _tool("channel_policy")
         rows = []
         for line in out.splitlines():
@@ -1112,7 +1116,7 @@ class Api:
                     continue  # 旧扫描结果也不能经「全选」把功能通知勾回去
                 rows.append({"pkg": pkg, "id": cid, "name": name, "app": app,
                              "checked": not judgement.default_unchecked})
-        return rows
+        return {"chans": rows, "notes": self.last_scan_notes}
 
     def _remember_error(self, operation, serial, detail):
         return self.reporter.remember_error(operation, serial, detail)
@@ -1213,6 +1217,9 @@ class Api:
                       + ("；电脑点击被拒（未开 USB 调试安全设置）" if st.get("input_blocked") else "")]
         else:
             lines.append("- 手机：还没检测")
+        if self.last_scan_notes:
+            # 用户报「候选比预期少」时，判据就是这几条排除计数（#521）。
+            lines.append("- 通知扫描附注：" + "；".join(self.last_scan_notes))
         j = self.job
         if j:
             snap = j.snapshot(0)

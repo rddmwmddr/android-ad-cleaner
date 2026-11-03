@@ -205,7 +205,7 @@ class NotificationSelectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             api = app.Api(directory, runner=FakeRunner(
                 runs=("\n".join(f"com.example\tpromo{i}\t{name}" for i, name in enumerate(names)), "", 0)))
-            rows = api.chan_scan("test")
+            rows = api.chan_scan("test")["chans"]
         self.assertEqual([r["name"] for r in rows if r["checked"]], ["活动优惠"])
 
 

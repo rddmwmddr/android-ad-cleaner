@@ -122,7 +122,7 @@ pre.report{background:var(--log);color:var(--logtext);font-family:var(--mono);fo
 <div class="modal" id="modal"><div class="box" id="modalbox"></div></div>
 
 <script>
-let api, ENV = {}, S = {step: 1, serial: null, dev: null, status: null, chans: null, plan: null, logNext: 0};
+let api, ENV = {}, S = {step: 1, serial: null, dev: null, status: null, chans: null, chanNotes: [], plan: null, logNext: 0};
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const main = () => $("#main");
@@ -227,7 +227,7 @@ async function refreshDevices(){
     return `<div class="dev"><div class="ico">📱</div><div class="meta"><b>${esc(d.name || (d.brand + " " + d.model) || d.serial)}</b><small>${esc(d.model)} · ${esc(d.serial)}</small><div style="margin-top:4px">${tag}</div></div>${btn}</div>`;
   }).join("");
 }
-function pick(d){ clearInterval(pollDev); S.serial = d.serial; S.dev = d; S.chans = null; showDetect(); }
+function pick(d){ clearInterval(pollDev); S.serial = d.serial; S.dev = d; S.chans = null; S.chanNotes = []; showDetect(); }
 
 /* ---------- 2 检测 ---------- */
 async function showDetect(){
@@ -301,10 +301,10 @@ async function showChoose(){
     S.chanError = ""; S.chanDetail = "";
     try {
       const result = await api.chan_scan(S.serial);
-      if (result.error){ S.chanError = result.error; S.chanDetail = result.detail || result.error; S.chans = []; }
+      if (result.error){ S.chanError = result.error; S.chanDetail = result.detail || result.error; S.chans = []; S.chanNotes = []; }
       // 同一个软件的渠道排在一起；读不到软件名的按包名排在后面
-      else S.chans = result.sort((a, b) => (!a.app - !b.app) || (a.app || a.pkg).localeCompare(b.app || b.pkg, "zh-CN") || a.name.localeCompare(b.name, "zh-CN"));
-    } catch(e){ S.chanError = String(e); S.chans = []; }
+      else { S.chans = result.chans.sort((a, b) => (!a.app - !b.app) || (a.app || a.pkg).localeCompare(b.app || b.pkg, "zh-CN") || a.name.localeCompare(b.name, "zh-CN")); S.chanNotes = result.notes || []; }
+    } catch(e){ S.chanError = String(e); S.chans = []; S.chanNotes = []; }
   }
   renderChans();
 }
@@ -313,9 +313,10 @@ function adName(p){
 }
 function renderChans(){
   const box = $("#chanbox"); if (!box) return;
-  if (S.chanError){ box.innerHTML = `<div class="note bad">通知扫描未完成：${esc(S.chanError)}</div>${errorDetails(S.chanDetail || S.chanError)}<div class="actions"><button class="btn plain" onclick="S.chans=null;showChoose()">重新扫描</button><button class="btn plain" onclick="copyDiagnostics()">复制完整诊断</button></div>`; $("#chancount").textContent = ""; return; }
-  if (!S.chans.length){ box.innerHTML = `<p class="lead" style="margin:10px 0 0">未发现已创建且开启的营销候选渠道。新设备或刚重置的设备上，App 可能尚未创建渠道，正常使用后可再次扫描。</p>`; $("#chancount").textContent = ""; return; }
-  box.innerHTML = `<div class="row" style="margin-top:10px"><button class="btn plain" onclick="chAll(true)">全选</button><button class="btn plain" onclick="chAll(false)">全不选</button></div>
+  if (S.chanError){ box.innerHTML = `<div class="note bad">通知扫描未完成：${esc(S.chanError)}</div>${errorDetails(S.chanDetail || S.chanError)}<div class="actions"><button class="btn plain" onclick="S.chans=null;S.chanNotes=[];showChoose()">重新扫描</button><button class="btn plain" onclick="copyDiagnostics()">复制完整诊断</button></div>`; $("#chancount").textContent = ""; return; }
+  const notes = S.chanNotes.length ? `<div class="note info">${S.chanNotes.map(n => `<div>${esc(n)}</div>`).join("")}</div>` : "";
+  if (!S.chans.length){ box.innerHTML = notes + `<p class="lead" style="margin:10px 0 0">未发现已创建且开启的营销候选渠道。新设备或刚重置的设备上，App 可能尚未创建渠道，正常使用后可再次扫描。</p>`; $("#chancount").textContent = ""; return; }
+  box.innerHTML = notes + `<div class="row" style="margin-top:10px"><button class="btn plain" onclick="chAll(true)">全选</button><button class="btn plain" onclick="chAll(false)">全不选</button></div>
     <div class="chan"><table><tr><th></th><th>软件</th><th>通知类别</th></tr>${S.chans.map((c, k) => `<tr><td style="width:28px"><input type="checkbox" class="ch" data-k="${k}" ${c.checked ? "checked" : ""} onchange="S.chans[${k}].checked=this.checked;chCount()"></td><td class="${c.app ? "appname" : "pkg"}" title="${esc(c.pkg)}">${esc(c.app || c.pkg)}</td><td>${esc(c.name)}</td></tr>`).join("")}</table></div>`;
   chCount();
 }
