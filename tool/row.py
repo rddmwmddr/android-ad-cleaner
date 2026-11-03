@@ -49,11 +49,14 @@ def icon_hit(node):
 
 
 def ident(node):
-    """同一个控件在 dump 里的身份：resource-id、文字（text / content-desc）与坐标。
-    华为 HarmonyOS 4 会把同一个控件吐出两次，这三项全同才算同一个（#510）。
-    只看坐标会把双列布局里左右对齐的两个控件并掉，所以三个都要算。"""
+    """同一个控件在 dump 里的身份：resource-id、文字（text / content-desc）、类名与坐标。
+    华为 HarmonyOS 4 会把同一个控件吐出两次，这四项全同才算同一个（#510）；
+    只看坐标会把双列布局里左右对齐的两个控件并掉，所以四项都要算。
+    类名不能省：自绘开关把无 id、无文字的容器与真开关叠在同一坐标上，
+    少了类名就会把 checkable 的那个并掉，整页开关读成 0 个（#531）。"""
     return (node.get("resource-id") or "",
             (node.get("text") or node.get("content-desc") or "").strip(),
+            node.get("class") or "",
             node.get("bounds") or "")
 
 
