@@ -65,6 +65,19 @@ class TabTests(unittest.TestCase):
         self.assertFalse(p.tab("我的", maxwait=0))
         p.click.assert_not_called()
 
+    # vivo 应用商店底栏把角标和序号一起塞进无障碍名（#530）：末段是「共5个」，
+    # 既不等于「我的」也不以逗号收在「我的」，只剩包含匹配能命中。
+    def test_badge_and_index_suffix_is_clicked(self):
+        p = phone(node(text="我的, 2个应用待更新,第5个, 共5个"))
+        self.assertTrue(p.tab("我的"))
+        p.click.assert_called_once_with(108, 2250)
+
+    def test_badge_suffix_tab_wins_over_a_content_label_with_the_same_name(self):
+        p = phone(node(text="我的", area=CONTENT),
+                  node(text="我的, 2个应用待更新,第5个, 共5个"))
+        self.assertTrue(p.tab("我的"))
+        p.click.assert_called_once_with(108, 2250)
+
     def test_exact_label_wins_over_a_longer_label_in_the_band(self):
         p = phone(node(text="我的奇妙小镇"), node(text="我的", area=RIGHT))
         self.assertTrue(p.tab("我的"))

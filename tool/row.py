@@ -31,6 +31,23 @@ def bounds(node):
     return tuple(map(int, m.groups())) if m else (0, 0, 0, 0)
 
 
+def icon_hit(node):
+    """这个节点是不是设置入口（齿轮图标，或文字正好是「设置」）。
+
+    只认正好是「设置」的描述 / 正文：商店「我的」页有一行正文「去功能设置里重新开启」，
+    主题商店有「设置壁纸」，按包含匹配会先命中它们、点进别的子页（#305 / #374）。
+    id 只认末段里以 setting 开头的词：securitySettingSwitchLayout 的 setting 前面粘着
+    security，那是应用安全检测入口，不该算。
+    """
+    words = ("设置", "settings", "setting")
+    if (node.get("content-desc") or "").strip().lower() in words:
+        return True
+    if (node.get("text") or "").strip().lower() in words:
+        return True
+    rid = (node.get("resource-id") or "").lower().rsplit("/", 1)[-1]
+    return rid.startswith("setting") or "_setting" in rid
+
+
 def ident(node):
     """同一个控件在 dump 里的身份：resource-id、文字（text / content-desc）与坐标。
     华为 HarmonyOS 4 会把同一个控件吐出两次，这三项全同才算同一个（#510）。

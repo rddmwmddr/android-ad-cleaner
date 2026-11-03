@@ -29,6 +29,8 @@ import wait
 from reader import Reader
 from row import (SWITCH_ROW_DEPTH, bounds, control, dedupe, disabled_at, is_switch, own,
                  summary, switches_in, title_of, unique)
+# 显式 re-export：机型脚本从 fast 取这个判据（与 bounds 同一处引用）。
+from row import icon_hit as icon_hit
 
 DISMISS = ("以后再说", "暂不更新", "暂不", "取消", "我知道了", "跳过", "禁止", "不再提示", "不同意")
 # 应用内更新弹窗的标题（主题商店 17.22.0beta2 是「检测到新版本」，#286）。它通常把更新说明放进可滚动容器，

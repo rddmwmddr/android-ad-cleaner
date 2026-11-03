@@ -2,6 +2,7 @@
 # 系统版本对上 17.1.10.2 时由 run.recipe_for 选这份。
 # 路径来源：Issue #220 报告者真机实测（V2547DA，PD2547D_A_17.1.10.2.W10，商店 V10.5.20.0，2026-10-28）。
 # 本仓库没有这台机器：入口按报告者给出的 Activity 与读屏描述写，未整段复测。
+# 2026-11-03 商店段改用 Phone.tab()、gear() 改用引擎 icon_hit（#530），同样未复测。
 # 与 recipe.py 的差别只在应用商店——Android 17 的「我的」页没有能读到的齿轮入口，
 # 且「个性化推荐」页两个开关的 content-desc 只有「开启，开关」，读不出标题。
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
@@ -34,12 +35,16 @@ def maybe(name, scrolls=6):
 
 
 def gear():
-    """vivo App 的设置多是右上角齿轮图标，没有文字。"""
+    """vivo App 的设置多是右上角齿轮图标，没有文字。
+
+    判据用引擎的 icon_hit：旧实现按 content-desc / resource-id 子串匹配，id 里带 setting 的
+    其它入口（商店的 securitySettingSwitchLayout 之类）会被当成齿轮先点掉（#530）。"""
+    from fast import bounds, icon_hit
     for n in p.tree().iter("node"):
-        d = (n.get("content-desc") or "") + (n.get("resource-id") or "")
-        if any(k in d.lower() for k in ("设置", "setting")) and n.get("clickable") == "true" and p.on_screen(n):
-            from fast import bounds
-            l, t, r, b = bounds(n); p.click((l + r) // 2, (t + b) // 2); time.sleep(1)
+        l, t, r, b = bounds(n)
+        icon = "ImageView" in n.get("class", "") and r - l < p.W * 0.25 and b - t < p.H * 0.15
+        if icon_hit(n) and (n.get("clickable") == "true" or icon) and p.on_screen(n):
+            p.click((l + r) // 2, (t + b) // 2); time.sleep(1)
             return True
     return p.tap("设置", exact=True, scrolls=0)
 
@@ -119,7 +124,9 @@ def _():
         reached = False
     if not reached:
         p.start("com.bbk.appstore", expect=("我的",))
-        p.tap("我的", exact=True, scrolls=0)
+        # 底栏标签读作「我的, 2个应用待更新,第5个, 共5个」，精确匹配读不到（#530）
+        if not p.tab("我的"):
+            raise RuntimeError("商店底部「我的」标签没找到")
         time.sleep(0.8)
         gear()
     if maybe("关于"):
