@@ -751,6 +751,37 @@ class Phone:
         self.say(f"  ✗ 点「{text}」后没出现「{expect}」")
         return False
 
+    def tab(self, name, maxwait=6.0):
+        """点屏幕底部的标签。
+        只在底部带（节点上沿 `top` 超过屏高 85%）里找：标签常读作「未选中,我的」或「我的，有新消息」，
+        精确匹配「我的」找不到；退回包含匹配又会先命中内容区里同名的文字（商店有游戏叫
+        「我的奇妙小镇」，#305 / #386）。带内按「精确 → 逗号末段等于 → 包含」递进，越靠前越优先。
+        6 秒内边等边关弹窗——应用内更新弹窗晚到时会盖住底栏（#286）；点完等页面换掉再返回。
+        找不到返回 False，不回退 tap() / go()：失败要响亮，不能静默点到内容区的同名文字。"""
+        deadline = time.time() + maxwait
+        while True:
+            xy = self._tab_xy(name)
+            if xy:
+                before = self.sig()
+                self.click(*xy)
+                self.settle(before, 1.0)
+                return True
+            if time.time() >= deadline:
+                self.say(f"  ✗ 底部没有「{name}」标签")
+                return False
+            self.dismiss() or time.sleep(0.2)
+
+    def _tab_xy(self, name):
+        """底部带内按三层递进找标签，返回点击坐标或 None。"""
+        items = self.texts()
+        for hit in (lambda t: t == name,
+                    lambda t: re.split(r"[,，]", t)[-1].strip() == name,
+                    lambda t: name in t):
+            for text, (l, top, r, b), _ in items:
+                if top > self.H * 0.85 and hit(text):
+                    return (l + r) // 2, (top + b) // 2
+        return None
+
     def settle(self, before, maxwait=0.8):
         """等新的非空页面稳定；跳页动画中的空树不算已经加载好。"""
         return bool(wait.until(self.sig, maxwait, poll=0.1, stable=0.2,
