@@ -178,7 +178,7 @@ class Android17RecipeTests(unittest.TestCase):
         self.load(p, ["应用商店"])
         self.assertEqual(p.start.call_args_list[1].args, ("com.bbk.appstore",))
         self.assertEqual(p.start.call_args_list[1].kwargs, {"expect": ("我的",)})
-        p.tap.assert_any_call("我的", exact=True, scrolls=0)
+        p.tab.assert_any_call("我的")
 
 
 if __name__ == "__main__":

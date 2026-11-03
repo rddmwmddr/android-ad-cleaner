@@ -38,17 +38,7 @@ def gear(toolbar_only=False):
     匹配只认正好是「设置」的描述、正文或 setting 类 id：商店「我的」页有一行正文「去功能设置里
     重新开启」，主题商店有「设置壁纸」，按包含匹配会先命中它们、点进别的子页，整段跑空（#305 / #374）。
     点击后要认出设置页：日历的齿轮会打开一个 PopupWindow，不校验就会在弹窗里找入口（#407）。"""
-    from fast import bounds
-
-    def icon_hit(n):
-        desc = (n.get("content-desc") or "").strip().lower()
-        text = (n.get("text") or "").strip().lower()
-        if desc in ("设置", "settings", "setting") or text in ("设置", "settings", "setting"):
-            return True
-        # id 只认最后一段里以 setting 开头的词：商店「我的」页的 securitySettingSwitchLayout
-        # 也含 setting，但 setting 前面粘着 security，不该算成设置入口。
-        rid = (n.get("resource-id") or "").lower().rsplit("/", 1)[-1]
-        return rid.startswith("setting") or "_setting" in rid
+    from fast import bounds, icon_hit
 
     def open_settings():
         for n in p.tree().iter("node"):

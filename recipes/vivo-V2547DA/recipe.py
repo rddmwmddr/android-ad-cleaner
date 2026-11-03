@@ -1,5 +1,6 @@
 # vivo X300 Ultra 机型脚本：V2547DA（卫星通信版）。V2547A（OriginOS 7）另有社区实测脚本 recipes/vivo-V2547A/
 # 路径来源：V2547DA，OriginOS 6 / Android 16（PD2547D_A_16.0.21.21.W10），2026-10-28 真机整段跑通验证。
+# 2026-11-03 商店段改用 Phone.tab()、gear() 改用引擎 icon_hit（#530），这两处未复测。
 # 别的系统版本会用安全模式跑：只关点名的开关，找不到入口就跳过。
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 BUILD = "PD2547D_A_16"
@@ -31,12 +32,16 @@ def maybe(name, scrolls=6):
 
 
 def gear():
-    """vivo App 的设置多是右上角齿轮图标，没有文字。"""
+    """vivo App 的设置多是右上角齿轮图标，没有文字。
+
+    判据用引擎的 icon_hit：旧实现按 content-desc / resource-id 子串匹配，id 里带 setting 的
+    其它入口（商店的 securitySettingSwitchLayout 之类）会被当成齿轮先点掉（#530）。"""
+    from fast import bounds, icon_hit
     for n in p.tree().iter("node"):
-        d = (n.get("content-desc") or "") + (n.get("resource-id") or "")
-        if any(k in d.lower() for k in ("设置", "setting")) and n.get("clickable") == "true" and p.on_screen(n):
-            from fast import bounds
-            l, t, r, b = bounds(n); p.click((l + r) // 2, (t + b) // 2); time.sleep(1)
+        l, t, r, b = bounds(n)
+        icon = "ImageView" in n.get("class", "") and r - l < p.W * 0.25 and b - t < p.H * 0.15
+        if icon_hit(n) and (n.get("clickable") == "true" or icon) and p.on_screen(n):
+            p.click((l + r) // 2, (t + b) // 2); time.sleep(1)
             return True
     return p.tap("设置", exact=True, scrolls=0)
 
@@ -76,7 +81,9 @@ def _():
 def _():
     # 开屏推荐页会挡住底部标签栏（#420）：先确认「我的」在，不在就退一次重进，仍不在就跳过本段
     p.start("com.bbk.appstore", expect=("我的",))
-    p.tap("我的", exact=True, scrolls=0)
+    # 底栏标签读作「我的, 2个应用待更新,第5个, 共5个」，精确匹配读不到（#530）
+    if not p.tab("我的"):
+        raise RuntimeError("商店底部「我的」标签没找到")
     time.sleep(0.8)
     gear()
     if maybe("关于"):
