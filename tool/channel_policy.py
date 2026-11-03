@@ -1,4 +1,4 @@
-"""渠道判定：营销候选、扫描排除、默认不勾、受保护；未知包名和渠道 ID 不猜测。"""
+"""渠道判定：营销候选、扫描排除、默认不勾、受保护、前台服务；未知包名和渠道 ID 不猜测。"""
 from dataclasses import dataclass
 import re
 
@@ -47,6 +47,7 @@ class ChannelJudgement:
     protected: bool = False
     vivo_marketing_id: bool = False
     ad_network_id: bool = False
+    foreground_service: bool = False
 
 
 def protected_channel(name, channel_id="", list_label=""):
@@ -63,7 +64,7 @@ def _youtube_channel_two(fields):
     return False
 
 
-def classify(name, channel_id="", list_label="", package="", app=""):
+def classify(name, channel_id="", list_label="", package="", app="", foreground_service=False):
     vivo = bool(VIVO_MARKETING.match(channel_id))
     ad_network = bool(AD_NETWORK.search(channel_id))
     # scan 只在读到应用名时打第四列；没有第四列时，最后一个字段就是渠道名。
@@ -80,4 +81,5 @@ def classify(name, channel_id="", list_label="", package="", app=""):
         protected=protected_channel(name, channel_id, list_label),
         vivo_marketing_id=vivo,
         ad_network_id=ad_network,
+        foreground_service=foreground_service,
     )

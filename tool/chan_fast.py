@@ -177,15 +177,22 @@ def show(outcome, label, want_on):
         events.payload(outcome.payload)
 
 
+# 前台服务常驻通知的标记（#459）。13 及以前叫 mFgServiceShown，14 起框架改名为
+# mUserVisibleTaskShown（置位条件也从 FLAG_FOREGROUND_SERVICE 扩到 isFgsOrUij()，
+# 含机主发起的任务）。两个名字都认，否则新系统上这条排除静默不生效。
+FG_SERVICE_MARKS = ("mFgServiceShown=true", "mUserVisibleTaskShown=true")
+
+
 def truncated(cid):
     """三星等系统会把长渠道 ID 缩略成 'com.se...'（#95）：不能当真实 ID 深链或去重。"""
     return cid.endswith(("...", "…"))
 
 
-def parse(p, locked=None):
+def parse(p, locked=None, foreground=None):
     """只取机主空间（user 0）。双开、分身、隐私空间、安全文件夹的同名应用 UID 不同（#95），
     以前按包名混在一起：界面已关，回读却拿到另一空间的「开」。
-    locked：传入集合时，收集系统不允许关闭的渠道（系统应用固定通知权限、渠道本身不可屏蔽，#134）。"""
+    locked：传入集合时，收集系统不允许关闭的渠道（系统应用固定通知权限、渠道本身不可屏蔽，#134）。
+    foreground：传入集合时，收集前台服务的常驻通知渠道（#459）。字段打在渠道行上，不在记录段。"""
     txt = p.d.shell("dumpsys notification --noredact", timeout=60).output
     # 安卓 8 / 9 的段名是「per-package config:」（RankingHelper），10 起是「PackagePreferences:」（#258 海信 Android 9）
     start = next((k for k in (txt.find("PackagePreferences:"), txt.find("per-package config:")) if k >= 0), -1)
@@ -216,6 +223,9 @@ def parse(p, locked=None):
             # 已删除的记录不参与判断，它的锁定信息不可信。
             if locked is not None and fixed and not deleted and "mBlockableSystem=false" in line:
                 locked.add(key)
+            # 同一渠道的两条读数（#194）任一说是前台服务就算：方向与上面的 locked 一致，宁可少关。
+            if foreground is not None and not deleted and any(m in line for m in FG_SERVICE_MARKS):
+                foreground.add(key)
     return d, app_off
 
 
@@ -866,15 +876,17 @@ def run(a):
     items = load(a[3]) if cmd != "scan" else []
     reader = ShellPhone(serial)
     if cmd == "scan":
-        locked = set()
-        d, app_off = parse(reader, locked)
-        short = fixed = 0
+        locked, foreground = set(), set()
+        d, app_off = parse(reader, locked, foreground)
+        short = fixed = fg_service = 0
         rows = []
         for (pk, cid), (name, imp, deleted) in sorted(d.items()):
-            judgement = classify(name, cid)
+            judgement = classify(name, cid, foreground_service=(pk, cid) in foreground)
             if (imp != 0 and not deleted and not app_off.get(pk) and judgement.marketing_candidate
                     and not judgement.scan_excluded and not judgement.protected):
-                if truncated(cid):
+                if judgement.foreground_service:
+                    fg_service += 1
+                elif truncated(cid):
                     short += 1
                 elif (pk, cid) in locked:
                     fixed += 1
@@ -887,6 +899,8 @@ def run(a):
             print(f"另有 {short} 个渠道的 ID 被系统缩略，无法可靠定位，未列入清单", file=sys.stderr)
         if fixed:
             print(f"另有 {fixed} 个渠道属于系统锁定、不允许关闭的系统应用，未列入清单", file=sys.stderr)
+        if fg_service:
+            print(f"另有 {fg_service} 个前台服务渠道未列入清单", file=sys.stderr)
         return
     if cmd in ("off", "on"):
         want = cmd == "on"

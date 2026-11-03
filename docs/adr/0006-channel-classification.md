@@ -22,6 +22,7 @@
 | `protected` | 找机位一类，始终不动 | `protected_channel()` |
 | `vivo_marketing_id` | 按 cid 认的 vivo 营销分类 | `VIVO_MARKETING` |
 | `ad_network_id` | 渠道 ID 命中广告网络名，命中即营销并越过服务词（见增补） | `AD_NETWORK` |
+| `foreground_service` | 前台服务的常驻通知渠道，扫描不列入（见增补 #459） | 基线无此概念 |
 
 不采用报告里的单一 `category` 枚举：它装不下 `scan_excluded` 与 `default_unchecked` 的差异，压平任何一级都会改变用户可见行为。
 
@@ -57,5 +58,17 @@
 
 - **新增** `AD_NETWORK` 词表与 `ad_network_id` 字段。只匹配渠道 ID，大小写不敏感、子串匹配——ID 常带 `CH1`、`_union` 一类前后缀，整段锚定认不出来；词条写得足够长（`adroi` 而不是 `ad`）来控制误报；`adroi` 仍会命中 `adroit` 一类英文词，按低风险误报接受。
 - **与 `VIVO_MARKETING` 的区别**：vivo 分类号只越过 `SKIP`，营销关键词仍要命中；广告网络 ID 本身就是营销证据，命中即 `marketing_candidate=True` 并越过 `SKIP`。ID 是厂商固定车道，渠道名不可靠。
-- **出口不变**：判定仍只从 `classify()` 出，消费方照旧只读 `marketing_candidate` / `scan_excluded`，不加旁路剔除逻辑。
+- **出口不变**：判定仍只从 `classify()` 出，消费方照旧只读 `marketing_candidate` / `scan_excluded`。这一句约束的是 #456 本身——#459 增补新增的 `foreground_service` 是另一条判定，证据由 `parse()` 收集、消费方在扫描梯子里合成。
 - **对拍策略**：冻结基线断言保持原样，继续证明其余判定没有漂移；新规则由独立用例钉住，`ad_network_id` 为假时任何判定都与改前一致。
+
+## 增补：前台服务的常驻通知（#459）
+
+桌面「应用推荐服务」一类常驻通知会被当成营销候选。判定依据是渠道行上的前台服务标记。
+
+- **证据在渠道行，不在记录段。** 这个标记是 `NotificationChannel` 的字段（各版本 `NotificationRecord` 都没有同名字段），框架在通知是前台服务时对该渠道置位，随 `getFieldsString()` 打在 `PackagePreferences:` 段那行 `NotificationChannel{...}` 上。`parse()` 新增 out 参数 `foreground` 收集这些键，与 `locked` 同形；不另写记录段解析。
+- **两个字段名都要认。** Android 13 及以前叫 `mFgServiceShown`，14 起改名为 `mUserVisibleTaskShown`（语义、打印位置、粘性都不变），置位条件也从 `FLAG_FOREGROUND_SERVICE` 扩到 `isFgsOrUij()`，多了机主发起的任务。只认老名字会让这条排除在 Android 14+ 上静默失效，所以 `FG_SERVICE_MARKS` 两个都匹配；扩出来的那一类同样是「关掉会打断的常驻通知」，照旧排除。
+- **粘性。** 置位后不清除：渠道发过一次前台服务通知，之后转成纯营销仍为 `true`。按「误关常驻通知的代价高于漏掉一个营销渠道」接受这条代价，判据速查里写明。
+- **优先级高于广告网络 ID，也优先于缩略 ID 与系统锁定。** scan 的分支梯子先判前台服务：同一渠道只计一次；「既缩略又锁定」的渠道因此归到前台服务这条提示下，不再报「ID 缩略」「系统锁定」。这两条提示原本只说明「列入清单也没用」，排除结论不变，是有意让位。
+- **字段缺失即不保护。** 渠道行里没有这两个字段（OEM 剥掉）时不报错、不提示，扫描输出与改前逐字节一致。
+- **判定的分工。** `classify()` 只把证据带进判定（关键字参数 `foreground_service` 与同名字段），`marketing_candidate` 保留原始营销信号；**排除与计数在 scan 的分支梯子里合成**，与 `truncated()`、`locked` 同样由消费方读一个判定字段后决定。与 `scan_excluded` 不同：那一条是 `classify()` 内部推导的，这里的证据来自 `parse()`。`gui/app.py` 的 `chan_scan()` 不传该参数——这些渠道进不了引擎的 TSV，客户端根本看不到。
+- **为什么不用元组带回。** `parse()` 的渠道值 `(name, importance, deleted)` 被 `state()` 与十余处假 `parse()` 的测试直接解包，扩一位会牵动这些接缝；`locked` 已经证明渠道级属性走 out 参数够用。
