@@ -42,14 +42,18 @@ def step(name):
 
 
 def page_summary():
-    """失败时的页面结构：只报 Activity 与计数，不带页面文字（账号页不外泄）。"""
+    """失败时的页面结构：只报 Activity 与计数，不带页面文字，也不截屏（账号页不外泄）。
+
+    计数交给 row.summary()：它按 #331 的判据只看节点，自绘开关不取色；
+    `p.switches()` 会为自绘开关截图，而这两段正经过账号页。
+    底栏带与 Phone.tab() 同为 85%，两处各说一个数会让复测对不上。
+    """
+    from row import summary
     try:
         root = p.tree()
-        texts = p.texts(root)
-        bottom = sum(1 for _text, (_l, top, _r, bottom_edge), _node in texts
-                     if (top + bottom_edge) // 2 >= p.H * .92)
-        return (f"当前页 {p.focus() or '未知'}；标题 {len(texts)} 条，"
-                f"开关 {len(p.switches(root))} 个，底栏 {bottom} 条")
+        bottom = sum(1 for _text, (_l, top, _r, bottom_edge), _node in p.texts(root)
+                     if (top + bottom_edge) // 2 >= p.H * .85)
+        return f"当前页 {p.focus() or '未知'}；{summary(root, p.W, p.H)}；底栏 {bottom} 条"
     except Exception:
         return "当前页面结构读取失败"
 
@@ -231,7 +235,10 @@ def _():
     settings = pkg + "/com.android.browser.activity.BrowserPreferencesPage"
     recommend = pkg + "/com.android.browser.activity.PersonalizedActivity"
     open_app(pkg, "工具"); wait_page(main, "工具")
-    p.go("工具", "设置"); p.go("设置", "主页展示")
+    require(not p.locked(), "手机锁屏，请机主解锁")
+    assert_no_other_window(p.tree(), pkg)
+    require(p.go("工具", "设置"), "浏览器没有「设置」入口")
+    require(p.go("设置", "主页展示"), "浏览器没有进入设置页")
     wait_page(settings, "主页展示")
     texts = [t for t, _, _ in p.texts(p.tree())]
     if "极简版" not in texts:
@@ -256,6 +263,8 @@ def _():
     settings = pkg + "/com.meizu.flyme.appcenter.activitys.AppSettingsPreferenceActivity"
     recommend = pkg + "/com.meizu.cloud.app.settings.PersonalizedPreferenceActivity"
     open_app(pkg, "我的"); wait_page(main, "我的")
+    require(not p.locked(), "手机锁屏，请机主解锁")
+    assert_no_other_window(p.tree(), pkg)
     # 「我的」在底栏：交给 Phone.tab()，它只在底部带里找、等遮挡弹窗散开，找不到就响亮失败（#523）
     require(p.tab("我的"), "应用商店底部没有「我的」标签")
     wait_page(main, "设置")  # 不读开关、不截图账号页
