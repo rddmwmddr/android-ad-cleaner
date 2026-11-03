@@ -160,13 +160,14 @@ def _():
 
 @step("应用商店")
 def _():
-    # 2026-10-29 实测：冷启动落「福利推广页」→ 先回首页；「我的」是底部标签，必须 exact。
+    # 2026-10-29 实测：冷启动落「福利推广页」→ 先回首页。
+    # 「我的」用 p.tab()：底部带过滤把内容区里同名的文字挡在外面（#386）。
     p.start("com.xiaomi.market")
     time.sleep(2.5)
     if p.find("回到首页", exact=True):
         p.tap("回到首页", exact=True, scrolls=0)
         time.sleep(2)
-    require(p.tap("我的", exact=True, scrolls=0), "商店底部「我的」标签没找到")
+    require(p.tab("我的"), "商店底部「我的」标签没找到")
     time.sleep(2)
     require(p.tap("设置", exact=True, scrolls=4), "商店设置图标没找到")
     time.sleep(1)

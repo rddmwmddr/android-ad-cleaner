@@ -125,12 +125,13 @@ def _():
 
 @step("应用商店")
 def _():
-    # 2026-10-27 K80 实测：冷启动常落「福利推广页」→先回首页；「我的」=底部标签，必须 exact（页里有游戏叫「我的奇妙小镇」）；设置是我的页顶部图标
+    # 2026-10-27 K80 实测：冷启动常落「福利推广页」→先回首页；设置是我的页顶部图标。
+    # 「我的」用 p.tab()：底部带过滤把页里那个叫「我的奇妙小镇」的游戏挡在外面（#386）。
     p.start("com.xiaomi.market")
     time.sleep(2.5)
     if p.find("回到首页", exact=True):
         p.tap("回到首页", exact=True, scrolls=0); time.sleep(2)
-    if not p.tap("我的", exact=True, scrolls=0):
+    if not p.tab("我的"):
         raise RuntimeError("商店底部「我的」标签没找到")
     time.sleep(2)
     if not (gear(toolbar_only=True) or gear() or p.tap("设置", exact=True, scrolls=4)):

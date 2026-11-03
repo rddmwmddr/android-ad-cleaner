@@ -40,7 +40,7 @@ Xiaomi 18 Pro Max 和 18 Fold 的系统底包相同，差别在 App 版本：商
 
 Xiaomi Pad 7 是平板，设置首页左右分栏，差异单独列在文末的[「Pad 7 差异」](#xiaomi-pad-7os20208的差异)。
 
-REDMI K80 至尊版（HyperOS 2 / Android 16）结构差异：「隐私与安全」首页是权限中心，没有「更多安全设置」，广告服务用设置顶部搜索直达；商店冷启动可能落「福利推广页」，先点「回到首页」再走「我的」；主题商店直接拉 com.android.thememanager/.ThemeResourceProxyTabActivity 最稳（themestore 冷启动的重定向过渡窗会让引擎前台校验误判）；主题/商店底部标签的无障碍名带「未选中,」前缀，要按屏幕底部位置点。
+REDMI K80 至尊版（HyperOS 2 / Android 16）结构差异：「隐私与安全」首页是权限中心，没有「更多安全设置」，广告服务用设置顶部搜索直达；商店冷启动可能落「福利推广页」，先点「回到首页」再走「我的」；主题商店直接拉 com.android.thememanager/.ThemeResourceProxyTabActivity 最稳（themestore 冷启动的重定向过渡窗会让引擎前台校验误判）；主题/商店底部标签的无障碍名带「未选中,」前缀，用 `p.tab()` 点（只认屏幕底部带，带内按精确 → 逗号末段等于 → 包含找）。
 
 13 Ultra 和 14 Pro 是 HyperOS 3，共用 `recipes/xiaomi-2304FPN6DC`，入口和 18 系列的 OS4 不完全一样，差异单独列在文末的[「13 Ultra 差异」](#xiaomi-13-ultraos30308的差异)。
 

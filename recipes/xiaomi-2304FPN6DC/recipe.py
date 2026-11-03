@@ -95,7 +95,7 @@ def _():
 @step("应用商店")
 def _():
     p.start("com.xiaomi.market")
-    if not p.tap("我的", exact=True, scrolls=0):
+    if not p.tab("我的"):
         raise RuntimeError("应用商店底部「我的」未找到")
     if not maybe("设置", scrolls=10):
         raise RuntimeError("应用商店设置入口未找到")
@@ -142,7 +142,7 @@ def _():
         p.start("com.miui.themestore", foreground="com.android.thememanager")
     else:
         p.start("com.android.thememanager")
-    if not p.tap("我的", exact=True, scrolls=0):
+    if not p.tab("我的"):
         raise RuntimeError("主题底部「我的」未找到")
     gear()
     p.off(only=["每次联网时通知"], keep=["自动更新"], page="主题·设置")
