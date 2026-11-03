@@ -624,7 +624,7 @@ class Reporter:
         payloads = [x for x in view.get("payloads", []) if x.strip()]
         if payloads:
             # 放在末尾：日志只留最后 2 万字，骨架跟着失败日志一起留下，不会被早先的成功步骤挤掉
-            log += "\n\n[页面骨架]\n" + "\n".join(payloads)
+            log += "\n\n[诊断载荷]\n" + "\n".join(payloads)
         steps = [{"title": scrub(r["title"])[:40], "sec": int(r.get("sec") or 0),
                   "result": "跳过" if r.get("skipped") else "已停止" if r.get("stopped") else ("成功" if r["rc"] == 0 else "失败")}
                  for r in view.get("results", [])][:12]
@@ -738,7 +738,7 @@ class Dispatcher:
 
     def _log(self, s, job=None):
         """记一行输出。事件行只改状态、不进日志，返回 None；人话返回存下来的文本。
-        载荷行（页面骨架）单独收着，上报时拼在末尾：不进界面日志与步骤摘要，也不会在
+        载荷行（页面骨架、通知权限模式等机器数据）单独收着，上报时拼在末尾：不进界面日志与步骤摘要，也不会在
         「最近失败的完整诊断」里重复一遍。工作线程传入自己那一次的 Job：它比 `Api.job`
         活得久，收尾时不能写进下一次执行。"""
         job = self.job if job is None else job

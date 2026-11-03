@@ -328,7 +328,7 @@ class ClientLogTests(unittest.TestCase):
         self.assertEqual(self.api.job.lines, [])          # 也不进界面日志
         report = self.api.report_payload()
         self.assertEqual(report["log"].count("骨架 v1"), 1)  # 只出现一次
-        self.assertIn("[页面骨架]", report["log"])
+        self.assertIn("[诊断载荷]", report["log"])
         self.assertNotIn("aac:payload", json.dumps(report, ensure_ascii=False))
 
     def test_events_still_stay_out_of_the_log(self):
