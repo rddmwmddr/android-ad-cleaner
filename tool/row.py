@@ -31,6 +31,26 @@ def bounds(node):
     return tuple(map(int, m.groups())) if m else (0, 0, 0, 0)
 
 
+def ident(node):
+    """同一个控件在 dump 里的身份：resource-id、文字（text / content-desc）与坐标。
+    华为 HarmonyOS 4 会把同一个控件吐出两次，这三项全同才算同一个（#510）。
+    只看坐标会把双列布局里左右对齐的两个控件并掉，所以三个都要算。"""
+    return (node.get("resource-id") or "",
+            (node.get("text") or node.get("content-desc") or "").strip(),
+            node.get("bounds") or "")
+
+
+def unique(nodes):
+    """去掉 dump 里重复出现的同一个控件，保留先读到的那份。"""
+    seen, out = set(), []
+    for node in nodes:
+        key = ident(node)
+        if key not in seen:
+            seen.add(key)
+            out.append(node)
+    return out
+
+
 def line(node, parents, max_depth=None):
     """文字所在的行。ListView 的行常常不可点（点击由列表处理），到列表的直接子项为止。
     max_depth 是往上检查的节点数上限（含起点）；None 表示一直找到根节点。"""
@@ -53,8 +73,9 @@ def is_switch(node):
 
 
 def switches_in(node, on_screen):
-    """node 子树里的开关。node 自己不算——问的是「一行里有几个开关」。"""
-    return [x for x in node.iter() if x is not node and is_switch(x) and on_screen(x)]
+    """node 子树里的开关。node 自己不算——问的是「一行里有几个开关」。
+    同一个开关被 dump 吐出两份时只算一个，否则一行会被读成「开关 2 个」而放弃（#510）。"""
+    return unique([x for x in node.iter() if x is not node and is_switch(x) and on_screen(x)])
 
 
 def switch_class(node):
@@ -220,8 +241,9 @@ def summary(root, screen_w, screen_h):
     """页面结构摘要（不含页面文字）：顶部标题数、开关数、一条控件链。
     入口没找到时用它区分「页面还没画完」和「入口确实没了」（#331）。
     与 Phone.texts() / switches() 同一套过滤：状态栏文字、折叠屏合上后的内屏残留、互斥单选都不算。"""
-    nodes = list(root.iter("node"))
-    parents = {c: n for n in nodes for c in n}
+    all_nodes = list(root.iter("node"))
+    nodes = unique(all_nodes)       # 重复吐出的同一个控件只算一次，否则标题数与开关数翻倍（#510）
+    parents = {c: n for n in all_nodes for c in n}
 
     def shown(n):
         l, t, r, b = bounds(n)
@@ -257,10 +279,11 @@ def skeleton(root, name, screen_w, screen_h, focus=""):
     bounds 用屏宽高的百分比，不同分辨率之间才能比较；N / M / P 三个字面就是「名字挂在哪」的答案。"""
     name = re.sub(r"\s+", " ", (name or "").strip())
     focus = re.sub(r"\s+", " ", (focus or "").strip())
-    nodes = list(root.iter("node"))
+    all_nodes = list(root.iter("node"))
+    nodes = unique(all_nodes)
     if not nodes or screen_w <= 0 or screen_h <= 0:
         return ""
-    parents = {c: n for n in nodes for c in n}
+    parents = {c: n for n in all_nodes for c in n}
 
     def depth_of(n):
         found = 0
