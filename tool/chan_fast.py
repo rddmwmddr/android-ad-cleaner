@@ -100,7 +100,7 @@ ERROR = "error"                        # 意外异常，原文进 detail
 class Outcome:
     kind: str
     detail: str = ""
-    payload: str = ""        # 进上报日志的机器行（页面骨架），不参与判读
+    payload: str = ""        # 进上报日志的机器行（页面骨架等），不参与判读
 
 
 # 怎么记账由这一张表决定，不由返回值的形状暗示。键是结局，值是它对整批的四件事：
@@ -729,6 +729,10 @@ class StopBatch(RuntimeError):
     """点错了开关：已尝试还原，整批停止。"""
 
 
+class StopBatchLost(StopBatch):
+    """点回后复核时手机断开：状态未知，整批按断线收尾（#330）。"""
+
+
 def side_effects(before, apps_before, after, apps_after, pk, cid, allowed):
     """点击后除目标渠道外还有什么变了：应用总开关，或不在本批清单里的同应用渠道。"""
     out = []
@@ -740,6 +744,46 @@ def side_effects(before, apps_before, after, apps_after, pk, cid, allowed):
         if (before[key][1] == 0) != (imp == 0) and key not in allowed:
             out.append(f"渠道「{name}」")
     return out
+
+
+def recheck(before, apps_before, current, apps, may_change):
+    """点回之后重读的全量状态与点击前比较：返回仍然不一致的地方（#330 第 2 条）。
+    may_change：本批本来就要改的渠道 —— 它们留在目标状态不算残留。"""
+    diffs = []
+    for key, old in before.items():
+        if key in may_change:
+            continue
+        new = current.get(key)
+        if new is None or old[1:] != new[1:]:
+            diffs.append(f"渠道「{old[0]}」")
+    for key, (name, _, _) in current.items():
+        if key not in before and key not in may_change:
+            diffs.append(f"新增渠道「{name}」")
+    if any(apps.get(package) != value for package, value in apps_before.items()):
+        diffs.append("应用通知总开关")
+    return diffs
+
+
+def undo_message(p, before, apps_before, may_change, restored, extra, clicked):
+    """点错开关后的说明：先说发生了什么，再说复核结果；复核不了就不能说已恢复（#330 第 2 条）。
+    返回（文案，是否断线）。"""
+    what = f"点击后{'、'.join(extra)}发生变化"
+    if not clicked:
+        return f"{what}，本次没有点击这一行，停止整批；请在手机上核对该 App 的通知设置", False
+    head = what + ("" if restored else "，没能自动点回")
+    try:
+        current, apps = parse(p)
+    except adb_link.DeviceLost:
+        return f"{head}；复核时手机断开，没能核对是否恢复，停止整批", True
+    except Exception:
+        return (f"{head}；回退后复核失败，无法确认已恢复，停止整批；请在手机上核对该 App 的通知设置",
+                False)
+    diffs = recheck(before, apps_before, current, apps, may_change)
+    if diffs:
+        return (f"{head}；复核仍有差异：{'、'.join(diffs)}，没能完全恢复，停止整批；"
+                "请在手机上核对该 App 的通知设置", False)
+    return (head + ("，已点回并复核通过" if restored else "，复核与点击前一致")
+            + "，停止整批；请在手机上核对该 App 的通知设置", False)
 
 
 def page_hint(p, name):
@@ -769,16 +813,69 @@ def notifications_denied(p, pk):
 APPOPS_DENIED = ("ignore", "deny")
 
 
+def appops_mode(reader, package):
+    """POST_NOTIFICATION 的 appops 模式；读不出来返回 unknown —— 不能当成 default 去写回（#330）。"""
+    try:
+        text = reader.shell(f"cmd appops get {shlex.quote(package)} POST_NOTIFICATION").output
+    except adb_link.DeviceLost:
+        raise
+    except Exception:
+        return "unknown"
+    if not isinstance(text, str):
+        return "unknown"
+    match = re.search(r"(?m)^\s*POST_NOTIFICATION:\s*([A-Za-z_]+)", text)
+    if match:
+        return match.group(1).lower()
+    return "default" if "No operations" in text else "unknown"
+
+
 def appops_denied(p, pk):
     """没装 POST_NOTIFICATIONS 权限的系统（安卓 12 及以前）从 appops 读同一个总开关。"""
     try:
-        text = p.d.shell(f"cmd appops get {shlex.quote(pk)} POST_NOTIFICATION").output
-    except Exception:
-        return False
-    if not isinstance(text, str):
-        return False
-    match = re.search(r"(?m)^\s*POST_NOTIFICATION:\s*([A-Za-z_]+)", text)
-    return bool(match) and match.group(1).lower() in APPOPS_DENIED
+        return appops_mode(p.d, pk) in APPOPS_DENIED
+    except adb_link.DeviceLost:
+        return False            # 这条既有判据读到断线时按「没关」处理，不改变 #426 的收容行为
+
+
+def restore_appops(reader, modes):
+    """批次结束时只还原「原值 default、现值 allow」这一种副作用（#330 第 4 条）：
+    访问应用通知页可能把权限模式提成 allow，其他组合一律不动。
+    modes：批次开始时记下的包名 → 模式。返回（观察到被改过的应用，没能恢复的应用）；
+    读不出来既不写也不算改动。"""
+    changed, failed = [], []
+    for package, original in sorted(modes.items()):
+        if original != "default":
+            continue
+        if appops_mode(reader, package) != "allow":
+            continue
+        changed.append(package)
+        try:
+            reader.shell("cmd appops set " + shlex.quote(package) + " POST_NOTIFICATION default")
+            if appops_mode(reader, package) != "default":
+                failed.append(package)
+        except adb_link.DeviceLost:
+            raise
+        except (OSError, RuntimeError):
+            failed.append(package)
+    return changed, failed
+
+
+def restore_report(reader, modes):
+    """收尾时恢复通知权限模式并说明结果；返回要加进失败计数的数（#330 第 4 条）。
+    「确实发生过改动」走上报载荷：这条副作用在哪些机型上成立，只有报告里能看到。"""
+    try:
+        changed, failed = restore_appops(reader, modes)
+    except adb_link.DeviceLost:
+        print("  ✗ 手机断开，没能核对通知权限模式是否被页面改动")
+        return 1
+    if changed:
+        events.payload("appops-changed\t" + ",".join(changed))
+    done = [package for package in changed if package not in failed]
+    if done:
+        print(f"  · 通知权限模式：{'、'.join(done)} 由 default 变成 allow，已写回 default 并核对")
+    if failed:
+        print(f"  ✗ 通知权限模式没能恢复原值：{'、'.join(failed)}")
+    return 1 if failed else 0
 
 
 def disabled_at(p, xy):
@@ -827,8 +924,9 @@ def toggle(p, pk, cid, want_on, name="", allowed=()):
             extra = side_effects(before, apps_before, current, apps, pk, cid, allowed)
             if extra:
                 restored = clicked and page.undo(switch[2], want_on)
-                raise StopBatch(f"点击后{'、'.join(extra)}发生变化，{'已点回原状态' if restored else '没能自动点回'}，"
-                                "停止整批；请在手机上核对该 App 的通知设置")
+                message, lost = undo_message(p, before, apps_before, set(allowed) | {(pk, cid)},
+                                             restored, extra, clicked)
+                raise (StopBatchLost if lost else StopBatch)(message)
             if state(current, apps, pk, cid) == desired:
                 return Outcome(DONE)
             if switch[1] == want_on:
@@ -926,6 +1024,7 @@ def run(a):
             if failed(outcome, want):
                 failures += 1
         retry, reached = [], 0
+        modes = {}              # 首次打开页面前才读（#330 第 4 条）：没有待拨的渠道就不会有这项副作用
         try:
             for second in (False, True):
                 queue = todo
@@ -961,6 +1060,7 @@ def run(a):
                             print("  ✗ 手机一直锁屏，本步骤没有执行。请解锁手机、保持亮屏后重试")
                             halted = True
                             break
+                        modes = {pk: appops_mode(p.d, pk) for pk in sorted({pk for pk, _, _ in todo})}
                         print(f"要处理 {len(todo)} 个渠道，每个几秒到半分钟，处理完一个显示一行", flush=True)
                     pause_point()
                     try:
@@ -977,7 +1077,8 @@ def run(a):
                         break
                     except (StopBatch, adb_link.DeviceLost) as e:
                         failures += 1
-                        gone, halted = isinstance(e, adb_link.DeviceLost), True
+                        gone = isinstance(e, (adb_link.DeviceLost, StopBatchLost))
+                        halted = True
                         print(f"  ✗ {e}  {label}")
                         break
                     if failed(outcome, want):
@@ -1004,6 +1105,8 @@ def run(a):
                     reader.shell(f"settings put global stay_on_while_plugged_in {stay_on}")
                 except RuntimeError:
                     pass                        # 手机已断开：收尾一步会再改回
+            if p is not None:
+                failures += restore_report(reader, modes)
         print(f"拨了 {changed} 个，{time.time()-t0:.0f} 秒")
         if gone:
             sys.exit(1)                 # 手机已断开：上面已说明原因，不再回读

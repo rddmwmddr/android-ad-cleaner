@@ -141,14 +141,15 @@ class SideEffectTests(unittest.TestCase):
                 if n.get("checkable") == "true":
                     n.set("checked", "false" if n.get("checked") == "true" else "true")
         p.click.side_effect = flip
-        with patch.object(chan, "parse", side_effect=[snap(), snap(target_on=False, other_on=False)]):
+        with patch.object(chan, "parse", side_effect=[snap(), snap(target_on=False, other_on=False),
+                                                      snap(target_on=True, other_on=True)]):
             with self.assertRaisesRegex(chan.StopBatch, "订单通知.*已点回"):
                 chan.toggle(p, "com.example", "promo", False, "营销通知")
         self.assertEqual(p.click.call_count, 2)
 
     def test_app_master_change_still_stops_batch(self, _sleep):
         p = self.phone()
-        with patch.object(chan, "parse", side_effect=[snap(), snap(app_off=True)]):
+        with patch.object(chan, "parse", side_effect=[snap(), snap(app_off=True), snap(app_off=True)]):
             with self.assertRaisesRegex(RuntimeError, "应用通知总开关"):
                 chan.toggle(p, "com.example", "promo", False, "营销通知")
 
@@ -170,6 +171,7 @@ class SideEffectTests(unittest.TestCase):
         items = [("com.example", "promo", "营销通知"), ("com.example", "news", "资讯")]
         data = {("com.example", "promo"): ("营销通知", 3, False), ("com.example", "news"): ("资讯", 3, False)}
         with patch.object(chan, "load", return_value=items), patch.object(chan, "parse", return_value=(data, {})), \
+             patch.object(chan, "appops_mode", return_value="default") as appops, \
              patch.object(chan, "Phone"), patch.object(chan, "keep_awake", return_value=None), \
              patch.object(chan, "toggle", side_effect=chan.StopBatch("点错了")) as toggle, \
              patch.object(sys, "argv", ["chan_fast.py", "-s", "test", "off", "x.tsv"]), \
@@ -177,6 +179,7 @@ class SideEffectTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 chan.main()
         toggle.assert_called_once()
+        self.assertEqual(appops.call_count, 2)      # 批次开始每个应用一次 + 收尾复核一次
         self.assertIn("点错了", out.getvalue())
 
 
@@ -342,12 +345,14 @@ class ScanWordingTests(unittest.TestCase):
         items = [("com.example", "promo", "营销推广")]
         data = {("com.example", "promo"): ("营销推广", 3, False)}
         with patch.object(chan, "load", return_value=items), patch.object(chan, "parse", return_value=(data, {})), \
+             patch.object(chan, "appops_mode", return_value="default") as appops, \
              patch.object(chan, "Phone"), patch.object(chan, "keep_awake", return_value=None), \
              patch.object(chan, "toggle", return_value=chan.Outcome(chan.UNCHANGED, "点击后渠道状态未改变")), \
              patch.object(sys, "argv", ["chan_fast.py", "-s", "test", "off", "x.tsv"]), \
              contextlib.redirect_stdout(io.StringIO()) as out:
             with self.assertRaises(SystemExit):
                 chan.main()
+        self.assertEqual(appops.call_count, 2)      # 批次开始每个应用一次 + 收尾复核一次
         self.assertIn("仍开着：营销推广", out.getvalue())
 
 
