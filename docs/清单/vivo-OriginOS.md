@@ -7,9 +7,9 @@
 - vivo X300 Ultra（V2547A，OriginOS 7，Android 17），2026-10-25。
 - vivo X Fold6（V2545A，OriginOS 6 Fold，Android 16），2026-10-26。
 - iQOO Z11 Turbo（V2536A，OriginOS 6，Android 16），2026-11-01，无专用脚本，`--ref` 安全模式实测。
-- vivo V2309A（OriginOS 6，Android 16，`PD2309E_A_16.2.15.0.W10`，商店 V10.5.31.0），2026-11-03，报告者实测（[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530)），无专用脚本。
+- vivo V2309A（OriginOS 6，Android 16，`PD2309E_A_16.2.15.0.W10`，商店 V10.5.31.0），2026-11-03，社区实测（[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530)），专用脚本 `recipes/vivo-V2309A/`。
 
-iQOO 结构相近。当前源码有 `recipes/vivo-V2547DA/`、`recipes/vivo-V2547A/`、`recipes/vivo-V2545A/` 三份机型脚本，均已真机整段跑通验证（V2547DA 124 秒，V2547A 126 秒，V2545A 121 秒）；V2547DA 的商店段与齿轮判据在 2026-11-03 改动过（[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530)），那个版本尚未复测。V2547DA 另有 Android 17 变体 `recipes/vivo-V2547DA/recipe_android17.py`，系统版本对上 `PD2547D_A_17.1.10.2` 时自动选它（其余 17.x 小版本对不上，仍走 Android 16 脚本并进安全模式）；入口按 #220 的报告者实测写，本仓库未复测。三份脚本对应不同机型与系统版本，入口差异见下文「OriginOS 7（Android 17）的不同之处」、「X Fold6 的差异」和「V2536A 的差异」；版本对不上时引擎会走安全模式。发布与验证范围见[归档记录](../归档/CHANGELOG-0.3.0及更早.md)。
+iQOO 结构相近。当前源码有 `recipes/vivo-V2547DA/`、`recipes/vivo-V2547A/`、`recipes/vivo-V2545A/`、`recipes/vivo-V2309A/` 四份机型脚本，均已真机整段跑通（V2547DA 124 秒，V2547A 126 秒，V2545A 121 秒，V2309A 167 秒，其中 V2309A 为社区实测、维护方未在本机复跑）；V2547DA 的商店段与齿轮判据在 2026-11-03 改动过（[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530)），那个版本尚未复测。V2547DA 另有 Android 17 变体 `recipes/vivo-V2547DA/recipe_android17.py`，系统版本对上 `PD2547D_A_17.1.10.2` 时自动选它（其余 17.x 小版本对不上，仍走 Android 16 脚本并进安全模式）；入口按 #220 的报告者实测写，本仓库未复测。四份脚本对应不同机型与系统版本，入口差异见下文「OriginOS 7（Android 17）的不同之处」、「X Fold6 的差异」、「V2536A 的差异」和「V2309A 的差异」；版本对不上时引擎会走安全模式。发布与验证范围见[归档记录](../归档/CHANGELOG-0.3.0及更早.md)。
 符号：🔴 关掉　🟢 保留　⚠️ 注意
 
 ---
@@ -291,3 +291,16 @@ Failure [only root can delete system app for a particular user]
 | 关于 → 服务注销 | 未记录 | 存在「服务注销」（停止 vivo 商店服务并清除使用数据） |
 
 商店「服务管理」里那 7 个推广位，报告者已手动处理但未逐项留证，本文不对该页的开关命名做任何断言。
+
+## V2309A 的差异
+
+实测：vivo V2309A，OriginOS 6 / Android 16，`PD2309E_A_16.2.15.0.W10`，商店 V10.5.31.0，2026-11-03（[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530)），社区实测，维护方未在本机复跑。专用脚本 `recipes/vivo-V2309A/`，七段整轮 167 秒；这一轮所有开关此前已关（调整 0 项），脚本实际关闭开关的路径未在这台机器上执行到。上面 1–10 节的开关本身与 X300 Ultra 一致，差别都在「怎么走到那个页面」，脚本里各有一处对应写法：
+
+| 位置 | 其它 vivo 机型 | V2309A |
+|---|---|---|
+| 商店底部「我的」 | V2547DA 用 `p.tap("我的", exact=True)` 能跑通，说明那台读到的就是「我的」 | 读作 `我的, 2个应用待更新,第5个, 共5个`，角标与序号后缀随待更新数量变（清空后是 `我的, 第5个, 共5个`）；用 `Phone.tab()` 的底带三层匹配 |
+| 商店「我的」页右上齿轮 | 有文字的「设置」入口 | 无文字 Button，只有 `content-desc="设置"`；同页还有「去功能设置里重新开启」这条含「设置」的说明行，靠 `icon_hit` 的精确判据分开 |
+| 商店「关于」 | 点标题文字能跳转 | 点左侧标题文字不跳转，要点行中间（同 V1986A） |
+| 负一屏入口 | 桌面从左边缘向右滑 | 从最左边缘划会拉出系统侧边栏（`com.vivo.upslide` 的 `SideSlideDisplayPanel`），要从屏幕中间往右划 |
+
+商店「服务管理」里那项叫「悬浮球」（见第 4 节），「关于 → 个性化推荐」两个开关叫「个性化推荐」「个性化广告推荐」（随商店版本，见第 4 节）。
