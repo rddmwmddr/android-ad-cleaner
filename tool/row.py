@@ -24,6 +24,17 @@ SKELETON_NODES = 80        # 一份骨架的节点上限：一屏朴素全量 18
 SKELETON_BYTES = 4096      # 单份字符上限，与节点上限双保险
 STATE_WORDS = ("开", "关", "已开启", "已关闭", "开启", "关闭", "ON", "OFF",
                "开启，开关", "关闭，开关", "已开启，开关", "已关闭，开关", "开启，按钮", "关闭，按钮")
+# vivo 把开关状态拼进标题尾部：「个性化推荐，开启」关掉后变「个性化推荐，关闭」，按原标题
+# 核对会扑空（#565）。与 STATE_WORDS 同一份词表派生的后缀（全角/半角逗号 + 状态词）：
+# 只剥「，状态词」结尾且剥出非空。标题产出处（title_of）统一调用，别处不再各自处理。
+STATE_SUFFIXES = tuple(f"，{word}" for word in STATE_WORDS) + tuple(f",{word}" for word in STATE_WORDS)
+
+
+def strip_state_suffix(title):
+    for suffix in STATE_SUFFIXES:
+        if title.endswith(suffix) and len(title) > len(suffix):
+            return title[:-len(suffix)].rstrip()
+    return title
 
 
 def bounds(node):
@@ -233,7 +244,9 @@ def title_of(switch, parents, on_screen, screen_h, max_depth=SWITCH_ROW_DEPTH):
         node = parents.get(node)
         if node is None:
             break
-    return title or label
+    # 状态尾缀在产出处剥掉（#565）：plan_switches / off / retry / wrong 拿到的标题
+    # 与状态无关，回读核对不再扑空。
+    return strip_state_suffix(title or label)
 
 
 def path(node, parents, depth=PATH_DEPTH):

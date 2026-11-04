@@ -136,7 +136,7 @@ def rows():
                 continue
             if best is None or (tt, tl) < (best[0], best[1]):
                 best = (tt, tl, s)
-        title = best[2] if best else (raw.split(".")[0].split("，")[0].strip() if raw else "")
+        title = best[2] if best else (raw.split(".")[0].strip() if raw else "")
         out.append((title, ck, ((l + r) // 2, cy)))
     return out
 
