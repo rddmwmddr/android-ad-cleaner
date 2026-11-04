@@ -276,8 +276,11 @@ class LaunchTests(unittest.TestCase):
     def test_late_permission_without_deny_button_stops(self):
         p = phone()
         p.d.shell.return_value = types.SimpleNamespace(exit_code=0, output="Starting")
-        p.focus = Mock(side_effect=["com.example/.Main", "com.android.permissioncontroller/.GrantPermissionsActivity"])
+        # 失败消息现在带落点（#547）
+        p.focus = Mock(side_effect=["com.example/.Main", "com.android.permissioncontroller/.GrantPermissionsActivity",
+                                    "com.android.permissioncontroller/.GrantPermissionsActivity"])
         p.texts = Mock(return_value=[("首页", (), None)])
+        p.tree = Mock(return_value=ET.fromstring('<hierarchy rotation="0"></hierarchy>'))
         p.dismiss = Mock(return_value=None)
         with self.assertRaisesRegex(RuntimeError, "离开前台"):
             p.start("com.example", settle=0)
@@ -286,19 +289,48 @@ class LaunchTests(unittest.TestCase):
     def test_start_leaving_target_app_stops_before_dismiss_or_click(self):
         p = phone()
         p.d.shell.return_value = types.SimpleNamespace(exit_code=0, output="Events injected: 1")
-        p.focus = Mock(side_effect=["com.example/.Main", "com.other/.Account"])
+        # 失败消息现在带落点（#547）：多读一次前台，页面结构也要读得到
+        p.focus = Mock(side_effect=["com.example/.Main", "com.other/.Account", "com.other/.Account"])
         p.texts = Mock(return_value=[])
+        p.tree = Mock(return_value=ET.fromstring('<hierarchy rotation="0"></hierarchy>'))
         p.dismiss = Mock()
         with patch.object(fast.time, "time", side_effect=itertools.count()), patch.object(fast.time, "sleep"):
             with self.assertRaisesRegex(RuntimeError, "离开前台"):
                 p.start("com.example")
         p.dismiss.assert_not_called()
 
+    def test_leaving_foreground_error_carries_the_actual_landing_page(self):
+        # #547：「启动后离开前台」命中 79 份上报、51 个型号，缺的都是「是谁盖住了」。
+        p = phone()
+        p.d.shell.return_value = types.SimpleNamespace(exit_code=0, output="Events injected: 1")
+        p.focus = Mock(side_effect=["com.example/.Main", "com.other/.Account"] + ["com.other/.Account"] * 4)
+        p.texts = Mock(return_value=[])
+        p.tree = Mock(return_value=ET.fromstring('<hierarchy rotation="0"></hierarchy>'))
+        p.dismiss = Mock()
+        with patch.object(fast.time, "time", side_effect=itertools.count()), patch.object(fast.time, "sleep"):
+            with self.assertRaisesRegex(RuntimeError, "离开前台.*停在 com\.other/\.Account"):
+                p.start("com.example")
+        p.dismiss.assert_not_called()
+
+    def test_never_entered_foreground_error_carries_the_actual_landing_page(self):
+        # #547：另一条短路（deadline 到了还没到目标包）同样带上落点。
+        p = phone()
+        p.d.shell.return_value = types.SimpleNamespace(exit_code=0, output="Starting")
+        p.focus = Mock(side_effect=["com.other/.Account"] * 20)
+        p.tree = Mock(return_value=ET.fromstring('<hierarchy rotation="0"></hierarchy>'))
+        p.texts = Mock(return_value=[])
+        p.dismiss = Mock()
+        with patch.object(fast.time, "monotonic", side_effect=itertools.count()), patch.object(fast.time, "sleep"):
+            with self.assertRaisesRegex(RuntimeError, "没有进入前台.*停在 com\.other/\.Account"):
+                p.start("com.example")
+
     def test_dismiss_leaving_target_app_is_not_accepted_as_success(self):
         p = phone()
         p.d.shell.return_value = types.SimpleNamespace(exit_code=0, output="Events injected: 1")
-        p.focus = Mock(side_effect=["com.example/.Main"] * 3 + ["com.other/.Main"])
+        # 失败消息现在带落点（#547）
+        p.focus = Mock(side_effect=["com.example/.Main"] * 3 + ["com.other/.Main", "com.other/.Main"])
         p.texts = Mock(return_value=[("首页", (), None)])
+        p.tree = Mock(return_value=ET.fromstring('<hierarchy rotation="0"></hierarchy>'))
         p.dismiss = Mock()
         with patch.object(fast.time, "time", side_effect=itertools.count(0, .1)), patch.object(fast.time, "sleep"):
             with self.assertRaisesRegex(RuntimeError, "离开前台"):
