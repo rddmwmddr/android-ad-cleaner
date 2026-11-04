@@ -1197,7 +1197,9 @@ class Phone:
             if self.focus().split("/", 1)[0] in PERMISSION_CONTROLLERS:
                 self.dismiss()
             if time.monotonic() >= deadline:
-                raise RuntimeError(f"{pkg} 没有进入前台，跳过本段")
+                # 带上落点（谁抢了前台、页面长什么样）：没有包名就分不清该加白名单还是改判据（#547）。
+                where, detail = self._page_diagnosis()
+                raise RuntimeError(f"{pkg} 没有进入前台，跳过本段（停在 {where}；{detail}）")
             time.sleep(0.2)
         def check_foreground():
             current = self.focus().split("/", 1)[0]
@@ -1212,7 +1214,9 @@ class Phone:
                     time.sleep(.2)
                     current = self.focus().split("/", 1)[0]
             if current != expected:
-                raise RuntimeError(f"{pkg} 启动后离开前台，停止本段以免操作其他 App")
+                # 同 #547：这条报错命中 79 份上报、51 个型号，缺的从来都是「是谁盖住了」。
+                where, detail = self._page_diagnosis()
+                raise RuntimeError(f"{pkg} 启动后离开前台，停止本段以免操作其他 App（停在 {where}；{detail}）")
 
         # 旧版商店冷启动可能暂时没有可读文字；空白不等于广告，不能盲按返回退出 App。
         t = time.time()
