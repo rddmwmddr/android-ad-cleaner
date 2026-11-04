@@ -48,7 +48,6 @@ Issues labelled `waiting-for-verify` have a fix on `main` that the reporter has 
 | #357 | 机主（证据来自 #348） | 华为 M30 / HarmonyOS | #358（0.3.0） | USB 提示按带调试接口的设备取品牌，不再把别的 USB 外设说成「华硕手机」；由 #348 的报告者在下一版插线确认 |
 | #367 | 机主 | POCO（`ro.product.brand=POCO`） | #369（0.3.0） | `run.py check` 的广告包一行出现 `com.miui.systemAdSolution`；`status-json` 的 `ads` 同步 |
 | #278 | @axibaqimingzhenna | OPPO Find N5 / PKH110 / ColorOS 17.0.0.103 | #277（0.2.9） | 不带 `--ref` 直接跑 `recipe`，七段逐段跑完、不再整段「✗ 没找到」，广告跟踪报出真实核对项数。负一屏仍提示需机主手动，属已知限制 |
-| #280 | @afive956 | OPPO Find X10 Pro Max / PMX110 / ColorOS 17.0.0.116 | #279（0.2.9） | 不带 `--ref` 直接跑 `recipe`，九段逐段跑完、不再整段「✗ 没找到」。摇一摇广告与软件商店「推荐卡片」点了没反应、下拉搜索需手动，都是已记录的系统限制，不算回归 |
 | #238 | @dgphust | HONOR PTP-AN20 / MagicOS 10.0.0.175 / Android 16 | #548（未发布） | 参考脚本主题段不再以「✗ 没找到『我的』/『设置』」结束，出现「主题·通知」「主题·个性化服务」两行核对；音乐段进到「音乐·消息和隐私」。市场 / 桌面文件夹段不在本次修复内（等 #547）。报告者跑 `main` 源码，不必等发版，2026-11-04 已发复测请求 |
 | #329 | @your-boy | Xiaomi 17 Max / 2605EPN8EC / HyperOS OS4.0.3.0.XAFCNXM（Android 17） | #331 / PR #395（0.3.0） | 浏览器段四个设置入口逐个命中，不再连报「没找到隐私和安全 / 主页设置 / 搜索设置 / 功能设置」。系统广告段停在「更多安全设置」不受这次修复影响，结果一并贴 |
 | #233 | @kitsonchung | 检测不到手机（电脑上的联想 USB 外设 / 华为 puraX） | #357 / PR #358（0.3.0） | 连接页的 USB 提示按带调试接口的实际设备说品牌并给华为排查建议，不再出现「电脑识别到联想手机，但没有调试接口」。puraX 那半若 `adb 设备` 仍是 0 台，按提示换线、USB 用途切「传输文件」、退出其他手机助手 |
@@ -61,6 +60,8 @@ Issues labelled `waiting-for-verify` have a fix on `main` that the reporter has 
 0.3.0（2026-11-01T05:53Z）包含 #347、#358、#359、#360、#369。同日发复测请求：#286 @xicong（#292 / #293 一并确认）、#335 @afive956、#337 @KujouShiori、#348 @cyf3580（代 #357）；#367 是机主自己开的票，没有外部报告者可催；#397 按待真机反馈一节 @wowbbs 要数据。
 
 #287 在 2026-10-31 用 0.2.9 复测失败后已离开本队列（摘掉 `waiting-for-verify`、改回 `needs-info`），它不在下面这张表的催复测范围里。
+
+#280 在 2026-11-04 离开本队列（摘掉 `waiting-for-verify`、改回 `ready-for-agent`）：同机型报告者复跑后证明「下拉搜索需手动」是脚本漏抄 `gs://search/setting` 这个已验证入口，轮播单选点反是脚本自己的判定错误，两条都不是系统限制。等这次的修复发版后再入队催复测；浏览器「摇一摇广告」与商店「推荐卡片」仍按系统不响应点击处理。
 
 ### 2026-11-01 从 `needs-info` 归队
 
