@@ -63,6 +63,7 @@ Issues labelled `waiting-for-verify` have a fix on `main` that the reporter has 
 | #413 | @Crispy-Pancakezzzz | iQOO Z11 Turbo / V2536A / OriginOS 6（Android 16） | PR #466 / #473（0.3.1） | 浏览器段点 ✕ 后若被带到别的 App，日志出现 `· 点了 ✕ 后跳到 <包名>，疑似推广位，已退回（<控件>）` 且落回原页；商店「关于」页与清单文末「V2536A 的差异」一致 |
 | #469 | @FROKING | Xiaomi 14 Ultra / 24031PN0DC / OS3.0.308.0.WNACNXM（Android 16） | #319（0.3.1） | `check` 的「机型脚本」一行从 `xiaomi-M154FF`（OS4.0）改为同族的 `xiaomi-2304FPN6DC`（OS3.0.308）、版本判定「相同」 |
 | #483 | @lvkowk0330-dev | OnePlus 13 / PJZ110 / PJZ110_17.0.0.103(CN01)（Android 17） | #319 / #165（0.3.1） | `check` 从 `oppo-PLP120`（ColorOS 16.0.9）改为 `oppo-PMX110`（ColorOS 17）；`recipe --ref` 九段逐段贴「命中 / 跳过」 |
+| #280 | @WeilianC | OPPO Find X10 Pro Max / PMX110 / ColorOS 17.0.0.116 | PR #563（未发布） | 不带 `--ref` 跑 `recipe`：下拉搜索走 `gs://search/setting` 后逐组回读（搜索范围 / 首页卡片管理 / 功能管理 / 消息管理 / 隐私），负一屏轮播点到「不显示轮播推荐」并回读，游戏中心先跳首进引导再找齿轮。浏览器「摇一摇广告」与商店「推荐卡片」点了没反应仍是系统限制，跳过即可 |
 
 2026-11-04：`/triage` 复核 `needs-info` 队列，把四张「已修待复测」却挂在 `needs-info` 的票改回本队列 —— #329、#233、#240（上表新增），#348（已在 #357 行按「证据来自 #348」登记，不重复）。四张票在 `needs-info` 期间都没有新增报告者回复。
 
@@ -72,7 +73,7 @@ Issues labelled `waiting-for-verify` have a fix on `main` that the reporter has 
 
 #287 在 2026-10-31 用 0.2.9 复测失败后已离开本队列（摘掉 `waiting-for-verify`、改回 `needs-info`），它不在下面这张表的催复测范围里。
 
-#280 在 2026-11-04 离开本队列（摘掉 `waiting-for-verify`、改回 `ready-for-agent`）：同机型报告者复跑后证明「下拉搜索需手动」是脚本漏抄 `gs://search/setting` 这个已验证入口，轮播单选点反是脚本自己的判定错误，两条都不是系统限制。等这次的修复发版后再入队催复测；浏览器「摇一摇广告」与商店「推荐卡片」仍按系统不响应点击处理。
+#280 在 2026-11-04 离开本队列（摘掉 `waiting-for-verify`、改回 `ready-for-agent`）：同机型报告者复跑后证明「下拉搜索需手动」是脚本漏抄 `gs://search/setting` 这个已验证入口，轮播单选点反是脚本自己的判定错误，两条都不是系统限制。修复已进 PR #563（未发布），随发版重新入队催复测（上表末行）；浏览器「摇一摇广告」与商店「推荐卡片」仍按系统不响应点击处理。
 
 ### 2026-11-01 从 `needs-info` 归队
 
