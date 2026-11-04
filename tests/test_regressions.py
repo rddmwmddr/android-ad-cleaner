@@ -308,7 +308,7 @@ class LaunchTests(unittest.TestCase):
         p.tree = Mock(return_value=ET.fromstring('<hierarchy rotation="0"></hierarchy>'))
         p.dismiss = Mock()
         with patch.object(fast.time, "time", side_effect=itertools.count()), patch.object(fast.time, "sleep"):
-            with self.assertRaisesRegex(RuntimeError, "离开前台.*停在 com\.other/\.Account"):
+            with self.assertRaisesRegex(RuntimeError, r"离开前台.*停在 com\.other/\.Account"):
                 p.start("com.example")
         p.dismiss.assert_not_called()
 
@@ -321,7 +321,7 @@ class LaunchTests(unittest.TestCase):
         p.texts = Mock(return_value=[])
         p.dismiss = Mock()
         with patch.object(fast.time, "monotonic", side_effect=itertools.count()), patch.object(fast.time, "sleep"):
-            with self.assertRaisesRegex(RuntimeError, "没有进入前台.*停在 com\.other/\.Account"):
+            with self.assertRaisesRegex(RuntimeError, r"没有进入前台.*停在 com\.other/\.Account"):
                 p.start("com.example")
 
     def test_dismiss_leaving_target_app_is_not_accepted_as_success(self):
