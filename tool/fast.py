@@ -11,7 +11,7 @@
   fast.py -s SERIAL run 机型脚本.py         跑一个品牌机型脚本
 在脚本里：from fast import Phone
 """
-import os, re, sys, time, xml.etree.ElementTree as ET
+import os, re, sys, time, unicodedata, xml.etree.ElementTree as ET
 from dataclasses import dataclass
 for _st in (sys.stdout, sys.stderr):
     try:
@@ -112,22 +112,38 @@ def in_band(xy, screen_h):
     return screen_h * 0.08 <= xy[1] <= screen_h * 0.985
 
 
+def match_key(text):
+    """keep/only 的归一化匹配键（#559）：NFKC 统一全角半角（「：」→「:」、「Ａ」→「A」、
+    全角空格→空格），去掉全部空白与常见中英标点，再小写。标题与保留词 / 名单词两侧
+    用同一套——只归一化一边等于没修。「应用安全」与「安全内容推荐」归一化后仍是两个键。
+    want_state() 的语义不动：它判「该开还是该关」，归一化只管「要不要碰」。"""
+    text = unicodedata.normalize("NFKC", text or "")
+    text = re.sub(r"[\s\u3000]+", "", text)
+    text = re.sub(r"[，。：；、！？·「」『』（）【】—－–,.:;!?()(\[\]){}\"'~*#@&%$+=|<>]", "", text)
+    return text.lower()
+
+
 def plan_switches(rows, keep=(), only=None, safe_mode=False, *, screen_h, disabled=None):
     """这一页该拨哪些开关。rows 是 `Phone.switches()` 的输出；函数不读屏、不点击。
 
     targets 只含需要点击的行；checked 是过了筛选的标题，含已在目标态、落在屏带外与被禁用的；
     kept 是安全模式放过的普通开关。disabled 是按坐标判「这一行的开关是灰的」的谓词：
-    命中的行不进 targets，也不报成拨不动。screen_h 无默认值：带过滤是这一页几何的一部分。"""
+    命中的行不进 targets，也不报成拨不动。screen_h 无默认值：带过滤是这一页几何的一部分。
+    keep/only 的匹配走 match_key 归一化（#559）：页面标题的字间空格、全角标点与脚本里
+    写的保留词不一致时（「首页 AI 搜索」vs「首页：AI搜索」），保留词照样命中。"""
+    keep_keys = {match_key(k) for k in keep if match_key(k)}
+    only_keys = {match_key(k) for k in only if match_key(k)} if only is not None else None
     checked, kept, candidates = set(), set(), []
     for title, state, xy in rows:
         if not title:
             continue
+        key = match_key(title)
         want = want_state(title)
         if want is None:
             continue
-        if any(k in title for k in keep):
+        if any(k in key for k in keep_keys):
             continue
-        if only is not None and not any(k in title for k in only) and not (want and TRACK_WORDS.search(title)):
+        if only is not None and not any(k in key for k in only_keys) and not (want and TRACK_WORDS.search(title)):
             continue                              # 「限制广告跟踪」这类保护开关：不在名单里也要打开
         if safe_mode and only is None and not want:
             kept.add(title)
