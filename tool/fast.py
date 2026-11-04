@@ -37,6 +37,13 @@ DISMISS = ("以后再说", "暂不更新", "暂不", "取消", "我知道了", "
 # 只按标题认，不按按钮认：单个「取消」在正常设置面板里也有。
 UPDATE_TITLE = re.compile(r"检测到新版本|发现新版本|版本更新提示")
 CONFIRM = ("确定", "关闭", "仍要关闭", "确认关闭", "确认", "继续关闭", "关闭推荐", "仍然关闭")
+# 点击后认确认框总共等多久：vivo 商店「个性化推荐」页的弹窗要 0.6 秒才进树，而一次读屏
+# 也要上百毫秒，1 秒是「能等到慢弹窗」与「没弹窗的页面不多付太多」之间的取值（#555）。
+# 前 0.2 秒先不给读屏：弹窗刚弹出时按钮还在动，点在半路上不生效。
+# 预算按挂钟算、读屏本身也吃时间：dump 慢到 0.5 秒的机型只采得到两次样，晚于 1 秒才进树的
+# 弹窗仍会漏，那时靠 `off()` 连点前的遮罩检查兜一次。
+CONFIRM_WAIT = 1.0
+CONFIRM_SETTLE = 0.2
 PERMISSION_CONTROLLERS = {"com.android.permissioncontroller", "com.google.android.permissioncontroller"}
 # 输入框：荣耀 MagicOS 10（PNM-AN10 10.0.0.102）设置搜索框是 AutoCompleteTextView，类名里没有 EditText
 EDIT = re.compile(r"EditText|AutoCompleteTextView")
@@ -796,16 +803,31 @@ class Phone:
             self.settle(b, 0.6)
 
     def confirm(self):
-        """开关后弹确认框就点确认类按钮。严格档只认 Button 类，
-        ColorOS 开关旁边的「开启/关闭」状态文字不算——点了会把开关又拨回去。
+        """开关后弹确认框就点确认类按钮，认出即返回按钮文字；没有弹窗返回 None。
+
+        弹窗进树可能远慢于一次读屏（vivo 商店这一页要 0.6 秒），单次快照从点击那一刻起就
+        必然错过，剩下的点击会落在遮罩上被吞（#555）。所以在 CONFIRM_WAIT 预算内轮询。"""
+        time.sleep(CONFIRM_SETTLE)
+        found = wait.until(self._confirm_target, timeout=CONFIRM_WAIT - CONFIRM_SETTLE,
+                           poll=0.1, now=time.time, sleep=time.sleep)
+        if found is None:
+            return None
+        label, xy = found
+        self.click(*xy)
+        time.sleep(0.3)
+        return label
+
+    def _confirm_target(self, root=None):
+        """屏上第一个确认类按钮的 (文字, 落点)；没有返回 None。只看不点，等弹窗与防遮罩共用它。
+
+        严格档只认 Button 类，ColorOS 开关旁边的「开启/关闭」状态文字不算——点了会把开关又拨回去。
         按钮文字不一定在 text 上：vivo 阅图锁屏的 Button text 为空、文字在 content-desc（#246 / PR #249）；
         vivo / iQOO 另一种弹窗把文字放在 Button 下级的 TextView（vbutton_title，PR #239）。
         都要整段等于确认词，避免点到说明文字。
         屏幕外的节点跳过：页面里常留着上一层对话框的按钮，点它会抛「点击坐标在屏幕外」把整段打断（PR #248）。
         严格档全没命中再退一档：HyperOS 4 的部分弹窗把确认键画成可点击的 TextView（小米 17 热榜页，PR #408 / #500）。
         兜底档靠 TextView 类过滤挡掉 ColorOS 的 View 状态文字，尺寸只用来排除整行。"""
-        time.sleep(0.2)
-        root = self.tree()
+        root = root if root is not None else self.tree()
 
         def button_hit(n, c):
             if "Button" not in (n.get("class") or ""):
@@ -829,9 +851,7 @@ class Phone:
                         continue
                     l, t, r, b = bounds(n)
                     if r > l and b > t and self.on_screen(n):
-                        self.click((l + r) // 2, (t + b) // 2)
-                        time.sleep(0.3)
-                        return c
+                        return c, ((l + r) // 2, (t + b) // 2)
         return None
 
     def off(self, keep=(), only=None, page="", max_screens=40):
@@ -869,6 +889,9 @@ class Phone:
             shift = False                               # 剩下的目标是不是还准在计划坐标上
             clicked = set()                             # 本屏真的点过的标题：点完从列表消失的靠它认
             for i, (t, xy, w) in enumerate(order):
+                if i and not slow and self._confirm_target() is not None:
+                    # 首击的确认框比 confirm() 的等待还慢时，页面还盖着遮罩：连点下去全被吞（#555）
+                    self.confirm()
                 if i and shift:
                     # 页面重排过：每点一项前重读，旧坐标可能已经指向邻行
                     time.sleep(0.3)                     # 等行消失、列表上移的动画走完
