@@ -39,6 +39,8 @@ Issues labelled `waiting-for-verify` have a fix on `main` that the reporter has 
 
 2026-11-03：#523 由 @gehongyan 在魅族 21 Pro（Flyme 12.6.0.0A）上拉取 `main` 最新代码重跑，浏览器与应用商店两段都能自己走完，原两条失败不再出现；报告者自行关闭，同日摘掉 `waiting-for-verify`。这次验证跑的是 `main` 源码而非发布版（修复随下一版发布），该票当时未登记进下表。
 
+2026-11-04：把漏登记的外部票补进下表（#209、#218、#317、#330、#331、#336、#413、#469、#483）。同一轮对账还改了三张票的状态：#531 由报告者 @cyjx007 在 `main` 真机确认，关闭并摘标；#193 的复测贴出主题段仍失败的证据与根因，摘标转 `needs-triage`；#336 修好随 0.3.0 进包却从没发过复测请求，补发一条。
+
 | Issue | 报告者 | 机型 / 系统 | 修复（进入的版本） | 要观察的输出 |
 | ----- | ------ | ----------- | ------------------ | ------------ |
 | #286 | @xicong | OPPO Find X8s / PKT110 / ColorOS 17.0.0.102 | #482、#519（未发布） | 主题商店与视频两段不再以「未找到入口」结束。主题商店 17.22 的「设置」读作「设置,有1条新通知」，脚本按文字包含或右上角图标都能进，落地页出现「服务管理 / 隐私」才算成功；游戏中心切「我的」会确认换了页，失败不再停在首页推荐流。失败时会打印停在哪一页 |
@@ -52,6 +54,15 @@ Issues labelled `waiting-for-verify` have a fix on `main` that the reporter has 
 | #329 | @your-boy | Xiaomi 17 Max / 2605EPN8EC / HyperOS OS4.0.3.0.XAFCNXM（Android 17） | #331 / PR #395（0.3.0） | 浏览器段四个设置入口逐个命中，不再连报「没找到隐私和安全 / 主页设置 / 搜索设置 / 功能设置」。系统广告段停在「更多安全设置」不受这次修复影响，结果一并贴 |
 | #233 | @kitsonchung | 检测不到手机（电脑上的联想 USB 外设 / 华为 puraX） | #357 / PR #358（0.3.0） | 连接页的 USB 提示按带调试接口的实际设备说品牌并给华为排查建议，不再出现「电脑识别到联想手机，但没有调试接口」。puraX 那半若 `adb 设备` 仍是 0 台，按提示换线、USB 用途切「传输文件」、退出其他手机助手 |
 | #240 | @KongdaV5 | Xiaomi 14 / 23127PN0CC / HyperOS OS3.0.303.0.WNCCNXM（Android 16） | #319（0.3.1） | `check` 的「机型脚本」一行从 `xiaomi-M154FF`（OS4.0）改为同族的 `redmi-23049RAD8C`（OS3.0）、版本判定「相同」；系统广告 / 主题 / 浏览器 / 天气和日历四段不再整段跳过。仍整段跳过则说明要按 OS3.0 另录一份，不是借哪份脚本的问题 |
+| #209 | @Wqyy2020 | REDMI K90 Pro Max / 25102RKBEC / OS 4.0.5.0（Android 17） | 专用脚本 `xiaomi-25102RKBEC`（v0.2.6 起，无需改码） | 不带 `--ref` 重跑：`check` 的「机型脚本」一行写 `recipes/xiaomi-25102RKBEC/recipe.py` 且版本一致，六段不再整段「✗ 没找到」 |
+| #218 | @Porridge10010 | Redmi Note 12 Turbo / 23049RAD8C / OS3.0.5.0.VMRCNXM（Android 15） | 专用脚本 `redmi-23049RAD8C`（v0.2.6 起，无需改码） | `check` 写 `recipes/redmi-23049RAD8C/recipe.py`；日志里的 `adb.exe: device '<序列号>' not found` 是连接断开，跑前退出手机助手类软件 |
+| #317 | @tasuma-qwq | Xiaomi 14 Pro / 23116PN5BC / OS3.0.308.0.WNBCNXM（Android 16） | PR #406（0.3.0） | `check` 写本型号，不再出现「本型号没有；同品牌参考 `xiaomi-M154FF`」，也不再提示安全模式；`recipe` 不用手工指定脚本路径 |
+| #330 | @lanzhihong6 | HUAWEI ALN-AL00 / HarmonyOS 4.2.0.223（Android 12） | PR #520（未发布） | 检出清单外变化并点回后，出现「已点回并复核通过」，或点名差异渠道的「没能完全恢复」；跑完用 `dumpsys package <包名>` 查 `POST_NOTIFICATIONS` 仍是原模式 |
+| #331 | @huangxy777 | REDMI K80 Ultra / redmi-25060RK16C（Android 17） | PR #395（0.3.0） | 浏览器段五个入口逐个命中；仍失败时日志带「停在 …」点名卡在哪一页，不再只说「没找到」 |
+| #336 | @KujouShiori | vivo V1986A / Funtouch OS 13.0（Android 12） | PR #387（0.3.0） | `chan-off` 的 11 个营销渠道不再全部「未确认」跳过；专用脚本 `recipes/vivo-V1986A` 自 v0.2.9 起在包里，`check` 应显示它 |
+| #413 | @Crispy-Pancakezzzz | iQOO Z11 Turbo / V2536A / OriginOS 6（Android 16） | PR #466 / #473（0.3.1） | 浏览器段点 ✕ 后若被带到别的 App，日志出现 `· 点了 ✕ 后跳到 <包名>，疑似推广位，已退回（<控件>）` 且落回原页；商店「关于」页与清单文末「V2536A 的差异」一致 |
+| #469 | @FROKING | Xiaomi 14 Ultra / 24031PN0DC / OS3.0.308.0.WNACNXM（Android 16） | #319（0.3.1） | `check` 的「机型脚本」一行从 `xiaomi-M154FF`（OS4.0）改为同族的 `xiaomi-2304FPN6DC`（OS3.0.308）、版本判定「相同」 |
+| #483 | @lvkowk0330-dev | OnePlus 13 / PJZ110 / PJZ110_17.0.0.103(CN01)（Android 17） | #319 / #165（0.3.1） | `check` 从 `oppo-PLP120`（ColorOS 16.0.9）改为 `oppo-PMX110`（ColorOS 17）；`recipe --ref` 九段逐段贴「命中 / 跳过」 |
 
 2026-11-04：`/triage` 复核 `needs-info` 队列，把四张「已修待复测」却挂在 `needs-info` 的票改回本队列 —— #329、#233、#240（上表新增），#348（已在 #357 行按「证据来自 #348」登记，不重复）。四张票在 `needs-info` 期间都没有新增报告者回复。
 
