@@ -723,8 +723,17 @@ def cmd_quickapp(serial, rest):
         else:
             print("可挂起的快应用组件已关闭（保留项除外）；恢复：quickapp on")
             if who:
-                # 保留平台就等于留着 hap:// 入口，不能写成广告已拦下
-                print(f"hap:// 链接仍由 {handlers} 接管（保留项）：广告仍可能跳进快应用。")
+                # 保留平台就等于留着 hap:// 入口，不能写成广告已拦下。已挂起的组件也会出现在
+                # query-activities 里（suspend 不撤销 manifest 声明，#564），两种状态不能共用
+                # 「保留项」这个词：按组件所属包分点名。
+                keep_pkgs = {pkg.split("/", 1)[0] for pkg in QUICKAPP_KEEP}
+                reserved = [h for h in who if h.split("/", 1)[0] in keep_pkgs]
+                suspended_handlers = [h for h in who if h.split("/", 1)[0] not in keep_pkgs]
+                if reserved:
+                    print(f"hap:// 链接仍由 {'、'.join(reserved)} 接管（保留项）：广告仍可能跳进快应用。")
+                if suspended_handlers:
+                    print(f"hap:// 链接仍由 {'、'.join(suspended_handlers)} 接管"
+                          f"（已挂起，但系统仍声明它能接这类链接）。")
         return 0
     if sub == "off":
         todo = [q["pkg"] for q in qs if not q["closed"] and q["method"] == "suspend" and not q["keep"]]

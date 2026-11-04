@@ -309,6 +309,36 @@ class RoundTripTests(unittest.TestCase):
         self.assertIn("com.example.a/.One", text)
         self.assertIn("com.example.b/.Two", text)
 
+    def test_check_keeps_reserved_wording_for_keep_packages(self):
+        """who 里只有保留平台时，文案与现在逐字一致（#564）。"""
+        def shell(_s, cmd):
+            if cmd.startswith("pm query-activities"):
+                return "  com.nearme.instant.platform/.Main\n"
+            if cmd.startswith("pm list packages") and "-d" not in cmd:
+                return "".join(f"package:{p}\n" for p in self.PKGS)
+            return ""
+
+        with tempfile.TemporaryDirectory() as directory,              patch.object(run, "sh", side_effect=shell),              patch.object(run, "quickapp_switch", return_value=None),              patch.object(run, "suspended", return_value=True),              patch.object(run, "latest_backup", return_value=directory),              patch.object(sys, "argv", ["run.py", "-s", "test", "quickapp", "check"]),              contextlib.redirect_stdout(out := io.StringIO()),              contextlib.redirect_stderr(io.StringIO()):
+            run.main()
+        text = out.getvalue()
+        self.assertIn("hap:// 链接仍由 com.nearme.instant.platform/.Main 接管（保留项）：广告仍可能跳进快应用。", text)
+
+    def test_check_names_suspended_handlers_separately_from_reserved_ones(self):
+        """非保留包已挂起但系统仍声明它接 hap://：不能说成「保留项」（#564，小米 17 实测）。"""
+        def shell(_s, cmd):
+            if cmd.startswith("pm query-activities"):
+                return "  com.miui.hybrid/.VendorDispatcherActivity\n"
+            if cmd.startswith("pm list packages") and "-d" not in cmd:
+                return "".join(f"package:{p}\n" for p in self.PKGS)
+            return ""
+
+        with tempfile.TemporaryDirectory() as directory,              patch.object(run, "sh", side_effect=shell),              patch.object(run, "quickapp_switch", return_value=None),              patch.object(run, "suspended", return_value=True),              patch.object(run, "latest_backup", return_value=directory),              patch.object(sys, "argv", ["run.py", "-s", "test", "quickapp", "check"]),              contextlib.redirect_stdout(out := io.StringIO()),              contextlib.redirect_stderr(io.StringIO()):
+            run.main()
+        text = out.getvalue()
+        self.assertIn("com.miui.hybrid/.VendorDispatcherActivity", text)
+        self.assertIn("已挂起，但系统仍声明它能接这类链接", text)
+        self.assertNotIn("（保留项）", text)
+
     def test_fold_open_reads_wm_size_once(self):
         """wm size 读一次就够，别一行里发两趟。"""
         events = []
