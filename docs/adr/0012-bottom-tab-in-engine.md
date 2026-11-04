@@ -27,7 +27,7 @@
 ## Consequences
 
 - **替换四处入口**：`xiaomi-2304FPN6DC` 的商店段与主题段、`redmi-25060RK16C` 的商店段、`xiaomi-24129PN74C` 的商店段。两处「必须 exact」的注释改写为底部带过滤的依据。
-- **另外几份本地 helper 不动**（`tap_bottom_tab` / `wait_bottom_tab` / `tab_bot` / `bottom_tab` / `tap_bottom` / `tab`）：那些机型没有真机在手，随各自下次改动迁移。`redmi-25060RK16C` 的主题段仍用 `tab_bot()`，同一个脚本暂时两套实现并存，等主题段下次实测时再一起换。
+- **另外几份本地 helper 不动**（`tap_bottom_tab` / `wait_bottom_tab` / `tab_bot` / `bottom_tab` / `tab`）：那些机型没有真机在手，随各自下次改动迁移。`redmi-25060RK16C` 的主题段仍用 `tab_bot()`，同一个脚本暂时两套实现并存，等主题段下次实测时再一起换。**2026-11-04 订正**：`tap_bottom` 已随 #280 从 `recipes/oppo-PMX110` 删除——下拉搜索改走 `gs://search/setting`，不再从搜索页底部找入口。
 - **其余十八处裸 `p.tap("我的", exact=True)` 当时不动**：大多在 OPPO / vivo / realme 上，`exact` 本来就能命中。**2026-11-03 订正**：vivo 应用商店不在其中——底栏标签带角标后缀（`我的, 2个应用待更新,第5个, 共5个`），`exact` 读不到，两份 vivo 参考脚本已改用 `Phone.tab()`（[ADR-0013](0013-settings-entry-in-engine.md)、#530）。
 - **`CONTEXT.md` 补「底部标签」**，`docs/04` 补 `p.tab()` 与 `p.go()` 的分工。
 - **没有真机可验。** 验收是单元回归：带内三种文案形状、精确与末段等于都压过包含、内容区同名不点、带外不点、屏带边界两侧、带内无匹配返回 `False`、标签晚到仍会等到。两处入口换写法后的真机复测进下一版 `waiting-for-verify` 清单，与 ADR-0002 / ADR-0005 同一标准。
