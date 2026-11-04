@@ -2,9 +2,16 @@
 BUILD = "PMX110_17.0.0"
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 import time
+import xml.etree.ElementTree as ET
 
 ONLY = globals().get("ONLY") or []
 FAILED_STEPS = globals().get("FAILED_STEPS") or []
+
+SEARCH_PKG = "com.heytap.quicksearchbox"
+# 设置页 SearchSettingActivity 没导出，am start -n 会被系统拒绝；这是应用自己的入口
+SEARCH_SETTINGS = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"
+SEARCH_TITLES = {"搜索范围", "功能管理", "首页卡片管理", "消息管理", "账号与隐私"}
+CAROUSEL_LABELS = {"显示轮播推荐", "不显示轮播推荐"}
 
 
 def step(name):
@@ -54,7 +61,7 @@ def tap_row(text, scrolls=6):
             m = n
             while m is not None and m.get("clickable") != "true":
                 m = parent.get(m)
-            m = m or n                      # 没有可点的那一行：点文字本身
+            m = n if m is None else m       # 没有可点的那一行：点文字本身
             l, t, r, b = bounds(m)
             if b > t and t < p.H * 0.95:
                 p.click((l + r) // 2, (t + b) // 2); time.sleep(1.5)
@@ -65,15 +72,32 @@ def tap_row(text, scrolls=6):
     return False
 
 
-def tap_bottom(text, min_y=0.6):
-    """只点页面下方的同名文字：下拉搜索页顶部也有「设置」，那是别的功能。"""
-    from fast import bounds
-    for n in p.tree().iter("node"):
-        if (n.get("text") or "").strip() == text and bounds(n)[1] > p.H * min_y:
-            l, t, r, b = bounds(n)
-            p.click((l + r) // 2, (t + b) // 2); time.sleep(1.5)
-            return True
-    return False
+def wait_search_settings(timeout=6):
+    """认「全局搜索的设置页」：前台是本包的 Setting 页，且页面上认得出设置项标题。
+    同包的搜索首页也有「搜索范围」这类文字，只看文字会把首页当成设置页。"""
+    from wait import until
+
+    def sample():
+        where = p.focus()
+        if SEARCH_PKG not in where or "Setting" not in where.split("/", 1)[-1]:
+            return False
+        try:
+            return bool(SEARCH_TITLES & {t.strip() for t, _, _ in p.texts()})
+        except ET.ParseError:          # 半截 dump：还没画完，下一轮再看
+            return False
+
+    return bool(until(sample, timeout=timeout, poll=0.4, now=time.monotonic, sleep=time.sleep))
+
+
+def dismiss_guide(timeout=4):
+    """首次进游戏中心会弹引导浮层，不点掉会盖住「我的」和齿轮。没有浮层时直接放行。"""
+    from wait import until
+    if not p.find("跳过", exact=True):
+        return True
+    if not p.tap("跳过", exact=True, scrolls=0):
+        return False
+    return bool(until(lambda: not p.find("跳过", exact=True), timeout=timeout, poll=0.3,
+                      now=time.monotonic, sleep=time.sleep))
 
 
 def tap_gear():
@@ -103,26 +127,54 @@ def menu(word):
     return ok
 
 
-def pick_radio(word):
-    """轮播推荐是单选按钮，点文字没反应，要直接点按钮。"""
+def carousel_choices():
+    """轮播单选：只认按钮自己那一行的标签，不合并祖先子树的文字。
+    这一页的父容器会把「显示轮播推荐 / 不显示轮播推荐」并成一段，按子串匹配会让「显示」那一项
+    也命中「不显示」，点下去等于把轮播又打开（#280）。预览图里的同名文字不是可点目标。"""
     from fast import bounds
     root = p.tree()
-    parent = {c: pp for pp in root.iter() for c in pp}
-    for n in root.iter("node"):
-        if "RadioButton" not in (n.get("class") or ""):
+    parents = {c: n for n in root.iter() for c in n}
+    choices = {}
+    for node in root.iter("node"):
+        if node.get("checkable") != "true" or "RadioButton" not in (node.get("class") or ""):
             continue
-        row, hit = n, False
-        for _ in range(3):
-            row = parent.get(row)
-            if row is None:
+        row = node
+        for _ in range(5):
+            captions = {x.get("text") or "" for x in row.iter("node")} | {
+                x.get("content-desc") or "" for x in row.iter("node")}
+            matched = captions & CAROUSEL_LABELS
+            if len(matched) == 1:
+                name = matched.pop()
+                if name in choices:
+                    raise RuntimeError("轮播单选项不唯一，未点击")
+                if not p.on_screen(node) or node.get("enabled") != "true":
+                    raise RuntimeError("轮播单选项不可操作")
+                if node.get("checked") not in ("true", "false"):
+                    raise RuntimeError("轮播单选状态未知，未点击")
+                choices[name] = (node.get("checked") == "true", bounds(node))
                 break
-            if word in " ".join((x.get("text") or "") for x in row.iter("node")):
-                hit = True; break
-        if hit:
-            l, t, r, b = bounds(n)
-            p.click((l + r) // 2, (t + b) // 2); time.sleep(1.2)
-            return True
-    return False
+            row = parents.get(row)
+            if row is None or len(matched) > 1:
+                break
+    if set(choices) != CAROUSEL_LABELS or sum(on for on, _ in choices.values()) != 1:
+        raise RuntimeError("无法确认轮播单选状态，未点击")
+    return choices
+
+
+def pick_radio(target):
+    """把轮播推荐改到 target（「不显示轮播推荐」/「显示轮播推荐」）；回读没改过来就报失败。"""
+    where = p.focus()
+    on, (l, t, r, b) = carousel_choices()[target]
+    if on:
+        print(f"  · 轮播推荐已经是「{target}」，不动")
+        return True
+    if p.focus() != where:                    # 读到坐标之后页面换了，坐标就作废
+        raise RuntimeError("单选页在读取与点击之间变化，未点击")
+    p.click((l + r) // 2, (t + b) // 2); time.sleep(1.2)
+    if not carousel_choices()[target][0]:
+        raise RuntimeError(f"「{target}」回读未选中，不当作已关闭")
+    print(f"  · 轮播推荐：已改为「{target}」")
+    return True
 
 
 @step("广告跟踪")
@@ -161,7 +213,11 @@ def _():
         p.off(only=["搜索框提示词"], page="负一屏")
         # ⚠ 「推荐服务」总开关不要关：会删掉天气/步数/清理卡片
         if tap_row("推荐服务", scrolls=6):
-            pick_radio("不显示")
+            try:
+                pick_radio("不显示轮播推荐")
+            except RuntimeError as e:            # 轮播没改不影响同段的热点资讯，但要如实记失败
+                print(f"  ✗ 轮播推荐没改成：{e}")
+                FAILED_STEPS.append("负一屏")
             p.back()
         if tap_row("热点资讯", scrolls=6):   # 二级页，里面才是总开关
             p.off(only=["热点资讯"], page="负一屏·热点资讯")
@@ -171,18 +227,24 @@ def _():
     p.back(3)
 
 
+def search_sources():
+    """借给别的机型（安全模式）时只关推荐位：ColorOS 17 上榜单 / 小说 / 购物是内容源，关掉会搜不到东西。"""
+    if p.safe_mode:
+        return ["个性化推荐", "精选资讯"]
+    return ["榜单", "小说", "购物", "个性化推荐", "精选资讯"]
+
+
 @step("下拉搜索")
 def _():
-    # 设置页 SearchSettingActivity 没有导出，am start 会被系统拒绝；入口在搜索页最底部
-    # ⚠ 不要用滑动去找：这台机器上滑会被输入法当成输入、或直接退出搜索页，只能就地找入口
-    p.start("com.heytap.quicksearchbox", ".multisearch.activity.MultiSearchHomeActivity")
-    time.sleep(1.5)
-    if not tap_bottom("设置"):
-        print("  ✗ 没找到搜索页底部的「设置」，本段跳过（需手动：桌面下拉搜索页 → 底部设置）")
+    # 设置页 SearchSettingActivity 没有导出，am start -n 会被系统拒绝；走应用自己的 scheme 直达。
+    # ⚠ 不要退回桌面下滑找搜索页底部入口：这台机器上滑会被输入法当成输入、或直接退出搜索页
+    p.d.shell(SEARCH_SETTINGS); time.sleep(1.5)
+    if not wait_search_settings():
+        print(f"  ✗ 没落到全局搜索设置页（当前前台：{p.focus()}），本段跳过")
         FAILED_STEPS.append("下拉搜索")
         return
     if tap_row("搜索范围", scrolls=3):
-        p.off(only=["榜单", "小说", "购物", "个性化推荐", "精选资讯"], page="下拉搜索·搜索范围")
+        p.off(only=search_sources(), page="下拉搜索·搜索范围")
         p.back()
     if tap_row("首页卡片管理", scrolls=4):
         p.off(only=["未下载应用推荐", "应用建议小卡", "探索发现", "活动皮肤", "每日热榜", "推荐卡片"],
@@ -190,6 +252,9 @@ def _():
         p.back()
     if tap_row("功能管理", scrolls=4):
         p.off(only=["搜索框提示词"], page="下拉搜索·功能管理")
+        p.back()
+    if tap_row("消息管理", scrolls=4):
+        p.off(only=["消息通知"], page="下拉搜索·消息管理")
         p.back()
     if tap_row("账号与隐私", scrolls=4) and p.tap("隐私", exact=True):
         p.off(only=["个性化推荐"], page="下拉搜索·隐私")
@@ -266,7 +331,13 @@ def _():
 @step("游戏中心")
 def _():
     p.start("com.nearme.gamecenter")
+    dismissed = dismiss_guide()                   # 首进引导浮层：首页可能弹一次、切「我的」也可能再弹
     p.tap("我的", exact=True, scrolls=0)          # 底部标签
+    dismissed = dismiss_guide() and dismissed
+    if not dismissed:
+        print("  ✗ 首进引导浮层没关掉，齿轮被挡住，本段跳过")
+        FAILED_STEPS.append("游戏中心")
+        p.back(2); return
     if tap_gear():                                # 右上齿轮，无障碍名是「设置,有新通知」
         time.sleep(1.2)
         if tap_row("隐私", scrolls=6) and tap_row("隐私开关设置", scrolls=4):
