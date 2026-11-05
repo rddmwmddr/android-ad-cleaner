@@ -52,8 +52,7 @@ class TargetSelectionTests(unittest.TestCase):
         plan = fast.plan_switches([("首页：AI搜索", True, (500, 800))],
                                   keep=["首页 AI 搜索"], screen_h=2340)
         self.assertEqual(plan.targets, ())
-        self.assertIn("首页：AI搜索", plan.kept) if False else None  # kept 仅安全模式；普通 keep 走 skip
-        self.assertNotIn("首页：AI搜索", [t for t, _, _ in plan.targets])
+        self.assertEqual(plan.checked, frozenset())
 
     def test_keep_matches_a_full_width_space_in_the_page_title(self):
         plan = fast.plan_switches([("服务管理　个性化推荐", True, (500, 800))],
