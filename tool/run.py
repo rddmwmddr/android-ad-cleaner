@@ -200,6 +200,10 @@ REFERENCE = {"oppo": "oppo-PLP120", "honor": "honor-PNM-AN10", "xiaomi": "xiaomi
 # 把脚本 BUILD 或设备版本抽成版本核心时要先切掉的机型名标记（#319）。
 VERSION_MARKER = {"oppo": "_", "vivo": "_A_", "honor": " ", "meizu": "Flyme"}
 
+# vivo 的 build 不都带机型前缀：Android 17 起有的机器直接报 AOSP 平台构建号（#580 的
+# CP2A.260605.016），没有 _A_ 可切，整条就是版本核心。按形状认，不写死某一代的首字母。
+AOSP_BUILD_ID = re.compile(r"^[A-Z]{1,3}\d[A-Z0-9]{0,2}\.\d{6}\.\d{3}")
+
 
 def recipe_meta(path):
     with open(path, encoding="utf-8") as f:
@@ -215,9 +219,10 @@ def version_core(value, fam):
     v = (value or "").strip()
     marker = VERSION_MARKER.get(fam)
     if marker:
-        if marker not in v:
+        if marker in v:
+            v = v.split(marker, 1)[1]
+        elif fam != "vivo" or not AOSP_BUILD_ID.match(v):
             return ""
-        v = v.split(marker, 1)[1]
     return re.sub(r"\(.*$", "", v).strip()
 
 

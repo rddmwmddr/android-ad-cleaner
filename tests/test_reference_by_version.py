@@ -133,6 +133,39 @@ class VivoFamilyTests(unittest.TestCase):
     def test_falls_back_when_the_version_is_not_recorded_anywhere(self):
         self.assertEqual(Path(self.pick("PD9999_A_18")[0]).parent.name, "vivo-V2547DA")
 
+    def test_picks_the_script_recorded_on_an_aosp_build(self):
+        # #580：Android 17 起 vivo 有的机器直接报 AOSP 平台构建号，没有机型前缀可切。
+        write_recipe(self.root, "vivo-V2303A", "CP2A.260605.016", 7)
+        path, reference = self.pick("CP2A.260605.016")
+        self.assertEqual(Path(path).parent.name, "vivo-V2303A")
+        self.assertTrue(reference)
+
+    def test_the_aosp_build_id_is_not_pinned_to_one_generation(self):
+        # 首字母跟着 Android 大版本走，下一代换个字母还得认得出。
+        write_recipe(self.root, "vivo-V2303A", "CP2A.260605.016", 7)
+        write_recipe(self.root, "vivo-V2400A", "DP2A.270105.001", 7)
+        self.assertEqual(Path(self.pick("DP2A.270105.001")[0]).parent.name, "vivo-V2400A")
+
+    def test_aosp_build_with_release_keys_matches_the_recorded_one(self):
+        write_recipe(self.root, "vivo-V2303A", "CP2A.260605.016", 7)
+        path, reference = self.pick("CP2A.260605.016(release-keys)")
+        self.assertEqual(Path(path).parent.name, "vivo-V2303A")
+        self.assertTrue(reference)
+
+    def test_unmatched_aosp_build_falls_back_to_the_pinned_reference(self):
+        self.assertEqual(Path(self.pick("CP2A.999999.999")[0]).parent.name, "vivo-V2547DA")
+
+    def test_version_core_of_each_vivo_build_shape(self):
+        self.assertEqual(run.version_core("PD2547D_A_17.1.10.2.W10", "vivo"), "17.1.10.2.W10")
+        self.assertEqual(run.version_core("CP2A.260605.016", "vivo"), "CP2A.260605.016")
+        self.assertEqual(run.version_core("DP2A.270105.001", "vivo"), "DP2A.270105.001")
+        self.assertEqual(run.version_core("CP2A.260605.016(release-keys)", "vivo"), "CP2A.260605.016")
+        # 裸机型名与空值都不是版本核心；空核心不参与比对，否则会命中同族一切脚本。
+        self.assertEqual(run.version_core("V2303A", "vivo"), "")
+        self.assertEqual(run.version_core("", "vivo"), "")
+        # 只对 vivo 放宽，其他家族照旧要求机型名标记。
+        self.assertEqual(run.version_core("CP2A.260605.016", "oppo"), "")
+
 
 class HonorFamilyTests(unittest.TestCase):
     """荣耀的 BUILD 以机型名开头；参考脚本的 BUILD 还没标。"""
