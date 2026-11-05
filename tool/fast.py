@@ -226,6 +226,7 @@ class Phone:
         self.miss = 0              # 本段已经没找到几次；>0 说明路径对不上，后面只看当前屏、不再翻页找
         self.skeleton_sigs = set()  # 本次运行已上报的骨架布局（#428）：同布局只留第一份
         self.skeleton_count = 0     # 本次运行已上报的骨架份数，上限见 chan_fast.SKELETON_PER_RUN
+        self.mismatch_probes = 0    # 本次运行已补的 MISMATCH 判据读数，上限见 chan_fast.MISMATCH_PER_RUN
         self.promoted = set()      # 点过才发现是推广位的 ✕：(App, 控件) 同一处不再点第二次（#420）
         self.app = ""              # 最近一次 start 拉起的目标 App：推广位只在这个 App 里判
 
