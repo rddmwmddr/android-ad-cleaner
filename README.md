@@ -130,7 +130,7 @@
 | vivo | V2417A | OriginOS 6 / Android 16（PD2417D_A_16.2.14.1.W10） | ✅ 社区实测：10-30 八段整段跑通、回读核对 32 项、幂等复跑 179 秒；11-02 浏览器升到 31.3.0.0 后入口变了，改走「我的 → 设置」，八段仍通过；维护方未在本机复跑；[适配说明](recipes/vivo-V2417A/README.md) | ✅ | ✅ 通用流程关闭 5 个明确营销渠道 |
 | vivo | X300 Ultra（V2547A） | OriginOS 7 | ✅ 2026-10-25 实测通过，重跑 126 秒 | ✅ | ⚠️ 只有应用级总开关 |
 | vivo（iQOO） | Z11 Turbo（V2536A） | OriginOS 6 / Android 16（PD2536B_A_16.0.12.8.W10） | — 无专用脚本；`--ref` 安全模式实测 | ✅ 见[清单差异](docs/清单/vivo-OriginOS.md) | —（未测） |
-| vivo | V2309A | OriginOS 6 / Android 16（PD2309E_A_16.2.15.0.W10） | ✅ 社区实测：11-03 从开启状态七段整段跑通，26 个开关逐个关闭、回读核对（213 秒），复跑轮调整 0 项（165 秒）；维护方未在本机复跑；商店「个性化推荐」子页的开关此前读不到（同坐标去重并掉），修复已合入 `main`，11-04 已在本机复测通过（[#531](https://github.com/rddmwmddr/android-ad-cleaner/issues/531)）；[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530) | ✅ 见[清单差异](docs/清单/vivo-OriginOS.md) | —（未测） |
+| vivo | V2309A | OriginOS 6 / Android 16（PD2309E_A_16.2.15.0.W10） | ✅ 社区实测：11-03 从开启状态七段整段跑通，26 个开关逐个关闭、回读核对（213 秒），复跑轮调整 0 项（165 秒）；维护方未在本机复跑；商店「个性化推荐」子页的开关此前读不到（同坐标去重并掉），修复已合入 `main`，11-04 已在该机复测通过（[#531](https://github.com/rddmwmddr/android-ad-cleaner/issues/531)）；[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530) | ✅ 见[清单差异](docs/清单/vivo-OriginOS.md) | —（未测） |
 | vivo | V2303A | OriginOS 7 / Android 17（CP2A.260605.016） | ⚠️ 2026-11-04 社区实测：七段安全模式自检关闭 25 项、逐段回读确认；维护方未在本机复跑，整轮用时未测（[#579](https://github.com/rddmwmddr/android-ad-cleaner/issues/579)） | ✅ 见[清单差异](docs/清单/vivo-OriginOS.md) | —（未测） |
 | 一加 | Ace 2（PHK110） | ColorOS 16.0.5 / Android 16 | ✅ 2026-10-25 路径实测、整段重跑约 85 秒 | ✅ | 11 个关闭，1 个受限 |
 | 一加 | Ace 2（PHK110） | ColorOS 15.0.0.601 / Android 15 | 2026-10-29 手动路径实测；自动脚本尚未整段真机验证 | 部分路径 | 渠道按独立流程处理 |
