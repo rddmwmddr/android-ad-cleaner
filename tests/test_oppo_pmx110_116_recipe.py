@@ -20,13 +20,13 @@ RECIPE = ROOT / "recipes/oppo-PMX110/recipe_17_0_0_116.py"
 def load(phone):
     scope = {"p": phone, "ONLY": ["__no_steps__"]}
     with contextlib.redirect_stdout(io.StringIO()):
-        exec(compile(RECIPE.read_text(), str(RECIPE), "exec"), scope)
+        exec(compile(RECIPE.read_text(encoding="utf-8"), str(RECIPE), "exec"), scope)
     return scope
 
 
 def action(scope, name):
     """取真实分段的函数体，以便给其导航协作方注入失败；不复制分段实现。"""
-    node = next(n for n in ast.parse(RECIPE.read_text()).body
+    node = next(n for n in ast.parse(RECIPE.read_text(encoding="utf-8")).body
                 if isinstance(n, ast.FunctionDef) and n.decorator_list
                 and n.decorator_list[0].args[0].value == name)
     node.decorator_list, node.name = [], "selected_action"
