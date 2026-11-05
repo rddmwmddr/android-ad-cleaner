@@ -318,10 +318,18 @@ class RoundTripTests(unittest.TestCase):
                 return "".join(f"package:{p}\n" for p in self.PKGS)
             return ""
 
-        with tempfile.TemporaryDirectory() as directory,              patch.object(run, "sh", side_effect=shell),              patch.object(run, "quickapp_switch", return_value=None),              patch.object(run, "suspended", return_value=True),              patch.object(run, "latest_backup", return_value=directory),              patch.object(sys, "argv", ["run.py", "-s", "test", "quickapp", "check"]),              contextlib.redirect_stdout(out := io.StringIO()),              contextlib.redirect_stderr(io.StringIO()):
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(run, "sh", side_effect=shell), \
+             patch.object(run, "quickapp_switch", return_value=None), \
+             patch.object(run, "suspended", return_value=True), \
+             patch.object(run, "latest_backup", return_value=directory), \
+             patch.object(sys, "argv", ["run.py", "-s", "test", "quickapp", "check"]), \
+             contextlib.redirect_stdout(out := io.StringIO()), \
+             contextlib.redirect_stderr(io.StringIO()):
             run.main()
         text = out.getvalue()
         self.assertIn("hap:// 链接仍由 com.nearme.instant.platform/.Main 接管（保留项）：广告仍可能跳进快应用。", text)
+        self.assertNotIn("应答方仍列出", text)
 
     def test_check_names_suspended_handlers_separately_from_reserved_ones(self):
         """非保留包已挂起但系统仍声明它接 hap://：不能说成「保留项」（#564，小米 17 实测）。"""
@@ -332,12 +340,43 @@ class RoundTripTests(unittest.TestCase):
                 return "".join(f"package:{p}\n" for p in self.PKGS)
             return ""
 
-        with tempfile.TemporaryDirectory() as directory,              patch.object(run, "sh", side_effect=shell),              patch.object(run, "quickapp_switch", return_value=None),              patch.object(run, "suspended", return_value=True),              patch.object(run, "latest_backup", return_value=directory),              patch.object(sys, "argv", ["run.py", "-s", "test", "quickapp", "check"]),              contextlib.redirect_stdout(out := io.StringIO()),              contextlib.redirect_stderr(io.StringIO()):
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(run, "sh", side_effect=shell), \
+             patch.object(run, "quickapp_switch", return_value=None), \
+             patch.object(run, "suspended", return_value=True), \
+             patch.object(run, "latest_backup", return_value=directory), \
+             patch.object(sys, "argv", ["run.py", "-s", "test", "quickapp", "check"]), \
+             contextlib.redirect_stdout(out := io.StringIO()), \
+             contextlib.redirect_stderr(io.StringIO()):
             run.main()
         text = out.getvalue()
         self.assertIn("com.miui.hybrid/.VendorDispatcherActivity", text)
         self.assertIn("已挂起，但系统仍声明它能接这类链接", text)
         self.assertNotIn("（保留项）", text)
+        self.assertNotIn("VendorDispatcherActivity 接管", text)
+
+    def test_check_separates_reserved_from_suspended_handlers_in_one_run(self):
+        """保留项与已挂起组件同时应答时，两种状态各说各的（ColorOS 上 platform 保留、其余已挂起）。"""
+        def shell(_s, cmd):
+            if cmd.startswith("pm query-activities"):
+                return "  com.nearme.instant.platform/.Main\n  com.oppo.instant.local.service/.X\n"
+            if cmd.startswith("pm list packages") and "-d" not in cmd:
+                return "".join(f"package:{p}\n" for p in self.PKGS)
+            return ""
+
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(run, "sh", side_effect=shell), \
+             patch.object(run, "quickapp_switch", return_value=None), \
+             patch.object(run, "suspended", return_value=True), \
+             patch.object(run, "latest_backup", return_value=directory), \
+             patch.object(sys, "argv", ["run.py", "-s", "test", "quickapp", "check"]), \
+             contextlib.redirect_stdout(out := io.StringIO()), \
+             contextlib.redirect_stderr(io.StringIO()):
+            run.main()
+        text = out.getvalue()
+        self.assertIn("hap:// 链接仍由 com.nearme.instant.platform/.Main 接管（保留项）", text)
+        self.assertIn("hap:// 链接的应答方仍列出 com.oppo.instant.local.service/.X", text)
+        self.assertEqual(text.count("（保留项）"), 1)
 
     def test_fold_open_reads_wm_size_once(self):
         """wm size 读一次就够，别一行里发两趟。"""
