@@ -268,6 +268,16 @@ class ReferenceRecipeTests(unittest.TestCase):
                 self.assertEqual(Path(run.recipe_for("NEWMODEL2", "iQOO")[0]).parent.name, "vivo-V2547DA")
                 self.assertEqual(run.recipe_for("24090RA29C", "Redmi"), (str(Path(root, "recipes", "xiaomi-24090RA29C", "recipe.py")), False))
 
+    def test_new_brand_borrows_its_only_recipe_as_reference(self):
+        """FAMILY 没登记的品牌，别的型号借不到同品牌脚本；三星进目录时踩过（#605）。"""
+        with tempfile.TemporaryDirectory() as root:
+            Path(root, "recipes", "samsung-SM-N9760").mkdir(parents=True)
+            Path(root, "recipes", "samsung-SM-N9760", "recipe.py").write_text('BUILD = "x"\nMODELS = ["SM-N9760"]\n', encoding="utf-8")
+            with patch.object(run, "ROOT", root):
+                path, reference = run.recipe_for("SM-S9280", "samsung")
+                self.assertTrue(reference)
+                self.assertEqual(Path(path).parent.name, "samsung-SM-N9760")
+
 
 class ScrubTests(unittest.TestCase):
     @classmethod
