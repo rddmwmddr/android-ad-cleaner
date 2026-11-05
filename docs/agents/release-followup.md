@@ -66,6 +66,9 @@ Issues labelled `waiting-for-verify` have a fix on `main` that the reporter has 
 | #469 | @FROKING | Xiaomi 14 Ultra / 24031PN0DC / OS3.0.308.0.WNACNXM（Android 16） | #319（0.3.1） | `check` 的「机型脚本」一行从 `xiaomi-M154FF`（OS4.0）改为同族的 `xiaomi-2304FPN6DC`（OS3.0.308）、版本判定「相同」 |
 | #483 | @lvkowk0330-dev | OnePlus 13 / PJZ110 / PJZ110_17.0.0.103(CN01)（Android 17） | #319 / #165（0.3.1） | `check` 从 `oppo-PLP120`（ColorOS 16.0.9）改为 `oppo-PMX110`（ColorOS 17）；`recipe --ref` 九段逐段贴「命中 / 跳过」 |
 | #280 | @WeilianC | OPPO Find X10 Pro Max / PMX110 / ColorOS 17.0.0.116 | PR #563（未发布） | 不带 `--ref` 跑 `recipe`：下拉搜索走 `gs://search/setting` 后逐组回读（搜索范围 / 首页卡片管理 / 功能管理 / 消息管理 / 隐私），负一屏轮播点到「不显示轮播推荐」并回读，游戏中心先跳首进引导再找齿轮。浏览器「摇一摇广告」与商店「推荐卡片」点了没反应仍是系统限制，跳过即可 |
+| #559 | 机主（证据来自 #280 的 @WeilianC） | OPPO Find X10 Pro Max / PMX110 / ColorOS 17.0.0.116 | PR #569（未发布） | 商店「服务管理」段跑完后，标题为「首页：AI搜索」的行仍开着（脚本保留词写的是「首页 AI 搜索」，全角冒号与空格差异不再让 keep 漏命中），不再被当推广位关掉 |
+
+2026-11-05：#559 从 #280 拆出的引擎侧缺陷，随 PR #569 合入 `main`（`4feca8a`），本行补登。修复不在任何发布版里，等下一版发出去再催 @WeilianC 复测；也是机主自己开的票。
 
 2026-11-04：`/triage` 复核 `needs-info` 队列，把四张「已修待复测」却挂在 `needs-info` 的票改回本队列 —— #329、#233、#240（上表新增），#348（已在 #357 行按「证据来自 #348」登记，不重复）。四张票在 `needs-info` 期间都没有新增报告者回复。
 
