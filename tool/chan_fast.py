@@ -150,8 +150,9 @@ def kind_of_state(st):
     return {"--": NO_CHANNEL, "del": DELETED, "app": APP_OFF}[st]
 
 
-def render(outcome, label, want_on):
-    """这一项的打印行；None 表示不提（已经是目标状态，或第二遍才确认改好、第一遍的 ✗ 已说过）。"""
+def render(outcome, label, want_on, pk=""):
+    """这一项的打印行；None 表示不提（已经是目标状态，或第二遍才确认改好、第一遍的 ✗ 已说过）。
+    失败行带上包名（#582）：同名渠道分属不同 App 时，事后才说得清是哪几个。"""
     kind = outcome.kind
     if kind in (ALREADY, CONFIRMED_LATER):
         return None
@@ -165,12 +166,12 @@ def render(outcome, label, want_on):
         return f"  · 应用通知已整体关闭，渠道不会弹出，不算失败  {label}"
     if kind == DONE:
         return f"  {'开' if want_on else '关'}  {label}"
-    return f"  ✗ {outcome.detail}  {label}"
+    return f"  ✗ {outcome.detail}  {label}" + (f"（{pk}）" if pk else "")
 
 
-def show(outcome, label, want_on):
-    """打印这一项的结局；不打印的项静默通过。机器行（骨架）跟在人话后面，由客户端分流。"""
-    line = render(outcome, label, want_on)
+def show(outcome, label, want_on, pk=""):
+    """打印这一项的结局；不打印的项静默通过。机器行（骨架、判据读数）跟在人话后面，由客户端分流。"""
+    line = render(outcome, label, want_on, pk)
     if line:
         print(line)
     if outcome.payload:
@@ -884,6 +885,22 @@ def disabled_at(p, xy):
     return row_disabled_at(p.tree(), xy)
 
 
+MISMATCH_PER_RUN = 3    # 一次运行最多补几条 MISMATCH 判据读数：额外命令只在不一致时发生，且要封顶
+
+
+def mismatch_probe(p, pk, cid, current, denied=None):
+    """MISMATCH 的一条判据读数（#582）：页面上关着、渠道记录里开着，差在哪一项。
+    只用 toggle 已经读到的 importance；应用级结论已有（denied）就不再问一次。"""
+    if p.mismatch_probes >= MISMATCH_PER_RUN:
+        return ""
+    p.mismatch_probes += 1
+    importance = current.get((pk, cid), ("", 0, False))[1]
+    if denied is None:
+        denied = notifications_denied(p, pk)
+    return (f"mismatch\t{pk}\t{cid}\timportance={importance}"
+            f"\tapp_notifications={'denied' if denied else 'allowed'}")
+
+
 def toggle(p, pk, cid, want_on, name="", allowed=()):
     name = (name or "").strip()     # 渠道名可能带空格（一加 13「福利活动 」），页面文字是去掉空格的（错误日志 10-29）
     try:
@@ -930,9 +947,11 @@ def toggle(p, pk, cid, want_on, name="", allowed=()):
             if state(current, apps, pk, cid) == desired:
                 return Outcome(DONE)
             if switch[1] == want_on:
-                if not want_on and notifications_denied(p, pk):
+                denied = notifications_denied(p, pk) if not want_on else None
+                if denied:
                     return Outcome(APP_DENIED)
-                return Outcome(MISMATCH, "界面状态与渠道实际状态不一致，未继续点击")
+                return Outcome(MISMATCH, "界面状态与渠道实际状态不一致，未继续点击",
+                               mismatch_probe(p, pk, cid, current, denied))
             time.sleep(0.25 + 0.3 * attempt)
         return Outcome(UNCHANGED, "点击后渠道状态未改变")
     except (StopBatch, adb_link.DeviceLost, ScreenLocked):
@@ -1020,7 +1039,7 @@ def run(a):
                 continue
             else:
                 outcome = Outcome(ALREADY)          # 已经是目标状态，不打印
-            show(outcome, label, want)
+            show(outcome, label, want, pk)
             if failed(outcome, want):
                 failures += 1
         retry, reached = [], 0
@@ -1042,7 +1061,7 @@ def run(a):
                             failures -= 1       # 其实已经改过来了
                             reached += 1
                             changed += toggled(outcome)
-                            show(outcome, label, want)
+                            show(outcome, label, want, pk)
                         else:
                             queue.append((pk, cid, label))
                     if not queue:
@@ -1092,7 +1111,7 @@ def run(a):
                         changed += toggled(outcome)
                     if exempt_from_recheck(outcome):
                         exemptions.add((pk, cid))
-                    show(outcome, label, want)
+                    show(outcome, label, want, pk)
                 if halted:
                     break                       # 锁屏、点错开关、断开：整批停下，不再重试
             if p is not None and not gone:
