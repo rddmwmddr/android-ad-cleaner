@@ -827,10 +827,16 @@ def page_hint(p, name):
     return ChannelPage(p, name)._hint()
 
 
-def notifications_denied(p, pk):
-    """应用通知是否被系统整体关闭。安卓 13 起看 POST_NOTIFICATIONS 权限；更早的系统没有这个权限，
-    只有 appops 能问（华为 HarmonyOS 4.2 / 安卓 12，#426）。有的系统 dumpsys notification 看不出来：
-    渠道页的开关显示「关」，渠道记录仍是「开」（三星 9 个、vivo 2 个，错误日志 10-29；华为 #241 同样现象）。"""
+def notifications_state(p, pk):
+    """应用通知是否被系统整体关闭：True 关着 / False 没关 / None 读不出来。
+
+    安卓 13 起看 POST_NOTIFICATIONS 权限；更早的系统没有这个权限，只有 appops 能问（华为
+    HarmonyOS 4.2 / 安卓 12，#426）。有的系统 dumpsys notification 看不出来：渠道页的开关显示
+    「关」，渠道记录仍是「开」（三星 9 个、vivo 2 个，错误日志 10-29；华为 #241 同样现象）。
+
+    三态只在「记进本机 UI 未暴露名单」这一处要紧：那条名单是持久的，把一次读失败当成「没关」
+    会让一个其实关得掉的渠道从扫描里永久消失（#576 复盘的取舍）。判 APP_DENIED 时仍走
+    `notifications_denied()`，那里把「不知道」当「没关」。"""
     try:
         # 不加 grep -m：提前退出会让 dumpsys 收到 SIGPIPE，u2 判「shell output invalid」（#205）
         out = p.d.shell(f"dumpsys package {shlex.quote(pk)} | grep 'POST_NOTIFICATIONS: granted='"
@@ -842,7 +848,18 @@ def notifications_denied(p, pk):
             return False                # 这个权限就代表着总开关，它开着就不用再问 appops
         if "POST_NOTIFICATIONS: granted=false" in out:
             return True
-    return appops_denied(p, pk)
+    try:
+        mode = appops_mode(p.d, pk)
+    except adb_link.DeviceLost:
+        return None
+    if mode == "unknown":
+        return None
+    return mode in APPOPS_DENIED
+
+
+def notifications_denied(p, pk):
+    """应用通知是否被系统整体关闭。读不出来按「没关」处理，见 `notifications_state()`。"""
+    return notifications_state(p, pk) is True
 
 
 # cmd appops 的 POST_NOTIFICATION 模式里算「关掉」的那两个；default / allow / foreground / 读不出来都按「没关」处理
@@ -952,18 +969,19 @@ def toggle(p, pk, cid, want_on, name="", allowed=()):
         reached = page.open()
         if not isinstance(reached, Reached):
             absent = not want_on and reached.hidden
-            denied = notifications_denied(p, pk) if absent or (not want_on and reached.no_row) else False
+            app_state = notifications_state(p, pk) if absent or (not want_on and reached.no_row) else False
             # 应用通知整体关着时，应用通知页只列总开关：这个渠道本来就不会出现在页面上，不是没认出（#426）
-            if not want_on and reached.no_row and denied:
+            if not want_on and reached.no_row and app_state is True:
                 return Outcome(APP_DENIED)
-            # 页面打得开、页面上确实没有这一行、App 通知也没关：系统没把这个渠道放到界面上（#576）。
+            # 页面打得开、页面上确实没有这一行、App 通知明确没关：系统没把这个渠道放到界面上（#576）。
             # 关不掉，也不该每轮都报同一条失败 —— 由 run() 记进本机名单，下次扫描不再列出。
-            # App 通知读出来是关着的就不记：那是渠道本来就不该出现，不是 UI 没暴露。
-            if absent and not denied:
+            # 总开关读不出来时不记：名单是持久的，一次读失败会让一个其实关得掉的渠道永久消失。
+            if absent and app_state is False:
                 return Outcome(UI_HIDDEN)
             # 只记 Activity、卡在哪一环和开关数量，不记页面内容；适配新系统靠它。
+            unknown = "（应用通知总开关读不出来）" if absent and app_state is None else ""
             return Outcome(NOT_CONFIRMED,
-                           f"未确认「{name}」渠道页及通知开关，跳过（停在 {p.focus() or '未知页面'}；{reached.text}）",
+                           f"未确认「{name}」渠道页及通知开关，跳过（停在 {p.focus() or '未知页面'}；{reached.text}{unknown}）",
                            reached.skeleton)
         if disabled_at(p, reached.switch[2]):
             return Outcome(GREYED)

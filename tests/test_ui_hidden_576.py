@@ -145,6 +145,18 @@ class ToggleDecisionTests(unittest.TestCase):
         p.reader.shell.side_effect = shell("allow")
         self.assertEqual(close(p).kind, chan.NOT_CONFIRMED)
 
+    def test_unreadable_app_notification_state_is_not_recorded(self):
+        # 名单是持久的：总开关读不出来时宁可继续报失败，也不能把一个也许关得掉的渠道记掉
+        def broken(command, *a, **k):
+            if "appops" in command:
+                raise RuntimeError("shell output invalid")
+            return Mock(output="")
+        p = phone([MASTER_ONLY])
+        p.reader.shell.side_effect = broken
+        got = close(p)
+        self.assertEqual(got.kind, chan.NOT_CONFIRMED)
+        self.assertIn("总开关读不出来", got.detail)
+
     def test_restore_direction_keeps_the_old_answer(self):
         p = phone([MASTER_ONLY])
         p.reader.shell.side_effect = shell("allow")

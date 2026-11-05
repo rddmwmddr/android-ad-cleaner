@@ -108,15 +108,18 @@ class AppLevelOffTests(unittest.TestCase):
         p.reader.shell.side_effect = shell("allow")
         self.assertEqual(outcome(p).kind, chan.UI_HIDDEN)
 
-    def test_unreadable_appops_counts_as_not_denied(self):
-        # 命令报错 / 输出不认识时按「没关」处理：这时仍按 UI 未暴露记，不做成「应用整体关闭」降级
+    def test_unreadable_appops_is_still_a_failure(self):
+        # 命令报错 / 输出不认识时既不算「关着」，也不算「明确没关」：
+        # 名单是持久的，读不出来就继续报失败，不把渠道记成「本机 UI 未暴露」（#576）
         def broken(command, *a, **k):
             if "appops" in command:
                 raise RuntimeError("shell output invalid")
             return Mock(output="")
         p = phone([MASTER_ONLY])
         p.reader.shell.side_effect = broken
-        self.assertEqual(outcome(p).kind, chan.UI_HIDDEN)
+        got = outcome(p)
+        self.assertEqual(got.kind, chan.NOT_CONFIRMED)
+        self.assertIn("总开关读不出来", got.detail)
 
     def test_no_operations_means_not_denied(self):
         # 这个应用没有 POST_NOTIFICATION 这条 appops 记录：读不出=没关
