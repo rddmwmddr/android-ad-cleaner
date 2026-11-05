@@ -133,6 +133,30 @@ class VivoFamilyTests(unittest.TestCase):
     def test_falls_back_when_the_version_is_not_recorded_anywhere(self):
         self.assertEqual(Path(self.pick("PD9999_A_18")[0]).parent.name, "vivo-V2547DA")
 
+    def test_picks_the_script_recorded_on_cp2a_build(self):
+        # PR #567 / Issue #580：vivo Android 17 的 CP2A.* build 无需机型前缀，本身作为版本核心
+        write_recipe(self.root, "vivo-V2303A", "CP2A.260605.016", 7)
+        path, reference = self.pick("CP2A.260605.016")
+        self.assertEqual(Path(path).parent.name, "vivo-V2303A")
+        self.assertTrue(reference)
+
+    def test_cp2a_with_release_keys_matches_recorded_build(self):
+        write_recipe(self.root, "vivo-V2303A", "CP2A.260605.016", 7)
+        path, reference = self.pick("CP2A.260605.016(release-keys)")
+        self.assertEqual(Path(path).parent.name, "vivo-V2303A")
+        self.assertTrue(reference)
+
+    def test_unmatched_cp2a_falls_back_to_pinned_reference(self):
+        self.assertEqual(Path(self.pick("CP2A.999999.999")[0]).parent.name, "vivo-V2547DA")
+
+    def test_vivo_version_core(self):
+        self.assertEqual(run.version_core("PD2547D_A_17.1.10.2.W10", "vivo"), "17.1.10.2.W10")
+        self.assertEqual(run.version_core("CP2A.260605.016", "vivo"), "CP2A.260605.016")
+        self.assertEqual(run.version_core("CP2A.260605.016(release-keys)", "vivo"), "CP2A.260605.016")
+        self.assertEqual(run.version_core("V2303A", "vivo"), "")
+        self.assertEqual(run.version_core("", "vivo"), "")
+        self.assertEqual(run.version_core("CP2A.260605.016", "oppo"), "")
+
 
 class HonorFamilyTests(unittest.TestCase):
     """荣耀的 BUILD 以机型名开头；参考脚本的 BUILD 还没标。"""

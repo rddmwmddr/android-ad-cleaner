@@ -215,9 +215,13 @@ def version_core(value, fam):
     v = (value or "").strip()
     marker = VERSION_MARKER.get(fam)
     if marker:
-        if marker not in v:
+        if marker in v:
+            v = v.split(marker, 1)[1]
+        elif fam == "vivo" and v.startswith("CP2A."):
+            # vivo Android 17 新 build 格式不含机型名与 _A_（#580），本身作为版本核心
+            pass
+        else:
             return ""
-        v = v.split(marker, 1)[1]
     return re.sub(r"\(.*$", "", v).strip()
 
 
