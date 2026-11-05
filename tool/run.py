@@ -10,6 +10,7 @@
   python3 tool/run.py adapt gen 探路-<型号>.tsv      把人工勾选的开关生成 recipe 草稿（不碰手机；草稿≠适配）
   python3 tool/run.py -s 序列号 adapt check 草稿.py  安全模式自检草稿，输出适配报告（找不到就如实说找不到）
   python3 tool/run.py -s 序列号 chan-scan          只读：列出开着的营销通知渠道 → backups/.../channels.tsv
+                                                  加 --reset 先清空「本机 UI 未暴露」名单再扫
   python3 tool/run.py -s 序列号 chan-off 清单.tsv   关掉清单里的渠道
   python3 tool/run.py -s 序列号 chan-on  清单.tsv   还原
   python3 tool/run.py -s 序列号 suspend 包名 …       挂起广告包（先征得机主同意），记录到 backups/.../suspended.txt
@@ -619,7 +620,7 @@ def cmd_recipe(serial, rest):
 
 def cmd_chan_scan(serial, rest):
     d = latest_backup(serial)
-    result = subprocess.run(script_cmd("chan_fast.py", "-s", serial, "scan"),
+    result = subprocess.run(script_cmd("chan_fast.py", "-s", serial, "scan", *rest),
                             capture_output=True, text=True, encoding="utf-8", errors="replace")
     if result.returncode:
         print(result.stderr or result.stdout, file=sys.stderr)
