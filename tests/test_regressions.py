@@ -49,6 +49,47 @@ class SwitchTests(unittest.TestCase):
         self.assertEqual([(t, c) for t, c, _ in phone().switches(root)],
                          [("每次联网时通知", True), ("自动更新", True), ("个性化广告推荐", False)])
 
+    def test_state_suffix_in_title_is_stripped_at_the_source(self):
+        # #565：vivo 把状态拼进标题尾部。剥掉后 off() 的回读核对不再扑空；
+        # 坐标不同的真实两行各自保留自己的标题。
+        root = ET.fromstring(
+            '<hierarchy><node bounds="[0,300][1168,900]">'
+            '<node text="个性化推荐，开启" bounds="[60,350][700,420]"/>'
+            '<node class="android.widget.Switch" checkable="true" checked="true" bounds="[990,350][1080,420]"/>'
+            '<node text="个性化广告推荐，关闭" bounds="[60,500][700,570]"/>'
+            '<node class="android.widget.Switch" checkable="true" checked="false" bounds="[990,500][1080,570]"/>'
+            '</node></hierarchy>')
+        self.assertEqual([t for t, _, _ in phone().switches(root)],
+                         ["个性化推荐", "个性化广告推荐"])
+
+    def test_whole_string_state_word_content_desc_is_still_not_a_title(self):
+        # 「开启，开关」这类整串状态词（content-desc 形态）依旧不算标题（与 #565 剥尾缀同一份词表）。
+        root = ET.fromstring(
+            '<hierarchy><node bounds="[0,300][1168,500]">'
+            '<node class="android.widget.Switch" checkable="true" checked="true" content-desc="开启，开关" bounds="[990,350][1080,420]"/>'
+            '</node></hierarchy>')
+        self.assertEqual([t for t, _, _ in phone().switches(root)], [""])
+
+    @patch.object(fast.time, "sleep")
+    def test_off_reports_both_switches_when_titles_carry_state_suffixes(self, _sleep):
+        # #565 的假设备验收：一页两个带状态字的开关，关掉后标题变化 → 调整 2 项，无「关不掉」。
+        # 不 mock switches：title_of 的剥尾缀必须在真实产出处生效。
+        xml_on = ('<hierarchy><node bounds="[0,300][1168,900]">'
+                  '<node text="个性化推荐，开启" bounds="[60,350][700,420]"/>'
+                  '<node class="android.widget.Switch" checkable="true" checked="true" bounds="[990,350][1080,420]"/>'
+                  '<node text="个性化广告推荐，开启" bounds="[60,500][700,570]"/>'
+                  '<node class="android.widget.Switch" checkable="true" checked="true" bounds="[990,500][1080,570]"/>'
+                  '</node></hierarchy>')
+        xml_off = xml_on.replace("，开启", "，关闭").replace('checked="true"', 'checked="false"')
+        p = phone()
+        # wait / plan / shift 探测都看到 ON 页；点击后的回读才看到 OFF
+        p.tree = Mock(side_effect=[ET.fromstring(xml_on)] * 3 + [ET.fromstring(xml_off)] * 12)
+        p.focus = Mock(return_value="app/settings")
+        p.click, p.confirm = Mock(), Mock(return_value=None)
+        p.scroll_more = Mock(return_value=False)
+        self.assertEqual(p.off(only=["个性化"], page="商店·个性化推荐"), 2)
+        self.assertEqual(p.changed, [("商店·个性化推荐", "个性化推荐"), ("商店·个性化推荐", "个性化广告推荐")])
+
     def test_offscreen_custom_switch_and_radio_are_not_touched(self):
         p = phone()
         root = ET.fromstring('''<hierarchy>

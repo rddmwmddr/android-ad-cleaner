@@ -43,8 +43,8 @@ def tap(name, scrolls=4):
 
 
 def title_key(title):
-    # vivo 将说明拼在点号后；商店将“开启/关闭”拼在中文逗号后。
-    return title.split(".", 1)[0].split("，", 1)[0].strip()
+    # vivo 将说明拼在点号后；「，开启/，关闭」状态尾缀已由引擎在标题产出处剥掉（#565）。
+    return title.split(".", 1)[0].strip()
 
 
 def read_switches(max_screens=1):
