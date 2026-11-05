@@ -103,11 +103,10 @@ https://t.me/+A5X3Mxzs-Cg3NjYx
 | 一加 | 13T（PKX110） | ColorOS 16.0.10.500 / Android 16 | ✅ 2026-10-28 实测：广告跟踪 76 项、商店两段、小布建议；浏览器/下拉搜索/负一屏见清单差异 | ✅ | ✅ 17 个渠道 |
 | 一加 | Ace 6T（PLR110） | ColorOS 17.0.0.101 / Android 17 | ✅ 2026-10-31 贡献者真机九段全跑 224 秒；本仓库无该机型，未复测，见[清单差异](docs/清单/OPPO-ColorOS.md) | ✅ | —（未测） |
 | OPPO | Find N6（PLP120） | ColorOS 16.0.9 | ⚠️ 路径实测，整段待验证 | ✅ | ✅ 30 个渠道 |
-| OPPO | Find X10 Pro Max（PMX110） | ColorOS 17 | — | ✅ | ✅ |
 | OPPO | Find X8s（PKT110） | ColorOS 17.0.0.102(CN01) / Android 17 | ✅ 10-28 真机整段重跑通过：广告跟踪 96 项 + 搜索与建议等 12 项逐项回读确认 | ✅ | ✅ 26 个渠道 |
 | OPPO | Find X9 Ultra（PMA110） | ColorOS 17.0.0.106(CN01) / Android 17 | ✅ 2026-10-29 八段整轮通过，重跑 211 秒，回读确认 173 项；见[说明](recipes/oppo-PMA110/README.md) | ✅ | ✅ 独立关闭并回读 6 个营销渠道，其他原有渠道及总开关未变 |
 | OPPO | Find X9 Pro（PLG110） | ColorOS 16.0.10.501(CN01) / Android 16 | ✅ 2026-11-01 九段逐项实测通过，回读确认 165 项；见[说明](recipes/oppo-PLG110/README.md) | ✅ | ✅ 60 个营销渠道全部关闭并回读确认（0 遗留） |
-| OPPO | Find X10 Pro Max（PMX110） | ColorOS 17.0.0.116 / Android 17 | ✅ 源码新增：9 段，全跑约 4 分钟；下拉搜索改走 scheme、轮播单选与游戏中心引导已修（#280，待真机复测），浏览器「摇一摇广告」点不动 | ✅ | ✅ 45 个渠道 |
+| OPPO | Find X10 Pro Max（PMX110） | ColorOS 17.0.0.116(CN01) / Android 17 | ✅ 2026-11-05 八段整轮复跑 540 秒，确认 593 项、调整 0 项；搜索卡片 7 项未显示，游戏中心未安装；[范围与实测](recipes/oppo-PMX110/README.md) | ✅ 保留搜索数据源、服务通知与卡片 | ✅ 本次独立关闭 3 个渠道，总开关未变 |
 | OPPO | Find X9 Ultra（PMA120） | ColorOS 16.0.10 | ❌ 页面和 N6 不同，待补 | 部分 | ✅ 27 个渠道 |
 | OPPO | Find N3 典藏版（PHN110） | ColorOS 16.0.5 | ❌ 待补 | 部分 | ✅ 27 个渠道 |
 | OPPO | Find N5（PKH110） | ColorOS 17.0.0.103 / Android 17 | ✅ 2026-10-29 七段实测通过，重跑 144 秒；负一屏需手动（设置页受权限保护） | ✅ | ✅ 42 个渠道 |
