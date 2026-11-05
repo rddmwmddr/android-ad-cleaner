@@ -6,6 +6,7 @@ import time
 from wait import GiveUp, until
 
 ONLY = globals().get("ONLY") or []
+FAILED_STEPS = []
 RESULTS = []
 
 
@@ -27,6 +28,7 @@ def step(name):
         try:
             state = "completed" if function() else "incomplete"
         except Exception as error:
+            FAILED_STEPS.append(name)
             print(f"  ✗ 本段停止：{error}")
             state = "failed"
         RESULTS.append((name, state))

@@ -12,6 +12,7 @@ import adb_link
 from fast import CONFIRM, Phone, bounds, want_state
 
 ONLY = globals().get("ONLY") or []
+FAILED_STEPS = []
 RESULTS = []
 VERIFIED_SWITCHES = 0
 HALTED = False
@@ -145,6 +146,7 @@ def step(name):
         except adb_link.DeviceLost:
             raise  # 交还引擎，整轮停止；不继续操作其他应用。
         except Exception as error:
+            FAILED_STEPS.append(name)
             print("  ! 本段未完成：" + str(error), flush=True)
             if p.locked():
                 HALTED = True

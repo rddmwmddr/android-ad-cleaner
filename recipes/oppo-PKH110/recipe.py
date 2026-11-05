@@ -7,6 +7,7 @@ MODELS = ["PKH110"]
 import time
 
 ONLY = globals().get("ONLY") or []
+FAILED_STEPS = []
 RESULTS = []
 
 # 仅关闭明确列名的推广入口。没有列出的入口（包括未来新增项）不主动处理。
@@ -42,6 +43,7 @@ def step(name):
             completed = function()
             state = "completed" if completed else "incomplete"
         except Exception as error:
+            FAILED_STEPS.append(name)
             print(f"  ✗ 本段停止：{error}")
             state = "failed"
         RESULTS.append((name, state))

@@ -8,6 +8,7 @@ MODELS = ["PKX110"]
 import time
 
 ONLY = globals().get("ONLY") or []
+FAILED_STEPS = []
 RESULTS = []
 
 # 服务管理里明确的推广入口（PHK110 清单 + 本机实测新增项）。未列出的入口不主动处理。
@@ -48,6 +49,7 @@ def step(name):
             completed = function()
             state = "completed" if completed else "incomplete"
         except Exception as error:
+            FAILED_STEPS.append(name)
             print(f"  ✗ 本段停止：{error}")
             state = "failed"
         RESULTS.append((name, state))

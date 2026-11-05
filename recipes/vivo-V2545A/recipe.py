@@ -6,6 +6,7 @@ MODELS = ["V2545A"]
 import time
 
 ONLY = globals().get("ONLY") or []
+FAILED_STEPS = []
 
 def step(name):
     def deco(f):
@@ -17,6 +18,7 @@ def step(name):
             try:
                 f()
             except Exception as e:
+                FAILED_STEPS.append(name)
                 print(f"  ✗ 出错：{e}")
             print(f"  ({time.time()-t:.0f} 秒)")
         return f

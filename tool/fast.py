@@ -1334,7 +1334,7 @@ def execute(p, cmd, rest):
         rest = [x for x in rest if x != "--ref"]
         if not p.wait_unlocked():
             print("✗ 手机一直锁屏，本步骤没有执行。请解锁手机、保持亮屏后重试"); sys.exit(2)
-        g = {"p": p, "__name__": "__recipe__", "ONLY": rest[1:]}
+        g = {"p": p, "__name__": "__recipe__", "ONLY": rest[1:], "FAILED_STEPS": []}
         with open(rest[0], encoding="utf-8") as f:
             src = f.read()
         build = p.d.shell("getprop ro.build.display.id").output.strip()
