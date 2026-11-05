@@ -39,6 +39,10 @@ def dispatch(argv, executable=None):
         return "cli"
     if not is_cli_program(executable):
         return "window"
+    # 打包冒烟用命令行程序起隐藏窗口做 GUI 验证（`gui/smoke_test.py`），
+    # 这两个开关必须继续走窗口分支，否则标签构建会卡在冒烟（#573）。
+    if any(flag in argv for flag in ("--smoke-gui", "--debug")):
+        return "window"
     return "help" if argv[:1] in (["-h"], ["--help"]) else "usage"
 
 

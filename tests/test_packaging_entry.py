@@ -166,6 +166,18 @@ class CliProgramDispatchTests(unittest.TestCase):
         cli_main.assert_called_once_with()
         webview.create_window.assert_not_called()
 
+    def test_the_packaging_smoke_flags_still_open_the_window(self):
+        """`gui/smoke_test.py` 用 `aac-cli.exe --smoke-gui` 起隐藏窗口做打包冒烟，
+        那一步在 `build-windows.yml` 里挡着发版产物；这两个开关不能变成用法错。"""
+        for flag in ("--smoke-gui", "--debug"):
+            with self.subTest(flag=flag):
+                self.assertEqual(launch.dispatch([flag], CLI_EXE), "window")
+                # 退出码由冒烟结论决定，这里断言的是「进了窗口分支、没打用法」。
+                _, out, err, webview, _ = self.launch_once([flag], CLI_EXE)
+                self.assertEqual(out, "")
+                self.assertNotIn("aac-cli --cli run.py", err)
+                webview.create_window.assert_called_once()
+
     def test_window_program_without_arguments_still_opens_the_window(self):
         code, _, err, webview, cli_main = self.launch_once([], WINDOW_EXE)
         self.assertIsNone(code, err)
