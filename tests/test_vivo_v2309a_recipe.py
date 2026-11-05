@@ -29,6 +29,9 @@ GEAR_ICON = ('<node class="android.widget.Button" content-desc="设置"'
 ABOUT_ROW = ('<node class="android.widget.LinearLayout" clickable="true" bounds="[0,1600][1260,1740]">'
              '<node class="android.widget.TextView" text="关于" clickable="false"'
              ' bounds="[104,1632][182,1684]"/></node>')
+PERSONAL_ROW = ('<node class="android.widget.LinearLayout" clickable="true" bounds="[61,1272][1199,1413]">'
+                '<node class="android.widget.TextView" text="个性化设置" clickable="false"'
+                ' bounds="[104,1316][299,1369]"/></node>')
 NOTIFY_ROW = ('<node class="android.widget.LinearLayout" clickable="true" bounds="[0,1200][1260,1360]">'
               '<node class="android.widget.TextView" text="消息提醒" clickable="false"'
               ' bounds="[104,1248][260,1300]"/></node>')
@@ -133,6 +136,19 @@ class VivoV2309ARecipeTests(unittest.TestCase):
         self.assertEqual(scope["FAILED_STEPS"], [])
         pages = {c.kwargs.get("page"): c.kwargs.get("only") for c in p.off.call_args_list}
         self.assertEqual(pages.get("商店·消息提醒"), ["资讯活动提醒"])
+
+    def test_imanager_rows_use_tap_row_not_title_text(self):
+        """i管家「关于 → 个性化设置」也是整行可点：点左侧标题文字不跳转（#588）。"""
+        p = make_phone(ABOUT_ROW + PERSONAL_ROW)
+        p.locked.return_value = False
+        p.back.return_value = None
+        scope = load(p, only=["i管家"])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        self.assertEqual([c.args for c in p.click.call_args_list],
+                         [(504, 1670), (516, 1342)])
+        p.entry.assert_not_called()
+        p.off.assert_called_once()
+        self.assertEqual(p.off.call_args.kwargs.get("page"), "i管家·个性化设置")
 
 
 if __name__ == "__main__":
