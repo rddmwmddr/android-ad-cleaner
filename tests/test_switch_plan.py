@@ -46,6 +46,28 @@ class TargetSelectionTests(unittest.TestCase):
         self.assertEqual(plan.targets, ())
         self.assertEqual((plan.checked, plan.kept), (frozenset(), frozenset()))
 
+    def test_keep_matches_after_normalizing_colons_and_spaces(self):
+        # #559 / PMX110：脚本保留词「首页 AI 搜索」，页面实际标题「首页：AI搜索」
+        # （全角冒号、无空格）。归一化后保留词命中，功能性入口不被当广告位关掉。
+        plan = fast.plan_switches([("首页：AI搜索", True, (500, 800))],
+                                  keep=["首页 AI 搜索"], screen_h=2340)
+        self.assertEqual(plan.targets, ())
+        self.assertEqual(plan.checked, frozenset())
+
+    def test_keep_matches_a_full_width_space_in_the_page_title(self):
+        plan = fast.plan_switches([("服务管理　个性化推荐", True, (500, 800))],
+                                  keep=["服务管理 个性化推荐"], screen_h=2340)
+        self.assertEqual(plan.targets, ())
+
+    def test_normalization_does_not_merge_two_distinct_titles(self):
+        # 反向用例：归一化没有把「应用安全」与「安全内容推荐」并成一个键。
+        plan = fast.plan_switches([("安全内容推荐", True, (500, 800))],
+                                  only=["应用安全"], screen_h=2340)
+        self.assertEqual(plan.targets, ())
+        plan = fast.plan_switches([("安全内容推荐", True, (500, 800))],
+                                  only=["安全内容推荐"], screen_h=2340)
+        self.assertEqual(plan.targets, (("安全内容推荐", (500, 800), False),))
+
     def test_rows_without_a_title_are_dropped(self):
         plan = fast.plan_switches([("", True, (500, 800))], screen_h=2340)
         self.assertEqual(plan.targets, ())
