@@ -95,8 +95,9 @@ class VivoV2417ARecipeTests(unittest.TestCase):
         states = {"个性化推荐": True, "个性化广告推荐": True}
         pending = []
         names = list(states)
+        # #565 后引擎剥掉状态尾缀，脚本收到的标题不再随状态变化。
         p.switches.side_effect = lambda: [
-            (name + ("，开启" if states[name] else "，关闭"), states[name], (index + 1, 2))
+            (name, states[name], (index + 1, 2))
             for index, name in enumerate(names)
         ]
         p.click.side_effect = lambda x, y: pending.append(names[x - 1])

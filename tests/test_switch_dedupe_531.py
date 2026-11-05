@@ -47,8 +47,9 @@ class SelfDrawnSwitchTests(unittest.TestCase):
     def test_wrapper_without_identity_does_not_hide_the_real_switch(self):
         xml = page(vivo_switch_row("个性化推荐，关闭", 353, False),
                    vivo_switch_row("个性化广告推荐，关闭", 600, False))
+        # #565 后引擎在标题产出处剥掉状态尾缀，去重判定（wrapper 身份）不受影响。
         self.assertEqual([(t, c) for t, c, _ in phone(xml).switches()],
-                         [("个性化推荐，关闭", False), ("个性化广告推荐，关闭", False)])
+                         [("个性化推荐", False), ("个性化广告推荐", False)])
 
 
 if __name__ == "__main__":

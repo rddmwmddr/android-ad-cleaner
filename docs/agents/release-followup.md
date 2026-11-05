@@ -33,6 +33,8 @@ Issues labelled `waiting-for-verify` have a fix on `main` that the reporter has 
 
 ## 当前队列
 
+0.3.2（2026-11-05T02:22Z）发布后同日发复测请求：#238 @dgphust、#280 @afive956、#330 @lanzhihong6、#555 @cyjx007。#386 #459 #521 #547 是维护者自己开的票，没有外部报告者可催；#523、#531 已关闭。
+
 0.3.1（2026-11-03T02:36Z）发布后同日发复测请求：#165、#220、#228、#286、#333、#407、#414、#415、#474、#498（各 @ 报告者）。机主或维护者自己开的票（#311 #378 #403 #420 #422 #426 #428 #452 #456 #460 #480 #486 #500 #510）没有外部报告者可催。
 
 2026-11-03：#228 由 @WET1AND 用 `AndroidAdCleaner-0.3.1-windows-portable` 按原场景复测通过（`startup: webview2=installed motw=yes`、MOTW 提示文案正确、解除标记后 smoke 正常），当日摘掉 `waiting-for-verify` 并关闭；原始报告者 @AbyssOvO 未回复，这段确认来自同症状的独立报告者。
