@@ -175,7 +175,8 @@ def _():
 def _():
     p.d.shell("am start -f 0x10008000 -n com.iqoo.secure/.MainSettings")
     time.sleep(1.0)
-    if maybe("关于") and maybe("个性化设置"):
+    # 可点行是整行 ViewGroup，点左侧标题文字不跳转；和商店「关于」一样取行宽 40%（#588）
+    if tap_row("关于") and tap_row("个性化设置"):
         p.off(only=["应用个性化推荐", "清理个性化推荐"], page="i管家·个性化设置")
     p.back(3)
 
