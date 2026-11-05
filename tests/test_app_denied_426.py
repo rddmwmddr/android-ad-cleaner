@@ -101,23 +101,22 @@ class AppLevelOffTests(unittest.TestCase):
         p.reader.shell.side_effect = shell("deny")
         self.assertEqual(outcome(p).kind, chan.APP_DENIED)
 
-    def test_appops_allow_is_still_a_failure(self):
-        # 应用通知开着、页面上却没有这个渠道：这是真的没认出，不能吞掉
+    def test_appops_allow_is_ui_hidden(self):
+        # 应用通知开着、页面上却没有这个渠道：不是「应用通知整体关闭」，也不该每轮重复报同一条失败
+        # —— 记成「本机 UI 未暴露」，下一轮扫描不再列出（#576）
         p = phone([MASTER_ONLY])
         p.reader.shell.side_effect = shell("allow")
-        got = outcome(p)
-        self.assertEqual(got.kind, chan.NOT_CONFIRMED)
-        self.assertIn("没找到这一行", got.detail)
+        self.assertEqual(outcome(p).kind, chan.UI_HIDDEN)
 
-    def test_unreadable_appops_is_still_a_failure(self):
-        # 命令报错 / 输出不认识时按「没关」处理：宁可不降级，也不把真实失败静默吞掉
+    def test_unreadable_appops_counts_as_not_denied(self):
+        # 命令报错 / 输出不认识时按「没关」处理：这时仍按 UI 未暴露记，不做成「应用整体关闭」降级
         def broken(command, *a, **k):
             if "appops" in command:
                 raise RuntimeError("shell output invalid")
             return Mock(output="")
         p = phone([MASTER_ONLY])
         p.reader.shell.side_effect = broken
-        self.assertEqual(outcome(p).kind, chan.NOT_CONFIRMED)
+        self.assertEqual(outcome(p).kind, chan.UI_HIDDEN)
 
     def test_no_operations_means_not_denied(self):
         # 这个应用没有 POST_NOTIFICATION 这条 appops 记录：读不出=没关
@@ -127,7 +126,7 @@ class AppLevelOffTests(unittest.TestCase):
             return Mock(output="")
         p = phone([MASTER_ONLY])
         p.reader.shell.side_effect = unknown_op
-        self.assertEqual(outcome(p).kind, chan.NOT_CONFIRMED)
+        self.assertEqual(outcome(p).kind, chan.UI_HIDDEN)
 
     def test_a_listed_row_without_a_readable_switch_is_not_degraded(self):
         # 渠道行在页面上（#427 那批），只是行内开关没认出：此时不许套用总开关判据
@@ -154,7 +153,7 @@ class AppLevelOffTests(unittest.TestCase):
         # 权限读数说 granted=true 就是没关，不再去问 appops（#330 记过两者可能不同步）
         p = phone([MASTER_ONLY])
         p.reader.shell.side_effect = shell("ignore", permission="  POST_NOTIFICATIONS: granted=true, flags=[ ]\n")
-        self.assertEqual(outcome(p).kind, chan.NOT_CONFIRMED)
+        self.assertEqual(outcome(p).kind, chan.UI_HIDDEN)
         self.assertFalse([c for c in p.reader.shell.call_args_list if "appops" in str(c)])
 
     def test_unconfirmed_page_is_not_degraded(self):

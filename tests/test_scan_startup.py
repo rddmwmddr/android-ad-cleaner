@@ -40,7 +40,9 @@ class ReadOnlyTests(unittest.TestCase):
             chan.main()
         connect.assert_not_called()
         self.assertTrue(all(c.args[0][1:3] == ["-s", "test-device"] for c in shell.call_args_list))
-        self.assertTrue(all(c.args[0][-1] == "dumpsys notification --noredact" for c in shell.call_args_list))
+        # 只读扫描只发这两条读命令：dumpsys 读渠道，getprop 读型号（「本机 UI 未暴露」名单按型号分文件，#576）
+        self.assertTrue(all(c.args[0][-1] in ("dumpsys notification --noredact", "getprop ro.product.model")
+                            for c in shell.call_args_list))
         return log.getvalue()
 
     def test_scan_survives_unavailable_automation(self):

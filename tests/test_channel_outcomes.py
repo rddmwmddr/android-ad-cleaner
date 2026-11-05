@@ -46,9 +46,9 @@ class OutcomeTableTests(unittest.TestCase):
         self.assertEqual({k for k in chan.KINDS if chan.toggled(outcome(k))},
                          {chan.DONE, chan.CONFIRMED_LATER})
 
-    def test_locked_and_denied_channels_are_exempt_from_the_recheck(self):
+    def test_channels_that_cannot_be_closed_are_exempt_from_the_recheck(self):
         self.assertEqual({k for k in chan.KINDS if chan.exempt_from_recheck(outcome(k))},
-                         {chan.GREYED, chan.APP_DENIED})
+                         {chan.GREYED, chan.APP_DENIED, chan.UI_HIDDEN})
 
 
 class RenderTests(unittest.TestCase):
