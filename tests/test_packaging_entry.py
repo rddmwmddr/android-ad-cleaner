@@ -4,14 +4,21 @@
 只有真打包才暴露——而 `build-windows.yml` 不守 PR（#391）。这里只读文件与语法树，不跑打包。
 """
 import ast
+import io
 import re
 import subprocess
 import sys
+import tempfile
+import types
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+
+from gui import app, launch        # noqa: E402  （ROOT 要先上 sys.path）
 
 
 def spec_entry():
@@ -94,6 +101,89 @@ class PackagingEntryTests(unittest.TestCase):
 
     def test_launch_script_entry_forwards_cli(self):
         self.assert_entry_forwards_cli("gui/launch.py")
+
+
+CLI_EXE = "/opt/AndroidAdCleaner/aac-cli.exe"
+WINDOW_EXE = "/opt/AndroidAdCleaner/AndroidAdCleaner.exe"
+PYTHON_EXE = "/usr/local/bin/python3.12"
+
+
+class CliProgramDispatchTests(unittest.TestCase):
+    """#573：`aac-cli.exe --help` 以前进了窗口分支，命令行零输出、进程挂住。
+
+    两个 exe 共用 `gui/launch.py`，可执行文件基名是唯一的区别；这里用假的 webview 与假的可执行
+    文件名驱动 `main()`，不装窗口库、不连手机。
+    """
+
+    def launch_once(self, argv, executable):
+        """跑一次入口：返回（退出码, stdout, stderr, 假 webview, 转发到的 cli_main）。"""
+        webview = types.SimpleNamespace(create_window=Mock(), start=Mock())
+        out, err = io.StringIO(), io.StringIO()
+        code = None
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.dict(sys.modules, {"webview": webview}), \
+             patch.object(sys, "argv", ["launch.py", *argv]), \
+             patch.object(sys, "executable", executable), \
+             patch.object(app, "data_dir", return_value=directory), \
+             patch.object(app, "find_adb", return_value=None), \
+             patch.object(app, "cli_main") as cli_main, \
+             redirect_stdout(out), redirect_stderr(err):
+            try:
+                launch.main()
+            except SystemExit as stop:
+                code = stop.code
+        return code, out.getvalue(), err.getvalue(), webview, cli_main
+
+    def assert_usage(self, text):
+        for form in ("aac-cli --cli run.py --help",
+                     "aac-cli --cli run.py devices",
+                     "aac-cli --cli run.py -s <序列号> check"):
+            self.assertIn(form, text, f"用法说明里少了这一种调用：{form}")
+
+    def test_cli_program_help_prints_usage_and_exits_zero(self):
+        for flag in ("--help", "-h"):
+            with self.subTest(flag=flag):
+                code, out, err, webview, _ = self.launch_once([flag], CLI_EXE)
+                self.assertEqual(code, 0, err)
+                self.assert_usage(out)
+                self.assertEqual(err, "")
+                webview.create_window.assert_not_called()
+                webview.start.assert_not_called()
+
+    def test_cli_program_without_prefix_prints_usage_to_stderr_and_fails(self):
+        for argv in ([], ["devices"], ["-s", "ABC123", "check"]):
+            with self.subTest(argv=argv):
+                code, out, err, webview, _ = self.launch_once(argv, CLI_EXE)
+                self.assertTrue(code, f"{argv} 应当以非零退出码结束，实际 {code}")
+                self.assert_usage(err)
+                self.assertEqual(out, "")
+                webview.create_window.assert_not_called()
+                webview.start.assert_not_called()
+
+    def test_cli_program_still_forwards_with_the_prefix(self):
+        code, out, err, webview, cli_main = self.launch_once(["--cli", "run.py", "--help"], CLI_EXE)
+        self.assertIsNone(code, err)
+        cli_main.assert_called_once_with()
+        webview.create_window.assert_not_called()
+
+    def test_window_program_without_arguments_still_opens_the_window(self):
+        code, _, err, webview, cli_main = self.launch_once([], WINDOW_EXE)
+        self.assertIsNone(code, err)
+        cli_main.assert_not_called()
+        webview.create_window.assert_called_once()
+        webview.start.assert_called_once()
+
+    def test_source_entry_keeps_the_interpreter_behaviour(self):
+        """以解释器运行时没有两个 exe 的区别：只有 `--cli` 才转发，其它照旧起窗口。"""
+        code, out, err, webview, cli_main = self.launch_once(["--cli", "run.py", "--help"], PYTHON_EXE)
+        self.assertIsNone(code, err)
+        self.assertEqual(out, "")
+        cli_main.assert_called_once_with()
+
+        code, out, err, webview, cli_main = self.launch_once(["--help"], PYTHON_EXE)
+        self.assertIsNone(code, err)
+        self.assertEqual(out, "")
+        webview.create_window.assert_called_once()
 
 
 if __name__ == "__main__":

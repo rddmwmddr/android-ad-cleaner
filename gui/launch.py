@@ -14,6 +14,34 @@ else:                               # 打包件与 `python gui/launch.py`：没�
     import app
 
 
+CLI_PROGRAM = "aac-cli"
+
+USAGE = """\
+用法：aac-cli --cli run.py <命令>
+
+  aac-cli --cli run.py --help               查看全部命令
+  aac-cli --cli run.py devices              列出已连接的手机
+  aac-cli --cli run.py -s <序列号> check     检测指定手机
+
+要打开窗口请运行 AndroidAdCleaner。
+"""
+
+
+def is_cli_program(executable=None):
+    """跑的是不是打包出来的命令行程序。两个 exe 共用本文件，可执行文件基名是唯一的区别
+    （`gui/windows.spec`）；以解释器运行时没有这个区别，按窗口程序处理（#573）。"""
+    return Path(sys.executable if executable is None else executable).stem.lower() == CLI_PROGRAM
+
+
+def dispatch(argv, executable=None):
+    """这次启动去哪：'cli' 转发给引擎、'help' 打用法、'usage' 报用法错、'window' 起窗口。"""
+    if len(argv) > 1 and argv[0] == "--cli":
+        return "cli"
+    if not is_cli_program(executable):
+        return "window"
+    return "help" if argv[:1] in (["-h"], ["--help"]) else "usage"
+
+
 def smoke_gui(window, result):
     """验证本地页面、图片、JS→Python 桥和模拟失败提示；不连接或修改手机。"""
     try:
@@ -58,8 +86,14 @@ def smoke_gui(window, result):
 
 
 def main():
-    if len(sys.argv) > 2 and sys.argv[1] == "--cli":
+    action = dispatch(sys.argv[1:])
+    if action == "cli":
         app.cli_main(); return
+    if action != "window":
+        app._fix_stdio()                # 控制台默认 GBK/cp1252，中文用法会报编码错
+        if action == "help":
+            print(USAGE); sys.exit(0)
+        print(USAGE, file=sys.stderr); sys.exit(2)
     import webview
     api = app.client_api()
     smoke = "--smoke-gui" in sys.argv
