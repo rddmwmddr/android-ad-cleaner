@@ -63,6 +63,18 @@ class ConfirmButtonTests(unittest.TestCase):
         p.click.assert_not_called()
 
     @patch.object(fast.time, "sleep")
+    def test_traditional_confirm_button(self, _sleep):
+        """繁体界面上的确认键是「確定」（#604）：词表只收简体时这一下点不到。"""
+        p = phone()
+        root = ET.fromstring('''<hierarchy>
+          <node class="android.widget.Button" text="取消" clickable="true" bounds="[120,2200][480,2320]"/>
+          <node class="android.widget.Button" text="確定" clickable="true" bounds="[600,2200][960,2320]"/>
+        </hierarchy>''')
+        p.tree, p.click = Mock(return_value=root), Mock()
+        self.assertEqual(p.confirm(), "確定")
+        p.click.assert_called_once_with(780, 2260)
+
+    @patch.object(fast.time, "sleep")
     def test_clickable_text_view_is_a_confirm_button(self, _sleep):
         """HyperOS 4（小米 17）热榜页：确认键是可点击的 TextView，不是 Button（#500 / PR #408）。
 

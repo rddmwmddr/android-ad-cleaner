@@ -115,10 +115,21 @@ class SwitchTests(unittest.TestCase):
         p.d.screenshot.assert_not_called()
 
     def test_protection_polarity(self):
-        for text in ("限制广告跟踪", "防止广告追踪", "关闭个性化推荐"):
-            self.assertIs(fast.want_state(text), True)
+        for text in ("限制广告跟踪", "防止广告追踪", "关闭个性化推荐",
+                     "选择停用广告个性化功能"):      # Google 简体译名把祈使动词放在否定词前面（#604）
+            with self.subTest(text=text):
+                self.assertIs(fast.want_state(text), True)
         self.assertIs(fast.want_state("个性化广告推荐"), False)
+        self.assertIs(fast.want_state("选择广告推荐"), False)   # 只多认一个动词前缀，不认没否定词的行
         self.assertIsNone(fast.want_state("关闭推送"))
+
+    def test_protection_polarity_traditional(self):
+        """繁体界面的同一批保护开关（#604；#498 只覆盖了渠道线词表）。"""
+        for text in ("限制廣告追蹤", "關閉個人化推薦", "選擇停用廣告個人化", "停用廣告個人化"):
+            with self.subTest(text=text):
+                self.assertIs(fast.want_state(text), True)
+        self.assertIs(fast.want_state("廣告推薦"), False)
+        self.assertIsNone(fast.want_state("關閉推送"))
 
     @patch.object(fast.time, "sleep")
     def test_disappeared_switch_is_not_reported_as_success_or_retapped(self, _sleep):
