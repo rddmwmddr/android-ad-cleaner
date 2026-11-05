@@ -1,7 +1,9 @@
-# OPPO Find X10 Pro Max（PMX110）：2026-11-05 逐页核对，ColorOS 17 / Android 17。
+# OPPO Find X10 Pro Max（PMX110）：2026-11-05 逐页核对，ColorOS 17 / Android 17，实测版本
+# PMX110_17.0.0.116(CN01)。BUILD 只写到 17.0.0：同代的 17.0.0.x 共用这份路径，其他 ColorOS 17
+# 机型也靠这个前缀把这份脚本当同族参考（#319 / #483）。
 # 只关点名的广告与推荐；搜索数据源、服务通知与消息总开关保留，营销由 chan-scan / chan-off
 # 在渠道级处理。通知渠道、组件挂起和快应用继续走 run.py 的独立确认流程。
-BUILD = "PMX110_17.0.0.116(CN01)"
+BUILD = "PMX110_17.0.0"
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 import time
 
@@ -22,6 +24,9 @@ VIDEO = "com.heytap.yoli"
 GAME = "com.nearme.gamecenter"
 SEARCH_SETTINGS = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"
 SEARCH_CARDS = ["未下载应用推荐", "应用建议小卡", "热搜应用", "精选推荐", "热搜榜单", "活动皮肤", "推荐卡片"]
+# 轮播单选只有这两个选项，「不显示」是我们要的那一档（#280）。
+CAROUSEL_LABELS = {"显示轮播推荐", "不显示轮播推荐"}
+CAROUSEL_OFF = "不显示轮播推荐"
 # 来自本机服务管理页；普通游戏分类、AI 搜索、资产、客服、工具与安全功能不在清单里。
 STORE_PROMOS = [
     "首页：悬浮活动图标", "首页：活动弹窗", "首页：顶部轮播卡片", "底部活动专区",
@@ -103,6 +108,7 @@ def app_settings(package):
 def row(text, title=None, package=None, activity=None, scrolls=8):
     """只点具名导航行，避免点隐私页的过度授权横幅；坐标来自当前节点。"""
     p.await_page()
+    where = p.focus()
     for index in range(scrolls + 2):
         root = p.tree()
         parents = {child: node for node in root.iter() for child in node}
@@ -117,8 +123,8 @@ def row(text, title=None, package=None, activity=None, scrolls=8):
             target = target if target is not None else node
             l, t, r, b = bounds(target)
             require(r > l and b > t and p.on_screen(target), "入口坐标无效")
-            where, before = p.focus(), p.sig()
-            require(p.focus() == where, "读取入口后页面变化，未点击")
+            require(p.focus() == where, "找入口期间页面变了，未点击")
+            before = p.sig()
             p.click((l + r) // 2, (t + b) // 2)
             require(p.settle(before, 2.4), f"点击「{text}」后页面没有变化")
             page(title or text, package, activity)
@@ -208,6 +214,13 @@ def close_named(names, title, max_screens=12, dependent=(), reopen=None, snapsho
     print(f"  · {title}：回读确认 {len(present)} 项关闭", flush=True)
 
 
+def require_installed(package, label):
+    result = p.d.shell("pm path " + package)
+    require(not result.exit_code, f"无法读取{label}安装状态")
+    if "package:" not in result.output:
+        raise SkipStep(f"本机未安装{label}")
+
+
 def system_settings():
     open_page("am start -f 0x10008000 -a android.settings.SETTINGS", "设置", "com.android.settings")
 
@@ -243,26 +256,31 @@ def dismiss_guide(timeout=4):
 
 
 def tap_gear():
-    """右上齿轮：没有文字标题，只有「设置」这两个字的无障碍名或 setting 资源名。"""
+    """右上齿轮：判据走引擎的 `icon_hit`（正好是「设置」的描述 / 正文，或末段以 setting 开头的资源名）。
+    这个入口的无障碍名带状态后缀（「设置,有新通知」），`icon_hit` 只认正好等于「设置」，所以补一条
+    以「设置」开头的描述；包含匹配会把「设置壁纸」一类也收进来（#305 / #374）。"""
+    from fast import icon_hit
     for node in p.tree().iter("node"):
-        cd, rid = node.get("content-desc") or "", (node.get("resource-id") or "").lower()
-        key = cd + " " + (node.get("text") or "") + " " + rid
-        if ("设置" in key or "setting" in key) and node.get("clickable") == "true":
-            l, t, r, b = bounds(node)
-            if t > p.H * 0.25:
-                continue
-            p.click((l + r) // 2, (t + b) // 2)
-            time.sleep(1.5)
-            return True
+        desc = (node.get("content-desc") or "").strip()
+        if node.get("clickable") != "true" or not p.on_screen(node):
+            continue
+        if not (icon_hit(node) or desc.startswith("设置")):
+            continue
+        l, t, r, b = bounds(node)
+        if t > p.H * 0.25:
+            continue
+        p.click((l + r) // 2, (t + b) // 2)
+        time.sleep(1.5)
+        return True
     return False
 
 
 @step("广告跟踪")
 def _():
     # 547 个具名许可逐个核对，个人应用名单只在本次会话里读，不写进脚本或公开记录。
-    if p.safe_mode or p.d.shell("getprop ro.product.model").output.strip() != "PMX110" or \
-            p.d.shell("getprop ro.build.display.id").output.strip() != BUILD:
-        raise SkipStep("仅在录制型号与完整版本匹配时批量处理广告跟踪")
+    # 版本由引擎判（录制版本对不上会置 safe_mode）；这里只挡「拿这份脚本去跑别的型号」。
+    if p.safe_mode or p.d.shell("getprop ro.product.model").output.strip() != "PMX110":
+        raise SkipStep("仅在 PMX110 上批量处理广告跟踪")
     system_settings()
     row("隐私与安全", package="com.oplus.securitypermission")
     row("设备标识与广告")
@@ -349,8 +367,7 @@ def hide_carousel():
             container = node
             for _ in range(5):
                 labels = ({x.get("text", "") for x in container.iter("node")} |
-                          {x.get("content-desc", "") for x in container.iter("node")}) & \
-                         {"显示轮播推荐", "不显示轮播推荐"}
+                          {x.get("content-desc", "") for x in container.iter("node")}) & CAROUSEL_LABELS
                 if len(labels) == 1:
                     label = labels.pop()
                     require(label not in found and p.on_screen(node) and node.get("enabled") == "true",
@@ -361,17 +378,17 @@ def hide_carousel():
                 container = parents.get(container)
                 if container is None or len(labels) > 1:
                     break
-        require(set(found) == {"显示轮播推荐", "不显示轮播推荐"} and
+        require(set(found) == CAROUSEL_LABELS and
                 sum(on for on, _ in found.values()) == 1, "无法确认轮播单选状态")
         return found
 
     where = p.focus()
-    selected, (l, t, r, b) = choices()["不显示轮播推荐"]
+    selected, (l, t, r, b) = choices()[CAROUSEL_OFF]
     if not selected:
         require(p.focus() == where, "读取后轮播页面变化，未点击")
         p.click((l + r) // 2, (t + b) // 2)
         p.await_page()
-        require(choices()["不显示轮播推荐"][0], "轮播推荐回读未选中不显示")
+        require(choices()[CAROUSEL_OFF][0], "轮播推荐回读未选中不显示")
         p.changed.append(("推荐服务", "轮播推荐：不显示"))
     require(read_switches("推荐服务") == before, "推荐服务总开关发生变化")
     VERIFIED_SWITCHES += 1
@@ -432,10 +449,7 @@ def _():
 
 @step("视频")
 def _():
-    result = p.d.shell("pm path " + VIDEO)
-    require(not result.exit_code, "无法读取视频安装状态")
-    if "package:" not in result.output:
-        raise SkipStep("本机未安装视频")
+    require_installed(VIDEO, "视频")
     p.start(VIDEO, expect=("我的",))
     require(p.tab("我的"), "未找到视频底部我的标签")
     require(p.tap("设置", scrolls=0), "未找到视频设置入口")
@@ -448,10 +462,7 @@ def _():
 def _():
     # ⚠ 本段照 #280 的实测记录写，录制这台机没装游戏中心，没有复测证据；
     # 界面对不上时按「未完成」上报，不要在这里放宽成找第一个齿轮。
-    result = p.d.shell("pm path " + GAME)
-    require(not result.exit_code, "无法读取游戏中心安装状态")
-    if "package:" not in result.output:
-        raise SkipStep("本机未安装游戏中心")
+    require_installed(GAME, "游戏中心")
     p.start(GAME)
     dismissed = dismiss_guide()
     p.tap("我的", exact=True, scrolls=0)

@@ -69,10 +69,6 @@ def action(scope, name):
     return scope["selected_action"]
 
 
-def texts(*labels):
-    return [(label, (0, 0, 0, 0), {}) for label in labels]
-
-
 def carousel_page():
     """父容器把两个选项的标签并成一段文字；预览区另有一段同名文字（不是可点目标）。"""
     return ET.fromstring('''<hierarchy>
@@ -95,12 +91,18 @@ def carousel_page():
 
 
 class RecipeSelectionTests(unittest.TestCase):
-    def test_script_is_the_only_one_and_pins_the_recorded_build(self):
+    def test_script_is_the_only_one_for_the_model(self):
         path, ref = run.recipe_for("PMX110", "OPPO", {"build": RECORDED, "os": ""})
         self.assertEqual(Path(path), RECIPE)
         self.assertFalse(ref)
-        self.assertEqual(run.recipe_meta(RECIPE)["build"], RECORDED)
         self.assertEqual(sorted(p.name for p in RECIPE.parent.glob("recipe_*.py")), [])
+
+    def test_build_stays_at_the_generation_so_siblings_can_borrow_it(self):
+        """BUILD 写细到 17.0.0.116，同族的 ColorOS 17 机型就借不到这份脚本（#319 / #483）。"""
+        self.assertEqual(run.recipe_meta(RECIPE)["build"], "PMX110_17.0.0")
+        path, ref = run.recipe_for("PJZ110", "OnePlus", {"build": "PJZ110_17.0.0.103(CN01)", "os": ""})
+        self.assertEqual(Path(path), RECIPE)
+        self.assertTrue(ref)
 
     def test_all_nine_segments_survive(self):
         self.assertEqual(run.recipe_meta(RECIPE)["steps"],
@@ -419,6 +421,18 @@ class StoreThemeVideoTests(unittest.TestCase):
         self.p.tap.assert_not_called()
         self.p.off.assert_not_called()
 
+    def test_video_wrong_landing_stops_before_personalization(self):
+        """点完「设置」没落到 SettingActivity 就停本段，不接着在别的页里关开关。"""
+        self.p.d.shell.return_value = SimpleNamespace(exit_code=0, output="package:/system/video.apk")
+        self.p.tab.return_value = True
+        self.p.tap.return_value = True
+        self.p.focus.return_value = "com.heytap.yoli/MainActivity"
+        self.p.find.return_value = True
+        with self.assertRaisesRegex(RuntimeError, "未进入目标设置页"):
+            action(self.scope, "视频")()
+        self.p.tap.assert_called_once_with("设置", scrolls=0)
+        self.p.off.assert_not_called()
+
 
 class CarouselTests(unittest.TestCase):
     def setUp(self):
@@ -526,7 +540,7 @@ class NegativeScreenTests(unittest.TestCase):
         scope["row"] = Mock()
         scope["hide_carousel"] = Mock(side_effect=RuntimeError("单选缺失"))
         scope["close_named"] = Mock()
-        with frozen_time(), self.assertRaisesRegex(RuntimeError, "热讯资讯|热点资讯已核对"):
+        with frozen_time(), self.assertRaisesRegex(RuntimeError, "热点资讯已核对"):
             action(scope, "负一屏")()
         scope["hide_carousel"].assert_called_once_with()
         scope["close_named"].assert_called_once_with(["热点资讯"], "热点资讯")
@@ -593,6 +607,29 @@ class GameCenterTests(unittest.TestCase):
         with frozen_time(), self.assertRaisesRegex(RuntimeError, "设置齿轮"):
             action(self.scope, "游戏中心")()
         self.scope["row"].assert_not_called()
+
+
+class TrackingGuardTests(unittest.TestCase):
+    def setUp(self):
+        self.p = phone_mock(W=1272, H=2772)
+        self.p.locked.return_value = False
+        self.p.texts.return_value = []
+        self.scope = load(self.p)
+
+    def test_safe_mode_skips_before_navigation(self):
+        self.p.safe_mode = True
+        with self.assertRaisesRegex(self.scope["SkipStep"], "仅在 PMX110"):
+            action(self.scope, "广告跟踪")()
+        self.p.d.shell.assert_not_called()
+        self.p.off.assert_not_called()
+
+    def test_another_model_skips_before_navigation(self):
+        self.p.d.shell.return_value = SimpleNamespace(exit_code=0, output="PMX120")
+        with self.assertRaisesRegex(self.scope["SkipStep"], "仅在 PMX110"):
+            action(self.scope, "广告跟踪")()
+        self.p.d.shell.assert_called_once_with("getprop ro.product.model")
+        self.p.click.assert_not_called()
+        self.p.off.assert_not_called()
 
 
 class StepDecoratorTests(unittest.TestCase):
