@@ -8,6 +8,7 @@
 | 小米 / Redmi | [小米-HyperOS.md](小米-HyperOS.md) | Xiaomi 18 Pro Max、18 Fold、17 Ultra、17、15、13 Ultra、Pad 7、REDMI K80 至尊版、K80 Pro、K90 Pro Max、Redmi K70、K70 Pro、Note 12 Turbo、Note 14 Pro、Note 14 5G |
 | vivo / iQOO | [vivo-OriginOS.md](vivo-OriginOS.md) | X300 Ultra（V2547DA、V2547A）、X Fold6（V2545A，负一屏需手动）、iQOO V2324HA、V2361A、V1986A、V2417A、iQOO Z11 Turbo（V2536A）、vivo V2309A |
 | 魅族 | [魅族-Flyme.md](魅族-Flyme.md) | 21 Pro（MEIZU 21 Pro，Flyme 12.6.0.0A；路径手动核对，脚本整段待验证） |
+| 三星 | [三星-OneUI.md](三星-OneUI.md) | Galaxy Note10+ 5G（SM-N9760，One UI 4 / Android 12；机型脚本仅「广告」一段） |
 
 ## 怎么读
 
