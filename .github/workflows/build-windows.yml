@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: 安装依赖
-        run: pip install -r requirements.txt pywebview pyinstaller pillow
+        run: pip install -r requirements.txt "pywebview>=6.2.1" "pythonnet>=3.2.1" pyinstaller pillow
       - name: 设备无关回归测试
         run: |
           $env:ADB = "$env:ANDROID_HOME\platform-tools\adb.exe"
