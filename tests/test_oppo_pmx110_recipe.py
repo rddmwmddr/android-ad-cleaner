@@ -19,7 +19,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from fixtures import load_recipe, phone_mock
+from fixtures import load_recipe, phone_mock, phone_stub
+import fast
 import run
 
 RECIPE = ROOT / "recipes/oppo-PMX110/recipe.py"
@@ -446,7 +447,9 @@ class StoreThemeVideoTests(unittest.TestCase):
         self.scope["row"] = Mock()
         self.scope["close_named"] = Mock()
         action(self.scope, "视频")()
-        self.assertIn("yoli://yoli.com/mine_act_lib_yoli/settings", self.p.d.shell.call_args_list[1].args[0])
+        launch = self.p.d.shell.call_args_list[1].args[0]
+        self.assertIn("yoli://yoli.com/mine_act_lib_yoli/settings", launch)
+        self.assertIn("-p com.heytap.yoli", launch)          # 别的 App 也注册 scheme 时不弹选择器
         self.p.start.assert_not_called()
         self.p.tab.assert_not_called()
 
@@ -642,6 +645,8 @@ class AdTrackingFlowTests(unittest.TestCase):
         self.scope["p"].setting.return_value = False
         self.scope["menu_state"].return_value = self.scope["MenuState"](True, True)
         action(self.scope, "广告跟踪")()
+        self.scope["p"].setting.assert_called_once_with(
+            "广告跟踪", "限制广告跟踪", path="隐私与安全 > 隐私 > 设备标识与广告")
         self.scope["system_settings"].assert_called_once_with()
         self.assertEqual([c.args[0] for c in self.scope["row"].call_args_list],
                          ["隐私与安全", "设备标识与广告", "广告跟踪"])
@@ -664,6 +669,35 @@ class AdTrackingFlowTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "仍有开着的应用"):
             action(self.scope, "广告跟踪")()
         self.assertIn("隐藏系统应用", [c.args[0] for c in self.p.tap.call_args_list])
+
+
+class RealDumpMenuTests(unittest.TestCase):
+    """用真实 dump 形状跑一遍：`Phone.texts()` 每个节点只产出一条文字，text 优先于 content-desc。"""
+
+    def setUp(self):
+        self.p = phone_stub("dump", fast_mod=fast)
+        self.p.W, self.p.H = 1080, 2340
+        # 读屏 adapter：`tree()` / `texts()` 走它；window_size 在 reader 上是可调用的
+        self.p.reader = Mock(window_size=Mock(return_value=(1080, 2340)))
+        self.p.tap = Mock(return_value=True)
+        self.p.await_page = Mock()
+        self.p.back = Mock()
+        self.scope, _ = load_recipe(self.p, RECIPE, ("__no_steps__",))
+
+    def dump(self, xml):
+        self.p.reader.dump_hierarchy.return_value = xml
+
+    def test_content_desc_only_state_suffix_is_disabled(self):
+        self.dump('<hierarchy><node content-desc="全部关闭 - 已停用" enabled="false" '
+                  'bounds="[0,0][1080,120]"/></hierarchy>')
+        self.scope["close_all_listed"]("用户应用")
+        self.assertNotIn("全部关闭", [c.args[0] for c in self.p.tap.call_args_list])
+
+    def test_text_wins_over_content_desc_and_enabled_flag_is_read(self):
+        self.dump('<hierarchy><node text="全部关闭" content-desc="全部关闭 - 已停用" enabled="false" '
+                  'bounds="[0,0][1080,120]"/></hierarchy>')
+        self.scope["close_all_listed"]("用户应用")
+        self.assertNotIn("全部关闭", [c.args[0] for c in self.p.tap.call_args_list])
 
 
 class TrackingGuardTests(unittest.TestCase):

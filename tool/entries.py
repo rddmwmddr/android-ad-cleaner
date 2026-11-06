@@ -358,8 +358,9 @@ def markdown(recipes_dir):
                                               if used.get(("direct", d.pkg, full(d.pkg, d.activity))) else "")
                 for d in e.direct) or "—"
             search = "<br>".join(
-                f"搜「{s.keyword}」点「{s.result}」" + (f"（{'、'.join(sorted(used.get(('search', s.keyword, s.result), ())))}）"
-                                                    if used.get(("search", s.keyword, s.result)) else "")
+                f"搜「{s.keyword}」点「{s.result}」" + (f"（位置：{s.path}）" if s.path else "")
+                + (f"（{'、'.join(sorted(used.get(('search', s.keyword, s.result), ())))}）"
+                   if used.get(("search", s.keyword, s.result)) else "")
                 for s in e.search) or "—"
             menu = e.menu + (f"（先拉起 `{e.app}`）" if e.app else "")
             lines.append(f"| {name} | {direct} | {search} | {menu} | {e.note or ''} |")

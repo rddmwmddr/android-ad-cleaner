@@ -260,7 +260,8 @@ def ad_id_page():
 
 def _labelled(text, name):
     """读屏会把状态后缀并进同一段文字（「全部关闭 - 已停用」），按主语认。"""
-    return text == name or text.startswith(name + " ")
+    rest = text[len(name):]
+    return text.startswith(name) and (not rest or rest[0] in " ,，、-")
 
 
 def menu_state():
@@ -474,9 +475,10 @@ def _():
 @step("视频")
 def _():
     require_installed(VIDEO, "视频")
-    # 设置页没导出，用 App 自己的深链直达（#650），不经开屏页和「我的」
-    open_page("am start -f 0x10008000 -a android.intent.action.VIEW -d yoli://yoli.com/mine_act_lib_yoli/settings",
-              "设置", VIDEO, "SettingActivity")
+    # 设置页没导出，用 App 自己的深链直达（#650），不经开屏页和「我的」；带 -p 限定到视频，
+    # 免得别的 App 也注册了这个 scheme 时弹选择器
+    open_page("am start -f 0x10008000 -a android.intent.action.VIEW -p " + VIDEO
+              + " -d yoli://yoli.com/mine_act_lib_yoli/settings", "设置", VIDEO, "SettingActivity")
     row("个性化管理")
     close_named(["个性化广告推荐", "个性化内容推荐"], "个性化管理")
 
