@@ -7,13 +7,19 @@ on:
 permissions:
   contents: read
 jobs:
+  # 本机开发环境是 3.12（与 CI 同一版），3.13+ 的兼容信号交给这里的第二个版本：
+  # 社区是从源码 python3 tool/run.py 跑的，解释器升级会改写文档字符串缩进、异常 repr 等输出。
   unittest:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
       - name: 安装依赖
         run: pip install -r requirements.txt
       - name: 准备 adb（不用手机，但套件里有用例在入口就解析 adb，缺了直接报「找不到 adb」）
