@@ -1,6 +1,6 @@
 /* 手机版：页面加载完由 MainActivity 注入。
    1) pywebview 桥：api.xxx(...) → AacHost.call → Python 的 aac_android.main.call，结果经 __aacDone 回来；
-   2) 首页换成 Shizuku 状态 + 「一键去广告」：自动走检测 → 扫描 → 开始执行，勾选与桌面版默认一致；
+   2) 首页换成 shell 权限状态 + 「一键去广告」：自动走检测 → 扫描 → 开始执行，勾选与桌面版默认一致；
    3) 桌面专属的入口（adb 设置、打开备份文件夹）隐藏，「插着线」「电脑」类文案改成手机上的说法。 */
 (function(){
   if (window.__aacMobile) return;
@@ -29,7 +29,7 @@
   const STEP = {
     need_dev: [`第 1 步（共 3 步）：打开开发者选项`, `点下面的按钮进「关于手机」，连点「版本号」7 次（小米点「OS 版本」，vivo 在「版本信息」里点「软件版本号」），输入锁屏密码，看到「已处于开发者模式」后回到这里。`, `打开「关于手机」`, `AacHost.openSettings('about')`],
     need_wifi: [`第 2 步（共 3 步）：打开无线调试`, `手机要连着 Wi-Fi。点下面的按钮进「开发者选项」，找到「无线调试」打开，弹窗选「允许」，然后回到这里。小米 / Redmi 顺便打开「USB 调试（安全设置）」，不然点不动开关。`, `打开开发者选项`, `AacHost.openSettings('dev')`],
-    need_pair: [`第 3 步（共 3 步）：授权本 App（只需一次）`, `安卓要求你亲手确认一次，才允许本 App 关闭系统里的广告开关，就像第一次用蓝牙耳机要确认一样。点下面的按钮，进「无线调试」→「使用配对码配对设备」，屏幕上会出现 6 位数字。不要关掉它，下拉通知栏，把这 6 位数字填进「安卓去广告」的通知里。<b>这台手机自己授权给自己，不连接任何其他设备，以后也不用再做。</b>`, `开始授权`, `AacHost.startPairing()`],
+    need_pair: [`第 3 步（共 3 步）：授权本 App（只需一次）`, `安卓要求你亲手确认一次，才允许本 App 关闭系统里的广告开关，就像第一次用蓝牙耳机要确认一样。点下面的按钮，进「无线调试」→「使用配对码配对设备」，屏幕上会出现 6 位数字。不要关掉它，下拉通知栏，把这 6 位数字填进「安卓去广告」的通知里。<b>这台手机自己授权给自己，不连接任何其他设备，以后也不用再做。</b>以后重启手机或换了 Wi-Fi，本 App 会自己重新打开无线调试并连上（第一次在新网络上，系统会要你再确认一次）；正在执行时它这么做，会在通知栏说一声。`, `开始授权`, `AacHost.startPairing()`],
     old: [`这台手机的安卓版本低于 11`, `安卓 11 起才有无线调试。可以装 Shizuku（免费开源）用电脑启动一次，或者直接用电脑版。`, `下载 Shizuku`, `AacHost.openShizuku()`],
     stopped: [`Shizuku 还没启动`, `打开 Shizuku 按它的说明启动（安卓 10 及以下要连一次电脑）。手机重启后要再启动一次。`, `打开 Shizuku`, `AacHost.openShizuku()`],
     ask: [`授权本 App 使用 Shizuku`, `点下面的按钮，在弹窗里选「始终允许」。`, `授权`, `AacHost.requestShizuku()`],
@@ -57,8 +57,13 @@
     if (st !== "ready"){
       const [t, d, b, act] = STEP[st] || STEP.need_pair;
       const first = st.startsWith("need_") ? `<p class="lead">第一次使用要做 3 个设置，大约 1 分钟，以后打开就能直接用。</p>` : "";
+      // 内置路径走不通时，装了 Shizuku 的人可以改走 Shizuku（#622 决策 1）；不记偏好，下次仍先试内置。
+      // 三步都给出口：卡在第 1、2 步（没开开发者选项 / 无线调试）时 Shizuku 也可能是现成能用的那条路
+      const viaShizuku = st.startsWith("need_")
+        ? `<div class="actions" style="justify-content:flex-start;margin-top:10px"><button class="btn plain" onclick="AacHost.requestShizuku()">已装 Shizuku？改用 Shizuku</button></div>`
+        : "";
       box.innerHTML = first + `<div class="card"><h3>${t}</h3><p class="lead" style="margin:0 0 14px">${d}</p>
-        <button class="btn big" onclick="${act}">${b}</button></div>
+        <button class="btn big" onclick="${act}">${b}</button></div>${viaShizuku}
         <p class="lead" style="margin:0">全程不需要 root，也不用连电脑。只在这台手机自己的网络里连接，不经过任何服务器。</p>
         <div class="note info" style="margin-top:12px">原生鸿蒙（HarmonyOS NEXT）不是安卓，装不了本 App；华为老机型与荣耀可以用。</div>`;
       return;
@@ -97,7 +102,7 @@
   };
 
   askDevOff = function(){
-    modal(`<h3>关闭开发者模式？</h3><p class="lead">关闭后无线调试一起关掉，Shizuku 随之停止。以后要还原改动，重新打开开发者模式和无线调试、启动 Shizuku 即可。</p>
+    modal(`<h3>关闭开发者模式？</h3><p class="lead">关闭后无线调试一起关掉，Shizuku（如果装了）随之停止。以后要还原改动，重新打开开发者模式和无线调试即可；万一系统要求重新授权，App 会再引导你填一次配对码。</p>
       <div class="actions"><button class="btn plain" onclick="closeModal()">取消</button><button class="btn" onclick="devOff()">关闭</button></div>`);
   };
 
@@ -127,7 +132,7 @@
     main().querySelectorAll(".card p.lead").forEach(p => {
       p.innerHTML = p.innerHTML
         .replace("若还要排查或重试，请先保留 USB 调试", "若还要排查或重试，请先保留开发者模式")
-        .replace("若不再使用电脑调试，建议关闭开发者模式和 USB 调试。", "若暂时不再用本 App，建议关闭开发者模式（无线调试随之关闭；下次用时打开开发者选项和无线调试即可，不用再配对）。");
+        .replace("若不再使用电脑调试，建议关闭开发者模式和 USB 调试。", "若暂时不再用本 App，建议关闭开发者模式（无线调试随之关闭；下次用时打开开发者选项和无线调试即可，系统若要求重新授权，App 会再引导一次）。");
     });
   };
 

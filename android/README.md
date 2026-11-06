@@ -8,11 +8,11 @@
 
 | 桌面版 | 手机版（`app/src/main/python/aac_android/`） |
 |---|---|
-| `subprocess.run([adb, "-s", 序列号, "shell", …])` | `adb.py` 接管 subprocess，adb 占位文件的调用按 adb 语义回答，命令经 Shizuku 执行（`bridge.py` → Kotlin `ShizukuShell`） |
+| `subprocess.run([adb, "-s", 序列号, "shell", …])` | `adb.py` 接管 subprocess，adb 占位文件的调用按 adb 语义回答，命令经 shell 门面执行（`bridge.py` → Kotlin `Shell`，底下是 `ShizukuShell` 或 `AdbShell`） |
 | 每一步一个 Python 子进程 | `inproc.py` 在本进程线程里跑脚本：每步清掉 `tool/` 模块、换环境变量、按线程分流输出、`SystemExit` 当退出码 |
-| `uiautomator2` / `adbutils` / `tool/ui_session.py` | `u2.py`：同一个 `u2.jar` 经 Shizuku 以 shell 身份启动，App 直连本机 9008 端口发 jsonrpc |
+| `uiautomator2` / `adbutils` / `tool/ui_session.py` | `u2.py`：同一个 `u2.jar` 以 shell 身份启动（经 `Shell` 门面），App 直连本机 9008 端口发 jsonrpc |
 
-界面经 WebView 加载 `index.html`；`assets/mobile/mobile.js` 补上 `pywebview` 桥，把首页换成 Shizuku 状态和「一键去广告」（自动走检测 → 扫描 → 开始执行，勾选与桌面版默认一致）。
+界面经 WebView 加载 `index.html`；`assets/mobile/mobile.js` 补上 `pywebview` 桥，把首页换成 shell 权限状态和「一键去广告」（自动走检测 → 扫描 → 开始执行，勾选与桌面版默认一致）。
 
 手机版自己的处理：
 
@@ -33,7 +33,7 @@
 
 执行与还原时优先在一块看不见的虚拟屏上跑，用户照常用主屏。做法参考 [Mika](https://github.com/wangzan101/mika)（Apache-2.0）：
 
-- `Vd.java` 随 APK 打包，经 Shizuku 以 shell 身份用 `app_process` 启动（类路径就是本 APK），建与主屏同尺寸同密度的虚拟屏，每 4 秒续亮。
+- `Vd.java` 随 APK 打包，以 shell 身份用 `app_process` 启动（类路径就是本 APK），建与主屏同尺寸同密度的虚拟屏，每 4 秒续亮。
 - `aac_android/screen.py` 把发往手机的命令改到这块屏：`am start` 加 `--display` 并另开一份任务（主屏开着同一个 App 时不把它搬走），`input` 加 `-d`，HOME、点亮屏幕、收起通知栏不发（只会作用到主屏），截图用它在 SurfaceFlinger 里的编号。查前台只看这块屏；这块屏带着 `ALWAYS_UNLOCKED` 时锁屏直接按未锁处理，`Vd` 降到没有这个标记的档位就按它那段照实读。
 - `u2.py` 读屏只留这块屏的窗口；点按走 `input -d`；选择器在过滤后的页面上自己匹配；不经读屏服务写字（它只找主屏的输入框），引擎自动退到剪贴板 + 粘贴。
 - 建不了屏（安卓 12 以下、系统不给 shell 建屏）就退回主屏模式。后台模式跑完不抢前台，按结果发通知（做完了 / 已停止 / 失败）。
@@ -61,3 +61,5 @@ AAC_BRIDGE_ADB=$(which adb) AAC_BRIDGE_SERIAL=emulator-5554 python -c "from aac_
 ```
 
 `tests/test_android_shim.py` 不连手机，验 adb 语义、进程内脚本与选择器。
+
+`app/src/test/java/com/ahuamiao/adcleaner/ShellServerTest.java` 用 JUnit 验命令服务的协议层：帧、stdout / stderr 分开、退出码、并发编号、取消。它只用 `java.io` 与 `ProcessBuilder`，不需要模拟器；开发机上把 sh 指到 `/bin/sh` 跑。

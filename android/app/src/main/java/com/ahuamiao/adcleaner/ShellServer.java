@@ -23,16 +23,32 @@ import java.util.concurrent.Executors;
  *         类型 1 执行：内容 = int 命令长度, 命令 UTF-8, int stdin 长度, stdin
  *         类型 2 起常驻进程：内容 = int 名字长度, 名字, 命令 UTF-8（输出读掉丢弃）
  *         类型 3 停常驻进程：内容 = 名字
+ *         类型 4 取消执行：内容为空；只对类型 1 有效，杀掉那条命令的进程且不回包
  *   回应  int id, int 退出码, int stdout 长度, stdout, int stderr 长度, stderr（类型 2 / 3 回 0 与空）
  */
 public final class ShellServer {
+    /** 安卓上的 sh；单测在开发机上跑时指到本机 sh（`ShellServerTest` 的 @BeforeClass）。 */
+    static String shell = "/system/bin/sh";
+
     private static DataOutputStream out;
     private static final Map<String, Process> daemons = new HashMap<>();
+    /** 正在跑的执行：取消要按 id 找到进程。daemons 不在里面（类型 4 对常驻进程无效）。 */
+    private static final Map<Integer, Process> running = new HashMap<>();
 
     public static void main(String[] args) throws IOException {
-        DataInputStream in = new DataInputStream(System.in);
-        out = new DataOutputStream(System.out);
-        ExecutorService pool = Executors.newCachedThreadPool();
+        serve(System.in, System.out);
+        System.exit(0);
+    }
+
+    /** 协议循环。参数化输入输出只为脱离 adb 做单测。 */
+    static void serve(InputStream stdin, OutputStream stdout) throws IOException {
+        DataInputStream in = new DataInputStream(stdin);
+        out = new DataOutputStream(stdout);
+        ExecutorService pool = Executors.newCachedThreadPool(r -> {
+            Thread t = new Thread(r);
+            t.setDaemon(true);
+            return t;
+        });
         reply(0, 0, new byte[0], "ready".getBytes("UTF-8"));        // 起来了：App 等到这一条才发命令
         while (true) {
             int id;
@@ -46,10 +62,18 @@ public final class ShellServer {
             in.readFully(body);
             pool.execute(() -> handle(id, type, body));
         }
+        shutdown();
+    }
+
+    private static void shutdown() {
         synchronized (daemons) {
             for (Process p : daemons.values()) p.destroy();
+            daemons.clear();
         }
-        System.exit(0);
+        synchronized (running) {
+            for (Process p : running.values()) p.destroy();
+            running.clear();
+        }
     }
 
     private static void handle(int id, byte type, byte[] body) {
@@ -72,6 +96,8 @@ public final class ShellServer {
                 }
                 if (p != null) p.destroy();
                 reply(id, 0, new byte[0], new byte[0]);
+            } else if (type == 4) {
+                cancel(id);
             }
         } catch (Throwable t) {
             try {
@@ -88,7 +114,10 @@ public final class ShellServer {
     }
 
     private static void run(int id, String cmd, byte[] stdin) throws Exception {
-        Process p = new ProcessBuilder("/system/bin/sh", "-c", cmd).start();
+        Process p = new ProcessBuilder(shell, "-c", cmd).start();
+        synchronized (running) {
+            running.put(id, p);
+        }
         ByteArrayOutputStream o = new ByteArrayOutputStream(), e = new ByteArrayOutputStream();
         Thread to = drain(p.getInputStream(), o), te = drain(p.getErrorStream(), e);
         try (OutputStream os = p.getOutputStream()) {
@@ -96,16 +125,40 @@ public final class ShellServer {
         } catch (IOException ignored) {
         }
         int code = p.waitFor();
+        if (release(id)) return;                                     // 取消过：不回包，也不必再等残留输出
         to.join(5000);
         te.join(5000);
         reply(id, code, o.toByteArray(), e.toByteArray());
+    }
+
+    /**
+     * 命令结束：把它摘下。返回 true 表示取消者已经先摘走了，这条不该再回包
+     * （回包会和取消撞同一个 id，而 App 侧早已把这条 id 从待回队列里删掉）。
+     */
+    private static boolean release(int id) {
+        synchronized (running) {
+            return running.remove(id) == null;
+        }
+    }
+
+    /**
+     * 取消一条执行。只认「执行」：常驻进程由类型 3 停。
+     * `destroy()` 只发给直属的 sh；`sh -c "a | b"` 的子进程靠管道关闭自行退出，
+     * 安卓没有 Java 9 的 ProcessHandle，剩下的短命子进程不追。
+     */
+    private static void cancel(int id) {
+        Process p;
+        synchronized (running) {
+            p = running.remove(id);
+        }
+        if (p != null) p.destroy();
     }
 
     private static void daemon(String name, String cmd) throws IOException {
         synchronized (daemons) {
             Process old = daemons.get(name);
             if (old != null && old.isAlive()) return;
-            Process p = new ProcessBuilder("/system/bin/sh", "-c", cmd).start();
+            Process p = new ProcessBuilder(shell, "-c", cmd).start();
             drain(p.getInputStream(), null);
             drain(p.getErrorStream(), null);
             p.getOutputStream().close();

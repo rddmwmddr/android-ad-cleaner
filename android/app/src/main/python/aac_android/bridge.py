@@ -1,7 +1,7 @@
 """以 shell 身份执行命令的通道。
 
-手机上走 Shizuku（Kotlin 的 ShizukuShell）；在电脑上调试这一层时设 AAC_BRIDGE_ADB / AAC_BRIDGE_SERIAL，
-改走真 adb，替换层的其余部分不用改就能对着模拟器跑。
+手机上走 Kotlin 的 `Shell` 门面：已授权的 Shizuku 用 `ShizukuShell`，否则用内置无线调试的 `AdbShell`（#622）。
+在电脑上调试这一层时设 AAC_BRIDGE_ADB / AAC_BRIDGE_SERIAL，改走真 adb，替换层的其余部分不用改就能对着模拟器跑。
 """
 import os
 import re
@@ -60,7 +60,11 @@ class ShizukuBridge:
         self.shell = jclass("com.ahuamiao.adcleaner.Shell")    # Shizuku 或内置无线调试（#622）
 
     def ready(self):
-        return bool(self.shell.ready())
+        return bool(self.shell.connected())
+
+    def ensure(self):
+        """去试着连上（最多 4 秒）：wait-for-device 用这个，其余只查现状。"""
+        return bool(self.shell.ensure())
 
     def exec(self, cmd, stdin=None, timeout=None):
         """命令在 Java 后台线程里跑，这里轮询：等的时候不占解释器锁（停止、界面轮询、看门狗照常），超时自己掐。"""
@@ -99,6 +103,9 @@ class AdbBridge:
     def ready(self):
         r = _run([self.adb, "-s", self.serial, "get-state"], capture_output=True, text=True, timeout=10)
         return r.stdout.strip() == "device"
+
+    def ensure(self):
+        return self.ready()
 
     def exec(self, cmd, stdin=None, timeout=None):
         try:

@@ -23,7 +23,7 @@ class KeepAliveService : Service() {
             return START_NOT_STICKY
         }
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL, "执行状态", NotificationManager.IMPORTANCE_LOW))
+        nm.createNotificationChannel(NotificationChannel(CHANNEL, CHANNEL_NAME, NotificationManager.IMPORTANCE_LOW))
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val notification = Notification.Builder(this, CHANNEL)
@@ -48,6 +48,7 @@ class KeepAliveService : Service() {
 
     companion object {
         const val CHANNEL = "running"
+        const val CHANNEL_NAME = "执行状态"
         const val ACTION_PAUSE = "com.ahuamiao.adcleaner.PAUSE"
         const val BACKGROUND = "background"
     }

@@ -113,10 +113,10 @@ class MainActivity : Activity() {
     }
 
     /**
-     * 能不能以 shell 身份执行，以及差哪一步。两条路任一可用就是 ready：
-     * - Shizuku：装了且在跑，沿用它的授权流程（ask / denied）；
-     * - 内置无线调试（#622，安卓 11 起）：need_dev 没开开发者选项 → need_wifi 没开无线调试 → need_pair 没配对。
-     * 安卓 10 及以下没有无线调试：old（没装 Shizuku）/ stopped（装了没启动）。
+     * 能不能以 shell 身份执行，以及差哪一步。已授权的 Shizuku 永远优先；没有就走内置无线调试（#622，安卓 11 起）：
+     * need_dev 没开开发者选项 → need_wifi 没开无线调试 → need_pair 没配对。
+     * Shizuku 在跑但没授权不再挡内置的路（决策：未授权时仍要能走内置）；要改走 Shizuku 由配对页的次级链接手动切。
+     * 安卓 10 及以下没有无线调试，只有 Shizuku：old（没装）/ stopped（装了没启动）/ ask / denied。
      * 连接要经 mDNS 找端口，最多等几秒，只在后台线程调。
      */
     private fun shellState(): String {
@@ -130,8 +130,7 @@ class MainActivity : Activity() {
                 else -> "ask"
             }
         }
-        if (AdbShell.ready() || AdbShell.connect(4000)) return "ready"
-        if (shizukuUp) return if (Shizuku.shouldShowRequestPermissionRationale()) "denied" else "ask"
+        if (Shell.ensure()) return "ready"
         return when {
             !AdbManager.developerOn(this) -> "need_dev"
             !AdbManager.wirelessOn(this) -> "need_wifi"
@@ -188,12 +187,22 @@ class MainActivity : Activity() {
             }
         }
 
+        /**
+         * 授权 Shizuku。没装 → 下载页；装了没启动，或拒绝过（系统不再弹窗）→ 打开 Shizuku 自己处理。
+         * 只在这两种情况下拿到 binder 之外的结果都是一样的：让用户去 Shizuku 那边动手，
+         * 否则这里只会抛异常、页面重查还是原样，点了像没反应。配对页的次级链接也落到这里。
+         */
         @JavascriptInterface
         fun requestShizuku() = runOnUiThread {
+            val up = installed(SHIZUKU) && runCatching { Shizuku.pingBinder() }.getOrDefault(false)
+            if (!up || runCatching { Shizuku.shouldShowRequestPermissionRationale() }.getOrDefault(false)) {
+                openShizuku()
+                return@runOnUiThread
+            }
             try {
                 Shizuku.requestPermission(1)
             } catch (_: Throwable) {
-                notifyShizuku()
+                openShizuku()
             }
         }
 
@@ -215,6 +224,10 @@ class MainActivity : Activity() {
         fun refreshState() {
             current?.notifyShizuku()
         }
+
+        /** 界面正开着（用户在看着）：后台自动做的事（重开无线调试）不必再发通知。 */
+        @JvmStatic
+        fun inForeground(): Boolean = current != null
 
         const val SHIZUKU = "moe.shizuku.privileged.api"
         const val SHIZUKU_PAGE = "https://shizuku.rikka.app/zh-hans/download/"

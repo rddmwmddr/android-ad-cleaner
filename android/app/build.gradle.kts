@@ -80,4 +80,6 @@ dependencies {
     implementation("com.github.MuntashirAkon:libadb-android:3.1.1")
     implementation("com.github.MuntashirAkon:sun-security-android:1.1")
     implementation("org.conscrypt:conscrypt-android:2.5.3")
+    // ShellServer 只用 java.io 与 ProcessBuilder，能在 JVM 上单测协议层（android/README.md）
+    testImplementation("junit:junit:4.13.2")
 }

@@ -16,13 +16,6 @@ import kotlin.concurrent.thread
  */
 object ShizukuShell {
 
-    class Result(
-        @JvmField val code: Int,
-        @JvmField val out: ByteArray,
-        @JvmField val err: ByteArray,
-        @JvmField val timedOut: Boolean,
-    )
-
     private val newProcess by lazy {
         Shizuku::class.java.getDeclaredMethod(
             "newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java,
@@ -82,7 +75,7 @@ object ShizukuShell {
 
         override fun isDone(): Boolean = finished
 
-        override fun result(timedOut: Boolean) = Result(code, out.toByteArray(), err.toByteArray(), timedOut)
+        override fun result(timedOut: Boolean) = Shell.Result(code, out.toByteArray(), err.toByteArray(), timedOut)
 
         override fun cancel() {
             try {

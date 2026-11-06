@@ -53,19 +53,22 @@ def _answer(argv, stdin, timeout):
         return (0, b"device\n", b"") if b.ready() else (1, b"", NOT_READY)
     if cmd == "wait-for-device":
         deadline = time.monotonic() + (timeout or 30)
-        while not b.ready():
+        while not b.ensure():
             if time.monotonic() > deadline:
                 raise subprocess.TimeoutExpired(argv, timeout)
             time.sleep(0.5)
         return 0, b"", b""
-    if not b.ready():
-        return 1, b"", NOT_READY
     if cmd in ("shell", "exec-out"):
+        if not b.ready():
+            return 1, b"", NOT_READY
         r = b.exec(" ".join(rest), stdin, timeout)
         if r.timed_out:
             raise subprocess.TimeoutExpired(argv, timeout)
         return r.code, r.out, r.err
     if cmd == "push" and len(rest) >= 2:
+        # 推文件是有实际动作的一步：断线时先试着连上（#622 拆出门面后 ready() 不再顺手 connect）
+        if not b.ensure():
+            return 1, b"", NOT_READY
         local, remote = rest[-2], rest[-1]
         if remote.endswith("/"):
             remote += os.path.basename(local)
@@ -76,12 +79,16 @@ def _answer(argv, stdin, timeout):
             return r.code, b"", r.err or b"adb: error: failed to copy\n"
         return 0, f"{local}: 1 file pushed, 0 skipped.\n".encode(), b""
     if cmd == "pull" and len(rest) >= 2:
+        if not b.ensure():
+            return 1, b"", NOT_READY
         r = b.exec(f"cat {shlex.quote(rest[-2])}", None, timeout)
         if r.code:
             return r.code, b"", r.err
         with open(rest[-1], "wb") as f:
             f.write(r.out)
         return 0, f"{rest[-2]}: 1 file pulled.\n".encode(), b""
+    if not b.ready():
+        return 1, b"", NOT_READY
     return 1, b"", f"adb: 手机版不支持 {cmd}\n".encode()
 
 
