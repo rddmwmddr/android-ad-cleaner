@@ -34,6 +34,7 @@ import adb_link
 import events
 import troubleshooting
 from backups import Backups, root_from_env
+from entries import FAMILY          # 品牌族只此一份；广告包、参考脚本与版本比较都按它归
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOL = os.path.join(ROOT, "tool")
@@ -182,11 +183,6 @@ def info(serial):
         # 都读不到时给「未知」：诊断输出留空会被当成没读到（#195 正文第 4 条）
         "android": android_release(serial) or "未知",
     }
-
-
-FAMILY = {"oppo": "oppo", "oneplus": "oppo", "realme": "oppo", "honor": "honor",
-          "xiaomi": "xiaomi", "redmi": "xiaomi", "poco": "xiaomi", "vivo": "vivo", "iqoo": "vivo",
-          "meizu": "meizu", "samsung": "samsung"}
 
 
 def ad_packages(brand):
