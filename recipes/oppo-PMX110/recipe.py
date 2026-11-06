@@ -439,9 +439,8 @@ def _():
         carousel_error = error
         print(f"  ✗ 轮播推荐未确认：{error}；继续核对独立的热点资讯", flush=True)
     # 热点资讯页有导出，直达（#650），不用回设置页再滚动找
-    open_page("am start -f 0x10008000 -n com.coloros.assistantscreen/"
-              "com.oplus.assistantscreen.card.infoflow.setting.activity.InfoFlowSettingActivity",
-              "热点资讯", "com.coloros.assistantscreen", "InfoFlowSettingActivity")
+    hot_news = "am start -f 0x10008000 -n com.coloros.assistantscreen/com.oplus.assistantscreen.card.infoflow.setting.activity.InfoFlowSettingActivity"
+    open_page(hot_news, "热点资讯", "com.coloros.assistantscreen", "InfoFlowSettingActivity")
     close_named(["热点资讯"], "热点资讯")
     if carousel_error:
         raise RuntimeError(f"热点资讯已核对；轮播推荐未完成：{carousel_error}")
