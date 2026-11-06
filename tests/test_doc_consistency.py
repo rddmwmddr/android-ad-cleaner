@@ -81,5 +81,30 @@ class BrandTapsDocTests(unittest.TestCase):
                              f"{path.name} 的 brand-taps 标记缩进不一致")
 
 
+class TutorialAltTests(unittest.TestCase):
+    """页面与 README 的截图 alt 一致（#655）。"""
+
+    README_ONLY = ("10", "12", "15")  # 素材图多于页面用图的部分
+
+    @staticmethod
+    def alts(text, pattern):
+        import re
+        return {m.group(1): m.group(2) for m in re.finditer(pattern, text)}
+
+    def test_tutorial_alts_match_between_page_and_readme(self):
+        html = (ROOT / "android-tutorial.html").read_text(encoding="utf-8")
+        readme = (ROOT / "docs/手机版教程/README.md").read_text(encoding="utf-8")
+        page = self.alts(html, r'手机版教程/img/(\d+)\.jpg[^>]*alt="([^"]*)"')
+        docs = self.alts(readme, r'<img src="img/(\d+)\.jpg[^>]*alt="([^"]*)"')
+        self.assertTrue(page, "android-tutorial.html 里没读到截图 alt，守卫会空转")
+        self.assertTrue(docs, "README 里没读到截图 alt，守卫会空转")
+        self.assertEqual(sorted(docs), [f"{n:02d}" for n in range(1, 20)],
+                         "README 应覆盖 img/01 到 img/19 全部 19 张")
+        self.assertEqual(sorted(page), [n for n in sorted(docs) if n not in self.README_ONLY],
+                         "页面用图应为 16 张（10/12/15 仅 README 用）")
+        for n in sorted(set(page) & set(docs)):
+            self.assertEqual(page[n], docs[n], f"img/{n} 的 alt 在页面与 README 不一致：只改一处即漂移")
+
+
 if __name__ == "__main__":
     unittest.main()
