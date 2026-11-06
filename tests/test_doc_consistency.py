@@ -1,4 +1,5 @@
-"""判定字段表与代码双向一致：新增判定漏改 ADR 时红（#467）；品牌连点表与单一来源一致（#654）。"""
+"""文档与单一来源一致：ADR 字段表（#467）、品牌连点表（#654）、教程截图 alt（#655）。"""
+import re
 import sys
 import unittest
 from dataclasses import fields
@@ -11,6 +12,8 @@ import gen_brand_taps as gen
 
 ADR = ROOT / "docs/adr/0006-channel-classification.md"
 BRAND_TAP_TARGETS = {"html", "readme", "dev_doc"}
+TUTORIAL_PAGE = ROOT / "android-tutorial.html"
+TUTORIAL_README = ROOT / "docs/手机版教程/README.md"
 
 
 def table_fields():
@@ -79,6 +82,80 @@ class BrandTapsDocTests(unittest.TestCase):
                     indents[kind].add(line[:len(line) - len(line.lstrip())])
             self.assertEqual(indents["start"], indents["end"],
                              f"{path.name} 的 brand-taps 标记缩进不一致")
+
+
+IMG_TAG = re.compile(r"<img\b[^>]*>")
+IMG_SRC = re.compile(r"""\bsrc=["'][^"']*?img/(\d{2})\.jpg["']""")
+IMG_ALT = re.compile(r"""\balt=["']([^"']*)["']""")
+
+
+def tutorial_alts(text):
+    """按标签读截图编号与 alt：属性顺序、引号风格都无关；同号重复或缺 alt 直接报错，不静默漏检。"""
+    alts = {}
+    for tag in IMG_TAG.findall(text):
+        src = IMG_SRC.search(tag)
+        if src is None:
+            continue
+        number = src.group(1)
+        alt = IMG_ALT.search(tag)
+        if alt is None or not alt.group(1).strip():
+            raise AssertionError(f"img/{number} 没有可用的 alt 属性")
+        if number in alts:
+            raise AssertionError(f"img/{number} 在同一份文档里出现两次，另一份 alt 不会被比对")
+        alts[number] = alt.group(1)
+    return alts
+
+
+class TutorialAltTests(unittest.TestCase):
+    """页面与 README 的截图 alt 一致（#655）。"""
+
+    README_SCREENSHOTS = 19  # 素材图张数：加图时这里、README_ONLY 与 README 一起改
+    README_ONLY = ("10", "12", "15")  # 素材图多于页面用图的部分
+
+    def page_alts(self):
+        return tutorial_alts(TUTORIAL_PAGE.read_text(encoding="utf-8"))
+
+    def readme_alts(self):
+        return tutorial_alts(TUTORIAL_README.read_text(encoding="utf-8"))
+
+    def test_guard_reads_both_documents(self):
+        self.assertTrue(self.page_alts(), "android-tutorial.html 里没读到截图 alt，守卫会空转")
+        self.assertTrue(self.readme_alts(), "README 里没读到截图 alt，守卫会空转")
+
+    def test_readme_covers_every_screenshot(self):
+        count = self.README_SCREENSHOTS
+        self.assertEqual(sorted(self.readme_alts()), [f"{n:02d}" for n in range(1, count + 1)],
+                         f"README 应覆盖 img/01 到 img/{count:02d} 全部 {count} 张")
+
+    def test_page_uses_every_shared_screenshot(self):
+        shared = [n for n in sorted(self.readme_alts()) if n not in self.README_ONLY]
+        self.assertEqual(sorted(self.page_alts()), shared,
+                         f"页面用图应为 {len(shared)} 张，README_ONLY = {self.README_ONLY}："
+                         "增删截图时页面、README 与 README_ONLY 要一起改")
+
+    def test_shared_screenshots_have_the_same_alt(self):
+        page, docs = self.page_alts(), self.readme_alts()
+        for number in sorted(set(page) & set(docs)):
+            self.assertEqual(page[number], docs[number],
+                             f"img/{number} 的 alt 在页面与 README 不一致：只改一处即漂移")
+
+    def test_helper_reads_reordered_or_single_quoted_tags(self):
+        self.assertEqual(tutorial_alts('<img alt="先 alt 后 src" src="docs/手机版教程/img/07.jpg">'),
+                         {"07": "先 alt 后 src"},
+                         "alt 写在 src 前面时读不到，守卫会把这张图当成缺失")
+        self.assertEqual(tutorial_alts("<img src='img/07.jpg' alt='单引号'>"), {"07": "单引号"},
+                         "单引号的 src 读不到，新增截图会绕过守卫")
+
+    def test_helper_rejects_missing_or_empty_alt(self):
+        for tag in ('<img src="img/20.jpg">',
+                    '<img src="img/20.jpg" alt="">',
+                    '<img src="img/20.jpg" alt="  ">'):
+            with self.subTest(tag=tag), self.assertRaises(AssertionError):
+                tutorial_alts(tag)
+
+    def test_helper_rejects_a_number_used_twice(self):
+        with self.assertRaises(AssertionError, msg="同一编号出现两次没报错"):
+            tutorial_alts('<img src="img/01.jpg" alt="一">\n<img src="img/01.jpg" alt="二">')
 
 
 if __name__ == "__main__":
