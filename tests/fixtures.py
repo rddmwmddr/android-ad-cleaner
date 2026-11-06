@@ -12,14 +12,16 @@ CODING_STANDARDS.md 要求纯重构给出对拍证据，页面样本取 tests/ �
 对拍用的页面样本别拿来断言新行为 —— 测试要照实现之外的事实断言，夹具是为了让两份实现吃同一份输入；
 假 Phone / 假 Runner 不在此列，单元测试直接用它们装配。
 """
+import contextlib
 import io
 import re
 import sys
+import time as _time
 from collections import namedtuple
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 TESTS_DIR = Path(__file__).resolve().parent
 ROOT = TESTS_DIR.parent
@@ -220,6 +222,46 @@ def phone_mock(fast_mod=None, **fields):
 def _silent_shell(command, timeout=None):
     """没给 shell 时的传输：什么也不做，返回空输出。"""
     return SimpleNamespace(output="", exit_code=0)
+
+
+class RecipeClock:
+    """机型脚本的 time 替身：sleep 只推进 offset，脚本里的等待不占真实时间。
+
+    time() / monotonic() 在真实读数上叠加 offset：「等到 deadline」的循环照样按期退出。
+    三个读数要成套使用 —— 只挡 sleep 而让 time() 走真实时钟，等待循环就会原地忙转到 deadline。
+    """
+
+    def __init__(self):
+        self._time, self._monotonic = _time.time, _time.monotonic
+        self.offset = 0.0
+        self.slept = 0.0
+
+    def time(self):
+        return self._time() + self.offset
+
+    def monotonic(self):
+        return self._monotonic() + self.offset
+
+    def sleep(self, seconds):
+        self.offset += seconds
+        self.slept += seconds
+
+
+def load_recipe(phone, path, only=None, out=None, **extra):
+    """装载机型脚本：注入 p / ONLY / 假 time，返回 (scope, 输出流)。
+
+    ONLY 命中的段在 exec 当时就跑，而脚本自己的 `import time` 会盖掉注入的同名全局，
+    所以执行期换的是模块上的 sleep / time / monotonic；跑完再把 scope["time"] 换成
+    RecipeClock，用例之后调脚本里的函数也不真睡。`only` 为空表示一段都不跑。
+    """
+    clock = RecipeClock()
+    scope = {"p": phone, "ONLY": list(only) if only else ["__no_steps__"], **extra}
+    out = out if out is not None else io.StringIO()
+    with patch.object(_time, "sleep", clock.sleep), patch.object(_time, "time", clock.time), \
+            patch.object(_time, "monotonic", clock.monotonic), contextlib.redirect_stdout(out):
+        exec(compile(Path(path).read_text(encoding="utf-8"), str(path), "exec"), scope)
+    scope["time"] = clock
+    return scope, out
 
 
 def fake_phone(clock=None, size=SIZES[0], stages=((0.0, EMPTY_PAGE),),

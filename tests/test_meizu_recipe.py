@@ -12,7 +12,7 @@ from xml.etree import ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 import run
-from fixtures import phone_mock
+from fixtures import load_recipe, phone_mock
 
 RECIPE = ROOT / "recipes/meizu-MEIZU 21 Pro/recipe.py"
 
@@ -35,9 +35,7 @@ class MeizuRecipeTests(unittest.TestCase):
         return phone
 
     def load(self, phone, only=None, out=None):
-        scope = {"p": phone, "ONLY": only or ["__none__"]}
-        with contextlib.redirect_stdout(out if out is not None else io.StringIO()):
-            exec(compile(RECIPE.read_text(encoding="utf-8"), str(RECIPE), "exec"), scope)
+        scope, _ = load_recipe(phone, RECIPE, only, out)
         return scope
 
     def test_model_selects_exact_recipe(self):

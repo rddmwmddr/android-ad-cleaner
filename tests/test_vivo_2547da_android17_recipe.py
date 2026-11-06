@@ -10,14 +10,14 @@ import sys
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import fixtures
 from fast import plan_switches
-from fixtures import fake_phone, phone_mock
+from fixtures import fake_phone, load_recipe, phone_mock
 
 RECIPE = ROOT / "recipes/vivo-V2547DA/recipe_android17.py"
 
@@ -85,14 +85,12 @@ class FakePage:
 
 class Android17RecipeTests(unittest.TestCase):
     def load(self, phone, only=None):
-        scope = {"p": phone, "ONLY": only or ["__none__"]}
-        with patch("time.sleep"), contextlib.redirect_stdout(io.StringIO()):
-            exec(compile(RECIPE.read_text(encoding="utf-8"), str(RECIPE), "exec"), scope)
+        scope, _ = load_recipe(phone, RECIPE, only)
         return scope
 
     def call(self, scope, page):
         buf = io.StringIO()
-        with patch("time.sleep"), contextlib.redirect_stdout(buf):
+        with contextlib.redirect_stdout(buf):
             result = scope["off_unnamed"](page)
         return result, buf.getvalue()
 

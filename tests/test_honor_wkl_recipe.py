@@ -11,15 +11,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 import adb_link
 import run
-from fixtures import phone_stub
+from fixtures import load_recipe, phone_stub
 
 
 class HonorWKLRecipeTests(unittest.TestCase):
     def load(self, phone):
-        path = ROOT / "recipes/honor-WKL-AN20/recipe.py"
-        scope = {"p": phone, "ONLY": ["__no_steps__"]}
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), scope)
+        scope, _ = load_recipe(phone, ROOT / "recipes/honor-WKL-AN20/recipe.py")
         return scope
 
     def phone(self, xml="<hierarchy/>"):

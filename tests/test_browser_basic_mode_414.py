@@ -3,8 +3,6 @@
 REDMI K100（M786BC）上拒绝协议后进入 `BasicModeSettingActivity`，隐私和安全、主页、
 搜索、功能设置都不在这一页；旧脚本照常找入口，43 秒后报「设置入口未找到」。
 """
-import contextlib
-import io
 from pathlib import Path
 import sys
 import unittest
@@ -14,7 +12,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import fast
-from fixtures import phone_mock
+from fixtures import load_recipe, phone_mock
 
 RECIPE = ROOT / "recipes/xiaomi-M154FF/recipe.py"
 BASIC = "com.android.browser/com.android.browser.basicmode.BasicModeSettingActivity"
@@ -30,10 +28,7 @@ class BrowserBasicModeTests(unittest.TestCase):
         p.tree.return_value = fast.ET.fromstring('<hierarchy rotation="0"></hierarchy>')
         p.find.return_value = None
         p.texts.return_value = []
-        scope = {"p": p, "ONLY": ["浏览器"]}
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            exec(compile(RECIPE.read_text(encoding="utf-8"), str(RECIPE), "exec"), scope)
+        _, out = load_recipe(p, RECIPE, ["浏览器"])
         return p, out.getvalue()
 
     def test_basic_mode_page_is_skipped_with_a_readable_reason(self):

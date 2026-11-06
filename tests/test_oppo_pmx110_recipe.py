@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from fixtures import phone_mock
+from fixtures import load_recipe, phone_mock
 import run
 
 RECIPE = ROOT / "recipes/oppo-PMX110/recipe.py"
@@ -53,9 +53,7 @@ def frozen_time():
 
 
 def load(phone, only=("__no_steps__",), out=None):
-    scope = {"p": phone, "ONLY": list(only)}
-    with contextlib.redirect_stdout(out if out is not None else io.StringIO()):
-        exec(compile(RECIPE.read_text(encoding="utf-8"), str(RECIPE), "exec"), scope)
+    scope, _ = load_recipe(phone, RECIPE, only, out)
     return scope
 
 

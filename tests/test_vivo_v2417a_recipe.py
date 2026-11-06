@@ -1,6 +1,4 @@
 """V2417A：标题变化/确认关闭、服务开关保护和失败结果的离线回归。"""
-import contextlib
-import io
 from pathlib import Path
 import sys
 import unittest
@@ -9,18 +7,16 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
+sys.path.insert(0, str(ROOT / "tests"))
 import adb_link
 import fast
 import run
-from fixtures import phone_mock
+from fixtures import load_recipe, phone_mock
 
 
 class VivoV2417ARecipeTests(unittest.TestCase):
     def load(self, phone, only=None):
-        path = ROOT / "recipes/vivo-V2417A/recipe.py"
-        scope = {"p": phone, "ONLY": only if only is not None else ["__no_steps__"]}
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), scope)
+        scope, _ = load_recipe(phone, ROOT / "recipes/vivo-V2417A/recipe.py", only)
         return scope
 
     def test_model_is_matched_without_reference_and_records_exact_build(self):

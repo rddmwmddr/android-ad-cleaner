@@ -36,8 +36,8 @@ class LockTests(unittest.TestCase):
                 session.DeviceLock(serial, wait=0)
             started = time.time()
             with self.assertRaises(session.DeviceBusyError):
-                session.DeviceLock(serial, wait=1)    # 先等一会儿，等不到才报占用
-            self.assertGreaterEqual(time.time() - started, 0.9)
+                session.DeviceLock(serial, wait=0.3)  # 先等一会儿，等不到才报占用
+            self.assertGreaterEqual(time.time() - started, 0.4)
             other = session.DeviceLock(serial + "-different-device")
             other.close()
             child.terminate(); child.wait(timeout=10)

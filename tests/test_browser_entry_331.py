@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import fast
 import row
-from fixtures import EMPTY_PAGE, Clock, fake_phone, install_clock
+from fixtures import EMPTY_PAGE, Clock, fake_phone, install_clock, load_recipe
 
 ENTRIES = ["隐私和安全", "主页设置", "搜索设置", "功能设置", "网页浏览设置"]
 
@@ -123,9 +123,7 @@ class BrowserEntryTests(unittest.TestCase):
 
     def test_browser_settings_rejects_a_gear_click_that_did_not_open_settings(self):
         """点完齿轮页面没换（点击被吞）：不能当成进了设置页，否则后面入口全打在旧页上。"""
-        import contextlib
-        import io
-        from unittest.mock import Mock, patch
+        from unittest.mock import Mock
         p = Mock(W=1080, H=2340)
         p.tree.return_value = fast.ET.fromstring(
             '<hierarchy><node text="设置" class="android.widget.ImageView" clickable="false" '
@@ -134,12 +132,8 @@ class BrowserEntryTests(unittest.TestCase):
         p.focus.return_value = "com.android.browser/.MainActivity"
         p.in_settings_page.return_value = False
         p.texts.return_value = []
-        path = ROOT / "recipes/xiaomi-M154FF/recipe.py"
-        scope = {"p": p, "ONLY": ["__no_steps__"]}
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), scope)
-        with patch.object(scope["time"], "sleep"):
-            self.assertFalse(scope["browser_settings"]())
+        scope, _ = load_recipe(p, ROOT / "recipes/xiaomi-M154FF/recipe.py")
+        self.assertFalse(scope["browser_settings"]())
         p.back.assert_not_called()
 
     def test_row_summary_skips_offscreen_and_status_bar_nodes(self):

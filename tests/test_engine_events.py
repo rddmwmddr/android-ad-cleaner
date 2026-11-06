@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -72,7 +73,11 @@ class PausePointTests(unittest.TestCase):
                 with patch.dict(fast.os.environ, {"AAC_PAUSE_FILE": str(path)}):
                     path.write_text("")
                     threading.Timer(0.05, path.unlink).start()
-                    return fast.pause_point()
+                    # 实现的轮询间隔是 0.5 秒：换成 0.01 秒，文件一删就退出，不真等满一轮。
+                    # 真 sleep 先取出来 —— fast.time 就是 time 模块本身，直接调会递归回替身。
+                    real_sleep = time.sleep
+                    with patch.object(fast.time, "sleep", lambda seconds: real_sleep(0.01)):
+                        return fast.pause_point()
         return capture(call, on=on)
 
     def test_reports_paused_then_resumed_around_the_wait(self):

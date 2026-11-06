@@ -1,6 +1,4 @@
 """Redmi Note 14 5G：专用型号匹配、系统版本锁定和保守的开关范围。"""
-import contextlib
-import io
 from pathlib import Path
 import sys
 import unittest
@@ -8,7 +6,9 @@ from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
+sys.path.insert(0, str(ROOT / "tests"))
 import run
+from fixtures import load_recipe
 
 
 class Redmi24094RAD4CRecipeTests(unittest.TestCase):
@@ -47,11 +47,8 @@ class Redmi24094RAD4CRecipeTests(unittest.TestCase):
 
     def test_theme_waits_for_the_bottom_tab_to_settle(self):
         p = Mock()
-        scope = {"p": p, "ONLY": ["__no_steps__"]}
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(compile(self.source, str(self.path), "exec"), scope)
+        scope, _ = load_recipe(p, self.path)
         scope["tap_bottom_tab"] = Mock(side_effect=[False, False, True])
-        scope["time"] = Mock()  # 换掉 recipe 自己的 time 绑定；改全局 time.sleep 会漏到后面的用例
         self.assertTrue(scope["wait_bottom_tab"]("我的"))
         self.assertEqual(scope["tap_bottom_tab"].call_count, 3)
         self.assertEqual(p.dismiss.call_count, 3)
@@ -65,9 +62,7 @@ class Redmi24094RAD4CRecipeTests(unittest.TestCase):
             [("热榜推荐", True, (3, 4))],
             [("资源推荐", False, (1, 2)), ("热榜推荐", False, (3, 4)), ("仅在WLAN下加载", False, (5, 6))],
         ]
-        scope = {"p": p, "ONLY": ["__no_steps__"]}
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(compile(self.source, str(self.path), "exec"), scope)
+        scope, _ = load_recipe(p, self.path)
         scope["close_with_plain_tap"](["资源推荐", "热榜推荐"], "下载管理·信息流")
         self.assertEqual(p.d.shell.call_count, 2)
         self.assertEqual(p.confirm.call_count, 2)
@@ -82,9 +77,7 @@ class Redmi24094RAD4CRecipeTests(unittest.TestCase):
             [("热榜推荐", True, (3, 4))],
             [("资源推荐", False, (1, 2)), ("热榜推荐", False, (3, 4))],
         ]
-        scope = {"p": p, "ONLY": ["__no_steps__"]}
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(compile(self.source, str(self.path), "exec"), scope)
+        scope, _ = load_recipe(p, self.path)
         scope["close_with_plain_tap"](["资源推荐", "热榜推荐"], "浏览器·隐私和安全")
         self.assertEqual(p.d.shell.call_count, 1)
         self.assertEqual(p.changed, [("浏览器·隐私和安全", "热榜推荐")])
@@ -92,9 +85,7 @@ class Redmi24094RAD4CRecipeTests(unittest.TestCase):
     def test_plain_tap_fallback_aborts_when_target_missing(self):
         p = Mock()
         p.switches.return_value = [("其他开关", True, (1, 2))]
-        scope = {"p": p, "ONLY": ["__no_steps__"]}
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(compile(self.source, str(self.path), "exec"), scope)
+        scope, _ = load_recipe(p, self.path)
         with self.assertRaisesRegex(RuntimeError, "未识别全部目标"):
             scope["close_with_plain_tap"](["资源推荐", "热榜推荐"], "下载管理·信息流")
         p.d.shell.assert_not_called()

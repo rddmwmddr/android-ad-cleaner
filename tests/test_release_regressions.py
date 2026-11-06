@@ -16,14 +16,12 @@ import fast
 import run
 import chan_fast as chan
 from bundle_data import bundle_data, stage
-from fixtures import FakeRunner, fake_adb, phone_stub
+from fixtures import FakeRunner, fake_adb, load_recipe, phone_stub
 
 
 def recipe(p, only="__no_steps__"):
-    scope = {"p": p, "ONLY": [only]}
-    path = ROOT / "recipes/xiaomi-M154FF/recipe.py"
-    with patch.object(fast.time, "sleep"), contextlib.redirect_stdout(io.StringIO()):
-        exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), scope)
+    with patch.object(fast.time, "sleep"):
+        scope, _ = load_recipe(p, ROOT / "recipes/xiaomi-M154FF/recipe.py", [only])
     return scope
 
 
@@ -194,7 +192,8 @@ class NotificationSelectionTests(unittest.TestCase):
     def test_scan_excludes_honor_service_channels(self):
         names = ["警告", "实时活动", "赛事资讯", "护眼推荐", "活动优惠"]
         data = {("com.example", "recommend_" + str(i)): (name, 3, False) for i, name in enumerate(names)}
-        with patch.object(chan, "Phone"), patch.object(chan, "parse", return_value=(data, {})), patch.object(chan, "keep_awake", return_value=None), \
+        with patch.object(chan, "Phone"), patch.object(chan, "parse", return_value=(data, {})), \
+             patch.object(chan, "phone_model", return_value=""), patch.object(chan, "keep_awake", return_value=None), \
              patch.object(sys, "argv", ["chan_fast.py", "-s", "test", "scan"]), \
              contextlib.redirect_stdout(io.StringIO()) as output:
             chan.main()

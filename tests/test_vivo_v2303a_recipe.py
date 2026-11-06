@@ -3,8 +3,6 @@
 Android 17 上从设置首页逐层翻页会滑出设置页、触发保护性中止；这台改成搜关键词直达。
 全局搜索的三个子页各自重新搜一次回主页，单页失败只跳过该页。
 """
-import contextlib
-import io
 from pathlib import Path
 import sys
 import unittest
@@ -14,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import run
-from fixtures import phone_mock
+from fixtures import load_recipe, phone_mock
 
 RECIPE = ROOT / "recipes/vivo-V2303A/recipe.py"
 
@@ -30,9 +28,7 @@ def make_phone(**fields):
 
 
 def load(phone, only):
-    scope = {"p": phone, "ONLY": only}
-    with contextlib.redirect_stdout(io.StringIO()):
-        exec(compile(RECIPE.read_text(encoding="utf-8"), str(RECIPE), "exec"), scope)
+    scope, _ = load_recipe(phone, RECIPE, only)
     return scope
 
 
