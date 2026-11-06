@@ -1,6 +1,6 @@
 /* 手机版：页面加载完由 MainActivity 注入。
    1) pywebview 桥：api.xxx(...) → AacHost.call → Python 的 aac_android.main.call，结果经 __aacDone 回来；
-   2) 首页换成 Shizuku 状态 + 「一键去广告」：自动走检测 → 扫描 → 开始执行，勾选与桌面版默认一致；
+   2) 首页换成 shell 权限状态 + 「一键去广告」：自动走检测 → 扫描 → 开始执行，勾选与桌面版默认一致；
    3) 桌面专属的入口（adb 设置、打开备份文件夹）隐藏，「插着线」「电脑」类文案改成手机上的说法。 */
 (function(){
   if (window.__aacMobile) return;
@@ -25,12 +25,15 @@
     if (on.includes("open_path") || on.includes("openSettings")) b.classList.add("hide");
   });
 
-  const SHZ = {
-    missing: [`需要先装 Shizuku`, `Shizuku 是免费开源的权限工具，让本 App 获得和电脑上 adb 一样的权限，不需要 root、不用连电脑。装好后回到这里。`, `下载 Shizuku`],
-    stopped: [`Shizuku 还没启动`, `打开 Shizuku，按「通过无线调试启动」的说明启动（要连着 Wi-Fi，并在开发者选项里打开「无线调试」）。手机重启后要再启动一次。小米 / Redmi 还要在开发者选项里打开「USB 调试（安全设置）」，不然点不动开关。`, `打开 Shizuku`],
-    old: [`Shizuku 版本太旧`, `请把 Shizuku 更新到最新版后回到这里。`, `打开 Shizuku`],
-    ask: [`授权本 App 使用 Shizuku`, `点下面的按钮，在弹窗里选「始终允许」。`, `授权`],
-    denied: [`之前拒绝了授权`, `打开 Shizuku →「已授权的应用」，把「安卓去广告」打开，再回到这里。`, `打开 Shizuku`],
+  // 权限状态 → [标题, 说明, 按钮, 按钮动作]。默认走内置无线调试（#622），不用另装 App；装了并授权 Shizuku 的也认
+  const STEP = {
+    need_dev: [`第 1 步（共 3 步）：打开开发者选项`, `点下面的按钮进「关于手机」，连点「版本号」7 次（小米点「OS 版本」，vivo 在「版本信息」里点「软件版本号」），输入锁屏密码，看到「已处于开发者模式」后回到这里。`, `打开「关于手机」`, `AacHost.openSettings('about')`],
+    need_wifi: [`第 2 步（共 3 步）：打开无线调试`, `手机要连着 Wi-Fi。点下面的按钮进「开发者选项」，找到「无线调试」打开，弹窗选「允许」，然后回到这里。小米 / Redmi 顺便打开「USB 调试（安全设置）」，不然点不动开关。`, `打开开发者选项`, `AacHost.openSettings('dev')`],
+    need_pair: [`第 3 步（共 3 步）：授权本 App（只需一次）`, `安卓要求你亲手确认一次，才允许本 App 关闭系统里的广告开关，就像第一次用蓝牙耳机要确认一样。点下面的按钮，进「无线调试」→「使用配对码配对设备」，屏幕上会出现 6 位数字。不要关掉它，下拉通知栏，把这 6 位数字填进「安卓去广告」的通知里。<b>这台手机自己授权给自己，不连接任何其他设备，以后也不用再做。</b>以后重启手机或换了 Wi-Fi，本 App 会自己重新打开无线调试并连上（第一次在新网络上，系统会要你再确认一次）；正在执行时它这么做，会在通知栏说一声。`, `开始授权`, `AacHost.startPairing()`],
+    old: [`这台手机的安卓版本低于 11`, `安卓 11 起才有无线调试。可以装 Shizuku（免费开源）用电脑启动一次，或者直接用电脑版。`, `下载 Shizuku`, `AacHost.openShizuku()`],
+    stopped: [`Shizuku 还没启动`, `打开 Shizuku 按它的说明启动（安卓 10 及以下要连一次电脑）。手机重启后要再启动一次。`, `打开 Shizuku`, `AacHost.openShizuku()`],
+    ask: [`授权本 App 使用 Shizuku`, `点下面的按钮，在弹窗里选「始终允许」。`, `授权`, `AacHost.requestShizuku()`],
+    denied: [`之前拒绝了 Shizuku 授权`, `打开 Shizuku →「已授权的应用」，把「安卓去广告」打开，再回到这里。`, `打开 Shizuku`, `AacHost.openShizuku()`],
   };
 
   showConnect = function(){
@@ -43,25 +46,35 @@
     api.poll(0).then(r => { if (r && r.running && S.step === 1){ S.logNext = 0; showRun(); } }).catch(() => {});
   };
 
-  window.__aacShizuku = async function(){
+  // 查状态要等几秒（找无线调试端口），由 Kotlin 在后台查完回调 __aacState
+  window.__aacShizuku = function(){
+    if ($("#shz") && S.step === 1) AacHost.checkState();
+  };
+
+  window.__aacState = async function(st){
     const box = $("#shz");
     if (!box || S.step !== 1) return;
-    const st = AacHost.shizuku();
     if (st !== "ready"){
-      const [t, d, b] = SHZ[st] || SHZ.stopped;
-      const act = st === "ask" ? "AacHost.requestShizuku()" : "AacHost.openShizuku()";
-      box.innerHTML = `<div class="card"><h3>${t}</h3><p class="lead" style="margin:0 0 14px">${d}</p>
-        <button class="btn big" onclick="${act}">${b}</button></div>
-        <div class="note info">原生鸿蒙（HarmonyOS NEXT）不是安卓，装不了本 App；华为老机型与荣耀可以用。</div>`;
+      const [t, d, b, act] = STEP[st] || STEP.need_pair;
+      const first = st.startsWith("need_") ? `<p class="lead">第一次使用要做 3 个设置，大约 1 分钟，以后打开就能直接用。</p>` : "";
+      // 内置路径走不通时，装了 Shizuku 的人可以改走 Shizuku（#622 决策 1）；不记偏好，下次仍先试内置。
+      // 三步都给出口：卡在第 1、2 步（没开开发者选项 / 无线调试）时 Shizuku 也可能是现成能用的那条路
+      const viaShizuku = st.startsWith("need_")
+        ? `<div class="actions" style="justify-content:flex-start;margin-top:10px"><button class="btn plain" onclick="AacHost.requestShizuku()">已装 Shizuku？改用 Shizuku</button></div>`
+        : "";
+      box.innerHTML = first + `<div class="card"><h3>${t}</h3><p class="lead" style="margin:0 0 14px">${d}</p>
+        <button class="btn big" onclick="${act}">${b}</button></div>${viaShizuku}
+        <p class="lead" style="margin:0">全程不需要 root，也不用连电脑。只在这台手机自己的网络里连接，不经过任何服务器。</p>
+        <div class="note info" style="margin-top:12px">原生鸿蒙（HarmonyOS NEXT）不是安卓，装不了本 App；华为老机型与荣耀可以用。</div>`;
       return;
     }
     let d = null;
     try { d = ((await api.devices()).list || [])[0]; } catch(e){}
-    if (!d){ box.innerHTML = `<div class="note bad">Shizuku 已授权，但读不到这台手机的信息。到 Shizuku 里停止后重新启动，再回到这里。</div>`; return; }
+    if (!d){ box.innerHTML = `<div class="note bad">已连接，但读不到这台手机的信息。到「开发者选项」里把「无线调试」关掉再打开，然后回到这里。</div>`; return; }
     S.local = d;
     S.serial = S.serial || d.serial; S.dev = S.dev || d;     // 「还原改动」要先有当前手机：手机版就是本机
     const name = d.name || `${d.brand} ${d.model}`;
-    box.innerHTML = `<div class="dev"><div class="ico">📱</div><div class="meta"><b>${esc(name)}</b><small>${esc(d.model)} · Shizuku 已连接</small></div></div>
+    box.innerHTML = `<div class="dev"><div class="ico">📱</div><div class="meta"><b>${esc(name)}</b><small>${esc(d.model)} · 已连接</small></div></div>
       <button class="btn big" onclick="oneTap()">一键去广告</button>
       <p class="lead" style="margin:12px 0 0">点了以后自动检测、扫描营销通知，按推荐勾选直接开始。多数手机上会在一块看不见的后台屏里自动点按，你可以照常用手机，做完发通知；不支持后台屏的手机会借用当前屏幕，那时<b>请不要碰手机</b>。</p>
       <div class="actions" style="justify-content:flex-start"><button class="btn plain" onclick="S.auto=false;pick(S.local)">自己选择要关的项目</button></div>`;
@@ -89,7 +102,7 @@
   };
 
   askDevOff = function(){
-    modal(`<h3>关闭开发者模式？</h3><p class="lead">关闭后无线调试一起关掉，Shizuku 随之停止。以后要还原改动，重新打开开发者模式和无线调试、启动 Shizuku 即可。</p>
+    modal(`<h3>关闭开发者模式？</h3><p class="lead">关闭后无线调试一起关掉，Shizuku（如果装了）随之停止。以后要还原改动，重新打开开发者模式和无线调试即可；万一系统要求重新授权，App 会再引导你填一次配对码。</p>
       <div class="actions"><button class="btn plain" onclick="closeModal()">取消</button><button class="btn" onclick="devOff()">关闭</button></div>`);
   };
 
@@ -119,7 +132,7 @@
     main().querySelectorAll(".card p.lead").forEach(p => {
       p.innerHTML = p.innerHTML
         .replace("若还要排查或重试，请先保留 USB 调试", "若还要排查或重试，请先保留开发者模式")
-        .replace("若不再使用电脑调试，建议关闭开发者模式和 USB 调试。", "若暂时不再用本 App，建议关闭开发者模式（Shizuku 会随之停止，下次用时重新启动）。");
+        .replace("若不再使用电脑调试，建议关闭开发者模式和 USB 调试。", "若暂时不再用本 App，建议关闭开发者模式（无线调试随之关闭；下次用时打开开发者选项和无线调试即可，系统若要求重新授权，App 会再引导一次）。");
     });
   };
 

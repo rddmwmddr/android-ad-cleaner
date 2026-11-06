@@ -1,6 +1,6 @@
 # 手机版（APK）
 
-在手机上直接跑去广告，不用连电脑。权限来自 [Shizuku](https://shizuku.rikka.app/)：用户在手机上用「无线调试」启动它，本 App 就能以 shell 身份执行命令，和电脑上的 adb 一样，不需要 root。
+在手机上直接跑去广告，不用连电脑、不用装别的 App。权限来自手机自带的「无线调试」：本 App 自己配对一次、自己连本机 adbd，以 shell 身份执行命令，和电脑上的 adb 一样，不需要 root（#622）。装了并授权 [Shizuku](https://shizuku.rikka.app/) 的手机也能用。
 
 ## 怎么做到不改引擎
 
@@ -8,22 +8,32 @@
 
 | 桌面版 | 手机版（`app/src/main/python/aac_android/`） |
 |---|---|
-| `subprocess.run([adb, "-s", 序列号, "shell", …])` | `adb.py` 接管 subprocess，adb 占位文件的调用按 adb 语义回答，命令经 Shizuku 执行（`bridge.py` → Kotlin `ShizukuShell`） |
+| `subprocess.run([adb, "-s", 序列号, "shell", …])` | `adb.py` 接管 subprocess，adb 占位文件的调用按 adb 语义回答，命令经 shell 门面执行（`bridge.py` → Kotlin `Shell`，底下是 `ShizukuShell` 或 `AdbShell`） |
 | 每一步一个 Python 子进程 | `inproc.py` 在本进程线程里跑脚本：每步清掉 `tool/` 模块、换环境变量、按线程分流输出、`SystemExit` 当退出码 |
-| `uiautomator2` / `adbutils` / `tool/ui_session.py` | `u2.py`：同一个 `u2.jar` 经 Shizuku 以 shell 身份启动，App 直连本机 9008 端口发 jsonrpc |
+| `uiautomator2` / `adbutils` / `tool/ui_session.py` | `u2.py`：同一个 `u2.jar` 以 shell 身份启动（经 `Shell` 门面），App 直连本机 9008 端口发 jsonrpc |
 
-界面经 WebView 加载 `index.html`；`assets/mobile/mobile.js` 补上 `pywebview` 桥，把首页换成 Shizuku 状态和「一键去广告」（自动走检测 → 扫描 → 开始执行，勾选与桌面版默认一致）。
+界面经 WebView 加载 `index.html`；`assets/mobile/mobile.js` 补上 `pywebview` 桥，把首页换成 shell 权限状态和「一键去广告」（自动走检测 → 扫描 → 开始执行，勾选与桌面版默认一致）。
 
 手机版自己的处理：
 
 - 执行与还原期间开前台服务，通知栏上可以点「暂停」。
 - 结束后用 shell 身份 `am start` 回到本 App：App 自己在后台启动界面会被系统拦，前台服务也不豁免。
 
+## 内置无线调试（#622）
+
+做法参考 Mika；adb 协议用 [libadb-android](https://github.com/MuntashirAkon/libadb-android)（GPL-3.0-or-later 或 Apache-2.0 双许可，本项目按 Apache-2.0 使用）。
+
+- `AdbManager`：App 私有目录存 RSA 密钥与自签证书；经 mDNS 找无线调试的配对 / 连接端口，只连本机 `127.0.0.1`。
+- 配对：码填在通知栏输入框（`Pairing`），用户不用离开系统的配对对话框。提交时 App 被唤醒，当场找配对端口再配——小米 HyperOS 会冻结后台 App，不能一直在后台等端口。
+- 命令：连上后只开一条常驻 `exec:` 流，跑 APK 里的 `ShellServer`（shell 身份），所有命令按编号经它收发。不给每条命令单开 adb 流：libadb 在对端关流时有竞态，小命令会丢输出和退出码。
+- 首次连上后经 shell 给本 App 授 `WRITE_SECURE_SETTINGS`：之后无线调试被关（重启、换 Wi-Fi）时 App 自己打开、重连。第一次在某个网络上打开无线调试，系统会弹「允许在此网络上使用无线调试」，勾「始终允许」后才能免确认。
+- 选择：Shizuku 已授权就用 Shizuku，否则用内置无线调试（`Shell`）；Python 侧不感知。
+
 ## 后台屏（#618）
 
 执行与还原时优先在一块看不见的虚拟屏上跑，用户照常用主屏。做法参考 [Mika](https://github.com/wangzan101/mika)（Apache-2.0）：
 
-- `Vd.java` 随 APK 打包，经 Shizuku 以 shell 身份用 `app_process` 启动（类路径就是本 APK），建与主屏同尺寸同密度的虚拟屏，每 4 秒续亮。
+- `Vd.java` 随 APK 打包，以 shell 身份用 `app_process` 启动（类路径就是本 APK），建与主屏同尺寸同密度的虚拟屏，每 4 秒续亮。
 - `aac_android/screen.py` 把发往手机的命令改到这块屏：`am start` 加 `--display` 并另开一份任务（主屏开着同一个 App 时不把它搬走），`input` 加 `-d`，HOME、点亮屏幕、收起通知栏不发（只会作用到主屏），截图用它在 SurfaceFlinger 里的编号。查前台只看这块屏；这块屏带着 `ALWAYS_UNLOCKED` 时锁屏直接按未锁处理，`Vd` 降到没有这个标记的档位就按它那段照实读。
 - `u2.py` 读屏只留这块屏的窗口；点按走 `input -d`；选择器在过滤后的页面上自己匹配；不经读屏服务写字（它只找主屏的输入框），引擎自动退到剪贴板 + 粘贴。
 - 建不了屏（安卓 12 以下、系统不给 shell 建屏）就退回主屏模式。后台模式跑完不抢前台，按结果发通知（做完了 / 已停止 / 失败）。
@@ -51,3 +61,5 @@ AAC_BRIDGE_ADB=$(which adb) AAC_BRIDGE_SERIAL=emulator-5554 python -c "from aac_
 ```
 
 `tests/test_android_shim.py` 不连手机，验 adb 语义、进程内脚本与选择器。
+
+`app/src/test/java/com/ahuamiao/adcleaner/ShellServerTest.java` 用 JUnit 验命令服务的协议层：帧、stdout / stderr 分开、退出码、并发编号、取消。它只用 `java.io` 与 `ProcessBuilder`，不需要模拟器；开发机上把 sh 指到 `/bin/sh` 跑。

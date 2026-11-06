@@ -18,9 +18,14 @@ from aac_android import adb, bridge, inproc, main, screen, u2  # noqa: E402
 
 class FakeBridge:
     def __init__(self, ready=True):
-        self.is_ready, self.cmds = ready, []
+        self.is_ready, self.cmds, self.calls = ready, [], []
 
     def ready(self):
+        self.calls.append("ready")
+        return self.is_ready
+
+    def ensure(self):
+        self.calls.append("ensure")
         return self.is_ready
 
     def exec(self, cmd, stdin=None, timeout=None):
@@ -70,6 +75,32 @@ class AdbTest(unittest.TestCase):
             adb.answer(["-s", "local", "pull", "/data/local/tmp/x", dst])
             self.assertEqual(Path(dst).read_bytes(), b"remote-bytes")
 
+    def test_only_wait_for_device_and_file_transfers_may_connect(self):
+        """#622 决策 6/8：查状态（devices / get-state / shell）只许纯查，别让每轮轮询等 mDNS。
+
+        拆门面之前 ready() 既查又连，所以推文件顺带就会重连；拆开之后要显式补上，否则断线中推
+        labels.dex 会直接 FAIL。这条守住「谁可以连、谁不许连」的分界。
+        """
+        self.fake.is_ready = True
+        adb.answer(["wait-for-device"])
+        self.assertEqual(self.fake.calls, ["ensure"], "wait-for-device 应当去连")
+
+        self.fake.calls.clear()
+        adb.answer(["-s", "local", "get-state"])
+        adb.answer(["devices"])
+        adb.answer(["-s", "local", "shell", "ls"])
+        self.assertEqual(self.fake.calls, ["ready"] * 3, "查状态的三个入口只许纯查")
+
+    def test_push_and_pull_try_to_connect_first(self):
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, "a.dex")
+            Path(src).write_bytes(b"\x00dex")
+            adb.answer(["-s", "local", "push", src, "/data/local/tmp/"])
+            self.assertEqual(self.fake.calls, ["ensure"])
+            self.fake.calls.clear()
+            adb.answer(["-s", "local", "pull", "/data/local/tmp/x", os.path.join(d, "b")])
+            self.assertEqual(self.fake.calls, ["ensure"])
+
     def test_subprocess_run_is_answered_for_the_placeholder_only(self):
         with tempfile.TemporaryDirectory() as d:
             saved = (adb.ADB_PATH, dict(adb._orig), subprocess.run, subprocess.call, subprocess.check_output)
@@ -100,8 +131,41 @@ class LauncherTest(unittest.TestCase):
             self.assertEqual(bridge.launcher(cmd), cmd)
 
 
-class ShizukuPollTest(unittest.TestCase):
-    """等命令时不占解释器锁、超时自己掐：Java 那边的 waitForTimeout 在真机上没按时返回。"""
+KOTLIN = ROOT / "android" / "app" / "src" / "main" / "java" / "com" / "ahuamiao" / "adcleaner"
+
+
+class ShellStub:
+    """Kotlin 的 `Shell` 门面替身：Python 侧只许调这几个名字（bridge.py 的契约）。"""
+
+    def __init__(self, submit=None):
+        self.calls, self._submit = [], submit
+
+    def connected(self):
+        self.calls.append("connected")
+        return True
+
+    def ensure(self):
+        self.calls.append("ensure")
+        return True
+
+    def submit(self, cmd, stdin):
+        self.calls.append("submit")
+        return self._submit(cmd, stdin)
+
+    def daemon(self, name, cmd):
+        self.calls.append("daemon")
+        return True
+
+    def stopDaemon(self, name):
+        self.calls.append("stopDaemon")
+
+    def ready(self):
+        # 改造前既查又连的旧名字：还有人调就是 Python 侧漏改了
+        raise AssertionError("Shell.ready() 已拆成 connected() / ensure()")
+
+
+class ShellFacadeTest(unittest.TestCase):
+    """Python 只认门面的几个名字：查状态不许顺手连（每轮轮询会等 mDNS），要连的只有 wait-for-device。"""
 
     class Job:
         def __init__(self, ticks):
@@ -118,8 +182,9 @@ class ShizukuPollTest(unittest.TestCase):
             return bridge.Result(0, b"ok", b"", timed_out)
 
     def bridge_with(self, job):
+        self.shell = ShellStub(submit=lambda cmd, stdin: job)
         b = bridge.ShizukuBridge.__new__(bridge.ShizukuBridge)
-        b.shell = type("S", (), {"submit": staticmethod(lambda cmd, stdin: job)})()
+        b.shell = self.shell
         return b
 
     def test_returns_when_done(self):
@@ -131,6 +196,25 @@ class ShizukuPollTest(unittest.TestCase):
         r = self.bridge_with(job).exec("monkey", None, 0.05)
         self.assertTrue(r.timed_out)
         self.assertTrue(job.cancelled)
+
+    def test_ready_only_asks_connected(self):
+        self.bridge_with(self.Job(1)).ready()
+        self.assertEqual(self.shell.calls, ["connected"])
+
+    def test_ensure_is_the_one_that_may_connect(self):
+        self.bridge_with(self.Job(1)).ensure()
+        self.assertEqual(self.shell.calls, ["ensure"])
+
+    def test_facade_exposes_the_names_python_calls(self):
+        """本机没有 JDK，Kotlin 编译不了：这里把它对 Python 的契约钉在源码上。"""
+        src = (KOTLIN / "Shell.kt").read_text(encoding="utf-8")
+        for name in ("fun connected()", "fun ensure()", "fun submit(", "fun daemon(", "fun stopDaemon("):
+            self.assertIn(name, src, f"Shell 门面缺 {name}")
+        self.assertNotIn("fun backend()", src)
+
+    def test_result_lives_on_the_facade(self):
+        self.assertIn("class Result(", (KOTLIN / "Shell.kt").read_text(encoding="utf-8"))
+        self.assertNotIn("class Result(", (KOTLIN / "ShizukuShell.kt").read_text(encoding="utf-8"))
 
 
 PAGE = ('<hierarchy rotation="0">'
