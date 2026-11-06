@@ -799,14 +799,18 @@ def cmd_quickapp(serial, rest):
 
 
 def cmd_finish(serial, rest):
-    f = os.path.join(latest_backup(serial), "stay_on.txt")
-    v = "0"
-    if os.path.exists(f):
+    # 原值取自带 stay_on.txt 的最近一份快照（#632）：一份都没有就不动这项设置，不能按 0 写回
+    f = Backups(BACKUPS).newest_with(info(serial)["model"], "stay_on.txt")
+    v = ""
+    if f:
         with open(f, encoding="utf-8") as fh:
             v = fh.read().strip()
-    sh(serial, f"settings put global stay_on_while_plugged_in {v or 0}")
+    if v.isdigit():
+        sh(serial, f"settings put global stay_on_while_plugged_in {v}")
+        print(f"插电常亮已改回 {v}")
+    else:
+        print("插电常亮未改动（没有找到改动前的快照）")
     sh(serial, "input keyevent HOME")
-    print(f"插电常亮已改回 {v or 0}")
     on = sh(serial, "settings get global development_settings_enabled") == "1"
     if on:
         msg = DEV_REMINDER.format(s=serial)

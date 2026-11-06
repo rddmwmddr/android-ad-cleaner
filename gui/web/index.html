@@ -378,7 +378,8 @@ async function tick(){
   if ($("#jt")){ $("#jt").textContent = r.title ? `第 ${r.idx} / ${r.total} 步：${r.title}` : "准备中……";
     $("#js").textContent = `已用 ${r.sec} 秒`; $("#jb").style.width = (r.total ? (r.idx - (r.running ? 0.5 : 0)) / r.total * 100 : 0) + "%"; }
   showPause(r);
-  if (!r.running && r.results && r.results.length){ clearInterval(pollJob); showDone(r); }
+  // 停在第一步时还没有结果，也要进完成页（#632），不然执行页一直停着、没有出口
+  if (!r.running && r.results && (r.results.length || r.cancel)){ clearInterval(pollJob); showDone(r); }
 }
 // 暂停在安全的位置生效：一个渠道、机型脚本的一段或一个步骤做完之后。生效前脚本还在点，不能碰手机
 function showPause(r){
@@ -406,6 +407,7 @@ function summarize(res){
   if (/快应用组件已关闭/.test(t)) return `${(t.match(/已关闭$/gm) || []).length} 个组件已关闭`;
   if (/快照已存/.test(t)) return "已保存";
   if ((m = t.match(/插电常亮已改回 (\d+)/))) return `插电常亮已改回 ${m[1]}`;
+  if (/插电常亮未改动/.test(t)) return "插电常亮未改动";
   return res.tail.filter(Boolean).slice(-1)[0] || "";
 }
 function showDone(r){
