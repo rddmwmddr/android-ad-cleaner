@@ -186,7 +186,7 @@ def info(serial):
 
 FAMILY = {"oppo": "oppo", "oneplus": "oppo", "realme": "oppo", "honor": "honor",
           "xiaomi": "xiaomi", "redmi": "xiaomi", "poco": "xiaomi", "vivo": "vivo", "iqoo": "vivo",
-          "meizu": "meizu"}
+          "meizu": "meizu", "samsung": "samsung"}
 
 
 def ad_packages(brand):
