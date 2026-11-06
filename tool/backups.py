@@ -16,31 +16,25 @@ class Backups:
     def __init__(self, root):
         self.root = os.fspath(root)
 
-    def latest(self, model):
-        """最近一份备份，没有则 None。按名字排序取最后一个，所以 `<型号>-gui` 优先于带时间的目录。"""
-        try:
-            hits = sorted(d for d in os.listdir(self.root) if d.startswith(model + "-"))
-        except FileNotFoundError:
-            return None
-        return os.path.join(self.root, hits[-1]) if hits else None
-
     def all(self, model):
-        """这个型号的全部备份目录，按 latest() 的顺序倒过来（最近的在前）。"""
+        """这个型号的所有目录，最近的在前。含 `<型号>-gui`：它按名字排在带时间的快照后面，所以算最新。
+        `latest()` 与 `newest_with()` 都吃这个顺序，别改成按时间戳排。"""
         try:
             hits = sorted((d for d in os.listdir(self.root) if d.startswith(model + "-")), reverse=True)
         except FileNotFoundError:
             return []
         return [os.path.join(self.root, d) for d in hits]
 
+    def latest(self, model):
+        """最近一份备份，没有则 None。按名字排序取最后一个，所以 `<型号>-gui` 优先于带时间的目录。"""
+        dirs = self.all(model)
+        return dirs[0] if dirs else None
+
     def newest_with(self, model, name):
         """带某个文件的最近一份备份里的该文件，没有则 None。`<型号>-gui` 按名字排在快照后面，
         却只有营销通知的勾选、没有快照里的文件，所以不能先取 latest() 再找文件。"""
-        try:
-            hits = sorted(d for d in os.listdir(self.root) if d.startswith(model + "-"))
-        except FileNotFoundError:
-            return None
-        for d in reversed(hits):
-            f = os.path.join(self.root, d, name)
+        for d in self.all(model):
+            f = os.path.join(d, name)
             if os.path.exists(f):
                 return f
         return None

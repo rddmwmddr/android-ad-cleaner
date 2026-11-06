@@ -4,8 +4,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import fixtures
 from fixtures import FakeRunner
 from gui import app
+
+fixtures.load_tool()
+import chan_fast  # noqa: E402
 
 
 def write(root, name, rows):
@@ -15,22 +19,33 @@ def write(root, name, rows):
         (d / "channels.tsv").write_text("# 包名\t渠道id\t渠道名\t应用名\n" + "".join(r + "\n" for r in rows), encoding="utf-8")
 
 
+def write_bytes(root, name, data):
+    d = Path(root, "backups", name)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "channels.tsv").write_bytes(data)
+
+
 class RestoreChannelsTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.sent = []
+        self.sent, self.paths = [], []
 
         def runs(script, *args):
             if script == "run.py" and "status-json" in args:
                 return json.dumps({"info": {"model": "M1"}}) + "\n", "", 0
             if script == "chan_fast.py" and args[2] == "on":
                 self.sent.append(Path(args[3]).read_text(encoding="utf-8"))
+                self.paths.append(args[3])
                 return "拨了 1 个\n", "", 0
             return None
         self.api = app.Api(self.tmp.name, runner=FakeRunner(runs=runs))
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    def loaded(self):
+        """交给 `chan_fast.py on` 的那份清单按引擎自己的读法解析：写出去的必须真的读得回来。"""
+        return chan_fast.load(self.paths[0])
 
     def test_older_list_is_used_when_latest_run_closed_nothing(self):
         write(self.tmp.name, "M1-20261106-1040", ["com.a\tpromo\t推广\tA"])
@@ -54,6 +69,32 @@ class RestoreChannelsTest(unittest.TestCase):
     def test_other_models_are_ignored(self):
         write(self.tmp.name, "M10-20261106-1040", ["com.z\tpromo\t推广\tZ"])
         self.assertEqual(self.api.restore("s", "channels"), "没有找到上次关掉的营销通知清单")
+
+    def test_gui_selection_is_merged_as_the_newest_list(self):
+        # 客户端勾选写的是 `<型号>-gui/channels.tsv`，字典序上排在最前，就是「最新那份」
+        write(self.tmp.name, "M1-20261106-1040", ["com.a\tpromo\t推广\tA", "com.b\tnews\t资讯\tB"])
+        write(self.tmp.name, "M1-gui", ["com.b\tnews\t资讯\tB", "com.c\tspam\t推广\tC"])
+        self.api.restore("s", "channels")
+        self.assertEqual(self.loaded(), [("com.b", "news", "资讯"), ("com.c", "spam", "推广"), ("com.a", "promo", "推广")])
+
+    def test_list_saved_with_bom_and_crlf_is_readable(self):
+        # AGENTS.md 让人手工删这份清单里的行；编辑器另存成带 BOM / CRLF 时，表头不能变成数据行
+        write_bytes(self.tmp.name, "M1-20261106-1040",
+                    "# 包名\t渠道id\t渠道名\t应用名\r\ncom.a\tpromo\t推广\tA\r\n".encode("utf-8-sig"))
+        self.api.restore("s", "channels")
+        self.assertEqual(self.loaded(), [("com.a", "promo", "推广")])
+
+    def test_bad_row_in_an_old_list_is_skipped(self):
+        # 坏行所在的备份从界面删不掉：不跳过就永远卡死这个型号的还原
+        write(self.tmp.name, "M1-20261106-1040", ["残留坏行", "com.a\tpromo\t推广\tA"])
+        self.api.restore("s", "channels")
+        self.assertEqual(self.loaded(), [("com.a", "promo", "推广")])
+
+    def test_rows_differing_only_in_spaces_are_one_channel(self):
+        write(self.tmp.name, "M1-20261106-1040", ["com.a \tpromo\t旧名\tA"])
+        write(self.tmp.name, "M1-20261106-1053", ["com.a\tpromo\t推广\tA"])
+        self.api.restore("s", "channels")
+        self.assertEqual(self.loaded(), [("com.a", "promo", "推广")])
 
 
 if __name__ == "__main__":

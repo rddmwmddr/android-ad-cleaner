@@ -108,6 +108,27 @@ class LatestTests(unittest.TestCase):
         self.assertEqual(Backups(self.root).latest(""), old_gui_latest(self.root, ""))
 
 
+class AllTests(unittest.TestCase):
+    """`all()` 是三处扫描的唯一实现：`latest()` / `newest_with()` 都从它派生，顺序不能分叉。"""
+
+    def test_all_is_the_same_scan_newest_first(self):
+        for label, names in TREES:
+            with self.subTest(label):
+                with tempfile.TemporaryDirectory() as root:
+                    for name in names:
+                        Path(root, name).mkdir(exist_ok=True)
+                    dirs = Backups(root).all(MODEL)
+                    expected = sorted((os.path.join(root, n) for n in names if n.startswith(MODEL + "-")),
+                                      reverse=True)
+                    self.assertEqual(dirs, expected)
+                    self.assertEqual(Backups(root).latest(MODEL), dirs[0] if dirs else None)
+
+    def test_missing_root_gives_an_empty_list(self):
+        missing = os.path.join(tempfile.mkdtemp(), "not-created")
+        self.assertFalse(os.path.exists(missing))
+        self.assertEqual(Backups(missing).all(MODEL), [])
+
+
 class CreateTests(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()

@@ -1191,21 +1191,21 @@ class Api:
     def _closed_channels(self, model):
         """这个型号历次关掉的营销渠道，合成一份清单交给 `chan_fast.py on`；一份都没有返回 None。
         以前只看最近一份备份，最近一次没关渠道时，之前关的就打不开了（#628）。按包名 + 渠道 ID 去重，
-        最近的那条在前；已经开着的渠道 `on` 本来就跳过。"""
+        最近的那条在前；已经开着的渠道 `on` 本来就跳过。读法照 `chan_fast.load()`：清单是让人手工删行
+        的，带 BOM / CRLF 的另存、只剩空格的差异、改坏的行都不能让整次还原失败。"""
         rows, seen = [], set()
         for d in self.backups.all(model):
             fn = os.path.join(d, "channels.tsv")
             if not os.path.exists(fn):
                 continue
-            with open(fn, encoding="utf-8") as f:
+            with open(fn, encoding="utf-8-sig") as f:
                 for line in f:
-                    line = line.rstrip("\n")
-                    if not line.strip() or line.startswith("#"):
+                    cells = [c.strip() for c in line.rstrip("\r\n").split("\t")]
+                    pk, cid = cells[0], cells[1] if len(cells) > 1 else ""
+                    if not re.fullmatch(r"[\w.]+", pk) or not cid or (pk, cid) in seen:
                         continue
-                    key = tuple(line.split("\t")[:2])
-                    if key not in seen:
-                        seen.add(key)
-                        rows.append(line)
+                    seen.add((pk, cid))
+                    rows.append("\t".join(cells))
         if not rows:
             return None
         out = os.path.join(self.backups.gui(model), "channels-restore.tsv")
