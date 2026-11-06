@@ -39,6 +39,7 @@ class Direct:
 class Search:
     keyword: str
     result: str                 # 搜索结果里要点的那一行标题
+    path: str = ""              # 结果下一行的位置文字；同名结果有多条时按它挑
 
 
 @dataclass(frozen=True)
@@ -95,15 +96,19 @@ ENTRIES = {
     "oppo": {
         "广告跟踪": Entry(
             menu="设置 → 隐私（ColorOS 17 叫「隐私与安全」）→ 设备标识与广告 → 广告跟踪",
-            search=(Search("设备标识与广告", "设备标识与广告"),),
-            note="部分版本搜得到但点结果不跳转（停在首页弹「取消」），这时走菜单"),
+            search=(Search("广告跟踪", "限制广告跟踪", path="隐私与安全 > 隐私 > 设备标识与广告"),
+                    Search("设备标识与广告", "设备标识与广告")),
+            note="ColorOS 17 用 oplus.intent.action.settings.MAIN_SEARCH 直接打开搜索页（Phone.setting 先试它）；"
+                 "搜「广告跟踪」时点位置为「隐私与安全 > 隐私 > 设备标识与广告」的那条。部分版本搜得到但点结果不跳转，"
+                 "这时走菜单。列表用右上菜单「全部关闭」整表关，「全部关闭」置灰即全部已关（PMX110，#650）"),
         "下拉搜索": Entry(
             menu="桌面中间向下滑 → 搜索页底部「设置」",
             direct=(Direct("com.heytap.quicksearchbox", ".ui.activity.SearchHomeActivity", ""),),
             note="SearchSettingActivity 未导出，只能直达搜索首页再点最靠下的「设置」；adb 下桌面下滑手势不稳"),
         "软件商店": Entry(
             menu="软件商店 → 我的 → 右上齿轮",
-            app="com.heytap.market"),
+            app="com.heytap.market",
+            note="设置页认 oppo.intent.action.APP_SETTINGS（am start -a … -p 包名），直达"),
         "浏览器": Entry(
             menu="浏览器 → 底部 ☰ 或「我的」→ 设置",
             direct=(Direct("com.heytap.browser", ".settings.component.BrowserPreferencesPage",
@@ -113,10 +118,16 @@ ENTRIES = {
             menu="设置 → OPPO AI → 小布建议 → 资讯服务（「内容资讯」是分组标题，点不动）"),
         "负一屏": Entry(
             menu="桌面从左边缘向右滑 → 左上头像 → 设置",
-            note="设置页受 oppo.permission.OPPO_COMPONENT_SAFE 保护，am start 被拒，只能走手势"),
-        "主题商店": Entry(menu="主题商店 → 我的 → 右上设置", app="com.heytap.themestore"),
-        "视频": Entry(menu="视频 → 我的 → 设置 → 个性化内容管理", app="com.heytap.yoli"),
-        "游戏中心": Entry(menu="游戏中心 → 我的 → 设置 → 隐私开关设置 → 个性化推荐管理", app="com.nearme.gamecenter"),
+            direct=(Direct("com.coloros.assistantscreen",
+                           "com.oplus.assistantscreen.card.infoflow.setting.activity.InfoFlowSettingActivity", "热点资讯"),),
+            note="设置页受 oppo.permission.OPPO_COMPONENT_SAFE 保护，am start 被拒，只能走手势；"
+                 "其中「热点资讯」那一页有导出，可以直达（PMX110，#650）"),
+        "主题商店": Entry(menu="主题商店 → 我的 → 右上设置", app="com.heytap.themestore",
+                          note="设置页认 oppo.intent.action.APP_SETTINGS，直达"),
+        "视频": Entry(menu="视频 → 我的 → 设置 → 个性化内容管理", app="com.heytap.yoli",
+                      note="设置页没导出，深链 yoli://yoli.com/mine_act_lib_yoli/settings 直达（PMX110，#650）"),
+        "游戏中心": Entry(menu="游戏中心 → 我的 → 设置 → 隐私开关设置 → 个性化推荐管理", app="com.nearme.gamecenter",
+                          note="设置页认 oppo.intent.action.APP_SETTINGS，直达；设置页上的「隐私」是分组标题、点不动（PMX110，#650）"),
     },
     "vivo": {
         "系统广告": Entry(
@@ -324,7 +335,8 @@ def reach(p, entry, log=print, now=None, sleep=None, settle=1.2):
             return "direct"
         log(f"  · 直达 {page} 没落在这一页，换下一档")
     for s in entry.search:
-        if p.setting(s.keyword, s.result):
+        extra = {"path": s.path} if s.path else {}
+        if p.setting(s.keyword, s.result, **extra):
             return "search"
     return None
 
@@ -346,8 +358,9 @@ def markdown(recipes_dir):
                                               if used.get(("direct", d.pkg, full(d.pkg, d.activity))) else "")
                 for d in e.direct) or "—"
             search = "<br>".join(
-                f"搜「{s.keyword}」点「{s.result}」" + (f"（{'、'.join(sorted(used.get(('search', s.keyword, s.result), ())))}）"
-                                                    if used.get(("search", s.keyword, s.result)) else "")
+                f"搜「{s.keyword}」点「{s.result}」" + (f"（位置：{s.path}）" if s.path else "")
+                + (f"（{'、'.join(sorted(used.get(('search', s.keyword, s.result), ())))}）"
+                   if used.get(("search", s.keyword, s.result)) else "")
                 for s in e.search) or "—"
             menu = e.menu + (f"（先拉起 `{e.app}`）" if e.app else "")
             lines.append(f"| {name} | {direct} | {search} | {menu} | {e.note or ''} |")

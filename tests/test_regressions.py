@@ -184,8 +184,12 @@ class InputTests(unittest.TestCase):
         self.assertFalse(p.type_text("广告", timeout=0.5))
         self.assertEqual(p.d.shell.call_args.args, ("input keyevent BACK",))
 
-    def search_phone(self, with_result):
+    def search_phone(self, with_result, search_page=False, results=None, exit_code=0):
+        """search_page：系统有直达设置搜索页的动作（ColorOS 的 MAIN_SEARCH，#650）。"""
         p = phone()
+        p.reader.shell = Mock(return_value=types.SimpleNamespace(
+            exit_code=exit_code,
+            output="Starting: Intent" if search_page else "Error: Activity not started, unable to resolve Intent"))
         home = ET.fromstring('<node text="搜索设置项" bounds="[50,100][1100,200]"/>')
         edit = ET.fromstring('<node text="广告" class="android.widget.EditText" bounds="[50,100][1000,200]"/>')
         result = ET.fromstring('<node text="广告" class="android.widget.TextView" bounds="[50,400][1000,500]"/>')
@@ -198,10 +202,46 @@ class InputTests(unittest.TestCase):
         p.edit_ready = Mock(return_value=True)
         p.focus = lambda: "settings/result" if selected else "settings/search"
         def texts():
-            nodes = ([edit, result] if with_result else [edit]) if typed else [home]
+            nodes = (results or ([edit, result] if with_result else [edit])) if typed else [home]
             return [(n.get("text"), fast.bounds(n), n) for n in nodes]
         p.texts = texts
         return p
+
+    def test_direct_search_page_skips_the_settings_home(self):
+        p = self.search_phone(True, search_page=True)
+        with patch.object(fast.time, "time", side_effect=itertools.count(0, 0.2)), patch.object(fast.time, "sleep"):
+            self.assertTrue(p.setting("广告"))
+        commands = [c.args[0] for c in p.reader.shell.call_args_list]
+        self.assertIn("am start -f 0x10008000 -a oplus.intent.action.settings.MAIN_SEARCH", commands)
+        self.assertNotIn("am start -f 0x10008000 -a android.settings.SETTINGS", commands)
+        self.assertEqual(p.click.call_count, 1)           # 只点结果，没有找框点框
+
+    def test_unresolved_search_action_falls_back_to_the_settings_home(self):
+        p = self.search_phone(True)
+        with patch.object(fast.time, "time", side_effect=itertools.count(0, 0.2)), patch.object(fast.time, "sleep"):
+            self.assertTrue(p.setting("广告"))
+        commands = [c.args[0] for c in p.reader.shell.call_args_list]
+        self.assertIn("am start -f 0x10008000 -a android.settings.SETTINGS", commands)
+
+    def test_search_action_with_a_nonzero_exit_does_not_count_as_opened(self):
+        """am start 打印了 Starting 但退出码非零：不当搜索页已打开，回设置首页。"""
+        p = self.search_phone(True, search_page=True, exit_code=1)
+        with patch.object(fast.time, "time", side_effect=itertools.count(0, 0.2)), patch.object(fast.time, "sleep"):
+            self.assertTrue(p.setting("广告"))
+        commands = [c.args[0] for c in p.reader.shell.call_args_list]
+        self.assertIn("am start -f 0x10008000 -a android.settings.SETTINGS", commands)
+
+    def test_path_picks_the_result_with_that_location(self):
+        edit = ET.fromstring('<node text="广告" class="android.widget.EditText" bounds="[50,100][1000,200]"/>')
+        rows = [ET.fromstring(x) for x in (
+            '<node text="广告" bounds="[50,400][1000,450]"/>',
+            '<node text="通知 > 广告" bounds="[50,450][1000,500]"/>',
+            '<node text="广告" bounds="[50,600][1000,650]"/>',
+            '<node text="隐私 > 广告" bounds="[50,650][1000,700]"/>')]
+        p = self.search_phone(True, search_page=True, results=[edit, *rows])
+        with patch.object(fast.time, "time", side_effect=itertools.count(0, 0.2)), patch.object(fast.time, "sleep"):
+            self.assertTrue(p.setting("广告", path="隐私 > 广告"))
+        self.assertEqual(p.click.call_args.args, (525, 625))
 
     def test_search_does_not_treat_input_as_result(self):
         p = self.search_phone(False)

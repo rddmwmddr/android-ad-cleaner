@@ -167,6 +167,16 @@ class ReachTest(unittest.TestCase):
         p.setting = lambda kw, result: False
         self.assertIsNone(self.reach(p))
 
+    def test_search_path_is_forwarded_when_the_entry_has_one(self):
+        """同名结果有多条时按位置挑（#650 的 PMX110 广告跟踪）：reach() 要把 path 传下去。"""
+        entry = entries.Entry(menu="…", search=(
+            entries.Search("广告", "广告与隐私", path="隐私与安全 > 隐私"),))
+        seen = []
+        p = phone(FakeReader())
+        p.setting = lambda kw, result, **extra: seen.append((kw, result, extra)) or False
+        self.assertIsNone(self.reach(p, entry))
+        self.assertEqual(seen, [("广告", "广告与隐私", {"path": "隐私与安全 > 隐私"})])
+
     def test_keep_task_page_is_launched_bare(self):
         """ColorOS 17 的浏览器设置页带清栈参数会立刻退出（#165），只能裸 am start。"""
         r = FakeReader(lands={"com.b/com.b.Page"})
