@@ -57,6 +57,45 @@ class HonorWKLRecipeTests(unittest.TestCase):
             scope["step"]("系统管家")(action)
         action.assert_not_called()
         p.start.assert_not_called()
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        self.assertEqual(scope["RESULTS"], [("系统管家", "跳过")])
+
+    def test_wrong_model_is_skipped_not_failed(self):
+        p = Mock()
+        p.d.shell.side_effect = [Mock(output="OTHER-MODEL"), Mock(output="WKL-AN20 11.0.0.111")]
+        scope = self.load(p)
+        scope["ONLY"] = ["系统管家"]
+        action = Mock()
+        with contextlib.redirect_stdout(io.StringIO()):
+            scope["step"]("系统管家")(action)
+        action.assert_not_called()
+        self.assertEqual(scope["FAILED_STEPS"], [])
+
+    def test_full_run_skips_music_step_without_failing(self):
+        """音乐段全跑时按约定跳过；记成未完成会让每轮全跑都退出码 1。
+
+        `_` 是模块里最后一个 `@step` 装饰的段函数，也就是「音乐」这一段的函数体。
+        """
+        p = Mock()
+        p.locked.return_value = False
+        p.d.shell.side_effect = [Mock(output="WKL-AN20"), Mock(output="WKL-AN20 11.0.0.111(SP7C00E110R101P7)")]
+        scope = self.load(p)
+        scope["ONLY"] = []
+        with contextlib.redirect_stdout(io.StringIO()):
+            scope["step"]("音乐")(scope["_"])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        self.assertEqual(scope["RESULTS"], [("音乐", "跳过")])
+
+    def test_skip_step_does_not_enter_failed_steps(self):
+        p = Mock()
+        p.locked.return_value = False
+        p.d.shell.side_effect = [Mock(output="WKL-AN20"), Mock(output="WKL-AN20 11.0.0.111(SP7C00E110R101P7)")]
+        scope = self.load(p)
+        scope["ONLY"] = ["系统管家"]
+        with contextlib.redirect_stdout(io.StringIO()):
+            scope["step"]("系统管家")(Mock(side_effect=scope["SkipStep"]("按约定跳过")))
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        self.assertEqual(scope["RESULTS"], [("系统管家", "跳过")])
 
     def test_device_loss_is_not_swallowed_as_a_skipped_step(self):
         p = Mock()

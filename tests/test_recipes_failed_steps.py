@@ -35,27 +35,33 @@ def declares_failed_steps(tree):
 
 
 def step_records_failed_steps(tree):
-    """step 装饰器（含它返回的嵌套函数）里有 FAILED_STEPS.append(…)。"""
+    """step 的异常分支里有 FAILED_STEPS.append(name)：记在成功路径上等于没记。"""
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef) or node.name != "step":
             continue
-        for inner in ast.walk(node):
-            if (isinstance(inner, ast.Call)
-                    and isinstance(inner.func, ast.Attribute)
-                    and inner.func.attr == "append"
-                    and isinstance(inner.func.value, ast.Name)
-                    and inner.func.value.id == "FAILED_STEPS"):
-                return True
+        for handler in (n for n in ast.walk(node) if isinstance(n, ast.ExceptHandler)):
+            for inner in ast.walk(handler):
+                if (isinstance(inner, ast.Call)
+                        and isinstance(inner.func, ast.Attribute)
+                        and inner.func.attr == "append"
+                        and isinstance(inner.func.value, ast.Name)
+                        and inner.func.value.id == "FAILED_STEPS"
+                        and inner.args
+                        and isinstance(inner.args[0], ast.Name)
+                        and inner.args[0].id == "name"):
+                    return True
     return False
 
 
 class EveryRecipeRecordsFailedSteps(unittest.TestCase):
     def test_step_declares_the_list_and_appends_the_segment_name(self):
-        for path in recipes():
+        found = recipes()
+        self.assertTrue(found, "recipes/ 下一份机型脚本都没找到")
+        for path in found:
             with self.subTest(recipe=str(path.relative_to(ROOT))):
                 tree = tree_of(path)
                 self.assertTrue(declares_failed_steps(tree), "模块级没有 FAILED_STEPS")
-                self.assertTrue(step_records_failed_steps(tree), "step 的异常路径没有记录段名")
+                self.assertTrue(step_records_failed_steps(tree), "step 的异常分支没有记录段名")
 
 
 if __name__ == "__main__":

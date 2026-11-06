@@ -139,8 +139,10 @@ def step(name):
                 raise SkipStep("前面检测到锁屏，后续段已停止")
             model = p.d.shell("getprop ro.product.model").output.strip()
             build = p.d.shell("getprop ro.build.display.id").output.strip()
-            if model not in MODELS or not build.startswith(BUILD):
-                raise SkipStep("型号或系统版本不匹配，跳过；请重新核对页面")
+            if model not in MODELS:
+                raise SkipStep("型号不匹配，跳过；不使用其他型号的路径")
+            if not build.startswith(BUILD):
+                raise SkipStep("系统版本不匹配，跳过；请重新核对页面")
             if p.locked():
                 HALTED = True
                 raise RuntimeError("手机锁屏，请机主解锁后重跑")
@@ -415,7 +417,8 @@ def _():
 def _():
     # 此机之前由机主手动打开，未验证从首页可靠自动进入；不复制其他机型的图标位置。
     # 全跑时跳过此段；手动进入「更多设置」后用 recipe 音乐 单独执行。
-    require(ONLY == ["音乐"], "请手动打开荣耀音乐 → 我的 → 设置 → 更多设置，再单段运行「音乐」")
+    if ONLY != ["音乐"]:
+        raise SkipStep("请手动打开荣耀音乐 → 我的 → 设置 → 更多设置，再单段运行「音乐」")
     package = "com.hihonor.cloudmusic"
     page(package, "消息和隐私设置")
     tap("消息和隐私设置")
