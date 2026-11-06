@@ -65,7 +65,8 @@ Issues labelled `waiting-for-verify` have a fix on `main` that the reporter has 
 | #413 | @Crispy-Pancakezzzz | iQOO Z11 Turbo / V2536A / OriginOS 6（Android 16） | PR #466 / #473（0.3.1） | 浏览器段点 ✕ 后若被带到别的 App，日志出现 `· 点了 ✕ 后跳到 <包名>，疑似推广位，已退回（<控件>）` 且落回原页；商店「关于」页与清单文末「V2536A 的差异」一致 |
 | #469 | @FROKING | Xiaomi 14 Ultra / 24031PN0DC / OS3.0.308.0.WNACNXM（Android 16） | #319（0.3.1） | `check` 的「机型脚本」一行从 `xiaomi-M154FF`（OS4.0）改为同族的 `xiaomi-2304FPN6DC`（OS3.0.308）、版本判定「相同」 |
 | #483 | @lvkowk0330-dev | OnePlus 13 / PJZ110 / PJZ110_17.0.0.103(CN01)（Android 17） | #319 / #165（0.3.1） | `check` 从 `oppo-PLP120`（ColorOS 16.0.9）改为 `oppo-PMX110`（ColorOS 17）；`recipe --ref` 九段逐段贴「命中 / 跳过」 |
-| #280 | @WeilianC | OPPO Find X10 Pro Max / PMX110 / ColorOS 17.0.0.116 | PR #563（未发布） | 不带 `--ref` 跑 `recipe`：下拉搜索走 `gs://search/setting` 后逐组回读（搜索范围 / 首页卡片管理 / 功能管理 / 消息管理 / 隐私），负一屏轮播点到「不显示轮播推荐」并回读，游戏中心先跳首进引导再找齿轮。浏览器「摇一摇广告」与商店「推荐卡片」点了没反应仍是系统限制，跳过即可 |
+| #280 | @WeilianC | OPPO Find X10 Pro Max / PMX110 / ColorOS 17.0.0.116 | PR #563 / #598（未发布） | 不带 `--ref` 跑 `recipe`：下拉搜索走 `gs://search/setting` 后逐组回读（搜索范围只关个性化推荐与精选资讯，榜单 / 小说 / 购物与消息管理不动），负一屏轮播点到「不显示轮播推荐」并回读，游戏中心先跳首进引导再找齿轮。浏览器「摇一摇广告」与商店「推荐卡片」在 17.0.0.116 上可以关，按回读结果报，不要再按「系统限制」跳过 |
+| #598 | @Sempron0720 | OPPO Find X10 Pro Max / PMX110 / ColorOS 17.0.0.116 | PR #621（未发布） | 脚本 `BUILD` 已钉在 `PMX110_17.0.0.116(CN01)`，请在**开启状态**下不带参数跑完整九段：重点看搜索范围里的榜单 / 小说 / 购物与消息总开关是否原样未动、主题「消息与广告」只剩开屏广告被关、视频段能不能自己走到底部「我的」；游戏中心装了就单独跑 `recipe 游戏中心` 报结果 |
 | #559 | 机主（证据来自 #280 的 @WeilianC） | OPPO Find X10 Pro Max / PMX110 / ColorOS 17.0.0.116 | PR #569（未发布） | 商店「服务管理」段跑完后，标题为「首页：AI搜索」的行仍开着（脚本保留词写的是「首页 AI 搜索」，全角冒号与空格差异不再让 keep 漏命中），不再被当推广位关掉 |
 | #576 | @Sheldor-C | vivo V2217A / iQOO 10 | PR #601（未发布） | `chan-off` 对「运营消息」这类「页面打得开、页面上确实没有这一行」的渠道改报 `· 本机界面没有这个渠道的入口，关不掉，不算失败`，批次收尾不再因此以退出码 1 结束；下一轮 `chan-scan` 不再列出这些渠道，并在标准错误多一行「另有 N 个渠道本机 UI 未暴露，未列入清单」（`chan-scan --reset` 可清空重判）。仍报「未确认…没找到这一行」说明该机应用通知总开关读数没拿到，是刻意保留的保守行为 |
 
