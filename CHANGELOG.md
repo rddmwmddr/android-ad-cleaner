@@ -34,6 +34,7 @@
 
 ### 内部
 
+- 品牌连点表改为单一来源 `brand-taps.json`，三处由生成器渲染（#658）
 - 设置搜索直达页按 `am start` 退出码判断成败，解析不到立刻回退；菜单置灰判据容忍状态后缀（#650）
 - 无设备套件不再真起 adb、真 sleep：机型脚本装配收进 `fixtures.load_recipe`（#640）
 - 本机 `.venv` 与 CI 的 Linux job 一起对齐到 3.13（`.python-version` 钉住），不再每次改动跑两遍；Windows 与打包留在 3.12（#631）
