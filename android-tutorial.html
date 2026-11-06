@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>手机版教程 · 安卓去广告</title>
+<meta name="description" content="安卓去广告手机版保姆级教程：第一次用做 3 个设置，大约 1 分钟；以后打开 App 点一下就行。不需要 root，不连电脑。">
+<meta property="og:title" content="手机版教程 · 安卓去广告">
+<meta property="og:description" content="在手机上一键关广告：3 个设置 + 一键，截图和视频一步一步讲。">
+<meta name="theme-color" content="#EBEFEC">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='4' y='16' width='56' height='32' rx='16' fill='%239AA7A0'/%3E%3Ccircle cx='20' cy='32' r='12' fill='white'/%3E%3C/svg%3E">
+<style>
+/* 与首页 index.html 同一套颜色、字体、顶栏与页脚；教程图片本身带字幕和点按红圈，页面只补每一步的说明 */
+:root {
+  --paper: #EBEFEC; --panel: #F8FAF8; --ink: #0F1B16; --ink-2: #4B5B53; --line: #CDD6D0;
+  --cobalt: #2347D6; --on-cobalt: #FFFFFF; --amber: #E8962A; --off: #A3AFA8; --knob: #FFFFFF; --code: #E2E8E4;
+  --sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --gutter: max(16px, env(safe-area-inset-left, 0px));
+  --gutter-r: max(16px, env(safe-area-inset-right, 0px));
+  --shadow: 0 30px 60px -36px rgba(15, 27, 22, .35);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0C1310; --panel: #131C18; --ink: #E3ECE6; --ink-2: #9AAEA4; --line: #25332C;
+    --cobalt: #7D96FF; --on-cobalt: #0C1310; --amber: #F0AC48; --off: #3B4B43; --knob: #E3ECE6; --code: #18231E;
+    --shadow: 0 30px 60px -36px rgba(0, 0, 0, .7);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0C1310; --panel: #131C18; --ink: #E3ECE6; --ink-2: #9AAEA4; --line: #25332C;
+  --cobalt: #7D96FF; --on-cobalt: #0C1310; --amber: #F0AC48; --off: #3B4B43; --knob: #E3ECE6; --code: #18231E;
+  --shadow: 0 30px 60px -36px rgba(0, 0, 0, .7);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.7 var(--sans); -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; }
+a { color: inherit; }
+img, video { max-width: 100%; display: block; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-left: var(--gutter); padding-right: var(--gutter-r); }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+h2 { font-size: clamp(28px, 4vw, 42px); line-height: 1.15; font-weight: 600; letter-spacing: -0.02em; }
+h3 { font-size: 19px; line-height: 1.35; font-weight: 600; letter-spacing: -0.01em; }
+p { text-wrap: pretty; }
+.lead { color: var(--ink-2); font-size: 17px; max-width: 36em; margin: 14px 0 0; }
+.label { font-size: 12px; letter-spacing: .14em; color: var(--ink-2); font-weight: 600; }
+:focus-visible { outline: 2px solid var(--cobalt); outline-offset: 3px; border-radius: 6px; }
+code { font-size: .92em; background: var(--code); padding: 1px 6px; border-radius: 6px; }
+
+/* 开关小图标（与首页品牌一致） */
+.sw { --w: 30px; --h: 18px; display: inline-block; position: relative; flex: none; width: var(--w); height: var(--h); border-radius: 999px; background: var(--amber); }
+.sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--knob);
+             box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transform: translateX(12px); }
+
+/* 顶栏 */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--paper); background: color-mix(in srgb, var(--paper) 86%, transparent);
+       backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px); }
+.top .wrap { display: flex; align-items: center; gap: 20px; height: 60px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; text-decoration: none; font-size: 17px; white-space: nowrap; }
+.nav { display: flex; gap: 20px; margin-left: auto; font-size: 15px; }
+.nav a { text-decoration: none; color: var(--ink-2); white-space: nowrap; touch-action: manipulation; }
+@media (hover: hover) and (pointer: fine) { .nav a:hover { color: var(--ink); } }
+
+/* 首屏：左边文字，右边竖版视频 */
+.hero { padding-block: 56px 72px; }
+.hero .wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 380px); gap: 56px; align-items: center; }
+.hero h1 { font-size: clamp(40px, 6.4vw, 76px); line-height: 1.08; font-weight: 600; letter-spacing: -0.035em; margin-top: 16px; }
+.hero .lead { font-size: clamp(17px, 1.6vw, 19px); margin-top: 22px; }
+.facts { display: flex; flex-wrap: wrap; gap: 8px; margin: 26px 0 0; padding: 0; list-style: none; }
+.facts li { font-size: 13px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink-2); }
+.notice { margin-top: 26px; padding: 14px 18px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); font-size: 15px; color: var(--ink-2); max-width: 36em; }
+.notice b { color: var(--ink); }
+.player { background: #0F1B16; border-radius: 30px; padding: 10px; box-shadow: var(--shadow); }
+.player video { width: 100%; aspect-ratio: 9 / 16; border-radius: 22px; background: #000; }
+.player-cap { font-size: 13px; color: var(--ink-2); text-align: center; margin-top: 12px; }
+
+/* 目录 */
+.toc { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; counter-reset: s; }
+.toc a { display: block; height: 100%; padding: 16px 18px; border-radius: 18px; background: var(--panel); border: 1px solid var(--line); text-decoration: none; touch-action: manipulation; }
+.toc b { display: block; font-size: 13px; color: var(--cobalt); letter-spacing: .06em; font-variant-numeric: tabular-nums; }
+.toc span { display: block; font-weight: 600; margin-top: 2px; }
+.toc small { display: block; color: var(--ink-2); font-size: 13px; margin-top: 2px; }
+
+section { padding-block: 80px; border-top: 1px solid var(--line); scroll-margin-top: 60px; }
+.head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 40px; align-items: end; margin-bottom: 36px; }
+.head .lead { margin: 0; }
+.num { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%; background: var(--cobalt); color: var(--on-cobalt);
+       font-weight: 600; font-size: 18px; margin-bottom: 16px; font-variant-numeric: tabular-nums; }
+
+/* 每一步的截图：桌面一行四张，手机横向滑动（露出下一张的边） */
+.shots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; margin: 0; padding: 0; list-style: none; }
+.shots li { min-width: 0; }
+.shots img { width: 100%; height: auto; aspect-ratio: 9 / 16; border-radius: 18px; background: var(--panel); border: 1px solid var(--line); }
+.shots p { font-size: 15px; color: var(--ink-2); margin: 12px 2px 0; }
+.shots p b { color: var(--ink); font-weight: 600; }
+
+.table { width: 100%; border-collapse: collapse; margin-top: 28px; font-size: 15px; background: var(--panel); border-radius: 16px; overflow: hidden; border: 1px solid var(--line); }
+.table th, .table td { text-align: left; padding: 12px 16px; border-top: 1px solid var(--line); vertical-align: top; }
+.table thead th { border-top: 0; font-size: 13px; color: var(--ink-2); font-weight: 600; }
+.table td:first-child { font-weight: 600; white-space: nowrap; }
+
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 22px 24px; }
+.card p { margin: 8px 0 0; color: var(--ink-2); font-size: 15px; }
+.list { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+.list li { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px 18px; font-size: 15px; }
+.list li b { display: block; color: var(--ink); }
+.list li span { color: var(--ink-2); }
+
+footer { border-top: 1px solid var(--line); padding-block: 40px 56px; font-size: 14px; color: var(--ink-2); }
+footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; }
+footer nav { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+
+@media (max-width: 900px) {
+  .hero .wrap { grid-template-columns: minmax(0, 1fr); gap: 40px; }
+  .player { max-width: 360px; margin: 0 auto; width: 100%; }
+  .head { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .toc { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cards { grid-template-columns: minmax(0, 1fr); }
+  .shots { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: var(--gutter); overscroll-behavior-x: contain; gap: 14px;
+           margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); padding-bottom: 6px; scrollbar-width: none; }
+  .shots::-webkit-scrollbar { display: none; }
+  .shots li { flex: 0 0 68%; scroll-snap-align: start; }
+}
+@media (max-width: 560px) {
+  .nav a.hide-s { display: none; }
+  section { padding-block: 60px; }
+  .hero { padding-block: 32px 56px; }
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><span class="sw" aria-hidden="true"></span>安卓去广告</a>
+    <nav class="nav" aria-label="页面导航">
+      <a href="#step1" class="hide-s">教程</a>
+      <a href="#after" class="hide-s">之后</a>
+      <a href="index.html">首页</a>
+      <a href="https://github.com/rddmwmddr/android-ad-cleaner" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="hero">
+  <div class="wrap">
+    <div>
+      <div class="label">手机版 · 保姆级教程</div>
+      <h1>在手机上一键关广告</h1>
+      <p class="lead">第一次用要在手机上做 3 个设置，大约 1 分钟；以后打开 App 点「一键去广告」就行。下面每一步都有截图，红圈是要点的位置。</p>
+      <ul class="facts"><li>不需要 root</li><li>不连电脑</li><li>不经过任何服务器</li><li>每一项可还原</li><li>安卓 11 及以上</li></ul>
+      <p class="notice"><b>手机版安装包随下一版发布。</b>发布后在<a href="index.html#download">下载区</a>和 <a href="https://github.com/rddmwmddr/android-ad-cleaner/releases" target="_blank" rel="noopener">GitHub 版本页</a>都能下到。</p>
+    </div>
+    <div>
+      <div class="player">
+        <video controls playsinline preload="metadata" poster="docs/手机版教程/img/poster.jpg" aria-label="手机版教程视频">
+          <source src="docs/手机版教程/教程视频.mp4" type="video/mp4">
+        </video>
+      </div>
+      <p class="player-cap">视频版 · 1 分半 · 带字幕</p>
+    </div>
+  </div>
+</div>
+
+<section id="before" style="padding-block: 56px">
+  <div class="wrap">
+    <ol class="toc">
+      <li><a href="#step1"><b>第 1 步</b><span>打开开发者选项</span><small>连点 7 下版本号</small></a></li>
+      <li><a href="#step2"><b>第 2 步</b><span>打开无线调试</span><small>开一个开关</small></a></li>
+      <li><a href="#step3"><b>第 3 步</b><span>授权本 App</span><small>App 自己读配对码</small></a></li>
+      <li><a href="#step4"><b>第 4 步</b><span>一键去广告</span><small>照常用手机</small></a></li>
+    </ol>
+    <ul class="list" style="margin-top: 20px">
+      <li><b>手机连着 Wi-Fi</b><span>无线调试要靠 Wi-Fi 打开，连哪个都行，不需要和电脑在一起。</span></li>
+      <li><b>安装时的风险提示</b><span>vivo 先勾选「已了解应用的风险检测结果」，再点「继续安装」；小米、OPPO 点「继续安装」或「仍然安装」。</span></li>
+      <li><b>哪些手机能用</b><span>安卓 11 及以上。原生鸿蒙（HarmonyOS NEXT）不是安卓，装不了本 App；华为老机型与荣耀可以用。</span></li>
+    </ul>
+  </div>
+</section>
+
+<section id="step1">
+  <div class="wrap">
+    <div class="head">
+      <div><span class="num">1</span><h2>打开开发者选项</h2></div>
+      <p class="lead">打开「安卓去广告」，首页写着「先做 3 个设置」。已经是开发者模式的手机，App 会直接跳到第 2 步。</p>
+    </div>
+    <ol class="shots">
+      <li><img src="docs/手机版教程/img/01.jpg" width="720" height="1280" loading="lazy" alt="App 首页第 1 步，红圈在「打开『关于手机』」按钮"><p><b>点「打开『关于手机』」</b></p></li>
+      <li><img src="docs/手机版教程/img/02.jpg" width="720" height="1280" loading="lazy" alt="关于手机页面滑到底，看到版本号"><p><b>滑到最底下</b>，找到「版本号」</p></li>
+      <li><img src="docs/手机版教程/img/03.jpg" width="720" height="1280" loading="lazy" alt="连点版本号后提示您现在处于开发者模式"><p><b>连点 7 下</b>，要输锁屏密码就输，看到「您现在处于开发者模式」</p></li>
+      <li><img src="docs/手机版教程/img/04.jpg" width="720" height="1280" loading="lazy" alt="小米关于手机页面，红圈在 OS 版本"><p>小米连点的是「OS 版本」</p></li>
+    </ol>
+    <table class="table">
+      <thead><tr><th>品牌</th><th>在哪儿连点 7 下</th></tr></thead>
+      <tbody>
+        <tr><td>小米 / Redmi / POCO</td><td>「关于手机」里的「OS 版本」</td></tr>
+        <tr><td>vivo / iQOO</td><td>「关于手机 → 版本信息」里的「软件版本号」</td></tr>
+        <tr><td>OPPO / 一加 / realme</td><td>「关于本机 → 版本信息」里的「版本号」</td></tr>
+        <tr><td>荣耀、华为老机型</td><td>「关于手机」里的「版本号」</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="step2">
+  <div class="wrap">
+    <div class="head">
+      <div><span class="num">2</span><h2>打开无线调试</h2></div>
+      <p class="lead">回到「安卓去广告」，它会自己进到第 2 步，第 1 步打上勾。</p>
+    </div>
+    <ol class="shots">
+      <li><img src="docs/手机版教程/img/05.jpg" width="720" height="1280" loading="lazy" alt="App 第 2 步，红圈在「打开开发者选项」"><p><b>点「打开开发者选项」</b></p></li>
+      <li><img src="docs/手机版教程/img/06.jpg" width="720" height="1280" loading="lazy" alt="开发者选项里找到调试下的无线调试"><p>往下滑，找到「调试」下面的<b>「无线调试」</b></p></li>
+      <li><img src="docs/手机版教程/img/07.jpg" width="720" height="1280" loading="lazy" alt="红圈在无线调试右边的开关"><p><b>打开右边的开关</b>。弹窗问是否允许，勾选「始终允许使用此网络」，再点「允许」</p></li>
+      <li><img src="docs/手机版教程/img/08.jpg" width="720" height="1280" loading="lazy" alt="小米还要打开 USB 调试（安全设置）"><p>小米 / Redmi 还要打开<b>「USB 调试（安全设置）」</b>（要插 SIM 卡、登录小米账号）</p></li>
+    </ol>
+  </div>
+</section>
+
+<section id="step3">
+  <div class="wrap">
+    <div class="head">
+      <div><span class="num">3</span><h2>授权本 App</h2></div>
+      <p class="lead">只做一次。App 打开系统的配对页，自己读出屏幕上的 6 位配对码完成授权，你不用记、也不用输。</p>
+    </div>
+    <ol class="shots">
+      <li><img src="docs/手机版教程/img/09.jpg" width="720" height="1280" loading="lazy" alt="App 第 3 步，红圈在「开始授权」"><p><b>点「开始授权」</b></p></li>
+      <li><img src="docs/手机版教程/img/11.jpg" width="720" height="1280" loading="lazy" alt="系统录屏提示，红圈在共享屏幕"><p>系统问能不能录屏：选「整个屏幕」，<b>点「共享屏幕」</b>（有的手机写「立即开始」）</p></li>
+      <li><img src="docs/手机版教程/img/13.jpg" width="720" height="1280" loading="lazy" alt="无线调试页，红圈在输入配对码配对设备"><p><b>点「输入配对码配对设备」</b>（有的手机叫「使用配对码配对设备」）</p></li>
+      <li><img src="docs/手机版教程/img/14.jpg" width="720" height="1280" loading="lazy" alt="弹出 6 位配对码"><p>弹出 6 位配对码，<b>什么都不用做</b>：一秒内授权完，自动回到 App</p></li>
+    </ol>
+    <div class="cards" style="margin-top: 28px">
+      <div class="card"><h3>为什么要授权</h3><p>关系统里的广告开关要用到调试权限。安卓只让「无线调试 + 配对码」这一条路拿到它，电脑和手机里的 App 都一样；配对码证明这是机主本人同意的。这台手机授权给它自己，不连接任何其他设备。</p></div>
+      <div class="card"><h3>截屏做什么用</h3><p>只用来在这台手机上认出那 6 位数字。截下来的画面不保存、不上传，授权完成就停止截屏。不允许截屏也行，App 会改为让你在通知栏手动填这 6 位数字。</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="step4">
+  <div class="wrap">
+    <div class="head">
+      <div><span class="num">4</span><h2>一键去广告</h2></div>
+      <p class="lead">App 显示「已就绪」，3 个设置就做完了。以后打开 App 直接从这一步开始。</p>
+    </div>
+    <ol class="shots">
+      <li><img src="docs/手机版教程/img/16.jpg" width="720" height="1280" loading="lazy" alt="App 首页，红圈在「一键去广告」"><p><b>点「一键去广告」</b></p></li>
+      <li><img src="docs/手机版教程/img/17.jpg" width="720" height="1280" loading="lazy" alt="正在准备：检测手机、扫描营销通知"><p>先检测手机、扫描营销通知，<b>做完一件勾一件</b></p></li>
+      <li><img src="docs/手机版教程/img/18.jpg" width="720" height="1280" loading="lazy" alt="执行页：在后台屏上逐项关闭"><p>在看不见的「后台屏」上逐项关闭，<b>可以照常用手机</b>；屏幕左边的蓝色小条表示还在进行</p></li>
+      <li><img src="docs/手机版教程/img/19.jpg" width="720" height="1280" loading="lazy" alt="完成页，各项成功"><p>做完会发通知。每一项都是<b>「成功」</b>就完成了</p></li>
+    </ol>
+    <p class="lead" style="margin-top: 24px">不支持后台屏的手机会借用当前屏幕，那时页面会写「请不要碰手机」。做完去下拉搜索、负一屏、应用商店、浏览器看一眼，确认功能正常。</p>
+  </div>
+</section>
+
+<section id="after">
+  <div class="wrap">
+    <div class="head"><h2>之后</h2><p class="lead">改动都能还原，开发者模式也能随时关掉。</p></div>
+    <ul class="list">
+      <li><b>以后再用</b><span>打开 App，点「一键去广告」。系统更新后广告开关可能被打开，再点一次就行。</span></li>
+      <li><b>想恢复</b><span>右上角「⋯」→「还原改动」，可以恢复快应用、挂起的广告组件和关掉的营销通知。各 App 里的开关按清单路径手动打开。</span></li>
+      <li><b>暂时不用</b><span>完成页可以帮你关闭开发者模式。部分银行、支付、游戏 App 检测到它开着会提醒或拒绝运行。关掉不会撤销已经成功的改动；下次用时打开开发者选项和无线调试，不用再授权。</span></li>
+      <li><b>中途停了</b><span>执行中点了「停止」，完成页底部有「重新开始」和「回到首页」。</span></li>
+      <li><b>一直停在第 3 步</b><span>确认「无线调试」开着、手机连着 Wi-Fi，再点一次「开始授权」。</span></li>
+      <li><b>提示「读屏没有启动」</b><span>GKD、自动记账、Appium 这类自动操作手机的工具会占用读屏，先暂停它们再点「重新开始」。</span></li>
+    </ul>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>安卓去广告 · MIT 开源</span>
+    <nav aria-label="页脚链接">
+      <a href="index.html">首页</a>
+      <a href="https://github.com/rddmwmddr/android-ad-cleaner/tree/main/docs/%E6%89%8B%E6%9C%BA%E7%89%88%E6%95%99%E7%A8%8B" target="_blank" rel="noopener">教程原文</a>
+      <a href="https://github.com/rddmwmddr/android-ad-cleaner" target="_blank" rel="noopener">源代码</a>
+      <a href="https://github.com/rddmwmddr/android-ad-cleaner/issues" target="_blank" rel="noopener">反馈问题</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>
