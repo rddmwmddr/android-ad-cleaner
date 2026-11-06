@@ -1,6 +1,5 @@
 """还原营销通知合并历次备份里的清单（#628）：最近一次没关渠道时，之前关的也能打开。"""
 import json
-import os
 import tempfile
 import unittest
 from pathlib import Path
