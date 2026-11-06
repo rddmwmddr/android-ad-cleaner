@@ -193,14 +193,30 @@ class UiObject:
         i = self.selector.get("instance", 0)
         return found[i] if i < len(found) else None
 
+    def _found_node(self, method):
+        """后台屏下取节点；找不到按 uiautomator2 的方式抛，机型脚本靠这个类型判断。"""
+        node = self._node()
+        if node is None:
+            raise UiObjectNotFoundError({"code": -32002, "data": str(self.selector), "method": method})
+        return node
+
     def _local_wait(self, exists, timeout):
+        """后台屏下没有 waitForExists：自己轮询过滤后的页面。读屏读超时同样只 warn 并回落一次查询，
+        与主屏路径同形——`wait()` 的契约就是不抛这个异常。"""
         deadline = time.monotonic() + timeout
-        while True:
-            if (self._node() is not None) == exists:
-                return True
-            if time.monotonic() >= deadline:
-                return False
-            time.sleep(0.3)
+        try:
+            while True:
+                if (self._node() is not None) == exists:
+                    return True
+                if time.monotonic() >= deadline:
+                    return False
+                time.sleep(0.3)
+        except HTTPError as e:
+            warnings.warn(f"wait readTimeout: {e}", RuntimeWarning)
+        try:
+            return self.exists if exists else not self.exists
+        except HTTPError:
+            return False
 
     def __getitem__(self, instance):
         selector = self.selector.clone()
@@ -235,14 +251,17 @@ class UiObject:
 
     @property
     def info(self):
-        return self.jsonrpc.objInfo(self.selector)
+        """后台屏下读屏服务只想问主屏的节点，这里用过滤后的页面拼出引擎会读的那几个字段。"""
+        if screen.active is None:
+            return self.jsonrpc.objInfo(self.selector)
+        node = self._found_node("info")
+        return {"text": node.get("text") or "", "contentDescription": node.get("content-desc") or "",
+                "bounds": dict(zip(("left", "top", "right", "bottom"), bounds_of(node))),
+                "packageName": node.get("package") or "", "className": node.get("class") or ""}
 
     def bounds(self):
         if screen.active is not None:
-            node = self._node()
-            if node is None:
-                raise UiObjectNotFoundError({"code": -32002, "data": str(self.selector), "method": "bounds"})
-            return bounds_of(node)
+            return bounds_of(self._found_node("bounds"))
         b = self.info.get("visibleBounds") or self.info.get("bounds")
         return b["left"], b["top"], b["right"], b["bottom"]
 
@@ -279,7 +298,9 @@ class UiObject:
 
     def get_text(self, timeout=None):
         self.must_wait(timeout=timeout)
-        return self.jsonrpc.getText(self.selector)
+        if screen.active is None:
+            return self.jsonrpc.getText(self.selector)
+        return self._found_node("getText").get("text") or ""
 
 
 class ShellResponse:

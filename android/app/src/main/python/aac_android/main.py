@@ -41,27 +41,33 @@ def visible(package, on, text=""):
 
 
 def mode():
-    """界面问「这次在哪块屏上跑」：background 时执行页告诉用户可以照常用手机。"""
-    return {"background": screen.active is not None}
+    """界面问「这次在哪块屏上跑」：建屏还没出结论时 deciding 为真，界面接着问；background 时执行页
+    告诉用户可以照常用手机。"""
+    return {"background": screen.active is not None, "deciding": screen.starting}
 
 
-def in_front(fn, package):
+def in_front(fn, package, what, stopped=None):
     """fn 运行期间开前台服务、显示悬浮胶囊（不被冻结），能建后台屏就在后台屏上跑。
     结束时：主屏模式回到本 App 看结果（App 自己在后台启动界面会被系统拦，shell 身份的 am start 不受限）；
-    后台模式不抢前台（用户可能正在用别的 App），发通知。"""
+    后台模式不抢前台（用户可能正在用别的 App），发通知——做完了 / 用户停止 / 出错三种结果文案不同，
+    一律发「做完了」会让停止和失败看起来都像成功。"""
     def run(*a, **k):
         bg = BACKGROUND and screen.start(package) is not None
         native.busy(True, bg)
-        visible(package, True, "净 去广告中（后台）" if bg else "净 去广告中")
+        visible(package, True, f"净 {what}中（后台）" if bg else f"净 {what}中")
+        title, text = f"{what}失败", "点这里查看原因"
         try:
-            return fn(*a, **k)
+            out = fn(*a, **k)
+            title = "已停止" if stopped is not None and stopped() else f"{what}做完了"
+            text = "点这里查看结果"
+            return out
         finally:
             visible(package, False)
             if bg:
                 screen.stop()
             native.busy(False, bg)
             if bg:
-                native.done("去广告做完了", "点这里查看结果")
+                native.done(title, text)
             else:
                 r = bridge.get().exec(f"am start -n {package}/.MainActivity", None, 10)
                 if r.code:
@@ -97,8 +103,12 @@ def boot(base, data_dir, cache_dir, package="com.ahuamiao.adcleaner"):
     api = app.Api(data_dir, adb=adb.ADB_PATH)
     api.runner = inproc.Runner(api._child_env)
     # 执行与还原都会切到别的 App 的设置页：期间开前台服务保活，结束后回到本 App
-    api.dispatcher._work = in_front(api.dispatcher._work, package)
-    api.restore = in_front(api.restore, package)
+    def stopped():
+        """用户点了「停止」：`_work()` 是正常返回的，只能靠 Job 上这个标记认出来。"""
+        return bool(api.dispatcher.job and api.dispatcher.job.cancel)
+
+    api.dispatcher._work = in_front(api.dispatcher._work, package, "去广告", stopped)
+    api.restore = in_front(api.restore, package, "还原")
     api.run_mode = mode
     API = api
     _ready.set()

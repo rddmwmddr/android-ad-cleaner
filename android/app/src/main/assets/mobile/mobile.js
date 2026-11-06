@@ -93,15 +93,23 @@
       <div class="actions"><button class="btn plain" onclick="closeModal()">取消</button><button class="btn" onclick="devOff()">关闭</button></div>`);
   };
 
-  // 执行页：能在后台屏上跑（#618）就告诉用户可以照常用手机；建不了屏的手机仍提示别碰
+  // 执行页：能在后台屏上跑（#618）就告诉用户可以照常用手机；建不了屏的手机仍提示别碰。
+  // 建屏最长 8 秒，执行线程起来后也要一会儿才有结论：每秒问一次，到 deciding 为 false 为止（最多 15 秒）
   const run = showRun;
   showRun = function(){
     run();
-    setTimeout(() => api.run_mode().then(m => {
-      const lead = main().querySelector("p.lead");
-      if (m && m.background && lead && S.step === 4)
-        lead.textContent = "在一块看不见的后台屏上逐项关闭，你可以照常用手机。做完会发通知。要看进度，回到这里。";
-    }).catch(() => {}), 2500);
+    const until = Date.now() + 15000;
+    const ask = () => {
+      const again = () => { if (Date.now() < until) setTimeout(ask, 1000); };
+      api.run_mode().then(m => {
+        if (!m || S.step !== 4) return;
+        const lead = main().querySelector("p.lead");
+        if (m.background && lead)
+          lead.textContent = "在一块看不见的后台屏上逐项关闭，你可以照常用手机。做完会发通知。要看进度，回到这里。";
+        if (m.deciding) again();
+      }).catch(again);
+    };
+    setTimeout(ask, 1000);
   };
 
   // 完成页：去掉「电脑调试」「USB 调试」的说法

@@ -12,15 +12,22 @@ from . import bridge
 PID_FILE = "/data/local/tmp/aac-vd.pid"
 LOG_FILE = "/data/local/tmp/aac-vd.log"
 NAME = "aac-bg"
+ALWAYS_UNLOCKED = 1 << 12       # Vd.java 的标记：降级档可能没有它，那时这块屏照样会被锁
 
 
 class Screen:
-    def __init__(self, display, sf):
+    def __init__(self, display, sf, flags=0):
         self.display = display      # 安卓的显示编号：am start --display、input -d、dumpsys 分段都用它
         self.sf = sf                # SurfaceFlinger 的编号：screencap -d 只认这个
+        self.flags = flags          # Vd 建屏时实际用上的标记（它打印的 flags=0x…）
+
+    @property
+    def unlocked(self):
+        return bool(self.flags & ALWAYS_UNLOCKED)
 
 
 active = None
+starting = False                # 正在建屏：界面问「在哪块屏上跑」时要等这个落到 False 才有结论
 
 
 def _size(b):
@@ -32,24 +39,49 @@ def _size(b):
     return w, h, dpi
 
 
-def start(package):
-    """建屏并启用改写；建不了返回 None（调用方照旧用主屏）。"""
-    global active
+def _reclaim():
+    """上一次进程被杀时没走到 stop()：PID_FILE 里的 Vd 还常驻，那块同名屏要等它死了才消失。
+    建新屏前先清掉并等 SurfaceFlinger 里没有它——不等就会把旧屏的编号当成新屏的。"""
+    b = bridge.get()
+    left = b.exec(f"[ -f {PID_FILE} ] && echo yes", None, 10).out.strip() == b"yes"
+    b.stop_daemon("vd")
+    if not left:
+        return
+    b.exec(f"kill $(cat {PID_FILE}) 2>/dev/null; rm -f {PID_FILE}", None, 10)
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        dump = b.exec("dumpsys SurfaceFlinger --displays", None, 10).out.decode("utf-8", "replace")
+        if f'name="{NAME}"' not in dump:
+            return
+        time.sleep(0.2)
+
+
+def _discard():
+    """拆掉本次尝试起的 Vd。不复位 `active`：另一次执行可能正跑在屏上，拆掉的是它那块。"""
+    b = bridge.get()
+    b.stop_daemon("vd")
+    b.exec(f"[ -f {PID_FILE} ] && kill $(cat {PID_FILE}) 2>/dev/null; rm -f {PID_FILE}", None, 10)
+
+
+def _build(package):
+    """建一块屏；建不了返回 None。"""
     b = bridge.get()
     paths = b.exec(f"pm path {package}", None, 10).out.decode()
     apk = next((line[len("package:"):].strip() for line in paths.splitlines() if line.endswith("base.apk")), "")
     w, h, dpi = _size(b)
     if not apk or not (w and h and dpi):
         return None
+    _reclaim()
     b.exec(f"rm -f {LOG_FILE}", None, 10)
     b.daemon("vd", f"echo $$ > {PID_FILE}; CLASSPATH={apk} exec app_process / com.ahuamiao.adcleaner.Vd "
                    f"{w} {h} {dpi} > {LOG_FILE} 2>&1")
-    display = None
+    display, flags = None, 0
     deadline = time.monotonic() + 8
     while time.monotonic() < deadline:
-        m = re.search(r"DISPLAY (-?\d+)", b.exec(f"cat {LOG_FILE} 2>/dev/null", None, 5).out.decode())
+        m = re.search(r"DISPLAY (-?\d+)(?: flags=0x([0-9a-fA-F]+))?",
+                      b.exec(f"cat {LOG_FILE} 2>/dev/null", None, 5).out.decode())
         if m:
-            display = int(m.group(1))
+            display, flags = int(m.group(1)), int(m.group(2) or "0", 16)
             break
         time.sleep(0.2)
     sf = None
@@ -58,19 +90,32 @@ def start(package):
         m = re.search(r"Virtual Display (\d+)\s*\n\s*name=\"" + NAME + "\"", dump)
         sf = m.group(1) if m else None
     if display is None or display < 0 or sf is None:
-        stop()
+        _discard()
         return None
-    active = Screen(display, sf)
-    return active
+    return Screen(display, sf, flags)
+
+
+def start(package):
+    """建屏并启用改写；建不了返回 None（调用方照旧用主屏）。
+    已经有一块在跑就复用它：建第二块会在拆除时把第一块连带拆掉，也没必要有两块。"""
+    global active, starting
+    if active is not None:
+        return active
+    starting = True
+    try:
+        built = _build(package)
+    finally:
+        starting = False
+    if built is not None:
+        active = built
+    return built
 
 
 def stop():
     """拆屏：屏上开着的页面随之关闭（建屏时带 DESTROY_CONTENT_ON_REMOVAL）。"""
     global active
     active = None
-    b = bridge.get()
-    b.stop_daemon("vd")
-    b.exec(f"[ -f {PID_FILE} ] && kill $(cat {PID_FILE}) 2>/dev/null; rm -f {PID_FILE}", None, 10)
+    _discard()
 
 
 # 只会作用到主屏的命令，后台屏下不发：
@@ -105,9 +150,10 @@ def rewrite(cmd):
     cmd = re.sub(r"\binput (?!-d )(?=(?:tap|swipe|keyevent|text|draganddrop|motionevent|keycombination)\b)",
                  f"input -d {n} ", cmd)
     cmd = re.sub(r"\bscreencap(?! -d)", f"screencap -d {s.sf}", cmd)
-    # 查前台、查锁屏：只看后台屏那一段；后台屏不锁（ALWAYS_UNLOCKED），主屏锁了照样跑
+    # 查前台、查锁屏：只看后台屏那一段。屏带 ALWAYS_UNLOCKED 时替它答「没锁」；降级档没这个标记，
+    # 这块屏自己会被锁，就按它那段照实读
+    lock = "; echo '  isKeyguardShowing=false'" if s.unlocked else ""
     cmd = re.sub(r"\bdumpsys window(?= *\|)",
-                 "{ " + _section("dumpsys window displays", "Display: mDisplayId=", n) + "; echo '  isKeyguardShowing=false'; }",
-                 cmd)
+                 "{ " + _section("dumpsys window displays", "Display: mDisplayId=", n) + lock + "; }", cmd)
     cmd = re.sub(r"\bdumpsys activity activities(?= *\|)", _section("dumpsys activity activities", "^Display #", n), cmd)
     return cmd
