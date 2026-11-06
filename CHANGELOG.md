@@ -25,7 +25,7 @@
 ### 内部
 
 - 无设备套件不再真起 adb、真 sleep：机型脚本装配收进 `fixtures.load_recipe`（#640）
-- 本机 `.venv` 对齐发版用的 3.12，不再每次改动跑两遍；CI 的 Linux job 改跑 3.13（#631）
+- 本机 `.venv` 与 CI 的 Linux job 一起对齐到 3.13，不再每次改动跑两遍；Windows 与打包留在 3.12（#631）
 - 渠道失败行带上包名，MISMATCH 另附 importance 与应用通知读数，同名渠道能按 App 定位（#582）
 
 ## 0.3.2 · 2026-11-05

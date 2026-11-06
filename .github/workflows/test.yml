@@ -8,8 +8,8 @@ permissions:
   contents: read
 jobs:
   # Linux 跑 3.13，Windows 跑 3.12：两个解释器各守一次，不重复跑同一组合。
-  # 3.12 与发版打包、本机 .venv 同版；3.13+ 是新版信号——社区从源码 python3 tool/run.py 跑的
-  # 常是新解释器，而 3.13 起编译器会剥掉文档字符串的公共缩进，异常 repr、argparse 帮助同理。
+  # 3.13 与开发者本机 .venv 同版；3.12 与 Windows 发版打包同版。社区从源码 python3 tool/run.py
+  # 跑的多是新解释器，而 3.13 起编译器会剥掉文档字符串的公共缩进，异常 repr、argparse 帮助同理。
   unittest:
     runs-on: ubuntu-latest
     steps:
@@ -40,7 +40,7 @@ jobs:
 
   # Windows 专属的用例（expanduser 靠 USERPROFILE、open() 默认 cp1252）只在打 Windows 包时才暴露，
   # 每轮发版才发现太晚，所以 PR 阶段也跑一遍。步骤与 Linux job 对齐，差别只在 adb 从哪来，
-  # 以及这里跑 3.12（与打包含同版）、Linux 跑 3.13。
+  # 以及这里跑 3.12（与打包含同版）、Linux 跑 3.13（与开发者本机同版）。
   unittest-windows:
     runs-on: windows-latest
     steps:
