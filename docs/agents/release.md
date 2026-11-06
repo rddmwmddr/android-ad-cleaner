@@ -81,7 +81,7 @@ GitHub 搜索索引有延迟，刚合上没几小时的 PR 可能还查不到；
 
 ## 一轮发版的产物顺序
 
-1. **跑验证**：`python -m unittest discover -s tests`（本机 `.venv`，与 CI 同为 3.12）一套，加 `uvx ruff@0.17.3 check --select F,E9 tool tests gui`。这一步的数字就是正文验证行与 CHANGELOG 那一行的来源，只跑一次。
+1. **跑验证**：`python -m unittest discover -s tests`（本机 `.venv`，3.12，与 Windows job 和打包同一版）一套，加 `uvx ruff@0.17.3 check --select F,E9 tool tests gui`。这一步的数字就是正文验证行与 CHANGELOG 那一行的来源，只跑一次。
 2. **补齐 `## 未发布`**：确认这一版的每一笔都在里面、都是一行一条。这时还没写验证行。
 3. **建 Release 草稿并推 tag**：`build-windows.yml` 由 `v*` 标签触发，要求对应 Release **先存在**（草稿即可，否则 workflow 报「请先创建对应的 Release 草稿」）。它打包两个 Windows 安装包、跑冒烟测试、把产物传进草稿。草稿已公开时它保留已验证的文件、不重建。
 4. **上传 macOS 安装包**到同一个草稿（本机打包与公证步骤在 `CLAUDE.local.md`）。
