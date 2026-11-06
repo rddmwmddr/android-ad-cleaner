@@ -6,6 +6,7 @@ import tempfile
 import textwrap
 import time
 import unittest
+import warnings
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -183,12 +184,59 @@ class InprocTest(unittest.TestCase):
         proc.terminate()
         self.assertEqual(proc.wait(5), -15)
 
+    def test_run_times_out_and_leaves_the_next_run_usable(self):
+        self.script("slow.py", """
+            import time
+            while True:
+                time.sleep(0.01)
+        """)
+        self.script("ok.py", "print('ok')\n")
+        run = inproc.Runner(lambda: dict(os.environ)).run
+        with self.assertRaises(subprocess.TimeoutExpired):
+            run("slow.py", timeout=0.2)
+        # 打断后锁与环境变量都要还回来，下一步照常跑
+        self.assertEqual(run("ok.py", timeout=5), ("ok\n", "", 0))
+
     def test_modules_are_fresh_per_top_level_run(self):
         self.script("counter.py", "N = []\n")
         self.script("bump.py", "import counter\ncounter.N.append(1)\nprint(len(counter.N))\n")
         run = inproc.Runner(lambda: dict(os.environ)).run
         self.assertEqual(run("bump.py")[0], "1\n")
         self.assertEqual(run("bump.py")[0], "1\n")
+
+
+class WaitTest(unittest.TestCase):
+    """读超时只 warn 并回落 exists：机型脚本的 click_exists 只捕 UiObjectNotFoundError。"""
+
+    class Rpc:
+        def __init__(self):
+            self.calls = []
+
+        def waitForExists(self, selector, timeout, http_timeout=None):
+            self.calls.append("waitForExists")
+            raise u2.HTTPError("read timeout")
+
+        def waitUntilGone(self, selector, timeout, http_timeout=None):
+            self.calls.append("waitUntilGone")
+            raise u2.HTTPTimeoutError("read timeout")   # 子类也要落到同一条回落
+
+        def exist(self, selector):
+            return True
+
+    def object_with(self, rpc):
+        dev = u2.Device.__new__(u2.Device)
+        dev.jsonrpc, dev.wait_timeout = rpc, 20.0
+        return u2.UiObject(dev, u2.Selector(text="x"))
+
+    def test_read_timeout_falls_back_to_exists(self):
+        rpc = self.Rpc()
+        obj = self.object_with(rpc)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            self.assertTrue(obj.wait())
+            self.assertFalse(obj.wait(exists=False))
+        self.assertEqual(rpc.calls, ["waitForExists", "waitUntilGone"])
+        self.assertEqual(len(w), 2)
 
 
 class SelectorTest(unittest.TestCase):

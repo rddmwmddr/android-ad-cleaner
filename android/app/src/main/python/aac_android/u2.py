@@ -15,6 +15,7 @@ import time
 import types
 import urllib.error
 import urllib.request
+import warnings
 
 from . import bridge
 
@@ -150,9 +151,15 @@ class UiObject:
         return obj
 
     def wait(self, exists=True, timeout=None):
+        """读屏读超时不抛，只 warn 并回落一次 exists 查询——与 uiautomator2 的 wait() 一致。
+        机型脚本的 click_exists 只捕 UiObjectNotFoundError，异常穿透会让整段中止而不是跳过。"""
         timeout = self.device.wait_timeout if timeout is None else timeout
         method = self.jsonrpc.waitForExists if exists else self.jsonrpc.waitUntilGone
-        return bool(method(self.selector, int(timeout * 1000), http_timeout=timeout + 10))
+        try:
+            return bool(method(self.selector, int(timeout * 1000), http_timeout=timeout + 10))
+        except HTTPError as e:
+            warnings.warn(f"wait readTimeout: {e}", RuntimeWarning)
+            return self.exists if exists else not self.exists
 
     @property
     def exists(self):

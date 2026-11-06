@@ -14,6 +14,7 @@ import io
 import os
 import queue
 import runpy
+import subprocess
 import sys
 import threading
 import traceback
@@ -228,11 +229,16 @@ class Proc:
         return None if self.thread.is_alive() else self.returncode
 
     def terminate(self):
-        if self.thread.is_alive():
-            ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_ulong(self.thread.ident),
-                                                       ctypes.py_object(KeyboardInterrupt))
+        interrupt(self.thread)
 
     kill = terminate
+
+
+def interrupt(thread):
+    """让线程在下一条字节码上抛 KeyboardInterrupt（脚本里会落进 _exec 的收容，返回 -15）。"""
+    if thread.is_alive():
+        ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_ulong(thread.ident),
+                                                   ctypes.py_object(KeyboardInterrupt))
 
 
 class Runner:
@@ -242,9 +248,19 @@ class Runner:
         self.env_for = env_for
 
     def run(self, script, *args, timeout=180):
+        """与桌面版一样按步计时：超时先打断脚本（与「停止」同一机制），再抛 TimeoutExpired。
+        打断只在下一条字节码生效，卡在 Java 调用里的脚本要等它返回，因此多等 5 秒再报。"""
         out, err = io.StringIO(), io.StringIO()
-        rc = top([script, *args], self.env_for(), out, err)
-        return out.getvalue(), err.getvalue(), rc
+        rc = []
+        t = threading.Thread(target=lambda: rc.append(top([script, *args], self.env_for(), out, err)),
+                             daemon=True)
+        t.start()
+        t.join(timeout)
+        if t.is_alive():
+            interrupt(t)
+            t.join(5)
+            raise subprocess.TimeoutExpired(script, timeout, output=out.getvalue(), stderr=err.getvalue())
+        return out.getvalue(), err.getvalue(), rc[0]
 
     def spawn(self, script, *args, env_extra=None):
         return Proc([script, *args], dict(self.env_for(), **(env_extra or {})))
