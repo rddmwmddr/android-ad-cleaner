@@ -63,7 +63,7 @@
     const name = d.name || `${d.brand} ${d.model}`;
     box.innerHTML = `<div class="dev"><div class="ico">📱</div><div class="meta"><b>${esc(name)}</b><small>${esc(d.model)} · Shizuku 已连接</small></div></div>
       <button class="btn big" onclick="oneTap()">一键去广告</button>
-      <p class="lead" style="margin:12px 0 0">点了以后自动检测、扫描营销通知，按推荐勾选直接开始。执行时本 App 会切到各个设置页自动点按，<b>请不要碰手机</b>，保持亮屏。做完会回到这里。</p>
+      <p class="lead" style="margin:12px 0 0">点了以后自动检测、扫描营销通知，按推荐勾选直接开始。多数手机上会在一块看不见的后台屏里自动点按，你可以照常用手机，做完发通知；不支持后台屏的手机会借用当前屏幕，那时<b>请不要碰手机</b>。</p>
       <div class="actions" style="justify-content:flex-start"><button class="btn plain" onclick="S.auto=false;pick(S.local)">自己选择要关的项目</button></div>`;
   };
 
@@ -91,6 +91,17 @@
   askDevOff = function(){
     modal(`<h3>关闭开发者模式？</h3><p class="lead">关闭后无线调试一起关掉，Shizuku 随之停止。以后要还原改动，重新打开开发者模式和无线调试、启动 Shizuku 即可。</p>
       <div class="actions"><button class="btn plain" onclick="closeModal()">取消</button><button class="btn" onclick="devOff()">关闭</button></div>`);
+  };
+
+  // 执行页：能在后台屏上跑（#618）就告诉用户可以照常用手机；建不了屏的手机仍提示别碰
+  const run = showRun;
+  showRun = function(){
+    run();
+    setTimeout(() => api.run_mode().then(m => {
+      const lead = main().querySelector("p.lead");
+      if (m && m.background && lead && S.step === 4)
+        lead.textContent = "在一块看不见的后台屏上逐项关闭，你可以照常用手机。做完会发通知。要看进度，回到这里。";
+    }).catch(() => {}), 2500);
   };
 
   // 完成页：去掉「电脑调试」「USB 调试」的说法

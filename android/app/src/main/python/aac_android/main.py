@@ -9,7 +9,7 @@ import threading
 import time
 import traceback
 
-from . import adb, bridge, inproc, u2
+from . import adb, bridge, inproc, screen, u2
 
 API = None
 _ready = threading.Event()
@@ -29,28 +29,43 @@ class _Native:
 native = _Native()
 
 
-def visible(package, on):
+BACKGROUND = True        # 优先在后台屏上执行（#618）；建不了屏自动退回主屏
+
+
+def visible(package, on, text=""):
     """执行期间显示悬浮胶囊：小米 HyperOS 会冻结退到后台的 App，前台服务和省电白名单都挡不住（18 Pro Max 实测），
     有可见窗口的不冻。悬浮窗权限经 Shizuku 给本 App 自己开，不用用户去设置里找。"""
     if on:
         bridge.get().exec(f"appops set {package} SYSTEM_ALERT_WINDOW allow", None, 10)
-    native.capsule(on)
+    native.capsule(on, text)
+
+
+def mode():
+    """界面问「这次在哪块屏上跑」：background 时执行页告诉用户可以照常用手机。"""
+    return {"background": screen.active is not None}
 
 
 def in_front(fn, package):
-    """fn 运行期间开前台服务、显示悬浮胶囊（不被冻结）；结束后回到本 App 看结果。App 自己在后台启动界面会被系统拦
-    （Android 10 起，前台服务也不豁免），shell 身份的 am start 不受限。"""
+    """fn 运行期间开前台服务、显示悬浮胶囊（不被冻结），能建后台屏就在后台屏上跑。
+    结束时：主屏模式回到本 App 看结果（App 自己在后台启动界面会被系统拦，shell 身份的 am start 不受限）；
+    后台模式不抢前台（用户可能正在用别的 App），发通知。"""
     def run(*a, **k):
-        native.busy(True)
-        visible(package, True)
+        bg = BACKGROUND and screen.start(package) is not None
+        native.busy(True, bg)
+        visible(package, True, "净 去广告中（后台）" if bg else "净 去广告中")
         try:
             return fn(*a, **k)
         finally:
             visible(package, False)
-            native.busy(False)
-            r = bridge.get().exec(f"am start -n {package}/.MainActivity", None, 10)
-            if r.code:
-                native.bringToFront()
+            if bg:
+                screen.stop()
+            native.busy(False, bg)
+            if bg:
+                native.done("去广告做完了", "点这里查看结果")
+            else:
+                r = bridge.get().exec(f"am start -n {package}/.MainActivity", None, 10)
+                if r.code:
+                    native.bringToFront()
     return run
 
 
@@ -84,6 +99,7 @@ def boot(base, data_dir, cache_dir, package="com.ahuamiao.adcleaner"):
     # 执行与还原都会切到别的 App 的设置页：期间开前台服务保活，结束后回到本 App
     api.dispatcher._work = in_front(api.dispatcher._work, package)
     api.restore = in_front(api.restore, package)
+    api.run_mode = mode
     API = api
     _ready.set()
     return app.VERSION

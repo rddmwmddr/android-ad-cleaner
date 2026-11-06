@@ -8,6 +8,7 @@ Selector 的字段与掩码照抄 uiautomator2（MIT），服务端按这张表�
 """
 import io
 import json
+import re
 import shlex
 import sys
 import threading
@@ -16,8 +17,9 @@ import types
 import urllib.error
 import urllib.request
 import warnings
+import xml.etree.ElementTree as ET
 
-from . import bridge
+from . import bridge, screen
 
 REMOTE_JAR = "/data/local/tmp/u2.jar"
 PID_FILE = "/data/local/tmp/aac-u2.pid"
@@ -86,8 +88,13 @@ def _ping():
 class _Rpc:
     """d.jsonrpc.方法名(参数…, http_timeout=秒)，与 uiautomator2 同一种写法。"""
 
+    # 读屏服务按选择器写字只找主屏的输入框：后台屏下不让它写，引擎自动退到剪贴板 + 粘贴（粘贴键发到后台屏）
+    MAIN_ONLY = {"setText", "clearTextField"}
+
     def __getattr__(self, method):
         def call(*params, http_timeout=10):
+            if screen.active is not None and method in self.MAIN_ONLY:
+                raise RPCUnknownError(-32001, "后台屏下不经读屏服务写字", method)
             payload = {"jsonrpc": "2.0", "id": 1, "method": method, "params": list(params)}
             raw = _http("POST", "/jsonrpc/0", payload, timeout=http_timeout)
             try:
@@ -138,9 +145,62 @@ class Selector(dict):
         return Selector(**{k: v for k, v in self.items() if k in self._fields})
 
 
+# 选择器字段 → 页面节点属性（后台屏下自己匹配用）
+ATTR = {"text": "text", "description": "content-desc", "className": "class", "packageName": "package",
+        "resourceId": "resource-id"}
+FLAGS = {"checkable": "checkable", "checked": "checked", "clickable": "clickable", "longClickable": "long-clickable",
+         "scrollable": "scrollable", "enabled": "enabled", "focusable": "focusable", "focused": "focused",
+         "selected": "selected"}
+
+
+def matches(node, selector):
+    """一个页面节点是否满足选择器（只认引擎与机型脚本用到的字段，未知字段一律不匹配）。"""
+    for key, want in selector.items():
+        if key in ("mask", "childOrSibling", "childOrSiblingSelector", "instance"):
+            continue
+        if key in ATTR:
+            ok = (node.get(ATTR[key]) or "") == want
+        elif key in FLAGS:
+            ok = (node.get(FLAGS[key]) == "true") == bool(want)
+        elif key.endswith("Matches") and key[:-7] in ATTR:
+            ok = re.fullmatch(want, node.get(ATTR[key[:-7]]) or "") is not None
+        elif key.endswith("Contains"):
+            ok = want in (node.get(ATTR[key[:-8]]) or "")
+        elif key.endswith("StartsWith"):
+            ok = (node.get(ATTR[key[:-10]]) or "").startswith(want)
+        elif key == "index":
+            ok = node.get("index") == str(want)
+        else:
+            return False
+        if not ok:
+            return False
+    return True
+
+
+def bounds_of(node):
+    l, t, r, b = map(int, re.findall(r"-?\d+", node.get("bounds") or "[0,0][0,0]"))
+    return l, t, r, b
+
+
 class UiObject:
     def __init__(self, device, selector):
         self.device, self.selector, self.jsonrpc = device, selector, device.jsonrpc
+
+    def _node(self):
+        """后台屏下：在过滤后的页面上找第 instance 个匹配节点。"""
+        root = ET.fromstring(self.device.dump_hierarchy())
+        found = [n for n in root.iter("node") if matches(n, self.selector)]
+        i = self.selector.get("instance", 0)
+        return found[i] if i < len(found) else None
+
+    def _local_wait(self, exists, timeout):
+        deadline = time.monotonic() + timeout
+        while True:
+            if (self._node() is not None) == exists:
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(0.3)
 
     def __getitem__(self, instance):
         selector = self.selector.clone()
@@ -154,6 +214,8 @@ class UiObject:
         """读屏读超时不抛，只 warn 并回落一次 exists 查询——与 uiautomator2 的 wait() 一致。
         机型脚本的 click_exists 只捕 UiObjectNotFoundError，异常穿透会让整段中止而不是跳过。"""
         timeout = self.device.wait_timeout if timeout is None else timeout
+        if screen.active is not None:
+            return self._local_wait(exists, timeout)
         method = self.jsonrpc.waitForExists if exists else self.jsonrpc.waitUntilGone
         try:
             return bool(method(self.selector, int(timeout * 1000), http_timeout=timeout + 10))
@@ -163,6 +225,8 @@ class UiObject:
 
     @property
     def exists(self):
+        if screen.active is not None:
+            return self._node() is not None
         return bool(self.jsonrpc.exist(self.selector))
 
     def must_wait(self, exists=True, timeout=None):
@@ -174,6 +238,11 @@ class UiObject:
         return self.jsonrpc.objInfo(self.selector)
 
     def bounds(self):
+        if screen.active is not None:
+            node = self._node()
+            if node is None:
+                raise UiObjectNotFoundError({"code": -32002, "data": str(self.selector), "method": "bounds"})
+            return bounds_of(node)
         b = self.info.get("visibleBounds") or self.info.get("bounds")
         return b["left"], b["top"], b["right"], b["bottom"]
 
@@ -194,6 +263,14 @@ class UiObject:
 
     def set_text(self, text, timeout=None):
         self.must_wait(timeout=timeout)
+        if screen.active is not None:
+            # 点进输入框、全选、粘贴：读屏服务的 setText 只找主屏
+            self.click()
+            self.device.shell("input keycombination 113 29")        # Ctrl+A
+            if not text:
+                return self.device.shell("input keyevent KEYCODE_DEL")
+            self.jsonrpc.setClipboard(None, text)
+            return self.device.shell("input keyevent KEYCODE_PASTE")
         if not text:
             return self.jsonrpc.clearTextField(self.selector)
         return self.jsonrpc.setText(self.selector, text)
@@ -290,6 +367,8 @@ class Device:
     def dump_hierarchy(self, compressed=False, pretty=False, max_depth=None):
         content = self.jsonrpc.dumpWindowHierarchy(compressed, max_depth or self.settings["max_depth"],
                                                    http_timeout=30)
+        if screen.active is not None and content:
+            content = only_display(content, screen.active.display)
         return content or EMPTY_XML
 
     def window_size(self):
@@ -313,20 +392,55 @@ class Device:
     def app_stop(self, package):
         self.shell(["am", "force-stop", package])
 
+    # 读屏服务的点按只发到主屏：后台屏下一律走 input（shell 改写成 input -d 屏号）
     def click(self, x, y):
+        if screen.active is not None:
+            self.shell(f"input tap {int(x)} {int(y)}")
+            return
         self.jsonrpc.click(int(x), int(y))
 
     def swipe(self, fx, fy, tx, ty, duration=None, steps=None):
         steps = int(duration * 200) if duration else (steps or 55)
+        if screen.active is not None:
+            return self.shell(f"input swipe {int(fx)} {int(fy)} {int(tx)} {int(ty)} {max(2, steps) * 5}")
         return self.jsonrpc.swipe(int(fx), int(fy), int(tx), int(ty), max(2, steps))
 
     def press(self, key, meta=None):
+        if screen.active is not None:
+            code = key if isinstance(key, int) else KEYS.get(str(key).lower(), f"KEYCODE_{str(key).upper()}")
+            return self.shell(f"input keyevent {code}")
         if isinstance(key, int):
             return self.jsonrpc.pressKeyCode(key, meta) if meta else self.jsonrpc.pressKeyCode(key)
         return self.jsonrpc.pressKey(key)
 
     def __call__(self, **selectors):
         return UiObject(self, Selector(**selectors))
+
+
+# 读屏服务 pressKey 的键名 → 安卓键码名（后台屏下改发 input keyevent）
+KEYS = {"home": "KEYCODE_HOME", "back": "KEYCODE_BACK", "enter": "KEYCODE_ENTER", "menu": "KEYCODE_MENU",
+        "search": "KEYCODE_SEARCH", "delete": "KEYCODE_DEL", "del": "KEYCODE_DEL", "recent": "KEYCODE_APP_SWITCH",
+        "up": "KEYCODE_DPAD_UP", "down": "KEYCODE_DPAD_DOWN", "left": "KEYCODE_DPAD_LEFT",
+        "right": "KEYCODE_DPAD_RIGHT", "center": "KEYCODE_DPAD_CENTER", "power": "KEYCODE_POWER"}
+
+
+def only_display(content, display):
+    """读屏服务一次给出所有屏的窗口（节点带 display-id）：只留第 display 块屏的。"""
+    try:
+        root = ET.fromstring(content)
+    except ET.ParseError:
+        return content
+    want = str(display)
+
+    def prune(parent):
+        for child in list(parent):
+            did = child.get("display-id")
+            if did is not None and did != want:
+                parent.remove(child)
+            else:
+                prune(child)
+    prune(root)
+    return ET.tostring(root, encoding="unicode")
 
 
 def connect(serial=None):

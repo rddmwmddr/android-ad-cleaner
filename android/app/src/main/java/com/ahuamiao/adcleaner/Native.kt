@@ -58,8 +58,8 @@ object Native {
 
     /** 执行开始 / 结束：前台服务保住进程（执行中本 App 在后台，系统可能回收它）。 */
     @JvmStatic
-    fun busy(on: Boolean) = main.post {
-        val intent = Intent(app, KeepAliveService::class.java)
+    fun busy(on: Boolean, background: Boolean) = main.post {
+        val intent = Intent(app, KeepAliveService::class.java).putExtra(KeepAliveService.BACKGROUND, background)
         if (on) app.startForegroundService(intent) else app.stopService(intent)
     }
 
@@ -71,14 +71,14 @@ object Native {
      * 放在左边缘，不盖住右侧的开关（截图取色看开关颜色）。
      */
     @JvmStatic
-    fun capsule(on: Boolean) = main.post {
+    fun capsule(on: Boolean, label: String) = main.post {
         val wm = app.getSystemService(WindowManager::class.java)
         capsule?.let { runCatching { wm.removeView(it) } }
         capsule = null
         if (!on || !Settings.canDrawOverlays(app)) return@post
         val dp = app.resources.displayMetrics.density
         val view = TextView(app).apply {
-            text = "净 去广告中"
+            text = label.ifEmpty { "净 去广告中" }
             textSize = 11f
             setTextColor(0xFFFFFFFF.toInt())
             setPadding((8 * dp).toInt(), (5 * dp).toInt(), (10 * dp).toInt(), (5 * dp).toInt())
@@ -92,6 +92,25 @@ object Native {
         ).apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL }
         runCatching { wm.addView(view, lp); capsule = view }
     }
+
+    /** 后台屏模式跑完：不抢前台（用户可能正在用别的 App），发一条通知，点它回到本 App 看结果。 */
+    @JvmStatic
+    fun done(title: String, text: String) = main.post {
+        val nm = app.getSystemService(android.app.NotificationManager::class.java)
+        nm.createNotificationChannel(android.app.NotificationChannel(DONE_CHANNEL, "执行结果",
+            android.app.NotificationManager.IMPORTANCE_DEFAULT))
+        val open = android.app.PendingIntent.getActivity(app, 2, Intent(app, MainActivity::class.java),
+            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT)
+        nm.notify(2, android.app.Notification.Builder(app, DONE_CHANNEL)
+            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build())
+    }
+
+    private const val DONE_CHANNEL = "done"
 
     /** 执行完回到本 App，让用户看到结果（引擎最后会回桌面）。 */
     @JvmStatic

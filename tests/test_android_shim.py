@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "android" / "app" / "src" / "main" / "python"))
 
-from aac_android import adb, bridge, inproc, u2  # noqa: E402
+from aac_android import adb, bridge, inproc, screen, u2  # noqa: E402
 
 
 class FakeBridge:
@@ -130,6 +130,73 @@ class ShizukuPollTest(unittest.TestCase):
         r = self.bridge_with(job).exec("monkey", None, 0.05)
         self.assertTrue(r.timed_out)
         self.assertTrue(job.cancelled)
+
+
+class BackgroundScreenTest(unittest.TestCase):
+    """后台屏（#618）：命令改发到第 N 块屏，读屏只留这块屏，选择器在过滤后的页面上自己匹配。"""
+
+    def setUp(self):
+        self.saved = screen.active
+        screen.active = screen.Screen(7, "11529215050074008624")
+
+    def tearDown(self):
+        screen.active = self.saved
+
+    def test_commands_go_to_the_background_screen(self):
+        r = screen.rewrite
+        # 另开一份（MULTIPLE_TASK）：主屏上开着同一个 App 时不把它搬走
+        self.assertEqual(r("am start -f 0x10008000 -n a/.B"), "am start --display 7 -f 0x18008000 -n a/.B")
+        self.assertEqual(r("am start -n a/.B"), "am start --display 7 -f 0x18000000 -n a/.B")
+        self.assertEqual(r("am start --display 3 -n a/.B"), "am start --display 3 -n a/.B")
+        self.assertEqual(r("input tap 10 20"), "input -d 7 tap 10 20")
+        self.assertEqual(r("input swipe 1 2 3 4 80"), "input -d 7 swipe 1 2 3 4 80")
+        self.assertEqual(r("input keyevent BACK"), "input -d 7 keyevent BACK")
+        self.assertEqual(r("screencap -p"), "screencap -d 11529215050074008624 -p")
+        self.assertIn("am start --display 7", bridge.prepare("monkey -p com.x -c android.intent.category.LAUNCHER 1"))
+
+    def test_home_and_wakeup_never_reach_the_main_screen(self):
+        for cmd in ("input keyevent HOME", "input keyevent KEYCODE_HOME", "input keyevent 3", "input keyevent KEYCODE_WAKEUP",
+                    "cmd statusbar collapse"):
+            self.assertEqual(screen.rewrite(cmd), "true", cmd)
+        self.assertEqual(screen.rewrite("am start -n a/.B; input keyevent HOME"), "am start --display 7 -f 0x18000000 -n a/.B; true")
+
+    def test_focus_and_lock_queries_read_only_this_screen(self):
+        cmd = screen.rewrite("dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | sed -n '1,4p'")
+        self.assertIn("dumpsys window displays", cmd)
+        self.assertIn("mDisplayId=7[ (]", cmd)
+        self.assertIn("isKeyguardShowing=false", cmd)
+        cmd = screen.rewrite("dumpsys activity activities | grep -E 'topResumedActivity' | sed -n '1p'")
+        self.assertIn("Display #7[ (]", cmd)
+
+    def test_untouched_without_background_screen(self):
+        screen.active = None
+        for cmd in ("am start -n a/.B", "input tap 1 2", "screencap -p", "input keyevent HOME"):
+            self.assertEqual(screen.rewrite(cmd), cmd)
+
+    PAGE = ('<hierarchy rotation="0">'
+            '<node display-id="0" package="com.home" text="主屏" bounds="[0,0][10,10]" />'
+            '<node display-id="7" package="com.x" text="" bounds="[0,0][100,100]">'
+            '<node display-id="7" resource-id="com.x:id/menu" text="菜单" clickable="true" bounds="[10,10][30,30]" />'
+            '<node display-id="7" resource-id="com.x:id/menu" text="菜单" clickable="true" bounds="[40,10][60,30]" />'
+            '</node></hierarchy>')
+
+    def test_dump_keeps_only_this_screen(self):
+        xml = u2.only_display(self.PAGE, 7)
+        self.assertNotIn("主屏", xml)
+        self.assertEqual(xml.count("菜单"), 2)
+
+    def test_selector_matches_on_filtered_page(self):
+        import xml.etree.ElementTree as ET
+        nodes = list(ET.fromstring(u2.only_display(self.PAGE, 7)).iter("node"))
+        hits = [n for n in nodes if u2.matches(n, u2.Selector(resourceId="com.x:id/menu"))]
+        self.assertEqual([u2.bounds_of(n) for n in hits], [(10, 10, 30, 30), (40, 10, 60, 30)])
+        self.assertTrue(any(u2.matches(n, u2.Selector(text="菜单", clickable=True)) for n in nodes))
+        self.assertFalse(any(u2.matches(n, u2.Selector(text="主屏")) for n in nodes))
+        self.assertTrue(any(u2.matches(n, u2.Selector(textMatches="菜.")) for n in nodes))
+
+    def test_reader_service_never_types_into_the_main_screen(self):
+        with self.assertRaises(u2.RPCUnknownError):
+            u2._Rpc().setText({}, "x")
 
 
 class InprocTest(unittest.TestCase):

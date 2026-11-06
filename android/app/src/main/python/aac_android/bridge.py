@@ -39,8 +39,14 @@ def launcher(cmd):
     return (f"c=$(cmd package resolve-activity --brief -c android.intent.category.LAUNCHER {pkg} | tail -n 1); "
             'case "$c" in */*) am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER '
             '-f 0x10200000 -n "$c" >/dev/null 2>&1 && echo "Events injected: 1" || '
-            '{ echo "** monkey aborted: am start failed"; exit 1; };; '
+            '{ echo "** monkey aborted: launch failed"; exit 1; };; '
             '*) echo "** No activities found to run, monkey aborted."; exit 1;; esac')
+
+
+def prepare(cmd):
+    """发给手机前的改写：monkey 拉起换成 am start，再按后台屏（启用时）改目标屏。"""
+    from . import screen
+    return screen.rewrite(launcher(cmd))
 
 
 class Result:
@@ -59,7 +65,7 @@ class ShizukuBridge:
     def exec(self, cmd, stdin=None, timeout=None):
         """命令在 Java 后台线程里跑，这里轮询：等的时候不占解释器锁（停止、界面轮询、看门狗照常），超时自己掐。"""
         t = time.monotonic()
-        job = self.shell.submit(launcher(cmd), stdin)
+        job = self.shell.submit(prepare(cmd), stdin)
         deadline, delay, timed_out = t + (timeout or 600), 0.002, False
         while not job.isDone():
             if time.monotonic() > deadline:
@@ -97,7 +103,7 @@ class AdbBridge:
     def exec(self, cmd, stdin=None, timeout=None):
         try:
             # 用 shell 不用 exec-out：shell v2 分开 stderr 并带回退出码，引擎要看退出码
-            r = _run([self.adb, "-s", self.serial, "shell", cmd],
+            r = _run([self.adb, "-s", self.serial, "shell", prepare(cmd)],
                      input=stdin, capture_output=True, timeout=timeout or 600)
         except subprocess.TimeoutExpired:
             return Result(124, b"", b"", True)
