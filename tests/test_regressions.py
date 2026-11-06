@@ -184,10 +184,11 @@ class InputTests(unittest.TestCase):
         self.assertFalse(p.type_text("广告", timeout=0.5))
         self.assertEqual(p.d.shell.call_args.args, ("input keyevent BACK",))
 
-    def search_phone(self, with_result, search_page=False, results=None):
+    def search_phone(self, with_result, search_page=False, results=None, exit_code=0):
         """search_page：系统有直达设置搜索页的动作（ColorOS 的 MAIN_SEARCH，#650）。"""
         p = phone()
         p.reader.shell = Mock(return_value=types.SimpleNamespace(
+            exit_code=exit_code,
             output="Starting: Intent" if search_page else "Error: Activity not started, unable to resolve Intent"))
         home = ET.fromstring('<node text="搜索设置项" bounds="[50,100][1100,200]"/>')
         edit = ET.fromstring('<node text="广告" class="android.widget.EditText" bounds="[50,100][1000,200]"/>')
@@ -217,6 +218,14 @@ class InputTests(unittest.TestCase):
 
     def test_unresolved_search_action_falls_back_to_the_settings_home(self):
         p = self.search_phone(True)
+        with patch.object(fast.time, "time", side_effect=itertools.count(0, 0.2)), patch.object(fast.time, "sleep"):
+            self.assertTrue(p.setting("广告"))
+        commands = [c.args[0] for c in p.reader.shell.call_args_list]
+        self.assertIn("am start -f 0x10008000 -a android.settings.SETTINGS", commands)
+
+    def test_search_action_with_a_nonzero_exit_does_not_count_as_opened(self):
+        """am start 打印了 Starting 但退出码非零：不当搜索页已打开，回设置首页。"""
+        p = self.search_phone(True, search_page=True, exit_code=1)
         with patch.object(fast.time, "time", side_effect=itertools.count(0, 0.2)), patch.object(fast.time, "sleep"):
             self.assertTrue(p.setting("广告"))
         commands = [c.args[0] for c in p.reader.shell.call_args_list]

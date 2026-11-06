@@ -6,9 +6,12 @@
 BUILD = "PMX110_17.0.0"
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 import time
+from collections import namedtuple
 
 import adb_link
 from fast import ScreenLocked, bounds
+
+MenuState = namedtuple("MenuState", "close_all_disabled system_apps_shown")
 
 ONLY = globals().get("ONLY") or []
 FAILED_STEPS = globals().get("FAILED_STEPS") or []
@@ -255,50 +258,55 @@ def ad_id_page():
     row("设备标识与广告")
 
 
-def close_all_state():
+def _labelled(text, name):
+    """读屏会把状态后缀并进同一段文字（「全部关闭 - 已停用」），按主语认。"""
+    return text == name or text.startswith(name + " ")
+
+
+def menu_state():
     """打开右上「更多选项」，读「全部关闭」与「显示系统应用」两项的状态，菜单保持打开。
     列表里没有开着的应用时，系统把「全部关闭」置灰（读屏描述「全部关闭 - 已停用」）。"""
     more_menu()
     p.await_page()
-    texts = [t for t, _, _ in p.texts()]
-    require("全部关闭" in texts, "菜单里没有「全部关闭」")
-    disabled = any(t.startswith("全部关闭") and "已停用" in t for t in texts) or any(
-        t == "全部关闭" and n.get("enabled") == "false" for t, _, n in p.texts())
+    items = p.texts()                 # 一次快照：三次 dump 之间列表可能已经变化
+    require(any(_labelled(t, "全部关闭") for t, _, _ in items), "菜单里没有「全部关闭」")
+    disabled = any(_labelled(t, "全部关闭") and "已停用" in t for t, _, _ in items) or any(
+        t == "全部关闭" and n.get("enabled") == "false" for t, _, n in items)
     # 显示系统应用后，这一项换成「隐藏系统应用」（PMX110 实测）
     system_shown = any(t.startswith("隐藏系统应用") or (t.startswith("显示系统应用") and "已选中" in t
-                                                       and "未选中" not in t) for t in texts)
-    return disabled, system_shown
+                                                       and "未选中" not in t) for t, _, _ in items)
+    return MenuState(disabled, system_shown)
 
 
 def close_all_listed(label):
     """当前列表里还有开着的就点「全部关闭」，再开一次菜单确认它变灰（#650）。"""
-    disabled, _ = close_all_state()
-    if disabled:
+    state = menu_state()
+    if state.close_all_disabled:
         p.back()
         print(f"  · 广告跟踪（{label}）：已全部关闭，未点击", flush=True)
         return
     require(p.tap("全部关闭", exact=True, scrolls=0), "未能点「全部关闭」")
     p.confirm()
     p.await_page()
-    disabled, _ = close_all_state()
+    state = menu_state()
     p.back()
-    require(disabled, f"广告跟踪（{label}）：点了「全部关闭」后仍有开着的应用")
+    require(state.close_all_disabled, f"广告跟踪（{label}）：点了「全部关闭」后仍有开着的应用")
     print(f"  · 广告跟踪（{label}）：已全部关闭，菜单项已置灰确认", flush=True)
 
 
 @step("广告跟踪")
 def _():
     # 每个应用一个开关。用菜单「全部关闭」整表关，再看它是否置灰来确认（#650）：
-    # 以前逐行读 559 个应用两遍，约 27 分钟；现在不用滚动列表，个人应用名单也不必读出来。
+    # 以前逐行读整个列表（547 个具名项）两遍，约 27 分钟；现在不用滚动列表，个人应用名单也不必读出来。
     # 版本由引擎判（录制版本对不上会置 safe_mode）；这里只挡「拿这份脚本去跑别的型号」。
     if p.safe_mode or p.d.shell("getprop ro.product.model").output.strip() != "PMX110":
         raise SkipStep("仅在 PMX110 上批量处理广告跟踪")
     ad_id_page()
     row("广告跟踪", activity="OAIDActivity")
-    _, system_shown = close_all_state()
+    state = menu_state()
     p.back()
-    close_all_listed("系统应用已显示" if system_shown else "用户应用")
-    if not system_shown:
+    close_all_listed("系统应用已显示" if state.system_apps_shown else "用户应用")
+    if not state.system_apps_shown:
         more_menu()
         require(p.tap("显示系统应用", scrolls=0), "未能显示系统应用")
         p.await_page()

@@ -39,6 +39,7 @@ class Direct:
 class Search:
     keyword: str
     result: str                 # 搜索结果里要点的那一行标题
+    path: str = ""              # 结果下一行的位置文字；同名结果有多条时按它挑
 
 
 @dataclass(frozen=True)
@@ -95,10 +96,10 @@ ENTRIES = {
     "oppo": {
         "广告跟踪": Entry(
             menu="设置 → 隐私（ColorOS 17 叫「隐私与安全」）→ 设备标识与广告 → 广告跟踪",
-            search=(Search("广告跟踪", "限制广告跟踪"),
+            search=(Search("广告跟踪", "限制广告跟踪", path="隐私与安全 > 隐私 > 设备标识与广告"),
                     Search("设备标识与广告", "设备标识与广告")),
             note="ColorOS 17 用 oplus.intent.action.settings.MAIN_SEARCH 直接打开搜索页（Phone.setting 先试它）；"
-                 "搜「广告跟踪」点位置为「隐私与安全 > 隐私 > 设备标识与广告」的那条。部分版本搜得到但点结果不跳转，"
+                 "搜「广告跟踪」时点位置为「隐私与安全 > 隐私 > 设备标识与广告」的那条。部分版本搜得到但点结果不跳转，"
                  "这时走菜单。列表用右上菜单「全部关闭」整表关，「全部关闭」置灰即全部已关（PMX110，#650）"),
         "下拉搜索": Entry(
             menu="桌面中间向下滑 → 搜索页底部「设置」",
@@ -334,7 +335,8 @@ def reach(p, entry, log=print, now=None, sleep=None, settle=1.2):
             return "direct"
         log(f"  · 直达 {page} 没落在这一页，换下一档")
     for s in entry.search:
-        if p.setting(s.keyword, s.result):
+        extra = {"path": s.path} if s.path else {}
+        if p.setting(s.keyword, s.result, **extra):
             return "search"
     return None
 

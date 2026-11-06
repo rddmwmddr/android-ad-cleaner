@@ -371,6 +371,20 @@ class StoreThemeVideoTests(unittest.TestCase):
         tapped = [c.args[0] for c in self.p.tap.call_args_list]
         self.assertNotIn("全部关闭", tapped)
 
+    def test_ad_tracking_grey_label_with_suffix_alone_is_still_disabled(self):
+        """置灰只体现为一条带后缀的文字（text 为空、content-desc 为「全部关闭 - 已停用」）时也要认。"""
+        self.menu(["全部关闭 - 已停用"])
+        self.scope["close_all_listed"]("用户应用")
+        self.assertNotIn("全部关闭", [c.args[0] for c in self.p.tap.call_args_list])
+
+    def test_ad_tracking_disabled_flag_alone_is_still_disabled(self):
+        """置灰只落在节点 enabled=false 上（文字仍是「全部关闭」）时也要认。"""
+        node = ET.fromstring('<node text="全部关闭" enabled="false"/>')
+        self.p.texts.return_value = [("全部关闭", (0, 0, 1, 1), node)]
+        self.p.tap.return_value = True
+        self.scope["close_all_listed"]("用户应用")
+        self.assertNotIn("全部关闭", [c.args[0] for c in self.p.tap.call_args_list])
+
     def test_ad_tracking_close_all_must_turn_grey(self):
         self.menu(["显示系统应用", "全部关闭"], ["显示系统应用", "全部关闭"])
         with self.assertRaisesRegex(RuntimeError, "仍有开着的应用"):
@@ -600,6 +614,56 @@ class GameCenterTests(unittest.TestCase):
             action(self.scope, "游戏中心")()
         self.scope["row"].assert_not_called()
         self.scope["close_named"].assert_not_called()
+
+
+class AdTrackingFlowTests(unittest.TestCase):
+    """广告跟踪段的编排：搜索不通要回菜单，显示系统应用后要关第二轮并把显示方式恢复（#650）。"""
+
+    def setUp(self):
+        self.p = phone_mock(W=1272, H=2772)
+        self.p.locked.return_value = False
+        self.p.texts.return_value = []
+        self.p.safe_mode = False
+        self.p.back = Mock()
+        self.p.await_page = Mock()
+        self.p.tap = Mock(return_value=True)
+        self.p.d.shell = Mock(side_effect=lambda cmd: SimpleNamespace(
+            exit_code=0, output="PMX110" if cmd.startswith("getprop") else ""))
+        self.scope = load(self.p)
+        self.scope["p"].setting = Mock()
+        self.scope["menu_state"] = Mock()
+        self.scope["close_all_listed"] = Mock()
+        self.scope["page"] = Mock()
+        self.scope["system_settings"] = Mock()
+        self.scope["row"] = Mock()
+        self.scope["more_menu"] = Mock()
+
+    def test_unreachable_search_falls_back_to_the_settings_menu(self):
+        self.scope["p"].setting.return_value = False
+        self.scope["menu_state"].return_value = self.scope["MenuState"](True, True)
+        action(self.scope, "广告跟踪")()
+        self.scope["system_settings"].assert_called_once_with()
+        self.assertEqual([c.args[0] for c in self.scope["row"].call_args_list],
+                         ["隐私与安全", "设备标识与广告", "广告跟踪"])
+
+    def test_system_apps_are_revealed_closed_and_hidden_again(self):
+        self.scope["p"].setting.return_value = True
+        self.scope["menu_state"].side_effect = [self.scope["MenuState"](False, False),
+                                                self.scope["MenuState"](False, True)]
+        action(self.scope, "广告跟踪")()
+        self.assertEqual([c.args[0] for c in self.scope["close_all_listed"].call_args_list],
+                         ["用户应用", "含系统应用"])
+        self.assertEqual([c.args[0] for c in self.p.tap.call_args_list],
+                         ["显示系统应用", "隐藏系统应用"])
+
+    def test_failed_second_round_still_hides_system_apps(self):
+        self.scope["p"].setting.return_value = True
+        self.scope["menu_state"].side_effect = [self.scope["MenuState"](False, False),
+                                                self.scope["MenuState"](False, True)]
+        self.scope["close_all_listed"].side_effect = [None, RuntimeError("仍有开着的应用")]
+        with self.assertRaisesRegex(RuntimeError, "仍有开着的应用"):
+            action(self.scope, "广告跟踪")()
+        self.assertIn("隐藏系统应用", [c.args[0] for c in self.p.tap.call_args_list])
 
 
 class TrackingGuardTests(unittest.TestCase):
