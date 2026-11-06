@@ -48,7 +48,7 @@ aside .step,.side-foot{display:none}
 .more:active{background:var(--fill)}
 .more svg{width:22px;height:22px}
 .more .dot{position:absolute;margin:-14px -14px 0 0;width:8px;height:8px;border-radius:50%;background:var(--bad)}
-main{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:8px 16px 24px;display:flex;flex-direction:column}
+main,#prep{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:8px 16px 24px;display:flex;flex-direction:column}
 main > *{flex-shrink:0}
 
 /* ---------- 文字 ---------- */
@@ -114,6 +114,7 @@ main > .actions{position:sticky;bottom:-24px;margin:auto -16px -24px;padding:12p
 .step-row.done .num{background:var(--ok);color:#fff}
 .step-row.now .num{background:var(--accent);color:#fff}
 .step-row .num svg{width:16px;height:16px}
+.step-row .num .spin{width:16px;height:16px;border-width:2px;border-color:rgba(255,255,255,.35);border-top-color:#fff}
 .step-row .body{flex:1;min-width:0}
 .step-row .body b{display:block;font-size:16px;font-weight:600;line-height:1.4}
 .step-row.done .body b{color:var(--sub)}
@@ -175,6 +176,7 @@ textarea,input[type=text]{border:1px solid var(--line);border-radius:14px}
   main > :nth-child(2){animation-delay:100ms}
   main > :nth-child(3){animation-delay:200ms}
   main > :nth-child(n+4){animation-delay:300ms}
+  #prep .steps{animation:none}
   main > .actions{animation-delay:0ms}
   .modal.show{animation:fade 200ms ease-out both}
   .modal.show .box{animation:rise 400ms var(--ease-drawer) both}

@@ -92,11 +92,13 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         current = this
+        Native.foreground(true)
         notifyShizuku()
     }
 
     override fun onPause() {
         if (current === this) current = null
+        Native.foreground(false)
         super.onPause()
     }
 

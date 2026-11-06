@@ -138,14 +138,31 @@
       `<button class="btn plain" onclick="S.auto=false;pick(S.local)">自己选择要关的</button><button class="btn big" onclick="oneTap()">一键去广告</button>`);
   };
 
-  window.oneTap = function(){ S.auto = true; pick(S.local); };
+  // 一键：不把「检测」「选择要关的」两页闪给用户看（看着像要你选、却自己跳走），换成一页「正在准备」，
+  // 三件事做完一件勾一件；中途要用户处理（锁屏、展开的折叠屏、没有可关的项目）就收起这页，露出原来的页面
+  const PREP = ["检测手机型号和系统", "扫描营销通知", "开始关闭"];
+  const prep = document.createElement("main");
+  prep.id = "prep";
+  prep.className = "hide";
+  main().after(prep);
+  function prepAt(k){
+    prep.innerHTML = `<h1>正在准备</h1><p class="lead">按推荐的项目一键关闭，大约半分钟后开始。</p>
+      <div class="steps">${PREP.map((t, i) => `<div class="step-row ${i < k ? "done" : i === k ? "now" : ""}">
+        <span class="num">${i < k ? I.check : i === k ? `<span class="spin"></span>` : i + 1}</span><div class="body"><b>${t}</b></div></div>`).join("")}</div>`;
+  }
+  function prepShow(on){
+    prep.classList.toggle("hide", !on);
+    main().classList.toggle("hide", on);
+  }
+  window.oneTap = function(){ S.auto = true; prepAt(0); prepShow(true); pick(S.local); };
 
   const detect = showDetect;
   showDetect = async function(){
     await detect();
-    if (!S.auto) return;
+    if (!S.auto) return prepShow(false);
     const next = [...main().querySelectorAll(".actions .btn")].find(b => b.textContent === "下一步");
-    if (next && !next.disabled) showChoose(); else S.auto = false;
+    if (next && !next.disabled){ prepAt(1); showChoose(); }
+    else { S.auto = false; prepShow(false); }
   };
 
   const choose = showChoose;
@@ -156,7 +173,11 @@
       if (n.textContent.includes("插着线")) n.textContent = "执行期间本 App 会切到各个设置页自动点按，请不要碰手机，保持亮屏。";
     });
     await ready;
-    if (auto && S.auto && S.step === 3){ S.auto = false; go(); }
+    if (auto && S.auto && S.step === 3){
+      S.auto = false; prepAt(2);
+      await go();
+    }
+    prepShow(false);           // 开始执行了就是执行页；没开始（没有可关的项目）就露出选择页
   };
 
   askDevOff = function(){
@@ -177,18 +198,23 @@
       log.parentNode.insertBefore(box, log);
       box.appendChild(log);
     }
+    // 先不下结论：后台屏要在执行开始后一两秒才建好，建好了说「照常用手机」，建不了才说「别碰」
+    const lead = main().querySelector("p.lead");
+    lead.textContent = "正在开始……";
+    // 后端报 deciding 时以它为准，一直问到建屏有结论；旧后端没有这个字段，按 8 次 × 500ms 兜底
     const until = Date.now() + 15000;
-    const ask = () => {
-      const again = () => { if (Date.now() < until) setTimeout(ask, 1000); };
-      api.run_mode().then(m => {
-        if (!m || S.step !== 4) return;
-        const lead = main().querySelector("p.lead");
-        if (m.background && lead)
-          lead.textContent = "在一块看不见的后台屏上逐项关闭，你可以照常用手机。做完会发通知。要看进度，回到这里。";
-        if (m.deciding) again();
-      }).catch(again);
-    };
-    setTimeout(ask, 1000);
+    let n = 0;
+    const ask = () => api.run_mode().then(m => {
+      if (!m || S.step !== 4) return;
+      if (m.background){
+        lead.textContent = "在一块看不见的后台屏上逐项关闭，你可以照常用手机。做完会发通知；要看进度，回到这里。";
+        return;
+      }
+      if (m.deciding && Date.now() < until){ setTimeout(ask, 500); return; }
+      if (++n < 8){ setTimeout(ask, 500); return; }
+      lead.textContent = "这台手机建不了后台屏，要借用当前屏幕：请不要碰手机。需要用手机时先点「暂停」，等提示已暂停再拿起手机。";
+    }).catch(() => {});
+    ask();
   };
 
   // 完成页：顶部状态图标；底部「重新开始 / 回到首页」（#632：手机版没有侧栏，停止后回不去）
