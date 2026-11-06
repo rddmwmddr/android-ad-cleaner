@@ -46,7 +46,12 @@ def mode():
     return {"background": screen.active is not None, "deciding": screen.starting}
 
 
-def in_front(fn, package, what, stopped=None):
+def was_stopped(job):
+    """用户点了「停止」：`_work()` 是正常返回的，只能靠 Job 上这个标记认出来。"""
+    return bool(job is not None and job.cancel)
+
+
+def in_front(fn, package, action, stopped=None):
     """fn 运行期间开前台服务、显示悬浮胶囊（不被冻结），能建后台屏就在后台屏上跑。
     结束时：主屏模式回到本 App 看结果（App 自己在后台启动界面会被系统拦，shell 身份的 am start 不受限）；
     后台模式不抢前台（用户可能正在用别的 App），发通知——做完了 / 用户停止 / 出错三种结果文案不同，
@@ -54,17 +59,17 @@ def in_front(fn, package, what, stopped=None):
     def run(*a, **k):
         bg = BACKGROUND and screen.start(package) is not None
         native.busy(True, bg)
-        visible(package, True, f"净 {what}中（后台）" if bg else f"净 {what}中")
-        title, text = f"{what}失败", "点这里查看原因"
+        visible(package, True, f"净 {action}中（后台）" if bg else f"净 {action}中")
+        title, text = f"{action}失败", "点这里查看原因"
         try:
             out = fn(*a, **k)
-            title = "已停止" if stopped is not None and stopped() else f"{what}做完了"
+            title = "已停止" if stopped is not None and stopped() else f"{action}做完了"
             text = "点这里查看结果"
             return out
         finally:
             visible(package, False)
             if bg:
-                screen.stop()
+                screen.release()
             native.busy(False, bg)
             if bg:
                 native.done(title, text)
@@ -103,11 +108,7 @@ def boot(base, data_dir, cache_dir, package="com.ahuamiao.adcleaner"):
     api = app.Api(data_dir, adb=adb.ADB_PATH)
     api.runner = inproc.Runner(api._child_env)
     # 执行与还原都会切到别的 App 的设置页：期间开前台服务保活，结束后回到本 App
-    def stopped():
-        """用户点了「停止」：`_work()` 是正常返回的，只能靠 Job 上这个标记认出来。"""
-        return bool(api.dispatcher.job and api.dispatcher.job.cancel)
-
-    api.dispatcher._work = in_front(api.dispatcher._work, package, "去广告", stopped)
+    api.dispatcher._work = in_front(api.dispatcher._work, package, "去广告", lambda: was_stopped(api.job))
     api.restore = in_front(api.restore, package, "还原")
     api.run_mode = mode
     API = api

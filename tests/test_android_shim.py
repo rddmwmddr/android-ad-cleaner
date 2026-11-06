@@ -8,7 +8,7 @@ import time
 import unittest
 import warnings
 from pathlib import Path
-from unittest import mock
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "android" / "app" / "src" / "main" / "python"))
@@ -133,6 +133,14 @@ class ShizukuPollTest(unittest.TestCase):
         self.assertTrue(job.cancelled)
 
 
+PAGE = ('<hierarchy rotation="0">'
+        '<node display-id="0" package="com.home" text="主屏" bounds="[0,0][10,10]" />'
+        '<node display-id="7" package="com.x" text="" bounds="[0,0][100,100]">'
+        '<node display-id="7" resource-id="com.x:id/menu" text="菜单" clickable="true" bounds="[10,10][30,30]" />'
+        '<node display-id="7" resource-id="com.x:id/menu" text="菜单" clickable="true" bounds="[40,10][60,30]" />'
+        '</node></hierarchy>')
+
+
 class BackgroundScreenTest(unittest.TestCase):
     """后台屏（#618）：命令改发到第 N 块屏，读屏只留这块屏，选择器在过滤后的页面上自己匹配。"""
 
@@ -181,21 +189,14 @@ class BackgroundScreenTest(unittest.TestCase):
         for cmd in ("am start -n a/.B", "input tap 1 2", "screencap -p", "input keyevent HOME"):
             self.assertEqual(screen.rewrite(cmd), cmd)
 
-    PAGE = ('<hierarchy rotation="0">'
-            '<node display-id="0" package="com.home" text="主屏" bounds="[0,0][10,10]" />'
-            '<node display-id="7" package="com.x" text="" bounds="[0,0][100,100]">'
-            '<node display-id="7" resource-id="com.x:id/menu" text="菜单" clickable="true" bounds="[10,10][30,30]" />'
-            '<node display-id="7" resource-id="com.x:id/menu" text="菜单" clickable="true" bounds="[40,10][60,30]" />'
-            '</node></hierarchy>')
-
     def test_dump_keeps_only_this_screen(self):
-        xml = u2.only_display(self.PAGE, 7)
+        xml = u2.only_display(PAGE, 7)
         self.assertNotIn("主屏", xml)
         self.assertEqual(xml.count("菜单"), 2)
 
     def test_selector_matches_on_filtered_page(self):
         import xml.etree.ElementTree as ET
-        nodes = list(ET.fromstring(u2.only_display(self.PAGE, 7)).iter("node"))
+        nodes = list(ET.fromstring(u2.only_display(PAGE, 7)).iter("node"))
         hits = [n for n in nodes if u2.matches(n, u2.Selector(resourceId="com.x:id/menu"))]
         self.assertEqual([u2.bounds_of(n) for n in hits], [(10, 10, 30, 30), (40, 10, 60, 30)])
         self.assertTrue(any(u2.matches(n, u2.Selector(text="菜单", clickable=True)) for n in nodes))
@@ -215,6 +216,7 @@ class ScreenBridge:
         self.pid = False        # PID_FILE 在不在
         self.stale = False      # 上一次的 Vd 还占着，SurfaceFlinger 里还有一块同名屏
         self.built = False      # 本次的 Vd 起来了
+        self.deciding_when_spawned = None   # 拉起 Vd 那一刻界面的说法：应当还在等结论
         self.cmds = []
 
     def exec(self, cmd, stdin=None, timeout=None):
@@ -240,6 +242,7 @@ class ScreenBridge:
 
     def daemon(self, name, cmd):
         self.cmds.append(f"daemon {name}")
+        self.deciding_when_spawned = screen.starting
         self.built, self.pid = True, True
         return True
 
@@ -274,12 +277,30 @@ class ScreenLifecycleTest(unittest.TestCase):
         self.fake.log = "DISPLAY 7 flags=0x1c9\n"
         self.assertFalse(screen.start("com.ahuamiao.adcleaner").unlocked)
 
+    def test_the_screen_is_deciding_while_vd_starts(self):
+        """界面在结论出来前要一直问：这条状态只有 start() 里那一处置真。"""
+        screen.start("com.ahuamiao.adcleaner")
+        self.assertTrue(self.fake.deciding_when_spawned)
+        self.assertFalse(screen.starting)
+
     def test_second_start_reuses_the_running_screen(self):
         first = screen.start("com.ahuamiao.adcleaner")
         calls = len(self.fake.cmds)
         self.assertIs(screen.start("com.ahuamiao.adcleaner"), first)
         self.assertIs(screen.active, first)
         self.assertEqual(len(self.fake.cmds), calls, "已经有一块屏了，不该再建第二块")
+
+    def test_the_last_holder_tears_the_screen_down(self):
+        """两个入口借同一块屏：先结束的那个不能把还在用的屏拆掉。"""
+        first = screen.start("com.ahuamiao.adcleaner")
+        self.assertIs(screen.start("com.ahuamiao.adcleaner"), first)
+        built = len(self.fake.cmds)
+        screen.release()
+        self.assertIs(screen.active, first)
+        self.assertEqual(len(self.fake.cmds), built, "还有执行正跑在屏上，一条命令都不该发")
+        screen.release()
+        self.assertIsNone(screen.active)
+        self.assertIn("stop_daemon vd", self.fake.cmds[built:])
 
     def test_a_failed_build_does_not_reset_the_running_screen(self):
         """失败清理只针对本次尝试：另一次执行正跑在屏上时，补救不能把它那块拆掉。"""
@@ -299,7 +320,7 @@ class ScreenLifecycleTest(unittest.TestCase):
     def test_leftover_daemon_is_reclaimed_before_building(self):
         self.fake.pid, self.fake.stale = True, True
         self.assertIsNotNone(screen.start("com.ahuamiao.adcleaner"))
-        kill = next(i for i, c in enumerate(self.fake.cmds) if c.startswith("kill $(cat"))
+        kill = next(i for i, c in enumerate(self.fake.cmds) if "kill $(cat" in c)
         self.assertLess(kill, self.fake.cmds.index("daemon vd"), "旧 Vd 还占着同名屏，必须先清掉再建")
 
 
@@ -318,36 +339,32 @@ class InFrontTest(unittest.TestCase):
 
     def setUp(self):
         self.native = Recorder()
-        self.fake = FakeBridge()
-        self.saved = (main.native, bridge._bridge, screen.active)
-        main.native, bridge._bridge, screen.active = self.native, self.fake, None
+        self.fake = ScreenBridge()
+        self.saved = (main.native, bridge._bridge, screen.active, screen.starting)
+        main.native, bridge._bridge, screen.active, screen.starting = self.native, self.fake, None, False
 
     def tearDown(self):
-        main.native, bridge._bridge, screen.active = self.saved
+        main.native, bridge._bridge, screen.active, screen.starting = self.saved
 
-    def run_with(self, background, fn, what="去广告", stopped=None):
-        built = screen.Screen(7, "11", screen.ALWAYS_UNLOCKED) if background else None
-        with mock.patch.object(main.screen, "start", return_value=built) as started, \
-                mock.patch.object(main.screen, "stop") as stopped_screen:
-            out = main.in_front(fn, "com.x", what, stopped)()
-        return out, started, stopped_screen
+    def run_with(self, background, fn, action="去广告", stopped=None):
+        if not background:
+            self.fake.sf_id = None          # 建不了屏：这次走主屏
+        return main.in_front(fn, "com.x", action, stopped)()
 
     def done_calls(self):
         return [c for c in self.native.calls if c[0] == "done"]
 
     def test_background_run_notifies_done(self):
-        out, started, stopped_screen = self.run_with(True, lambda: "ok")
-        self.assertEqual(out, "ok")
-        started.assert_called_once()
-        stopped_screen.assert_called_once()
+        self.assertEqual(self.run_with(True, lambda: "ok"), "ok")
         self.assertEqual(self.done_calls(), [("done", "去广告做完了", "点这里查看结果")])
         self.assertIn(("busy", True, True), self.native.calls)
         self.assertIn(("busy", False, True), self.native.calls)
         self.assertIn(("capsule", True, "净 去广告中（后台）"), self.native.calls)
-        self.assertEqual([c for c in self.fake.cmds if c[0].startswith("am start")], [])
+        self.assertIsNone(screen.active, "用完要拆屏")
+        self.assertEqual([c for c in self.fake.cmds if c.startswith("am start -n")], [])
 
     def test_user_stop_is_not_reported_as_done(self):
-        self.run_with(True, lambda: "ok", stopped=lambda: True)
+        self.run_with(True, lambda: "ok", stopped=lambda: main.was_stopped(SimpleNamespace(cancel=True)))
         self.assertEqual(self.done_calls(), [("done", "已停止", "点这里查看结果")])
 
     def test_failure_is_not_reported_as_done(self):
@@ -358,19 +375,27 @@ class InFrontTest(unittest.TestCase):
             self.run_with(True, boom)
         self.assertEqual(self.done_calls(), [("done", "去广告失败", "点这里查看原因")])
         self.assertIn(("busy", False, True), self.native.calls, "出错也要把保活与胶囊收掉")
+        self.assertIsNone(screen.active)
 
     def test_restore_reports_its_own_name(self):
-        self.run_with(True, lambda: "ok", what="还原")
+        self.run_with(True, lambda: "ok", action="还原")
         self.assertEqual(self.done_calls(), [("done", "还原做完了", "点这里查看结果")])
         self.assertIn(("capsule", True, "净 还原中（后台）"), self.native.calls)
 
     def test_main_screen_run_comes_back_to_the_app(self):
-        out, _, stopped_screen = self.run_with(False, lambda: "ok")
-        self.assertEqual(out, "ok")
-        stopped_screen.assert_not_called()
+        self.assertEqual(self.run_with(False, lambda: "ok"), "ok")
         self.assertEqual(self.done_calls(), [])
         self.assertIn(("busy", True, False), self.native.calls)
-        self.assertIn("am start -n com.x/.MainActivity", [c[0] for c in self.fake.cmds])
+        self.assertIn("am start -n com.x/.MainActivity", self.fake.cmds)
+
+
+class WasStoppedTest(unittest.TestCase):
+    """boot() 靠它在「做完了」和「已停止」之间分开：`_work()` 是正常返回的，只有 Job 上这个标记认得出来。"""
+
+    def test_only_a_cancelled_job_counts(self):
+        self.assertTrue(main.was_stopped(SimpleNamespace(cancel=True)))
+        self.assertFalse(main.was_stopped(SimpleNamespace(cancel=False)))
+        self.assertFalse(main.was_stopped(None))
 
 
 class RunModeTest(unittest.TestCase):
@@ -412,7 +437,7 @@ class ScreenObjectTest(unittest.TestCase):
             return self.page
 
     def test_text_and_bounds_come_from_this_screen_only(self):
-        dev = self.Device(u2.only_display(BackgroundScreenTest.PAGE, 7))
+        dev = self.Device(u2.only_display(PAGE, 7))
         second = u2.UiObject(dev, u2.Selector(text="菜单", instance=1))
         self.assertEqual(second.get_text(), "菜单")
         self.assertEqual(second.info["text"], "菜单")

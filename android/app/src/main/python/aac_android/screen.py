@@ -20,6 +20,7 @@ class Screen:
         self.display = display      # 安卓的显示编号：am start --display、input -d、dumpsys 分段都用它
         self.sf = sf                # SurfaceFlinger 的编号：screencap -d 只认这个
         self.flags = flags          # Vd 建屏时实际用上的标记（它打印的 flags=0x…）
+        self.holders = 0            # 有几个入口正借这块屏：最后一个用完才拆
 
     @property
     def unlocked(self):
@@ -39,15 +40,21 @@ def _size(b):
     return w, h, dpi
 
 
+def _discard():
+    """拆掉 Vd。不复位 `active`：调用方自己决定那块屏还算不算数。"""
+    b = bridge.get()
+    b.stop_daemon("vd")
+    b.exec(f"[ -f {PID_FILE} ] && kill $(cat {PID_FILE}) 2>/dev/null; rm -f {PID_FILE}", None, 10)
+
+
 def _reclaim():
     """上一次进程被杀时没走到 stop()：PID_FILE 里的 Vd 还常驻，那块同名屏要等它死了才消失。
     建新屏前先清掉并等 SurfaceFlinger 里没有它——不等就会把旧屏的编号当成新屏的。"""
     b = bridge.get()
     left = b.exec(f"[ -f {PID_FILE} ] && echo yes", None, 10).out.strip() == b"yes"
-    b.stop_daemon("vd")
+    _discard()
     if not left:
         return
-    b.exec(f"kill $(cat {PID_FILE}) 2>/dev/null; rm -f {PID_FILE}", None, 10)
     deadline = time.monotonic() + 3
     while time.monotonic() < deadline:
         dump = b.exec("dumpsys SurfaceFlinger --displays", None, 10).out.decode("utf-8", "replace")
@@ -56,22 +63,15 @@ def _reclaim():
         time.sleep(0.2)
 
 
-def _discard():
-    """拆掉本次尝试起的 Vd。不复位 `active`：另一次执行可能正跑在屏上，拆掉的是它那块。"""
-    b = bridge.get()
-    b.stop_daemon("vd")
-    b.exec(f"[ -f {PID_FILE} ] && kill $(cat {PID_FILE}) 2>/dev/null; rm -f {PID_FILE}", None, 10)
-
-
 def _build(package):
     """建一块屏；建不了返回 None。"""
+    _reclaim()                      # 先清残留：这一步之后的任何早退都不该把旧 Vd 留在屏上
     b = bridge.get()
     paths = b.exec(f"pm path {package}", None, 10).out.decode()
     apk = next((line[len("package:"):].strip() for line in paths.splitlines() if line.endswith("base.apk")), "")
     w, h, dpi = _size(b)
     if not apk or not (w and h and dpi):
         return None
-    _reclaim()
     b.exec(f"rm -f {LOG_FILE}", None, 10)
     b.daemon("vd", f"echo $$ > {PID_FILE}; CLASSPATH={apk} exec app_process / com.ahuamiao.adcleaner.Vd "
                    f"{w} {h} {dpi} > {LOG_FILE} 2>&1")
@@ -97,9 +97,10 @@ def _build(package):
 
 def start(package):
     """建屏并启用改写；建不了返回 None（调用方照旧用主屏）。
-    已经有一块在跑就复用它：建第二块会在拆除时把第一块连带拆掉，也没必要有两块。"""
+    已经有一块在跑就借给它：建第二块会在拆除时把第一块连带拆掉，也没必要有两块。用完调 `release()`。"""
     global active, starting
     if active is not None:
+        active.holders += 1
         return active
     starting = True
     try:
@@ -107,8 +108,19 @@ def start(package):
     finally:
         starting = False
     if built is not None:
+        built.holders = 1
         active = built
     return built
+
+
+def release():
+    """一个入口用完这块屏了：还有别处借着的就留着，最后一个走的拆掉。"""
+    global active
+    if active is None:
+        return
+    active.holders -= 1
+    if active.holders <= 0:
+        stop()
 
 
 def stop():

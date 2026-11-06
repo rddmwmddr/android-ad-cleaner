@@ -201,8 +201,8 @@ class UiObject:
         return node
 
     def _local_wait(self, exists, timeout):
-        """后台屏下没有 waitForExists：自己轮询过滤后的页面。读屏读超时同样只 warn 并回落一次查询，
-        与主屏路径同形——`wait()` 的契约就是不抛这个异常。"""
+        """后台屏下没有 waitForExists：自己轮询过滤后的页面。读屏读超时只 warn 并回落一次查询——
+        `wait()` 的契约就是不抛这个异常；回落那次自己也可能超时，所以它也被兜住。"""
         deadline = time.monotonic() + timeout
         try:
             while True:
