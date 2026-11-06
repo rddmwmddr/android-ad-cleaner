@@ -55,7 +55,13 @@ class PairingService : Service() {
         val code = intent?.getIntExtra(CODE, 0) ?: 0
         startForeground(ID, status("正在等你打开配对码", "在「无线调试」里点「使用配对码配对设备」，本 App 会读出屏幕上的 6 位数字完成授权。"),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
-        if (data == null || projection != null) return START_NOT_STICKY
+        if (projection != null) return START_NOT_STICKY      // 已经在等了，重复启动的这一次什么都不用做，更不能把那条会话杀掉
+        if (data == null) {                       // 没有授权结果：别留一条永远不消失的「正在等你打开配对码」
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        stopped = false                           // 上一次会话收尾时置过 true；同一个实例被复用时要从头开始
         looper = HandlerThread("aac-pair").also { it.start() }
         val handler = Handler(looper.looper)
         val mp = getSystemService(MediaProjectionManager::class.java).getMediaProjection(code, data)
@@ -81,6 +87,18 @@ class PairingService : Service() {
      * 端口要先确认有人在听：mDNS 会把上一次对话框的端口留一会儿（模拟器实测），连过去被拒，那不是数字认错了。
      */
     private fun watch() {
+        try {
+            watchLoop()
+        } catch (e: Exception) {
+            Log.w(TAG, "等配对码时出错：${e.javaClass.simpleName}")
+            if (!stopped) fallback("读配对码时出了点问题，请手动填写。")
+        } finally {
+            // 任何一条退出路径都要把截屏与前台通知收掉，别让屏幕一直被捕获
+            if (!stopped) finish(null)
+        }
+    }
+
+    private fun watchLoop() {
         AdbShell.app = applicationContext
         val deadline = System.currentTimeMillis() + 5 * 60_000
         val tried = mutableSetOf<String>()      // 这个端口上配对被拒过的数字
@@ -133,7 +151,7 @@ class PairingService : Service() {
                 return
             }
         }
-        if (!stopped) fallback("等了 5 分钟没有看到配对码。回到「安卓去广告」再点一次「开始授权」。", input = false)
+        if (!stopped) fallback("等了 5 分钟没有看到配对码。请先在「无线调试」里打开「使用配对码配对设备」。")
     }
 
     private fun grab(): Bitmap? {
@@ -173,9 +191,9 @@ class PairingService : Service() {
     private fun finish(done: String?) {
         if (stopped) return
         stopped = true
-        runCatching { display?.release() }
-        runCatching { reader?.close() }
-        runCatching { projection?.stop() }
+        runCatching { display?.release() }; display = null
+        runCatching { reader?.close() }; reader = null
+        runCatching { projection?.stop() }; projection = null     // 留成 null，下一次启动才知道没有会话在跑
         if (::looper.isInitialized) looper.quitSafely()
         stopForeground(STOP_FOREGROUND_REMOVE)
         if (done != null) Pairing.notify(this, done, "点这里回到「安卓去广告」开始去广告")
@@ -183,11 +201,10 @@ class PairingService : Service() {
         stopSelf()
     }
 
-    private fun fallback(why: String, input: Boolean = true) {
+    private fun fallback(why: String) {
         Log.i(TAG, "退回手动：$why")
         finish(null)
-        if (input) Pairing.notify(this, "请手动填写 6 位数字", why + "下拉通知栏，点这条通知下方的「填写」。", input = true)
-        else Pairing.notify(this, "授权没有完成", why)
+        Pairing.notify(this, "请手动填写 6 位数字", why + "下拉通知栏，点这条通知下方的「填写」。", input = true)
     }
 
     private fun status(title: String, text: String): Notification {

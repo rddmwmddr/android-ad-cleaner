@@ -41,7 +41,6 @@
     shield: svg(`<path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/>`),
     lock: svg(`<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>`),
   };
-  window.__aacIcon = I;
 
   const brand = document.querySelector(".brand");
   brand.insertAdjacentHTML("afterend", `<button class="more" aria-label="更多" onclick="openMore()">${I.more}<span class="dot hide" id="moredot"></span></button>`);
@@ -156,13 +155,24 @@
   }
   window.oneTap = function(){ S.auto = true; prepAt(0); prepShow(true); pick(S.local); };
 
+  // 一键流程里任何一步抛错都要把主页面放回来：手机版把侧栏藏了，停在「正在准备」就整页没有出口
+  const backToMain = () => { S.auto = false; prepShow(false); };
+
   const detect = showDetect;
   showDetect = async function(){
-    await detect();
-    if (!S.auto) return prepShow(false);
-    const next = [...main().querySelectorAll(".actions .btn")].find(b => b.textContent === "下一步");
-    if (next && !next.disabled){ prepAt(1); showChoose(); }
-    else { S.auto = false; prepShow(false); }
+    try {
+      await detect();
+      if (!S.auto) return;
+      const next = [...main().querySelectorAll(".actions .btn")].find(b => b.textContent === "下一步");
+      if (next && !next.disabled){ prepAt(1); showChoose(); }
+      else backToMain();
+    } catch (e) {
+      backToMain();
+      main().innerHTML = `<h1>检测失败</h1><p class="lead">${esc(String((e && e.message) || e))}</p>
+        <div class="actions"><button class="btn" onclick="showConnect()">返回</button></div>`;
+    } finally {
+      if (!S.auto) prepShow(false);      // 普通「检测」不经过一键的「正在准备」页，别让它留在上面
+    }
   };
 
   const choose = showChoose;
@@ -172,12 +182,18 @@
     main().querySelectorAll(".note.info").forEach(n => {
       if (n.textContent.includes("插着线")) n.textContent = "执行期间本 App 会切到各个设置页自动点按，请不要碰手机，保持亮屏。";
     });
-    await ready;
-    if (auto && S.auto && S.step === 3){
-      S.auto = false; prepAt(2);
-      await go();
+    try {
+      await ready;
+      if (auto && S.auto && S.step === 3){
+        S.auto = false; prepAt(2);
+        await go();
+      }
+    } catch (e) {
+      // 露出选择页让用户能重来；执行页是否真的起来了由引擎那边的状态决定，这里不覆盖
+      backToMain();          // 不能留着 S.auto：否则用户点「上一步 → 重新检测」会被当成还在自动流程里，不经确认直接开跑
+    } finally {
+      prepShow(false);         // 开始执行了就是执行页；没开始（没有可关的项目、或中途出错）就露出选择页
     }
-    prepShow(false);           // 开始执行了就是执行页；没开始（没有可关的项目）就露出选择页
   };
 
   askDevOff = function(){

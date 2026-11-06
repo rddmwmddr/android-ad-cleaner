@@ -41,6 +41,15 @@ class FinishStayOnTest(unittest.TestCase):
             self.assertEqual(puts, [])
             self.assertIn("插电常亮未改动", out)
 
+    def test_snapshot_holding_null_says_the_value_was_not_recorded(self):
+        with tempfile.TemporaryDirectory() as root:
+            snap = Backups(root).create("M")
+            Path(snap, "stay_on.txt").write_text("null", encoding="utf-8")     # 从来没设过，settings get 回 null
+            puts, out = self.finish(root)
+            self.assertEqual(puts, [])
+            self.assertIn("插电常亮未改动", out)
+            self.assertNotIn("没有找到改动前的快照", out)
+
     def test_newest_snapshot_with_the_file_wins(self):
         with tempfile.TemporaryDirectory() as root:
             for name, v in (("M-20261105-0900", "7"), ("M-20261106-0900", "15")):

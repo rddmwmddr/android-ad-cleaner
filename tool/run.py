@@ -808,6 +808,8 @@ def cmd_finish(serial, rest):
     if v.isdigit():
         sh(serial, f"settings put global stay_on_while_plugged_in {v}")
         print(f"插电常亮已改回 {v}")
+    elif f:
+        print("插电常亮未改动（快照里没有记下原值）")
     else:
         print("插电常亮未改动（没有找到改动前的快照）")
     sh(serial, "input keyevent HOME")
