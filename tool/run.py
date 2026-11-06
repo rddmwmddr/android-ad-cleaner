@@ -800,7 +800,10 @@ def cmd_quickapp(serial, rest):
 
 def cmd_finish(serial, rest):
     f = os.path.join(latest_backup(serial), "stay_on.txt")
-    v = open(f, encoding="utf-8").read().strip() if os.path.exists(f) else "0"
+    v = "0"
+    if os.path.exists(f):
+        with open(f, encoding="utf-8") as fh:
+            v = fh.read().strip()
     sh(serial, f"settings put global stay_on_while_plugged_in {v or 0}")
     sh(serial, "input keyevent HOME")
     print(f"插电常亮已改回 {v or 0}")

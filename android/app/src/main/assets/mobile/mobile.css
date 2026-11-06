@@ -1,0 +1,21 @@
+/* 手机竖屏：侧栏改成顶栏，步骤条收起，按钮放大 */
+.btn.big{display:block;width:100%;padding:15px;font-size:17px;border-radius:12px;margin-top:4px}
+@media (max-width: 760px){
+  .app{grid-template-columns:1fr;grid-template-rows:auto 1fr;height:100vh;height:100dvh}
+  aside{flex-direction:row;flex-wrap:wrap;align-items:center;gap:0;padding:10px 10px 6px;border-right:0;border-bottom:1px solid var(--line)}
+  aside .step{display:none}
+  .brand{flex:1 1 100%;padding:0 6px 6px;font-size:16px}
+  .side-foot{margin:0;flex-direction:row;flex-wrap:wrap;gap:0;width:100%}
+  .link{padding:5px 8px;font-size:13px}
+  .ver{display:none}
+  main{padding:18px 16px 32px}
+  h1{font-size:20px}
+  .card{padding:16px}
+  .grid{grid-template-columns:1fr 1fr;gap:8px}
+  .actions{flex-wrap:wrap}
+  .actions .btn{flex:1 1 auto}
+  .log{height:260px}
+  .chan{max-height:none}
+  .res{flex-wrap:wrap;gap:6px 10px}
+  .res .d{flex:1 1 100%}
+}
