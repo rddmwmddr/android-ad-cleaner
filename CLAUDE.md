@@ -7,12 +7,12 @@
 ## 开发
 
 - 回归：`python -m unittest discover -s tests`；本机用仓库根的 `.venv/bin/python`（系统 python 缺 adbutils，会报一串 ModuleNotFoundError）。只装 `requirements.txt` 就够，不需要 pywebview / pillow。并行会话在各自的 worktree 里干活时，那个目录没有 `.venv`，用主副本 `.venv/bin/python` 的绝对路径；Read/Edit 也一律用该 worktree 的绝对路径。只跑一个文件时加 `PYTHONPATH=tests`：`PYTHONPATH=tests python -m unittest tests.test_row`（`tests/` 里的用例按顶层模块 import `fixtures`）。
-- 本机 `.venv` 是 3.13，与 CI 的 Linux job 同一版，上面那条回归命令就是本机口径，不必再用别的解释器跑一遍。3.12 那侧由 Windows job 与发版打包（`gui/build_mac.sh` 自建的 `gui/.venv`）守——解释器会改写部分输出（3.13 起编译器剥掉文档字符串的公共缩进，异常 repr、argparse 帮助同理），别假设两个版本跑的是同一份逐字输出。
+- 本机 `.venv` 是 3.13（仓库根的 `.python-version` 钉着这一版），与 CI 的 Linux job 同一版，上面那条回归命令就是本机口径，不必再用别的解释器跑一遍；重建时照 `.python-version` 走，别升到更新的版本。3.12 只剩 Windows job 与发版打包在跑，而那两边会 skip 掉 POSIX-only 的一批用例（包括 CLI 逐字节对拍），macOS 打包不跑回归——解释器会改写部分输出（3.13 起编译器剥掉文档字符串的公共缩进，异常 repr、argparse 帮助同理），别假设两版逐字相同。
 - 数基线总数用干净副本：先 `git rev-parse origin/main` 记下 `<sha>`，再 `git archive <sha> | tar -x -C /tmp/x`，在 `/tmp/x` 里跑同一套。主副本里可能躺着别的会话没提交的用例。
 - 改动面与审查对比用分支基点的固定 SHA（`git merge-base HEAD origin/main` 的结果，`git diff <sha>`），不用 `origin/main` 尖端——并行会话会推进它。
 - 主副本的当前分支随时被别的会话切走（`main` 只是其中一种状态），所以切分支、丢弃改动（`git checkout --`、`restore`、`reset`、`stash`）都在 `git worktree add` 出来的目录里做；主副本只做合并与只读操作。
 - 推送前再 `git fetch origin main` 并 rebase：并行会话会在开工到推送之间推进 main，基于旧 SHA 推送会让 PR 直接 `CONFLICTING`，CI 也不触发。
-- CI：`.github/workflows/test.yml` 在 PR 和 main 推送时自动跑同一套，Linux（`unittest`，3.13）与 Windows（`unittest-windows`，3.12）各一个 job——两版解释器各守一次，不重复跑同一组合；两边 skip 的用例不一样，判断覆盖时看 `-v` 输出里的 skipped 行，别假设两边跑的是同一批，也别指望 Windows 那个 job 能当 3.13 的替代。`build-windows.yml` 只在 `v*` 标签或手动触发时打包，不守 PR。
+- CI：`.github/workflows/test.yml` 在 PR 和 main 推送时自动跑同一套，Linux（`unittest`，3.13）与 Windows（`unittest-windows`，3.12）各一个 job，两版解释器各跑一次；两边 skip 的用例不一样（Windows 侧 skip 掉 POSIX-only 那批，含 CLI 逐字节对拍），判断覆盖时看 `-v` 输出里的 skipped 行，别假设两边跑的是同一批。`build-windows.yml` 只在 `v*` 标签或手动触发时打包，不守 PR。
 - 静态检查：`uvx ruff@0.17.3 check --select F,E9 tool tests gui`，本地与 CI 同一个版本（CI 就钉 0.17.3，`.venv` 里没有 ruff）。不查 `recipes/`——机型脚本靠注入作用域执行，静态分析看到的全是未定义名；也不开格式与行长规则。
 - CHANGELOG 一条一行、≤ 80 字，落在 `## 未发布` 的 `### 新增` / `### 修复` / `### 内部` 之一，结尾挂一个编号（有 PR 挂 PR 号，只有 issue 的挂 issue 号；内部重构再加 ADR 号）。内部条目允许点一个符号名，但不展开机制；测试数、基线 SHA、对拍组数一律不写——那些在 PR 描述与 ADR 里。`## 未发布` 期间不写验证行，发版时才补。rebase 后先 `git rebase --continue` 把提交落完、再跑回归与对拍，并确认 `## 未发布` 没有被已发版的小节吸收（main 刚发过版时要重新开出来）。
 - 审查标准：见 [CODING_STANDARDS.md](CODING_STANDARDS.md)，只放判断项；机械规则交给 CI。
