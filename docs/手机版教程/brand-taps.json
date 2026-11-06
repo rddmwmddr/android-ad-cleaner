@@ -1,0 +1,9 @@
+{
+  "comment": "各品牌「连点 7 下」表格的单一来源（#654）。改品牌只改这份 JSON，再跑 python tool/gen_brand_taps.py；三处标记区内的表格（android-tutorial.html、docs/手机版教程/README.md、docs/00-打开开发者模式.md）由它渲染，标记区外的正文不在此列。tests/test_doc_consistency.py 守卫漂移。",
+  "rows": [
+    { "brand": "小米 / Redmi / POCO", "path": "设置 → 我的设备 → 全部参数与信息", "tap": "「关于手机」里的「OS 版本」" },
+    { "brand": "vivo / iQOO", "path": "设置 → 系统管理与升级 → 版本信息", "tap": "「关于手机 → 版本信息」里的「软件版本号」" },
+    { "brand": "OPPO / 一加 / realme", "path": "设置 → 关于本机 → 版本信息", "tap": "「关于本机 → 版本信息」里的「版本号」" },
+    { "brand": "荣耀、华为老机型", "path": "设置 → 关于手机", "tap": "「关于手机」里的「版本号」" }
+  ]
+}
