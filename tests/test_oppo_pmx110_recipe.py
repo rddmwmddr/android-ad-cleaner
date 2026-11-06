@@ -352,6 +352,45 @@ class StoreThemeVideoTests(unittest.TestCase):
         self.assertEqual([c.args[0] for c in self.scope["close_named"].call_args_list],
                          [["个性化推荐"], ["首页：活动弹窗"]])
 
+    def menu(self, *screens):
+        """每次读屏返回一屏菜单文字；「已停用」写在读屏描述里（PMX110 实测）。"""
+        frames = iter(screens)
+        node = ET.fromstring("<node/>")
+        current = []
+        def texts():
+            return [(t, (0, 0, 1, 1), node) for t in current]
+        def advance():
+            current[:] = next(frames)
+            return True
+        self.p.tap.side_effect = lambda text, **kw: advance() if text in ("更多选项", "更多") else True
+        self.p.texts.side_effect = texts
+
+    def test_ad_tracking_menu_already_grey_is_not_clicked(self):
+        self.menu(["显示系统应用 - 未选中", "显示系统应用", "全部关闭 - 已停用", "全部关闭"])
+        self.scope["close_all_listed"]("用户应用")
+        tapped = [c.args[0] for c in self.p.tap.call_args_list]
+        self.assertNotIn("全部关闭", tapped)
+
+    def test_ad_tracking_close_all_must_turn_grey(self):
+        self.menu(["显示系统应用", "全部关闭"], ["显示系统应用", "全部关闭"])
+        with self.assertRaisesRegex(RuntimeError, "仍有开着的应用"):
+            self.scope["close_all_listed"]("用户应用")
+        self.assertIn("全部关闭", [c.args[0] for c in self.p.tap.call_args_list])
+
+    def test_ad_tracking_close_all_confirmed_by_grey_item(self):
+        self.menu(["显示系统应用", "全部关闭"], ["显示系统应用", "全部关闭 - 已停用", "全部关闭"])
+        self.scope["close_all_listed"]("用户应用")
+        self.p.confirm.assert_called()
+
+    def test_game_center_goes_straight_to_privacy_switch_settings(self):
+        self.scope["require_installed"] = Mock()
+        self.scope["open_page"] = Mock()
+        self.scope["row"] = Mock()
+        self.scope["close_named"] = Mock()
+        action(self.scope, "游戏中心")()
+        self.assertIn("APP_SETTINGS -p com.nearme.gamecenter", self.scope["open_page"].call_args.args[0])
+        self.assertEqual([c.args[0] for c in self.scope["row"].call_args_list], ["隐私开关设置", "个性化推荐管理"])
+
     def test_theme_only_closes_the_ad_switch(self):
         self.scope["app_settings"] = Mock()
         self.scope["row"] = Mock()
@@ -385,26 +424,25 @@ class StoreThemeVideoTests(unittest.TestCase):
         self.p.start.assert_not_called()
         self.p.off.assert_not_called()
 
-    def test_video_missing_bottom_tab_stops_before_settings(self):
+    def test_video_settings_open_by_deep_link(self):
+        """设置页用 App 自己的深链直达（#650），不经开屏页和「我的」。"""
         self.p.d.shell.return_value = SimpleNamespace(exit_code=0, output="package:/system/video.apk")
-        self.p.tab.return_value = False
-        with self.assertRaisesRegex(RuntimeError, "底部我的"):
-            action(self.scope, "视频")()
-        self.p.start.assert_called_once_with("com.heytap.yoli", expect=("我的",))
-        self.p.tab.assert_called_once_with("我的")
-        self.p.tap.assert_not_called()
-        self.p.off.assert_not_called()
+        self.p.focus.return_value = "com.heytap.yoli/com.heytap.yoli.mine.setting.SettingActivity"
+        self.p.find.return_value = True
+        self.scope["row"] = Mock()
+        self.scope["close_named"] = Mock()
+        action(self.scope, "视频")()
+        self.assertIn("yoli://yoli.com/mine_act_lib_yoli/settings", self.p.d.shell.call_args_list[1].args[0])
+        self.p.start.assert_not_called()
+        self.p.tab.assert_not_called()
 
     def test_video_wrong_landing_stops_before_personalization(self):
-        """点完「设置」没落到 SettingActivity 就停本段，不接着在别的页里关开关。"""
+        """深链没落到 SettingActivity 就停本段，不接着在别的页里关开关。"""
         self.p.d.shell.return_value = SimpleNamespace(exit_code=0, output="package:/system/video.apk")
-        self.p.tab.return_value = True
-        self.p.tap.return_value = True
         self.p.focus.return_value = "com.heytap.yoli/MainActivity"
         self.p.find.return_value = True
         with self.assertRaisesRegex(RuntimeError, "未进入目标设置页"):
             action(self.scope, "视频")()
-        self.p.tap.assert_called_once_with("设置", scrolls=0)
         self.p.off.assert_not_called()
 
 
@@ -514,12 +552,13 @@ class NegativeScreenTests(unittest.TestCase):
         scope["row"] = Mock()
         scope["hide_carousel"] = Mock(side_effect=RuntimeError("单选缺失"))
         scope["close_named"] = Mock()
+        scope["open_page"] = Mock()
         with self.assertRaisesRegex(RuntimeError, "热点资讯已核对"):
             action(scope, "负一屏")()
         scope["hide_carousel"].assert_called_once_with()
         scope["close_named"].assert_called_once_with(["热点资讯"], "热点资讯")
-        self.assertEqual([c.args[0] for c in scope["row"].call_args_list],
-                         ["设置", "推荐服务", "热点资讯"])
+        self.assertEqual([c.args[0] for c in scope["row"].call_args_list], ["设置", "推荐服务"])
+        self.assertIn("InfoFlowSettingActivity", scope["open_page"].call_args.args[0])    # 直达，不回设置页找（#650）
 
 
 class GameCenterTests(unittest.TestCase):
@@ -540,46 +579,27 @@ class GameCenterTests(unittest.TestCase):
         self.p.start.assert_not_called()
         self.p.off.assert_not_called()
 
-    def test_first_run_overlay_is_skipped_before_the_gear(self):
-        overlay = {"up": True}
-
-        def find(text, **kwargs):
-            return (100, 100) if text == "跳过" and overlay["up"] else None
-
-        def tap(text, **kwargs):
-            if text == "跳过":
-                overlay["up"] = False
-            return True
-
-        self.p.find.side_effect = find
-        self.p.tap.side_effect = tap
-        self.p.tree.return_value = ET.fromstring('''<hierarchy>
-          <node content-desc="设置,有新通知" clickable="true" bounds="[900,60][1020,180]"/>
-        </hierarchy>''')
+    def test_settings_page_opens_directly_and_skips_the_privacy_header(self):
+        """设置页认 APP_SETTINGS 直达（#650）；「隐私」是点不动的分组标题，入口是「隐私开关设置」。"""
+        self.p.focus.return_value = "com.nearme.gamecenter/com.nearme.gamecenter.me.ui.SettingActivity"
+        self.p.find.return_value = True
         action(self.scope, "游戏中心")()
-        self.assertEqual([c.args[0] for c in self.p.tap.call_args_list], ["跳过", "我的"])
-        self.assertEqual(self.p.click.call_args_list[0].args, (960, 120))
-        self.assertEqual(self.scope["close_named"].call_args_list,
-                         [call(["个性化推荐"], "个性化推荐管理")])
-        self.assertEqual([c.args[0] for c in self.scope["row"].call_args_list],
-                         ["隐私", "隐私开关设置", "个性化推荐管理"])
+        self.p.start.assert_not_called()
+        self.assertIn("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.nearme.gamecenter",
+                      [c.args[0] for c in self.p.d.shell.call_args_list])
+        self.assertEqual([c.args[0] for c in self.scope["row"].call_args_list], ["隐私开关设置", "个性化推荐管理"])
+        self.assertEqual(self.scope["close_named"].call_args_list, [call(["个性化推荐"], "个性化推荐管理")])
 
-    def test_overlay_that_never_closes_stops_before_the_gear(self):
-        self.p.find.side_effect = lambda text, **kwargs: (100, 100)
-        self.p.tap.return_value = True
-        with self.assertRaisesRegex(RuntimeError, "引导浮层"):
+    def test_denied_settings_entry_stops_before_rows(self):
+        def shell(command):
+            if command.startswith("pm path"):
+                return SimpleNamespace(exit_code=0, output="package:/data/app/gamecenter/base.apk")
+            return SimpleNamespace(exit_code=1, output="Permission Denial")
+        self.p.d.shell.side_effect = shell
+        with self.assertRaisesRegex(RuntimeError, "系统未允许"):
             action(self.scope, "游戏中心")()
-        self.p.click.assert_not_called()
         self.scope["row"].assert_not_called()
         self.scope["close_named"].assert_not_called()
-
-    def test_missing_gear_stops_before_settings_rows(self):
-        self.p.find.return_value = None
-        self.p.tap.return_value = True
-        self.p.tree.return_value = ET.fromstring('<hierarchy><node text="首页"/></hierarchy>')
-        with self.assertRaisesRegex(RuntimeError, "设置齿轮"):
-            action(self.scope, "游戏中心")()
-        self.scope["row"].assert_not_called()
 
 
 class TrackingGuardTests(unittest.TestCase):

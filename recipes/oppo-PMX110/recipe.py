@@ -244,58 +244,73 @@ def more_menu():
             "未找到更多选项")
 
 
-def dismiss_guide(timeout=4):
-    """首次进游戏中心会弹引导浮层，不点掉会盖住「我的」和齿轮。没有浮层时直接放行。"""
-    from wait import until
-    if not p.find("跳过", exact=True):
-        return True
-    if not p.tap("跳过", exact=True, scrolls=0):
-        return False
-    return bool(until(lambda: not p.find("跳过", exact=True), timeout=timeout, poll=0.3,
-                      now=time.monotonic, sleep=time.sleep))
+def ad_id_page():
+    """到「设备标识与广告」页：先用设置搜索（ColorOS 能直接打开搜索页，#650，实测 4 秒），
+    搜不到再从设置首页一层层找。"""
+    if p.setting("广告跟踪", "限制广告跟踪", path="隐私与安全 > 隐私 > 设备标识与广告"):
+        page("设备标识与广告")
+        return
+    system_settings()
+    row("隐私与安全", package="com.oplus.securitypermission")
+    row("设备标识与广告")
 
 
-def tap_gear():
-    """右上齿轮：判据走引擎的 `icon_hit`（正好是「设置」的描述 / 正文，或末段以 setting 开头的资源名）。
-    这个入口的无障碍名带状态后缀（「设置,有新通知」），`icon_hit` 只认正好等于「设置」，所以补一条
-    以「设置」开头的描述；包含匹配会把「设置壁纸」一类也收进来（#305 / #374）。"""
-    from fast import icon_hit
-    for node in p.tree().iter("node"):
-        desc = (node.get("content-desc") or "").strip()
-        if node.get("clickable") != "true" or not p.on_screen(node):
-            continue
-        if not (icon_hit(node) or desc.startswith("设置")):
-            continue
-        l, t, r, b = bounds(node)
-        if t > p.H * 0.25:
-            continue
-        p.click((l + r) // 2, (t + b) // 2)
-        time.sleep(1.5)
-        return True
-    return False
+def close_all_state():
+    """打开右上「更多选项」，读「全部关闭」与「显示系统应用」两项的状态，菜单保持打开。
+    列表里没有开着的应用时，系统把「全部关闭」置灰（读屏描述「全部关闭 - 已停用」）。"""
+    more_menu()
+    p.await_page()
+    texts = [t for t, _, _ in p.texts()]
+    require("全部关闭" in texts, "菜单里没有「全部关闭」")
+    disabled = any(t.startswith("全部关闭") and "已停用" in t for t in texts) or any(
+        t == "全部关闭" and n.get("enabled") == "false" for t, _, n in p.texts())
+    # 显示系统应用后，这一项换成「隐藏系统应用」（PMX110 实测）
+    system_shown = any(t.startswith("隐藏系统应用") or (t.startswith("显示系统应用") and "已选中" in t
+                                                       and "未选中" not in t) for t in texts)
+    return disabled, system_shown
+
+
+def close_all_listed(label):
+    """当前列表里还有开着的就点「全部关闭」，再开一次菜单确认它变灰（#650）。"""
+    disabled, _ = close_all_state()
+    if disabled:
+        p.back()
+        print(f"  · 广告跟踪（{label}）：已全部关闭，未点击", flush=True)
+        return
+    require(p.tap("全部关闭", exact=True, scrolls=0), "未能点「全部关闭」")
+    p.confirm()
+    p.await_page()
+    disabled, _ = close_all_state()
+    p.back()
+    require(disabled, f"广告跟踪（{label}）：点了「全部关闭」后仍有开着的应用")
+    print(f"  · 广告跟踪（{label}）：已全部关闭，菜单项已置灰确认", flush=True)
 
 
 @step("广告跟踪")
 def _():
-    # 547 个具名许可逐个核对，个人应用名单只在本次会话里读，不写进脚本或公开记录。
+    # 每个应用一个开关。用菜单「全部关闭」整表关，再看它是否置灰来确认（#650）：
+    # 以前逐行读 559 个应用两遍，约 27 分钟；现在不用滚动列表，个人应用名单也不必读出来。
     # 版本由引擎判（录制版本对不上会置 safe_mode）；这里只挡「拿这份脚本去跑别的型号」。
     if p.safe_mode or p.d.shell("getprop ro.product.model").output.strip() != "PMX110":
         raise SkipStep("仅在 PMX110 上批量处理广告跟踪")
-    system_settings()
-    row("隐私与安全", package="com.oplus.securitypermission")
-    row("设备标识与广告")
+    ad_id_page()
     row("广告跟踪", activity="OAIDActivity")
-    more_menu()
-    if p.find("显示系统应用"):
-        require(p.tap("显示系统应用", scrolls=0), "未显示系统应用")
-    else:
-        require(p.find("隐藏系统应用"), "无法确认系统应用显示状态")
-        p.back()
-    page("广告跟踪", activity="OAIDActivity")
-    # 本机安装 559 个包，每次滚动约新增 5 行；80 屏不足以读完整列表，保留有界上限 160。
-    snapshot = read_switches("广告跟踪", max_screens=160)
-    require(snapshot, "未读到具名广告跟踪许可")
-    close_named(list(snapshot), "广告跟踪", max_screens=160, snapshot=snapshot)
+    _, system_shown = close_all_state()
+    p.back()
+    close_all_listed("系统应用已显示" if system_shown else "用户应用")
+    if not system_shown:
+        more_menu()
+        require(p.tap("显示系统应用", scrolls=0), "未能显示系统应用")
+        p.await_page()
+        page("广告跟踪", activity="OAIDActivity")
+        try:
+            close_all_listed("含系统应用")
+        finally:
+            more_menu()                       # 显示方式恢复原样，不改机主的列表偏好
+            if not p.tap("隐藏系统应用", scrolls=0):
+                p.back()
+                print("  · 没找到「隐藏系统应用」，列表保持显示系统应用", flush=True)
+            p.await_page()
 
 
 @step("浏览器")
@@ -423,8 +438,10 @@ def _():
         require(p.focus() == where, "轮播识别失败且已离开原页，停止本段")
         carousel_error = error
         print(f"  ✗ 轮播推荐未确认：{error}；继续核对独立的热点资讯", flush=True)
-    p.back()
-    row("热点资讯")
+    # 热点资讯页有导出，直达（#650），不用回设置页再滚动找
+    open_page("am start -f 0x10008000 -n com.coloros.assistantscreen/"
+              "com.oplus.assistantscreen.card.infoflow.setting.activity.InfoFlowSettingActivity",
+              "热点资讯", "com.coloros.assistantscreen", "InfoFlowSettingActivity")
     close_named(["热点资讯"], "热点资讯")
     if carousel_error:
         raise RuntimeError(f"热点资讯已核对；轮播推荐未完成：{carousel_error}")
@@ -450,28 +467,20 @@ def _():
 @step("视频")
 def _():
     require_installed(VIDEO, "视频")
-    p.start(VIDEO, expect=("我的",))
-    require(p.tab("我的"), "未找到视频底部我的标签")
-    require(p.tap("设置", scrolls=0), "未找到视频设置入口")
-    page("设置", VIDEO, "SettingActivity")
+    # 设置页没导出，用 App 自己的深链直达（#650），不经开屏页和「我的」
+    open_page("am start -f 0x10008000 -a android.intent.action.VIEW -d yoli://yoli.com/mine_act_lib_yoli/settings",
+              "设置", VIDEO, "SettingActivity")
     row("个性化管理")
     close_named(["个性化广告推荐", "个性化内容推荐"], "个性化管理")
 
 
 @step("游戏中心")
 def _():
-    # ⚠ 本段照 #280 的实测记录写，录制这台机没装游戏中心，没有复测证据；
-    # 界面对不上时按「未完成」上报，不要在这里放宽成找第一个齿轮。
+    # 设置页认 APP_SETTINGS 动作，直达（#650），不用关首进引导、找「我的」和齿轮。
+    # 设置页上的「隐私」只是分组标题、点不动；入口是它下面的「隐私开关设置」（PMX110 11-06 实测）。
     require_installed(GAME, "游戏中心")
-    p.start(GAME)
-    dismissed = dismiss_guide()
-    p.tap("我的", exact=True, scrolls=0)
-    dismissed = dismiss_guide() and dismissed
-    require(dismissed, "首进引导浮层没关掉，齿轮被挡住")
-    require(tap_gear(), "没找到右上设置齿轮")
-    time.sleep(1.2)
-    row("隐私", scrolls=6)
-    row("隐私开关设置", scrolls=4)
+    open_page("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + GAME, "游戏中心", GAME, "SettingActivity")
+    row("隐私开关设置", scrolls=6)
     row("个性化推荐管理", scrolls=4)
     close_named(["个性化推荐"], "个性化推荐管理")
     p.confirm()

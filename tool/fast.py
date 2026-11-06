@@ -1088,12 +1088,26 @@ class Phone:
                 return True
         return False
 
-    def setting(self, kw, entry=None, box=None):
+    # 直接打开系统设置搜索页的动作（#650）：打得开就省掉「设置首页 → 找框 → 点框 → 等输入框」。
+    # 没有这个动作的系统 am start 当场报解析不到，回到老路，不额外等。
+    SEARCH_ACTIONS = ("oplus.intent.action.settings.MAIN_SEARCH",)       # ColorOS（OPPO / 一加 / 真我）
+
+    def _search_page(self):
+        for action in self.SEARCH_ACTIONS:
+            res = self.reader.shell(f"am start -f 0x10008000 -a {action}")
+            out = str(getattr(res, "output", None) or getattr(res, "stdout", None) or res or "")
+            if "Error" in out or "unable to resolve" in out.lower():
+                continue
+            if wait.until(self.edit_ready, timeout=2.5, poll=0.15, now=time.time, sleep=time.sleep):
+                return True
+        return False
+
+    def setting(self, kw, entry=None, box=None, path=None):
         """系统设置里搜 kw，点结果 entry（默认就是 kw）。
         box：搜索框文字，不给就自动认（小米「搜索系统设置项」、OPPO「搜索设置项」等）。
+        path：结果下一行的位置文字（如「隐私与安全 > 隐私 > 设备标识与广告」）。同名结果有好几条时按它挑。
         设置首页刚打开时点搜索框会被忽略（小米 18 Pro Max 实测）：点完要看到输入框才往下走，没打开就再点。"""
         self.miss = 0
-        self.reader.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
 
         def box_at():
             for t, (l, tp, r, b), _ in self.texts():
@@ -1103,13 +1117,19 @@ class Phone:
 
         def result_at():
             # 输入框里也有同一段文字；只认非输入框的结果，不能点回搜索框后假报成功。
-            for t, (l, tp, r, b), n in self.texts():
-                if t == (entry or kw) and not EDIT.search(n.get("class", "")):
-                    return ((l + r) // 2, (tp + b) // 2)
+            items = self.texts()
+            for i, (t, (l, tp, r, b), n) in enumerate(items):
+                if t != (entry or kw) or EDIT.search(n.get("class", "")):
+                    continue
+                if path and not (i + 1 < len(items) and items[i + 1][0] == path):
+                    continue
+                return ((l + r) // 2, (tp + b) // 2)
             return None
 
-        opened = False
-        for _ in range(4):
+        opened = self._search_page()
+        if not opened:
+            self.reader.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
+        for _ in range(0 if opened else 4):
             xy = wait.until(box_at, timeout=3, poll=0.15, now=time.time, sleep=time.sleep)
             if not xy:
                 break
