@@ -32,5 +32,23 @@ class JudgementDocTests(unittest.TestCase):
                          "字段表与 ChannelJudgement 不一致：新增判定加一行，删判定删行")
 
 
+class BrandTapsDocTests(unittest.TestCase):
+    """三处「连点 7 下」品牌表与单一来源一致（#654）。"""
+
+    def test_brand_tap_tables_match_single_source(self):
+        sys.path.insert(0, str(ROOT / "tool"))
+        import gen_brand_taps as gen
+
+        for key, path in gen.TARGETS.items():
+            text = path.read_text(encoding="utf-8")
+            rendered = gen.render_all()[key]
+            self.assertEqual(text.count(gen.START), len(rendered), f"{path.name} 的 brand-taps 标记区数量不符")
+            self.assertEqual(text.count(gen.END), len(rendered), f"{path.name} 的 brand-taps 标记区数量不符")
+            updated = gen.replace_regions(text, rendered)
+            self.assertEqual(updated, text,
+                             f"{path.name} 的品牌表与 docs/手机版教程/brand-taps.json 不一致："
+                             "只改 JSON 一处后跑 python tool/gen_brand_taps.py")
+
+
 if __name__ == "__main__":
     unittest.main()
