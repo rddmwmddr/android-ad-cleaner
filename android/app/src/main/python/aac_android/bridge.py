@@ -14,7 +14,6 @@ import time
 _run = subprocess.run
 _popen = subprocess.Popen
 
-U2_PORT = 9008
 SLOW = 3.0
 
 
@@ -88,8 +87,30 @@ class ShizukuBridge:
     def stop_daemon(self, name):
         self.shell.stopDaemon(name)
 
-    def server_port(self):
-        return U2_PORT
+    def _await(self, job, timeout):
+        """等一条内部请求（读屏、问尺寸）。轮询而不是在 Java 方法里等：Chaquopy 调 Java 期间不放解释器锁，
+        一条卡住的请求会把停止键、界面轮询与看门狗一起冻住。"""
+        deadline, delay = time.monotonic() + timeout, 0.002
+        while not job.isDone():
+            if time.monotonic() > deadline:
+                job.cancel()
+                return Result(-1, b"", f"读屏请求超时（{timeout:.0f} 秒）".encode(), True)
+            time.sleep(delay)
+            delay = min(delay * 2, 0.05)
+        r = job.result(False)
+        return Result(r.code, bytes(r.out), bytes(r.err))
+
+    def dump(self, display):
+        """读屏：命令服务经 UiAutomation 读第 display 块屏的窗口，返回与 uiautomator 同格式的 XML。"""
+        return self._await(self.shell.dumpJob(int(display)), 30)
+
+    def size(self, display):
+        return self._await(self.shell.sizeJob(int(display)), 10)
+
+    def set_clipboard(self, text):
+        """写字走剪贴板：引擎发完粘贴键后由系统粘进输入框。"""
+        from java import jclass
+        jclass("com.ahuamiao.adcleaner.Native").setClipboard(text)
 
 
 class AdbBridge:
@@ -98,7 +119,6 @@ class AdbBridge:
     def __init__(self, adb, serial):
         self.adb, self.serial = adb, serial
         self.daemons = {}
-        self.port = None
 
     def ready(self):
         r = _run([self.adb, "-s", self.serial, "get-state"], capture_output=True, text=True, timeout=10)
@@ -129,12 +149,23 @@ class AdbBridge:
         if p is not None:
             p.kill()
 
-    def server_port(self):
-        if self.port is None:
-            out = _run([self.adb, "-s", self.serial, "forward", "tcp:0", f"tcp:{U2_PORT}"],
-                       capture_output=True, text=True, timeout=10).stdout
-            self.port = int(out.strip())
-        return self.port
+    def dump(self, display):
+        """电脑调试：系统自带的 uiautomator dump 只读主屏（后台屏只在手机上用）。"""
+        r = self.exec("uiautomator dump /data/local/tmp/aac-dump.xml >/dev/null "
+                      "&& cat /data/local/tmp/aac-dump.xml", None, 30)
+        return Result(r.code, r.out, r.err)
+
+    def size(self, display):
+        r = self.exec("wm size", None, 10)
+        found = re.findall(r"(\d+)x(\d+)", r.out.decode("utf-8", "replace"))
+        if not found:
+            return Result(1, b"", b"wm size returned nothing")
+        w, h = found[-1]
+        return Result(0, f"{w} {h}".encode(), b"")
+
+    def set_clipboard(self, text):
+        """电脑调试这条路上没有 App 进程可写剪贴板：打字用例只做记录。"""
+        print(f"[clipboard] {text}", file=sys.__stderr__)
 
 
 _bridge = None

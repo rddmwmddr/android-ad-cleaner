@@ -60,13 +60,13 @@ chaquopy {
 }
 
 // 引擎、机型脚本、客户端后台与网页原样打进 assets/aac，App 首次启动解到私有目录再跑（路径与桌面版一致）
+// 读屏是 App 自己的 ShellServer（#623），不再带 u2.jar
 val syncEngine by tasks.registering(Sync::class) {
     into(layout.buildDirectory.dir("generated/aac-assets/aac"))
     from(repo.resolve("tool")) { into("tool"); include("*.py", "*.dex") }
     from(repo.resolve("recipes")) { into("recipes"); include("*/recipe*.py"); exclude("zztest-*/**") }
     from(repo.resolve("gui")) { into("gui"); include("app.py", "winpreflight.py", "version.py", "web/**") }
     from(repo.resolve("images")) { into("images"); include("dev-*.png") }   // env() 只列 dev-*：界面的教程图
-    from(repo.resolve("gui/.venv/lib/python3.12/site-packages/uiautomator2/assets/u2.jar"))
 }
 tasks.named("preBuild") { dependsOn(syncEngine) }
 

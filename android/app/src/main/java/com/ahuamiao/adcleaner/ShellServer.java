@@ -13,10 +13,13 @@ import java.util.concurrent.Executors;
 
 /**
  * shell 身份的命令服务（#622）：经内置无线调试用一条常驻的 `exec:` 流启动
- * （`CLASSPATH=本 APK app_process / com.ahuamiao.adcleaner.ShellServer`），之后 App 的每条命令都走这条流。
+ * （`CLASSPATH=本 APK app_process / com.ahuamiao.adcleaner.ShellServerMain`），之后 App 的每条命令都走这条流。
  *
  * 不给每条命令单开一条 adb 流：libadb 在对端关流时有竞态，模拟器上 getprop 这类小命令会丢掉全部输出和退出码。
  * 一条流从头用到尾、只开关一次，就碰不到它。Shizuku 也是这个结构（一个 shell 身份的服务进程）。
+ *
+ * 这个类只用 java.io 与 ProcessBuilder，读屏那部分从 {@link ScreenReader} 注入，
+ * 所以整层协议能脱离安卓在 JVM 上单测（ADR-0014）。
  *
  * 协议（大端，经 stdin / stdout，stderr 不用）：
  *   请求  int id, byte 类型, int 长度, 内容
@@ -24,21 +27,22 @@ import java.util.concurrent.Executors;
  *         类型 2 起常驻进程：内容 = int 名字长度, 名字, 命令 UTF-8（输出读掉丢弃）
  *         类型 3 停常驻进程：内容 = 名字
  *         类型 4 取消执行：内容为空；只对类型 1 有效，杀掉那条命令的进程且不回包
- *   回应  int id, int 退出码, int stdout 长度, stdout, int stderr 长度, stderr（类型 2 / 3 回 0 与空）
+ *         类型 5 读屏：内容 = 屏号（-1 = 所有屏），回与 uiautomator 同格式的 XML（节点带 display-id）
+ *         类型 6 屏幕尺寸：内容 = 屏号，回「宽 高」（随旋转）
+ *   回应  int id, int 退出码, int stdout 长度, stdout, int stderr 长度, stderr（类型 2 / 3 / 4 回 0 与空）
  */
 public final class ShellServer {
     /** 安卓上的 sh；单测在开发机上跑时指到本机 sh（`ShellServerTest` 的 @BeforeClass）。 */
     static String shell = "/system/bin/sh";
+    /** 读屏：ShellServerMain 装 Android 实现，单测装假的。null 表示这个进程没有读屏能力。 */
+    static volatile ScreenReader reader;
+    /** 装读屏时失败的原因：把「读屏起不来」的原话回给客户端，别让它只剩一句「读不到」。 */
+    static volatile String readerError;
 
     private static DataOutputStream out;
     private static final Map<String, Process> daemons = new HashMap<>();
     /** 正在跑的执行：取消要按 id 找到进程。daemons 不在里面（类型 4 对常驻进程无效）。 */
     private static final Map<Integer, Process> running = new HashMap<>();
-
-    public static void main(String[] args) throws IOException {
-        serve(System.in, System.out);
-        System.exit(0);
-    }
 
     /** 协议循环。参数化输入输出只为脱离 adb 做单测。 */
     static void serve(InputStream stdin, OutputStream stdout) throws IOException {
@@ -98,6 +102,10 @@ public final class ShellServer {
                 reply(id, 0, new byte[0], new byte[0]);
             } else if (type == 4) {
                 cancel(id);
+            } else if (type == 5) {
+                dumpScreen(id, displayArg(body));
+            } else if (type == 6) {
+                replySize(id, displayArg(body));
             }
         } catch (Throwable t) {
             try {
@@ -105,6 +113,24 @@ public final class ShellServer {
             } catch (IOException ignored) {
             }
         }
+    }
+
+    private static int displayArg(byte[] body) {
+        return Integer.parseInt(new String(body, java.nio.charset.StandardCharsets.UTF_8).trim());
+    }
+
+    private static ScreenReader screen() {
+        ScreenReader r = reader;
+        if (r == null) throw new IllegalStateException(readerError == null ? "这个进程没有读屏能力" : readerError);
+        return r;
+    }
+
+    private static void dumpScreen(int id, int display) throws Exception {
+        reply(id, 0, screen().dump(display).getBytes("UTF-8"), new byte[0]);
+    }
+
+    private static void replySize(int id, int display) throws Exception {
+        reply(id, 0, screen().size(display).getBytes("UTF-8"), new byte[0]);
     }
 
     private static byte[] read(DataInputStream b) throws IOException {

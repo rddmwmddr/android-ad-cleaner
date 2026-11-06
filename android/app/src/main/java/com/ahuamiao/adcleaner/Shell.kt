@@ -8,8 +8,8 @@ interface ShellJob {
 }
 
 /**
- * 以 shell 身份执行命令的门面，Python 只认这一个类（aac_android/bridge.py）。
- * 两条路：用户装了并授权了 Shizuku 就用 Shizuku；否则用内置无线调试（#622），不用另装 App。
+ * 以 shell 身份执行命令、读屏的门面，Python 只认这一个类（`aac_android/bridge.py`、`aac_android/u2.py`）。
+ * 两条路起的是同一个命令服务（ShellServer）：装了并授权 Shizuku 就经 Shizuku 起，否则经内置无线调试（#622）。
  * 已授权的 Shizuku 永远优先，不记后端偏好。
  */
 object Shell {
@@ -19,6 +19,14 @@ object Shell {
         @JvmField val err: ByteArray,
         @JvmField val timedOut: Boolean,
     )
+
+    /** 命令服务起不来时的那条结果：已经「结束」，Python 取 result() 就拿到原因。 */
+    private class Failed(reason: String) : ShellJob {
+        override fun isDone() = true
+        override fun result(timedOut: Boolean) = Result(-1, ByteArray(0), reason.toByteArray(), timedOut)
+        override fun cancel() {
+        }
+    }
 
     /**
      * 现在能用吗：纯查询，不建连接。`devices` / `get-state` 用它，
@@ -36,17 +44,43 @@ object Shell {
     fun ensure(): Boolean =
         if (ShizukuShell.ready()) true else AdbShell.ready() || AdbShell.connect(4000)
 
-    @JvmStatic
-    fun submit(cmd: String, stdin: ByteArray?): ShellJob =
-        if (ShizukuShell.ready()) ShizukuShell.submit(cmd, stdin) else AdbShell.submit(cmd, stdin)
+    private fun client(): ServerClient =
+        if (ShizukuShell.ready()) ShizukuShell.client() else AdbShell.client()
 
     @JvmStatic
-    fun daemon(name: String, cmd: String): Boolean =
-        if (ShizukuShell.ready()) ShizukuShell.daemon(name, cmd) else AdbShell.daemon(name, cmd)
+    fun submit(cmd: String, stdin: ByteArray?): ShellJob = try {
+        client().submit(cmd, stdin)
+    } catch (e: Exception) {
+        Failed("命令服务不可用：$e")
+    }
+
+    @JvmStatic
+    fun daemon(name: String, cmd: String): Boolean {
+        client().daemon(name, cmd)
+        return true
+    }
 
     @JvmStatic
     fun stopDaemon(name: String) {
-        ShizukuShell.stopDaemon(name)
-        AdbShell.stopDaemon(name)
+        try {
+            client().stopDaemon(name)
+        } catch (_: Exception) {
+        }
+    }
+
+    /** 读屏（-1 = 所有屏）：Python 侧轮询 isDone() 后取 result()，不要在 Java 方法里等。 */
+    @JvmStatic
+    fun dumpJob(display: Int): ShellJob = try {
+        client().dump(display)
+    } catch (e: Exception) {
+        Failed("命令服务不可用：$e")
+    }
+
+    /** 某块屏的逻辑尺寸（随旋转）。 */
+    @JvmStatic
+    fun sizeJob(display: Int): ShellJob = try {
+        client().size(display)
+    } catch (e: Exception) {
+        Failed("命令服务不可用：$e")
     }
 }

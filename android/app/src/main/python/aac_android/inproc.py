@@ -25,7 +25,7 @@ TOOL = ""                                    # setup() 时定下
 _lock = threading.RLock()
 _sinks = {}                                  # 线程 id → [(out, err)]（嵌套捕获时压栈）
 _fallback = (sys.stdout, sys.stderr)         # setup() 时换成当时的输出（Chaquopy 接到 logcat 的那一对）
-after_run = []                               # 每个顶层脚本结束后调用（u2 用它停掉读屏服务）
+after_run = []                               # 每个顶层脚本结束后调用（机型脚本 / 客户端卸载资源用）
 
 
 class _Router(io.TextIOBase):

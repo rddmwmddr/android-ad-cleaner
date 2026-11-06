@@ -10,7 +10,7 @@
 |---|---|
 | `subprocess.run([adb, "-s", 序列号, "shell", …])` | `adb.py` 接管 subprocess，adb 占位文件的调用按 adb 语义回答，命令经 shell 门面执行（`bridge.py` → Kotlin `Shell`，底下是 `ShizukuShell` 或 `AdbShell`） |
 | 每一步一个 Python 子进程 | `inproc.py` 在本进程线程里跑脚本：每步清掉 `tool/` 模块、换环境变量、按线程分流输出、`SystemExit` 当退出码 |
-| `uiautomator2` / `adbutils` / `tool/ui_session.py` | `u2.py`：同一个 `u2.jar` 以 shell 身份启动（经 `Shell` 门面），App 直连本机 9008 端口发 jsonrpc |
+| `uiautomator2` / `adbutils` / `tool/ui_session.py` | `u2.py`：读屏走本 App 的 `ShellServer`（shell 身份连 UiAutomation，读所有屏的窗口），点按走 `input`，选择器在页面上本地匹配，不开网络端口 |
 
 界面经 WebView 加载 `index.html`；`assets/mobile/mobile.js` 补上 `pywebview` 桥，把首页换成 shell 权限状态和「一键去广告」（自动走检测 → 扫描 → 开始执行，勾选与桌面版默认一致）。
 
@@ -25,9 +25,18 @@
 
 - `AdbManager`：App 私有目录存 RSA 密钥与自签证书；经 mDNS 找无线调试的配对 / 连接端口，只连本机 `127.0.0.1`。
 - 配对：码填在通知栏输入框（`Pairing`），用户不用离开系统的配对对话框。提交时 App 被唤醒，当场找配对端口再配——小米 HyperOS 会冻结后台 App，不能一直在后台等端口。
-- 命令：连上后只开一条常驻 `exec:` 流，跑 APK 里的 `ShellServer`（shell 身份），所有命令按编号经它收发。不给每条命令单开 adb 流：libadb 在对端关流时有竞态，小命令会丢输出和退出码。
+- 命令与读屏：连上后只开一条常驻 `exec:` 流，跑 APK 里的 `ShellServerMain` → `ShellServer`（shell 身份），所有命令、读屏按编号经它收发（`ServerClient`；Shizuku 那条路起的是同一个服务）。不给每条命令单开 adb 流：libadb 在对端关流时有竞态，小命令会丢输出和退出码。
 - 首次连上后经 shell 给本 App 授 `WRITE_SECURE_SETTINGS`：之后无线调试被关（重启、换 Wi-Fi）时 App 自己打开、重连。第一次在某个网络上打开无线调试，系统会弹「允许在此网络上使用无线调试」，勾「始终允许」后才能免确认。
 - 选择：Shizuku 已授权就用 Shizuku，否则用内置无线调试（`Shell`）；Python 侧不感知。
+
+## 读屏（#623）
+
+手机版要读屏才认得出页面上的开关。以前借的是 uiautomator2 自带的 `u2.jar`：它在 9008 端口监听所有网卡、没有鉴权，执行期间同一个 Wi-Fi 下的设备能读屏、代点按。现在换成 App 自己的实现：
+
+- `AndroidScreenReader`：以 shell 身份连 UiAutomation（`ActivityThread.systemMain` + 反射私有构造函数），`getWindowsOnAllDisplays()` 读所有屏的窗口，输出与 uiautomator 同格式的 XML，节点带 `display-id`。
+- 读屏与屏幕尺寸走 `ShellServer` 的类型 5 / 6，也就是那条常驻的 stdin / stdout 管道——**不开任何端口**，`u2.jar` 不再打进 APK。
+- `u2.py` 的点按 / 滑动 / 按键改走 `input`，选择器在拿到的页面上本地匹配，写字走 App 设的剪贴板 + 粘贴键（引擎本来就有这条回落）。
+- 读屏代码在 `AndroidScreenReader` 里、经 `ScreenReader` 接口注入：`ShellServer` 仍只用 `java.io`，协议层能脱离安卓单测。
 
 ## 后台屏（#618）
 
@@ -35,7 +44,7 @@
 
 - `Vd.java` 随 APK 打包，以 shell 身份用 `app_process` 启动（类路径就是本 APK），建与主屏同尺寸同密度的虚拟屏，每 4 秒续亮。
 - `aac_android/screen.py` 把发往手机的命令改到这块屏：`am start` 加 `--display` 并另开一份任务（主屏开着同一个 App 时不把它搬走），`input` 加 `-d`，HOME、点亮屏幕、收起通知栏不发（只会作用到主屏），截图用它在 SurfaceFlinger 里的编号。查前台只看这块屏；这块屏带着 `ALWAYS_UNLOCKED` 时锁屏直接按未锁处理，`Vd` 降到没有这个标记的档位就按它那段照实读。
-- `u2.py` 读屏只留这块屏的窗口；点按走 `input -d`；选择器在过滤后的页面上自己匹配；不经读屏服务写字（它只找主屏的输入框），引擎自动退到剪贴板 + 粘贴。
+- `u2.py` 按屏号读屏（命令服务只回这块屏的窗口）；点按走 `input -d`；选择器在拿到的页面上自己匹配；写字走 App 设的剪贴板 + 粘贴键，引擎本来就有这条回落。
 - 建不了屏（安卓 12 以下、系统不给 shell 建屏）就退回主屏模式。后台模式跑完不抢前台，按结果发通知（做完了 / 已停止 / 失败）。
 - 靠桌面手势进入的入口（OPPO / vivo 负一屏）在后台屏上走不通，照常报「没找到」。
 
@@ -45,10 +54,10 @@
 android/build.sh assembleRelease
 ```
 
-构建前会把 `tool/`、`recipes/`（不含 `zztest-*`）、`gui/app.py`、`gui/web/`、教程图和 `u2.jar` 同步进 assets。版本号读 `gui/app.py` 的 `VERSION`。
+构建前会把 `tool/`、`recipes/`（不含 `zztest-*`）、`gui/app.py`、`gui/web/` 和教程图同步进 assets。版本号读 `gui/app.py` 的 `VERSION`。
 
 - 需要 JDK 17、Android SDK、gradle 8.10.2，以及本机的 Python 3.12（Chaquopy 编译用，路径在 `app/build.gradle.kts`）。
-- `u2.jar` 取自 `gui/.venv` 里装的 uiautomator2 3.7.1：先按客户端的说明装好 `gui/.venv`。
+- 协议层的 JVM 单测（`app/src/test/…/ShellServerTest.java`）不碰 Android：`./gradlew :app:testDebugUnitTest` 就能跑，读屏用假的 `ScreenReader` 注入。
 - 正式签名读 `.private/android-signing/keystore.properties`，没有就退回 debug 签名。证书丢了，已安装的 App 就没法覆盖更新。
 
 ## 在电脑上调试替换层
