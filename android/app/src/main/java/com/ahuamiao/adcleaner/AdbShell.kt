@@ -4,16 +4,13 @@ import android.content.Context
 import android.os.Build
 import io.github.muntashirakon.adb.AdbStream
 import io.github.muntashirakon.adb.android.AdbMdns
-import java.io.DataInputStream
-import java.nio.ByteBuffer
 import kotlin.concurrent.thread
 
 /**
- * 内置无线调试的命令通道（#622），与 ShizukuShell 同一组接口：submit 返回 Job，Python 侧轮询。
+ * 内置无线调试（#622）：配对、连本机 adbd，再开一条常驻 `exec:` 流跑本 APK 里的 ShellServer（shell 身份），
+ * 之后所有命令与读屏都经 ServerClient 收发。
  *
- * 连上本机 adbd 后只开一条常驻 `exec:` 流，跑本 APK 里的 ShellServer（shell 身份），所有命令按编号经它收发，
- * 分得开 stdout / stderr、带回退出码。不给每条命令单开 adb 流：libadb 在对端关流时有竞态，
- * 模拟器上小命令会丢掉全部输出和退出码。
+ * 不给每条命令单开 adb 流：libadb 在对端关流时有竞态，模拟器上小命令会丢掉全部输出和退出码。
  */
 object AdbShell {
     lateinit var app: Context
@@ -94,10 +91,11 @@ object AdbShell {
     private fun grantSelf() {
         thread(isDaemon = true) {
             try {
-                submit("pm grant ${app.packageName} android.permission.WRITE_SECURE_SETTINGS", null).let { job ->
-                    val deadline = System.currentTimeMillis() + 10_000
-                    while (!job.isDone() && System.currentTimeMillis() < deadline) Thread.sleep(50)
-                }
+                client().submit("pm grant ${app.packageName} android.permission.WRITE_SECURE_SETTINGS", null)
+                    .let { job ->
+                        val deadline = System.currentTimeMillis() + 10_000
+                        while (!job.isDone() && System.currentTimeMillis() < deadline) Thread.sleep(50)
+                    }
             } catch (_: Throwable) {
             }
         }
@@ -117,148 +115,24 @@ object AdbShell {
         return ok
     }
 
-    // ----- 命令服务：一条常驻流，所有命令都经它（见 ShellServer.java）-----
-    /** 协议类型（与 ShellServer.java 的注释一一对应）。 */
-    private const val TYPE_RUN = 1
-    private const val TYPE_DAEMON = 2
-    private const val TYPE_STOP = 3
-    private const val TYPE_CANCEL = 4
+    // ----- 命令服务：一条常驻 exec: 流跑 ShellServer，所有命令与读屏都经它 -----
+    private var client: ServerClient? = null
 
-    private var server: AdbStream? = null
-    private var output: java.io.OutputStream? = null
-    private val pending = java.util.concurrent.ConcurrentHashMap<Int, Job>()
-    private val nextId = java.util.concurrent.atomic.AtomicInteger(1)
-
-    /** 起命令服务（已在跑就直接用）：经 exec: 流以 shell 身份跑本 APK 里的 ShellServer，等它报「ready」。 */
+    /** 起命令服务（已在跑就直接用）：流断了就重开一条并等它报「ready」。 */
+    @JvmStatic
     @Synchronized
-    private fun ensureServer(): AdbStream {
-        server?.let { if (!it.isClosed) return it }
-        val apk = app.applicationInfo.sourceDir
-        // exec: 流里 stderr 与 stdout 混在一起，会打乱二进制协议：stderr 丢掉
-        val stream = AdbManager.get(app).openStream(
-            "exec:CLASSPATH=$apk exec app_process / com.ahuamiao.adcleaner.ShellServer 2>/dev/null")
-        val ready = java.util.concurrent.CountDownLatch(1)
-        thread(isDaemon = true) {
-            try {
-                val input = DataInputStream(stream.openInputStream())
-                while (true) {
-                    val id = input.readInt()
-                    val code = input.readInt()
-                    val o = ByteArray(input.readInt()).also { input.readFully(it) }
-                    val e = ByteArray(input.readInt()).also { input.readFully(it) }
-                    if (id == 0) ready.countDown() else pending.remove(id)?.complete(code, o, e)
-                }
-            } catch (e: Exception) {
-                android.util.Log.w("AacAdb", "命令服务断开：$e")
-            } finally {
-                synchronized(this) { if (server === stream) server = null }
-                pending.values.toList().forEach { it.complete(-1, ByteArray(0), "命令服务断开".toByteArray()) }
-                pending.clear()
-            }
+    fun client(): ServerClient {
+        client?.let { if (!it.closed) return it }
+        val stream: AdbStream = AdbManager.get(app)
+            .openStream("exec:" + ServerClient.command(app.applicationInfo.sourceDir))
+        val c = ServerClient(stream.openInputStream(), stream.openOutputStream()) {
+            synchronized(this) { if (client?.closed == true) client = null }
         }
-        output = stream.openOutputStream()
-        server = stream
-        if (!ready.await(15, java.util.concurrent.TimeUnit.SECONDS)) {
+        if (!c.awaitReady(15_000)) {
             stream.close()
             throw java.io.IOException("命令服务没有启动")
         }
-        return stream
-    }
-
-    /** 发一条请求：整包一次写出（每次 write 都要等对端回 OKAY，拆开写会慢）。 */
-    private fun send(id: Int, type: Int, body: ByteArray) {
-        ensureServer()
-        val buf = ByteBuffer.allocate(9 + body.size).putInt(id).put(type.toByte()).putInt(body.size).put(body).array()
-        synchronized(this) {
-            output!!.write(buf)
-            output!!.flush()
-        }
-    }
-
-    /**
-     * 只在已经连着的服务上写一条（取消用）：断了就算了，**别为一条取消去重建连接**——
-     * `send()` 会经 `ensureServer()` 新开 adb 流并等「ready」最多 15 秒，正卡在 Python 的轮询线程上，
-     * 而取消恰恰发生在「流刚断、命令超时」这条路径上。
-     */
-    @Synchronized
-    private fun sendIfOpen(id: Int, type: Int, body: ByteArray) {
-        if (server?.isClosed != false) return
-        val o = output ?: return
-        val buf = ByteBuffer.allocate(9 + body.size).putInt(id).put(type.toByte()).putInt(body.size).put(body).array()
-        o.write(buf)
-        o.flush()
-    }
-
-    private fun field(data: ByteArray): ByteArray = ByteBuffer.allocate(4 + data.size).putInt(data.size).put(data).array()
-
-    class Job internal constructor(private val id: Int) : ShellJob {
-        @Volatile private var finished = false
-        @Volatile private var code = -1
-        @Volatile private var out = ByteArray(0)
-        @Volatile private var err = ByteArray(0)
-
-        fun complete(code: Int, out: ByteArray, err: ByteArray) {
-            this.code = code; this.out = out; this.err = err
-            finished = true
-        }
-
-        override fun isDone(): Boolean = finished
-        override fun result(timedOut: Boolean) = Shell.Result(code, out, err, timedOut)
-
-        /**
-         * 超时：先把这条 id 从待回队列摘掉，再让命令服务真把远端进程杀掉（协议类型 4，不回包）。
-         * 只摘队列不够——远端命令会一直跑完，占着设置页和 CPU。
-         */
-        override fun cancel() {
-            finished = true
-            AdbShell.pending.remove(id)
-            try {
-                AdbShell.sendIfOpen(id, TYPE_CANCEL, ByteArray(0))
-            } catch (_: Exception) {
-            }
-        }
-    }
-
-    @JvmStatic
-    fun submit(cmd: String, stdin: ByteArray?): ShellJob {
-        val id = nextId.getAndIncrement()
-        val job = Job(id)
-        pending[id] = job
-        try {
-            send(id, TYPE_RUN, field(cmd.toByteArray()) + field(stdin ?: ByteArray(0)))
-        } catch (e: Exception) {
-            pending.remove(id)
-            job.complete(-1, ByteArray(0), "命令服务不可用：$e".toByteArray())
-        }
-        return job
-    }
-
-    /**
-     * 常驻进程（读屏服务、后台屏）：交给命令服务起，名字相同且还活着就不再起。
-     * 不等应答：与 ShizukuShell.daemon 不同，这里返回的 true 只表示请求发出去了，
-     * 是否真的新起由服务端的同名判断决定。现有调用点都不读返回值，所以发不出去时要照旧抛出去——
-     * 否则「建不了屏 / 读屏服务起不来」的真实原因就被吞成 false，调用方只能空等超时。
-     */
-    @JvmStatic
-    fun daemon(name: String, cmd: String): Boolean {
-        val id = nextId.getAndIncrement()
-        pending[id] = Job(id)
-        return try {
-            send(id, TYPE_DAEMON, field(name.toByteArray()) + cmd.toByteArray())
-            true
-        } catch (e: Exception) {
-            pending.remove(id)
-            throw e
-        }
-    }
-
-    @JvmStatic
-    fun stopDaemon(name: String) {
-        if (server?.isClosed != false) return
-        // 类型 3 的回包没有人等：不登记 pending，到了直接丢掉
-        try {
-            send(nextId.getAndIncrement(), TYPE_STOP, name.toByteArray())
-        } catch (_: Exception) {
-        }
+        client = c
+        return c
     }
 }

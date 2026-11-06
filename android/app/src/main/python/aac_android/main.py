@@ -81,7 +81,7 @@ def in_front(fn, package, action, stopped=None):
 
 
 def boot(base, data_dir, cache_dir, package="com.ahuamiao.adcleaner"):
-    """base：解出来的 aac/（tool、recipes、gui、images、u2.jar）；data_dir：备份与设置。"""
+    """base：解出来的 aac/（tool、recipes、gui、images）；data_dir：备份与设置。"""
     global API
     os.environ.setdefault("HOME", data_dir)
     os.environ["TMPDIR"] = cache_dir
@@ -91,8 +91,7 @@ def boot(base, data_dir, cache_dir, package="com.ahuamiao.adcleaner"):
     inproc.EXECUTABLE = sys.executable
     inproc.setup(os.path.join(base, "tool"))
     adb.install(os.path.join(data_dir, "bin", "adb"))
-    u2.install(os.path.join(base, "u2.jar"))
-    inproc.after_run.append(u2.cleanup)
+    u2.install()
     sys.path.insert(0, os.path.join(base, "gui"))
 
     import app
@@ -127,14 +126,6 @@ def call(method, args_json):
     except Exception as e:
         traceback.print_exc(file=inproc._fallback[1])
         return json.dumps({"error": f"{type(e).__name__}: {e}"}, ensure_ascii=False)
-
-
-def stop_service():
-    """App 被关掉时：停掉还在跑的读屏服务。"""
-    try:
-        u2.cleanup()
-    except Exception:
-        pass
 
 
 def selftest(serial_hint=""):

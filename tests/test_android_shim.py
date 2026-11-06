@@ -1,4 +1,5 @@
 """手机版替换层（android/app/src/main/python/aac_android）：不连手机，替换掉执行通道后验 adb 语义、进程内脚本、选择器。"""
+import contextlib
 import os
 import subprocess
 import sys
@@ -159,6 +160,14 @@ class ShellStub:
     def stopDaemon(self, name):
         self.calls.append("stopDaemon")
 
+    def dumpJob(self, display):
+        self.calls.append(f"dumpJob:{display}")
+        return self._submit("", None)
+
+    def sizeJob(self, display):
+        self.calls.append(f"sizeJob:{display}")
+        return self._submit("", None)
+
     def ready(self):
         # 改造前既查又连的旧名字：还有人调就是 Python 侧漏改了
         raise AssertionError("Shell.ready() 已拆成 connected() / ensure()")
@@ -206,11 +215,21 @@ class ShellFacadeTest(unittest.TestCase):
         self.assertEqual(self.shell.calls, ["ensure"])
 
     def test_facade_exposes_the_names_python_calls(self):
-        """本机没有 JDK，Kotlin 编译不了：这里把它对 Python 的契约钉在源码上。"""
+        """回归里不编译 Kotlin：这里把门面对 Python 的契约钉在源码上。"""
         src = (KOTLIN / "Shell.kt").read_text(encoding="utf-8")
-        for name in ("fun connected()", "fun ensure()", "fun submit(", "fun daemon(", "fun stopDaemon("):
+        for name in ("fun connected()", "fun ensure()", "fun submit(", "fun daemon(", "fun stopDaemon(",
+                     "fun dumpJob(", "fun sizeJob("):
             self.assertIn(name, src, f"Shell 门面缺 {name}")
         self.assertNotIn("fun backend()", src)
+
+    def test_reading_the_screen_is_polled_not_awaited_in_java(self):
+        """读屏也是「提交 + Python 轮询」：在 Java 方法里等会冻住解释器锁（那正是 #623 改前的问题）。"""
+        self.shell = ShellStub()
+        self.shell.dumpJob = lambda display: self.Job(3)
+        b = bridge.ShizukuBridge.__new__(bridge.ShizukuBridge)
+        b.shell = self.shell
+        r = b.dump(7)
+        self.assertEqual((r.code, r.out), (0, b"ok"))
 
     def test_result_lives_on_the_facade(self):
         self.assertIn("class Result(", (KOTLIN / "Shell.kt").read_text(encoding="utf-8"))
@@ -223,6 +242,63 @@ PAGE = ('<hierarchy rotation="0">'
         '<node display-id="7" resource-id="com.x:id/menu" text="菜单" clickable="true" bounds="[10,10][30,30]" />'
         '<node display-id="7" resource-id="com.x:id/menu" text="菜单" clickable="true" bounds="[40,10][60,30]" />'
         '</node></hierarchy>')
+
+# 命令服务已经按屏号过滤过：后台屏下 Device 拿到的就是这一份
+PAGE7 = ('<hierarchy rotation="0">'
+         '<node display-id="7" package="com.x" text="" bounds="[0,0][100,100]">'
+         '<node display-id="7" resource-id="com.x:id/menu" text="菜单" clickable="true" bounds="[10,10][30,30]" />'
+         '<node display-id="7" resource-id="com.x:id/menu" text="菜单" clickable="true" bounds="[40,10][60,30]" />'
+         '</node></hierarchy>')
+
+
+class _Reader:
+    """假命令服务：dump / size 回预置值，其它命令记下来（#623 后读屏走的就是这条通道）。"""
+
+    def __init__(self, dump=(None, 0, ""), size=("1080 2400", 0, ""), exit_code=0):
+        self.dump_result, self.size_result, self.exit_code = dump, size, exit_code
+        self.displays, self.cmds = [], []
+
+    @staticmethod
+    def _unpack(t):
+        out, code, *err = t
+        return code, (out or "").encode(), (err[0] if err else "").encode()
+
+    def ready(self):
+        return True
+
+    def ensure(self):
+        return True
+
+    def dump(self, display):
+        self.displays.append(display)
+        return bridge.Result(*self._unpack(self.dump_result))
+
+    def size(self, display):
+        return bridge.Result(*self._unpack(self.size_result))
+
+    def exec(self, cmd, stdin=None, timeout=None):
+        self.cmds.append(cmd)
+        return bridge.Result(self.exit_code, b"", b"")
+
+    def daemon(self, name, cmd):
+        self.cmds.append(cmd)
+        return True
+
+    def stop_daemon(self, name):
+        self.cmds.append(f"stop:{name}")
+
+    def set_clipboard(self, text):
+        self.cmds.append(f"clipboard:{text}")
+
+
+@contextlib.contextmanager
+def _using(fake):
+    saved = bridge._bridge
+    bridge._bridge = fake
+    try:
+        yield fake
+    finally:
+        bridge._bridge = saved
 
 
 class BackgroundScreenTest(unittest.TestCase):
@@ -273,21 +349,58 @@ class BackgroundScreenTest(unittest.TestCase):
         for cmd in ("am start -n a/.B", "input tap 1 2", "screencap -p", "input keyevent HOME"):
             self.assertEqual(screen.rewrite(cmd), cmd)
 
-    def test_dump_keeps_only_this_screen(self):
-        xml = u2.only_display(PAGE, 7)
-        self.assertNotIn("主屏", xml)
-        self.assertEqual(xml.count("菜单"), 2)
+    def test_dump_asks_the_service_for_this_screen(self):
+        """读屏不再起监听 9008 的 u2.jar：dump 按屏号问命令服务，回包就是引擎读的页面。"""
+        page = '<hierarchy><node display-id="7" text="菜单" /></hierarchy>'
+        fake = _Reader((page, 0))
+        with _using(fake):
+            dev = u2.Device()
+            self.assertEqual(dev.dump_hierarchy(), page)
+        self.assertEqual(set(fake.displays), {7})
 
-    def test_selector_matches_on_filtered_page(self):
+    def test_a_failed_read_raises_with_the_servers_words(self):
+        """读屏坏了要报错：回落成空页会让引擎把每个开关都数成「没找到」。"""
+        with _using(_Reader((None, 255, "UiAutomation 被别的无障碍服务占用"))):
+            with self.assertRaises(u2.UiAutomationError) as caught:
+                u2.Device()
+        self.assertIn("UiAutomation 被别的无障碍服务占用", str(caught.exception))
+
+    def test_a_registered_reader_maps_to_the_busy_type(self):
+        """两个客户端抢读屏时，引擎靠这个类型报「读屏服务被占用」，别改成泛泛的读屏错误。"""
+        with _using(_Reader((None, 255, "UiAutomationService already registered"))):
+            with self.assertRaises(u2.AccessibilityServiceAlreadyRegisteredError):
+                u2.Device()
+
+    def test_selector_matches_on_the_page(self):
         import xml.etree.ElementTree as ET
-        nodes = list(ET.fromstring(u2.only_display(PAGE, 7)).iter("node"))
+        nodes = list(ET.fromstring(PAGE).iter("node"))
         hits = [n for n in nodes if u2.matches(n, u2.Selector(resourceId="com.x:id/menu"))]
         self.assertEqual([u2.bounds_of(n) for n in hits], [(10, 10, 30, 30), (40, 10, 60, 30)])
         self.assertTrue(any(u2.matches(n, u2.Selector(text="菜单", clickable=True)) for n in nodes))
-        self.assertFalse(any(u2.matches(n, u2.Selector(text="主屏")) for n in nodes))
+        self.assertFalse(any(u2.matches(n, u2.Selector(text="主屏")) and n.get("display-id") == "7" for n in nodes))
         self.assertTrue(any(u2.matches(n, u2.Selector(textMatches="菜.")) for n in nodes))
 
-    def test_reader_service_never_types_into_the_main_screen(self):
+    def test_clearing_a_field_goes_through_input(self):
+        """clearTextField 自己发全选 + DEL：不能像 setText 一样一律抛错，
+        否则引擎「粘贴前先清空」那一步成了死代码，搜索框里的旧词会和粘贴的内容叠在一起。"""
+        fake = _Reader((PAGE, 0))
+        with _using(fake):
+            dev = u2.Device()
+            dev.jsonrpc.clearTextField(dev(resourceId="com.x:id/menu").selector)
+        self.assertIn("input keycombination 113 29", fake.cmds)
+        self.assertIn("input keyevent KEYCODE_DEL", fake.cmds)
+        self.assertTrue(any(c.startswith("input tap 20 20") for c in fake.cmds), fake.cmds)
+
+    def test_clearing_falls_back_when_keycombination_is_missing(self):
+        """`input keycombination` 要 Android 11+，minSdk 是 26：老系统上按字数逐字删。"""
+        fake = _Reader((PAGE, 0), exit_code=1)
+        with _using(fake):
+            dev = u2.Device()
+            dev.jsonrpc.clearTextField(dev(resourceId="com.x:id/menu").selector)
+        self.assertEqual(fake.cmds.count("input keyevent KEYCODE_DEL"), 3)   # 「菜单」两个字 + 收尾那一次
+
+    def test_set_text_still_refuses_so_the_engine_pastes(self):
+        """写字的契约没变：走读屏写字一律抛错，引擎退到剪贴板 + 粘贴。"""
         with self.assertRaises(u2.RPCUnknownError):
             u2._Rpc().setText({}, "x")
 
@@ -521,7 +634,7 @@ class ScreenObjectTest(unittest.TestCase):
             return self.page
 
     def test_text_and_bounds_come_from_this_screen_only(self):
-        dev = self.Device(u2.only_display(PAGE, 7))
+        dev = self.Device(PAGE7)
         second = u2.UiObject(dev, u2.Selector(text="菜单", instance=1))
         self.assertEqual(second.get_text(), "菜单")
         self.assertEqual(second.info["text"], "菜单")
@@ -611,37 +724,33 @@ class InprocTest(unittest.TestCase):
 
 
 class WaitTest(unittest.TestCase):
-    """读超时只 warn 并回落 exists：机型脚本的 click_exists 只捕 UiObjectNotFoundError。"""
+    """读超时只 warn 并回落，不穿透：机型脚本的 click_exists 只捕 UiObjectNotFoundError。"""
 
-    class Rpc:
-        def __init__(self):
-            self.calls = []
+    class Device:
+        """前 failures 次读屏抛超时，之后正常。"""
 
-        def waitForExists(self, selector, timeout, http_timeout=None):
-            self.calls.append("waitForExists")
-            raise u2.HTTPError("read timeout")
+        def __init__(self, page, failures=1):
+            self.page, self.failures, self.reads = page, failures, 0
+            self.jsonrpc, self.wait_timeout = None, 20.0
 
-        def waitUntilGone(self, selector, timeout, http_timeout=None):
-            self.calls.append("waitUntilGone")
-            raise u2.HTTPTimeoutError("read timeout")   # 子类也要落到同一条回落
+        def dump_hierarchy(self, *a, **k):
+            self.reads += 1
+            if self.reads <= self.failures:
+                raise u2.HTTPTimeoutError("read timeout")
+            return self.page
 
-        def exist(self, selector):
-            return True
-
-    def object_with(self, rpc):
-        dev = u2.Device.__new__(u2.Device)
-        dev.jsonrpc, dev.wait_timeout = rpc, 20.0
-        return u2.UiObject(dev, u2.Selector(text="x"))
-
-    def test_read_timeout_falls_back_to_exists(self):
-        rpc = self.Rpc()
-        obj = self.object_with(rpc)
+    def test_read_timeout_falls_back_instead_of_raising(self):
+        obj = u2.UiObject(self.Device(PAGE7), u2.Selector(text="菜单"))
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             self.assertTrue(obj.wait())
-            self.assertFalse(obj.wait(exists=False))
-        self.assertEqual(rpc.calls, ["waitForExists", "waitUntilGone"])
-        self.assertEqual(len(w), 2)
+        self.assertEqual(len(w), 1)
+
+    def test_giving_up_returns_false_rather_than_raising(self):
+        obj = u2.UiObject(self.Device(PAGE7, failures=99), u2.Selector(text="菜单"))
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            self.assertFalse(obj.wait())
 
 
 class SelectorTest(unittest.TestCase):

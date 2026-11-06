@@ -3,15 +3,14 @@ package com.ahuamiao.adcleaner
 import android.content.pm.PackageManager
 import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuRemoteProcess
-import java.io.ByteArrayOutputStream
-import java.io.InputStream
-import java.util.concurrent.TimeUnit
-import kotlin.concurrent.thread
 
 /**
- * 经 Shizuku 以 shell 身份执行命令：桌面版经 adb 做的事，手机上都走这里（Python 侧见 aac_android/adb.py）。
+ * 经 Shizuku 以 shell 身份起 ShellServer（与内置无线调试同一个命令服务），之后经 ServerClient 收发。
  *
- * Shizuku 13 起 newProcess 不再公开，官方建议 UserService；这里只需要执行一条 sh 命令、拿退出码与输出，
+ * 不再每条命令起一个远程进程：读屏（#623）要在同一个 shell 进程里连 UiAutomation，
+ * 而且常驻服务让命令的 stdout / stderr / 退出码都按编号分开回来。
+ *
+ * Shizuku 13 起 newProcess 不再公开，官方建议 UserService；这里只需要起一个进程、拿它的输入输出，
  * 反射调用它是 Shizuku 文档里认可的做法（rish 走的也是同一个接口）。
  */
 object ShizukuShell {
@@ -33,86 +32,22 @@ object ShizukuShell {
     private fun start(cmd: String): ShizukuRemoteProcess =
         newProcess.invoke(null, arrayOf("sh", "-c", cmd), null, null) as ShizukuRemoteProcess
 
-    private fun drain(stream: InputStream, into: ByteArrayOutputStream) = thread(isDaemon = true) {
-        try {
-            stream.copyTo(into)
-        } catch (_: Exception) {
-        }
-    }
+    private var client: ServerClient? = null
 
-    /**
-     * 一条命令在后台线程里跑，Python 侧轮询 isDone() 并自己掐超时。
-     *
-     * 不能在 Python 调用的 Java 方法里等命令结束：Chaquopy 调 Java 期间不放解释器锁，
-     * 一条命令卡住（小米 18 Pro Max 上经 Shizuku 跑 monkey 卡了 122 秒），停止、界面轮询、看门狗全跟着停。
-     * 也不能靠 waitForTimeout 掐超时：同一次实测里 60 秒的超时没有生效。
-     */
-    class Job internal constructor(cmd: String, stdin: ByteArray?) : ShellJob {
-        private val process = start(cmd)
-        private val out = ByteArrayOutputStream()
-        private val err = ByteArrayOutputStream()
-        @Volatile private var finished = false
-        @Volatile private var code = -1
-
-        init {
-            val readers = listOf(drain(process.inputStream, out), drain(process.errorStream, err))
-            thread(isDaemon = true) {
-                try {
-                    process.outputStream.use { if (stdin != null) it.write(stdin) }
-                } catch (_: Exception) {
-                }
-            }
-            thread(isDaemon = true) {
-                code = try {
-                    process.waitFor()
-                } catch (_: Exception) {
-                    -1
-                }
-                readers.forEach { it.join(2000) }
-                finished = true
-            }
-        }
-
-        override fun isDone(): Boolean = finished
-
-        override fun result(timedOut: Boolean) = Shell.Result(code, out.toByteArray(), err.toByteArray(), timedOut)
-
-        override fun cancel() {
-            try {
-                process.destroy()
-            } catch (_: Exception) {
-            }
-        }
-    }
-
-    @JvmStatic
-    fun submit(cmd: String, stdin: ByteArray?): Job = Job(cmd, stdin)
-
-    private val daemons = mutableMapOf<String, ShizukuRemoteProcess>()
-
-    /** 常驻进程（读屏服务 u2.jar）：同名的还活着就不再起；输出读掉丢弃，免得管道写满把它卡住。 */
+    /** 起命令服务（已在跑就直接用）：进程断了就重起一个。 */
     @JvmStatic
     @Synchronized
-    fun daemon(name: String, cmd: String): Boolean {
-        daemons[name]?.let { if (alive(it)) return false }
-        val process = start(cmd)
-        drain(process.inputStream, ByteArrayOutputStream())
-        drain(process.errorStream, ByteArrayOutputStream())
-        process.outputStream.close()
-        daemons[name] = process
-        return true
-    }
-
-    /** isAlive 同样走 exitValue()，换成 0 毫秒的 waitForTimeout。 */
-    private fun alive(process: ShizukuRemoteProcess) = try {
-        !process.waitForTimeout(0, TimeUnit.MILLISECONDS)
-    } catch (_: Exception) {
-        false
-    }
-
-    @JvmStatic
-    @Synchronized
-    fun stopDaemon(name: String) {
-        daemons.remove(name)?.destroy()
+    fun client(): ServerClient {
+        client?.let { if (!it.closed) return it }
+        val process = start(ServerClient.command(AdbShell.app.applicationInfo.sourceDir))
+        val c = ServerClient(process.inputStream, process.outputStream) {
+            synchronized(this) { if (client?.closed == true) client = null }
+        }
+        if (!c.awaitReady(15_000)) {
+            process.destroy()
+            throw java.io.IOException("命令服务没有启动")
+        }
+        client = c
+        return c
     }
 }

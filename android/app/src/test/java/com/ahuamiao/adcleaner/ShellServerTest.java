@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit;
  * 退出码、并发编号、取消。连不上 adbd 的连接 / 重连留给真机（#622）。
  */
 public class ShellServerTest {
-    private static final int RUN = 1, DAEMON = 2, STOP = 3, CANCEL = 4;
+    private static final int RUN = 1, DAEMON = 2, STOP = 3, CANCEL = 4, DUMP = 5, SIZE = 6;
 
     @org.junit.BeforeClass
     public static void useTheHostShell() {
@@ -64,6 +64,7 @@ public class ShellServerTest {
 
     @Before
     public void start() throws Exception {
+        ShellServer.reader = null;              // 静态字段：每例从「没有读屏能力」开始，自己按需装
         toServer = new PipedOutputStream();
         PipedInputStream serverIn = new PipedInputStream(toServer, 1 << 16);
         PipedOutputStream serverOut = new PipedOutputStream();
@@ -237,5 +238,88 @@ public class ShellServerTest {
         Frame stopped = next(5000);
         assertNotNull(stopped);
         assertEquals(31, stopped.id);
+    }
+
+    // ----- 读屏（#623）-----
+
+    /** 读屏不在协议层实现：换一个假的，协议照样按类型 5 / 6 收发。 */
+    private static ScreenReader reader(String dump, String size) {
+        return new ScreenReader() {
+            @Override
+            public String dump(int display) {
+                return dump + display;
+            }
+
+            @Override
+            public String size(int display) {
+                return size;
+            }
+        };
+    }
+
+    @Test
+    public void dump_and_size_are_served_by_the_reader() throws Exception {
+        ShellServer.reader = reader("", "1080 2400");
+        send(40, DUMP, "3".getBytes(StandardCharsets.UTF_8));
+        Frame f = next(5000);
+        assertNotNull(f);
+        assertEquals(40, f.id);
+        assertEquals(0, f.code);
+        assertEquals("3", f.outText());         // 假读屏把屏号回显出来：屏号确实传到了实现里
+        assertEquals("", f.errText());
+
+        send(41, SIZE, "3".getBytes(StandardCharsets.UTF_8));
+        Frame g = next(5000);
+        assertNotNull(g);
+        assertEquals(41, g.id);
+        assertEquals("1080 2400", g.outText());
+    }
+
+    @Test
+    public void a_reader_failure_comes_back_with_the_servers_own_words() throws Exception {
+        ShellServer.reader = new ScreenReader() {
+            @Override
+            public String dump(int display) {
+                throw new IllegalStateException("读屏连接被别的无障碍服务占用");
+            }
+
+            @Override
+            public String size(int display) {
+                return "";
+            }
+        };
+        send(42, DUMP, "0".getBytes(StandardCharsets.UTF_8));
+        Frame f = next(5000);
+        assertNotNull(f);
+        assertEquals(255, f.code);
+        assertTrue("根因要回给客户端，不能只剩一句「读不到」", f.errText().contains("读屏连接被别的无障碍服务占用"));
+    }
+
+    @Test
+    public void without_a_reader_the_command_channel_still_works() throws Exception {
+        send(43, DUMP, "0".getBytes(StandardCharsets.UTF_8));
+        Frame f = next(5000);
+        assertNotNull(f);
+        assertEquals(43, f.id);
+        assertEquals(255, f.code);
+        assertTrue(f.errText().contains("没有读屏"));
+
+        send(44, RUN, execBody("echo alive", ""));
+        Frame g = next(5000);
+        assertNotNull(g);
+        assertEquals("alive\n", g.outText());   // 读屏缺失不该拖垮命令通道
+    }
+
+    @Test
+    public void cancelling_one_id_does_not_eat_another_reply() throws Exception {
+        // 类型 4 与 5 / 6 是两张码：取消回的是「不回包」，读屏回的是正文。
+        // 这条守住编号不撞车——撞了的话，取消会把后一条读屏的应答吃掉。
+        ShellServer.reader = reader("screen-", "1 1");
+        send(50, CANCEL, new byte[0]);          // 服务端没有这个 id：什么都不做，也不回包
+        send(51, DUMP, "0".getBytes(StandardCharsets.UTF_8));
+        Frame f = next(5000);
+        assertNotNull(f);
+        assertEquals(51, f.id);
+        assertEquals("screen-0", f.outText());
     }
 }
