@@ -77,24 +77,27 @@ class RestoreChannelsTest(unittest.TestCase):
         self.api.restore("s", "channels")
         self.assertEqual(self.loaded(), [("com.b", "news", "资讯"), ("com.c", "spam", "推广"), ("com.a", "promo", "推广")])
 
-    def test_list_saved_with_bom_and_crlf_is_readable(self):
-        # AGENTS.md 让人手工删这份清单里的行；编辑器另存成带 BOM / CRLF 时，表头不能变成数据行
+    def test_list_saved_with_bom_is_readable(self):
+        # AGENTS.md 让人手工删这份清单里的行，编辑器会按系统习惯另存（Windows 上带 BOM + CRLF）。
+        # 首行故意是数据行：带 BOM 的表头本来就会被坏行过滤跳过，那样测不出 `utf-8-sig`。
         write_bytes(self.tmp.name, "M1-20261106-1040",
-                    "# 包名\t渠道id\t渠道名\t应用名\r\ncom.a\tpromo\t推广\tA\r\n".encode("utf-8-sig"))
+                    "com.a\tpromo\t推广\tA\r\ncom.b\tnews\t资讯\tB\r\n".encode("utf-8-sig"))
         self.api.restore("s", "channels")
-        self.assertEqual(self.loaded(), [("com.a", "promo", "推广")])
+        self.assertEqual(self.loaded(), [("com.a", "promo", "推广"), ("com.b", "news", "资讯")])
 
     def test_bad_row_in_an_old_list_is_skipped(self):
-        # 坏行所在的备份从界面删不掉：不跳过就永远卡死这个型号的还原
-        write(self.tmp.name, "M1-20261106-1040", ["残留坏行", "com.a\tpromo\t推广\tA"])
+        # 坏行所在的备份从界面删不掉：不跳过就永远卡死这个型号的还原。第二条带 cid、包名里有空格，
+        # 只按「有没有 cid」过滤拦不住它 —— 它进清单后 `load()` 会抛错。
+        write(self.tmp.name, "M1-20261106-1040", ["残留坏行", "com.a promo\tpromo\t促销\tA", "com.b\tnews\t资讯\tB"])
         self.api.restore("s", "channels")
-        self.assertEqual(self.loaded(), [("com.a", "promo", "推广")])
+        self.assertEqual(self.loaded(), [("com.b", "news", "资讯")])
 
     def test_rows_differing_only_in_spaces_are_one_channel(self):
         write(self.tmp.name, "M1-20261106-1040", ["com.a \tpromo\t旧名\tA"])
         write(self.tmp.name, "M1-20261106-1053", ["com.a\tpromo\t推广\tA"])
         self.api.restore("s", "channels")
-        self.assertEqual(self.loaded(), [("com.a", "promo", "推广")])
+        rows = [r for r in self.sent[0].splitlines() if not r.startswith("#")]
+        self.assertEqual(rows, ["com.a\tpromo\t推广\tA"])     # 真的合成一行，且用最近那条的名字
 
 
 if __name__ == "__main__":

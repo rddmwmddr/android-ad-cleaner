@@ -16,7 +16,7 @@
 
 ## Consequences
 
-- 逐字保留的一条隐形行为：`Backups.latest()` 是 `sorted(...)[-1]`，字典序上 `"<型号>-gui"` 排在所有 `"<型号>-<时间>"` 之后——只要兜底目录存在，它优先于带时间的备份。`channels.tsv` 会写进去、`restore channels` 从里面读，所以这不是可以「顺手改成取最新」的地方。
+- 逐字保留的一条隐形行为：备份目录按字典序排，`"<型号>-gui"` 排在所有 `"<型号>-<时间>"` 之后——只要兜底目录存在，它优先于带时间的备份。`latest()` 取这个顺序的最后一个（#628 起改由 `Backups.all()` 的倒序取第一个，结果不变）。`channels.tsv` 会写进去、`restore channels` 从里面读，所以这不是可以「顺手改成取最新」的地方。
 - `latest()` 选 `listdir` + `startswith(model + "-")`（`gui/app.py` 原来的语义），`run.py` 原来的 `glob(f"{model}-*")` 不再使用。型号里真出现 glob 元字符（`[` `]` `*` `?`）时两边结果不同——`A[B]C-*` 在 glob 下能匹配 `ABC-…`。真机型号不会有这些字符，`tests/test_backups.py` 有用例钉住选中的这一套。
 - 测试原有的 `api._run = Mock(...)`、`patch.object(app.subprocess, "Popen")`、`patch.object(app.subprocess, "run")` 三类 patch 全部保留：`Runner` 用的还是同一个 `subprocess` 模块对象。改用注入的假 `Runner` 是另一笔独立迁移。
 - `data_dir()` 只去掉 `makedirs`，位置判定（Windows `%APPDATA%` / macOS `Application Support` / 其它 `~/.local/share`）逐字未动。`ClientData.ensure()` 只在 `client_api()`（窗口与截图脚本共用的入口）与两处写盘前调用：`_install_id()` 与 `_download()`——后者原先依赖 import 期那次 `makedirs`。
