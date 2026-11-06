@@ -100,6 +100,18 @@ class MainActivity : Activity() {
         super.onPause()
     }
 
+    @Deprecated("Activity 基类只有这个回调")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != CAPTURE) return
+        if (resultCode == RESULT_OK && data != null && Build.VERSION.SDK_INT >= 30) {
+            PairingService.start(this, resultCode, data)
+            Pairing.openWireless(this)
+        } else {
+            Pairing.start(this)
+        }
+    }
+
     override fun onDestroy() {
         Shizuku.removeBinderReceivedListener(binderListener)
         Shizuku.removeBinderDeadListener(deadListener)
@@ -171,8 +183,22 @@ class MainActivity : Activity() {
             }
         }
 
+        /**
+         * 开始授权（#634）：先请求一次截取屏幕，允许了就由 PairingService 自动读配对码；
+         * 不允许或安卓版本不支持，退回通知栏手动填写。
+         */
         @JavascriptInterface
-        fun startPairing() = runOnUiThread { Pairing.start(this@MainActivity) }
+        fun startPairing() = runOnUiThread {
+            val mpm = getSystemService(android.media.projection.MediaProjectionManager::class.java)
+            val ask = if (Build.VERSION.SDK_INT >= 34)
+                mpm.createScreenCaptureIntent(android.media.projection.MediaProjectionConfig.createConfigForDefaultDisplay())
+            else mpm.createScreenCaptureIntent()
+            try {
+                startActivityForResult(ask, CAPTURE)
+            } catch (_: Exception) {
+                Pairing.start(this@MainActivity)
+            }
+        }
 
         @JavascriptInterface
         fun openSettings(which: String) = runOnUiThread {
@@ -217,6 +243,7 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        private const val CAPTURE = 7
         @Volatile private var current: MainActivity? = null
 
         /** 配对成功等事件：让开着的界面重新查一次状态。 */

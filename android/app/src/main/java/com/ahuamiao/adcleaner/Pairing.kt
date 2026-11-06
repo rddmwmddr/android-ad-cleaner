@@ -23,11 +23,20 @@ object Pairing {
     private const val CHANNEL = "pair"
     private const val ID = 3
 
-    /** 发出带输入框的通知，并打开开发者选项（「无线调试」在里面）。 */
+    /** 手动填写：发出带输入框的通知，并打开开发者选项（「无线调试」在里面）。自动识别不可用时走这条。 */
     @JvmStatic
     fun start(context: Context) {
         notify(context, "填写屏幕上的 6 位数字", "在「无线调试 → 使用配对码配对设备」里看到 6 位数字后，点下面的「填写」把它填进来", input = true)
+        openWireless(context)
+    }
+
+    /** 打开开发者选项并高亮「无线调试」那一行（AOSP 的 fragment 参数；不认的系统只是打开开发者选项）。 */
+    @JvmStatic
+    fun openWireless(context: Context) {
+        val key = ":settings:fragment_args_key"
         context.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
+            .putExtra(key, "toggle_adb_wireless")
+            .putExtra(":settings:show_fragment_args", android.os.Bundle().apply { putString(key, "toggle_adb_wireless") })
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 

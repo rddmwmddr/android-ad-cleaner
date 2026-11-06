@@ -89,15 +89,18 @@ object AdbShell {
 
     /** 首次连上：给本 App 授 WRITE_SECURE_SETTINGS，以后无线调试被关时 App 能自己打开、不用用户再操作。 */
     private fun grantSelf() {
-        thread(isDaemon = true) {
-            try {
-                client().submit("pm grant ${app.packageName} android.permission.WRITE_SECURE_SETTINGS", null)
-                    .let { job ->
-                        val deadline = System.currentTimeMillis() + 10_000
-                        while (!job.isDone() && System.currentTimeMillis() < deadline) Thread.sleep(50)
-                    }
-            } catch (_: Throwable) {
+        thread(isDaemon = true) { exec("pm grant ${app.packageName} android.permission.WRITE_SECURE_SETTINGS") }
+    }
+
+    /** 以 shell 身份跑一条命令，不关心输出；失败不抛。 */
+    @JvmStatic
+    fun exec(command: String, timeoutMs: Long = 10_000) {
+        try {
+            client().submit(command, null).let { job ->
+                val deadline = System.currentTimeMillis() + timeoutMs
+                while (!job.isDone() && System.currentTimeMillis() < deadline) Thread.sleep(50)
             }
+        } catch (_: Throwable) {
         }
     }
 
@@ -105,12 +108,22 @@ object AdbShell {
     @JvmStatic
     fun pair(code: String, timeoutMs: Long): Boolean {
         val port = AdbManager.discover(app, AdbMdns.SERVICE_TYPE_TLS_PAIRING, timeoutMs)
-        if (port <= 0) return false
-        val ok = try {
-            AdbManager.get(app).pair("127.0.0.1", port, code)
-        } catch (_: Throwable) {
+        if (port <= 0) {
+            android.util.Log.i("AacPair", "没找到配对端口：对话框关了，或 mDNS 没收到")
+            return false
+        }
+        return try {
+            pairAt(port, code)
+        } catch (e: Throwable) {
+            android.util.Log.w("AacPair", "配对失败", e)
             false
         }
+    }
+
+    /** 已知配对端口时直接配（自动识别配对码时用，#634）；失败抛异常，由调用方记日志。 */
+    @JvmStatic
+    fun pairAt(port: Int, code: String): Boolean {
+        val ok = AdbManager.get(app).pair("127.0.0.1", port, code)
         if (ok) failedAt = 0L       // 刚配对：马上可以连
         return ok
     }
