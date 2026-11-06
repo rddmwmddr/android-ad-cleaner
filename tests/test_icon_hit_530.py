@@ -5,12 +5,9 @@
 两种先后下都只点齿轮。
 """
 import ast
-import contextlib
-import io
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 from xml.etree import ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,7 +15,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from row import icon_hit
-from fixtures import phone_mock
+from fixtures import load_recipe, phone_mock
 
 
 class IconHitTests(unittest.TestCase):
@@ -115,11 +112,8 @@ def make_phone(nodes):
 
 
 def call_gear(path, phone):
-    scope = {"p": phone, "ONLY": ["__no_steps__"]}
-    with contextlib.redirect_stdout(io.StringIO()):
-        exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), scope)
-        with patch.object(scope["time"], "sleep"):
-            return scope["gear"]()
+    scope, _ = load_recipe(phone, path)
+    return scope["gear"]()
 
 
 class VivoGearTests(unittest.TestCase):

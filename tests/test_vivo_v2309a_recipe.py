@@ -2,19 +2,16 @@
 
 三处入口差异都来自 V2309A 真机读数；参考脚本按 V2547DA 的写法在这台上空转 216 秒。
 """
-import contextlib
-import io
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import patch
 from xml.etree import ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import run
-from fixtures import phone_mock
+from fixtures import load_recipe, phone_mock
 
 RECIPE = ROOT / "recipes/vivo-V2309A/recipe.py"
 
@@ -48,15 +45,12 @@ def make_phone(nodes, **fields):
 
 
 def load(phone, only=None):
-    scope = {"p": phone, "ONLY": only if only is not None else ["__no_steps__"]}
-    with contextlib.redirect_stdout(io.StringIO()):
-        exec(compile(RECIPE.read_text(encoding="utf-8"), str(RECIPE), "exec"), scope)
+    scope, _ = load_recipe(phone, RECIPE, only)
     return scope
 
 
 def call(scope, name, *args, **kwargs):
-    with patch.object(scope["time"], "sleep"):
-        return scope[name](*args, **kwargs)
+    return scope[name](*args, **kwargs)
 
 
 class VivoV2309ARecipeTests(unittest.TestCase):

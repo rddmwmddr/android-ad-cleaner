@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from fixtures import phone_stub
+from fixtures import load_recipe, phone_stub
 
 SETTING_FOCUS = "com.vivo.browser/com.vivo.browser.ui.module.setting.common.activity.SettingActivity"
 # 31.3.0.0 实测：「我的」页右上角的设置图标没有 text，文字只在 content-desc 上。
@@ -46,10 +46,7 @@ class Vivo2417BrowserEntryTests(unittest.TestCase):
         return p
 
     def browser_step(self, p):
-        path = ROOT / "recipes/vivo-V2417A/recipe.py"
-        scope = {"p": p, "ONLY": ["__no_steps__"]}
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), scope)
+        scope, _ = load_recipe(p, ROOT / "recipes/vivo-V2417A/recipe.py")
         scope["tap"] = Mock(return_value=True)          # 首页设置/极简首页等子页入口
         scope["close_named"] = Mock(return_value=True)  # 本用例只验入口，不验开关
         return scope

@@ -1,6 +1,4 @@
 """PLG110（OPPO Find X9 Pro）：未确认页面/控件时不点击，并保留服务类开关。"""
-import contextlib
-import io
 from pathlib import Path
 import sys
 import unittest
@@ -9,15 +7,15 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
+sys.path.insert(0, str(ROOT / "tests"))
 import run
+from fixtures import load_recipe
 
 RECIPE = ROOT / "recipes/oppo-PLG110/recipe.py"
 
 
 def load(phone, only=None):
-    scope = {"p": phone, "ONLY": only or ["__no_steps__"]}
-    with contextlib.redirect_stdout(io.StringIO()):
-        exec(compile(RECIPE.read_text(encoding="utf-8"), str(RECIPE), "exec"), scope)
+    scope, _ = load_recipe(phone, RECIPE, only)
     return scope
 
 

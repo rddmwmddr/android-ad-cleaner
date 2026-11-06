@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import fast
 import run
-from fixtures import Clock, fake_phone, install_clock, phone_mock
+from fixtures import Clock, fake_phone, install_clock, load_recipe, phone_mock
 
 GEAR_PAGE = """<hierarchy rotation="0">
   <node class="android.widget.FrameLayout" package="com.android.calendar" bounds="[0,0][1080,2340]">
@@ -33,10 +33,7 @@ RECIPES = ("recipe.py", "recipe_os4.py")
 
 class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
     def load(self, phone, recipe="recipe.py"):
-        path = ROOT / "recipes/xiaomi-24129PN74C" / recipe
-        scope = {"p": phone, "ONLY": ["__no_steps__"]}
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), scope)
+        scope, _ = load_recipe(phone, ROOT / "recipes/xiaomi-24129PN74C" / recipe)
         return scope
 
     def test_actual_model_selects_own_recipe_and_pins_recorded_build(self):

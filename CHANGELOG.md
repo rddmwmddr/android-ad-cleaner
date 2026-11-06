@@ -23,6 +23,7 @@
 
 ### 内部
 
+- 无设备套件不再真起 adb、真 sleep：机型脚本装配收进 `fixtures.load_recipe`（#640）
 - 渠道失败行带上包名，MISMATCH 另附 importance 与应用通知读数，同名渠道能按 App 定位（#582）
 
 ## 0.3.2 · 2026-11-05

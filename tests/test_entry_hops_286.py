@@ -5,8 +5,6 @@
 文字不够——「我的」点开后页面上本来就有「设置」，真正没发生的是换页。
 """
 from pathlib import Path
-import contextlib
-import io
 import sys
 import unittest
 from unittest.mock import Mock, call
@@ -15,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from fixtures import phone_mock, phone_stub
+from fixtures import load_recipe, phone_mock, phone_stub
 
 
 def phone(taps=1):
@@ -41,11 +39,7 @@ def phone(taps=1):
 
 def load_step(p, only):
     """按段名加载并执行：返回 (scope, 标准输出)。"""
-    path = ROOT / "recipes/oppo-PKT110/recipe.py"
-    scope = {"p": p, "ONLY": only}
-    out = io.StringIO()
-    with contextlib.redirect_stdout(out):
-        exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), scope)
+    scope, out = load_recipe(p, ROOT / "recipes/oppo-PKT110/recipe.py", only)
     return scope, out.getvalue()
 
 

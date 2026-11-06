@@ -1,6 +1,4 @@
 """OPPO Find X8s（PKT110 / ColorOS 17）：入口回读和目标开关不完整时停止，避免把尝试写成成功。"""
-import contextlib
-import io
 from pathlib import Path
 import sys
 import unittest
@@ -8,15 +6,14 @@ from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
+sys.path.insert(0, str(ROOT / "tests"))
 import run
+from fixtures import load_recipe
 
 
 class OppoPkt110RecipeTests(unittest.TestCase):
     def load(self, phone):
-        path = ROOT / "recipes/oppo-PKT110/recipe.py"
-        scope = {"p": phone, "ONLY": ["__no_steps__"]}
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), scope)
+        scope, _ = load_recipe(phone, ROOT / "recipes/oppo-PKT110/recipe.py")
         return scope
 
     def test_actual_model_selects_own_recipe_and_pins_recorded_build(self):
@@ -138,10 +135,7 @@ class OppoPkt110ParentChildTests(unittest.TestCase):
         return phone, state
 
     def load(self, phone):
-        path = ROOT / "recipes/oppo-PKT110/recipe.py"
-        scope = {"p": phone, "ONLY": ["__no_steps__"]}
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), scope)
+        scope, _ = load_recipe(phone, ROOT / "recipes/oppo-PKT110/recipe.py")
         return scope
 
     def test_children_are_closed_before_the_parent(self):
@@ -178,11 +172,8 @@ class OppoPkt110ParentChildTests(unittest.TestCase):
 
 
     def load_only(self, phone, only):
-        """按段名加载：ONLY 命中的段在 exec 时就执行，异常记进 FAILED_STEPS。"""
-        path = ROOT / "recipes/oppo-PKT110/recipe.py"
-        scope = {"p": phone, "ONLY": only}
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), scope)
+        """按段名加载：ONLY 命中的段在装载时就执行，异常记进 FAILED_STEPS。"""
+        scope, _ = load_recipe(phone, ROOT / "recipes/oppo-PKT110/recipe.py", only)
         return scope
 
     def test_game_center_falls_back_to_the_settings_icon(self):

@@ -10,17 +10,16 @@ import contextlib
 import io
 from pathlib import Path
 import sys
-import time
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, call
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from fixtures import phone_mock
+from fixtures import load_recipe, phone_mock
 import run
 
 RECIPE = ROOT / "recipes/oppo-PMX110/recipe.py"
@@ -31,31 +30,8 @@ SEARCH_HOME_FOCUS = ("com.heytap.quicksearchbox/"
                      "com.heytap.quicksearchbox.ui.activity.MultiSearchHomeActivity")
 
 
-class FakeClock:
-    """假时钟：等落点、等浮层消失的循环按它推进，用例不必真睡。"""
-
-    def __init__(self):
-        self.t = 0.0
-
-    def monotonic(self):
-        return self.t
-
-    def sleep(self, seconds):
-        self.t += seconds
-
-
-@contextlib.contextmanager
-def frozen_time():
-    clock = FakeClock()
-    with patch.object(time, "monotonic", clock.monotonic), \
-            patch.object(time, "sleep", clock.sleep):
-        yield clock
-
-
 def load(phone, only=("__no_steps__",), out=None):
-    scope = {"p": phone, "ONLY": list(only)}
-    with contextlib.redirect_stdout(out if out is not None else io.StringIO()):
-        exec(compile(RECIPE.read_text(encoding="utf-8"), str(RECIPE), "exec"), scope)
+    scope, _ = load_recipe(phone, RECIPE, only, out)
     return scope
 
 
@@ -338,8 +314,7 @@ class SearchStepTests(unittest.TestCase):
         self.p.d.shell.return_value = SimpleNamespace(exit_code=0, output="")
         self.p.focus.return_value = SEARCH_SETTINGS_FOCUS
         self.p.find.return_value = False
-        with frozen_time():
-            scope = load(self.p, only=("下拉搜索",))
+        scope = load(self.p, only=("下拉搜索",))
         self.assertEqual(scope["FAILED_STEPS"], ["下拉搜索"])
         self.p.off.assert_not_called()
 
@@ -347,8 +322,7 @@ class SearchStepTests(unittest.TestCase):
         self.p.d.shell.return_value = SimpleNamespace(exit_code=0, output="")
         self.p.focus.return_value = SEARCH_HOME_FOCUS
         self.p.find.return_value = True
-        with frozen_time():
-            scope = load(self.p, only=("下拉搜索",))
+        scope = load(self.p, only=("下拉搜索",))
         self.assertEqual(scope["FAILED_STEPS"], ["下拉搜索"])
         self.p.off.assert_not_called()
         self.p.click.assert_not_called()
@@ -540,7 +514,7 @@ class NegativeScreenTests(unittest.TestCase):
         scope["row"] = Mock()
         scope["hide_carousel"] = Mock(side_effect=RuntimeError("单选缺失"))
         scope["close_named"] = Mock()
-        with frozen_time(), self.assertRaisesRegex(RuntimeError, "热点资讯已核对"):
+        with self.assertRaisesRegex(RuntimeError, "热点资讯已核对"):
             action(scope, "负一屏")()
         scope["hide_carousel"].assert_called_once_with()
         scope["close_named"].assert_called_once_with(["热点资讯"], "热点资讯")
@@ -582,8 +556,7 @@ class GameCenterTests(unittest.TestCase):
         self.p.tree.return_value = ET.fromstring('''<hierarchy>
           <node content-desc="设置,有新通知" clickable="true" bounds="[900,60][1020,180]"/>
         </hierarchy>''')
-        with frozen_time():
-            action(self.scope, "游戏中心")()
+        action(self.scope, "游戏中心")()
         self.assertEqual([c.args[0] for c in self.p.tap.call_args_list], ["跳过", "我的"])
         self.assertEqual(self.p.click.call_args_list[0].args, (960, 120))
         self.assertEqual(self.scope["close_named"].call_args_list,
@@ -594,7 +567,7 @@ class GameCenterTests(unittest.TestCase):
     def test_overlay_that_never_closes_stops_before_the_gear(self):
         self.p.find.side_effect = lambda text, **kwargs: (100, 100)
         self.p.tap.return_value = True
-        with frozen_time(), self.assertRaisesRegex(RuntimeError, "引导浮层"):
+        with self.assertRaisesRegex(RuntimeError, "引导浮层"):
             action(self.scope, "游戏中心")()
         self.p.click.assert_not_called()
         self.scope["row"].assert_not_called()
@@ -604,7 +577,7 @@ class GameCenterTests(unittest.TestCase):
         self.p.find.return_value = None
         self.p.tap.return_value = True
         self.p.tree.return_value = ET.fromstring('<hierarchy><node text="首页"/></hierarchy>')
-        with frozen_time(), self.assertRaisesRegex(RuntimeError, "设置齿轮"):
+        with self.assertRaisesRegex(RuntimeError, "设置齿轮"):
             action(self.scope, "游戏中心")()
         self.scope["row"].assert_not_called()
 
