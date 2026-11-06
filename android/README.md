@@ -2,6 +2,8 @@
 
 在手机上直接跑去广告，不用连电脑、不用装别的 App。权限来自手机自带的「无线调试」：本 App 自己配对一次、自己连本机 adbd，以 shell 身份执行命令，和电脑上的 adb 一样，不需要 root（#622）。装了并授权 [Shizuku](https://shizuku.rikka.app/) 的手机也能用。
 
+用户教程（截图 + 视频）：[docs/手机版教程](../docs/手机版教程/README.md)。
+
 ## 怎么做到不改引擎
 
 界面、后台、引擎都是桌面版那一份，原样打进 APK：`gui/web/index.html`、`gui/app.py` 的 `Api`、`tool/`、`recipes/`。手机上只替换三处：
@@ -24,8 +26,9 @@
 做法参考 Mika；adb 协议用 [libadb-android](https://github.com/MuntashirAkon/libadb-android)（GPL-3.0-or-later 或 Apache-2.0 双许可，本项目按 Apache-2.0 使用）。
 
 - `AdbManager`：App 私有目录存 RSA 密钥与自签证书；经 mDNS 找无线调试的配对 / 连接端口，只连本机 `127.0.0.1`。
-- 配对：码填在通知栏输入框（`Pairing`），用户不用离开系统的配对对话框。提交时 App 被唤醒，当场找配对端口再配——小米 HyperOS 会冻结后台 App，不能一直在后台等端口。
-- 命令与读屏：连上后只开一条常驻 `exec:` 流，跑 APK 里的 `ShellServerMain` → `ShellServer`（shell 身份），所有命令、读屏按编号经它收发（`ServerClient`；Shizuku 那条路起的是同一个服务）。不给每条命令单开 adb 流：libadb 在对端关流时有竞态，小命令会丢输出和退出码。
+- 配对（#634）：「开始授权」先请求一次截屏，`PairingService`（mediaProjection 前台服务）等 mDNS 上冒出配对端口，截一帧、用打包的 ML Kit 拉丁文模型在本机认出 6 位配对码，配对、连接，再以 shell 身份把 App 调回前台。帧只在内存里，完成即停。不用悬浮引导卡：设置的 `SettingsBaseActivity` 默认隐藏第三方悬浮窗。mDNS 会留着上一个对话框的端口，用前先探端口。
+- 退路：拒绝截屏、截到黑屏、15 秒认不出时，码填在通知栏输入框（`Pairing`）。vivo 会把通知里的「填写」按钮折起来，所以只当退路。
+- 命令与读屏：连上后只开一条常驻 `exec:` 流，跑 APK 里的 `ShellServerMain` → `ShellServer`（shell 身份），所有命令、读屏按编号经它收发（`ServerClient`；Shizuku 那条路起的是同一个服务）。读屏用 UiAutomation，不开网络端口——以前借用的 u2.jar 读屏服务在 9008 端口对局域网开放、无鉴权（#623）。不给每条命令单开 adb 流：libadb 在对端关流时有竞态，小命令会丢输出和退出码。
 - 首次连上后经 shell 给本 App 授 `WRITE_SECURE_SETTINGS`：之后无线调试被关（重启、换 Wi-Fi）时 App 自己打开、重连。第一次在某个网络上打开无线调试，系统会弹「允许在此网络上使用无线调试」，勾「始终允许」后才能免确认。
 - 选择：Shizuku 已授权就用 Shizuku，否则用内置无线调试（`Shell`）；Python 侧不感知。
 
