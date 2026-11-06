@@ -57,7 +57,7 @@ class Result:
 class ShizukuBridge:
     def __init__(self):
         from java import jclass
-        self.shell = jclass("com.ahuamiao.adcleaner.ShizukuShell")
+        self.shell = jclass("com.ahuamiao.adcleaner.Shell")    # Shizuku 或内置无线调试（#622）
 
     def ready(self):
         return bool(self.shell.ready())

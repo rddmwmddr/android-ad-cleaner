@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -8,6 +9,12 @@
     <!-- 执行期间的悬浮胶囊：有可见窗口的 App 不会被小米 HyperOS 冻结 -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
+    <!-- 内置无线调试（#622）：首次连上后经 shell 自授，之后无线调试被关时 App 自己打开 -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <queries>
         <package android:name="moe.shizuku.privileged.api" />
     </queries>
@@ -40,6 +47,11 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="执行用户发起的去广告操作，期间要切到其他 App 的设置页" />
         </service>
+
+        <!-- 通知栏填配对码的回复 -->
+        <receiver
+            android:name=".PairingReceiver"
+            android:exported="false" />
 
         <provider
             android:name="rikka.shizuku.ShizukuProvider"

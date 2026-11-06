@@ -1,6 +1,6 @@
 # 手机版（APK）
 
-在手机上直接跑去广告，不用连电脑。权限来自 [Shizuku](https://shizuku.rikka.app/)：用户在手机上用「无线调试」启动它，本 App 就能以 shell 身份执行命令，和电脑上的 adb 一样，不需要 root。
+在手机上直接跑去广告，不用连电脑、不用装别的 App。权限来自手机自带的「无线调试」：本 App 自己配对一次、自己连本机 adbd，以 shell 身份执行命令，和电脑上的 adb 一样，不需要 root（#622）。装了并授权 [Shizuku](https://shizuku.rikka.app/) 的手机也能用。
 
 ## 怎么做到不改引擎
 
@@ -18,6 +18,16 @@
 
 - 执行与还原期间开前台服务，通知栏上可以点「暂停」。
 - 结束后用 shell 身份 `am start` 回到本 App：App 自己在后台启动界面会被系统拦，前台服务也不豁免。
+
+## 内置无线调试（#622）
+
+做法参考 Mika；adb 协议用 [libadb-android](https://github.com/MuntashirAkon/libadb-android)（GPL-3.0-or-later 或 Apache-2.0 双许可，本项目按 Apache-2.0 使用）。
+
+- `AdbManager`：App 私有目录存 RSA 密钥与自签证书；经 mDNS 找无线调试的配对 / 连接端口，只连本机 `127.0.0.1`。
+- 配对：码填在通知栏输入框（`Pairing`），用户不用离开系统的配对对话框。提交时 App 被唤醒，当场找配对端口再配——小米 HyperOS 会冻结后台 App，不能一直在后台等端口。
+- 命令：连上后只开一条常驻 `exec:` 流，跑 APK 里的 `ShellServer`（shell 身份），所有命令按编号经它收发。不给每条命令单开 adb 流：libadb 在对端关流时有竞态，小命令会丢输出和退出码。
+- 首次连上后经 shell 给本 App 授 `WRITE_SECURE_SETTINGS`：之后无线调试被关（重启、换 Wi-Fi）时 App 自己打开、重连。第一次在某个网络上打开无线调试，系统会弹「允许在此网络上使用无线调试」，勾「始终允许」后才能免确认。
+- 选择：Shizuku 已授权就用 Shizuku，否则用内置无线调试（`Shell`）；Python 侧不感知。
 
 ## 后台屏（#618）
 

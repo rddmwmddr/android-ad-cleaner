@@ -17,6 +17,7 @@ class AacApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Native.app = this
+        AdbShell.app = this
         booted = worker.submit<String> {
             val base = extract()
             if (!Python.isStarted()) Python.start(AndroidPlatform(this))

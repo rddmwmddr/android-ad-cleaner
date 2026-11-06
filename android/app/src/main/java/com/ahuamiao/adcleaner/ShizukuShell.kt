@@ -54,7 +54,7 @@ object ShizukuShell {
      * 一条命令卡住（小米 18 Pro Max 上经 Shizuku 跑 monkey 卡了 122 秒），停止、界面轮询、看门狗全跟着停。
      * 也不能靠 waitForTimeout 掐超时：同一次实测里 60 秒的超时没有生效。
      */
-    class Job internal constructor(cmd: String, stdin: ByteArray?) {
+    class Job internal constructor(cmd: String, stdin: ByteArray?) : ShellJob {
         private val process = start(cmd)
         private val out = ByteArrayOutputStream()
         private val err = ByteArrayOutputStream()
@@ -80,11 +80,11 @@ object ShizukuShell {
             }
         }
 
-        fun isDone(): Boolean = finished
+        override fun isDone(): Boolean = finished
 
-        fun result(timedOut: Boolean) = Result(code, out.toByteArray(), err.toByteArray(), timedOut)
+        override fun result(timedOut: Boolean) = Result(code, out.toByteArray(), err.toByteArray(), timedOut)
 
-        fun cancel() {
+        override fun cancel() {
             try {
                 process.destroy()
             } catch (_: Exception) {

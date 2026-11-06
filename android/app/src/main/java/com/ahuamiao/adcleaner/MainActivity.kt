@@ -91,7 +91,13 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        current = this
         notifyShizuku()
+    }
+
+    override fun onPause() {
+        if (current === this) current = null
+        super.onPause()
     }
 
     override fun onDestroy() {
@@ -101,17 +107,36 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 
+    /** 让页面重新问一次权限状态（页面收到后调 AacHost.checkState()）。 */
     private fun notifyShizuku() = runOnUiThread {
         if (::web.isInitialized) web.evaluateJavascript("window.__aacShizuku && window.__aacShizuku()", null)
     }
 
-    private fun shizukuState(): String = when {
-        !installed(SHIZUKU) -> "missing"
-        !Shizuku.pingBinder() -> "stopped"
-        Shizuku.isPreV11() -> "old"
-        Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED -> "ready"
-        Shizuku.shouldShowRequestPermissionRationale() -> "denied"
-        else -> "ask"
+    /**
+     * 能不能以 shell 身份执行，以及差哪一步。两条路任一可用就是 ready：
+     * - Shizuku：装了且在跑，沿用它的授权流程（ask / denied）；
+     * - 内置无线调试（#622，安卓 11 起）：need_dev 没开开发者选项 → need_wifi 没开无线调试 → need_pair 没配对。
+     * 安卓 10 及以下没有无线调试：old（没装 Shizuku）/ stopped（装了没启动）。
+     * 连接要经 mDNS 找端口，最多等几秒，只在后台线程调。
+     */
+    private fun shellState(): String {
+        val shizukuUp = installed(SHIZUKU) && runCatching { Shizuku.pingBinder() }.getOrDefault(false)
+        if (shizukuUp && !Shizuku.isPreV11() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) return "ready"
+        if (Build.VERSION.SDK_INT < 30) {
+            return when {
+                !installed(SHIZUKU) -> "old"
+                !shizukuUp -> "stopped"
+                Shizuku.shouldShowRequestPermissionRationale() -> "denied"
+                else -> "ask"
+            }
+        }
+        if (AdbShell.ready() || AdbShell.connect(4000)) return "ready"
+        if (shizukuUp) return if (Shizuku.shouldShowRequestPermissionRationale()) "denied" else "ask"
+        return when {
+            !AdbManager.developerOn(this) -> "need_dev"
+            !AdbManager.wirelessOn(this) -> "need_wifi"
+            else -> "need_pair"
+        }
     }
 
     private fun installed(pkg: String) = try {
@@ -134,11 +159,33 @@ class MainActivity : Activity() {
             }
         }
 
+        /** 异步查权限状态，结果回调给页面里的 __aacState(状态)。 */
         @JavascriptInterface
-        fun shizuku(): String = try {
-            shizukuState()
-        } catch (_: Throwable) {
-            "stopped"
+        fun checkState() {
+            app.worker.execute {
+                val state = try {
+                    shellState()
+                } catch (_: Throwable) {
+                    "need_pair"
+                }
+                runOnUiThread { web.evaluateJavascript("window.__aacState && window.__aacState('$state')", null) }
+            }
+        }
+
+        @JavascriptInterface
+        fun startPairing() = runOnUiThread { Pairing.start(this@MainActivity) }
+
+        @JavascriptInterface
+        fun openSettings(which: String) = runOnUiThread {
+            val action = when (which) {
+                "about" -> android.provider.Settings.ACTION_DEVICE_INFO_SETTINGS
+                else -> android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS
+            }
+            try {
+                startActivity(Intent(action))
+            } catch (_: Exception) {
+                startActivity(Intent(android.provider.Settings.ACTION_SETTINGS))
+            }
         }
 
         @JavascriptInterface
@@ -161,6 +208,14 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        @Volatile private var current: MainActivity? = null
+
+        /** 配对成功等事件：让开着的界面重新查一次状态。 */
+        @JvmStatic
+        fun refreshState() {
+            current?.notifyShizuku()
+        }
+
         const val SHIZUKU = "moe.shizuku.privileged.api"
         const val SHIZUKU_PAGE = "https://shizuku.rikka.app/zh-hans/download/"
     }
