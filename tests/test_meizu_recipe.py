@@ -1,7 +1,6 @@
 """魅族脚本只操作已确认的页面和精确目标，不把失败回读当成功。"""
 import contextlib
 import io
-import itertools
 from pathlib import Path
 import sys
 import tempfile
@@ -12,7 +11,7 @@ from xml.etree import ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 import run
-from fixtures import phone_mock
+from fixtures import load_recipe, phone_mock
 
 RECIPE = ROOT / "recipes/meizu-MEIZU 21 Pro/recipe.py"
 
@@ -35,9 +34,7 @@ class MeizuRecipeTests(unittest.TestCase):
         return phone
 
     def load(self, phone, only=None, out=None):
-        scope = {"p": phone, "ONLY": only or ["__none__"]}
-        with contextlib.redirect_stdout(out if out is not None else io.StringIO()):
-            exec(compile(RECIPE.read_text(encoding="utf-8"), str(RECIPE), "exec"), scope)
+        scope, _ = load_recipe(phone, RECIPE, only, out)
         return scope
 
     def test_model_selects_exact_recipe(self):
@@ -119,8 +116,7 @@ class MeizuRecipeTests(unittest.TestCase):
         p.switches.return_value = []
         p.focus.side_effect = lambda: main if p.go.call_count == 0 else settings
         out = io.StringIO()
-        with patch("time.sleep"):
-            self.load(p, ["浏览器"], out=out)
+        self.load(p, ["浏览器"], out=out)
         self.assertEqual(p.go.call_args_list, [call("工具", "设置"), call("设置", "主页展示")])
         self.assertNotIn("未确认目标页", out.getvalue())
 
@@ -137,8 +133,7 @@ class MeizuRecipeTests(unittest.TestCase):
         p.switches.return_value = []
         p.focus.return_value = main
         out = io.StringIO()
-        with patch("time.sleep"), patch("time.monotonic", side_effect=itertools.count()):
-            self.load(p, ["浏览器"], out=out)
+        self.load(p, ["浏览器"], out=out)
         self.assertIn("未确认目标页「主页展示」", out.getvalue())
 
     def test_app_store_enters_the_profile_tab_through_the_engine_tab_entry(self):
@@ -155,8 +150,7 @@ class MeizuRecipeTests(unittest.TestCase):
         p.focus.return_value = main
         p.tab.return_value = False
         out = io.StringIO()
-        with patch("time.sleep"):
-            self.load(p, ["应用商店"], out=out)
+        self.load(p, ["应用商店"], out=out)
         p.tab.assert_called_once_with("我的")
         self.assertIn("应用商店底部没有「我的」标签", out.getvalue())
         p.click.assert_not_called()

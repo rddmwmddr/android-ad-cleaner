@@ -3,12 +3,9 @@
 #414 只给了 xiaomi-M154FF 这条判定；其余七份同款浏览器段（browser_settings()、
 require(p.tap(...))、by_id 与 recipe_os4.py 的 monkey 拉起几种形状）在拒绝协议落到
 `BasicModeSettingActivity` 时仍会整段空转后报「入口未找到 / 未找到浏览器…」。加载方式与
-#414 的测试相同——机型脚本按约定在注入的 `p` 上运行，这里用 runpy 按文件路径执行并注入假设备。
+#414 的测试相同——机型脚本按约定在注入的 `p` 上运行，这里按文件路径装载并注入假设备。
 """
-import contextlib
-import io
 from pathlib import Path
-import runpy
 import sys
 import unittest
 
@@ -17,7 +14,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import fast
-from fixtures import phone_mock
+from fixtures import load_recipe, phone_mock
 
 BASIC = "com.android.browser/com.android.browser.basicmode.BasicModeSettingActivity"
 HOME = "com.android.browser/com.android.browser.MainActivity"
@@ -43,9 +40,7 @@ class BrowserBasicMode460(unittest.TestCase):
         p.tree.return_value = fast.ET.fromstring('<hierarchy rotation="0"></hierarchy>')
         p.find.return_value = None
         p.texts.return_value = []
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            runpy.run_path(str(recipe), init_globals={"p": p, "ONLY": ["浏览器"]})
+        _, out = load_recipe(p, recipe, ["浏览器"])
         return p, out.getvalue()
 
     def test_basic_mode_page_is_skipped_with_a_readable_reason(self):

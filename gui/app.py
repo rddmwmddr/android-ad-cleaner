@@ -1163,6 +1163,11 @@ class Api:
     def resume(self):
         return self.dispatcher.resume()
 
+    def run_mode(self):
+        """这次执行在哪块屏上跑、结论出来没有（#618）。桌面版只有主屏；手机版在 `aac_android.main.boot()`
+        里换成读后台屏的状态。"""
+        return {"background": False, "deciding": False}
+
     # ----- 收尾 / 还原 -----
     def dev_off(self, serial):
         out, err, rc = self._run("run.py", "-s", serial, "dev-off", "--yes", timeout=30)

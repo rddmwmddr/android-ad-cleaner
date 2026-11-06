@@ -2,28 +2,23 @@
 
 假页面只断言「点了哪个节点、落点验过没有、失败时有没有乱点」，不断言打印的中文文案。
 """
-import contextlib
-import io
 from pathlib import Path
 import sys
-import time
 import unittest
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import adb_link
 import fast
-from fixtures import phone_mock, phone_stub
+from fixtures import load_recipe, phone_mock, phone_stub
 
 RECIPE = ROOT / "recipes/honor-PNM-AN10/recipe.py"
 
 
 def load(phone, only=("__no_steps__",)):
-    scope = {"p": phone, "ONLY": list(only)}
-    with patch.object(time, "sleep"), contextlib.redirect_stdout(io.StringIO()):
-        exec(compile(RECIPE.read_text(encoding="utf-8"), str(RECIPE), "exec"), scope)
+    scope, _ = load_recipe(phone, RECIPE, only)
     return scope
 
 

@@ -1,6 +1,4 @@
 """版本选择及开关识别保护：不需要连接设备。"""
-import contextlib
-import io
 from pathlib import Path
 import sys
 import unittest
@@ -8,15 +6,14 @@ from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
+sys.path.insert(0, str(ROOT / "tests"))
 import run
+from fixtures import load_recipe
 
 
 class Android15RecipeTests(unittest.TestCase):
     def load(self, phone):
-        path = ROOT / "recipes/oneplus-PHK110/recipe_android15.py"
-        scope = {"p": phone, "ONLY": ["__no_steps__"]}
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), scope)
+        scope, _ = load_recipe(phone, ROOT / "recipes/oneplus-PHK110/recipe_android15.py")
         scope["page"] = lambda *args: True
         return scope
 

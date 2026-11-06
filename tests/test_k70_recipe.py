@@ -1,6 +1,4 @@
 """Redmi K70：系统广告入口、标签识别和回读保护。"""
-import contextlib
-import io
 from pathlib import Path
 import sys
 import unittest
@@ -8,15 +6,14 @@ from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
+sys.path.insert(0, str(ROOT / "tests"))
 import run
+from fixtures import load_recipe
 
 
 class K70RecipeTests(unittest.TestCase):
     def load(self, phone):
-        path = ROOT / "recipes/redmi-23113RKC6C/recipe.py"
-        scope = {"p": phone, "ONLY": ["__no_steps__"]}
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), scope)
+        scope, _ = load_recipe(phone, ROOT / "recipes/redmi-23113RKC6C/recipe.py")
         return scope
 
     def test_actual_model_selects_own_recipe_and_pins_recorded_build(self):
@@ -90,10 +87,7 @@ class K70ProRecipeTests(unittest.TestCase):
         phone.tap.return_value = True
         phone.switches.return_value = switches
         phone.scroll_more.return_value = False
-        scope = {"p": phone, "ONLY": ["应用商店"]}
-        path = ROOT / "recipes/redmi-23117RK66C/recipe.py"
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), scope)
+        scope, _ = load_recipe(phone, ROOT / "recipes/redmi-23117RK66C/recipe.py", ["应用商店"])
         return phone, scope
 
     def test_store_missing_target_aborts_before_toggling_other_settings(self):

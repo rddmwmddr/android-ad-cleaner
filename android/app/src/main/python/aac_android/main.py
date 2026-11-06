@@ -1,0 +1,136 @@
+"""手机版入口：把桌面版的后台（gui/app.py 的 Api）原样搬进 App 进程，界面经 WebView 调它。
+
+boot() 由 MainActivity 在后台线程调用一次；之后界面上每个 api.xxx(...) 都落到 call()。
+"""
+import json
+import os
+import sys
+import threading
+import time
+import traceback
+
+from . import adb, bridge, inproc, screen, u2
+
+API = None
+_ready = threading.Event()
+
+
+class _Native:
+    """Kotlin 的 Native；电脑上调试时没有 Java，换成打印。"""
+
+    def __getattr__(self, name):
+        try:
+            from java import jclass
+            return getattr(jclass("com.ahuamiao.adcleaner.Native"), name)
+        except ImportError:
+            return lambda *a: print(f"[native] {name}{a}", file=inproc._fallback[1])
+
+
+native = _Native()
+
+
+BACKGROUND = True        # 优先在后台屏上执行（#618）；建不了屏自动退回主屏
+
+
+def visible(package, on, text=""):
+    """执行期间显示悬浮胶囊：小米 HyperOS 会冻结退到后台的 App，前台服务和省电白名单都挡不住（18 Pro Max 实测），
+    有可见窗口的不冻。悬浮窗权限经 Shizuku 给本 App 自己开，不用用户去设置里找。"""
+    if on:
+        bridge.get().exec(f"appops set {package} SYSTEM_ALERT_WINDOW allow", None, 10)
+    native.capsule(on, text)
+
+
+def mode():
+    """界面问「这次在哪块屏上跑」：建屏还没出结论时 deciding 为真，界面接着问；background 时执行页
+    告诉用户可以照常用手机。"""
+    return {"background": screen.active is not None, "deciding": screen.starting}
+
+
+def was_stopped(job):
+    """用户点了「停止」：`_work()` 是正常返回的，只能靠 Job 上这个标记认出来。"""
+    return bool(job is not None and job.cancel)
+
+
+def in_front(fn, package, action, stopped=None):
+    """fn 运行期间开前台服务、显示悬浮胶囊（不被冻结），能建后台屏就在后台屏上跑。
+    结束时：主屏模式回到本 App 看结果（App 自己在后台启动界面会被系统拦，shell 身份的 am start 不受限）；
+    后台模式不抢前台（用户可能正在用别的 App），发通知——做完了 / 用户停止 / 出错三种结果文案不同，
+    一律发「做完了」会让停止和失败看起来都像成功。"""
+    def run(*a, **k):
+        bg = BACKGROUND and screen.start(package) is not None
+        native.busy(True, bg)
+        visible(package, True, f"净 {action}中（后台）" if bg else f"净 {action}中")
+        title, text = f"{action}失败", "点这里查看原因"
+        try:
+            out = fn(*a, **k)
+            title = "已停止" if stopped is not None and stopped() else f"{action}做完了"
+            text = "点这里查看结果"
+            return out
+        finally:
+            visible(package, False)
+            if bg:
+                screen.release()
+            native.busy(False, bg)
+            if bg:
+                native.done(title, text)
+            else:
+                r = bridge.get().exec(f"am start -n {package}/.MainActivity", None, 10)
+                if r.code:
+                    native.bringToFront()
+    return run
+
+
+def boot(base, data_dir, cache_dir, package="com.ahuamiao.adcleaner"):
+    """base：解出来的 aac/（tool、recipes、gui、images）；data_dir：备份与设置。"""
+    global API
+    os.environ.setdefault("HOME", data_dir)
+    os.environ["TMPDIR"] = cache_dir
+    os.environ.pop("AAC_EVENTS", None)
+    if not sys.executable:
+        sys.executable = "python3"
+    inproc.EXECUTABLE = sys.executable
+    inproc.setup(os.path.join(base, "tool"))
+    adb.install(os.path.join(data_dir, "bin", "adb"))
+    u2.install()
+    sys.path.insert(0, os.path.join(base, "gui"))
+
+    import app
+    app.BASE = base
+    app.TOOL = os.path.join(base, "tool")
+    app.play_sound = lambda path: native.chime(path)
+    app.Api.copy_text = lambda self, text: (native.copy(text), True)[1]
+    app.Api.open_url = lambda self, url: native.openUrl(url)
+    app.Api.open_path = lambda self, which: native.toast("备份在本 App 的私有目录里，卸载 App 会一起删掉")
+    app.Api.usb_hint = lambda self: ""
+    app.os_name = lambda: "安卓手机版（Shizuku）"      # 错误上报与诊断的「电脑」一栏：和桌面版的报告分开
+
+    api = app.Api(data_dir, adb=adb.ADB_PATH)
+    api.runner = inproc.Runner(api._child_env)
+    # 执行与还原都会切到别的 App 的设置页：期间开前台服务保活，结束后回到本 App
+    api.dispatcher._work = in_front(api.dispatcher._work, package, "去广告", lambda: was_stopped(api.job))
+    api.restore = in_front(api.restore, package, "还原")
+    api.run_mode = mode
+    API = api
+    _ready.set()
+    return app.VERSION
+
+
+def call(method, args_json):
+    """界面的一次 api 调用，返回 JSON 字符串：{"ok": 结果} 或 {"error": 文本}。"""
+    _ready.wait(60)
+    try:
+        if method.startswith("_") or API is None:
+            raise AttributeError(method)
+        result = getattr(API, method)(*json.loads(args_json or "[]"))
+        return json.dumps({"ok": result}, ensure_ascii=False, default=str)
+    except Exception as e:
+        traceback.print_exc(file=inproc._fallback[1])
+        return json.dumps({"error": f"{type(e).__name__}: {e}"}, ensure_ascii=False)
+
+
+def selftest(serial_hint=""):
+    """电脑上调试：AAC_BRIDGE_ADB / AAC_BRIDGE_SERIAL 指向模拟器，跑一遍检测，打印耗时。"""
+    t = time.time()
+    print(call("devices", "[]"))
+    print(call("status", json.dumps([adb.SERIAL]))[:600])
+    print(f"{time.time() - t:.1f}s")

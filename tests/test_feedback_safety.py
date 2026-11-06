@@ -57,7 +57,8 @@ class PhotoSpotTests(unittest.TestCase):
     def test_scan_protects_feature_names_even_with_marketing_channel_id(self):
         for name in ("找机位", "找 机 位通知", "找\u200b機位", "机位推荐", "推薦機位", "摄影找机位活动"):
             with self.subTest(name=name), patch.object(chan, "parse", return_value=self.state(name)), \
-                 patch.object(chan, "Phone") as phone, patch.object(sys, "argv", ["chan_fast.py", "-s", "test", "scan"]), \
+                 patch.object(chan, "phone_model", return_value=""), patch.object(chan, "Phone") as phone, \
+                 patch.object(sys, "argv", ["chan_fast.py", "-s", "test", "scan"]), \
                  contextlib.redirect_stdout(io.StringIO()) as output:
                 chan.main()
                 self.assertEqual(output.getvalue(), "")

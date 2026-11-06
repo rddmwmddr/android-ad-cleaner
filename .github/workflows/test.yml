@@ -7,13 +7,16 @@ on:
 permissions:
   contents: read
 jobs:
+  # Linux 跑 3.13，Windows 跑 3.12：两版解释器各跑一次，不重复跑同一组合。
+  # 3.13 与仓库根的 .python-version 一致；3.12 与两个发版打包同版。3.13 起编译器会剥掉文档字符串
+  # 的公共缩进，异常 repr、argparse 帮助同理，同一份源码在两版下可能逐字不同。
   unittest:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: "3.13"
       - name: 安装依赖
         run: pip install -r requirements.txt
       - name: 准备 adb（不用手机，但套件里有用例在入口就解析 adb，缺了直接报「找不到 adb」）
@@ -36,7 +39,8 @@ jobs:
         run: python -m unittest discover -s tests -v
 
   # Windows 专属的用例（expanduser 靠 USERPROFILE、open() 默认 cp1252）只在打 Windows 包时才暴露，
-  # 每轮发版才发现太晚，所以 PR 阶段也跑一遍。步骤与 Linux job 对齐，差别只在 adb 从哪来。
+  # 每轮发版才发现太晚，所以 PR 阶段也跑一遍。步骤与 Linux job 对齐，差别只在 adb 从哪来，
+  # 以及这里跑 3.12（与打包同版）、Linux 跑 3.13。
   unittest-windows:
     runs-on: windows-latest
     steps:

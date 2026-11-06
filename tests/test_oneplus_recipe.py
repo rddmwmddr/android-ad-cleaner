@@ -1,6 +1,4 @@
 """一加旧系统：入口回读和目标开关不完整时停止，避免把尝试写成成功。"""
-import contextlib
-import io
 from pathlib import Path
 import sys
 import unittest
@@ -8,15 +6,14 @@ from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
+sys.path.insert(0, str(ROOT / "tests"))
 import run
+from fixtures import load_recipe
 
 
 class OnePlusRecipeTests(unittest.TestCase):
     def load(self, phone):
-        path = ROOT / "recipes/oneplus-PJA110/recipe.py"
-        scope = {"p": phone, "ONLY": ["__no_steps__"]}
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), scope)
+        scope, _ = load_recipe(phone, ROOT / "recipes/oneplus-PJA110/recipe.py")
         return scope
 
     def test_actual_model_selects_own_recipe_and_pins_recorded_build(self):

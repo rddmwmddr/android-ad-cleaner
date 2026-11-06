@@ -186,7 +186,7 @@ def info(serial):
 
 FAMILY = {"oppo": "oppo", "oneplus": "oppo", "realme": "oppo", "honor": "honor",
           "xiaomi": "xiaomi", "redmi": "xiaomi", "poco": "xiaomi", "vivo": "vivo", "iqoo": "vivo",
-          "meizu": "meizu"}
+          "meizu": "meizu", "samsung": "samsung"}
 
 
 def ad_packages(brand):
@@ -799,11 +799,20 @@ def cmd_quickapp(serial, rest):
 
 
 def cmd_finish(serial, rest):
-    f = os.path.join(latest_backup(serial), "stay_on.txt")
-    v = open(f, encoding="utf-8").read().strip() if os.path.exists(f) else "0"
-    sh(serial, f"settings put global stay_on_while_plugged_in {v or 0}")
+    # 原值取自带 stay_on.txt 的最近一份快照（#632）：一份都没有就不动这项设置，不能按 0 写回
+    f = Backups(BACKUPS).newest_with(info(serial)["model"], "stay_on.txt")
+    v = ""
+    if f:
+        with open(f, encoding="utf-8") as fh:
+            v = fh.read().strip()
+    if v.isdigit():
+        sh(serial, f"settings put global stay_on_while_plugged_in {v}")
+        print(f"插电常亮已改回 {v}")
+    elif f:
+        print("插电常亮未改动（快照里没有记下原值）")
+    else:
+        print("插电常亮未改动（没有找到改动前的快照）")
     sh(serial, "input keyevent HOME")
-    print(f"插电常亮已改回 {v or 0}")
     on = sh(serial, "settings get global development_settings_enabled") == "1"
     if on:
         msg = DEV_REMINDER.format(s=serial)

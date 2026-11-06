@@ -3,8 +3,6 @@
 本机实测的两个坑都写在这里：应用商店底部「我的」在 y>92%（find() 默认不点导航栏），
 「关于」那行点标题文字不跳转、要点副标题所在行的中间。
 """
-import contextlib
-import io
 from pathlib import Path
 import sys
 import unittest
@@ -12,15 +10,14 @@ from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
+sys.path.insert(0, str(ROOT / "tests"))
 import run
+from fixtures import load_recipe
 
 
 class VivoV1986ARecipeTests(unittest.TestCase):
     def load(self, phone):
-        path = ROOT / "recipes/vivo-V1986A/recipe.py"
-        scope = {"p": phone, "ONLY": ["__no_steps__"]}
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), scope)
+        scope, _ = load_recipe(phone, ROOT / "recipes/vivo-V1986A/recipe.py")
         return scope
 
     def test_actual_model_selects_own_recipe_not_reference(self):

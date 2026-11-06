@@ -24,6 +24,19 @@ class Backups:
             return None
         return os.path.join(self.root, hits[-1]) if hits else None
 
+    def newest_with(self, model, name):
+        """带某个文件的最近一份备份里的该文件，没有则 None。`<型号>-gui` 按名字排在快照后面，
+        却只有营销通知的勾选、没有快照里的文件，所以不能先取 latest() 再找文件。"""
+        try:
+            hits = sorted(d for d in os.listdir(self.root) if d.startswith(model + "-"))
+        except FileNotFoundError:
+            return None
+        for d in reversed(hits):
+            f = os.path.join(self.root, d, name)
+            if os.path.exists(f):
+                return f
+        return None
+
     def create(self, model, when=None):
         d = os.path.join(self.root, f"{model}-{(when or datetime.datetime.now()):%Y%m%d-%H%M}")
         os.makedirs(d, exist_ok=True)

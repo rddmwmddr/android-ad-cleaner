@@ -1,17 +1,14 @@
 """HyperOS 机型脚本的 gear()：只认设置图标，不把正文/描述里含「设置」的干扰行当成入口（#305）。"""
-import contextlib
-import io
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import patch
 from xml.etree import ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from fixtures import phone_mock
+from fixtures import load_recipe, phone_mock
 
 # 干扰样本来自 #305 与 #374 的真机读数。
 STORE_ROW = ('<node class="android.widget.TextView" text="去功能设置里重新开启"'
@@ -58,11 +55,8 @@ def make_phone(nodes):
 
 
 def call_gear(path, phone, **kwargs):
-    scope = {"p": phone, "ONLY": ["__no_steps__"]}
-    with contextlib.redirect_stdout(io.StringIO()):
-        exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), scope)
-        with patch.object(scope["time"], "sleep"):
-            return scope["gear"](**kwargs)
+    scope, _ = load_recipe(phone, path)
+    return scope["gear"](**kwargs)
 
 
 class GearMatcherTests(unittest.TestCase):

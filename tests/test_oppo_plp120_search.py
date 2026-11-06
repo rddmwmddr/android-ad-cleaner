@@ -5,7 +5,6 @@ ColorOS 17 的桌面搜索页没有「设置」入口，`SearchSettingActivity` 
 能直达就执行、直达不了退回旧入口、两条都不通只报一句跳过原因；
 认页不能把同一个包里的搜索首页当成设置页；借给别的机型时不动内容源。
 """
-import contextlib
 import io
 from pathlib import Path
 import sys
@@ -17,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from fixtures import phone_mock
+from fixtures import load_recipe, phone_mock
 
 RECIPE = ROOT / "recipes/oppo-PLP120/recipe.py"
 SEARCH_PACKAGE = "com.heytap.quicksearchbox"
@@ -30,9 +29,7 @@ SETTINGS_TEXTS = ["搜索范围", "自定义搜索结果", "搜索引擎", "功�
 
 
 def load(phone, only=("__no_steps__",), out=None):
-    scope = {"p": phone, "ONLY": list(only)}
-    with contextlib.redirect_stdout(out if out is not None else io.StringIO()):
-        exec(compile(RECIPE.read_text(encoding="utf-8"), str(RECIPE), "exec"), scope)
+    scope, _ = load_recipe(phone, RECIPE, only, out)
     return scope
 
 

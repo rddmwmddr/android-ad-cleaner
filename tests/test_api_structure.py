@@ -26,6 +26,7 @@ BRIDGE = {
     "stop": (),
     "pause": (),
     "resume": (),
+    "run_mode": (),
     "download_adb": (),
     "download_state": (),
     "adb_info": (),
