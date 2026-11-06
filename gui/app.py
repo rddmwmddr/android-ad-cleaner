@@ -1180,14 +1180,38 @@ class Api:
             out, err, rc = self._run("run.py", "-s", serial, "quickapp", "on")
         elif what == "channels":
             st = self.status(serial)
-            d = self.backups.latest(st.get("info", {}).get("model", ""))
-            fn = d and os.path.join(d, "channels.tsv")
-            if not fn or not os.path.exists(fn):
+            fn = self._closed_channels(st.get("info", {}).get("model", ""))
+            if not fn:
                 return "没有找到上次关掉的营销通知清单"
             out, err, rc = self._run("chan_fast.py", "-s", serial, "on", fn, timeout=600)
         else:
             return "未知的还原项"
         return out + err
+
+    def _closed_channels(self, model):
+        """这个型号历次关掉的营销渠道，合成一份清单交给 `chan_fast.py on`；一份都没有返回 None。
+        以前只看最近一份备份，最近一次没关渠道时，之前关的就打不开了（#628）。按包名 + 渠道 ID 去重，
+        最近的那条在前；已经开着的渠道 `on` 本来就跳过。"""
+        rows, seen = [], set()
+        for d in self.backups.all(model):
+            fn = os.path.join(d, "channels.tsv")
+            if not os.path.exists(fn):
+                continue
+            with open(fn, encoding="utf-8") as f:
+                for line in f:
+                    line = line.rstrip("\n")
+                    if not line.strip() or line.startswith("#"):
+                        continue
+                    key = tuple(line.split("\t")[:2])
+                    if key not in seen:
+                        seen.add(key)
+                        rows.append(line)
+        if not rows:
+            return None
+        out = os.path.join(self.backups.gui(model), "channels-restore.tsv")
+        with open(out, "w", encoding="utf-8") as f:
+            f.write("# 包名\t渠道id\t渠道名\t应用名（历次关掉的合并）\n" + "\n".join(rows) + "\n")
+        return out
 
     # ----- 反馈 -----
     def diagnostics(self):

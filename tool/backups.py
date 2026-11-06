@@ -24,6 +24,14 @@ class Backups:
             return None
         return os.path.join(self.root, hits[-1]) if hits else None
 
+    def all(self, model):
+        """这个型号的全部备份目录，按 latest() 的顺序倒过来（最近的在前）。"""
+        try:
+            hits = sorted((d for d in os.listdir(self.root) if d.startswith(model + "-")), reverse=True)
+        except FileNotFoundError:
+            return []
+        return [os.path.join(self.root, d) for d in hits]
+
     def newest_with(self, model, name):
         """带某个文件的最近一份备份里的该文件，没有则 None。`<型号>-gui` 按名字排在快照后面，
         却只有营销通知的勾选、没有快照里的文件，所以不能先取 latest() 再找文件。"""
