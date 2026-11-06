@@ -78,6 +78,8 @@ dependencies {
     implementation("dev.rikka.shizuku:provider:13.1.5")
     // 内置无线调试配对与连接（#622）。libadb-android 双许可 GPL-3.0-or-later / Apache-2.0，按 Apache-2.0 使用
     implementation("com.github.MuntashirAkon:libadb-android:3.1.1")
+    // 授权时在本机识别配对码（#634）：模型打包进 APK，离线可用，不依赖 Google 服务
+    implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation("com.github.MuntashirAkon:sun-security-android:1.1")
     implementation("org.conscrypt:conscrypt-android:2.5.3")
     // ShellServer 只用 java.io 与 ProcessBuilder，能在 JVM 上单测协议层（android/README.md）

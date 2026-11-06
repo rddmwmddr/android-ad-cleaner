@@ -91,12 +91,12 @@ class AdbManager private constructor(context: Context) : AbsAdbConnectionManager
             instance ?: synchronized(this) { instance ?: AdbManager(context.applicationContext).also { instance = it } }
 
         /** 经 mDNS 找无线调试的某个服务端口（配对 / 连接）；找不到返回 -1。只认本机。 */
-        fun discover(context: Context, type: String, timeoutMs: Long): Int {
+        fun discover(context: Context, type: String, timeoutMs: Long, skip: Set<Int> = emptySet()): Int {
             val port = AtomicInteger(-1)
             val found = CountDownLatch(1)
             val local = localAddresses()
             val mdns = AdbMdns(context, type) { host: InetAddress?, p: Int ->
-                if (host != null && (local.isEmpty() || host.hostAddress in local) && p > 0) {
+                if (host != null && (local.isEmpty() || host.hostAddress in local) && p > 0 && p !in skip) {
                     port.set(p)
                     found.countDown()
                 }
@@ -108,6 +108,13 @@ class AdbManager private constructor(context: Context) : AbsAdbConnectionManager
                 mdns.stop()
             }
             return port.get()
+        }
+
+        /** 本机这个端口有没有人在听。mDNS 会把上一次对话框的配对端口留一会儿，连过去是 ECONNREFUSED。 */
+        fun alive(port: Int): Boolean = try {
+            java.net.Socket().use { it.connect(java.net.InetSocketAddress("127.0.0.1", port), 500); true }
+        } catch (_: Exception) {
+            false
         }
 
         /** 本机各网卡的地址：同一个 Wi-Fi 下别人的手机也在广播无线调试，只连自己。 */

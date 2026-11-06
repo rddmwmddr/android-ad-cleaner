@@ -5,6 +5,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 执行期间的悬浮胶囊：有可见窗口的 App 不会被小米 HyperOS 冻结 -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
@@ -39,6 +40,11 @@
         </activity>
 
         <!-- 执行期间引擎会切到别的 App 的设置页，本 App 退到后台；前台服务保住进程不被回收 -->
+        <!-- 授权时自动读配对码（#634）：截屏只在配对期间开，完成即停 -->
+        <service
+            android:name=".PairingService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
         <service
             android:name=".KeepAliveService"
             android:exported="false"
