@@ -151,7 +151,7 @@ ENTRIES = {
             menu="设置 → 搜索「广告」→ 广告与隐私",
             search=(Search("广告", "广告与隐私"),)),
         "智能推荐服务": Entry(
-            menu="（清单只记了直达页面）",
+            menu="设置 → 搜索「广告」→ 广告与隐私 → 智能推荐服务",
             direct=(Direct("com.hihonor.id", ".oaid.ui.IntelligentRecommendActivity", ""),)),
         "YOYO": Entry(
             menu="设置 → 搜索「新闻资讯」",
@@ -220,14 +220,16 @@ def full(pkg, activity):
     return pkg + activity if activity.startswith(".") else activity
 
 
-# 脚本里 `名字 = "字面量"` 的赋值，用来把 `p.start(package, …)` 还原成包名。
-_ASSIGN = re.compile(r'^[ \t]*(\w+)[ \t]*=[ \t]*"([\w.$]+)"[ \t]*$', re.M)
+# 脚本里的赋值，用来把 `p.start(package, …)` 还原成包名。
+_ASSIGN = re.compile(r'^[ \t]*(\w+)[ \t]*=(?!=)[ \t]*(.*?)[ \t]*$', re.M)
+_LITERAL = re.compile(r'^"([\w.$]*)"$|^\'([\w.$]*)\'$')
 
 
 def _arg_at(token, src, pos):
-    """一个实参：字面量，或在这个位置之前最后一次被赋成字面量的名字。认不出来返回 None。
+    """一个实参：字面量，或在这个位置之前最后一次赋值的名字——那次赋值必须也是字面量。认不出来返回 None。
 
-    按位置取最后一次赋值：同一个脚本里 `package` 每段都会被重新赋值，取全文件的最后一份会张冠李戴。
+    按位置取最后一次赋值：同一个脚本里 `package` 每段都会重新赋值，取全文件的最后一份会张冠李戴。
+    最后一次赋值不是字面量（`package = helper()`）时返回 None，不退回更早的旧值：那样会记成别的包。
     """
     token = token.strip()
     if token.startswith("activity="):
@@ -238,8 +240,10 @@ def _arg_at(token, src, pos):
         return None
     value = None
     for m in _ASSIGN.finditer(src, 0, pos):
-        if m.group(1) == token:
-            value = m.group(2)
+        if m.group(1) != token:
+            continue
+        lit = _LITERAL.match(m.group(2))
+        value = (lit.group(1) if lit.group(1) is not None else lit.group(2)) if lit else None
     return value
 
 
@@ -272,13 +276,16 @@ def used_by(recipes_dir):
     return found
 
 
-def open_direct(p, d):
-    """打开一条直达页面。带清栈参数的走 Phone.start（它会顺手收掉开屏 / 权限弹窗），
-    会因此退出的页面裸启动。打不开就抛出，由 reach() 记一笔换下一档。"""
-    if d.keep_task:
-        p.reader.shell(f"am start -n {d.pkg}/{full(d.pkg, d.activity)}")
-    else:
-        p.start(d.pkg, d.activity)
+def open_direct(p, d, settle=1.2):
+    """打开一条直达页面。默认走 Phone.start（顺手收掉开屏 / 权限弹窗、核对前台），
+    带清栈参数就会自己退出的页面（`keep_task`）裸启动，失败时照样抛出。打不开由 reach() 记一笔换下一档。"""
+    if not d.keep_task:
+        p.start(d.pkg, d.activity, settle=settle)
+        return
+    page = full(d.pkg, d.activity)
+    result = p.reader.shell(f"am start -n {d.pkg}/{page}")
+    if getattr(result, "exit_code", 0) or re.search(r"Error|Exception", result.output or "", re.I):
+        raise RuntimeError(f"无法打开 {page}：{(result.output or '').strip()[-200:]}")
 
 
 def landed(p, d):
@@ -292,9 +299,9 @@ def landed(p, d):
     return got_pkg.lower() == d.pkg.lower() and got_act.lower() == full(d.pkg, d.activity).lower()
 
 
-def reach(p, entry, log=print, now=None, sleep=None):
+def reach(p, entry, log=print, now=None, sleep=None, settle=1.2):
     """按快慢依次试：直达页面 → 设置搜索。到了返回用的是哪一档（"direct" / "search"），都不行返回 None，
-    由调用方照 `entry.menu` 走菜单或跳过。`now` / `sleep` 给测试换掉真实等待。"""
+    由调用方照 `entry.menu` 走菜单或跳过。`now` / `sleep` / `settle` 给测试换掉真实等待。"""
     import time
     import wait
 
@@ -303,11 +310,13 @@ def reach(p, entry, log=print, now=None, sleep=None):
     for d in entry.direct:
         page = full(d.pkg, d.activity)
         try:
-            open_direct(p, d)
+            open_direct(p, d, settle=settle)
         except Exception as e:
             import adb_link
-            if isinstance(e, adb_link.DeviceLost):
-                raise                       # 断线不是「这一档不通」，换下一档只会接着错
+            # 断线不是「这一档不通」：换下一档只会接着错。读屏抛的原始异常不一定转成 DeviceLost，
+            # 但 _u2 会把 Phone.lost 置位，一并认。
+            if isinstance(e, adb_link.DeviceLost) or getattr(p, "lost", False):
+                raise
             log(f"  · 直达 {page} 打不开（{e}），换下一档")
             continue
         ok = wait.until(lambda: landed(p, d), timeout=4, poll=0.2, now=now, sleep=sleep)

@@ -68,6 +68,17 @@ class SourceTest(unittest.TestCase):
         self.assertIn(key, used)
         self.assertIn("WKL-AN20", used[key])
 
+    def test_non_literal_reassignment_does_not_reuse_an_older_literal(self):
+        """最后一次赋值不是字面量时不记出处：退回更早的旧值会把机型挂到别的包上。"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            model = Path(d) / "brand-model"
+            model.mkdir()
+            (model / "recipe.py").write_text(
+                'package = "com.old"\npackage = helper()\ndef _():\n    p.start(package, ".B")\n',
+                encoding="utf-8")
+            self.assertEqual(entries.used_by(d), {})
+
     def test_doc_is_generated_from_table(self):
         doc = (ROOT / "docs" / "清单" / "入口速查.md").read_text(encoding="utf-8")
         self.assertEqual(doc, entries.markdown(RECIPES),
@@ -112,7 +123,7 @@ class FakeReader:
         self.closed = True
 
 
-def phone(reader, lands=(), searches=()):
+def phone(reader):
     """一台带假读屏的 Phone，装配走 fixtures.phone_stub()。"""
     return fixtures.phone_stub("test", d=reader, W=1080, H=2400)
 
@@ -123,7 +134,7 @@ class ReachTest(unittest.TestCase):
                           search=(entries.Search("广告", "广告与隐私"),))
 
     def reach(self, p, entry=None):
-        return entries.reach(p, entry or self.ENTRY, log=lambda *a: None, sleep=no_wait)
+        return entries.reach(p, entry or self.ENTRY, log=lambda *a: None, sleep=no_wait, settle=0)
 
     def test_direct_first(self):
         r = FakeReader(lands={"com.a/com.a.One"})
@@ -168,8 +179,45 @@ class ReachTest(unittest.TestCase):
         r = FakeReader(lands={"com.b/com.b.Page"}, page_text="别的页")
         entry = entries.Entry(menu="…", direct=(entries.Direct("com.b", ".Page", expect="个性化推荐"),))
         p = phone(r)
+        seen = []
+        p.expect_page = lambda expect, timeout=None: seen.append((expect, timeout)) or False
         p.setting = lambda kw, result: False
         self.assertIsNone(self.reach(p, entry))
+        self.assertEqual(seen, [("个性化推荐", 3)])
+
+    def test_disconnect_is_not_treated_as_a_dead_entry(self):
+        """断线要上抛：当成「这一档不通」接着拉下一档，只会在断了的机器上继续点。"""
+        import adb_link
+        p = phone(FakeReader())
+
+        def gone(*a, **k):
+            raise adb_link.DeviceLost("device offline")
+        p.start = gone
+        with self.assertRaises(adb_link.DeviceLost):
+            self.reach(p)
+
+    def test_reader_failure_after_lost_flag_is_still_a_disconnect(self):
+        """读屏抛的原始异常不一定转成 DeviceLost，但 Phone.lost 已置位：同样要上抛。"""
+        p = phone(FakeReader())
+        p.lost = True
+
+        def broken(*a, **k):
+            raise RuntimeError("uiautomator dump failed")
+        p.start = broken
+        with self.assertRaises(RuntimeError):
+            self.reach(p)
+
+    def test_bare_launch_failure_is_reported_as_cannot_open(self):
+        """裸启动打不开要报「打不开」，不能报成「没落在这一页」——后者会让人去怀疑落点判据。"""
+        r = FakeReader()
+        entry = entries.Entry(menu="…", direct=(entries.Direct("com.b", ".Page", keep_task=True),))
+        r.shell = lambda cmd, timeout=None: types.SimpleNamespace(
+            output="Error: Activity not started, unable to resolve Intent", exit_code=1)
+        p = phone(r)
+        p.setting = lambda kw, result: False
+        lines = []
+        self.assertIsNone(entries.reach(p, entry, log=lines.append, sleep=no_wait, settle=0))
+        self.assertTrue(any("打不开" in line for line in lines), lines)
 
     def test_launch_failure_moves_to_the_next_entry(self):
         r = FakeReader(lands={"com.a/com.a.Two"})
