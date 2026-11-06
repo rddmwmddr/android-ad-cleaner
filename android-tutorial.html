@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#EBEFEC">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='4' y='16' width='56' height='32' rx='16' fill='%239AA7A0'/%3E%3Ccircle cx='20' cy='32' r='12' fill='white'/%3E%3C/svg%3E">
 <style>
-/* 与首页 index.html 同一套颜色、字体、顶栏与页脚；教程图片本身带字幕和点按红圈，页面只补每一步的说明 */
+/* 颜色与字体沿用首页；顶栏与页脚结构一致，版心与栏高按阅读页收紧。教程图片本身带字幕和点按红圈，页面只补每一步的说明 */
 :root {
   --paper: #EBEFEC; --panel: #F8FAF8; --ink: #0F1B16; --ink-2: #4B5B53; --line: #CDD6D0;
   --cobalt: #2347D6; --on-cobalt: #FFFFFF; --amber: #E8962A; --off: #A3AFA8; --knob: #FFFFFF; --code: #E2E8E4;
@@ -76,13 +76,18 @@ code { font-size: .92em; background: var(--code); padding: 1px 6px; border-radiu
 .player-cap { font-size: 13px; color: var(--ink-2); text-align: center; margin-top: 12px; }
 
 /* 目录 */
-.toc { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; counter-reset: s; }
+.toc { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
 .toc a { display: block; height: 100%; padding: 16px 18px; border-radius: 18px; background: var(--panel); border: 1px solid var(--line); text-decoration: none; touch-action: manipulation; }
 .toc b { display: block; font-size: 13px; color: var(--cobalt); letter-spacing: .06em; font-variant-numeric: tabular-nums; }
 .toc span { display: block; font-weight: 600; margin-top: 2px; }
 .toc small { display: block; color: var(--ink-2); font-size: 13px; margin-top: 2px; }
 
 section { padding-block: 80px; border-top: 1px solid var(--line); scroll-margin-top: 60px; }
+/* 单次使用的间距 */
+#before { padding-block: 56px; }
+#before .list { margin-top: 20px; }
+#step3 .cards { margin-top: 28px; }
+#step4 .wrap > .lead { margin-top: 24px; }
 .head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 40px; align-items: end; margin-bottom: 36px; }
 .head .lead { margin: 0; }
 .num { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%; background: var(--cobalt); color: var(--on-cobalt);
@@ -165,7 +170,7 @@ footer nav { display: flex; flex-wrap: wrap; gap: 8px 22px; }
   </div>
 </div>
 
-<section id="before" style="padding-block: 56px">
+<section id="before">
   <div class="wrap">
     <ol class="toc">
       <li><a href="#step1"><b>第 1 步</b><span>打开开发者选项</span><small>连点 7 下版本号</small></a></li>
@@ -173,7 +178,7 @@ footer nav { display: flex; flex-wrap: wrap; gap: 8px 22px; }
       <li><a href="#step3"><b>第 3 步</b><span>授权本 App</span><small>App 自己读配对码</small></a></li>
       <li><a href="#step4"><b>第 4 步</b><span>一键去广告</span><small>照常用手机</small></a></li>
     </ol>
-    <ul class="list" style="margin-top: 20px">
+    <ul class="list">
       <li><b>手机连着 Wi-Fi</b><span>无线调试要靠 Wi-Fi 打开，连哪个都行，不需要和电脑在一起。</span></li>
       <li><b>安装时的风险提示</b><span>vivo 先勾选「已了解应用的风险检测结果」，再点「继续安装」；小米、OPPO 点「继续安装」或「仍然安装」。</span></li>
       <li><b>哪些手机能用</b><span>安卓 11 及以上。原生鸿蒙（HarmonyOS NEXT）不是安卓，装不了本 App；华为老机型与荣耀可以用。</span></li>
@@ -232,7 +237,7 @@ footer nav { display: flex; flex-wrap: wrap; gap: 8px 22px; }
       <li><img src="docs/手机版教程/img/13.jpg" width="720" height="1280" loading="lazy" alt="无线调试页，红圈在输入配对码配对设备"><p><b>点「输入配对码配对设备」</b>（有的手机叫「使用配对码配对设备」）</p></li>
       <li><img src="docs/手机版教程/img/14.jpg" width="720" height="1280" loading="lazy" alt="弹出 6 位配对码"><p>弹出 6 位配对码，<b>什么都不用做</b>：一秒内授权完，自动回到 App</p></li>
     </ol>
-    <div class="cards" style="margin-top: 28px">
+    <div class="cards">
       <div class="card"><h3>为什么要授权</h3><p>关系统里的广告开关要用到调试权限。安卓只让「无线调试 + 配对码」这一条路拿到它，电脑和手机里的 App 都一样；配对码证明这是机主本人同意的。这台手机授权给它自己，不连接任何其他设备。</p></div>
       <div class="card"><h3>截屏做什么用</h3><p>只用来在这台手机上认出那 6 位数字。截下来的画面不保存、不上传，授权完成就停止截屏。不允许截屏也行，App 会改为让你在通知栏手动填这 6 位数字。</p></div>
     </div>
@@ -251,7 +256,7 @@ footer nav { display: flex; flex-wrap: wrap; gap: 8px 22px; }
       <li><img src="docs/手机版教程/img/18.jpg" width="720" height="1280" loading="lazy" alt="执行页：在后台屏上逐项关闭"><p>在看不见的「后台屏」上逐项关闭，<b>可以照常用手机</b>；屏幕左边的蓝色小条表示还在进行</p></li>
       <li><img src="docs/手机版教程/img/19.jpg" width="720" height="1280" loading="lazy" alt="完成页，各项成功"><p>做完会发通知。每一项都是<b>「成功」</b>就完成了</p></li>
     </ol>
-    <p class="lead" style="margin-top: 24px">不支持后台屏的手机会借用当前屏幕，那时页面会写「请不要碰手机」。做完去下拉搜索、负一屏、应用商店、浏览器看一眼，确认功能正常。</p>
+    <p class="lead">不支持后台屏的手机会借用当前屏幕，那时页面会写「请不要碰手机」。做完去下拉搜索、负一屏、应用商店、浏览器看一眼，确认功能正常。</p>
   </div>
 </section>
 
