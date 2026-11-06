@@ -12,7 +12,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "gui"))
 from gui import app
-import fast
 import run
 import chan_fast as chan
 from bundle_data import bundle_data, stage
@@ -20,8 +19,7 @@ from fixtures import FakeRunner, fake_adb, load_recipe, phone_stub
 
 
 def recipe(p, only="__no_steps__"):
-    with patch.object(fast.time, "sleep"):
-        scope, _ = load_recipe(p, ROOT / "recipes/xiaomi-M154FF/recipe.py", [only])
+    scope, _ = load_recipe(p, ROOT / "recipes/xiaomi-M154FF/recipe.py", only)
     return scope
 
 
@@ -62,8 +60,7 @@ class XiaomiNavigationTests(unittest.TestCase):
         p.tree.return_value = ET.fromstring('''<hierarchy><node text="设置" class="android.widget.ImageView"
           clickable="false" bounds="[900,100][1020,220]"/></hierarchy>''')
         p.on_screen.return_value = True
-        with patch.object(fast.time, "sleep"):
-            self.assertTrue(recipe(p)["browser_settings"]())
+        self.assertTrue(recipe(p)["browser_settings"]())
         p.click.assert_called_once_with(960, 160)
 
     def test_browser_article_is_not_my_tab(self):

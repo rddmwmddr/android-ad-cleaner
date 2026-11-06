@@ -2,7 +2,7 @@
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -76,8 +76,7 @@ class VivoV2417ARecipeTests(unittest.TestCase):
         p.click.side_effect = toggle
         p.off.side_effect = lambda **kwargs: fast.Phone.off(p, **kwargs)
         scope = self.load(p)
-        with patch.object(fast.time, "sleep"):
-            scope["close_named"](["个性化广告"], "系统广告")
+        scope["close_named"](["个性化广告"], "系统广告")
         self.assertEqual(states, {"个性化广告": False, "个性化广告推荐": True})
         p.click.assert_called_once_with(1, 600)
         p.off.assert_called_once()
