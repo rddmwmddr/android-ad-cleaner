@@ -100,16 +100,16 @@ object Native {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
             PixelFormat.TRANSLUCENT,
         ).apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL }
-        view.visibility = if (front) View.GONE else View.VISIBLE
+        view.visibility = if (MainActivity.inForeground()) View.GONE else View.VISIBLE
         runCatching { wm.addView(view, lp); capsule = view }
     }
 
-    /** 本 App 在前台时收起胶囊：它是给后台防冻结用的，盖在自己的页面上多余。 */
-    @Volatile private var front = false
-
+    /**
+     * 本 App 在前台时收起胶囊：它是给后台防冻结用的，盖在自己的页面上多余。
+     * 「在不在前台」只记在 MainActivity 一处（#662），这里只跟着它改胶囊的显隐。
+     */
     @JvmStatic
     fun foreground(on: Boolean) = main.post {
-        front = on
         capsule?.visibility = if (on) View.GONE else View.VISIBLE
     }
 

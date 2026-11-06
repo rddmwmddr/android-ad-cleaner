@@ -132,6 +132,7 @@ class MainActivity : Activity() {
      * Shizuku 在跑但没授权不再挡内置的路（决策：未授权时仍要能走内置）；要改走 Shizuku 由配对页的次级链接手动切。
      * 安卓 10 及以下没有无线调试，只有 Shizuku：old（没装）/ stopped（装了没启动）/ ask / denied。
      * 连接要经 mDNS 找端口，最多等几秒，只在后台线程调。
+     * 这里会顺手去连（Shell.ensure），不是纯查询：「已就绪」的定义就是连得上，光看开关打没打开说明不了（#662）。
      */
     private fun shellState(): String {
         val shizukuUp = installed(SHIZUKU) && runCatching { Shizuku.pingBinder() }.getOrDefault(false)
@@ -191,6 +192,10 @@ class MainActivity : Activity() {
          */
         @JavascriptInterface
         fun startPairing() = runOnUiThread {
+            if (PairingService.waiting) {                 // 已经在等配对码了：别再要一次截屏许可（#662）
+                Pairing.openWireless(this@MainActivity)
+                return@runOnUiThread
+            }
             val mpm = getSystemService(android.media.projection.MediaProjectionManager::class.java)
             val ask = if (Build.VERSION.SDK_INT >= 34)
                 mpm.createScreenCaptureIntent(android.media.projection.MediaProjectionConfig.createConfigForDefaultDisplay())

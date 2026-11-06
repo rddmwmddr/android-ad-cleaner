@@ -459,6 +459,15 @@ class ScreenLifecycleTest(unittest.TestCase):
     def tearDown(self):
         screen.active, screen.starting, bridge._bridge = self.saved
 
+    def test_lost_screen_is_rebuilt_on_next_start(self):
+        """#662：上一块屏已经没了（lost），下一次建屏不借它，拆干净重建。"""
+        gone = screen.Screen(5, "9")
+        gone.lost, gone.holders = True, 1
+        screen.active = gone
+        fresh = screen.start("com.ahuamiao.adcleaner")
+        self.assertIsNot(fresh, gone)
+        self.assertEqual((fresh.display, fresh.holders), (7, 1))
+
     def test_builds_from_the_flags_vd_reports_and_tears_down(self):
         s = screen.start("com.ahuamiao.adcleaner")
         self.assertEqual((s.display, s.sf, s.flags), (7, "11", 0x1F5C9))
@@ -521,6 +530,56 @@ class ScreenLifecycleTest(unittest.TestCase):
         self.assertLess(kill, self.fake.cmds.index("daemon vd"), "旧 Vd 还占着同名屏，必须先清掉再建")
 
 
+class LostScreenTest(unittest.TestCase):
+    """#662：建屏进程中途退出后，发往那块屏的命令直接报错，不再发给一块不存在的屏；下次建屏重建。"""
+
+    class Job:
+        def __init__(self, code, out=b""):
+            self.code, self.out = code, out
+
+        def isDone(self):
+            return True
+
+        def cancel(self):
+            pass
+
+        def result(self, timed_out):
+            return bridge.Result(self.code, self.out, b"", timed_out)
+
+    def setUp(self):
+        self.sent = []
+
+        def submit(cmd, stdin):
+            self.sent.append(cmd)
+            if "kill -0" in cmd:
+                return self.Job(1)                      # 进程不在
+            return self.Job(1 if " -d 7 " in cmd else 0)
+        b = bridge.ShizukuBridge.__new__(bridge.ShizukuBridge)
+        b.shell = ShellStub(submit=submit)
+        self.saved = (bridge._bridge, screen.active)
+        bridge._bridge, screen.active = b, screen.Screen(7, "11")
+        self.b = b
+
+    def tearDown(self):
+        bridge._bridge, screen.active = self.saved
+
+    def test_dead_screen_is_marked_and_later_commands_fail_fast(self):
+        r = self.b.exec("input tap 1 1", None, 5)
+        self.assertTrue(screen.active.lost)
+        self.assertIn(screen.LOST, r.err.decode())
+        before = len(self.sent)
+        r = self.b.exec("input tap 2 2", None, 5)
+        self.assertEqual(r.code, 1)
+        self.assertEqual(len(self.sent), before, "屏已经没了，不该再发")
+        self.b.exec("settings get global x", None, 5)
+        self.assertEqual(len(self.sent), before + 1, "不发往后台屏的命令照常")
+
+    def test_failure_on_a_live_screen_is_not_mistaken_for_loss(self):
+        self.b.shell._submit = lambda cmd, stdin: self.Job(0, b"up") if "kill -0" in cmd else self.Job(1)
+        self.b.exec("input tap 1 1", None, 5)
+        self.assertFalse(screen.active.lost)
+
+
 class Recorder:
     """main.native 的替身：记下界面侧被调了什么。"""
 
@@ -537,11 +596,12 @@ class InFrontTest(unittest.TestCase):
     def setUp(self):
         self.native = Recorder()
         self.fake = ScreenBridge()
-        self.saved = (main.native, bridge._bridge, screen.active, screen.starting)
+        self.saved = (main.native, bridge._bridge, screen.active, screen.starting, main.SESSION)
         main.native, bridge._bridge, screen.active, screen.starting = self.native, self.fake, None, False
+        main.SESSION = main.Session()
 
     def tearDown(self):
-        main.native, bridge._bridge, screen.active, screen.starting = self.saved
+        main.native, bridge._bridge, screen.active, screen.starting, main.SESSION = self.saved
 
     def run_with(self, background, fn, action="去广告", stopped=None):
         if not background:
@@ -578,6 +638,18 @@ class InFrontTest(unittest.TestCase):
         self.run_with(True, lambda: "ok", action="还原")
         self.assertEqual(self.done_calls(), [("done", "还原做完了", "点这里查看结果")])
         self.assertIn(("capsule", True, "净 还原中（后台）"), self.native.calls)
+
+    def test_overlapping_entries_keep_the_keepalive_until_the_last_leaves(self):
+        """#662：内层先结束不能撤掉外层的前台服务和胶囊，结束通知也只发一次。"""
+        def outer():
+            main.in_front(lambda: "in", "com.x", "还原")()
+            self.assertNotIn(("busy", False, True), self.native.calls, "内层结束时外层还在跑")
+            self.assertIsNotNone(screen.active, "外层还在用这块屏")
+            return "out"
+        self.assertEqual(self.run_with(True, outer), "out")
+        self.assertEqual([c for c in self.native.calls if c[0] == "busy"], [("busy", True, True), ("busy", False, True)])
+        self.assertEqual(len(self.done_calls()), 1)
+        self.assertIsNone(screen.active)
 
     def test_main_screen_run_comes_back_to_the_app(self):
         self.assertEqual(self.run_with(False, lambda: "ok"), "ok")

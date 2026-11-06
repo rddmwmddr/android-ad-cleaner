@@ -234,7 +234,9 @@ async function showDetect(){
   setStep(2);
   main().innerHTML = `<h1>检测</h1><p class="lead">读取这台手机的型号、系统版本和广告组件状态。只读，不改任何东西。</p>
     <div class="card"><div class="row"><span class="spin"></span>正在检测……</div></div>`;
-  const st = await api.status(S.serial);
+  const serial = S.serial;
+  const st = await api.status(serial);
+  if (S.step !== 2 || S.serial !== serial) return;     // 等结果期间已离开检测页或换了手机：不改别人的页面（#662）
   if (st.error){ main().innerHTML += `<div class="note bad">检测失败：${esc(st.error)}</div><div class="actions"><button class="btn plain" onclick="showConnect()">返回</button></div>`; return; }
   S.status = st;
   const i = st.info, name = i.name || (i.brand + " " + i.model);
@@ -368,10 +370,17 @@ function showRun(){
     <div id="pausenote" class="note hide" style="margin-top:12px"></div>
     <div class="log" id="log"></div>
     <div class="actions"><button class="btn plain" id="stopbtn" onclick="api.stop()">停止</button><button class="btn plain" id="pausebtn" onclick="togglePause()">暂停</button></div></div>`;
+  clearInterval(pollJob);                  // 再次进入执行页时旧定时器还在：不停掉就两个一起问（#662）
   pollJob = setInterval(tick, 500);
 }
+let polling = false;
 async function tick(){
-  const r = await api.poll(S.logNext);
+  // 上一次还没回来就不发下一次：手机上一次常常超过半秒，两次拿同一个 logNext，同一段日志会追加两遍（#662）
+  if (polling) return;
+  polling = true;
+  let r;
+  try { r = await api.poll(S.logNext); } finally { polling = false; }
+  if (S.step !== 4) return;                // 已经到完成页：迟到的这一次不再画
   S.logNext = r.next;
   const log = $("#log");
   if (log && r.lines.length){ log.textContent += r.lines.join("\n") + "\n"; log.scrollTop = log.scrollHeight; }
@@ -379,7 +388,7 @@ async function tick(){
     $("#js").textContent = `已用 ${r.sec} 秒`; $("#jb").style.width = (r.total ? (r.idx - (r.running ? 0.5 : 0)) / r.total * 100 : 0) + "%"; }
   showPause(r);
   // 停在第一步时还没有结果，也要进完成页（#632），不然执行页一直停着、没有出口
-  if (!r.running && r.results && (r.results.length || r.cancel)){ clearInterval(pollJob); showDone(r); }
+  if (!r.running && r.results && (r.results.length || r.cancel)){ clearInterval(pollJob); pollJob = null; showDone(r); }
 }
 // 暂停在安全的位置生效：一个渠道、机型脚本的一段或一个步骤做完之后。生效前脚本还在点，不能碰手机
 function showPause(r){

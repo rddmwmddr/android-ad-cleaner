@@ -5,6 +5,7 @@
 就不启用，引擎照旧在主屏上跑。
 """
 import re
+import threading
 import time
 
 from . import bridge
@@ -21,6 +22,7 @@ class Screen:
         self.sf = sf                # SurfaceFlinger 的编号：screencap -d 只认这个
         self.flags = flags          # Vd 建屏时实际用上的标记（它打印的 flags=0x…）
         self.holders = 0            # 有几个入口正借这块屏：最后一个用完才拆
+        self.lost = False           # Vd 中途退出、屏已不在：之后发往它的命令直接报错（#662）
 
     @property
     def unlocked(self):
@@ -29,6 +31,8 @@ class Screen:
 
 active = None
 starting = False                # 正在建屏：界面问「在哪块屏上跑」时要等这个落到 False 才有结论
+_lock = threading.RLock()       # 建屏 / 借屏 / 还屏互斥：两个入口同时建，后建的清残留会拆掉先建的（#662）
+LOST = "后台屏意外关闭（建屏进程已退出），这一步无法继续"
 
 
 def _size(b):
@@ -99,35 +103,46 @@ def start(package):
     """建屏并启用改写；建不了返回 None（调用方照旧用主屏）。
     已经有一块在跑就借给它：建第二块会在拆除时把第一块连带拆掉，也没必要有两块。用完调 `release()`。"""
     global active, starting
-    if active is not None:
-        active.holders += 1
-        return active
-    starting = True
-    try:
-        built = _build(package)
-    finally:
-        starting = False
-    if built is not None:
-        built.holders = 1
-        active = built
-    return built
+    with _lock:
+        if active is not None and not active.lost:
+            active.holders += 1
+            return active
+        if active is not None:          # 上一块已经没了：拆干净再建
+            stop()
+        starting = True
+        try:
+            built = _build(package)
+        finally:
+            starting = False
+        if built is not None:
+            built.holders = 1
+            active = built
+        return built
 
 
 def release():
     """一个入口用完这块屏了：还有别处借着的就留着，最后一个走的拆掉。"""
-    global active
-    if active is None:
-        return
-    active.holders -= 1
-    if active.holders <= 0:
-        stop()
+    with _lock:
+        if active is None:
+            return
+        active.holders -= 1
+        if active.holders <= 0:
+            stop()
 
 
 def stop():
     """拆屏：屏上开着的页面随之关闭（建屏时带 DESTROY_CONTENT_ON_REMOVAL）。"""
     global active
-    active = None
-    _discard()
+    with _lock:
+        active = None
+        _discard()
+
+
+def dead():
+    """建屏进程还在不在。发往后台屏的命令失败时才问，不每条命令都问。"""
+    b = bridge.get()
+    r = b.exec(f"[ -f {PID_FILE} ] && kill -0 $(cat {PID_FILE}) 2>/dev/null && echo up", None, 10)
+    return b"up" not in r.out
 
 
 # 只会作用到主屏的命令，后台屏下不发：

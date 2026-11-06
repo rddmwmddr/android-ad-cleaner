@@ -15,6 +15,7 @@ import kotlin.concurrent.thread
 object AdbShell {
     lateinit var app: Context
     @Volatile private var failedAt = 0L      // 上次连不上的时刻：10 秒内不再试，免得每次查状态都等 mDNS
+    @Volatile private var failedWireless = false     // 连不上那会儿无线调试开没开：用户改过开关就不必等满 10 秒（#662）
 
     /** 已连上本机 adbd。 */
     @JvmStatic
@@ -35,7 +36,7 @@ object AdbShell {
         if (Build.VERSION.SDK_INT < 30) return false
         val m = AdbManager.get(app)
         if (m.isConnected) return true
-        if (System.currentTimeMillis() - failedAt < 10_000) return false
+        if (System.currentTimeMillis() - failedAt < 10_000 && AdbManager.wirelessOn(app) == failedWireless) return false
         val restarted = !AdbManager.wirelessOn(app)
         if (restarted) {
             try {
@@ -58,6 +59,7 @@ object AdbShell {
             if (restarted && !MainActivity.inForeground()) noticeWirelessRestarted()
         } else {
             if (port <= 0) android.util.Log.w("AacAdb", "没找到无线调试的连接端口（${timeoutMs}ms）")
+            failedWireless = AdbManager.wirelessOn(app)
             failedAt = System.currentTimeMillis()
         }
         return ok
