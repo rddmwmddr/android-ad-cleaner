@@ -19,3 +19,8 @@ CLAUDE.local.md
 # 单机操作工具含个人设备序列号和备份路径，不进入公开源码
 /session_grouped_channels.py
 /session_checkbox_adapter.py
+
+# 手机版构建产物与本机配置
+android/local.properties
+android/.gradle/
+android/app/build/
