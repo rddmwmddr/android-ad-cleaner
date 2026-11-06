@@ -26,7 +26,7 @@ object Pairing {
     /** 发出带输入框的通知，并打开开发者选项（「无线调试」在里面）。 */
     @JvmStatic
     fun start(context: Context) {
-        notify(context, "填写配对码", "在「无线调试 → 使用配对码配对设备」里看到 6 位配对码后，下拉通知栏在这里填写", input = true)
+        notify(context, "填写屏幕上的 6 位数字", "在「无线调试 → 使用配对码配对设备」里看到 6 位数字后，点下面的「填写」把它填进来", input = true)
         context.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
@@ -47,8 +47,8 @@ object Pairing {
             val reply = PendingIntent.getBroadcast(context, 4,
                 Intent(context, PairingReceiver::class.java).setAction(ACTION),
                 PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-            val remote = RemoteInput.Builder(KEY).setLabel("6 位配对码").build()
-            builder.addAction(Notification.Action.Builder(null, "填写配对码", reply).addRemoteInput(remote).build())
+            val remote = RemoteInput.Builder(KEY).setLabel("屏幕上的 6 位数字").build()
+            builder.addAction(Notification.Action.Builder(null, "填写", reply).addRemoteInput(remote).build())
         }
         nm.notify(ID, builder.build())
     }
@@ -59,21 +59,21 @@ class PairingReceiver : BroadcastReceiver() {
         val code = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(Pairing.KEY)?.toString()
             ?.filter { it.isDigit() }.orEmpty()
         if (code.length != 6) {
-            Pairing.notify(context, "配对码是 6 位数字", "请对照「使用配对码配对设备」里的数字重新填写", input = true)
+            Pairing.notify(context, "要填 6 位数字", "请对照「使用配对码配对设备」里显示的数字重新填写", input = true)
             return
         }
         val pending = goAsync()
         AdbShell.app = context.applicationContext
-        Pairing.notify(context, "正在配对…", "请先不要关掉「使用配对码配对设备」对话框")
+        Pairing.notify(context, "正在授权…", "请先不要关掉「使用配对码配对设备」那个页面")
         thread {
             try {
                 val paired = AdbShell.pair(code, 8000)
                 val connected = paired && AdbShell.connect(8000)
                 when {
-                    connected -> Pairing.notify(context, "配对成功", "回到「安卓去广告」就能开始。以后不用再配对")
-                    paired -> Pairing.notify(context, "配对成功，但还没连上", "回到「安卓去广告」，它会自动再连一次")
-                    else -> Pairing.notify(context, "配对没成功",
-                        "配对码可能已经变了。重新点「使用配对码配对设备」，用新的配对码再填一次", input = true)
+                    connected -> Pairing.notify(context, "授权完成，以后不用再做", "回到「安卓去广告」就能开始")
+                    paired -> Pairing.notify(context, "授权完成", "回到「安卓去广告」，它会自动连上")
+                    else -> Pairing.notify(context, "授权没成功",
+                        "数字可能已经变了（每次打开那个页面都会换）。再点一次「使用配对码配对设备」，填新的 6 位数字", input = true)
                 }
                 MainActivity.refreshState()
             } finally {

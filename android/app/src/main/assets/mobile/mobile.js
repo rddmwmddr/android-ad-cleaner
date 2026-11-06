@@ -27,9 +27,9 @@
 
   // 权限状态 → [标题, 说明, 按钮, 按钮动作]。默认走内置无线调试（#622），不用另装 App；装了并授权 Shizuku 的也认
   const STEP = {
-    need_dev: [`第 1 步：打开开发者选项`, `点下面的按钮进「关于手机」，连点「版本号」7 次（小米点「OS 版本」，vivo 在「版本信息」里点「软件版本号」），输入锁屏密码，看到「已处于开发者模式」后回到这里。`, `打开「关于手机」`, `AacHost.openSettings('about')`],
-    need_wifi: [`第 2 步：打开无线调试`, `手机要连着 Wi-Fi。点下面的按钮进「开发者选项」，找到「无线调试」打开，弹窗选「允许」，然后回到这里。小米 / Redmi 顺便打开「USB 调试（安全设置）」，不然点不动开关。`, `打开开发者选项`, `AacHost.openSettings('dev')`],
-    need_pair: [`第 3 步：配对一次（以后不用再配）`, `点下面的按钮，进「无线调试」→「使用配对码配对设备」，屏幕上会出现 6 位配对码。不要关掉它，下拉通知栏，在「安卓去广告」的通知里点「填写配对码」，把 6 位数字填进去。`, `开始配对`, `AacHost.startPairing()`],
+    need_dev: [`第 1 步（共 3 步）：打开开发者选项`, `点下面的按钮进「关于手机」，连点「版本号」7 次（小米点「OS 版本」，vivo 在「版本信息」里点「软件版本号」），输入锁屏密码，看到「已处于开发者模式」后回到这里。`, `打开「关于手机」`, `AacHost.openSettings('about')`],
+    need_wifi: [`第 2 步（共 3 步）：打开无线调试`, `手机要连着 Wi-Fi。点下面的按钮进「开发者选项」，找到「无线调试」打开，弹窗选「允许」，然后回到这里。小米 / Redmi 顺便打开「USB 调试（安全设置）」，不然点不动开关。`, `打开开发者选项`, `AacHost.openSettings('dev')`],
+    need_pair: [`第 3 步（共 3 步）：授权本 App（只需一次）`, `安卓要求你亲手确认一次，才允许本 App 关闭系统里的广告开关，就像第一次用蓝牙耳机要确认一样。点下面的按钮，进「无线调试」→「使用配对码配对设备」，屏幕上会出现 6 位数字。不要关掉它，下拉通知栏，把这 6 位数字填进「安卓去广告」的通知里。<b>这台手机自己授权给自己，不连接任何其他设备，以后也不用再做。</b>`, `开始授权`, `AacHost.startPairing()`],
     old: [`这台手机的安卓版本低于 11`, `安卓 11 起才有无线调试。可以装 Shizuku（免费开源）用电脑启动一次，或者直接用电脑版。`, `下载 Shizuku`, `AacHost.openShizuku()`],
     stopped: [`Shizuku 还没启动`, `打开 Shizuku 按它的说明启动（安卓 10 及以下要连一次电脑）。手机重启后要再启动一次。`, `打开 Shizuku`, `AacHost.openShizuku()`],
     ask: [`授权本 App 使用 Shizuku`, `点下面的按钮，在弹窗里选「始终允许」。`, `授权`, `AacHost.requestShizuku()`],
@@ -56,7 +56,8 @@
     if (!box || S.step !== 1) return;
     if (st !== "ready"){
       const [t, d, b, act] = STEP[st] || STEP.need_pair;
-      box.innerHTML = `<div class="card"><h3>${t}</h3><p class="lead" style="margin:0 0 14px">${d}</p>
+      const first = st.startsWith("need_") ? `<p class="lead">第一次使用要做 3 个设置，大约 1 分钟，以后打开就能直接用。</p>` : "";
+      box.innerHTML = first + `<div class="card"><h3>${t}</h3><p class="lead" style="margin:0 0 14px">${d}</p>
         <button class="btn big" onclick="${act}">${b}</button></div>
         <p class="lead" style="margin:0">全程不需要 root，也不用连电脑。只在这台手机自己的网络里连接，不经过任何服务器。</p>
         <div class="note info" style="margin-top:12px">原生鸿蒙（HarmonyOS NEXT）不是安卓，装不了本 App；华为老机型与荣耀可以用。</div>`;
