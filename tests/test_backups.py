@@ -108,6 +108,42 @@ class LatestTests(unittest.TestCase):
         self.assertEqual(Backups(self.root).latest(""), old_gui_latest(self.root, ""))
 
 
+class AllTests(unittest.TestCase):
+    """`all()` 是三处扫描的唯一实现：`latest()` / `newest_with()` 都从它派生，顺序不能分叉。
+
+    期望值逐条写在表里，不用实现同一个公式现算：自算只能守住「前缀过滤」，守不住「倒序」本身。
+    """
+
+    CASES = (
+        ("空仓库", (), ()),
+        ("只有带时间的备份", (f"{MODEL}-20260101-1000",), (f"{MODEL}-20260101-1000",)),
+        ("多份备份取最后一份", (f"{MODEL}-20260101-1000", f"{MODEL}-20260101-1010"),
+         (f"{MODEL}-20260101-1010", f"{MODEL}-20260101-1000")),
+        ("gui 兜底目录排最前", (f"{MODEL}-20260101-1000", f"{MODEL}-gui"),
+         (f"{MODEL}-gui", f"{MODEL}-20260101-1000")),
+        ("只有 gui 兜底目录", (f"{MODEL}-gui",), (f"{MODEL}-gui",)),
+        ("名字相近的别家型号", (f"{MODEL}x-20260101-1000",), ()),
+        ("同名前缀但没破折号", (MODEL,), ()),
+    )
+
+    def test_all_is_newest_first_and_drives_latest(self):
+        for label, made, expected in self.CASES:
+            with self.subTest(label):
+                with tempfile.TemporaryDirectory() as root:
+                    for name in made:
+                        Path(root, name).mkdir(exist_ok=True)
+                    dirs = Backups(root).all(MODEL)
+                    self.assertEqual([os.path.basename(p) for p in dirs], list(expected))
+                    self.assertEqual(Backups(root).latest(MODEL),
+                                     os.path.join(root, expected[0]) if expected else None)
+
+    def test_missing_root_gives_an_empty_list(self):
+        with tempfile.TemporaryDirectory() as root:
+            missing = os.path.join(root, "not-created")
+            self.assertFalse(os.path.exists(missing))
+            self.assertEqual(Backups(missing).all(MODEL), [])
+
+
 class CreateTests(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
