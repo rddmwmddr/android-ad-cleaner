@@ -12,6 +12,8 @@ import gen_brand_taps as gen
 
 ADR = ROOT / "docs/adr/0006-channel-classification.md"
 BRAND_TAP_TARGETS = {"html", "readme", "dev_doc"}
+TUTORIAL_PAGE = ROOT / "android-tutorial.html"
+TUTORIAL_README = ROOT / "docs/手机版教程/README.md"
 
 
 def table_fields():
@@ -83,12 +85,12 @@ class BrandTapsDocTests(unittest.TestCase):
 
 
 IMG_TAG = re.compile(r"<img\b[^>]*>")
-IMG_SRC = re.compile(r'src="[^"]*?img/(\d{2})\.jpg"')
-IMG_ALT = re.compile(r'alt="([^"]*)"')
+IMG_SRC = re.compile(r"""\bsrc=["'][^"']*?img/(\d{2})\.jpg["']""")
+IMG_ALT = re.compile(r"""\balt=["']([^"']*)["']""")
 
 
 def tutorial_alts(text):
-    """按标签读截图编号与 alt：属性顺序无关，同号重复或缺 alt 直接报错，不静默覆盖。"""
+    """按标签读截图编号与 alt：属性顺序、引号风格都无关；同号重复或缺 alt 直接报错，不静默漏检。"""
     alts = {}
     for tag in IMG_TAG.findall(text):
         src = IMG_SRC.search(tag)
@@ -96,8 +98,8 @@ def tutorial_alts(text):
             continue
         number = src.group(1)
         alt = IMG_ALT.search(tag)
-        if alt is None:
-            raise AssertionError(f"img/{number} 没有 alt 属性")
+        if alt is None or not alt.group(1).strip():
+            raise AssertionError(f"img/{number} 没有可用的 alt 属性")
         if number in alts:
             raise AssertionError(f"img/{number} 在同一份文档里出现两次，另一份 alt 不会被比对")
         alts[number] = alt.group(1)
@@ -111,12 +113,10 @@ class TutorialAltTests(unittest.TestCase):
     README_ONLY = ("10", "12", "15")  # 素材图多于页面用图的部分
 
     def page_alts(self):
-        text = (ROOT / "android-tutorial.html").read_text(encoding="utf-8")
-        return tutorial_alts(text)
+        return tutorial_alts(TUTORIAL_PAGE.read_text(encoding="utf-8"))
 
     def readme_alts(self):
-        text = (ROOT / "docs/手机版教程/README.md").read_text(encoding="utf-8")
-        return tutorial_alts(text)
+        return tutorial_alts(TUTORIAL_README.read_text(encoding="utf-8"))
 
     def test_guard_reads_both_documents(self):
         self.assertTrue(self.page_alts(), "android-tutorial.html 里没读到截图 alt，守卫会空转")
@@ -130,8 +130,8 @@ class TutorialAltTests(unittest.TestCase):
     def test_page_uses_every_shared_screenshot(self):
         shared = [n for n in sorted(self.readme_alts()) if n not in self.README_ONLY]
         self.assertEqual(sorted(self.page_alts()), shared,
-                         f"页面用图应为 {len(shared)} 张（{'、'.join(self.README_ONLY)} 仅 README 用）："
-                         "两份文档的用图清单已漂移")
+                         f"页面用图应为 {len(shared)} 张，README_ONLY = {self.README_ONLY}："
+                         "增删截图时页面、README 与 README_ONLY 要一起改")
 
     def test_shared_screenshots_have_the_same_alt(self):
         page, docs = self.page_alts(), self.readme_alts()
@@ -139,17 +139,23 @@ class TutorialAltTests(unittest.TestCase):
             self.assertEqual(page[number], docs[number],
                              f"img/{number} 的 alt 在页面与 README 不一致：只改一处即漂移")
 
-    def test_helper_reads_alt_before_src(self):
-        tag = '<img alt="先 alt 后 src" src="docs/手机版教程/img/07.jpg">'
-        self.assertEqual(tutorial_alts(tag), {"07": "先 alt 后 src"},
+    def test_helper_reads_reordered_or_single_quoted_tags(self):
+        self.assertEqual(tutorial_alts('<img alt="先 alt 后 src" src="docs/手机版教程/img/07.jpg">'),
+                         {"07": "先 alt 后 src"},
                          "alt 写在 src 前面时读不到，守卫会把这张图当成缺失")
+        self.assertEqual(tutorial_alts("<img src='img/07.jpg' alt='单引号'>"), {"07": "单引号"},
+                         "单引号的 src 读不到，新增截图会绕过守卫")
 
-    def test_helper_rejects_missing_or_duplicated_alt(self):
-        readme = (ROOT / "docs/手机版教程/README.md").read_text(encoding="utf-8")
-        with self.assertRaises(AssertionError, msg="缺 alt 的截图没报错"):
-            tutorial_alts(readme + '\n<img src="img/20.jpg">\n')
+    def test_helper_rejects_missing_or_empty_alt(self):
+        for tag in ('<img src="img/20.jpg">',
+                    '<img src="img/20.jpg" alt="">',
+                    '<img src="img/20.jpg" alt="  ">'):
+            with self.subTest(tag=tag), self.assertRaises(AssertionError):
+                tutorial_alts(tag)
+
+    def test_helper_rejects_a_number_used_twice(self):
         with self.assertRaises(AssertionError, msg="同一编号出现两次没报错"):
-            tutorial_alts(readme + '\n<img src="img/01.jpg" alt="另一份">\n')
+            tutorial_alts('<img src="img/01.jpg" alt="一">\n<img src="img/01.jpg" alt="二">')
 
 
 if __name__ == "__main__":
