@@ -11,13 +11,13 @@ SCRIPT = ROOT / "tests" / "compare_phone_state.py"
 class BaselineTests(unittest.TestCase):
     def setUp(self):
         probe = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=ROOT,
-                               capture_output=True, text=True)
+                               capture_output=True, text=True, encoding="utf-8", errors="replace")
         if probe.returncode:
             self.skipTest("git archive 出来的干净副本没有 .git；这条只在 git 工作区里跑")
 
     def worktrees(self):
         return subprocess.run(["git", "worktree", "list", "--porcelain"], cwd=ROOT,
-                              capture_output=True, text=True, check=True).stdout
+                              capture_output=True, text=True, encoding="utf-8", errors="replace", check=True).stdout
 
     def test_unknown_sha_fails_without_leaving_a_worktree(self):
         before = self.worktrees()

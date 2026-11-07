@@ -232,7 +232,7 @@ def probe(tool):
 
 def run(tool):
     return json.loads(subprocess.run([sys.executable, __file__, str(tool), "--dump"],
-                                     capture_output=True, text=True, check=True).stdout)
+                                     capture_output=True, text=True, encoding="utf-8", errors="replace", check=True).stdout)
 
 
 def main(argv):

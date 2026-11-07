@@ -211,7 +211,7 @@ def old_adb_present(adb, serial):
     try:
         subprocess.run([adb, "-s", serial, "wait-for-device"], capture_output=True, timeout=10,
                        creationflags=adb_link.NOWIN)
-        out = subprocess.run([adb, "-s", serial, "get-state"], capture_output=True, text=True,
+        out = subprocess.run([adb, "-s", serial, "get-state"], capture_output=True, text=True, encoding="utf-8", errors="replace",
                              timeout=8, creationflags=adb_link.NOWIN).stdout
     except (OSError, subprocess.TimeoutExpired):
         return False

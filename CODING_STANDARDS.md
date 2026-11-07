@@ -51,6 +51,7 @@ README、PR 描述、Release Note 里的计数，必须交代它在什么样本�
 - 桩住一个协作方，就对它断言 `assert_called_once()` / `assert_called_with(...)`；本来就该不调的，用 `assert_not_called()` 把这件事写下来。
 - patch 类成员用 `autospec=True`。`self` 怎么绑、实参能不能对上签名都会当场报出来，普通 `Mock` 会照单全收。
 - 重构动了调用关系时，把「桩住谁」当成被测面一起改；改不动的桩直接删掉，留着只会骗下一个人。
+- 替身记下的是标识（id / 路径 / 句柄）时，断言要对着被测代码**真正创建**的那个对象，并且先让它存在。对着一个从没被创建过的值断言，等于断言 `None == None`：先 `showRun()` 拿到 `pollJob`，再 `assert.deepEqual(cleared, [polling])`；否则把 `clearInterval(pollJob)` 改成 `clearInterval(undefined)` 也照样全绿（#684）。
 
 反例：候选 5 把 `via_app_page` 改成一行前向壳后，四处 `patch.object(chan, "via_app_page", ...)` 都成了哑桩，其中三处继续绿；只有那句 `via.assert_called_once()` 把它们暴露出来。
 

@@ -108,9 +108,9 @@ class AdbTest(unittest.TestCase):
             try:
                 adb._orig.clear()
                 adb.install(os.path.join(d, "bin", "adb"))
-                r = subprocess.run([adb.ADB_PATH, "-s", "local", "shell", "echo"], capture_output=True, text=True)
+                r = subprocess.run([adb.ADB_PATH, "-s", "local", "shell", "echo"], capture_output=True, text=True, encoding="utf-8", errors="replace")
                 self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "out\n", "err\n"))
-                other = subprocess.run([sys.executable, "-c", "print(42)"], capture_output=True, text=True)
+                other = subprocess.run([sys.executable, "-c", "print(42)"], capture_output=True, text=True, encoding="utf-8", errors="replace")
                 self.assertEqual(other.stdout.strip(), "42")
             finally:
                 adb.ADB_PATH = saved[0]

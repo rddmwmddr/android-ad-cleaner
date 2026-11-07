@@ -446,7 +446,7 @@ def other_adb():
                                  capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=8,
                                  creationflags=NOWIN).stdout
         else:
-            out = subprocess.run(["ps", "-axo", "comm="], capture_output=True, text=True, timeout=5).stdout
+            out = subprocess.run(["ps", "-axo", "comm="], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5).stdout
     except (OSError, subprocess.TimeoutExpired):
         return []
     paths = {line.strip() for line in out.splitlines() if re.search(r"adb", os.path.basename(line.strip()), re.I)}
@@ -1333,7 +1333,7 @@ class Api:
             if IS_WIN:
                 win_clipboard(text)
             else:
-                subprocess.run(["pbcopy"], input=text, text=True, encoding="utf-8", timeout=10)
+                subprocess.run(["pbcopy"], input=text, text=True, encoding="utf-8", errors="replace", timeout=10)
             return True
         except Exception:
             return False
