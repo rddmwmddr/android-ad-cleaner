@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from entries import ENTRIES, FAMILY, LABEL
+from polarity import want_state       # 只取极性与词表；不 import fast，那条链会连带 adbutils（#693）
 
 # (家族, 页面标签前缀) → 分组。前缀是 page= 里「·」前面那段，是脚本内部写法，只在这里翻译成分组。
 PAGES = {
@@ -96,13 +97,25 @@ FALLBACK = {
     ("oppo", "资讯服务"): "小布建议",
     ("oppo", "首页卡片管理"): "下拉搜索",
 }
-OFF, KEEP = "要关", "同页保留"
+OFF, OPEN, NOOP, KEEP = "要关", "要开", "不碰", "同页保留"   # 方向取自 polarity.want_state()，不从调用名猜（#693）
 CJK = re.compile(r"[\u4e00-\u9fff]")
 
 
 def key_of(text):
     """去重用的键：NFKC + 去空格，同 #559 的前两步。收录时照原文写。不 import fast.match_key：它要连带 adbutils。"""
     return "".join(unicodedata.normalize("NFKC", text).split())
+
+
+def direction_of(text):
+    """这条词条要拨到哪：保护类开关「要开」，其余普通广告开关「要关」。
+
+    `want_state()` 为 None 的行（「减少动画」这种既没否定词前缀也不带广告词的）在
+    `plan_switches()` 里直接跳过，点名等于没点：标「不碰」把这个死名字显出来，
+    不能并进「要关」——那正是这次要修的那类不一致（#693）。"""
+    want = want_state(text)
+    if want is None:
+        return NOOP
+    return OPEN if want else OFF
 
 
 @dataclass(frozen=True)
@@ -302,7 +315,8 @@ def scan(recipes_dir):
             else:
                 strings = _resolve(names, constants, dicts)
                 if strings is not None:
-                    here += [Word(s.value, OFF, family, group, label, script, s.lineno) for s in strings]
+                    here += [Word(s.value, direction_of(s.value), family, group, label, script, s.lineno)
+                             for s in strings]
                 elif not inside:
                     missed = out.unresolved_only if how == "off" else out.unresolved_close
                     missed.append(Call(family, script, call.lineno, ast.unparse(names)))
@@ -343,12 +357,12 @@ def _group_section(group, words):
     lines = [f"### {group}", ""]
     if not words:
         return lines + ["暂无词条。", ""]
-    off = [w for w in words if w.kind == OFF]
+    toggles = [w for w in words if w.kind in (OFF, OPEN, NOOP)]
     keep = [w for w in words if w.kind == KEEP]
     lines += ["**出处机型：** " + "、".join(sorted({w.model for w in words})), ""]
-    if off:
+    if toggles:
         lines += ["**词条**", ""]
-        lines += [f"- {_spelled(same)}：{_sources(same)}" for _key, same in _by_key(off)]
+        lines += [f"- {_spelled(same)}：{_sources(same)}" for _key, same in _by_key(toggles)]
         lines.append("")
     if keep:
         lines += ["**同页保留项**（只在这一页成立）", ""]
@@ -383,11 +397,14 @@ def render(recipes_dir):
         by_group[(word.family, word.group)].append(word)
     lines = ["# 品牌词库：开关词条与同页保留项", "",
              "由 `tool/vocab.py` 从机型脚本现算（`python3 tool/vocab.py > docs/清单/词库.md`），不要手改。", "",
-             "按家族和分组列出机型脚本要关的开关（词条）和同页保留项，都带出处。入口怎么进看[入口速查](入口速查.md)。"
+             "按家族和分组列出机型脚本点名的开关（词条）、每条要拨的方向和同页保留项，都带出处。"
+             "入口怎么进看[入口速查](入口速查.md)。"
              "社区上报里还没落进脚本的叫法看[词条线索](词条线索.md)，那边的不算词条。", "",
              "**用之前：** 词条说明别的机型上这个开关叫这个，不代表这台手机上它管同一件事，写脚本要真机核对。"
              "同页保留项只在那一页成立，不是品牌级的禁词表。"
-             "开头带否定词（`fast.NEG_PREFIX`）的才是保护类开关，引擎把它拨到开，判定在 `fast.want_state()`。", "",
+             "「要开」是保护类开关：开头带否定词（`polarity.NEG_PREFIX`）且带广告词，引擎会把它拨到开，"
+             "判定在 `polarity.want_state()`；不要把这类词条按普通广告开关处理。"
+             "「不碰」是点了名、引擎却不会拨的行（既没否定词也没广告词），出现即说明那条点名没生效。", "",
              "出处写成 `目录:行号`，指 `recipes/<目录>/recipe.py`；别的文件写全文件名。"
              f"这里读 `p.off()` 和 `close_named()`：共 {len(words)} 处词，另有 {found.whole_page} 处没有点名（整页全关，没有词）。", ""]
     for family, groups in ENTRIES.items():
