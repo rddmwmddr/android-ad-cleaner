@@ -224,15 +224,36 @@ def _():
     p.back(3)
 
 
-@step("下拉搜索")
-def _():
+SEARCH_SETTING = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"
+# 设置页上的标题；搜索首页也有「搜索范围」这类文字，所以还要看前台 Activity（SearchSettingActivity）。
+SEARCH_TITLES = {"搜索范围", "首页卡片管理", "功能管理", "账号与隐私"}
+
+
+def wait_search_settings(tries=30):
+    from wait import until
+
+    def sample():
+        focus = p.focus()
+        if "com.heytap.quicksearchbox" not in focus or "Setting" not in focus:
+            return False
+        return bool(SEARCH_TITLES & {text for text, _, _ in p.texts()})
+
+    return bool(until(sample, tries=tries, same=2, now=time.monotonic, sleep=time.sleep))
+
+
+def search_settings():
+    """先用全局搜索自己的 scheme 落地（同族 PLP120 / PMX110 实测，#796）；打不开再退回桌面下拉。
+    SearchSettingActivity 未导出，按组件名 `am start -n` 会被系统拒绝。"""
+    p.d.shell(SEARCH_SETTING)
+    if wait_search_settings():
+        return True
     p.d.shell("input keyevent HOME"); time.sleep(0.6)
     # HOME 可能停在速览页（左一屏）：先左滑回主桌面，否则下拉手势被速览吃掉
     p.d.shell(f"input swipe {p.W*6//7} {p.H//2} {p.W//7} {p.H//2} 250"); time.sleep(1.0)
     p.d.shell(f"input swipe {p.W//2} {p.H*3//10} {p.W//2} {p.H*7//10} 300"); time.sleep(1.5)
     if "quicksearchbox" not in p.focus():
         print("  ✗ 下拉没进全局搜索")
-        return
+        return False
     # 收键盘要点键盘上的「收起键盘」箭头；按返回会整页退出
     p.tap("收起键盘", exact=True, scrolls=0)
     time.sleep(0.8)
@@ -242,13 +263,20 @@ def _():
     if not cands:
         print("  ✗ 底部没有「设置」")
         p.back()
-        return
+        return False
     before = p.sig()
     p.click(*cands[-1])
     p.settle(before, 1.5)
     if "SearchSetting" not in p.focus():
         print("  ✗ 没进搜索设置")
-        return
+        return False
+    return True
+
+
+@step("下拉搜索")
+def _():
+    if not search_settings():
+        raise RuntimeError("没进全局搜索设置页")
     if p.tap("搜索范围", exact=True):
         # APP内搜索、搜索建议、小程序、AI搜索、便捷服务保留
         p.off(only=["榜单", "小说", "购物", "个性化推荐", "精选资讯"], page="下拉搜索·搜索范围")

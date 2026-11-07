@@ -73,13 +73,19 @@ def open_entry(text, scrolls=0):
 
 @step("广告跟踪")
 def _():
-    if not p.setting("广告", "广告与隐私"):
-        # 部分 MagicOS 10 机型设置搜索框打不开（#88 #99），按菜单进：隐私和安全 → 其他隐私和安全功能 → 广告与隐私
-        p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
-        p.miss = 0
-        if not (p.tap("隐私和安全", exact=True) and p.tap("其他隐私和安全功能", exact=True)
-                and p.tap("广告与隐私", exact=True)):
-            return
+    # 同代的 CLE-AN00 实测这一页能直达（#671），省掉设置搜索与三层菜单（#796）
+    try:
+        p.start("com.hihonor.id", ".oaid.ui.AdvertisingPrivacyActivity", expect="应用广告跟踪管理")
+    except (adb_link.DeviceLost, ScreenLocked):
+        raise
+    except RuntimeError:
+        if not p.setting("广告", "广告与隐私"):
+            # 部分 MagicOS 10 机型设置搜索框打不开（#88 #99），按菜单进：隐私和安全 → 其他隐私和安全功能 → 广告与隐私
+            p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
+            p.miss = 0
+            if not (p.tap("隐私和安全", exact=True) and p.tap("其他隐私和安全功能", exact=True)
+                    and p.tap("广告与隐私", exact=True)):
+                return
     p.tap("更多选项", scrolls=0)
     if p.find("显示系统程序", exact=True):
         p.tap("显示系统程序", exact=True, scrolls=0)
@@ -100,15 +106,21 @@ def _():
 
 @step("搜索")
 def _():
-    p.d.press("home"); time.sleep(0.6); p.d.press("home"); time.sleep(0.6)
-    p.d.shell(f"input swipe {p.W//2} {p.H*3//10} {p.W//2} {p.H*7//10} 300"); time.sleep(1.5)
-    p.d.press("back"); time.sleep(0.5)          # 收起键盘，菜单位置才固定
-    xy = None
-    for t, (l, tp, r, b), n in p.texts():
-        if t == "更多" and tp > p.H * 0.3:
-            xy = ((l + r) // 2, (tp + b) // 2)
+    # 同代的 CLE-AN00 实测这个页面能直达（#671）：桌面下滑手势在 adb 下不稳，还要先退回主桌面（#796）
+    p.start("com.hihonor.search", ".feature.mainpage.presentation.page.HomeActivity", expect="更多")
+
+    def more_at():
+        for t, (l, tp, r, b), _n in p.texts():
+            if t == "更多" and tp > p.H * 0.3:
+                return (l + r) // 2, (tp + b) // 2
+        return None
+
+    xy = more_at()
+    if not xy:                              # 主屏上键盘会盖住它；后台屏没有键盘，按返回会把搜索页退掉，所以先看再按
+        p.d.press("back"); time.sleep(0.5)
+        xy = more_at()
     if not xy:
-        print("  ✗ 找不到搜索框旁的「更多」"); return
+        raise RuntimeError("找不到搜索框旁的「更多」")
     p.click(*xy); time.sleep(0.6)
     p.tap("设置", exact=True, scrolls=0)
     p.tap("首页显示", exact=True)
@@ -120,11 +132,17 @@ def _():
 
 @step("负一屏")
 def _():
-    p.d.press("home"); time.sleep(0.6)
-    for _ in range(3):
-        p.d.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250"); time.sleep(1.2)
-        if p.find("头像", exact=True):
-            break
+    # 负一屏是桌面的一部分，前台仍是 launcher，只按页面文字判断进没进（同代 CLE-AN00 实测，#796）
+    p.d.shell("am start -f 0x10008000 -n com.hihonor.hiboard/com.hihonor.intelligent.LauncherActivity")
+    time.sleep(2)
+    if not p.find("头像", exact=True):
+        p.d.press("home"); time.sleep(0.6)
+        for _ in range(3):
+            p.d.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250"); time.sleep(1.2)
+            if p.find("头像", exact=True):
+                break
+        else:
+            raise RuntimeError("负一屏没打开，没找到头像入口")
     p.tap("头像", exact=True, scrolls=0)
     p.tap("设置", exact=True, scrolls=0)
     p.off(only=["智能推荐", "个性化广告", "个性化消息"], page="负一屏·设置")
