@@ -1,4 +1,4 @@
-"""文档与单一来源一致：ADR 字段表（#467）、品牌连点表（#654）、教程截图 alt（#655）、站点与侧栏图标同源（#669）、ADR 索引（#624）、静态检查目标（#624）。"""
+"""文档与单一来源一致：ADR 字段表（#467）、品牌连点表（#654）、教程截图 alt（#655）、站点与侧栏图标同源（#669）、ADR 索引（#624）、静态检查目标（#624）、手机版措辞的宿主边界（#732）。"""
 import re
 import sys
 import unittest
@@ -198,6 +198,24 @@ class TutorialAltTests(unittest.TestCase):
     def test_helper_rejects_a_number_used_twice(self):
         with self.assertRaises(AssertionError, msg="同一编号出现两次没报错"):
             tutorial_alts('<img src="img/01.jpg" alt="一">\n<img src="img/01.jpg" alt="二">')
+
+
+class HostWordingDocTests(unittest.TestCase):
+    """引擎照宿主取词之后，讲宿主边界的文档要跟着说，否则后来人按总览会把 `tool/host.py` 当成异物（#732）。"""
+
+    NAMING = ("docs/adr/0019-phone-second-execution-host.md", "docs/ARCHITECTURE.md", "CONTEXT.md",
+              "CLAUDE.md", "android/README.md")
+
+    def test_docs_name_the_wording_seam(self):
+        for name in self.NAMING:
+            self.assertIn("host.py", (ROOT / name).read_text(encoding="utf-8"),
+                          f"{name} 没写清排查提示按宿主取词")
+
+    def test_summary_docs_no_longer_claim_three_differences_only(self):
+        """旧树不绿：总览与术语表原写着「差别只有三处」，措辞分叉加进来之后那句话是错的。"""
+        for name in ("docs/ARCHITECTURE.md", "CONTEXT.md"):
+            self.assertNotIn("差别只有三处", (ROOT / name).read_text(encoding="utf-8"),
+                             f"{name} 仍写着宿主差别只有三处")
 
 
 class SharedAssetTests(unittest.TestCase):

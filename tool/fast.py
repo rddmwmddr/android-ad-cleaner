@@ -21,7 +21,8 @@ for _st in (sys.stdout, sys.stderr):
 import adbutils
 import uiautomator2 as u2
 from ui_session import connect
-from troubleshooting import UI_RECOVERY, XIAOMI_INPUT, accessibility_summary, input_blocked
+from troubleshooting import (CLICKER, UI_INSTALL_FAILED, UI_RECOVERY, XIAOMI_INPUT,
+                             accessibility_summary, input_blocked)
 import adb_link
 import backups
 import events
@@ -265,9 +266,7 @@ class Phone:
             # 读屏服务文件传不进手机（adb push 返回 FAIL）或命令无回应：多半是连接中途断了（错误日志 10-27）。
             if not adb_link.present(serial):
                 raise adb_link.lost(f"{type(e).__name__}: {e}") from e
-            raise RuntimeError("读屏服务没能装到手机上（adb 传文件失败），本次未点击开关。请拔插数据线、"
-                               "退出电脑上的手机助手类软件后重试；仍失败请重启手机。"
-                               f"\n原始异常：{type(e).__name__}: {str(e)[:200]}") from e
+            raise RuntimeError(UI_INSTALL_FAILED + f"\n原始异常：{type(e).__name__}: {str(e)[:200]}") from e
         self._shell = self.reader.shell
         self.link = adb_link.Connection(serial, transport=_shell_transport(self._shell), lost_on_retry=False)
         self.reader.shell = self._resilient_shell
@@ -276,7 +275,7 @@ class Phone:
             self.W, self.H = self.reader.window_size()
             # 小米没开「USB 调试（安全设置）」时能读不能点：先探一下，别跑几分钟全是「没找到」。
             if input_blocked(self.reader.shell("input keyevent 0").output):
-                raise RuntimeError("INPUT_BLOCKED：系统拒绝了电脑发出的点击，本次未点击开关。\n" + XIAOMI_INPUT)
+                raise RuntimeError(f"INPUT_BLOCKED：系统拒绝了{CLICKER}发出的点击，本次未点击开关。\n" + XIAOMI_INPUT)
         except BaseException:
             self.reader.close()
             raise
@@ -510,7 +509,7 @@ class Phone:
             raise RuntimeError("点击坐标在屏幕外，未操作")
         out = self.reader.shell(f"input swipe {x} {y} {x} {y} 80").output   # 有的 App 吞 input tap
         if input_blocked(out):
-            raise RuntimeError("系统拒绝了电脑发出的点击。" + XIAOMI_INPUT)
+            raise RuntimeError(f"系统拒绝了{CLICKER}发出的点击。" + XIAOMI_INPUT)
 
     def scroll(self, frac=0.45, up=False):
         """按下-移动-停 0.12 秒-松开：没有惯性，翻多少是多少，约 0.45 秒。"""

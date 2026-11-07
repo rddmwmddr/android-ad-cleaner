@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fast import Phone, ScreenLocked, pause_point
 from row import PATH_DEPTH, SAME_LINE, bounds, disabled_at as row_disabled_at, link, own, skeleton
 from channel_policy import classify, protected_channel
-from troubleshooting import XIAOMI_INPUT
+from troubleshooting import ON_PHONE, XIAOMI_INPUT
 from backups import root_from_env
 from ui_hidden import UiHidden
 import adb_link
@@ -255,15 +255,23 @@ def parse(p, locked=None, foreground=None):
     return d, app_off
 
 
+def stays_on(value):
+    """插电常亮的位：1 交流、2 USB、4 无线，三位都在就算常亮。Android 14 起「保持唤醒」写 15（多一个底座位）。"""
+    return value.isdigit() and int(value) & 7 == 7
+
+
 def keep_awake(reader):
-    """改开关期间插电常亮：营销通知一步可能跑好几分钟，以前只有机型脚本设了常亮（#71 中途锁屏）。"""
+    """改开关期间插电常亮：营销通知一步可能跑好几分钟，以前只有机型脚本设了常亮（#71 中途锁屏）。
+    手机版多半没插电，由 App 自己保持亮屏（#728）；这里设不上不影响，也不提示（#729）。
+    vivo 经无线调试写不进任何全局设置（V2547DA / OriginOS 7 实测：put 被静默忽略），原值已是 15 时不算没设上。"""
     old = reader.shell("settings get global stay_on_while_plugged_in").output.strip()
     try:
-        reader.shell("settings put global stay_on_while_plugged_in 7")
-        ok = reader.shell("settings get global stay_on_while_plugged_in").output.strip() == "7"
+        if not stays_on(old):
+            reader.shell("settings put global stay_on_while_plugged_in 7")
+        ok = stays_on(reader.shell("settings get global stay_on_while_plugged_in").output.strip())
     except RuntimeError:
         ok = False
-    if not ok:
+    if not ok and not ON_PHONE:
         print("  ! 插电常亮没有设上，手机息屏会打断操作；请把自动锁屏时间调长后再跑。" + XIAOMI_INPUT, flush=True)
     return old if old.isdigit() else "0"
 

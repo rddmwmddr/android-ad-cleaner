@@ -6,7 +6,7 @@
 
 ## 怎么做到不改引擎
 
-后台和引擎都是桌面版那一份，原样打进 APK：`gui/app.py` 的 `Api`、`tool/`、`recipes/`。手机上只替换三处：
+后台和引擎都是桌面版那一份，原样打进 APK：`gui/app.py` 的 `Api`、`tool/`、`recipes/`。手机上只替换三处（另有一处措辞分叉：手机版没有电脑和数据线，引擎的排查提示按 `tool/host.py` 取词，见 [ADR-0019](../docs/adr/0019-phone-second-execution-host.md) 的增补段）：
 
 | 桌面版 | 手机版（`app/src/main/python/aac_android/`） |
 |---|---|
