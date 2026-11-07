@@ -501,7 +501,7 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(self.app.usb_hw_id(""), "")
 
     def test_usb_facts_render_one_line_per_hit_device(self):
-        facts = self.app.usb_facts([("三星", "Galaxy S25", "OK", True, "USB\\VID_04E8&PID_6860&MI_00")])
+        facts = self.app.usb_facts([("三星", "Galaxy S25", "OK", True, "USB\\VID_04E8&PID_6860&MI_00", None)])
         self.assertEqual(len(facts), 1)
         self.assertIn("三星", facts[0])
         self.assertIn("Galaxy S25", facts[0])
@@ -509,8 +509,8 @@ class GuiTests(unittest.TestCase):
         self.assertIn("（OK，调试接口）", facts[0])
         self.assertIn("USB\\VID_04E8&PID_6860&MI_00", facts[0])
         # 一台都没有调试接口时也逐台列出，不挑一台当结论
-        facts = self.app.usb_facts([("华为", "HUAWEI M30", "OK", False, "USB\\VID_12D1&PID_107E"),
-                                    ("小米", "MI 15", "Error", False, "")])
+        facts = self.app.usb_facts([("华为", "HUAWEI M30", "OK", False, "USB\\VID_12D1&PID_107E", None),
+                                    ("小米", "MI 15", "Error", False, "", None)])
         self.assertEqual(len(facts), 2)
         self.assertIn("非调试接口", facts[0])
         self.assertIn("未识别", facts[1])
@@ -518,8 +518,8 @@ class GuiTests(unittest.TestCase):
 
     def test_usb_facts_cap_at_five_keeping_the_debug_interfaces(self):
         # #673：整条 USB 总线的设备不能把诊断刷满，但带调试接口的那台不能被截掉
-        found = [("安卓", f"外设 {i}", "OK", False, f"USB\\VID_05C6&PID_900{i}") for i in range(6)]
-        found.append(("小米", "MI 15", "OK", True, "USB\\VID_2717&PID_FF40"))
+        found = [("安卓", f"外设 {i}", "OK", False, f"USB\\VID_05C6&PID_900{i}", None) for i in range(6)]
+        found.append(("小米", "MI 15", "OK", True, "USB\\VID_2717&PID_FF40", None))
         facts = self.app.usb_facts(found)
         self.assertEqual(len(facts), 5)
         self.assertIn("MI 15", facts[0])
@@ -529,7 +529,7 @@ class GuiTests(unittest.TestCase):
         api = self.app.Api(self.data.name)
         api.adb = "/opt/tools/adb"
         api.last_devices = "List of devices attached\n"
-        found = [("小米", "MI 15", "OK", True, "USB\\VID_2717&PID_FF40")]
+        found = [("小米", "MI 15", "OK", True, "USB\\VID_2717&PID_FF40", None)]
         with patch.object(self.app, "usb_phones", return_value=found) as phones, \
              patch.object(api, "_adb", return_value="Android Debug Bridge") as adb:
             report = api.diagnostics()
