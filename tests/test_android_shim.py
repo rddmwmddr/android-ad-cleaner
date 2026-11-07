@@ -657,6 +657,23 @@ class InFrontTest(unittest.TestCase):
         self.assertIn(("busy", True, False), self.native.calls)
         self.assertIn("am start -n com.x/.MainActivity", self.fake.cmds)
 
+    def test_failed_entry_does_not_wedge_the_keepalive(self):
+        """#662：进会话半路失败要回滚计数；不然之后每次都走「内层」的早退分支，保活与胶囊再也不开。"""
+        real = screen.start
+
+        def boom(pkg):
+            raise RuntimeError("建屏时桥没起来")
+
+        screen.start = boom
+        self.addCleanup(setattr, screen, "start", real)
+        with self.assertRaises(RuntimeError):
+            self.run_with(True, lambda: "ok")
+        self.assertEqual(main.SESSION.count, 0, "失败的这一次不能把计数留在 1")
+        screen.start = real
+        self.assertEqual(self.run_with(True, lambda: "ok"), "ok")
+        self.assertIn(("busy", True, True), self.native.calls, "下一次执行照常开保活")
+        self.assertIn(("busy", False, True), self.native.calls, "收尾照常撤保活")
+
 
 class WasStoppedTest(unittest.TestCase):
     """boot() 靠它在「做完了」和「已停止」之间分开：`_work()` 是正常返回的，只有 Job 上这个标记认得出来。"""
