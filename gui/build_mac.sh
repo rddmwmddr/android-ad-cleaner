@@ -3,11 +3,11 @@
 #   gui/build_mac.sh                      Apple 芯片版，不签名（自己测）
 #   ARCH=x86_64 gui/build_mac.sh          Intel 版（在 Apple 芯片的 Mac 上要装 Rosetta）
 #   SIGN_ID="Developer ID Application: 名字 (TEAMID)" NOTARY_PROFILE=钥匙串公证配置名 gui/build_mac.sh
-# 产物：gui/dist/<架构>/安卓去广告.app、gui/dist/AndroidAdCleaner-<版本>-mac-<arm64|intel>.dmg
+# 产物：gui/dist/<架构>/肉呆去广告.app、gui/dist/AndroidAdCleaner-<版本>-mac-<arm64|intel>.dmg
 set -eo pipefail
 cd "${0:A:h}/.."
 ARCH=${ARCH:-arm64}
-NAME="安卓去广告"
+NAME="肉呆去广告"
 if [ "$ARCH" = "x86_64" ]; then
   VENV=gui/.venv-x86; RUN=(arch -x86_64); TAG=intel; PYVER=cpython-3.12-macos-x86_64
 else

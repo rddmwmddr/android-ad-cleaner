@@ -3,6 +3,7 @@
 package com.ahuamiao.adcleaner.ui
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
@@ -57,6 +59,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
@@ -111,12 +114,20 @@ fun HomeScreen(model: AppModel) {
                     .padding(top = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                Image(
+                    painterResource(R.mipmap.ic_launcher_art),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .padding(start = 4.dp)
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                )
                 Text(
-                    "安卓去广告",
+                    "肉呆去广告",
                     style = MaterialTheme.typography.titleMediumEmphasized,
                     modifier = Modifier
                         .weight(1f)
-                        .padding(start = 4.dp),
+                        .padding(start = 8.dp),
                 )
                 Box {
                     IconButton(onClick = { model.sheet = Sheet.More }, shapes = IconButtonDefaults.shapes()) {
@@ -425,7 +436,7 @@ private fun statusCopy(state: String) = when (state) {
     "old" -> StatusCopy("安卓版本太低", "安卓 11 以下没有无线调试，要装 Shizuku，按它的说明连一次电脑启动。", "打开 Shizuku") { it.openShizuku() }
     "stopped" -> StatusCopy("Shizuku 还没启动", "打开 Shizuku 按说明启动。手机重启后要再启动一次。", "打开 Shizuku") { it.openShizuku() }
     "ask" -> StatusCopy("允许本 App 使用 Shizuku", "点下面的按钮，在弹窗里选「始终允许」。", "授权") { it.requestShizuku() }
-    "denied" -> StatusCopy("之前拒绝了 Shizuku 授权", "打开 Shizuku →「已授权的应用」，打开「安卓去广告」，再回到这里。", "打开 Shizuku") { it.openShizuku() }
+    "denied" -> StatusCopy("之前拒绝了 Shizuku 授权", "打开 Shizuku →「已授权的应用」，打开「肉呆去广告」，再回到这里。", "打开 Shizuku") { it.openShizuku() }
     else -> StatusCopy("读不到这台手机", "到「开发者选项」把「无线调试」关掉再打开，然后回到这里。", "打开开发者选项") { it.openSettings("dev") }
 }
 

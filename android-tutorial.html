@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>手机版教程 · 安卓去广告</title>
-<meta name="description" content="安卓去广告手机版保姆级教程：第一次用做 3 个设置，大约 1 分钟；以后打开 App 点一下就行。不需要 root，不连电脑。">
-<meta property="og:title" content="手机版教程 · 安卓去广告">
+<title>手机版教程 · 肉呆去广告</title>
+<meta name="description" content="肉呆去广告手机版保姆级教程：第一次用做 3 个设置，大约 1 分钟；以后打开 App 点一下就行。不需要 root，不连电脑。">
+<meta property="og:title" content="手机版教程 · 肉呆去广告">
 <meta property="og:description" content="在手机上一键关广告：3 个设置 + 一键，截图和视频一步一步讲。">
 <meta name="theme-color" content="#EBEFEC">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='4' y='16' width='56' height='32' rx='16' fill='%239AA7A0'/%3E%3Ccircle cx='20' cy='32' r='12' fill='white'/%3E%3C/svg%3E">
+<link rel="icon" href="images/roudai-icon.png">
 <style>
 /* 颜色与字体沿用首页；顶栏与页脚结构一致，版心与栏高按阅读页收紧。教程图片本身带字幕和点按红圈，页面只补每一步的说明 */
 :root {
@@ -47,11 +47,6 @@ p { text-wrap: pretty; }
 .label { font-size: 12px; letter-spacing: .14em; color: var(--ink-2); font-weight: 600; }
 :focus-visible { outline: 2px solid var(--cobalt); outline-offset: 3px; border-radius: 6px; }
 code { font-size: .92em; background: var(--code); padding: 1px 6px; border-radius: 6px; }
-
-/* 开关小图标（与首页品牌一致） */
-.sw { --w: 30px; --h: 18px; display: inline-block; position: relative; flex: none; width: var(--w); height: var(--h); border-radius: 999px; background: var(--amber); }
-.sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--knob);
-             box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transform: translateX(12px); }
 
 /* 顶栏 */
 .top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--paper); background: color-mix(in srgb, var(--paper) 86%, transparent);
@@ -133,13 +128,14 @@ footer nav { display: flex; flex-wrap: wrap; gap: 8px 22px; }
   section { padding-block: 60px; }
   .hero { padding-block: 32px 56px; }
 }
+.brand .logo { width: 28px; height: 28px; border-radius: 8px; flex: none; }
 </style>
 </head>
 <body>
 
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="index.html"><span class="sw" aria-hidden="true"></span>安卓去广告</a>
+    <a class="brand" href="index.html"><img class="logo" src="images/roudai-icon.png" alt="">肉呆去广告</a>
     <nav class="nav" aria-label="页面导航">
       <a href="#step1" class="hide-s">教程</a>
       <a href="#after" class="hide-s">之后</a>
@@ -190,7 +186,7 @@ footer nav { display: flex; flex-wrap: wrap; gap: 8px 22px; }
   <div class="wrap">
     <div class="head">
       <div><span class="num">1</span><h2>打开开发者选项</h2></div>
-      <p class="lead">打开「安卓去广告」，首页写着「先做 3 个设置」。已经是开发者模式的手机，App 会直接跳到第 2 步。</p>
+      <p class="lead">打开「肉呆去广告」，首页写着「先做 3 个设置」。已经是开发者模式的手机，App 会直接跳到第 2 步。</p>
     </div>
     <ol class="shots">
       <li><img src="docs/手机版教程/img/01.jpg" width="720" height="1280" loading="lazy" alt="App 首页第 1 步，红圈在「打开『关于手机』」按钮"><p><b>点「打开『关于手机』」</b></p></li>
@@ -216,7 +212,7 @@ footer nav { display: flex; flex-wrap: wrap; gap: 8px 22px; }
   <div class="wrap">
     <div class="head">
       <div><span class="num">2</span><h2>打开无线调试</h2></div>
-      <p class="lead">回到「安卓去广告」，它会自己进到第 2 步，第 1 步打上勾。</p>
+      <p class="lead">回到「肉呆去广告」，它会自己进到第 2 步，第 1 步打上勾。</p>
     </div>
     <ol class="shots">
       <li><img src="docs/手机版教程/img/05.jpg" width="720" height="1280" loading="lazy" alt="App 第 2 步，红圈在「打开开发者选项」"><p><b>点「打开开发者选项」</b></p></li>
@@ -279,7 +275,7 @@ footer nav { display: flex; flex-wrap: wrap; gap: 8px 22px; }
 
 <footer>
   <div class="wrap">
-    <span>安卓去广告 · MIT 开源</span>
+    <span>肉呆去广告 · MIT 开源</span>
     <nav aria-label="页脚链接">
       <a href="index.html">首页</a>
       <a href="https://github.com/rddmwmddr/android-ad-cleaner/tree/main/docs/%E6%89%8B%E6%9C%BA%E7%89%88%E6%95%99%E7%A8%8B" target="_blank" rel="noopener">教程原文</a>

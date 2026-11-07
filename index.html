@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>安卓去广告</title>
+<title>肉呆去广告</title>
 <meta name="description" content="关掉国产安卓手机的开屏广告、热搜、资讯推荐和营销推送。Mac / Windows 客户端，开源免费。">
-<meta property="og:title" content="安卓去广告">
+<meta property="og:title" content="肉呆去广告">
 <meta property="og:description" content="插上数据线，在电脑上点几下，关掉手机里的广告。">
 <meta name="theme-color" content="#EBEFEC">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='4' y='16' width='56' height='32' rx='16' fill='%239AA7A0'/%3E%3Ccircle cx='20' cy='32' r='12' fill='white'/%3E%3C/svg%3E">
+<link rel="icon" href="images/roudai-icon.png">
 <style>
 /* 布局：首屏左侧是带开关的标题，右侧是一块「广告与推荐」设置面板；下面各节沿用设置列表的行与开关 */
 :root {
@@ -75,8 +75,6 @@ h2 { font-size: clamp(30px, 4.2vw, 46px); line-height: 1.12; font-weight: 600; l
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 21; background: var(--paper); }
 .top .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; text-decoration: none; font-size: 17px; }
-.brand .sw { --w: 30px; --h: 18px; pointer-events: none; }
-.brand .sw::after { top: 2px; left: 2px; width: 14px; height: 14px; }
 .nav { display: flex; gap: 22px; margin-left: auto; font-size: 15px; }
 .nav a { text-decoration: none; color: var(--ink-2); }
 .nav a:hover { color: var(--ink); }
@@ -222,13 +220,14 @@ footer a:hover { color: var(--ink); }
   .dl, .what, .faq, .edge { grid-template-columns: minmax(0, 1fr); }
   .btn { width: 100%; justify-content: center; }
 }
+.brand .logo { width: 28px; height: 28px; border-radius: 8px; flex: none; }
 </style>
 </head>
 <body>
 
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="#"><span class="sw" aria-hidden="true"></span>安卓去广告</a>
+    <a class="brand" href="#"><img class="logo" src="images/roudai-icon.png" alt="">肉呆去广告</a>
     <nav class="nav" aria-label="页面导航">
       <a href="#download">下载</a>
       <a href="android-tutorial.html">手机版教程</a>
@@ -405,7 +404,7 @@ footer a:hover { color: var(--ink); }
 
 <footer>
   <div class="wrap">
-    <span>安卓去广告 · MIT 开源</span>
+    <span>肉呆去广告 · MIT 开源</span>
     <nav aria-label="页脚链接">
       <a href="https://github.com/rddmwmddr/android-ad-cleaner" target="_blank" rel="noopener">源代码</a>
       <a href="https://github.com/rddmwmddr/android-ad-cleaner/releases" target="_blank" rel="noopener">更新说明</a>

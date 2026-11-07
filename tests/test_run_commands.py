@@ -199,7 +199,7 @@ class HandlerInterfaceTests(unittest.TestCase):
              contextlib.redirect_stdout(out := io.StringIO()):
             self.assertEqual(run.main(["-h"]), 0)
             self.assertEqual(run.main([]), 0)
-        self.assertIn("手机去广告", out.getvalue())
+        self.assertIn("肉呆去广告", out.getvalue())
 
     def test_bad_arguments_still_report_missing_adb_first(self):
         """参数写错时也先报「找不到 adb」：这与旧实现 import 期的先后一致，别在搬 adb() 时弄反。"""

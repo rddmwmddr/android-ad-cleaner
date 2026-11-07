@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""安卓去广告 · 桌面客户端（macOS / Windows）。
+"""肉呆去广告 · 桌面客户端（macOS / Windows）。
 
 界面：gui/web/index.html（pywebview 窗口）
 后台：tool/run.py、tool/fast.py、tool/chan_fast.py，以子进程运行，日志实时回传界面。
@@ -13,7 +13,7 @@ try:                                # 当包导入（测试）；直接跑脚本
 except ImportError:
     import winpreflight
 
-APP_NAME = "安卓去广告"
+APP_NAME = "肉呆去广告"
 VERSION = "0.3.2"
 FROZEN = getattr(sys, "frozen", False)
 BASE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

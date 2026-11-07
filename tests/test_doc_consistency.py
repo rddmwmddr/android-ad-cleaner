@@ -1,4 +1,4 @@
-"""文档与单一来源一致：ADR 字段表（#467）、品牌连点表（#654）、教程截图 alt（#655）。"""
+"""文档与单一来源一致：ADR 字段表（#467）、品牌连点表（#654）、教程截图 alt（#655）、站点与侧栏图标同源（#669）。"""
 import re
 import sys
 import unittest
@@ -156,6 +156,14 @@ class TutorialAltTests(unittest.TestCase):
     def test_helper_rejects_a_number_used_twice(self):
         with self.assertRaises(AssertionError, msg="同一编号出现两次没报错"):
             tutorial_alts('<img src="img/01.jpg" alt="一">\n<img src="img/01.jpg" alt="二">')
+
+
+class SharedAssetTests(unittest.TestCase):
+    def test_site_and_client_use_the_same_logo(self):
+        """站点与桌面版侧栏各存一份图标（打包目录不同，必须有副本）；旧树也绿，守的是换图时不会只改一处。"""
+        self.assertEqual((ROOT / "gui/web/img/logo.png").read_bytes(),
+                         (ROOT / "images/roudai-icon.png").read_bytes(),
+                         "两处图标已不一致：换图时把 gui/web/img/logo.png 一并更新")
 
 
 if __name__ == "__main__":

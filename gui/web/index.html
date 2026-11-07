@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>安卓去广告</title>
+<title>肉呆去广告</title>
 <style>
 :root{
   --bg:#f5f6f8; --panel:#ffffff; --side:#eef0f4; --text:#1d1f23; --sub:#6b7280; --line:#e3e6eb;
@@ -21,7 +21,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
 .app{display:grid;grid-template-columns:220px 1fr;height:100vh}
 aside{background:var(--side);border-right:1px solid var(--line);padding:22px 14px;display:flex;flex-direction:column;gap:4px}
 .brand{font-weight:700;font-size:17px;padding:0 10px 18px;display:flex;align-items:center;gap:8px}
-.brand i{width:26px;height:26px;border-radius:7px;background:var(--accent);display:inline-grid;place-items:center;color:#fff;font-style:normal;font-size:14px}
+.brand img{width:26px;height:26px;border-radius:7px}
 .step{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;color:var(--sub);cursor:default}
 .step b{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--line);display:grid;place-items:center;font-size:12px;font-weight:600}
 .step.on{background:var(--panel);color:var(--text);font-weight:600}
@@ -100,7 +100,7 @@ pre.report{background:var(--log);color:var(--logtext);font-family:var(--mono);fo
 <body>
 <div class="app">
   <aside>
-    <div class="brand"><i>净</i>安卓去广告</div>
+    <div class="brand"><img src="img/logo.png" alt="">肉呆去广告</div>
     <div class="step" data-s="1"><b>1</b>连接手机</div>
     <div class="step" data-s="2"><b>2</b>检测</div>
     <div class="step" data-s="3"><b>3</b>选择要关的</div>

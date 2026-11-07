@@ -82,7 +82,7 @@ class AdbManager private constructor(context: Context) : AbsAdbConnectionManager
 
     override fun getPrivateKey(): PrivateKey = privateKey
     override fun getCertificate(): Certificate = certificate
-    override fun getDeviceName(): String = "安卓去广告"
+    override fun getDeviceName(): String = "肉呆去广告"
 
     companion object {
         @Volatile private var instance: AdbManager? = null

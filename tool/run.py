@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""手机去广告 · 总入口。所有命令都要带 -s <序列号>（adb devices 第一列）。
+"""肉呆去广告 · 总入口。所有命令都要带 -s <序列号>（adb devices 第一列）。
 
   python3 tool/run.py devices                      列出连着的手机、型号、系统版本、有没有现成机型脚本
   python3 tool/run.py -s 序列号 check              只读：锁屏、机型脚本匹配、广告包挂起状态

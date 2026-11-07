@@ -644,7 +644,7 @@ class InFrontTest(unittest.TestCase):
         self.assertEqual(self.done_calls(), [("done", "去广告做完了", "点这里查看结果")])
         self.assertIn(("busy", True, True), self.native.calls)
         self.assertIn(("busy", False, True), self.native.calls)
-        self.assertIn(("capsule", True, "净 去广告中（后台）"), self.native.calls)
+        self.assertIn(("capsule", True, "肉呆去广告中（后台）"), self.native.calls)
         self.assertIsNone(screen.active, "用完要拆屏")
         self.assertEqual([c for c in self.fake.cmds if c.startswith("am start -n")], [])
 
@@ -665,7 +665,7 @@ class InFrontTest(unittest.TestCase):
     def test_restore_reports_its_own_name(self):
         self.run_with(True, lambda: "ok", action="还原")
         self.assertEqual(self.done_calls(), [("done", "还原做完了", "点这里查看结果")])
-        self.assertIn(("capsule", True, "净 还原中（后台）"), self.native.calls)
+        self.assertIn(("capsule", True, "肉呆还原中（后台）"), self.native.calls)
 
     def test_overlapping_entries_keep_the_keepalive_until_the_last_leaves(self):
         """#662：内层先结束不能撤掉外层的前台服务和胶囊，结束通知也只发一次。"""
