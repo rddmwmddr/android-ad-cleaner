@@ -552,7 +552,7 @@ class LostScreenTest(unittest.TestCase):
         def submit(cmd, stdin):
             self.sent.append(cmd)
             if "kill -0" in cmd:
-                return self.Job(1)                      # 进程不在
+                return self.Job(1, b"probe\n")          # 探测跑通了，进程不在
             return self.Job(1 if " -d 7 " in cmd else 0)
         b = bridge.ShizukuBridge.__new__(bridge.ShizukuBridge)
         b.shell = ShellStub(submit=submit)
@@ -575,9 +575,15 @@ class LostScreenTest(unittest.TestCase):
         self.assertEqual(len(self.sent), before + 1, "不发往后台屏的命令照常")
 
     def test_failure_on_a_live_screen_is_not_mistaken_for_loss(self):
-        self.b.shell._submit = lambda cmd, stdin: self.Job(0, b"up") if "kill -0" in cmd else self.Job(1)
+        self.b.shell._submit = lambda cmd, stdin: self.Job(0, b"probe\nup\n") if "kill -0" in cmd else self.Job(1)
         self.b.exec("input tap 1 1", None, 5)
         self.assertFalse(screen.active.lost)
+
+    def test_probe_that_never_ran_is_not_a_dead_screen(self):
+        """#662：通道断了、探测超时时 probe 判不了屏死，否则通道恢复后也一直拒发。"""
+        self.b.shell._submit = lambda cmd, stdin: self.Job(1) if "kill -0" in cmd else self.Job(1)
+        self.b.exec("input tap 1 1", None, 5)
+        self.assertFalse(screen.active.lost, "探测没跑通就判屏死，会把一次通道抖动变成整段执行失败")
 
 
 class Recorder:

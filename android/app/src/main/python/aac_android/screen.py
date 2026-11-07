@@ -139,10 +139,13 @@ def stop():
 
 
 def dead():
-    """建屏进程还在不在。发往后台屏的命令失败时才问，不每条命令都问。"""
+    """建屏进程还在不在。发往后台屏的命令失败时才问，不每条命令都问。
+
+    先 echo 一个哨兵：通道自己断了（或探测超时）时 out 是空的，不能据此判屏死——
+    那样通道恢复后也会一直拒发，整段执行报「后台屏意外关闭」。"""
     b = bridge.get()
-    r = b.exec(f"[ -f {PID_FILE} ] && kill -0 $(cat {PID_FILE}) 2>/dev/null && echo up", None, 10)
-    return b"up" not in r.out
+    r = b.exec(f"echo probe; [ -f {PID_FILE} ] && kill -0 $(cat {PID_FILE}) 2>/dev/null && echo up", None, 10)
+    return b"probe" in r.out and b"up" not in r.out
 
 
 # 只会作用到主屏的命令，后台屏下不发：
