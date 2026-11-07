@@ -163,20 +163,28 @@ def prop(serial, k):
     return sh(serial, f"getprop {k}")
 
 
-def android_release(serial):
-    """按 ANDROID_RELEASE_KEYS 的顺序取第一个非空值，都读不到返回空串。"""
-    for k in ANDROID_RELEASE_KEYS:
-        value = prop(serial, k)
+def first_nonempty(values):
+    for value in values:
         if value:
             return value
     return ""
+
+
+def android_release(serial):
+    """按 ANDROID_RELEASE_KEYS 的顺序取第一个非空值，都读不到返回空串。"""
+    return first_nonempty(prop(serial, k) for k in ANDROID_RELEASE_KEYS)
+
+
+# 设备名的候选属性：同一台手机在不同 ROM 上只暴露其中一个。设备列表与 status-json 都按
+# 这里的顺序取第一个非空，两处显示的名字才不会分叉。
+NAME_PROPS = ("ro.vendor.oplus.market.name", "ro.product.marketname", "ro.product.vendor.marketname")
 
 
 def info(serial):
     return {
         "brand": prop(serial, "ro.product.brand"),
         "model": prop(serial, "ro.product.model"),
-        "name": prop(serial, "ro.vendor.oplus.market.name") or prop(serial, "ro.product.marketname") or prop(serial, "ro.product.vendor.marketname"),
+        "name": first_nonempty(prop(serial, k) for k in NAME_PROPS),
         "build": prop(serial, "ro.build.display.id"),
         "os": prop(serial, "ro.mi.os.version.incremental") or prop(serial, "ro.build.version.opporom")
               or prop(serial, "ro.vivo.os.build.display.id") or prop(serial, "ro.build.version.magic"),

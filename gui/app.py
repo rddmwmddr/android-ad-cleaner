@@ -1084,6 +1084,7 @@ class Api:
     def devices(self):
         if not self.adb:
             return {"error": "no-adb", "list": []}
+        naming = _tool("run")   # 候选属性与取法只在 tool/run.py 定义，别在这里再抄一份
         try:
             out = self._adb("devices", "-l", timeout=10)
         except Exception as e:
@@ -1100,11 +1101,12 @@ class Api:
             d = {"serial": ser, "state": st, "model": "", "name": "", "brand": ""}
             if st == "device":
                 try:
+                    keys = ("ro.product.brand", "ro.product.model") + tuple(naming.NAME_PROPS)
                     p = self._adb("-s", ser, "shell",
-                                  "getprop ro.product.brand; getprop ro.product.model; "
-                                  "getprop ro.vendor.oplus.market.name; getprop ro.product.marketname", timeout=8).splitlines()
-                    p += [""] * 4
-                    d.update(brand=p[0].strip(), model=p[1].strip(), name=(p[2] or p[3]).strip())
+                                  "; ".join(f"getprop {k}" for k in keys), timeout=8).splitlines()
+                    p += [""] * len(keys)
+                    d.update(brand=p[0].strip(), model=p[1].strip(),
+                             name=naming.first_nonempty(v.strip() for v in p[2:len(keys)]))
                 except Exception:
                     pass
             res.append(d)
