@@ -1,6 +1,7 @@
 """品牌词库（tool/vocab.py，#681）：词条都有出处、键和入口速查相同、解析不出的不静默丢弃、保留项只在页面上。"""
 import ast
 import re
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -173,10 +174,18 @@ class RealRecipesTest(unittest.TestCase):
         self.assertIn("进反查表", section)
 
     def test_protection_note_points_at_the_engine_list(self):
-        """保护类前缀只认 fast.NEG_PREFIX，不在文档里另抄一份词表（抄漏过「减少」）。"""
+        """保护类前缀只认极性模块那一份词表，不在文档里另抄（抄漏过「减少」）。"""
         note = next(line for line in vocab.render(RECIPES).splitlines() if "保护类开关" in line)
-        self.assertIn("fast.NEG_PREFIX", note)
+        self.assertIn("polarity.NEG_PREFIX", note)
         self.assertNotIn("减少", note)
+
+    def test_protection_switch_gets_its_own_direction(self):
+        """引擎会打开保护类开关，词库不能跟着 p.off() 一律标「要关」（#693）。"""
+        tmp = recipes(**{"xiaomi-A1": 'p.off(only=["个性化广告推荐", "减少广告"], page="商店·设置")'})
+        self.addCleanup(tmp.cleanup)
+        self.assertEqual([(w.text, w.kind) for w in vocab.scan(tmp.name).words],
+                         [("个性化广告推荐", vocab.OFF), ("减少广告", vocab.OPEN)])
+        self.assertIn("| 减少广告 | 小米 | 应用商店 | 商店·设置 | 要开 |", vocab.render(tmp.name))
 
     def test_scripts_without_any_word_are_named(self):
         """整份脚本一条词条都读不出来时，文档必须点名，不能让人以为这台机没有词。"""
@@ -291,6 +300,10 @@ class RealHonorTest(unittest.TestCase):
         words = [w for w in vocab.scan(RECIPES).words if w.script.startswith("honor-WKL-AN20/")]
         self.assertIn(("音乐", "展示“摇一摇”类开屏广告"), {(w.group, w.text) for w in words})
         self.assertIn(("音乐", "个性化广告推荐"), {(w.group, w.text) for w in words})
+
+    def test_reduce_ads_is_marked_open_in_the_real_vocabulary(self):
+        """#693：这条方向相反，词库要跟引擎说的一致。"""
+        self.assertIn("| 减少广告 | 荣耀 | 音乐 | 音乐·广告推荐 | 要开 |", vocab.render(RECIPES))
 
 
 class ParseTest(unittest.TestCase):
@@ -460,6 +473,27 @@ class SourceShapeTest(unittest.TestCase):
         assigned = {t.id for n in tree.body if isinstance(n, ast.Assign) for t in n.targets if isinstance(t, ast.Name)}
         self.assertFalse(assigned & {"FAMILY", "LABEL", "ENTRIES"})
         self.assertFalse(re.search(r"^(BRANDS?|KEEP_WORDS|NEVER)\s*=", src, re.M))
+
+    def test_polarity_word_lists_are_defined_in_one_module(self):
+        """极性词表只定义一处（#693）：别的 tool/ 模块只能取用或转发，不能各留副本。"""
+        owners = {}
+        for path in ROOT.glob("tool/*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in tree.body:
+                if isinstance(node, ast.Assign):
+                    for target in node.targets:
+                        if isinstance(target, ast.Name) and target.id in ("NEG_PREFIX", "AD_WORDS", "TRACK_WORDS"):
+                            owners.setdefault(target.id, []).append(path.name)
+        self.assertEqual(owners, {name: ["polarity.py"] for name in ("NEG_PREFIX", "AD_WORDS", "TRACK_WORDS")})
+
+    def test_importing_vocab_does_not_pull_the_device_stack(self):
+        """生成器要能单独跑：极性判据从 polarity 取，不经过 fast（那条链会连带 adbutils）。"""
+        code = ("import sys; sys.path.insert(0, 'tool'); import vocab; "
+                "print(sorted(m for m in ('adbutils', 'uiautomator2') if m in sys.modules))")
+        done = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stdout.strip(), "[]")
 
 
 if __name__ == "__main__":
