@@ -21,7 +21,7 @@ object Shell {
     )
 
     /** 命令服务起不来时的那条结果：已经「结束」，Python 取 result() 就拿到原因。 */
-    private class Failed(reason: String) : ShellJob {
+    private class Failed(private val reason: String) : ShellJob {
         override fun isDone() = true
         override fun result(timedOut: Boolean) = Result(-1, ByteArray(0), reason.toByteArray(), timedOut)
         override fun cancel() {

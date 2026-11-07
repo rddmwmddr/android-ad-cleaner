@@ -7,9 +7,13 @@ const { openPage, pollResult } = require("./page.js");
 test("手机版停止后完成页给出回到首页与重新开始的出口", async () => {
   const page = await openPage({
     mobile: true,
-    api: { poll: () => pollResult({ results: [], cancel: true }) },
+    api: {
+      poll: () => pollResult({ results: [], cancel: true }),
+      run_mode: () => ({ background: true, deciding: false }),
+    },
   });
   try {
+    page.window.showRun();              // tick() 只在执行页才画（#662）
     await page.window.tick();
 
     const buttons = [...page.document.querySelectorAll("#main .actions .btn")];

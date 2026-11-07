@@ -704,6 +704,7 @@ class Dispatcher:
         self.on_error = on_error
         self.job = None
         self.lock = threading.Lock()
+        self.side = ""                  # 正在跑的旁路操作（还原），与执行互斥（#662）
 
     def exclusive(self):
         """`ui_check()` 与 `start()` 互斥：持锁期间不许开新任务。"""
@@ -713,11 +714,35 @@ class Dispatcher:
         """调用方须持 `exclusive()` 的锁。"""
         return bool(self.job and self.job.running)
 
+    def claim(self, name, wait=0.2):
+        """占住「旁路操作」的位置（还原）：执行中或已有旁路操作时返回占着它的那件事的说明，占到了返回空串。
+        还原与执行同时跑会互相点乱同一块屏，手机版上还原先结束还会把执行的保活一起撤掉（#662）。
+
+        拿锁只等 `wait` 秒：`ui_check()` 持着同一把锁最长 75 秒，按界面按钮的线程不该被按在那里等，
+        拿不到就直接回一句。"""
+        if not self.lock.acquire(timeout=wait):
+            return "正在检查读屏连接，等它结束后再还原"
+        try:
+            if self.busy():
+                return "正在执行去广告，等它结束后再还原"
+            if self.side:
+                return f"「{self.side}」还没做完，请稍后"
+            self.side = name
+            return ""
+        finally:
+            self.lock.release()
+
+    def release(self):
+        with self.lock:
+            self.side = ""
+
     def start(self, serial, plan):
         """plan: {backup, steps:[段名]|None, channels:[{pkg,id,name}], quickapp:bool, ads:[包名], model}"""
         with self.lock:
             if self.job and self.job.running:
                 return {"error": "已有任务在运行"}
+            if self.side:
+                return {"error": f"「{self.side}」还没做完，请稍后再开始"}
             tasks = []
             if plan.get("backup", True):
                 tasks.append(Task("存改动前的快照", "run.py", ["-s", serial, "backup"]))
@@ -875,20 +900,24 @@ class Dispatcher:
         return snap
 
     def stop(self):
-        j = self.job
-        if j and j.running:
+        # 取 job、判 running 与置停止在同一把锁里：不然判完之后新一次执行顶上来，停掉的是它（#662）
+        with self.lock:
+            j = self.job
+            if not (j and j.running):
+                return True
             j.request_stop()
-            self.resume()
+        self.resume()
         return True
 
     def pause(self):
         """执行中需要操作手机时用：引擎做完手头这一项（一个渠道、机型脚本的一段、一个步骤）就停下等待。"""
-        j = self.job
-        if not j or not j.running or j.cancel:
-            return False
-        self.data.ensure()
-        Path(self.data.pause).write_text("", encoding="utf-8")
-        j.request_pause()
+        with self.lock:
+            j = self.job
+            if not j or not j.running or j.cancel:
+                return False
+            self.data.ensure()
+            Path(self.data.pause).write_text("", encoding="utf-8")
+            j.request_pause()
         return True
 
     def resume(self):
@@ -1129,6 +1158,8 @@ class Api:
         with self.dispatcher.exclusive():
             if self.dispatcher.busy():
                 return {"error": "任务正在执行，请结束后再检查读屏连接"}
+            if self.dispatcher.side:      # 还原正在点手机：检查读屏会和它抢同一块屏（#675）
+                return {"error": f"「{self.dispatcher.side}」正在做，结束后再检查读屏连接"}
             try:
                 # 直接启动读屏进程，超时时终止它；不经额外父进程留下仍在连接的子任务。
                 out, err, rc = self._run("fast.py", "-s", serial, "check", timeout=75)
@@ -1174,6 +1205,16 @@ class Api:
         return out + err
 
     def restore(self, serial, what):
+        """还原与执行、与另一次还原互斥（#662）：占不到位置就直接回一句说明，不碰手机。"""
+        held = self.dispatcher.claim("还原")
+        if held:
+            return held
+        try:
+            return self._restore_work(serial, what)
+        finally:
+            self.dispatcher.release()
+
+    def _restore_work(self, serial, what):
         if what == "suspend":
             out, err, rc = self._run("run.py", "-s", serial, "unsuspend")
         elif what == "quickapp":

@@ -533,5 +533,16 @@ class OffDriverTests(unittest.TestCase):
         p.say.assert_any_call("  · 页：安全模式不做整页全关，本页 2 个开关未改动，需要时请按清单手动关")
 
 
+class ScreenGoneTests(unittest.TestCase):
+    def test_a_gone_background_screen_is_not_reported_as_a_reader_failure(self):
+        """#674：屏已经没了不是读屏服务坏了，别把用户指去关别的客户端。"""
+        gone = fast.u2.exceptions.UiAutomationError("后台屏意外关闭（建屏进程已退出），这一步无法继续")
+        with patch.object(fast, "connect", side_effect=gone):
+            with self.assertRaises(RuntimeError) as caught:
+                fast.Phone("S", log=False)
+        self.assertIn("那块屏已经关了", str(caught.exception))
+        self.assertNotIn("读屏服务（UiAutomation）启动失败", str(caught.exception))
+
+
 if __name__ == "__main__":
     unittest.main()
