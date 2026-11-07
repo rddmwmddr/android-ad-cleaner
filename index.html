@@ -281,7 +281,7 @@ footer a:hover { color: var(--ink); }
   <div class="wrap">
     <div class="head">
       <h2>下载</h2>
-      <p class="lead" id="dl-lead">选你的设备。国内下载走百度网盘，链接里带提取码。替换旧版程序，原来的备份保留。</p>
+      <p class="lead" id="dl-lead">选你的设备。国内下载走 Gitee，不用登录。替换旧版程序，原来的备份保留。</p>
     </div>
     <div class="dl" id="dl"></div>
     <div class="after" id="dl-after"></div>
@@ -433,25 +433,27 @@ footer a:hover { color: var(--ink); }
 </footer>
 
 <script>
-/* ===== 发布信息：发新版或填网盘链接时只改这里（gui/upload_baidu.sh 按这个格式自动写入网盘链接） ===== */
+/* ===== 发布信息：发新版时只改这里。国内下载走 gitee（gui/upload_gitee.py 上传）。
+   Gitee 不可用时的退路：gitee 留空，跑 gui/upload_baidu.sh，它会把网盘链接写回下面的 baidu，按钮随之恢复。 ===== */
 const REL = {
   version: "0.3.2",
   github: "https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.3.2/",
-  // 百度网盘：每个版本可以单独填链接（files 里的 baidu）；没填的用这里的总链接（整个大文件夹的分享）
-  baidu: { url: "https://pan.baidu.com/s/18slO2hS6PsZcVmWgdQZdUA", code: "wj4m" },
+  gitee: "https://gitee.com/rddmw/android-ad-cleaner/releases/download/v0.3.2/",
+  baidu: { url: "", code: "" },
   files: [
-    { id: "mac-arm64", folder: "Mac-Apple芯片", baidu: { url: "https://pan.baidu.com/s/1rpDXRMps3YqMYGqsy1vGpg", code: "cbn8" }, title: "Mac · Apple 芯片", sub: "M1 / M2 / M3 / M4 及以后", file: "AndroidAdCleaner-0.3.2-mac-arm64.dmg", size: "34.7 MB",
+    { id: "mac-arm64", folder: "Mac-Apple芯片", baidu: { url: "", code: "" }, title: "Mac · Apple 芯片", sub: "M1 / M2 / M3 / M4 及以后", file: "AndroidAdCleaner-0.3.2-mac-arm64.dmg", size: "34.7 MB",
       note: "苹果公证通过，双击打开", sha: "d6b5218a787cbb05848692aeee17c800934aa7abfa1ccba4bf2e04eb454d9e54" },
-    { id: "mac-intel", folder: "Mac-Intel芯片", baidu: { url: "https://pan.baidu.com/s/1ClnunJY8TzVJa-gG0OtcjA", code: "gup3" }, title: "Mac · Intel 芯片", sub: "2020 年及以前的 Intel Mac，macOS 11 及以上", file: "AndroidAdCleaner-0.3.2-mac-intel.dmg", size: "40.5 MB",
+    { id: "mac-intel", folder: "Mac-Intel芯片", baidu: { url: "", code: "" }, title: "Mac · Intel 芯片", sub: "2020 年及以前的 Intel Mac，macOS 11 及以上", file: "AndroidAdCleaner-0.3.2-mac-intel.dmg", size: "40.5 MB",
       note: "苹果公证通过，双击打开", sha: "5dc4fac93510a7db593d8bcb269e61c14b47d0f2550dac4ce314eb5fc5fd1198" },
-    { id: "win-setup", folder: "Windows-安装版", baidu: { url: "https://pan.baidu.com/s/1Hh_Ez0WMKA-dIk4XUDBdgQ", code: "2pvq" }, title: "Windows · 安装版", sub: "Windows 10 / 11（64 位）", file: "AndroidAdCleaner-0.3.2-windows-setup.exe", size: "30.3 MB",
-      note: "弹出安全提示时点「更多信息」→「仍要运行」", sha: "40840abadd1df8c4c0a1f597c9ac1483730708ae6e191d6ea93647bf6488d4ad" },
-    { id: "win-zip", folder: "Windows-免安装版", baidu: { url: "https://pan.baidu.com/s/10MTWaV6l5CH53jLbxgpotQ", code: "q85j" }, title: "Windows · 免安装", sub: "Windows 10 / 11（64 位）", file: "AndroidAdCleaner-0.3.2-windows-portable.zip", size: "45.2 MB",
+    { id: "win-setup", folder: "Windows-安装版", baidu: { url: "", code: "" }, title: "Windows · 安装版", sub: "Windows 10 / 11（64 位）", file: "AndroidAdCleaner-0.3.2-windows-setup.exe", size: "30.3 MB",
+      note: "弹出安全提示时点「更多信息」→「仍要运行」", sha: "40840abadd1df8c4c0a1f597c9ac1483730708ae6e191d6ea93647bf6488d4ad", gitee: false },
+    { id: "win-zip", folder: "Windows-免安装版", baidu: { url: "", code: "" }, title: "Windows · 免安装", sub: "Windows 10 / 11（64 位）", file: "AndroidAdCleaner-0.3.2-windows-portable.zip", size: "45.2 MB",
       note: "解压后双击 AndroidAdCleaner.exe", sha: "ffd302f3e311f7351b2cb906327f8c38d278873fb608ed58f748b60d7a25b709" },
   ],
 };
 const RELEASED = "2026-11-05";
 const REPO = "https://github.com/rddmwmddr/android-ad-cleaner";
+const GITEE = "https://gitee.com/rddmw/android-ad-cleaner";
 
 const PROMPTS = {
   agent: {
@@ -486,6 +488,12 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const pan = (f) => (f.baidu && f.baidu.url) ? f.baidu : (REL.baidu.url ? REL.baidu : null);
 const panUrl = (b) => b.url + (b.code ? (b.url.includes("?") ? "&" : "?") + "pwd=" + encodeURIComponent(b.code) : "");
+// gitee: false：Gitee 拒收的文件（目前是没有代码签名的 Windows 安装版），不给国内下载按钮
+const cnUrl = (f) => {
+  if (REL.gitee && f.gitee !== false) return REL.gitee + f.file;
+  const b = pan(f);
+  return b ? panUrl(b) : "";
+};
 
 function platformOf(){
   const ua = navigator.userAgent || "";
@@ -514,42 +522,47 @@ async function copy(text, button, doneText){
 /* 下载 */
 (function renderDownloads(){
   const os = platformOf();
+  const win = REL.files.find((f) => f.id === "win-setup");
+  const winPick = win && cnUrl(win) ? win : REL.files.find((f) => f.id === "win-zip");  // 国内能下的那个
   const mine = (f) => os === "android" ? f.id === "android"
-    : (os === "mac" && f.id.startsWith("mac")) || (os === "win" && f.id === "win-setup");
+    : (os === "mac" && f.id.startsWith("mac")) || (os === "win" && winPick && f.id === winPick.id);
   const osLabel = (f) => f.id === "android" ? "安卓手机" : f.id.startsWith("mac") ? "MAC"
     : f.id.startsWith("win") ? "WINDOWS" : f.id.toUpperCase();
   $("#dl").innerHTML = REL.files.map((f) => {
-    const b = pan(f);
+    const b = pan(f), cn = cnUrl(f);
     return `<article class="card ${mine(f) ? "mine" : ""}">
       <span class="os">${osLabel(f)}</span>
       <h3>${esc(f.title.split(" · ")[1] || f.title)}</h3>
       <span class="sub">${esc(f.sub)}</span>
-      <span class="note">${esc(f.note)}</span>
+      <span class="note">${esc(f.note)}${f.gitee === false && !cn ? "。国内网络建议下载免安装版" : ""}</span>
       <span class="size">${esc(f.size)}</span>
       <div class="btns">
-        ${b ? `<a class="btn primary" href="${esc(panUrl(b))}" target="_blank" rel="noopener">国内下载</a>
+        ${cn ? `<a class="btn primary" href="${esc(cn)}" target="_blank" rel="noopener">国内下载</a>` : ""}
+        ${b ? `${REL.gitee ? `<a class="btn" href="${esc(panUrl(b))}" target="_blank" rel="noopener">百度网盘</a>` : ""}
                ${b.code ? `<span class="pwd">提取码 <code>${esc(b.code)}</code><button class="mini" data-copy="${esc(b.code)}">复制</button></span>` : ""}` : ""}
-        <a class="btn" href="${esc(REL.github + f.file)}">GitHub 下载</a>
+        <a class="btn ${cn ? "" : "primary"}" href="${esc(REL.github + f.file)}">GitHub 下载</a>
       </div>
     </article>`;
   }).join("");
   const all = REL.baidu.url ? `<span>百度网盘全部版本：<a href="${esc(panUrl(REL.baidu))}" target="_blank" rel="noopener">打开</a>${REL.baidu.code ? `　提取码 <code>${esc(REL.baidu.code)}</code>` : ""}</span>` : "";
-  $("#dl-after").innerHTML = `${all}<span><a href="${REPO}/releases" target="_blank" rel="noopener">GitHub 全部版本</a></span><span><a href="${REPO}/releases/tag/v${esc(REL.version)}" target="_blank" rel="noopener">v${esc(REL.version)} 更新说明</a></span>`;
+  const giteeAll = REL.gitee ? `<span><a href="${GITEE}/releases" target="_blank" rel="noopener">Gitee 全部版本</a></span>` : "";
+  $("#dl-after").innerHTML = `${all}${giteeAll}<span><a href="${REPO}/releases" target="_blank" rel="noopener">GitHub 全部版本</a></span><span><a href="${REPO}/releases/tag/v${esc(REL.version)}" target="_blank" rel="noopener">v${esc(REL.version)} 更新说明</a></span>`;
   $("#sums").innerHTML = REL.files.map((f) => `${esc(f.sha)}  ${esc(f.file)}`).join("<br>");
   const phone = REL.files.find((f) => f.id === "android");
   $("#hero-meta").textContent = `v${REL.version} · ${RELEASED} · Mac（Apple / Intel 芯片）· Windows 10 / 11${phone ? ` · ${phone.sub}` : ""}`;
 
-  const win = REL.files.find((f) => f.id === "win-setup");
   if (os === "win" && win){
-    const b = pan(win);
     $("#hero-os").textContent = "Windows";
-    if (b){ $("#hero-cn").href = panUrl(b); $("#hero-cn").target = "_blank"; $("#hero-cn").rel = "noopener"; }
+    if (winPick && cnUrl(winPick)){ $("#hero-cn").href = cnUrl(winPick); $("#hero-cn").target = "_blank"; $("#hero-cn").rel = "noopener"; }
     $("#hero-gh").href = REL.github + win.file;
   } else if (os === "mac"){
     $("#hero-os").textContent = "Mac";
   } else if (os === "android" && phone){
     // 下载页还没上 APK 时不写「安卓」，否则按钮指着一个不存在的安装包
     $("#hero-os").textContent = "安卓";
+    const cn = cnUrl(phone);
+    if (cn){ $("#hero-cn").href = cn; $("#hero-cn").target = "_blank"; $("#hero-cn").rel = "noopener"; }
+    $("#hero-gh").href = REL.github + phone.file;
   }
   document.addEventListener("click", (e) => {
     const t = e.target.closest("[data-copy]");

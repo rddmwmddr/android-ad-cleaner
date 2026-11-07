@@ -1,4 +1,5 @@
 """#714：下载页和网盘说明要认得手机版 APK。"""
+import importlib.util
 import os
 import re
 import subprocess
@@ -21,6 +22,24 @@ PAGE = '''
 SUMS = "1  AndroidAdCleaner-0.4.0-mac-arm64.dmg\n2  AndroidAdCleaner-0.4.0-android-arm64.apk\n"
 
 
+def load_rows():
+    spec = importlib.util.spec_from_file_location("baidu_rows", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class RealPageTest(unittest.TestCase):
+    def test_every_id_on_the_real_page_has_setup_and_check(self):
+        rows = load_rows()
+        ids = [item[0] for item in rows.ITEM.findall((ROOT / "index.html").read_text(encoding="utf-8"))]
+        self.assertTrue(ids)
+        for key in [*ids, "android"]:
+            kind = rows.kind_of(key)
+            self.assertIn(kind, rows.SETUP, key)
+            self.assertIn(kind, rows.CHECK, key)
+
+
 class AndroidRowTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -38,6 +57,18 @@ class AndroidRowTest(unittest.TestCase):
         out = self.run_script("0.4.0", "guide.txt")
         self.assertIn("android\t安卓手机\tAndroidAdCleaner-0.4.0-android-arm64.apk", out)
         self.assertIn("2 个文件", (self.dir / "guide.txt").read_text(encoding="utf-8"))
+
+    def test_an_unregistered_id_stops_before_anything_is_uploaded(self):
+        # 真实风险：写成 android-arm64 时，以前要等安装包传完、分享链接建好才 KeyError
+        page = self.dir / "index.html"
+        page.write_text(PAGE.replace('id: "android"', 'id: "android-arm64"'), encoding="utf-8")
+        done = subprocess.run([sys.executable, str(SCRIPT), "0.4.0", "guide.txt"], cwd=self.dir,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("android-arm64", done.stderr)
+        self.assertNotIn("Traceback", done.stderr)
+        self.assertEqual(done.stdout, "")
 
     def test_legacy_guide_for_the_phone_does_not_talk_about_cables(self):
         out_dir = self.dir / "legacy"

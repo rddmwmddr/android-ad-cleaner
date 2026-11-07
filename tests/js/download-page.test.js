@@ -1,4 +1,5 @@
-/* 官网下载页：手机版 APK 那张卡与两条用法路径（票 #714，PR #715）。载入真实 index.html，只往 REL.files 里补条目。 */
+/* 官网下载页：手机版 APK 那张卡、两条用法路径（票 #714，PR #715），以及国内下载走 Gitee（#718）。
+   载入真实 index.html，只往 REL.files 里补条目或按用例改写 REL。 */
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -12,6 +13,7 @@ const ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KH
 // Firefox / 内置 WebView 没有 userAgentData，navigator.platform 报的是 Linux 而不是 Android
 const ANDROID_FIREFOX = "Mozilla/5.0 (Android 14; Mobile; rv:126.0) Gecko/126.0 Firefox/126.0";
 const MAC = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36";
+const WIN = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36";
 
 const APK = (sub) => `    { id: "android", folder: "安卓手机", baidu: { url: "", code: "" }, title: "安卓手机 · 手机版", sub: "${sub}", file: "AndroidAdCleaner-0.4.0-android-arm64.apk", size: "50 MB",
       note: "不用连电脑", sha: "2" },
@@ -20,9 +22,10 @@ const ENTRY = (id) => `    { id: "${id}", folder: "x", baidu: { url: "", code: "
       note: "x", sha: "3" },
 `;
 
-function open({ userAgent = MAC, platform = "", apk = true, sub = "安卓 11 及以上", extra = "" } = {}) {
+function open({ userAgent = MAC, platform = "", apk = true, sub = "安卓 11 及以上", extra = "", transform = null } = {}) {
   // Windows 上这份文件是 CRLF，注入锚点必须按 LF 匹配，否则静默不注入
   let html = fs.readFileSync(PAGE, "utf8").replace(/\r\n/g, "\n");
+  if (transform) html = transform(html);
   const added = (apk ? APK(sub) : "") + extra;
   if (added) {
     const anchor = "\n  ],\n};";
@@ -49,8 +52,12 @@ function open({ userAgent = MAC, platform = "", apk = true, sub = "安卓 11 及
     cards: () => [...document.querySelectorAll("#dl .card")],
     labels: () => [...document.querySelectorAll("#dl .card .os")].map((el) => el.textContent),
     highlighted: () => [...document.querySelectorAll("#dl .card.mine .os")].map((el) => el.textContent),
+    card: (text) => [...document.querySelectorAll("#dl .card")].find((c) => c.querySelector("h3").textContent.includes(text)),
+    button: (card, text) => [...card.querySelectorAll("a")].find((a) => a.textContent.includes(text)),
     hero: () => document.querySelector("#hero-meta").textContent,
     heroOs: () => document.querySelector("#hero-os").textContent,
+    heroCn: () => document.querySelector("#hero-cn").href,
+    heroGh: () => document.querySelector("#hero-gh").href,
     close: () => window.close(),
   };
 }
@@ -127,5 +134,103 @@ test("认不出的 id 用自己的名字当角标，不冒充 WINDOWS", () => {
   const page = open({ apk: false, extra: ENTRY("linux-deb") });
   try {
     assert.deepEqual(page.labels(), ["MAC", "MAC", "WINDOWS", "WINDOWS", "LINUX-DEB"]);
+  } finally { page.close(); }
+});
+
+test("页面上看不到百度网盘，国内下载指向这一版的 Gitee 路径", () => {
+  const page = open();
+  try {
+    const shown = ["#dl", "#dl-after", "#dl-lead"].map((s) => page.document.querySelector(s).textContent).join("\n");
+    for (const word of ["百度", "网盘", "提取码"]) assert.ok(!shown.includes(word), word);
+    const mac = page.card("Apple");
+    assert.match(page.button(mac, "国内下载").href,
+      /^https:\/\/gitee\.com\/rddmw\/android-ad-cleaner\/releases\/download\/v[\d.]+\/AndroidAdCleaner-[\d.]+-mac-arm64\.dmg$/);
+    assert.ok(page.document.querySelector("#dl-after").textContent.includes("Gitee 全部版本"));
+    assert.deepEqual(page.errors, []);
+  } finally { page.close(); }
+});
+
+test("Gitee 拒收的 Windows 安装版只给 GitHub，并提示选免安装版", () => {
+  const page = open({ userAgent: WIN, platform: "Win32", apk: false });
+  try {
+    const setup = page.card("安装版");
+    assert.equal(page.button(setup, "国内下载"), undefined);
+    assert.ok(page.button(setup, "GitHub").classList.contains("primary"));
+    assert.match(setup.textContent, /国内网络建议下载免安装版/);
+    assert.match(page.button(page.card("免安装"), "国内下载").href, /gitee\.com.*windows-portable\.zip$/);
+  } finally { page.close(); }
+});
+
+test("Windows 用户的首屏按钮和高亮都指向国内能下的免安装版", () => {
+  const page = open({ userAgent: WIN, platform: "Win32", apk: false });
+  try {
+    assert.match(page.heroCn(), /gitee\.com.*windows-portable\.zip$/);
+    assert.ok(page.card("免安装").classList.contains("mine"));
+    assert.ok(!page.card("安装版").classList.contains("mine"));
+  } finally { page.close(); }
+});
+
+test("手机上首屏的两个按钮都指向 APK", () => {
+  const page = open({ userAgent: ANDROID });
+  try {
+    assert.match(page.heroCn(), /gitee\.com.*AndroidAdCleaner-[\d.]+-android-arm64\.apk$/);
+    assert.match(page.heroGh(), /AndroidAdCleaner-[\d.]+-android-arm64\.apk$/);
+  } finally { page.close(); }
+});
+
+// 旧树也绿，守的是不回退：注入 APK 不该把桌面端的高亮带偏
+test("电脑上打开时，安卓卡片不高亮，卡片数只多一条", () => {
+  const before = open({ apk: false });
+  const after = open();
+  try {
+    assert.equal(after.cards().length, before.cards().length + 1);
+    assert.ok(!after.card("手机版").classList.contains("mine"));
+    assert.deepEqual(after.highlighted(), ["MAC", "MAC"]);
+  } finally {
+    before.close();
+    after.close();
+  }
+});
+
+test("Gitee 与网盘都在时，卡片同时给国内下载和百度网盘", () => {
+  const page = open({
+    apk: false,
+    transform: (html) => html.replace(
+      /(\{ id: "mac-arm64", folder: "[^"]+", )baidu: \{ url: "", code: "" \}/,
+      '$1baidu: { url: "https://pan.baidu.com/s/x", code: "abcd" }'),
+  });
+  try {
+    const mac = page.card("Apple");
+    assert.match(page.button(mac, "国内下载").href, /gitee\.com.*mac-arm64\.dmg$/);
+    assert.match(page.button(mac, "百度网盘").href, /pan\.baidu\.com\/s\/x\?pwd=abcd/);
+    assert.match(mac.textContent, /提取码/);
+  } finally { page.close(); }
+});
+
+test("国内下载的 Gitee 路径与页首写的版本号是同一个", () => {
+  const page = open();
+  try {
+    const version = page.hero().match(/^v([\d.]+)/)[1];
+    assert.ok(page.button(page.card("Apple"), "国内下载").href.includes(`/releases/download/v${version}/`),
+      `Gitee 路径要跟着 REL.version（${version}）走，发版时改一处就够`);
+  } finally { page.close(); }
+});
+
+test("退路：gitee 留空、填回网盘链接后，国内下载回到百度网盘", () => {
+  const page = open({
+    userAgent: WIN,
+    platform: "Win32",
+    apk: false,
+    transform: (html) => html
+      .replace(/gitee: "https:[^"]+",/, 'gitee: "",')
+      .replace(/(\{ id: "win-setup", folder: "[^"]+", )baidu: \{ url: "", code: "" \}/,
+        '$1baidu: { url: "https://pan.baidu.com/s/x", code: "abcd" }'),
+  });
+  try {
+    const setup = page.card("安装版");
+    assert.match(page.button(setup, "国内下载").href, /pan\.baidu\.com\/s\/x\?pwd=abcd/);
+    assert.match(setup.textContent, /提取码/);
+    assert.equal(page.button(setup, "百度网盘"), undefined);
+    assert.ok(!page.document.querySelector("#dl-after").textContent.includes("Gitee"));
   } finally { page.close(); }
 });
