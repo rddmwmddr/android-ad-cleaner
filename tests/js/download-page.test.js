@@ -21,9 +21,14 @@ const ENTRY = (id) => `    { id: "${id}", folder: "x", baidu: { url: "", code: "
 `;
 
 function open({ userAgent = MAC, platform = "", apk = true, sub = "安卓 11 及以上", extra = "" } = {}) {
-  let html = fs.readFileSync(PAGE, "utf8");
+  // Windows 上这份文件是 CRLF，注入锚点必须按 LF 匹配，否则静默不注入
+  let html = fs.readFileSync(PAGE, "utf8").replace(/\r\n/g, "\n");
   const added = (apk ? APK(sub) : "") + extra;
-  if (added) html = html.replace("\n  ],\n};", "\n" + added + "  ],\n};");
+  if (added) {
+    const anchor = "\n  ],\n};";
+    assert.ok(html.includes(anchor), "index.html 的 REL.files 结尾变了，注入锚点要跟着改");
+    html = html.replace(anchor, "\n" + added + "  ],\n};");
+  }
   const errors = [];
   const virtualConsole = new VirtualConsole();
   virtualConsole.on("jsdomError", (error) => errors.push(error));
