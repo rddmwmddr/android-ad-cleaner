@@ -24,12 +24,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: 安装 JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
       - name: 装 Gradle（与本地 build.sh 同版）
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: "8.10.2"
       - name: 装构建用的 Python 3.12（Chaquopy 要它跑 pip）
