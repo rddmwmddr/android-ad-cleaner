@@ -28,7 +28,8 @@
 - 找「引擎报给客户端的状态」先看 [tool/events.py](tool/events.py)：五个 kind 与事件行格式只在那里定义（[ADR-0004](docs/adr/0004-engine-state-events.md)），引擎侧 `emit()`、`gui/app.py` 的 `_log()` 都走它；不要再按中文文案判断状态。
 - 找「渠道怎么判营销 / 服务 / 受保护」先看 [tool/channel_policy.py](tool/channel_policy.py) 的 `classify()`：营销候选、扫描排除、默认不勾、受保护、厂商营销 ID、广告网络 ID、前台服务七组判定只在那里定义（[ADR-0006](docs/adr/0006-channel-classification.md)）；`chan_fast` 的扫描分支与 `gui/app.py` 的 `chan_scan()` 都消费它，不要另写词表。前台服务的证据来自渠道行的 `mFgServiceShown`（Android 14 起叫 `mUserVisibleTaskShown`，两个都认，见 `FG_SERVICE_MARKS`；`parse()` 用 `foreground` out 参数带回），不在通知记录段。
 - 找「怎么点 App 底部标签」先看 [tool/fast.py](tool/fast.py) 的 `Phone.tab()`：底部带 `top > 0.85H` 与「精确 → 逗号末段等于 → 包含」三层匹配只在那里定义（[ADR-0012](docs/adr/0012-bottom-tab-in-engine.md)）；它不重试、不确认落点、找不到不回退，需要文字确认的普通导航仍用 `Phone.go()`。
-- 改「一行输出怎么进界面」先看两处：`gui/app.py` 的 `_log()` 决定它进 `Job.lines` 还是只当事件；[gui/web/index.html](gui/web/index.html) 的 `summarize()` 在认不出模式时直接显示 `results[].tail` 末行——`tail` 是第二个落点，机器行不能进。
+- 改「一行输出怎么进界面」先看两处：`gui/app.py` 的 `_log()` 决定它进 `Job.lines` 还是只当事件；[gui/web/index.html](gui/web/index.html) 的 `summarize()` 在认不出模式时直接显示 `results[].tail` 末行——`tail` 是第二个落点，机器行不能进。手机版同样的判断在 `android/app/src/main/python/aac_android/view.py`，改口径时两边都要看。
+- 找「手机版界面」先看 `android/app/src/main/java/com/ahuamiao/adcleaner/ui/AppModel.kt`：页面流程只有 `Screen` 一个状态，每次切换都经过它的方法（[ADR-0017](docs/adr/0017-android-compose-ui.md)）；带判断的逻辑放 `aac_android/view.py`，别写进 Kotlin。手机版不再加载 `gui/web/`。
 - 造不连手机的 `Phone` 用 [tests/fixtures.py](tests/fixtures.py) 的 `phone_stub()`（`fake_phone()` 就是它加一条时间轴），装配只此一处。客户端用例要假 `Runner`（命令返回什么、spawn 交什么）同样用它：`FakeRunner` / `FakeProc`，`Api(runner=…)` 注入，不要 patch `api._run` 与 `app.subprocess`。纯重构要给对拍证据时，同一文件还有 `all_pages()` 取 `tests/` 里的页面样本、`Clock` 假时钟、`Timeline` + `Device` 按时间轴换页。
 - 无设备用例不许真等：`chan_fast` 的 scan 分支会读型号，用例要 patch 掉 `phone_model`，否则对着不存在的序列号等 adb 超时；机型脚本一律用 `fixtures.load_recipe()` 装载（它把脚本的 `time` 三个读数一起换成假钟），自己 `exec` 一份脚本就会真 sleep。躲不开真实进程的环节（跨进程锁、真起播放器）用 `Clock` 注入或把等待压到毫秒级。[tests/test_recipe_loader.py](tests/test_recipe_loader.py) 守着装载这一条。
 - 改「认渠道页」这类读屏逻辑要做改前改后对拍时，驱动器是 [tests/compare_chan_pages.py](tests/compare_chan_pages.py)：认页 / 进页 / 编排三层 × 两种屏尺寸，同一份探针分别跑冻结基线与当前 `tool/`，守卫数字非零才算测到。
@@ -70,4 +71,4 @@ GitHub Issues（`gh` CLI）。**开工前先有票**：任何实现 / 重构 / �
 
 ### Domain docs
 
-single-context：根目录 `CONTEXT.md` + `docs/adr/`。见 `docs/agents/domain.md`。`CONTEXT.md` 只放术语表（命令 / 脚本 / 执行 / 连接 / 事件 / 等待 / 通知 / issue 状态 / 文档九组定义）；模块边界的决定写进 `docs/adr/`（现有 `0001` 手机连接、`0002` Phone 状态、`0003` 客户端 import 与依赖、`0004` 引擎状态事件、`0005` 命令与退出码、`0006` 渠道判定、`0007` 渠道到达、`0008` 拨动计划、`0009` 引擎载荷通道、`0010` 执行状态、`0011` Api 拆分、`0012` 底部标签、`0013` 设置入口、`0014` 手机 shell 通道、`0015` 配对码识别、`0016` 设置搜索直达），架构描述仍不写，等主流程整体重构。
+single-context：根目录 `CONTEXT.md` + `docs/adr/`。见 `docs/agents/domain.md`。`CONTEXT.md` 只放术语表（命令 / 脚本 / 执行 / 连接 / 事件 / 等待 / 通知 / issue 状态 / 文档九组定义）；模块边界的决定写进 `docs/adr/`（现有 `0001` 手机连接、`0002` Phone 状态、`0003` 客户端 import 与依赖、`0004` 引擎状态事件、`0005` 命令与退出码、`0006` 渠道判定、`0007` 渠道到达、`0008` 拨动计划、`0009` 引擎载荷通道、`0010` 执行状态、`0011` Api 拆分、`0012` 底部标签、`0013` 设置入口、`0014` 手机 shell 通道、`0015` 配对码识别、`0016` 设置搜索直达、`0017` 手机版界面），架构描述仍不写，等主流程整体重构。

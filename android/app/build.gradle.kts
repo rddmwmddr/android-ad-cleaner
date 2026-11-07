@@ -4,7 +4,7 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
     id("com.chaquo.python")
 }
 
@@ -17,7 +17,7 @@ val parts = appVersion.split(".").map { it.toInt() }
 
 android {
     namespace = "com.ahuamiao.adcleaner"
-    compileSdk = 35
+    compileSdk = 37
     defaultConfig {
         applicationId = "com.ahuamiao.adcleaner"
         minSdk = 26
@@ -43,11 +43,12 @@ android {
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
+    buildFeatures { compose = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/aac-assets"))
+    sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/aac-assets").get().asFile)
 }
 
 kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
@@ -67,21 +68,23 @@ chaquopy {
     }
 }
 
-// 引擎、机型脚本、客户端后台与网页原样打进 assets/aac，App 首次启动解到私有目录再跑（路径与桌面版一致）
+// 引擎、机型脚本、客户端后台原样打进 assets/aac，App 首次启动解到私有目录再跑（路径与桌面版一致）；界面是 Compose，不带网页
 // 读屏是 App 自己的 ShellServer（#623），不再带 u2.jar
 val syncEngine by tasks.registering(Sync::class) {
     into(layout.buildDirectory.dir("generated/aac-assets/aac"))
     from(repo.resolve("tool")) { into("tool"); include("*.py", "*.dex") }
     from(repo.resolve("recipes")) { into("recipes"); include("*/recipe*.py"); exclude("zztest-*/**") }
-    from(repo.resolve("gui")) { into("gui"); include("app.py", "winpreflight.py", "version.py", "web/**") }
-    from(repo.resolve("images")) { into("images"); include("dev-*.png") }   // env() 只列 dev-*：界面的教程图
+    from(repo.resolve("gui")) { into("gui"); include("app.py", "winpreflight.py", "version.py", "web/chime.wav") }
+    from(repo.resolve("docs/手机版教程")) { into("docs"); include("brand-taps.json") }   // 首次设置按品牌说路径
 }
 tasks.named("preBuild") { dependsOn(syncEngine) }
 
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.activity:activity-ktx:1.9.3")
-    implementation("androidx.webkit:webkit:1.12.1")
+    implementation("androidx.activity:activity-compose:1.13.0")
+    // 官方 Material 3 Expressive（ADR-0017）。1.5 要求 compileSdk 37、AGP 9.1；Chaquopy 17.2 支持到 AGP 9.5
+    implementation("androidx.compose.material3:material3:1.5.0-rc01")
+    implementation("androidx.graphics:graphics-shapes:1.1.0")
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
     // 内置无线调试配对与连接（#622）。libadb-android 双许可 GPL-3.0-or-later / Apache-2.0，按 Apache-2.0 使用

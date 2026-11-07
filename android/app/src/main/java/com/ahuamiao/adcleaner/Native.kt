@@ -26,6 +26,11 @@ object Native {
     lateinit var app: Context
     private val main = Handler(Looper.getMainLooper())
 
+    /** 从后台线程切回主线程做一件事。 */
+    fun onMain(block: () -> Unit) {
+        main.post(block)
+    }
+
     @JvmStatic
     fun openUrl(url: String) = main.post {
         app.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

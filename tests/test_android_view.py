@@ -1,0 +1,207 @@
+"""手机版界面的判断（aac_android/view.py）：结果怎么说、什么时候挡住开始、反馈网址怎么截。"""
+import json
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "android" / "app" / "src" / "main" / "python"))
+
+from aac_android import view  # noqa: E402
+
+
+class FakeApi:
+    def __init__(self, status=None, run=None):
+        self._status, self._run = status or {}, run or {}
+        self.opened, self.copied = [], []
+
+    def status(self, serial):
+        return self._status
+
+    def poll(self, since):
+        return self._run
+
+    def open_url(self, url):
+        self.opened.append(url)
+
+    def copy_text(self, text):
+        self.copied.append(text)
+        return True
+
+
+def status(**over):
+    base = {"info": {"name": "Phone X", "brand": "OPPO", "model": "PX1", "os": "16"},
+            "steps": ["桌面", "浏览器"], "recipe": "oppo/PX1", "recipe_ok": True, "recipe_ref": False,
+            "quickapps": [], "ads": []}
+    return {**base, **over}
+
+
+class SummarizeTest(unittest.TestCase):
+    def test_known_lines(self):
+        cases = [(["机型脚本跑完：关了 12 个，34 秒"], "关了 12 个开关"),
+                 (["拨了 5 个", "仍开着: 1 个"], "关了 5 个渠道，复查仍开着 1 个"),
+                 (["拨了 5 个"], "关了 5 个渠道"),
+                 (["快照已存"], "已保存"),
+                 (["插电常亮已改回 15"], "插电常亮已改回 15"),
+                 (["插电常亮未改动"], "插电常亮未改动")]
+        for tail, want in cases:
+            self.assertEqual(view.summarize({"tail": tail}), want)
+
+    def test_quickapp_counts_lines(self):
+        tail = ["  快应用 com.a 已关闭", "  快应用 com.b 已关闭", "快应用组件已关闭（保留项除外）。请按常用入口核对效果；恢复：quickapp on"]
+        self.assertEqual(view.summarize({"tail": tail}), "2 个组件已关闭")
+
+    def test_falls_back_to_last_line(self):
+        self.assertEqual(view.summarize({"tail": ["甲", "乙", ""]}), "乙")
+        self.assertEqual(view.summarize({"tail": []}), "")
+
+
+class OutcomeTest(unittest.TestCase):
+    def test_all_ok(self):
+        self.assertEqual(view.outcome({"results": [{"rc": 0}], "cancel": False}), "ok")
+
+    def test_stopped_is_not_failure(self):
+        run = {"results": [{"rc": 1, "stopped": True}], "cancel": True}
+        self.assertEqual(view.outcome(run), "stopped")
+        self.assertEqual(view.outcome({"results": [], "cancel": True}), "stopped")
+
+    def test_real_failure(self):
+        self.assertEqual(view.outcome({"results": [{"rc": 1}], "cancel": False}), "failed")
+
+    def test_poll_adds_summary_and_outcome(self):
+        run = view.poll(FakeApi(run={"results": [{"rc": 0, "tail": ["快照已存"]}], "cancel": False}))
+        self.assertEqual(run["results"][0]["summary"], "已保存")
+        self.assertEqual(run["outcome"], "ok")
+
+
+class DetectTest(unittest.TestCase):
+    def detect(self, **over):
+        return view.detect(FakeApi(status(**over)), "s")
+
+    def test_ready_phone_is_not_blocked(self):
+        d = self.detect()
+        self.assertFalse(d["blocked"])
+        self.assertEqual(d["warnings"], [])
+        self.assertEqual(d["recipe_label"], "按机型脚本自动关")
+        self.assertEqual(d["manual_url"], "")
+
+    def test_error_passes_through(self):
+        self.assertEqual(view.detect(FakeApi({"error": "连不上"}), "s"), {"error": "连不上"})
+
+    def test_locked_and_input_blocked_stop_the_run(self):
+        self.assertTrue(self.detect(locked=True)["blocked"])
+        self.assertTrue(self.detect(input_blocked=True)["blocked"])
+
+    def test_open_fold_blocks_only_when_a_recipe_would_run(self):
+        self.assertTrue(self.detect(fold_open=True)["blocked"])
+        d = self.detect(fold_open=True, steps=[], recipe=None)
+        self.assertFalse(d["blocked"])
+        self.assertEqual(d["warnings"], [])
+
+    def test_no_recipe_points_to_the_brand_checklist(self):
+        d = self.detect(steps=[], recipe=None)
+        self.assertIsNone(d["recipe_label"])
+        self.assertEqual(d["manual_name"], "OPPO / ColorOS")
+        self.assertIn("OPPO-ColorOS.md", d["manual_url"])
+
+    def test_reference_recipe_runs_in_safe_mode(self):
+        d = self.detect(recipe="oppo/PX9", recipe_ref=True, recipe_ok=False)
+        self.assertTrue(d["ref"])
+        self.assertIn("PX9", d["recipe_label"])
+        self.assertIn("安全模式", d["recipe_note"])
+        self.assertTrue(d["manual_url"])
+
+    def test_version_mismatch_is_stated(self):
+        d = self.detect(recipe_ok=False, recipe_build="15")
+        self.assertIn("脚本按 15 录，这台是 16", d["recipe_note"])
+
+    def test_quickapp_and_ads_only_list_what_is_still_on(self):
+        d = self.detect(quickapps=[{"name": "A", "closed": True}, {"name": "B"}, {"name": "C", "keep": True}],
+                        ads=[{"pkg": "com.opos.ads"}, {"pkg": "x.y", "suspended": True}])
+        self.assertEqual(d["quickapps"], ["B"])
+        self.assertIn("保留", d["quickapp_note"])
+        self.assertEqual(d["ads"], [{"pkg": "com.opos.ads", "name": "OPPO 广告服务"}])
+        d = self.detect(quickapps=[{"name": "A", "closed": True}], ads=[{"pkg": "x", "suspended": True}])
+        self.assertEqual((d["quickapp_state"], d["ads_state"]), ("已关闭", "已挂起"))
+        d = self.detect()
+        self.assertEqual((d["quickapp_state"], d["ads_state"]), ("没有检测到", "没有已知的"))
+
+
+class BrandGuideTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        docs = Path(self.tmp.name, "docs")
+        docs.mkdir()
+        docs.joinpath("brand-taps.json").write_text(
+            (ROOT / "docs" / "手机版教程" / "brand-taps.json").read_text(encoding="utf-8"), encoding="utf-8")
+        old, view.BASE = view.BASE, self.tmp.name
+        self.addCleanup(setattr, view, "BASE", old)
+
+    def test_every_brand_finds_its_row(self):
+        want = {"Xiaomi": "OS 版本", "Redmi": "OS 版本", "vivo": "软件版本号", "iQOO": "软件版本号",
+                "OPPO": "版本号", "OnePlus": "版本号", "realme": "版本号", "HONOR": "版本号"}
+        for brand, word in want.items():
+            self.assertIn(word, view.brand_guide(None, brand)["tap"], brand)
+
+    def test_xiaomi_family_flag(self):
+        self.assertTrue(view.brand_guide(None, "Redmi")["xiaomi"])
+        self.assertFalse(view.brand_guide(None, "vivo")["xiaomi"])
+
+    def test_unknown_brand_or_missing_file_still_answers(self):
+        self.assertIn("版本号", view.brand_guide(None, "Nokia")["tap"])
+        view.BASE = "/nonexistent"
+        self.assertIn("版本号", view.brand_guide(None, "vivo")["tap"])
+
+
+class FeedbackTest(unittest.TestCase):
+    def query(self, url):
+        return parse_qs(urlsplit(url).query)
+
+    def test_short_goes_entirely_in_the_url(self):
+        url, clip = view.feedback_url("idea", "希望支持平板\n第二行", "诊断")
+        q = self.query(url)
+        self.assertEqual(clip, "")
+        self.assertEqual(q["template"], ["feature_request.md"])
+        self.assertEqual(q["title"], ["[建议] 希望支持平板"])
+        self.assertIn("诊断", q["body"][0])
+
+    def test_no_diag_no_section(self):
+        url, _ = view.feedback_url("bug", "卡住了", "")
+        self.assertNotIn("诊断信息", self.query(url)["body"][0])
+
+    def test_long_diag_keeps_a_summary_and_copies_the_rest(self):
+        log = "\n".join(f"第 {i} 行日志" for i in range(600))
+        diag = f"手机：PX1\n<details>\n```text\n{log}\n```\n</details>"
+        url, clip = view.feedback_url("bug", "卡住了", diag)
+        body = self.query(url)["body"][0]
+        self.assertLessEqual(len(url), view.URL_LIMIT)
+        self.assertIn("手机：PX1", body)
+        self.assertIn("第 599 行日志", body)
+        self.assertIn("第 0 行日志", clip)
+
+    def test_huge_summary_falls_back_to_paste_hint(self):
+        url, clip = view.feedback_url("bug", "卡住了", "头" * 9000)
+        self.assertLessEqual(len(url), view.URL_LIMIT)
+        self.assertIn("请在这里粘贴", self.query(url)["body"][0])
+        self.assertTrue(clip)
+
+    def test_send_copies_only_when_trimmed(self):
+        api = FakeApi()
+        self.assertEqual(view.send_feedback(api, "bug", "短", ""), {"trimmed": False})
+        self.assertEqual((len(api.opened), api.copied), (1, []))
+        self.assertEqual(view.send_feedback(api, "bug", "长", "头" * 9000), {"trimmed": True})
+        self.assertEqual(len(api.copied), 1)
+
+
+class BrandTapsShapeTest(unittest.TestCase):
+    def test_every_brand_key_matches_a_row(self):
+        rows = json.loads((ROOT / "docs" / "手机版教程" / "brand-taps.json").read_text(encoding="utf-8"))["rows"]
+        for word in set(view.BRAND_KEYS.values()):
+            self.assertTrue(any(word in r["brand"] for r in rows), word)
+
+
+if __name__ == "__main__":
+    unittest.main()
