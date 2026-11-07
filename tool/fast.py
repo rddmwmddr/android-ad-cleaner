@@ -162,6 +162,73 @@ def greyed_titles(pairs, disabled):
     return {title for title, found in flags.items() if all(found)}
 
 
+# 一屏回读后每条目标的结局。只有前两个算拨到了：VANISHED 是点过之后整行从列表消失（#486），
+# 灰态单列一档，因为它的说法与失败不同（「被上级开关禁用」而不是「关不掉」，#333）。
+REACHED = "reached"      # 到了目标态（关掉；保护类开关则是打开）
+VANISHED = "vanished"    # 点过之后整行从列表消失，按已关记账
+MISSED = "missed"        # 没到目标态
+GREYED = "greyed"        # 没到目标态，且开关是灰的
+
+
+def readback(targets, rows, *, clicked, others, page_same, disabled):
+    """一屏回读：{标题: 结局}。不读屏、不点击。
+
+    targets 是 `plan_switches()` 的输出；rows 是这一次读到的 (`Phone.switches()` 格式)；
+    clicked 是本屏真的点过的标题；others 是本屏计划时见过的非目标标题；disabled 是按落点判灰的谓词。
+    page_same 是零参数可调用对象，只在「点过、且行已从列表消失」时才被问，答这一页还是原来那页。
+    结局按标题合并：同名行的任意一行没到目标态就算没到（#403）。
+    """
+    states = {}
+    for title, on, _ in rows:
+        states.setdefault(title, []).append(on)
+    out = {}
+    for t, _, w in targets:
+        seen = states.get(t)
+        if seen is not None:
+            out[t] = REACHED if all(on == w for on in seen) else MISSED
+        elif t in clicked and rows and not w:
+            # 点过的普通开关行从列表里消失了：回读里还有本屏计划时见过的非目标行，
+            # 且没跳走，才算随行消失。整页读空、换成标题全新的页（同 Activity 的子页）
+            # 时这一页已无法核对，不能把读屏失败当成关闭成功（#486）。
+            # 保护类开关是「主动打开」，行消失证明不了它开了，仍报打不开。
+            out[t] = VANISHED if page_same() and others & states.keys() else MISSED
+        else:
+            out[t] = MISSED
+    for t in still_greyed(targets, rows, {t for t, v in out.items() if v == MISSED}, disabled):
+        out[t] = GREYED
+    return out
+
+
+def still_greyed(targets, rows, titles, disabled):
+    """rows 里这些标题中、还没到目标态、且同名行全被判灰的那几个（#333）。
+    回读与补点共用这一份判据：每次都要按当次读到的落点重新算，不能沿用上一次的。"""
+    want = {t: w for t, _, w in targets}
+    return titles & greyed_titles(
+        ((title, xy) for title, on, xy in rows
+         if title in titles and on != want[title]), disabled)
+
+
+def still_open(verdicts):
+    """回读里还没到目标态的标题（灰的也算在里面）：补点只看这一批。"""
+    return {t for t, v in verdicts.items() if v in (MISSED, GREYED)}
+
+
+def pick_retry_rows(targets, rows, still, disabled):
+    """该补点的那一行：一标题一行、跳过灰的、按状态而不是按标题挑（#403）。
+    rows 是新读的一屏，不能沿用消失节点的旧坐标；顺序跟着拨动计划。"""
+    want = {t: w for t, _, w in targets}
+    grey = still_greyed(targets, rows, still, disabled)
+    picked = []
+    for t, w in want.items():
+        if t not in still or t in grey:
+            continue
+        row = next(((on, at) for title, on, at in rows
+                    if title == t and on != w and not disabled(at)), None)
+        if row is not None:
+            picked.append((t, row[1]))
+    return picked
+
+
 def _shell_transport(shell):
     """读屏库的 shell 当传输。断线只有它认得出来（异常类型加错误串），判定留在这一层。"""
     def send(command, timeout=None):
@@ -934,36 +1001,18 @@ class Phone:
                 time.sleep(0.25)
                 self.confirm()
 
-                def wrong():                            # 还没到目标状态的标题，以及其中灰掉的
+                def read_page():                        # 这一屏的回读：{标题: 结局}
                     root = self.tree()
                     rows = self.switches(root)
-                    states, want = {}, {t: w for t, _, w in targets}
-                    for title, on, _ in rows:
-                        states.setdefault(title, []).append(on)
-                    page_same = None                    # 惰性查：没有消失行时不额外读一次前台
-                    still, vanished = set(), set()
-                    for t, _, w in targets:
-                        seen = states.get(t)
-                        if seen is not None:
-                            if any(on != w for on in seen):   # 同名双列：还有一行没到目标态（#403）
-                                still.add(t)
-                        elif t in clicked and rows and not w:
-                            # 点过的普通开关行从列表里消失了：回读里还有本屏计划时见过的非目标行，
-                            # 且没跳走，才算随行消失。整页读空、换成标题全新的页（同 Activity 的子页）
-                            # 时这一页已无法核对，不能把读屏失败当成关闭成功（#486）。
-                            # 保护类开关是「主动打开」，行消失证明不了它开了，仍报打不开。
-                            if page_same is None:
-                                page_same = self.focus() == start
-                            if page_same and others & states.keys():
-                                vanished.add(t)
-                            else:
-                                still.add(t)
-                        else:
-                            still.add(t)
-                    return still, still & greyed_titles(
-                        ((title, xy) for title, on, xy in rows
-                         if title in still and on != want[title]),
-                        lambda xy: disabled_at(root, xy)), vanished
+                    stayed = []                         # 惰性查：没有消失行时不额外读一次前台
+
+                    def page_same():
+                        if not stayed:
+                            stayed.append(self.focus() == start)
+                        return stayed[0]
+                    return readback(targets, rows, clicked=clicked, others=others,
+                                    page_same=page_same,
+                                    disabled=lambda xy: disabled_at(root, xy))
 
                 def retry(still):
                     # 只重试当前仍能识别的开关，不能在节点消失后沿用旧坐标；灰掉的点了也不会变。
@@ -975,39 +1024,31 @@ class Phone:
                                                         # here 为空只是这一次没读到前台，不拦补点
                     root = self.tree()
                     rows = self.switches(root)
-                    want = {t: w for t, _, w in targets}
-                    grey = still & greyed_titles(
-                        ((title, xy) for title, on, xy in rows
-                         if title in still and on != want[title]),
-                        lambda xy: disabled_at(root, xy))
-                    retried = set()                     # 一次补点里同名标题只点一下
-                    for t, _, w in targets:
-                        if t not in still or t in grey or t in retried:
-                            continue
-                        # 同名双列挑还开着、且不是灰的行：按标题取最后读到的那行会让补点取决于读屏顺序（#403）
-                        row = next(((on, at) for title, on, at in rows
-                                    if title == t and on != w and not disabled_at(root, at)), None)
-                        if row is not None:
-                            retried.add(t)
-                            self.click(*row[1]); self.confirm()
-                            clicked.add(t)              # 补点也算点过：行随后消失同样是随行消失（#486）
-                still, grey, vanished = wrong()
+                    for t, xy in pick_retry_rows(targets, rows, still,
+                                                 lambda xy: disabled_at(root, xy)):
+                        self.click(*xy); self.confirm()
+                        clicked.add(t)                  # 补点也算点过：行随后消失同样是随行消失（#486）
+                verdicts = read_page()
+                still = still_open(verdicts)
                 retry(still)
-                still, grey, vanished = wrong()
+                verdicts = read_page()
+                still = still_open(verdicts)
                 if still:                               # 还有没拨过去的：等动画结束再点一次
                     time.sleep(0.8)
                     retry(still)
                     time.sleep(0.4)
-                    still, grey, vanished = wrong()
-                page_greyed |= grey                     # 这一屏关到一半才变灰的，同样不报成拨不动
+                    verdicts = read_page()
+                # 这一屏关到一半才变灰的，同样不报成拨不动
+                page_greyed |= {t for t, v in verdicts.items() if v == GREYED}
                 for t, _, w in targets:
-                    if t in still and t in grey:
+                    v = verdicts[t]
+                    if v == GREYED:
                         continue                        # 下面单独说明
-                    if t in still:
+                    if v == MISSED:
                         self.say(f"  ✗ {'打不开' if w else '关不掉'} {t}")
                     else:
                         self.say(f"  {'开（保护类开关）' if w else '关'} {t}"
-                                 + ("（点后从列表消失）" if t in vanished else ""))
+                                 + ("（点后从列表消失）" if v == VANISHED else ""))
                         self.changed.append((page, t))
                         done += 1
             for t in page_greyed - greyed:
