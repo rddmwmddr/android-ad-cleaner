@@ -297,16 +297,81 @@ class Runner:
 class Task:
     """一个步骤。uses_ui：这一步要连读屏，前一步因读屏被占用失败时跳过它。
     channels 非 None 表示这一步是关营销通知：运行前把勾选的渠道写进 channels.tsv，
-    args 由 `_work()` 换成 `-s <序列号> off <清单>`。"""
+    args 由 `_work()` 换成 `-s <序列号> off <清单>`。
+    skip_reason 非空表示这一步这次不跑：照样占结果里的一行，说明为什么（#577）。"""
 
-    def __init__(self, title, script, args=(), uses_ui=False, channels=None):
+    def __init__(self, title, script, args=(), uses_ui=False, channels=None, skip_reason=""):
         self.title, self.script, self.args = title, script, args
         self.uses_ui, self.channels = uses_ui, channels
+        self.skip_reason = skip_reason
 
 
 def runs_after_stop(task):
     """停止后仍要跑的一步：收尾（把手机改回插电常亮，以前停止会让手机一直亮着）。"""
     return task.title == "收尾"
+
+
+UNCHECKED = "未勾选，本次没有执行"
+
+
+def not_run(title, reason):
+    """这次不跑的步骤：不碰手机，只在结果里留一行（#577）。"""
+    return Task(title, "", skip_reason=reason)
+
+
+def not_run_result(job, task):
+    """没执行的项进结果：rc=0 表示这一步没出错，界面按「跳过」显示、上报也写「跳过」；
+    原因放 tail，摘要函数认不出模式时直接拿它当摘要。诊断里由 `skip_reason()` 压成一句。"""
+    job.add_result({"title": task.title, "rc": 0, "skipped": True, "sec": 0, "tail": [task.skip_reason]})
+
+
+def plan_tasks(serial, plan, offered=None):
+    """这次排哪些任务。勾了的照旧起脚本；没勾的留一行「跳过」并说明原因（#577）。
+
+    `offered` 是选择页上摆出来的项（调用方从检测结果与上一次通知扫描里取），用来区分
+    「用户没勾」和「这台机本来就没有」；给 None 时不知道摆过什么，就不留这些行。"""
+    tasks = []
+    if plan.get("backup", True):
+        tasks.append(Task("存改动前的快照", "run.py", ["-s", serial, "backup"]))
+    steps = list(plan.get("steps") or [])
+    if steps:
+        title = "关闭各 App 里的广告开关"
+        total = len(offered.get("steps") or []) if offered else 0
+        if total > len(steps):
+            title += f"（{len(steps)} / {total} 段）"
+        tasks.append(Task(title, "run.py",
+                          ["-s", serial, "recipe", *steps, *(["--ref"] if plan.get("ref") else [])],
+                          uses_ui=True))
+    elif offered is not None:
+        tasks.append(not_run("关闭各 App 里的广告开关",
+                             UNCHECKED if offered.get("steps") else "没有专用脚本，这一步要照清单手动做"))
+    channels = list(plan.get("channels") or [])
+    if channels:
+        tasks.append(Task("关闭营销通知", "chan_fast.py", uses_ui=True, channels=channels))
+    elif offered is not None:
+        seen = offered.get("channels")          # None 表示通知没扫成
+        tasks.append(not_run("关闭营销通知",
+                             "通知扫描没有完成，本次没有关闭营销通知" if seen is None
+                             else "没有扫描到可关闭的营销渠道" if not seen else UNCHECKED))
+    if plan.get("quickapp"):
+        tasks.append(Task("关闭快应用", "run.py", ["-s", serial, "quickapp", "off"]))
+    elif offered is not None:
+        apps = offered.get("quickapps") or []
+        tasks.append(not_run("关闭快应用",
+                             "没有检测到快应用组件" if not apps
+                             else "可关闭的快应用组件都已关闭" if all(q.get("closed") or q.get("keep") for q in apps)
+                             else UNCHECKED))
+    ads = list(plan.get("ads") or [])
+    if ads:
+        tasks.append(Task("挂起广告组件", "run.py", ["-s", serial, "suspend", *ads]))
+    elif offered is not None:
+        seen = offered.get("ads") or []
+        tasks.append(not_run("挂起广告组件",
+                             "没有已知的广告组件" if not seen
+                             else "广告组件已经挂起" if all(a.get("suspended") for a in seen)
+                             else UNCHECKED))
+    tasks.append(Task("收尾", "run.py", ["-s", serial, "finish"]))
+    return tasks
 
 
 class Job:
@@ -767,30 +832,19 @@ class Dispatcher:
         with self.lock:
             self.side = ""
 
-    def start(self, serial, plan):
-        """plan: {backup, steps:[段名]|None, channels:[{pkg,id,name}], quickapp:bool, ads:[包名], model}"""
+    def start(self, serial, plan, offered=None):
+        """plan: {backup, steps:[段名]|None, channels:[{pkg,id,name}], quickapp:bool, ads:[包名], model}
+        offered: 选择页上摆出来的项，给没勾的项定「没执行」的原因（#577）；None 表示不知道。"""
         with self.lock:
             if self.job and self.job.running:
                 return {"error": "已有任务在运行"}
             if self.side:
                 return {"error": f"「{self.side}」还没做完，请稍后再开始"}
-            tasks = []
-            if plan.get("backup", True):
-                tasks.append(Task("存改动前的快照", "run.py", ["-s", serial, "backup"]))
-            if plan.get("steps"):
-                tasks.append(Task("关闭各 App 里的广告开关", "run.py",
-                                  ["-s", serial, "recipe", *plan["steps"], *(["--ref"] if plan.get("ref") else [])],
-                                  uses_ui=True))
-            if plan.get("channels"):
-                tasks.append(Task("关闭营销通知", "chan_fast.py", uses_ui=True, channels=plan["channels"]))
-            if plan.get("quickapp"):
-                tasks.append(Task("关闭快应用", "run.py", ["-s", serial, "quickapp", "off"]))
-            if plan.get("ads"):
-                tasks.append(Task("挂起广告组件", "run.py", ["-s", serial, "suspend", *plan["ads"]]))
-            tasks.append(Task("收尾", "run.py", ["-s", serial, "finish"]))
-            self.job = Job(serial=serial, model=plan.get("model", ""), total=len(tasks))
+            tasks = plan_tasks(serial, plan, offered)
+            total = sum(1 for t in tasks if not t.skip_reason)
+            self.job = Job(serial=serial, model=plan.get("model", ""), total=total)
         threading.Thread(target=self._work, args=(tasks,), daemon=True).start()
-        return {"ok": True, "total": len(tasks)}
+        return {"ok": True, "total": total}
 
     def _log(self, s, job=None):
         """记一行输出。事件行只改状态、不进日志，返回 None；人话返回存下来的文本。
@@ -833,8 +887,13 @@ class Dispatcher:
     def _work(self, tasks):
         j = self.job
         ui_busy = False
+        done = 0                        # 真正跑过的步数：没执行的项不进「第 N / M 步」
         self.resume()                   # 上次没清掉的暂停标记不能带进这次
         for i, task in enumerate(tasks):
+            if task.skip_reason:
+                not_run_result(j, task)
+                continue
+            done += 1
             with j.lock:
                 j.step_events = set()
             if j.pause and not j.cancel:
@@ -852,7 +911,7 @@ class Dispatcher:
             if j.cancel and not runs_after_stop(task):
                 continue
             with j.lock:
-                j.idx, j.title = i + 1, task.title
+                j.idx, j.title = done, task.title
             self._log(f"\n▶ {task.title}", j)
             if ui_busy and task.uses_ui:
                 reason = "读屏服务仍被占用，跳过本步骤；请先解决读屏连接再重试。"
@@ -903,6 +962,9 @@ class Dispatcher:
                     self.on_error(task.title, j.serial, detail)
                     reason = LINK_LOST
                     for later in tasks[i + 1:]:
+                        if later.skip_reason:      # 本来就不跑的项：原因照旧，不写成断线
+                            not_run_result(j, later)
+                            continue
                         self._log(f"\n▶ {later.title}\n{reason}", j)
                         j.add_result({"title": later.title, "rc": 3, "skipped": True, "sec": 0, "tail": [reason]})
                     break
@@ -973,6 +1035,7 @@ class Api:
         self.last_status = None
         self.last_devices = ""
         self.last_scan_notes = []
+        self.last_chans = None        # 上一次通知扫描的候选；None 表示没扫成
 
     @property
     def adb(self):
@@ -1158,6 +1221,7 @@ class Api:
 
     def chan_scan(self, serial):
         self.last_scan_notes = []     # 任何失败（含未预期的异常）都不留上一次的附注
+        self.last_chans = None        # 扫成之前不知道有没有候选（#577 的结果行要分这一档）
         try:
             out, err, rc = self._run("chan_fast.py", "-s", serial, "scan", timeout=120)
         except (subprocess.TimeoutExpired, OSError) as e:
@@ -1178,6 +1242,7 @@ class Api:
                     continue  # 旧扫描结果也不能经「全选」把功能通知勾回去
                 rows.append({"pkg": pkg, "id": cid, "name": name, "app": app,
                              "checked": not judgement.default_unchecked})
+        self.last_chans = rows
         return {"chans": rows, "notes": self.last_scan_notes}
 
     def _remember_error(self, operation, serial, detail):
@@ -1204,7 +1269,18 @@ class Api:
 
     # ----- 任务 -----
     def start(self, serial, plan):
-        return self.dispatcher.start(serial, plan)
+        return self.dispatcher.start(serial, plan, self._offered())
+
+    def _offered(self):
+        """选择页上摆出来的项：判断「没执行」是用户没勾还是这台机本来就没有（#577）。
+        还没检测过就返回 None——那时不知道摆过什么，结果里不加这些行。
+        没有 `steps` 的 status 不是一次完整检测（对拍驱动只塞了 `info`），同样按没检测算。"""
+        if not self.last_status or "steps" not in self.last_status:
+            return None
+        return {"steps": self.last_status.get("steps") or [],
+                "quickapps": self.last_status.get("quickapps") or [],
+                "ads": self.last_status.get("ads") or [],
+                "channels": self.last_chans}
 
     def _log(self, s, job=None):
         return self.dispatcher._log(s, job)
