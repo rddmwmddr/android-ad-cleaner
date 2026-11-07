@@ -593,9 +593,14 @@ class ChannelPage:
             at = [b[1] < p.H * 0.22 for t, b, _ in p.texts(root) if t == name]
             title = "顶部" if any(at) else ("列表" if at else "无")
             self.skeleton = self._skeleton(root)
-            return f"标题{title}，允许通知开关 {len(allow_switches(p, root))} 个，开关 {len(p.switches(root))} 个"
+            text = f"标题{title}，允许通知开关 {len(allow_switches(p, root))} 个，开关 {len(p.switches(root))} 个"
         except Exception:
             return ""
+        # 遮罩挡着的页面也读成「开关 0 个」，补一句才分得清是没适配还是有弹窗（#557）
+        try:
+            return text + p.residual_note("；", root)
+        except Exception:
+            return text          # 这个函数从不抛：摘要读到了就先给摘要，诊断失败不把它一起吞掉
 
     def _skeleton(self, root):
         """#427 要的答案：名字挂在哪个节点上。同一次运行里同一布局只留第一份，最多两份。"""
