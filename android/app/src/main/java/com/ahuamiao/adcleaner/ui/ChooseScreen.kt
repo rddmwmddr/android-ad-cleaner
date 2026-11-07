@@ -79,7 +79,7 @@ fun ChooseScreen(model: AppModel) {
         topBar = {
             CenteredBar {
             MediumFlexibleTopAppBar(
-                title = { Text("自己选", style = MaterialTheme.typography.headlineMediumEmphasized) },
+                title = { Text("确认关闭哪些", style = MaterialTheme.typography.headlineMediumEmphasized) },
                 subtitle = selection?.let { s -> { Text(s.detection.name) } },
                 navigationIcon = {
                     IconButton(onClick = model::goHomeNow, shapes = IconButtonDefaults.shapes()) {

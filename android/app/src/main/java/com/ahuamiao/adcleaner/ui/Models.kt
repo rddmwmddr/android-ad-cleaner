@@ -155,7 +155,7 @@ sealed interface ScanState {
     data class Ready(val notes: List<String>) : ScanState
 }
 
-/** 「自己选」页的勾选。一键也走它，默认值和桌面版一致：参考脚本不勾，快应用、广告组件不勾。 */
+/** 确认页的勾选。默认值和桌面版一致：参考脚本不勾，快应用、广告组件不勾。 */
 class Selection(val detection: Detection) {
     var recipe by mutableStateOf(detection.steps.isNotEmpty() && !detection.ref)
         private set

@@ -7,7 +7,7 @@ import org.json.JSONObject
 /**
  * 只在 debug 构建里：不连手机、不跑引擎，逐屏验收界面。
  * `adb shell am start -n com.ahuamiao.adcleaner/.MainActivity --es demo home [--es sheet more]`
- * 页面：setup1 setup2 setup3 setup3mi old stopped-sh ask denied nodev home prepare0 prepare1 prepare2 choose
+ * 页面：setup1 setup2 setup3 setup3mi old stopped-sh ask denied nodev home prepare0 prepare1 choose
  * blocked norecipe scanfail run paused pausing stalled fgmode stopping done failed stopped failed2
  * 面板：more newer restore restored feedback report log；对话框：devoff
  */
@@ -60,7 +60,6 @@ object Demo {
             "old", "stopped-sh", "ask", "denied", "nodev" -> Screen.Setup(name.removeSuffix("-sh"))
             "prepare0" -> Screen.Prepare(0)
             "prepare1" -> Screen.Prepare(1)
-            "prepare2" -> Screen.Prepare(2)
             "choose", "blocked", "norecipe", "scanfail" -> Screen.Choose
             "run", "paused", "pausing", "stalled", "fgmode", "stopping" -> Screen.Run
             "done", "failed", "failed2", "stopped" -> Screen.Done(run)

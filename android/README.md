@@ -14,7 +14,7 @@
 | 每一步一个 Python 子进程 | `inproc.py` 在本进程线程里跑脚本：每步清掉 `tool/` 模块、换环境变量、按线程分流输出、`SystemExit` 当退出码 |
 | `uiautomator2` / `adbutils` / `tool/ui_session.py` | `u2.py`：读屏走本 App 的 `ShellServer`（shell 身份连 UiAutomation，读所有屏的窗口），点按走 `input`，选择器在页面上本地匹配，不开网络端口 |
 
-界面是手机版自己的，见下一节。
+界面是手机版自己的，见下一节。一键走「检测 → 扫描 → 确认页」，用户在确认页点「开始」才执行。
 
 手机版自己的处理：
 
@@ -34,9 +34,9 @@ Jetpack Compose + 官方 Material 3 Expressive，代码在 `app/src/main/java/..
 | 按钮 M / L 尺寸与按下形变 | 主按钮 96dp，屏幕矮时 56dp |
 | 标准 `ButtonGroup` | 自己选 / 还原、暂停 / 停止（按下的变宽、旁边让位） |
 | 连接按钮组 + `ToggleButton` | 反馈类型单选 |
-| `HorizontalFloatingToolbar` | 「自己选」页的已选数和开始 |
+| `HorizontalFloatingToolbar` | 确认页的已选数和开始 |
 | `SegmentedListItem` | 所有列表 |
-| `LargeFlexibleTopAppBar`、`MediumFlexibleTopAppBar` | 首次设置、自己选 |
+| `LargeFlexibleTopAppBar`、`MediumFlexibleTopAppBar` | 首次设置、确认页 |
 | 强调字体、预测性返回、触感 | 标题与数字；可返回的页面跟手缩小；确认、失败、每进一步 |
 
 中文字体常常只有常规和粗体两档，官方 500 的强调字重会落回常规，所以 `Theme.kt` 把强调样式调到 600 / 700。所有操作都留文字标签。图标是 Material Symbols Rounded（Apache-2.0），在 `res/drawable/`。

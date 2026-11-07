@@ -19,9 +19,8 @@ import org.json.JSONObject
  * 现在在哪一页。页面流程只有这一个状态，每次切换都经过 [AppModel] 的方法（ADR-0017）。
  *
  * ```
- * Boot → Setup ⇄ Home → Prepare → Run → Done → Home
- *                  ↓       ↓       ↑
- *                Choose ←──┘───────┘
+ * Boot → Setup ⇄ Home → Prepare → Choose → Run → Done → Home
+ *                  └─────────────────↗
  * ```
  */
 sealed interface Screen {
@@ -183,24 +182,19 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
         screen = Screen.Home
     }
 
-    /** 一键：把检测、扫描、开始连起来。中途要用户处理（锁屏、展开的折叠屏、没有可关的项目）就落到「自己选」页。 */
+    /** 一键：检测、扫描连着做完，停在确认页（勾选是默认值），用户点「开始」才执行。 */
     fun oneTap() = flow {
         val serial = device?.serial ?: return@flow
         screen = Screen.Prepare(0)
         val selection = detect(serial) ?: return@flow goHome()
         if (selection.detection.blocked) {
-            screen = Screen.Choose
+            screen = Screen.Choose      // 锁屏、展开的折叠屏：先露出提示，扫描在确认页上接着做
             scan(serial, selection)
             return@flow
         }
         screen = Screen.Prepare(1)
         scan(serial, selection)
-        if (selection.scan is ScanState.Failed || selection.count == 0) {
-            screen = Screen.Choose
-            return@flow
-        }
-        screen = Screen.Prepare(2)
-        begin(serial, selection.plan())
+        screen = Screen.Choose
     }
 
     fun openChoose() = flow {
@@ -370,8 +364,7 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
         return true
     }
 
-    /** 准备页的最后一件是把计划交给引擎，那一步发出去就收不回来了。 */
-    fun canGoBack() = screen.let { it is Screen.Choose || it is Screen.Done || (it is Screen.Prepare && it.at < 2) }
+    fun canGoBack() = screen.let { it is Screen.Choose || it is Screen.Done || it is Screen.Prepare }
 
     // ---------- 还原 ---------- //
 

@@ -66,7 +66,7 @@ import com.ahuamiao.adcleaner.R
 
 // ---------- 正在准备 ---------- //
 
-private val PrepareItems = listOf("检测手机型号和系统", "扫描营销通知", "开始关闭")
+private val PrepareItems = listOf("检测手机型号和系统", "扫描营销通知")
 
 @Composable
 fun PrepareScreen(model: AppModel, at: Int) {
@@ -119,9 +119,7 @@ fun PrepareScreen(model: AppModel, at: Int) {
                 .height(64.dp),
             contentAlignment = Alignment.Center,
         ) {
-            if (model.canGoBack()) {
-                TextButton(onClick = model::goHomeNow, shapes = ButtonDefaults.shapes()) { Text("取消") }
-            }
+            TextButton(onClick = model::goHomeNow, shapes = ButtonDefaults.shapes()) { Text("取消") }
         }
         },
     )
