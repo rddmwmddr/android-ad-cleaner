@@ -89,7 +89,7 @@ class PackagingEntryTests(unittest.TestCase):
         （删掉时进程以 0 退出、什么都不打印），以及入口模块在无父包时的 import 兜底。
         """
         r = subprocess.run([sys.executable, *argv, "--cli", "run.py", "--help"], cwd=ROOT,
-                           capture_output=True, text=True, encoding="utf-8", timeout=180)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180)
         self.assertEqual(r.returncode, 0, f"{' '.join(argv)} 退出码 {r.returncode}：{r.stderr[-800:]}")
         self.assertIn("tool/run.py", r.stdout, f"{' '.join(argv)} 没有转发到 tool/run.py")
 

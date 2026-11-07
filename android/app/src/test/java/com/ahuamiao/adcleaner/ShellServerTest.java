@@ -230,9 +230,8 @@ public class ShellServerTest {
 
         send(30, CANCEL, new byte[0]);              // 类型 4 只对「执行」有效
         Thread.sleep(300);
-        long handle = Long.parseLong(pid);
-        assertTrue("常驻进程不该被取消掉",
-                ProcessHandle.of(handle).map(ProcessHandle::isAlive).orElse(false));
+        // 单测对着 android.jar 编译，没有 ProcessHandle
+        assertEquals("常驻进程不该被取消掉", 0, new ProcessBuilder("kill", "-0", pid).start().waitFor());
 
         send(31, STOP, "t".getBytes(StandardCharsets.UTF_8));
         Frame stopped = next(5000);

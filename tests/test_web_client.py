@@ -1,4 +1,4 @@
-"""gui/web 与手机版的前端行为用例放在 tests/js/，这里只做代跑与守卫。
+"""gui/web 的前端行为用例放在 tests/js/，这里只做代跑与守卫。
 
 回归入口是一条 python -m unittest discover -s tests：前端用例由这条命令带跑，
 不另开第二条命令（ADR-0017）。
@@ -48,7 +48,9 @@ class WebClientJsTests(unittest.TestCase):
         output = proc.stdout + proc.stderr
         problem = judge(output, proc.returncode)
         if problem:
-            self.fail(f"前端用例没全过（{problem}）：\n{output}")
+            # 干净副本与新 worktree 都没有 node_modules，直接告诉下一个人装什么
+            hint = "（先 npm ci 装 jsdom）" if "Cannot find module" in output else ""
+            self.fail(f"前端用例没全过（{problem}）{hint}：\n{output}")
 
 
 class JudgeTests(unittest.TestCase):

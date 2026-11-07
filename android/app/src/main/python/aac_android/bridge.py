@@ -67,8 +67,14 @@ class ShizukuBridge:
 
     def exec(self, cmd, stdin=None, timeout=None):
         """命令在 Java 后台线程里跑，这里轮询：等的时候不占解释器锁（停止、界面轮询、看门狗照常），超时自己掐。"""
+        from . import screen
         t = time.monotonic()
-        job = self.shell.submit(prepare(cmd), stdin)
+        target = prepare(cmd)
+        moved = target != launcher(cmd)          # 改写过：这条发往后台屏
+        s = screen.active
+        if moved and s is not None and s.lost:
+            return Result(1, b"", screen.LOST.encode())
+        job = self.shell.submit(target, stdin)
         deadline, delay, timed_out = t + (timeout or 600), 0.002, False
         while not job.isDone():
             if time.monotonic() > deadline:
@@ -79,6 +85,9 @@ class ShizukuBridge:
             delay = min(delay * 2, 0.05)
         r = job.result(timed_out)
         slow(f"shell {cmd[:120]!r}", t, f"code={r.code} timedOut={timed_out}")
+        if moved and r.code and not timed_out and s is not None and not s.lost and screen.dead():
+            s.lost = True                        # 屏没了：之后发往它的命令直接报错，不再发给一块不存在的屏
+            return Result(r.code, bytes(r.out), bytes(r.err) + ("\n" + screen.LOST).encode(), False)
         return Result(r.code, bytes(r.out), bytes(r.err), timed_out)
 
     def daemon(self, name, cmd):

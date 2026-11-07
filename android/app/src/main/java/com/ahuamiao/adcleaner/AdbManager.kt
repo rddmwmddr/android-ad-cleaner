@@ -96,7 +96,9 @@ class AdbManager private constructor(context: Context) : AbsAdbConnectionManager
             val found = CountDownLatch(1)
             val local = localAddresses()
             val mdns = AdbMdns(context, type) { host: InetAddress?, p: Int ->
-                if (host != null && (local.isEmpty() || host.hostAddress in local) && p > 0 && p !in skip) {
+                // getHostAddress() 在 Kotlin 眼里是 String?；先判空，别拿 null 去比 Set<String>（#682）
+                val addr = host?.hostAddress
+                if (addr != null && (local.isEmpty() || addr in local) && p > 0 && p !in skip) {
                     port.set(p)
                     found.countDown()
                 }

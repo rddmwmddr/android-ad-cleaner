@@ -108,9 +108,9 @@ class AdbTest(unittest.TestCase):
             try:
                 adb._orig.clear()
                 adb.install(os.path.join(d, "bin", "adb"))
-                r = subprocess.run([adb.ADB_PATH, "-s", "local", "shell", "echo"], capture_output=True, text=True)
+                r = subprocess.run([adb.ADB_PATH, "-s", "local", "shell", "echo"], capture_output=True, text=True, encoding="utf-8", errors="replace")
                 self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "out\n", "err\n"))
-                other = subprocess.run([sys.executable, "-c", "print(42)"], capture_output=True, text=True)
+                other = subprocess.run([sys.executable, "-c", "print(42)"], capture_output=True, text=True, encoding="utf-8", errors="replace")
                 self.assertEqual(other.stdout.strip(), "42")
             finally:
                 adb.ADB_PATH = saved[0]
@@ -358,6 +358,28 @@ class BackgroundScreenTest(unittest.TestCase):
             self.assertEqual(dev.dump_hierarchy(), page)
         self.assertEqual(set(fake.displays), {7})
 
+    def test_main_screen_still_reads_display_zero(self):
+        """#674：没有后台屏时读屏照旧问主屏 0。"""
+        page = '<hierarchy><node display-id="0" text="主屏" /></hierarchy>'
+        fake = _Reader((page, 0))
+        screen.active = None
+        with _using(fake):
+            dev = u2.Device()
+            self.assertEqual(dev.dump_hierarchy(), page)
+        self.assertEqual(set(fake.displays), {0})
+
+    def test_reads_stop_when_the_screen_is_gone(self):
+        """#674：屏被判没了之后读屏不再问那块显示，直接报屏已关闭，免得每个等待点各自重试。"""
+        fake = _Reader()
+        with _using(fake):
+            dev = u2.Device()           # 连上先读一次屏
+            sent = len(fake.displays)
+            screen.active.lost = True
+            with self.assertRaises(u2.UiAutomationError) as caught:
+                dev.dump_hierarchy()
+        self.assertIn(screen.LOST, str(caught.exception))
+        self.assertEqual(len(fake.displays), sent, "屏已经没了，不该再问它")
+
     def test_a_failed_read_raises_with_the_servers_words(self):
         """读屏坏了要报错：回落成空页会让引擎把每个开关都数成「没找到」。"""
         with _using(_Reader((None, 255, "UiAutomation 被别的无障碍服务占用"))):
@@ -459,6 +481,15 @@ class ScreenLifecycleTest(unittest.TestCase):
     def tearDown(self):
         screen.active, screen.starting, bridge._bridge = self.saved
 
+    def test_lost_screen_is_rebuilt_on_next_start(self):
+        """#662：上一块屏已经没了（lost），下一次建屏不借它，拆干净重建。"""
+        gone = screen.Screen(5, "9")
+        gone.lost, gone.holders = True, 1
+        screen.active = gone
+        fresh = screen.start("com.ahuamiao.adcleaner")
+        self.assertIsNot(fresh, gone)
+        self.assertEqual((fresh.display, fresh.holders), (7, 1))
+
     def test_builds_from_the_flags_vd_reports_and_tears_down(self):
         s = screen.start("com.ahuamiao.adcleaner")
         self.assertEqual((s.display, s.sf, s.flags), (7, "11", 0x1F5C9))
@@ -521,6 +552,62 @@ class ScreenLifecycleTest(unittest.TestCase):
         self.assertLess(kill, self.fake.cmds.index("daemon vd"), "旧 Vd 还占着同名屏，必须先清掉再建")
 
 
+class LostScreenTest(unittest.TestCase):
+    """#662：建屏进程中途退出后，发往那块屏的命令直接报错，不再发给一块不存在的屏；下次建屏重建。"""
+
+    class Job:
+        def __init__(self, code, out=b""):
+            self.code, self.out = code, out
+
+        def isDone(self):
+            return True
+
+        def cancel(self):
+            pass
+
+        def result(self, timed_out):
+            return bridge.Result(self.code, self.out, b"", timed_out)
+
+    def setUp(self):
+        self.sent = []
+
+        def submit(cmd, stdin):
+            self.sent.append(cmd)
+            if "kill -0" in cmd:
+                return self.Job(1, b"probe\n")          # 探测跑通了，进程不在
+            return self.Job(1 if " -d 7 " in cmd else 0)
+        b = bridge.ShizukuBridge.__new__(bridge.ShizukuBridge)
+        b.shell = ShellStub(submit=submit)
+        self.saved = (bridge._bridge, screen.active)
+        bridge._bridge, screen.active = b, screen.Screen(7, "11")
+        self.b = b
+
+    def tearDown(self):
+        bridge._bridge, screen.active = self.saved
+
+    def test_dead_screen_is_marked_and_later_commands_fail_fast(self):
+        r = self.b.exec("input tap 1 1", None, 5)
+        self.assertTrue(screen.active.lost)
+        self.assertIn(screen.LOST, r.err.decode())
+        before = len(self.sent)
+        r = self.b.exec("input tap 2 2", None, 5)
+        self.assertEqual(r.code, 1)
+        self.assertEqual(len(self.sent), before, "屏已经没了，不该再发")
+        self.b.exec("settings get global x", None, 5)
+        self.assertEqual(len(self.sent), before + 1, "不发往后台屏的命令照常")
+
+    def test_failure_on_a_live_screen_is_not_mistaken_for_loss(self):
+        self.b.shell._submit = lambda cmd, stdin: self.Job(0, b"probe\nup\n") if "kill -0" in cmd else self.Job(1)
+        self.b.exec("input tap 1 1", None, 5)
+        self.assertFalse(screen.active.lost)
+
+    def test_probe_that_never_ran_is_not_a_dead_screen(self):
+        """#662：通道断了、探测超时时 probe 判不了屏死，否则通道恢复后也一直拒发。"""
+        self.b.shell._submit = lambda cmd, stdin: self.Job(1) if "kill -0" in cmd else self.Job(1)
+        self.b.exec("input tap 1 1", None, 5)
+        self.assertFalse(screen.active.lost, "探测没跑通就判屏死，会把一次通道抖动变成整段执行失败")
+
+
 class Recorder:
     """main.native 的替身：记下界面侧被调了什么。"""
 
@@ -537,11 +624,12 @@ class InFrontTest(unittest.TestCase):
     def setUp(self):
         self.native = Recorder()
         self.fake = ScreenBridge()
-        self.saved = (main.native, bridge._bridge, screen.active, screen.starting)
+        self.saved = (main.native, bridge._bridge, screen.active, screen.starting, main.SESSION)
         main.native, bridge._bridge, screen.active, screen.starting = self.native, self.fake, None, False
+        main.SESSION = main.Session()
 
     def tearDown(self):
-        main.native, bridge._bridge, screen.active, screen.starting = self.saved
+        main.native, bridge._bridge, screen.active, screen.starting, main.SESSION = self.saved
 
     def run_with(self, background, fn, action="去广告", stopped=None):
         if not background:
@@ -579,11 +667,57 @@ class InFrontTest(unittest.TestCase):
         self.assertEqual(self.done_calls(), [("done", "还原做完了", "点这里查看结果")])
         self.assertIn(("capsule", True, "净 还原中（后台）"), self.native.calls)
 
+    def test_overlapping_entries_keep_the_keepalive_until_the_last_leaves(self):
+        """#662：内层先结束不能撤掉外层的前台服务和胶囊，结束通知也只发一次。"""
+        def outer():
+            main.in_front(lambda: "in", "com.x", "还原")()
+            self.assertNotIn(("busy", False, True), self.native.calls, "内层结束时外层还在跑")
+            self.assertIsNotNone(screen.active, "外层还在用这块屏")
+            return "out"
+        self.assertEqual(self.run_with(True, outer), "out")
+        self.assertEqual([c for c in self.native.calls if c[0] == "busy"], [("busy", True, True), ("busy", False, True)])
+        self.assertEqual(len(self.done_calls()), 1)
+        self.assertIsNone(screen.active)
+
     def test_main_screen_run_comes_back_to_the_app(self):
         self.assertEqual(self.run_with(False, lambda: "ok"), "ok")
         self.assertEqual(self.done_calls(), [])
         self.assertIn(("busy", True, False), self.native.calls)
         self.assertIn("am start -n com.x/.MainActivity", self.fake.cmds)
+
+    def test_failed_entry_does_not_wedge_the_keepalive(self):
+        """#662：进会话半路失败要回滚计数；不然之后每次都走「内层」的早退分支，保活与胶囊再也不开。"""
+        real = screen.start
+
+        def boom(pkg):
+            raise RuntimeError("建屏时桥没起来")
+
+        screen.start = boom
+        self.addCleanup(setattr, screen, "start", real)
+        with self.assertRaises(RuntimeError):
+            self.run_with(True, lambda: "ok")
+        self.assertEqual(main.SESSION.count, 0, "失败的这一次不能把计数留在 1")
+        screen.start = real
+        self.assertEqual(self.run_with(True, lambda: "ok"), "ok")
+        self.assertIn(("busy", True, True), self.native.calls, "下一次执行照常开保活")
+        self.assertIn(("busy", False, True), self.native.calls, "收尾照常撤保活")
+
+    def test_failed_entry_takes_the_capsule_down_again(self):
+        """#662：保活起来了但胶囊没挂上时（visible 抛错），胶囊与屏都不能留下。"""
+        real = main.visible
+
+        def boom(package, on, text=""):
+            if on:
+                raise RuntimeError("设不上悬浮窗权限")
+            return real(package, on, text)
+
+        main.visible = boom
+        self.addCleanup(setattr, main, "visible", real)
+        with self.assertRaises(RuntimeError):
+            self.run_with(True, lambda: "ok")
+        self.assertIn(("capsule", False, ""), self.native.calls, "胶囊要收掉")
+        self.assertIn(("busy", False, False), self.native.calls, "保活也要撤")
+        self.assertIsNone(screen.active)
 
 
 class WasStoppedTest(unittest.TestCase):

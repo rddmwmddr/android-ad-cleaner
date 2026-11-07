@@ -1,0 +1,42 @@
+# 手机版的编译闸门：Kotlin 侧此前没有任何 CI 覆盖，`Shell.kt` 编译不过能一路进 main（#678）。
+# 只编译 debug（不签名、不上架）；正式包仍走 build-windows.yml 那套发布流程。
+name: android
+on:
+  pull_request:
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  push:
+    branches: [main]
+    paths:
+      - "android/**"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    # 首次构建要下载 Gradle、Chaquopy 的 Python 与 pip 依赖，比后续慢得多
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v5
+      - name: 安装 JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: 装 Gradle（与本地 build.sh 同版）
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.8.2"
+      - name: 装构建用的 Python 3.12（Chaquopy 要它跑 pip）
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: 告诉 Gradle 用哪个 Python
+        run: echo "CHAQUOPY_PYTHON=$(command -v python3.12 || command -v python3)" >> "$GITHUB_ENV"
+      - name: 编译 debug APK
+        run: gradle --console=plain assembleDebug

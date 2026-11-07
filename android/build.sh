@@ -4,6 +4,6 @@
 set -e
 export JAVA_HOME="$(/usr/libexec/java_home -v 17)"
 export ANDROID_HOME="$HOME/Library/Android/sdk"
-export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$HOME/Library/gradle/gradle-8.10.2/bin:$PATH"
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$HOME/Library/gradle/gradle-9.8.2/bin:$PATH"
 cd "$(dirname "$0")"
 gradle --console=plain "${@:-assembleDebug}"

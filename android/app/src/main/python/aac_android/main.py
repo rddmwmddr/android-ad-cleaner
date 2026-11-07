@@ -1,6 +1,7 @@
-"""手机版入口：把桌面版的后台（gui/app.py 的 Api）原样搬进 App 进程，界面经 WebView 调它。
+"""手机版入口：把桌面版的后台（gui/app.py 的 Api）原样搬进 App 进程，Compose 界面经 call() 调它。
 
-boot() 由 MainActivity 在后台线程调用一次；之后界面上每个 api.xxx(...) 都落到 call()。
+boot() 由 AacApp 在后台线程调用一次；之后界面的每次调用都落到 call()：普通方法名是 Api 上的方法，
+`view.xxx` 是 view.py 里给界面准备好的判断。
 """
 import json
 import os
@@ -9,7 +10,7 @@ import threading
 import time
 import traceback
 
-from . import adb, bridge, inproc, screen, u2
+from . import adb, bridge, inproc, screen, u2, view
 
 API = None
 _ready = threading.Event()
@@ -51,15 +52,63 @@ def was_stopped(job):
     return bool(job is not None and job.cancel)
 
 
+class Session:
+    """一次「在后台替用户点手机」的会话：后台屏、前台服务、悬浮胶囊、结束通知一起开、一起收（#662）。
+
+    以前三样各管各的：后台屏按引用计数，前台服务和胶囊只有开 / 关，两个入口叠在一起时，先结束的那个
+    把还在跑的那个的保活撤掉（小米会冻结它）。现在按进入次数计数，最后一个离开的才收；
+    执行与还原本身由 `Dispatcher.claim()` 互斥，这里是第二道保险。"""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.count = 0
+        self.background = False
+
+    def enter(self, package, action):
+        with self.lock:
+            self.count += 1
+            if self.count > 1:
+                return self.background
+            try:
+                self.background = BACKGROUND and screen.start(package) is not None
+                native.busy(True, self.background)
+                visible(package, True, f"净 {action}中（后台）" if self.background else f"净 {action}中")
+            except BaseException:
+                # 半路失败不能把计数留在 1：之后每次执行都会走 count > 1 的早退分支，保活与胶囊就再也不开了
+                self.count -= 1
+                self.background = False
+                try:
+                    visible(package, False)
+                    screen.release()
+                    native.busy(False, False)
+                except Exception:
+                    pass
+                raise
+            return self.background
+
+    def leave(self, package):
+        """返回这一次是不是最后一个离开（是的话保活已撤、屏已拆）。"""
+        with self.lock:
+            self.count -= 1
+            if self.count > 0:
+                return False
+            visible(package, False)
+            if self.background:
+                screen.release()
+            native.busy(False, self.background)
+            return True
+
+
+SESSION = Session()
+
+
 def in_front(fn, package, action, stopped=None):
     """fn 运行期间开前台服务、显示悬浮胶囊（不被冻结），能建后台屏就在后台屏上跑。
     结束时：主屏模式回到本 App 看结果（App 自己在后台启动界面会被系统拦，shell 身份的 am start 不受限）；
     后台模式不抢前台（用户可能正在用别的 App），发通知——做完了 / 用户停止 / 出错三种结果文案不同，
     一律发「做完了」会让停止和失败看起来都像成功。"""
     def run(*a, **k):
-        bg = BACKGROUND and screen.start(package) is not None
-        native.busy(True, bg)
-        visible(package, True, f"净 {action}中（后台）" if bg else f"净 {action}中")
+        bg = SESSION.enter(package, action)
         title, text = f"{action}失败", "点这里查看原因"
         try:
             out = fn(*a, **k)
@@ -67,16 +116,13 @@ def in_front(fn, package, action, stopped=None):
             text = "点这里查看结果"
             return out
         finally:
-            visible(package, False)
-            if bg:
-                screen.release()
-            native.busy(False, bg)
-            if bg:
-                native.done(title, text)
-            else:
-                r = bridge.get().exec(f"am start -n {package}/.MainActivity", None, 10)
-                if r.code:
-                    native.bringToFront()
+            if SESSION.leave(package):
+                if bg:
+                    native.done(title, text)
+                else:
+                    r = bridge.get().exec(f"am start -n {package}/.MainActivity", None, 10)
+                    if r.code:
+                        native.bringToFront()
     return run
 
 
@@ -93,6 +139,8 @@ def boot(base, data_dir, cache_dir, package="com.ahuamiao.adcleaner"):
     adb.install(os.path.join(data_dir, "bin", "adb"))
     u2.install()
     sys.path.insert(0, os.path.join(base, "gui"))
+    os.makedirs(os.path.join(base, "images"), exist_ok=True)   # Api.env() 要列这个目录；手机版不带教程图
+    view.BASE = base
 
     import app
     app.BASE = base
@@ -108,7 +156,8 @@ def boot(base, data_dir, cache_dir, package="com.ahuamiao.adcleaner"):
     api.runner = inproc.Runner(api._child_env)
     # 执行与还原都会切到别的 App 的设置页：期间开前台服务保活，结束后回到本 App
     api.dispatcher._work = in_front(api.dispatcher._work, package, "去广告", lambda: was_stopped(api.job))
-    api.restore = in_front(api.restore, package, "还原")
+    # 包在互斥判断里面：执行中点还原会先被 Api.restore() 拒掉，不会先开保活、建屏再拒（#662）
+    api._restore_work = in_front(api._restore_work, package, "还原")
     api.run_mode = mode
     API = api
     _ready.set()
@@ -121,7 +170,11 @@ def call(method, args_json):
     try:
         if method.startswith("_") or API is None:
             raise AttributeError(method)
-        result = getattr(API, method)(*json.loads(args_json or "[]"))
+        args = json.loads(args_json or "[]")
+        if method.startswith("view."):
+            result = view.EXPORTS[method[len("view."):]](API, *args)
+        else:
+            result = getattr(API, method)(*args)
         return json.dumps({"ok": result}, ensure_ascii=False, default=str)
     except Exception as e:
         traceback.print_exc(file=inproc._fallback[1])

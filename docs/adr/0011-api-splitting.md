@@ -70,3 +70,9 @@
 ## 补记（2026-11-02，#311）
 
 手动指定 adb 之后，`adb` 多了两个写者：`Api.set_adb_path()` 与 `Api.clear_adb_path()` 在保存、清除后重新解析并写回，走的仍是 `Api.adb` 这个可写 property（`--smoke-gui` 与测试的赋值也是同一条路）。`_download()` 不再是唯一写者；「手填优先」由 `find_adb(..., manual=)` 的候选顺序保证。三块不互读的守卫不变。
+
+## 补记（2026-11-07，#662）
+
+执行与还原互斥：`Dispatcher` 多一个自有状态 `side`（正在跑的旁路操作）与 `claim(name)` / `release()` 一对方法，`Api.restore()` 退成「占位 → 做事 → 放出」，还原体留在 `_restore_work`。占位与 `start()` 共用 `lock`，`start()` 在锁内也拒「旁路操作还没做完」。手机版 `aac_android.main.boot()` 的 patch 点随之从 `api.restore` 换成 `api._restore_work`（保活与后台屏要落在互斥判断之后才开），`_restore_work` 记为门面保留的私有名。`restore` 的窗口桥签名与三块不互读的守卫不变。
+
+（2026-11-07，#675 续）占位拿锁改成 `claim(name, wait=0.2)`：`ui_check()` 持着同一把锁最长 75 秒，按界面按钮的那条线程不该被按在那里，拿不到就直接回一句。反过来 `ui_check()` 也拒「还原正在做」，两边不再抢同一块屏。`side` 的读写仍只发生在这对方法里。

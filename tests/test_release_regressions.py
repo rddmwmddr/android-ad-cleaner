@@ -220,6 +220,12 @@ class BundleTests(unittest.TestCase):
             stage(root, out)
             self.assertEqual({p.relative_to(out).as_posix() for p in out.rglob("*") if p.is_file()}, public)
 
+    def test_every_file_under_gui_web_is_staged(self):
+        # 页面用 file:// 从同目录取资源：不在白名单里的文件发出去就是 404，桌面版一点就炸（#665 的 core.js）
+        staged = {Path(src).relative_to(ROOT).as_posix() for src, _ in bundle_data(ROOT)}
+        on_disk = {p.relative_to(ROOT).as_posix() for p in (ROOT / "gui" / "web").rglob("*") if p.is_file()}
+        self.assertEqual(on_disk - staged, set())
+
 
 if __name__ == "__main__":
     unittest.main()

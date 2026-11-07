@@ -6,7 +6,7 @@
 
 ## 怎么做到不改引擎
 
-界面、后台、引擎都是桌面版那一份，原样打进 APK：`gui/web/index.html`、`gui/app.py` 的 `Api`、`tool/`、`recipes/`。手机上只替换三处：
+后台和引擎都是桌面版那一份，原样打进 APK：`gui/app.py` 的 `Api`、`tool/`、`recipes/`。手机上只替换三处：
 
 | 桌面版 | 手机版（`app/src/main/python/aac_android/`） |
 |---|---|
@@ -14,12 +14,40 @@
 | 每一步一个 Python 子进程 | `inproc.py` 在本进程线程里跑脚本：每步清掉 `tool/` 模块、换环境变量、按线程分流输出、`SystemExit` 当退出码 |
 | `uiautomator2` / `adbutils` / `tool/ui_session.py` | `u2.py`：读屏走本 App 的 `ShellServer`（shell 身份连 UiAutomation，读所有屏的窗口），点按走 `input`，选择器在页面上本地匹配，不开网络端口 |
 
-界面经 WebView 加载 `index.html`；`assets/mobile/mobile.js` 补上 `pywebview` 桥，把首页换成 shell 权限状态和「一键去广告」（自动走检测 → 扫描 → 开始执行，勾选与桌面版默认一致）。
+界面是手机版自己的，见下一节。一键走「检测 → 扫描 → 确认页」，用户在确认页点「开始」才执行。
 
 手机版自己的处理：
 
 - 执行与还原期间开前台服务，通知栏上可以点「暂停」。
 - 结束后用 shell 身份 `am start` 回到本 App：App 自己在后台启动界面会被系统拦，前台服务也不豁免。
+
+## 界面（ADR-0018）
+
+Jetpack Compose + 官方 Material 3 Expressive，代码在 `app/src/main/java/.../ui/`。页面状态只有 `AppModel.kt` 的 `Screen`，经 `Backend` 调 `aac_android.main.call()`：普通方法名落到 `Api`，`view.xxx` 落到 `aac_android/view.py`（界面要用的判断，CI 测得到）。
+
+| 规范元素 | 用在哪 |
+|---|---|
+| `MaterialExpressiveTheme`、`MotionScheme.expressive()`、动态取色 | 全局；安卓 12 以下用 `expressiveLightColorScheme` |
+| `MaterialShapes`、`Morph` | 贯穿首页 → 准备 → 执行 → 完成的主形状（`Hero.kt`），换页时接着变形；步骤号、结果状态的小形状 |
+| `LoadingIndicator`、`ContainedLoadingIndicator` | 启动、准备、扫描 |
+| `CircularWavyProgressIndicator`、`LinearWavyProgressIndicator` | 执行进度（暂停时波浪收平）、还原中 |
+| 按钮 M / L 尺寸与按下形变 | 主按钮 96dp，屏幕矮时 56dp |
+| 标准 `ButtonGroup` | 自己选 / 还原、暂停 / 停止（按下的变宽、旁边让位） |
+| 连接按钮组 + `ToggleButton` | 反馈类型单选 |
+| `HorizontalFloatingToolbar` | 确认页的已选数和开始 |
+| `SegmentedListItem` | 所有列表 |
+| `LargeFlexibleTopAppBar`、`MediumFlexibleTopAppBar` | 首次设置、确认页 |
+| 强调字体、预测性返回、触感 | 标题与数字；可返回的页面跟手缩小；确认、失败、每进一步 |
+
+中文字体常常只有常规和粗体两档，官方 500 的强调字重会落回常规，所以 `Theme.kt` 把强调样式调到 600 / 700。所有操作都留文字标签。图标是 Material Symbols Rounded（Apache-2.0），在 `res/drawable/`。
+
+不连手机逐屏验收（只在 debug 构建）：
+
+```bash
+adb shell am start -n com.ahuamiao.adcleaner/.MainActivity --es demo home [--es sheet more]
+```
+
+页面和面板的名字在 `src/debug/.../Demo.kt`。`--es plan '<计划 JSON>'` 不经勾选，把计划交给真引擎（模拟器上没有营销渠道可选时用），`--es call pause` 发暂停。
 
 ## 内置无线调试（#622）
 
@@ -57,9 +85,9 @@
 android/build.sh assembleRelease
 ```
 
-构建前会把 `tool/`、`recipes/`（不含 `zztest-*`）、`gui/app.py`、`gui/web/` 和教程图同步进 assets。版本号读 `gui/app.py` 的 `VERSION`。
+构建前会把 `tool/`、`recipes/`（不含 `zztest-*`）、`gui/app.py`、提示音和 `brand-taps.json` 同步进 assets。版本号读 `gui/app.py` 的 `VERSION`。
 
-- 需要 JDK 17、Android SDK、gradle 8.10.2，以及本机的 Python 3.12（Chaquopy 编译用，路径在 `app/build.gradle.kts`）。
+- 需要 JDK 17、Android SDK（compileSdk 37）、gradle 9.8.2，以及本机的 Python 3.12（Chaquopy 编译用，路径在 `app/build.gradle.kts`）。
 - 协议层的 JVM 单测（`app/src/test/…/ShellServerTest.java`）不碰 Android：`./gradlew :app:testDebugUnitTest` 就能跑，读屏用假的 `ScreenReader` 注入。
 - 正式签名读 `.private/android-signing/keystore.properties`，没有就退回 debug 签名。证书丢了，已安装的 App 就没法覆盖更新。
 

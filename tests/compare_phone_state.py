@@ -155,7 +155,7 @@ def baseline_tool_dir(sha):
     try:
         try:
             subprocess.run(["git", "worktree", "add", "--detach", str(tree), sha],
-                           cwd=root, check=True, capture_output=True, text=True)
+                           cwd=root, check=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
         except subprocess.CalledProcessError as e:
             sys.exit(f"找不到提交 {sha}：先 git fetch origin {sha}\n{e.stderr.strip()}")
         added = True
@@ -169,7 +169,7 @@ def baseline_tool_dir(sha):
 
 def collect(tool_dir):
     proc = subprocess.run([sys.executable, str(Path(__file__).resolve()), "--dump", str(tool_dir)],
-                          capture_output=True, text=True, encoding="utf-8")
+                          capture_output=True, text=True, encoding="utf-8", errors="replace")
     if proc.returncode:
         sys.exit(f"跑不通 {tool_dir}：\n{proc.stderr}")
     return json.loads(proc.stdout)

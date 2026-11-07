@@ -46,6 +46,12 @@ class PairingService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    /** 服务被系统回收时不一定走到 `finish()`：标志要在这里也放开，否则「开始授权」只会回到无线调试页，拿不回截屏许可（#662）。 */
+    override fun onDestroy() {
+        waiting = false
+        super.onDestroy()
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == STOP) {
             finish(null)
@@ -62,9 +68,14 @@ class PairingService : Service() {
             return START_NOT_STICKY
         }
         stopped = false                           // 上一次会话收尾时置过 true；同一个实例被复用时要从头开始
+        waiting = true
         looper = HandlerThread("aac-pair").also { it.start() }
         val handler = Handler(looper.looper)
         val mp = getSystemService(MediaProjectionManager::class.java).getMediaProjection(code, data)
+        if (mp == null) {                         // 系统不给这次截屏会话：退回手动填，别留着「正在等」
+            fallback("系统没有同意这次截屏。")
+            return START_NOT_STICKY
+        }
         projection = mp
         mp.registerCallback(object : MediaProjection.Callback() {
             override fun onStop() = finish(null)
@@ -189,8 +200,12 @@ class PairingService : Service() {
     }
 
     private fun finish(done: String?) {
-        if (stopped) return
-        stopped = true
+        // 识别线程收尾和截屏被系统收回（onStop 回调，另一条线程）可能同时进来：判断与置位要一起做（#662）
+        synchronized(this) {
+            if (stopped) return
+            stopped = true
+        }
+        waiting = false
         runCatching { display?.release() }; display = null
         runCatching { reader?.close() }; reader = null
         runCatching { projection?.stop() }; projection = null     // 留成 null，下一次启动才知道没有会话在跑
@@ -222,6 +237,10 @@ class PairingService : Service() {
     }
 
     companion object {
+        /** 正在等配对码：再点「开始授权」不再要一次截屏许可，只把用户带回无线调试页（#662）。 */
+        @Volatile @JvmStatic var waiting = false
+            private set
+
         private const val TAG = "AacPair"
         private const val ID = 6
         private const val CHANNEL = "pair-watch"
