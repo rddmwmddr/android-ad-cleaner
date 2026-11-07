@@ -127,7 +127,8 @@ class TheGuardItself(unittest.TestCase):
         """守卫只看返回值有没有被拿去判，判不出 `if not` 里写的是 raise 还是 return。
 
         这条限制写在测试里而不是靠读者猜：把 `raise` 退回 `return` 不会让这一层返红，
-        拦住它的是 `SegmentFailsWhenSettingFails` 那几条行为用例。"""
+        拦住它的是 `SegmentFailsWhenSettingFails` 与 `FallbackFailingTooFailsTheSegment`
+        那几条行为用例。"""
         self.assertEqual(self.flagged('if not p.setting("系统广告"):\n    return\n'), [])
 
 
@@ -216,16 +217,18 @@ class SuccessPathUnchanged(unittest.TestCase):
                 self.assertEqual(p.off.call_args_list, expected)
 
 
+def unlocked_phone():
+    """假 Phone：锁屏读成 False，其余交给 Mock。"""
+    p = phone_mock()
+    p.locked = lambda *a, **k: False
+    return p
+
+
 class FallbackStaysSilent(unittest.TestCase):
     """兜底走通时本段仍算成功（旧树也绿，守的是这次重排不回退）。"""
 
-    def phone(self):
-        p = phone_mock()
-        p.locked = lambda *a, **k: False
-        return p
-
     def test_pmx110_search_hit_opens_page(self):
-        p = self.phone()
+        p = unlocked_phone()
         p.setting = lambda *a, **k: True
         scope, _ = load_recipe(p, recipe_of("oppo-PMX110"))
         scope["page"], scope["row"], scope["system_settings"] = Mock(), Mock(), Mock()
@@ -234,7 +237,7 @@ class FallbackStaysSilent(unittest.TestCase):
         scope["system_settings"].assert_not_called()
 
     def test_pmx110_search_miss_walks_the_menu(self):
-        p = self.phone()
+        p = unlocked_phone()
         p.setting = lambda *a, **k: False
         scope, _ = load_recipe(p, recipe_of("oppo-PMX110"))
         scope["page"], scope["row"], scope["system_settings"] = Mock(), Mock(), Mock()
@@ -244,7 +247,7 @@ class FallbackStaysSilent(unittest.TestCase):
         self.assertEqual(scope["row"].call_count, 2)
 
     def test_redmi_search_hit_skips_the_menu(self):
-        p = self.phone()
+        p = unlocked_phone()
         p.setting = lambda *a, **k: True
         scope, _ = load_recipe(p, recipe_of("redmi-25060RK16C"), only=["系统广告"])
         self.assertEqual(scope["FAILED_STEPS"], [])
@@ -252,7 +255,7 @@ class FallbackStaysSilent(unittest.TestCase):
         self.assertGreaterEqual(p.off.call_count, 1)
 
     def test_redmi_search_miss_walks_the_menu(self):
-        p = self.phone()
+        p = unlocked_phone()
         p.setting = lambda *a, **k: False
         scope, _ = load_recipe(p, recipe_of("redmi-25060RK16C"), only=["系统广告"])
         self.assertEqual(scope["FAILED_STEPS"], [])
@@ -260,7 +263,7 @@ class FallbackStaysSilent(unittest.TestCase):
 
     def xiaomi_phone(self, search_hits):
         """close_named 前后各读一次开关，第二次读到已关才算核对通过。"""
-        p = self.phone()
+        p = unlocked_phone()
         p.setting = lambda *a, **k: search_hits
         p.switches.side_effect = [[("个性化广告推荐", True, (0, 0))],
                                   [("个性化广告推荐", False, (0, 0))]]
@@ -279,6 +282,36 @@ class FallbackStaysSilent(unittest.TestCase):
         self.assertEqual(scope["FAILED_STEPS"], [], text)
         p.d.shell.assert_called_once_with(
             "am start -f 0x10008000 -n com.android.settings/.ad.AdServiceSettings")
+
+
+class FallbackFailingTooFailsTheSegment(unittest.TestCase):
+    """设置搜索失败、兜底菜单也走不通时本段要记失败（#819）。
+
+    `if not p.setting(...):` 里那几处兜底原本只是裸 `return` / `break`：段内一项没做，
+    FAILED_STEPS 为空、退出码 0、结果页标「成功」。#776 的 AST 守卫只看返回值有没有被
+    拿去判，区分不出兜底那一支写的是 raise 还是 return，拦住它们的是这几条行为用例。
+    """
+
+    def test_redmi_menu_fallback_failing_too_fails_the_segment(self):
+        p = unlocked_phone()
+        p.setting = lambda *a, **k: False
+        p.entry = lambda *a, **k: False
+        scope, out = load_recipe(p, recipe_of("redmi-25060RK16C"), only=["系统广告"])
+        self.assertEqual(scope["FAILED_STEPS"], ["系统广告"], out.getvalue())
+        self.assertIn("✗ 未完成：没找到「广告服务」入口", out.getvalue())
+
+    def test_honor_menu_fallback_failing_too_fails_the_segment(self):
+        p = unlocked_phone()
+        p.setting = lambda *a, **k: False
+        p.start = Mock(side_effect=RuntimeError("没有这个页面"))
+        p.tap = Mock(return_value=False)
+        scope, out = load_recipe(p, recipe_of("honor-PNM-AN10"), only=["广告跟踪"])
+        self.assertEqual(scope["FAILED_STEPS"], ["广告跟踪"], out.getvalue())
+        self.assertIn("✗ 未完成：没找到「广告与隐私」入口", out.getvalue())
+        # 先落到「设置搜索失败 → 菜单三步」那一支，再从第一步失败出来；
+        # 只断言 FAILED_STEPS 的话，把菜单链整段删成无条件 raise 也照样绿。
+        p.d.shell.assert_called_once_with("am start -f 0x10008000 -a android.settings.SETTINGS")
+        self.assertEqual(p.tap.call_args_list, [call("隐私和安全", exact=True)])
 
 
 if __name__ == "__main__":

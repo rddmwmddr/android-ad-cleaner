@@ -73,3 +73,20 @@
   `FAILED_STEPS`，因此也被段级重试覆盖。带菜单兜底的几处（如 `honor-PNM-AN10` 的「广告跟踪」、
   `vivo-V2303A` 的「全局搜索」）仍只消费返回值，兜底也不通时照旧不进名单、只能整段重跑。
   改动只在脚本侧，引擎的 `Phone.setting()` 契约没动。
+
+## 增补：补齐有兜底的调用点（#819）
+
+上面那条「只覆盖没有兜底的调用点」在 #819 之后不再成立：`honor-PNM-AN10` 的「广告跟踪」、
+`redmi-25060RK16C` 的「系统广告」在菜单兜底也不通时、`vivo-V2303A` 的「全局搜索」在设置搜索
+失败时同样 `raise`，本段写进 `FAILED_STEPS`，因此也被段级重试覆盖；搜索成功或兜底走通时行为
+与改动前一致。
+
+`tests/test_recipe_setting_checked.py` 的 AST 守卫不收紧：它只看返回值有没有落进判断结构，
+`if not` 分支里写 `raise` 还是 `return` 静态分不出；收紧要对分支体做形状判定，而别的兜底靠
+带 raise 的 helper（`row()` / `close_named()`）收尾，静态同样看不出来。守住这三处的是行为用例
+（redmi / honor 在 `FallbackFailingTooFailsTheSegment`，vivo 在 `test_vivo_v2303a_recipe.py`），
+不是 AST。
+
+`vivo-V2303A` 的 `raise` 必须放在「单页跳过」的 `try` 之外：放在里面会被那个 `except Exception`
+吞掉，段内结局照样是「成功」。副作用是 `p.setting()` 自己抛的异常（如断线）不再被当成「该页跳过」，
+会记成整段失败；`maybe()` / `off()` 抛异常时只跳过该页的行为不变。

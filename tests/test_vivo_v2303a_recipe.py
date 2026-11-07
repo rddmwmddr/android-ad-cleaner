@@ -57,7 +57,8 @@ class VivoV2303ARecipeTests(unittest.TestCase):
         p = make_phone()
         p.setting.return_value = True
         p.entry.return_value = True
-        load(p, only=["全局搜索"])
+        scope = load(p, only=["全局搜索"])
+        self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertEqual(p.setting.call_count, 3)
         self.assertEqual([c.args[0] for c in p.setting.call_args_list], ["全局搜索"] * 3)
 
@@ -78,12 +79,15 @@ class VivoV2303ARecipeTests(unittest.TestCase):
         load(p, only=["全局搜索"])
         self.assertEqual(pages, ["全局搜索·首页展示内容", "全局搜索·推荐热搜榜单", "全局搜索·个性化内容"])
 
-    def test_global_search_does_nothing_when_the_search_box_never_opens(self):
+    def test_global_search_fails_the_segment_when_the_search_box_never_opens(self):
+        """搜索不可用时本段记未完成，而不是 break 出去让这一段看起来「成功」（#819）。"""
         p = make_phone()
         p.setting.return_value = False
-        load(p, only=["全局搜索"])
+        scope, out = load_recipe(p, RECIPE, only=["全局搜索"])
         p.off.assert_not_called()
         self.assertEqual(p.setting.call_count, 1)
+        self.assertEqual(scope["FAILED_STEPS"], ["全局搜索"])
+        self.assertIn("✗ 未完成：没搜到「全局搜索」", out.getvalue())
 
 
 if __name__ == "__main__":
