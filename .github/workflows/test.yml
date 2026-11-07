@@ -17,8 +17,14 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
       - name: 安装依赖
         run: pip install -r requirements.txt
+      - name: 安装前端用例依赖（tests/js 用 jsdom，版本按 package-lock.json）
+        run: npm ci
       - name: 准备 adb（不用手机，但套件里有用例在入口就解析 adb，缺了直接报「找不到 adb」）
         run: |
           adb="$(command -v adb || true)"
@@ -48,8 +54,14 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
       - name: 安装依赖
         run: pip install -r requirements.txt
+      - name: 安装前端用例依赖（tests/js 用 jsdom，版本按 package-lock.json）
+        run: npm ci
       - name: 准备 adb（镜像自带 Android SDK，不额外安装；缺了跟 Linux 一样会有一批用例报「找不到 adb」）
         run: |
           $adb = (Get-Command adb.exe -ErrorAction SilentlyContinue).Source
