@@ -2,7 +2,19 @@
 
 实测机型：PNM-AN10（MagicOS 10），2026-10-23。机型脚本：`recipes/honor-PNM-AN10/`，重跑约 4 分钟。
 补充机型：WKL-AN20（MagicOS 11.0.0.111 / Android 17），2026-10-28 逐项路径实测；[新脚本说明](../../recipes/honor-WKL-AN20/README.md)。新脚本整轮及用时尚未真机复测。
+补充机型：CLE-AN00（Magic V Flip2，MagicOS 10.0.0.175 / Android 16），2026-11-07 整轮实测，下面「CLE-AN00 的差别」单列。
 符号：🔴 关掉　🟢 保留　⚠️ 注意
+
+## CLE-AN00 的差别
+
+- 广告与隐私能直达，不用搜索：`com.hihonor.id/.oaid.ui.AdvertisingPrivacyActivity`。
+- 下拉搜索能直达：`com.hihonor.search/.feature.mainpage.presentation.page.HomeActivity`。个性化管理里点名关「个性化推荐」「个性化广告」。
+- 负一屏能直达：`com.hihonor.hiboard/com.hihonor.intelligent.LauncherActivity`，不用手势。
+- 应用市场底部「我的」带角标，读作「我的,您在应用市场共有 N 条通知」。「热门推荐管理」是「内容推荐服务」页里的一个开关。桌面文件夹的设置页没导出。
+- 浏览器是百度版：我的 → 右上齿轮 → 搜索下一条推荐、消息设置（新闻热点、兴趣推送）。「隐私设置 → 广告设置」是网页。
+- 主题：没同意用户协议时打开就弹协议，不代为同意，这一段跳过。
+
+---
 
 ---
 

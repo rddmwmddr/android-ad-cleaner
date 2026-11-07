@@ -164,6 +164,7 @@ ENTRIES = {
     "honor": {
         "广告跟踪": Entry(
             menu="设置 → 搜索「广告」→ 广告与隐私",
+            direct=(Direct("com.hihonor.id", ".oaid.ui.AdvertisingPrivacyActivity", "应用广告跟踪管理"),),
             search=(Search("广告", "广告与隐私"),)),
         "智能推荐服务": Entry(
             menu="设置 → 搜索「广告」→ 广告与隐私 → 智能推荐服务",
@@ -184,7 +185,9 @@ ENTRIES = {
         "视频": Entry(
             menu="视频 → 设置 → 其他设置",
             direct=(Direct("com.hihonor.youku.video", "com.youku.android.youkusetting.activity.SettingsActivity", ""),)),
-        "下拉搜索": Entry(menu="桌面中间向下滑 → 按返回收起键盘 → 搜索框旁「更多」→ 设置"),
+        "下拉搜索": Entry(
+            menu="桌面中间向下滑 → 按返回收起键盘 → 搜索框旁「更多」→ 设置",
+            direct=(Direct("com.hihonor.search", ".feature.mainpage.presentation.page.HomeActivity", "更多"),)),
         "负一屏": Entry(menu="桌面从左边缘向右滑 → 头像 → 设置"),
         "应用市场": Entry(menu="应用市场 → 我的 → 设置", app="com.hihonor.appmarket"),
         "浏览器": Entry(menu="经典首页：我的 → 右上第三个图标；简洁首页：更多 → 设置", app="com.hihonor.baidu.browser"),
