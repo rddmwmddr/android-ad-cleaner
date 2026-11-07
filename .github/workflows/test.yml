@@ -40,7 +40,7 @@ jobs:
       - name: 静态检查（未定义名 / 未使用导入；recipes/ 靠注入作用域执行，查不了）
         run: |
           pip install ruff==0.17.3
-          ruff check --select F,E9 tool tests gui
+          ruff check --select F,E9 tool tests gui android/app/src/main/python
       - name: 设备无关回归测试
         run: python -m unittest discover -s tests -v
 
@@ -72,6 +72,6 @@ jobs:
       - name: 静态检查（未定义名 / 未使用导入；recipes/ 靠注入作用域执行，查不了）
         run: |
           pip install ruff==0.17.3
-          ruff check --select F,E9 tool tests gui
+          ruff check --select F,E9 tool tests gui android/app/src/main/python
       - name: 设备无关回归测试
         run: python -m unittest discover -s tests -v

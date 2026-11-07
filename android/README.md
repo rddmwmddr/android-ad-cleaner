@@ -19,6 +19,8 @@
 手机版自己的处理：
 
 - 执行与还原期间开前台服务，通知栏上可以点「暂停」。
+- 同一期间在屏幕左缘显示悬浮胶囊（`main.py` 的 `visible()`）：HyperOS 会冻结退到后台的 App，前台服务和省电白名单都挡不住，有可见窗口的 App 不冻；悬浮窗权限经 shell 给本 App 自己开，不用用户去设置里找。
+- 脚本跑了 60 秒还没完，看门狗每 60 秒把它卡在哪一行写进 logcat（`inproc.py` 的 `_watchdog`）：只进系统日志，不进界面，也不进错误上报。
 - 结束后用 shell 身份 `am start` 回到本 App：App 自己在后台启动界面会被系统拦，前台服务也不豁免。
 
 ## 界面（ADR-0018）
@@ -87,8 +89,9 @@ android/build.sh assembleRelease
 
 构建前会把 `tool/`、`recipes/`（不含 `zztest-*`）、`gui/app.py`、提示音和 `brand-taps.json` 同步进 assets。版本号读 `gui/app.py` 的 `VERSION`。
 
-- 需要 JDK 17、Android SDK（compileSdk 37）、gradle 9.8.2，以及本机的 Python 3.12（Chaquopy 编译用，路径在 `app/build.gradle.kts`）。
-- 协议层的 JVM 单测（`app/src/test/…/ShellServerTest.java`）不碰 Android：`./gradlew :app:testDebugUnitTest` 就能跑，读屏用假的 `ScreenReader` 注入。
+- 需要 JDK 17、Android SDK（compileSdk 37）、gradle 9.8.2，以及构建用的 Python 3.12。
+- `build.sh` 认 `JAVA_HOME` / `ANDROID_HOME` / `GRADLE_HOME`，不设就用维护者机器上的默认值；构建用的 Python 3.12 由 `CHAQUOPY_PYTHON` 指定，不设时 `app/build.gradle.kts` 会退回本机 uv 装的那份 macOS aarch64 路径，配置期 `require()` 一查不到就直接失败——别的机器必须设。仓库里没有 `gradlew`，构建走 PATH 上的 `gradle`；构建目录固定落在 `~/Library/Caches/aac-android/`。维护者机器以外没有验证过完整构建。
+- 协议层的 JVM 单测（`app/src/test/…/ShellServerTest.java`）不碰 Android：`cd android && gradle :app:testDebugUnitTest` 就能跑，读屏用假的 `ScreenReader` 注入；配置期同样要一份可执行的 Python 3.12。
 - 正式签名读 `.private/android-signing/keystore.properties`，没有就退回 debug 签名。证书丢了，已安装的 App 就没法覆盖更新。
 
 ## 在电脑上调试替换层

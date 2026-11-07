@@ -1,4 +1,4 @@
-"""文档与单一来源一致：ADR 字段表（#467）、品牌连点表（#654）、教程截图 alt（#655）、站点与侧栏图标同源（#669）。"""
+"""文档与单一来源一致：ADR 字段表（#467）、品牌连点表（#654）、教程截图 alt（#655）、站点与侧栏图标同源（#669）、ADR 索引（#624）、静态检查目标（#624）。"""
 import re
 import sys
 import unittest
@@ -11,6 +11,8 @@ import channel_policy as policy
 import gen_brand_taps as gen
 
 ADR = ROOT / "docs/adr/0006-channel-classification.md"
+CLAUDE = ROOT / "CLAUDE.md"
+ADR_NAME = re.compile(r"^(\d{4})-[a-z0-9-]+\.md$")
 BRAND_TAP_TARGETS = {"html", "readme", "dev_doc"}
 TUTORIAL_PAGE = ROOT / "android-tutorial.html"
 TUTORIAL_README = ROOT / "docs/手机版教程/README.md"
@@ -35,6 +37,46 @@ class JudgementDocTests(unittest.TestCase):
         self.assertTrue(listed, "ADR-0006 的字段表没被读到，这条守卫会空转")
         self.assertEqual(sorted(listed), sorted(f.name for f in fields(policy.ChannelJudgement)),
                          "字段表与 ChannelJudgement 不一致：新增判定加一行，删判定删行")
+
+
+class AdrIndexTests(unittest.TestCase):
+    """`docs/adr/` 的每一份都被 CLAUDE.md 的 ADR 列表收录（#624）。"""
+
+    def test_every_adr_is_listed_in_claude_md(self):
+        files = sorted(p.name for p in (ROOT / "docs/adr").glob("*.md"))
+        self.assertTrue(files, "docs/adr 里没有 ADR，守卫会空转")
+        matched = [(name, ADR_NAME.match(name)) for name in files]
+        bad = [name for name, m in matched if m is None]
+        self.assertEqual(bad, [], "ADR 文件名应是 NNNN-slug.md：" + "、".join(bad))
+        lines = [line for line in CLAUDE.read_text(encoding="utf-8").splitlines()
+                 if "模块边界的决定写进" in line]
+        self.assertEqual(len(lines), 1,
+                         "CLAUDE.md 里该有一行讲 ADR 列表（含「模块边界的决定写进」），读到 %d 行" % len(lines))
+        listed = set(re.findall(r"`(\d{4})`", lines[0]))
+        self.assertTrue(listed, "那一行里没读到 ADR 编号，守卫会空转")
+        missing = [name for name, m in matched if m.group(1) not in listed]
+        self.assertEqual(missing, [], "这些 ADR 没被 CLAUDE.md 的 ADR 列表收录：" + "、".join(missing))
+
+
+def ruff_targets(text):
+    """把文本里每条 `ruff check … --select F,E9 <目标>` 的目标清单切出来（到反引号或行末为止）。"""
+    return [line.split("`")[0].split() for line in re.findall(r"--select F,E9 (.+)", text)]
+
+
+class LintCommandTests(unittest.TestCase):
+    """静态检查的目标清单在 CLAUDE.md、发版文档与 CI 三处一致（#624）：加目录时四处一起改。"""
+
+    def test_ruff_targets_match_everywhere(self):
+        docs = [ROOT / "CLAUDE.md", ROOT / "docs/agents/release.md"]
+        expected = ruff_targets(docs[0].read_text(encoding="utf-8"))
+        self.assertEqual(len(expected), 1, "CLAUDE.md 里应当恰好一条 ruff 命令")
+        self.assertIn("tool", expected[0], "目标清单没读到，守卫会空转")
+        for path in docs[1:]:
+            with self.subTest(path=str(path.relative_to(ROOT))):
+                self.assertEqual(ruff_targets(path.read_text(encoding="utf-8")), expected)
+        ci = ruff_targets((ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8"))
+        self.assertEqual(len(ci), 2, "CI 应当两个 job 各跑一次 ruff，读到 %d 条" % len(ci))
+        self.assertEqual(ci, [expected[0], expected[0]])
 
 
 class BrandTapsDocTests(unittest.TestCase):
