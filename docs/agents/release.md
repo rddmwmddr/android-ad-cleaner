@@ -91,10 +91,10 @@ GitHub 搜索索引有延迟，刚合上没几小时的 PR 可能还查不到；
 2. **补齐 `## 未发布`**：确认这一版的每一笔都在里面、都是一行一条。这时还没写验证行。
 3. **建 Release 草稿并推 tag**：`build-windows.yml` 由 `v*` 标签触发，要求对应 Release **先存在**（草稿即可，否则 workflow 报「请先创建对应的 Release 草稿」）。它打包两个 Windows 安装包、跑冒烟测试、把产物传进草稿。草稿已公开时它保留已验证的文件、不重建。
 4. **上传 macOS 安装包**到同一个草稿（本机打包与公证步骤在 `CLAUDE.local.md`）。
-5. **写正文并发布**。正文可以在草稿阶段写好；发布前核对四个安装包的 SHA256 与 `SHA256SUMS.txt` 一致，并按「致谢谁」核对待致谢名单。
+5. **写正文并发布**。正文可以在草稿阶段写好；发布前核对全部安装包（四个桌面包和 APK）的 SHA256 与 `SHA256SUMS.txt` 一致。这个文件是发版时写的，APK 要写进去，不然安装说明里它的校验值是空的，并按「致谢谁」核对待致谢名单。
 6. **同步用户侧文本**：
    - `README.md` 的版本摘要：首段从 Release 正文首段复制，后面接「旧版不会自动更新……」；下载表格换版本号与链接。
-   - `index.html` 的 `REL`（`version` / `github` / `gitee` / `files[].file` / `size` / `sha`）与 `RELEASED` 日期。
+   - `index.html` 的 `REL`（`version` / `github` / `gitee` / `files[].file` / `size` / `sha`）与 `RELEASED` 日期。APK 条目的 `id` 逐字写 `android`：卡片角标、手机端高亮和网盘说明都靠它，没有这一条，线上就看不到手机版。
 7. **同步版本提示**：官网的 `android-ad-cleaner-latest.json`，以及放在机主服务器上的官网副本（两处的步骤在本机 `CLAUDE.local.md`）。
 8. **国内下载**：`python3 gui/upload_gitee.py <版本>`，从公开的 Release 下载安装包、核对 SHA256，推代码和标签到 Gitee、建发行版传附件，再匿名下载回来核对。Windows 安装版被 Gitee 拒收，不上传，下载页上它标 `gitee: false`，只给 GitHub 按钮。`index.html` 的 `REL.gitee` 换成这一版的路径。百度网盘暂停使用，页面上不显示；Gitee 不可用时把 `REL.gitee` 留空，改跑 `gui/upload_baidu.sh <版本>`，它会回写网盘链接，按钮随之恢复。
 9. **CHANGELOG 收口**：把 `## 未发布` 改名为 `## <版本> · <日期>`，在标题下补一行验证（回归项数 + 验证了什么 + 缺什么），再重开一个空的 `## 未发布`。回归项数写第 1 步 `discover` 的输出，不记基线 SHA——那个 tag 上重跑一遍就能得到同一个数。

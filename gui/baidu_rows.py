@@ -13,9 +13,21 @@ ITEM = re.compile(r'\{ id: "([\w-]+)", folder: "([^"]+)", baidu: \{[^}]*\}, titl
                   r'file: "([^"]+)"[^\n]*\n\s*note: "([^"]+)"')
 
 
+# 下载页的 id → 安装说明的种类。没登记的 id 在上传之前就报错，不要等安装包传完才崩
+KINDS = {"mac-arm64": "mac", "mac-intel": "mac", "win-setup": "win-setup", "win-zip": "win-zip", "android": "android"}
+
+
+def kind_of(key):
+    if key not in KINDS:
+        sys.exit(f"index.html 里的 id「{key}」没有登记：在 baidu_rows.py 的 KINDS、SETUP、CHECK 里补上（手机版的 id 是 android）")
+    return KINDS[key]
+
+
 def rows(ver, guide):
     html = open(PAGE, encoding="utf-8").read()
     items = [i for i in ITEM.findall(html) if ver in i[4]]
+    for item in items:
+        kind_of(item[0])
     lines = [f"肉呆去广告 v{ver}", "", "选哪个文件："]
     lines += [f"· {title}（{sub}）：{folder}/{file}。{note}" for _, folder, title, sub, file, note in items]
     lines += ["", "不知道 Mac 是哪种芯片：左上角苹果图标 → 关于本机，「芯片」写 Apple M 开头的选 Apple 芯片。",
@@ -83,7 +95,7 @@ def legacy(ver, out, sums_path):
                 "「芯片」一栏写 Apple M 开头的选 Mac-Apple芯片，写 Intel 的选 Mac-Intel芯片。\n\n"
                 "每个文件夹里有安装包和这个版本的安装说明。旧版本在官网和 GitHub 的「全部版本」里。\n")
     for key, folder, title, sub, file, note in items:
-        kind = "mac" if key.startswith("mac") else key
+        kind = kind_of(key)
         os.makedirs(os.path.join(out, folder), exist_ok=True)
         steps = "\n".join(f"{n}. {line.format(file=file)}" for n, line in enumerate(SETUP[kind], 1))
         digest = sums.get(file, "")
