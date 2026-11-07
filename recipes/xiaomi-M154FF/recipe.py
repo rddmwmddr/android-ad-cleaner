@@ -6,6 +6,8 @@ BUILD = "OS4.0"
 MODELS = ["M154FF", "2608BPX34C"]
 import time
 
+import adb_link
+
 ONLY = globals().get("ONLY") or []
 FAILED_STEPS = []
 
@@ -71,6 +73,18 @@ def browser_settings():
     return False
 
 
+def opened(start):
+    """试一条直达页面：到了返回真。18 Fold 这类版本不同的机器可能没有这一页，返回假走菜单；断线照常上抛。"""
+    try:
+        start()
+        return True
+    except adb_link.DeviceLost:
+        raise
+    except RuntimeError as e:
+        print(f"  · 直达不通（{e}），走菜单")
+        return False
+
+
 def tap_any(*names, scrolls=6):
     """依次试几个入口名，点中一个就返回 True。"""
     return any(maybe(n, scrolls) for n in names)
@@ -83,6 +97,9 @@ def maybe(name, scrolls=6):
 
 @step("系统广告")
 def _():
+    if opened(lambda: p.start("com.android.settings", ".ad.AdServiceSettings", expect="个性化广告推荐", budget=2)):
+        p.off(only=["个性化广告推荐"], page="系统·广告服务")
+        return
     # 不用设置搜索：HyperOS 搜索框用 setText 输入中文会卡住、一直打「%」。按菜单路径点进去
     p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
     if not maybe("隐私与安全"):
@@ -97,9 +114,10 @@ def _():
 
 @step("应用商店")
 def _():
-    p.start("com.xiaomi.market")
-    p.go("我的", "设置")
-    gear()
+    if not opened(lambda: p.start("com.xiaomi.market", ".ui.MarketPreferenceActivity", expect="通知设置", budget=2)):
+        p.start("com.xiaomi.market")
+        p.go("我的", "设置")
+        gear()
     if tap_any("隐私设置", "隐私"):
         # 4.129.s.00 的「个性化服务」是子页入口，开关在下一层。
         nested = not any("个性化服务" in t for t, _, _ in p.switches())
@@ -129,6 +147,10 @@ def _():
 
 @step("下载管理")
 def _():
+    if opened(lambda: p.start("com.android.providers.downloads.ui", ".activity.InfoFlowSettingActivity", expect="资源推荐", budget=2)):
+        p.off(only=["资源推荐", "热榜推荐"], page="下载管理·信息流")
+        p.back()
+        return
     p.start("com.android.providers.downloads.ui")
     if not gear():
         raise RuntimeError("下载管理设置入口未找到")
@@ -155,15 +177,20 @@ def _():
 @step("浏览器")
 def _():
     # 首页「默认 / 探索版 / 自定义主页」不改：自定义主页要填网址，按机主喜好
-    p.start("com.android.browser")
-    if "basicmode" in p.focus().lower():
-        # 拒绝浏览器协议后落到基本模式设置页，四个设置入口都不在这条路径上，找下去只会报「入口未找到」（#414）
-        print("  · 浏览器处在基本模式，设置入口不在这条路径上，本段跳过")
-        return
-    if not browser_settings():
-        raise RuntimeError("浏览器设置入口未找到；未点击正文中的文字")
-    if maybe("隐私和安全"):
-        p.off(only=["个性化内容推荐", "个性化广告推荐"], page="浏览器·隐私和安全"); p.back()
+    # 设置页都有导出，直达：后台屏上首页的工具栏和底栏认不出来，走菜单会报「入口未找到」（#667）
+    if opened(lambda: p.start("com.android.browser", ".preferences.activity.CustomizationPreferenceActivity", expect="个性化内容推荐", budget=2)):
+        p.off(only=["个性化内容推荐", "个性化广告推荐"], page="浏览器·个性化推荐")
+        p.start("com.android.browser", ".BrowserSettingsActivity")
+    else:
+        p.start("com.android.browser")
+        if "basicmode" in p.focus().lower():
+            # 拒绝浏览器协议后落到基本模式设置页，四个设置入口都不在这条路径上，找下去只会报「入口未找到」（#414）
+            print("  · 浏览器处在基本模式，设置入口不在这条路径上，本段跳过")
+            return
+        if not browser_settings():
+            raise RuntimeError("浏览器设置入口未找到；未点击正文中的文字")
+        if maybe("隐私和安全"):
+            p.off(only=["个性化内容推荐", "个性化广告推荐"], page="浏览器·隐私和安全"); p.back()
     for page, only in [("主页设置", ["宫格位推送"]), ("搜索设置", ["猜你想搜"]), ("功能设置", ["小说"])]:
         if maybe(page):                           # 新版浏览器这三项都没有，有就关
             p.off(only=only, page=f"浏览器·{page}"); p.back()
@@ -208,6 +235,9 @@ def _():
 def _():
     # Issue #1 提供入口线索；2026-10-25 已在 M154FF 验证天气、日历的「内容推广」。
     for pkg in ("com.miui.weather2", "com.android.calendar"):
+        if pkg == "com.android.calendar" and opened(lambda: p.start("com.android.calendar", ".settings.UserExperienceActionBarActivity", expect="内容推广", budget=2)):
+            p.off(only=["推荐", "广告", "个性化", "内容推广", "天气视频卡片"], page=f"{pkg}·用户体验计划"); p.back()
+            continue
         p.start(pkg)
         if pkg == "com.miui.weather2" and p.find("城市管理", exact=True, edge_ok="tab"):
             # 新版天气：底部城市管理 → 右上更多设置 → 设置。

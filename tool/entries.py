@@ -11,6 +11,7 @@
 没有出处的不写进来：猜的包名、页面名会让引擎跳到别处。快应用不在这里——它按包名与设置项处理，
 见 run.py 的 `QUICKAPP` 与 vivo 的 `switch_quick_app_service`，不走界面。
 """
+import shlex
 import re
 from dataclasses import dataclass
 
@@ -68,6 +69,7 @@ ENTRIES = {
             direct=(Direct("com.miui.securitycenter", "com.miui.securityscan.ui.settings.SettingsActivity", ""),)),
         "下载管理": Entry(
             menu="下载管理 → 右上「更多」→ 设置 → 信息流设置",
+            direct=(Direct("com.android.providers.downloads.ui", ".activity.InfoFlowSettingActivity", "资源推荐"),),
             app="com.android.providers.downloads.ui"),
         "主题": Entry(
             menu="主题 → 我的 → 右上设置",
@@ -132,6 +134,7 @@ ENTRIES = {
     "vivo": {
         "系统广告": Entry(
             menu="设置 → 安全 → 更多安全设置 → 广告与隐私",
+            direct=(Direct("com.android.settings", ".Settings$AdAndPrivacyActivityForOsTwo", "智能推荐服务"),),
             search=(Search("广告与隐私", "广告与隐私"),),
             note="OriginOS 7 搜索结果点了直达；个性化广告、个性化推荐、智能推荐服务三个开关在同一页"),
         "阅图锁屏": Entry(
@@ -291,7 +294,7 @@ def open_direct(p, d, settle=1.2):
     """打开一条直达页面。默认走 Phone.start（顺手收掉开屏 / 权限弹窗、核对前台），
     带清栈参数就会自己退出的页面（`keep_task`）裸启动，失败时照样抛出。打不开由 reach() 记一笔换下一档。"""
     if not d.keep_task:
-        p.start(d.pkg, d.activity, settle=settle)
+        p.start(d.pkg, shlex.quote(d.activity), settle=settle)      # 页面名可能带 $，手机上的 shell 会展开
         return
     page = full(d.pkg, d.activity)
     result = p.reader.shell(f"am start -n {d.pkg}/{page}")
