@@ -2,6 +2,8 @@
 
 基线 `d664ece`（#647）。
 
+**手机版那部分已废止**：界面在 #666 改成 Compose，`mobile.js` 随之删除，本文里「注入 `mobile.js`」「手机版完成页出口」等内容只描述当时的基座；手机版的判断改由 `tests/test_android_view.py` 守，见 [ADR-0018](0018-android-compose-ui.md)。桌面版的用法不变。
+
 `gui/web/index.html` 的 JS 全在一个内联 `<script>` 里（约 450 行），手机版 `mobile.js` 是加载即改写
 桌面版全局函数的 IIFE。两者在此之前没有任何自动化守护：`tests/` 里对 `index.html` 只有文件存在性
 断言，#632 的 `tick()` 门槛与手机版完成页出口只有作者手测。
@@ -13,6 +15,7 @@
 
 - DOM 用 jsdom：`new JSDOM(读进来的真实 gui/web/index.html, {runScripts: "dangerously"})`，
   再注入 `mobile.js` 文本、dispatch `pywebviewready`。生产代码一个字节不改。
+  （`mobile.js` 已在 #666 删除，注入这一步随之去掉。）
 - `package.json` 与 `package-lock.json` 进库，jsdom 版本钉死，CI 用 `npm ci`；`node_modules/` 不入库。
 - 两个 CI job 各加 `actions/setup-node`，钉 `22.23.4`，不依赖 runner 镜像自带的那份；这个版本是
   实测过 `--test-force-exit` 且满足 jsdom engines 的那个。
@@ -42,6 +45,7 @@
   而不是报错。`--test-timeout` 只把用例标红、不让进程退出，所以还要 `--test-force-exit`，wrapper
   另有 subprocess 超时。
 - jsdom 不拉图片、不算样式，样式层仍无守护；本基座覆盖的是 #632 的两处行为（`tick()` 落点、
-  手机版完成页出口）与 `summarize()` 的三条摘要分支；`mobile.js` 的首页状态机与一键流程不在范围内。
+  手机版完成页出口）与 `summarize()` 的三条摘要分支；`mobile.js` 的首页状态机与一键流程不在范围内
+  （该文件与这两条用例都已在 #666 移除，手机版改由 `tests/test_android_view.py` 守）。
 - 页面结构一变，用例跟着变：用例是行为断言（完成页标题、第 5 步高亮、按钮文案与 onclick），
   不是对 HTML 字符串的逐字比对。

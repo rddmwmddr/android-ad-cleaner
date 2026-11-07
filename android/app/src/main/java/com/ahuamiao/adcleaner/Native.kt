@@ -26,6 +26,11 @@ object Native {
     lateinit var app: Context
     private val main = Handler(Looper.getMainLooper())
 
+    /** 从后台线程切回主线程做一件事。 */
+    fun onMain(block: () -> Unit) {
+        main.post(block)
+    }
+
     @JvmStatic
     fun openUrl(url: String) = main.post {
         app.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -130,6 +135,27 @@ object Native {
             .build())
     }
 
+    /** 执行好一阵没有进展：用户可能正在用别的 App，看不到执行页。有进展了就收回。 */
+    fun stallNotice(on: Boolean) = main.post {
+        val nm = app.getSystemService(android.app.NotificationManager::class.java)
+        if (!on) {
+            nm.cancel(STALL_ID)
+            return@post
+        }
+        nm.createNotificationChannel(android.app.NotificationChannel(DONE_CHANNEL, "执行结果",
+            android.app.NotificationManager.IMPORTANCE_DEFAULT))
+        val open = android.app.PendingIntent.getActivity(app, 5, Intent(app, MainActivity::class.java),
+            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT)
+        nm.notify(STALL_ID, android.app.Notification.Builder(app, DONE_CHANNEL)
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setContentTitle("去广告可能卡住了")
+            .setContentText("已经 1 分钟没有进展，点这里看看")
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build())
+    }
+
+    private const val STALL_ID = 5
     private const val DONE_CHANNEL = "done"
 
     /** 执行完回到本 App，让用户看到结果（引擎最后会回桌面）。 */

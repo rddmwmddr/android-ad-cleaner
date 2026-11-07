@@ -1,6 +1,7 @@
-"""手机版入口：把桌面版的后台（gui/app.py 的 Api）原样搬进 App 进程，界面经 WebView 调它。
+"""手机版入口：把桌面版的后台（gui/app.py 的 Api）原样搬进 App 进程，Compose 界面经 call() 调它。
 
-boot() 由 MainActivity 在后台线程调用一次；之后界面上每个 api.xxx(...) 都落到 call()。
+boot() 由 AacApp 在后台线程调用一次；之后界面的每次调用都落到 call()：普通方法名是 Api 上的方法，
+`view.xxx` 是 view.py 里给界面准备好的判断。
 """
 import json
 import os
@@ -9,7 +10,7 @@ import threading
 import time
 import traceback
 
-from . import adb, bridge, inproc, screen, u2
+from . import adb, bridge, inproc, screen, u2, view
 
 API = None
 _ready = threading.Event()
@@ -138,6 +139,8 @@ def boot(base, data_dir, cache_dir, package="com.ahuamiao.adcleaner"):
     adb.install(os.path.join(data_dir, "bin", "adb"))
     u2.install()
     sys.path.insert(0, os.path.join(base, "gui"))
+    os.makedirs(os.path.join(base, "images"), exist_ok=True)   # Api.env() 要列这个目录；手机版不带教程图
+    view.BASE = base
 
     import app
     app.BASE = base
@@ -167,7 +170,11 @@ def call(method, args_json):
     try:
         if method.startswith("_") or API is None:
             raise AttributeError(method)
-        result = getattr(API, method)(*json.loads(args_json or "[]"))
+        args = json.loads(args_json or "[]")
+        if method.startswith("view."):
+            result = view.EXPORTS[method[len("view."):]](API, *args)
+        else:
+            result = getattr(API, method)(*args)
         return json.dumps({"ok": result}, ensure_ascii=False, default=str)
     except Exception as e:
         traceback.print_exc(file=inproc._fallback[1])

@@ -72,6 +72,10 @@ class PairingService : Service() {
         looper = HandlerThread("aac-pair").also { it.start() }
         val handler = Handler(looper.looper)
         val mp = getSystemService(MediaProjectionManager::class.java).getMediaProjection(code, data)
+        if (mp == null) {                         // 系统不给这次截屏会话：退回手动填，别留着「正在等」
+            fallback("系统没有同意这次截屏。")
+            return START_NOT_STICKY
+        }
         projection = mp
         mp.registerCallback(object : MediaProjection.Callback() {
             override fun onStop() = finish(null)

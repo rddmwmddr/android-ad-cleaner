@@ -1,18 +1,25 @@
 package com.ahuamiao.adcleaner
 
 import android.app.Application
+import android.os.Build
+import com.ahuamiao.adcleaner.ui.AppModel
+import com.ahuamiao.adcleaner.ui.PythonBackend
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import kotlinx.coroutines.MainScope
 
 /**
- * 进程级：解出引擎文件、起 Python、调 aac_android.main.boot。界面打开前就在后台开始，WebView 等它。
+ * 进程级：解出引擎文件、起 Python、调 aac_android.main.boot。界面打开前就在后台开始，界面等它。
  */
 class AacApp : Application() {
     lateinit var booted: Future<String>
     val worker = Executors.newCachedThreadPool()
+
+    /** 页面状态：Activity 被系统回收后重新打开，接着这一份。 */
+    val model by lazy { AppModel(PythonBackend(this), MainScope(), Build.BRAND) }
 
     override fun onCreate() {
         super.onCreate()

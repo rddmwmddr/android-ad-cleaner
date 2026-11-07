@@ -31,7 +31,7 @@ jobs:
       - name: 装 Gradle（与本地 build.sh 同版）
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: "8.10.2"
+          gradle-version: "9.8.2"
       - name: 装构建用的 Python 3.12（Chaquopy 要它跑 pip）
         uses: actions/setup-python@v6
         with:
