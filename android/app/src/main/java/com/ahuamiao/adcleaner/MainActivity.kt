@@ -14,7 +14,7 @@ import com.ahuamiao.adcleaner.ui.Demo
 import com.ahuamiao.adcleaner.ui.HostActions
 import rikka.shizuku.Shizuku
 
-/** 界面在 ui/（Compose，ADR-0017）；这里只放要 Activity 才做得了的系统动作。页面状态在进程级的 AppModel。 */
+/** 界面在 ui/（Compose，ADR-0018）；这里只放要 Activity 才做得了的系统动作。页面状态在进程级的 AppModel。 */
 class MainActivity : ComponentActivity(), HostActions {
     private val app get() = application as AacApp
 

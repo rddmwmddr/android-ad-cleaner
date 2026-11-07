@@ -82,7 +82,7 @@ tasks.named("preBuild") { dependsOn(syncEngine) }
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.13.0")
-    // 官方 Material 3 Expressive（ADR-0017）。1.5 要求 compileSdk 37、AGP 9.1；Chaquopy 17.2 支持到 AGP 9.5
+    // 官方 Material 3 Expressive（ADR-0018）。1.5 要求 compileSdk 37、AGP 9.1；Chaquopy 17.2 支持到 AGP 9.5
     implementation("androidx.compose.material3:material3:1.5.0-rc01")
     implementation("androidx.graphics:graphics-shapes:1.1.0")
     implementation("dev.rikka.shizuku:api:13.1.5")

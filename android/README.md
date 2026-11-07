@@ -21,7 +21,7 @@
 - 执行与还原期间开前台服务，通知栏上可以点「暂停」。
 - 结束后用 shell 身份 `am start` 回到本 App：App 自己在后台启动界面会被系统拦，前台服务也不豁免。
 
-## 界面（ADR-0017）
+## 界面（ADR-0018）
 
 Jetpack Compose + 官方 Material 3 Expressive，代码在 `app/src/main/java/.../ui/`。页面状态只有 `AppModel.kt` 的 `Screen`，经 `Backend` 调 `aac_android.main.call()`：普通方法名落到 `Api`，`view.xxx` 落到 `aac_android/view.py`（界面要用的判断，CI 测得到）。
 

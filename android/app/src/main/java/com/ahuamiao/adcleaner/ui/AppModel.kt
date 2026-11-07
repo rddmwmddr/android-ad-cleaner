@@ -16,7 +16,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 /**
- * 现在在哪一页。页面流程只有这一个状态，每次切换都经过 [AppModel] 的方法（ADR-0017）。
+ * 现在在哪一页。页面流程只有这一个状态，每次切换都经过 [AppModel] 的方法（ADR-0018）。
  *
  * ```
  * Boot → Setup ⇄ Home → Prepare → Choose → Run → Done → Home

@@ -1,5 +1,4 @@
-/* 把真实页面装进 jsdom。桌面版脚本在加载时就注册 pywebviewready；
-   手机版按 MainActivity 的顺序注入（它自己 dispatch 那个事件）。
+/* 把真实页面装进 jsdom。桌面版脚本在加载时就注册 pywebviewready。
    每个用例收尾必须 close()：页面里有 setInterval，不关事件循环就不退出。 */
 const fs = require("node:fs");
 const path = require("node:path");
@@ -7,7 +6,6 @@ const { JSDOM, VirtualConsole } = require("jsdom");
 
 const ROOT = path.resolve(__dirname, "../..");
 const PAGE = path.join(ROOT, "gui/web/index.html");
-const MOBILE = path.join(ROOT, "android/app/src/main/assets/mobile/mobile.js");
 
 const flush = () => new Promise(resolve => setTimeout(resolve, 0));
 
@@ -22,7 +20,7 @@ function pollResult(over = {}) {
 
 const stepDone = { title: "关闭营销通知", rc: 0, sec: 3, tail: ["拨了 2 个"], skipped: false, stopped: false };
 
-async function openPage({ mobile = false, api = {} } = {}) {
+async function openPage({ api = {} } = {}) {
   const errors = [];
   const virtualConsole = new VirtualConsole();
   virtualConsole.on("jsdomError", error => errors.push(error));
@@ -54,29 +52,10 @@ async function openPage({ mobile = false, api = {} } = {}) {
     return (...args) => (typeof value === "function" ? value(...args) : value);
   };
 
-  const hostCalls = [];
-  if (mobile) {
-    // 手机版自己把 window.pywebview 换成走 AacHost.call 的桥，结果经 __aacDone 回来
-    window.AacHost = {
-      call(id, name, argsJson) {
-        let reply;
-        try { reply = { ok: answer(name)(...JSON.parse(argsJson)) }; }
-        catch (error) { reply = { error: String(error.message || error) }; }
-        window.__aacDone(id, JSON.stringify(reply));
-      },
-      checkState: () => hostCalls.push("checkState"),
-      openSettings: at => hostCalls.push("openSettings:" + at),
-      startPairing: () => hostCalls.push("startPairing"),
-      requestShizuku: () => hostCalls.push("requestShizuku"),
-      openShizuku: () => hostCalls.push("openShizuku"),
-    };
-    window.eval(fs.readFileSync(MOBILE, "utf8"));
-  } else {
-    window.pywebview = {
-      api: new Proxy({}, { get: (_, name) => typeof name === "string" ? (...args) => Promise.resolve(answer(name)(...args)) : undefined }),
-    };
-    window.dispatchEvent(new window.Event("pywebviewready"));
-  }
+  window.pywebview = {
+    api: new Proxy({}, { get: (_, name) => typeof name === "string" ? (...args) => Promise.resolve(answer(name)(...args)) : undefined }),
+  };
+  window.dispatchEvent(new window.Event("pywebviewready"));
   await flush();
   if (errors.length) throw new Error(`页面在 jsdom 里报错：${errors.map(String).join("；")}`);
 
@@ -84,7 +63,6 @@ async function openPage({ mobile = false, api = {} } = {}) {
     window,
     document: window.document,
     errors,
-    hostCalls,
     close: () => {
       window.close();
       // 交互期间页面报的错也在这里判：漏了这一步，带 .catch(() => {}) 的调用会静默通过

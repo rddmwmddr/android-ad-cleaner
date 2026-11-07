@@ -36,6 +36,6 @@
   `targetSdk` 仍是 35，系统行为不变。
 - APK 从 43.9 MB 变成 50.0 MB，多出来的是 Compose 库；少打进去的是网页和教程图。
 - 1.5 还是 RC。`LoadingIndicator`、`MaterialShapes` 在它里面仍标实验性，升版本时可能要改。
-- Compose 页面没有自动化测试；验收靠 debug 构建逐屏截图加真机。#647 里手机版 `mobile.js` 那一半不用做了，
-  手机版的判断在 `view.py`，用 Python 测；`gui/web` 那一半不受影响。
+- Compose 页面没有自动化测试；验收靠 debug 构建逐屏截图加真机。ADR-0017 前端测试基座里手机版 `mobile.js` 那部分随文件一起去掉，
+  手机版的判断在 `view.py`，用 Python 测；`gui/web` 那部分不受影响。
 - 手机版教程的截图和视频按旧界面拍，要重拍。
