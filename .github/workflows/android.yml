@@ -32,5 +32,11 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.10.2"
+      - name: 装构建用的 Python 3.12（Chaquopy 要它跑 pip）
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: 告诉 Gradle 用哪个 Python
+        run: echo "CHAQUOPY_PYTHON=$(command -v python3.12 || command -v python3)" >> "$GITHUB_ENV"
       - name: 编译 debug APK
         run: gradle --console=plain assembleDebug

@@ -54,7 +54,14 @@ kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
 chaquopy {
     defaultConfig {
         version = "3.12"
-        buildPython(System.getProperty("user.home") + "/.local/share/uv/python/cpython-3.12-macos-aarch64-none/bin/python3.12")
+        // 构建机上的 Python 3.12：本机默认走 uv 装的那份，别的机器与 CI 用 CHAQUOPY_PYTHON 指定（#678）。
+        // 以前这里写死 macOS 的 uv 路径，别的系统一构建就报「is not a valid Python 3.12 command」。
+        val buildPythonPath = System.getenv("CHAQUOPY_PYTHON")
+            ?: java.io.File(System.getProperty("user.home"), ".local/share/uv/python/cpython-3.12-macos-aarch64-none/bin/python3.12").path
+        require(java.io.File(buildPythonPath).canExecute()) {
+            "找不到构建用的 Python 3.12：把 CHAQUOPY_PYTHON 指向它（现在是 $buildPythonPath）"
+        }
+        buildPython(buildPythonPath)
         pip { install("pillow") }
     }
 }
