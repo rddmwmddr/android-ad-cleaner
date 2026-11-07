@@ -38,13 +38,39 @@ def _encode(text):
     return quote(text, safe="-_.!~*'()")
 
 
+def _run_summary(text, turned_off):
+    """「机型脚本跑完」那行只有关掉几个，另两类结局要从 tail 里数（#758）。
+
+    不动的项只认 `tool/fast.py` 的 `off()` 末尾那句「核对 X 项，调整 Y 项」：回读确认 /
+    调整 N 项 是各机型脚本自己写的、说法不统一，数不准。X−Y 要扣两档「没动但不是本来就
+    关着」的：灰态、以及「✗ 关不掉 / 打不开」。带外没点的行仍在 X 里（CONTEXT.md 的
+    「拨动计划」），归进「无需改动」。
+
+    几份 vivo / OPPO 脚本自打「✗ 关不掉」却不用核对行（V2547A、V2545A、V1986A、PKH110），
+    与 p.off() 的段混在一次运行里会被多扣；tail 只留最近 80 行（`gui/app.py` 的 `_log`），
+    日志更长时前几页少算。两处都只让这个数偏小，好过把没拨成说成没事。
+    """
+    parts = [f"关了 {turned_off} 个开关"]
+    same = sum(int(x) - int(y) for x, y in re.findall(r"核对 (\d+) 项，调整 (\d+) 项", text))
+    same -= text.count("被上级开关禁用（开关是灰的），未改动")
+    same -= len(re.findall(r"✗ (?:关不掉|打不开) ", text))
+    if same > 0:
+        parts.append(f"{same} 项核对过无需改动")
+    m = re.search(r"未完成步骤：(.*)", text)
+    if m:
+        names = [n.strip() for n in m.group(1).split("、") if n.strip()]
+        if names:
+            parts.append(f"{len(names)} 段未完成（{names[0]}{' 等' if len(names) > 1 else ''}）")
+    return "；".join(parts)
+
+
 def summarize(result):
     """一步的结果用一句话说；认不出模式就取日志末行（所以机器行不能进 tail）。"""
     tail = result.get("tail") or []
     text = "\n".join(tail)
     m = re.search(r"机型脚本跑完：关了 (\d+) 个，(\d+) 秒", text)
     if m:
-        return f"关了 {m.group(1)} 个开关"
+        return _run_summary(text, int(m.group(1)))
     m = re.search(r"拨了 (\d+) 个", text)
     if m:
         left = re.search(r"仍开着: (\d+) 个", text)

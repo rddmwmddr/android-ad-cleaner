@@ -39,6 +39,13 @@ def status(**over):
 
 
 class SummarizeTest(unittest.TestCase):
+    def test_shared_cases_with_web_client(self):
+        """tests/summary_cases.json 是两处 summarize() 的共同口径：网页版用例断言同一批串。"""
+        cases = json.loads((ROOT / "tests" / "summary_cases.json").read_text(encoding="utf-8"))
+        for case in cases:
+            with self.subTest(case=case["name"]):
+                self.assertEqual(view.summarize({"tail": case["tail"]}), case["want"])
+
     def test_known_lines(self):
         cases = [(["机型脚本跑完：关了 12 个，34 秒"], "关了 12 个开关"),
                  (["拨了 5 个", "仍开着: 1 个"], "关了 5 个渠道，复查仍开着 1 个"),

@@ -2,6 +2,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { openPage, pollResult, stepDone } = require("./page.js");
+/* 与手机版 aac_android/view.py 的 summarize() 同一批 tail、同一批期望串（#758）：
+   tests/test_android_view.py 读的是同一份文件，两处产出必须逐字相同。 */
+const SUMMARY_CASES = require("../summary_cases.json");
 
 function spyClearInterval(window) {
   const cleared = [];
@@ -82,6 +85,15 @@ test("引擎还没收尾时不进完成页", async () => {
 
     assert.equal(heading(page), "执行", "仍停的执行页，不能跳到完成页");
     assert.deepEqual(cleared, [], "轮询不能停");
+  } finally { page.close(); }
+});
+
+test("机型脚本摘要说清三类结局，与手机版逐字一致（#758）", async () => {
+  const page = await openPage();
+  try {
+    for (const c of SUMMARY_CASES){
+      assert.equal(page.window.summarize({ tail: c.tail }), c.want, c.name);
+    }
   } finally { page.close(); }
 });
 
