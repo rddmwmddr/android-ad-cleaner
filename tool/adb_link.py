@@ -93,7 +93,7 @@ def present(serial, adb=None):
     if not adb:
         return False
     try:
-        result = subprocess.run([adb, "-s", serial, "get-state"], capture_output=True, text=True,
+        result = subprocess.run([adb, "-s", serial, "get-state"], capture_output=True, text=True, encoding="utf-8", errors="replace",
                                 timeout=8, creationflags=NOWIN)
         return result.stdout.strip() == "device"
     except (OSError, subprocess.TimeoutExpired):
@@ -107,7 +107,7 @@ def detached(serial, adb=None):
     if not adb:
         return False
     try:
-        result = subprocess.run([adb, "-s", serial, "get-state"], capture_output=True, text=True,
+        result = subprocess.run([adb, "-s", serial, "get-state"], capture_output=True, text=True, encoding="utf-8", errors="replace",
                                 timeout=8, creationflags=NOWIN)
     except (OSError, subprocess.TimeoutExpired):
         return False

@@ -52,6 +52,7 @@
 - 渠道失败行带上包名，MISMATCH 另附 importance 与应用通知读数，同名渠道能按 App 定位（#582）
 - 前端行为用例进 `tests/js/`：jsdom 加载真实页面，由同一条回归命令带跑（#647，ADR-0017）
 - Android 编译进 CI（改 `android/` 才跑）；跨运行时符号加 `test_runtime_symbols` 守卫（#678）
+- 子进程文本模式统一写 UTF-8 解码并加 AST 守卫；`gui/web` 下的文件必须进打包白名单（#684）
 
 ## 0.3.2 · 2026-11-05
 

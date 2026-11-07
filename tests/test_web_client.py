@@ -48,7 +48,9 @@ class WebClientJsTests(unittest.TestCase):
         output = proc.stdout + proc.stderr
         problem = judge(output, proc.returncode)
         if problem:
-            self.fail(f"前端用例没全过（{problem}）：\n{output}")
+            # 干净副本与新 worktree 都没有 node_modules，直接告诉下一个人装什么
+            hint = "（先 npm ci 装 jsdom）" if "Cannot find module" in output else ""
+            self.fail(f"前端用例没全过（{problem}）{hint}：\n{output}")
 
 
 class JudgeTests(unittest.TestCase):

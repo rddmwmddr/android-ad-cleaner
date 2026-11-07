@@ -28,7 +28,7 @@ class LockTests(unittest.TestCase):
         source = "from ui_session import DeviceLock; import sys; lock=DeviceLock(sys.argv[1]); print('locked',flush=True); sys.stdin.read()"
         env = dict(os.environ, PYTHONPATH=str(ROOT / "tool"))
         child = subprocess.Popen([sys.executable, "-u", "-c", source, serial], stdin=subprocess.PIPE,
-                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", env=env)
         try:
             self.assertEqual(child.stdout.readline().strip(), "locked")
             with self.assertRaises(session.DeviceBusyError):
