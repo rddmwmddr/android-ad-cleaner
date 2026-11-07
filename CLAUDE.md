@@ -63,9 +63,13 @@
 
 GitHub Issues（`gh` CLI）。**开工前先有票**：任何实现 / 重构 / 文档改造先开 issue，分支名带 issue 号。见 `docs/agents/issue-tracker.md`。
 
+### Issue claiming
+
+一张票在动之前先打 `in-progress`（`gh issue edit <N> --add-label in-progress`），同时摘掉 `ready-for-agent` / `ready-for-human` / `needs-triage`。动手前先 `gh issue list --label in-progress` 查重：命中一张不是本会话认领的票，先看它有没有开着的 PR 或在改的分支，别开第二份实现。**合入 main 之前不摘**：PR 开着没合并，别人仍可能拿同一张票再做一遍。摘只有两个时机——合入 main 且不需要真机复测就直接摘，合入 main 但等真机复测就摘 `in-progress`、加 `waiting-for-verify`（两者不并存）；放弃或改派则摘掉并把原来的 `ready-*` 或 `needs-triage` 加回，票面写一句为什么停。细节见 `docs/agents/issue-tracker.md` 的「票的生命周期」。
+
 ### Triage labels
 
-默认五个角色标签，标签名即角色名，另加本仓库的 `waiting-for-verify`（已修、等真机复测）。见 `docs/agents/triage-labels.md`。
+默认五个角色标签，标签名即角色名；另加本仓库自有的两个状态标签：`waiting-for-verify`（已修、等真机复测）与 `in-progress`（已认领、正在改）。见 `docs/agents/triage-labels.md`。
 
 ### Release followup
 

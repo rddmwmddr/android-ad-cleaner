@@ -10,13 +10,16 @@ The skills speak in terms of five canonical triage roles. This file maps those r
 | `ready-for-human`          | `ready-for-human`    | Requires human implementation            |
 | `wontfix`                  | `wontfix`            | Will not be actioned                     |
 
-The repo adds one role the five do not cover:
+The repo adds two labels the five roles do not cover:
 
 | Label in our tracker  | Meaning                                                                  |
 | --------------------- | ------------------------------------------------------------------------ |
 | `waiting-for-verify`  | Fix is merged to main but not in any released build yet, or merged and released but not yet confirmed on the reporter's hardware. Not ready to be implemented again. |
+| `in-progress`         | Claimed: someone is implementing this now. Avoid starting the same fix.   |
 
 `waiting-for-verify` outranks the five roles above — an issue carrying it must not also carry `ready-for-agent`, `ready-for-human`, or `needs-info`. It moves to a closed state only after the reporter confirms on a real device; the checks owed at each release are listed in [release-followup.md](release-followup.md).
+
+`in-progress` is a claim, not a role: it stays out of the five-role set and must not coexist with `waiting-for-verify`. Claiming means adding `in-progress` and removing `ready-for-agent`, `ready-for-human`, and `needs-triage`. The claim survives an open, unmerged PR — the work is not in main yet, so someone else could redo it. It ends when the fix is merged to main: drop the label, or swap it for `waiting-for-verify` when real-device verification is owed. Abandoning a claim restores the previous `ready-*` or `needs-triage` label. The lifecycle is spelled out in [issue-tracker.md](issue-tracker.md).
 
 ## 分类标签
 
