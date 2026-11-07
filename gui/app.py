@@ -1398,10 +1398,18 @@ class Api:
             nm = i.get("name") or i.get("model")
             if not nm.upper().startswith((i.get("brand") or "").upper()):
                 nm = f"{i.get('brand')} {nm}"
+            # 借用同品牌参考脚本时 recipe_ok 恒为假（run.py 的 `(not ref) and build_ok(...)`），
+            # 检测页与手机版都先看 recipe_ref 再谈版本：这里同样分三档（#778）。
+            recipe = st.get("recipe")
+            if not recipe:
+                script = "无"
+            elif st.get("recipe_ref"):
+                script = f"{recipe}（同品牌参考脚本，录制版本 {st.get('recipe_build') or '未标'}）"
+            else:
+                script = f"{recipe}（录制版本 {st.get('recipe_build')}，{'一致' if st.get('recipe_ok') else '不一致'}）"
             lines += [f"- 手机：{nm}（{i.get('model')}）",
                       f"- 系统：{i.get('os') or i.get('build')}（{i.get('build')}），Android {i.get('android')}",
-                      f"- 机型脚本：{st.get('recipe') or '无'}"
-                      + (f"（录制版本 {st.get('recipe_build')}，{'一致' if st.get('recipe_ok') else '不一致'}）" if st.get('recipe') else ""),
+                      f"- 机型脚本：{script}",
                       f"- 折叠屏展开：{'是' if st.get('fold_open') else '否'}；锁屏：{'是' if st.get('locked') else '否'}"
                       + (TAP_REFUSED if st.get("input_blocked") else "")]
         else:
