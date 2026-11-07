@@ -46,7 +46,7 @@
 - 手机上「有」的读屏异常名，电脑上未必有：`aac_android/u2.py` 的 `install()` 把模块里定义的类动态注册成 `uiautomator2.exceptions`，电脑上装的是真库 + `adbutils`。在 `tool/`、`gui/` 里新增 `u2.exceptions.X` 或 `adbutils.X` 之前先确认桌面那份也有，`tests/test_runtime_symbols.py` 守着这一条。
 - adb 固定 platform-tools 37.0.1（`gui/app.py` 的 `ADB_PINNED`）；升级时改那张表，校验值按 Google `repository2-3.xml` 的 SHA-1 核对。
 - 客户端数据路径看 `gui/app.py` 的 `ClientData`，备份目录看 [tool/backups.py](tool/backups.py) 的 `Backups`（root 由调用方给），工具模块用 `_tool()` 惰性取。
-- 找「Windows 启动失败是缺 WebView2 还是被 MOTW 拦」先看 [gui/winpreflight.py](gui/winpreflight.py)：注册表三态与两个关键 dll 的 `Zone.Identifier` 判定只在那里定义（[ADR-0003](docs/adr/0003-desktop-client-import-and-dependencies.md)）；`gui/app.py` 的 `startup_advice()` 只按结论选文案。
+- 找「Windows 启动失败是缺 WebView2、被 MOTW 拦还是托管的 dll 被判成远程来源」先看 [gui/winpreflight.py](gui/winpreflight.py)：注册表三态、两个关键 dll 的 `Zone.Identifier` 判定与 `load_rejected()` 认的那两个原文子串只在那里定义（[ADR-0003](docs/adr/0003-desktop-client-import-and-dependencies.md)）；`gui/app.py` 的 `startup_advice()` 只按结论选文案，顺序是缺运行时 → MOTW → 原文拒载 → 未确认 → 兜底（带 MOTW 的 dll 也报同一句 `Failed to resolve`，所以 MOTW 在前）。随包的 `<exe>.config` 由 [gui/dotnet_config.py](gui/dotnet_config.py) 写，`windows.spec` 收集完产物后调用。
 
 ## 错误日志上报
 
