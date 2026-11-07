@@ -1225,9 +1225,10 @@ def run(a):
         if st == "ON" and not protected and (pk, cid) not in exemptions:
             bad += 1
             if cmd == "off":
-                print(f"  仍开着：{label}")       # 以前只给数量，看不出是哪一个（#115）
+                print(f"  仍开着：{label}（{pk}）")   # 后缀包名同失败行（#582）：同名渠道才分得清（#751）
         if cmd == "verify":
-            print(f"{st:4} {label}" + ("（受保护，不参与营销关闭）" if protected else ""))
+            note = "，受保护，不参与营销关闭" if protected else ""
+            print(f"{st:4} {label}（{pk}{note}）")
     print(f"营销渠道仍开着: {bad} 个")
     if cmd == "on":
         pending = sum(state(d, app_off, pk, cid) != "ON" for pk, cid, _ in items)

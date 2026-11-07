@@ -230,7 +230,7 @@ class RetryTests(unittest.TestCase):
         still = {**off(ON), ("com.b", "news"): ON[("com.b", "news")]}
         code, printed, toggled = run_off([OK, SKIPPED, OK, SKIPPED], [ON, still, still])
         self.assertEqual(code, 1)
-        self.assertIn("仍开着：资讯推送", printed)
+        self.assertIn("仍开着：资讯推送（com.b）", printed)
 
     def test_nothing_recognised_means_no_retry(self):
         # 华为那种一个都认不出：重试只会多等，不重试
