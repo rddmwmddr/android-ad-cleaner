@@ -18,8 +18,14 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.4"
+          cache: npm
       - name: 安装依赖
         run: pip install -r requirements.txt pywebview pyinstaller pillow
+      - name: 安装前端用例依赖（tests/js 用 jsdom，版本按 package-lock.json；回归里的前端用例缺它就红）
+        run: npm ci
       - name: 设备无关回归测试
         run: |
           $env:ADB = "$env:ANDROID_HOME\platform-tools\adb.exe"
