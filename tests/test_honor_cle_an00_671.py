@@ -218,6 +218,24 @@ class ReaderTest(unittest.TestCase):
         p.tab.assert_not_called()
 
 
+class ReduceAdsTest(unittest.TestCase):
+    """#693：「减少广告」方向相反，要打开。"""
+
+    def test_it_is_named_on_the_music_ad_page(self):
+        p = in_app(phone(), "com.hihonor.cloudmusic")
+        p.d.shell.return_value = Mock(output="")
+        run(p, "音乐")
+        p.off.assert_any_call(only=["个性化广告推荐", "减少广告"], page="音乐·广告推荐")
+
+    def test_the_engine_opens_it_and_leaves_lookalikes_alone(self):
+        from fast import want_state
+        self.assertIs(want_state("减少广告"), True)
+        self.assertIs(want_state("減少廣告"), True)
+        self.assertIs(want_state("减少推荐内容"), True)
+        self.assertIsNone(want_state("减少动画"))           # 不带广告词：不碰，也不能当广告开关关掉
+        self.assertIs(want_state("个性化广告推荐"), False)
+
+
 class MusicTest(unittest.TestCase):
     """音乐 App 的「启动后自动播放歌曲」开着时，一打开就放歌。"""
 

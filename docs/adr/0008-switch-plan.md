@@ -12,7 +12,7 @@
 
 - `screen_h` 无默认值，屏带过滤留在策略里；带外行仍算 `checked`，只是不进 `targets`。
 - `targets` 保持 `switches()` 的输入顺序；`checked` / `kept` 用 `frozenset`，调用方按屏并集。
-- `want_state()` 与 `TRACK_WORDS` 不搬走：极性判据仍直接单测（`tests/test_regressions.py` 的 `test_protection_polarity`）。
+- `want_state()` 与 `TRACK_WORDS` 不搬走：极性判据仍直接单测（`tests/test_regressions.py` 的 `test_protection_polarity`）。（2026-11-07 修订：判据搬进 `tool/polarity.py`，理由见文末「增补：极性判据独立成模块」；单测位置不变。）
 - `off()` 的签名、人话、`p.changed`、退出码，以及点击顺序与「首下单独点」的节奏逐字不变。
 - `disabled` 是调用方注入的「这个落点的开关是不是灰的」谓词（#333），`plan_switches()` 自己不读屏；`off()` 传的是按当前页面树判定的闭包，`chan_fast` 与它共用 `tool/row.py` 的 `disabled_at()`。判断规则：同一屏同名行**全部**为灰才算灰（双列卡片可能一灰一正常，不能把一个的失败当成另一个的灰态吞掉）；灰行不点击、不算失败，但仍算 `checked`。
 - 页面加载期开关可能短暂不可用：`off()` 计划期发现灰行会再读一页确认，仍灰才跳过。
@@ -27,7 +27,7 @@
 - **纯函数 + 冻结值对象**（采纳）vs **留在 `off()` 里加注释**。后者能保住行数，但屏带、`checked`、`kept` 继续只能靠跑完整点击循环测。
 - **纯函数带 `screen_h`**（采纳）vs **带过滤留在驱动**。后者保住「纯函数只谈标题」，但换页时 `self.H` 会变，带过滤与目标集合会分处两层。
 - **`SwitchPlan` 多字段**（采纳）vs **只返回 `targets`**。后者复现不了「核对 N 项」与安全模式文案；`checked` 含已在目标态与带外的行，不能由 `targets` 推出。第四个字段 `disabled` 是 #333 追加的：灰行不进 `targets`，但要单独说明，还要参与跨屏去重。
-- **只动 `tool/fast.py`**（采纳）vs **新开模块**。新模块要么复制 `want_state` / `TRACK_WORDS`，要么把它们搬走并改更多调用点。
+- **只动 `tool/fast.py`**（采纳）vs **新开模块**。新模块要么复制 `want_state` / `TRACK_WORDS`，要么把它们搬走并改更多调用点。（2026-11-07 修订：`tool/polarity.py` 成立，但目的不是拆 `off()`，见文末增补。）
 
 ## Consequences
 
@@ -43,3 +43,11 @@
 ## 增补：keep/only 的归一化匹配（#559）
 
 **标题与保留词 / 名单词两侧过同一把归一化键再比对**：NFKC 统一全角半角、去全部空白（含全角空格）、去常见中英标点、小写。PMX110 实测「首页：AI搜索」对保留词「首页 AI 搜索」不命中，功能性入口被当广告位关掉；归一化后命中，且「应用安全」与「安全内容推荐」仍是两个键。`want_state()` 的语义不动——归一化只管「要不要碰」，不管「该开还是该关」。
+
+## 增补：极性判据独立成模块（#693）
+
+**2026-11-07 起**，`NEG_PREFIX` / `AD_WORDS` / `TRACK_WORDS` 与 `want_state()` 定义在 `tool/polarity.py`；`tool/fast.py` 用显式 re-export 转发（`from polarity import want_state as want_state`），`from fast import want_state` 的调用点、单测位置与判据本身都不变。
+
+上面的「不搬走」与「新开模块被否决」针对的是「为拆 `off()` 值不值得」；这次的理由不同：文档生成器 `tool/vocab.py` 也要同一份极性判据，而它不能连带 `adbutils`（`fast` 那条链会）。并且词库此前按 `p.off()` 的字面量一律标「要关」，把保护类开关写反了（#693 的「减少广告」）。判据只定义一处、引擎与文档同源，比少一个模块更重要。
+
+`vocab.py` 的方向因此分四档：`要关` / `要开` / `不碰` / `同页保留`。`不碰` 是 `want_state()` 为 `None` 的行——`plan_switches()` 对它直接 `continue`，脚本点了名也等于没写，词库把这个死名字显出来。点名方式（写进 `p.off(only=[...])`）与引擎行为都不改——保护类开关的放行仍由 `plan_switches()` 按 `TRACK_WORDS` 判，不看调用名。
