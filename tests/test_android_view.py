@@ -76,6 +76,58 @@ class OutcomeTest(unittest.TestCase):
         self.assertEqual(run["outcome"], "ok")
 
 
+class StallWatchTest(unittest.TestCase):
+    def setUp(self):
+        self.t = 0
+        self.watch = view.StallWatch(now=lambda: self.t)
+
+    def at(self, t, **run):
+        self.t = t
+        return self.watch.update({"running": True, "idx": 2, "next": 10, **run})
+
+    def test_quiet_below_the_threshold_says_nothing(self):
+        self.at(0)
+        self.assertEqual(self.at(view.StallWatch.AFTER - 1), 0)
+
+    def test_quiet_past_the_threshold_reports_seconds(self):
+        self.at(0)
+        self.assertEqual(self.at(view.StallWatch.AFTER), view.StallWatch.AFTER)
+        self.assertEqual(self.at(95), 95)
+
+    def test_new_log_line_resets(self):
+        self.at(0)
+        self.at(90)
+        self.assertEqual(self.at(91, next=11), 0)
+        self.assertEqual(self.at(91 + view.StallWatch.AFTER - 1, next=11), 0)
+
+    def test_new_step_resets(self):
+        self.at(0)
+        self.at(90)
+        self.assertEqual(self.at(91, idx=3), 0)
+
+    def test_paused_is_not_a_stall(self):
+        self.at(0)
+        self.assertEqual(self.at(200, paused=True), 0)
+        self.assertEqual(self.at(201), 0)              # 刚继续，重新计时
+
+    def test_pausing_that_never_takes_effect_is_a_stall(self):
+        # 点了暂停但还没到安全位置：脚本仍在跑，一直不生效就是卡住了
+        self.at(0, pause=True)
+        self.assertEqual(self.at(100, pause=True), 100)
+
+    def test_finished_run_is_not_a_stall(self):
+        self.at(0)
+        self.assertEqual(self.at(500, running=False), 0)
+
+    def test_poll_reports_the_stall(self):
+        watch, view.WATCH = view.WATCH, self.watch
+        self.addCleanup(setattr, view, "WATCH", watch)
+        run = {"running": True, "idx": 1, "next": 3, "results": [], "cancel": False}
+        view.poll(FakeApi(run=run))
+        self.t = 100
+        self.assertEqual(view.poll(FakeApi(run=run))["stalled"], 100)
+
+
 class DetectTest(unittest.TestCase):
     def detect(self, **over):
         return view.detect(FakeApi(status(**over)), "s")

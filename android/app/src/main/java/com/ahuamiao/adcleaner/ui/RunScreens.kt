@@ -22,7 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -141,6 +141,7 @@ private data class RunStatus(val text: String, val attention: Boolean)
 
 private fun runStatus(run: RunProgress, mode: RunMode) = when {
     run.cancel -> RunStatus("正在停止", true)
+    run.stalled > 0 -> RunStatus("已经 ${formatDuration(run.stalled)}没有进展，可能卡住了。可以停止后重新开始", true)
     run.paused -> RunStatus("已暂停，可以用手机", false)
     run.pause -> RunStatus("正在暂停，先别碰手机", true)
     mode == RunMode.Background -> RunStatus("在后台屏上进行，可以照常用手机", false)
@@ -158,6 +159,11 @@ fun RunScreen(model: AppModel) {
     // 每进一步，中间的形状变一次、手上轻轻一下
     LaunchedEffect(run.idx) {
         if (run.idx > 1) haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
+    }
+    // 卡住时动画不能还在动，不然看着像有进展：波浪收平，形状转灰，手上震一下
+    val still = run.pause || run.stalled > 0
+    LaunchedEffect(run.stalled > 0) {
+        if (run.stalled > 0) haptic.performHapticFeedback(HapticFeedbackType.Reject)
     }
 
     HeroPage(
@@ -187,8 +193,7 @@ fun RunScreen(model: AppModel) {
                             modifier = Modifier.size(ring),
                             stroke = stroke,
                             trackStroke = track,
-                            // 暂停时波浪收平
-                            amplitude = { if (run.pause) 0f else WavyProgressIndicatorDefaults.indicatorAmplitude(it) },
+                            amplitude = { if (still) 0f else WavyProgressIndicatorDefaults.indicatorAmplitude(it) },
                             wavelength = 44.dp,
                         )
                     } else {
@@ -200,7 +205,7 @@ fun RunScreen(model: AppModel) {
                         )
                     }
                     val polygon = RunShapes[run.idx.coerceAtLeast(0) % RunShapes.size]
-                    Hero(polygon, if (run.pause) colors.surfaceContainerHighest else colors.primaryContainer, Modifier.size(ring * 0.72f)) {
+                    Hero(polygon, if (still) colors.surfaceContainerHighest else colors.primaryContainer, Modifier.size(ring * 0.72f), spin = !still) {
                         StepCounter(run)
                     }
                 }
@@ -231,13 +236,14 @@ fun RunScreen(model: AppModel) {
                 Spacer(Modifier.height(12.dp))
                 val status = runStatus(run, model.runMode)
                 Surface(
-                    shape = CircleShape,
+                    shape = RoundedCornerShape(20.dp),
                     color = if (status.attention) colors.tertiaryContainer else colors.surfaceContainerHigh,
                     contentColor = if (status.attention) colors.onTertiaryContainer else colors.onSurfaceVariant,
                 ) {
                     Text(
                         status.text,
                         style = MaterialTheme.typography.labelLarge,
+                        textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
                 }

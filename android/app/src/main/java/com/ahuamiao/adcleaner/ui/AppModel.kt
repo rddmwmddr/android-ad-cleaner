@@ -1,5 +1,6 @@
 package com.ahuamiao.adcleaner.ui
 
+import com.ahuamiao.adcleaner.Native
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -98,6 +99,7 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
     var visible = true
 
     private var booted = false
+    private var stallNoticed = false
     private var flow: Job? = null
     private var refreshing = false
     private var refreshAgain = false
@@ -298,6 +300,7 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
             next = run.next
             log.addAll(run.lines)
             progress = run
+            noticeStall(run)
             if (run.finished) {
                 mode.cancel()
                 screen = Screen.Done(run)
@@ -312,6 +315,14 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
             }
             delay(if (visible) 500 else 2000)
         }
+    }
+
+    /** 卡住时用户多半在用别的 App：通知栏说一声；有进展了就收回。 */
+    private fun noticeStall(run: RunProgress) {
+        val stalled = run.stalled > 0
+        if (stalled == stallNoticed) return
+        stallNoticed = stalled
+        if (!stalled) Native.stallNotice(false) else if (!visible) Native.stallNotice(true)
     }
 
     /** 建后台屏要一两秒才有结论：建好了说「照常用手机」，建不了才说「别碰」。 */

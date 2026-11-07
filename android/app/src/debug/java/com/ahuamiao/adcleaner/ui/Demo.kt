@@ -8,7 +8,7 @@ import org.json.JSONObject
  * 只在 debug 构建里：不连手机、不跑引擎，逐屏验收界面。
  * `adb shell am start -n com.ahuamiao.adcleaner/.MainActivity --es demo home [--es sheet more]`
  * 页面：setup1 setup2 setup3 setup3mi old stopped-sh ask denied nodev home prepare0 prepare1 prepare2 choose
- * blocked norecipe scanfail run paused pausing fgmode stopping done failed stopped failed2
+ * blocked norecipe scanfail run paused pausing stalled fgmode stopping done failed stopped failed2
  * 面板：more newer restore restored feedback report log；对话框：devoff
  */
 object Demo {
@@ -47,6 +47,7 @@ object Demo {
             "run" -> RunProgress(running = true, idx = 3, total = 8, title = "关闭营销通知", sec = 142)
             "paused" -> RunProgress(running = true, idx = 5, total = 8, title = "系统广告", sec = 318, pause = true, paused = true)
             "pausing" -> RunProgress(running = true, idx = 5, total = 8, title = "系统广告", sec = 318, pause = true)
+            "stalled" -> RunProgress(running = true, idx = 3, total = 8, title = "关闭各 App 里的广告开关", sec = 212, stalled = 95)
             "fgmode" -> RunProgress(running = true, idx = 2, total = 8, title = "存快照", sec = 12)
             "stopping" -> RunProgress(running = true, idx = 4, total = 8, title = "浏览器", sec = 201, cancel = true)
             "done", "failed", "failed2", "stopped" -> finished(name)
@@ -61,7 +62,7 @@ object Demo {
             "prepare1" -> Screen.Prepare(1)
             "prepare2" -> Screen.Prepare(2)
             "choose", "blocked", "norecipe", "scanfail" -> Screen.Choose
-            "run", "paused", "pausing", "fgmode", "stopping" -> Screen.Run
+            "run", "paused", "pausing", "stalled", "fgmode", "stopping" -> Screen.Run
             "done", "failed", "failed2", "stopped" -> Screen.Done(run)
             else -> Screen.Home
         }

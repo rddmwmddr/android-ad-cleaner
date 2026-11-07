@@ -5,6 +5,7 @@
 import json
 import os
 import re
+import time
 from urllib.parse import quote
 
 BASE = ""       # 解出来的 aac/ 目录，boot() 填
@@ -71,10 +72,35 @@ def outcome(run):
     return "stopped"
 
 
+class StallWatch:
+    """这一轮多久没有进展了：步骤没变、日志没有新行。已经暂停的不算。
+    引擎卡住时界面上的动画还在动，用户分不出来，要靠这个说出来。"""
+
+    AFTER = 60      # 秒。正常的一页也可能读几十秒，太短会误报
+
+    def __init__(self, now=time.monotonic):
+        self.now = now
+        self.mark = None
+        self.since = now()
+
+    def update(self, run):
+        """返回已经停了多少秒；还没到门槛、没在跑、在暂停时都是 0。"""
+        mark = (run.get("idx"), run.get("next"))
+        if mark != self.mark or not run.get("running") or run.get("paused"):
+            self.mark, self.since = mark, self.now()
+            return 0
+        quiet = int(self.now() - self.since)
+        return quiet if quiet >= self.AFTER else 0
+
+
+WATCH = StallWatch()
+
+
 def poll(api, since=0):
     run = dict(api.poll(since))
     run["results"] = [{**r, "summary": summarize(r)} for r in run.get("results") or []]
     run["outcome"] = outcome(run)
+    run["stalled"] = WATCH.update(run)
     return run
 
 

@@ -66,6 +66,8 @@ data class RunProgress(
     val results: List<StepResult> = emptyList(),
     val outcome: Outcome = Outcome.Ok,
     val lines: List<String> = emptyList(),
+    /** 已经多少秒没有进展；0 表示正常（判断在 view.py 的 StallWatch）。 */
+    val stalled: Int = 0,
 ) {
     /** 执行结束了吗。停在第一步时还没有结果，也算结束（#632）。 */
     val finished get() = !running && (results.isNotEmpty() || cancel)
@@ -89,6 +91,7 @@ data class RunProgress(
                 else -> Outcome.Ok
             },
             lines = o.optJSONArray("lines").strings(),
+            stalled = o.optInt("stalled"),
         )
     }
 }
