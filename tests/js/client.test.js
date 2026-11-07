@@ -70,6 +70,39 @@ test("完成页摘要认不出模式时显示最后一条非空行", async () =>
   } finally { page.close(); }
 });
 
+test("没勾的项在完成页是一行「跳过」，不算失败（#577）", async () => {
+  const notRun = { title: "关闭各 App 里的广告开关", rc: 0, sec: 0, skipped: true, stopped: false,
+                   tail: ["未勾选，本次没有执行"] };
+  const page = await openPage({ api: { poll: () => pollResult({ results: [stepDone, notRun] }) } });
+  try {
+    page.window.showRun();
+    await page.window.tick();
+
+    assert.equal(heading(page), "完成", "没勾不等于没成功");
+    const rows = [...page.document.querySelectorAll(".res")];
+    assert.equal(rows.length, 2);
+    assert.match(rows[1].textContent, /跳过/);
+    assert.match(rows[1].textContent, /未勾选，本次没有执行/);
+    assert.ok(rows[1].querySelector(".tag").classList.contains("warn"), "跳过用跳过样式，不用失败的红");
+    assert.equal(page.document.querySelector(".note.bad"), null, "不提示上报");
+  } finally { page.close(); }
+});
+
+test("真出错的跳过行仍然算失败（#577 不能掩盖它）", async () => {
+  const busy = { title: "关闭营销通知", rc: 3, sec: 0, skipped: true, stopped: false,
+                 tail: ["读屏服务仍被占用，跳过本步骤；请先解决读屏连接再重试。"] };
+  const page = await openPage({ api: { poll: () => pollResult({ results: [busy, stepDone] }) } });
+  try {
+    page.window.showRun();
+    await page.window.tick();
+
+    assert.equal(heading(page), "已结束（有步骤没成功）");
+    assert.notEqual(page.document.querySelector(".note.bad"), null, "要提示上报");
+    const tag = page.document.querySelector(".res .tag");
+    assert.ok(tag.classList.contains("bad"), "故障跳过的行要保持红色，不能被当成没勾");
+  } finally { page.close(); }
+});
+
 test("完成页摘要遇到空 tail 返回空串而不是 undefined", async () => {
   const page = await openPage();
   try {
