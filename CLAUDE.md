@@ -57,7 +57,7 @@
 - 完整流程与 Release 正文的写法见 [docs/agents/release.md](docs/agents/release.md)：正文是用户看的唯一权威，repo 里不留副本，`README.md` 的首段从它复制。
 - 新版本提示读官网的 `android-ad-cleaner-latest.json`，发版后要更新它（步骤记在本机 `CLAUDE.local.md`）。
 - 官网另有一份放在机主的服务器上，发版后同步，方法记在本机 `CLAUDE.local.md`。
-- 国内下载走 Gitee：`python3 gui/upload_gitee.py <版本>` 从公开的 GitHub Release 下载安装包并核对 SHA256，推代码和标签，建发行版传附件，再匿名下载回来核对。令牌在本机 `~/.config/gitee/token`，不进仓库和对话。百度网盘暂停使用；Gitee 不可用时把 `index.html` 的 `REL.gitee` 留空，改跑 `gui/upload_baidu.sh [版本]`，它回写网盘链接、按钮随之恢复，`#dl-lead` 那句文案要手动改回「国内下载走百度网盘，链接里带提取码」。
+- 国内下载走 Gitee：`python3 gui/upload_gitee.py <版本>` 从公开的 GitHub Release 下载安装包并核对 SHA256，推代码和标签，建发行版传附件，再匿名下载回来核对。令牌在本机 `~/.config/gitee/token`，不进仓库和对话。百度网盘暂停使用；Gitee 不可用时把 `index.html` 的 `REL.gitee` 留空，改跑 `gui/upload_baidu.sh [版本]`，它回写网盘链接、按钮随之恢复，`#dl-lead` 那句文案要手动改回「国内下载走百度网盘，链接里带提取码」，后半句「安装版会原地替换旧版，原来的备份保留；免安装版不会」原样留着。
 - 发完版按 [docs/agents/release-followup.md](docs/agents/release-followup.md) 把 `waiting-for-verify` 的 issue 逐条发给报告者复测。新版不送到报告者手上，这些 issue 永远关不掉。
 
 ## Agent skills

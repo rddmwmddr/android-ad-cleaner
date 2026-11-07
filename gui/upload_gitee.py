@@ -161,7 +161,8 @@ def main(argv):
         push_code(ver)
         note = (f"肉呆去广告 v{ver}。更新说明：https://github.com/{GH_REPO}/releases/tag/v{ver}\n\n"
                 "安装包和 GitHub Release 是同一份，可以用 SHA256SUMS.txt 核对。"
-                "Windows 安装版只在 GitHub Release 上，这里有免安装版。")
+                "Windows 安装版只在 GitHub Release 上，这里有免安装版。免安装版不替换、也不卸载已安装的旧版；"
+                "要让新版顶掉旧版，用 GitHub 上的安装版覆盖安装，或先卸载旧的「安卓去广告」（0.3.2 及更早版本装的名字），卸载不动数据与备份。")
         rid = release_for(ver, note)["id"]
         have = attachments(rid)
         sums_file = stage / "SHA256SUMS.txt"
