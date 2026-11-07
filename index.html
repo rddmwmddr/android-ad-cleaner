@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>肉呆去广告</title>
-<meta name="description" content="关掉国产安卓手机的开屏广告、热搜、资讯推荐和营销推送。Mac / Windows 客户端，开源免费。">
+<meta name="description" content="关掉国产安卓手机的开屏广告、热搜、资讯推荐和营销推送。安卓 App 与 Mac / Windows 客户端，开源免费。">
 <meta property="og:title" content="肉呆去广告">
-<meta property="og:description" content="插上数据线，在电脑上点几下，关掉手机里的广告。">
+<meta property="og:description" content="手机 App 里点一下，或用数据线连电脑，关掉手机里的广告。">
 <meta name="theme-color" content="#EBEFEC">
 <link rel="icon" href="images/roudai-icon.png">
 <style>
@@ -119,6 +119,8 @@ section { padding-block: 92px; border-top: 1px solid var(--line); }
 
 /* 下载 */
 .dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+/* 有五个下载项（加了手机版）时均分一行，免得末行只剩一张卡占 1/4、右边空三格 */
+@media (min-width: 981px) { .dl:has(> :nth-child(5)) { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 22px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .card.mine { border-color: var(--cobalt); box-shadow: 0 0 0 1px var(--cobalt) inset; }
 .card .os { font-size: 12px; letter-spacing: .1em; color: var(--ink-2); font-weight: 600; }
@@ -160,13 +162,15 @@ details.sums summary { cursor: pointer; }
 .what .sw { margin-top: 4px; }
 
 /* 怎么用 */
-.steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; padding: 0; margin: 0; list-style: none; counter-reset: s; }
-.steps li { padding: 0 22px 0 0; counter-increment: s; position: relative; }
-.steps li::before { content: counter(s); display: block; font: 600 54px/1 var(--sans); letter-spacing: -0.04em; color: var(--off); font-variant-numeric: tabular-nums; }
-.steps li::after { content: ""; position: absolute; top: 27px; left: 44px; right: 14px; height: 1px; background: var(--line); }
-.steps li:last-child::after { display: none; }
-.steps b { display: block; font-size: 18px; font-weight: 600; margin-top: 18px; }
+.steps { display: grid; gap: 26px; padding: 0; margin: 0; list-style: none; counter-reset: s; }
+.steps li { display: grid; grid-template-columns: 64px minmax(0, 1fr); counter-increment: s; }
+.steps li::before { content: counter(s); grid-row: span 2; display: block; font: 600 44px/1 var(--sans); letter-spacing: -0.04em; color: var(--off); font-variant-numeric: tabular-nums; }
+.steps b { display: block; font-size: 18px; font-weight: 600; margin-top: 2px; }
 .steps p { margin: 6px 0 0; font-size: 14px; color: var(--ink-2); }
+/* 两条用法路径：手机版不连电脑，电脑版走数据线 */
+.paths { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px; }
+.path h3 { margin: 0 0 22px; font-size: 20px; }
+.path h3 span { display: block; margin-top: 6px; font-size: 14px; font-weight: 400; letter-spacing: 0; color: var(--ink-2); }
 
 /* 边界 */
 .edge { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
@@ -204,11 +208,7 @@ footer a:hover { color: var(--ink); }
   .hero .wrap, .ai, .head { grid-template-columns: minmax(0, 1fr); }
   .head { gap: 14px; }
   .dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .steps { grid-template-columns: minmax(0, 1fr); gap: 26px; }
-  .steps li { display: grid; grid-template-columns: 64px minmax(0, 1fr); padding: 0; }
-  .steps li::before { grid-row: span 2; font-size: 44px; }
-  .steps li::after { display: none; }
-  .steps b { margin-top: 2px; }
+  .paths { grid-template-columns: minmax(0, 1fr); gap: 32px; }
   .edge { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .nav { display: none; }
   .tut { display: inline-block; margin-left: auto; }
@@ -248,9 +248,9 @@ footer a:hover { color: var(--ink); }
 <div class="hero">
   <div class="wrap">
     <div>
-      <div class="label">开源 · MAC / WINDOWS 客户端</div>
+      <div class="label">开源 · 安卓 APP / MAC / WINDOWS</div>
       <h1>把手机里的广告<span class="sw on flip" style="--i:-3" aria-hidden="true"></span>关掉</h1>
-      <p class="lead">国产安卓手机的开屏广告、热搜、资讯推荐、营销推送。插上数据线，在电脑上点几下。</p>
+      <p class="lead">国产安卓手机的开屏广告、热搜、资讯推荐、营销推送。手机 App 里点一下，或用数据线连电脑。</p>
       <div class="cta">
         <a class="btn primary" id="hero-cn" href="#download">国内下载 <small id="hero-os"></small></a>
         <a class="btn" id="hero-gh" href="#download">GitHub 下载</a>
@@ -281,7 +281,7 @@ footer a:hover { color: var(--ink); }
   <div class="wrap">
     <div class="head">
       <h2>下载</h2>
-      <p class="lead" id="dl-lead">选你的电脑。国内下载走百度网盘，链接里带提取码。替换旧版程序，原来的备份保留。</p>
+      <p class="lead" id="dl-lead">选你的设备。国内下载走百度网盘，链接里带提取码。替换旧版程序，原来的备份保留。</p>
     </div>
     <div class="dl" id="dl"></div>
     <div class="after" id="dl-after"></div>
@@ -333,15 +333,30 @@ footer a:hover { color: var(--ink); }
   <div class="wrap">
     <div class="head">
       <h2>怎么用</h2>
-      <p class="lead">有机型脚本的手机，从插线到完成 4 到 6 分钟。</p>
+      <p class="lead">手机版打开点一下就行；电脑版用数据线，有机型脚本的手机从插线到完成 4 到 6 分钟。</p>
     </div>
-    <ol class="steps">
-      <li><b>连接手机</b><p>打开开发者模式和 USB 调试，用数据线连电脑。客户端里有五个品牌的图文教程。</p></li>
-      <li><b>检测</b><p>读取型号、系统版本、机型脚本、快应用和广告组件的状态。只读。</p></li>
-      <li><b>选择</b><p>营销通知按渠道列出，服务类渠道默认不勾。快应用和广告组件由你决定。</p></li>
-      <li><b>执行</b><p>开始前存一份改动前的快照。执行中显示进度和日志，手机放在一边。</p></li>
-      <li><b>完成</b><p>列出每一步的结果。关闭开发者模式，改动保留。「还原改动」可以恢复。</p></li>
-    </ol>
+    <div class="paths">
+      <div class="path" data-path="phone">
+        <h3>手机版<span>不用电脑，第一次做 3 个设置约 1 分钟</span></h3>
+        <ol class="steps">
+          <li><b>做 3 个设置</b><p>打开开发者选项、无线调试，授权本 App。<a href="android-tutorial.html">图文和视频教程</a>里有每个品牌的连点位置。</p></li>
+          <li><b>点「一键去广告」</b><p>先检测手机型号和系统、扫描营销通知，扫完停在确认页。</p></li>
+          <li><b>确认要关的项</b><p>默认勾选和电脑版一致，想改就先改，点「开始」才动手。</p></li>
+          <li><b>后台执行</b><p>在一块看不见的后台屏上逐项关闭，这时可以照常用手机。不支持后台屏的机型会借用当前屏幕，那时页面会写「请不要碰手机」。</p></li>
+          <li><b>完成</b><p>每一项都成功就完成了。想恢复点「⋯」→「还原改动」，完成页也能帮你关掉开发者模式。</p></li>
+        </ol>
+      </div>
+      <div class="path" data-path="desk">
+        <h3>电脑版<span>数据线连电脑</span></h3>
+        <ol class="steps">
+          <li><b>连接手机</b><p>打开开发者模式和 USB 调试，用数据线连电脑。客户端里有五个品牌的图文教程。</p></li>
+          <li><b>检测</b><p>读取型号、系统版本、机型脚本、快应用和广告组件的状态。只读。</p></li>
+          <li><b>选择</b><p>营销通知按渠道列出，服务类渠道默认不勾。快应用和广告组件由你决定。</p></li>
+          <li><b>执行</b><p>开始前存一份改动前的快照。执行中显示进度和日志，手机放在一边。</p></li>
+          <li><b>完成</b><p>列出每一步的结果。关闭开发者模式，改动保留。「还原改动」可以恢复。</p></li>
+        </ol>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -355,7 +370,7 @@ footer a:hover { color: var(--ink); }
       <div><b>无需 root、解锁、刷机</b><p>系统更新、保修保持原样。</p></div>
       <div><b>系统应用：挂起，不卸载</b><p>一条命令恢复。</p></div>
       <div><b>协议与权限弹窗</b><p>点「取消」「以后再说」「不允许」。</p></div>
-      <div><b>数据去向</b><p>执行过程在电脑和手机之间进行。错误日志上报，发送前由你确认。</p></div>
+      <div><b>数据去向</b><p>电脑版在你的电脑和手机之间进行；手机版全程只在这台手机上。错误日志上报，发送前由你确认。</p></div>
     </div>
   </div>
 </section>
@@ -364,7 +379,7 @@ footer a:hover { color: var(--ink); }
   <div class="wrap">
     <div class="head">
       <h2>机型</h2>
-      <p class="lead">通过 adb 连接的安卓手机可以处理营销通知、快应用和广告组件。App 里的开关需要机型脚本。</p>
+      <p class="lead">手机版和电脑版都能处理营销通知、快应用和广告组件。App 里的开关需要机型脚本。</p>
     </div>
     <div class="table">
       <table>
@@ -381,7 +396,7 @@ footer a:hover { color: var(--ink); }
         </tbody>
       </table>
     </div>
-    <p class="fine">表里没有你的手机：客户端左下角「反馈问题」→「适配新机型」。小米、Redmi 需要打开开发者选项里的「USB 调试（安全设置）」。</p>
+    <p class="fine">表里没有你的手机：电脑版在左下角「反馈问题」→「适配新机型」，手机版是右上角「⋯」→「反馈问题」→「适配新机型」。小米、Redmi 需要打开开发者选项里的「USB 调试（安全设置）」，两个版本都要。</p>
   </div>
 </section>
 
@@ -389,14 +404,14 @@ footer a:hover { color: var(--ink); }
   <div class="wrap">
     <div class="head"><h2>常见问题</h2></div>
     <div class="faq">
-      <details><summary>Mac 怎么看是哪种芯片？</summary><p>屏幕左上角苹果图标 → 关于本机。「芯片」一栏写 Apple M 开头的是 Apple 芯片，写 Intel 的是 Intel 芯片。</p></details>
-      <details><summary>Windows 弹出「Windows 已保护你的电脑」</summary><p>安装程序没有代码签名。点「更多信息」→「仍要运行」。</p></details>
-      <details><summary>Windows 提示缺少 WebView2，或提示「程序文件被 Windows 标记成来自网络」</summary><p>到微软官网下载安装「WebView2 Evergreen Bootstrapper」，然后打开本程序。安装后提示没有消失，把弹窗括号里的原文发到反馈里。</p><p>用的是便携版（zip 解压出来的）时，提示可能不是真的缺 WebView2，而是解压出来的文件被 Windows 标成「来自网络」、加载时被拦住了：对下载的 zip 点右键 →「属性」→ 勾选「解除锁定」→ 确定，重新解压后再打开；zip 已经删了，就在解压出来的文件夹里按住 Shift 点右键 →「在此处打开 PowerShell 窗口」，粘贴 <code>Get-ChildItem . -Recurse -File | Unblock-File</code> 回车。安装版不受影响。</p></details>
-      <details><summary>插上手机，客户端认不出来</summary><p>换一根能传数据的线；手机通知栏里 USB 用途选「传输文件」；手机弹窗点「允许 USB 调试」。荣耀、华为打开「仅充电模式下允许 ADB 调试」；三星装三星 USB 驱动。退出电脑上的手机助手和安卓模拟器。</p></details>
+      <details><summary>（电脑版）Mac 怎么看是哪种芯片？</summary><p>屏幕左上角苹果图标 → 关于本机。「芯片」一栏写 Apple M 开头的是 Apple 芯片，写 Intel 的是 Intel 芯片。</p></details>
+      <details><summary>（电脑版）Windows 弹出「Windows 已保护你的电脑」</summary><p>安装程序没有代码签名。点「更多信息」→「仍要运行」。</p></details>
+      <details><summary>（电脑版）Windows 提示缺少 WebView2，或提示「程序文件被 Windows 标记成来自网络」</summary><p>到微软官网下载安装「WebView2 Evergreen Bootstrapper」，然后打开本程序。安装后提示没有消失，把弹窗括号里的原文发到反馈里。</p><p>用的是便携版（zip 解压出来的）时，提示可能不是真的缺 WebView2，而是解压出来的文件被 Windows 标成「来自网络」、加载时被拦住了：对下载的 zip 点右键 →「属性」→ 勾选「解除锁定」→ 确定，重新解压后再打开；zip 已经删了，就在解压出来的文件夹里按住 Shift 点右键 →「在此处打开 PowerShell 窗口」，粘贴 <code>Get-ChildItem . -Recurse -File | Unblock-File</code> 回车。安装版不受影响。</p></details>
+      <details><summary>（电脑版）插上手机，客户端认不出来</summary><p>换一根能传数据的线；手机通知栏里 USB 用途选「传输文件」；手机弹窗点「允许 USB 调试」。荣耀、华为打开「仅充电模式下允许 ADB 调试」；三星装三星 USB 驱动。退出电脑上的手机助手和安卓模拟器。</p></details>
       <details><summary>小米 / Redmi 点不动，跑一半锁屏</summary><p>开发者选项里打开「USB 调试（安全设置）」，需要插 SIM 卡、登录小米账号。</p></details>
       <details><summary>会影响系统更新和保修吗？</summary><p>不会。不 root，不解锁，不改系统分区。用到的是开发者选项和系统自带的设置项。</p></details>
-      <details><summary>关完还会有广告吗？</summary><p>会剩一些：浏览器搜索框的轮播热词没有开关；新装的 App 带着广告跟踪和营销通知，装新 App 后跑一次客户端。第三方 App 自己的开屏广告不在范围内。</p></details>
-      <details><summary>怎么恢复？</summary><p>客户端左下角「还原改动」：恢复快应用、恢复挂起的广告组件、重新打开关掉的营销通知。App 里的开关按清单路径打开。</p></details>
+      <details><summary>关完还会有广告吗？</summary><p>会剩一些：浏览器搜索框的轮播热词没有开关；新装的 App 带着广告跟踪和营销通知，装新 App 后再跑一次（电脑版客户端，或手机 App 的「一键去广告」）。第三方 App 自己的开屏广告不在范围内。</p></details>
+      <details><summary>怎么恢复？</summary><p>电脑版在左下角「还原改动」，手机版是右上角「⋯」→「还原改动」：恢复快应用、恢复挂起的广告组件、重新打开关掉的营销通知。App 里的开关按清单路径打开。</p></details>
     </div>
   </div>
 </section>
@@ -473,7 +488,10 @@ const pan = (f) => (f.baidu && f.baidu.url) ? f.baidu : (REL.baidu.url ? REL.bai
 const panUrl = (b) => b.url + (b.code ? (b.url.includes("?") ? "&" : "?") + "pwd=" + encodeURIComponent(b.code) : "");
 
 function platformOf(){
-  const p = ((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent || "").toLowerCase();
+  const ua = navigator.userAgent || "";
+  // 安卓的 navigator.platform 报的是 "Linux armv8l"，Firefox 与内置 WebView 也没有 userAgentData，只能看 UA
+  if (/android/i.test(ua)) return "android";
+  const p = ((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || ua).toLowerCase();
   if (p.includes("mac")) return "mac";
   if (p.includes("win")) return "win";
   return "";
@@ -496,11 +514,14 @@ async function copy(text, button, doneText){
 /* 下载 */
 (function renderDownloads(){
   const os = platformOf();
-  const mine = (f) => (os === "mac" && f.id.startsWith("mac")) || (os === "win" && f.id === "win-setup");
+  const mine = (f) => os === "android" ? f.id === "android"
+    : (os === "mac" && f.id.startsWith("mac")) || (os === "win" && f.id === "win-setup");
+  const osLabel = (f) => f.id === "android" ? "安卓手机" : f.id.startsWith("mac") ? "MAC"
+    : f.id.startsWith("win") ? "WINDOWS" : f.id.toUpperCase();
   $("#dl").innerHTML = REL.files.map((f) => {
     const b = pan(f);
     return `<article class="card ${mine(f) ? "mine" : ""}">
-      <span class="os">${f.id.startsWith("mac") ? "MAC" : "WINDOWS"}</span>
+      <span class="os">${osLabel(f)}</span>
       <h3>${esc(f.title.split(" · ")[1] || f.title)}</h3>
       <span class="sub">${esc(f.sub)}</span>
       <span class="note">${esc(f.note)}</span>
@@ -515,7 +536,8 @@ async function copy(text, button, doneText){
   const all = REL.baidu.url ? `<span>百度网盘全部版本：<a href="${esc(panUrl(REL.baidu))}" target="_blank" rel="noopener">打开</a>${REL.baidu.code ? `　提取码 <code>${esc(REL.baidu.code)}</code>` : ""}</span>` : "";
   $("#dl-after").innerHTML = `${all}<span><a href="${REPO}/releases" target="_blank" rel="noopener">GitHub 全部版本</a></span><span><a href="${REPO}/releases/tag/v${esc(REL.version)}" target="_blank" rel="noopener">v${esc(REL.version)} 更新说明</a></span>`;
   $("#sums").innerHTML = REL.files.map((f) => `${esc(f.sha)}  ${esc(f.file)}`).join("<br>");
-  $("#hero-meta").textContent = `v${REL.version} · ${RELEASED} · Mac（Apple / Intel 芯片）· Windows 10 / 11`;
+  const phone = REL.files.find((f) => f.id === "android");
+  $("#hero-meta").textContent = `v${REL.version} · ${RELEASED} · Mac（Apple / Intel 芯片）· Windows 10 / 11${phone ? ` · ${phone.sub}` : ""}`;
 
   const win = REL.files.find((f) => f.id === "win-setup");
   if (os === "win" && win){
@@ -525,6 +547,9 @@ async function copy(text, button, doneText){
     $("#hero-gh").href = REL.github + win.file;
   } else if (os === "mac"){
     $("#hero-os").textContent = "Mac";
+  } else if (os === "android" && phone){
+    // 下载页还没上 APK 时不写「安卓」，否则按钮指着一个不存在的安装包
+    $("#hero-os").textContent = "安卓";
   }
   document.addEventListener("click", (e) => {
     const t = e.target.closest("[data-copy]");

@@ -83,7 +83,7 @@ GitHub 搜索索引有延迟，刚合上没几小时的 PR 可能还查不到；
 
 手机版随桌面版一起发布，产物是 arm64 APK（`android/build.sh assembleRelease`）。签名与分发由 owner 掌握：构建读 `.private/android-signing/keystore.properties`（见 `android/app/build.gradle.kts`），缺失就退回 debug 签名。这一节只记口径，不写实际操作步骤；本机没有这份证书，签名与分发路径未验证。
 
-`android/**` 的改动由 `.github/workflows/android.yml` 在 PR 上跑 `assembleDebug` 编译闸门，不产出发版产物。下面「一轮发版的产物顺序」只管桌面版那四个安装包；APK 由 owner 构建并传到同一个 Release，不在这十步里。当次 Release 里已有 APK 时，README 下载区与 `docs/手机版教程/README.md` 的「下载」一节一并更新链接；没有就维持「随下一版发布」。
+`android/**` 的改动由 `.github/workflows/android.yml` 在 PR 上跑 `assembleDebug` 编译闸门，不产出发版产物。APK 由 owner 构建并传到同一个 Release，构建不在「一轮发版的产物顺序」里；但下载页的 `REL.files` 补上 android 条目之后，第 8 步的网盘脚本会按条目现算文件列表，把 APK 一并上传、建分享并回写链接，所以那一版多传一个包。当次 Release 里已有 APK 时，README 下载区与 `docs/手机版教程/README.md` 的「下载」一节一并更新链接；没有就维持「随下一版发布」。
 
 ## 一轮发版的产物顺序
 
@@ -91,7 +91,7 @@ GitHub 搜索索引有延迟，刚合上没几小时的 PR 可能还查不到；
 2. **补齐 `## 未发布`**：确认这一版的每一笔都在里面、都是一行一条。这时还没写验证行。
 3. **建 Release 草稿并推 tag**：`build-windows.yml` 由 `v*` 标签触发，要求对应 Release **先存在**（草稿即可，否则 workflow 报「请先创建对应的 Release 草稿」）。它打包两个 Windows 安装包、跑冒烟测试、把产物传进草稿。草稿已公开时它保留已验证的文件、不重建。
 4. **上传 macOS 安装包**到同一个草稿（本机打包与公证步骤在 `CLAUDE.local.md`）。
-5. **写正文并发布**。正文可以在草稿阶段写好；发布前核对四个安装包的 SHA256 与 `SHA256SUMS.txt` 一致，并按「致谢谁」核对待致谢名单。
+5. **写正文并发布**。正文可以在草稿阶段写好；发布前核对这一版发出去的每个安装包（含 APK）的 SHA256 与 `SHA256SUMS.txt` 一致，并按「致谢谁」核对待致谢名单。那份校验清单是手写的，漏掉哪个包，`baidu_rows.py --legacy` 生成安装说明时会直接报错，不会写出空校验值。
 6. **同步用户侧文本**：
    - `README.md` 的版本摘要：首段从 Release 正文首段复制，后面接「旧版不会自动更新……」；下载表格换版本号与链接。
    - `index.html` 的 `REL`（`version` / `github` / `files[].file` / `size` / `sha`）与 `RELEASED` 日期。

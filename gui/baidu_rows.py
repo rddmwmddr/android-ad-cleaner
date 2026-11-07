@@ -19,7 +19,7 @@ def rows(ver, guide):
     lines = [f"肉呆去广告 v{ver}", "", "选哪个文件："]
     lines += [f"· {title}（{sub}）：{folder}/{file}。{note}" for _, folder, title, sub, file, note in items]
     lines += ["", "不知道 Mac 是哪种芯片：左上角苹果图标 → 关于本机，「芯片」写 Apple M 开头的选 Apple 芯片。",
-              "SHA256SUMS.txt 是 4 个文件的 SHA256 校验值。",
+              f"SHA256SUMS.txt 是 {len(items)} 个文件的 SHA256 校验值。",
               "用法、常见问题、反馈：https://github.com/rddmwmddr/android-ad-cleaner"]
     with open(guide, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
@@ -56,15 +56,31 @@ SETUP = {
                 "弹出「Windows 已保护你的电脑」：点「更多信息」→「仍要运行」。",
                 "提示「程序文件被 Windows 标记成「来自网络」」：按第一条重新解除锁定再解压。",
                 "提示缺少 WebView2：到微软官网安装「WebView2 Evergreen Bootstrapper」，然后打开本程序。"],
+    "android": ["把 {file} 传到手机上，点开安装（安卓 11 及以上）。",
+                "弹风险提示：vivo 先勾选「已了解应用的风险检测结果」，再点「继续安装」；小米、OPPO 点「继续安装」或「仍然安装」。"],
 }
-CHECK = {"mac": "shasum -a 256 文件名（终端）", "win-setup": "Get-FileHash 文件名（PowerShell）", "win-zip": "Get-FileHash 文件名（PowerShell）"}
+USAGE = ("使用\n----\n1. 手机打开开发者模式和 USB 调试（客户端里有图文教程）。\n"
+         "2. 用数据线连电脑，手机上点「允许 USB 调试」。荣耀、华为另开「仅充电模式下允许 ADB 调试」；"
+         "小米、Redmi 另开「USB 调试（安全设置）」；三星在 Windows 上装三星 USB 驱动。\n"
+         "3. 客户端里：连接手机 → 检测 → 选择要关的 → 执行 → 完成。\n"
+         "4. 做完后关闭开发者模式，客户端完成页有按钮。\n\n"
+         "第一次打开时，电脑上没有 adb 的话，客户端会提示从 Google 官网下载（约 10 MB）。\n\n")
+USAGE_ANDROID = ("使用\n----\n不用连电脑。第一次打开按页面做 3 个设置，之后点「一键去广告」。\n"
+                 "图文和视频教程：https://ahuamiao.com/sites/other/android-tutorial.html\n\n")
+CHECK = {"mac": "shasum -a 256 文件名（终端）", "win-setup": "Get-FileHash 文件名（PowerShell）", "win-zip": "Get-FileHash 文件名（PowerShell）",
+         "android": "在电脑上算：shasum -a 256 文件名（Mac 终端）或 Get-FileHash 文件名（PowerShell）"}
+# 下载页 REL.files 的 id → 安装说明表。新增平台时这里与 SETUP / CHECK 一起加：
+# 漏了要等发版跑到 --legacy 才炸，那时安装包已经传上去了。
+KIND = {"mac-arm64": "mac", "mac-intel": "mac", "win-setup": "win-setup",
+        "win-zip": "win-zip", "android": "android"}
 
 
 def legacy(ver, out, sums_path):
     html = open(PAGE, encoding="utf-8").read()
     items = [i for i in ITEM.findall(html) if ver in i[4]]
     sums = dict(reversed(line.split(None, 1)) for line in open(sums_path, encoding="utf-8").read().split("\n") if line.strip())
-    sums = {name.strip(): digest for name, digest in sums.items()}
+    # `sha256sum -b` 写成「hash *文件名」，星号是格式的一部分，不算文件名
+    sums = {name.strip().lstrip("*"): digest for name, digest in sums.items()}
     folders = [f"{folder:<18}{title}（{sub}）" for _, folder, title, sub, _, _ in items]
     with open(os.path.join(out, "先看我-选哪个文件夹.txt"), "w", encoding="utf-8") as f:
         f.write(f"肉呆去广告 {ver}\n{INTRO}\n选哪个文件夹\n------------\n" + "\n".join(folders) +
@@ -72,20 +88,21 @@ def legacy(ver, out, sums_path):
                 "「芯片」一栏写 Apple M 开头的选 Mac-Apple芯片，写 Intel 的选 Mac-Intel芯片。\n\n"
                 "每个文件夹里有安装包和这个版本的安装说明。旧版本在官网和 GitHub 的「全部版本」里。\n")
     for key, folder, title, sub, file, note in items:
-        kind = "mac" if key.startswith("mac") else key
+        kind = KIND.get(key)
+        if kind is None:
+            sys.exit(f"下载页里的 id「{key}」没有安装说明表；认得的 id：{'、'.join(KIND)}")
+        digest = sums.get(file)
+        if not digest:
+            sys.exit(f"SHA256SUMS.txt 里没有 {file}，先补上再生成安装说明")
         os.makedirs(os.path.join(out, folder), exist_ok=True)
         steps = "\n".join(f"{n}. {line.format(file=file)}" for n, line in enumerate(SETUP[kind], 1))
-        digest = sums.get(file, "")
         with open(os.path.join(out, folder, "安装说明.txt"), "w", encoding="utf-8") as f:
             f.write(f"肉呆去广告 {ver}\n{INTRO}\n适用：{title}（{sub}）。\n\n安装\n----\n{steps}\n\n"
-                    "使用\n----\n1. 手机打开开发者模式和 USB 调试（客户端里有图文教程）。\n"
-                    "2. 用数据线连电脑，手机上点「允许 USB 调试」。荣耀、华为另开「仅充电模式下允许 ADB 调试」；"
-                    "小米、Redmi 另开「USB 调试（安全设置）」；三星在 Windows 上装三星 USB 驱动。\n"
-                    "3. 客户端里：连接手机 → 检测 → 选择要关的 → 执行 → 完成。\n"
-                    "4. 做完后关闭开发者模式，客户端完成页有按钮。\n\n"
-                    "第一次打开时，电脑上没有 adb 的话，客户端会提示从 Google 官网下载（约 10 MB）。\n\n"
+                    + (USAGE_ANDROID if kind == "android" else USAGE) +
                     "更多\n----\n官网：https://ahuamiao.com/sites/other/android-ad-removal-intro.html\n"
-                    "源代码：https://github.com/rddmwmddr/android-ad-cleaner\n遇到问题：客户端左下角「反馈问题」或「上报错误日志」\n\n"
+                    "源代码：https://github.com/rddmwmddr/android-ad-cleaner\n"
+                    + ("遇到问题：App 右上角「⋯」→「反馈问题」\n\n" if kind == "android"
+                       else "遇到问题：客户端左下角「反馈问题」或「上报错误日志」\n\n") +
                     f"校验\n----\nSHA-256：{digest}\n验证方法：{CHECK[kind]}\n")
         with open(os.path.join(out, folder, "SHA256校验.txt"), "w", encoding="utf-8") as f:
             f.write(f"{digest}  {file}\n")
