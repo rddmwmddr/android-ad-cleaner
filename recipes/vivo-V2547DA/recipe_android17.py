@@ -148,6 +148,8 @@ def _():
     try:
         p.start("com.bbk.appstore", ".ui.menu.AppstoreSettingsActivity")
         reached = "AppstoreSettingsActivity" in p.focus()
+    except adb_link.DeviceLost:
+        raise                     # DeviceLost 也是 RuntimeError：断线不能当成「这一页打不开」再空跑一次
     except RuntimeError as e:
         print(f"  · 直达商店设置页失败（{e}），改走「我的 → 设置」")
         reached = False

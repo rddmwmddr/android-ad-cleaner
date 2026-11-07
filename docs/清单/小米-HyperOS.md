@@ -38,7 +38,7 @@
 
 Xiaomi 18 Pro Max 和 18 Fold 的系统底包相同，差别在 App 版本：商店、浏览器、全局搜索、手机管家升级后入口变了。Redmi K70 是 HyperOS 3 / Android 16，入口单独记录。下面每一项都写了「旧版 / 新版」两种入口，按你手机上看到的选。
 
-**Xiaomi 18 Pro Max（M154FF，HyperOS 4.0.24）有五个可直达的导出页**，2026-11-07 本机实测，机型脚本 `recipes/xiaomi-M154FF/` 已改成先直达、打不开再走菜单（下表「落点判据」是该页首屏能读到的字）：
+**Xiaomi 18 Pro Max（M154FF，HyperOS 4.0.24）这五段有可直达的导出页**（全局搜索、手机管家本来就走直达，不在此列），2026-11-07 本机实测，机型脚本 `recipes/xiaomi-M154FF/` 已改成先直达、打不开再走菜单。下表「落点判据」是该页首屏能读到的字：
 
 | 分组 | 直达页面 | 落点判据 |
 |---|---|---|
@@ -48,7 +48,7 @@ Xiaomi 18 Pro Max 和 18 Fold 的系统底包相同，差别在 App 版本：商
 | 浏览器 | `com.android.browser/.preferences.activity.CustomizationPreferenceActivity` | 个性化内容推荐 |
 | 日历 | `com.android.calendar/.settings.UserExperienceActionBarActivity` | 内容推广 |
 
-浏览器另有 `com.android.browser/.BrowserSettingsActivity`，第二跳是为了让「主页设置 / 搜索设置 / 功能设置」这几个子项可达；老版本没有这一页时只跳过子项，不影响整段。后台屏上首页的工具栏和底栏认不出来，「拉首页 → 我的 / 菜单 → 设置」这条老路会报「设置入口未找到」，直达后不再依赖首页。
+浏览器另有 `com.android.browser/.BrowserSettingsActivity`，第二跳是为了让「主页设置 / 搜索设置 / 功能设置」这几个子项可达；这一页打不开时脚本只跳过这三个子项，不把整段记成未完成（18 Fold 这类没有该页的版本走的就是这条路，仅单测）。后台屏上首页的工具栏和底栏认不出来，「拉首页 → 我的 / 菜单 → 设置」这条老路会报「设置入口未找到」，直达后不再依赖首页。
 
 试过但没用上的：`ThemeSettingsActivity` 是系统的个性主题页，不是主题商店的设置页；`mibrowser://personalized/single` 指向不明确，会弹「打开方式」；`CalendarActionbarSettingsActivity` 首屏没有「用户体验」，直接用上面那个 Activity。
 

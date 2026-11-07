@@ -170,8 +170,8 @@ Failure [only root can delete system app for a particular user]
 机型脚本 `recipes/vivo-V2547A/recipe.py` 里已按行还原标题、排除单选钮。
 
 V2547DA 的 Android 17 变体（`recipes/vivo-V2547DA/recipe_android17.py`）2026-11-07 本机把系统广告、
-全局搜索、阅图锁屏三段改成直达，打不开再走菜单；整段 91 秒降到 62 秒。同一轮确认商店
-`AppstoreSettingsActivity` 与浏览器设置页在这个版本都没导出。
+全局搜索、阅图锁屏三段改成直达，打不开再走菜单；整段 91 秒降到 62 秒。浏览器设置页在这台没有
+导出，仍走菜单，是这一轮最慢的一段。
 
 ⚠️ V2547DA 的 Android 17 上，商店「设置 → 关于 → 个性化推荐」页的两个开关读屏里 content-desc 只有
 「开启，开关」、行内没有标题。引擎的 `p.off()` 按标题匹配，空标题的行整行跳过——不会关，也不会报「关不掉」。

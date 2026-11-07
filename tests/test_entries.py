@@ -196,6 +196,13 @@ class ReachTest(unittest.TestCase):
         self.assertEqual(self.reach(phone(r), entry), "direct")
         self.assertEqual(r.shells[0], "am start -n com.b/com.b.Page")
 
+    def test_keep_task_page_with_dollar_is_quoted_here(self):
+        """`keep_task` 的裸 am start 不经 Phone.start，引用由 open_direct 自己做（#667）。"""
+        r = FakeReader(lands={"com.b/com.b.Settings$Ad"})
+        entry = entries.Entry(menu="…", direct=(entries.Direct("com.b", ".Settings$Ad", keep_task=True),))
+        self.assertEqual(self.reach(phone(r), entry), "direct")
+        self.assertEqual(r.shells[0], "am start -n 'com.b/com.b.Settings$Ad'")
+
     def test_expect_keeps_a_landed_page_out_of_the_fast_path(self):
         """落在对的页面但没看见判据文字，仍算没到。"""
         r = FakeReader(lands={"com.b/com.b.Page"}, page_text="别的页")

@@ -294,8 +294,9 @@ def open_direct(p, d, settle=1.2):
     """打开一条直达页面。默认走 Phone.start（顺手收掉开屏 / 权限弹窗、核对前台），
     带清栈参数就会自己退出的页面（`keep_task`）裸启动，失败时照样抛出。打不开由 reach() 记一笔换下一档。
 
-    页面名一律按字面量传下去：带 `$` 的那种由 Phone._launch 在 shell 边界引用一次，
-    这里再 quote 一层会让 used_by() 的源码扫描认不出机型（#667）。"""
+    页面名按字面量传下去：走 `Phone.start` 的那条由 `Phone._launch` 在 shell 边界引用一次，
+    这里再 quote 一层会让 used_by() 的源码扫描认不出机型（#667）；`keep_task` 那条不经
+    `Phone.start`，引用由这里做。"""
     if not d.keep_task:
         p.start(d.pkg, d.activity, settle=settle)
         return
@@ -332,7 +333,7 @@ def reach(p, entry, log=print, now=None, sleep=None, settle=1.2):
             import adb_link
             # 断线不是「这一档不通」：换下一档只会接着错。读屏抛的原始异常不一定转成 DeviceLost，
             # 但 _u2 会把 Phone.lost 置位，一并认。
-            if isinstance(e, adb_link.DeviceLost) or getattr(p, "lost", False):
+            if isinstance(e, adb_link.DeviceLost) or p.lost:
                 raise
             log(f"  · 直达 {page} 打不开（{e}），换下一档")
             continue

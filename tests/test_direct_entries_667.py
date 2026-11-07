@@ -1,4 +1,5 @@
 """#667：小米 M154FF、vivo V2547DA 的设置页能直达就直达，打不开才走菜单，断线不当成「这一档不通」。"""
+import ast
 import sys
 import unittest
 from pathlib import Path
@@ -97,6 +98,7 @@ class XiaomiTest(unittest.TestCase):
         p = phone()
         self.run_step("下载管理", p)
         self.assertEqual(started(p), [("com.android.providers.downloads.ui", ".activity.InfoFlowSettingActivity")])
+        self.assertEqual(expects(p), ["资源推荐"])
         p.off.assert_called_once_with(only=["资源推荐", "热榜推荐"], page="下载管理·信息流")
 
     def test_browser_does_not_depend_on_the_home_page(self):
@@ -106,6 +108,7 @@ class XiaomiTest(unittest.TestCase):
         scope, _ = self.run_step("浏览器", p)
         self.assertEqual(started(p), [("com.android.browser", ".preferences.activity.CustomizationPreferenceActivity"),
                                       ("com.android.browser", ".BrowserSettingsActivity")])
+        self.assertEqual(expects(p), ["个性化内容推荐", None])
         p.off.assert_called_once_with(only=["个性化内容推荐", "个性化广告推荐"], page="浏览器·个性化推荐")
         self.assertEqual(scope["FAILED_STEPS"], [])
 
@@ -116,10 +119,11 @@ class XiaomiTest(unittest.TestCase):
                 raise RuntimeError("无法打开")
 
         p = phone(second_hop_missing)
-        p.tree.side_effect = AssertionError("子项页没打开时不该在旧页上找子项")
         scope, out = self.run_step("浏览器", p)
         self.assertIn("直达不通", out.getvalue())
         p.off.assert_called_once_with(only=["个性化内容推荐", "个性化广告推荐"], page="浏览器·个性化推荐")
+        # 只找过这三个子项，没有回头读首页或设置页找别的入口
+        self.assertEqual([c.args[0] for c in p.entry.call_args_list], ["主页设置", "搜索设置", "功能设置"])
         self.assertEqual(scope["FAILED_STEPS"], [])
 
     def test_browser_basic_mode_still_skips_on_the_menu_path(self):
@@ -150,7 +154,16 @@ class VivoTest(unittest.TestCase):
         p = phone()
         self.run_step("系统广告", p)
         self.assertEqual(started(p), [("com.android.settings", ".Settings$AdAndPrivacyActivityForOsTwo")])
+        self.assertEqual(expects(p), ["智能推荐服务"])
         p.off.assert_called_once_with(only=["个性化广告", "个性化推荐", "智能推荐服务"], page="系统·广告与隐私")
+
+    def test_lost_in_the_middle_does_not_walk_the_menu(self):
+        p = phone()
+        p.lost = True
+        p.start.side_effect = RuntimeError("device offline")
+        scope, _ = self.run_step("系统广告", p)
+        self.assertEqual(shells(p), [])
+        self.assertEqual(scope["FAILED_STEPS"], ["系统广告"])
 
     def test_system_ads_falls_back_to_the_menu(self):
         p = phone(fail_direct)
@@ -161,6 +174,7 @@ class VivoTest(unittest.TestCase):
         p = phone()
         self.run_step("阅图锁屏", p)
         self.assertEqual(started(p), [("com.vivo.magazine", ".ui.MagazineSettings")])
+        self.assertEqual(expects(p), ["锁屏横滑进入阅图"])
         self.assertEqual(shells(p), [])
 
     def test_search_opens_settings_directly(self):
@@ -168,6 +182,7 @@ class VivoTest(unittest.TestCase):
         p.entry.side_effect = lambda name, scrolls=6: name == "首页展示内容"
         self.run_step("全局搜索", p)
         self.assertEqual(started(p), [("com.vivo.globalsearch", ".view.SearchSettingsActivity")])
+        self.assertEqual(expects(p), ["首页展示内容"])
         self.assertEqual(shells(p), [])
         p.off.assert_called_once_with(only=["搜索框推荐词", "推荐卡片"], page="全局搜索·首页展示内容")
 
@@ -193,6 +208,26 @@ class VivoTest(unittest.TestCase):
         p.entry.side_effect = lambda name, scrolls=6: name == "首页展示内容"
         self.run_step("全局搜索", p)
         self.assertFalse(any(c.args[0] == "推荐热搜榜单" for c in p.entry.call_args_list))
+
+
+class RecipeQuotingTest(unittest.TestCase):
+    """页面名的 shell 引用只在 Phone._launch 做一次。脚本里再 shlex.quote 会叠成两层，
+    am 收到带字面引号的类名（#667 审查时 vivo V2417A 就是这么被弄坏的）。"""
+
+    def test_no_recipe_quotes_the_page_name_before_start(self):
+        offenders = []
+        for path in sorted((ROOT / "recipes").glob("*/recipe*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                if not (isinstance(node.func, ast.Attribute) and node.func.attr == "start"):
+                    continue
+                for arg in node.args[1:]:
+                    if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Attribute) \
+                            and arg.func.attr == "quote":
+                        offenders.append(f"{path.relative_to(ROOT)}:{arg.lineno}")
+        self.assertEqual(offenders, [], "页面名照字面量传，引用交给 Phone._launch")
 
 
 class OpenDirectTest(unittest.TestCase):
