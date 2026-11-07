@@ -13,6 +13,10 @@ import run  # noqa: E402
 
 BRAND, MODEL, VENDOR_NAME = "OPPO", "PJD110", "OPPO Find X8"
 
+# 改动前 info() 的 or 链逐字冻结：NAME_PROPS 删词、挪位都要让下面那条断言返红。
+# 不遍历实现自己的元组——否则删词会连期望一起消失（CODING_STANDARDS.md）。
+BASE_NAME_PROPS = ("ro.vendor.oplus.market.name", "ro.product.marketname", "ro.product.vendor.marketname")
+
 
 def adb_reply(props, calls):
     """假 adb：`devices -l` 报一台设备，`shell` 按 getprop 串逐条回值。"""
@@ -52,6 +56,7 @@ class DeviceNameTests(unittest.TestCase):
         self.assertEqual(self.status_name(props), VENDOR_NAME)
 
     def test_both_sides_fall_back_to_brand_and_model(self):
+        """旧树也绿，守的是都空时两边回退成同一个 brand + model，不被塞进假名字。"""
         props = {"ro.product.brand": BRAND, "ro.product.model": MODEL}
         listed = self.device_listed(props)
         self.assertEqual(listed["name"], "")
@@ -60,17 +65,21 @@ class DeviceNameTests(unittest.TestCase):
         self.assertEqual(listed["name"] or listed["brand"] + " " + listed["model"], f"{BRAND} {MODEL}")
 
     def test_marketname_precedes_vendor_marketname(self):
+        """旧树也绿，守的是两个候选都有值时仍取靠前的那个，顺序不被 vendor 属性顶掉。"""
         props = {"ro.product.marketname": "Find X8", "ro.product.vendor.marketname": VENDOR_NAME}
         self.assertEqual(self.device_listed(props)["name"], "Find X8")
         self.assertEqual(self.status_name(props), "Find X8")
+
+    def test_candidate_props_are_frozen(self):
+        self.assertEqual(run.NAME_PROPS, BASE_NAME_PROPS)
 
     def test_device_list_reads_every_candidate_in_one_shell_call(self):
         self.device_listed({"ro.product.brand": BRAND, "ro.product.model": MODEL})
         shells = [call for call in self.calls if call[0] == "-s"]
         self.assertEqual(len(shells), 1)
         command = shells[0][3]
-        self.assertEqual(command.count("getprop"), 2 + len(run.NAME_PROPS))
-        for key in run.NAME_PROPS:
+        self.assertEqual(command.count("getprop"), 2 + len(BASE_NAME_PROPS))
+        for key in BASE_NAME_PROPS:
             self.assertIn(f"getprop {key}", command)
 
 
