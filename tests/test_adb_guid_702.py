@@ -3,7 +3,9 @@
 Windows 上 adb 只按 {F72FE0D4-CBCB-407D-8814-9ED673D0DD6B} 枚举 USB 接口；
 手机只登记了厂商自己的 GUID 时，接口状态一切正常、`adb devices` 却静默为 0 台。
 """
+import tempfile
 import unittest
+from unittest.mock import patch
 
 from gui import app
 
@@ -44,7 +46,7 @@ class UsbFactsGuidTests(unittest.TestCase):
         found = [("荣耀", "ADB Interface", "OK", True, HW, ())]
         lines = app.usb_facts(found)
         self.assertIn("未登记", lines[1])
-        self.assertIn("没登记任何厂商 GUID", lines[1])
+        self.assertIn("没有登记任何 GUID", lines[1])
 
 
 class UsbParseTests(unittest.TestCase):
@@ -61,6 +63,23 @@ class UsbParseTests(unittest.TestCase):
     def test_parse_of_a_line_without_the_guid_field_is_unreadable(self):
         # 老格式 / 输出被截断：宁可不说，也不报成「没登记任何 GUID」
         self.assertIsNone(app.usb_parse(f"{HW}|ADB Interface|OK|USBDevice\n")[0][5])
+
+
+class DiagnosticsTests(unittest.TestCase):
+    def test_report_carries_the_guid_line(self):
+        # 这一行必须真的进诊断报告，而不只是 usb_facts() 能渲染出来
+        data = tempfile.TemporaryDirectory()
+        self.addCleanup(data.cleanup)
+        api = app.Api(data.name)
+        api.adb = "/opt/tools/adb"
+        api.last_devices = "List of devices attached\n"
+        found = [("荣耀", "ADB Interface", "OK", True, HW, (VENDOR,))]
+        with patch.object(app, "usb_phones", return_value=found), \
+             patch.object(api, "_adb", return_value="Android Debug Bridge"):
+            report = api.diagnostics()
+        self.assertIn(f"- USB 设备：{DEVICE_LINE}", report)
+        self.assertIn(f"- USB 设备：荣耀 ADB Interface 未登记 adb 需要的 device interface GUID"
+                      f"（实际登记的 GUID：{VENDOR}）", report)
 
 
 if __name__ == "__main__":

@@ -520,6 +520,7 @@ DRIVER_HINT = {
 # adb 在 Windows 上只按 android_winusb.inf 里登记的这个 GUID 枚举 USB 接口；手机只登记了厂商
 # 自己的 GUID 时，接口状态正常、`adb devices` 却静默为 0 台（#702）。
 ADB_INTERFACE_GUID = "f72fe0d4-cbcb-407d-8814-9ed673d0dd6b"
+USB_GUID_UNREADABLE = "-"   # PowerShell 与 usb_parse() 之间的约定：注册表没读到
 
 
 def usb_hw_id(instance_id):
@@ -543,24 +544,26 @@ def usb_parse(out):
         name = parts[1] if len(parts) > 1 else ""
         status = parts[2] if len(parts) > 2 else ""
         cls = parts[3] if len(parts) > 3 else ""
-        raw = parts[4] if len(parts) > 4 else "-"
+        raw = parts[4] if len(parts) > 4 else USB_GUID_UNREADABLE
         adb = bool(re.search(r"adb|android", name + " " + cls, re.I))
-        guids = None if raw.strip() == "-" else tuple(g.strip() for g in raw.split(",") if g.strip())
+        guids = None if raw.strip() == USB_GUID_UNREADABLE else tuple(
+            g.strip() for g in raw.split(",") if g.strip())
         found.append((USB_VENDORS.get(m.group(1).upper(), "安卓"), name, status, adb,
                       usb_hw_id(parts[0]), guids))
     return found
 
 
 def usb_phones():
-    """只读：Windows 设备管理器里的手机 USB 设备。
+    """只读：Windows 设备管理器里按 USB 厂商号命中的设备（手机也可能混着同厂外设）。
     返回 [(品牌, 设备名, 状态, 是否 ADB 接口, 硬件 ID, 登记的 GUID 元组或 None)]；查不到返回空。"""
     if not IS_WIN:
         return []
     script = ("[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-PnpDevice -PresentOnly | Where-Object { $_.InstanceId -match '^USB\\\\VID_(" + "|".join(USB_VENDORS) + ")' } | "
               "ForEach-Object { $k = 'HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\' + $_.InstanceId + '\\Device Parameters'; "
-              "$g = '-'; if (Test-Path $k -ErrorAction SilentlyContinue) { "
+              "$g = '" + USB_GUID_UNREADABLE + "'; if (Test-Path $k -ErrorAction SilentlyContinue) { "
               "try { $p = Get-ItemProperty -Path $k -ErrorAction Stop; "
-              "$g = (@($p.DeviceInterfaceGUID, $p.DeviceInterfaceGUIDs) | Where-Object { $_ } | Select-Object -Unique) -join ',' } catch { $g = '-' } }; "
+              "$g = (@($p.DeviceInterfaceGUID, $p.DeviceInterfaceGUIDs) | Where-Object { $_ } | Select-Object -Unique) -join ',' } "
+              "catch { $g = '" + USB_GUID_UNREADABLE + "' } }; "
               "$_.InstanceId + '|' + $_.FriendlyName + '|' + $_.Status + '|' + $_.Class + '|' + $g }")
     try:
         out = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, text=True,
@@ -571,19 +574,18 @@ def usb_phones():
 
 
 def usb_guid_note(guids):
-    """这个接口登记的 device interface GUID 里有没有 adb 要的那个；没有时把它实际登记的厂商 GUID 说出来。"""
+    """这个接口登记的 device interface GUID 里有没有 adb 要的那个；没有时把它实际登记的 GUID 说出来。"""
     if ADB_INTERFACE_GUID in {g.strip().strip("{}").lower() for g in guids}:
         return "已登记 adb 需要的 device interface GUID"
-    vendor = "、".join(g for g in guids if g.strip())
-    if not vendor:
-        return "未登记 adb 需要的 device interface GUID，也没登记任何厂商 GUID"
-    return f"未登记 adb 需要的 device interface GUID（实际登记的厂商 GUID：{vendor}）"
+    registered = "、".join(g for g in guids if g.strip())
+    trail = f"（实际登记的 GUID：{registered}）" if registered else "，也没有登记任何 GUID"
+    return "未登记 adb 需要的 device interface GUID" + trail
 
 
 def usb_facts(found, limit=5):
     """把命中的设备逐台说成诊断行：品牌、设备名、状态、是不是调试接口、硬件 ID。
-    只截断条数，不替用户判断哪台是手机；带调试接口的排前面，先被截掉的是别的外设（#673）。
-    调试接口后面再跟一行它登记的 device interface GUID；读不到就不写（#702）。"""
+    只截断设备台数，不替用户判断哪台是手机；带调试接口的排前面，先被截掉的是别的外设（#673）。
+    调试接口后面再跟一行它登记的 device interface GUID，所以输出最多两倍 limit 行；读不到就不写（#702）。"""
     ordered = [f for f in found if f[3]] + [f for f in found if not f[3]]
     lines = []
     for brand, name, status, adb, hw, guids in ordered[:limit]:
