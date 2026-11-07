@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """新机型适配辅助：探路 → 人工勾选 → 生成草稿 → 安全模式自检。四段都由人把关，工具不自动决定关哪些开关。
 
+  adapt.py survey -s SERIAL                  只读：拿品牌词库逐条试直达入口，数命中的开关词，不点任何东西
   adapt.py explore -s SERIAL [包名 …]        只读探路（复用 explore.py）→ 探路-<型号>.tsv
   adapt.py gen 探路-<型号>.tsv [-o 输出.py]   把人工勾选的开关生成 recipe 草稿（不碰手机）
                      [--pick 清单.txt]       勾选清单：每行一个开关标题（不用改 TSV 时用它）
@@ -18,6 +19,7 @@ for _st in (sys.stdout, sys.stderr):
         pass
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fast                                    # 只读 want_state / 驱动 Phone；不改引擎
+import vocab
 from fast import Phone
 from run import script_cmd                     # 打包版起子进程要带 --cli，这一处已知规矩只在 run.py 写
 
@@ -330,6 +332,66 @@ def cmd_check(rest):
     return 0 if print_report(report) else 1
 
 
+def survey(p, brand, pages, log=print):
+    """拿词库在这台手机上试一遍：装没装、直达打不打得开、页面上有哪些别的机型关过的开关。
+    pages 是 {(包名, 页面): 用过的机型}。不点任何东西，也不走 Phone.start：它的弹窗处理会替人点「取消」。
+    只打印词库里已有的词，不打印页面原文，所以带不出账号名和装机列表。返回每一页的结果。"""
+    import shlex
+    rows, installed = [], {}
+    for (pkg, page), models in sorted(pages.items(), key=lambda item: (-len(item[1]), item[0][1])):
+        if pkg not in installed:
+            installed[pkg] = "package:" in p.d.shell(f"pm path {pkg}").output
+        if not installed[pkg]:
+            continue
+        result = p.d.shell(f"am start -W -f 0x10008000 -n {pkg}/{shlex.quote(page)} 2>&1").output
+        opened = not re.search(r"Error|Exception|Permission Denial", result)
+        row = {"page": page, "models": len(models), "opened": opened, "landed": False,
+               "switches": [], "entries": [], "agreement": False}
+        if opened:
+            p.await_page()
+            row["landed"] = p.focus().split("/", 1)[0] == pkg
+            shown = [t for t, _, _ in p.texts()] if row["landed"] else []
+            row["switches"] = sorted(w for w in brand.off if any(w in t for t in shown))
+            row["entries"] = sorted(w for w in brand.entries if w in shown and w not in vocab.GENERIC)
+            row["agreement"] = "同意" in shown
+        rows.append(row)
+        mark = "✓" if row["landed"] else ("落到别处" if opened else "✗ 打不开")
+        extra = "  ⚠️ 弹着协议，没有点" if row["agreement"] else ""
+        log(f"{mark}  {page}（{len(models)} 个机型用过）{extra}")
+        if row["switches"]:
+            log(f"     开关词：{'、'.join(row['switches'])}")
+        if row["entries"]:
+            log(f"     入口词：{'、'.join(row['entries'])}")
+    p.d.press("home")
+    apps = sorted(brand.packages, key=lambda a: -len(brand.packages[a]))
+    for pkg in apps:
+        if pkg not in installed:
+            installed[pkg] = "package:" in p.d.shell(f"pm path {pkg}").output
+    log(f"\n同品牌脚本用过的 App：这台装了 {sum(installed[a] for a in apps)} / {len(apps)} 个")
+    missing = [a for a in apps if not installed[a]]
+    if missing:
+        log("  没装：" + "、".join(missing))
+    log(f"设置搜索词可以试：{'、'.join(sorted(brand.search)) or '无'}")
+    return rows
+
+
+def cmd_survey(rest):
+    if not rest or rest[0] != "-s" or len(rest) < 2:
+        sys.exit("用法：run.py -s <序列号> adapt survey")
+    recipes = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "recipes")
+    p = Phone(rest[1])
+    maker = p.d.shell("getprop ro.product.brand").output.strip().lower()
+    family = vocab.FAMILY.get(maker)
+    brand = vocab.scan(recipes).get(family)
+    if not brand:
+        sys.exit(f"品牌 {maker or '未知'} 的词库是空的：还没有这个品牌的机型脚本。可以先看词库里的通用词，再用 adapt explore 探路")
+    pages = {key: models for key, models in vocab.directs_by_family(recipes).get(family, {}).items()
+             if vocab.SETTING_PAGE.search(key[1])}
+    print(f"{vocab.LABEL.get(family, family)}：词库来自 {len(brand.models)} 个机型，试 {len(pages)} 个直达入口。屏幕会跳，不要碰手机。\n")
+    survey(p, brand, pages)
+    return 0
+
+
 def cmd_explore(rest):
     if not rest or rest[0] != "-s" or len(rest) < 2:
         sys.exit("用法：run.py adapt explore -s <序列号> [包名 …]")
@@ -340,13 +402,15 @@ def main(argv):
     if not argv or argv[0] in ("-h", "--help"):
         print(__doc__); return 0
     sub, rest = argv[0], argv[1:]
+    if sub == "survey":
+        return cmd_survey(rest)
     if sub == "explore":
         return cmd_explore(rest)
     if sub == "gen":
         return cmd_gen(rest)
     if sub == "check":
         return cmd_check(rest)
-    sys.exit("adapt 后面跟 explore / gen / check。用法：run.py adapt --help")
+    sys.exit("adapt 后面跟 survey / explore / gen / check。用法：run.py adapt --help")
 
 
 if __name__ == "__main__":
