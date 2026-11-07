@@ -121,6 +121,7 @@ pre.report{background:var(--log);color:var(--logtext);font-family:var(--mono);fo
 
 <div class="modal" id="modal"><div class="box" id="modalbox"></div></div>
 
+<script src="core.js"></script>
 <script>
 let api, ENV = {}, S = {step: 1, serial: null, dev: null, status: null, chans: null, chanNotes: [], plan: null, logNext: 0};
 const $ = s => document.querySelector(s);
@@ -379,7 +380,7 @@ async function tick(){
     $("#js").textContent = `已用 ${r.sec} 秒`; $("#jb").style.width = (r.total ? (r.idx - (r.running ? 0.5 : 0)) / r.total * 100 : 0) + "%"; }
   showPause(r);
   // 停在第一步时还没有结果，也要进完成页（#632），不然执行页一直停着、没有出口
-  if (!r.running && r.results && (r.results.length || r.cancel)){ clearInterval(pollJob); showDone(r); }
+  if (GuiCore.shouldFinish(r)){ clearInterval(pollJob); showDone(r); }
 }
 // 暂停在安全的位置生效：一个渠道、机型脚本的一段或一个步骤做完之后。生效前脚本还在点，不能碰手机
 function showPause(r){
@@ -399,24 +400,14 @@ async function togglePause(){
 }
 
 /* ---------- 5 完成 ---------- */
-function summarize(res){
-  const t = res.tail.join("\n");
-  let m;
-  if ((m = t.match(/机型脚本跑完：关了 (\d+) 个，(\d+) 秒/))) return `关了 ${m[1]} 个开关`;
-  if ((m = t.match(/拨了 (\d+) 个/))){ const left = (t.match(/仍开着: (\d+) 个/) || [])[1]; return `关了 ${m[1]} 个渠道` + (left !== undefined ? `，复查仍开着 ${left} 个` : ""); }
-  if (/快应用组件已关闭/.test(t)) return `${(t.match(/已关闭$/gm) || []).length} 个组件已关闭`;
-  if (/快照已存/.test(t)) return "已保存";
-  if ((m = t.match(/插电常亮已改回 (\d+)/))) return `插电常亮已改回 ${m[1]}`;
-  if (/插电常亮未改动/.test(t)) return "插电常亮未改动";
-  return res.tail.filter(Boolean).slice(-1)[0] || "";
-}
+/* summarize 在 core.js（#647）：与 tests/js 共用同一份实现 */
 function showDone(r){
   setStep(5);
   const ok = r.results.every(x => x.rc === 0) && !r.cancel;
   const failed = r.results.some(x => x.rc !== 0 && !x.stopped);   // 点了停止不算出错，不提示上报
   if (!r.results.length){ r.results = []; }
   main().innerHTML = `<h1>${ok ? "完成" : failed ? "已结束（有步骤没成功）" : "已停止"}</h1><p class="lead">用时 ${r.sec} 秒。去下拉搜索、负一屏、应用商店、浏览器看一眼，确认功能正常。</p>
-    <div class="card ${r.results.length ? "" : "hide"}">${r.results.map(x => `<div class="res"><span class="tag ${x.rc === 0 ? "ok" : x.stopped ? "warn" : "bad"}">${x.skipped ? "跳过" : x.stopped ? "已停止" : x.rc === 0 ? "成功" : "失败"}</span><span class="t">${esc(x.title)}</span><span class="d">${esc(summarize(x))} · ${x.sec} 秒</span></div>`).join("")}</div>
+    <div class="card ${r.results.length ? "" : "hide"}">${r.results.map(x => `<div class="res"><span class="tag ${x.rc === 0 ? "ok" : x.stopped ? "warn" : "bad"}">${x.skipped ? "跳过" : x.stopped ? "已停止" : x.rc === 0 ? "成功" : "失败"}</span><span class="t">${esc(x.title)}</span><span class="d">${esc(GuiCore.summarize(x))} · ${x.sec} 秒</span></div>`).join("")}</div>
     ${r.recovery ? `<div class="card" id="ui-recovery"><h3>排查读屏连接</h3><p class="lead">${esc(r.recovery)}</p><div class="actions"><button class="btn plain" onclick="checkUi()">检查读屏连接</button><button class="btn plain" onclick="copyDiagnostics()">复制完整诊断</button></div></div>` : ""}
     <div class="card"><h3>最后一步：关闭开发者模式</h3>
       <p class="lead" style="margin:0 0 12px">${failed ? "有步骤未成功；若还要排查或重试，请先保留 USB 调试。结束排查后再关闭。" : "核对结果后，若不再使用电脑调试，建议关闭开发者模式和 USB 调试。"}部分银行、支付、游戏 App 检测到它开着会提醒或拒绝运行。<br>关掉<b>不会撤销</b>已经成功的改动。</p>
