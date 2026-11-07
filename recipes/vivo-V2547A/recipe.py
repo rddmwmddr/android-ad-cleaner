@@ -7,7 +7,7 @@ BUILD = "PD2547B_A_17.1.10.2"          # ro.build.display.id 的开头；对不�
 #   · 浏览器冷启动停在首页，底部没有「我的」，只能走右上「菜单 → 设置」
 #   · 应用商店的「服务管理」「个性化推荐」在「设置 → 关于」里，且必须点行中间（点左侧文字不转发点击）
 #   · 天气的设置藏在右上 more_btn 后面（页面里那个「更多」是展开按钮，按文字找会点错）
-#   · 关推荐类开关会弹「温馨提示 → 取消 / 确认关闭」，按钮节点 text 是空的，引擎的 p.confirm() 匹配不到
+#   · 关推荐类开关会弹「温馨提示 → 取消 / 确认关闭」，按钮节点 text 是空的，文字挂在 vbutton_title 里（#397）
 #   · 开关行是「整行 + 开关」两个 checkable 节点（y 差 7px），整行节点的标题还会串到上一行，
 #     所以下面自己扫了一遍树，按行还原标题、排除单选钮，再逐行只点一次
 import re
@@ -48,9 +48,11 @@ def bounds_of(n):
 def confirm2():
     """关掉推荐开关后，vivo 会弹「温馨提示 → 取消 / 确认关闭」。
     这个框的按钮 text 是空的（android:id/button1=取消、button2=确认关闭），
-    标题挂在下层 TextView（resource-id=...vbutton_title）里，
-    所以引擎自带的 p.confirm()（按 Button 节点的 text 精确匹配）永远匹配不到，
-    弹窗会一直挂着，后面的每一步都会跑偏。这里改成「看按钮子树里的文字」。"""
+    标题挂在下层 TextView（resource-id=...vbutton_title）里。
+
+    PR #239 起 p.confirm() 也会读 Button 下级整段等于确认词的文字，理论上已覆盖这个形状；
+    但没在 V2547A 真机上验过，暂留这份（#397）。真要换掉，先用 dialog_open() 断言弹窗真的消失：
+    p.confirm() 不要求 clickable="true"，落在不可点击的 Button 上同样返回确认词。"""
     time.sleep(0.35)
     root = p.tree()
     for n in root.iter("node"):
@@ -191,7 +193,7 @@ def off(only=None, keep=(), page="", max_screens=30):
         for t, xy in todo:
             p.click(*xy)
             time.sleep(0.3)
-            hit = confirm2()                    # vivo 的确认框按钮没有 text，必须用 confirm2
+            hit = confirm2()                    # 这个弹窗按钮没有 text，见 confirm2() 的说明
             if hit:
                 print(f"  · 二次确认点了「{hit}」")
             time.sleep(0.15)
