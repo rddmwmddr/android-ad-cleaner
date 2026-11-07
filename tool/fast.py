@@ -833,7 +833,8 @@ class Phone:
     def go(self, text, expect, tries=3, exact=True):
         """点 text，直到 expect 出现在屏幕上（被弹窗吞掉就再点）。
         精确匹配找不到时退回包含匹配：底部标签常读作「我的，有新消息」，精确匹配「我的」返回空（#305）。
-        放宽的只是点哪个节点，落点仍由 expect 确认，点错了照样返回 False。"""
+        已知边界：落点只核对 expect 此刻在不在屏上，不与点击前的页面比较——expect 本来就在屏上时，
+        点击被吞或入口没找到也返回 True。底栏标签改用 tab()，它按屏底带定位。"""
         if exact and not self.find(text, exact=True, edge_ok="tab", nav=True):
             exact = False
         for _ in range(tries):
