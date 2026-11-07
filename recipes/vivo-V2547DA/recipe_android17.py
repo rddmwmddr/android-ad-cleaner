@@ -3,6 +3,7 @@
 # 路径来源：Issue #220 报告者真机实测（V2547DA，PD2547D_A_17.1.10.2.W10，商店 V10.5.20.0，2026-10-28）。
 # 2026-11-03 商店段改用 Phone.tab()、gear() 改用引擎 icon_hit（#530）。
 # 2026-11-07 整段在 V2547DA 真机复测；系统广告、全局搜索、阅图锁屏改为直达，打不开再走菜单（#667）。
+# 2026-11-07 gear() 补落地校验：点不动的齿轮继续找、最后回退按文字点（#575），未复测。
 # 与 recipe.py 的差别只在应用商店——Android 17 的「我的」页没有能读到的齿轮入口，
 # 且「个性化推荐」页两个开关的 content-desc 只有「开启，开关」，读不出标题。
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
@@ -42,15 +43,32 @@ def gear():
     """vivo App 的设置多是右上角齿轮图标，没有文字。
 
     判据用引擎的 icon_hit：旧实现按 content-desc / resource-id 子串匹配，id 里带 setting 的
-    其它入口（商店的 securitySettingSwitchLayout 之类）会被当成齿轮先点掉（#530）。"""
+    其它入口（商店的 securitySettingSwitchLayout 之类）会被当成齿轮先点掉（#530）。
+    点完要认出设置页才算命中：点不动的图标页面没换，接着试下一个候选；点进了别的页先退回来
+    再试；都点不进去时回退到按文字点，回退也没进设置页才算失败（#575）。"""
     from fast import bounds, icon_hit
+
+    def landed(focus0):
+        if p.focus() == focus0:
+            return False                    # 点击被吞：页面没换，不能当成进了设置页
+        if p.in_settings_page():
+            return True
+        # Activity 名不含 Setting 的 App：只认顶上标题带那一处「设置」——齿轮自己也读作「设置」
+        at = p.find("设置", exact=True)
+        return bool(at) and at[1] < p.H * 0.25
+
     for n in p.tree().iter("node"):
         l, t, r, b = bounds(n)
         icon = "ImageView" in n.get("class", "") and r - l < p.W * 0.25 and b - t < p.H * 0.15
         if icon_hit(n) and (n.get("clickable") == "true" or icon) and p.on_screen(n):
-            p.click((l + r) // 2, (t + b) // 2); time.sleep(1)
-            return True
-    return p.tap("设置", exact=True, scrolls=0)
+            focus0 = p.focus()
+            p.click((l + r) // 2, (t + b) // 2); p.await_page(1.5)
+            if landed(focus0):
+                return True
+            if p.focus() != focus0:         # 点进了别的页：退回来，别用旧树的坐标在新页上接着点
+                p.back(); time.sleep(0.6)
+    focus0 = p.focus()
+    return p.tap("设置", exact=True, scrolls=0) and landed(focus0)
 
 
 def off_unnamed(page):

@@ -98,6 +98,7 @@ TEXT_DECOY = ('<node class="android.widget.TextView" text="去功能设置里重
               ' bounds="[0,600][1080,680]"/>')
 DESC_DECOY = ('<node class="android.widget.TextView" content-desc="去功能设置里重新开启"'
               ' clickable="true" bounds="[0,900][1080,980]"/>')
+SETTINGS = "com.bbk.appstore/.ui.menu.AppstoreSettingsActivity"
 # 看起来像图标但没勾 clickable：旧实现漏掉，新实现按尺寸启发式认。
 UNCLICKABLE_GEAR = ('<node class="android.widget.ImageView" content-desc="设置" clickable="false"'
                     ' bounds="[900,100][1020,220]"/>')
@@ -108,6 +109,10 @@ def make_phone(nodes):
     p.tree.return_value = ET.fromstring(f"<hierarchy>{nodes}</hierarchy>")
     p.on_screen.return_value = True
     p.tap.return_value = False
+    # 点完才进商店设置页：gear() 要求页面确实换了才算命中（#575）
+    p.focus.side_effect = lambda: (SETTINGS if p.click.called
+                                   else "com.bbk.appstore/.MainActivity")
+    p.in_settings_page.side_effect = lambda: bool(p.click.called)
     return p
 
 
