@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from fixtures import load_recipe
+from fixtures import load_recipe, phone_mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -13,7 +13,7 @@ RECIPE = ROOT / "recipes" / "honor-CLE-AN00" / "recipe.py"
 
 
 def phone(**over):
-    p = Mock()
+    p = phone_mock(W=1080, H=2400)
     p.locked.return_value = False
     p.focus.return_value = ""
     p.entry.return_value = True
@@ -24,7 +24,6 @@ def phone(**over):
     p.expect_page.return_value = True
     p.switches.return_value = []
     p.texts.return_value = []
-    p.W, p.H = 1080, 2400
     for k, v in over.items():
         setattr(p, k, v)
     return p
@@ -151,6 +150,33 @@ class MarketTest(unittest.TestCase):
         scope, out = run(p, "市场")
         self.assertEqual(scope["FAILED_STEPS"], ["市场"])
         self.assertIn("内容推荐服务", out)
+
+    def test_tab_hidden_by_a_late_dialog_is_not_read_as_basic_service(self):
+        # 晚到的「发现新版本」盖住底栏时「我的」读不到；只是被盖住，不是基本服务模式
+        p = phone()
+        covered = {"dialog": True}
+
+        def find(text, exact=False, **kw):
+            if text == "基本服务":
+                return object()
+            if text == "我的":
+                return None if covered["dialog"] else object()
+            return None
+
+        p.find.side_effect = find
+        p.dismiss.side_effect = lambda: covered.update(dialog=False)
+        scope, _ = run(p, "市场")
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        p.tab.assert_called_once_with("我的")
+
+
+class LaunchTest(unittest.TestCase):
+    def test_raw_launch_sets_the_app_used_by_promoted_checks(self):
+        # launch() 绕开 p.start：不设 p.app，推广位识别会沿用上一段的 App
+        p = in_app(phone(), BROWSER)
+        p.find.side_effect = agreement
+        run(p, "浏览器")
+        self.assertEqual(p.app, BROWSER)
 
 
 class AdTrackingTest(unittest.TestCase):

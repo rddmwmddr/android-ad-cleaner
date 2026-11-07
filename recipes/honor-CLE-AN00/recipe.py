@@ -63,9 +63,13 @@ def wait_open(pkg, app):
 
 
 def launch(activity, app):
-    """裸启动。弹着协议时 p.start 会替我们点「取消」，App 一退就分不清是没同意还是没打开。"""
+    """裸启动。弹着协议时 p.start 会替我们点「取消」，App 一退就分不清是没同意还是没打开。
+    p.start 平时会登记目标 App 并清推广位记录，绕开它就要自己补，否则后面按上一段的 App 判推广位。"""
+    pkg = activity.split("/", 1)[0]
+    p.app = pkg
+    p.promoted.clear()
     p.d.shell(f"am start -f 0x10008000 -n {activity}")
-    wait_open(activity.split("/", 1)[0], app)
+    wait_open(pkg, app)
 
 
 def wait_home(app):
@@ -181,6 +185,9 @@ def _():
 def _():
     p.start("com.hihonor.appmarket")
     no_agreement("应用市场")
+    if p.find("基本服务", exact=True, edge_ok="tab") and not p.find("我的", edge_ok="tab"):
+        # 晚到的「发现新版本」盖住底栏时也读不到「我的」：关掉弹窗再看一次，别误判成基本服务模式
+        p.dismiss(); time.sleep(1.5)
     if p.find("基本服务", exact=True, edge_ok="tab") and not p.find("我的", edge_ok="tab"):
         raise SkipStep("已是基本服务模式，没有推荐，也没有设置入口")
     my_tab("市场")                           # 底栏带角标，读作「我的,您在应用市场共有 N 条通知」，精确匹配找不到
