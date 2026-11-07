@@ -100,6 +100,13 @@ class HandlerInterfaceTests(unittest.TestCase):
                 self.assertEqual(run.main(["-s", "S", command, *rest]), 3)
                 self.assertEqual(child.call_args.args, expected)
 
+    def test_adapt_forwards_child_code(self):
+        """adapt 不在 COMMANDS 表里（它在 -s 解析之前转发），子进程码照样原样透出。
+        旧树也绿，守的是不回退：`adapt.py` 改成返回退出码之后，这条转发仍是它唯一的出口（#708）。"""
+        with patch.object(run, "py", return_value=3) as child:
+            self.assertEqual(run.main(["adapt", "gen", "探路.tsv"]), 3)
+        child.assert_called_once_with("adapt.py", "gen", "探路.tsv")
+
     def test_chan_scan_forwards_child_code_and_its_stderr(self):
         err = io.StringIO()
         failed = SimpleNamespace(returncode=7, stdout="", stderr="读取失败\n")

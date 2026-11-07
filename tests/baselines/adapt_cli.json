@@ -1,0 +1,104 @@
+{
+  "provenance": {
+    "baseline": "294ff50",
+    "how": "git archive <sha> | tar -x -C /tmp/aac-adapt-base && .venv/bin/python tests/make_adapt_cli_baseline.py /tmp/aac-adapt-base <sha>",
+    "cases": 19
+  },
+  "cases": {
+    "gen-成功": {
+      "rc": 0,
+      "stdout": "⚠ 这些是保护类开关（打开才是保护），没有写进草稿：限制广告跟踪\n草稿已生成：草稿-PJA110.py（2 段，2 个开关，均为待验证）\nBUILD 为空：自检时不比对系统版本；转正式脚本前请填上录制版本（ro.build.display.id）\n下一步：python3 tool/run.py -s <序列号> adapt check 草稿-PJA110.py\n自检通过也不等于适配完成：请人工在手机上核对每一步，再决定是否转为正式机型脚本。\n",
+      "stderr": ""
+    },
+    "gen-型号认不出": {
+      "rc": 0,
+      "stdout": "⚠ 这些是保护类开关（打开才是保护），没有写进草稿：限制广告跟踪\n草稿已生成：草稿.py（2 段，2 个开关，均为待验证）\n没能从文件名认出型号，MODELS 为空；补型号用 --model，或直接把文件名改成 探路-<型号>.tsv\nBUILD 为空：自检时不比对系统版本；转正式脚本前请填上录制版本（ro.build.display.id）\n下一步：python3 tool/run.py -s <序列号> adapt check 草稿.py\n自检通过也不等于适配完成：请人工在手机上核对每一步，再决定是否转为正式机型脚本。\n",
+      "stderr": ""
+    },
+    "gen-勾选清单": {
+      "rc": 0,
+      "stdout": "草稿已生成：草稿-PLP120.py（1 段，1 个开关，均为待验证）\n下一步：python3 tool/run.py -s <序列号> adapt check 草稿-PLP120.py\n自检通过也不等于适配完成：请人工在手机上核对每一步，再决定是否转为正式机型脚本。\n",
+      "stderr": ""
+    },
+    "gen-选项缺值": {
+      "rc": 1,
+      "stdout": "",
+      "stderr": "选项 -o 后面要跟值\n"
+    },
+    "gen-不认识的选项": {
+      "rc": 1,
+      "stdout": "",
+      "stderr": "不认识的选项 --bogus。用法：run.py adapt gen <探路-型号.tsv> [-o 输出.py] [--pick 清单.txt] [--model 型号] [--build 录制版本]\n"
+    },
+    "gen-两个TSV": {
+      "rc": 1,
+      "stdout": "",
+      "stderr": "只收一个探路 TSV 文件；要合并多份结果请先手工合并\n"
+    },
+    "gen-没有给TSV": {
+      "rc": 1,
+      "stdout": "",
+      "stderr": "用法：run.py adapt gen <探路-型号.tsv> [-o 输出.py] [--pick 清单.txt] [--model 型号] [--build 录制版本]\n"
+    },
+    "gen-找不到TSV": {
+      "rc": 1,
+      "stdout": "",
+      "stderr": "找不到 无.tsv\n"
+    },
+    "gen-没有数据行": {
+      "rc": 1,
+      "stdout": "",
+      "stderr": "空.tsv 里没有数据行\n"
+    },
+    "gen-没有勾选": {
+      "rc": 1,
+      "stdout": "",
+      "stderr": "没有勾选任何开关：在 TSV 末列「人工勾选」写「关」，或用 --pick 给清单文件。工具不自动决定关哪些开关。\n"
+    },
+    "gen-找不到勾选清单": {
+      "rc": 1,
+      "stdout": "",
+      "stderr": "找不到勾选清单 无.txt\n"
+    },
+    "gen-写不出": {
+      "rc": 1,
+      "stdout": "⚠ 这些是保护类开关（打开才是保护），没有写进草稿：限制广告跟踪\n",
+      "stderr": "写不出 无此目录/草稿.py：[Errno 2] <OSERR>: '无此目录/草稿.py'\n"
+    },
+    "check-缺参数": {
+      "rc": 1,
+      "stdout": "",
+      "stderr": "用法：run.py adapt check -s <序列号> <草稿.py> [段名 …]\n"
+    },
+    "check-参数顺序错": {
+      "rc": 1,
+      "stdout": "",
+      "stderr": "用法：run.py adapt check -s <序列号> <草稿.py> [段名 …]\n"
+    },
+    "check-找不到草稿": {
+      "rc": 1,
+      "stdout": "",
+      "stderr": "找不到 无.py\n"
+    },
+    "explore-缺序列号": {
+      "rc": 1,
+      "stdout": "",
+      "stderr": "用法：run.py adapt explore -s <序列号> [包名 …]\n"
+    },
+    "explore-只给-s": {
+      "rc": 1,
+      "stdout": "",
+      "stderr": "用法：run.py adapt explore -s <序列号> [包名 …]\n"
+    },
+    "explore-参数顺序错": {
+      "rc": 1,
+      "stdout": "",
+      "stderr": "用法：run.py adapt explore -s <序列号> [包名 …]\n"
+    },
+    "未知子命令": {
+      "rc": 1,
+      "stdout": "",
+      "stderr": "adapt 后面跟 explore / gen / check。用法：run.py adapt --help\n"
+    }
+  }
+}

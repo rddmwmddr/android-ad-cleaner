@@ -2,6 +2,7 @@
 
 运行：python -m unittest discover -s tests -v
 """
+import ast
 import contextlib
 import io
 from pathlib import Path
@@ -68,9 +69,11 @@ class TsvParseTests(unittest.TestCase):
             rows = adapt.parse_tsv(path)
         self.assertEqual(rows[0]["pick"], "")
 
-    def test_missing_tsv_fails_clearly(self):
-        with self.assertRaises(SystemExit):
-            adapt.read_pick_file("/不存在的清单.txt")
+    def test_missing_pick_file_reports_its_reason_instead_of_exiting(self):
+        """#708：helper 只把文案交回调用方，退出码归 cmd_gen（ADR-0005 的形状）。"""
+        titles, error = adapt.read_pick_file("/不存在的清单.txt")
+        self.assertIsNone(titles)
+        self.assertEqual(error, "找不到勾选清单 /不存在的清单.txt")
 
 
 class SelectionTests(unittest.TestCase):
@@ -79,7 +82,9 @@ class SelectionTests(unittest.TestCase):
             rows = adapt.parse_tsv(write_tsv(d))
             pick = Path(d) / "pick.txt"
             pick.write_text("# 人工确认\n活动弹窗\n", encoding="utf-8")
-            groups, protection, ad_left = adapt.select_rows(rows, adapt.read_pick_file(pick))
+            titles, error = adapt.read_pick_file(pick)
+            self.assertIsNone(error)
+            groups, protection, ad_left = adapt.select_rows(rows, titles)
         self.assertEqual(groups, [
             ("com.heytap.market", "设置 > 隐私", ["个性化推荐"]),
             ("com.heytap.market", "设置 > 服务管理", ["活动弹窗"]),
@@ -151,12 +156,21 @@ class DraftGenTests(unittest.TestCase):
         self.assertIn('MODELS = ["PLP120"]', src)
 
     def test_no_selection_refuses_to_generate(self):
+        err = io.StringIO()
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "empty.tsv"
             path.write_text("com.a\t设置\t个性化推荐\t开\t★\t\n", encoding="utf-8")
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+                code = adapt.cmd_gen([str(path), "-o", str(Path(d) / "x.py")])
+            self.assertFalse((Path(d) / "x.py").exists())
+        self.assertEqual(code, 1)
+        self.assertIn("没有勾选任何开关", err.getvalue())
+
+    def test_successful_generation_returns_zero(self):
+        with tempfile.TemporaryDirectory() as d:
             with contextlib.redirect_stdout(io.StringIO()):
-                with self.assertRaises(SystemExit):
-                    adapt.cmd_gen([str(path), "-o", str(Path(d) / "x.py")])
+                code = adapt.cmd_gen([str(write_tsv(d)), "-o", str(Path(d) / "草稿.py")])
+        self.assertEqual(code, 0)
 
 
 class CheckReportTests(unittest.TestCase):
@@ -219,13 +233,41 @@ class CheckReportTests(unittest.TestCase):
         self.assertIn("不能把部分完成当成适配成功", out.getvalue())
 
     def run_check_entry(self, draft_path, switch_lists):
-        """走 check 的真实入口（`adapt.main(["check", …])`），拿进程退出码。"""
+        """走 check 的真实入口（`adapt.main(["check", …])`），拿返回的退出码。"""
         p = draft_phone(switch_lists)
         with patch.object(adapt, "Phone") as P, contextlib.redirect_stdout(io.StringIO()):
             P.return_value.__enter__.return_value = p
-            with self.assertRaises(SystemExit) as result:
-                sys.exit(adapt.main(["check", "-s", "FAKE_SERIAL", str(draft_path)]))
-        return result.exception.code
+            return adapt.main(["check", "-s", "FAKE_SERIAL", str(draft_path)])
+
+    def test_locked_phone_exits_one_before_running_the_draft(self):
+        """锁屏是 check 的第三条退出：返回码 1 + 逐字文案，且不碰插电常亮、不跑草稿。"""
+        p = draft_phone([])
+        p.locked.return_value = True
+        err = io.StringIO()
+        with tempfile.TemporaryDirectory() as d:
+            with patch.object(adapt, "Phone") as P, contextlib.redirect_stdout(io.StringIO()), \
+                 contextlib.redirect_stderr(err):
+                P.return_value.__enter__.return_value = p
+                code = adapt.main(["check", "-s", "FAKE_SERIAL", str(self.draft(d))])
+        self.assertEqual(code, 1)
+        self.assertEqual(err.getvalue(), "手机锁屏了，请机主解锁后再跑\n")
+        p.d.shell.assert_not_called()
+        p.off.assert_not_called()
+
+    def test_close_failure_keeps_the_lock_message_unprinted(self):
+        """旧实现里那句锁屏文案是挂起的 `SystemExit`，`Phone` 关闭抛错时它不会被打出来。
+        返回码写法要保住同一个时机：文案等 `__exit__` 跑完才渲染（ADR-0005 的 `cmd_recipe` 同型）。"""
+        p = draft_phone([])
+        p.locked.return_value = True
+        err = io.StringIO()
+        with tempfile.TemporaryDirectory() as d, \
+             patch.object(adapt, "Phone") as P, contextlib.redirect_stdout(io.StringIO()), \
+             contextlib.redirect_stderr(err):
+            P.return_value.__enter__.return_value = p
+            P.return_value.__exit__.side_effect = RuntimeError("读屏服务没关掉")
+            with self.assertRaises(RuntimeError):
+                adapt.main(["check", "-s", "FAKE_SERIAL", str(self.draft(d))])
+        self.assertEqual(err.getvalue(), "")
 
     def test_all_closed_check_exits_zero(self):
         with tempfile.TemporaryDirectory() as d:
@@ -322,6 +364,40 @@ class ExploreNavigationTests(unittest.TestCase):
         for entry in ("声音", "显示"):
             self.assertNotIn(entry, tapped)                         # 中断后不再探剩下的条目
         p.d.app_stop.assert_called_once_with("com.example")
+
+
+class EntryShapeTests(unittest.TestCase):
+    """#708：adapt 与 ADR-0005 同形状——命令只返回退出码，退出只留在 `__main__` 那一处。"""
+
+    def test_help_prints_the_module_doc_and_returns_zero(self):
+        """用法说明与 `__doc__` 逐字相等。旧树也绿，守的是不回退。
+        不进子进程对拍：3.13 起编译器会去掉文档字符串的公共缩进，3.12 不会，
+        同一份源码跨版本逐字不同（与 test_run_commands 同一条理由）。"""
+        for argv in ([], ["-h"], ["--help"]):
+            with self.subTest(argv), contextlib.redirect_stdout(out := io.StringIO()):
+                self.assertEqual(adapt.main(argv), 0)
+            self.assertEqual(out.getvalue(), adapt.__doc__ + "\n")
+
+    def test_unknown_subcommand_returns_one_and_names_the_choices(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(adapt.main(["bogus"]), 1)
+        self.assertEqual(err.getvalue(), "adapt 后面跟 explore / gen / check。用法：run.py adapt --help\n")
+
+    def test_error_rendering_is_the_same_function_as_run(self):
+        """错误渲染只留一份：ADR-0005 的 `run.fail()` 是「自述型文案」的唯一出处（#708）。"""
+        self.assertIs(adapt.fail, run.fail)
+
+    def test_exit_lives_only_at_the_entry(self):
+        """helper 与命令入口里不许再出现 `sys.exit`：退出码的唯一出口是 `__main__` 那一行。"""
+        tree = ast.parse(Path(adapt.__file__).read_text(encoding="utf-8"))
+        exits = [node for node in ast.walk(tree)
+                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                 and node.func.attr == "exit" and getattr(node.func.value, "id", "") == "sys"]
+        system_exits = [node for node in ast.walk(tree)
+                        if isinstance(node, ast.Name) and node.id == "SystemExit"]
+        self.assertEqual(exits, [])
+        self.assertEqual(len(system_exits), 1)
 
 
 if __name__ == "__main__":

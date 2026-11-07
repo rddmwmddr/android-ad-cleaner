@@ -57,3 +57,4 @@
 - **范围**：只动 `tool/run.py` 与新增测试。`recipes/` 冻结；命令行参数与 GUI 的调用方式（`gui/app.py` 的 `_work` / `Task` / `_run`）一律不改。`status-json` 的 `print(json.dumps(...))` 一行不动，GUI 仍然解析末行。
 - **未验证**：没有 Windows、没有打包环境、没有真机。`raise SystemExit(main())` 这条依据是 `run.py` 本来就直调 `main()`，打包壳只换入口路径；验证范围是本机单测与子进程对拍。
 - CHANGELOG 的「## 未发布」一条加在实现那一笔，本 ADR 只落决策。
+- **2026-11-07 增补（#708）**：`tool/adapt.py` 的三条子命令（`gen` / `check` / `explore`）随后也收成同一形状——`from run import fail` 复用这里的唯一渲染、命令入口返回退出码、`sys.exit` 只剩 `__main__` 一处；对外退出码与 stderr 文案由 `tests/baselines/adapt_cli.json` 对拍守着（19 组，基线 `294ff50`）。`fast.py` / `chan_fast.py` 不在其中：前者没有进程内调用者，后者的退出都在 `main()` 尾部与参数解析。
