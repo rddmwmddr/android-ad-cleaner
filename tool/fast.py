@@ -1150,7 +1150,8 @@ class Phone:
 
     def type_text(self, kw, timeout=4.0):
         """往当前输入框打字。部分机型（小米 HyperOS 设置搜索）用 setText 会卡住、一直打「%」：
-        加超时，打完核对；不对就清掉、改用剪贴板粘贴；还不对就关掉键盘返回 False，不卡住。"""
+        加超时，打完核对；不对就清掉、改用剪贴板粘贴；还不对就返回 False，不卡住。
+        失败时不退场：离开搜索页只由调用方的 `_leave_search()` 做（#639）。"""
         if not self.edit_ready():
             return False
 
@@ -1186,7 +1187,6 @@ class Phone:
         if attempt(paste):
             return True
         clear()
-        self.reader.shell("input keyevent BACK")
         return False
 
     BOX = re.compile(r"^搜索.{0,6}设置|^Search settings", re.I)
@@ -1208,6 +1208,22 @@ class Phone:
         if getattr(res, "exit_code", 0) or "Error" in out or "unable to resolve" in out.lower():
             return False
         return bool(wait.until(self.edit_ready, timeout=2.5, poll=0.15, now=time.time, sleep=time.sleep))
+
+    def _leave_search(self):
+        """离开设置搜索页并回到设置首页（#639）：按 BACK 收起键盘、退出搜索页，
+        再拉起设置首页——直达搜索页时它是新任务根，BACK 会落到桌面而不是设置首页。
+        搜索失败的各条路径共用这一处退场。"""
+        if not self.edit_ready():
+            return True
+        for _ in range(3):
+            self.back()
+            if not self.edit_ready():
+                break
+        else:
+            return False
+        self.reader.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
+        time.sleep(0.5)
+        return True
 
     def setting(self, kw, entry=None, box=None, path=None):
         """系统设置里搜 kw，点结果 entry（默认就是 kw）。
@@ -1234,6 +1250,13 @@ class Phone:
                 return ((l + r) // 2, (tp + b) // 2)
             return None
 
+        def give_up(msg):
+            # 失败前把页面退回设置首页：留在搜索页上，调用方后续的滚屏会全落在输入法上（#639）
+            self.say(msg)
+            if not self._leave_search():
+                self.say(f"  · 设置搜索页退不出去，当前停在 {self.focus()}")
+            return False
+
         opened = self._search_page()
         if not opened:
             self.reader.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
@@ -1248,15 +1271,12 @@ class Phone:
                 if opened:
                     break
         if not opened:
-            self.say(f"  ✗ 设置搜索框没打开，跳过「{kw}」")
-            return False
+            return give_up(f"  ✗ 设置搜索框没打开，跳过「{kw}」")
         if not self.type_text(kw):
-            self.say(f"  ✗ 设置搜索框输入「{kw}」失败，跳过")
-            return False
+            return give_up(f"  ✗ 设置搜索框输入「{kw}」失败，跳过")
         xy = wait.until(result_at, timeout=3, poll=0.15, now=time.time, sleep=time.sleep)
         if not xy:
-            self.say(f"  ✗ 没搜到「{entry or kw}」，跳过")
-            return False
+            return give_up(f"  ✗ 没搜到「{entry or kw}」，跳过")
         before = self.focus()
         self.click(*xy)
 
@@ -1264,8 +1284,7 @@ class Phone:
             return self.focus() != before or not self.edit_ready()
 
         if not wait.until(left_search, timeout=3, poll=0.15, now=time.time, sleep=time.sleep):
-            self.say(f"  ✗ 搜索结果「{entry or kw}」没有打开，跳过")
-            return False
+            return give_up(f"  ✗ 搜索结果「{entry or kw}」没有打开，跳过")
         time.sleep(0.3)                      # 结果页起来了，给它的内容留一拍
         return True
 
