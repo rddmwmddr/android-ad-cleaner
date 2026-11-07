@@ -48,7 +48,7 @@
 
 | 模块 | 拥有什么 |
 |---|---|
-| `adapt.py` | 新机型适配辅助：探路 → 勾选 → 草稿 → 自检 |
+| `adapt.py` | 新机型适配辅助：试入口 → 探路 → 勾选 → 草稿 → 自检 |
 | `explore.py` | 探路：只读，列出像广告的开关 |
 | `huawei_channels.py` | 华为 ALN-AL00 的清单式渠道处理，需人工审核清单，客户端不自动跑 |
 | `gen_brand_taps.py` | 从 `docs/手机版教程/brand-taps.json` 渲染连点表 |

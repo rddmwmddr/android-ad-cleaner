@@ -6,6 +6,7 @@
   python3 tool/run.py -s 序列号 ui-check           只读：检查手机读屏服务，不点击任何开关
   python3 tool/run.py -s 序列号 backup             改动前快照，存到 backups/<型号>-<时间>/
   python3 tool/run.py -s 序列号 recipe [段名 …]     跑本机型机型脚本（不带段名=全跑）
+  python3 tool/run.py -s 序列号 adapt survey       只读：拿同家族验证过的直达逐条试入口，报打不开与命中的词
   python3 tool/run.py -s 序列号 adapt explore [包名 …]  只读：探路新机型 → 探路-<型号>.tsv（末列供人工勾选）
   python3 tool/run.py adapt gen 探路-<型号>.tsv      把人工勾选的开关生成 recipe 草稿（不碰手机；草稿≠适配）
   python3 tool/run.py -s 序列号 adapt check 草稿.py  安全模式自检草稿，输出适配报告（找不到就如实说找不到）
@@ -876,6 +877,10 @@ def dispatch(a):
     adb()
     if a[0] != "-s" or len(a) < 3:
         return fail("命令格式：run.py -s <序列号> <命令>。先跑 run.py devices 看序列号")
+    # 文档里写的是 `-s 序列号 adapt <子命令>`；adapt.py 自己收的是子命令在前。gen 不碰手机，不带 -s。
+    if a[2] == "adapt" and len(a) > 3 and a[3] in ("survey", "explore", "check"):
+        adb_shell(a[1], "getprop ro.product.brand")     # 设备不在时给出与其它 -s 命令同样的人话，不是子进程 traceback
+        return py("adapt.py", a[3], "-s", a[1], *a[4:])
     handler = COMMANDS.get(a[2])
     if handler is None:
         print(__doc__); return 0
