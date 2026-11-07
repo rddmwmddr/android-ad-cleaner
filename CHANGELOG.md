@@ -45,6 +45,7 @@
 - 收尾复查与 verify 的逐项行带上包名，同名渠道分得清是哪个 App（#751）
 - 官网两页的调色板、深色档、顶栏与页脚由 `site.css` 生成，不再各存一份（#653，ADR-0025）
 - `SizedButton` 以 `tonal` 档位取代 `colors` 参数，调用点不再覆盖配色（#777）
+- `AppModel.redetect()` 改名 `restartScan()`，删掉多余的 `Screen.Choose` 赋值（#701）
 
 ## 0.4.0 · 2026-11-07
 
