@@ -23,11 +23,11 @@ https://t.me/+A5X3Mxzs-Cg3NjYx
 |---|---|---|
 | Mac · Apple 芯片（M1 及以后） | [AndroidAdCleaner-0.4.0-mac-arm64.dmg](https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.0/AndroidAdCleaner-0.4.0-mac-arm64.dmg) | 已签名、通过苹果公证，双击就能打开 |
 | Mac · Intel 芯片（macOS 11 及以上） | [AndroidAdCleaner-0.4.0-mac-intel.dmg](https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.0/AndroidAdCleaner-0.4.0-mac-intel.dmg) | 同上 |
-| Windows 10 / 11 · 安装版 | [AndroidAdCleaner-0.4.0-windows-setup.exe](https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.0/AndroidAdCleaner-0.4.0-windows-setup.exe) | 弹「Windows 已保护你的电脑」时点「更多信息」→「仍要运行」 |
-| Windows 10 / 11 · 免安装 | [AndroidAdCleaner-0.4.0-windows-portable.zip](https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.0/AndroidAdCleaner-0.4.0-windows-portable.zip) | 解压后双击 `AndroidAdCleaner.exe` |
+| Windows 10 / 11 · 安装版 | [AndroidAdCleaner-0.4.0-windows-setup.exe](https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.0/AndroidAdCleaner-0.4.0-windows-setup.exe) | 弹「Windows 已保护你的电脑」时点「更多信息」→「仍要运行」；和旧版共用安装标识，会原地升级 |
+| Windows 10 / 11 · 免安装 | [AndroidAdCleaner-0.4.0-windows-portable.zip](https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.0/AndroidAdCleaner-0.4.0-windows-portable.zip) | 解压后双击 `AndroidAdCleaner.exe`；不会替换、也不会卸载已安装的旧版 |
 | 安卓手机 · 手机版（安卓 11 及以上） | [AndroidAdCleaner-0.4.0-android-arm64.apk](https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.0/AndroidAdCleaner-0.4.0-android-arm64.apk) | 不用连电脑，安装和授权见[手机版教程](docs/手机版教程/README.md) |
 
-不知道 Mac 是哪种芯片：左上角苹果图标 → 关于本机，「芯片」写 Apple M 开头的选 Apple 芯片。所有版本：[Releases](https://github.com/rddmwmddr/android-ad-cleaner/releases)；国内下载走 [Gitee](https://gitee.com/rddmw/android-ad-cleaner/releases)，不用登录（Windows 安装版只在 GitHub 上）。用法：[docs/08-桌面客户端.md](docs/08-桌面客户端.md)。
+不知道 Mac 是哪种芯片：左上角苹果图标 → 关于本机，「芯片」写 Apple M 开头的选 Apple 芯片。所有版本：[Releases](https://github.com/rddmwmddr/android-ad-cleaner/releases)；国内下载走 [Gitee](https://gitee.com/rddmw/android-ad-cleaner/releases)，不用登录（Windows 安装版只在 GitHub 上）。国内走 Gitee 时拿到的是 Windows 免安装版，它不会替换已安装的旧版：要顶掉旧版，用安装版覆盖安装，或先在 Windows「设置」的应用列表里卸载旧的「安卓去广告」（0.3.2 及更早版本装的名字）再删掉旧快捷方式；卸载只删程序目录，数据与备份保留。用法：[docs/08-桌面客户端.md](docs/08-桌面客户端.md)。
 
 > 手机版是不用连电脑的安卓 App（见下面[用法五](#五种用法)）：安装包在上面的表里，安装、授权与还原步骤见[手机版教程](docs/手机版教程/README.md)；想自己构建看 [android/](android/README.md)。
 

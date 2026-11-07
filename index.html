@@ -299,7 +299,7 @@ footer a:hover { color: var(--ink); }
   <div class="wrap">
     <div class="head">
       <h2>下载</h2>
-      <p class="lead" id="dl-lead">选你的设备。国内下载走 Gitee，不用登录。替换旧版程序，原来的备份保留。</p>
+      <p class="lead" id="dl-lead">选你的设备。国内下载走 Gitee，不用登录。安装版会原地替换旧版，原来的备份保留；免安装版不会。</p>
     </div>
     <div class="dl" id="dl"></div>
     <div class="after" id="dl-after"></div>
@@ -425,6 +425,7 @@ footer a:hover { color: var(--ink); }
       <details><summary>（电脑版）Mac 怎么看是哪种芯片？</summary><p>屏幕左上角苹果图标 → 关于本机。「芯片」一栏写 Apple M 开头的是 Apple 芯片，写 Intel 的是 Intel 芯片。</p></details>
       <details><summary>（电脑版）Windows 弹出「Windows 已保护你的电脑」</summary><p>安装程序没有代码签名。点「更多信息」→「仍要运行」。</p></details>
       <details><summary>（电脑版）Windows 提示缺少 WebView2，或提示「程序文件被 Windows 标记成来自网络」</summary><p>到微软官网下载安装「WebView2 Evergreen Bootstrapper」，然后打开本程序。安装后提示没有消失，把弹窗括号里的原文发到反馈里。</p><p>用的是便携版（zip 解压出来的）时，提示可能不是真的缺 WebView2，而是解压出来的文件被 Windows 标成「来自网络」、加载时被拦住了：对下载的 zip 点右键 →「属性」→ 勾选「解除锁定」→ 确定，重新解压后再打开；zip 已经删了，就在解压出来的文件夹里按住 Shift 点右键 →「在此处打开 PowerShell 窗口」，粘贴 <code>Get-ChildItem . -Recurse -File | Unblock-File</code> 回车。安装版不受影响。</p><p>提示「本地程序集被判成远程来源」时，确认 <code>AndroidAdCleaner.exe</code> 旁边有 <code>AndroidAdCleaner.exe.config</code>（新版包自带，别删、别改名）；没有就用最新版 zip 重新解压，有了还这样也换最新版。</p></details>
+      <details><summary>（电脑版）Windows 上装了新版，旧的「安卓去广告」还在，两个程序并存</summary><p>国内走 Gitee 拿到的是免安装版（zip），它不会替换、也不会卸载之前装过的旧版。想让新版顶掉旧版，两种做法任选：用 GitHub 上的安装版覆盖安装，它和旧版共用同一个安装标识，会原地升级并清掉旧的开始菜单项和桌面快捷方式；或先卸载旧的「安卓去广告」（0.3.2 及更早版本装的名字）——Windows 11 在「设置 → 应用 → 已安装的应用」里，Windows 10 在「设置 → 应用和功能」里——再删掉桌面和开始菜单里的旧快捷方式。卸载只删程序目录，数据与备份保留。</p></details>
       <details><summary>（电脑版）插上手机，客户端认不出来</summary><p>换一根能传数据的线，插电脑后面的 USB 口；后面的口是 USB 2.0 的话，换一个 USB 3.0 口再试；手机通知栏里 USB 用途选「传输文件」；手机弹窗点「允许 USB 调试」。荣耀、华为打开「仅充电模式下允许 ADB 调试」；三星装三星 USB 驱动。退出电脑上的手机助手和安卓模拟器。</p></details>
       <details><summary>小米 / Redmi 点不动，跑一半锁屏</summary><p>开发者选项里打开「USB 调试（安全设置）」，需要插 SIM 卡、登录小米账号。</p></details>
       <details><summary>会影响系统更新和保修吗？</summary><p>不会。不 root，不解锁，不改系统分区。用到的是开发者选项和系统自带的设置项。</p></details>
@@ -466,7 +467,7 @@ const REL = {
     { id: "win-setup", folder: "Windows-安装版", baidu: { url: "", code: "" }, title: "Windows · 安装版", sub: "Windows 10 / 11（64 位）", file: "AndroidAdCleaner-0.4.0-windows-setup.exe", size: "30.7 MB",
       note: "弹出安全提示时点「更多信息」→「仍要运行」", sha: "5e345d159df1b1afb3f63bec58c37424a5c226a4f477576fd1736b0b40c8962e", gitee: false },
     { id: "win-zip", folder: "Windows-免安装版", baidu: { url: "", code: "" }, title: "Windows · 免安装", sub: "Windows 10 / 11（64 位）", file: "AndroidAdCleaner-0.4.0-windows-portable.zip", size: "45.5 MB",
-      note: "解压后双击 AndroidAdCleaner.exe", sha: "cdcfa806a8963a701f959918915cb512d6385abfc8376bcabf36719bf073fecf" },
+      note: "解压后双击 AndroidAdCleaner.exe。不会替换、也不会卸载已安装的旧版；要顶掉旧版请用安装版覆盖安装，或先在 Windows「设置」的应用列表里卸载旧的「安卓去广告」（0.3.2 及更早版本装的名字）。卸载只删程序目录，数据与备份保留", sha: "cdcfa806a8963a701f959918915cb512d6385abfc8376bcabf36719bf073fecf" },
     { id: "android", folder: "安卓手机", baidu: { url: "", code: "" }, title: "安卓手机 · 手机版", sub: "安卓 11 及以上", file: "AndroidAdCleaner-0.4.0-android-arm64.apk", size: "52.7 MB",
       note: "不用连电脑，在手机上点一下", sha: "07f04bdbfb5d5a516e0f605bcf0cea362a6e600b8515bea6689c3cae92102dc9" },
   ],
@@ -554,7 +555,7 @@ async function copy(text, button, doneText){
       <span class="os">${osLabel(f)}</span>
       <h3>${esc(f.title.split(" · ")[1] || f.title)}</h3>
       <span class="sub">${esc(f.sub)}</span>
-      <span class="note">${esc(f.note)}${f.gitee === false && !cn ? "。国内网络建议下载免安装版" : ""}</span>
+      <span class="note">${esc(f.note)}${f.gitee === false && !cn ? "。国内下不到安装版，要它请点下面的 GitHub 下载" : ""}</span>
       <span class="size">${esc(f.size)}</span>
       <div class="btns">
         ${cn ? `<a class="btn primary" href="${esc(cn)}" target="_blank" rel="noopener">国内下载</a>` : ""}

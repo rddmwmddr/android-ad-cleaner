@@ -152,14 +152,36 @@ test("页面上看不到百度网盘，国内下载指向这一版的 Gitee 路�
   } finally { page.close(); }
 });
 
-test("Gitee 拒收的 Windows 安装版只给 GitHub，并提示选免安装版", () => {
+test("Gitee 拒收的 Windows 安装版只给 GitHub，没有国内按钮", () => {
   const page = open({ userAgent: WIN, platform: "Win32", apk: false });
   try {
     const setup = page.card("安装版");
     assert.equal(page.button(setup, "国内下载"), undefined);
     assert.ok(page.button(setup, "GitHub").classList.contains("primary"));
-    assert.match(setup.textContent, /国内网络建议下载免安装版/);
     assert.match(page.button(page.card("免安装"), "国内下载").href, /gitee\.com.*windows-portable\.zip$/);
+  } finally { page.close(); }
+});
+
+// #814：国内 Windows 访客只拿得到免安装版，它不替换已安装的旧版，升级后两个程序并存
+test("免安装版不替换旧版这件事，下载页的四处说明缺一不可", () => {
+  const page = open({ userAgent: WIN, platform: "Win32", apk: false });
+  try {
+    const zip = page.card("免安装").textContent;
+    assert.match(zip, /不会替换/, "免安装卡片要写明它不替换、也不卸载已安装的旧版");
+    assert.match(zip, /卸载/, "要给出卸载旧版的办法");
+    assert.match(zip, /覆盖安装/, "另一条路是用安装版覆盖安装");
+    assert.match(zip, /数据与备份保留/, "卸载不能丢数据与备份");
+
+    assert.match(page.card("安装版").textContent, /国内下不到安装版/, "安装版卡片要说清国内拿不到它");
+
+    const lead = page.document.querySelector("#dl-lead").textContent;
+    assert.match(lead, /安装版会原地替换旧版/, "顶部总述不能无条件承诺「替换旧版程序」");
+
+    const faq = page.document.querySelector("#faq").textContent;
+    assert.match(faq, /已安装的应用/, "FAQ 要给 Windows 用户能照着点的卸载路径");
+    assert.match(faq, /数据与备份保留/, "FAQ 要说明卸载不动数据与备份");
+
+    assert.deepEqual(page.errors, []);
   } finally { page.close(); }
 });
 
