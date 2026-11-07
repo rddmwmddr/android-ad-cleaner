@@ -32,7 +32,7 @@ Jetpack Compose + 官方 Material 3 Expressive，代码在 `app/src/main/java/..
 | `LoadingIndicator`、`ContainedLoadingIndicator` | 启动、准备、扫描 |
 | `CircularWavyProgressIndicator`、`LinearWavyProgressIndicator` | 执行进度（暂停时波浪收平）、还原中 |
 | 按钮 M / L 尺寸与按下形变 | 主按钮 96dp，屏幕矮时 56dp |
-| 标准 `ButtonGroup` | 自己选 / 还原、暂停 / 停止（按下的变宽、旁边让位） |
+| 标准 `ButtonGroup` | 暂停 / 停止（按下的变宽、旁边让位） |
 | 连接按钮组 + `ToggleButton` | 反馈类型单选 |
 | `HorizontalFloatingToolbar` | 确认页的已选数和开始 |
 | `SegmentedListItem` | 所有列表 |

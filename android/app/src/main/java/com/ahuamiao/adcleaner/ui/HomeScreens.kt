@@ -188,9 +188,12 @@ fun HomeScreen(model: AppModel) {
                 interactionSource = press,
             )
             Spacer(Modifier.height(8.dp))
-            ActionPair(
-                GroupAction("自己选", R.drawable.ic_tune, onClick = model::openChoose),
-                GroupAction("还原", R.drawable.ic_history, onClick = model::openRestore),
+            SizedButton(
+                text = "还原",
+                onClick = model::openRestore,
+                modifier = Modifier.fillMaxWidth(),
+                icon = R.drawable.ic_history,
+                colors = ButtonDefaults.filledTonalButtonColors(),
             )
             Spacer(Modifier.height(8.dp))
         },
