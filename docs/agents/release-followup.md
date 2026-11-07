@@ -118,6 +118,7 @@ Issues labelled `waiting-for-verify` have a fix on `main` that the reporter has 
 | #170 | @Tian621-cx | OPPO Find 系列 | ColorOS「通知管理」独立页识别（0.2.4） | 营销渠道可关 |
 | #179 | @jklowt2 | iQOO 15 | adb 断线重试与列出其他 adb（0.2.4） | 中途断线后不再整轮失败 |
 | #258 | @lcbd7poa | Hisense HLTE217T / Android 8 | dumpsys 段名 `per-package config:`（0.2.7） | 渠道扫描能列出该机的营销渠道 |
+| #193 / #581 | @skysstst | Xiaomi 15 / 24129PN74C / HyperOS OS4（Android 17） | 启动前台判定：读不出焦点与跳包过渡帧不再算离开前台（未发布） | 用 OS4 变体重跑主题段（`recipes/xiaomi-24129PN74C/recipe_os4.py`），不再出现「启动后离开前台」；进到「主题·通知」一行。仍失败则贴那段输出（真正被别的 App 占住会照旧停段并打印落点） |
 | #634 | @rddmwmddr | 手机版，任意机型（**需要一台还没授权过本 App 的手机**，已授权的先到无线调试里取消配对） | #635（0.4.0） | 点「开始授权」后一两秒自动读出 6 位配对码并连上，全程不用抄码；拒绝截屏、黑屏、15 秒认不出、等满 5 分钟没出现配对端口、识别途中出错这五条退路都给通知栏「填写」入口 |
 
 #634 这条不是普通缺陷复测：核心能力（截屏 + 本机识别配对码，ADR-0015）合并时**没有在任何真机上跑过**，Kotlin 侧也没过编译器（接手时本机无 Gradle / SDK），要在构建机上补一次 `android/build.sh assembleDebug`。
