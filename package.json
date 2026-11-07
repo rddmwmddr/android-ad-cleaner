@@ -1,0 +1,11 @@
+{
+  "name": "android-ad-cleaner-web-tests",
+  "private": true,
+  "description": "gui/web 前端行为测试（由 tests/test_web_client.py 代跑）",
+  "scripts": {
+    "test": "node --test --test-reporter=tap --test-timeout=30000 --test-force-exit \"tests/js/*.test.js\""
+  },
+  "devDependencies": {
+    "jsdom": "31.0.0"
+  }
+}
