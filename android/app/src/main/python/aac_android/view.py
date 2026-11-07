@@ -111,7 +111,7 @@ def _warnings(status, fold_block):
     if status.get("input_blocked"):
         out.append("系统拒绝了模拟点按。小米 / Redmi / POCO 要在「开发者选项」里打开「USB 调试（安全设置）」"
                    "（需插 SIM 卡、登录小米账号），等风险提示倒计时结束点「确定」，再重新检测。"
-                   "还是不行就重启手机再检测。不开它，自动关开关和营销通知都会失败，中途还会锁屏。")
+                   "还是不行就重启手机再检测。不开它，自动关开关和营销通知都会失败。")
     if status.get("fold_open"):
         out.append("这是展开的折叠屏。展开后是左右分栏，自动关 App 开关会找错位置。合上手机用外屏，再重新检测。"
                    if fold_block else

@@ -70,12 +70,12 @@ class WordingTests(unittest.TestCase):
         self.assertIn("请拔插数据线", t.UI_INSTALL_FAILED)
 
     def test_engine_click_message_follows_the_host(self):
-        # fast.py 在导入时取 CLICKER；手机版每次执行前清掉 tool/ 模块再导入，用新进程模拟
-        code = "import sys; sys.path.insert(0, 'tool'); import fast; print(fast.CLICKER)"
+        # fast.py 在导入时取整句常量；手机版每次执行前清掉 tool/ 模块再导入，用新进程模拟
+        code = "import sys; sys.path.insert(0, 'tool'); import fast; print(fast.TAPPED)"
         env = dict(os.environ, AAC_HOST="phone", PYTHONIOENCODING="utf-8")
         out = subprocess.run([sys.executable, "-c", code], cwd=ROOT, env=env, capture_output=True,
                              text=True, encoding="utf-8", errors="replace", timeout=60)
-        self.assertEqual(out.stdout.strip().splitlines()[-1], "本 App", out.stderr[-800:])
+        self.assertEqual(out.stdout.strip().splitlines()[-1], "本 App 发出的点击", out.stderr[-800:])
 
 
 class DisconnectHintTests(unittest.TestCase):
@@ -173,10 +173,11 @@ class PhoneBootTests(unittest.TestCase):
     """boot() 要在导入 gui/app.py 之前设宿主标记，并换掉断开文案。"""
 
     def test_boot_sets_host_and_link_lost(self):
+        # 解析 boot() 只此一处：新增的模块常量覆盖也挂在这里（#747）
         path = ROOT / "android/app/src/main/python/aac_android/main.py"
         boot = next(n for n in ast.parse(path.read_text(encoding="utf-8")).body
                     if isinstance(n, ast.FunctionDef) and n.name == "boot")
-        env_set = link_lost = None
+        env_set = link_lost = tap_refused = engine_host = None
         for node in ast.walk(boot):
             if not isinstance(node, ast.Assign):
                 continue
@@ -184,8 +185,15 @@ class PhoneBootTests(unittest.TestCase):
             if (isinstance(target, ast.Subscript) and ast.unparse(target) == "os.environ['AAC_HOST']"
                     and isinstance(node.value, ast.Constant)):
                 env_set = (node.lineno, node.value.value)
-            if isinstance(target, ast.Attribute) and ast.unparse(target) == "app.LINK_LOST":
+            if not isinstance(target, ast.Attribute):
+                continue
+            name = ast.unparse(target)
+            if name == "app.LINK_LOST":
                 link_lost = node.value.value
+            elif name == "app.TAP_REFUSED":        # #747：诊断里的「点击被拒」那一栏
+                tap_refused = node.value.value
+            elif name == "app.ENGINE_HOST":        # #747：child_env() 只认它，不认继承来的 AAC_HOST
+                engine_host = node.value.value
         imports_app = min(n.lineno for n in ast.walk(boot)
                           if isinstance(n, ast.Import) and any(a.name == "app" for a in n.names))
         self.assertEqual(env_set[1], "phone")
@@ -194,6 +202,8 @@ class PhoneBootTests(unittest.TestCase):
         # 断线判 failed，结果页那个按钮叫「重新开始」；「再做一次」只在 outcome == Ok 分支（ui/RunScreens.kt）
         self.assertIn("重新开始", link_lost)
         self.assertNotIn("再做一次", link_lost)
+        self.assertEqual(tap_refused, "；本 App 的点击被拒（未开 USB 调试安全设置）")
+        self.assertEqual(engine_host, "phone")
 
 
 if __name__ == "__main__":

@@ -91,6 +91,16 @@ class StepPauseTests(Base):
         self.api._work([app.Task("收尾", "run.py", ["-s", "t", "finish"])])
         self.assertEqual(self.api.runner.spawn_calls[0].env_extra["AAC_EVENTS"], "1")
 
+    def test_child_env_never_inherits_the_phone_host(self):
+        # 桌面用户 shell 里碰巧导出 AAC_HOST=phone，引擎会改用手机版文案、压掉插电常亮的告警（#747）。
+        # 手机版由 aac_android.main.boot() 显式设回。
+        with patch.dict(os.environ, {"AAC_HOST": "phone"}):
+            self.assertNotIn("AAC_HOST", app.child_env(None, "/tmp/backups"))
+
+    def test_child_env_passes_the_host_the_app_asked_for(self):
+        with patch.object(app, "ENGINE_HOST", "phone"):
+            self.assertEqual(app.child_env(None, "/tmp/backups")["AAC_HOST"], "phone")
+
 
 class RunnerTests(unittest.TestCase):
     def test_spawn_merges_the_child_env_with_the_step_extras(self):

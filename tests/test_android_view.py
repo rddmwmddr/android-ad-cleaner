@@ -158,7 +158,8 @@ class DetectTest(unittest.TestCase):
                          ["手机锁屏了。请解锁手机并保持亮屏，然后点「重新检测」。"])
         blocked = self.detect(input_blocked=True)["warnings"]
         self.assertIn("USB 调试（安全设置）", blocked[0])
-        self.assertIn("不开它，自动关开关和营销通知都会失败，中途还会锁屏", blocked[0])
+        self.assertIn("不开它，自动关开关和营销通知都会失败。", blocked[0])
+        self.assertNotIn("锁屏", blocked[0])      # #728 之后由本 App 自己的屏幕锁兜着
         self.assertIn("合上手机用外屏", self.detect(fold_open=True)["warnings"][0])
 
     def test_no_recipe_points_to_the_brand_checklist(self):

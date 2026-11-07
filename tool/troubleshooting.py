@@ -4,7 +4,9 @@ import re
 import subprocess
 
 import adb_link
-from host import CLICKER as CLICKER, ON_PHONE as ON_PHONE    # 显式转发：调用点与单测仍从本模块取（#729）
+# 显式转发：调用点与单测仍从本模块取（沿用 #729 的做法，整句常量按 #747 加）
+from host import (CLICK as CLICK, CLICKER as CLICKER, ON_PHONE as ON_PHONE,
+                  TAPPED as TAPPED)
 
 
 UI_RECOVERY = (
