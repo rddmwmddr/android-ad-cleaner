@@ -12,7 +12,7 @@
 
 ## 下载
 
-APK 随下一版发布，发布后这里给出下载链接。已经拿到安装包的话，直接往下做那 3 个设置。
+从[官网下载区](https://ahuamiao.com/sites/other/android-ad-removal-intro.html#download)下载，国内走 [Gitee](https://gitee.com/rddmw/android-ad-cleaner/releases)，不用登录；也可以从 [GitHub](https://github.com/rddmwmddr/android-ad-cleaner/releases/latest) 下载。文件名是 `AndroidAdCleaner-<版本>-android-arm64.apk`。下载好后，往下做那 3 个设置。
 
 ## 开始之前
 

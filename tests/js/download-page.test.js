@@ -26,6 +26,8 @@ function open({ userAgent = MAC, platform = "", apk = true, sub = "安卓 11 及
   // Windows 上这份文件是 CRLF，注入锚点必须按 LF 匹配，否则静默不注入
   let html = fs.readFileSync(PAGE, "utf8").replace(/\r\n/g, "\n");
   if (transform) html = transform(html);
+  // 0.4.0 起页面自带手机版这一行；先拿掉，有没有手机版由用例的 apk 决定
+  html = html.replace(/^    \{ id: "android",[^\n]*\n[^\n]*\},\n/m, "");
   const added = (apk ? APK(sub) : "") + extra;
   if (added) {
     const anchor = "\n  ],\n};";
