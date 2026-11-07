@@ -11,12 +11,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -28,11 +26,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ButtonGroup
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -40,7 +36,6 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Text
@@ -188,67 +183,16 @@ fun HomeScreen(model: AppModel) {
                 interactionSource = press,
             )
             Spacer(Modifier.height(8.dp))
-            ActionPair(
-                GroupAction("自己选", R.drawable.ic_tune, onClick = model::openChoose),
-                GroupAction("还原", R.drawable.ic_history, onClick = model::openRestore),
+            SizedButton(
+                text = "还原",
+                onClick = model::openRestore,
+                modifier = Modifier.fillMaxWidth(),
+                icon = R.drawable.ic_history,
+                colors = ButtonDefaults.filledTonalButtonColors(),
             )
             Spacer(Modifier.height(8.dp))
         },
     )
-}
-
-data class GroupAction(
-    val text: String,
-    val icon: Int?,
-    val enabled: Boolean = true,
-    val outlined: Boolean = false,
-    val onClick: () -> Unit,
-)
-
-/** 一排两个操作：官方标准按钮组，按下的一个变宽、旁边的让位。文字始终留着。 */
-@Composable
-fun ActionPair(first: GroupAction, second: GroupAction) {
-    val height = ButtonDefaults.MediumContainerHeight
-    val sources = remember { listOf(MutableInteractionSource(), MutableInteractionSource()) }
-    ButtonGroup(
-        overflowIndicator = {},
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        listOf(first, second).forEachIndexed { i, action ->
-            customItem(
-                buttonGroupContent = {
-                    val modifier = Modifier
-                        .animateWidth(sources[i])
-                        .weight(1f)
-                        .heightIn(min = height)
-                    val label: @Composable RowScope.() -> Unit = { ButtonLabel(action.text, height, action.icon) }
-                    if (action.outlined) {
-                        OutlinedButton(
-                            onClick = action.onClick,
-                            shapes = ButtonDefaults.shapesFor(height),
-                            modifier = modifier,
-                            enabled = action.enabled,
-                            contentPadding = ButtonDefaults.contentPaddingFor(height),
-                            interactionSource = sources[i],
-                            content = label,
-                        )
-                    } else {
-                        FilledTonalButton(
-                            onClick = action.onClick,
-                            shapes = ButtonDefaults.shapesFor(height),
-                            modifier = modifier,
-                            enabled = action.enabled,
-                            contentPadding = ButtonDefaults.contentPaddingFor(height),
-                            interactionSource = sources[i],
-                            content = label,
-                        )
-                    }
-                },
-                menuContent = {},
-            )
-        }
-    }
 }
 
 // ---------- 首次设置 ---------- //
