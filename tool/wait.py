@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""「等到页面认得出」的唯一实现。
+"""「等到页面认得出」与「等机主解锁」的唯一实现。
 
 一次等待只看四件事：采样值认不认得出、最多等多久、多久算稳定、有没有理由提前放弃。
 超时与稳定判据都是参数，不再每处各写一份轮询循环（#320）。
@@ -15,10 +15,14 @@
   timeout —— 挂钟秒数（页面慢时读屏本身也吃时间，轮数会少一些）；
   tries   —— 采样次数（慢机型上一轮读屏更久，但「最多试 12 次」就是要试满 12 次）。
 
+「等机主解锁」不是 until()：它的循环要先亮屏、再报一句人话、解锁后还要让屏幕站稳，
+塞进 until() 就得给它加三个钩子。策略（文案、轮询间隔、站稳时间、默认预算、locked 事件）
+留在下面的 wait_unlocked()，调用点只传「现在锁没锁着」和「怎么亮屏」两件机制。
+
 几处等待没有收进来，因为它们的循环里夹着副作用，收进来就得给接口加钩子：
   fast.go、fast.tap(scrolls=0) 的 6 秒（每轮关弹窗）；
   fast._launch() 的三处（等前台包 5 秒、等权限弹窗 3 秒、等空白页出字 8 秒）；
-  fast.wait_unlocked（要打印「请解锁手机」）；chan_fast.ChannelPage._enter_app_page 的翻页循环
+  chan_fast.ChannelPage._enter_app_page 的翻页循环
   （是翻页不是等待）。
 
 时钟和 sleep 由调用方传：fast / chan_fast 传自己模块里的 time.time / time.sleep，
@@ -26,7 +30,15 @@
 """
 import time
 
+import events
+
 UNSET = object()
+
+# 等解锁的四项策略只在这里定义：默认预算、轮询间隔、解锁后让屏幕站稳的时间、那句人话。
+UNLOCK_TIMEOUT = 90
+UNLOCK_POLL = 1.0
+UNLOCK_SETTLE = 0.8
+UNLOCK_TEXT = "  ! 手机锁屏了：请解锁手机并保持亮屏，解锁后自动继续（最多等 {} 秒）"
 
 
 class GiveUp(Exception):
@@ -79,3 +91,24 @@ def until(sample, timeout=None, poll=0.15, stable=0.0, same=0, tries=None,
             steady, held, streak = UNSET, None, 0
         sleep(poll)
         rounds += 1
+
+
+# 钟沿用原实现的挂钟（不是 until() 的 monotonic）；两处调用点各传自己模块的 time，测试靠它换假钟。
+def wait_unlocked(locked, wake, timeout=UNLOCK_TIMEOUT, now=time.time, sleep=time.sleep):
+    """点亮屏幕，等机主解锁（不代替解锁）；等到了返回 True。
+
+    locked() 说自己是否仍锁着，wake() 按一次亮屏。文案、轮询节奏与 locked 事件都在这里发，
+    事件每次等待只发一条（真锁着才发，醒来就是解锁状态的发零条）。
+    错误日志 10-27：约 15 份报告在开始执行时手机已锁屏，以前直接报失败，后面每一项都重复「锁屏了」。"""
+    wake()
+    if not locked():
+        return True
+    print(UNLOCK_TEXT.format(timeout), flush=True)
+    events.emit("locked")
+    start = now()
+    while now() - start < timeout:
+        sleep(UNLOCK_POLL)
+        if not locked():
+            sleep(UNLOCK_SETTLE)
+            return True
+    return False

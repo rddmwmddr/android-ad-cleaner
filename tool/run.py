@@ -31,8 +31,8 @@ for _st in (sys.stdout, sys.stderr):
         pass
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import adb_link
-import events
 import troubleshooting
+import wait
 from backups import Backups, root_from_env
 from entries import FAMILY          # 品牌族只此一份；广告包、参考脚本与版本比较都按它归
 
@@ -312,20 +312,10 @@ def locked(serial):
     return adb_link.keyguard_showing(sh(serial, adb_link.KEYGUARD_CMD))
 
 
-def wait_unlocked(serial, timeout=90):
-    """锁屏时点亮屏幕，等机主解锁（不代替解锁）。开始执行时手机已锁屏的报告约 15 份（错误日志 10-27）。"""
-    sh(serial, "input keyevent KEYCODE_WAKEUP")
-    if not locked(serial):
-        return True
-    print(f"  ! 手机锁屏了：请解锁手机并保持亮屏，解锁后自动继续（最多等 {timeout} 秒）", flush=True)
-    events.emit("locked")
-    t = time.time()
-    while time.time() - t < timeout:
-        time.sleep(1)
-        if not locked(serial):
-            time.sleep(0.8)
-            return True
-    return False
+def wait_unlocked(serial, timeout=wait.UNLOCK_TIMEOUT):
+    """锁屏时点亮屏幕，等机主解锁。文案、节奏与事件在 wait.wait_unlocked（#709）。"""
+    return wait.wait_unlocked(lambda: locked(serial), lambda: sh(serial, adb_link.WAKEUP),
+                              timeout, now=time.time, sleep=time.sleep)
 
 
 def latest_backup(serial, create=False):

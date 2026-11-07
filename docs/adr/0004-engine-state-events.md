@@ -24,13 +24,13 @@
 |---|---|---|
 | `paused` | `fast.pause_point()` 开始等待 | 引擎停在暂停点，等人操作手机 |
 | `resumed` | `fast.pause_point()` 放行 | 暂停点放行 |
-| `locked` | `fast.Phone.wait_unlocked()` 与 `run.wait_unlocked()` 开始等解锁——两处各有一份实现，都要发 | 手机锁着，等机主解锁 |
+| `locked` | `tool/wait.py` 的 `wait_unlocked()`——`run.wait_unlocked()` 与 `Phone.wait_unlocked()` 两个壳都调它（2026-11-07 修订，原为两处各一份实现，见文末增补） | 手机锁着，等机主解锁 |
 | `ui_busy` | `fast.Phone.__init__`（读屏服务已被注册）与 `ui_session.DeviceLock`（本机另一个任务占着）两个抛出处 | 读屏服务被占用，这一步没法点 |
 | `link_lost` | `DeviceLost` 的构造处（`adb_link.lost()` / `check_alive()` / `lost_from()`） | adb 连接已确认断开 |
 
 不含步骤开始/结束，也不含退出码：步骤边界是客户端自己排的，退出码是它 `p.wait()` 的返回值，加进协议等于把可推导的信息再固化一份；退出码语义是候选 2（`run.py` handler 表）的主题。
 
-**发送点跟着语义走，不跟着退出路径走。** `locked` 有两处实现（`run.wait_unlocked` 与 `Phone.wait_unlocked`，两份几乎重复的代码，本轮不合并），两处都要发；`ui_busy` 同样有两个抛出处。`link_lost` 则是三条退出路径（`run.py` 的 `adb_shell`、`chan_fast.py` 的 `main`）共用一个发送点——收在 `DeviceLost` 的构造上，构造即代表已确认断线，谁把它转成退出码都不影响事件。`AAC_EVENTS` 未设时不发，测试里构造 `DeviceLost` 也不会多出一行。
+**发送点跟着语义走，不跟着退出路径走。** `locked` 有两处实现（`run.wait_unlocked` 与 `Phone.wait_unlocked`，两份几乎重复的代码，本轮不合并），两处都要发（2026-11-07 修订：两份已合并进 `wait.wait_unlocked`，事件仍只发一条，见文末增补）；`ui_busy` 同样有两个抛出处。`link_lost` 则是三条退出路径（`run.py` 的 `adb_shell`、`chan_fast.py` 的 `main`）共用一个发送点——收在 `DeviceLost` 的构造上，构造即代表已确认断线，谁把它转成退出码都不影响事件。`AAC_EVENTS` 未设时不发，测试里构造 `DeviceLost` 也不会多出一行。
 
 **客户端把「这一步发生过什么」记成事件集合，不再查文本。**
 
@@ -61,3 +61,9 @@
 - 测试面：两处喂中文串的用例改为喂事件行；「人话不变」用两个守卫——五个发送点各设 / 不设 `AAC_EVENTS` 跑一遍，去掉事件行后逐字对拍（`DeviceLost` 与两处占用比的是异常文案）；三条打印行（暂停、继续、锁屏）另写字面量断言，两条异常文案由既有用例盯着短语。
 - 没有 Windows、没有打包环境、没有真机：`--cli` 与 `_fix_stdio` 这条依据是「`print(flush=True)` 一行一次」加上已有的 `line_buffering` / `write_through` / `PYTHONUNBUFFERED=1`，**未在打包件上验证**；验证范围是本机单测。
 - CHANGELOG 的「未发布」一条加在实现那一笔，本 ADR 只落决策。
+
+## 增补：`locked` 的发送点合并（#709）
+
+**2026-11-07 起**，上面「两处各有一份实现」不再成立：文案、轮询间隔（1 秒）、解锁后站稳时间（0.8 秒）、默认预算（90 秒）与 `events.emit("locked")` 全收进 `tool/wait.py` 的 `wait_unlocked(locked, wake, timeout=90)`。`run.wait_unlocked(serial)` 与 `fast.Phone.wait_unlocked()` 只剩一层壳，各自只交出「现在锁没锁着」与「怎么亮屏」两件机制，`chan_fast` 传 `timeout=60` 的预算照旧。
+
+事件语义不变：只在真锁着时发一条——亮屏后就是解锁状态的那次等零条，一直不解锁也只一条。人话与节奏由同一处定义，两处调用点的输出逐字未变。

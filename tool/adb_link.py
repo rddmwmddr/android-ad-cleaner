@@ -123,6 +123,7 @@ def detached(serial, adb=None):
 # sed 会读完整个输入再输出前几行，所以能截断行数而不提前退出。
 KEYGUARD_CMD = ("dumpsys window | grep -E 'mCurrentFocus|isKeyguardShowing|mDreamingLockscreen|mIsShowing='"
                 " | sed -n '1,12p'")
+WAKEUP = "input keyevent KEYCODE_WAKEUP"
 SHADE_WINDOWS = {"NotificationShade", "StatusBar", "Keyguard", "KeyguardBouncer", "Bouncer"}
 
 
