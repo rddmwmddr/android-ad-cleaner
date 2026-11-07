@@ -18,6 +18,28 @@ function stepOn(page, n) {
   return page.document.querySelector(`.step[data-s="${n}"]`).classList.contains("on");
 }
 
+/* 手动驱动轮询：先建好执行页，再把 500 ms 定时器摘掉，免得它在断言之间插进来。 */
+function startPolling(page) {
+  page.window.showRun();
+  page.window.eval("clearInterval(pollJob); pollJob = null");
+}
+
+/* 让 api.poll 挂住，由用例决定哪一次先回包。tick() 会 await 它，所以返回的 Promise 不能由这里 await。 */
+function hungPoll() {
+  const calls = [];
+  const poll = since => new Promise(resolve => calls.push({ since, resolve }));
+  return { calls, poll };
+}
+
+const flush = () => new Promise(resolve => setTimeout(resolve, 0));
+
+/* 假时钟起点用真实量级：#676 的 pollStart 初值是 0，用 1000 起步的话「每次发起都刷新起点」删掉也看不出来。 */
+const EPOCH = 1_700_000_000_000;
+
+function logText(page) {
+  return page.document.querySelector("#log").textContent;
+}
+
 test("执行完有结果时进完成页并停掉轮询", async () => {
   const page = await openPage({ api: { poll: () => pollResult({ results: [stepDone] }) } });
   try {
@@ -114,5 +136,86 @@ test("完成页摘要认得快照已存", async () => {
   const page = await openPage();
   try {
     assert.equal(page.window.summarize({ tail: ["快照已存：3 项"] }), "已保存");
+  } finally { page.close(); }
+});
+
+// 守卫用例：旧树也绿——单飞行自 #662 起就在，这里守的是它不回退（#698）
+test("上一次 poll 没回来时不发第二次（#698）", async () => {
+  const hung = hungPoll();
+  const page = await openPage({ api: { poll: hung.poll } });
+  try {
+    let now = EPOCH;
+    page.window.Date.now = () => now;
+    startPolling(page);
+
+    page.window.tick();                          // 挂住：这个 Promise 永远不落地，不能 await
+    await flush();
+    assert.equal(hung.calls.length, 1);
+
+    now += 5000; page.window.tick(); await flush();
+    now += 1000; page.window.tick(); await flush();
+
+    assert.equal(hung.calls.length, 1, "上一次还在路上，10 秒以内不该重发");
+  } finally { page.close(); }
+});
+
+test("一次 poll 超时后重发，且只补没画过的那一段（#698）", async () => {
+  // 守的是 #676 的超时重发：超过 POLL_TIMEOUT 允许重问，问的仍是没画过的那一段
+  const hung = hungPoll();
+  const page = await openPage({ api: { poll: hung.poll } });
+  try {
+    let now = EPOCH;
+    page.window.Date.now = () => now;
+    startPolling(page);
+
+    page.window.tick();
+    await flush();
+    hung.calls[0].resolve(pollResult({ next: 2, lines: ["第一行", "第二行"] }));
+    await flush();
+    assert.equal(page.window.eval("S.logNext"), 2);
+
+    page.window.tick();                          // 第二次挂住，起点是上一次画到的位置
+    await flush();
+    assert.equal(hung.calls[1].since, 2);
+
+    now += 10500;
+    page.window.tick();
+    await flush();
+    assert.equal(hung.calls.length, 3, "超过 POLL_TIMEOUT 要允许重发");
+    assert.equal(hung.calls[2].since, 2, "重发时只问还没画过的那一段");
+
+    hung.calls[2].resolve(pollResult({ next: 4, lines: ["第三行", "第四行"] }));
+    await flush();
+
+    assert.match(logText(page), /第一行\n第二行\n第三行\n第四行/);
+    assert.equal(page.window.eval("S.logNext"), 4);
+  } finally { page.close(); }
+});
+
+test("被后来一次接管的那份回包迟到时整份丢弃（#698）", async () => {
+  // 守的是 #676 的序号作废：晚到的那份整份丢掉，不画、不改 S.logNext
+  const hung = hungPoll();
+  const page = await openPage({ api: { poll: hung.poll } });
+  try {
+    let now = EPOCH;
+    page.window.Date.now = () => now;
+    startPolling(page);
+
+    page.window.tick();
+    await flush();
+
+    now += 10500;
+    page.window.tick();
+    await flush();
+    hung.calls[1].resolve(pollResult({ next: 2, lines: ["第一行", "第二行"] }));
+    await flush();
+
+    // 挂住的那一次问的是 since=0，真回来时整段尾巴都在（Job.snapshot 的 next = since + len(lines)），
+    // 所以它比后发的那次更大：只靠 `r.next > S.logNext` 挡不住，必须是序号作废。票面写的 next:1 挡得住，验不出这条。
+    hung.calls[0].resolve(pollResult({ next: 3, lines: ["第一行", "第二行", "迟到的旧行"] }));
+    await flush();
+
+    assert.doesNotMatch(logText(page), /迟到的旧行/, "迟到的旧结果不能再画进来");
+    assert.equal(page.window.eval("S.logNext"), 2, "作废的那份不能改 logNext");
   } finally { page.close(); }
 });
