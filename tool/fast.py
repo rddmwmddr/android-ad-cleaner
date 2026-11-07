@@ -1528,6 +1528,8 @@ def execute(p, cmd, rest):
         except OSError:
             pass
         if g.get("FAILED_STEPS"):
+            # 段名同时走事件通道：客户端按它只重跑没做成的段（#638）。人读的那行照旧。
+            events.emit("failed_steps", steps=list(g["FAILED_STEPS"]))
             print("未完成步骤：" + "、".join(g["FAILED_STEPS"]), flush=True)
             sys.exit(1)
     else:

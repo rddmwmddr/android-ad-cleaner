@@ -67,3 +67,20 @@
 **2026-11-07 起**，上面「两处各有一份实现」不再成立：文案、轮询间隔（1 秒）、解锁后站稳时间（0.8 秒）、默认预算（90 秒）与 `events.emit("locked")` 全收进 `tool/wait.py` 的 `wait_unlocked(locked, wake, timeout=90)`。`run.wait_unlocked(serial)` 与 `fast.Phone.wait_unlocked()` 只剩一层壳，各自只交出「现在锁没锁着」与「怎么亮屏」两件机制，`chan_fast` 传 `timeout=60` 的预算照旧。
 
 事件语义不变：只在真锁着时发一条——亮屏后就是解锁状态的那次等零条，一直不解锁也只一条。人话与节奏由同一处定义，两处调用点的输出逐字未变。
+
+## 增补：`failed_steps`，第一个带载荷的 kind（#638）
+
+**2026-11-07 起**，上面「词汇表只有五个 kind」与「payload 只有 `kind`」两句都不再成立。`KINDS` 现在有六个，
+`emit(kind, **data)` 把载荷放进同一行 JSON：`#aac:event {"kind": "failed_steps", "steps": ["商店", "浏览器"]}`。
+没有载荷时那一行与改动前逐字相同（`test_no_payload_keeps_the_line_byte_for_byte`）。
+词表本身冻结在 `tests/test_events.py` 的 `FROZEN_KINDS` 里，删词会红。
+
+| kind | 发送点 | 含义 |
+|---|---|---|
+| `failed_steps` | `fast.py` 的 run 分支，`if g.get("FAILED_STEPS")` 那一支 | 本次跑完仍未做成的段名，与紧邻的人话 `未完成步骤：…` 同一份数据 |
+
+客户端取值走新增的 `events.parse_data(line)`（整份字典，kind 不在词表里或解析不出来返回 `None`）；
+`parse(line)` 改为它的薄封装，行为不变。`Dispatcher._event()` 因此接字典而不是 kind，多一个分支把段名记进
+`Job.failed_steps`，这一步结束时写进结果行的 `failed_steps`（`retry_plan()` 用它只重跑那几段，ADR-0026）。
+
+事件仍然不进日志、不进上报、不进 `tail`；`failed_steps` 也不改变这一步的结局——结局仍是退出码。

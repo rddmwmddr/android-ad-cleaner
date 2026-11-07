@@ -302,12 +302,14 @@ class Task:
     """一个步骤。uses_ui：这一步要连读屏，前一步因读屏被占用失败时跳过它。
     channels 非 None 表示这一步是关营销通知：运行前把勾选的渠道写进 channels.tsv，
     args 由 `_work()` 换成 `-s <序列号> off <清单>`。
-    skip_reason 非空表示这一步这次不跑：照样占结果里的一行，说明为什么（#577）。"""
+    skip_reason 非空表示这一步这次不跑：照样占结果里的一行，说明为什么（#577）。
+    kind 是这一步的固定身份（backup / recipe / channels / quickapp / ads / finish），
+    重试与多轮结果合并都按它对齐，不认标题（#638；标题里的「（3 / 9 段）」会变）。"""
 
-    def __init__(self, title, script, args=(), uses_ui=False, channels=None, skip_reason=""):
+    def __init__(self, title, script, args=(), uses_ui=False, channels=None, skip_reason="", kind=""):
         self.title, self.script, self.args = title, script, args
         self.uses_ui, self.channels = uses_ui, channels
-        self.skip_reason = skip_reason
+        self.skip_reason, self.kind = skip_reason, kind
 
 
 def runs_after_stop(task):
@@ -318,15 +320,20 @@ def runs_after_stop(task):
 UNCHECKED = "未勾选，本次没有执行"
 
 
-def not_run(title, reason):
+def not_run(title, reason, kind=""):
     """这次不跑的步骤：不碰手机，只在结果里留一行（#577）。"""
-    return Task(title, "", skip_reason=reason)
+    return Task(title, "", skip_reason=reason, kind=kind)
+
+
+def step_result(task, **fields):
+    """结果里的一行：标题与 kind 从任务上取，其余字段各有各的。合并多轮结果时按 kind 对齐（#638）。"""
+    return {"title": task.title, "kind": task.kind, **fields}
 
 
 def not_run_result(job, task):
     """没执行的项进结果：rc=0 表示这一步没出错，界面按「跳过」显示、上报也写「跳过」；
     原因放 tail，摘要函数认不出模式时直接拿它当摘要。诊断里由 `skip_reason()` 压成一句。"""
-    job.add_result({"title": task.title, "rc": 0, "skipped": True, "sec": 0, "tail": [task.skip_reason]})
+    job.add_result(step_result(task, rc=0, skipped=True, sec=0, tail=[task.skip_reason]))
 
 
 def plan_tasks(serial, plan, offered=None):
@@ -336,7 +343,7 @@ def plan_tasks(serial, plan, offered=None):
     「用户没勾」和「这台机本来就没有」；给 None 时不知道摆过什么，就不留这些行。"""
     tasks = []
     if plan.get("backup", True):
-        tasks.append(Task("存改动前的快照", "run.py", ["-s", serial, "backup"]))
+        tasks.append(Task("存改动前的快照", "run.py", ["-s", serial, "backup"], kind="backup"))
     steps = list(plan.get("steps") or [])
     if steps:
         title = "关闭各 App 里的广告开关"
@@ -345,50 +352,95 @@ def plan_tasks(serial, plan, offered=None):
             title += f"（{len(steps)} / {total} 段）"
         tasks.append(Task(title, "run.py",
                           ["-s", serial, "recipe", *steps, *(["--ref"] if plan.get("ref") else [])],
-                          uses_ui=True))
+                          uses_ui=True, kind="recipe"))
     elif offered is not None:
         tasks.append(not_run("关闭各 App 里的广告开关",
-                             UNCHECKED if offered.get("steps") else "没有专用脚本，这一步要照清单手动做"))
+                             UNCHECKED if offered.get("steps") else "没有专用脚本，这一步要照清单手动做",
+                             kind="recipe"))
     channels = list(plan.get("channels") or [])
     if channels:
-        tasks.append(Task("关闭营销通知", "chan_fast.py", uses_ui=True, channels=channels))
+        tasks.append(Task("关闭营销通知", "chan_fast.py", uses_ui=True, channels=channels, kind="channels"))
     elif offered is not None:
         seen = offered.get("channels")          # None 表示通知没扫成
         tasks.append(not_run("关闭营销通知",
                              "通知扫描没有完成，本次没有关闭营销通知" if seen is None
-                             else "没有扫描到可关闭的营销渠道" if not seen else UNCHECKED))
+                             else "没有扫描到可关闭的营销渠道" if not seen else UNCHECKED,
+                             kind="channels"))
     if plan.get("quickapp"):
-        tasks.append(Task("关闭快应用", "run.py", ["-s", serial, "quickapp", "off"]))
+        tasks.append(Task("关闭快应用", "run.py", ["-s", serial, "quickapp", "off"], kind="quickapp"))
     elif offered is not None:
         apps = offered.get("quickapps") or []
         tasks.append(not_run("关闭快应用",
                              "没有检测到快应用组件" if not apps
                              else "可关闭的快应用组件都已关闭" if all(q.get("closed") or q.get("keep") for q in apps)
-                             else UNCHECKED))
+                             else UNCHECKED,
+                             kind="quickapp"))
     ads = list(plan.get("ads") or [])
     if ads:
-        tasks.append(Task("挂起广告组件", "run.py", ["-s", serial, "suspend", *ads]))
+        tasks.append(Task("挂起广告组件", "run.py", ["-s", serial, "suspend", *ads], kind="ads"))
     elif offered is not None:
         seen = offered.get("ads") or []
         tasks.append(not_run("挂起广告组件",
                              "没有已知的广告组件" if not seen
                              else "广告组件已经挂起" if all(a.get("suspended") for a in seen)
-                             else UNCHECKED))
-    tasks.append(Task("收尾", "run.py", ["-s", serial, "finish"]))
+                             else UNCHECKED,
+                             kind="ads"))
+    # 重试轮只在收尾上一轮没做成时才跑它（#638）；首次执行没有这个键，照旧收尾
+    if plan.get("finish", True):
+        tasks.append(Task("收尾", "run.py", ["-s", serial, "finish"], kind="finish"))
     return tasks
 
 
-class Job:
-    """一次执行的状态（ADR-0010）。工作线程写，HTTP 线程经 snapshot() 读一致视图。"""
+def retryable(result):
+    """这一步是不是没做成：失败，或因读屏被占用 / 断线 / 锁屏而跳过（#638）。
 
-    def __init__(self, serial="", model="", total=0, t0=None):
+    除设备侧的原因外，子进程起不来（rc=-1）也算——这类重跑一次多半就好了。
+    没勾选、这台机本来没有或已关、通知没扫成的那几档（#577）是 rc=0 的跳过，用户点「停止」的步带
+    stopped，两者都不重试。
+    """
+    return bool(result.get("rc")) and not result.get("stopped")
+
+
+def retry_plan(plan, results):
+    """上一轮没做成的步骤组成的计划；一项都不剩时返回 None（#638）。
+
+    广告开关步只重跑 `failed_steps` 里的段——脚本中途退出、没留下段名时才整段重跑。
+    快照一旦成功就不再重存：重存会把已经关掉的状态当成原状，还原就还原不回去了。
+    「通知没扫成」那一行不算可重试：扫描在选择页上就失败了，重跑这一步时的渠道清单本来就是空的，
+    要重扫只能回选择页（#577 的第三档）。
+    """
+    plan = plan or {}
+    again = {r.get("kind"): retryable(r) for r in results if r.get("kind")}
+    recipe = next((r for r in results if r.get("kind") == "recipe"), {})
+    steps = list(recipe.get("failed_steps") or plan.get("steps") or []) if again.get("recipe") else []
+    out = {"backup": again.get("backup", False),
+           "steps": steps, "ref": plan.get("ref"), "model": plan.get("model"),
+           "channels": list(plan.get("channels") or []) if again.get("channels") else [],
+           "quickapp": bool(plan.get("quickapp")) and again.get("quickapp", False),
+           "ads": list(plan.get("ads") or []) if again.get("ads") else [],
+           "finish": again.get("finish", False)}
+    if not any(out[k] for k in ("backup", "steps", "channels", "quickapp", "ads", "finish")):
+        return None
+    return out
+
+
+class Job:
+    """一次执行的状态（ADR-0010）。工作线程写，HTTP 线程经 snapshot() 读一致视图。
+
+    `plan` 是这一轮跑的原始计划，`retry_plan()` 拿它重建下一轮；重试轮的 `results` / `lines` /
+    `payloads` 从上一轮接管过来，每一步按 kind 覆盖同一步的旧结果，日志与上报仍是整场的（#638）。"""
+
+    def __init__(self, serial="", model="", total=0, t0=None, plan=None,
+                 base_results=(), base_lines=(), base_payloads=()):
         self.lock = threading.RLock()
         self.running = True
-        self.lines = []
+        self.lines = list(base_lines)
         self.idx = 0
         self.total = total
         self.title = ""
-        self.results = []
+        self.results = list(base_results)
+        self.plan = dict(plan) if plan else None
+        self.failed_steps = []          # 本步骤里引擎报的未完成段名
         self.proc = None
         self.cancel = False
         self.t0 = time.time() if t0 is None else t0
@@ -398,10 +450,20 @@ class Job:
         self.pause = False
         self.recovery = ""
         self.step_events = set()
-        self.payloads = []
+        self.payloads = list(base_payloads)
 
     def add_result(self, result):
+        """记一行的结果。重试轮里同 kind 的那一行被就地覆盖，界面看到的始终是各步最新一轮（#638）。
+
+        标题留着上一轮的：`关闭各 App 里的广告开关（3 / 9 段）` 说的是用户勾了哪几段，重试轮只跑其中
+        一两段，按这一轮重算会把覆盖范围从界面上抹掉。"""
         with self.lock:
+            kind = result.get("kind")
+            if kind:
+                for i, old in enumerate(self.results):
+                    if old.get("kind") == kind:
+                        self.results[i] = {**result, "title": old.get("title", result["title"])}
+                        return
             self.results.append(result)
 
     def request_stop(self):
@@ -421,14 +483,17 @@ class Job:
             self.pause = False
 
     def snapshot(self, since=0):
-        """某一时刻的一致只读视图。lines 只给 since 之后的新行，next 是下一次的偏移。"""
+        """某一时刻的一致只读视图。lines 只给 since 之后的新行，next 是下一次的偏移。
+
+        `retry` 是此刻还能重试的步数，结果页的按钮按它取 N（#638）。"""
         with self.lock:
             lines = self.lines[since:]
             return {"running": self.running, "lines": lines, "next": since + len(lines),
                     "idx": self.idx, "total": self.total, "title": self.title,
                     "results": list(self.results), "sec": round(time.time() - self.t0),
                     "cancel": self.cancel, "recovery": self.recovery,
-                    "pause": self.pause, "paused": self.paused}
+                    "pause": self.pause, "paused": self.paused,
+                    "retry": sum(1 for r in self.results if retryable(r))}
 
 
 def os_name():
@@ -840,9 +905,10 @@ class Dispatcher:
         with self.lock:
             self.side = ""
 
-    def start(self, serial, plan, offered=None):
-        """plan: {backup, steps:[段名]|None, channels:[{pkg,id,name}], quickapp:bool, ads:[包名], model}
-        offered: 选择页上摆出来的项，给没勾的项定「没执行」的原因（#577）；None 表示不知道。"""
+    def start(self, serial, plan, offered=None, base_results=(), base_lines=(), base_payloads=()):
+        """plan: {backup, steps:[段名]|None, channels:[{pkg,id,name}], quickapp:bool, ads:[包名], model, finish}
+        offered: 选择页上摆出来的项，给没勾的项定「没执行」的原因（#577）；None 表示不知道。
+        三个 base_*: 重试轮从上一轮接管的快照（#638）；首次执行都是空的。"""
         with self.lock:
             if self.job and self.job.running:
                 return {"error": "已有任务在运行"}
@@ -850,7 +916,9 @@ class Dispatcher:
                 return {"error": f"「{self.side}」还没做完，请稍后再开始"}
             tasks = plan_tasks(serial, plan, offered)
             total = sum(1 for t in tasks if not t.skip_reason)
-            self.job = Job(serial=serial, model=plan.get("model", ""), total=total)
+            self.job = Job(serial=serial, model=plan.get("model", ""), total=total, plan=plan,
+                           base_results=base_results, base_lines=base_lines,
+                           base_payloads=base_payloads)
         threading.Thread(target=self._work, args=(tasks,), daemon=True).start()
         return {"ok": True, "total": total}
 
@@ -863,7 +931,7 @@ class Dispatcher:
         s = s.rstrip("\n")
         events = _tool("events")
         if events.is_event(s):
-            self._event(events.parse(s), job)
+            self._event(events.parse_data(s), job)
             return None
         if events.is_payload(s):
             with job.lock:
@@ -873,12 +941,13 @@ class Dispatcher:
             job.lines.append(s)
         return s
 
-    def _event(self, kind, job=None):
-        """引擎事件（ADR-0004）：暂停 / 继续 / 锁屏改提示状态，其余记进本步骤的事件集合；
-        都不进日志、不上报。"""
+    def _event(self, data, job=None):
+        """引擎事件（ADR-0004）：暂停 / 继续 / 锁屏改提示状态，`failed_steps` 记下段名，
+        其余记进本步骤的事件集合；都不进日志、不上报。`data` 是 `events.parse_data()` 给出的整份字典。"""
         job = self.job if job is None else job
-        if kind is None:                # 前缀对上但解析不出来：当没有这个事件
+        if not data:                    # 前缀对上但解析不出来：当没有这个事件
             return
+        kind = data["kind"]
         if kind == "paused":
             with job.lock:
                 job.paused = True
@@ -888,6 +957,12 @@ class Dispatcher:
                 job.paused = False
         elif kind == "locked":
             chime()                     # 要机主来解锁
+        elif kind == "failed_steps":
+            # 载荷来自另一个进程：只认字符串列表，别的形状当没报（单个字符串会被逐字符拆成段名）
+            steps = data.get("steps")
+            named = isinstance(steps, list) and all(isinstance(s, str) for s in steps)
+            with job.lock:
+                job.failed_steps = [s.strip() for s in steps if s.strip()] if named else []
         else:
             with job.lock:
                 job.step_events.add(kind)
@@ -904,6 +979,7 @@ class Dispatcher:
             done += 1
             with j.lock:
                 j.step_events = set()
+                j.failed_steps = []
             if j.pause and not j.cancel:
                 # 步骤之间的暂停；步骤里面的暂停由引擎在段与段、渠道与渠道之间处理
                 with j.lock:
@@ -924,7 +1000,7 @@ class Dispatcher:
             if ui_busy and task.uses_ui:
                 reason = "读屏服务仍被占用，跳过本步骤；请先解决读屏连接再重试。"
                 self._log(reason, j)
-                j.add_result({"title": task.title, "rc": 3, "skipped": True, "sec": 0, "tail": [reason]})
+                j.add_result(step_result(task, rc=3, skipped=True, sec=0, tail=[reason]))
                 continue
             line_start = len(j.lines)
             t = time.time()
@@ -958,10 +1034,11 @@ class Dispatcher:
                 rc, tail = -1, [str(e)]
                 self._log(f"✗ {e}", j)
             if (rc or killed) and j.cancel and not runs_after_stop(task):
-                # 用户点了停止：不是出错，不记诊断、不提示上报（错误日志 10-28：4 份是停止后上报的）
-                j.add_result({"title": task.title, "rc": rc, "stopped": True, "sec": round(time.time() - t), "tail": tail})
+                # 用户点了停止：不是出错、不重试，也不记诊断、不提示上报（错误日志 10-28：4 份是停止后上报的）
+                j.add_result(step_result(task, rc=rc, stopped=True, sec=round(time.time() - t), tail=tail))
                 continue
-            j.add_result({"title": task.title, "rc": rc, "sec": round(time.time() - t), "tail": tail})
+            j.add_result(step_result(task, rc=rc, sec=round(time.time() - t), tail=tail,
+                                     failed_steps=list(j.failed_steps)))
             if rc:
                 detail = "\n".join(j.lines[line_start:])
                 ui_busy = ui_busy or "ui_busy" in j.step_events
@@ -974,7 +1051,7 @@ class Dispatcher:
                             not_run_result(j, later)
                             continue
                         self._log(f"\n▶ {later.title}\n{reason}", j)
-                        j.add_result({"title": later.title, "rc": 3, "skipped": True, "sec": 0, "tail": [reason]})
+                        j.add_result(step_result(later, rc=3, skipped=True, sec=0, tail=[reason]))
                     break
                 recovery = self.on_error(task.title, j.serial, detail)
                 if recovery:
@@ -1279,6 +1356,22 @@ class Api:
     def start(self, serial, plan):
         return self.dispatcher.start(serial, plan, self._offered())
 
+    def retry(self):
+        """把上一轮没做成的步骤再跑一遍（#638）。结果按步骤合并，快照成功过就绝不再存。
+
+        一次都没跑过、或没有可重试的项时什么都不做，回一句为什么。连续点两次只会有一次生效：
+        `Dispatcher.start()` 在锁里看到已有任务在跑就回绝。上一轮的日志与诊断载荷一并交给新
+        `Job`：诊断与上报要看的是整场，不是最后那一轮。"""
+        j = self.job
+        if not j:
+            return {"error": "没有需要重试的步骤"}
+        view = j.snapshot(0)            # 锁内的一致视图（ADR-0010），别裸读工作线程正在写的列表
+        plan = retry_plan(j.plan, view["results"])
+        if plan is None:
+            return {"error": "没有需要重试的步骤"}
+        return self.dispatcher.start(j.serial, plan, base_results=view["results"],
+                                     base_lines=view["lines"], base_payloads=list(j.payloads))
+
     def _offered(self):
         """选择页上摆出来的项：判断「没执行」是用户没勾还是这台机本来就没有（#577）。
         还没检测过就返回 None——那时不知道摆过什么，结果里不加这些行。
@@ -1293,8 +1386,8 @@ class Api:
     def _log(self, s, job=None):
         return self.dispatcher._log(s, job)
 
-    def _event(self, kind, job=None):
-        return self.dispatcher._event(kind, job)
+    def _event(self, data, job=None):
+        return self.dispatcher._event(data, job)
 
     def _work(self, tasks):
         return self.dispatcher._work(tasks)

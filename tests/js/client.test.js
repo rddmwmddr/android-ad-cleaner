@@ -231,3 +231,34 @@ test("被后来一次接管的那份回包迟到时整份丢弃（#698）", asyn
     assert.equal(page.window.eval("S.logNext"), 2, "作废的那份不能改 logNext");
   } finally { page.close(); }
 });
+
+test("有可重试的步时结果页给按钮，N 由后台算（#638）", async () => {
+  const results = [stepDone, { title: "关闭各 App 里的广告开关", rc: 1, sec: 5, tail: ["未完成步骤：商店"], skipped: false, stopped: false }];
+  let asked = 0;
+  const page = await openPage({ api: { retry: () => { asked += 1; return { ok: true, total: 1 }; } } });
+  try {
+    page.window.showDone(pollResult({ results, retry: 1 }));
+    const button = [...page.document.querySelectorAll("#main button")]
+      .find(b => b.textContent.includes("重试没成功的步骤"));
+    assert.ok(button, "结果页应当出现重试按钮");
+    assert.match(button.textContent, /（1）/, "N 来自 poll 的 retry");
+
+    button.click();                        // 走页面上的 onclick 绑定，不直接调函数
+    await flush();
+    page.window.eval("clearInterval(pollJob); pollJob = null");
+    assert.equal(asked, 1, "点一下只该问后台一次");
+    assert.equal(heading(page), "执行");
+    assert.equal(page.window.eval("S.logNext"), 0);
+  } finally { page.close(); }
+});
+
+test("没有可重试的步时结果页不给按钮（#638）", async () => {
+  // 旧树也绿：守的是回退——按钮只在后台给出 N > 0 时出现，别在界面上自己猜。
+  const page = await openPage();
+  try {
+    page.window.showDone(pollResult({ results: [stepDone] }));
+    const button = [...page.document.querySelectorAll("#main button")]
+      .find(b => b.textContent.includes("重试没成功的步骤"));
+    assert.equal(button, undefined);
+  } finally { page.close(); }
+});

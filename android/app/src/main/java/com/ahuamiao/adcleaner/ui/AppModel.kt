@@ -346,6 +346,26 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
 
     fun stopRun() = scope.launch { runCatching { backend.call("stop") } }
 
+    /**
+     * 把上一轮没做成的步骤再跑一遍（#638）。计划由后台按各步结局与失败段名重排；
+     * 这里跟首次执行一样走 [follow]，暂停、停止与收尾语义不变。
+     */
+    fun retry() = flow {
+        val o = try {
+            backend.call("retry") as JSONObject
+        } catch (e: EngineError) {
+            notice = Notice("没法重试", e.message.orEmpty())
+            return@flow
+        }
+        if (o.has("error")) {
+            // 连点两下：第二次会撞上「已有任务在运行」，那时要跟上它，别留在结果页
+            if (runCatching { poll(0).running }.getOrDefault(false)) return follow()
+            notice = Notice("没法重试", o.optString("error"))
+            return@flow
+        }
+        follow()
+    }
+
     fun goHomeNow() = flow { goHome() }
 
     private suspend fun goHome() {
