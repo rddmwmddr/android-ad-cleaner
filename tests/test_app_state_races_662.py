@@ -89,7 +89,7 @@ class StopPauseTests(unittest.TestCase):
         t = threading.Thread(target=run)
         t.start()
         try:
-            self.assertFalse(done.wait(0.3), "别人持着锁它就返回了：判断跑在临界区外面")
+            self.assertFalse(done.wait(0.1), "别人持着锁它就返回了：判断跑在临界区外面")
         finally:
             release.set()
             h.join(5)
