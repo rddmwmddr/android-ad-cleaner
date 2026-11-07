@@ -356,28 +356,8 @@ def reach(p, entry, log=print, now=None, sleep=None, settle=1.2):
     return None
 
 
-def speedups(recipes_dir):
-    """同家族有机型的脚本用过这条直达、另一些机型的脚本没有：[(家族, 分组, 没用的机型, 直达)]。
-    只是提示：没走这条直达可能是页面没导出、版本不同或者没装这个 App，不算缺陷。"""
-    import glob, os
-    models = {}
-    for f in glob.glob(os.path.join(recipes_dir, "*", "recipe*.py")):
-        brand, _, model = os.path.basename(os.path.dirname(f)).partition("-")
-        if brand.lower() in FAMILY:
-            models.setdefault(FAMILY[brand.lower()], set()).add(model)
-    used = used_by(recipes_dir)
-    out = []
-    for fam, groups in ENTRIES.items():
-        for name, e in groups.items():
-            for d in e.direct:
-                proven = used.get(("direct", d.pkg, full(d.pkg, d.activity)), set()) & models.get(fam, set())
-                if proven and models[fam] - proven:
-                    out.append((fam, name, sorted(models[fam] - proven), d))
-    return out
-
-
 def markdown(recipes_dir):
-    """docs/清单/入口速查.md 的全文：每个家族一张表，一个分组一行，表尾是可提速提示。"""
+    """docs/清单/入口速查.md 的全文：每个家族一张表，一个分组一行。"""
     used = used_by(recipes_dir)
     lines = ["# 入口速查：广告与推荐开关在哪", "",
              "由 `tool/entries.py` 生成（`python3 tool/entries.py > docs/清单/入口速查.md`），不要手改。",
@@ -400,12 +380,6 @@ def markdown(recipes_dir):
             menu = e.menu + (f"（先拉起 `{e.app}`）" if e.app else "")
             lines.append(f"| {name} | {direct} | {search} | {menu} | {e.note or ''} |")
         lines.append("")
-    lines += ["## 可提速提示", "",
-              "同家族里有机型的脚本用过这条直达，下面这些机型的脚本还没有。脚本未走这条直达 ≠ 缺陷："
-              "页面可能没导出、版本不同或者没装这个 App，要换先真机试。", ""]
-    lines += [f"- {LABEL.get(fam, fam)} / {name} / {'、'.join(missing)} / `{d.pkg}/{d.activity}`"
-              for fam, name, missing, d in speedups(recipes_dir)]
-    lines.append("")
     return "\n".join(lines)
 
 
