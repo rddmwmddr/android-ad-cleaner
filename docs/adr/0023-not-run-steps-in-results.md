@@ -47,3 +47,12 @@
 - 新用例 `tests/test_not_run_steps_577.py` 覆盖结果集构造与 `_work()` 的计数、断线时各行保留自己的原因；
   `tests/js/client.test.js` 覆盖完成页渲染与「真出错的跳过仍算失败」。
 - 不改变参考脚本「默认不勾」的安全策略，也不改各步骤的实质行为。
+
+## 补充（#638）：结果形状多了 `kind`
+
+上面「结果形状不变（`title / rc / skipped / sec / tail`）」不再成立：每行多一个 `kind`
+（`backup / recipe / channels / quickapp / ads / finish`），真正跑过的行还多一个 `failed_steps`
+（引擎报的未完成段名，见 ADR-0004 的增补段）。跳过与停止的行只有 `kind`，没有 `failed_steps`。
+
+本 ADR 的判定不受影响：这一档仍是 `rc=0` + `skipped` + `tail=[原因]`，失败判定与上报标签照旧读
+`rc` 与 `skipped`。新增的 `kind` 只给重试与多轮合并用（ADR-0026），不参与「算不算失败」。

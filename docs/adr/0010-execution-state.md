@@ -37,3 +37,13 @@
 
 - **`proc` 的登记方补杀。** 只靠 `request_stop()` 杀进程会漏掉「`spawn()` 已返回、`proc` 尚未登记」这一瞬。登记 `proc` 的同一个临界区里读一次 `cancel`，已置位就由工作线程终止刚拿到的进程；不要为此把锁跨 `spawn()` / `wait()`（见 Decision）。
 - **收尾行与 `running = False` 同临界区发布。** 分两次写会让轮询看到「已结束但没有收尾行」，也会给下一次执行接管留下空隙；收尾行本身也在这个临界区里按 `cancel` 取值。工作线程经 `_log(s, job)` / `_event(kind, job)` 写自己手里的那个 `Job`，不走 `Api.job`（缺省时仍回落到 `Api.job`，给不需要绑定的调用方）——旧执行的任何写入都只进旧 `Job`。
+
+## 补充（#638）：快照多一个 `retry`，`_event()` 收整份字典
+
+- `snapshot()` 的返回多一个 `retry`（此刻还能重试的步数，按 `retryable()` 从 `results` 现算），
+  上面那份字段清单不再完整。界面按它决定结果页出不出重试按钮，判定本身不在这儿（ADR-0026）。
+- `_event()` 的入参由 kind 变成 `events.parse_data()` 给出的整份字典：`failed_steps` 要取载荷，
+  其余分支仍只看 `data["kind"]`。写者仍是工作线程，`_log(s, job)` 这条不变。
+- `Job` 多三个可注入的起点：`plan`、`base_results`（ADR-0026 的合并）、`base_lines` / `base_payloads`
+  （重试轮的日志与诊断载荷接着上一轮）。不传时与改动前一致；`Job.lines` 因此由空列表初始化的假设
+  不再成立，读它请照旧走 `snapshot()`。

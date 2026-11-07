@@ -366,6 +366,15 @@ fun DoneScreen(model: AppModel, run: RunProgress) {
                             textAlign = TextAlign.Center,
                         )
                     }
+                    // 没做成的步由后台判定，界面只按 N 出按钮（#638）
+                    if (run.retry > 0) {
+                        Spacer(Modifier.height(20.dp))
+                        SizedButton(
+                            "重试没成功的步骤（${run.retry}）",
+                            model::retry,
+                            icon = R.drawable.ic_restart_alt,
+                        )
+                    }
                 }
             }
             itemsIndexed(run.results) { i, r -> ResultRow(i, run.results.size, r) }

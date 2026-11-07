@@ -80,6 +80,14 @@ class OutcomeTest(unittest.TestCase):
         self.assertEqual(run["results"][0]["summary"], "已保存")
         self.assertEqual(run["outcome"], "ok")
 
+    def test_poll_passes_the_retry_count_through_untouched(self):
+        # 旧树也绿：守的是回退——可重试判定只在 gui/app.py 的 retryable 里定义一次，
+        # 手机版不许在 view.py 另算一份，只能把后台给的数字原样透传（#638）。
+        run = view.poll(FakeApi(run={"results": [{"rc": 1, "tail": []}], "cancel": False, "retry": 1}))
+        self.assertEqual(run["retry"], 1)
+        # 没有这个字段的载荷不炸：Compose 侧 optInt 取到 0，结果页不出按钮
+        self.assertIsNone(view.poll(FakeApi(run={"results": [], "cancel": True})).get("retry"))
+
 
 class StallWatchTest(unittest.TestCase):
     def setUp(self):

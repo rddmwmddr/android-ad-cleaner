@@ -62,7 +62,8 @@
 备份 → 任务步骤（广告开关 / 营销通知 / 快应用 / 挂起）→ 收尾 → 结果
 ```
 
-- 步骤清单由 `plan_tasks()` 按用户的选择拼出，每一步是一个 `Task`（标题 + 脚本 + 参数）。没勾的项也在清单里，只是带 `skip_reason`、不碰手机，照样在结果里占一行（[ADR-0023](adr/0023-not-run-steps-in-results.md)）。
+- 步骤清单由 `plan_tasks()` 按用户的选择拼出，每一步是一个 `Task`（标题 + `kind` + 脚本 + 参数）。没勾的项也在清单里，只是带 `skip_reason`、不碰手机，照样在结果里占一行（[ADR-0023](adr/0023-not-run-steps-in-results.md)）。
+- 没做成的步可以在结果页再跑一轮：`retry_plan()` 按各步的 `kind` 与失败段名重建一份计划，新 `Job` 接住上一轮的结果、按 `kind` 就地覆盖（[ADR-0026](adr/0026-retry-failed-steps.md)）。
 - 状态全部收在 `Job` 里：单写者 + 锁内快照，界面轮询只拿快照（[ADR-0010](adr/0010-execution-state.md)）。
 - 引擎发回来的东西分三路：人话进日志、事件改状态、载荷进上报（见「四条契约」）。
 - 广告开关那一步里，「这一页该拨哪些」是纯函数 `plan_switches()` 算的，点击与回读在 `off()` 里（[ADR-0008](adr/0008-switch-plan.md)）。

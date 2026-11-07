@@ -448,8 +448,10 @@ function showDone(r){
   setStep(5);
   const ok = r.results.every(x => x.rc === 0) && !r.cancel;
   const failed = r.results.some(x => x.rc !== 0 && !x.stopped);   // 点了停止不算出错，不提示上报
+  const retry = r.retry || 0;      // 可重试的步数由后台按结果算好（gui/app.py 的 retryable，#638）
   if (!r.results.length){ r.results = []; }
   main().innerHTML = `<h1>${ok ? "完成" : failed ? "已结束（有步骤没成功）" : "已停止"}</h1><p class="lead">用时 ${r.sec} 秒。去下拉搜索、负一屏、应用商店、浏览器看一眼，确认功能正常。</p>
+    ${retry ? `<div class="row" style="margin-bottom:14px"><button class="btn" onclick="retryRun(this)">重试没成功的步骤（${retry}）</button></div>` : ""}
     <div class="card ${r.results.length ? "" : "hide"}">${r.results.map(x => `<div class="res"><span class="tag ${x.skipped && x.rc === 0 ? "warn" : x.rc === 0 ? "ok" : x.stopped ? "warn" : "bad"}">${x.skipped ? "跳过" : x.stopped ? "已停止" : x.rc === 0 ? "成功" : "失败"}</span><span class="t">${esc(x.title)}</span><span class="d">${esc(summarize(x))} · ${x.sec} 秒</span></div>`).join("")}</div>
     ${r.recovery ? `<div class="card" id="ui-recovery"><h3>排查读屏连接</h3><p class="lead">${esc(r.recovery)}</p><div class="actions"><button class="btn plain" onclick="checkUi()">检查读屏连接</button><button class="btn plain" onclick="copyDiagnostics()">复制完整诊断</button></div></div>` : ""}
     <div class="card"><h3>最后一步：关闭开发者模式</h3>
@@ -457,6 +459,18 @@ function showDone(r){
       <div class="row"><button class="btn" onclick="askDevOff()">帮我关闭</button><button class="btn plain" onclick="selfOff()">我在手机上自己关</button></div></div>
     ${failed ? `<div class="note bad">有步骤没成功。<a href="#" onclick="openReport();return false">上报错误日志</a>（不需要账号，发送前可以看到全部内容），或<a href="#" onclick="openFeedback('bug');return false">到 GitHub 反馈</a>。</div>` : ""}
     <details class="card"><summary>查看完整日志</summary><div class="log" style="height:260px">${esc(document.querySelector("#log")?.textContent || "")}</div></details>`;
+}
+/* 重试没做成的步骤（#638）：后台按失败段名重排计划，界面只是再走一次执行页。
+   按下就置灰：连点两下时第二次会撞上「已有任务在运行」，那个报错会盖在已经跑起来的重试上。 */
+async function retryRun(button){
+  if (button) button.disabled = true;
+  const r = await api.retry();
+  if (r.error){
+    if (button) button.disabled = false;
+    modal(`<h3>没法重试</h3><p>${esc(r.error)}</p><div class="actions"><button class="btn" onclick="closeModal()">好</button></div>`);
+    return;
+  }
+  S.logNext = 0; showRun();
 }
 function askDevOff(){
   modal(`<h3>关闭开发者模式？</h3><p class="lead">关闭后电脑会和手机断开，这是正常的。以后要还原改动，在手机上重新打开开发者模式即可。</p>
