@@ -45,6 +45,16 @@ UNRESOLVED_CLOSE = {
     "redmi-23117RK66C/recipe.py": 1,
     "vivo-V2417A/recipe.py": 1,
 }
+# 解析不出的 keep=，同样按脚本冻结：它只影响同页保留项，读不出时那页的约束就整段丢了。
+UNRESOLVED_KEEP = {
+    "oneplus-PHK110/recipe.py": 1,
+    "oneplus-PKX110/recipe.py": 1,
+    "oppo-PKH110/recipe.py": 1,
+    "oppo-PLG110/recipe.py": 2,
+    "oppo-PMA110/recipe.py": 1,
+    "oppo-PMX110/recipe.py": 1,
+    "vivo-V2417A/recipe.py": 1,
+}
 # 模块级字典里的说明文字，按脚本冻结。
 DICT_NOTES = {
     "honor-WKL-AN20/recipe.py": 37,
@@ -100,6 +110,13 @@ class RealRecipesTest(unittest.TestCase):
 
     def test_unresolved_close_named_is_frozen_per_script(self):
         self.assertEqual(dict(Counter(c.script for c in self.scan.unresolved_close)), UNRESOLVED_CLOSE)
+
+    def test_unresolved_keep_is_frozen_per_script(self):
+        """守卫用例，旧树也绿：守的是这 8 处 keep= 不回退，不被静默读成别的词、也不被悄悄丢掉。"""
+        self.assertEqual(dict(Counter(c.script for c in self.scan.unresolved_keep)), UNRESOLVED_KEEP)
+        doc = vocab.render(RECIPES)
+        for call in self.scan.unresolved_keep:
+            self.assertIn(f"`{call.script}:{call.line}` keep= {call.text}", doc)
 
     def test_dict_notes_are_frozen_per_script(self):
         self.assertEqual(dict(Counter(n.script for n in self.scan.notes)), DICT_NOTES)
