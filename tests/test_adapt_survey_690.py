@@ -1,4 +1,4 @@
-"""#690：adapt survey 试入口（三种结局、只读边界）与 `-s S adapt <子命令>` 的转发。
+"""#690：adapt survey 试入口（三种结局、只读边界）与 `-s S adapt <子命令>` 的转发；#740：带 -s 的误用不再静默成功。
 
 运行：python -m unittest discover -s tests -v
 """
@@ -226,14 +226,14 @@ class SurveyEntryTests(unittest.TestCase):
 
 
 class DispatchTest(unittest.TestCase):
-    """文档写的 `-s 序列号 adapt <子命令>` 要真转发；gen 不碰手机，仍打印帮助。"""
+    """文档写的 `-s 序列号 adapt <子命令>` 要真转发；gen 不碰手机，误带 -s 时明确报错。"""
 
     def setUp(self):
         fake_adb(self)
 
-    def forward(self, argv):
+    def forward(self, argv, out=None):
         with patch.object(run, "py") as spy, patch.object(run, "adb_shell") as shell, \
-                contextlib.redirect_stdout(io.StringIO()):
+                contextlib.redirect_stdout(out or io.StringIO()):
             code = run.dispatch(argv)
         self.shell = shell
         return code, spy
@@ -252,12 +252,41 @@ class DispatchTest(unittest.TestCase):
         _code, spy = self.forward(["-s", "FAKE", "adapt", "explore", "com.a", "com.b"])
         spy.assert_called_once_with("adapt.py", "explore", "-s", "FAKE", "com.a", "com.b")
 
-    def test_gen_and_unknown_subcommands_still_print_help(self):
-        for argv in (["-s", "FAKE", "adapt", "gen", "f.tsv"], ["-s", "FAKE", "adapt", "nope"]):
-            code, spy = self.forward(argv)
-            self.assertEqual(code, 0)
+    def test_check_is_forwarded_too(self):
+        """三条要序列号的子命令各有一条守卫（#740 审查指出 check 那条先前没人走）。"""
+        _code, spy = self.forward(["-s", "FAKE", "adapt", "check", "草稿.py"])
+        spy.assert_called_once_with("adapt.py", "check", "-s", "FAKE", "草稿.py")
+
+    def test_help_is_still_a_help(self):
+        """`-s S adapt --help` 是求助不是误用：与顶层 -h 一样打印总入口帮助、rc 0（ADR-0005）。"""
+        out = io.StringIO()
+        code, spy = self.forward(["-s", "FAKE", "adapt", "--help"], out=out)
+        self.assertEqual(code, 0)
+        self.assertEqual(out.getvalue(), run.__doc__ + "\n")
+        spy.assert_not_called()
+        self.shell.assert_not_called()
+
+    def test_gen_with_a_serial_points_at_the_working_form(self):
+        """gen 不碰手机，`-s S adapt gen` 是误用：以前打印总入口帮助并以 0 退出，
+        探路 TSV 没生成却看着像成功（#740）。"""
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code, spy = self.forward(["-s", "FAKE", "adapt", "gen", "f.tsv"])
+        self.assertEqual(code, 1)
+        self.assertIn("run.py adapt gen", err.getvalue())
+        spy.assert_not_called()
+        self.shell.assert_not_called()              # 不碰手机的子命令不做设备检查
+
+    def test_missing_or_unknown_subcommand_is_a_failure_not_silent_help(self):
+        """`-s S adapt` 与 `-s S adapt nope` 也该以 1 退出并指向正确写法（#740）。"""
+        for argv in (["-s", "FAKE", "adapt"], ["-s", "FAKE", "adapt", "nope"]):
+            err = io.StringIO()
+            with self.subTest(argv), contextlib.redirect_stderr(err):
+                code, spy = self.forward(argv)
+            self.assertEqual(code, 1)
+            self.assertIn("adapt survey", err.getvalue())
             spy.assert_not_called()
-            self.shell.assert_not_called()          # 不碰手机的子命令不做设备检查
+            self.shell.assert_not_called()
 
     def test_bare_adapt_still_accepts_the_engine_order(self):
         _code, spy = self.forward(["adapt", "survey", "-s", "FAKE"])

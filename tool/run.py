@@ -866,6 +866,10 @@ COMMANDS = {
 }
 
 
+# adapt 里要序列号的子命令。gen 不碰手机，不用带 -s；文档三处（本文件帮助、AGENTS.md、docs/04）按这条写。
+ADAPT_SERIAL_SUBS = ("survey", "explore", "check")
+
+
 def dispatch(a):
     if not a or a[0] in ("-h", "--help"):
         print(__doc__); return 0
@@ -877,10 +881,18 @@ def dispatch(a):
     adb()
     if a[0] != "-s" or len(a) < 3:
         return fail("命令格式：run.py -s <序列号> <命令>。先跑 run.py devices 看序列号")
-    # 文档里写的是 `-s 序列号 adapt <子命令>`；adapt.py 自己收的是子命令在前。gen 不碰手机，不带 -s。
-    if a[2] == "adapt" and len(a) > 3 and a[3] in ("survey", "explore", "check"):
+    # 文档里写的是 `-s 序列号 adapt <子命令>`；adapt.py 自己收的是子命令在前。
+    if a[2] == "adapt":
+        sub = a[3] if len(a) > 3 else ""
+        if sub in ("-h", "--help"):
+            print(__doc__); return 0            # 求助不是误用：与顶层 -h 一样打印总入口帮助（ADR-0005）
+        if sub == "gen":
+            return fail("adapt gen 不碰手机，不用带 -s：run.py adapt gen 探路-<型号>.tsv")
+        if sub not in ADAPT_SERIAL_SUBS:
+            return fail(f"adapt 后面跟 {' / '.join(ADAPT_SERIAL_SUBS)}（gen 不用带 -s）。"
+                        "用法：run.py -s <序列号> adapt survey")
         adb_shell(a[1], "getprop ro.product.brand")     # 设备不在时给出与其它 -s 命令同样的人话，不是子进程 traceback
-        return py("adapt.py", a[3], "-s", a[1], *a[4:])
+        return py("adapt.py", sub, "-s", a[1], *a[4:])
     handler = COMMANDS.get(a[2])
     if handler is None:
         print(__doc__); return 0
