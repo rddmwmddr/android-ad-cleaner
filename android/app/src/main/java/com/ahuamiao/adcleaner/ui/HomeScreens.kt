@@ -188,7 +188,7 @@ fun HomeScreen(model: AppModel) {
                 onClick = model::openRestore,
                 modifier = Modifier.fillMaxWidth(),
                 icon = R.drawable.ic_history,
-                colors = ButtonDefaults.filledTonalButtonColors(),
+                tonal = true,
             )
             Spacer(Modifier.height(8.dp))
         },
