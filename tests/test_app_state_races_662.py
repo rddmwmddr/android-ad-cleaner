@@ -4,6 +4,7 @@
 执行页「更多 → 还原改动」照样能点，还原先结束就把执行的保活撤了（小米会冻结它），两边还在同一块屏上点按。
 """
 import tempfile
+import threading
 import unittest
 
 from fixtures import FakeRunner, job_stub
@@ -67,6 +68,41 @@ class StopPauseTests(unittest.TestCase):
     def test_pause_refused_after_stop(self):
         self.api.dispatcher.job = job_stub(running=True, cancel=True)
         self.assertFalse(self.api.pause())
+
+    def wait_for_the_dispatcher_lock(self, call):
+        """别人持着锁时这条调用必须等：立刻返回就说明「取 job、判 running、置标记」不在锁里。"""
+        d = self.api.dispatcher
+        holding, release, done = threading.Event(), threading.Event(), threading.Event()
+
+        def hold():
+            with d.exclusive():
+                holding.set()
+                release.wait(5)
+
+        def run():
+            call()
+            done.set()
+
+        h = threading.Thread(target=hold)
+        h.start()
+        self.assertTrue(holding.wait(5), "没能占住锁")
+        t = threading.Thread(target=run)
+        t.start()
+        try:
+            self.assertFalse(done.wait(0.3), "别人持着锁它就返回了：判断跑在临界区外面")
+        finally:
+            release.set()
+            h.join(5)
+            t.join(5)
+        self.assertTrue(done.is_set())
+
+    def test_stop_reads_the_job_under_the_dispatcher_lock(self):
+        self.api.dispatcher.job = job_stub(running=True)
+        self.wait_for_the_dispatcher_lock(self.api.stop)
+
+    def test_pause_reads_the_job_under_the_dispatcher_lock(self):
+        self.api.dispatcher.job = job_stub(running=True)
+        self.wait_for_the_dispatcher_lock(self.api.pause)
 
 
 if __name__ == "__main__":
