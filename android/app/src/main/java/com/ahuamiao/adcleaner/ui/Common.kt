@@ -25,14 +25,18 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ButtonGroup
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -159,6 +163,60 @@ fun RowScope.ButtonLabel(text: String, height: Dp, @DrawableRes icon: Int? = nul
         Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(height)))
     }
     Text(text, style = ButtonDefaults.textStyleFor(height).copy(fontWeight = FontWeight.SemiBold), maxLines = 1)
+}
+
+data class GroupAction(
+    val text: String,
+    val icon: Int?,
+    val enabled: Boolean = true,
+    val outlined: Boolean = false,
+    val onClick: () -> Unit,
+)
+
+/** 一排两个操作：官方标准按钮组，按下的一个变宽、旁边的让位。文字始终留着。 */
+@Composable
+fun ActionPair(first: GroupAction, second: GroupAction) {
+    val height = ButtonDefaults.MediumContainerHeight
+    val sources = remember { listOf(MutableInteractionSource(), MutableInteractionSource()) }
+    ButtonGroup(
+        overflowIndicator = {},
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        listOf(first, second).forEachIndexed { i, action ->
+            customItem(
+                buttonGroupContent = {
+                    val modifier = Modifier
+                        .animateWidth(sources[i])
+                        .weight(1f)
+                        .heightIn(min = height)
+                    val label: @Composable RowScope.() -> Unit = { ButtonLabel(action.text, height, action.icon) }
+                    if (action.outlined) {
+                        OutlinedButton(
+                            onClick = action.onClick,
+                            shapes = ButtonDefaults.shapesFor(height),
+                            modifier = modifier,
+                            enabled = action.enabled,
+                            contentPadding = ButtonDefaults.contentPaddingFor(height),
+                            interactionSource = sources[i],
+                            content = label,
+                        )
+                    } else {
+                        FilledTonalButton(
+                            onClick = action.onClick,
+                            shapes = ButtonDefaults.shapesFor(height),
+                            modifier = modifier,
+                            enabled = action.enabled,
+                            contentPadding = ButtonDefaults.contentPaddingFor(height),
+                            interactionSource = sources[i],
+                            content = label,
+                        )
+                    }
+                },
+                menuContent = {},
+            )
+        }
+    }
 }
 
 /** 分段列表：段间 2dp，首尾外角大、中间小。 */
