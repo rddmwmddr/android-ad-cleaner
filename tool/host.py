@@ -7,3 +7,7 @@ import os
 
 ON_PHONE = os.environ.get("AAC_HOST") == "phone"
 CLICKER = "本 App" if ON_PHONE else "电脑"
+# 「本 App」后面要留空格、直接拼会变成「本 App点击」，所以整句放在这里。
+# 两种桌面说法（「电脑点击」「电脑发出的点击」）历史不同，各自保留，别合并（#747）。
+CLICK = f"{CLICKER} 发出的点击" if ON_PHONE else f"{CLICKER}点击"
+TAPPED = f"{CLICKER} 发出的点击" if ON_PHONE else f"{CLICKER}发出的点击"

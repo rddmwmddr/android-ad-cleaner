@@ -21,7 +21,7 @@ for _st in (sys.stdout, sys.stderr):
 import adbutils
 import uiautomator2 as u2
 from ui_session import connect
-from troubleshooting import (CLICKER, UI_INSTALL_FAILED, UI_RECOVERY, XIAOMI_INPUT,
+from troubleshooting import (TAPPED, UI_INSTALL_FAILED, UI_RECOVERY, XIAOMI_INPUT,
                              accessibility_summary, input_blocked)
 import adb_link
 import backups
@@ -297,7 +297,7 @@ class Phone:
             self.W, self.H = self.reader.window_size()
             # 小米没开「USB 调试（安全设置）」时能读不能点：先探一下，别跑几分钟全是「没找到」。
             if input_blocked(self.reader.shell("input keyevent 0").output):
-                raise RuntimeError(f"INPUT_BLOCKED：系统拒绝了{CLICKER}发出的点击，本次未点击开关。\n" + XIAOMI_INPUT)
+                raise RuntimeError(f"INPUT_BLOCKED：系统拒绝了{TAPPED}，本次未点击开关。\n" + XIAOMI_INPUT)
         except BaseException:
             self.reader.close()
             raise
@@ -539,7 +539,7 @@ class Phone:
             raise RuntimeError("点击坐标在屏幕外，未操作")
         out = self.reader.shell(f"input swipe {x} {y} {x} {y} 80").output   # 有的 App 吞 input tap
         if input_blocked(out):
-            raise RuntimeError(f"系统拒绝了{CLICKER}发出的点击。" + XIAOMI_INPUT)
+            raise RuntimeError(f"系统拒绝了{TAPPED}。" + XIAOMI_INPUT)
 
     def scroll(self, frac=0.45, up=False):
         """按下-移动-停 0.12 秒-松开：没有惯性，翻多少是多少，约 0.45 秒。"""

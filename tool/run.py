@@ -530,8 +530,7 @@ def cmd_check(serial, rest):
     print(f"机型：{i['name'] if i['name'].upper().startswith(i['brand'].upper()) else i['brand']+' '+i['name']}（{i['model']}），系统 {i['build']}，Android {i['android']}")
     print(f"锁屏：{'是（请机主解锁）' if locked(serial) else '否'}")
     if input_blocked(serial, i["brand"]):
-        print(("本 App 发出的点击" if troubleshooting.ON_PHONE else "电脑点击") + "：被系统拒绝。"
-              + troubleshooting.XIAOMI_INPUT)
+        print(troubleshooting.CLICK + "：被系统拒绝。" + troubleshooting.XIAOMI_INPUT)
     if r and ref:
         rb = recipe_meta(r)["build"]
         matched = version_match(i, rb, FAMILY.get((i["brand"] or "").lower()))

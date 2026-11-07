@@ -138,7 +138,7 @@ def boot(base, data_dir, cache_dir, package="com.ahuamiao.adcleaner"):
     global API
     os.environ.setdefault("HOME", data_dir)
     os.environ["TMPDIR"] = cache_dir
-    os.environ["AAC_HOST"] = "phone"     # 引擎按它给手机版的说法，不提电脑和数据线（tool/host.py，#729）
+    os.environ["AAC_HOST"] = "phone"     # 本进程按手机版说法（tool/host.py，#729）；引擎那份由 ENGINE_HOST 定（#747）
     os.environ.pop("AAC_EVENTS", None)
     if not sys.executable:
         sys.executable = "python3"
@@ -160,6 +160,8 @@ def boot(base, data_dir, cache_dir, package="com.ahuamiao.adcleaner"):
     app.Api.usb_hint = lambda self: ""
     app.os_name = lambda: "安卓手机版（Shizuku）"      # 错误上报与诊断的「电脑」一栏：和桌面版的报告分开
     app.LINK_LOST = "和手机的调试连接断开了，这一步没有执行。回到本 App 点「重新开始」。"   # #729
+    app.TAP_REFUSED = "；本 App 的点击被拒（未开 USB 调试安全设置）"                          # #747
+    app.ENGINE_HOST = "phone"                             # child_env() 只认它，不认继承来的 AAC_HOST
 
     api = app.Api(data_dir, adb=adb.ADB_PATH)
     api.runner = inproc.Runner(api._child_env)

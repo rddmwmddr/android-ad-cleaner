@@ -261,6 +261,10 @@ def child_env(adb, backups):
     # 事件开关只由本客户端在跑任务时打开。用户 shell 里碰巧导出了它也不能生效：
     # `_run()` 那些一次性命令会把输出直接解析（`status()` 取末行当 JSON）。
     e.pop("AAC_EVENTS", None)
+    # 宿主标记同理：只认客户端自己给的 ENGINE_HOST，不从用户 shell 继承（#747）
+    e.pop("AAC_HOST", None)
+    if ENGINE_HOST:
+        e["AAC_HOST"] = ENGINE_HOST
     e.update({"ADB": adb or "", "ADBUTILS_ADB_PATH": adb or "", "AAC_BACKUPS": backups,
               "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1", "AAC_GUI": "1"})
     if adb:
@@ -579,6 +583,10 @@ LATEST_URLS = ("https://ahuamiao.com/sites/other/android-ad-cleaner-latest.json"
 DOWNLOAD_PAGE = "https://ahuamiao.com/sites/other/android-ad-removal-intro.html"
 # 断线后跳过后面各步时写给用户的话；手机版没有电脑，启动时换成自己的说法（aac_android.main.boot，#729）
 LINK_LOST = "手机和电脑已断开，这一步没有执行。重新连接手机后点「重试」。"
+# 诊断里「点击被拒」那一栏：手机版会整段复制与上报，不能写「电脑」（aac_android.main.boot，#747）
+TAP_REFUSED = "；电脑点击被拒（未开 USB 调试安全设置）"
+# 传给引擎子进程的宿主标记，手机版由 boot() 设成 "phone"；引擎按它取词（tool/host.py，#747）
+ENGINE_HOST = ""
 # 没执行过任何步骤时只有手机型号，看不出问题（错误日志 10-28：6 份空报告）
 EMPTY_REPORT = "还没有执行记录，这份报告只有手机型号，看不出问题。请先执行一次再上报；还没执行就遇到问题，请到 GitHub 反馈，写清楚卡在哪一步。"
 PRIVATE = (
@@ -1395,7 +1403,7 @@ class Api:
                       f"- 机型脚本：{st.get('recipe') or '无'}"
                       + (f"（录制版本 {st.get('recipe_build')}，{'一致' if st.get('recipe_ok') else '不一致'}）" if st.get('recipe') else ""),
                       f"- 折叠屏展开：{'是' if st.get('fold_open') else '否'}；锁屏：{'是' if st.get('locked') else '否'}"
-                      + ("；电脑点击被拒（未开 USB 调试安全设置）" if st.get("input_blocked") else "")]
+                      + (TAP_REFUSED if st.get("input_blocked") else "")]
         else:
             lines.append("- 手机：还没检测")
         if self.last_scan_notes:
