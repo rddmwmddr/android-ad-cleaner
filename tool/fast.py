@@ -21,7 +21,8 @@ for _st in (sys.stdout, sys.stderr):
 import adbutils
 import uiautomator2 as u2
 from ui_session import connect
-from troubleshooting import CLICKER, UI_RECOVERY, XIAOMI_INPUT, accessibility_summary, input_blocked
+from troubleshooting import (CLICKER, UI_INSTALL_FAILED, UI_RECOVERY, XIAOMI_INPUT,
+                             accessibility_summary, input_blocked)
 import adb_link
 import backups
 import events
@@ -265,9 +266,7 @@ class Phone:
             # 读屏服务文件传不进手机（adb push 返回 FAIL）或命令无回应：多半是连接中途断了（错误日志 10-27）。
             if not adb_link.present(serial):
                 raise adb_link.lost(f"{type(e).__name__}: {e}") from e
-            raise RuntimeError("读屏服务没能装到手机上（adb 传文件失败），本次未点击开关。请拔插数据线、"
-                               "退出电脑上的手机助手类软件后重试；仍失败请重启手机。"
-                               f"\n原始异常：{type(e).__name__}: {str(e)[:200]}") from e
+            raise RuntimeError(UI_INSTALL_FAILED + f"\n原始异常：{type(e).__name__}: {str(e)[:200]}") from e
         self._shell = self.reader.shell
         self.link = adb_link.Connection(serial, transport=_shell_transport(self._shell), lost_on_retry=False)
         self.reader.shell = self._resilient_shell

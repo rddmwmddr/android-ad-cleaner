@@ -8,6 +8,7 @@ import shutil
 import subprocess
 
 import events
+from host import ON_PHONE
 
 # adb 客户端自己的错误（远端命令的 stderr 不会带这些前缀）。
 # Windows 上程序名有时显示成「adb.」（错误日志 10-27）。
@@ -19,7 +20,14 @@ LIB_GONE = re.compile(r"device '[^']*' not found|device offline|no devices/emula
                       r"|\Aclosed\Z|connection refused|max retries exceeded|newconnectionerror|remotedisconnected"
                       r"|cannot connect to|couldn't connect to|failed to establish", re.I)
 
-HINT = ("手机和电脑的 adb 连接断开了，本步骤没有完成。请逐项排查后重试：\n"
+# 手机版（tool/host.py 的 ON_PHONE）的调试连接是 App 自己的 Shizuku / 内置无线调试，没有电脑、线缆和
+# USB 授权框，排查动作要换成「回首页看连接状态」。桌面版逐字不变（#729）。
+HINT = ("和手机的调试连接断开了，本步骤没有完成。请逐项排查后重试：\n"
+        "· 回到本 App 首页看连接状态：用 Shizuku 的，确认 Shizuku 还在运行（手机重启后要重新启动一次）\n"
+        "· 用无线调试的，到「开发者选项」把「无线调试」关掉再打开，本 App 会自己重连\n"
+        "· 还不行就重启手机后再试"
+        ) if ON_PHONE else (
+        "手机和电脑的 adb 连接断开了，本步骤没有完成。请逐项排查后重试：\n"
         "· 退出电脑上的手机助手类软件（各品牌手机助手、应用宝、360 手机助手、豌豆荚、爱思助手、刷机工具）和安卓模拟器。"
         "它们自带另一个版本的 adb，会和本工具抢连接\n"
         "· 换原装或可传数据的线，直接插电脑接口，不经过扩展坞或 USB Hub\n"
@@ -27,7 +35,8 @@ HINT = ("手机和电脑的 adb 连接断开了，本步骤没有完成。请逐
         "· 用无线调试时，手机息屏或换网络后端口会变，要重新连接")
 
 # 一轮内已经确认断线：后面的段只报这一句，不重复上面整段排查说明，也不再逐段重试（#293）。
-REPEAT = "手机和电脑的 adb 连接已断开，本段跳过；原因和排查办法见第一次报错"
+REPEAT = ("和手机的调试连接已断开，本段跳过；原因和排查办法见第一次报错" if ON_PHONE
+          else "手机和电脑的 adb 连接已断开，本段跳过；原因和排查办法见第一次报错")
 NO_ADB = "找不到 adb。安装方法见 docs/01-准备工作.md"
 
 NOWIN = 0x08000000 if os.name == "nt" else 0
