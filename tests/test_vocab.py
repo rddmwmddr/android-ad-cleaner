@@ -38,6 +38,7 @@ UNRESOLVED_ONLY = {
     "xiaomi-25102RKBEC/recipe.py": 1,
     "xiaomi-2512BPNDAC/recipe.py": 1,
     "xiaomi-M154FF/recipe.py": 1,
+    "xiaomi-M332BF/recipe.py": 1,
 }
 # close_named() 第一个参数解析不出的，和上面分开冻结，免得一个口径盖住另一个。
 UNRESOLVED_CLOSE = {
