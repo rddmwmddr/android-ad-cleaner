@@ -145,7 +145,7 @@ HyperOS OS3.0.309.0.WMCCNXM / Android 16，2026-11-05 社区实测（[Issue #281
 - 🟢 自动更新（和上一项挨着，别点错行）
 - 🔴 隐私设置 → 个性化推荐
 - ⚠️ K90 Pro Max 打开主题商店会落到 `com.android.thememanager` 的 `ThemeResourceProxyTabActivity`；系统广告组件 `com.miui.systemAdSolution` 未挂起时，开屏窗会抢焦点，自动化会被中断。先执行 `run.py -s 序列号 suspend com.miui.systemAdSolution`（可还原）再跑这一段。
-- ⚠️ REDMI K80 Pro（HyperOS 3.0.304.0）同样会跳包：`com.miui.themestore` 拉起后立刻变成 `com.android.thememanager`，`p.start()` 的前台校验会判「启动后离开前台」并停段。直达 `com.android.thememanager/.ThemeResourceProxyTabActivity` 后「我的 → 齿轮」稳定可达。
+- ⚠️ REDMI K80 Pro（HyperOS 3.0.304.0）同样会跳包：`com.miui.themestore` 拉起后立刻变成 `com.android.thememanager`，`p.start()` 的前台校验曾把它判成「启动后离开前台」并停段；#581 起读不出前台与一两帧的跳包过渡不算离开，连续外占才停段（[ADR-0022](../adr/0022-launch-foreground.md)）。直达 `com.android.thememanager/.ThemeResourceProxyTabActivity` 后「我的 → 齿轮」稳定可达。
 
 ## 6. 浏览器
 
@@ -155,7 +155,7 @@ HyperOS OS3.0.309.0.WMCCNXM / Android 16，2026-11-05 社区实测（[Issue #281
 - 🔴 隐私和安全 → 个性化内容推荐、个性化广告推荐（新旧版都有）
 - 🔴 旧版：主页设置 → 宫格位推送；搜索设置 → 显示猜你想搜模块；功能设置 → 小说（🟢 我的网盘）
 - ⚠️ 新版这三项都没有。主页设置只剩「探索版 / 自定义主页」，自定义主页要填网址，`about:blank` 填不进去，可以填 `https://www.bing.com`。按你的喜好选，不选也行。
-- ⚠️ REDMI K80 Pro（浏览器 20.x，HyperOS 3.0.304.0）：这版有「我的」，但它是**顶部标签**（主页 / 视频 / AI搜索 / 免费小说 / 我的），不是底部；「设置」是顶部右侧的齿轮 `ImageView`，文字就是「设置」（1080 宽下约 `[922,133]-[1038,249]`）。冷启动会偶发被启动过渡窗判成「离开前台」，脚本里先 `am force-stop` 再直达 `BrowserActivity` 重试；80 毫秒短按点不动齿轮时改用 `input tap`。
+- ⚠️ REDMI K80 Pro（浏览器 20.x，HyperOS 3.0.304.0）：这版有「我的」，但它是**顶部标签**（主页 / 视频 / AI搜索 / 免费小说 / 我的），不是底部；「设置」是顶部右侧的齿轮 `ImageView`，文字就是「设置」（1080 宽下约 `[922,133]-[1038,249]`）。冷启动会偶发冒出启动过渡窗（#581 起不再因此判「离开前台」），脚本里仍先 `am force-stop` 再直达 `BrowserActivity` 重试；80 毫秒短按点不动齿轮时改用 `input tap`。
 - ⚠️ 浏览器会弹小米账号登录框，点「取消」。
 
 **Xiaomi 17 Ultra（浏览器 20.29.1031010，2026-10-28）**：
