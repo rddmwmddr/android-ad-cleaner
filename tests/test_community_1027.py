@@ -491,6 +491,60 @@ class GuiTests(unittest.TestCase):
         self.assertIn("华硕（没有调试接口）", hint)
         self.assertIn("华为（没有调试接口）", hint)
 
+    def test_usb_hw_id_drops_the_serial_after_the_last_backslash(self):
+        # #673：诊断会带上硬件 ID，末尾的序列号不能跟着出去
+        self.assertEqual(self.app.usb_hw_id("USB\\VID_2717&PID_FF40\\5e3d4f6b"), "USB\\VID_2717&PID_FF40")
+        self.assertEqual(self.app.usb_hw_id("USB\\VID_2717&PID_FF40&MI_00\\7&1a2b3c&0&0000"),
+                         "USB\\VID_2717&PID_FF40&MI_00")
+        self.assertEqual(self.app.usb_hw_id("USB\\VID_2717&PID_FF40"), "USB\\VID_2717&PID_FF40")
+        self.assertEqual(self.app.usb_hw_id("HDAUDIO\\FUNC_01&VEN_10EC"), "")
+        self.assertEqual(self.app.usb_hw_id(""), "")
+
+    def test_usb_facts_render_one_line_per_hit_device(self):
+        facts = self.app.usb_facts([("三星", "Galaxy S25", "OK", True, "USB\\VID_04E8&PID_6860&MI_00")])
+        self.assertEqual(len(facts), 1)
+        self.assertIn("三星", facts[0])
+        self.assertIn("Galaxy S25", facts[0])
+        self.assertIn("OK", facts[0])
+        self.assertIn("（OK，调试接口）", facts[0])
+        self.assertIn("USB\\VID_04E8&PID_6860&MI_00", facts[0])
+        # 一台都没有调试接口时也逐台列出，不挑一台当结论
+        facts = self.app.usb_facts([("华为", "HUAWEI M30", "OK", False, "USB\\VID_12D1&PID_107E"),
+                                    ("小米", "MI 15", "Error", False, "")])
+        self.assertEqual(len(facts), 2)
+        self.assertIn("非调试接口", facts[0])
+        self.assertIn("未识别", facts[1])
+        self.assertEqual(self.app.usb_facts([]), [])
+
+    def test_usb_facts_cap_at_five_keeping_the_debug_interfaces(self):
+        # #673：整条 USB 总线的设备不能把诊断刷满，但带调试接口的那台不能被截掉
+        found = [("安卓", f"外设 {i}", "OK", False, f"USB\\VID_05C6&PID_900{i}") for i in range(6)]
+        found.append(("小米", "MI 15", "OK", True, "USB\\VID_2717&PID_FF40"))
+        facts = self.app.usb_facts(found)
+        self.assertEqual(len(facts), 5)
+        self.assertIn("MI 15", facts[0])
+        self.assertNotIn("外设 5", "\n".join(facts))
+
+    def test_diagnostics_list_usb_devices_only_when_adb_sees_none(self):
+        api = self.app.Api(self.data.name)
+        api.adb = "/opt/tools/adb"
+        api.last_devices = "List of devices attached\n"
+        found = [("小米", "MI 15", "OK", True, "USB\\VID_2717&PID_FF40")]
+        with patch.object(self.app, "usb_phones", return_value=found) as phones, \
+             patch.object(api, "_adb", return_value="Android Debug Bridge") as adb:
+            report = api.diagnostics()
+        phones.assert_called_once_with()
+        adb.assert_called_once()
+        self.assertIn("USB 设备：小米 MI 15", report)
+        self.assertIn("USB\\VID_2717&PID_FF40", report)
+        # 有设备连着时不列，免得把没用的总线信息塞进报告
+        api.last_devices = "List of devices attached\nABC123\tdevice usb:1-1\n"
+        with patch.object(self.app, "usb_phones", return_value=found) as phones, \
+             patch.object(api, "_adb", return_value="Android Debug Bridge"):
+            report = api.diagnostics()
+        phones.assert_not_called()
+        self.assertNotIn("USB 设备：", report)
+
     def test_diagnostics_include_device_count_and_other_adb(self):
         api = self.app.Api(self.data.name)
         api.adb = "/opt/tools/adb"
