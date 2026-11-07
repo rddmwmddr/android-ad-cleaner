@@ -1,9 +1,11 @@
-"""文档与单一来源一致：ADR 字段表（#467）、品牌连点表（#654）、官网共享样式（#653）、教程截图 alt（#655）、站点与侧栏图标同源（#669）、ADR 索引（#624）、静态检查目标（#624）、手机版措辞的宿主边界（#732）、adapt 的 -s 写法（#740）。"""
+"""文档与单一来源一致：ADR 字段表（#467）、品牌连点表（#654）、官网共享样式（#653）、教程截图 alt（#655）、站点与侧栏图标同源（#669）、ADR 索引（#624）、静态检查目标（#624）、手机版措辞的宿主边界（#732）、adapt 的 -s 写法（#740）、Windows USB 提示三分支（#785）。"""
 import re
 import sys
 import unittest
 from dataclasses import fields
 from pathlib import Path
+
+from gui import app
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -275,6 +277,44 @@ class HostWordingDocTests(unittest.TestCase):
         for name in ("docs/ARCHITECTURE.md", "CONTEXT.md"):
             self.assertNotIn("差别只有三处", (ROOT / name).read_text(encoding="utf-8"),
                              f"{name} 仍写着宿主差别只有三处")
+
+
+# 每个 Windows USB 提示：假设备、客户端该说的关键短语、FAQ 那一行该指的步号。
+USB_HINT_CASES = (
+    (("三星", "Galaxy S25", "OK", False), "没有调试接口", "第 3 步"),
+    (("三星", "ADB Interface", "Error", True), "驱动没有装好", "第 5 步"),
+    (("三星", "ADB Interface", "OK", True), "adb 没连上", "第 6 步"),
+)
+
+
+def faq_row(text, phrase):
+    """FAQ 表格里写着该提示的那一行：三种提示各占一行，「怎么办」在同一行里。"""
+    for line in text.splitlines():
+        if line.startswith("|") and phrase in line:
+            return line
+    raise AssertionError(f"docs/06 的表格里没有「{phrase}」这一行")
+
+
+class UsbHintDocTests(unittest.TestCase):
+    """FAQ 节尾要与 Windows 上的三种 USB 提示对得上，别再只写两种（#785）。"""
+
+    def test_faq_maps_every_hint_to_the_client_wording_and_a_step(self):
+        faq = (ROOT / "docs/06-常见问题.md").read_text(encoding="utf-8")
+        for device, phrase, step in USB_HINT_CASES:
+            self.assertIn(phrase, app.usb_hint([device]), f"客户端不再这么说，词表要跟着改：{phrase}")
+            self.assertIn(step, faq_row(faq, phrase), f"「{phrase}」那行没指到 {step}")
+
+    def test_multi_phone_wording_stays_in_the_faq_vocabulary(self):
+        """多台手机走另一条分支，措辞不同，但用的仍是 FAQ 里那三种（#785）。"""
+        faq = (ROOT / "docs/06-常见问题.md").read_text(encoding="utf-8")
+        both_off = app.usb_hint([("三星", "Galaxy S25", "OK", False), ("华为", "HUAWEI M30", "OK", False)])
+        mixed = app.usb_hint([("三星", "ADB Interface", "OK", True), ("华为", "HUAWEI M30", "Error", True)])
+        self.assertIn("三星（没有调试接口）", both_off)
+        self.assertIn("华为（没有调试接口）", both_off)
+        self.assertIn("三星（调试接口在，但 adb 没连上）", mixed)
+        self.assertIn("华为（调试接口的驱动没有装好）", mixed)
+        for phrase in ("没有调试接口", "驱动没有装好", "adb 没连上"):
+            self.assertIn(phrase, faq, f"docs/06 没写客户端会显示的「{phrase}」")
 
 
 ADAPT_CALL = re.compile(r"run\.py\s+(?:-s\s+(\S+)\s+)?adapt\s+([a-z]+)")
