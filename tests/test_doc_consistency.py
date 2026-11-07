@@ -151,7 +151,7 @@ def tutorial_alts(text):
 class TutorialAltTests(unittest.TestCase):
     """页面与 README 的截图 alt 一致（#655）。"""
 
-    README_SCREENSHOTS = 19  # 素材图张数：加图时这里、README_ONLY 与 README 一起改
+    README_SCREENSHOTS = 21  # 素材图张数：加图时这里、README_ONLY 与 README 一起改
     README_ONLY = ("10", "12", "15")  # 素材图多于页面用图的部分
 
     def page_alts(self):
