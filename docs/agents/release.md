@@ -79,9 +79,15 @@ gh search prs --repo "$REPO" --closed ">=$LAST" is:unmerged --json author,author
 
 GitHub 搜索索引有延迟，刚合上没几小时的 PR 可能还查不到；对着本版 PR 列表手工补一遍。
 
+## 手机版 APK
+
+手机版随桌面版一起发布，产物是 arm64 APK（`android/build.sh assembleRelease`）。签名与分发由 owner 掌握：构建读 `.private/android-signing/keystore.properties`（见 `android/app/build.gradle.kts`），缺失就退回 debug 签名。这一节只记口径，不写实际操作步骤；本机没有这份证书，签名与分发路径未验证。
+
+`android/**` 的改动由 `.github/workflows/android.yml` 在 PR 上跑 `assembleDebug` 编译闸门，不产出发版产物。下面「一轮发版的产物顺序」只管桌面版那四个安装包；APK 由 owner 构建并传到同一个 Release，不在这十步里。当次 Release 里已有 APK 时，README 下载区与 `docs/手机版教程/README.md` 的「下载」一节一并更新链接；没有就维持「随下一版发布」。
+
 ## 一轮发版的产物顺序
 
-1. **跑验证**：`python -m unittest discover -s tests`（本机 `.venv`，3.13，与 Linux job 同一版）一套，加 `uvx ruff@0.17.3 check --select F,E9 tool tests gui`。这一步的数字就是正文验证行与 CHANGELOG 那一行的来源，只跑一次。两个安装包都是 3.12 产物，tag 构建时 `build-windows.yml` 会在 3.12 上再跑一遍套件（Windows 平台，POSIX-only 用例会 skip）；两版结论不一致时以那次为准。
+1. **跑验证**：`python -m unittest discover -s tests`（本机 `.venv`，3.13，与 Linux job 同一版）一套，加 `uvx ruff@0.17.3 check --select F,E9 tool tests gui android/app/src/main/python`。这一步的数字就是正文验证行与 CHANGELOG 那一行的来源，只跑一次。两个安装包都是 3.12 产物，tag 构建时 `build-windows.yml` 会在 3.12 上再跑一遍套件（Windows 平台，POSIX-only 用例会 skip）；两版结论不一致时以那次为准。
 2. **补齐 `## 未发布`**：确认这一版的每一笔都在里面、都是一行一条。这时还没写验证行。
 3. **建 Release 草稿并推 tag**：`build-windows.yml` 由 `v*` 标签触发，要求对应 Release **先存在**（草稿即可，否则 workflow 报「请先创建对应的 Release 草稿」）。它打包两个 Windows 安装包、跑冒烟测试、把产物传进草稿。草稿已公开时它保留已验证的文件、不重建。
 4. **上传 macOS 安装包**到同一个草稿（本机打包与公证步骤在 `CLAUDE.local.md`）。

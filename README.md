@@ -28,6 +28,8 @@ https://t.me/+A5X3Mxzs-Cg3NjYx
 
 不知道 Mac 是哪种芯片：左上角苹果图标 → 关于本机，「芯片」写 Apple M 开头的选 Apple 芯片。所有版本：[Releases](https://github.com/rddmwmddr/android-ad-cleaner/releases)。用法：[docs/08-桌面客户端.md](docs/08-桌面客户端.md)。
 
+> 手机版是不用连电脑的安卓 App（见下面[用法五](#五种用法)）：APK 随下一版发布，安装、授权与还原步骤见[手机版教程](docs/手机版教程/README.md)；想自己构建看 [android/](android/README.md)。
+
 | | |
 |---|---|
 | <img src="images/gui-1-connect.png" alt="连接手机"><br>**1 连接手机**：插线即认出手机，内置开启 USB 调试的图文教程 | <img src="images/gui-3-detect.png" alt="检测"><br>**2 检测**：型号、系统版本、机型脚本、快应用、广告组件 |
@@ -66,9 +68,9 @@ https://t.me/+A5X3Mxzs-Cg3NjYx
 
 ---
 
-## 四种用法
+## 五种用法
 
-<p align="center"><img src="images/ways.png" width="460" alt="三种用法"></p>
+<p align="center"><img src="images/ways.png" width="460" alt="用法示意"></p>
 
 > 用法一要先在手机上打开开发者模式和 USB 调试，带截图的教程：[docs/00-打开开发者模式.md](docs/00-打开开发者模式.md)。
 
@@ -78,6 +80,7 @@ https://t.me/+A5X3Mxzs-Cg3NjYx
 | **二：聊天 AI 带你点** | 只有手机 | DeepSeek、豆包、ChatGPT 任意一个 | [docs/03-用聊天AI.md](docs/03-用聊天AI.md) |
 | **三：照清单手动关** | 想自己掌握每一步 | 只要手机 | [docs/清单/](docs/清单/) |
 | **四：桌面客户端** | 不想敲命令 | Mac（Apple / Intel 芯片）或 Windows 10/11、数据线 | [下载](#下载桌面客户端) · [说明](docs/08-桌面客户端.md) |
+| **五：手机版 App** | 不想连电脑 | 安卓 11 及以上、Wi-Fi；APK 随下一版发布 | [教程](docs/手机版教程/README.md) |
 
 
 用法一的开场白，复制给 AI：
@@ -201,6 +204,7 @@ tool/
   chan_fast.py       营销通知渠道
   explore.py         新机型探路（实验）
 gui/                 桌面客户端（pywebview 界面 + PyInstaller 打包）
+android/             手机版 APK（引擎与桌面版同一份，界面是 Compose）
 recipes/<品牌>-<型号>/recipe.py   各机型的机型脚本
 images/              文档配图
 tests/               不连接手机的引擎回归测试
