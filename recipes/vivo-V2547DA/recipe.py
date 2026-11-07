@@ -7,6 +7,7 @@
 BUILD = "PD2547D_A_16"
 MODELS = ["V2547DA"]
 import time
+from wait import until
 
 ONLY = globals().get("ONLY") or []
 FAILED_STEPS = []
@@ -118,28 +119,56 @@ def _():
     p.back(2)
 
 
+def browser_settings(tries=2):
+    """右上「菜单 → 设置」，点完要认出设置页（#753）。
+
+    冷启动首页没有底部「我的」，入口是右上菜单。菜单浮层右上角有一个 desc 读作「返回」的 ✕
+    （id 里带 cancel），等入口时按弹窗去关会把它点掉，刚打开的菜单就收起来了，「设置」再也找不到。
+    所以这里只等那一行画出来、直接点，不在等待里关弹窗；点完没进设置页就退回、重开菜单再试一次。
+    别的 vivo 型号可能没有这个按钮，最多等 3 秒就放弃本段。"""
+    def landed():
+        if p.in_settings_page():
+            return True
+        at = p.find("设置", exact=True)         # Activity 名不含 Setting 的 App：只认顶上那处「设置」标题
+        return bool(at) and at[1] < p.H * 0.25
+
+    for _ in range(tries):
+        if not p.d(resourceId="com.vivo.browser:id/menu_btn").click_exists(timeout=3):
+            return False                        # 本机没有这个按钮：交给调用方跳过本段
+        p.await_page(1.6)                       # 菜单是弹层，画出来的那一帧才有「设置」
+        xy = until(lambda: p.find("设置", exact=True, edge_ok="tab"), timeout=3.0, poll=0.3,
+                   now=time.time, sleep=time.sleep)
+        if xy:
+            before = p.sig()
+            p.click(*xy)
+            if p.settle(before, 1.5):
+                p.await_page(1.5)               # Activity 换了、内容可能还在画：等这一页画完再认落点
+                if landed():
+                    return True
+        p.back()                                # 收起浮层 / 退出点错的页，下一轮重开菜单
+    raise RuntimeError(f"浏览器设置页没有打开；停在 {p.focus()}")
+
+
 @step("浏览器")
 def _():
     p.start("com.vivo.browser")
-    # 冷启动首页没有底部「我的」：走右上菜单 → 设置。别的 vivo 型号用它当参考脚本时可能没有这个按钮，最多等 3 秒
-    if p.d(resourceId="com.vivo.browser:id/menu_btn").click_exists(timeout=3):
-        time.sleep(1.0)
-        p.tap("设置", exact=True, scrolls=0)
-    if "SettingActivity" in p.focus() or maybe("设置"):
-        if maybe("首页设置"):
-            maybe("极简首页", scrolls=0)
-            p.off(only=["首页上滑展示资讯"], page="浏览器·首页设置"); p.back()
-        p.top()
-        if maybe("网页浏览设置"):
-            p.off(only=["网页下载相关推荐"], page="浏览器·网页浏览"); p.back()
-        p.top()
-        if maybe("更多设置"):
-            p.off(only=["WiFi连接跳转新闻资讯", "WiFi 连接跳转新闻资讯", "跳转新闻资讯",
-                        "下载管理页展示热门应用", "下载管理页展示下载热榜"], page="浏览器·更多设置"); p.back()
-        p.top()
-        if maybe("隐私权限设置"):
-            p.off(only=["个性化内容", "第三方应用来源个性化推荐", "个性化广告推荐"], page="浏览器·隐私"); p.back()
-        p.back(2)
+    if not browser_settings():
+        print("  ✗ 本机浏览器没有右上菜单按钮，跳过本段"); return
+    print(f"  · 浏览器设置页 {p.focus()}")
+    if maybe("首页设置"):
+        maybe("极简首页", scrolls=0)
+        p.off(only=["首页上滑展示资讯"], page="浏览器·首页设置"); p.back()
+    p.top()
+    if maybe("网页浏览设置"):
+        p.off(only=["网页下载相关推荐"], page="浏览器·网页浏览"); p.back()
+    p.top()
+    if maybe("更多设置"):
+        p.off(only=["WiFi连接跳转新闻资讯", "WiFi 连接跳转新闻资讯", "跳转新闻资讯",
+                    "下载管理页展示热门应用", "下载管理页展示下载热榜"], page="浏览器·更多设置"); p.back()
+    p.top()
+    if maybe("隐私权限设置"):
+        p.off(only=["个性化内容", "第三方应用来源个性化推荐", "个性化广告推荐"], page="浏览器·隐私"); p.back()
+    p.back(2)
 
 
 @step("i管家")
