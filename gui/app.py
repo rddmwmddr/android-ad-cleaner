@@ -385,8 +385,16 @@ DRIVER_HINT = {
 }
 
 
+def usb_hw_id(instance_id):
+    """InstanceId 里认得出设备的那一段：`USB\\VID_xxxx&PID_xxxx` 加可选的 `&MI_xx`，
+    最后一个反斜杠之后的设备序列号丢掉（诊断「序列号一律替换」的口径不能破）。认不出格式返回空。"""
+    parts = (instance_id or "").split("\\")
+    prefix = "\\".join(parts[:2])
+    return prefix if re.fullmatch(r"USB\\VID_[0-9A-F]{4}&PID_[0-9A-F]{4}(&MI_[0-9A-F]{2})?", prefix, re.I) else ""
+
+
 def usb_phones():
-    """只读：Windows 设备管理器里的手机 USB 设备。返回 [(品牌, 设备名, 状态, 是否 ADB 接口)]；查不到返回空。"""
+    """只读：Windows 设备管理器里的手机 USB 设备。返回 [(品牌, 设备名, 状态, 是否 ADB 接口, 硬件 ID)]；查不到返回空。"""
     if not IS_WIN:
         return []
     script = ("[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-PnpDevice -PresentOnly | Where-Object { $_.InstanceId -match '^USB\\\\VID_(" + "|".join(USB_VENDORS) + ")' } | "
@@ -402,8 +410,17 @@ def usb_phones():
         m = re.match(r"USB\\VID_([0-9A-F]{4})", parts[0], re.I)
         if m:
             adb = bool(re.search(r"adb|android", parts[1] + " " + parts[3], re.I))
-            found.append((USB_VENDORS.get(m.group(1).upper(), "安卓"), parts[1], parts[2], adb))
+            found.append((USB_VENDORS.get(m.group(1).upper(), "安卓"), parts[1], parts[2], adb,
+                          usb_hw_id(parts[0])))
     return found
+
+
+def usb_facts(found, limit=5):
+    """把命中的设备逐台说成诊断行：品牌、设备名、状态、是不是调试接口、硬件 ID。
+    只截断条数，不替用户判断哪台是手机；带调试接口的排前面，先被截掉的是别的外设（#673）。"""
+    ordered = [f for f in found if f[3]] + [f for f in found if not f[3]]
+    return [f"{b} {name}（{status}，{'调试接口' if adb else '非调试接口'}）硬件 ID：{hw or '未识别'}"
+            for b, name, status, adb, hw in ordered[:limit]]
 
 
 def usb_hint(found):
@@ -1273,9 +1290,11 @@ class Api:
         if others:
             lines.append(f"- 其他正在运行的 adb：{'；'.join(others)}")
         if not rows:
-            hint = usb_hint(usb_phones())
+            found = usb_phones()
+            hint = usb_hint(found)
             if hint:
                 lines.append(f"- USB：{hint}")
+            lines += [f"- USB 设备：{line}" for line in usb_facts(found)]
         if st and "info" in st:
             i = st["info"]
             nm = i.get("name") or i.get("model")

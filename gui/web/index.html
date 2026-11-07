@@ -464,7 +464,7 @@ async function openFeedback(type){
     <div class="fb-types">${Object.entries(FB).map(([k, v]) => `<label><input type="radio" name="fbt" value="${k}" ${k === type ? "checked" : ""}>${v[0]}</label>`).join("")}</div>
     <textarea id="fbtext" rows="4" placeholder="发生了什么？你希望怎样？
 比如：执行到「关闭营销通知」时卡住了；或者：希望支持 vivo X200。"></textarea>
-    <label class="chk"><input type="checkbox" id="fbdiag" checked><span>附带诊断信息<small>客户端版本、电脑系统、手机型号和系统版本、执行结果和最近的日志。手机序列号已替换掉，不含应用列表和通知内容。可以在下面修改。</small></span></label>
+    <label class="chk"><input type="checkbox" id="fbdiag" checked><span>附带诊断信息<small>客户端版本、电脑系统、手机型号和系统版本、执行结果和最近的日志；adb 读到 0 台时还有 USB 设备名与硬件 ID。手机序列号已替换掉，不含应用列表和通知内容。可以在下面修改。</small></span></label>
     <details><summary>查看 / 修改诊断信息</summary><textarea id="fbdiagtext" class="mono" rows="6" style="margin-top:8px">${esc(diag)}</textarea></details>
     <div id="fbmsg" class="note info hide" style="margin-top:12px"></div>
     <div class="actions"><button class="btn plain" onclick="openReport()">没有 GitHub 账号：上报错误日志</button><button class="btn plain" onclick="closeModal()">取消</button><button class="btn" onclick="sendFeedback()">提交到 GitHub</button></div>`, true);
