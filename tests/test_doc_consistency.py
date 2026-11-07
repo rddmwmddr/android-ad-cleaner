@@ -1,4 +1,4 @@
-"""文档与单一来源一致：ADR 字段表（#467）、品牌连点表（#654）、教程截图 alt（#655）、站点与侧栏图标同源（#669）、ADR 索引（#624）、静态检查目标（#624）、手机版措辞的宿主边界（#732）。"""
+"""文档与单一来源一致：ADR 字段表（#467）、品牌连点表（#654）、教程截图 alt（#655）、站点与侧栏图标同源（#669）、ADR 索引（#624）、静态检查目标（#624）、手机版措辞的宿主边界（#732）、adapt 的 -s 写法（#740）。"""
 import re
 import sys
 import unittest
@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 import channel_policy as policy
 import gen_brand_taps as gen
+import run
 
 ADR = ROOT / "docs/adr/0006-channel-classification.md"
 CLAUDE = ROOT / "CLAUDE.md"
@@ -216,6 +217,43 @@ class HostWordingDocTests(unittest.TestCase):
         for name in ("docs/ARCHITECTURE.md", "CONTEXT.md"):
             self.assertNotIn("差别只有三处", (ROOT / name).read_text(encoding="utf-8"),
                              f"{name} 仍写着宿主差别只有三处")
+
+
+ADAPT_CALL = re.compile(r"run\.py\s+(?:-s\s+(\S+)\s+)?adapt\s+([a-z]+)")
+# 期望词表：survey / explore / check 收 `-s`，gen 不碰手机、不带。实现在 run.ADAPT_SERIAL_SUBS。
+ADAPT_COMMANDS = {"survey": True, "explore": True, "gen": False, "check": True}
+
+
+def adapt_calls(text):
+    """文档里的每条 `run.py [-s 序列号] adapt <子命令>` → {子命令: 有没有 -s}。"""
+    return {sub: bool(serial) for serial, sub in ADAPT_CALL.findall(text)}   # findall 用 '' 表示未参与的可选组
+
+
+class AdaptCommandDocTests(unittest.TestCase):
+    """三处文档（run.py 帮助、AGENTS.md、docs/04）的 adapt 写法要与 dispatch() 一致（#740）。"""
+
+    GUIDES = ("AGENTS.md", "docs/04-给新机型写脚本.md")
+
+    def test_frozen_word_list_matches_the_dispatcher(self):
+        """期望词表冻结在上面的 ADAPT_COMMANDS；这条把它钉到实现那份，改 `dispatch()` 漏改这里就红。"""
+        self.assertEqual(set(run.ADAPT_SERIAL_SUBS),
+                         {sub for sub, serial in ADAPT_COMMANDS.items() if serial})
+
+    def test_help_and_guides_use_the_same_order(self):
+        """旧树也绿，守的是不回退：三处文档今天已经一致，改一处漏一处要红。
+
+        钉的是 `-s` 前缀序。`adapt.py` 也接受 `adapt explore -s S`，但文档只写一种，读者才不会跟错。
+        """
+        sources = {"run.py 帮助": run.__doc__}
+        sources.update({name: (ROOT / name).read_text(encoding="utf-8") for name in self.GUIDES})
+        for name, text in sources.items():
+            with self.subTest(name):
+                self.assertEqual(adapt_calls(text), ADAPT_COMMANDS)
+
+    def test_parser_sees_both_orders(self):
+        """旧树也绿，守的是不回退：守卫本身要认得出带与不带 -s 两种写法，否则文本改了也照样绿。"""
+        text = "run.py -s S adapt survey\nrun.py adapt gen x.tsv\nrun.py adapt --help\n"
+        self.assertEqual(adapt_calls(text), {"survey": True, "gen": False})
 
 
 class SharedAssetTests(unittest.TestCase):
