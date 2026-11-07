@@ -416,10 +416,27 @@ async function togglePause(){
 }
 
 /* ---------- 5 完成 ---------- */
+/* 「机型脚本跑完」那行只有关掉几个，另两类结局要从 tail 里数（#758）。口径与手机版
+   aac_android/view.py 的 _run_summary() 相同（那里的注释写了扣减理由与 tail 的 80 行上界）：
+   tests/summary_cases.json 两边都读。 */
+function runSummary(t, turnedOff){
+  const parts = [`关了 ${turnedOff} 个开关`];
+  let same = 0;
+  for (const g of t.matchAll(/核对 (\d+) 项，调整 (\d+) 项/g)) same += Number(g[1]) - Number(g[2]);
+  same -= t.split("被上级开关禁用（开关是灰的），未改动").length - 1;
+  same -= (t.match(/✗ (?:关不掉|打不开) /g) || []).length;
+  if (same > 0) parts.push(`${same} 项核对过无需改动`);
+  const f = t.match(/未完成步骤：(.*)/);
+  if (f){
+    const names = f[1].split("、").map(s => s.trim()).filter(Boolean);
+    if (names.length) parts.push(`${names.length} 段未完成（${names[0]}${names.length > 1 ? " 等" : ""}）`);
+  }
+  return parts.join("；");
+}
 function summarize(res){
   const t = res.tail.join("\n");
   let m;
-  if ((m = t.match(/机型脚本跑完：关了 (\d+) 个，(\d+) 秒/))) return `关了 ${m[1]} 个开关`;
+  if ((m = t.match(/机型脚本跑完：关了 (\d+) 个，(\d+) 秒/))) return runSummary(t, Number(m[1]));
   if ((m = t.match(/拨了 (\d+) 个/))){ const left = (t.match(/仍开着: (\d+) 个/) || [])[1]; return `关了 ${m[1]} 个渠道` + (left !== undefined ? `，复查仍开着 ${left} 个` : ""); }
   if (/快应用组件已关闭/.test(t)) return `${(t.match(/已关闭$/gm) || []).length} 个组件已关闭`;
   if (/快照已存/.test(t)) return "已保存";
