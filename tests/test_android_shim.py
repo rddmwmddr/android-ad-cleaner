@@ -680,6 +680,23 @@ class InFrontTest(unittest.TestCase):
         self.assertIn(("busy", True, True), self.native.calls, "下一次执行照常开保活")
         self.assertIn(("busy", False, True), self.native.calls, "收尾照常撤保活")
 
+    def test_failed_entry_takes_the_capsule_down_again(self):
+        """#662：保活起来了但胶囊没挂上时（visible 抛错），胶囊与屏都不能留下。"""
+        real = main.visible
+
+        def boom(package, on, text=""):
+            if on:
+                raise RuntimeError("设不上悬浮窗权限")
+            return real(package, on, text)
+
+        main.visible = boom
+        self.addCleanup(setattr, main, "visible", real)
+        with self.assertRaises(RuntimeError):
+            self.run_with(True, lambda: "ok")
+        self.assertIn(("capsule", False, ""), self.native.calls, "胶囊要收掉")
+        self.assertIn(("busy", False, False), self.native.calls, "保活也要撤")
+        self.assertIsNone(screen.active)
+
 
 class WasStoppedTest(unittest.TestCase):
     """boot() 靠它在「做完了」和「已停止」之间分开：`_work()` 是正常返回的，只有 Job 上这个标记认得出来。"""

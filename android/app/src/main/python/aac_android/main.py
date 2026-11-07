@@ -62,7 +62,6 @@ class Session:
         self.lock = threading.Lock()
         self.count = 0
         self.background = False
-        self.label = ""
 
     def enter(self, package, action):
         with self.lock:
@@ -71,7 +70,6 @@ class Session:
                 return self.background
             try:
                 self.background = BACKGROUND and screen.start(package) is not None
-                self.label = action
                 native.busy(True, self.background)
                 visible(package, True, f"净 {action}中（后台）" if self.background else f"净 {action}中")
             except BaseException:
@@ -79,6 +77,7 @@ class Session:
                 self.count -= 1
                 self.background = False
                 try:
+                    visible(package, False)
                     screen.release()
                     native.busy(False, False)
                 except Exception:
