@@ -354,7 +354,8 @@ class Phone:
         if self.log:
             print(*a, flush=True)
 
-    # ---------- 读屏 ----------
+    # ---------- 采样：读屏、页面状态与签名 ----------
+    # 区内的 scroll_more、locked、wait_unlocked 会动屏幕（翻页、拉通知栏、亮屏等人解锁），不是纯读。
     def tree(self):
         root = ET.fromstring(self._u2(self.reader.dump_hierarchy))
         # Mi 10 的热榜子页会横屏；不能一直用连接时的竖屏尺寸过滤节点。
@@ -362,7 +363,9 @@ class Phone:
         return root
 
     def focus(self):
-        """当前焦点窗口（~0.1 秒；u2 的 app_current 在浮窗上会卡 10 秒）。"""
+        """当前前台窗口：多数是 `包名/页面名`，锁屏 / 通知栏 / 输入法抢焦点时是裸窗口名，读不到返回空串
+        （~0.1 秒；u2 的 app_current 在浮窗上会卡 10 秒）。判「还在不在这个 App」用 `split("/", 1)[0]`。
+        不是聚焦控件，也不是焦点元素：判断有没有聚焦的输入框用 `edit_ready()`，读框里的文字用 `focused_text()`。"""
         self.check_alive()
         # 不能加 grep -m / head：提前退出会让 dumpsys 收到 SIGPIPE，u2 判「shell output invalid」（#205）。
         # sed 读完整个流再截断，行数与原来一致。
@@ -497,7 +500,7 @@ class Phone:
         for t, c, xy in self.switches(root):
             print(f"  [{'开' if c else '关'}] {t}  @{xy}")
 
-    # ---------- 动作 ----------
+    # ---------- 认行与导航：点击、翻页、按文字找入口 ----------
     def click(self, x, y):
         size = self._u2(self.reader.window_size)
         if tuple(size) != (self.W, self.H):
@@ -871,6 +874,7 @@ class Phone:
             self.reader.shell("input keyevent BACK")
             self.settle(b, 0.6)
 
+    # ---------- 拨动：确认框与整页开关 ----------
     def confirm(self):
         """开关后弹确认框就点确认类按钮，认出即返回按钮文字；没有弹窗返回 None。
 
@@ -1053,6 +1057,7 @@ class Phone:
                 self.say(f"  · {page}：核对 {len(checked)} 项，调整 {done} 项" + ("（本页未找到目标开关）" if not checked else ""))
         return done
 
+    # ---------- 设置搜索：输入框、打字、按关键词进页 ----------
     def focused_text(self):
         for n in self.tree().iter("node"):
             if n.get("focused") == "true" and EDIT.search(n.get("class") or "") and self.on_screen(n):
@@ -1180,6 +1185,7 @@ class Phone:
         time.sleep(0.3)                      # 结果页起来了，给它的内容留一拍
         return True
 
+    # ---------- 生命周期：拉起 App 与落点确认 ----------
     def start(self, pkg, activity=None, settle=1.2, foreground=None, expect=None, budget=6.0):
         """拉起 App；之后 settle 秒内冒出来的更新/推荐弹窗顺手点掉。
 
