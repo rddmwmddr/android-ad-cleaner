@@ -52,10 +52,31 @@ def no_agreement(app):
         raise SkipStep(f"{app}还没同意用户协议，不代为同意。需要的话打开{app}同意后，单独跑这一段")
 
 
-def launch(activity):
-    """裸启动：弹着协议时 p.start 会替我们点「取消」，App 一退就分不清是没同意还是没打开。"""
+def wait_open(pkg, app):
+    """等它真的到前台。后台屏冷启动慢，不等的话后面会在上一个 App 的页面上找入口。"""
+    for _ in range(20):
+        if p.focus().split("/", 1)[0] == pkg and p.has_text():
+            return
+        time.sleep(0.5)
+    raise RuntimeError(f"{app}没有打开")
+
+
+def launch(activity, app):
+    """裸启动。弹着协议时 p.start 会替我们点「取消」，App 一退就分不清是没同意还是没打开。"""
     p.d.shell(f"am start -f 0x10008000 -n {activity}")
-    time.sleep(2.5)
+    wait_open(activity.split("/", 1)[0], app)
+
+
+def wait_home(app):
+    """协议框比首页晚：等到底栏后再盯 2 秒。没等到就往下走的话，找入口时弹窗处理会把协议「取消」掉，App 随之退出。"""
+    for _ in range(10):
+        no_agreement(app)
+        if p.find("我的", edge_ok="tab"):
+            break
+        time.sleep(0.5)
+    for _ in range(4):
+        time.sleep(0.5)
+        no_agreement(app)
 
 
 def my_tab(app):
@@ -99,11 +120,17 @@ def _():
 @step("搜索")
 def _():
     p.start("com.hihonor.search", ".feature.mainpage.presentation.page.HomeActivity", expect="更多")
-    p.d.press("back"); time.sleep(0.5)      # 收起键盘，菜单位置才固定
-    xy = None
-    for t, (l, tp, r, b), _n in p.texts():
-        if t == "更多" and tp > p.H * 0.3:
-            xy = ((l + r) // 2, (tp + b) // 2)
+
+    def more():
+        for t, (l, tp, r, b), _n in p.texts():
+            if t == "更多" and tp > p.H * 0.3:
+                return (l + r) // 2, (tp + b) // 2
+        return None
+
+    xy = more()
+    if not xy:                              # 主屏上键盘会盖住它。后台屏没有键盘，按返回会把搜索页退掉，所以先看再按
+        p.d.press("back"); time.sleep(0.5)
+        xy = more()
     if not xy:
         raise RuntimeError("搜索框旁的「更多」没找到")
     p.click(*xy); time.sleep(0.6)
@@ -117,13 +144,17 @@ def _():
 
 @step("负一屏")
 def _():
-    launch("com.hihonor.hiboard/com.hihonor.intelligent.LauncherActivity")
-    if not p.find("头像", exact=True):      # 直达落不到就走手势；后台屏上手势不生效
+    # 负一屏是桌面的一部分，只在主屏上有。手机版在后台屏上跑时进不去，这时说明并跳过，不算失败
+    p.d.shell("am start -f 0x10008000 -n com.hihonor.hiboard/com.hihonor.intelligent.LauncherActivity")
+    time.sleep(2)
+    if not p.find("头像", exact=True):
         p.d.press("home"); time.sleep(0.6)
         for _ in range(3):
             p.d.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250"); time.sleep(1.2)
             if p.find("头像", exact=True):
                 break
+        else:
+            raise SkipStep("负一屏在后台屏上进不去。要关的话手动：桌面向右滑 → 头像 → 设置 → 智能推荐、个性化广告、个性化消息")
     enter("头像", scrolls=0)
     enter("设置", scrolls=0)
     # 页面切换时前台还是上一页，这时翻页引擎会判成「离开了设置页」（实测 3 次出现 1 次）
@@ -175,8 +206,8 @@ def browser_gear():
 @step("浏览器")
 def _():
     # 百度版：设置页都没导出，只能走 我的 → 齿轮。「广告设置」是网页，读不到开关
-    p.start("com.hihonor.baidu.browser")
-    no_agreement("浏览器")
+    launch("com.hihonor.baidu.browser/com.baidu.searchbox.SplashActivity", "浏览器")
+    wait_home("浏览器")
     p.dismiss()
     my_tab("浏览器")
     browser_gear()
@@ -192,8 +223,8 @@ def _():
 @step("主题")
 def _():
     # 路径同 PNM-AN10；本机协议没同意，这一段的后半段没有在本机验证过
-    launch("com.hihonor.android.thememanager/.PageActivity")
-    no_agreement("主题")
+    launch("com.hihonor.android.thememanager/.PageActivity", "主题")
+    wait_home("主题")
     my_tab("主题")
     enter("设置", scrolls=2)
     enter("通知")
@@ -220,21 +251,54 @@ def _():
     p.back()
 
 
+MUSIC = "com.hihonor.cloudmusic"
+
+
+def music_playing():
+    """只看音乐 App 自己的播放状态，别的 App 在放不算。"""
+    sessions = p.d.shell("dumpsys media_session").output.split("package=")[1:]
+    return any(s.startswith(MUSIC) and "state=PLAYING" in s for s in sessions)
+
+
+def hush_music(listening):
+    """用户原本没在听，音乐却响了：暂停。返回有没有按。"""
+    if listening or not music_playing():
+        return False
+    p.d.shell("input keyevent KEYCODE_MEDIA_PAUSE")
+    print("  · 音乐一打开就放歌（它的「启动后自动播放歌曲」开着），已暂停")
+    return True
+
+
 @step("音乐")
 def _():
-    # 网易云荣耀版。「个性化服务」管每日推荐，属于听歌功能，保留
-    p.start("com.hihonor.cloudmusic")
-    time.sleep(1.5); p.dismiss()
-    no_agreement("音乐")
-    my_tab("音乐")
-    p.dismiss()
-    if not p.d(resourceId="com.hihonor.cloudmusic:id/ic_setting").click_exists(timeout=3):
-        raise RuntimeError("音乐设置图标没找到")
-    time.sleep(1.2)
-    enter("更多设置")
-    enter("消息和隐私设置", scrolls=6)
-    p.off(only=["朋友页显示推荐动态"], page="音乐·消息和隐私")
-    p.back(3)
+    # 网易云荣耀版。「个性化服务」管每日推荐，属于听歌功能，保留。
+    # 「启动后自动播放歌曲」开着时，一打开就放歌，约 1.3 秒出声（按桌面图标也一样）。这个开关不是广告，不替用户改；
+    # 所以裸启动后马上盯着；不用 p.start：等它看到首页再按就响好几秒了，而且每拉起一次就重新放一遍。用户本来就在听的不碰。
+    listening = music_playing()
+    p.d.shell(f"am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER "
+              f"-n {MUSIC}/com.netease.cloudmusic.activity.MainActivity")
+    try:
+        for _i in range(10):
+            if hush_music(listening):
+                break
+            time.sleep(0.3)
+        wait_open(MUSIC, "音乐")
+        time.sleep(1.5); p.dismiss()
+        no_agreement("音乐")
+        hush_music(listening)               # 慢手机上可能比上面的 3 秒还晚才开播
+        my_tab("音乐")
+        p.dismiss()
+        if not p.d(resourceId=f"{MUSIC}:id/ic_setting").click_exists(timeout=3):
+            raise RuntimeError("音乐设置图标没找到")
+        time.sleep(1.2)
+        enter("更多设置")
+        enter("消息和隐私设置", scrolls=6)
+        p.off(only=["朋友页显示推荐动态", "展示“摇一摇”类开屏广告"], page="音乐·消息和隐私")
+        enter("广告推荐设置")
+        p.off(only=["个性化广告推荐"], page="音乐·广告推荐")
+        p.back(4)
+    finally:
+        hush_music(listening)
 
 
 @step("阅读")
