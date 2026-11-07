@@ -382,7 +382,7 @@ class EntryShapeTests(unittest.TestCase):
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
             self.assertEqual(adapt.main(["bogus"]), 1)
-        self.assertEqual(err.getvalue(), "adapt 后面跟 explore / gen / check。用法：run.py adapt --help\n")
+        self.assertEqual(err.getvalue(), "adapt 后面跟 survey / explore / gen / check。用法：run.py adapt --help\n")
 
     def test_error_rendering_is_the_same_function_as_run(self):
         """错误渲染只留一份：ADR-0005 的 `run.fail()` 是「自述型文案」的唯一出处（#708）。"""

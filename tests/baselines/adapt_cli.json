@@ -2,7 +2,8 @@
   "provenance": {
     "baseline": "294ff50",
     "how": "git archive <sha> | tar -x -C /tmp/aac-adapt-base && .venv/bin/python tests/make_adapt_cli_baseline.py /tmp/aac-adapt-base <sha>",
-    "cases": 19
+    "cases": 19,
+    "note": "未知子命令的文案随 #690 增加 survey 一项，其余用例仍与 #708 的基线逐字相同"
   },
   "cases": {
     "gen-成功": {
@@ -98,7 +99,7 @@
     "未知子命令": {
       "rc": 1,
       "stdout": "",
-      "stderr": "adapt 后面跟 explore / gen / check。用法：run.py adapt --help\n"
+      "stderr": "adapt 后面跟 survey / explore / gen / check。用法：run.py adapt --help\n"
     }
   }
 }

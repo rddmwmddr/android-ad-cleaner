@@ -424,22 +424,22 @@ def survey(p, family, words, log=print, now=None, sleep=None):
 
 def cmd_survey(rest):
     if not rest or rest[0] != "-s" or len(rest) < 2:
-        sys.exit("用法：run.py -s <序列号> adapt survey")
+        return fail("用法：run.py -s <序列号> adapt survey")
     recipes = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "recipes")
     with Phone(rest[1]) as p:
         if p.locked():
-            sys.exit("手机锁屏了，请机主解锁后再跑")
+            return fail("手机锁屏了，请机主解锁后再跑")
         brand = p.reader.shell("getprop ro.product.brand").output.strip().lower()
         family = entries.FAMILY.get(brand)
         if not family:
-            sys.exit(f"认不出品牌「{brand or '空'}」：入口速查只收了"
-                     + "、".join(entries.LABEL[f] for f in entries.ENTRIES) + "的机型")
+            return fail(f"认不出品牌「{brand or '空'}」：入口速查只收了"
+                        + "、".join(entries.LABEL[f] for f in entries.ENTRIES) + "的机型")
         groups = entries.ENTRIES.get(family, {})
         if not any(entry.direct for entry in groups.values()):
-            sys.exit(f"{entries.LABEL.get(family, family)}还没有直达入口记录：用 adapt explore 探路")
+            return fail(f"{entries.LABEL.get(family, family)}还没有直达入口记录：用 adapt explore 探路")
         words = vocab.scan(recipes).words
         if not any(word.family == family for word in words):
-            sys.exit(f"{entries.LABEL.get(family, family)}的词库是空的：还没有这个家族的机型脚本，先用 adapt explore 探路")
+            return fail(f"{entries.LABEL.get(family, family)}的词库是空的：还没有这个家族的机型脚本，先用 adapt explore 探路")
         print(f"{entries.LABEL.get(family, family)}：试 {sum(len(e.direct) for e in groups.values())} 个直达入口，"
               "屏幕会跳，不要碰手机。", flush=True)
         rows = survey(p, family, words)

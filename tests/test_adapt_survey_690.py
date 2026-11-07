@@ -158,13 +158,14 @@ class SurveyResultTests(unittest.TestCase):
 class SurveyEntryTests(unittest.TestCase):
     def run_cmd(self, phone, argv=("-s", "FAKE"), scanned=None):
         scanned = [word("个性化广告推荐")] if scanned is None else scanned
-        out = io.StringIO()
+        out, err = io.StringIO(), io.StringIO()
         with patch.object(adapt, "Phone") as factory, \
                 patch.object(adapt.vocab, "scan", return_value=types.SimpleNamespace(words=scanned)), \
-                patch.object(entries, "ENTRIES", ONE_FAMILY), contextlib.redirect_stdout(out):
+                patch.object(entries, "ENTRIES", ONE_FAMILY), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             factory.return_value.__enter__.return_value = phone
             code = adapt.cmd_survey(list(argv))
-        self.factory = factory
+        self.factory, self.err = factory, err.getvalue()
         return code, out.getvalue()
 
     def test_any_landing_exits_zero_and_goes_home(self):
@@ -182,15 +183,15 @@ class SurveyEntryTests(unittest.TestCase):
 
     def test_unknown_brand_exits_one(self):
         p = survey_phone(brand="nokia")
-        with self.assertRaises(SystemExit) as caught:
-            self.run_cmd(p)
-        self.assertIn("认不出品牌", str(caught.exception.code))
+        code, _out = self.run_cmd(p)
+        self.assertEqual(code, 1)
+        self.assertIn("认不出品牌", self.err)
 
     def test_empty_vocabulary_exits_one(self):
         p = survey_phone()
-        with self.assertRaises(SystemExit) as caught:
-            self.run_cmd(p, scanned=[])
-        self.assertIn("词库是空的", str(caught.exception.code))
+        code, _out = self.run_cmd(p, scanned=[])
+        self.assertEqual(code, 1)
+        self.assertIn("词库是空的", self.err)
 
     def test_no_landing_exits_one(self):
         p = survey_phone(focus="com.android.settings/.Settings")
@@ -201,9 +202,9 @@ class SurveyEntryTests(unittest.TestCase):
     def test_locked_phone_exits_one_without_a_single_tap(self):
         p = survey_phone()
         p.locked.return_value = True
-        with self.assertRaises(SystemExit) as caught:
-            self.run_cmd(p)
-        self.assertIn("锁屏", str(caught.exception.code))
+        code, _out = self.run_cmd(p)
+        self.assertEqual(code, 1)
+        self.assertIn("锁屏", self.err)
         p.tap.assert_not_called()
         p.click.assert_not_called()
         p.off.assert_not_called()
@@ -212,14 +213,16 @@ class SurveyEntryTests(unittest.TestCase):
 
     def test_family_without_direct_entries_exits_one(self):
         p = survey_phone(brand="huawei")
-        with self.assertRaises(SystemExit) as caught:
-            self.run_cmd(p)
-        self.assertIn("还没有直达入口记录", str(caught.exception.code))
+        code, _out = self.run_cmd(p)
+        self.assertEqual(code, 1)
+        self.assertIn("还没有直达入口记录", self.err)
 
     def test_missing_serial_prints_usage(self):
-        with self.assertRaises(SystemExit) as caught:
-            adapt.cmd_survey([])
-        self.assertIn("用法", str(caught.exception.code))
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code = adapt.cmd_survey([])
+        self.assertEqual(code, 1)
+        self.assertIn("用法", err.getvalue())
 
 
 class DispatchTest(unittest.TestCase):

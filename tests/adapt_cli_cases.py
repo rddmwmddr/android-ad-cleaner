@@ -56,5 +56,5 @@ CASES = [
     case("explore-只给-s", ["explore", "-s"], expect=["用法：run.py adapt explore -s"]),
     case("explore-参数顺序错", ["explore", "S", "com.a"], expect=["用法：run.py adapt explore -s"]),
     # ---------- 参数分派 ----------
-    case("未知子命令", ["bogus"], expect=["adapt 后面跟 explore / gen / check"]),
+    case("未知子命令", ["bogus"], expect=["adapt 后面跟 survey / explore / gen / check"]),
 ]
