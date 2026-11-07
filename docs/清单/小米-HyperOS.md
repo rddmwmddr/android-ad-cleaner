@@ -19,6 +19,7 @@
 | Redmi K70（23113RKC6C） | HyperOS OS3.0.307.0.WNKCNXM，Android 16 | 2026-10-26 无线+有线：9 段专用脚本；当前目标 20 项；本轮实测含已移除的小说 1 项；浏览器「最新资讯」disabled，未操作 |
 | Redmi K70 Pro（23117RK66C） | HyperOS OS3.0.306.0.WNMCNXM，Android 16 | 2026-10-29～30 实测；专用脚本与验证范围见 [K70 Pro 实测](../14-红米K70Pro实测.md) |
 | Redmi Note 14 5G（24094RAD4C） | HyperOS OS3.0.306.0.WOQCNXM，Android 16 | 2026-10-30 真机实测；专用八段脚本首轮关闭 20 项（记账修复前统计，不含普通点击关掉的 4 项），复跑 291 秒、21 项回读、调整 0 项 |
+| Xiaomi 13（2211133C） | HyperOS OS3.0.309.0.WMCCNXM，Android 16 | 2026-11-05 社区实测（[Issue #281](https://github.com/rddmwmddr/android-ad-cleaner/issues/281)）；无专用脚本，客户端按底包自动借 `recipes/xiaomi-24129PN74C`，差异见[文末](#xiaomi-132211133c的差异) |
 | Xiaomi 13 Ultra（2304FPN6DC） | HyperOS OS3.0.308.0.WMACNXM，Android 16 | 2026-10-28 实测；九段脚本复跑通过，约 3 分 16 秒 |
 | Xiaomi 14 Pro（23116PN5BC） | HyperOS OS3.0.308.0.WNBCNXM，Android 16 | 2026-10-29 社区实测（[Issue #317](https://github.com/rddmwmddr/android-ad-cleaner/issues/317)）；与 13 Ultra 共用 `recipes/xiaomi-2304FPN6DC`，安全模式下九段跑通、每步回读，仅浏览器「搜索设置」未命中 |
 
@@ -72,9 +73,24 @@ REDMI K80 至尊版（HyperOS 2 / Android 16）结构差异：「隐私与安全
 | 下载管理 | 页面上**没有齿轮**，设置在右上「更多」按钮的弹窗里 → 「设置」→ 信息流设置 |
 | 手机管家 | 「个性化推荐」在隐私设置里；垃圾清理设置里是「推荐内容」。实测都是关的 |
 | 主题 | 每次联网时通知实测已关；隐私设置「个性化推荐」出厂就是关的 |
-| 天气和日历 | 天气齿轮进设置页，「用户体验计划」里「天气视频卡片」默认开着。日历的齿轮打开的是 `PopupWindow`，不是设置页；脚本按「没有可识别的设置入口」跳过（#407 真机焦点，天气设置页的 Activity 名待复测） |
+| 天气和日历 | 天气齿轮进设置页，「用户体验计划」里「天气视频卡片」默认开着。日历的齿轮打开的是 `PopupWindow`，不是设置页；脚本按「没有可识别的设置入口」跳过（#407 真机焦点；天气设置页的 Activity 见[Xiaomi 13 一节](#xiaomi-132211133c的差异)） |
 
 **浏览器实测开着并已关闭的广告项**只有两个：🔴 搜索设置「显示猜你想搜模块」、🔴 功能设置「运营任务」（做任务得金币挣红包）。出厂就是关的：个性化内容推荐、个性化广告推荐、小说、宫格位推送。保留：扫一扫、搜索历史、书签、最常访问、我的网盘、翻译提示。
+
+---
+
+## Xiaomi 13（2211133C）的差异
+
+HyperOS OS3.0.309.0.WMCCNXM / Android 16，2026-11-05 社区实测（[Issue #281](https://github.com/rddmwmddr/android-ad-cleaner/issues/281)）。没有专用脚本：除浏览器段外九段都是 0 项（出厂即关），为一段差异复刻一份脚本不划算。客户端按底包（`BP2A.250605.031.A3`）自动借 `recipes/xiaomi-24129PN74C`，不用 `--ref`。
+
+| 项 | 这台机的入口 |
+|---|---|
+| 浏览器 20.30.1031026 | 底栏仍是 主页/视频/AI搜索/菜单/我的，入口是底部「菜单」→ 弹窗里的「设置」（`id=action_menu_setting`）。**「隐私和安全」这一页已经没有了**；功能设置里**「运营任务」也没了**（20.29 还有），「小说」还在；搜索设置 8 个开关默认全开 |
+| 天气 | 设置页 Activity 是 `com.miui.weather2.ActivitySet`。这台上**没有「用户体验计划」**，也没有天气视频卡片 / 内容推广开关 |
+| 日历 | 入口是右上那个 ImageView `id=com.android.calendar:id/settings_button`（**不是文字「更多」**）→ PopupWindow → `CalendarActionbarSettingsActivity` → 底部「用户体验计划」→ `UserExperienceActionBarActivity`；唯一开关「内容推广」出厂就是关的 |
+| 主题 | 设置页是 `ThemePreferenceActivity`、隐私设置是 `PrivacySettingsActivity`，两项都已经是关的 |
+
+**工具栏和菜单弹窗里各有一个叫「设置」的图标**：弹窗那个在屏幕下半段（1080 宽下约 y=1149，`id=action_menu_setting`），工具栏那个在上半屏（`id=simple_page_settings`）。按文字点会先命中工具栏那个、进首页编辑面板，后面几页入口全部找不到，整段 0 项又不报错——脚本因此只点下半屏那一行并核对落点（#586）。
 
 ---
 

@@ -23,6 +23,7 @@
 BUILD = "BP2A.250605.031"
 MODELS = ["24129PN74C"]
 import time
+from wait import until
 
 ONLY = globals().get("ONLY") or []
 FAILED_STEPS = []
@@ -60,6 +61,40 @@ def maybe(name, scrolls=6):
 
 def tap_any(*names, scrolls=6):
     return any(maybe(name, scrolls) for name in names)
+
+
+def popup_row(text, timeout=3.0):
+    """屏幕下半段里文字正好是 text 的那一行：菜单弹窗从底部升起，工具栏上的同名图标在上半屏。"""
+    def row():
+        for t, (l, top, r, b), _n in p.texts():
+            if t == text and top > p.H * 0.3:
+                return (l + r) // 2, (top + b) // 2
+        return None
+    return until(row, timeout=timeout, poll=0.3, now=time.time, sleep=time.sleep)
+
+
+def menu_settings(tries=2):
+    """底栏「菜单」→ 弹窗里的「设置」，点完必须认出设置页（#586）。
+
+    工具栏右上角也有一个叫「设置」的图标，弹窗还没画出来时按文字点会落到它上面、进首页编辑面板，
+    后面几页入口全部找不到，整段 0 项又不报错。所以只点下半屏那一行，且没落进设置页就退回来
+    重开菜单再试；两次都不成就报当前页，不在工具栏面板上继续找。"""
+    stopped = ""
+    for _ in range(tries):
+        if not p.tap("菜单", exact=True, scrolls=0):
+            raise RuntimeError("未找到浏览器底部「菜单」")
+        xy = popup_row("设置")
+        if not xy:
+            raise RuntimeError(f"浏览器菜单里没有「设置」；停在 {p.focus()}")
+        before = p.sig()
+        p.click(*xy)
+        p.settle(before, 1.5)
+        if p.in_settings_page():
+            return
+        # 弹窗这一行在屏上才走到这里，所以按返回是收起弹窗或退出面板，不会离开浏览器首页
+        stopped = p.focus()
+        p.back()
+    raise RuntimeError(f"浏览器设置页没有打开；停在 {stopped}")
 
 
 def gear(toolbar_only=False):
@@ -228,10 +263,7 @@ def _():
         print("  · 浏览器处在基本模式，设置入口不在这条路径上，本段跳过")
         return
     time.sleep(2)
-    require(p.tap("菜单", exact=True, scrolls=0), "未找到浏览器底部「菜单」")
-    time.sleep(1.2)
-    require(p.tap("设置", exact=True, scrolls=0), "未找到浏览器弹窗里的「设置」")
-    time.sleep(1.5)
+    menu_settings()
     # 「隐私和安全」在设置页最底部（实测要滚 8 屏），往下翻着找。
     if maybe("隐私和安全", scrolls=12):
         p.off(only=["个性化内容推荐", "个性化广告推荐"], page="浏览器·隐私和安全")

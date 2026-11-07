@@ -85,6 +85,26 @@ def by_id(rid, wait=1.5):
     return False
 
 
+def menu_settings(tries=2):
+    """底部「菜单」→ 弹窗里的「设置」，点完必须认出设置页（#586）。
+
+    两个按钮都按 resource-id 定位，不会点到工具栏那个同名图标；但点击被吞或弹窗还没画出来时
+    仍会停在原页，后面几页入口全部找不到、整段 0 项又不报错。没落进设置页就退回来重开一次，
+    两次都不成就报当前页。"""
+    stopped = ""
+    for _ in range(tries):
+        if not by_id("com.android.browser:id/action_more"):
+            raise RuntimeError("浏览器底部「菜单」未找到")
+        if not by_id("com.android.browser:id/action_menu_setting"):
+            raise RuntimeError("菜单弹窗里的「设置」未找到")
+        time.sleep(2)
+        if p.in_settings_page():
+            return
+        stopped = p.focus()
+        p.back()
+    raise RuntimeError(f"浏览器设置页没有打开；停在 {stopped}")
+
+
 def bottom_tab(name="我的"):
     """点底部标签。这些 App 的标签文字能找到，但点进去后没有带文字的「设置」，
     所以不能写 p.go("我的", "设置")。"""
@@ -185,12 +205,7 @@ def _():
         return
     # 工具栏最右那个「设置」按钮点进去是「页面布局」子页（这版特有）。
     # 正确路径：底部「菜单」→ 弹窗右上角「设置」，用 resource-id 定位。
-    if not by_id("com.android.browser:id/action_more"):
-        raise RuntimeError("浏览器底部「菜单」未找到")
-    time.sleep(1)
-    if not by_id("com.android.browser:id/action_menu_setting"):
-        raise RuntimeError("菜单弹窗里的「设置」未找到")
-    time.sleep(2)
+    menu_settings()
     # 「隐私和安全」在主设置页最底部（第 13 项之后），必须滚动
     if maybe("隐私和安全", scrolls=8):
         p.off(only=["个性化内容推荐", "个性化广告推荐"], page="浏览器·隐私和安全"); p.back()
