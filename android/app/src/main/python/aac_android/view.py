@@ -25,7 +25,7 @@ CHECKLIST_NAME = {"OPPO-ColorOS.md": "OPPO / ColorOS", "荣耀-MagicOS.md": "荣
 
 AD_NAMES = {"com.opos.ads": "OPPO 广告服务",
             "com.heytap.pictorial": "OPPO 乐划锁屏（锁屏杂志）",
-            "com.miui.systemAdSolution": "小米系统广告组件。挂起并禁止联网；旧系统可能不支持断网，开屏广告也可能仍出现"}
+            "com.miui.systemAdSolution": "小米系统广告组件。尝试挂起并禁止联网；旧系统可能不支持断网，会报告部分完成，开屏广告也可能仍出现"}
 
 # brand-taps.json 的品牌列是给人看的（「小米 / Redmi / POCO」），这里把 Build.BRAND 对到它
 BRAND_KEYS = {"xiaomi": "小米", "redmi": "小米", "poco": "小米", "vivo": "vivo", "iqoo": "vivo",
@@ -107,12 +107,15 @@ def poll(api, since=0):
 def _warnings(status, fold_block):
     out = []
     if status.get("locked"):
-        out.append("手机锁屏了。解锁并保持亮屏，再重新检测。")
+        out.append("手机锁屏了。请解锁手机并保持亮屏，然后点「重新检测」。")
     if status.get("input_blocked"):
         out.append("系统拒绝了模拟点按。小米 / Redmi / POCO 要在「开发者选项」里打开「USB 调试（安全设置）」"
-                   "（需插 SIM 卡、登录小米账号），等风险提示倒计时结束点「确定」，再重新检测。还不行就重启手机。")
-    if fold_block:
-        out.append("展开的折叠屏是左右分栏，自动关 App 开关会找错位置。合上手机用外屏，再重新检测。")
+                   "（需插 SIM 卡、登录小米账号），等风险提示倒计时结束点「确定」，再重新检测。"
+                   "还是不行就重启手机再检测。不开它，自动关开关和营销通知都会失败，中途还会锁屏。")
+    if status.get("fold_open"):
+        out.append("这是展开的折叠屏。展开后是左右分栏，自动关 App 开关会找错位置。合上手机用外屏，再重新检测。"
+                   if fold_block else
+                   "这是展开的折叠屏。营销通知、快应用、广告组件不受影响，可以继续。")
     return out
 
 
@@ -124,11 +127,11 @@ def _recipe(status, info):
     recipe = status.get("recipe") or ""
     label = f"试用同品牌参考脚本（{recipe.split('/')[1]} 录制）" if ref and "/" in recipe else (
         "试用同品牌参考脚本" if ref else "按机型脚本自动关")
-    note = ("安全模式：只关脚本里点名的开关，找不到入口的步骤会跳过。" if ref or not ok
+    note = ("安全模式：只关脚本里点名的开关，不做整页全关；页面不一样时，找不到入口的步骤会跳过。" if ref or not ok
             else "系统广告、负一屏、搜索、商店、浏览器、主题等 App 里的推荐和广告开关。")
     if recipe and not ref and not ok:
         note = f"脚本按 {status.get('recipe_build')} 录，这台是 {info.get('os') or info.get('build')}。" + note
-    return label, note + "「限制广告跟踪」这类保护开关会打开。"
+    return label, note + "「防止 / 限制广告跟踪」这类保护开关会打开。"
 
 
 def _checklist(status, info):
@@ -143,12 +146,17 @@ def _checklist(status, info):
 def _quickapp(status):
     apps = status.get("quickapps") or []
     on = [q for q in apps if not q.get("closed") and not q.get("keep")]
+    kept = [q for q in apps if q.get("keep")]
     if not on:
-        return [], "", "已关闭" if apps else "没有检测到"
-    keep = ("快应用平台会保留，负一屏快递卡片等系统服务依赖它。" if any(q.get("keep") for q in apps)
-            else "关闭后系统会拦截 hap:// 入口。")
-    used = "近期打开过，确认不是你在用。" if any(q.get("used") for q in on) else "确认负一屏快递卡片等常用服务不依赖它。"
-    return [q.get("name", "") for q in on], f"广告常用 hap:// 链接跳进快应用。{keep}{used}可还原。", ""
+        if not apps:
+            return [], "", "没有检测到"
+        return [], "", f"已关闭（保留 {len(kept)} 个系统组件）" if kept else "已关闭"
+    keep = ("快应用平台会保留（负一屏快递卡片等系统服务依赖它），广告仍可能通过 hap:// 跳进快应用" if kept
+            else "关闭后系统会拦截这类入口")
+    used = "检测到近期打开过，确认不是你主动在用。" if any(q.get("used") for q in on) else "请确认负一屏快递卡片等常用服务不依赖快应用。"
+    return ([q.get("name", "") for q in on],
+            f"广告常用 hap:// 链接把人跳进快应用。{keep}；vivo 优先使用快应用服务开关，其他支持的机型使用挂起。{used}可还原。",
+            "")
 
 
 def _ads(status):

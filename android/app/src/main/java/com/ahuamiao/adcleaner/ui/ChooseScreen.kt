@@ -151,12 +151,21 @@ private fun ChooseList(model: AppModel, selection: Selection) {
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 120.dp),
         verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
     ) {
+        item {
+            Text(
+                "开始前会存一份改动前的快照，每一项都能在「还原改动」里恢复。执行期间请保持手机亮屏、解锁。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+        }
         if (detection.warnings.isNotEmpty()) {
             item {
                 Surface(
                     shape = MaterialTheme.shapes.extraLarge,
-                    color = colors.errorContainer,
-                    contentColor = colors.onErrorContainer,
+                    // 不是所有提示都拦着开始（展开的折叠屏照常能关营销通知），拦不住的用中性色，别当成错误
+                    color = if (detection.blocked) colors.errorContainer else colors.secondaryContainer,
+                    contentColor = if (detection.blocked) colors.onErrorContainer else colors.onSecondaryContainer,
                     modifier = Modifier.padding(bottom = 12.dp),
                 ) {
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -212,6 +221,9 @@ private fun ChooseList(model: AppModel, selection: Selection) {
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("通知扫描未完成", style = MaterialTheme.typography.titleMediumEmphasized)
                         Text(scan.message, style = MaterialTheme.typography.bodyMedium)
+                        if (scan.detail.isNotEmpty() && scan.detail != scan.message) {
+                            Text(scan.detail, style = MaterialTheme.typography.bodySmall)
+                        }
                         TextButton(
                             onClick = model::copyDiagnostics,
                             shapes = ButtonDefaults.shapes(),

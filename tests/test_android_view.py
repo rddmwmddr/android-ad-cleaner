@@ -150,7 +150,16 @@ class DetectTest(unittest.TestCase):
         self.assertTrue(self.detect(fold_open=True)["blocked"])
         d = self.detect(fold_open=True, steps=[], recipe=None)
         self.assertFalse(d["blocked"])
-        self.assertEqual(d["warnings"], [])
+        self.assertEqual(d["warnings"],
+                         ["这是展开的折叠屏。营销通知、快应用、广告组件不受影响，可以继续。"])
+
+    def test_warnings_say_what_to_do(self):
+        self.assertEqual(self.detect(locked=True)["warnings"],
+                         ["手机锁屏了。请解锁手机并保持亮屏，然后点「重新检测」。"])
+        blocked = self.detect(input_blocked=True)["warnings"]
+        self.assertIn("USB 调试（安全设置）", blocked[0])
+        self.assertIn("不开它，自动关开关和营销通知都会失败，中途还会锁屏", blocked[0])
+        self.assertIn("合上手机用外屏", self.detect(fold_open=True)["warnings"][0])
 
     def test_no_recipe_points_to_the_brand_checklist(self):
         d = self.detect(steps=[], recipe=None)
@@ -163,6 +172,8 @@ class DetectTest(unittest.TestCase):
         self.assertTrue(d["ref"])
         self.assertIn("PX9", d["recipe_label"])
         self.assertIn("安全模式", d["recipe_note"])
+        self.assertIn("不做整页全关", d["recipe_note"])
+        self.assertIn("「防止 / 限制广告跟踪」这类保护开关会打开", d["recipe_note"])
         self.assertTrue(d["manual_url"])
 
     def test_version_mismatch_is_stated(self):
@@ -174,11 +185,19 @@ class DetectTest(unittest.TestCase):
                         ads=[{"pkg": "com.opos.ads"}, {"pkg": "x.y", "suspended": True}])
         self.assertEqual(d["quickapps"], ["B"])
         self.assertIn("保留", d["quickapp_note"])
+        self.assertIn("hap://", d["quickapp_note"])
+        self.assertIn("vivo 优先使用快应用服务开关", d["quickapp_note"])
         self.assertEqual(d["ads"], [{"pkg": "com.opos.ads", "name": "OPPO 广告服务"}])
         d = self.detect(quickapps=[{"name": "A", "closed": True}], ads=[{"pkg": "x", "suspended": True}])
         self.assertEqual((d["quickapp_state"], d["ads_state"]), ("已关闭", "已挂起"))
+        d = self.detect(quickapps=[{"name": "A", "closed": True}, {"name": "C", "keep": True}])
+        self.assertEqual(d["quickapp_state"], "已关闭（保留 1 个系统组件）")
         d = self.detect()
         self.assertEqual((d["quickapp_state"], d["ads_state"]), ("没有检测到", "没有已知的"))
+
+    def test_xiaomi_ad_component_says_partial_success_is_reported(self):
+        d = self.detect(ads=[{"pkg": "com.miui.systemAdSolution"}])
+        self.assertIn("会报告部分完成", d["ads"][0]["name"])
 
 
 class BrandGuideTest(unittest.TestCase):
@@ -249,6 +268,14 @@ class FeedbackTest(unittest.TestCase):
 
 
 class BrandTapsShapeTest(unittest.TestCase):
+    """品牌键冻结在这里：从实现自己的表派生样例，删键会连样例一起消失。"""
+
+    FROZEN = {"xiaomi": "小米", "redmi": "小米", "poco": "小米", "vivo": "vivo", "iqoo": "vivo",
+              "oppo": "OPPO", "oneplus": "OPPO", "realme": "OPPO", "honor": "荣耀", "huawei": "荣耀"}
+
+    def test_brand_keys_are_the_frozen_table(self):
+        self.assertEqual(view.BRAND_KEYS, self.FROZEN)
+
     def test_every_brand_key_matches_a_row(self):
         rows = json.loads((ROOT / "docs" / "手机版教程" / "brand-taps.json").read_text(encoding="utf-8"))["rows"]
         for word in set(view.BRAND_KEYS.values()):
