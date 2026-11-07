@@ -85,8 +85,9 @@ def off_unnamed(page):
 @step("系统广告")
 def _():
     # Android 17 上用设置内搜关键词直达，避开逐层翻页滑出设置页。
-    if p.setting("广告与隐私"):
-        p.off(only=["个性化广告", "个性化推荐", "智能推荐服务"], page="系统·广告与隐私")
+    if not p.setting("广告与隐私"):
+        raise RuntimeError("没搜到「广告与隐私」")
+    p.off(only=["个性化广告", "个性化推荐", "智能推荐服务"], page="系统·广告与隐私")
 
 
 @step("全局搜索")
@@ -111,9 +112,10 @@ def _():
 
 @step("阅图锁屏")
 def _():
-    if p.setting("锁屏设置"):
-        if maybe("阅图锁屏"):
-            p.off(only=["阅图锁屏", "锁屏横滑进入阅图"], page="阅图锁屏")
+    if not p.setting("锁屏设置"):
+        raise RuntimeError("没搜到「锁屏设置」")
+    if maybe("阅图锁屏"):
+        p.off(only=["阅图锁屏", "锁屏横滑进入阅图"], page="阅图锁屏")
 
 
 @step("应用商店")

@@ -131,7 +131,8 @@ def off_exact(names, page, max_screens=16):
 @step("广告跟踪")
 def _():
     # 此版本的 OAIDActivity 不能由 shell 直接拉起，必须走系统设置中的搜索结果。
-    p.setting("设备标识与广告")
+    if not p.setting("设备标识与广告"):
+        raise RuntimeError("没搜到「设备标识与广告」")
     result = p.d(resourceId="android:id/title", text="设备标识与广告")
     if result.exists:
         result.click()

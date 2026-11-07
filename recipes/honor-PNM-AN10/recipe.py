@@ -99,7 +99,7 @@ def _():
 @step("YOYO")
 def _():
     if not p.setting("新闻资讯"):     # 搜不到就停在本段，别在设置首页的空页面上找开关（#639）
-        return
+        raise RuntimeError("没搜到「新闻资讯」")    # 停段要记成未完成，不再算成功（#776 推翻 #639 的「不算失败」）
     dismiss(*NO)
     p.off(only=["新闻资讯"], page="YOYO 建议")
 
@@ -320,7 +320,8 @@ def _():
 @step("魔法画报")
 def _():
     # 锁屏杂志在荣耀叫「魔法画报」；轮播本来就关着
-    p.setting("杂志", "魔法画报")
+    if not p.setting("杂志", "魔法画报"):
+        raise RuntimeError("没搜到「魔法画报」")
     p.tap("魔法画报", exact=True, scrolls=0)        # 右栏的「魔法画报」入口
     if "magazine" not in p.focus():
         xy = [b for t, b, _ in p.texts() if t == "魔法画报"]

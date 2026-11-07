@@ -99,20 +99,20 @@ def tab_bot(name):
 @step("系统广告")
 def _():
     # 实测：HyperOS 2 的「隐私与安全」页是权限中心，没有「更多安全设置」；改走引擎设置搜索（0.2.4 已修小米搜索框卡顿）
-    if p.setting("广告服务"):
-        # 「广告跟踪」以限制/防止开头 = 保护类，off() 会把它拨到开（AGENTS 硬规则10）
-        p.off(only=["个性化广告推荐", "广告跟踪"], page="系统·广告服务")
-        p.back()
+    if not p.setting("广告服务"):
+        # 搜索不可用时退回菜单路径（全程 maybe 守卫）
+        p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
+        if maybe("隐私与安全") or maybe("隐私保护"):
+            if not maybe("更多安全设置"):
+                if maybe("安全", scrolls=3) or maybe("保护与隐私", scrolls=3):
+                    maybe("更多安全设置")
+            if maybe("广告服务"):
+                p.off(only=["个性化广告推荐", "广告跟踪"], page="系统·广告服务")
+                p.back()
         return
-    # 搜索不可用时退回菜单路径（全程 maybe 守卫）
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
-    if maybe("隐私与安全") or maybe("隐私保护"):
-        if not maybe("更多安全设置"):
-            if maybe("安全", scrolls=3) or maybe("保护与隐私", scrolls=3):
-                maybe("更多安全设置")
-        if maybe("广告服务"):
-            p.off(only=["个性化广告推荐", "广告跟踪"], page="系统·广告服务")
-            p.back()
+    # 「广告跟踪」以限制/防止开头 = 保护类，off() 会把它拨到开（AGENTS 硬规则10）
+    p.off(only=["个性化广告推荐", "广告跟踪"], page="系统·广告服务")
+    p.back()
 
 
 @step("应用商店")
