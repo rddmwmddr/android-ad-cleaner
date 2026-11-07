@@ -61,15 +61,29 @@ class WordingTests(unittest.TestCase):
 
 
 class KeepAwakeTests(unittest.TestCase):
-    def reader(self):
-        # 写不进去：读回来始终是 0（vivo 手机版 4 份报告的样子）
-        return types.SimpleNamespace(shell=lambda cmd: types.SimpleNamespace(output="0\n"))
+    def reader(self, value="0", writes=None):
+        # 写不进去：读回来始终是原值（vivo 经无线调试，put 被静默忽略）
+        def shell(cmd):
+            if writes is not None and " put " in cmd:
+                writes.append(cmd)
+            return types.SimpleNamespace(output=value + "\n")
+        return types.SimpleNamespace(shell=shell)
 
-    def run_keep_awake(self, on_phone):
+    def run_keep_awake(self, on_phone, value="0", writes=None):
         out = io.StringIO()
         with patch.object(chan, "ON_PHONE", on_phone), contextlib.redirect_stdout(out):
-            old = chan.keep_awake(self.reader())
+            old = chan.keep_awake(self.reader(value, writes))
         return old, out.getvalue()
+
+    def test_wider_value_counts_as_on(self):
+        # 「保持唤醒」写的是 15（多一个底座位），比 7 宽：不写、不报没设上，收尾按 15 改回
+        writes = []
+        old, printed = self.run_keep_awake(False, "15", writes)
+        self.assertEqual((old, printed, writes), ("15", "", []))
+
+    def test_partial_value_is_not_enough(self):
+        old, printed = self.run_keep_awake(False, "3")       # 只有交流和 USB，无线充电时会息屏
+        self.assertIn("插电常亮没有设上", printed)
 
     def test_phone_does_not_blame_the_cable(self):
         old, printed = self.run_keep_awake(True)
