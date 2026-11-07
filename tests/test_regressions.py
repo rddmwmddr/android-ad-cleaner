@@ -182,7 +182,8 @@ class InputTests(unittest.TestCase):
         p.edit_ready = Mock(return_value=True)
         p.focused_text = Mock(return_value="%%%%")
         self.assertFalse(p.type_text("广告", timeout=0.5))
-        self.assertEqual(p.d.shell.call_args.args, ("input keyevent BACK",))
+        # 退场交给调用方，type_text 不再自己按返回（#639）
+        self.assertNotIn("input keyevent BACK", [c.args[0] for c in p.d.shell.call_args_list])
 
     def search_phone(self, with_result, search_page=False, results=None, exit_code=0):
         """search_page：系统有直达设置搜索页的动作（ColorOS 的 MAIN_SEARCH，#650）。"""

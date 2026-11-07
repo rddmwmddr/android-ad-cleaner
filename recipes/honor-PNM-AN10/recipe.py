@@ -92,7 +92,8 @@ def _():
 
 @step("YOYO")
 def _():
-    p.setting("新闻资讯")
+    if not p.setting("新闻资讯"):     # 搜不到就停在本段，别在设置首页的空页面上找开关（#639）
+        return
     dismiss(*NO)
     p.off(only=["新闻资讯"], page="YOYO 建议")
 
