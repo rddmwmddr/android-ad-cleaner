@@ -48,11 +48,6 @@ p { text-wrap: pretty; }
 :focus-visible { outline: 2px solid var(--cobalt); outline-offset: 3px; border-radius: 6px; }
 code { font-size: .92em; background: var(--code); padding: 1px 6px; border-radius: 6px; }
 
-/* 开关小图标（与首页品牌一致） */
-.sw { --w: 30px; --h: 18px; display: inline-block; position: relative; flex: none; width: var(--w); height: var(--h); border-radius: 999px; background: var(--amber); }
-.sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--knob);
-             box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transform: translateX(12px); }
-
 /* 顶栏 */
 .top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--paper); background: color-mix(in srgb, var(--paper) 86%, transparent);
        backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px); }

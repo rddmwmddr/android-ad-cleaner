@@ -32,6 +32,14 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
+[InstallDelete]
+; 0.3.2 及更早按旧产品名建了开始菜单组与桌面快捷方式；AppId 没变，装新版按升级处理，不清掉就和新的并存。
+; 公共级那两条只在提权安装时删：以前可能按「所有用户」装过，而这次选了按用户装，没权限删公共目录会让安装报错。
+Type: filesandordirs; Name: "{userprograms}\安卓去广告"
+Type: filesandordirs; Name: "{commonprograms}\安卓去广告"; Check: IsAdminInstallMode
+Type: files; Name: "{autodesktop}\安卓去广告.lnk"
+Type: files; Name: "{commondesktop}\安卓去广告.lnk"; Check: IsAdminInstallMode
+
 [Files]
 Source: "dist\AndroidAdCleaner\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
