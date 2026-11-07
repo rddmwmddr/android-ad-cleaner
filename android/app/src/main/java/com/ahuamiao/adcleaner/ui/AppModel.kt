@@ -55,13 +55,17 @@ data class Notice(
 
 enum class RunMode { Deciding, Background, Foreground }
 
-data class BrandGuide(val tap: String = "「关于手机」里的「版本号」", val xiaomi: Boolean = false)
-
 data class NewVersion(val version: String, val url: String)
 
 /** 进程级：Activity 被系统回收、从通知点回来，都接着这一份。 */
-class AppModel(backend: Backend, private val scope: CoroutineScope, private val brand: String) {
-    private var backend by mutableStateOf(backend)
+class AppModel(
+    /** 首次设置的三步只从真的 Python 取；演示用的假后台不答这部分（#646）。 */
+    private val engine: Backend,
+    private val scope: CoroutineScope,
+    private val brand: String,
+) {
+    private var backend by mutableStateOf(engine)
+    private var brandOverride: String? = null
 
     var screen by mutableStateOf<Screen>(Screen.Boot)
         private set
@@ -72,7 +76,8 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
         private set
     var newVersion by mutableStateOf<NewVersion?>(null)
         private set
-    var guide by mutableStateOf(BrandGuide())
+    /** 首次设置的三步与「第几步」都来自 view.py，页面和通知栏读同一份（#646）。 */
+    var setup by mutableStateOf(SetupGuide())
         private set
     var device by mutableStateOf<Device?>(null)
         private set
@@ -95,10 +100,13 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
         private set
 
     /** Activity 看得见时半秒问一次进度，看不见时放慢。 */
-    var visible = true
+    var visible by mutableStateOf(true)
+        private set
 
     private var booted = false
     private var stallNoticed = false
+    /** 通知栏上那条首次设置指引；null 表示没有。只在真的变了才重新通知（#646）。 */
+    private var setupNote: SetupNote? = null
     private var flow: Job? = null
     private var refreshing = false
     private var refreshAgain = false
@@ -113,12 +121,15 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
         if (booted) return refresh()
         booted = true
         flow {
+            // 上个进程被系统收掉时可能留下一条首次设置的通知，新进程里没人认得它（#646）
+            Native.setupNotice(null, "")
             try {
                 version = backend.boot()
             } catch (e: EngineError) {
                 screen = Screen.Failed(e.message.orEmpty())
                 return@flow
             }
+            runCatching { loadSetup() }     // 三步文案取不到不该把整个 App 钉在失败页，refreshOnce 会再试
             launch { loadExtras() }
             // 执行期间界面可能被系统回收：重新打开时后台的执行还在跑，接回执行页
             val run = runCatching { poll(0) }.getOrNull()
@@ -126,16 +137,43 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
         }
     }
 
+    /** 三步清单与每个授权状态是第几步都由 view.py 给，页面和通知栏读同一份（#646）。 */
+    private suspend fun loadSetup() {
+        setup = SetupGuide.parse(engine.call("view.setup_guide", brandOverride ?: brand) as JSONObject)
+        syncSetupNotice()
+    }
+
     private suspend fun loadExtras() {
-        runCatching {
-            val o = backend.call("view.brand_guide", brand) as JSONObject
-            guide = BrandGuide(o.optString("tap"), o.optBoolean("xiaomi"))
-        }
         runCatching {
             val o = backend.call("latest_version") as? JSONObject ?: return@runCatching
             val v = o.optString("version")
             if (v.isNotEmpty()) newVersion = NewVersion(v, o.optString("url"))
         }
+    }
+
+    /** Activity 看得见 / 看不见；看得见时不必再占着通知栏说下一步（#646）。
+     * 不能叫 setVisible：visible 的 JVM setter 已经是这个名字。 */
+    fun setForeground(on: Boolean) {
+        visible = on
+        syncSetupNotice()
+    }
+
+    /**
+     * 用户切到系统设置后，通知栏说明这一步做什么、下一步是什么（#646）。
+     * 第 3 步不带指引：那一段由 PairingService 的通知负责，另发一条会和手填退路打架。
+     */
+    private fun syncSetupNotice() {
+        val state = (screen as? Screen.Setup)?.state
+        val note = if (visible) null else state?.let { setup.steps.getOrNull(setup.at[it] ?: -1) }?.notice
+        if (note == setupNote) return
+        setupNote = note
+        Native.setupNotice(note?.title, note?.text.orEmpty())
+    }
+
+    /** 换页；首次设置的页面进出都要顺手改通知栏（#646）。 */
+    private fun show(next: Screen) {
+        screen = next
+        syncSetupNotice()
     }
 
     /** 重新查一次授权状态。只有授权相关的页面才跟着变；查询要等几秒，同时只跑一个，期间再来的合并成下一次。 */
@@ -161,16 +199,17 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
     private fun watchesShell() = screen.let { it is Screen.Boot || it is Screen.Setup || it is Screen.Home }
 
     private suspend fun refreshOnce() {
+        if (setup.steps.isEmpty()) runCatching { loadSetup() }
         val state = backend.shellState()
         if (!watchesShell()) return
         if (state != "ready") {
-            screen = Screen.Setup(state)
+            show(Screen.Setup(state))
             return
         }
         val dev = runCatching { (backend.call("devices") as JSONObject).optJSONArray("list").objects().firstOrNull() }.getOrNull()
         if (!watchesShell()) return
         if (dev == null) {
-            screen = Screen.Setup("nodev")
+            show(Screen.Setup("nodev"))
             return
         }
         device = Device.parse(dev)
@@ -179,22 +218,22 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
             flow { follow() }
             return
         }
-        screen = Screen.Home
+        show(Screen.Home)
     }
 
     /** 一键：检测、扫描连着做完，停在确认页（勾选是默认值），用户点「开始」才执行。 */
     fun oneTap() = flow {
         val serial = device?.serial ?: return@flow
-        screen = Screen.Prepare(0)
+        show(Screen.Prepare(0))
         val selection = detect(serial) ?: return@flow goHome()
         if (selection.detection.blocked) {
-            screen = Screen.Choose      // 锁屏、展开的折叠屏：先露出提示，扫描在确认页上接着做
+            show(Screen.Choose)      // 锁屏、展开的折叠屏：先露出提示，扫描在确认页上接着做
             scan(serial, selection)
             return@flow
         }
-        screen = Screen.Prepare(1)
+        show(Screen.Prepare(1))
         scan(serial, selection)
-        screen = Screen.Choose
+        show(Screen.Choose)
     }
 
     /**
@@ -252,7 +291,7 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
         val selection = selection ?: return@flow
         if (selection.count == 0) {
             notice = Notice("还没选任何一项", "选好要关的项目再开始。都不用关的话，可以去完成页关闭开发者模式。",
-                confirm = "去完成页", onConfirm = { screen = Screen.Done(RunProgress()) }, dismiss = "返回")
+                confirm = "去完成页", onConfirm = { show(Screen.Done(RunProgress())) }, dismiss = "返回")
             return@flow
         }
         begin(serial, selection.plan())
@@ -268,7 +307,7 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
             // 已经有一轮在跑：跟上它，别把用户留在选择页上以为没开始
             if (runCatching { poll(0).running }.getOrDefault(false)) return follow()
             notice = Notice("没法开始", error)
-            if (selection == null) goHome() else screen = Screen.Choose
+            if (selection == null) goHome() else show(Screen.Choose)
             return
         }
         follow()
@@ -281,7 +320,7 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
         log.clear()
         progress = RunProgress(running = true)
         runMode = RunMode.Deciding
-        screen = Screen.Run
+        show(Screen.Run)
         val mode = launch { watchMode() }
         var next = 0
         var idle = 0
@@ -298,7 +337,7 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
             noticeStall(run)
             if (run.finished) {
                 mode.cancel()
-                screen = Screen.Done(run)
+                show(Screen.Done(run))
                 return@coroutineScope
             }
             // 没在跑、又没有结果：这次执行根本没起来（比如进程重启过），别一直停在执行页
@@ -370,7 +409,7 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
 
     private suspend fun goHome() {
         selection = null
-        screen = if (device != null) Screen.Home else Screen.Boot
+        show(if (device != null) Screen.Home else Screen.Boot)
         refreshOnceSafely()
     }
 
@@ -516,7 +555,9 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
         run?.let { progress = it }
         log.clear()
         log.addAll(lines)
-        screen = target
+        show(target)
+        // 演示页的三步文案也来自真的 view.py：先等 Python 起来（演示不经过 start() 的启动流程）
+        scope.launch { runCatching { engine.boot(); loadSetup() } }
     }
 
     /** debug 构建的真引擎验收：不经勾选，直接把计划交给引擎（模拟器上没有营销渠道可选）。 */
@@ -529,8 +570,9 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
         runMode = mode
     }
 
-    internal fun demoGuide(guide: BrandGuide) {
-        this.guide = guide
+    /** 演示按品牌看三步文案（小米多一条「USB 调试（安全设置）」）；真机上品牌取自 Build.BRAND。 */
+    internal fun demoBrand(brand: String) {
+        brandOverride = brand
     }
 
     internal fun demoVersion(version: String, newer: NewVersion?) {
