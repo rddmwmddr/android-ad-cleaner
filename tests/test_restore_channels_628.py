@@ -70,8 +70,10 @@ class RestoreChannelsTest(unittest.TestCase):
         write(self.tmp.name, "M10-20261106-1040", ["com.z\tpromo\t推广\tZ"])
         self.assertEqual(self.api.restore("s", "channels"), "没有找到上次关掉的营销通知清单")
 
-    def test_gui_selection_is_merged_as_the_newest_list(self):
-        # 客户端勾选写的是 `<型号>-gui/channels.tsv`，字典序上排在最前，就是「最新那份」
+    def test_legacy_list_in_the_gui_dir_is_still_merged(self):
+        """旧树也绿，守的是不回退：0.4.0 及更早的客户端把关渠道清单写进 `<型号>-gui/channels.tsv`
+        （#651 起客户端与 `run.py chan-scan` 都改写快照目录）。老机器上那份不做迁移，
+        字典序上排在最前，照旧当「最新那份」合并进来。"""
         write(self.tmp.name, "M1-20261106-1040", ["com.a\tpromo\t推广\tA", "com.b\tnews\t资讯\tB"])
         write(self.tmp.name, "M1-gui", ["com.b\tnews\t资讯\tB", "com.c\tspam\t推广\tC"])
         self.api.restore("s", "channels")

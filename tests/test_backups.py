@@ -5,6 +5,7 @@
 import datetime
 import glob
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -169,6 +170,40 @@ class CreateTests(unittest.TestCase):
         self.assertEqual(made, old_gui_fallback(self.root, MODEL))
         self.assertEqual(os.path.basename(made), f"{MODEL}-gui")
         self.assertTrue(os.path.isdir(made))
+
+
+class SnapshotTests(unittest.TestCase):
+    """`snapshot()` 是客户端写 channels.tsv 的落点：`<型号>-gui` 历次共用，写进去会被下一次覆盖（#651）。"""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.root = self.dir.name
+
+    def test_newest_dated_backup_wins_over_the_gui_dir(self):
+        for name in (f"{MODEL}-20260101-1000", f"{MODEL}-20260101-1010", f"{MODEL}-gui"):
+            Path(self.root, name).mkdir()
+        self.assertEqual(Backups(self.root).snapshot(MODEL), os.path.join(self.root, f"{MODEL}-20260101-1010"))
+
+    def test_gui_dir_never_takes_the_list(self):
+        Path(self.root, f"{MODEL}-gui").mkdir()
+        made = Backups(self.root).snapshot(MODEL)
+        self.assertTrue(os.path.isdir(made))
+        self.assertNotEqual(made, os.path.join(self.root, f"{MODEL}-gui"))
+        self.assertTrue(os.path.basename(made).startswith(f"{MODEL}-"))
+
+    def test_empty_root_gets_a_new_directory(self):
+        made = Backups(self.root).snapshot(MODEL)
+        self.assertEqual(sorted(os.listdir(self.root)), [os.path.basename(made)])
+        # 名字必须是带时间的那一种：只断言「没退回 gui」时，`return self.gui(model)` 也照样过
+        self.assertRegex(os.path.basename(made), rf"^{re.escape(MODEL)}-\d{{8}}-\d{{4}}$")
+
+    def test_a_model_ending_in_gui_still_gets_a_dated_directory(self):
+        # 型号 `X-gui` 的兜底目录叫 `X-gui-gui`，后缀像 gui 也不能把它当兜底目录排掉
+        Path(self.root, "X-gui-gui").mkdir()
+        made = Backups(self.root).snapshot("X-gui")
+        self.assertNotEqual(made, os.path.join(self.root, "X-gui-gui"))
+        self.assertRegex(os.path.basename(made), r"^X-gui-\d{8}-\d{4}$")
 
 
 class RootFromEnvTests(unittest.TestCase):

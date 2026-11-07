@@ -214,7 +214,7 @@ def elapsed_norm(lines):
 
 def run_case(name, plan, make_procs, guard, extra_patches=()):
     with tempfile.TemporaryDirectory() as d:
-        os.makedirs(os.path.join(d, "backups", "M-gui"), exist_ok=True)
+        # 这里原来预造 `<型号>-gui` 来钉关渠道清单的落点；#651 起清单改写快照目录，那个目录不再参与
         runner = FakeRunner()
         api = app.Api(d, runner=runner)
         runner.procs = make_procs(api)

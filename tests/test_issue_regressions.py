@@ -468,8 +468,7 @@ class BackupTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory, "channels.tsv")
             path.write_text("original-list")
-            with patch.object(run, "latest_backup", return_value=directory), \
-                 patch.object(run.subprocess, "run", return_value=types.SimpleNamespace(returncode=1, stdout="", stderr="读取失败")), \
+            with patch.object(run.subprocess, "run", return_value=types.SimpleNamespace(returncode=1, stdout="", stderr="读取失败")), \
                  patch.object(sys, "argv", ["run.py", "-s", "test", "chan-scan"]), \
                  contextlib.redirect_stderr(io.StringIO()):
                 self.assertEqual(run.main(), 1)

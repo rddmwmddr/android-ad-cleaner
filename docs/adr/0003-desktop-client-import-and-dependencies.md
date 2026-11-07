@@ -16,7 +16,7 @@
 
 ## Consequences
 
-- 逐字保留的一条隐形行为：备份目录按字典序排，`"<型号>-gui"` 排在所有 `"<型号>-<时间>"` 之后——只要兜底目录存在，它优先于带时间的备份。`latest()` 取这个顺序的最后一个（#628 起改由 `Backups.all()` 的倒序取第一个，结果不变）。`channels.tsv` 会写进去、`restore channels` 从里面读，所以这不是可以「顺手改成取最新」的地方。
+- 逐字保留的一条隐形行为：备份目录按字典序排，`"<型号>-gui"` 排在所有 `"<型号>-<时间>"` 之后——只要兜底目录存在，它优先于带时间的备份。`latest()` 取这个顺序的最后一个（#628 起改由 `Backups.all()` 的倒序取第一个，结果不变）。`run.py` 的 `latest_backup()`（`quickapp-setting.json`、`suspended.txt` 等记录的落点）与 `cmd_status_json()` 都吃这个顺序，所以这不是可以「顺手改成取最新」的地方。（2026-11-07 修订，#651：客户端关渠道与 `run.py chan-scan` 的 `channels.tsv` 曾经都按 `latest_backup()` 写进 `<型号>-gui`，每次运行盖掉上一次，历次清单只剩最后一批；现状是两者都写 `Backups.snapshot()` 给出的快照目录，`<型号>-gui` 不再接收 `channels.tsv`，那里的渠道清单只剩还原写的合并版 `channels-restore.tsv`。`suspend` / `quickapp` 的记录仍按 `latest_backup()` 的落点，可能落进它。）
 - `latest()` 选 `listdir` + `startswith(model + "-")`（`gui/app.py` 原来的语义），`run.py` 原来的 `glob(f"{model}-*")` 不再使用。型号里真出现 glob 元字符（`[` `]` `*` `?`）时两边结果不同——`A[B]C-*` 在 glob 下能匹配 `ABC-…`。真机型号不会有这些字符，`tests/test_backups.py` 有用例钉住选中的这一套。
 - 测试原有的 `api._run = Mock(...)`、`patch.object(app.subprocess, "Popen")`、`patch.object(app.subprocess, "run")` 三类 patch 全部保留：`Runner` 用的还是同一个 `subprocess` 模块对象。改用注入的假 `Runner` 是另一笔独立迁移。
 - `data_dir()` 只去掉 `makedirs`，位置判定（Windows `%APPDATA%` / macOS `Application Support` / 其它 `~/.local/share`）逐字未动。`ClientData.ensure()` 只在 `client_api()`（窗口与截图脚本共用的入口）与两处写盘前调用：`_install_id()` 与 `_download()`——后者原先依赖 import 期那次 `makedirs`。

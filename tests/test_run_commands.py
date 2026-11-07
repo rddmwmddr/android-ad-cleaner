@@ -110,8 +110,7 @@ class HandlerInterfaceTests(unittest.TestCase):
     def test_chan_scan_forwards_child_code_and_its_stderr(self):
         err = io.StringIO()
         failed = SimpleNamespace(returncode=7, stdout="", stderr="读取失败\n")
-        with patch.object(run, "latest_backup", return_value="/tmp/x"), \
-             patch.object(run.subprocess, "run", return_value=failed), \
+        with patch.object(run.subprocess, "run", return_value=failed), \
              contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
             self.assertEqual(run.main(["-s", "S", "chan-scan"]), 7)
         self.assertIn("读取失败", err.getvalue())
@@ -122,16 +121,35 @@ class HandlerInterfaceTests(unittest.TestCase):
                              stderr="另有 3 个前台服务渠道未列入清单\n")
         out, err = io.StringIO(), io.StringIO()
         with tempfile.TemporaryDirectory() as directory, \
-             patch.object(run, "latest_backup", return_value=directory) as backup, \
+             patch.object(run, "BACKUPS", directory), \
+             patch.object(run, "info", return_value={"model": "M"}), \
              patch.object(run.subprocess, "run", autospec=True, return_value=ok) as child, \
              contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             self.assertEqual(run.main(["-s", "S", "chan-scan"]), 0)
-            saved = Path(directory, "channels.tsv").read_text(encoding="utf-8")
-        backup.assert_called_once_with("S")
+            (made,) = list(Path(directory).iterdir())
+            saved = (made / "channels.tsv").read_text(encoding="utf-8")
+        self.assertRegex(made.name, r"^M-\d{8}-\d{4}$")
         child.assert_called_once()
         self.assertIn("另有 3 个前台服务渠道未列入清单", err.getvalue())
         self.assertNotIn("另有", out.getvalue())
         self.assertNotIn("另有", saved)
+
+    def test_chan_scan_leaves_the_shared_gui_dir_alone(self):
+        """候选清单也写快照目录：`<型号>-gui` 里那份历史清单会被还原合并，扫描不能盖掉它（#651）。"""
+        ok = SimpleNamespace(returncode=0, stdout="com.shop\tpromo\t活动优惠\n", stderr="")
+        legacy = "com.old\tpromo\t旧渠道\tO\n"
+        with tempfile.TemporaryDirectory() as directory:
+            gui = Path(directory, "M-gui")
+            gui.mkdir()
+            (gui / "channels.tsv").write_text(legacy, encoding="utf-8")
+            with patch.object(run, "BACKUPS", directory), \
+                 patch.object(run, "info", return_value={"model": "M"}), \
+                 patch.object(run.subprocess, "run", autospec=True, return_value=ok), \
+                 contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(run.main(["-s", "S", "chan-scan"]), 0)
+            self.assertEqual((gui / "channels.tsv").read_text(encoding="utf-8"), legacy)
+            (made,) = [p for p in Path(directory).iterdir() if p.name != "M-gui"]
+            self.assertIn("com.shop", (made / "channels.tsv").read_text(encoding="utf-8"))
 
     def test_chan_off_without_a_list_fails_before_starting_anything(self):
         err = io.StringIO()
