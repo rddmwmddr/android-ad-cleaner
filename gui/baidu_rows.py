@@ -69,13 +69,18 @@ USAGE_ANDROID = ("使用\n----\n不用连电脑。第一次打开按页面做 3 
                  "图文和视频教程：https://ahuamiao.com/sites/other/android-tutorial.html\n\n")
 CHECK = {"mac": "shasum -a 256 文件名（终端）", "win-setup": "Get-FileHash 文件名（PowerShell）", "win-zip": "Get-FileHash 文件名（PowerShell）",
          "android": "在电脑上算：shasum -a 256 文件名（Mac 终端）或 Get-FileHash 文件名（PowerShell）"}
+# 下载页 REL.files 的 id → 安装说明表。新增平台时这里与 SETUP / CHECK 一起加：
+# 漏了要等发版跑到 --legacy 才炸，那时安装包已经传上去了。
+KIND = {"mac-arm64": "mac", "mac-intel": "mac", "win-setup": "win-setup",
+        "win-zip": "win-zip", "android": "android"}
 
 
 def legacy(ver, out, sums_path):
     html = open(PAGE, encoding="utf-8").read()
     items = [i for i in ITEM.findall(html) if ver in i[4]]
     sums = dict(reversed(line.split(None, 1)) for line in open(sums_path, encoding="utf-8").read().split("\n") if line.strip())
-    sums = {name.strip(): digest for name, digest in sums.items()}
+    # `sha256sum -b` 写成「hash *文件名」，星号是格式的一部分，不算文件名
+    sums = {name.strip().lstrip("*"): digest for name, digest in sums.items()}
     folders = [f"{folder:<18}{title}（{sub}）" for _, folder, title, sub, _, _ in items]
     with open(os.path.join(out, "先看我-选哪个文件夹.txt"), "w", encoding="utf-8") as f:
         f.write(f"肉呆去广告 {ver}\n{INTRO}\n选哪个文件夹\n------------\n" + "\n".join(folders) +
@@ -83,10 +88,14 @@ def legacy(ver, out, sums_path):
                 "「芯片」一栏写 Apple M 开头的选 Mac-Apple芯片，写 Intel 的选 Mac-Intel芯片。\n\n"
                 "每个文件夹里有安装包和这个版本的安装说明。旧版本在官网和 GitHub 的「全部版本」里。\n")
     for key, folder, title, sub, file, note in items:
-        kind = "mac" if key.startswith("mac") else key
+        kind = KIND.get(key)
+        if kind is None:
+            sys.exit(f"下载页里的 id「{key}」没有安装说明表；认得的 id：{'、'.join(KIND)}")
+        digest = sums.get(file)
+        if not digest:
+            sys.exit(f"SHA256SUMS.txt 里没有 {file}，先补上再生成安装说明")
         os.makedirs(os.path.join(out, folder), exist_ok=True)
         steps = "\n".join(f"{n}. {line.format(file=file)}" for n, line in enumerate(SETUP[kind], 1))
-        digest = sums.get(file, "")
         with open(os.path.join(out, folder, "安装说明.txt"), "w", encoding="utf-8") as f:
             f.write(f"肉呆去广告 {ver}\n{INTRO}\n适用：{title}（{sub}）。\n\n安装\n----\n{steps}\n\n"
                     + (USAGE_ANDROID if kind == "android" else USAGE) +
