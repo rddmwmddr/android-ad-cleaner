@@ -42,6 +42,31 @@ class RestoreExclusionTests(unittest.TestCase):
         self.assertEqual(self.api.restore("test", "quickapp"), "已还原")
         self.assertIn("还没做完", self.ran[0])
 
+    def test_restore_refuses_instead_of_queueing_behind_a_ui_check(self):
+        """#662：读屏检查持锁最长 75 秒，还原不能把界面线程按在那里等，要立刻回一句。"""
+        holding, release = threading.Event(), threading.Event()
+
+        def hold():
+            with self.api.dispatcher.exclusive():
+                holding.set()
+                release.wait(5)
+
+        h = threading.Thread(target=hold)
+        h.start()
+        self.assertTrue(holding.wait(5), "没能占住锁")
+        out = []
+        w = threading.Thread(target=lambda: out.append(self.api.restore("test", "quickapp")))
+        w.start()
+        try:
+            w.join(0.4)
+            self.assertFalse(w.is_alive(), "锁在别人手里时要立刻回一句")
+        finally:
+            release.set()
+            h.join(5)
+            w.join(5)
+        self.assertIn("读屏", out[0])
+        self.assertEqual(self.ran, [], "都没占到位置，不该碰手机")
+
     def test_slot_is_released_even_when_restore_fails(self):
         def boom(serial, what):
             raise RuntimeError("手机断开")

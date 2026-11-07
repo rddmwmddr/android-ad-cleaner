@@ -714,16 +714,23 @@ class Dispatcher:
         """调用方须持 `exclusive()` 的锁。"""
         return bool(self.job and self.job.running)
 
-    def claim(self, name):
+    def claim(self, name, wait=0.2):
         """占住「旁路操作」的位置（还原）：执行中或已有旁路操作时返回占着它的那件事的说明，占到了返回空串。
-        还原与执行同时跑会互相点乱同一块屏，手机版上还原先结束还会把执行的保活一起撤掉（#662）。"""
-        with self.lock:
+        还原与执行同时跑会互相点乱同一块屏，手机版上还原先结束还会把执行的保活一起撤掉（#662）。
+
+        拿锁只等 `wait` 秒：`ui_check()` 持着同一把锁最长 75 秒，按界面按钮的线程不该被按在那里等，
+        拿不到就直接回一句。"""
+        if not self.lock.acquire(timeout=wait):
+            return "正在检查读屏连接，等它结束后再还原"
+        try:
             if self.busy():
                 return "正在执行去广告，等它结束后再还原"
             if self.side:
                 return f"「{self.side}」还没做完，请稍后"
             self.side = name
             return ""
+        finally:
+            self.lock.release()
 
     def release(self):
         with self.lock:
