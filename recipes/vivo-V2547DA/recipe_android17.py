@@ -1,14 +1,16 @@
 # vivo X300 Ultra（V2547DA，卫星通信版）Android 17 变体：同型号的 OriginOS 6 路径在 recipe.py，
 # 系统版本对上 17.1.10.2 时由 run.recipe_for 选这份。
 # 路径来源：Issue #220 报告者真机实测（V2547DA，PD2547D_A_17.1.10.2.W10，商店 V10.5.20.0，2026-10-28）。
-# 本仓库没有这台机器：入口按报告者给出的 Activity 与读屏描述写，未整段复测。
-# 2026-11-03 商店段改用 Phone.tab()、gear() 改用引擎 icon_hit（#530），同样未复测。
+# 2026-11-03 商店段改用 Phone.tab()、gear() 改用引擎 icon_hit（#530）。
+# 2026-11-07 整段在 V2547DA 真机复测；系统广告、全局搜索、阅图锁屏改为直达，打不开再走菜单（#667）。
 # 与 recipe.py 的差别只在应用商店——Android 17 的「我的」页没有能读到的齿轮入口，
 # 且「个性化推荐」页两个开关的 content-desc 只有「开启，开关」，读不出标题。
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 BUILD = "PD2547D_A_17.1.10.2"
 MODELS = ["V2547DA"]
 import time
+
+import adb_link
 
 ONLY = globals().get("ONLY") or []
 FAILED_STEPS = []
@@ -82,36 +84,61 @@ def off_unnamed(page):
     return done
 
 
+def opened(start):
+    """试一条直达页面：到了返回真。别的系统版本可能没有这一页，返回假走菜单；
+    断线照常上抛——跑到一半掉线时 Phone 只置 lost、抛的是普通 RuntimeError（#293）。"""
+    try:
+        start()
+        return True
+    except adb_link.DeviceLost:
+        raise
+    except RuntimeError as e:
+        if p.lost:
+            raise
+        print(f"  · 直达不通（{e}），走菜单")
+        return False
+
+
 def settings_home():
     p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
 
 
 @step("系统广告")
 def _():
+    only = ["个性化广告", "个性化推荐", "智能推荐服务"]
+    if opened(lambda: p.start("com.android.settings", ".Settings$AdAndPrivacyActivityForOsTwo", expect="智能推荐服务", budget=2)):
+        p.off(only=only, page="系统·广告与隐私")
+        return
     settings_home()
     if maybe("安全") or maybe("安全与隐私"):
         if maybe("更多安全设置") and maybe("广告与隐私"):
-            p.off(only=["个性化广告", "个性化推荐", "智能推荐服务"], page="系统·广告与隐私")
+            p.off(only=only, page="系统·广告与隐私")
 
 
 @step("全局搜索")
 def _():
-    settings_home()
-    if maybe("系统管理与升级") and maybe("全局搜索"):
-        if maybe("首页展示内容"):
-            p.off(only=["搜索框推荐词", "推荐卡片"], page="全局搜索·首页展示内容"); p.back()
-        # Android 17 上没有「推荐热搜榜单」这个入口（#220），找不到就跳过
-        if maybe("推荐热搜榜单", scrolls=2):
-            p.off(only=["热门搜索"], page="全局搜索·热搜榜单"); p.back()
-        if maybe("个性化内容"):
-            p.off(only=["广告个性化"], page="全局搜索·个性化内容"); p.back()   # 历史记录、应用建议保留
+    if not opened(lambda: p.start("com.vivo.globalsearch", ".view.SearchSettingsActivity", expect="首页展示内容", budget=2)):
+        settings_home()
+        if not (maybe("系统管理与升级") and maybe("全局搜索")):
+            return
+    if maybe("首页展示内容"):
+        p.off(only=["搜索框推荐词", "推荐卡片"], page="全局搜索·首页展示内容"); p.back()
+    # Android 17 上没有「推荐热搜榜单」这个入口（#220）。这一页只有几行，看一眼就够，不滚也不等
+    if p.find("推荐热搜榜单", exact=True) and maybe("推荐热搜榜单", scrolls=0):
+        p.off(only=["热门搜索"], page="全局搜索·热搜榜单"); p.back()
+    if maybe("个性化内容"):
+        p.off(only=["广告个性化"], page="全局搜索·个性化内容"); p.back()   # 历史记录、应用建议保留
 
 
 @step("阅图锁屏")
 def _():
+    only = ["阅图锁屏", "锁屏横滑进入阅图"]
+    if opened(lambda: p.start("com.vivo.magazine", ".ui.MagazineSettings", expect="锁屏横滑进入阅图", budget=2)):
+        p.off(only=only, page="阅图锁屏")
+        return
     settings_home()
     if maybe("桌面、锁屏与壁纸") and maybe("锁屏设置") and maybe("阅图锁屏"):
-        p.off(only=["阅图锁屏", "锁屏横滑进入阅图"], page="阅图锁屏")
+        p.off(only=only, page="阅图锁屏")
 
 
 @step("应用商店")
@@ -121,6 +148,8 @@ def _():
     try:
         p.start("com.bbk.appstore", ".ui.menu.AppstoreSettingsActivity")
         reached = "AppstoreSettingsActivity" in p.focus()
+    except adb_link.DeviceLost:
+        raise                     # DeviceLost 也是 RuntimeError：断线不能当成「这一页打不开」再空跑一次
     except RuntimeError as e:
         print(f"  · 直达商店设置页失败（{e}），改走「我的 → 设置」")
         reached = False

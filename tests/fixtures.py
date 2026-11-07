@@ -204,7 +204,7 @@ def phone_mock(fast_mod=None, **fields):
     """以 Mock 冒充 Phone（配方脚本、只读命令这类不需要真页面的用例）。
 
     `Mock()` 上任何属性都是真值，于是 `Phone` 构造处声明的开关（`safe_mode` / `systemui_text` /
-    `vivo_seen`）在真实方法里会被当成 True；`d` 与 `reader` 也会变成两个不相干的 Mock，而
+    `vivo_seen` / `lost`）在真实方法里会被当成 True；`d` 与 `reader` 也会变成两个不相干的 Mock，而
     `Phone.start` 这类内部走 `reader`、配方脚本走 `p.d`。这里只补这两件事，其余照旧交给 Mock
     （`changed` 保持 Mock，用例可以数 `.append` 的次数）。
     """
@@ -213,6 +213,7 @@ def phone_mock(fast_mod=None, **fields):
         import fast as fast_mod
     p = Mock(name="Phone")
     p.pause_at_lock_check, p.systemui_text, p.vivo_seen, p.safe_mode = False, False, False, False
+    p.lost = False              # Phone 上这是代理 link 的属性，Mock 上没有：不补就恒为真
     p.skeleton_sigs, p.skeleton_count = set(), 0
     p.mismatch_probes = 0
     p.reader = p.d = Mock(name="reader")
