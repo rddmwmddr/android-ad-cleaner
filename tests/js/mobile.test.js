@@ -12,9 +12,10 @@ test("手机版停止后完成页给出回到首页与重新开始的出口", as
   try {
     await page.window.tick();
 
-    const buttons = [...page.document.querySelectorAll("#main .actions .btn")].map(b => b.textContent);
-    assert.deepEqual(buttons, ["回到首页", "重新开始"]);
-    assert.equal(page.document.querySelector("#main .actions .btn").getAttribute("onclick"), "showConnect()");
+    const buttons = [...page.document.querySelectorAll("#main .actions .btn")];
+    assert.deepEqual(buttons.map(b => b.textContent), ["回到首页", "重新开始"]);
+    assert.deepEqual(buttons.map(b => b.getAttribute("onclick")), ["showConnect()", "oneTap()"],
+      "两个按钮各自要落到哪一页");
     assert.ok(page.document.querySelector("#main .hero .badge.warn"), "停止不是出错，徽标是 warn");
   } finally { page.close(); }
 });

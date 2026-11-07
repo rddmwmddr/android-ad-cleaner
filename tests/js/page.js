@@ -42,8 +42,14 @@ async function openPage({ mobile = false, api = {} } = {}) {
     poll: () => pollResult(),
     ...api,
   };
+  // 没定义的方法要当场暴露：记进 errors，用例收尾时判红。
+  // 页面里不少调用带 .catch(() => {})，只抛不加记录会被它们吞掉。
   const answer = name => {
-    if (!(name in all)) throw new Error(`窗口桥没有定义 ${name}()，用例要显式给出返回值`);
+    if (!(name in all)) {
+      const error = new Error(`窗口桥没有定义 ${name}()，用例要显式给出返回值`);
+      errors.push(error.message);
+      throw error;
+    }
     const value = all[name];
     return (...args) => (typeof value === "function" ? value(...args) : value);
   };
@@ -55,7 +61,7 @@ async function openPage({ mobile = false, api = {} } = {}) {
       call(id, name, argsJson) {
         let reply;
         try { reply = { ok: answer(name)(...JSON.parse(argsJson)) }; }
-        catch (error) { errors.push(String(error.message || error)); reply = { error: String(error.message || error) }; }
+        catch (error) { reply = { error: String(error.message || error) }; }
         window.__aacDone(id, JSON.stringify(reply));
       },
       checkState: () => hostCalls.push("checkState"),
@@ -79,7 +85,11 @@ async function openPage({ mobile = false, api = {} } = {}) {
     document: window.document,
     errors,
     hostCalls,
-    close: () => window.close(),
+    close: () => {
+      window.close();
+      // 交互期间页面报的错也在这里判：漏了这一步，带 .catch(() => {}) 的调用会静默通过
+      if (errors.length) throw new Error(`用例期间页面报错：${errors.map(String).join("；")}`);
+    },
   };
 }
 
