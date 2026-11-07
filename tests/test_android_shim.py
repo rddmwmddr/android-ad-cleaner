@@ -358,6 +358,18 @@ class BackgroundScreenTest(unittest.TestCase):
             self.assertEqual(dev.dump_hierarchy(), page)
         self.assertEqual(set(fake.displays), {7})
 
+    def test_reads_stop_when_the_screen_is_gone(self):
+        """#662：屏被判没了之后读屏不再问那块显示，直接报屏已关闭，免得每个等待点各自重试。"""
+        fake = _Reader()
+        with _using(fake):
+            dev = u2.Device()           # 连上先读一次屏
+            sent = len(fake.displays)
+            screen.active.lost = True
+            with self.assertRaises(u2.UiAutomationError) as caught:
+                dev.dump_hierarchy()
+        self.assertIn(screen.LOST, str(caught.exception))
+        self.assertEqual(len(fake.displays), sent, "屏已经没了，不该再问它")
+
     def test_a_failed_read_raises_with_the_servers_words(self):
         """读屏坏了要报错：回落成空页会让引擎把每个开关都数成「没找到」。"""
         with _using(_Reader((None, 255, "UiAutomation 被别的无障碍服务占用"))):

@@ -46,8 +46,12 @@ class AdbError(Exception): ...
 
 
 def display():
-    """当前操作的屏：后台屏启用时是它，否则主屏 0。"""
-    return screen.active.display if screen.active is not None else 0
+    """读屏要问的屏：后台屏启用时是它，否则主屏 0。后台屏已经没了就直接报错（#662）——
+    读屏不经 `bridge.exec()`，少了那里的早退判断，再发过去只会拿到一条看不出原因的读屏失败。"""
+    s = screen.active
+    if s is not None and s.lost:
+        raise read_failed("读屏", screen.LOST.encode())
+    return s.display if s is not None else 0
 
 
 def text_of(raw):
