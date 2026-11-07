@@ -59,6 +59,14 @@ UNRESOLVED_KEEP = {
 DICT_NOTES = {
     "honor-WKL-AN20/recipe.py": 37,
 }
+# 一条词条都读不出来的脚本（判据就是零词条）：开关点名散在自建函数里（vivo-V2547A 的 off()、
+# oneplus-PHK110 的 off_exact()、samsung-SM-N9760 的 protect()），或者名单运行时才算。
+SILENT = (
+    "oneplus-PHK110/recipe.py",
+    "oneplus-PHK110/recipe_android15.py",
+    "samsung-SM-N9760/recipe.py",
+    "vivo-V2547A/recipe.py",
+)
 # 页面标签归不到分组的调用。多出来的先看能不能加进 vocab.PAGES。
 UNCLASSIFIED = {
     ("oppo", "<page>"): 7,
@@ -91,19 +99,23 @@ class RealRecipesTest(unittest.TestCase):
             lines = cache.setdefault(word.script, (ROOT / "recipes" / word.script).read_text(encoding="utf-8").splitlines())
             self.assertIn(word.text, lines[word.line - 1], word.source)
 
-    def test_keys_match_the_entry_table(self):
-        self.assertEqual(set(vocab.keys()), {(f, g) for f, groups in entries.ENTRIES.items() for g in groups})
+    def test_doc_sections_cover_every_entry_key(self):
+        """旧树也绿，守的是词库文档不会少一节或多一节：从标题反解出来的键集必须与 entries.ENTRIES 相等。"""
+        label_of = {label: family for family, label in entries.LABEL.items()}
+        found, family = set(), None
+        for line in vocab.render(RECIPES).splitlines():
+            if line.startswith("## "):
+                family = label_of.get(line[3:].split("（", 1)[0])
+            elif line.startswith("### ") and family:
+                found.add((family, line[4:]))
+        self.assertEqual(found, {(f, g) for f, groups in entries.ENTRIES.items() for g in groups})
+
+    def test_page_mapping_points_at_real_groups(self):
+        """旧树也绿，守的是 PAGES / FALLBACK 不指到 entries 里不存在的分组。"""
         for (family, prefix), group in {**vocab.PAGES, **vocab.FALLBACK}.items():
             self.assertIn(group, entries.ENTRIES[family], f"{family} {prefix}")
         placed = {(w.family, w.group) for w in self.scan.words if w.group}
-        self.assertLessEqual(placed, set(vocab.keys()))
-
-    def test_every_key_has_a_section_in_the_doc(self):
-        doc = vocab.render(RECIPES)
-        for family, groups in entries.ENTRIES.items():
-            section = doc.split(f"## {entries.LABEL[family]}（", 1)[1].split("\n## ", 1)[0]
-            for group in groups:
-                self.assertIn(f"### {group}\n", section, f"{family} {group}")
+        self.assertLessEqual(placed, {(f, g) for f, groups in entries.ENTRIES.items() for g in groups})
 
     def test_unresolved_only_is_frozen_per_script(self):
         self.assertEqual(dict(Counter(c.script for c in self.scan.unresolved_only)), UNRESOLVED_ONLY)
@@ -136,7 +148,8 @@ class RealRecipesTest(unittest.TestCase):
         doc = (ROOT / "docs" / "清单" / "词库.md").read_text(encoding="utf-8")
         self.assertEqual(doc, vocab.render(RECIPES), "机型脚本变了：跑 python3 tool/vocab.py > docs/清单/词库.md")
 
-    def test_reverse_table_never_has_a_row_without_a_page(self):
+    def test_reverse_table_never_has_a_row_without_a_real_page(self):
+        """只看行里的实际页面：模板页（含 `{…}`）和 `<变量>` 都不许出现，不能用同一个 has_page 自证。"""
         doc = vocab.render(RECIPES)
         table = doc.split("## 反查表", 1)[1]
         self.assertIn("反查只是索引，不构成跨页禁词表", table)
@@ -144,7 +157,33 @@ class RealRecipesTest(unittest.TestCase):
         self.assertGreater(len(rows), 100)
         for row in rows:
             page = row.split(" | ")[3]
-            self.assertTrue(vocab.has_page(page), row)
+            self.assertNotIn("{", page, row)
+            self.assertFalse(page.startswith("<"), row)
+
+    def test_unclassified_real_labels_do_get_reverse_rows(self):
+        """旧树也绿，守的是这 4 行不被「未归类」措辞改动顺手带掉。"""
+        doc = vocab.render(RECIPES)
+        table = doc.split("## 反查表", 1)[1]
+        self.assertIn("| 个性化推荐 | OPPO | 未归类 | 隐私 | 要关 |", table)
+        self.assertNotIn("<page>", table)
+
+    def test_unclassified_section_says_which_ones_reach_the_table(self):
+        section = vocab.render(RECIPES).split("## 未归类", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("真实标签", section)
+        self.assertIn("进反查表", section)
+
+    def test_protection_note_points_at_the_engine_list(self):
+        """保护类前缀只认 fast.NEG_PREFIX，不在文档里另抄一份词表（抄漏过「减少」）。"""
+        note = next(line for line in vocab.render(RECIPES).splitlines() if "保护类开关" in line)
+        self.assertIn("fast.NEG_PREFIX", note)
+        self.assertNotIn("减少", note)
+
+    def test_scripts_without_any_word_are_named(self):
+        """整份脚本一条词条都读不出来时，文档必须点名，不能让人以为这台机没有词。"""
+        self.assertEqual(tuple(self.scan.silent), SILENT)
+        section = vocab.render(RECIPES).split("## 读不到的脚本", 1)[1].split("\n## ", 1)[0]
+        for script in SILENT:
+            self.assertIn(f"`{script}`", section)
 
 
 class CluesTest(unittest.TestCase):

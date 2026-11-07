@@ -154,6 +154,7 @@ class Scan:
     unresolved_close: list = field(default_factory=list)
     unclassified: list = field(default_factory=list)
     notes: list = field(default_factory=list)
+    silent: list = field(default_factory=list)   # 一条词条都没读出来的脚本
     whole_page: int = 0         # 没有点名的：不带 only= 的 p.off()，close_named(None, …)
 
 
@@ -238,8 +239,8 @@ def _page_label(node):
 
 
 def has_page(label):
-    """标签是不是真的指到一页：变量和没写的都不算。"""
-    return bool(label) and not label.startswith("<")
+    """标签是不是真的指到一页：变量、模板页（`{pkg}` 这类 f-string）和没写的都不算。"""
+    return bool(label) and not label.startswith("<") and "{" not in label
 
 
 def group_of(family, label):
@@ -278,6 +279,7 @@ def scan(recipes_dir):
             continue
         with open(os.path.join(recipes_dir, script), encoding="utf-8") as f:
             tree = ast.parse(f.read())
+        before = len(out.words)
         constants, dicts = _constants(tree), _dicts(tree)
         helper = _inside_helper(tree)
         out.notes += _notes(tree, script)
@@ -314,12 +316,9 @@ def scan(recipes_dir):
             if not group and not inside:
                 out.unclassified.append(Call(family, script, call.lineno, label or "（没写页面）",
                                              tuple(dict.fromkeys(w.text for w in here))))
+        if len(out.words) == before:
+            out.silent.append(script)
     return out
-
-
-def keys():
-    """词库的键，和入口速查同一套。"""
-    return [(family, group) for family, groups in ENTRIES.items() for group in groups]
 
 
 def _spelled(words):
@@ -363,7 +362,10 @@ def _group_section(group, words):
 
 
 def reverse_rows(words):
-    """反查表的行：(词, 家族名, 分组, 页面, 类别)。没有真实页面的词不进表，它们列在「未归类」。"""
+    """反查表的行：(词, 家族名, 分组, 页面, 类别)。
+
+    页面不是真实一页的（`<变量>`、`{…}` 模板页）不进表：变量标签的词列在「未归类」，模板页的词留在分组节。
+    """
     rows = set()
     for word in words:
         if has_page(word.page):
@@ -385,7 +387,7 @@ def render(recipes_dir):
              "社区上报里还没落进脚本的叫法看[词条线索](词条线索.md)，那边的不算词条。", "",
              "**用之前：** 词条说明别的机型上这个开关叫这个，不代表这台手机上它管同一件事，写脚本要真机核对。"
              "同页保留项只在那一页成立，不是品牌级的禁词表。"
-             "「限制」「减少」这类开头的是保护类开关，引擎把它拨到开，判定在 `fast.want_state()`。", "",
+             "开头带否定词（`fast.NEG_PREFIX`）的才是保护类开关，引擎把它拨到开，判定在 `fast.want_state()`。", "",
              "出处写成 `目录:行号`，指 `recipes/<目录>/recipe.py`；别的文件写全文件名。"
              f"这里读 `p.off()` 和 `close_named()`：共 {len(words)} 处词，另有 {found.whole_page} 处没有点名（整页全关，没有词）。", ""]
     for family, groups in ENTRIES.items():
@@ -406,11 +408,17 @@ def render(recipes_dir):
     lines += [f"- `{n.script}:{n.line}` {n.key}：{n.text}" + ("" if key_of(n.text) in known else "（词条里没有）")
               for n in found.notes]
     lines += ["", f"## 未归类（{len(found.unclassified)} 处）", "",
-              "页面标签归不到分组：`<变量>` 是运行时才定的标签。这些调用里读得出的词列在这里，不进反查表。", ""]
+              "页面标签归不到分组。`<变量>` 是运行时才定的标签，它的词只在下面列名、不进反查表；"
+              "其余是脚本里的真实标签，`PAGES` / `FALLBACK` 里没有，这些词仍进反查表、分组记「未归类」。", ""]
     lines += [f"- {LABEL.get(c.family, c.family)} `{c.text}`：`{c.script}:{c.line}`"
               + (f"（{'、'.join(c.words)}）" if c.words else "")
               for c in found.unclassified]
-    lines += ["", "## 反查表", "", "反查只是索引，不构成跨页禁词表：一个词只在它所在的那一页成立。", "",
+    lines += ["", f"## 读不到的脚本（{len(found.silent)} 份）", "",
+              "这些脚本一条词条都没读出来：点名开关的地方不是 `p.off()` 的 `only=` / `keep=` 字面量，"
+              "也不是 `close_named()` 的名单（常见是自建函数，或名单运行时才算）。写这些机型的脚本时直接翻脚本。", ""]
+    lines += [f"- `{script}`" for script in found.silent]
+    lines += ["", "## 反查表", "", "反查只是索引，不构成跨页禁词表：一个词只在它所在的那一页成立。"
+              "带 `{…}` 的模板页不进表，它们的词在分组节里。", "",
               "| 词 | 家族 | 分组 | 页面 | 类别 |", "|---|---|---|---|---|"]
     lines += [f"| {word} | {family} | {group} | {page} | {kind} |"
               for word, family, group, page, kind in reverse_rows(words)]
