@@ -36,6 +36,7 @@ import troubleshooting
 import wait
 from backups import Backups, root_from_env
 from entries import FAMILY          # 品牌族只此一份；广告包、参考脚本与版本比较都按它归
+from host import ON_PHONE           # 手机版不写插电常亮（#731）
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOL = os.path.join(ROOT, "tool")
@@ -598,10 +599,13 @@ def cmd_recipe(serial, rest):
     safe_mode = bool(ref or not build_ok(i, recipe_meta(r)["build"]))
     if safe_mode:
         print("⚠ 安全模式：这份机型脚本不是按这台的型号和系统版本录的。只关脚本里点名的开关，找不到入口的步骤跳过。")
-    stay_on = sh(serial, "settings get global stay_on_while_plugged_in")
+    # 手机版的亮屏由 App 自己的屏幕锁保证（#728）：写进去的 7 只能靠收尾改回，而收尾会被断线跳过（#731）。
+    # None = 这台宿主没读过、也没写过，finally 就不还原。
+    stay_on = None if ON_PHONE else sh(serial, "settings get global stay_on_while_plugged_in")
     message, rc = "", 0
     try:
-        sh(serial, "settings put global stay_on_while_plugged_in 7")
+        if not ON_PHONE:
+            sh(serial, "settings put global stay_on_while_plugged_in 7")
         if wait_unlocked(serial):
             rc = py("fast.py", "-s", serial, "run", r, *(["--ref"] if safe_mode else []), *rest)
         else:
@@ -609,7 +613,8 @@ def cmd_recipe(serial, rest):
     finally:
         # 恢复插电常亮先于报错：旧代码里 sys.exit 挂起的文案要等 finally 跑完才打印，
         # 恢复这一步自己失败时，stderr 上只有那一条（恢复的错顶掉了锁屏文案）。
-        sh(serial, f"settings put global stay_on_while_plugged_in {int(stay_on) if stay_on.isdigit() else 0}")
+        if stay_on is not None:
+            sh(serial, f"settings put global stay_on_while_plugged_in {int(stay_on) if stay_on.isdigit() else 0}")
     return fail(message) if message else rc
 
 
@@ -794,19 +799,21 @@ def cmd_quickapp(serial, rest):
 
 
 def cmd_finish(serial, rest):
-    # 原值取自带 stay_on.txt 的最近一份快照（#632）：一份都没有就不动这项设置，不能按 0 写回
-    f = Backups(BACKUPS).newest_with(info(serial)["model"], "stay_on.txt")
-    v = ""
-    if f:
-        with open(f, encoding="utf-8") as fh:
-            v = fh.read().strip()
-    if v.isdigit():
-        sh(serial, f"settings put global stay_on_while_plugged_in {v}")
-        print(f"插电常亮已改回 {v}")
-    elif f:
-        print("插电常亮未改动（快照里没有记下原值）")
-    else:
-        print("插电常亮未改动（没有找到改动前的快照）")
+    # 原值取自带 stay_on.txt 的最近一份快照（#632）：一份都没有就不动这项设置，不能按 0 写回。
+    # 手机版没人写过这项设置，也就没有要改回的，连这一步的话都不说（#731）。
+    if not ON_PHONE:
+        f = Backups(BACKUPS).newest_with(info(serial)["model"], "stay_on.txt")
+        v = ""
+        if f:
+            with open(f, encoding="utf-8") as fh:
+                v = fh.read().strip()
+        if v.isdigit():
+            sh(serial, f"settings put global stay_on_while_plugged_in {v}")
+            print(f"插电常亮已改回 {v}")
+        elif f:
+            print("插电常亮未改动（快照里没有记下原值）")
+        else:
+            print("插电常亮未改动（没有找到改动前的快照）")
     sh(serial, "input keyevent HOME")
     on = sh(serial, "settings get global development_settings_enabled") == "1"
     if on:

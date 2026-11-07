@@ -50,9 +50,7 @@ class SummarizeTest(unittest.TestCase):
         cases = [(["机型脚本跑完：关了 12 个，34 秒"], "关了 12 个开关"),
                  (["拨了 5 个", "仍开着: 1 个"], "关了 5 个渠道，复查仍开着 1 个"),
                  (["拨了 5 个"], "关了 5 个渠道"),
-                 (["快照已存"], "已保存"),
-                 (["插电常亮已改回 15"], "插电常亮已改回 15"),
-                 (["插电常亮未改动"], "插电常亮未改动")]
+                 (["快照已存"], "已保存")]
         for tail, want in cases:
             self.assertEqual(view.summarize({"tail": tail}), want)
 

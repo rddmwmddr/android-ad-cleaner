@@ -79,11 +79,6 @@ def summarize(result):
         return f"{len(re.findall(r'已关闭$', text, re.M))} 个组件已关闭"
     if "快照已存" in text:
         return "已保存"
-    m = re.search(r"插电常亮已改回 (\d+)", text)
-    if m:
-        return f"插电常亮已改回 {m.group(1)}"
-    if "插电常亮未改动" in text:
-        return "插电常亮未改动"
     lines = [line for line in tail if line]
     return lines[-1] if lines else ""
 

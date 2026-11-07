@@ -262,17 +262,19 @@ def stays_on(value):
 
 def keep_awake(reader):
     """改开关期间插电常亮：营销通知一步可能跑好几分钟，以前只有机型脚本设了常亮（#71 中途锁屏）。
-    手机版多半没插电，由 App 自己保持亮屏（#728）；这里设不上不影响，也不提示（#729）。
+    手机版多半没插电，由 App 自己保持亮屏（#728）；这里设不上不影响，也不提示（#729），
+    而且干脆不写（#731）：唯一还原点是「收尾」，断线正好会跳过它，设置就留在 7。
     vivo 经无线调试写不进任何全局设置（V2547DA / OriginOS 7 实测：put 被静默忽略），原值已是 15 时不算没设上。"""
     old = reader.shell("settings get global stay_on_while_plugged_in").output.strip()
-    try:
-        if not stays_on(old):
-            reader.shell("settings put global stay_on_while_plugged_in 7")
-        ok = stays_on(reader.shell("settings get global stay_on_while_plugged_in").output.strip())
-    except RuntimeError:
-        ok = False
-    if not ok and not ON_PHONE:
-        print("  ! 插电常亮没有设上，手机息屏会打断操作；请把自动锁屏时间调长后再跑。" + XIAOMI_INPUT, flush=True)
+    if not ON_PHONE:
+        try:
+            if not stays_on(old):
+                reader.shell("settings put global stay_on_while_plugged_in 7")
+            ok = stays_on(reader.shell("settings get global stay_on_while_plugged_in").output.strip())
+        except RuntimeError:
+            ok = False
+        if not ok:
+            print("  ! 插电常亮没有设上，手机息屏会打断操作；请把自动锁屏时间调长后再跑。" + XIAOMI_INPUT, flush=True)
     return old if old.isdigit() else "0"
 
 
@@ -1033,8 +1035,10 @@ def toggle(p, pk, cid, want_on, name="", allowed=()):
         gone = adb_link.lost_from(e, p.serial)   # 读屏库的断线异常不是 RuntimeError，以前带着堆栈退出（错误日志 10-28）
         if gone is not None:
             raise gone from e
-        if isinstance(e, RuntimeError):
-            return Outcome(ERROR, str(e))
+        # 读屏这一次没读成（手机版「读屏请求超时」）也只是这个渠道没处理，后面照常跑（#731）
+        slow = adb_link.read_failed(e)
+        if isinstance(e, RuntimeError) or slow:
+            return Outcome(ERROR, slow or str(e))
         raise
 
 
@@ -1048,10 +1052,11 @@ def main():
         # 读屏服务被占用、启动失败等：给出原因，不打印 Python 报错堆栈（错误日志 10-27）
         sys.exit(f"✗ {e}")
     except Exception as e:
-        gone = adb_link.lost_from(e, sys.argv[2] if len(sys.argv) > 2 else None)
-        if gone is None:
+        # 断线 / 读屏慢一次：给一句人话，不打印 Python 报错堆栈（#731）
+        message = adb_link.failure_message(e, sys.argv[2] if len(sys.argv) > 2 else None)
+        if message is None:
             raise
-        sys.exit(f"✗ {gone}")
+        sys.exit(f"✗ {message}")
 
 
 def run(a):
@@ -1205,7 +1210,7 @@ def run(a):
         finally:
             if p is not None:
                 p.close()
-            if stay_on is not None:
+            if stay_on is not None and not ON_PHONE:      # 手机版没改过这项设置，也就没有要改回的（#731）
                 try:
                     reader.shell(f"settings put global stay_on_while_plugged_in {stay_on}")
                 except RuntimeError:
