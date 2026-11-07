@@ -15,11 +15,14 @@ for pkg in ("uiautomator2", "adbutils", "webview"):
     d, b, h = collect_all(pkg)
     datas += d; binaries += b; hidden += h
 
+# exe 名只有这一处：COLLECT 的目录名与随包 .config 的文件名都从这里取
+APP_EXE, CLI_EXE = "AndroidAdCleaner", "aac-cli"
+
 a = Analysis([os.path.join(ROOT, "gui", "launch.py")], pathex=[ROOT], binaries=binaries, datas=datas, hiddenimports=hidden)
 pyz = PYZ(a.pure)
 icon = os.path.join(ROOT, "gui", "icon.ico")
-gui = EXE(pyz, a.scripts, [], exclude_binaries=True, name="AndroidAdCleaner", console=False, icon=icon)
-cli = EXE(pyz, a.scripts, [], exclude_binaries=True, name="aac-cli", console=True, icon=icon)
-coll = COLLECT(gui, cli, a.binaries, a.datas, name="AndroidAdCleaner")
+gui = EXE(pyz, a.scripts, [], exclude_binaries=True, name=APP_EXE, console=False, icon=icon)
+cli = EXE(pyz, a.scripts, [], exclude_binaries=True, name=CLI_EXE, console=True, icon=icon)
+coll = COLLECT(gui, cli, a.binaries, a.datas, name=APP_EXE)
 # COLLECT 之后写：Inno Setup 从 dist\AndroidAdCleaner\* 递归收文件，便携 zip 也打这一层
-dotnet_config.write(os.path.join(DISTPATH, "AndroidAdCleaner"))
+dotnet_config.write(os.path.join(DISTPATH, APP_EXE), (APP_EXE, CLI_EXE))

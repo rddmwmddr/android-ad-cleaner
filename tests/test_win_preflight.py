@@ -8,13 +8,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from fixtures import RESOLVE_ERROR
 from gui import winpreflight
-
-# 报告者给的原文（#597）：clr_loader 按路径加载 Python.Runtime.dll 时被 .NET Framework 拒了。
-RESOLVE_ERROR = (
-    "RuntimeError: Failed to resolve Python.Runtime.Loader.Initialize from "
-    r"D:\AndroidAdCleaner\_internal\pythonnet\runtime\Python.Runtime.dll"
-)
 
 # 三处实际存在的注册表位置，按报告者给出的路径写死，不从被测代码里取。
 KEY_64 = r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
@@ -139,7 +134,8 @@ class StartupAdviceTests(unittest.TestCase):
 
     def advice(self, state, blocked=(), error=None):
         from gui import app
-        return app.startup_advice(state, blocked, error or RuntimeError("loading Python.Runtime.dll failed"))
+        error = error or RuntimeError("loading Python.Runtime.dll failed")
+        return app.startup_advice(state, blocked, error, winpreflight.load_rejected(error))
 
     def test_missing_runtime_points_at_the_bootstrap_installer(self):
         text, open_site = self.advice("missing")
@@ -203,6 +199,9 @@ class StartupFailedWiringTests(unittest.TestCase):
 
         def blocked_files(self, root):
             return tuple(self.blocked)
+
+        def load_rejected(self, error):
+            return winpreflight.load_rejected(error)
 
     def run_with(self, state, blocked=(), error=None):
         from gui import app

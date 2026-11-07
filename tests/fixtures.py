@@ -26,6 +26,13 @@ from unittest.mock import Mock, patch
 TESTS_DIR = Path(__file__).resolve().parent
 ROOT = TESTS_DIR.parent
 
+# 报告者贴的原文（#597）：clr_loader 按路径加载 Python.Runtime.dll 时被 .NET Framework 拒了。
+# 归因与打包冒烟两侧都拿它当输入，措辞照原样留一份。
+RESOLVE_ERROR = (
+    "RuntimeError: Failed to resolve Python.Runtime.Loader.Initialize from "
+    r"D:\AndroidAdCleaner\_internal\pythonnet\runtime\Python.Runtime.dll"
+)
+
 _REAL_TIME, _REAL_MONOTONIC = _time.time, _time.monotonic
 
 # 两种屏尺寸：竖屏主流宽度差一半，行分带与可视区域判定都要在这两种下各跑一遍

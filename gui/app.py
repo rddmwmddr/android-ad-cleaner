@@ -1619,7 +1619,7 @@ def version_key(text):
     return tuple(map(int, m.groups())) if m else ()
 
 
-def startup_advice(state, blocked, error):
+def startup_advice(state, blocked, error, rejected):
     """窗口起不来时给用户看的文案，以及要不要跳微软官网（#228、#597）。
 
     以前一律说「缺少 WebView2」，portable 包解压后文件带 MOTW 的现场被指到装不上的东西上。
@@ -1638,11 +1638,12 @@ def startup_advice(state, blocked, error):
                 "「在此处打开 PowerShell 窗口」，粘贴下面这行后回车：\n"
                 "Get-ChildItem . -Recurse -File | Unblock-File\n\n"
                 f"（{error}）", False)
-    if winpreflight.load_rejected(error):
+    if rejected:
         return ("这台电脑的 .NET Framework 把程序自带的 dll 判成了「远程来源」，加载时被拦住了。\n\n"
                 "办法一：确认程序文件夹里 AndroidAdCleaner.exe 旁边有 AndroidAdCleaner.exe.config，"
                 "别把它删掉或改名。\n"
-                "办法二：没有这个文件，从官方 Release 重新下载最新版，完整解压后再打开。\n\n"
+                "办法二：没有这个文件，或者有了还是这样，从官方 Release 重新下载最新版，"
+                "完整解压后再打开。\n\n"
                 f"（{error}）", False)
     if state == "unknown":
         return ("程序启动失败。这台电脑的 WebView2 状态没能确认（多半是注册表读取受限），"
@@ -1665,7 +1666,8 @@ def startup_failed(error, preflight=None, notify=None, open_url=None):
     preflight = preflight or winpreflight
     notify = notify or (lambda text: ctypes.windll.user32.MessageBoxW(0, text, APP_NAME, 0x40))
     text, open_site = startup_advice(preflight.webview2_state(),
-                                     preflight.blocked_files(BASE), error)
+                                     preflight.blocked_files(BASE), error,
+                                     preflight.load_rejected(error))
     notify(text)
     if open_site:
         (open_url or webbrowser.open)("https://developer.microsoft.com/microsoft-edge/webview2/")
