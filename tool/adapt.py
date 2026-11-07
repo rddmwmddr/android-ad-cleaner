@@ -19,7 +19,7 @@ for _st in (sys.stdout, sys.stderr):
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fast                                    # 只读 want_state / 驱动 Phone；不改引擎
 from fast import Phone
-from run import script_cmd                     # 打包版起子进程要带 --cli，这一处已知规矩只在 run.py 写
+from run import fail, script_cmd             # 错误渲染与打包版的 --cli 规矩都只在 run.py 写一份
 
 TSV_COLS = ("pkg", "page", "title", "state", "ad", "pick")
 # 人工勾选列里写这些值=要关；空=不关。工具不自动勾选。
@@ -45,11 +45,12 @@ def parse_tsv(path):
 
 
 def read_pick_file(path):
-    """人工勾选清单：每行一个开关标题；# 开头是注释。"""
+    """人工勾选清单：每行一个开关标题；# 开头是注释。
+    找不到时返回 (None, 文案)，由调用方转成退出码——helper 不结束进程。"""
     if not os.path.exists(path):
-        sys.exit(f"找不到勾选清单 {path}")
+        return None, f"找不到勾选清单 {path}"
     with open(path, encoding="utf-8-sig") as f:
-        return [l.strip() for l in f.read().splitlines() if l.strip() and not l.lstrip().startswith("#")]
+        return [l.strip() for l in f.read().splitlines() if l.strip() and not l.lstrip().startswith("#")], None
 
 
 def select_rows(rows, pick_titles=()):
@@ -204,7 +205,7 @@ def cmd_gen(rest):
         a = args[i]
         if a in ("-o", "--pick", "--model", "--build"):
             if i + 1 >= len(args):
-                sys.exit(f"选项 {a} 后面要跟值")
+                return fail(f"选项 {a} 后面要跟值")
             value = args[i + 1]
             if a == "-o":
                 out = value
@@ -216,30 +217,33 @@ def cmd_gen(rest):
                 build = value
             i += 2
         elif a.startswith("-"):
-            sys.exit(f"不认识的选项 {a}。用法：run.py adapt gen <探路-型号.tsv> [-o 输出.py] [--pick 清单.txt] "
-                     "[--model 型号] [--build 录制版本]")
+            return fail(f"不认识的选项 {a}。用法：run.py adapt gen <探路-型号.tsv> [-o 输出.py] [--pick 清单.txt] "
+                        "[--model 型号] [--build 录制版本]")
         elif tsv is None:
             tsv = a
             i += 1
         else:
-            sys.exit("只收一个探路 TSV 文件；要合并多份结果请先手工合并")
+            return fail("只收一个探路 TSV 文件；要合并多份结果请先手工合并")
     if not tsv:
-        sys.exit("用法：run.py adapt gen <探路-型号.tsv> [-o 输出.py] [--pick 清单.txt] [--model 型号] [--build 录制版本]")
+        return fail("用法：run.py adapt gen <探路-型号.tsv> [-o 输出.py] [--pick 清单.txt] [--model 型号] [--build 录制版本]")
     if not os.path.exists(tsv):
-        sys.exit(f"找不到 {tsv}")
+        return fail(f"找不到 {tsv}")
     rows = parse_tsv(tsv)
     if not rows:
-        sys.exit(f"{tsv} 里没有数据行")
+        return fail(f"{tsv} 里没有数据行")
     if not model:
         m = re.search(r"探路-(.+)\.tsv$", os.path.basename(tsv))
         model = m.group(1) if m else ""
     pick_titles = []
     for pf in picks:
-        pick_titles.extend(read_pick_file(pf))
+        titles, error = read_pick_file(pf)
+        if error:
+            return fail(error)
+        pick_titles.extend(titles)
     groups, protection, ad_left = select_rows(rows, pick_titles)
     if not groups:
-        sys.exit("没有勾选任何开关：在 TSV 末列「人工勾选」写「关」，或用 --pick 给清单文件。"
-                 "工具不自动决定关哪些开关。")
+        return fail("没有勾选任何开关：在 TSV 末列「人工勾选」写「关」，或用 --pick 给清单文件。"
+                    "工具不自动决定关哪些开关。")
     known = {r["title"] for r in rows}
     unknown = sorted({t for t in pick_titles if t not in known})
     if unknown:
@@ -254,7 +258,7 @@ def cmd_gen(rest):
         with open(out, "w", encoding="utf-8") as f:
             f.write(src)
     except OSError as e:
-        sys.exit(f"写不出 {out}：{e}")
+        return fail(f"写不出 {out}：{e}")
     total = sum(len(names) for _, _, names in groups)
     print(f"草稿已生成：{out}（{len(groups)} 段，{total} 个开关，均为待验证）")
     if not model:
@@ -263,6 +267,7 @@ def cmd_gen(rest):
         print("BUILD 为空：自检时不比对系统版本；转正式脚本前请填上录制版本（ro.build.display.id）")
     print(f"下一步：python3 tool/run.py -s <序列号> adapt check {out}")
     print("自检通过也不等于适配完成：请人工在手机上核对每一步，再决定是否转为正式机型脚本。")
+    return 0
 
 
 # ---------- 安全模式自检 ----------
@@ -313,26 +318,30 @@ def print_report(report):
 
 def cmd_check(rest):
     if len(rest) < 3 or rest[0] != "-s":
-        sys.exit("用法：run.py adapt check -s <序列号> <草稿.py> [段名 …]")
+        return fail("用法：run.py adapt check -s <序列号> <草稿.py> [段名 …]")
     serial, recipe, only = rest[1], rest[2], rest[3:]
     if not os.path.exists(recipe):
-        sys.exit(f"找不到 {recipe}")
+        return fail(f"找不到 {recipe}")
+    locked = False
     with Phone(serial) as p:
         if p.locked():
-            sys.exit("手机锁屏了，请机主解锁后再跑")
-        stay = p.d.shell("settings get global stay_on_while_plugged_in").output.strip()
-        try:
-            p.d.shell("settings put global stay_on_while_plugged_in 7")
-            print("⚠ 安全模式自检：这份是待验证草稿，只关 only= 点名的开关，找不到就如实报告。")
-            report = check_draft(p, recipe, only)
-        finally:
-            p.d.shell(f"settings put global stay_on_while_plugged_in {int(stay) if stay.isdigit() else 0}")
+            locked = True
+        else:
+            stay = p.d.shell("settings get global stay_on_while_plugged_in").output.strip()
+            try:
+                p.d.shell("settings put global stay_on_while_plugged_in 7")
+                print("⚠ 安全模式自检：这份是待验证草稿，只关 only= 点名的开关，找不到就如实报告。")
+                report = check_draft(p, recipe, only)
+            finally:
+                p.d.shell(f"settings put global stay_on_while_plugged_in {int(stay) if stay.isdigit() else 0}")
+    if locked:                      # 文案等 __exit__ 跑完再渲染：close 抛错时与 sys.exit 的旧时机一致
+        return fail("手机锁屏了，请机主解锁后再跑")
     return 0 if print_report(report) else 1
 
 
 def cmd_explore(rest):
     if not rest or rest[0] != "-s" or len(rest) < 2:
-        sys.exit("用法：run.py adapt explore -s <序列号> [包名 …]")
+        return fail("用法：run.py adapt explore -s <序列号> [包名 …]")
     return subprocess.call(script_cmd("explore.py", "-s", rest[1], *rest[2:]))
 
 
@@ -346,8 +355,8 @@ def main(argv):
         return cmd_gen(rest)
     if sub == "check":
         return cmd_check(rest)
-    sys.exit("adapt 后面跟 explore / gen / check。用法：run.py adapt --help")
+    return fail("adapt 后面跟 explore / gen / check。用法：run.py adapt --help")
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    raise SystemExit(main(sys.argv[1:]))
