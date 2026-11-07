@@ -182,7 +182,7 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
         import fast as fast_mod
     p = fast_mod.Phone.__new__(fast_mod.Phone)
     p.link = fast_mod.adb_link.Connection(serial, transport=shell or _silent_shell)
-    p.log, p.miss, p.changed, p.promoted = False, 0, [], set()
+    p.log, p.miss, p.changed, p.missed, p.promoted = False, 0, [], [], set()
     p.app = ""
     p.pause_at_lock_check = False
     p.systemui_text, p.vivo_seen, p.safe_mode = False, False, False
@@ -221,6 +221,7 @@ def phone_mock(fast_mod=None, **fields):
     p = Mock(name="Phone")
     p.pause_at_lock_check, p.systemui_text, p.vivo_seen, p.safe_mode = False, False, False, False
     p.lost = False              # Phone 上这是代理 link 的属性，Mock 上没有：不补就恒为真
+    p.missed = []               # `report_run()` 读它：Mock 恒真会把干净的一轮判成失败（#788）
     p.skeleton_sigs, p.skeleton_count = set(), 0
     p.mismatch_probes = 0
     p.reader = p.d = Mock(name="reader")

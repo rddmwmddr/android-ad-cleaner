@@ -307,6 +307,7 @@ class Phone:
         self.systemui_text = False          # 读屏时是否算上 com.android.systemui 的文字（vivo OriginOS Ocean 的通知页就挂在那里）
         self.vivo_seen = False              # 见过 vivo 的通知页：渠道页与应用通知页是同一个 Activity，只从应用列表进
         self.changed = []          # (页面, 标题) 记录本次关掉的
+        self.missed = []           # (页面, 标题) 记录本次没拨到目标态的；与 changed 同源、同生命周期（#788）
         self.miss = 0              # 本段已经没找到几次；>0 说明路径对不上，后面只看当前屏、不再翻页找
         self.skeleton_sigs = set()  # 本次运行已上报的骨架布局（#428）：同布局只留第一份
         self.skeleton_count = 0     # 本次运行已上报的骨架份数，上限见 chan_fast.SKELETON_PER_RUN
@@ -989,7 +990,8 @@ class Phone:
         点过的普通开关行在回读里消失、回读仍见到本屏计划时的非目标行且没跳走，按已关记账；
         整页读空、换到别的页（含同 Activity 的子页）或保护类开关消失，仍报失败（#486）。
         开关是灰的（被上级开关禁用）的行不点、也不算失败：点了也不会变，以前报成「关不掉」（#333）。
-        补点两轮仍没到位的，回退到点整行标题（只认行标题的页面，ADR-0024）：照样由回读确认。"""
+        补点两轮仍没到位的，回退到点整行标题（只认行标题的页面，ADR-0024）：照样由回读确认。
+        仍没拨到目标态的记进 `self.missed`：光打一行 ✗ 的话退出码还是 0、结果页标「成功」（#788）。"""
         # 页面刚打开还没画完：等开关出现，最多试 10 次（本段已走丢就不等）
         wait.until(self.switches, tries=2 if self.miss else 10, poll=0.2,
                    now=time.time, sleep=time.sleep)
@@ -1009,6 +1011,9 @@ class Phone:
                 root = self.tree()
                 plan, planned = plan_page(root)
             checked |= plan.checked
+            for t in plan.checked:                      # 已经到位的：上一屏或上一次 off() 记的那条不再算没拨动
+                if (page, t) in self.missed:
+                    self.missed.remove((page, t))
             kept |= plan.kept
             page_greyed = set(plan.disabled)
             targets = plan.targets
@@ -1123,10 +1128,14 @@ class Phone:
                         continue                        # 下面单独说明
                     if v == MISSED:
                         self.say(f"  ✗ {'打不开' if w else '关不掉'} {t}")
+                        if (page, t) not in self.missed:      # 滚动后同一行会再成为目标
+                            self.missed.append((page, t))
                     else:
                         self.say(f"  {'开（保护类开关）' if w else '关'} {t}"
                                  + ("（点后从列表消失）" if v == VANISHED else ""))
                         self.changed.append((page, t))
+                        if (page, t) in self.missed:          # 下一屏补点拨到了
+                            self.missed.remove((page, t))
                         done += 1
             for t in page_greyed - greyed:
                 self.say(f"  · 被上级开关禁用（开关是灰的），未改动 {t}")
@@ -1461,6 +1470,31 @@ class Phone:
             time.sleep(.2)
 
 
+MISSED_SHOWN = 8    # 收尾那行最多列几个没拨动的开关，其余折成「等 N 个」
+
+
+def missed_line(missed, limit=MISSED_SHOWN):
+    """没拨动的开关拼成一行：`页面 · 标题`，多的折成「等 N 个」。页名缺省时只写标题。"""
+    names = "、".join(f"{pg} · {t}" if pg else t for pg, t in missed[:limit])
+    more = len(missed) - limit
+    return f"没拨动的开关：{len(missed)} 个（{names}{f' 等 {more} 个' if more > 0 else ''}）"
+
+
+def report_run(g, p):
+    """机型脚本跑完的收尾：先报没做成的段，再报没拨动的开关；任一非空就返回 1（#788）。
+
+    `g` 是 `exec` 的脚本作用域，`p` 是这一轮的 Phone。
+    段名同时发 `failed_steps` 事件（客户端按它只重跑那几段，#638）；没拨动的开关只有人读的这一行，
+    客户端按退出码把整个任务标「失败」。#758 的摘要要把它算进「K 段未完成」，得先有页→段映射。
+    """
+    if g.get("FAILED_STEPS"):
+        events.emit("failed_steps", steps=list(g["FAILED_STEPS"]))
+        print("未完成步骤：" + "、".join(g["FAILED_STEPS"]), flush=True)
+    if p.missed:
+        print(missed_line(p.missed), flush=True)
+    return 1 if g.get("FAILED_STEPS") or p.missed else 0
+
+
 def main():
     a = sys.argv[1:]
     if a in ([], ["--help"], ["-h"]):
@@ -1546,10 +1580,7 @@ def execute(p, cmd, rest):
                     f.write(f"{pg}\t{tt}\n")
         except OSError:
             pass
-        if g.get("FAILED_STEPS"):
-            # 段名同时走事件通道：客户端按它只重跑没做成的段（#638）。人读的那行照旧。
-            events.emit("failed_steps", steps=list(g["FAILED_STEPS"]))
-            print("未完成步骤：" + "、".join(g["FAILED_STEPS"]), flush=True)
+        if report_run(g, p):
             sys.exit(1)
     else:
         print(__doc__)

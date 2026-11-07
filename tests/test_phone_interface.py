@@ -3,7 +3,11 @@
 守的是「这些状态从哪来」：一次渠道尝试的诊断归 chan_fast（Attempt），
 读屏策略与设备记忆归 Phone 构造处声明的字段。装配统一走 fixtures。
 """
+import contextlib
+import io
+import os
 import sys
+import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -13,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 import explore
 import fast
-from fixtures import Clock, Device, Timeline, fake_phone, install_clock, phone_stub
+from fixtures import Clock, Device, Timeline, fake_phone, install_clock, load_recipe, phone_stub
 from reader import Reader
 
 # 同一屏里两个 App 的文字：Settings 自己的一行，和浮在它上面的另一个窗口
@@ -83,6 +87,9 @@ LIST_PAGE = '''<hierarchy rotation="0">
     <node class="android.widget.Switch" checkable="true" checked="true" bounds="[950,500][1060,580]"/>
   </node>
 </hierarchy>'''
+
+# 同一页，两个开关都已经关着：off() 只有 checked、没有 target，台账为空
+CLOSED_PAGE = LIST_PAGE.replace('checked="true"', 'checked="false"')
 
 
 CARD_PAGE = '''<hierarchy rotation="0">
@@ -536,6 +543,202 @@ class OffDriverTests(unittest.TestCase):
         self.run_off(p, page="页")
         p.click.assert_not_called()
         p.say.assert_any_call("  · 页：安全模式不做整页全关，本页 2 个开关未改动，需要时请按清单手动关")
+
+
+class MissedLedgerTests(unittest.TestCase):
+    """#788：拨不动的开关除了那行 ✗，还要记进引擎台账（形状与 `Phone.changed` 对齐）。"""
+
+    def phone(self, reads, size=(1080, 2340)):
+        p = phone_stub("S")
+        p.W, p.H = size
+        p.tree = Mock(return_value=ET.fromstring("<hierarchy/>"))
+        p.switches = Mock(side_effect=reads)
+        p.switch_rows = Mock(return_value=[])
+        p.focus = Mock(return_value="app/settings")
+        p.click = Mock()
+        p.confirm = Mock(return_value=None)
+        p.scroll_more = Mock(return_value=False)
+        p.say = Mock()
+        p.back = Mock()
+        return p
+
+    def run_off(self, p, **kwargs):
+        with patch.object(fast, "time", Clock()):        # 假钟的 sleep 只推进读数，不真等
+            done = p.off(**kwargs)
+        p.tree.assert_called()
+        p.switches.assert_any_call(p.tree.return_value)   # 主循环真的带着这一棵树读屏
+        return done
+
+    def test_a_switch_that_will_not_budge_lands_in_the_ledger(self):
+        rows = [("广告推荐", True, (500, 800))]
+        p = self.phone([])
+        p.switches = Mock(return_value=rows)       # 一直拨不动：读几次都是开着
+        done = self.run_off(p, page="页")
+        self.assertEqual({c.args for c in p.click.call_args_list}, {(500, 800)})   # 首击 + 两轮补点都点它
+        self.assertEqual((done, p.changed), (0, []))
+        self.assertEqual(p.missed, [("页", "广告推荐")])
+
+    def test_the_same_switch_across_screens_is_counted_once(self):
+        """滚动后同一行还留在屏带里：每屏都会重新成为目标，但不能记成两个（#788 复核）。"""
+        rows = [("广告推荐", True, (500, 800))]
+        p = self.phone([])
+        p.switches = Mock(return_value=rows)
+        p.scroll_more = Mock(side_effect=[True, False])
+        self.run_off(p, page="页")
+        self.assertEqual(p.missed, [("页", "广告推荐")])
+
+    def test_a_later_pass_that_gets_it_clears_the_ledger_entry(self):
+        """上一次没拨动、这一次拨到了：旧条目要撤销，否则结果页会报一次假失败。"""
+        rows = [("广告推荐", True, (500, 800))]
+        after = [("广告推荐", False, (500, 800))]
+        clicked = []
+        p = self.phone([])
+        p.click = Mock(side_effect=lambda *a: clicked.append(a))
+        p.switches = Mock(side_effect=lambda *a: after if clicked else rows)
+        p.missed = [("页", "广告推荐")]            # 上一次 off() 留下的
+        done = self.run_off(p, page="页")
+        self.assertEqual((done, p.changed), (1, [("页", "广告推荐")]))
+        self.assertEqual(p.missed, [])
+
+    def test_a_second_pass_that_finds_it_closed_clears_the_ledger_entry(self):
+        """同页再调一次 off()：这次它已关着、不是目标，靠拨动计划的 checked 撤销旧条目。"""
+        rows = [("广告推荐", True, (500, 800))]
+        after = [("广告推荐", False, (500, 800))]
+        p = self.phone([])
+        p.switches = Mock(return_value=rows)
+        self.run_off(p, page="页")
+        self.assertEqual(p.missed, [("页", "广告推荐")])
+        p.switches = Mock(return_value=after)
+        self.run_off(p, page="页")
+        self.assertEqual(p.missed, [])
+
+    def test_a_protection_switch_that_will_not_open_lands_in_the_ledger_too(self):
+        rows = [("限制广告跟踪", False, (500, 800))]
+        p = self.phone([rows] * 20)
+        self.run_off(p, page="页")
+        p.say.assert_any_call("  ✗ 打不开 限制广告跟踪")
+        self.assertEqual(p.missed, [("页", "限制广告跟踪")])
+
+    def test_a_page_that_all_closes_leaves_the_ledger_empty(self):
+        rows = [("广告甲", True, (500, 800))]
+        after = [("广告甲", False, (500, 800))]
+        clicked = []
+        p = self.phone([])
+        p.click = Mock(side_effect=lambda *a: clicked.append(a))
+        p.switches = Mock(side_effect=lambda *a: after if clicked else rows)
+        self.run_off(p, page="页")
+        self.assertEqual(p.missed, [])
+
+    def test_a_row_that_vanishes_after_being_switched_off_is_not_missed(self):
+        """点后从列表消失按已关记账（#486）：它进了 `changed`，不进台账。"""
+        rows = [("甲", True, (500, 800)), ("推荐位", True, (500, 1000))]
+        after = [("甲", True, (500, 800))]
+        p = self.phone([rows, rows] + [after] * 5)
+        self.run_off(p, page="页", only=["推荐位"])
+        self.assertEqual(p.changed, [("页", "推荐位")])
+        self.assertEqual(p.missed, [])
+
+    def test_a_grey_switch_is_not_missed(self):
+        """灰态是「被上级开关禁用」，不是没拨动（#333）。"""
+        lines = []
+        clock = Clock()
+        install_clock(fast, clock)
+        p = fake_phone(clock=clock, stages=[(0.0, GREY_LIST_PAGE)], say=lines.append)
+        p.off(page="页")
+        self.assertEqual(clock.clicks, 0)                                # 守卫：真的当过目标、但一下都没点
+        self.assertTrue(any("被上级开关禁用（开关是灰的），未改动 摇一摇广告" in line for line in lines))
+        self.assertEqual((p.changed, p.missed), ([], []))
+
+
+class MissedLineTests(unittest.TestCase):
+    def test_lists_page_and_title(self):
+        self.assertEqual(fast.missed_line([("设置·广告服务", "个性化广告推荐")]),
+                         "没拨动的开关：1 个（设置·广告服务 · 个性化广告推荐）")
+
+    def test_a_switch_without_a_page_name_is_listed_by_its_title(self):
+        self.assertEqual(fast.missed_line([("", "广告推荐")]), "没拨动的开关：1 个（广告推荐）")
+
+    def test_the_tail_beyond_the_limit_is_folded(self):
+        missed = [(f"页{i}", f"开关{i}") for i in range(10)]
+        line = fast.missed_line(missed, limit=8)
+        self.assertTrue(line.startswith("没拨动的开关：10 个（"))
+        self.assertIn("开关7", line)
+        self.assertNotIn("开关8", line)
+        self.assertTrue(line.endswith("等 2 个）"))
+
+
+class ReportRunTests(unittest.TestCase):
+    """#788：脚本跑完的收尾把「没拨动的开关」也算进退出码。"""
+
+    def quiet(self):
+        return patch.dict("os.environ", {"AAC_EVENTS": ""})
+
+    def test_a_clean_run_prints_nothing_and_returns_zero(self):
+        p = phone_stub("S")
+        with self.quiet(), patch("builtins.print") as out:
+            self.assertEqual(fast.report_run({}, p), 0)
+        out.assert_not_called()
+
+    def test_failed_steps_alone_still_exit_one(self):
+        with self.quiet(), patch("builtins.print") as out:
+            self.assertEqual(fast.report_run({"FAILED_STEPS": ["商店"]}, phone_stub("S")), 1)
+        out.assert_called_once_with("未完成步骤：商店", flush=True)
+
+    def test_missed_switches_alone_exit_one(self):
+        p = phone_stub("S")
+        p.missed = [("页", "个性化广告推荐")]
+        with self.quiet(), patch("builtins.print") as out:
+            self.assertEqual(fast.report_run({}, p), 1)
+        out.assert_called_once_with("没拨动的开关：1 个（页 · 个性化广告推荐）", flush=True)
+
+    def test_both_inputs_print_both_lines(self):
+        p = phone_stub("S")
+        p.missed = [("页", "广告推荐")]
+        with self.quiet(), patch("builtins.print") as out:
+            self.assertEqual(fast.report_run({"FAILED_STEPS": ["商店"]}, p), 1)
+        self.assertEqual([(c.args, c.kwargs) for c in out.call_args_list],
+                         [(("未完成步骤：商店",), {"flush": True}),
+                          (("没拨动的开关：1 个（页 · 广告推荐）",), {"flush": True})])
+
+    def test_a_recipe_whose_switches_will_not_budge_ends_with_a_failing_rc(self):
+        """假设备上跑一份脚本：点不动的开关留在台账里，收尾退出码为 1。
+
+        页面一直是那两行开着——`Device` 的点击只推进假时钟，回读永远没到位。"""
+        p = fake_phone(stages=[(0.0, LIST_PAGE)])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp, "recipe.py")
+            path.write_text('p.off(page="设置·广告服务")\n', encoding="utf-8")
+            scope, _ = load_recipe(p, path)
+        self.assertEqual(p.missed, [("设置·广告服务", "个性化推荐"), ("设置·广告服务", "猜你喜欢")])
+        with patch("builtins.print"):
+            self.assertEqual(fast.report_run(scope, p), 1)
+
+    def run_script(self, page):
+        """在假设备上让 `execute()` 走一遍 `run` 分支：临时脚本 + 临时备份目录。"""
+        clock = Clock()
+        install_clock(fast, clock)
+        p = fake_phone(clock=clock, stages=[(0.0, page)])
+        out, code = io.StringIO(), 0
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp, "recipe.py")
+            path.write_text('p.off(page="设置·广告服务")\n', encoding="utf-8")
+            with patch.dict(os.environ, {"AAC_BACKUPS": tmp}), contextlib.redirect_stdout(out):
+                try:
+                    fast.execute(p, "run", [str(path)])
+                except SystemExit as e:
+                    code = e.code
+        return code, out.getvalue()
+
+    def test_the_run_branch_turns_the_ledger_into_a_failing_rc(self):
+        """收尾那一句 `if report_run(g, p): sys.exit(1)` 本身由这条守住（#788）。"""
+        code, printed = self.run_script(LIST_PAGE)
+        self.assertEqual(code, 1)
+        self.assertIn("没拨动的开关：2 个（设置·广告服务 · 个性化推荐、设置·广告服务 · 猜你喜欢）", printed)
+
+    def test_the_run_branch_stays_quiet_when_every_switch_is_closed(self):
+        code, printed = self.run_script(CLOSED_PAGE)
+        self.assertEqual(code, 0)
+        self.assertNotIn("没拨动的开关", printed)
 
 
 class ScreenGoneTests(unittest.TestCase):
