@@ -671,7 +671,7 @@ class Phone:
                     return True
                 self.dismiss() or time.sleep(0.2)
             if not quiet:
-                self.say(f"  ✗ 没找到「{text}」")
+                self.say(f"  ✗ 没找到「{text}」" + self.residual_note())
             return False
         if self.miss:                                   # 本段已经走丢：只看当前这一屏
             xy = self.find(text, exact, nav=True)
@@ -683,7 +683,7 @@ class Phone:
                 return True
             self.miss += 1
             if not quiet:
-                self.say(f"  ✗ 没找到「{text}」（快速放弃）")
+                self.say(f"  ✗ 没找到「{text}」（快速放弃）" + self.residual_note())
             return False
         for rnd in range(2 if scrolls else 1):
             for i in range(scrolls + 1):
@@ -709,7 +709,7 @@ class Phone:
                 self.top(scrolls + 2)
         self.miss += 1
         if not quiet:
-            self.say(f"  ✗ 没找到「{text}」")
+            self.say(f"  ✗ 没找到「{text}」" + self.residual_note())
         return False
 
     def in_settings_page(self):
@@ -811,10 +811,10 @@ class Phone:
         for _ in range(tries):
             seen = []
             if not self.tap(text, exact=exact, scrolls=scrolls, seen=seen):
-                raise RuntimeError(f"未找到入口「{text}」；当前页：{self.page_text()}")
+                raise RuntimeError(f"未找到入口「{text}」{self.residual_note('；')}；当前页：{self.page_text()}")
             if self.settle(seen[0], 2.0):
                 return
-        raise RuntimeError(f"点「{text}」后页面没有变化；当前页：{self.page_text()}")
+        raise RuntimeError(f"点「{text}」后页面没有变化{self.residual_note('；')}；当前页：{self.page_text()}")
 
     def go(self, text, expect, tries=3, exact=True):
         """点 text，直到 expect 出现在屏幕上（被弹窗吞掉就再点）。
@@ -828,7 +828,7 @@ class Phone:
                 if self.find(expect) or self.find(expect, edge_ok="tab"):
                     return True
                 self.dismiss() or time.sleep(0.3)
-        self.say(f"  ✗ 点「{text}」后没出现「{expect}」")
+        self.say(f"  ✗ 点「{text}」后没出现「{expect}」" + self.residual_note())
         return False
 
     def tab(self, name, maxwait=6.0):
@@ -888,6 +888,25 @@ class Phone:
         self.click(*xy)
         time.sleep(0.3)
         return label
+
+    def residual_confirm(self, root=None):
+        """屏上还挂着没被点掉的确认框时返回确认按钮的文字，没有返回 None。
+
+        查找失败时用它补一句原因：整页读不到行常常是遮罩挡着，而不是这一版没适配（#557）。
+        只读不点，弹窗留着不动。读页读不到也按「没有确认框」算：这是失败路径上的诊断，
+        它抛错会把脚本里大量 `if p.tap(...)` 的可选探测一起打断；只有断线照常冒泡。"""
+        try:
+            found = self._confirm_target(root)
+        except adb_link.DeviceLost:
+            raise
+        except Exception:
+            return None
+        return found[0] if found else None
+
+    def residual_note(self, sep="——", root=None):
+        """查找失败时挂在说明后面的那句「屏上还挂着没点掉的确认框「X」」；没有确认框时是空串。"""
+        label = self.residual_confirm(root)
+        return f"{sep}屏上还挂着没点掉的确认框「{label}」" if label else ""
 
     def _confirm_target(self, root=None):
         """屏上第一个确认类按钮的 (文字, 落点)；没有返回 None。只看不点，等弹窗与防遮罩共用它。
