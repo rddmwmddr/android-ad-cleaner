@@ -720,6 +720,58 @@ class InFrontTest(unittest.TestCase):
         self.assertIsNone(screen.active)
 
 
+class DeadChannel:
+    """调试通道断了（Shizuku 停了、无线调试被关）：发出去的每条命令都抛（#746）。"""
+
+    def exec(self, cmd, stdin=None, timeout=None):
+        raise RuntimeError("和手机的调试连接断开了")
+
+    def stop_daemon(self, name):
+        raise RuntimeError("和手机的调试连接断开了")
+
+
+class SessionCleanupTest(unittest.TestCase):
+    """#746：清理不能半途中断。通道断了时拆屏会抛，前台服务与屏幕锁仍要撤。"""
+
+    def setUp(self):
+        self.native = Recorder()
+        self.saved = (main.native, main.SESSION, bridge._bridge, screen.active, screen.start)
+        main.native, main.SESSION = self.native, main.Session()
+        bridge._bridge = DeadChannel()
+        screen.active = None
+
+    def tearDown(self):
+        main.native, main.SESSION, bridge._bridge, screen.active, screen.start = self.saved
+
+    def busy(self):
+        return [c for c in self.native.calls if c[0] == "busy"]
+
+    def live_screen(self):
+        """建屏成功的样子：给 enter/leave 一个持有中的屏，拆它时才会去碰通道。"""
+        screen.active = screen.Screen(7, "11")
+        screen.active.holders = 1
+        return screen.active
+
+    def test_a_failed_entry_still_stops_the_service_and_lock(self):
+        """建屏成功了、挂胶囊时通道断了：补救里的拆屏也会抛，保活与屏幕锁仍要撤，计数也要还回去。"""
+        def live_start(package):
+            return self.live_screen()
+
+        screen.start = live_start
+        with self.assertRaises(RuntimeError):
+            main.SESSION.enter("com.x", "去广告")
+        self.assertEqual(main.SESSION.count, 0)
+        self.assertIn(("busy", False, False), self.busy())
+
+    def test_a_failed_screen_take_down_still_stops_the_service(self):
+        """离开时拆屏抛了（通道断了）：保活与屏幕锁仍要撤，不能两样都留到进程结束。"""
+        self.live_screen()
+        main.SESSION.count, main.SESSION.background = 1, True
+        with self.assertRaises(RuntimeError):
+            main.SESSION.leave("com.x")
+        self.assertIn(("busy", False, True), self.busy())
+
+
 class WasStoppedTest(unittest.TestCase):
     """boot() 靠它在「做完了」和「已停止」之间分开：`_work()` 是正常返回的，只有 Job 上这个标记认得出来。"""
 
