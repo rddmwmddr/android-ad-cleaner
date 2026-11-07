@@ -8,6 +8,7 @@ from PyInstaller.utils.hooks import collect_all
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 sys.path.insert(0, os.path.join(ROOT, "gui"))
 from bundle_data import bundle_data
+import dotnet_config
 datas = bundle_data(ROOT)
 binaries, hidden = [], ["uiautomator2", "adbutils", "PIL"]
 for pkg in ("uiautomator2", "adbutils", "webview"):
@@ -20,3 +21,5 @@ icon = os.path.join(ROOT, "gui", "icon.ico")
 gui = EXE(pyz, a.scripts, [], exclude_binaries=True, name="AndroidAdCleaner", console=False, icon=icon)
 cli = EXE(pyz, a.scripts, [], exclude_binaries=True, name="aac-cli", console=True, icon=icon)
 coll = COLLECT(gui, cli, a.binaries, a.datas, name="AndroidAdCleaner")
+# COLLECT 之后写：Inno Setup 从 dist\AndroidAdCleaner\* 递归收文件，便携 zip 也打这一层
+dotnet_config.write(os.path.join(DISTPATH, "AndroidAdCleaner"))

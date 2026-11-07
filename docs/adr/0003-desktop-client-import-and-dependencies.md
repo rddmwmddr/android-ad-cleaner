@@ -23,3 +23,12 @@
 - 没有 Windows、没有打包环境、没有真机：`--cli` 子进程、`_MEIPASS` 布局、`--smoke-gui` 未在打包件上验证。依据是 `cmd_for()` / `cli_main()` 逐字未改、`child_env()` 只多收一个备份根（值与原模块级 `BACKUPS` 相同），加上 `python -m unittest discover -s tests` 533 项全过（同一台机器上 `git archive origin/main` 的干净副本是 520 项）。
 - 验收证据两处：`tests/test_gui_import.py` 在子进程里用临时 `HOME`/`APPDATA` 跑真正的 `import gui.app`，断言不建目录、不改 `sys.path`、没有任何 `__file__` 落在 `tool/` 下的模块被加载（改前必红）；`tests/test_backups.py` 把改动前 `run.py` 与 `gui/app.py` 的两份实现逐字抄成基线，喂 7 组目录树逐项对拍，并单独守卫三条目标分支：`-gui` 优先、`os.listdir` 真的抛 `FileNotFoundError` 被接住、glob 元字符按字面处理。
 - 2026-11-02 起入口是 `gui/launch.py`：`python -m gui.app`、`python gui/app.py`、`python gui/launch.py` 与打包件四种启动方式都转发到同一个 `main()`，`tests/test_packaging_entry.py` 在子进程里各跑一遍 `--cli`（删掉转发、破坏无父包分支都会红）。Windows 打包验证不再依赖人手动点：`gh workflow run build-windows.yml --ref <分支>` 会在改过的入口上重打包，并对打包件跑 `--cli` 与 `--smoke-gui` 冒烟。Mac 打包本机没有环境，仍只有静态守卫。
+
+## 增补：随包 `<exe>.config` 与「被判成远程来源」的归因（#597）
+
+部分 Windows 机器上，包内没有 `Zone.Identifier` 的托管 dll 也会被 .NET Framework 按「网络位置」拒载（`NotSupportedException`，`HResult 0x80131515`），`import clr` 起不来，报的是与 MOTW 同一句 `Failed to resolve Python.Runtime.Loader.Initialize`。
+
+- **随包自带 `<exe>.config` 打开 `loadFromRemoteSources`**（采纳）vs **让用户照提示手工建这份文件**（否）。包内 dll 全部随包分发，没有任何从外部路径加载代码的通路，放宽这一条不改变来源可信度；手工建文件则把每次启动失败变成一次手工操作。代价是这台机器上「按路径加载」的检查对整个过程关掉，这是有意接受的安全权衡。`aac-cli.exe` 同样要带——它是双方共用的另一个入口。
+- **归因在 `startup_failed()` 的 `error` 原文上做子串匹配**（采纳）vs **起子进程跑 PowerShell 探一次**（否）。失败点正是 `import clr`，此时 pythonnet 的 `System` 模块还不存在，进程内拿托管 dll 试加载做不到（#609 的探测方案因此不可行）；另起进程能测，但测的是另一份加载上下文。代价是库把这句话改写后要同步维护那两个子串。
+- **`--smoke-gui` 的 `startup:` 行加 `load=` 字段**（采纳）。取值 `unresolved` / `no`，不复用 MOTW 的三态命名；打包件起不来时用户能贴的只有这一行。
+- 判定顺序固定为：缺 WebView2 → MOTW → 原文拒载 → 注册表读不到 → 兜底。带 MOTW 的 dll 与被判成远程来源的 dll 报同一句错，前者的出路是解锁文件，所以 MOTW 必须先判。

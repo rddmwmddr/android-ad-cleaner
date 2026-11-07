@@ -198,5 +198,37 @@ class CliProgramDispatchTests(unittest.TestCase):
         webview.create_window.assert_called_once()
 
 
+class SmokeStartupLineTests(unittest.TestCase):
+    """#597：启动异常时 `--smoke-gui` 打的那一行要带上归因，远程诊断才分得清是哪一类失败。
+
+    打包件起不来时用户只能贴这一行；归因漏传给 `describe()` 时这里会红。
+    """
+
+    RESOLVE_ERROR = ("RuntimeError: Failed to resolve Python.Runtime.Loader.Initialize from "
+                     r"D:\AndroidAdCleaner\_internal\pythonnet\runtime\Python.Runtime.dll")
+
+    def smoke_line(self, error):
+        webview = types.SimpleNamespace(create_window=Mock(), start=Mock(side_effect=error))
+        out = io.StringIO()
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.dict(sys.modules, {"webview": webview}), \
+             patch.object(sys, "argv", ["launch.py", "--smoke-gui"]), \
+             patch.object(app, "IS_WIN", True), \
+             patch.object(app, "data_dir", return_value=directory), \
+             patch.object(app, "find_adb", return_value=None), \
+             redirect_stdout(out):
+            with self.assertRaises(RuntimeError):
+                launch.main()
+        line = out.getvalue()
+        self.assertIn("startup: ", line)
+        return line
+
+    def test_line_names_the_load_rejection(self):
+        self.assertIn("load=unresolved", self.smoke_line(RuntimeError(self.RESOLVE_ERROR)))
+
+    def test_line_stays_off_the_load_branch_for_other_errors(self):
+        self.assertIn("load=no", self.smoke_line(RuntimeError("WebView2 runtime not found")))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1620,9 +1620,11 @@ def version_key(text):
 
 
 def startup_advice(state, blocked, error):
-    """窗口起不来时给用户看的文案，以及要不要跳微软官网（#228）。
+    """窗口起不来时给用户看的文案，以及要不要跳微软官网（#228、#597）。
 
     以前一律说「缺少 WebView2」，portable 包解压后文件带 MOTW 的现场被指到装不上的东西上。
+    带 MOTW 的 dll 与被判成「远程来源」的 dll 报的是同一句 `Failed to resolve`，所以先看
+    `blocked` 再认原文——前者的出路是解锁文件，不是补 config。
     """
     if state == "missing":
         return ("这台电脑缺少微软 Edge WebView2 运行时，界面没法显示。\n\n"
@@ -1635,6 +1637,12 @@ def startup_advice(state, blocked, error):
                 "办法二：zip 已经删了，就在解压出来的文件夹里按住 Shift 点右键 →"
                 "「在此处打开 PowerShell 窗口」，粘贴下面这行后回车：\n"
                 "Get-ChildItem . -Recurse -File | Unblock-File\n\n"
+                f"（{error}）", False)
+    if winpreflight.load_rejected(error):
+        return ("这台电脑的 .NET Framework 把程序自带的 dll 判成了「远程来源」，加载时被拦住了。\n\n"
+                "办法一：确认程序文件夹里 AndroidAdCleaner.exe 旁边有 AndroidAdCleaner.exe.config，"
+                "别把它删掉或改名。\n"
+                "办法二：没有这个文件，从官方 Release 重新下载最新版，完整解压后再打开。\n\n"
                 f"（{error}）", False)
     if state == "unknown":
         return ("程序启动失败。这台电脑的 WebView2 状态没能确认（多半是注册表读取受限），"

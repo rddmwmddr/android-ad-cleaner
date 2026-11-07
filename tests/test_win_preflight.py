@@ -1,4 +1,5 @@
-"""Windows 启动失败归因：缺 WebView2 / 程序文件带 MOTW / 其他（#228）。
+"""Windows 启动失败归因：缺 WebView2 / 程序文件带 MOTW / 本地 dll 被 .NET 判成远程来源 / 其他
+（#228、#597）。
 
 注册表读取与 ADS 探测都从外面注入，所以这套判定在 macOS 上也能跑。
 """
@@ -8,6 +9,12 @@ import unittest
 from pathlib import Path
 
 from gui import winpreflight
+
+# 报告者给的原文（#597）：clr_loader 按路径加载 Python.Runtime.dll 时被 .NET Framework 拒了。
+RESOLVE_ERROR = (
+    "RuntimeError: Failed to resolve Python.Runtime.Loader.Initialize from "
+    r"D:\AndroidAdCleaner\_internal\pythonnet\runtime\Python.Runtime.dll"
+)
 
 # 三处实际存在的注册表位置，按报告者给出的路径写死，不从被测代码里取。
 KEY_64 = r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
@@ -115,19 +122,24 @@ class DescribeTests(unittest.TestCase):
     def test_line_names_both_facts(self):
         line = winpreflight.describe(str(self.root), read=fake_read({("HKLM", KEY_64): VERSION}),
                                      detect=lambda p: True)
-        self.assertEqual(line, "webview2=installed motw=yes")
+        self.assertEqual(line, "webview2=installed motw=yes load=no")
 
     def test_line_says_no_when_nothing_is_wrong(self):
         line = winpreflight.describe(str(self.root), read=fake_read({}), detect=lambda p: False)
-        self.assertEqual(line, "webview2=missing motw=no")
+        self.assertEqual(line, "webview2=missing motw=no load=no")
+
+    def test_line_names_the_load_rejection(self):
+        line = winpreflight.describe(str(self.root), read=fake_read({("HKLM", KEY_64): VERSION}),
+                                     detect=lambda p: False, error=RuntimeError(RESOLVE_ERROR))
+        self.assertEqual(line, "webview2=installed motw=no load=unresolved")
 
 
 class StartupAdviceTests(unittest.TestCase):
     """窗口起不来时用户看到的那段话，以及要不要跳微软官网。"""
 
-    def advice(self, state, blocked=()):
+    def advice(self, state, blocked=(), error=None):
         from gui import app
-        return app.startup_advice(state, blocked, RuntimeError("loading Python.Runtime.dll failed"))
+        return app.startup_advice(state, blocked, error or RuntimeError("loading Python.Runtime.dll failed"))
 
     def test_missing_runtime_points_at_the_bootstrap_installer(self):
         text, open_site = self.advice("missing")
@@ -154,6 +166,30 @@ class StartupAdviceTests(unittest.TestCase):
         self.assertIn("issues/new", text)
         self.assertFalse(open_site)
 
+    def test_load_rejection_points_at_the_bundled_config(self):
+        """#597：本地 dll 被 .NET 判成远程来源时，别再让用户去提 issue。"""
+        text, open_site = self.advice("installed", error=RuntimeError(RESOLVE_ERROR))
+        self.assertIn("远程来源", text)
+        self.assertIn("AndroidAdCleaner.exe.config", text)
+        self.assertNotIn("issues/new", text)
+        self.assertNotIn("缺少微软 Edge WebView2 运行时", text)
+        self.assertFalse(open_site)
+
+    def test_a_partial_error_text_does_not_land_on_the_load_branch(self):
+        """两个子串缺一个就不算这一类，免得把别的 clr 故障也指到 config 上。"""
+        for error in ("Failed to resolve WebView2 from somewhere",
+                      "Python.Runtime.Loader.Initialize is missing"):
+            with self.subTest(error=error):
+                text, _ = self.advice("installed", error=RuntimeError(error))
+                self.assertIn("issues/new", text)
+                self.assertNotIn("AndroidAdCleaner.exe.config", text)
+
+    def test_motw_wins_over_the_load_branch_when_both_apply(self):
+        """带 MOTW 的 dll 也会报同一句 resolve 失败；那时该给的是解锁步骤，不是 config。"""
+        text, _ = self.advice("installed", blocked=("x",), error=RuntimeError(RESOLVE_ERROR))
+        self.assertIn("解除锁定", text)
+        self.assertNotIn("AndroidAdCleaner.exe.config", text)
+
 
 class StartupFailedWiringTests(unittest.TestCase):
     """`startup_failed` 把归因喂给弹窗、并且只在缺运行时那一路开官网。"""
@@ -168,10 +204,10 @@ class StartupFailedWiringTests(unittest.TestCase):
         def blocked_files(self, root):
             return tuple(self.blocked)
 
-    def run_with(self, state, blocked=()):
+    def run_with(self, state, blocked=(), error=None):
         from gui import app
         seen, opened = [], []
-        app.startup_failed(RuntimeError("boom"), preflight=self.Verdict(state, blocked),
+        app.startup_failed(error or RuntimeError("boom"), preflight=self.Verdict(state, blocked),
                            notify=seen.append, open_url=opened.append)
         return seen, opened
 
@@ -185,6 +221,12 @@ class StartupFailedWiringTests(unittest.TestCase):
         seen, opened = self.run_with("missing")
         self.assertIn("Evergreen Bootstrapper", seen[0])
         self.assertEqual(opened, ["https://developer.microsoft.com/microsoft-edge/webview2/"])
+
+    def test_load_rejection_reaches_the_dialog(self):
+        seen, opened = self.run_with("installed", error=RuntimeError(RESOLVE_ERROR))
+        self.assertEqual(len(seen), 1)
+        self.assertIn("AndroidAdCleaner.exe.config", seen[0])
+        self.assertEqual(opened, [])
 
 
 if __name__ == "__main__":

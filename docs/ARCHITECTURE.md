@@ -54,7 +54,7 @@
 | `gen_brand_taps.py` | 从 `docs/手机版教程/brand-taps.json` 渲染连点表 |
 | `gen_site_css.py` | 把仓库根 `site.css` 渲染进官网两页的共享样式块 |
 
-客户端侧：`gui/app.py` 是主体（`ClientData` / `AdbDownloader` / `Reporter` / `Dispatcher` / `Api`），`gui/launch.py` 是入口与打包冒烟，`gui/web/` 是桌面版的界面，`gui/winpreflight.py` 归因 Windows 启动失败。
+客户端侧：`gui/app.py` 是主体（`ClientData` / `AdbDownloader` / `Reporter` / `Dispatcher` / `Api`），`gui/launch.py` 是入口与打包冒烟，`gui/web/` 是桌面版的界面，`gui/winpreflight.py` 归因 Windows 启动失败，`gui/dotnet_config.py` 在打包时写随包的 `<exe>.config`。
 
 ## 四、一次执行的路径
 

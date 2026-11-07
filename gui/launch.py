@@ -115,9 +115,9 @@ def main():
     if app.IS_WIN:
         try:
             webview.start(gui="edgechromium", **options)
-        except Exception as e:      # 启动失败：缺 WebView2、程序文件被 MOTW 拦、其他（#228）
+        except Exception as e:      # 启动失败：缺 WebView2、程序文件被 MOTW 拦、dll 被判成远程来源、其他
             if smoke:
-                print(f"startup: {app.winpreflight.describe(app.BASE)}", flush=True)
+                print(f"startup: {app.winpreflight.describe(app.BASE, error=e)}", flush=True)
                 raise
             app.startup_failed(e)
     else:
