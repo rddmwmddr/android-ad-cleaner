@@ -85,7 +85,9 @@ object Native {
     /**
      * 执行期间保持亮屏（#728）。手机版多半没插电，引擎设的「插电常亮」不起作用，手机放着就锁屏，后面几段全断。
      * 悬浮胶囊带 FLAG_KEEP_SCREEN_ON；没给悬浮窗权限、或本 App 在前台收起胶囊时，靠这把屏幕锁。
-     * 带一小时上限，进程被杀时系统也会收回。用户自己按电源键息屏不拦，引擎照旧等解锁。
+     * 不带超时（#746）：慢机型整轮可能超过一小时，到时静默丢锁就又回到锁屏；正常结束由 busy(false) 撤，
+     * 进程真死了系统本来就会收走它的屏幕锁。也没选「定时续期」：那要多一个常驻定时器、还要跟 busy(false)
+     * 一起取消，换来的效果和不带超时一样。用户自己按电源键息屏不拦，引擎照旧等解锁。
      */
     @Suppress("DEPRECATION")   // 后台服务没有窗口可挂 FLAG_KEEP_SCREEN_ON，只能用屏幕锁
     private fun keepAwake(on: Boolean) {
@@ -95,7 +97,7 @@ object Native {
         val pm = app.getSystemService(PowerManager::class.java)
         awake = pm.newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK or PowerManager.ON_AFTER_RELEASE, "aac:run").apply {
             setReferenceCounted(false)
-            acquire(60 * 60 * 1000L)
+            acquire()
         }
     }
 

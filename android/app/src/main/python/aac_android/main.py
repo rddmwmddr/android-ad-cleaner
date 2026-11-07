@@ -77,9 +77,13 @@ class Session:
                 # 半路失败不能把计数留在 1：之后每次执行都会走 count > 1 的早退分支，保活与胶囊就再也不开了
                 self.count -= 1
                 self.background = False
+                # 拆屏要碰通道，断线时它自己会抛：保活与屏幕锁仍要撤（#746）
                 try:
                     visible(package, False)
                     screen.release()
+                except Exception:
+                    pass
+                try:
                     native.busy(False, False)
                 except Exception:
                     pass
@@ -92,10 +96,13 @@ class Session:
             self.count -= 1
             if self.count > 0:
                 return False
-            visible(package, False)
-            if self.background:
-                screen.release()
-            native.busy(False, self.background)
+            try:
+                visible(package, False)
+                if self.background:
+                    screen.release()
+            finally:
+                # 拆屏要碰通道，断线时它会抛：保活与屏幕锁仍要撤，否则断线后两样都留着（#746）
+                native.busy(False, self.background)
             return True
 
 
