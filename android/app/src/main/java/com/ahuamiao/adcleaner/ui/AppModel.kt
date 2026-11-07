@@ -359,7 +359,7 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
         }
         if (o.has("error")) {
             // 连点两下：第二次会撞上「已有任务在运行」，那时要跟上它，别留在结果页
-            if (runCatching { poll(0).running }.getOrDefault(false)) return follow()
+            if (runCatching { poll(0).running }.getOrDefault(false)) return@flow follow()
             notice = Notice("没法重试", o.optString("error"))
             return@flow
         }
