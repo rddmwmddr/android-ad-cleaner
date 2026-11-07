@@ -20,6 +20,17 @@ VERSION = "156.0.3414.50"
 DLLS = (("pythonnet", "runtime", "Python.Runtime.dll"),
         ("clr_loader", "ffi", "dlls", "amd64", "ClrLoader.dll"))
 
+WEBVIEW2_URL = "https://developer.microsoft.com/microsoft-edge/webview2/"
+
+# 五路归因各来一次：(webview2 状态, 带 MOTW 的 dll, 错误原文)
+ATTRIBUTIONS = (
+    ("missing", (), None),
+    ("installed", ("x",), None),
+    ("installed", (), RESOLVE_ERROR),
+    ("unknown", (), None),
+    ("installed", (), None),
+)
+
 
 def fake_read(values):
     """values: {(hive, 完整键路径): pv 或异常}；不在表里的键一律当作键不存在。"""
@@ -132,10 +143,10 @@ class DescribeTests(unittest.TestCase):
 class StartupAdviceTests(unittest.TestCase):
     """窗口起不来时用户看到的那段话，以及要不要跳微软官网。"""
 
-    def advice(self, state, blocked=(), error=None):
+    def advice(self, state, blocked=(), error=None, copied=None):
         from gui import app
         error = error or RuntimeError("loading Python.Runtime.dll failed")
-        return app.startup_advice(state, blocked, error, winpreflight.load_rejected(error))
+        return app.startup_advice(state, blocked, error, winpreflight.load_rejected(error), copied)
 
     def test_missing_runtime_points_at_the_bootstrap_installer(self):
         text, open_site = self.advice("missing")
@@ -187,8 +198,37 @@ class StartupAdviceTests(unittest.TestCase):
         self.assertNotIn("AndroidAdCleaner.exe.config", text)
 
 
+class CopyNoteTests(unittest.TestCase):
+    """#811：弹窗之前先替用户复制好；复制不进去时退回按 Ctrl+C。"""
+
+    def advice(self, state, blocked, error, copied):
+        from gui import app
+        error = RuntimeError(error or "loading Python.Runtime.dll failed")
+        return app.startup_advice(state, blocked, error, winpreflight.load_rejected(error), copied)
+
+    def test_every_attribution_says_the_text_is_already_copied(self):
+        for state, blocked, error in ATTRIBUTIONS:
+            with self.subTest(state=state, blocked=blocked, error=error):
+                text, _ = self.advice(state, blocked, error, copied=True)
+                self.assertIn("已复制", text)
+                self.assertIn("粘贴", text)
+                self.assertNotIn("Ctrl+C", text)
+
+    def test_every_attribution_falls_back_to_ctrl_c_when_the_copy_failed(self):
+        for state, blocked, error in ATTRIBUTIONS:
+            with self.subTest(state=state, blocked=blocked, error=error):
+                text, _ = self.advice(state, blocked, error, copied=False)
+                self.assertIn("Ctrl+C", text)
+                self.assertNotIn("已复制", text)
+
+    def test_without_a_copy_attempt_the_text_is_left_alone(self):
+        text, _ = self.advice("installed", (), None, copied=None)
+        self.assertNotIn("Ctrl+C", text)
+        self.assertNotIn("已复制", text)
+
+
 class StartupFailedWiringTests(unittest.TestCase):
-    """`startup_failed` 把归因喂给弹窗、并且只在缺运行时那一路开官网。"""
+    """`startup_failed` 先复制、后弹窗，并且只在缺运行时那一路开官网。"""
 
     class Verdict:
         def __init__(self, state, blocked=()):
@@ -203,29 +243,76 @@ class StartupFailedWiringTests(unittest.TestCase):
         def load_rejected(self, error):
             return winpreflight.load_rejected(error)
 
-    def run_with(self, state, blocked=(), error=None):
+    class Clipboard:
+        """假剪贴板：记下写进去的内容；error 非空时模拟被别的程序占着。"""
+
+        def __init__(self, log, error=None):
+            self.log, self.error = log, error
+
+        def __call__(self, text):
+            self.log.append(("copy", text))
+            if self.error is not None:
+                raise self.error
+
+    def run_with(self, state, blocked=(), error=None, clipboard_error=None):
         from gui import app
-        seen, opened = [], []
-        app.startup_failed(error or RuntimeError("boom"), preflight=self.Verdict(state, blocked),
-                           notify=seen.append, open_url=opened.append)
-        return seen, opened
+        log, opened = [], []
+        error = RuntimeError(error) if error else RuntimeError("boom")
+        app.startup_failed(error, preflight=self.Verdict(state, blocked),
+                           notify=lambda text: log.append(("notify", text)),
+                           open_url=opened.append, clipboard=self.Clipboard(log, clipboard_error))
+        shown = [text for kind, text in log if kind == "notify"]
+        return log, shown, opened
 
     def test_blocked_verdict_reaches_the_dialog_without_opening_the_site(self):
-        seen, opened = self.run_with("installed", blocked=("x",))
-        self.assertEqual(len(seen), 1)
-        self.assertIn("解除锁定", seen[0])
+        _, shown, opened = self.run_with("installed", blocked=("x",))
+        self.assertEqual(len(shown), 1)
+        self.assertIn("解除锁定", shown[0])
         self.assertEqual(opened, [])
 
     def test_missing_verdict_opens_the_webview2_page(self):
-        seen, opened = self.run_with("missing")
-        self.assertIn("Evergreen Bootstrapper", seen[0])
-        self.assertEqual(opened, ["https://developer.microsoft.com/microsoft-edge/webview2/"])
+        _, shown, opened = self.run_with("missing")
+        self.assertIn("Evergreen Bootstrapper", shown[0])
+        self.assertEqual(opened, [WEBVIEW2_URL])
 
     def test_load_rejection_reaches_the_dialog(self):
-        seen, opened = self.run_with("installed", error=RuntimeError(RESOLVE_ERROR))
-        self.assertEqual(len(seen), 1)
-        self.assertIn("AndroidAdCleaner.exe.config", seen[0])
+        _, shown, opened = self.run_with("installed", error=RESOLVE_ERROR)
+        self.assertEqual(len(shown), 1)
+        self.assertIn("AndroidAdCleaner.exe.config", shown[0])
         self.assertEqual(opened, [])
+
+    def test_the_dialog_text_is_on_the_clipboard_before_it_appears(self):
+        log, shown, _ = self.run_with("installed", blocked=("x",))
+        self.assertEqual([kind for kind, _ in log], ["copy", "notify"])
+        self.assertEqual(log[0][1], shown[0])
+        self.assertIn("已复制", shown[0])
+
+    def test_all_five_verdicts_copy_exactly_what_the_dialog_shows(self):
+        for state, blocked, error in ATTRIBUTIONS:
+            with self.subTest(state=state, blocked=blocked, error=error):
+                log, shown, _ = self.run_with(state, blocked, error)
+                self.assertEqual([kind for kind, _ in log], ["copy", "notify"])
+                self.assertEqual(log[0][1], shown[0])
+
+    def test_a_busy_clipboard_still_shows_the_dialog_with_the_ctrl_c_hint(self):
+        log, shown, _ = self.run_with("installed", blocked=("x",),
+                                      clipboard_error=OSError("剪贴板被占用"))
+        self.assertEqual(len(shown), 1)
+        self.assertIn("Ctrl+C", shown[0])
+        self.assertIn("Unblock-File", shown[0])
+
+    def test_a_busy_clipboard_still_opens_the_site_for_a_missing_runtime(self):
+        _, shown, opened = self.run_with("missing", clipboard_error=OSError("剪贴板被占用"))
+        self.assertIn("Evergreen Bootstrapper", shown[0])
+        self.assertEqual(opened, [WEBVIEW2_URL])
+
+    def test_a_clipboard_that_fails_another_way_does_not_swallow_the_dialog(self):
+        """收容集合是整个 Exception：窗口版没有控制台，弹窗是用户唯一看得到的东西。"""
+        _, shown, _ = self.run_with("installed", blocked=("x",),
+                                    clipboard_error=UnicodeEncodeError(
+                                        "utf-16-le", "\ud800", 0, 1, "孤立代理项"))
+        self.assertEqual(len(shown), 1)
+        self.assertIn("Ctrl+C", shown[0])
 
 
 if __name__ == "__main__":
