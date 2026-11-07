@@ -9,6 +9,7 @@
 同页保留项只在那一页、那一次 off() 里成立，这里不产出跨页的禁词表。
 
   python3 tool/vocab.py > docs/清单/词库.md
+  python3 tool/vocab.py gaps <目录名>            查漏：同家族别的机型关过、这份脚本没写的词条
 """
 import ast
 import glob
@@ -442,10 +443,65 @@ def render(recipes_dir):
     return "\n".join(lines) + "\n"
 
 
+def gaps(recipes_dir, folder):
+    """查漏：同家族别的机型关过、这份脚本没写的词条，按分组列出。
+
+    `folder` 是 recipes/ 下的目录名（`<品牌>-<型号>`）。只比要关的词条，按 key_of() 归一化后比对：
+    同页保留项和「要开」的保护类开关不在这台机上独立成立，同族叫法也可能整组不同。
+    这是写脚本之后的自查清单，不是缺陷报告。"""
+    if not os.path.isdir(os.path.join(recipes_dir, folder)):
+        raise FileNotFoundError(f"recipes/ 下没有 {folder} 这个目录")
+    family = FAMILY.get(folder.split("-", 1)[0].lower())
+    if not family:
+        raise ValueError(f"认不出 {folder} 的品牌：目录名要写成 <品牌>-<型号>")
+    words = scan(recipes_dir).words
+    mine = {key_of(word.text) for word in words if word.script.startswith(folder + "/")}
+    missing = [word for word in words
+               if word.family == family and word.kind == OFF
+               and not word.script.startswith(folder + "/") and key_of(word.text) not in mine]
+    label = LABEL.get(family, family)
+    lines = [f"# 查漏：{folder}", "",
+             f"同家族（{label}）别的机型关过、这份脚本没写的词条。这是写脚本之后的自查清单，不是缺陷报告："
+             "同族的词在这台机上可能换了叫法、对应 App 没装，或者有意不关。", ""]
+    if not missing:
+        return "\n".join(lines + ["没有差异：同家族别的机型关过的词条，这份脚本都写了。", ""])
+    by_group = defaultdict(list)
+    for word in missing:
+        by_group[word.group or "未归类"].append(word)
+    order = [g for g in ENTRIES.get(family, {}) if g in by_group]
+    order += sorted(set(by_group) - set(order))
+    lines += [f"共 {len({key_of(word.text) for word in missing})} 条，按分组列：", ""]
+    for group in order:
+        merged = defaultdict(list)
+        for word in by_group[group]:
+            merged[key_of(word.text)].append(word)
+        lines += [f"## {group}", ""]
+        for key in sorted(merged, key=lambda k: (-len({w.model for w in merged[k]}), k)):
+            same = merged[key]
+            sources = "、".join(f"`{word.source}`（{word.model} · {word.page or '没写页面'}）" for word in same)
+            lines.append(f"- {_spelled(same)}：{sources}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _recipes_dir():
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "recipes")
+
+
 if __name__ == "__main__":
     for _stream in (sys.stdout, sys.stderr):
         try:
             _stream.reconfigure(encoding="utf-8", errors="replace")
         except Exception:
             pass
-    sys.stdout.write(render(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "recipes")))
+    if len(sys.argv) == 1:
+        sys.stdout.write(render(_recipes_dir()))
+    elif len(sys.argv) == 3 and sys.argv[1] == "gaps":
+        try:
+            sys.stdout.write(gaps(_recipes_dir(), sys.argv[2]))
+        except (FileNotFoundError, ValueError) as error:
+            print(error, file=sys.stderr)
+            raise SystemExit(1)
+    else:
+        print("用法：python3 tool/vocab.py [gaps <目录名>]", file=sys.stderr)
+        raise SystemExit(1)
