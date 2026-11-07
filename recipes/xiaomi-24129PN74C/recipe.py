@@ -172,13 +172,10 @@ HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "�
 @step("系统广告")
 def _():
     # 本机「隐私与安全」是权限中心，没有「更多安全设置」。用设置搜索直达「广告服务」。
-    if p.setting("广告服务"):
-        close_named(["个性化广告推荐"], "系统·广告服务")
-        p.back()
-        return
-    # 搜索不可用时用深链兜底。
-    p.d.shell("am start -f 0x10008000 -n com.android.settings/.ad.AdServiceSettings")
-    time.sleep(1.5)
+    if not p.setting("广告服务"):
+        # 搜索不可用时用深链兜底。
+        p.d.shell("am start -f 0x10008000 -n com.android.settings/.ad.AdServiceSettings")
+        time.sleep(1.5)
     close_named(["个性化广告推荐"], "系统·广告服务")
     p.back()
 

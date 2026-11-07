@@ -73,8 +73,9 @@ def _():
     except Exception:
         pass
     # 2. 系统广告（系统工具广告）
-    if p.setting("系统广告"):
-        p.off(only=["系统工具广告"], page="系统·系统工具广告")
+    if not p.setting("系统广告"):
+        raise RuntimeError("没搜到「系统广告」")
+    p.off(only=["系统工具广告"], page="系统·系统工具广告")
 
 
 @step("应用商店")

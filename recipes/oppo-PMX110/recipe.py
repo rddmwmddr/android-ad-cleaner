@@ -250,12 +250,12 @@ def more_menu():
 def ad_id_page():
     """到「设备标识与广告」页：先用设置搜索（ColorOS 能直接打开搜索页，#650，实测 4 秒），
     搜不到再从设置首页一层层找。"""
-    if p.setting("广告跟踪", "限制广告跟踪", path="隐私与安全 > 隐私 > 设备标识与广告"):
-        page("设备标识与广告")
+    if not p.setting("广告跟踪", "限制广告跟踪", path="隐私与安全 > 隐私 > 设备标识与广告"):
+        system_settings()
+        row("隐私与安全", package="com.oplus.securitypermission")
+        row("设备标识与广告")
         return
-    system_settings()
-    row("隐私与安全", package="com.oplus.securitypermission")
-    row("设备标识与广告")
+    page("设备标识与广告")
 
 
 def _labelled(text, name):
