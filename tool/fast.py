@@ -200,6 +200,8 @@ class Phone:
                                f"{accessibility_summary(serial)}\n{UI_RECOVERY}\n"
                                f"原始异常：{type(e).__name__}: {e}") from e
         except u2.exceptions.UiAutomationError as e:
+            if "后台屏" in str(e):      # 屏已经没了不是读屏服务坏了：别把用户指去关别的客户端（#674）
+                raise RuntimeError(f"后台执行用的那块屏已经关了，本次未点击开关。请重试一次。\n原始异常：{type(e).__name__}: {e}") from e
             raise RuntimeError("手机读屏服务（UiAutomation）启动失败，本次未点击开关。"
                                f"\n{accessibility_summary(serial)}\n{UI_RECOVERY}\n"
                                f"原始异常：{type(e).__name__}: {e}") from e

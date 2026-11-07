@@ -358,8 +358,18 @@ class BackgroundScreenTest(unittest.TestCase):
             self.assertEqual(dev.dump_hierarchy(), page)
         self.assertEqual(set(fake.displays), {7})
 
+    def test_main_screen_still_reads_display_zero(self):
+        """#674：没有后台屏时读屏照旧问主屏 0。"""
+        page = '<hierarchy><node display-id="0" text="主屏" /></hierarchy>'
+        fake = _Reader((page, 0))
+        screen.active = None
+        with _using(fake):
+            dev = u2.Device()
+            self.assertEqual(dev.dump_hierarchy(), page)
+        self.assertEqual(set(fake.displays), {0})
+
     def test_reads_stop_when_the_screen_is_gone(self):
-        """#662：屏被判没了之后读屏不再问那块显示，直接报屏已关闭，免得每个等待点各自重试。"""
+        """#674：屏被判没了之后读屏不再问那块显示，直接报屏已关闭，免得每个等待点各自重试。"""
         fake = _Reader()
         with _using(fake):
             dev = u2.Device()           # 连上先读一次屏
