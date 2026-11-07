@@ -43,7 +43,7 @@ class RestoreExclusionTests(unittest.TestCase):
         self.assertIn("还没做完", self.ran[0])
 
     def test_restore_refuses_instead_of_queueing_behind_a_ui_check(self):
-        """#662：读屏检查持锁最长 75 秒，还原不能把界面线程按在那里等，要立刻回一句。"""
+        """#675：读屏检查持锁最长 75 秒，还原不能把界面线程按在那里等，要立刻回一句。"""
         holding, release = threading.Event(), threading.Event()
 
         def hold():
@@ -58,14 +58,21 @@ class RestoreExclusionTests(unittest.TestCase):
         w = threading.Thread(target=lambda: out.append(self.api.restore("test", "quickapp")))
         w.start()
         try:
-            w.join(0.4)
+            w.join(1.0)
             self.assertFalse(w.is_alive(), "锁在别人手里时要立刻回一句")
         finally:
             release.set()
             h.join(5)
             w.join(5)
-        self.assertIn("读屏", out[0])
+        self.assertEqual(out[0], "正在检查读屏连接，等它结束后再还原")
         self.assertEqual(self.ran, [], "都没占到位置，不该碰手机")
+
+    def test_ui_check_is_refused_while_a_restore_is_going(self):
+        """#675：还原正在点手机时不能去跑读屏检查，两边会抢同一块屏。"""
+        self.api._run = lambda *a, **k: self.ran.append(a) or ("", "", 0)
+        self.api.dispatcher.side = "还原"
+        self.assertIn("还原", self.api.ui_check("test")["error"])
+        self.assertEqual(self.ran, [], "不该起检查进程")
 
     def test_slot_is_released_even_when_restore_fails(self):
         def boom(serial, what):

@@ -1158,6 +1158,8 @@ class Api:
         with self.dispatcher.exclusive():
             if self.dispatcher.busy():
                 return {"error": "任务正在执行，请结束后再检查读屏连接"}
+            if self.dispatcher.side:      # 还原正在点手机：检查读屏会和它抢同一块屏（#675）
+                return {"error": f"「{self.dispatcher.side}」正在做，结束后再检查读屏连接"}
             try:
                 # 直接启动读屏进程，超时时终止它；不经额外父进程留下仍在连接的子任务。
                 out, err, rc = self._run("fast.py", "-s", serial, "check", timeout=75)
