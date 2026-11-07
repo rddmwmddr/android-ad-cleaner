@@ -4,14 +4,16 @@
 键和 entries.py 同一个。入口怎么进看入口速查，这里只装它没有的那层：开关词条、同页保留项、出处。
 机型脚本是唯一来源，不手写词；社区线索在手写的 docs/清单/词条线索.md，要变成词条必须先实测并落进机型脚本。
 
-只解析 `p.off()` 的 only= / keep=，只认字面量列表和模块级列表常量。循环变量、运行时算的记为未解析，
-逐条列名，不静默丢弃。同页保留项只在那一页、那一次 off() 里成立，这里不产出跨页的禁词表。
+解析 `p.off()` 的 only= / keep= 和 `close_named()` 的第一个参数，认字面量和模块级常量（列表、元组、字典取值）。
+循环变量、运行时算的记为未解析，逐条列名，不静默丢弃。模块级字典里的说明文字单列，不算词条。
+同页保留项只在那一页、那一次 off() 里成立，这里不产出跨页的禁词表。
 
   python3 tool/vocab.py > docs/清单/词库.md
 """
 import ast
 import glob
 import os
+import re
 import sys
 import unicodedata
 from collections import Counter, defaultdict
@@ -40,6 +42,8 @@ PAGES = {
     ("oppo", "小布建议"): "小布建议",
     ("oppo", "负一屏"): "负一屏",
     ("oppo", "主题"): "主题商店",
+    ("oppo", "主题商店"): "主题商店",
+    ("oppo", "OPPO视频"): "视频",
     ("oppo", "视频"): "视频",
     ("oppo", "游戏中心"): "游戏中心",
     ("vivo", "系统"): "系统广告",
@@ -50,6 +54,8 @@ PAGES = {
     ("vivo", "i管家"): "i管家",
     ("vivo", "天气"): "天气",
     ("vivo", "浏览器"): "浏览器",
+    ("vivo", "手机管家"): "i管家",
+    ("vivo", "负一屏"): "负一屏",
     ("honor", "广告与隐私"): "智能推荐服务",
     ("honor", "YOYO 建议"): "YOYO",
     ("honor", "魔法画报"): "魔法画报",
@@ -64,6 +70,14 @@ PAGES = {
     ("honor", "主题"): "主题",
     ("honor", "音乐"): "音乐",
     ("honor", "阅读"): "阅读",
+    ("meizu", "系统"): "系统跟踪",
+    ("meizu", "全局搜索"): "全局搜索",
+    ("meizu", "浏览器"): "浏览器",
+    ("meizu", "应用商店"): "应用商店",
+    ("meizu", "主题美化"): "主题美化",
+    ("meizu", "天气"): "天气",
+    ("meizu", "手机管家"): "手机管家",
+    ("meizu", "锁屏画报"): "锁屏画报",
 }
 # 兜底：占位前缀和没有前缀的标签。都是看过脚本定的，比如 {pkg} 是日历、天气共用的那个循环。
 FALLBACK = {
@@ -72,8 +86,18 @@ FALLBACK = {
     ("oppo", "功能管理"): "下拉搜索",
     ("oppo", "消息管理"): "下拉搜索",
     ("oppo", "应用建议"): "小布建议",        # 小布建议 → 其他 → 应用建议
+    # PMX110 的无前缀标签，看过所在的 @step。「个性化管理」「隐私」在多个段里都用，归不准，留在未归类
+    ("oppo", "广告管理"): "浏览器",
+    ("oppo", "个性化推荐"): "软件商店",
+    ("oppo", "服务管理"): "软件商店",
+    ("oppo", "个性化推荐管理"): "游戏中心",
+    ("oppo", "消息与广告"): "主题商店",
+    ("oppo", "热点资讯"): "负一屏",
+    ("oppo", "资讯服务"): "小布建议",
+    ("oppo", "首页卡片管理"): "下拉搜索",
 }
 OFF, KEEP = "要关", "同页保留"
+CJK = re.compile(r"[\u4e00-\u9fff]")
 
 
 def key_of(text):
@@ -113,13 +137,24 @@ class Call:
     words: tuple = ()           # 归不到分组时，这一处读得出的词
 
 
+@dataclass(frozen=True)
+class Note:
+    """模块级字典里的一段说明文字。它是打印给人看的，不是开关名单，所以不算词条。"""
+    text: str
+    key: str
+    script: str
+    line: int
+
+
 @dataclass
 class Scan:
     words: list = field(default_factory=list)
     unresolved_only: list = field(default_factory=list)
     unresolved_keep: list = field(default_factory=list)
+    unresolved_close: list = field(default_factory=list)
     unclassified: list = field(default_factory=list)
-    whole_page: int = 0         # 不带 only= 的 p.off()：整页全关，没有词
+    notes: list = field(default_factory=list)
+    whole_page: int = 0         # 没有点名的：不带 only= 的 p.off()，close_named(None, …)
 
 
 def _constants(tree):
@@ -147,14 +182,45 @@ def _literal(node):
     return list(node.elts)
 
 
-def _resolve(node, constants):
-    """only= / keep= 的字符串节点；解析不出返回 None。"""
+def _dicts(tree):
+    """模块级字典常量：{名字: {键: 值节点}}。后面又赋了别的值的不算。"""
+    found = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    found.pop(target.id, None)
+                    if isinstance(node.value, ast.Dict):
+                        found[target.id] = {k.value: v for k, v in zip(node.value.keys, node.value.values)
+                                            if isinstance(k, ast.Constant)}
+    return found
+
+
+def _resolve(node, constants, dicts):
+    """only= / keep= / close_named 名单的字符串节点；解析不出返回 None。字典要按字面量的键取值才算。"""
     literal = _literal(node)
     if literal is not None:
         return literal
     if isinstance(node, ast.Name):
         return constants.get(node.id)
+    if (isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name)
+            and isinstance(node.slice, ast.Constant)):
+        value = dicts.get(node.value.id, {}).get(node.slice.value)
+        return _literal(value) if value is not None else None
     return None
+
+
+def _notes(tree, script):
+    """模块级字典里写中文的字符串：比如 WKL-AN20 的 CHANGES，按「、」拆开。键值对里没有中文的（包名、页面名）不收。"""
+    out = []
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict):
+            for key, value in zip(node.value.keys, node.value.values):
+                if (isinstance(key, ast.Constant) and isinstance(value, ast.Constant)
+                        and isinstance(value.value, str) and CJK.search(value.value)):
+                    out += [Note(part.strip(), str(key.value), script, value.lineno)
+                            for part in value.value.split("、") if part.strip()]
+    return out
 
 
 def _page_label(node):
@@ -188,6 +254,19 @@ def _off_calls(tree):
             yield node
 
 
+def _close_calls(tree):
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "close_named":
+            yield node
+
+
+def _inside_helper(tree):
+    """close_named 函数体里的 p.off()：名单是它的参数，词已经在调用处读到了，这里不算未解析。"""
+    return {id(call) for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "close_named"
+            for call in _off_calls(node)}
+
+
 def scan(recipes_dir):
     """读所有机型脚本。认不出品牌的目录不进库（tests/test_entries.py 守着每个品牌都有家族）。"""
     out = Scan()
@@ -199,26 +278,41 @@ def scan(recipes_dir):
             continue
         with open(os.path.join(recipes_dir, script), encoding="utf-8") as f:
             tree = ast.parse(f.read())
-        constants = _constants(tree)
-        for call in sorted(_off_calls(tree), key=lambda c: c.lineno):
+        constants, dicts = _constants(tree), _dicts(tree)
+        helper = _inside_helper(tree)
+        out.notes += _notes(tree, script)
+        calls = [("off", c) for c in _off_calls(tree)] + [("close", c) for c in _close_calls(tree)]
+        for how, call in sorted(calls, key=lambda item: item[1].lineno):
             kwargs = {k.arg: k.value for k in call.keywords if k.arg}
-            label = _page_label(kwargs.get("page"))
+            if how == "off":
+                label_node, names, keep = kwargs.get("page"), kwargs.get("only"), kwargs.get("keep")
+            else:
+                args = list(call.args) + [None, None]
+                label_node = args[1] or kwargs.get("page") or kwargs.get("title")
+                names, keep = args[0] or kwargs.get("names"), None
+            inside = id(call) in helper
+            label = _page_label(label_node)
             group = group_of(family, label)
             here = []
-            for arg, kind, missed in (("only", OFF, out.unresolved_only), ("keep", KEEP, out.unresolved_keep)):
-                node = kwargs.get(arg)
-                if node is None:
-                    if arg == "only":
-                        out.whole_page += 1
-                    continue
-                strings = _resolve(node, constants)
-                if strings is None:
-                    missed.append(Call(family, script, call.lineno, ast.unparse(node)))
-                    continue
-                here += [Word(s.value, kind, family, group, label, script, s.lineno) for s in strings]
+            if names is None or (isinstance(names, ast.Constant) and names.value is None):
+                if not inside:
+                    out.whole_page += 1
+            else:
+                strings = _resolve(names, constants, dicts)
+                if strings is not None:
+                    here += [Word(s.value, OFF, family, group, label, script, s.lineno) for s in strings]
+                elif not inside:
+                    missed = out.unresolved_only if how == "off" else out.unresolved_close
+                    missed.append(Call(family, script, call.lineno, ast.unparse(names)))
+            if keep is not None:
+                strings = _resolve(keep, constants, dicts)
+                if strings is not None:
+                    here += [Word(s.value, KEEP, family, group, label, script, s.lineno) for s in strings]
+                else:
+                    out.unresolved_keep.append(Call(family, script, call.lineno, ast.unparse(keep)))
             out.words += here
-            if not group:
-                out.unclassified.append(Call(family, script, call.lineno, label or "（没写 page=）",
+            if not group and not inside:
+                out.unclassified.append(Call(family, script, call.lineno, label or "（没写页面）",
                                              tuple(dict.fromkeys(w.text for w in here))))
     return out
 
@@ -290,18 +384,27 @@ def render(recipes_dir):
              "按家族和分组列出机型脚本要关的开关（词条）和同页保留项，都带出处。入口怎么进看[入口速查](入口速查.md)。"
              "社区上报里还没落进脚本的叫法看[词条线索](词条线索.md)，那边的不算词条。", "",
              "**用之前：** 词条说明别的机型上这个开关叫这个，不代表这台手机上它管同一件事，写脚本要真机核对。"
-             "同页保留项只在那一页成立，不是品牌级的禁词表。", "",
+             "同页保留项只在那一页成立，不是品牌级的禁词表。"
+             "「限制」「减少」这类开头的是保护类开关，引擎把它拨到开，判定在 `fast.want_state()`。", "",
              "出处写成 `目录:行号`，指 `recipes/<目录>/recipe.py`；别的文件写全文件名。"
-             f"这里只读 `p.off()`：共 {len(words)} 处词，另有 {found.whole_page} 处不带 `only=`（整页全关，没有词）。", ""]
+             f"这里读 `p.off()` 和 `close_named()`：共 {len(words)} 处词，另有 {found.whole_page} 处没有点名（整页全关，没有词）。", ""]
     for family, groups in ENTRIES.items():
         brands = "、".join(b for b, f in FAMILY.items() if f == family)
         lines += [f"## {LABEL.get(family, family)}（{brands}）", ""]
         for group in groups:
             lines += _group_section(group, by_group[(family, group)])
-    lines += [f"## 未解析（only= {len(found.unresolved_only)} 处，keep= {len(found.unresolved_keep)} 处）", "",
+    lines += [f"## 未解析（only= {len(found.unresolved_only)} 处，close_named {len(found.unresolved_close)} 处，"
+              f"keep= {len(found.unresolved_keep)} 处）", "",
               "循环变量和运行时算的，读不出是哪些词。这些脚本里的词不在上面。", ""]
     lines += [f"- `{c.script}:{c.line}` {c.text}" for c in found.unresolved_only]
+    lines += [f"- `{c.script}:{c.line}` close_named {c.text}" for c in found.unresolved_close]
     lines += [f"- `{c.script}:{c.line}` keep= {c.text}" for c in found.unresolved_keep]
+    lines += ["", f"## 字典常量里的说明文字（{len(found.notes)} 段）", "",
+              "模块级字典里写给人看的说明，脚本运行时只打印，不拿去拨开关，所以不算词条。"
+              "和上面重复的不再标；没有的可能是别的写法，也可能只是措辞，要去手机上看。", ""]
+    known = {key_of(w.text) for w in words}
+    lines += [f"- `{n.script}:{n.line}` {n.key}：{n.text}" + ("" if key_of(n.text) in known else "（词条里没有）")
+              for n in found.notes]
     lines += ["", f"## 未归类（{len(found.unclassified)} 处）", "",
               "页面标签归不到分组：`<变量>` 是运行时才定的标签。这些调用里读得出的词列在这里，不进反查表。", ""]
     lines += [f"- {LABEL.get(c.family, c.family)} `{c.text}`：`{c.script}:{c.line}`"

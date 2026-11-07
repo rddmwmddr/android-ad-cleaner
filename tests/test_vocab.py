@@ -19,40 +19,41 @@ CLUES = ROOT / "docs" / "清单" / "词条线索.md"
 
 # 解析不出的 only=，按脚本冻结。新脚本多了这种写法，先看能不能写成字面量或模块级常量，确实不能再改这里。
 UNRESOLVED_ONLY = {
-    "honor-WKL-AN20/recipe.py": 1,
+    "honor-CLE-AN00/recipe.py": 1,
     "oneplus-PHK110/recipe.py": 1,
-    "oneplus-PJA110/recipe.py": 1,
     "oneplus-PKX110/recipe.py": 1,
     "oppo-PKH110/recipe.py": 1,
-    "oppo-PKT110/recipe.py": 1,
-    "oppo-PLG110/recipe.py": 3,
+    "oppo-PLG110/recipe.py": 2,
     "oppo-PLP120/recipe.py": 1,
-    "oppo-PMA110/recipe.py": 2,
-    "oppo-PMX110/recipe.py": 1,
+    "oppo-PMA110/recipe.py": 1,
     "redmi-23049RAD8C/recipe.py": 1,
-    "redmi-23113RKC6C/recipe.py": 1,
-    "redmi-23117RK66C/recipe.py": 1,
-    "redmi-24122RKC7C/recipe.py": 1,
     "redmi-25060RK16C/recipe.py": 1,
     "vivo-V2303A/recipe.py": 1,
-    "vivo-V2417A/recipe.py": 1,
     "vivo-V2547DA/recipe_android17.py": 4,
     "xiaomi-2304FPN6DC/recipe.py": 1,
     "xiaomi-24090RA29C/recipe.py": 1,
     "xiaomi-2410CRP4CC/recipe.py": 1,
-    "xiaomi-24129PN74C/recipe.py": 1,
     "xiaomi-24129PN74C/recipe_os4.py": 2,
     "xiaomi-25102RKBEC/recipe.py": 1,
     "xiaomi-2512BPNDAC/recipe.py": 1,
     "xiaomi-M154FF/recipe.py": 1,
 }
-# 页面标签归不到分组的 p.off()。多出来的先看能不能加进 vocab.PAGES。
+# close_named() 第一个参数解析不出的，和上面分开冻结，免得一个口径盖住另一个。
+UNRESOLVED_CLOSE = {
+    "oppo-PKT110/recipe.py": 3,
+    "oppo-PMX110/recipe.py": 2,
+    "redmi-23117RK66C/recipe.py": 1,
+    "vivo-V2417A/recipe.py": 1,
+}
+# 模块级字典里的说明文字，按脚本冻结。
+DICT_NOTES = {
+    "honor-WKL-AN20/recipe.py": 37,
+}
+# 页面标签归不到分组的调用。多出来的先看能不能加进 vocab.PAGES。
 UNCLASSIFIED = {
-    ("honor", "<title>"): 1,
-    ("oppo", "<page>"): 8,
-    ("oppo", "<title>"): 1,
-    ("vivo", "<page>"): 1,
-    ("xiaomi", "<page>"): 4,
+    ("oppo", "<page>"): 7,
+    ("oppo", "个性化管理"): 2,
+    ("oppo", "隐私"): 2,
 }
 
 
@@ -96,6 +97,12 @@ class RealRecipesTest(unittest.TestCase):
 
     def test_unresolved_only_is_frozen_per_script(self):
         self.assertEqual(dict(Counter(c.script for c in self.scan.unresolved_only)), UNRESOLVED_ONLY)
+
+    def test_unresolved_close_named_is_frozen_per_script(self):
+        self.assertEqual(dict(Counter(c.script for c in self.scan.unresolved_close)), UNRESOLVED_CLOSE)
+
+    def test_dict_notes_are_frozen_per_script(self):
+        self.assertEqual(dict(Counter(n.script for n in self.scan.notes)), DICT_NOTES)
 
     def test_unresolved_only_is_listed_by_name_in_the_doc(self):
         doc = vocab.render(RECIPES)
@@ -160,6 +167,74 @@ class CluesTest(unittest.TestCase):
         doc = vocab.render(RECIPES)
         self.assertIn("(词条线索.md)", doc)
         self.assertNotIn("github.com/rddmwmddr", doc)
+
+
+class CloseNamedTest(unittest.TestCase):
+    """#681：荣耀 WKL-AN20 的词全在 close_named() 里，只读 p.off() 荣耀家族几乎是空的。"""
+
+    def scan(self, src, folder="honor-A1"):
+        tmp = recipes(**{folder: src})
+        self.addCleanup(tmp.cleanup)
+        return vocab.scan(tmp.name)
+
+    def test_first_argument_and_label_are_read(self):
+        found = self.scan('close_named(["朋友页显示推荐动态"], "音乐·消息和隐私设置", package, "消息和隐私设置")')
+        self.assertEqual([(w.text, w.kind, w.group, w.page) for w in found.words],
+                         [("朋友页显示推荐动态", vocab.OFF, "音乐", "音乐·消息和隐私设置")])
+
+    def test_module_constant_is_read(self):
+        found = self.scan('NAMES = ["甲"]\nclose_named(NAMES, "音乐·页")')
+        self.assertEqual([w.text for w in found.words], ["甲"])
+
+    def test_dict_value_with_a_literal_key_is_read(self):
+        found = self.scan('T = {"a": ["甲", "乙"]}\nclose_named(T["a"], "音乐·页")\np.off(only=T["a"], page="音乐·页")')
+        self.assertEqual([w.text for w in found.words], ["甲", "乙", "甲", "乙"])
+
+    def test_dict_value_with_a_variable_key_is_unresolved(self):
+        found = self.scan('T = {"a": ["甲"]}\nclose_named(T[k], "音乐·页")')
+        self.assertEqual(found.words, [])
+        self.assertEqual([c.text for c in found.unresolved_close], ["T[k]"])
+
+    def test_local_names_are_unresolved_on_their_own_list(self):
+        found = self.scan('close_named(names, "音乐·页")\np.off(only=names, page="音乐·页")')
+        self.assertEqual([c.text for c in found.unresolved_close], ["names"])
+        self.assertEqual([c.text for c in found.unresolved_only], ["names"])
+
+    def test_none_means_the_whole_page(self):
+        found = self.scan('close_named(None, "音乐·页")')
+        self.assertEqual(found.words, [])
+        self.assertEqual(found.unresolved_close, [])
+        self.assertEqual(found.whole_page, 1)
+
+    def test_off_inside_the_helper_is_not_counted_twice(self):
+        found = self.scan('''
+            def close_named(names, title):
+                p.off(only=sorted(names), page=title)
+            close_named(["甲"], "音乐·页")
+        ''')
+        self.assertEqual([w.text for w in found.words], ["甲"])
+        self.assertEqual(found.unresolved_only, [])
+        self.assertEqual(found.unclassified, [])
+
+    def test_unknown_label_is_unclassified(self):
+        found = self.scan('close_named(["甲"], "没见过·页")')
+        self.assertEqual([(c.text, c.words) for c in found.unclassified], [("没见过·页", ("甲",))])
+
+    def test_prose_in_a_dict_is_a_note_not_a_word(self):
+        found = self.scan('CHANGES = {"音乐": "朋友页显示推荐动态、个性化广告推荐", "浏览器首页": "模式选择 → 简洁首页"}')
+        self.assertEqual(found.words, [])
+        self.assertEqual([n.text for n in found.notes], ["朋友页显示推荐动态", "个性化广告推荐", "模式选择 → 简洁首页"])
+
+    def test_dict_without_chinese_is_ignored(self):
+        self.assertEqual(self.scan('START_ACTIVITIES = {"com.a": ".Main"}').notes, [])
+
+
+class RealHonorTest(unittest.TestCase):
+    def test_the_words_that_caught_a_real_miss_are_in_the_vocabulary(self):
+        # 真实发生过：CLE-AN00 的音乐段漏了这两个，是拿 WKL-AN20 的 close_named 词对照发现的
+        words = [w for w in vocab.scan(RECIPES).words if w.script.startswith("honor-WKL-AN20/")]
+        self.assertIn(("音乐", "展示“摇一摇”类开屏广告"), {(w.group, w.text) for w in words})
+        self.assertIn(("音乐", "个性化广告推荐"), {(w.group, w.text) for w in words})
 
 
 class ParseTest(unittest.TestCase):
@@ -227,8 +302,8 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(found.unresolved_only, [])
         self.assertEqual(found.whole_page, 1)
 
-    def test_only_p_off_is_read(self):
-        found = self.scan('close_named(["词"], "搜索·首页")\nother.off(only=["别的"], page="搜索·首页")')
+    def test_off_on_something_else_is_not_read(self):
+        found = self.scan('other.off(only=["别的"], page="搜索·首页")\nfast_close(["也不读"], "搜索·首页")')
         self.assertEqual(found.words, [])
 
     def test_unknown_label_goes_to_unclassified(self):
