@@ -125,6 +125,7 @@ https://t.me/+A5X3Mxzs-Cg3NjYx
 | 小米 | REDMI K80 至尊版（25060RK16C） | HyperOS 2（BP2A.250605.031.A3）/ Android 16 | ✅ 10-27 真机九段通过，重跑 3 分钟 | ✅ | ✅ 3 个渠道 |
 | 小米 | 15（24129PN74C） | HyperOS OS3.0.307.0.WOCCNXM / Android 16 | ⚠️ 10-29 路径逐项实测、开关已实际关闭；新脚本整轮待复测、用时未测，底包同 K80 但浏览器/商店入口不同 | ✅ | ✅ 17 个渠道，全部关闭 |
 | 小米 | REDMI K90 Pro Max（25102RKBEC） | HyperOS OS4.0.2.0.XPMCNXM / Android 17 | ✅ 10-27 九段实测通过，重跑 169 秒 | ✅ | ✅ 26 个渠道 |
+| 小米 | REDMI K90 Ultra（M332BF） | HyperOS OS4.0.4.0.XHPCNXM / Android 17 | ⚠️ 10-31 社区实测：@Sin1ery 本机九段跑通、复跑 179 秒、0 调整；按他的实测规格重写、本仓库未复跑，待其复测，见[实测记录](docs/16-红米K90至尊实测.md) | ✅ 见[清单](docs/清单/小米-HyperOS.md) | ✅ 19 个渠道（21 候选，剔除 2 条服务类） |
 | 小米 | REDMI K80 Pro（24122RKC7C） | HyperOS OS3.0.304.0.WOMCNXM / Android 16 | ✅ 10-29 九段实测，首轮关 20 项，复跑 172 秒；[实测记录](docs/15-红米K80Pro实测.md) | ✅ | ✅ 48 个渠道（54 候选） |
 | 小米 | Redmi Note 14 Pro（24090RA29C） | HyperOS 3.0.309.0 / Android 16 | ✅ 10-26 八段实测通过，整轮约 5 分钟 | ✅ | ✅ 11 个渠道 |
 | 小米 | Redmi Note 14 5G（24094RAD4C） | HyperOS OS3.0.306.0.WOQCNXM / Android 16 | ✅ 10-30 八段实测：20 项新关闭（记账修复前统计，不含普通点击关掉的 4 项），复跑 291 秒、21 项回读、调整 0 项 | ✅ | ✅ 3 个渠道，全部关闭 |

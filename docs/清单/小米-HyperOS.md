@@ -15,6 +15,7 @@
 | REDMI K80 至尊版（25060RK16C） | HyperOS 2（BP2A.250605.031.A3），Android 16 | 2026-10-27 真机实测；专用脚本九段全通过并回读（recipes/redmi-25060RK16C） |
 | REDMI K80 Pro（24122RKC7C） | HyperOS OS3.0.304.0.WOMCNXM，Android 16 | 2026-10-29 真机实测；首轮借 K70 路径关 20 项，专用脚本九段复跑 172 秒、0 异常（`recipes/redmi-24122RKC7C`，见 [实测记录](../15-红米K80Pro实测.md)） |
 | REDMI K90 Pro Max（25102RKBEC） | HyperOS OS4.0.2.0.XPMCNXM，Android 17 | 2026-10-27 实测，九段机型脚本全通过（169 秒） |
+| REDMI K90 Ultra（M332BF） | HyperOS OS4.0.4.0.XHPCNXM，Android 17 | 2026-10-31 社区实测（[Issue #374](https://github.com/rddmwmddr/android-ad-cleaner/issues/374)）；专用脚本按报告者规格重写，待其用新版复测 |
 | Redmi Note 12 Turbo（23049RAD8C） | HyperOS OS3.0.5.0.VMRCNXM，Android 15 | 2026-10-25 实测（九段脚本跑通，用时约 3.5 分钟） |
 | Redmi K70（23113RKC6C） | HyperOS OS3.0.307.0.WNKCNXM，Android 16 | 2026-10-26 无线+有线：9 段专用脚本；当前目标 20 项；本轮实测含已移除的小说 1 项；浏览器「最新资讯」disabled，未操作 |
 | Redmi K70 Pro（23117RK66C） | HyperOS OS3.0.306.0.WNMCNXM，Android 16 | 2026-10-29～30 实测；专用脚本与验证范围见 [K70 Pro 实测](../14-红米K70Pro实测.md) |
@@ -36,6 +37,8 @@
 主题段与参考脚本一致：桌面入口在 `com.miui.themestore`，打开后转到 `com.android.thememanager`，这个跳转是正常的，不是被别的 App 顶掉。机型脚本 `recipes/xiaomi-24129PN74C/recipe_os4.py`（HyperOS 4 变体，系统版本对上时自动选它）已按上面三点写，九段实测重跑 164 秒。
 
 **K90 Pro Max 与上面两台的两处差异**：① 设置首页一屏放不下，「隐私与安全」在第二屏，要往下滑一段才看得到；②「隐私与安全」打开的是安全中心的 `PrivacySafetyActivity`，只有「隐私 / 安全」两个分栏、默认停在「隐私」，得先切到「安全」分栏，「更多安全设置」在这一页的最末尾。机型脚本 `recipes/xiaomi-25102RKBEC/` 已按这两点写。
+
+**K90 Ultra（M332BF，HyperOS OS4.0.4.0.XHPCNXM）与 18 Pro Max 的四处差异**（2026-10-31 社区实测，[Issue #374](https://github.com/rddmwmddr/android-ad-cleaner/issues/374)）：① 广告服务在「安全」分栏 →「更多安全设置」页底，直达 `com.android.settings/.ad.AdServiceSettings` 后这段从 50 秒降到 2 秒；② 这一页的开关说明行含「关闭后，广告数量不会因此减少……」，`p.start()` 启动后的弹窗清理会把它当 ✕ 点掉，等于自己拨一次开关，脚本改用 `am start` 直达；③ 主题商店的齿轮会先命中「设置壁纸」，脚本的 `gear()` 只认正好是「设置」；④ 浏览器主设置页是 `com.android.browser/.BrowserSettingsActivity`（工具栏齿轮进的是首页编辑面板），关「个性化内容推荐 / 个性化广告推荐」各弹一次「关闭提醒」，要点「确认关闭」。机型脚本 `recipes/xiaomi-M332BF/` 已按这四点写，本仓库未在该机复跑，待报告者用新版复测。
 
 Xiaomi 18 Pro Max 和 18 Fold 的系统底包相同，差别在 App 版本：商店、浏览器、全局搜索、手机管家升级后入口变了。Redmi K70 是 HyperOS 3 / Android 16，入口单独记录。下面每一项都写了「旧版 / 新版」两种入口，按你手机上看到的选。
 
