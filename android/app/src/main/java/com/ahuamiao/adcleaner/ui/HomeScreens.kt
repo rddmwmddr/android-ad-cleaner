@@ -115,7 +115,7 @@ fun HomeScreen(model: AppModel) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Image(
-                    painterResource(R.mipmap.ic_launcher),
+                    painterResource(R.mipmap.ic_launcher_art),
                     contentDescription = null,
                     modifier = Modifier
                         .padding(start = 4.dp)
