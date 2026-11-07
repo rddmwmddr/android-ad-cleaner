@@ -448,13 +448,16 @@ def gaps(recipes_dir, folder):
 
     `folder` 是 recipes/ 下的目录名（`<品牌>-<型号>`）。只比要关的词条，按 key_of() 归一化后比对：
     同页保留项和「要开」的保护类开关不在这台机上独立成立，同族叫法也可能整组不同。
-    这是写脚本之后的自查清单，不是缺陷报告。"""
-    if not os.path.isdir(os.path.join(recipes_dir, folder)):
-        raise FileNotFoundError(f"recipes/ 下没有 {folder} 这个目录")
+    这是写脚本之后的自查清单，不是缺陷报告。
+
+    目录名按大小写不敏感匹配、容忍尾斜杠：`isdir` 在 macOS 上本来就大小写不敏感，
+    不归一化的话认得出目录、却按原样拼 `startswith` 前缀，这份脚本自己的词全被当成漏项。"""
+    folder = _folder_name(recipes_dir, folder)
     family = FAMILY.get(folder.split("-", 1)[0].lower())
     if not family:
         raise ValueError(f"认不出 {folder} 的品牌：目录名要写成 <品牌>-<型号>")
-    words = scan(recipes_dir).words
+    found = scan(recipes_dir)
+    words = found.words
     mine = {key_of(word.text) for word in words if word.script.startswith(folder + "/")}
     missing = [word for word in words
                if word.family == family and word.kind == OFF
@@ -463,6 +466,13 @@ def gaps(recipes_dir, folder):
     lines = [f"# 查漏：{folder}", "",
              f"同家族（{label}）别的机型关过、这份脚本没写的词条。这是写脚本之后的自查清单，不是缺陷报告："
              "同族的词在这台机上可能换了叫法、对应 App 没装，或者有意不关。", ""]
+    if any(script.startswith(folder + "/") for script in found.silent):
+        lines += ["⚠ 这份脚本一条词条都没读出来（见词库的「读不到的脚本」），下面的清单不能当查漏结果用。", ""]
+    peers = [call for call in found.unresolved_only + found.unresolved_close
+             if call.family == family and not call.script.startswith(folder + "/")]
+    if peers:
+        lines += [f"同族另有 {len(peers)} 处点名是变量或运行时才算，读不出词、没参与比对："
+                  + "、".join(f"`{call.script}:{call.line}`" for call in peers), ""]
     if not missing:
         return "\n".join(lines + ["没有差异：同家族别的机型关过的词条，这份脚本都写了。", ""])
     by_group = defaultdict(list)
@@ -472,16 +482,21 @@ def gaps(recipes_dir, folder):
     order += sorted(set(by_group) - set(order))
     lines += [f"共 {len({key_of(word.text) for word in missing})} 条，按分组列：", ""]
     for group in order:
-        merged = defaultdict(list)
-        for word in by_group[group]:
-            merged[key_of(word.text)].append(word)
         lines += [f"## {group}", ""]
-        for key in sorted(merged, key=lambda k: (-len({w.model for w in merged[k]}), k)):
-            same = merged[key]
+        for _key, same in _by_key(by_group[group]):
             sources = "、".join(f"`{word.source}`（{word.model} · {word.page or '没写页面'}）" for word in same)
             lines.append(f"- {_spelled(same)}：{sources}")
         lines.append("")
     return "\n".join(lines)
+
+
+def _folder_name(recipes_dir, folder):
+    """`recipes/` 下的真实目录名：容忍尾斜杠、路径分隔符与大小写差异。找不到就抛 FileNotFoundError。"""
+    wanted = folder.strip().replace(os.sep, "/").strip("/").lower()
+    for name in sorted(os.listdir(recipes_dir)):
+        if name.lower() == wanted and os.path.isdir(os.path.join(recipes_dir, name)):
+            return name
+    raise FileNotFoundError(f"recipes/ 下没有 {folder} 这个目录")
 
 
 def _recipes_dir():

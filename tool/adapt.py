@@ -12,6 +12,7 @@
 转正式机型脚本前必须人工在手机上核对，并补上 BUILD 录制版本。不要直接放进 recipes/。
 """
 import datetime, json, os, re, shlex, subprocess, sys
+import xml.etree.ElementTree as ET
 for _st in (sys.stdout, sys.stderr):
     try:
         _st.reconfigure(encoding="utf-8", errors="replace")   # Windows 控制台默认不是 UTF-8
@@ -353,12 +354,21 @@ def _installed_packages(p):
     return {line.strip().split("package:", 1)[1] for line in out.splitlines() if "package:" in line}
 
 
+def _page_texts(p):
+    """这一屏的文字。半截 dump 解析失败按「这屏没有文字」处理，与 `Phone.has_text()` 同口径。"""
+    try:
+        return [t for t, _, _ in p.texts()]
+    except ET.ParseError:
+        return []
+
+
 def survey(p, family, words, log=print, now=None, sleep=None):
     """拿同家族已经验证过的直达页面在这台手机上逐条试：打不打得开、页面上有哪些同分组的词条、
     同族脚本用过的 App 这台装了哪些。只读：不点开关、不点弹窗，看到协议只标注。
 
     不走 `Phone.start`：它的 DISMISS 会替人点「取消 / 不同意」。打不开的判据与
-    `entries.open_direct()` 那一处相同（退出码或 Error / Exception）。
+    `entries.open_direct()` 那一处相同（退出码或 Error / Exception）；`Direct.expect` 非空时还要求
+    看见判据文字，与 `entries.reach()` 同口径——焦点对上了但内容不是那一页，引擎会换下一档。
     命中词条只比同分组的词：全量比对会把「应用商店」页报出「浏览器」组的词。
     `now` / `sleep` 给测试换掉真实等待，与 `entries.reach()` 同口径。返回每条入口的结果。"""
     import time
@@ -375,13 +385,17 @@ def survey(p, family, words, log=print, now=None, sleep=None):
             result = p.reader.shell(f"am start -W{flag} -n {shlex.quote(d.pkg + '/' + page)}")
             if getattr(result, "exit_code", 0) or re.search(r"Error|Exception", result.output or "", re.I):
                 log(f"✗ 打不开  {group} {page}")
-                rows.append({"group": group, "page": page, "landed": False, "words": []})
+                rows.append({"group": group, "page": page, "landed": False, "expect": False, "words": []})
                 continue
             if not wait.until(lambda: entries.landed(p, d), timeout=4, poll=0.2, now=now, sleep=sleep):
                 log(f"落在别处（实际 {p.focus() or '未知页面'}）  {group} {page}")
-                rows.append({"group": group, "page": page, "landed": False, "words": []})
+                rows.append({"group": group, "page": page, "landed": False, "expect": False, "words": []})
                 continue
-            shown = [t for t, _, _ in p.texts()]
+            if d.expect and not p.expect_page(d.expect, 3):
+                log(f"! {group} {page}  落在这一页，但没看到「{d.expect}」")
+                rows.append({"group": group, "page": page, "landed": True, "expect": False, "words": []})
+                continue
+            shown = _page_texts(p)
             normalized = [vocab.key_of(t) for t in shown]
             hits, seen = [], set()
             for word in words:
@@ -394,7 +408,7 @@ def survey(p, family, words, log=print, now=None, sleep=None):
             log(f"✓ {group} {page}" + ("（弹着协议，没有点）" if agreement else ""))
             if hits:
                 log(f"    同组词条：{'、'.join(hits)}")
-            rows.append({"group": group, "page": page, "landed": True, "words": hits})
+            rows.append({"group": group, "page": page, "landed": True, "expect": True, "words": hits})
     apps, searches = [], []
     for entry in entries.ENTRIES.get(family, {}).values():
         apps += [d.pkg for d in entry.direct] + ([entry.app] if entry.app else [])
@@ -430,7 +444,7 @@ def cmd_survey(rest):
               "屏幕会跳，不要碰手机。", flush=True)
         rows = survey(p, family, words)
         p.reader.press("home")
-    return 0 if any(row["landed"] for row in rows) else 1
+    return 0 if any(row["landed"] and row["expect"] for row in rows) else 1
 
 
 def cmd_explore(rest):

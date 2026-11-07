@@ -32,6 +32,7 @@ def survey_phone(focus="", texts=(), start=("", 0), packages="package:com.androi
     p = phone_mock()
     p.locked.return_value = False
     p.focus.return_value = focus
+    p.expect_page.return_value = True          # 默认看见判据文字；要测不看见时用例自己改
     node = ET.fromstring('<node text="x"/>')
     p.texts.return_value = [(text, (0, 0, 1, 1), node) for text in texts]
 
@@ -48,12 +49,16 @@ def survey_phone(focus="", texts=(), start=("", 0), packages="package:com.androi
     return p
 
 
-def run_survey(p, words):
+def run_survey(p, words, family="xiaomi", family_map=ONE_FAMILY):
     clock = Clock()
     out = io.StringIO()
-    with patch.object(entries, "ENTRIES", ONE_FAMILY), contextlib.redirect_stdout(out):
-        rows = adapt.survey(p, "xiaomi", words, now=clock.time, sleep=clock.sleep)
+    with patch.object(entries, "ENTRIES", family_map), contextlib.redirect_stdout(out):
+        rows = adapt.survey(p, family, words, now=clock.time, sleep=clock.sleep)
     return rows, out.getvalue()
+
+
+def shell_calls(p):
+    return [call.args[0] for call in p.reader.shell.call_args_list]
 
 
 class SurveyResultTests(unittest.TestCase):
@@ -108,22 +113,84 @@ class SurveyResultTests(unittest.TestCase):
         self.assertIn("同族脚本用过的 App：装了 0 / 1 个（没装：com.android.settings）", out)
         self.assertIn("设置搜索词可试：无", out)
 
+    def test_launch_command_expands_relative_activity_and_clears_task(self):
+        p = survey_phone(focus="com.android.settings/.ad.AdServiceSettings")
+        run_survey(p, [])
+        self.assertIn("am start -W -f 0x10008000 -n "
+                      "com.android.settings/com.android.settings.ad.AdServiceSettings", shell_calls(p))
+
+    def test_keep_task_pages_start_without_clear_task(self):
+        """带清栈参数会立刻退出的页面只能裸启动（#165），否则 survey 会把它误报成落在别处。"""
+        direct = entries.Direct("com.heytap.browser", ".settings.component.BrowserPreferencesPage", keep_task=True)
+        p = survey_phone(focus="com.heytap.browser/com.heytap.browser.settings.component.BrowserPreferencesPage")
+        fmap = {"oppo": {"浏览器": entries.Entry(menu="浏览器 → 设置", direct=(direct,))}}
+        rows, _out = run_survey(p, [], family="oppo", family_map=fmap)
+        self.assertEqual([row["landed"] for row in rows], [True])
+        command = next(cmd for cmd in shell_calls(p) if cmd.startswith("am start"))
+        self.assertNotIn("-f", command)
+
+    def test_dollar_in_activity_is_shell_quoted(self):
+        """vivo 的 `$` 类名不 quote 会被 shell 当变量吃掉。"""
+        direct = entries.Direct("com.android.settings", ".Settings$AdAndPrivacyActivityForOsTwo")
+        p = survey_phone(focus="com.android.settings/com.android.settings.Settings$AdAndPrivacyActivityForOsTwo")
+        fmap = {"vivo": {"系统广告": entries.Entry(menu="设置 → 广告与隐私", direct=(direct,))}}
+        run_survey(p, [], family="vivo", family_map=fmap)
+        command = next(cmd for cmd in shell_calls(p) if cmd.startswith("am start"))
+        self.assertIn("'com.android.settings/com.android.settings.Settings$AdAndPrivacyActivityForOsTwo'", command)
+
+    def test_landed_but_missing_expect_text_is_not_a_pass(self):
+        """reach() 还要求看见判据文字：焦点对上了但内容不是那一页，引擎会换下一档。"""
+        p = survey_phone(focus="com.android.settings/.ad.AdServiceSettings", texts=("别的文字",))
+        p.expect_page.return_value = False
+        rows, out = run_survey(p, [])
+        self.assertEqual([(row["landed"], row["expect"]) for row in rows], [(True, False)])
+        self.assertIn("! 系统广告 com.android.settings.ad.AdServiceSettings  落在这一页，但没看到「个性化广告推荐」", out)
+
+    def test_half_dump_is_treated_as_empty_page_not_a_crash(self):
+        p = survey_phone(focus="com.android.settings/.ad.AdServiceSettings")
+        p.texts.side_effect = ET.ParseError
+        rows, out = run_survey(p, [word("个性化广告推荐")])
+        self.assertEqual([row["landed"] for row in rows], [True])
+        self.assertIn("✓", out)
+        self.assertNotIn("同组词条", out)
+
 
 class SurveyEntryTests(unittest.TestCase):
-    def run_cmd(self, phone, argv=("-s", "FAKE")):
+    def run_cmd(self, phone, argv=("-s", "FAKE"), scanned=None):
+        scanned = [word("个性化广告推荐")] if scanned is None else scanned
         out = io.StringIO()
         with patch.object(adapt, "Phone") as factory, \
-                patch.object(adapt.vocab, "scan", return_value=types.SimpleNamespace(words=[word("个性化广告推荐")])), \
+                patch.object(adapt.vocab, "scan", return_value=types.SimpleNamespace(words=scanned)), \
                 patch.object(entries, "ENTRIES", ONE_FAMILY), contextlib.redirect_stdout(out):
             factory.return_value.__enter__.return_value = phone
             code = adapt.cmd_survey(list(argv))
+        self.factory = factory
         return code, out.getvalue()
 
     def test_any_landing_exits_zero_and_goes_home(self):
         p = survey_phone(focus="com.android.settings/.ad.AdServiceSettings", texts=("个性化广告推荐",))
         code, _out = self.run_cmd(p)
         self.assertEqual(code, 0)
+        self.factory.assert_called_once_with("FAKE")
         p.reader.press.assert_called_once_with("home")
+
+    def test_landed_without_the_expect_text_exits_one(self):
+        p = survey_phone(focus="com.android.settings/.ad.AdServiceSettings", texts=("别的文字",))
+        p.expect_page.return_value = False
+        code, _out = self.run_cmd(p)
+        self.assertEqual(code, 1)
+
+    def test_unknown_brand_exits_one(self):
+        p = survey_phone(brand="nokia")
+        with self.assertRaises(SystemExit) as caught:
+            self.run_cmd(p)
+        self.assertIn("认不出品牌", str(caught.exception.code))
+
+    def test_empty_vocabulary_exits_one(self):
+        p = survey_phone()
+        with self.assertRaises(SystemExit) as caught:
+            self.run_cmd(p, scanned=[])
+        self.assertIn("词库是空的", str(caught.exception.code))
 
     def test_no_landing_exits_one(self):
         p = survey_phone(focus="com.android.settings/.Settings")
@@ -162,14 +229,21 @@ class DispatchTest(unittest.TestCase):
         fake_adb(self)
 
     def forward(self, argv):
-        with patch.object(run, "py") as spy, contextlib.redirect_stdout(io.StringIO()):
+        with patch.object(run, "py") as spy, patch.object(run, "adb_shell") as shell, \
+                contextlib.redirect_stdout(io.StringIO()):
             code = run.dispatch(argv)
+        self.shell = shell
         return code, spy
 
     def test_documented_order_is_forwarded(self):
         code, spy = self.forward(["-s", "FAKE", "adapt", "survey"])
         spy.assert_called_once_with("adapt.py", "survey", "-s", "FAKE")
         self.assertIs(code, spy.return_value)
+
+    def test_forwarding_checks_the_device_first_so_the_error_is_readable(self):
+        """设备不在时要在 run.py 里就变成人话，别让子进程抛 traceback（ADR-0005 的 NoAdb/断线出口）。"""
+        self.forward(["-s", "FAKE", "adapt", "survey"])
+        self.shell.assert_called_once_with("FAKE", "getprop ro.product.brand")
 
     def test_explore_keeps_its_package_arguments(self):
         _code, spy = self.forward(["-s", "FAKE", "adapt", "explore", "com.a", "com.b"])
@@ -180,10 +254,12 @@ class DispatchTest(unittest.TestCase):
             code, spy = self.forward(argv)
             self.assertEqual(code, 0)
             spy.assert_not_called()
+            self.shell.assert_not_called()          # 不碰手机的子命令不做设备检查
 
     def test_bare_adapt_still_accepts_the_engine_order(self):
         _code, spy = self.forward(["adapt", "survey", "-s", "FAKE"])
         spy.assert_called_once_with("adapt.py", "survey", "-s", "FAKE")
+        self.shell.assert_not_called()              # 老写法仍由 adapt.py 自己管设备
 
 
 if __name__ == "__main__":

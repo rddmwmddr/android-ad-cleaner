@@ -64,6 +64,26 @@ class GapsTest(unittest.TestCase):
         })
         self.assertIn("没有差异", text)
 
+    def test_trailing_slash_and_case_do_not_change_the_answer(self):
+        """shell 补全会给尾斜杠，macOS 的盘默认大小写不敏感：都得认出同一个目录，不能把本机的词当成漏项。"""
+        tmp = recipes(**{"honor-A1": 'p.off(only=["甲"], page="音乐·页")',
+                         "honor-B2": 'p.off(only=["甲", "乙"], page="音乐·页")'})
+        self.addCleanup(tmp.cleanup)
+        exact = vocab.gaps(tmp.name, "honor-A1")
+        for variant in ("honor-A1/", "HONOR-a1"):
+            self.assertEqual(vocab.gaps(tmp.name, variant), exact, variant)
+
+    def test_script_with_no_readable_words_is_flagged(self):
+        text = self.gaps(**{"honor-A1": 'p.off(only=names, page="音乐·页")',
+                            "honor-B2": 'p.off(only=["乙"], page="音乐·页")'})
+        self.assertIn("一条词条都没读出来", text)
+
+    def test_unresolvable_peer_calls_are_named_not_silently_ignored(self):
+        text = self.gaps(**{"honor-A1": 'p.off(only=["甲"], page="音乐·页")',
+                            "honor-B2": 'p.off(only=names, page="音乐·页")'})
+        self.assertIn("没参与比对", text)
+        self.assertIn("`honor-B2/recipe.py:1`", text)
+
     def test_unknown_folder_and_brand_are_distinct_errors(self):
         tmp = recipes(**{"honor-A1": 'p.off(only=["甲"], page="音乐·页")',
                          "unknownbrand-A1": 'p.off(only=["甲"], page="音乐·页")'})

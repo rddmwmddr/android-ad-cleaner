@@ -873,13 +873,14 @@ def dispatch(a):
         return cmd_devices(a[1:])
     if a[0] == "adapt":
         return py("adapt.py", *a[1:])
-    # 文档里写的是 `-s 序列号 adapt <子命令>`；adapt.py 自己收的是子命令在前。gen 不碰手机，不带 -s。
-    if len(a) > 3 and a[0] == "-s" and a[2] == "adapt" and a[3] in ("survey", "explore", "check"):
-        return py("adapt.py", a[3], "-s", a[1], *a[4:])
     # 以前 adb 在 import 期就解析，找不到时**任何**调用（含参数写错）都先报这一句；保留同样的先后。
     adb()
     if a[0] != "-s" or len(a) < 3:
         return fail("命令格式：run.py -s <序列号> <命令>。先跑 run.py devices 看序列号")
+    # 文档里写的是 `-s 序列号 adapt <子命令>`；adapt.py 自己收的是子命令在前。gen 不碰手机，不带 -s。
+    if a[2] == "adapt" and len(a) > 3 and a[3] in ("survey", "explore", "check"):
+        adb_shell(a[1], "getprop ro.product.brand")     # 设备不在时给出与其它 -s 命令同样的人话，不是子进程 traceback
+        return py("adapt.py", a[3], "-s", a[1], *a[4:])
     handler = COMMANDS.get(a[2])
     if handler is None:
         print(__doc__); return 0
