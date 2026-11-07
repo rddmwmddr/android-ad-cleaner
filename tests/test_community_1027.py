@@ -353,7 +353,7 @@ class ScanWordingTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 chan.main()
         self.assertEqual(appops.call_count, 2)      # 批次开始每个应用一次 + 收尾复核一次
-        self.assertIn("仍开着：营销推广", out.getvalue())
+        self.assertIn("仍开着：营销推广（com.example）", out.getvalue())
 
 
 class SearchBoxTests(unittest.TestCase):
