@@ -535,6 +535,18 @@ def scrub(text, serial=None):
     return text
 
 
+def skip_reason(result):
+    """跳过结果记下的那行说明，压成报告里列表的一项：取第一句（#603）。
+
+    原因行后面都跟着一句「接下来怎么办」，整行塞进「跳过（…）」会盖过前面那一栏。没有记下
+    说明的结果返回空串，由调用方写成中性的「跳过」。
+    """
+    tail = [t for t in result.get("tail") or [] if t.strip()]
+    if not tail:
+        return ""
+    return re.split(r"[。！？；\n]", tail[-1].strip())[0].strip()
+
+
 class AdbDownloader:
     """下载并校验 platform-tools（#273）。下载源表、校验、落盘与下载状态都在这里（ADR-0011）。"""
 
@@ -1318,7 +1330,11 @@ class Api:
             snap = j.snapshot(0)
             lines.append("\n**执行结果**\n")
             for r in snap["results"]:
-                state = "跳过（读屏服务被占用）" if r.get("skipped") else ("成功" if r["rc"] == 0 else "失败（退出码 %s）" % r["rc"])
+                if r.get("skipped"):
+                    reason = skip_reason(r)
+                    state = f"跳过（{reason}）" if reason else "跳过"
+                else:
+                    state = "成功" if r["rc"] == 0 else "失败（退出码 %s）" % r["rc"]
                 lines.append(f"- {r['title']}：{state}，{r['sec']} 秒")
             tail = [l for l in snap["lines"] if l.strip()][-60:]
             log = "\n".join(tail)
