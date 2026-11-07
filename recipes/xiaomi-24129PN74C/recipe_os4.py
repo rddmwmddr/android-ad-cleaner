@@ -11,6 +11,7 @@
 BUILD = "OS4.0"
 MODELS = ["24129PN74C"]
 import time
+from wait import until
 
 from fast import bounds
 
@@ -80,6 +81,39 @@ def tap_any(*names, scrolls=6):
 def maybe(name, scrolls=6):
     """可选入口：有就点，没有不报「走丢」。"""
     return p.entry(name, scrolls=scrolls)
+
+
+def popup_row(text, timeout=3.0):
+    """屏幕下半段里文字正好是 text 的那一行：菜单弹窗从底部升起，工具栏上的同名图标在上半屏。"""
+    def row():
+        for t, (l, top, r, b), _n in p.texts():
+            if t == text and top > p.H * 0.3:
+                return (l + r) // 2, (top + b) // 2
+        return None
+    return until(row, timeout=timeout, poll=0.3, now=time.time, sleep=time.sleep)
+
+
+def menu_settings(tries=2):
+    """底栏「菜单」→ 弹窗里的「设置」，点完必须认出设置页（#586）。
+
+    工具栏右上角也有一个叫「设置」的图标，点它打开的是首页编辑面板（页面布局 / 快捷网址 / 全网热榜）。
+    只点下半屏那一行；没落进设置页就退回来重开菜单再试，两次都不成就报当前页，不在面板上继续找。"""
+    stopped = ""
+    for _ in range(tries):
+        if not p.tap("菜单", exact=True, scrolls=0):
+            raise RuntimeError("浏览器底栏「菜单」未找到")
+        xy = popup_row("设置")
+        if not xy:
+            raise RuntimeError(f"浏览器菜单里没有「设置」；停在 {p.focus()}")
+        before = p.sig()
+        p.click(*xy)
+        p.settle(before, 1.5)
+        if p.in_settings_page():
+            return
+        # 弹窗这一行在屏上才走到这里，所以按返回是收起弹窗或退出面板，不会离开浏览器首页
+        stopped = p.focus()
+        p.back()
+    raise RuntimeError(f"浏览器设置页没有打开；停在 {stopped}")
 
 
 def gear_top():
@@ -191,24 +225,9 @@ def _():
         print("  · 浏览器处在基本模式，设置入口不在这条路径上，本段跳过")
         return
     # 底栏按钮是 ViewGroup，只认 80 毫秒短按；input tap 点了没反应
-    if not p.tap("菜单", exact=True, scrolls=0):
-        raise RuntimeError("浏览器底栏「菜单」未找到")
-    time.sleep(1.2)
-    # 工具栏右上角也有一个叫「设置」的图标，点它打开的是首页编辑面板（页面布局/快捷网址/全网热榜）。
-    # 菜单里那个在同名的一行（头像/菜单编辑/分享/设置），按 y 坐标排除顶部那个。
-    hit = None
-    for n in p.tree().iter("node"):
-        t = (n.get("text") or n.get("content-desc") or "").strip()
-        if t == "设置" and p.on_screen(n):
-            l, top, r, b = bounds(n)
-            cy = (top + b) // 2
-            if cy > p.H * 0.3:
-                hit = ((l + r) // 2, cy)
-                break
-    if not hit:
-        raise RuntimeError("浏览器菜单里没有「设置」")
-    p.click(*hit)
-    time.sleep(1.5)
+    # 工具栏右上角也有一个叫「设置」的图标，点它打开的是首页编辑面板（页面布局/快捷网址/全网热榜）；
+    # 菜单里那个在同一行（头像/菜单编辑/分享/设置），menu_settings() 按 y 坐标排除顶部那个。
+    menu_settings()
     if maybe("隐私和安全", scrolls=6):
         p.off(only=["个性化内容推荐", "个性化广告推荐"], page="浏览器·隐私和安全"); p.back()
     p.back(2)
