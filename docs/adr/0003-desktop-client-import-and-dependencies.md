@@ -32,3 +32,12 @@
 - **归因在 `startup_failed()` 的 `error` 原文上做子串匹配**（采纳）vs **起子进程跑 PowerShell 探一次**（否）。失败点正是 `import clr`，此时 pythonnet 的 `System` 模块还不存在，进程内拿托管 dll 试加载做不到（#609 的探测方案因此不可行）；另起进程能测，但测的是另一份加载上下文。代价是库把这句话改写后要同步维护那两个子串。
 - **`--smoke-gui` 的 `startup:` 行加 `load=` 字段**（采纳）。取值 `unresolved` / `no`，不复用 MOTW 的三态命名；打包件起不来时用户能贴的只有这一行。
 - 判定顺序固定为：缺 WebView2 → MOTW → 原文拒载 → 注册表读不到 → 兜底。带 MOTW 的 dll 与被判成远程来源的 dll 报同一句错，前者的出路是解锁文件，所以 MOTW 必须先判。
+
+## 增补：启动失败提示先复制、后弹窗（#811）
+
+弹窗是原生 `MessageBoxW`，文字选不中。MOTW 那一路要用户照着敲 `Get-ChildItem … | Unblock-File`，另外几路要用户把括号里的错误原文回报到 issue——不替用户复制，就只能手抄或拍照识别。
+
+- **弹窗之前用 `win_clipboard()` 把整段文案写进剪贴板**（采纳）vs **在界面上画复制按钮**（否）。这条路径上没起来的正是 WebView2 界面，界面里画不出按钮；自绘 Win32 对话框画得出，但收益不如自动复制，风险还高。
+- 写进剪贴板的内容就是弹窗里那一句，逐字一致：复制说明在 `startup_advice()` 里追加，别在弹窗处另拼一份，否则改文案时容易只改一处。
+- 写剪贴板失败**不能挡住弹窗**：`startup_failed()` 的收容集合是 `Exception`（与 `Api.copy_text` 一致），退回到文案末尾的「按 Ctrl+C」提示。窗口版没有控制台，弹窗是用户唯一看得到的东西，`except OSError` 会让 `UnicodeEncodeError` 之类的失败连弹窗一起吞掉。
+- 剪贴板写入是可注入协作者，默认 `win_clipboard`，与 `notify` / `open_url` 同一形状，用例于是在非 Windows 上也能验「先复制、后弹窗」的顺序。
