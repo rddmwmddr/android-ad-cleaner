@@ -1,4 +1,4 @@
-"""gui/web 的前端行为用例放在 tests/js/，这里只做代跑与守卫。
+"""前端行为用例放在 tests/js/（桌面版 gui/web 与官网下载页），这里只做代跑与守卫。
 
 回归入口是一条 python -m unittest discover -s tests：前端用例由这条命令带跑，
 不另开第二条命令（ADR-0017）。

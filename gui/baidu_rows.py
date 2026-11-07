@@ -87,7 +87,8 @@ def legacy(ver, out, sums_path):
     html = open(PAGE, encoding="utf-8").read()
     items = [i for i in ITEM.findall(html) if ver in i[4]]
     sums = dict(reversed(line.split(None, 1)) for line in open(sums_path, encoding="utf-8").read().split("\n") if line.strip())
-    sums = {name.strip(): digest for name, digest in sums.items()}
+    # `sha256sum -b` 写成「hash *文件名」，星号是格式的一部分，不算文件名
+    sums = {name.strip().lstrip("*"): digest for name, digest in sums.items()}
     folders = [f"{folder:<18}{title}（{sub}）" for _, folder, title, sub, _, _ in items]
     with open(os.path.join(out, "先看我-选哪个文件夹.txt"), "w", encoding="utf-8") as f:
         f.write(f"肉呆去广告 {ver}\n{INTRO}\n选哪个文件夹\n------------\n" + "\n".join(folders) +
@@ -96,9 +97,11 @@ def legacy(ver, out, sums_path):
                 "每个文件夹里有安装包和这个版本的安装说明。旧版本在官网和 GitHub 的「全部版本」里。\n")
     for key, folder, title, sub, file, note in items:
         kind = kind_of(key)
+        digest = sums.get(file)
+        if not digest:
+            sys.exit(f"SHA256SUMS.txt 里没有 {file}，先补上再生成安装说明")
         os.makedirs(os.path.join(out, folder), exist_ok=True)
         steps = "\n".join(f"{n}. {line.format(file=file)}" for n, line in enumerate(SETUP[kind], 1))
-        digest = sums.get(file, "")
         with open(os.path.join(out, folder, "安装说明.txt"), "w", encoding="utf-8") as f:
             f.write(f"肉呆去广告 {ver}\n{INTRO}\n适用：{title}（{sub}）。\n\n安装\n----\n{steps}\n\n"
                     + (USAGE_ANDROID if kind == "android" else USAGE) +
