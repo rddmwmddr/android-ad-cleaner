@@ -158,7 +158,7 @@ python3 tool/run.py devices
 | 负一屏/天气设置面板被退出 | 单屏面板不能翻页，或面板的「取消」被当作弹窗按钮 | 只滑动可滚动容器；滑动离开当前 Activity 就停止本段；带开关/列表的页面不按短弹窗处理 |
 | OPPO / 一加 / realme 关了快应用后，负一屏快递卡片能显示、点「全部」打不开详情页 | `com.nearme.instant.platform` 承载快递详情页，挂起它就弹「快应用服务框架目前无法使用。该应用是由Shell所管理。」 | `quickapp off` 已保留该组件，只挂 `local.service` 和 `card`；手动 `suspend` 平台才会复现，用 `unsuspend` 恢复（Issue #335） |
 
-代码回归见仓库根的 [CLAUDE.md](CLAUDE.md)「开发」一节——这里只放操作手机的步骤。
+代码回归见仓库根的 [CLAUDE.md](CLAUDE.md)「开发」一节——这里只放操作手机的步骤。前端行为用例在 `tests/js/`（`node --test` + jsdom），由同一条回归命令带跑，需要有 node；单跑先 `npm ci`，再 `npm test`。
 
 社区问题最新处理范围见 [docs/09-社区问题处理.md](docs/09-社区问题处理.md)。新渠道关闭流程必须确认渠道标题和明确的通知开关，回读渠道状态；不允许回退为关闭 App 全部通知。挂起成功不保证已经运行的进程退出或图标消失，快应用挂起成功后再 `force-stop`。
 
