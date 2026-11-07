@@ -28,7 +28,7 @@ class KeepAliveService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val notification = Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_popup_sync)
-            .setContentTitle("安卓去广告正在执行")
+            .setContentTitle("肉呆去广告正在执行")
             .setContentText(if (intent?.getBooleanExtra(BACKGROUND, false) == true)
                 "在后台屏上逐项关闭，可以照常用手机"
                 else "正在逐项关闭，请不要碰手机。要用手机先点「暂停」，等提示音响了再操作")

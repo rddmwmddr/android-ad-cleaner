@@ -72,7 +72,7 @@ class Session:
             try:
                 self.background = BACKGROUND and screen.start(package) is not None
                 native.busy(True, self.background)
-                visible(package, True, f"净 {action}中（后台）" if self.background else f"净 {action}中")
+                visible(package, True, f"肉呆{action}中（后台）" if self.background else f"肉呆{action}中")
             except BaseException:
                 # 半路失败不能把计数留在 1：之后每次执行都会走 count > 1 的早退分支，保活与胶囊就再也不开了
                 self.count -= 1

@@ -4,12 +4,12 @@
 #endif
 [Setup]
 AppId={{6C1E3F2A-8B7D-4E55-9A41-AAC0ADC1EA01}
-AppName=安卓去广告
+AppName=肉呆去广告
 AppVersion={#APPVER}
 AppPublisher=android-ad-cleaner
 AppPublisherURL=https://github.com/rddmwmddr/android-ad-cleaner
 DefaultDirName={autopf}\AndroidAdCleaner
-DefaultGroupName=安卓去广告
+DefaultGroupName=肉呆去广告
 DisableProgramGroupPage=yes
 OutputDir=dist
 OutputBaseFilename=AndroidAdCleaner-{#APPVER}-windows-setup
@@ -36,8 +36,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "dist\AndroidAdCleaner\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\安卓去广告"; Filename: "{app}\AndroidAdCleaner.exe"
-Name: "{autodesktop}\安卓去广告"; Filename: "{app}\AndroidAdCleaner.exe"; Tasks: desktopicon
+Name: "{group}\肉呆去广告"; Filename: "{app}\AndroidAdCleaner.exe"
+Name: "{autodesktop}\肉呆去广告"; Filename: "{app}\AndroidAdCleaner.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\AndroidAdCleaner.exe"; Description: "{cm:LaunchProgram,安卓去广告}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\AndroidAdCleaner.exe"; Description: "{cm:LaunchProgram,肉呆去广告}"; Flags: nowait postinstall skipifsilent

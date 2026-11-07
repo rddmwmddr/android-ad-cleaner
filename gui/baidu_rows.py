@@ -16,7 +16,7 @@ ITEM = re.compile(r'\{ id: "([\w-]+)", folder: "([^"]+)", baidu: \{[^}]*\}, titl
 def rows(ver, guide):
     html = open(PAGE, encoding="utf-8").read()
     items = [i for i in ITEM.findall(html) if ver in i[4]]
-    lines = [f"安卓去广告 v{ver}", "", "选哪个文件："]
+    lines = [f"肉呆去广告 v{ver}", "", "选哪个文件："]
     lines += [f"· {title}（{sub}）：{folder}/{file}。{note}" for _, folder, title, sub, file, note in items]
     lines += ["", "不知道 Mac 是哪种芯片：左上角苹果图标 → 关于本机，「芯片」写 Apple M 开头的选 Apple 芯片。",
               "SHA256SUMS.txt 是 4 个文件的 SHA256 校验值。",
@@ -47,7 +47,7 @@ def write(stream):
 INTRO = ("关掉国产安卓手机系统里的广告、热搜、资讯推荐和营销推送。\n"
          "不 root，不刷机，系统更新不受影响，每一项能还原。不需要 Python，也不需要 AI 工具。\n")
 SETUP = {
-    "mac": ["双击 {file}，把「安卓去广告」拖进「应用程序」文件夹。",
+    "mac": ["双击 {file}，把「肉呆去广告」拖进「应用程序」文件夹。",
             "在「应用程序」里双击打开。安装包有苹果公证。"],
     "win-setup": ["双击 {file}，按提示安装。",
                   "弹出「Windows 已保护你的电脑」：点「更多信息」→「仍要运行」（安装程序没有代码签名）。",
@@ -67,7 +67,7 @@ def legacy(ver, out, sums_path):
     sums = {name.strip(): digest for name, digest in sums.items()}
     folders = [f"{folder:<18}{title}（{sub}）" for _, folder, title, sub, _, _ in items]
     with open(os.path.join(out, "先看我-选哪个文件夹.txt"), "w", encoding="utf-8") as f:
-        f.write(f"安卓去广告 {ver}\n{INTRO}\n选哪个文件夹\n------------\n" + "\n".join(folders) +
+        f.write(f"肉呆去广告 {ver}\n{INTRO}\n选哪个文件夹\n------------\n" + "\n".join(folders) +
                 "\n\n不知道 Mac 是哪种芯片：点屏幕左上角的苹果图标 → 关于本机，\n"
                 "「芯片」一栏写 Apple M 开头的选 Mac-Apple芯片，写 Intel 的选 Mac-Intel芯片。\n\n"
                 "每个文件夹里有安装包和这个版本的安装说明。旧版本在官网和 GitHub 的「全部版本」里。\n")
@@ -77,7 +77,7 @@ def legacy(ver, out, sums_path):
         steps = "\n".join(f"{n}. {line.format(file=file)}" for n, line in enumerate(SETUP[kind], 1))
         digest = sums.get(file, "")
         with open(os.path.join(out, folder, "安装说明.txt"), "w", encoding="utf-8") as f:
-            f.write(f"安卓去广告 {ver}\n{INTRO}\n适用：{title}（{sub}）。\n\n安装\n----\n{steps}\n\n"
+            f.write(f"肉呆去广告 {ver}\n{INTRO}\n适用：{title}（{sub}）。\n\n安装\n----\n{steps}\n\n"
                     "使用\n----\n1. 手机打开开发者模式和 USB 调试（客户端里有图文教程）。\n"
                     "2. 用数据线连电脑，手机上点「允许 USB 调试」。荣耀、华为另开「仅充电模式下允许 ADB 调试」；"
                     "小米、Redmi 另开「USB 调试（安全设置）」；三星在 Windows 上装三星 USB 驱动。\n"
