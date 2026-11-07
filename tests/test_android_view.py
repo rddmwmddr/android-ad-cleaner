@@ -241,6 +241,58 @@ class BrandGuideTest(unittest.TestCase):
         self.assertIn("版本号", view.brand_guide(None, "vivo")["tap"])
 
 
+class SetupGuideTest(unittest.TestCase):
+    """首次设置三步：页面与通知栏都从这一份取（#646）。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        docs = Path(self.tmp.name, "docs")
+        docs.mkdir()
+        docs.joinpath("brand-taps.json").write_text(
+            (ROOT / "docs" / "手机版教程" / "brand-taps.json").read_text(encoding="utf-8"), encoding="utf-8")
+        old, view.BASE = view.BASE, self.tmp.name
+        self.addCleanup(setattr, view, "BASE", old)
+
+    def guide(self, brand="OPPO"):
+        return view.setup_guide(None, brand)
+
+    def test_states_map_to_three_ordered_steps(self):
+        g = self.guide()
+        self.assertEqual(g["at"], {"need_dev": 0, "need_wifi": 1, "need_pair": 2})
+        self.assertEqual([s["key"] for s in g["steps"]], ["about", "dev", "pair"])
+        self.assertEqual([s["title"] for s in g["steps"]], ["打开开发者选项", "打开无线调试", "授权本 App"])
+        self.assertEqual([s["action"] for s in g["steps"]], ["打开「关于手机」", "打开开发者选项", "开始授权"])
+        self.assertIn("setup_guide", view.EXPORTS)
+
+    def test_every_step_carries_the_fields_the_client_parses(self):
+        for step in self.guide()["steps"]:
+            self.assertEqual(set(step), {"key", "title", "lines", "note", "action", "notice"})
+            self.assertTrue(step["lines"])
+
+    def test_notice_carries_the_step_and_what_to_do_next(self):
+        steps = self.guide()["steps"]
+        self.assertEqual([s["notice"]["title"] for s in steps[:2]],
+                         ["第 1 步，共 3 步：打开开发者选项", "第 2 步，共 3 步：打开无线调试"])
+        # 通知里别再补一层「在「关于手机」里」：tap 自带完整路径，各品牌入口还不一样
+        self.assertTrue(steps[0]["notice"]["text"].startswith("连点"))
+        self.assertIn("版本号", steps[0]["notice"]["text"])
+        self.assertIn("回到「肉呆去广告」", steps[1]["notice"]["text"])
+        self.assertIsNone(steps[2]["notice"])     # 配对阶段的通知由 PairingService 负责
+
+    def test_brand_changes_the_path_and_the_xiaomi_extra_step(self):
+        xiaomi = self.guide("Redmi")["steps"]
+        self.assertIn("OS 版本", xiaomi[0]["lines"][1])
+        self.assertIn("OS 版本", xiaomi[0]["notice"]["text"])
+        self.assertIn("USB 调试（安全设置）", "".join(xiaomi[1]["lines"]))
+        self.assertIn("USB 调试（安全设置）", xiaomi[1]["notice"]["text"])
+        self.assertIn("输入配对码配对设备", "".join(xiaomi[2]["lines"]))
+        vivo = self.guide("vivo")["steps"]
+        self.assertIn("软件版本号", vivo[0]["lines"][1])
+        self.assertNotIn("USB 调试（安全设置）", "".join(vivo[1]["lines"]))
+        self.assertNotIn("USB 调试（安全设置）", vivo[1]["notice"]["text"])
+
+
 class FeedbackTest(unittest.TestCase):
     def query(self, url):
         return parse_qs(urlsplit(url).query)

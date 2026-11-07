@@ -10,6 +10,8 @@ import org.json.JSONObject
  * 页面：setup1 setup2 setup3 setup3mi old stopped-sh ask denied nodev home prepare0 prepare1 choose
  * blocked norecipe scanfail run paused pausing stalled fgmode stopping done failed stopped failed2
  * 面板：more newer restore restored feedback report log；对话框：devoff
+ *
+ * 首次设置的三个演示页仍从真的 view.py 取三步文案（#646）：要先等 Python 启动，期间显示启动页。
  */
 object Demo {
     private val device = Device("demo", "OPPO Find X10 Pro Max", "PKD110")
@@ -26,7 +28,7 @@ object Demo {
         val name = intent?.getStringExtra("demo") ?: return
         val sheet = intent.getStringExtra("sheet")
         model.demoVersion("0.3.2", if (sheet == "newer") NewVersion("0.3.3", "https://example.invalid") else null)
-        model.demoGuide(BrandGuide(if (name == "setup3mi") "「关于手机」里的「OS 版本」" else "「关于本机 → 版本信息」里的「版本号」", name.endsWith("mi")))
+        model.demoBrand(if (name == "setup3mi") "Xiaomi" else "OPPO")
 
         val backend = DemoBackend(when (name) {
             "setup1" -> "need_dev"

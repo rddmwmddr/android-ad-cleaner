@@ -20,6 +20,41 @@ internal fun JSONArray?.objects(): List<JSONObject> =
 internal fun JSONArray?.strings(): List<String> =
     if (this == null) emptyList() else List(length()) { getString(it) }
 
+/** 切到系统设置时通知栏里那条指引。 */
+data class SetupNote(val title: String, val text: String)
+
+/** 首次设置的一步；文案来自 view.py 的 setup_guide（#646）。key 决定按哪个按钮走哪个系统动作。 */
+data class SetupStep(
+    val key: String,
+    val title: String,
+    val lines: List<String>,
+    val note: String,
+    val action: String,
+    val notice: SetupNote?,
+)
+
+data class SetupGuide(
+    val steps: List<SetupStep> = emptyList(),
+    /** 授权状态（need_dev / need_wifi / need_pair）到这个状态是第几步。 */
+    val at: Map<String, Int> = emptyMap(),
+) {
+    companion object {
+        fun parse(o: JSONObject) = SetupGuide(
+            steps = o.optJSONArray("steps").objects().map { s ->
+                SetupStep(
+                    key = s.text("key"),
+                    title = s.text("title"),
+                    lines = s.optJSONArray("lines").strings(),
+                    note = s.text("note"),
+                    action = s.text("action"),
+                    notice = s.optJSONObject("notice")?.let { SetupNote(it.text("title"), it.text("text")) },
+                )
+            },
+            at = buildMap { o.optJSONObject("at")?.let { a -> a.keys().forEach { put(it, a.optInt(it)) } } },
+        )
+    }
+}
+
 data class Device(val serial: String, val title: String, val model: String) {
     companion object {
         fun parse(o: JSONObject) = Device(

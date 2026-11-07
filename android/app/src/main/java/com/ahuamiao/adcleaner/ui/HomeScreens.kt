@@ -20,6 +20,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,6 +46,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -197,61 +201,32 @@ fun HomeScreen(model: AppModel) {
 
 // ---------- 首次设置 ---------- //
 
-private val SetupAt = mapOf("need_dev" to 0, "need_wifi" to 1, "need_pair" to 2)
-
 @Composable
 fun SetupScreen(model: AppModel, state: String, host: HostActions) {
-    val at = SetupAt[state]
-    if (at == null) StatusScreen(state, host) else SetupSteps(model, at, host)
+    val at: Int? = model.setup.at[state]
+    val steps = model.setup.steps
+    when {
+        // 三步清单还没从 view.py 取到：还不知道这一步该说什么（只有演示路径会碰上）
+        at == null -> if (steps.isEmpty()) BootScreen() else StatusScreen(state, host)
+        at > steps.lastIndex -> BootScreen()
+        else -> SetupSteps(model, at, host)
+    }
 }
 
-private data class SetupStep(
-    val title: String,
-    val lines: List<String>,
-    val note: String = "",
-    val action: String,
-    val run: (HostActions) -> Unit,
-)
-
-private fun setupSteps(guide: BrandGuide) = listOf(
-    SetupStep(
-        title = "打开开发者选项",
-        lines = listOf(
-            "点下面的按钮，进入系统设置",
-            "连点${guide.tap} 7 下，输入锁屏密码",
-            "看到「已处于开发者模式」，回到这里",
-        ),
-        action = "打开「关于手机」",
-        run = { it.openSettings("about") },
-    ),
-    SetupStep(
-        title = "打开无线调试",
-        lines = buildList {
-            add("连上 Wi-Fi，点下面的按钮")
-            if (guide.xiaomi) add("打开「USB 调试（安全设置）」，不然点不动下一个开关")
-            add("打开「无线调试」")
-            add("弹窗里勾「始终允许」，点「允许」")
-        },
-        action = "打开开发者选项",
-        run = { it.openSettings("dev") },
-    ),
-    SetupStep(
-        title = "授权本 App",
-        lines = listOf(
-            "点下面的按钮，共享屏幕时选「整个屏幕」，点「立即开始」",
-            if (guide.xiaomi) "在打开的页面点「无线调试」→「输入配对码配对设备」"
-            else "在打开的页面点「无线调试」→「使用配对码配对设备」",
-            "本 App 读出 6 位数字自己完成授权，你不用输入",
-        ),
-        note = "截屏只在这台手机上识别数字，不保存、不上传，授权完成就停。",
-        action = "开始授权",
-        run = { it.startPairing() },
-    ),
-)
+/** 三步的按钮落到哪个系统动作；文案不在这里（view.py 的 setup_guide，#646）。 */
+private fun runStep(step: SetupStep, host: HostActions) = when (step.key) {
+    "about" -> host.openSettings("about")
+    "dev" -> host.openSettings("dev")
+    "pair" -> host.startPairing()
+    else -> Unit
+}
 
 @Composable
 private fun SetupSteps(model: AppModel, at: Int, host: HostActions) {
-    val steps = setupSteps(model.guide)
+    val steps = model.setup.steps
+    val list = rememberLazyListState()
+    // 从系统设置回到 App 时定位到当前步（#646）；换一步时也滚过去。高亮由 SetupRow 按 i == at 画。
+    LaunchedEffect(at, model.visible) { if (model.visible) list.animateScrollToItem(at) }
     val bar = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val colors = MaterialTheme.colorScheme
     Scaffold(
@@ -280,7 +255,7 @@ private fun SetupSteps(model: AppModel, at: Int, host: HostActions) {
                 ) {
                     SizedButton(
                         text = steps[at].action,
-                        onClick = { steps[at].run(host) },
+                        onClick = { runStep(steps[at], host) },
                         modifier = Modifier.fillMaxWidth(),
                         height = ctaHeight(),
                     )
@@ -292,13 +267,14 @@ private fun SetupSteps(model: AppModel, at: Int, host: HostActions) {
         },
     ) { inner ->
         Box(Modifier.fillMaxSize().padding(inner), contentAlignment = Alignment.TopCenter) {
-            Segments(
-                Modifier
+            LazyColumn(
+                state = list,
+                modifier = Modifier
                     .widthIn(max = PageWidth)
-                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
             ) {
-                steps.forEachIndexed { i, step -> SetupRow(i, steps.size, step, i < at, i == at) }
+                itemsIndexed(steps) { i, step -> SetupRow(i, steps.size, step, i < at, i == at) }
             }
         }
     }

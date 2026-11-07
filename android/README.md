@@ -25,7 +25,7 @@
 
 ## 界面（ADR-0018）
 
-Jetpack Compose + 官方 Material 3 Expressive，代码在 `app/src/main/java/.../ui/`。页面状态只有 `AppModel.kt` 的 `Screen`，经 `Backend` 调 `aac_android.main.call()`：普通方法名落到 `Api`，`view.xxx` 落到 `aac_android/view.py`（界面要用的判断，CI 测得到）。
+Jetpack Compose + 官方 Material 3 Expressive，代码在 `app/src/main/java/.../ui/`。页面状态只有 `AppModel.kt` 的 `Screen`，经 `Backend` 调 `aac_android.main.call()`：普通方法名落到 `Api`，`view.xxx` 落到 `aac_android/view.py`（界面要用的判断，CI 测得到）。首次设置的三步文案与「现在是第几步」也在 `view.py` 的 `setup_guide()`：页面和通知栏读同一份；切到系统设置时通知栏显示当前步，回到 App 时清单滚到当前步（#646）。
 
 | 规范元素 | 用在哪 |
 |---|---|

@@ -225,6 +225,46 @@ def brand_guide(api, brand):
     return {"tap": tap, "xiaomi": key in XIAOMI}
 
 
+SETUP_AT = {"need_dev": 0, "need_wifi": 1, "need_pair": 2}
+
+
+def setup_steps(brand=""):
+    """首次设置的三步。页面与通知栏取同一份，别在 Kotlin 再写一遍（#646）。"""
+    g = brand_guide(None, brand)
+    tap, xiaomi = g["tap"], g["xiaomi"]
+    return [
+        {"key": "about", "title": "打开开发者选项", "action": "打开「关于手机」",
+         "lines": ["点下面的按钮，进入系统设置",
+                   f"连点{tap} 7 下，输入锁屏密码",
+                   "看到「已处于开发者模式」，回到这里"],
+         "note": "",
+         "notice": {"title": "第 1 步，共 3 步：打开开发者选项",
+                    "text": f"连点{tap} 7 下，输入锁屏密码；看到「已处于开发者模式」就回到「肉呆去广告」。"}},
+        {"key": "dev", "title": "打开无线调试", "action": "打开开发者选项",
+         "lines": ["连上 Wi-Fi，点下面的按钮"]
+                  + (["打开「USB 调试（安全设置）」，不然点不动下一个开关"] if xiaomi else [])
+                  + ["打开「无线调试」", "弹窗里勾「始终允许」，点「允许」"],
+         "note": "",
+         "notice": {"title": "第 2 步，共 3 步：打开无线调试",
+                    "text": ("先打开「USB 调试（安全设置）」；" if xiaomi else "")
+                            + "打开「无线调试」，弹窗里勾「始终允许」再点「允许」，然后回到「肉呆去广告」。"}},
+        {"key": "pair", "title": "授权本 App", "action": "开始授权",
+         "lines": ["点下面的按钮，共享屏幕时选「整个屏幕」，点「立即开始」",
+                   "在打开的页面点「无线调试」→「输入配对码配对设备」" if xiaomi
+                   else "在打开的页面点「无线调试」→「使用配对码配对设备」",
+                   "本 App 读出 6 位数字自己完成授权，你不用输入"],
+         "note": "截屏只在这台手机上识别数字，不保存、不上传，授权完成就停。",
+         # 这一阶段的指引由 PairingService 的通知给（自动读码或退回手填）；
+         # 另发一条「回 App 重新开始」会把人推进 ADR-0015 说的重开死循环。
+         "notice": None},
+    ]
+
+
+def setup_guide(api, brand=""):
+    """首次设置要的三步，以及每个授权状态是第几步；界面与通知栏都从这里取（#646）。"""
+    return {"steps": setup_steps(brand), "at": SETUP_AT}
+
+
 def feedback_url(kind, text, diag):
     """返回 (网址, 要放进剪贴板的全文)。网址太长时里面只留摘要，全文走剪贴板。"""
     template, prefix = FEEDBACK.get(kind, FEEDBACK["bug"])
@@ -261,4 +301,5 @@ def send_feedback(api, kind, text, diag):
     return {"trimmed": bool(clip)}
 
 
-EXPORTS = {"poll": poll, "detect": detect, "brand_guide": brand_guide, "send_feedback": send_feedback}
+EXPORTS = {"poll": poll, "detect": detect, "brand_guide": brand_guide, "setup_guide": setup_guide,
+           "send_feedback": send_feedback}

@@ -170,6 +170,33 @@ object Native {
             .build())
     }
 
+    /**
+     * 首次设置时用户切到系统设置：通知栏说明这一步做什么（#646）。title 传 null 收回。
+     * 与配对的前台通知分开一条（不同 ID），免得两边互相盖掉。
+     * 不设 ongoing：设置阶段没有前台服务保活，进程被系统收掉后就没人来撤它了，留一条划不掉的旧步号；
+     * 启动时 `AppModel.start()` 会补一次收回。
+     */
+    @JvmStatic
+    fun setupNotice(title: String?, text: String) = main.post {
+        val nm = app.getSystemService(android.app.NotificationManager::class.java)
+        if (title == null) {
+            nm.cancel(SETUP_ID)
+            return@post
+        }
+        nm.createNotificationChannel(android.app.NotificationChannel(SETUP_CHANNEL, "首次设置",
+            android.app.NotificationManager.IMPORTANCE_LOW))
+        val open = android.app.PendingIntent.getActivity(app, 7, Intent(app, MainActivity::class.java),
+            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT)
+        nm.notify(SETUP_ID, android.app.Notification.Builder(app, SETUP_CHANNEL)
+            .setSmallIcon(android.R.drawable.ic_menu_view)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(android.app.Notification.BigTextStyle().bigText(text))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build())
+    }
+
     /** 执行好一阵没有进展：用户可能正在用别的 App，看不到执行页。有进展了就收回。 */
     fun stallNotice(on: Boolean) = main.post {
         val nm = app.getSystemService(android.app.NotificationManager::class.java)
@@ -192,6 +219,8 @@ object Native {
 
     private const val STALL_ID = 5
     private const val DONE_CHANNEL = "done"
+    private const val SETUP_ID = 7
+    private const val SETUP_CHANNEL = "setup"
 
     /** 执行完回到本 App，让用户看到结果（引擎最后会回桌面）。 */
     @JvmStatic
