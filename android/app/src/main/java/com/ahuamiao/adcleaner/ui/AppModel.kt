@@ -84,8 +84,6 @@ class AppModel(
 
     var selection by mutableStateOf<Selection?>(null)
         private set
-    var detecting by mutableStateOf(false)
-        private set
 
     var progress by mutableStateOf(RunProgress())
         private set
@@ -254,22 +252,17 @@ class AppModel(
     }
 
     private suspend fun detect(serial: String): Selection? {
-        detecting = true
-        try {
-            val o = try {
-                backend.call("view.detect", serial) as JSONObject
-            } catch (e: EngineError) {
-                notice = Notice("检测失败", e.message.orEmpty())
-                return null
-            }
-            if (o.has("error")) {
-                notice = Notice("检测失败", o.optString("error"))
-                return null
-            }
-            return Selection(Detection.parse(o)).also { selection = it }
-        } finally {
-            detecting = false
+        val o = try {
+            backend.call("view.detect", serial) as JSONObject
+        } catch (e: EngineError) {
+            notice = Notice("检测失败", e.message.orEmpty())
+            return null
         }
+        if (o.has("error")) {
+            notice = Notice("检测失败", o.optString("error"))
+            return null
+        }
+        return Selection(Detection.parse(o)).also { selection = it }
     }
 
     private suspend fun scan(serial: String, selection: Selection) {
