@@ -47,8 +47,9 @@ def enter(text, scrolls=4):
 
 
 def no_agreement(app):
-    """App 还弹着用户协议就停：引擎的弹窗处理会点「取消」，App 随之退出，后面全是空跑。"""
-    if p.find("同意", exact=True) or p.find("同意并继续", exact=True):
+    """App 还弹着用户协议就停：引擎的弹窗处理会点「取消」，App 随之退出，后面全是空跑。
+    按钮贴着屏幕底也要算：find 默认不看最底下那一条，而后台屏上协议框的按钮可能正好落在那里。"""
+    if p.find("同意", exact=True, edge_ok="tab") or p.find("同意并继续", exact=True, edge_ok="tab"):
         raise SkipStep(f"{app}还没同意用户协议，不代为同意。需要的话打开{app}同意后，单独跑这一段")
 
 
@@ -80,6 +81,13 @@ def wait_home(app):
 
 
 def my_tab(app):
+    """底栏可能被晚到的弹窗盖住（阅读开屏广告之后才弹「发现新版本」）：关掉再找。协议框不关，只跳过。"""
+    for _ in range(4):
+        no_agreement(app)
+        if p.find("我的", edge_ok="tab"):
+            break
+        p.dismiss()
+        time.sleep(1.5)
     if not p.tab("我的"):
         raise RuntimeError(f"{app}底部「我的」没找到")
     time.sleep(1)

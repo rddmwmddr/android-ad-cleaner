@@ -97,6 +97,15 @@ class AgreementTest(unittest.TestCase):
         self.assertIn("不代为同意", out)
         p.tab.assert_not_called()
 
+    def test_agreement_button_at_the_very_bottom_of_the_screen_counts(self):
+        # find 默认不看屏幕最底下那一条；后台屏上协议框的按钮可能正好落在那里，这时弹窗处理会点「取消」
+        p = in_app(phone(), THEME)
+        p.find.side_effect = lambda text, exact=False, edge_ok=False, **kw: (
+            object() if text == "同意" and edge_ok == "tab" else None)
+        scope, out = run(p, "主题")
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        self.assertIn("不代为同意", out)
+
     def test_stale_page_of_the_previous_app_is_not_used(self):
         # 真实发生过：主题还没起来，就在上一个 App（浏览器）的页面上点了「我的」
         p = in_app(phone(), BROWSER)
@@ -158,6 +167,29 @@ class AdTrackingTest(unittest.TestCase):
         p.switches.return_value = [("某个私人应用", False)]
         _, out = run(p, "广告跟踪")
         self.assertNotIn("某个私人应用", out)
+
+
+class ReaderTest(unittest.TestCase):
+    def test_tab_covered_by_a_late_dialog_is_found_after_closing_it(self):
+        # 真实发生过：开屏广告之后才弹「发现新版本」，盖住底栏，直接点就报「我的」没找到
+        p = in_app(phone(), "com.hihonor.dz.reader")
+        closed = []
+        p.dismiss.side_effect = lambda: closed.append(1)
+        p.find.side_effect = lambda text, exact=False, **kw: (object() if text == "我的" and closed else None)
+        p.tab.side_effect = lambda text: bool(closed)
+        scope, _ = run(p, "阅读")
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        p.tab.assert_called_once_with("我的")
+
+    def test_agreement_is_not_closed_while_looking_for_the_tab(self):
+        p = in_app(phone(), "com.hihonor.dz.reader")
+        shown = {"agreement": False}
+        p.dismiss.side_effect = lambda: shown.update(agreement=True)    # 引擎启动后的那次之后协议框才出现
+        p.find.side_effect = lambda text, exact=False, **kw: (object() if text == "同意" and shown["agreement"] else None)
+        scope, out = run(p, "阅读")
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        self.assertIn("不代为同意", out)
+        p.tab.assert_not_called()
 
 
 class MusicTest(unittest.TestCase):
