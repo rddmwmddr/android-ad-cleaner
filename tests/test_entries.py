@@ -79,6 +79,12 @@ class SourceTest(unittest.TestCase):
                 encoding="utf-8")
             self.assertEqual(entries.used_by(d), {})
 
+    def test_honor_minus_one_screen_direct_entry_is_registered(self):
+        """CLE-AN00 用 hiboard 直达负一屏首页，ENTRIES 要跟着登记（#671）。"""
+        e = entries.ENTRIES["honor"]["负一屏"]
+        self.assertTrue(any(d.activity == "com.hihonor.intelligent.LauncherActivity" for d in e.direct),
+                        "honor·负一屏 缺 CLE-AN00 实测到的直达页")
+
     def test_doc_is_generated_from_table(self):
         doc = (ROOT / "docs" / "清单" / "入口速查.md").read_text(encoding="utf-8")
         self.assertEqual(doc, entries.markdown(RECIPES),
