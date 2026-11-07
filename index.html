@@ -425,7 +425,7 @@ footer a:hover { color: var(--ink); }
       <details><summary>（电脑版）Mac 怎么看是哪种芯片？</summary><p>屏幕左上角苹果图标 → 关于本机。「芯片」一栏写 Apple M 开头的是 Apple 芯片，写 Intel 的是 Intel 芯片。</p></details>
       <details><summary>（电脑版）Windows 弹出「Windows 已保护你的电脑」</summary><p>安装程序没有代码签名。点「更多信息」→「仍要运行」。</p></details>
       <details><summary>（电脑版）Windows 提示缺少 WebView2，或提示「程序文件被 Windows 标记成来自网络」</summary><p>到微软官网下载安装「WebView2 Evergreen Bootstrapper」，然后打开本程序。安装后提示没有消失，把弹窗括号里的原文发到反馈里。</p><p>用的是便携版（zip 解压出来的）时，提示可能不是真的缺 WebView2，而是解压出来的文件被 Windows 标成「来自网络」、加载时被拦住了：对下载的 zip 点右键 →「属性」→ 勾选「解除锁定」→ 确定，重新解压后再打开；zip 已经删了，就在解压出来的文件夹里按住 Shift 点右键 →「在此处打开 PowerShell 窗口」，粘贴 <code>Get-ChildItem . -Recurse -File | Unblock-File</code> 回车。安装版不受影响。</p></details>
-      <details><summary>（电脑版）插上手机，客户端认不出来</summary><p>换一根能传数据的线；手机通知栏里 USB 用途选「传输文件」；手机弹窗点「允许 USB 调试」。荣耀、华为打开「仅充电模式下允许 ADB 调试」；三星装三星 USB 驱动。退出电脑上的手机助手和安卓模拟器。</p></details>
+      <details><summary>（电脑版）插上手机，客户端认不出来</summary><p>换一根能传数据的线，插电脑后面的 USB 口；后面的口是 USB 2.0 的话，换一个 USB 3.0 口再试；手机通知栏里 USB 用途选「传输文件」；手机弹窗点「允许 USB 调试」。荣耀、华为打开「仅充电模式下允许 ADB 调试」；三星装三星 USB 驱动。退出电脑上的手机助手和安卓模拟器。</p></details>
       <details><summary>小米 / Redmi 点不动，跑一半锁屏</summary><p>开发者选项里打开「USB 调试（安全设置）」，需要插 SIM 卡、登录小米账号。</p></details>
       <details><summary>会影响系统更新和保修吗？</summary><p>不会。不 root，不解锁，不改系统分区。用到的是开发者选项和系统自带的设置项。</p></details>
       <details><summary>关完还会有广告吗？</summary><p>会剩一些：浏览器搜索框的轮播热词没有开关；新装的 App 带着广告跟踪和营销通知，装新 App 后再跑一次（电脑版客户端，或手机 App 的「一键去广告」）。第三方 App 自己的开屏广告不在范围内。</p></details>
