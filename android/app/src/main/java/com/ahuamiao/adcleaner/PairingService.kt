@@ -46,6 +46,12 @@ class PairingService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    /** 服务被系统回收时不一定走到 `finish()`：标志要在这里也放开，否则「开始授权」只会回到无线调试页，拿不回截屏许可（#662）。 */
+    override fun onDestroy() {
+        waiting = false
+        super.onDestroy()
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == STOP) {
             finish(null)
