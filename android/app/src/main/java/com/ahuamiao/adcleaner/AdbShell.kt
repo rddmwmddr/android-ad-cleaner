@@ -14,7 +14,7 @@ import kotlin.concurrent.thread
  */
 object AdbShell {
     lateinit var app: Context
-    @Volatile private var failedAt = 0L      // 上次连不上的时刻：10 秒内不再试，免得每次查状态都等 mDNS
+    @Volatile private var failedAt = 0L      // 上次连不上的时刻：10 秒内不再试（开关没变的话），免得每次查状态都等 mDNS
     @Volatile private var failedWireless = false     // 连不上那会儿无线调试开没开：用户改过开关就不必等满 10 秒（#662）
 
     /** 已连上本机 adbd。 */
