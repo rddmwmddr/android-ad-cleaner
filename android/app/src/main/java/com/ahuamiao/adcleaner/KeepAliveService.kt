@@ -10,7 +10,10 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 
-/** 执行期间的前台服务：引擎在别的 App 的设置页里点开关，本 App 在后台，靠它不被系统回收。 */
+/**
+ * 执行期间的前台服务：引擎在别的 App 的设置页里点开关，本 App 在后台，靠它不被系统回收。
+ * 屏幕锁挂在它身上（#769）：锁此前只跟着 `busy()` 走，服务被单独停掉时没人放，屏幕会一直亮到进程结束。
+ */
 class KeepAliveService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -43,7 +46,13 @@ class KeepAliveService : Service() {
         } else {
             startForeground(1, notification)
         }
+        Native.acquireAwake()
         return START_NOT_STICKY
+    }
+
+    override fun onDestroy() {
+        Native.releaseAwake()
+        super.onDestroy()
     }
 
     companion object {
