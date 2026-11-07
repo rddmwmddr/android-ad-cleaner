@@ -1,4 +1,4 @@
-"""文档与单一来源一致：ADR 字段表（#467）、品牌连点表（#654）、教程截图 alt（#655）、站点与侧栏图标同源（#669）、ADR 索引（#624）、静态检查目标（#624）、手机版措辞的宿主边界（#732）、adapt 的 -s 写法（#740）。"""
+"""文档与单一来源一致：ADR 字段表（#467）、品牌连点表（#654）、官网共享样式（#653）、教程截图 alt（#655）、站点与侧栏图标同源（#669）、ADR 索引（#624）、静态检查目标（#624）、手机版措辞的宿主边界（#732）、adapt 的 -s 写法（#740）。"""
 import re
 import sys
 import unittest
@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 import channel_policy as policy
 import gen_brand_taps as gen
+import gen_site_css as site_css
 import run
 
 ADR = ROOT / "docs/adr/0006-channel-classification.md"
@@ -125,6 +126,63 @@ class BrandTapsDocTests(unittest.TestCase):
                     indents[kind].add(line[:len(line) - len(line.lstrip())])
             self.assertEqual(indents["start"], indents["end"],
                              f"{path.name} 的 brand-taps 标记缩进不一致")
+
+
+class SiteCssTests(unittest.TestCase):
+    """官网两页的共享样式与 site.css 一致（#653）。"""
+
+    def test_target_set_is_frozen(self):
+        self.assertEqual(set(site_css.TARGETS), {"home", "tutorial"},
+                         "TARGETS 的键变了：增删渲染目标要同时改这里，否则下面的逐字对拍会静默漏掉那页")
+
+    def test_both_pages_carry_the_shared_block(self):
+        css = site_css.load_css()
+        self.assertIn("--paper:", css, "site.css 里没读到调色板，守卫会空转")
+        for key, path in site_css.TARGETS.items():
+            with self.subTest(page=path.name):
+                text = path.read_text(encoding="utf-8")
+                site_css.check_markers(text, path.name)
+                self.assertEqual(site_css.replace_region(text, css), text,
+                                 f"{path.name} 的共享样式与 site.css 不一致：跑 python tool/gen_site_css.py")
+
+    def test_appearance_rules_live_only_in_the_shared_block(self):
+        """旧树也绿，守的是共享规则不在页面里留副本：标记区外逐字相同的声明会盖掉 site.css 的改动。"""
+        shared = [line for line in site_css.load_css().splitlines()
+                  if line.strip() and not line.strip().startswith(("/*", "}"))]
+        self.assertGreater(len(shared), 20, "共享块没读到规则行，守卫会空转")
+        for key, path in site_css.TARGETS.items():
+            outside = site_css.replace_region(path.read_text(encoding="utf-8"), "")
+            with self.subTest(page=path.name):
+                self.assertEqual([line for line in shared if line in outside], [],
+                                 f"{path.name} 的标记区外还有共享规则的副本：跑一次生成器就会漂移")
+
+    def test_reading_page_hooks_its_differences(self):
+        """差异值只由 :root.reading 给出：类名掉了或用到了首页上，版心与栏高会一起串。"""
+        self.assertIn(":root.reading", site_css.load_css())
+        for key, path in site_css.TARGETS.items():
+            html_tag = re.search(r"<html[^>]*>", path.read_text(encoding="utf-8"))
+            self.assertIsNotNone(html_tag, f"{path.name} 的第一行不是 <html>")
+            with self.subTest(page=path.name):
+                self.assertEqual('class="reading"' in html_tag.group(0), key == "tutorial",
+                                 f"{path.name} 的 <html> 带错了 reading 类：版心、栏高与顶栏 gap 会串页")
+
+    def test_pages_stay_self_contained(self):
+        """机主服务器上的副本是单文件（standalone.py 也只内联），外链样式表在那里取不到。旧树也绿，守的是不回退。"""
+        for path in site_css.TARGETS.values():
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(page=path.name):
+                self.assertIsNone(re.search(r"<link[^>]*stylesheet|@import", text),
+                                  f"{path.name} 引了外部样式表：共享样式要渲染进 <style>")
+
+    def test_marker_checks_reject_a_broken_pair(self):
+        text = site_css.TARGETS["home"].read_text(encoding="utf-8")
+        site_css.check_markers(text, "home")
+        for broken, why in ((text + "\n" + site_css.START + "\n" + site_css.END + "\n", "多出一对标记"),
+                            (text.replace(site_css.START, ""), "少了开始标记"),
+                            (text.replace(site_css.START, "@@").replace(site_css.END, site_css.START)
+                             .replace("@@", site_css.END), "结束标记在前")):
+            with self.subTest(why=why), self.assertRaises(ValueError):
+                site_css.check_markers(broken, "home")
 
 
 IMG_TAG = re.compile(r"<img\b[^>]*>")
