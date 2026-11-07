@@ -1,14 +1,14 @@
-"""#714：下载页的国内下载走 Gitee，页面上不出现百度网盘；Gitee 不可用时留空 gitee 就能退回网盘。"""
+"""#718：上传脚本从 GitHub 取包、核 SHA256，Gitee 拒收的安装版不进上传清单，匿名下载回验。"""
 import importlib.util
-import re
+import io
 import sys
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-PAGE = (ROOT / "index.html").read_text(encoding="utf-8")
 
 
 def load_uploader():
@@ -16,30 +16,6 @@ def load_uploader():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
-
-
-class PageTest(unittest.TestCase):
-    def test_gitee_path_follows_the_version(self):
-        version = re.search(r'version: "([^"]+)"', PAGE).group(1)
-        self.assertIn(f'gitee: "https://gitee.com/rddmw/android-ad-cleaner/releases/download/v{version}/"', PAGE)
-
-    def test_no_netdisk_link_or_wording_is_shown(self):
-        self.assertNotIn("pan.baidu.com", PAGE)
-        lead = re.search(r'id="dl-lead">([^<]+)<', PAGE).group(1)
-        self.assertIn("Gitee", lead)
-        self.assertNotIn("百度", lead)
-        self.assertNotIn("提取码", lead)
-
-    def test_the_installer_gitee_rejects_gets_no_gitee_link(self):
-        row = re.search(r'\{ id: "win-setup",[^\n]*\n[^\n]*', PAGE).group(0)
-        self.assertIn("gitee: false", row)
-        self.assertIn('f.gitee !== false', PAGE)
-        self.assertIn("国内网络建议下载免安装版", PAGE)
-
-    def test_every_file_keeps_an_empty_slot_so_the_netdisk_script_can_restore_it(self):
-        rows = re.findall(r'\{ id: "[\w-]+", folder: "[^"]+", baidu: \{ url: "", code: "" \}', PAGE)
-        self.assertEqual(len(rows), len(re.findall(r'\{ id: "[\w-]+", folder:', PAGE)))
-        self.assertTrue(rows)
 
 
 class UploaderTest(unittest.TestCase):
@@ -78,6 +54,44 @@ class UploaderTest(unittest.TestCase):
             with self.assertRaises(SystemExit) as caught:
                 self.up.token()
         self.assertIn("私人令牌", str(caught.exception))
+
+    def test_only_version_tags_reach_gitee(self):
+        seen = []
+
+        def fake_run(*cmd, **_kw):
+            seen.append(cmd)
+
+        with patch.object(self.up, "run", fake_run):
+            self.up.push_code("1.0.0")
+        pushed = [c for c in seen if "push" in c]
+        self.assertEqual(len(pushed), 1)
+        self.assertIn("refs/heads/main:refs/heads/main", pushed[0])
+        self.assertIn("refs/tags/v*:refs/tags/v*", pushed[0])
+        self.assertNotIn("refs/tags/*:refs/tags/*", pushed[0])
+
+    def test_a_tampered_public_download_stops_the_release(self):
+        class Resp(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_a):
+                return False
+
+        with patch.object(self.up.urllib.request, "urlopen", lambda *_a, **_kw: Resp(b"x")):
+            with self.assertRaises(SystemExit) as caught:
+                self.up.verify_public("1.0.0", [], {}, "0" * 64)
+        self.assertIn("SHA256SUMS.txt", str(caught.exception))
+
+    def test_a_rejected_upload_reports_the_status_and_the_platform_message(self):
+        path = self.stage / "a.exe"
+        path.write_bytes(b"x")
+        refused = urllib.error.HTTPError("u", 400, "Bad Request", {},
+                                         io.BytesIO(b"malicious file detected and rejected"))
+        with patch.object(self.up, "call", side_effect=refused):
+            with self.assertRaises(SystemExit) as caught:
+                self.up.upload(1, path)
+        self.assertIn("400", str(caught.exception))
+        self.assertIn("malicious file detected", str(caught.exception))
 
 
 if __name__ == "__main__":

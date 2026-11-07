@@ -178,6 +178,7 @@ test("手机上首屏的两个按钮都指向 APK", () => {
   } finally { page.close(); }
 });
 
+// 旧树也绿，守的是不回退：注入 APK 不该把桌面端的高亮带偏
 test("电脑上打开时，安卓卡片不高亮，卡片数只多一条", () => {
   const before = open({ apk: false });
   const after = open();
@@ -189,6 +190,30 @@ test("电脑上打开时，安卓卡片不高亮，卡片数只多一条", () =>
     before.close();
     after.close();
   }
+});
+
+test("Gitee 与网盘都在时，卡片同时给国内下载和百度网盘", () => {
+  const page = open({
+    apk: false,
+    transform: (html) => html.replace(
+      /(\{ id: "mac-arm64", folder: "[^"]+", )baidu: \{ url: "", code: "" \}/,
+      '$1baidu: { url: "https://pan.baidu.com/s/x", code: "abcd" }'),
+  });
+  try {
+    const mac = page.card("Apple");
+    assert.match(page.button(mac, "国内下载").href, /gitee\.com.*mac-arm64\.dmg$/);
+    assert.match(page.button(mac, "百度网盘").href, /pan\.baidu\.com\/s\/x\?pwd=abcd/);
+    assert.match(mac.textContent, /提取码/);
+  } finally { page.close(); }
+});
+
+test("国内下载的 Gitee 路径与页首写的版本号是同一个", () => {
+  const page = open();
+  try {
+    const version = page.hero().match(/^v([\d.]+)/)[1];
+    assert.ok(page.button(page.card("Apple"), "国内下载").href.includes(`/releases/download/v${version}/`),
+      `Gitee 路径要跟着 REL.version（${version}）走，发版时改一处就够`);
+  } finally { page.close(); }
 });
 
 test("退路：gitee 留空、填回网盘链接后，国内下载回到百度网盘", () => {

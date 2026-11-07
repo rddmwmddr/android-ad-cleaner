@@ -118,7 +118,9 @@ section { padding-block: 92px; border-top: 1px solid var(--line); }
 .head .lead { margin: 0; }
 
 /* 下载 */
-.dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+.dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+/* 有五个下载项（加了手机版）时均分一行，免得末行只剩一张卡占 1/4、右边空三格 */
+@media (min-width: 981px) { .dl:has(> :nth-child(5)) { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 22px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .card.mine { border-color: var(--cobalt); box-shadow: 0 0 0 1px var(--cobalt) inset; }
 .card .os { font-size: 12px; letter-spacing: .1em; color: var(--ink-2); font-weight: 600; }
@@ -487,7 +489,11 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 const pan = (f) => (f.baidu && f.baidu.url) ? f.baidu : (REL.baidu.url ? REL.baidu : null);
 const panUrl = (b) => b.url + (b.code ? (b.url.includes("?") ? "&" : "?") + "pwd=" + encodeURIComponent(b.code) : "");
 // gitee: false：Gitee 拒收的文件（目前是没有代码签名的 Windows 安装版），不给国内下载按钮
-const cnUrl = (f) => (REL.gitee && f.gitee !== false) ? REL.gitee + f.file : (pan(f) ? panUrl(pan(f)) : "");
+const cnUrl = (f) => {
+  if (REL.gitee && f.gitee !== false) return REL.gitee + f.file;
+  const b = pan(f);
+  return b ? panUrl(b) : "";
+};
 
 function platformOf(){
   const ua = navigator.userAgent || "";
@@ -519,7 +525,7 @@ async function copy(text, button, doneText){
   const win = REL.files.find((f) => f.id === "win-setup");
   const winPick = win && cnUrl(win) ? win : REL.files.find((f) => f.id === "win-zip");  // 国内能下的那个
   const mine = (f) => os === "android" ? f.id === "android"
-    : (os === "mac" && f.id.startsWith("mac")) || (os === "win" && f === winPick);
+    : (os === "mac" && f.id.startsWith("mac")) || (os === "win" && winPick && f.id === winPick.id);
   const osLabel = (f) => f.id === "android" ? "安卓手机" : f.id.startsWith("mac") ? "MAC"
     : f.id.startsWith("win") ? "WINDOWS" : f.id.toUpperCase();
   $("#dl").innerHTML = REL.files.map((f) => {

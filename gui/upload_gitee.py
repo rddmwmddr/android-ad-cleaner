@@ -88,10 +88,10 @@ def push_code(ver):
         bare = Path(tmp) / "m.git"
         run("git", "clone", "-q", "--bare", "--single-branch", "--branch", "main",
             f"git@github.com:{GH_REPO}.git", str(bare))
-        run("git", "-C", str(bare), "fetch", "-q", "origin", "refs/tags/*:refs/tags/*")
+        run("git", "-C", str(bare), "fetch", "-q", "origin", "refs/tags/v*:refs/tags/v*")
         run("git", "-C", str(bare), "rev-parse", "-q", "--verify", f"refs/tags/v{ver}", stdout=subprocess.DEVNULL)
         run("git", "-C", str(bare), "-c", "credential.helper=", "-c", f"credential.helper={helper}", "push", "-q",
-            f"https://gitee.com/{GITEE_REPO}.git", "refs/heads/main:refs/heads/main", "refs/tags/*:refs/tags/*")
+            f"https://gitee.com/{GITEE_REPO}.git", "refs/heads/main:refs/heads/main", "refs/tags/v*:refs/tags/v*")
     print("代码和标签已推到 Gitee")
 
 
@@ -127,19 +127,23 @@ def upload(rid, path):
     print(f"  传好 {path.name}（{path.stat().st_size // 1048576} MB，{time.time() - t:.0f} 秒）")
 
 
-def verify_public(ver, files, sums):
-    """不带令牌下载回来，确认用户拿到的和 GitHub 上的是同一份。"""
-    for p in files:
-        url = f"https://gitee.com/{GITEE_REPO}/releases/download/v{ver}/{p.name}"
+def verify_public(ver, files, sums, sums_digest):
+    """不带令牌下载回来，确认用户拿到的和 GitHub 上的是同一份。校验清单本身也要对。"""
+    want = {p.name: sums[p.name] for p in files}
+    want["SHA256SUMS.txt"] = sums_digest
+    for name, digest in want.items():
+        url = f"https://gitee.com/{GITEE_REPO}/releases/download/v{ver}/{name}"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         t = time.time()
         h = hashlib.sha256()
+        size = 0
         with urllib.request.urlopen(req, timeout=300) as r:
             for chunk in iter(lambda: r.read(1 << 20), b""):
                 h.update(chunk)
-        if h.hexdigest() != sums[p.name]:
-            sys.exit(f"匿名下载校验不一致：{p.name}")
-        print(f"  匿名下载校验通过 {p.name}（{p.stat().st_size / 1048576 / (time.time() - t):.1f} MB/s）")
+                size += len(chunk)
+        if h.hexdigest() != digest:
+            sys.exit(f"匿名下载校验不一致：{name}")
+        print(f"  匿名下载校验通过 {name}（{size / 1048576:.1f} MB，{size / 1048576 / (time.time() - t):.1f} MB/s）")
 
 
 def for_gitee(files):
@@ -160,12 +164,13 @@ def main(argv):
                 "Windows 安装版只在 GitHub Release 上，这里有免安装版。")
         rid = release_for(ver, note)["id"]
         have = attachments(rid)
-        for p in [*files, stage / "SHA256SUMS.txt"]:
+        sums_file = stage / "SHA256SUMS.txt"
+        for p in [*files, sums_file]:
             if p.name in have and int(have[p.name].get("size") or -1) == p.stat().st_size:
                 print(f"  已有 {p.name}")
                 continue
             upload(rid, p)
-        verify_public(ver, files, sums)
+        verify_public(ver, files, sums, sha256(sums_file))
     print(f"完成：https://gitee.com/{GITEE_REPO}/releases/tag/v{ver}")
     return 0
 
