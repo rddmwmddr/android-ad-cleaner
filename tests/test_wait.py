@@ -1,15 +1,22 @@
-"""「等到认得出」：超时、稳定、变化、受阻四个判据。
+"""「等到认得出」：超时、稳定、变化、受阻四个判据；外加等机主解锁。
 
 不用手机、不真睡：采样器是假的，时钟也是假的。期望值都写成采样序列里能直接读出来的
 事实（第几次采样认出、在几秒时认出、一共采样几次），不是把算法的算式重算一遍。
 """
+import contextlib
+import io
+import os
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
+import events
 import wait
+
+LOCKED_TEXT = "  ! 手机锁屏了：请解锁手机并保持亮屏，解锁后自动继续（最多等 90 秒）"
 
 
 class Clock:
@@ -198,6 +205,56 @@ class PropagatesTests(unittest.TestCase):
 
         with self.assertRaises(ConnectionError):
             wait.until(sample, timeout=1.0, now=clock.now, sleep=clock.sleep)
+
+
+class UnlockedTests(unittest.TestCase):
+    """等机主解锁（#709）：两处调用点只传「锁没锁着」「怎么亮屏」，策略全在这里。"""
+
+    def setUp(self):
+        self.clock = Clock()
+        self.wakes = []
+
+    def unlock(self, locked, timeout=wait.UNLOCK_TIMEOUT):
+        """跑一次等待，返回 (返回值, 人话, 事件列表)；wake 记下自己被叫到的时刻。"""
+        out = io.StringIO()
+        with patch.dict(os.environ, {"AAC_EVENTS": "1"}, clear=False), contextlib.redirect_stdout(out):
+            result = wait.wait_unlocked(locked, lambda: self.wakes.append(self.clock.t),
+                                        timeout, now=self.clock.now, sleep=self.clock.sleep)
+        lines = out.getvalue().splitlines()
+        return (result, "\n".join(l for l in lines if not events.is_event(l)),
+                [events.parse(l) for l in lines if events.is_event(l)])
+
+    def states(self, values):
+        """按顺序回答「现在还锁着吗」；用完之后一直报最后一个状态。"""
+        queue = list(values)
+        return lambda: queue.pop(0) if queue else values[-1]
+
+    def test_wakes_and_waits_until_the_owner_unlocks(self):
+        result, human, sent = self.unlock(self.states([True, True, False]))
+        self.assertTrue(result)
+        self.assertEqual(self.wakes, [0.0])                        # 先亮屏，再问锁没锁
+        self.assertEqual(human, LOCKED_TEXT)                       # 锁着的时候才报这句
+        self.assertEqual(sent, ["locked"])
+        self.assertEqual(self.clock.slept, [1, 1, 0.8])            # 两次轮询，解锁后站稳
+
+    def test_never_unlocked_gives_up_and_reports_locked_once(self):
+        result, human, sent = self.unlock(lambda: True)
+        self.assertFalse(result)
+        self.assertEqual(human, LOCKED_TEXT)
+        self.assertEqual(sent, ["locked"])                         # 一直不解锁也只发一条事件
+        self.assertEqual(self.clock.slept, [1] * wait.UNLOCK_TIMEOUT)   # 每秒问一次，到点不再问
+
+    def test_unlocked_phone_is_not_delayed(self):
+        result, human, sent = self.unlock(lambda: False)
+        self.assertTrue(result)
+        self.assertEqual((human, sent, self.clock.slept), ("", [], []))
+
+    def test_caller_can_give_its_own_budget(self):
+        # chan_fast 在渠道之间另等 60 秒：预算由调用点给，轮询节奏不变
+        result, human, sent = self.unlock(lambda: True, timeout=60)
+        self.assertFalse(result)
+        self.assertEqual(len(self.clock.slept), 60)
+        self.assertEqual(human, LOCKED_TEXT.replace("90", "60"))
 
 
 if __name__ == "__main__":

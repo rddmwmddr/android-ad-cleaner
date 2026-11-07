@@ -33,7 +33,7 @@
 | `chan_fast.py` | 营销通知渠道：`ChannelPage`（到页 + 认行）、批处理循环 |
 | `channel_policy.py` | 渠道判定：营销候选、扫描排除、默认不勾、受保护、前台服务 |
 | `row.py` | 「开关所属的那一行」的唯一定义 |
-| `wait.py` | 「等到页面认得出」的唯一实现 |
+| `wait.py` | 「等到页面认得出」与「等机主解锁」的唯一实现 |
 | `events.py` | 事件行与载荷行的格式与判定 |
 | `reader.py` | 读屏 adapter 的接口（`Reader`） |
 | `adb_link.py` | 连接中断的判定与「等手机回来」 |

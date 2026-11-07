@@ -457,21 +457,10 @@ class Phone:
             out = self.reader.shell(adb_link.KEYGUARD_CMD).output
         return adb_link.keyguard_showing(out)
 
-    def wait_unlocked(self, timeout=90):
-        """锁屏时点亮屏幕，等机主解锁（不代替解锁）。等到了返回 True。
-        错误日志 10-27：约 15 份报告在开始执行时手机已锁屏，以前直接报失败，后面每一项都重复「锁屏了」。"""
-        self.reader.shell("input keyevent KEYCODE_WAKEUP")
-        if not self.locked():
-            return True
-        print(f"  ! 手机锁屏了：请解锁手机并保持亮屏，解锁后自动继续（最多等 {timeout} 秒）", flush=True)
-        events.emit("locked")
-        t = time.time()
-        while time.time() - t < timeout:
-            time.sleep(1)
-            if not self.locked():
-                time.sleep(0.8)
-                return True
-        return False
+    def wait_unlocked(self, timeout=wait.UNLOCK_TIMEOUT):
+        """锁屏时点亮屏幕，等机主解锁。文案、节奏与事件在 wait.wait_unlocked（#709）。"""
+        return wait.wait_unlocked(self.locked, lambda: self.reader.shell(adb_link.WAKEUP),
+                                  timeout, now=time.time, sleep=time.sleep)
 
     def sig(self):
         return "|".join(t for t, _, _ in self.texts())
