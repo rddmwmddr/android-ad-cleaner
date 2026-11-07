@@ -131,6 +131,7 @@ def boot(base, data_dir, cache_dir, package="com.ahuamiao.adcleaner"):
     global API
     os.environ.setdefault("HOME", data_dir)
     os.environ["TMPDIR"] = cache_dir
+    os.environ["AAC_HOST"] = "phone"     # 引擎按它给手机版的说法，不提电脑和数据线（tool/troubleshooting.py，#729）
     os.environ.pop("AAC_EVENTS", None)
     if not sys.executable:
         sys.executable = "python3"
@@ -151,6 +152,7 @@ def boot(base, data_dir, cache_dir, package="com.ahuamiao.adcleaner"):
     app.Api.open_path = lambda self, which: native.toast("备份在本 App 的私有目录里，卸载 App 会一起删掉")
     app.Api.usb_hint = lambda self: ""
     app.os_name = lambda: "安卓手机版（Shizuku）"      # 错误上报与诊断的「电脑」一栏：和桌面版的报告分开
+    app.LINK_LOST = "和手机的调试连接断开了，这一步没有执行。回到本 App 点「再做一次」。"   # #729
 
     api = app.Api(data_dir, adb=adb.ADB_PATH)
     api.runner = inproc.Runner(api._child_env)

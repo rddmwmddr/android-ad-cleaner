@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 执行期间的悬浮胶囊：有可见窗口的 App 不会被小米 HyperOS 冻结 -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- 执行期间保持亮屏（#728）：手机版多半没插电，引擎设的「插电常亮」不起作用 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
     <!-- 内置无线调试（#622）：首次连上后经 shell 自授，之后无线调试被关时 App 自己打开 -->
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"

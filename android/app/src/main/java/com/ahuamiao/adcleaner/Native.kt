@@ -10,6 +10,7 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
@@ -76,6 +77,26 @@ object Native {
     fun busy(on: Boolean, background: Boolean) = main.post {
         val intent = Intent(app, KeepAliveService::class.java).putExtra(KeepAliveService.BACKGROUND, background)
         if (on) app.startForegroundService(intent) else app.stopService(intent)
+        keepAwake(on)
+    }
+
+    private var awake: PowerManager.WakeLock? = null
+
+    /**
+     * 执行期间保持亮屏（#728）。手机版多半没插电，引擎设的「插电常亮」不起作用，手机放着就锁屏，后面几段全断。
+     * 悬浮胶囊带 FLAG_KEEP_SCREEN_ON；没给悬浮窗权限、或本 App 在前台收起胶囊时，靠这把屏幕锁。
+     * 带一小时上限，进程被杀时系统也会收回。用户自己按电源键息屏不拦，引擎照旧等解锁。
+     */
+    @Suppress("DEPRECATION")   // 后台服务没有窗口可挂 FLAG_KEEP_SCREEN_ON，只能用屏幕锁
+    private fun keepAwake(on: Boolean) {
+        awake?.let { if (it.isHeld) it.release() }
+        awake = null
+        if (!on) return
+        val pm = app.getSystemService(PowerManager::class.java)
+        awake = pm.newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK or PowerManager.ON_AFTER_RELEASE, "aac:run").apply {
+            setReferenceCounted(false)
+            acquire(60 * 60 * 1000L)
+        }
     }
 
     private var capsule: View? = null
@@ -83,7 +104,8 @@ object Native {
     /**
      * 执行期间屏幕左边缘的「去广告中」胶囊。小米 HyperOS 会冻结退到后台的 App（前台服务、省电白名单都挡不住），
      * 冻住后脚本停在当时那一行；有可见悬浮窗的 App 不冻（18 Pro Max 实测）。胶囊点击穿透，不挡引擎的点按；
-     * 放在左边缘，不盖住右侧的开关（截图取色看开关颜色）。
+     * 放在左边缘，不盖住右侧的开关（截图取色看开关颜色）。窗口带 FLAG_KEEP_SCREEN_ON：看得见胶囊时，
+     * 不管前台是哪个 App 都不息屏（#728）。
      */
     @JvmStatic
     fun capsule(on: Boolean, label: String) = main.post {
@@ -102,7 +124,8 @@ object Native {
         val lp = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
             PixelFormat.TRANSLUCENT,
         ).apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL }
         view.visibility = if (MainActivity.inForeground()) View.GONE else View.VISIBLE

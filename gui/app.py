@@ -495,6 +495,8 @@ REPORT_LIMIT = 3            # 每小时最多上报几次（服务器另有按 I
 LATEST_URLS = ("https://ahuamiao.com/sites/other/android-ad-cleaner-latest.json",
                "https://api.github.com/repos/rddmwmddr/android-ad-cleaner/releases/latest")
 DOWNLOAD_PAGE = "https://ahuamiao.com/sites/other/android-ad-removal-intro.html"
+# 断线后跳过后面各步时写给用户的话；手机版没有电脑，启动时换成自己的说法（aac_android.main.boot，#729）
+LINK_LOST = "手机和电脑已断开，这一步没有执行。重新连接手机后点「重试」。"
 # 没执行过任何步骤时只有手机型号，看不出问题（错误日志 10-28：6 份空报告）
 EMPTY_REPORT = "还没有执行记录，这份报告只有手机型号，看不出问题。请先执行一次再上报；还没执行就遇到问题，请到 GitHub 反馈，写清楚卡在哪一步。"
 PRIVATE = (
@@ -870,7 +872,7 @@ class Dispatcher:
                 if "link_lost" in j.step_events and not adb_present(self.adb_of(), j.serial):
                     # 手机已断开：后面每一步都会报同一段排查说明（错误日志 10-27），不再执行
                     self.on_error(task.title, j.serial, detail)
-                    reason = "手机和电脑已断开，这一步没有执行。重新连接手机后点「重试」。"
+                    reason = LINK_LOST
                     for later in tasks[i + 1:]:
                         self._log(f"\n▶ {later.title}\n{reason}", j)
                         j.add_result({"title": later.title, "rc": 3, "skipped": True, "sec": 0, "tail": [reason]})

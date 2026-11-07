@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fast import Phone, ScreenLocked, pause_point
 from row import PATH_DEPTH, SAME_LINE, bounds, disabled_at as row_disabled_at, link, own, skeleton
 from channel_policy import classify, protected_channel
-from troubleshooting import XIAOMI_INPUT
+from troubleshooting import ON_PHONE, XIAOMI_INPUT
 from backups import root_from_env
 from ui_hidden import UiHidden
 import adb_link
@@ -256,14 +256,15 @@ def parse(p, locked=None, foreground=None):
 
 
 def keep_awake(reader):
-    """改开关期间插电常亮：营销通知一步可能跑好几分钟，以前只有机型脚本设了常亮（#71 中途锁屏）。"""
+    """改开关期间插电常亮：营销通知一步可能跑好几分钟，以前只有机型脚本设了常亮（#71 中途锁屏）。
+    手机版多半没插电，由 App 自己保持亮屏（#728）；这里设不上不影响，也不提示（#729）。"""
     old = reader.shell("settings get global stay_on_while_plugged_in").output.strip()
     try:
         reader.shell("settings put global stay_on_while_plugged_in 7")
         ok = reader.shell("settings get global stay_on_while_plugged_in").output.strip() == "7"
     except RuntimeError:
         ok = False
-    if not ok:
+    if not ok and not ON_PHONE:
         print("  ! 插电常亮没有设上，手机息屏会打断操作；请把自动锁屏时间调长后再跑。" + XIAOMI_INPUT, flush=True)
     return old if old.isdigit() else "0"
 
