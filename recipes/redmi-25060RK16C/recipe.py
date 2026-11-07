@@ -109,7 +109,9 @@ def _():
             if maybe("广告服务"):
                 p.off(only=["个性化广告推荐", "广告跟踪"], page="系统·广告服务")
                 p.back()
-        return
+                return
+        # 兜底菜单也走不通：停段记败，不算成功（#819）
+        raise RuntimeError("没找到「广告服务」入口")
     # 「广告跟踪」以限制/防止开头 = 保护类，off() 会把它拨到开（AGENTS 硬规则10）
     p.off(only=["个性化广告推荐", "广告跟踪"], page="系统·广告服务")
     p.back()

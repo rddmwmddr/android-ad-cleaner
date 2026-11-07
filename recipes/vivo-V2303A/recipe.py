@@ -101,9 +101,11 @@ def _():
         ("推荐热搜榜单", ["热门搜索"]),        # Android 17 上无此入口（#220），找不到即跳过
         ("个性化内容", ["广告个性化"]),          # 历史记录、应用建议保留
     ):
+        # 搜索失败且本段没有第二条路：停段记败，不静默成功（#819）。放在 try 外，
+        # 否则下面的 except 会把它当单个子页的跳过吞掉。
+        if not p.setting("全局搜索"):
+            raise RuntimeError("没搜到「全局搜索」")
         try:
-            if not p.setting("全局搜索"):
-                break
             if maybe(name, scrolls=2):
                 p.off(only=switches, page=f"全局搜索·{name}"); p.back()
         except Exception as e:
