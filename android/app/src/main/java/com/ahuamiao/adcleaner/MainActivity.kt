@@ -53,7 +53,7 @@ class MainActivity : ComponentActivity(), HostActions {
 
     override fun onStart() {
         super.onStart()
-        app.model.setVisible(true)
+        app.model.setForeground(true)
     }
 
     override fun onResume() {
@@ -70,7 +70,7 @@ class MainActivity : ComponentActivity(), HostActions {
     }
 
     override fun onStop() {
-        app.model.setVisible(false)
+        app.model.setForeground(false)
         super.onStop()
     }
 

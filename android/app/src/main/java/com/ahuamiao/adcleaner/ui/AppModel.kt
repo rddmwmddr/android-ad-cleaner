@@ -151,8 +151,9 @@ class AppModel(
         }
     }
 
-    /** Activity 看得见 / 看不见；看得见时不必再占着通知栏说下一步（#646）。 */
-    fun setVisible(on: Boolean) {
+    /** Activity 看得见 / 看不见；看得见时不必再占着通知栏说下一步（#646）。
+     * 不能叫 setVisible：visible 的 JVM setter 已经是这个名字。 */
+    fun setForeground(on: Boolean) {
         visible = on
         syncSetupNotice()
     }
