@@ -65,7 +65,7 @@ if "$PCS" ls "$LEGACY" >/dev/null 2>&1; then
   "$PCS" upload --policy overwrite "$STAGE/legacy/先看我-选哪个文件夹.txt" "$LEGACY"
   while IFS=$'\t' read -r id folder file; do
     "$PCS" ls "$LEGACY/$folder" >/dev/null 2>&1 || "$PCS" mkdir "$LEGACY/$folder" >/dev/null
-    for old in $("$PCS" ls "$LEGACY/$folder" | grep -oE 'AndroidAdCleaner-[0-9.]+-[a-z0-9-]+\.(dmg|exe|zip)' | grep -vF -- "-$VER-" | sort -u); do
+    for old in $("$PCS" ls "$LEGACY/$folder" | grep -oE 'AndroidAdCleaner-[0-9.]+-[a-z0-9-]+\.(dmg|exe|zip|apk)' | grep -vF -- "-$VER-" | sort -u); do
       "$PCS" mkdir "$ARCHIVE/$folder" >/dev/null 2>&1 || true
       "$PCS" mv "$LEGACY/$folder/$old" "$ARCHIVE/$folder"
     done

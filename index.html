@@ -281,7 +281,7 @@ footer a:hover { color: var(--ink); }
   <div class="wrap">
     <div class="head">
       <h2>下载</h2>
-      <p class="lead" id="dl-lead">选你的电脑。国内下载走百度网盘，链接里带提取码。替换旧版程序，原来的备份保留。</p>
+      <p class="lead" id="dl-lead">选你的设备。国内下载走百度网盘，链接里带提取码。替换旧版程序，原来的备份保留。</p>
     </div>
     <div class="dl" id="dl"></div>
     <div class="after" id="dl-after"></div>
@@ -496,11 +496,12 @@ async function copy(text, button, doneText){
 /* 下载 */
 (function renderDownloads(){
   const os = platformOf();
-  const mine = (f) => (os === "mac" && f.id.startsWith("mac")) || (os === "win" && f.id === "win-setup");
+  const mine = (f) => /Android/i.test(navigator.userAgent) ? f.id === "android"
+    : (os === "mac" && f.id.startsWith("mac")) || (os === "win" && f.id === "win-setup");
   $("#dl").innerHTML = REL.files.map((f) => {
     const b = pan(f);
     return `<article class="card ${mine(f) ? "mine" : ""}">
-      <span class="os">${f.id.startsWith("mac") ? "MAC" : "WINDOWS"}</span>
+      <span class="os">${f.id.startsWith("mac") ? "MAC" : f.id === "android" ? "安卓手机" : "WINDOWS"}</span>
       <h3>${esc(f.title.split(" · ")[1] || f.title)}</h3>
       <span class="sub">${esc(f.sub)}</span>
       <span class="note">${esc(f.note)}</span>
@@ -515,7 +516,7 @@ async function copy(text, button, doneText){
   const all = REL.baidu.url ? `<span>百度网盘全部版本：<a href="${esc(panUrl(REL.baidu))}" target="_blank" rel="noopener">打开</a>${REL.baidu.code ? `　提取码 <code>${esc(REL.baidu.code)}</code>` : ""}</span>` : "";
   $("#dl-after").innerHTML = `${all}<span><a href="${REPO}/releases" target="_blank" rel="noopener">GitHub 全部版本</a></span><span><a href="${REPO}/releases/tag/v${esc(REL.version)}" target="_blank" rel="noopener">v${esc(REL.version)} 更新说明</a></span>`;
   $("#sums").innerHTML = REL.files.map((f) => `${esc(f.sha)}  ${esc(f.file)}`).join("<br>");
-  $("#hero-meta").textContent = `v${REL.version} · ${RELEASED} · Mac（Apple / Intel 芯片）· Windows 10 / 11`;
+  $("#hero-meta").textContent = `v${REL.version} · ${RELEASED} · Mac（Apple / Intel 芯片）· Windows 10 / 11${REL.files.some((f) => f.id === "android") ? " · 安卓 11 及以上" : ""}`;
 
   const win = REL.files.find((f) => f.id === "win-setup");
   if (os === "win" && win){
