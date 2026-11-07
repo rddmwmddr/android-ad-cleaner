@@ -371,12 +371,12 @@ function showRun(){
     <div class="log" id="log"></div>
     <div class="actions"><button class="btn plain" id="stopbtn" onclick="api.stop()">停止</button><button class="btn plain" id="pausebtn" onclick="togglePause()">暂停</button></div></div>`;
   clearInterval(pollJob);                  // 再次进入执行页时旧定时器还在：不停掉就两个一起问（#662）
-  pollSeq++;                               // 上一轮还在路上的结果作废，不要再画进这次
+  pollSeq++;                               // 上一轮还在路上的结果作废，不要再画进这次（#676）
   polling = false;
   pollJob = setInterval(tick, 500);
 }
 let polling = false, pollStart = 0, pollSeq = 0;
-const POLL_TIMEOUT = 10000;                // 一次 poll 超过这么久没回来就当它废了
+const POLL_TIMEOUT = 10000;                // 一次 poll 超过这么久没回来就当它废了，允许重发（#676）
 async function tick(){
   // 上一次还没回来就不发下一次：手机上一次常常超过半秒，两次拿同一个 logNext，同一段日志会追加两遍（#662）
   if (polling && Date.now() - pollStart < POLL_TIMEOUT) return;
@@ -386,10 +386,10 @@ async function tick(){
   try { r = await api.poll(since); } finally { if (mine === pollSeq) polling = false; }
   if (mine !== pollSeq) return;            // 已经被后来的一次接管：这一份结果作废，免得倒着画
   if (S.step !== 4) return;                // 已经到完成页：迟到的这一次不再画
-  if (r.next > S.logNext){                 // 上一次超时后才回来时，前面那段可能已经画过，只补后一段
-    const lines = r.lines.slice(Math.max(0, S.logNext - since));
+  // 只有最新那一次能写 S.logNext，所以这里拿到的永远是没画过的那一段；照旧防一手重复
+  if (r.next > S.logNext){
     const log = $("#log");
-    if (log && lines.length){ log.textContent += lines.join("\n") + "\n"; log.scrollTop = log.scrollHeight; }
+    if (log && r.lines.length){ log.textContent += r.lines.join("\n") + "\n"; log.scrollTop = log.scrollHeight; }
     S.logNext = r.next;
   }
   if ($("#jt")){ $("#jt").textContent = r.title ? `第 ${r.idx} / ${r.total} 步：${r.title}` : "准备中……";
