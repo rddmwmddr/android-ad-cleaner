@@ -14,7 +14,7 @@
 - 推送前再 `git fetch origin main` 并 rebase：并行会话会在开工到推送之间推进 main，基于旧 SHA 推送会让 PR 直接 `CONFLICTING`，CI 也不触发。
 - CI：`.github/workflows/test.yml` 在 PR 和 main 推送时自动跑同一套，Linux（`unittest`，3.13）与 Windows（`unittest-windows`，3.12）各一个 job，两版解释器各跑一次；两边 skip 的用例不一样（Windows 侧 skip 掉 POSIX-only 那批，含 CLI 逐字节对拍），判断覆盖时看 `-v` 输出里的 skipped 行，别假设两边跑的是同一批。`build-windows.yml` 只在 `v*` 标签或手动触发时打包，不守 PR。
 - 静态检查：`uvx ruff@0.17.3 check --select F,E9 tool tests gui`，本地与 CI 同一个版本（CI 就钉 0.17.3，`.venv` 里没有 ruff）。不查 `recipes/`——机型脚本靠注入作用域执行，静态分析看到的全是未定义名；也不开格式与行长规则。
-- 找「前端行为测试」先看 [tests/js/](tests/js/)：用例用 `node --test` + jsdom 加载真实的 `gui/web/index.html`，手机版再注入 `mobile.js` 并 dispatch `pywebviewready`（[ADR-0017](docs/adr/0017-frontend-test-harness.md)）。由 [tests/test_web_client.py](tests/test_web_client.py) 在 `unittest` 里代跑，回归仍是上面那一条命令；单跑先 `npm ci`，再 `npm test`（等价于 `node --test --test-timeout=30000 --test-force-exit "tests/js/*.test.js"`；Node 22 不认目录参数，`--test-force-exit` 防漏写 `window.close()` 时挂住）。缺 node、用例数为 0 都判红，不跳过。
+- 找「前端行为测试」先看 [tests/js/](tests/js/)：用例用 `node --test` + jsdom 加载真实的 `gui/web/index.html`，手机版再注入 `mobile.js` 并 dispatch `pywebviewready`（[ADR-0017](docs/adr/0017-frontend-test-harness.md)）。由 [tests/test_web_client.py](tests/test_web_client.py) 在 `unittest` 里代跑，回归仍是上面那一条命令；单跑先 `npm ci`，再 `npm test`（等价于 `node --test --test-timeout=30000 --test-force-exit "tests/js/*.test.js"`；Node 22 不认目录参数，`--test-force-exit` 防漏写 `window.close()` 时挂住）。缺 node、用例数为 0 都判红，不跳过。jsdom 覆盖不到的真渲染 / 真定时器再退到真浏览器：`python -m http.server` 起静态服务，页面加载后桩 `window.pywebview.api` 并 dispatch `pywebviewready`，之后直接调 `showRun()` 这类顶层函数。
 - CHANGELOG 一条一行、≤ 80 字，落在 `## 未发布` 的 `### 新增` / `### 修复` / `### 内部` 之一，结尾挂一个编号（有 PR 挂 PR 号，只有 issue 的挂 issue 号；内部重构再加 ADR 号）。内部条目允许点一个符号名，但不展开机制；测试数、基线 SHA、对拍组数一律不写——那些在 PR 描述与 ADR 里。`## 未发布` 期间不写验证行，发版时才补。rebase 后先 `git rebase --continue` 把提交落完、再跑回归与对拍，并确认 `## 未发布` 没有被已发版的小节吸收（main 刚发过版时要重新开出来）。
 - 审查标准：见 [CODING_STANDARDS.md](CODING_STANDARDS.md)，只放判断项；机械规则交给 CI。
 - 社区问题的归类与真机缺口见 [docs/09](docs/09-社区问题处理.md)：那里只记 GitHub 上看不到的判据与缺口，逐条回复与 issue 编号留在 issue 里。
@@ -33,6 +33,7 @@
 - 无设备用例不许真等：`chan_fast` 的 scan 分支会读型号，用例要 patch 掉 `phone_model`，否则对着不存在的序列号等 adb 超时；机型脚本一律用 `fixtures.load_recipe()` 装载（它把脚本的 `time` 三个读数一起换成假钟），自己 `exec` 一份脚本就会真 sleep。躲不开真实进程的环节（跨进程锁、真起播放器）用 `Clock` 注入或把等待压到毫秒级。[tests/test_recipe_loader.py](tests/test_recipe_loader.py) 守着装载这一条。
 - 改「认渠道页」这类读屏逻辑要做改前改后对拍时，驱动器是 [tests/compare_chan_pages.py](tests/compare_chan_pages.py)：认页 / 进页 / 编排三层 × 两种屏尺寸，同一份探针分别跑冻结基线与当前 `tool/`，守卫数字非零才算测到。
 - 找「读屏 adapter」先看 [tool/reader.py](tool/reader.py)：`Phone.reader` 是手机读屏库或假设备的统一接口，`Phone.d` 是它的历史别名（机型脚本与测试用），新增读屏能力先加进 `Reader`。
+- 手机上「有」的读屏异常名，电脑上未必有：`aac_android/u2.py` 的 `install()` 把模块里定义的类动态注册成 `uiautomator2.exceptions`，电脑上装的是真库 + `adbutils`。在 `tool/`、`gui/` 里新增 `u2.exceptions.X` 或 `adbutils.X` 之前先确认桌面那份也有，`tests/test_runtime_symbols.py` 守着这一条。
 - adb 固定 platform-tools 37.0.1（`gui/app.py` 的 `ADB_PINNED`）；升级时改那张表，校验值按 Google `repository2-3.xml` 的 SHA-1 核对。
 - 客户端数据路径看 `gui/app.py` 的 `ClientData`，备份目录看 [tool/backups.py](tool/backups.py) 的 `Backups`（root 由调用方给），工具模块用 `_tool()` 惰性取。
 - 找「Windows 启动失败是缺 WebView2 还是被 MOTW 拦」先看 [gui/winpreflight.py](gui/winpreflight.py)：注册表三态与两个关键 dll 的 `Zone.Identifier` 判定只在那里定义（[ADR-0003](docs/adr/0003-desktop-client-import-and-dependencies.md)）；`gui/app.py` 的 `startup_advice()` 只按结论选文案。

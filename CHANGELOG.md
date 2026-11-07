@@ -50,6 +50,7 @@
 - 入口速查表 `entries`：各品牌分组的直达页面 / 设置搜索 / 菜单路径，生成 docs/清单/入口速查.md（#613）
 - 渠道失败行带上包名，MISMATCH 另附 importance 与应用通知读数，同名渠道能按 App 定位（#582）
 - 前端行为用例进 `tests/js/`：jsdom 加载真实页面，由同一条回归命令带跑（#647，ADR-0017）
+- Android 编译进 CI（改 `android/` 才跑）；跨运行时符号加 `test_runtime_symbols` 守卫（#678）
 
 ## 0.3.2 · 2026-11-05
 
