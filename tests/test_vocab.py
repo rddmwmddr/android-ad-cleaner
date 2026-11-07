@@ -187,6 +187,14 @@ class RealRecipesTest(unittest.TestCase):
                          [("个性化广告推荐", vocab.OFF), ("减少广告", vocab.OPEN)])
         self.assertIn("| 减少广告 | 小米 | 应用商店 | 商店·设置 | 要开 |", vocab.render(tmp.name))
 
+    def test_named_but_ignored_row_is_marked_as_such(self):
+        """引擎对 want_state 为 None 的行直接跳过，词库不能把死名字标成「要关」（#693）。"""
+        tmp = recipes(**{"xiaomi-A1": 'p.off(only=["广告", "减少动画"], page="商店·设置")'})
+        self.addCleanup(tmp.cleanup)
+        self.assertEqual([(w.text, w.kind) for w in vocab.scan(tmp.name).words],
+                         [("广告", vocab.OFF), ("减少动画", vocab.NOOP)])
+        self.assertIn("| 减少动画 | 小米 | 应用商店 | 商店·设置 | 不碰 |", vocab.render(tmp.name))
+
     def test_scripts_without_any_word_are_named(self):
         """整份脚本一条词条都读不出来时，文档必须点名，不能让人以为这台机没有词。"""
         self.assertEqual(tuple(self.scan.silent), SILENT)
@@ -487,7 +495,10 @@ class SourceShapeTest(unittest.TestCase):
         self.assertEqual(owners, {name: ["polarity.py"] for name in ("NEG_PREFIX", "AD_WORDS", "TRACK_WORDS")})
 
     def test_importing_vocab_does_not_pull_the_device_stack(self):
-        """生成器要能单独跑：极性判据从 polarity 取，不经过 fast（那条链会连带 adbutils）。"""
+        """生成器要能单独跑：极性判据从 polarity 取，不经过 fast（那条链会连带 adbutils）。
+
+        旧树也绿（vocab 本来只 import entries），守的是不回退：以后有人图省事改成 `import fast`
+        就会把 adbutils 拉进文档生成器（#693）。"""
         code = ("import sys; sys.path.insert(0, 'tool'); import vocab; "
                 "print(sorted(m for m in ('adbutils', 'uiautomator2') if m in sys.modules))")
         done = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True,

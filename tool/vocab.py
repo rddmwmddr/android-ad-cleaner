@@ -97,7 +97,7 @@ FALLBACK = {
     ("oppo", "资讯服务"): "小布建议",
     ("oppo", "首页卡片管理"): "下拉搜索",
 }
-OFF, OPEN, KEEP = "要关", "要开", "同页保留"   # 方向取自 polarity.want_state()，不从调用名猜（#693）
+OFF, OPEN, NOOP, KEEP = "要关", "要开", "不碰", "同页保留"   # 方向取自 polarity.want_state()，不从调用名猜（#693）
 CJK = re.compile(r"[\u4e00-\u9fff]")
 
 
@@ -107,8 +107,15 @@ def key_of(text):
 
 
 def direction_of(text):
-    """这条词条要拨到哪：保护类开关（want_state 为真）是「要开」，其余是「要关」。"""
-    return OPEN if want_state(text) else OFF
+    """这条词条要拨到哪：保护类开关「要开」，其余普通广告开关「要关」。
+
+    `want_state()` 为 None 的行（「减少动画」这种既没否定词前缀也不带广告词的）在
+    `plan_switches()` 里直接跳过，点名等于没点：标「不碰」把这个死名字显出来，
+    不能并进「要关」——那正是这次要修的那类不一致（#693）。"""
+    want = want_state(text)
+    if want is None:
+        return NOOP
+    return OPEN if want else OFF
 
 
 @dataclass(frozen=True)
@@ -350,7 +357,7 @@ def _group_section(group, words):
     lines = [f"### {group}", ""]
     if not words:
         return lines + ["暂无词条。", ""]
-    toggles = [w for w in words if w.kind in (OFF, OPEN)]
+    toggles = [w for w in words if w.kind in (OFF, OPEN, NOOP)]
     keep = [w for w in words if w.kind == KEEP]
     lines += ["**出处机型：** " + "、".join(sorted({w.model for w in words})), ""]
     if toggles:
@@ -396,7 +403,8 @@ def render(recipes_dir):
              "**用之前：** 词条说明别的机型上这个开关叫这个，不代表这台手机上它管同一件事，写脚本要真机核对。"
              "同页保留项只在那一页成立，不是品牌级的禁词表。"
              "「要开」是保护类开关：开头带否定词（`polarity.NEG_PREFIX`）且带广告词，引擎会把它拨到开，"
-             "判定在 `polarity.want_state()`；不要把这类词条按普通广告开关处理。", "",
+             "判定在 `polarity.want_state()`；不要把这类词条按普通广告开关处理。"
+             "「不碰」是点了名、引擎却不会拨的行（既没否定词也没广告词），出现即说明那条点名没生效。", "",
              "出处写成 `目录:行号`，指 `recipes/<目录>/recipe.py`；别的文件写全文件名。"
              f"这里读 `p.off()` 和 `close_named()`：共 {len(words)} 处词，另有 {found.whole_page} 处没有点名（整页全关，没有词）。", ""]
     for family, groups in ENTRIES.items():
