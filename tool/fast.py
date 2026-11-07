@@ -591,6 +591,9 @@ class Phone:
         return None
 
     CLOSE = re.compile(r"close|关闭|跳过|skip|cancel|dismiss|iv_x\b|btn_x\b", re.I)
+    # 描述精确读作「返回」的不是弹窗的 ✕，是浮层/页面自己的返回键：点了是导航，会把刚打开的
+    # 浮层收起来。vivo 浏览器菜单的 iv_back_cancel 就长这样，id 里的 cancel 本来会命中 CLOSE（#753）。
+    BACK_LABELS = {"返回", "back"}
 
     def dismiss(self):
         """挡路的更新/推荐/权限弹窗：点拒绝类按钮（不替用户同意任何东西）。
@@ -626,8 +629,10 @@ class Phone:
         for n in root.iter("node"):
             if n.get("clickable") != "true" or n.get("package") == "com.android.systemui":
                 continue
-            key = (n.get("content-desc") or "") + " " + (n.get("resource-id") or "")
-            if (self.CLOSE.search(key) and not (n.get("text") or "").strip()
+            desc = (n.get("content-desc") or "").strip()
+            key = desc + " " + (n.get("resource-id") or "")
+            if (self.CLOSE.search(key) and desc.casefold() not in self.BACK_LABELS
+                    and not (n.get("text") or "").strip()
                     and not in_list(n) and not is_switch_row(n)):
                 l, t, r, b = bounds(n)
                 # 只点屏幕内的图标：屏幕外还留着上一层的节点，点它会抛「点击坐标在屏幕外」把整段打断

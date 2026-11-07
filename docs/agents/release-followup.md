@@ -76,6 +76,7 @@ Issues labelled `waiting-for-verify` have a fix on `main` that the reporter has 
 | #573 | @bfxh | Windows 打包件（onedir，版本待补） | PR #602（0.4.0） | `aac-cli.exe --help` / `-h` 打印一段用法、退出码 0；裸用 `devices`、`-s <序列号> check`、无参数：同一段用法打到标准错误、退出码 2。四种形态都不再起窗口、不再零输出挂住；`aac-cli.exe --cli run.py <命令>` 的转发输出与退出码不变 |
 | #603 | 机主 | 桌面客户端，任意机型（要有一次真实的跳过：读屏占用或途中拔线） | PR #757（未发布） | 「复制诊断」的「执行结果」栏里，跳过的步骤写的是它实际的原因：读屏被占用是「跳过（读屏服务仍被占用，跳过本步骤）」，手机断开是「跳过（手机和电脑已断开，这一步没有执行）」。不再一律写读屏服务被占用，也不会出现空括号 |
 | #608 | 机主 | 三星 SM-N9760 / Android 12（Google 广告设置页 `AdsSettingsActivity`） | PR #767（未发布） | 在这一页上跑 `python3 tool/fast.py -s <序列号> only 停用广告个性化`：修复前点开关本体三次不动、报「✗ 打不开 选择停用广告个性化功能」；修复后回退点整行标题、弹框确认后回读，报「开（保护类开关） 选择停用广告个性化功能」。确认通过后，`recipes/samsung-SM-N9760/recipe.py` 的 `protect()` 可以换回 `p.off(only=["停用广告个性化"])` |
+| #753 | @Sheldor-C | vivo V2217A / iQOO 10（借 `recipes/vivo-V2547DA` 跑 `--ref`） | PR #781（未发布） | 浏览器段不再停在 `BrowserActivity`：日志出现「· 弹窗点了 ✕（返回 com.vivo.browser:id/iv_back_cancel）」之后仍能进设置页，接着出现「· 浏览器设置页 …SettingActivity」与「首页设置 / 网页浏览设置 / 更多设置 / 隐私权限设置」四个入口的核对行。仍进不去时改成一行「✗ 未完成：浏览器设置页没有打开；停在 …」，不再是整段 0 项——若那一行出现，说明菜单里的「设置」要滚动才看得到，把日志贴回来 |
 
 2026-11-07：#608 随 PR #767 合入 `main`（`9600d11`）。`off()` 在两轮补点后回退到点行标题（ADR-0024），`switches()` 的返回形状与所有调用方没动。SM-N9760 的 `protect()` 故意先留着：换回 `p.off()` 要等这条复测通过。机主自己开的票，没有外部报告者可催。
 
