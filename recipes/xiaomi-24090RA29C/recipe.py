@@ -160,7 +160,11 @@ def _():
     if "package:" in p.d.shell("pm path com.miui.themestore").output:
         p.d.shell("am start -n com.miui.themestore/com.miui.thememanagerstore.ThemeResourceTabActivity")
     else:
-        p.d.shell("monkey -p com.android.thememanager -c android.intent.category.LAUNCHER 1")
+        # 没有主题商店时直接起 thememanager：它没有 LAUNCHER activity，monkey 拉不起来（#730）。
+        # 直达代理页前台就是它自己，没有上面那条前台误判，可以交给 start() 等落点。
+        if "package:" not in p.d.shell("pm path com.android.thememanager").output:
+            print("  · 本机没有主题商店，跳过"); return
+        p.start("com.android.thememanager", ".ThemeResourceProxyTabActivity")
     time.sleep(3)
     p.dismiss()
     # 底部「我的」标签 → 右上齿轮（desc=设置，无文字）
