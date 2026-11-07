@@ -115,7 +115,7 @@ https://t.me/+A5X3Mxzs-Cg3NjYx
 | OPPO | Find X9 Ultra（PMA120） | ColorOS 16.0.10 | ❌ 页面和 N6 不同，待补 | 部分 | ✅ 27 个渠道 |
 | OPPO | Find N3 典藏版（PHN110） | ColorOS 16.0.5 | ❌ 待补 | 部分 | ✅ 27 个渠道 |
 | OPPO | Find N5（PKH110） | ColorOS 17.0.0.103 / Android 17 | ✅ 2026-10-29 七段实测通过，重跑 144 秒；负一屏需手动（设置页受权限保护） | ✅ | ✅ 42 个渠道 |
-| 小米 | 18 Pro Max（M154FF） | HyperOS 4.0.24 | ✅ 2026-11-07 九段全过（设置页改直达，150 → 97 秒）；浏览器段不再依赖首页，后台屏也能跑 | ✅ | ✅ |
+| 小米 | 18 Pro Max（M154FF） | HyperOS 4.0.24 | ✅ 2026-11-07 九段全过（设置页改直达，150 → 97 秒）；浏览器段不再依赖首页，后台屏也能跑；见[说明](recipes/xiaomi-M154FF/README.md) | ✅ | ✅ |
 | 小米 | 17 Ultra 标准版（2512BPNDAC） | HyperOS OS4.0.5.0.XPACNXM / Android 17 | ✅ 10-28 九段实测通过，重跑 176 秒 | ✅ | ✅ 1 个渠道（商店「其他」） |
 | 小米 | 17（25113PN0EC） | HyperOS 4 / Android 17 | — 无专用脚本 | ✅ 见[清单](docs/清单/小米-HyperOS.md) | ✅ 无营销渠道；1 个候选属服务类，已跳过 |
 | 小米 | 15（24129PN74C） | HyperOS OS4.0.0.22.XOCCNXM / Android 17 | ✅ 10-29 九段实测通过，重跑 164 秒 | ✅ | —（未跑） |
@@ -132,8 +132,8 @@ https://t.me/+A5X3Mxzs-Cg3NjYx
 | Redmi | Note 12 Turbo（23049RAD8C） | HyperOS OS3.0.5.0 | ✅ 实测通过，九段 3.5 分钟 | ✅ | ✅ |
 | Redmi | K70（23113RKC6C） | HyperOS 3.0.307.0 / Android 16 | ⚠️ 9 段专用脚本，目标 20 项；[实测记录](docs/13-红米K70实测.md) | ✅ | —（未测通知） |
 | Redmi | K70 Pro（23117RK66C） | HyperOS OS3.0.306.0.WNMCNXM / Android 16 | ✅ 10-30 九段整轮 235 秒，25 项回读、0 调整、0 异常；[实测记录](docs/14-红米K70Pro实测.md) | ✅ | ✅ 17 个渠道，其他已有渠道和总开关不变 |
-| vivo | X300 Ultra（V2547DA） | OriginOS 6 | ✅ 2026-10-28 实测通过，七段全通（124 秒） | ✅ | ✅ |
-| vivo | X300 Ultra（V2547DA） | Android 17（PD2547D_A_17.1.10.2.W10） | ✅ 2026-11-07 七段全过（设置页改直达，91 → 62 秒）；商店「个性化推荐」页仍按位置点、不靠标题（[#220](https://github.com/rddmwmddr/android-ad-cleaner/issues/220)） | ✅ 见[清单差异](docs/清单/vivo-OriginOS.md) | —（未测） |
+| vivo | X300 Ultra（V2547DA） | OriginOS 6 | ✅ 2026-10-28 实测通过，七段全通（124 秒）；见[适配说明](recipes/vivo-V2547DA/README.md) | ✅ | ✅ |
+| vivo | X300 Ultra（V2547DA） | Android 17（PD2547D_A_17.1.10.2.W10） | ✅ 2026-11-07 七段全过（设置页改直达，91 → 62 秒）；商店「个性化推荐」页仍按位置点、不靠标题（[#220](https://github.com/rddmwmddr/android-ad-cleaner/issues/220)）；见[适配说明](recipes/vivo-V2547DA/README.md) | ✅ 见[清单差异](docs/清单/vivo-OriginOS.md) | —（未测） |
 | vivo | X Fold6（V2545A） | OriginOS 6 Fold / Android 16 | ✅ 实测通过，7 段 121 秒（合上外屏） | 部分（负一屏、i 管家需手动） | ⚠️ 仅 1 条候选，应用级开关已跳过 |
 | vivo（iQOO） | V2324HA | 原系统 Android 16（PD2324J_A_16.2.13.1.W10） | ✅ 2026-10-27 实测，七段全通，重跑 2.5 分钟 | ✅ | 5 个渠道，关 3 个、跳过 1 个 |
 | vivo | V2361A | OriginOS 16（PD2361B_A_16.2.12.2.W10） | ⚠️ 2026-10-26 路径逐页实测、开关已实际关闭；引擎整段待验证 | ✅ | — |
