@@ -373,7 +373,8 @@ class GuiTests(unittest.TestCase):
             api = self.api(directory, spawns=[FakeProc()])
             api._work([self.app.Task("关闭营销通知", "chan_fast.py", uses_ui=True,
                                      channels=[{"pkg": "com.taobao.taobao", "id": "promo", "name": "活动优惠", "app": "淘\t宝"}])])
-            text = Path(directory, "backups", "M-gui", "channels.tsv").read_text(encoding="utf-8")
+            (made,) = [p for p in Path(directory, "backups").iterdir() if p.name != "M-gui"]
+            text = (made / "channels.tsv").read_text(encoding="utf-8")
             self.assertIn("com.taobao.taobao\tpromo\t活动优惠\t淘 宝\n", text)
 
     def test_new_version_notice(self):

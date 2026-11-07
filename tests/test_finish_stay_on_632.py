@@ -29,7 +29,7 @@ class FinishStayOnTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             snap = Backups(root).create("M")
             Path(snap, "stay_on.txt").write_text("15", encoding="utf-8")
-            Path(Backups(root).gui("M"), "channels.tsv").write_text("", encoding="utf-8")
+            Path(Backups(root).gui("M"), "channels-restore.tsv").write_text("", encoding="utf-8")
             puts, out = self.finish(root)
             self.assertEqual(puts, ["settings put global stay_on_while_plugged_in 15"])
             self.assertIn("插电常亮已改回 15", out)

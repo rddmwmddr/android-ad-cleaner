@@ -615,14 +615,14 @@ def cmd_recipe(serial, rest):
 
 
 def cmd_chan_scan(serial, rest):
-    d = latest_backup(serial)
     result = subprocess.run(script_cmd("chan_fast.py", "-s", serial, "scan", *rest),
                             capture_output=True, text=True, encoding="utf-8", errors="replace")
     if result.returncode:
         print(result.stderr or result.stdout, file=sys.stderr)
         return result.returncode
     out = result.stdout
-    f = os.path.join(d, "channels.tsv")
+    # 候选清单与关掉的清单写同一处快照目录：`<型号>-gui` 是历次共用的，写进去会盖掉历史清单（#651）
+    f = os.path.join(Backups(BACKUPS).snapshot(info(serial)["model"]), "channels.tsv")
     Path(f).write_text(
         "# 包名\t渠道id\t渠道名\t应用名。人工核对：删掉服务类（热点共享、红包、防盗、直播提醒等）后再 chan-off\n" + out, encoding="utf-8")
     print(out); print(f"候选清单：{display_backup_path(f)}（共 {out.count(chr(10))} 条）")

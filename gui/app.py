@@ -922,7 +922,7 @@ class Dispatcher:
             t = time.time()
             script, args = task.script, list(task.args)
             if task.channels is not None:
-                d = self.backups_of().latest(j.model) or self.backups_of().gui(j.model)
+                d = self.backups_of().snapshot(j.model)
                 fn = os.path.join(d, "channels.tsv")
                 with open(fn, "w", encoding="utf-8") as f:
                     f.write("# 包名\t渠道id\t渠道名\t应用名（客户端勾选）\n")
