@@ -197,10 +197,13 @@ class AppModel(backend: Backend, private val scope: CoroutineScope, private val 
         screen = Screen.Choose
     }
 
-    fun redetect() = flow {
+    /**
+     * 「重新检测」：清空已有的勾选，重新检测并重扫，仍停在确认页。
+     * 只在确认页调用——清空 [selection] 期间由确认页自带加载态，不必自己切 screen。
+     */
+    fun restartScan() = flow {
         val serial = device?.serial ?: return@flow
         selection = null
-        screen = Screen.Choose
         val selection = detect(serial) ?: return@flow goHome()
         scan(serial, selection)      // 只读；被挡住（锁屏、展开的折叠屏）也先列出来，处理完直接能开始
     }

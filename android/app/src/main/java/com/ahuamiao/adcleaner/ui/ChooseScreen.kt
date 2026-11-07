@@ -170,7 +170,7 @@ private fun ChooseList(model: AppModel, selection: Selection) {
                 ) {
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         detection.warnings.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                        Button(onClick = model::redetect, shapes = ButtonDefaults.shapes()) {
+                        Button(onClick = model::restartScan, shapes = ButtonDefaults.shapes()) {
                             ButtonLabel("重新检测", ButtonDefaults.MinHeight, R.drawable.ic_refresh)
                         }
                     }
