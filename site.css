@@ -1,0 +1,64 @@
+/* 官网两页（index.html / android-tutorial.html）共用的调色板、深色档、顶栏与页脚（#653）。
+   单一来源：tool/gen_site_css.py 把它渲染进两页 <style> 的 site-css 标记区，页面不引用本文件——
+   GitHub Pages 与机主服务器上的单文件副本都只认页面里内联的那份。
+   改完跑 python tool/gen_site_css.py；漏跑由 tests/test_doc_consistency.py 抓。
+   两页在共享样式上的差异值集中在下面的 :root.reading 一条里：教程页是阅读页，版心与栏高比首页收紧一档。
+   本文件只管共享部分；页面专属样式（含两页各自的 h2 / .lead 字号与宽度、页脚链接下划线）留在各自 <style> 里。 */
+
+:root {
+  --paper: #EBEFEC; --panel: #F8FAF8; --ink: #0F1B16; --ink-2: #4B5B53; --line: #CDD6D0;
+  --cobalt: #2347D6; --on-cobalt: #FFFFFF; --amber: #E8962A; --off: #A3AFA8; --knob: #FFFFFF; --code: #E2E8E4;
+  --sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  --shadow: 0 30px 60px -36px rgba(15, 27, 22, .35);
+  --gutter: max(20px, env(safe-area-inset-left, 0px));
+  --gutter-r: max(20px, env(safe-area-inset-right, 0px));
+  --top-h: 64px; --top-gap: 28px; --nav-gap: 22px;
+  --top-rule: 1px solid transparent;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0C1310; --panel: #131C18; --ink: #E3ECE6; --ink-2: #9AAEA4; --line: #25332C;
+    --cobalt: #7D96FF; --on-cobalt: #0C1310; --amber: #F0AC48; --off: #3B4B43; --knob: #E3ECE6; --code: #18231E;
+    --shadow: 0 30px 60px -36px rgba(0, 0, 0, .7);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0C1310; --panel: #131C18; --ink: #E3ECE6; --ink-2: #9AAEA4; --line: #25332C;
+  --cobalt: #7D96FF; --on-cobalt: #0C1310; --amber: #F0AC48; --off: #3B4B43; --knob: #E3ECE6; --code: #18231E;
+  --shadow: 0 30px 60px -36px rgba(0, 0, 0, .7);
+  color-scheme: dark;
+}
+:root.reading {
+  --gutter: max(16px, env(safe-area-inset-left, 0px));
+  --gutter-r: max(16px, env(safe-area-inset-right, 0px));
+  --top-h: 60px; --top-gap: 20px; --nav-gap: 20px;
+  --top-rule: 0;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.7 var(--sans); -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; }
+a { color: inherit; }
+img, video { max-width: 100%; display: block; }
+.wrap { max-width: 1160px; margin: 0 auto; padding-left: var(--gutter); padding-right: var(--gutter-r); }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+.label { font-size: 12px; letter-spacing: .14em; color: var(--ink-2); font-weight: 600; }
+:focus-visible { outline: 2px solid var(--cobalt); outline-offset: 3px; border-radius: 6px; }
+
+/* 顶栏 */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--paper); background: color-mix(in srgb, var(--paper) 86%, transparent);
+       backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px); border-bottom: var(--top-rule); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 21; background: var(--paper); }
+.top .wrap { display: flex; align-items: center; gap: var(--top-gap); height: var(--top-h); }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; text-decoration: none; font-size: 17px; white-space: nowrap; }
+.brand .logo { width: 28px; height: 28px; border-radius: 8px; flex: none; }
+.nav { display: flex; gap: var(--nav-gap); margin-left: auto; font-size: 15px; }
+.nav a { text-decoration: none; color: var(--ink-2); white-space: nowrap; touch-action: manipulation; }
+@media (hover: hover) and (pointer: fine) { .nav a:hover { color: var(--ink); } }
+
+/* 页脚 */
+footer { border-top: 1px solid var(--line); padding-block: 40px 56px; font-size: 14px; color: var(--ink-2); }
+footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; }
+footer nav { display: flex; flex-wrap: wrap; gap: 8px 22px; }
