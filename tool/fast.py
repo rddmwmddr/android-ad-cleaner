@@ -29,7 +29,7 @@ import events
 import wait
 from reader import Reader
 from row import (SWITCH_ROW_DEPTH, bounds, control, dedupe, disabled_at, is_switch, own,
-                 summary, switches_in, title_of, unique)
+                 summary, switches_in, title_hit, unique)
 # 显式 re-export：机型脚本从 fast 取这个判据（与 bounds 同一处引用）。
 from row import icon_hit as icon_hit
 # 极性词表定义在 polarity.py（文档生成器也要同一份，见 #693），这里显式 re-export，
@@ -143,7 +143,7 @@ def plan_switches(rows, keep=(), only=None, safe_mode=False, *, screen_h, disabl
     keep_keys = {match_key(k) for k in keep if match_key(k)}
     only_keys = {match_key(k) for k in only if match_key(k)} if only is not None else None
     checked, kept, candidates = set(), set(), []
-    for title, state, xy in rows:
+    for title, state, xy, *_ in rows:
         if not title:
             continue
         key = match_key(title)
@@ -194,7 +194,7 @@ def readback(targets, rows, *, clicked, others, page_same, disabled):
     结局按标题合并：同名行的任意一行没到目标态就算没到（#403）。
     """
     states = {}
-    for title, on, _ in rows:
+    for title, on, *_ in rows:
         states.setdefault(title, []).append(on)
     out = {}
     for t, _, w in targets:
@@ -219,7 +219,7 @@ def still_greyed(targets, rows, titles, disabled):
     回读与补点共用这一份判据：每次都要按当次读到的落点重新算，不能沿用上一次的。"""
     want = {t: w for t, _, w in targets}
     return titles & greyed_titles(
-        ((title, xy) for title, on, xy in rows
+        ((title, xy) for title, on, xy, *_ in rows
          if title in titles and on != want[title]), disabled)
 
 
@@ -237,11 +237,19 @@ def pick_retry_rows(targets, rows, still, disabled):
     for t, w in want.items():
         if t not in still or t in grey:
             continue
-        row = next(((on, at) for title, on, at in rows
+        row = next(((on, at) for title, on, at, *_ in rows
                     if title == t and on != w and not disabled(at)), None)
         if row is not None:
             picked.append((t, row[1]))
     return picked
+
+
+def pick_title_rows(targets, rows, still, disabled):
+    """回退到行标题时该点哪些行：挑哪几行交给 `pick_retry_rows`，落点换成同一行的标题（#608）。
+    rows 是 `Phone.switch_rows()` 的四元组；没有独立标题的行不点——点它的标题等于再点一次本体。"""
+    hits = {(title, xy): hit for title, _, xy, hit in rows if hit is not None}
+    return [(t, hits[(t, xy)])
+            for t, xy in pick_retry_rows(targets, rows, still, disabled) if (t, xy) in hits]
 
 
 def _shell_transport(shell):
@@ -420,7 +428,13 @@ class Phone:
         return r > l and b > t and 0 <= cx < self.W and 0 <= cy < self.H
 
     def switches(self, root=None):
-        """[(标题, checked, (cx,cy))]，标题取开关所在行的第一段文字。"""
+        """[(标题, checked, (cx,cy))]，标题取开关所在行的第一段文字。落点是开关本体。"""
+        return [(title, on, xy) for title, on, xy, hit in self.switch_rows(root)]
+
+    def switch_rows(self, root=None):
+        """[(标题, checked, 开关本体落点, 行标题落点)]：与 switches() 同一次遍历，多带标题落点。
+        落点为 None 表示这一行没有独立标题（标题取自开关自己的标签）；`off()` 在开关本体
+        点了不动时改点标题（#608）。"""
         root = root if root is not None else self.tree()
         parent = {c: p for p in root.iter() for c in p}
         out = []
@@ -459,8 +473,10 @@ class Phone:
             l, t, r, b = bounds(ctrl)
             # 卡片自己报状态时以卡片为准；缺这个属性才读内层开关，别把缺属性当成「关」
             checked = n.get("checked") if n.get("checked") is not None else ctrl.get("checked")
-            out.append((title_of(n, parent, self.on_screen, self.H), checked == "true", (l, t, r, b)))
-        return [(title, on, ((l + r) // 2, (t + b) // 2)) for title, on, (l, t, r, b) in dedupe(out)]
+            title, hit = title_hit(n, parent, self.on_screen, self.H)
+            out.append((title, checked == "true", (l, t, r, b), hit))
+        return [(title, on, ((l + r) // 2, (t + b) // 2), hit)
+                for title, on, (l, t, r, b), hit in dedupe(out)]
 
     def locked(self):
         if self.pause_at_lock_check and pause_point():
@@ -966,7 +982,8 @@ class Phone:
         首击后剩下的目标若已不在原坐标，这一屏剩下的改成每点一项前重读坐标（#480）。
         点过的普通开关行在回读里消失、回读仍见到本屏计划时的非目标行且没跳走，按已关记账；
         整页读空、换到别的页（含同 Activity 的子页）或保护类开关消失，仍报失败（#486）。
-        开关是灰的（被上级开关禁用）的行不点、也不算失败：点了也不会变，以前报成「关不掉」（#333）。"""
+        开关是灰的（被上级开关禁用）的行不点、也不算失败：点了也不会变，以前报成「关不掉」（#333）。
+        补点两轮仍没到位的，回退到点整行标题（只认行标题的页面，ADR-0024）：照样由回读确认。"""
         # 页面刚打开还没画完：等开关出现，最多试 10 次（本段已走丢就不等）
         wait.until(self.switches, tries=2 if self.miss else 10, poll=0.2,
                    now=time.time, sleep=time.sleep)
@@ -1002,7 +1019,7 @@ class Phone:
                     time.sleep(0.3)                     # 等行消失、列表上移的动画走完
                     root = self.tree()
                     rows = self.switches(root)
-                    row = next(((on, at) for title, on, at in rows
+                    row = next(((on, at) for title, on, at, *_ in rows
                                 if title == t and on != w), None)
                     if row is None or not in_band(row[1], self.H) or disabled_at(root, row[1]):
                         continue                        # 已不在、已到位、已在带外或已变灰：交给收尾回读
@@ -1026,7 +1043,7 @@ class Phone:
                 time.sleep(0.25)
                 self.confirm()
 
-                def read_page():                        # 这一屏的回读：{标题: 结局}
+                def read_page():                        # 这一屏的回读：({标题: 结局}, 这次读到的树)
                     root = self.tree()
                     rows = self.switches(root)
                     stayed = []                         # 惰性查：没有消失行时不额外读一次前台
@@ -1037,7 +1054,7 @@ class Phone:
                         return stayed[0]
                     return readback(targets, rows, clicked=clicked, others=others,
                                     page_same=page_same,
-                                    disabled=lambda xy: disabled_at(root, xy))
+                                    disabled=lambda xy: disabled_at(root, xy)), root
 
                 def retry(still):
                     # 只重试当前仍能识别的开关，不能在节点消失后沿用旧坐标；灰掉的点了也不会变。
@@ -1053,16 +1070,45 @@ class Phone:
                                                  lambda xy: disabled_at(root, xy)):
                         self.click(*xy); self.confirm()
                         clicked.add(t)                  # 补点也算点过：行随后消失同样是随行消失（#486）
-                verdicts = read_page()
+
+                def retry_titles(still, root):
+                    # 开关本体点了不动、只认行标题的页面（Google 广告设置页，#608）：改点这一行的标题。
+                    # 每点一次都按新树重取坐标：点掉一行会让下面的行整体上移，旧坐标会落到邻行（#480 同一口子）。
+                    done_here, pending = False, set(still)
+                    while pending:
+                        picked = pick_title_rows(targets, self.switch_rows(root), pending,
+                                                 lambda xy: disabled_at(root, xy))
+                        if not picked:
+                            break                       # 没有独立标题可点：不多读前台、也不多回读
+                        here = self.focus()
+                        if here and here != start:
+                            break                       # 页面已经换了：新页上的同名行不是这一屏的开关
+                        t, xy = picked[0]
+                        self.click(*xy); self.confirm()
+                        clicked.add(t)
+                        done_here, pending = True, pending - {t}
+                        here = self.focus()
+                        if here and here != start:      # 标题不是开关：有的页面点它进的是详情页
+                            self.back()
+                            break
+                        if pending:
+                            time.sleep(0.3)             # 等行消失 / 列表上移的动画走完
+                            root = self.tree()
+                    return done_here
+                verdicts, root = read_page()
                 still = still_open(verdicts)
                 retry(still)
-                verdicts = read_page()
+                verdicts, root = read_page()
                 still = still_open(verdicts)
                 if still:                               # 还有没拨过去的：等动画结束再点一次
                     time.sleep(0.8)
                     retry(still)
                     time.sleep(0.4)
-                    verdicts = read_page()
+                    verdicts, root = read_page()
+                    still = still_open(verdicts)
+                if still and retry_titles(still, root):
+                    time.sleep(0.4)                     # 点标题后可能弹确认框 / 改状态：复读确认
+                    verdicts, _ = read_page()
                 # 这一屏关到一半才变灰的，同样不报成拨不动
                 page_greyed |= {t for t, v in verdicts.items() if v == GREYED}
                 for t, _, w in targets:

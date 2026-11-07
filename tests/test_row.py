@@ -252,6 +252,21 @@ ONE_ROW = '''<hierarchy><node bounds="[0,0][1080,2340]">
 </node></hierarchy>'''
 
 
+# 平铺列表（开关是列表的直接子项）里本行的标题在开关上方，下一行的文字在下方：
+# 「竖直最近」要按上 / 下边界算，不能让下一行借走标题（#608 拆 title_label 时踩过）
+TALL_NEIGHBOUR = '''<hierarchy><node bounds="[0,300][1080,2340]">
+  <node text="本行标题" bounds="[60,960][600,1000]"/>
+  <node class="android.widget.Switch" checkable="true" checked="true" content-desc="本行开关" bounds="[990,1000][1080,1080]"/>
+  <node text="下一行的说明" bounds="[60,1340][600,1380]"/>
+</node></hierarchy>'''
+
+# 同上，但唯一的文字在下方远处：够不着就不是本行标题，退回开关自己的标签
+TALL_ONLY_BELOW = '''<hierarchy><node bounds="[0,300][1080,2340]">
+  <node class="android.widget.Switch" checkable="true" checked="true" content-desc="本行开关" bounds="[990,1000][1080,1080]"/>
+  <node text="下一行的说明" bounds="[60,1400][600,1440]"/>
+</node></hierarchy>'''
+
+
 # 开关状态词写在标题上面：它不是标题
 STATE_ABOVE = '''<hierarchy><node bounds="[0,0][1080,2340]">
   <node bounds="[0,400][1080,560]">
@@ -273,6 +288,16 @@ class TitleTests(unittest.TestCase):
         root, parents = page(TALL_LIST)
         self.assertEqual(row.title_of(switch_at(root, 570), parents, on_screen(1168, 1712), 1712),
                          "自动更新")
+
+    def test_tall_container_does_not_borrow_the_title_of_the_row_below(self):
+        root, parents = page(TALL_NEIGHBOUR)
+        self.assertEqual(row.title_of(switch_at(root, 1000), parents, on_screen(), 2340),
+                         "本行标题")
+
+    def test_a_text_too_far_below_is_not_the_title(self):
+        root, parents = page(TALL_ONLY_BELOW)
+        self.assertEqual(row.title_of(switch_at(root, 1000), parents, on_screen(), 2340),
+                         "本行开关")
 
     def test_short_container_takes_the_top_text_even_when_the_description_is_closer(self):
         root, parents = page(ONE_ROW)

@@ -188,6 +188,9 @@ class OffDriverTests(unittest.TestCase):
         p.W, p.H = size
         p.tree = Mock(return_value=ET.fromstring("<hierarchy/>"))
         p.switches = Mock(side_effect=reads)
+        # off() 的回退还会问 switch_rows()：一起桩掉，否则它跑真实现、对着空树空转，
+        # 这批用例就测不到「回退拿到的行」与实际读到的是同一份（标题回退的行为在 test_off_title_fallback）
+        p.switch_rows = Mock(return_value=[])
         p.focus = Mock(return_value="app/settings")
         p.click = Mock()
         p.confirm = Mock(return_value=None)
@@ -361,7 +364,9 @@ class OffDriverTests(unittest.TestCase):
         done = self.run_off(p, page="页")
         self.assertEqual((done, p.changed), (0, []))
         self.assertEqual([c.args for c in p.click.call_args_list], [(500, 800)])   # 不在新页上补点
-        self.assertEqual(p.focus.call_count, 7)     # 守卫：回读确实查过是否跳走（start / 首击 / 三次回读 / 两次重试）
+        # 守卫：回读确实查过是否跳走（start / 首击 / 三次回读 / 两次重试）；
+        # 挑不到标题落点时回退不多读前台，所以这里不增一次
+        self.assertEqual(p.focus.call_count, 7)
         p.say.assert_any_call("  ✗ 关不掉 广告推荐")
 
     def test_a_retry_does_not_click_a_same_named_row_on_another_page(self):
