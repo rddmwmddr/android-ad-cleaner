@@ -381,8 +381,9 @@ class LaunchTests(unittest.TestCase):
     def test_start_leaving_target_app_stops_before_dismiss_or_click(self):
         p = phone()
         p.d.shell.return_value = types.SimpleNamespace(exit_code=0, output="Events injected: 1")
-        # 失败消息现在带落点（#547）：多读一次前台，页面结构也要读得到
-        p.focus = Mock(side_effect=["com.example/.Main", "com.other/.Account", "com.other/.Account"])
+        # 失败消息现在带落点（#547）：多读一次前台，页面结构也要读得到。
+        # 连续 3 帧读到别的 App 才判离开（#581），落点那一次再多读一次。
+        p.focus = Mock(side_effect=["com.example/.Main"] + ["com.other/.Account"] * 4)
         p.texts = Mock(return_value=[])
         p.tree = Mock(return_value=ET.fromstring('<hierarchy rotation="0"></hierarchy>'))
         p.dismiss = Mock()
@@ -419,8 +420,8 @@ class LaunchTests(unittest.TestCase):
     def test_dismiss_leaving_target_app_is_not_accepted_as_success(self):
         p = phone()
         p.d.shell.return_value = types.SimpleNamespace(exit_code=0, output="Events injected: 1")
-        # 失败消息现在带落点（#547）
-        p.focus = Mock(side_effect=["com.example/.Main"] * 3 + ["com.other/.Main", "com.other/.Main"])
+        # 失败消息现在带落点（#547）；连续 3 帧读到别的 App 才算离开（#581）
+        p.focus = Mock(side_effect=["com.example/.Main"] * 3 + ["com.other/.Main"] * 4)
         p.texts = Mock(return_value=[("首页", (), None)])
         p.tree = Mock(return_value=ET.fromstring('<hierarchy rotation="0"></hierarchy>'))
         p.dismiss = Mock()

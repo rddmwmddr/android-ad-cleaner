@@ -51,6 +51,20 @@ CONFIRM = ("确定", "確定", "关闭", "關閉", "仍要关闭", "仍要關閉
 CONFIRM_WAIT = 1.0
 CONFIRM_SETTLE = 0.2
 PERMISSION_CONTROLLERS = {"com.android.permissioncontroller", "com.google.android.permissioncontroller"}
+# 拉起后等目标 App 到前台：只有「确知不是它」的时间计入预算，空焦点是窗口还没画出来，不计（#581）。
+LAUNCH_WAIT = 5
+# 冷启动过渡能把启动等待顺延到的挂钟上限：与下面「启动后 8 秒仍读不到页面」同一个界，空焦点不能无限等。
+LAUNCH_HARD_STOP = 8
+# 连续读到别的 App 几次才算离开前台：主题商店 → 主题管理器这类跳包过渡帧只占一两帧（#581）。
+FOREIGN_STREAK = 3
+
+
+def unknown_focus(current):
+    """读不出前台（空串）= 窗口还没画出来，不是别的 App 抢了前台（#581）。
+    启动等待与权限弹窗两条分支共用这一条口径。"""
+    return not current
+
+
 # 输入框：荣耀 MagicOS 10（PNM-AN10 10.0.0.102）设置搜索框是 AutoCompleteTextView，类名里没有 EditText
 EDIT = re.compile(r"EditText|AutoCompleteTextView")
 
@@ -1282,50 +1296,79 @@ class Phone:
                     raise adb_link.lost((result.output or pm).strip())
                 raise RuntimeError(f"本机没有安装 {pkg}，跳过本段")
             raise RuntimeError(f"无法打开 {pkg}：{result.output.strip()[-250:]}")
-        deadline = time.monotonic() + 5
         expected = foreground or pkg
+        started = time.monotonic()
+        last = started
+        waited = 0.0                       # 只有确知「不是目标 App」的时间才计入启动等待
         while self.focus().split("/", 1)[0] != expected:
-            if self.focus().split("/", 1)[0] in PERMISSION_CONTROLLERS:
+            current = self.focus().split("/", 1)[0]
+            now = time.monotonic()
+            if not unknown_focus(current):
+                waited += now - last       # 空焦点是窗口还没画出来，顺延到 LAUNCH_HARD_STOP 为止
+            last = now
+            if current in PERMISSION_CONTROLLERS:
                 self.dismiss()
-            if time.monotonic() >= deadline:
+            if waited >= LAUNCH_WAIT or now >= started + LAUNCH_HARD_STOP:
                 # 带上落点（谁抢了前台、页面长什么样）：没有包名就分不清该加白名单还是改判据（#547）。
                 where, detail = self._page_diagnosis()
                 raise RuntimeError(f"{pkg} 没有进入前台，跳过本段（停在 {where}；{detail}）")
             time.sleep(0.2)
+
+        def leave_foreground():
+            # 同 #547：这条报错命中 79 份上报、51 个型号，缺的从来都是「是谁盖住了」。
+            where, detail = self._page_diagnosis()
+            raise RuntimeError(f"{pkg} 启动后离开前台，停止本段以免操作其他 App（停在 {where}；{detail}）")
+
+        streak = 0                          # 连续读到别的 App 的帧数，读到目标包或读空就清零
         def check_foreground():
+            """确认前台：落在目标 App 返回真（这一屏可以读、可以关弹窗），读不出或别的 App 返回假。"""
+            nonlocal streak
             current = self.focus().split("/", 1)[0]
             # 权限申请可能在首页已出现后才弹出，也只能拒绝；不在其他 App 上找关闭按钮。
             if current in PERMISSION_CONTROLLERS:
                 give_up_at = time.monotonic() + 3
-                while current in PERMISSION_CONTROLLERS or not current:
+                while current in PERMISSION_CONTROLLERS or unknown_focus(current):
                     if time.monotonic() >= give_up_at:
                         break
                     if current and not self.dismiss():
                         break
                     time.sleep(.2)
                     current = self.focus().split("/", 1)[0]
-            if current != expected:
-                # 同 #547：这条报错命中 79 份上报、51 个型号，缺的从来都是「是谁盖住了」。
-                where, detail = self._page_diagnosis()
-                raise RuntimeError(f"{pkg} 启动后离开前台，停止本段以免操作其他 App（停在 {where}；{detail}）")
+                if current in PERMISSION_CONTROLLERS:      # 等满 3 秒仍在：确知被它占住
+                    leave_foreground()
+            if unknown_focus(current):
+                streak = 0
+                return False
+            if current == expected:
+                streak = 0
+                return True
+            streak += 1
+            if streak >= FOREIGN_STREAK:
+                leave_foreground()
+            return False
 
         # 旧版商店冷启动可能暂时没有可读文字；空白不等于广告，不能盲按返回退出 App。
         t = time.time()
-        while time.time() - t < 8:
-            check_foreground()
-            if self.texts():               # 一两个标签也可能是正常首页
-                break
-            self.dismiss()                # 仅尝试可识别的关闭 / 拒绝按钮
+        while time.time() - t < LAUNCH_HARD_STOP:
+            if check_foreground():         # 不在别的 App 上读页面、关弹窗
+                if self.texts():           # 一两个标签也可能是正常首页
+                    break
+                self.dismiss()             # 仅尝试可识别的关闭 / 拒绝按钮
             time.sleep(.2)
         else:
-            raise RuntimeError(f"{pkg} 启动后 8 秒仍读不到页面，停止本段；请确认首页已加载后重试")
+            raise RuntimeError(f"{pkg} 启动后 {LAUNCH_HARD_STOP} 秒仍读不到页面，停止本段；请确认首页已加载后重试")
 
         t = time.time()                    # 首屏加载较慢时，也要给引导/更新弹窗留下处理时间
         while time.time() - t < settle:
-            check_foreground()
-            self.dismiss()
+            if check_foreground():
+                self.dismiss()
             time.sleep(0.4)
-        check_foreground()
+        # 收尾至少再读一次：最后一拍被别的 App 抢了前台也当启动成功的话，后面的段会对着它操作。
+        # 那一帧不判，读到别的 App 就把它攒够才停；读空或回到目标包就结束（跳包过渡会自己清零）。
+        while True:
+            if check_foreground() or not streak:
+                break
+            time.sleep(.2)
 
 
 def main():
