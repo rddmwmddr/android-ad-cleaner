@@ -292,12 +292,15 @@ def used_by(recipes_dir):
 
 def open_direct(p, d, settle=1.2):
     """打开一条直达页面。默认走 Phone.start（顺手收掉开屏 / 权限弹窗、核对前台），
-    带清栈参数就会自己退出的页面（`keep_task`）裸启动，失败时照样抛出。打不开由 reach() 记一笔换下一档。"""
+    带清栈参数就会自己退出的页面（`keep_task`）裸启动，失败时照样抛出。打不开由 reach() 记一笔换下一档。
+
+    页面名一律按字面量传下去：带 `$` 的那种由 Phone._launch 在 shell 边界引用一次，
+    这里再 quote 一层会让 used_by() 的源码扫描认不出机型（#667）。"""
     if not d.keep_task:
-        p.start(d.pkg, shlex.quote(d.activity), settle=settle)      # 页面名可能带 $，手机上的 shell 会展开
+        p.start(d.pkg, d.activity, settle=settle)
         return
     page = full(d.pkg, d.activity)
-    result = p.reader.shell(f"am start -n {d.pkg}/{page}")
+    result = p.reader.shell(f"am start -n {shlex.quote(d.pkg + '/' + page)}")
     if getattr(result, "exit_code", 0) or re.search(r"Error|Exception", result.output or "", re.I):
         raise RuntimeError(f"无法打开 {page}：{(result.output or '').strip()[-200:]}")
 

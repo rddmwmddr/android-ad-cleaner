@@ -8,7 +8,6 @@
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 BUILD = "PD2547D_A_17.1.10.2"
 MODELS = ["V2547DA"]
-import shlex
 import time
 
 import adb_link
@@ -86,13 +85,16 @@ def off_unnamed(page):
 
 
 def opened(start):
-    """试一条直达页面：到了返回真。别的系统版本可能没有这一页，返回假走菜单；断线照常上抛。"""
+    """试一条直达页面：到了返回真。别的系统版本可能没有这一页，返回假走菜单；
+    断线照常上抛——跑到一半掉线时 Phone 只置 lost、抛的是普通 RuntimeError（#293）。"""
     try:
         start()
         return True
     except adb_link.DeviceLost:
         raise
     except RuntimeError as e:
+        if p.lost:
+            raise
         print(f"  · 直达不通（{e}），走菜单")
         return False
 
@@ -104,7 +106,7 @@ def settings_home():
 @step("系统广告")
 def _():
     only = ["个性化广告", "个性化推荐", "智能推荐服务"]
-    if opened(lambda: p.start("com.android.settings", shlex.quote(".Settings$AdAndPrivacyActivityForOsTwo"), expect="智能推荐服务", budget=2)):
+    if opened(lambda: p.start("com.android.settings", ".Settings$AdAndPrivacyActivityForOsTwo", expect="智能推荐服务", budget=2)):
         p.off(only=only, page="系统·广告与隐私")
         return
     settings_home()

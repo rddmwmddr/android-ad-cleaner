@@ -159,10 +159,19 @@ Failure [only root can delete system app for a particular user]
 - 负一屏设置面板：`com.vivo.hiboard/.settings.AppletSettingActivity`
 - 阅图锁屏：`com.vivo.magazine/.ui.MagazineSettings`
 - 天气：`com.vivo.weather:id/more_btn`，设置页 `com.vivo.weather/.WeatherSettings`
+- 广告与隐私：`com.android.settings/.Settings$AdAndPrivacyActivityForOsTwo`。页面名带 `$`，由 `Phone.start`
+  在 shell 边界整串引用一次，脚本里照字面量写
+- 全局搜索：`com.vivo.globalsearch/.view.SearchSettingsActivity`。Android 17 上没有「推荐热搜榜单」，
+  这一页只有几行，看一眼即可，不必翻页
+- 浏览器设置页在这个版本的 `com.vivo.browser` 里没有导出，仍走菜单
 
 ⚠️ 负一屏「热点资讯」页的 8 行开关，整行节点的标题全串成了页标题「热点资讯」；这一页还有 3 个单选钮
 （悬浮 / 经典 / 卡片形态）也是 checkable，按「找 checkable 节点」的通用写法会把它当开关一起拨掉。
 机型脚本 `recipes/vivo-V2547A/recipe.py` 里已按行还原标题、排除单选钮。
+
+V2547DA 的 Android 17 变体（`recipes/vivo-V2547DA/recipe_android17.py`）2026-11-07 本机把系统广告、
+全局搜索、阅图锁屏三段改成直达，打不开再走菜单；整段 91 秒降到 62 秒。同一轮确认商店
+`AppstoreSettingsActivity` 与浏览器设置页在这个版本都没导出。
 
 ⚠️ V2547DA 的 Android 17 上，商店「设置 → 关于 → 个性化推荐」页的两个开关读屏里 content-desc 只有
 「开启，开关」、行内没有标题。引擎的 `p.off()` 按标题匹配，空标题的行整行跳过——不会关，也不会报「关不掉」。

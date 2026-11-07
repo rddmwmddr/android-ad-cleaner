@@ -2,12 +2,13 @@
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch
 
+import fixtures
 from fixtures import load_recipe
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
+sys.path.insert(0, str(ROOT / "tests"))
 
 import adb_link  # noqa: E402
 import entries  # noqa: E402
@@ -16,8 +17,8 @@ XIAOMI = ROOT / "recipes" / "xiaomi-M154FF" / "recipe.py"
 VIVO = ROOT / "recipes" / "vivo-V2547DA" / "recipe_android17.py"
 
 
-def phone(start=None):
-    p = Mock()
+def phone(start=None, lost=False):
+    p = fixtures.phone_mock(lost=lost)
     p.locked.return_value = False
     p.focus.return_value = ""
     p.entry.return_value = False
@@ -29,6 +30,10 @@ def phone(start=None):
 
 def started(p):
     return [c.args[:2] if len(c.args) > 1 else c.args[:1] for c in p.start.call_args_list]
+
+
+def expects(p):
+    return [c.kwargs.get("expect") for c in p.start.call_args_list]
 
 
 def shells(p):
@@ -48,6 +53,7 @@ class XiaomiTest(unittest.TestCase):
         p = phone()
         self.run_step("系统广告", p)
         self.assertEqual(started(p), [("com.android.settings", ".ad.AdServiceSettings")])
+        self.assertEqual(expects(p), ["个性化广告推荐"])       # 落点判据要真的传下去
         p.off.assert_called_once_with(only=["个性化广告推荐"], page="系统·广告服务")
         self.assertFalse(any("android.settings.SETTINGS" in c for c in shells(p)))
 
@@ -58,10 +64,17 @@ class XiaomiTest(unittest.TestCase):
         self.assertEqual(p.entry.call_args_list[0].args[0], "隐私与安全")
 
     def test_lost_connection_does_not_walk_the_menu(self):
-        with patch.object(adb_link, "emit", create=True):
-            lost = adb_link.DeviceLost("断了")
-        p = phone(lost)
-        scope, out = self.run_step("系统广告", p)
+        p = phone(adb_link.DeviceLost("断了"))
+        scope, _ = self.run_step("系统广告", p)
+        self.assertEqual(shells(p), [])
+        self.assertEqual(scope["FAILED_STEPS"], ["系统广告"])
+
+    def test_lost_in_the_middle_does_not_look_like_an_unreachable_page(self):
+        """读到一半断线时 Phone 只置 lost、抛的是普通 RuntimeError（#293、#667）：不能当成「这一页打不开」。"""
+        p = phone()
+        p.lost = True
+        p.start.side_effect = RuntimeError("device offline")
+        scope, _ = self.run_step("系统广告", p)
         self.assertEqual(shells(p), [])
         self.assertEqual(scope["FAILED_STEPS"], ["系统广告"])
 
@@ -69,6 +82,7 @@ class XiaomiTest(unittest.TestCase):
         p = phone()
         self.run_step("应用商店", p)
         self.assertEqual(started(p), [("com.xiaomi.market", ".ui.MarketPreferenceActivity")])
+        self.assertEqual(expects(p), ["通知设置"])
         p.go.assert_not_called()
 
     def test_store_falls_back_to_my_page(self):
@@ -95,6 +109,19 @@ class XiaomiTest(unittest.TestCase):
         p.off.assert_called_once_with(only=["个性化内容推荐", "个性化广告推荐"], page="浏览器·个性化推荐")
         self.assertEqual(scope["FAILED_STEPS"], [])
 
+    def test_browser_second_hop_does_not_fail_the_segment(self):
+        """18 Fold 这类版本可能没有 .BrowserSettingsActivity：打不开只跳过子项，不让整段报未完成。"""
+        def second_hop_missing(pkg, activity=None, **kw):
+            if activity == ".BrowserSettingsActivity":
+                raise RuntimeError("无法打开")
+
+        p = phone(second_hop_missing)
+        p.tree.side_effect = AssertionError("子项页没打开时不该在旧页上找子项")
+        scope, out = self.run_step("浏览器", p)
+        self.assertIn("直达不通", out.getvalue())
+        p.off.assert_called_once_with(only=["个性化内容推荐", "个性化广告推荐"], page="浏览器·个性化推荐")
+        self.assertEqual(scope["FAILED_STEPS"], [])
+
     def test_browser_basic_mode_still_skips_on_the_menu_path(self):
         p = phone(fail_direct)
         p.focus.return_value = "com.android.browser/.basicmode.BasicModeSettingActivity"
@@ -109,6 +136,7 @@ class XiaomiTest(unittest.TestCase):
         self.run_step("天气和日历", p)
         self.assertEqual(started(p), [("com.miui.weather2",),
                                       ("com.android.calendar", ".settings.UserExperienceActionBarActivity")])
+        self.assertEqual(expects(p), [None, "内容推广"])
         p.off.assert_called_once()
         self.assertEqual(p.off.call_args.kwargs["page"], "com.android.calendar·用户体验计划")
 
@@ -117,11 +145,11 @@ class VivoTest(unittest.TestCase):
     def run_step(self, name, p):
         return load_recipe(p, VIVO, only=name)
 
-    def test_system_ads_quotes_the_dollar_sign(self):
-        # 不加引号的话，手机上的 shell 会把 $AdAndPrivacy… 当变量展开成空
+    def test_system_ads_passes_the_literal_activity(self):
+        """页面名带 $：引用只在引擎的 shell 边界做一次（Phone._launch），脚本这层保持字面量。"""
         p = phone()
         self.run_step("系统广告", p)
-        self.assertEqual(started(p), [("com.android.settings", "'.Settings$AdAndPrivacyActivityForOsTwo'")])
+        self.assertEqual(started(p), [("com.android.settings", ".Settings$AdAndPrivacyActivityForOsTwo")])
         p.off.assert_called_once_with(only=["个性化广告", "个性化推荐", "智能推荐服务"], page="系统·广告与隐私")
 
     def test_system_ads_falls_back_to_the_menu(self):
@@ -149,15 +177,33 @@ class VivoTest(unittest.TestCase):
         p.off.assert_not_called()
         self.assertEqual([c.args[0] for c in p.entry.call_args_list], ["系统管理与升级"])
 
+    def test_hot_search_row_is_closed_without_scrolling(self):
+        p = phone()
+        p.find.return_value = object()
+        p.entry.side_effect = lambda name, scrolls=6: name in ("首页展示内容", "推荐热搜榜单")
+        self.run_step("全局搜索", p)
+        self.assertEqual([c.kwargs["page"] for c in p.off.call_args_list],
+                         ["全局搜索·首页展示内容", "全局搜索·热搜榜单"])
+        hot = [c for c in p.entry.call_args_list if c.args[0] == "推荐热搜榜单"]
+        self.assertEqual(hot[0].kwargs["scrolls"], 0)      # 这一页只有几行，不滚（#667）
+
+    def test_hot_search_row_is_not_searched_for_when_absent(self):
+        p = phone()
+        p.find.return_value = None
+        p.entry.side_effect = lambda name, scrolls=6: name == "首页展示内容"
+        self.run_step("全局搜索", p)
+        self.assertFalse(any(c.args[0] == "推荐热搜榜单" for c in p.entry.call_args_list))
+
 
 class OpenDirectTest(unittest.TestCase):
-    def test_activity_with_dollar_is_quoted_for_the_shell(self):
-        p = Mock()
+    def test_activity_is_passed_to_phone_start_unquoted(self):
+        """引用交给 Phone._launch；这一层保持字面量，used_by() 才认得出是哪台机在用（#667 审查）。"""
+        p = fixtures.phone_mock()
         entries.open_direct(p, entries.Direct("com.android.settings", ".Settings$AdAndPrivacyActivityForOsTwo"))
-        self.assertEqual(p.start.call_args.args, ("com.android.settings", "'.Settings$AdAndPrivacyActivityForOsTwo'"))
+        self.assertEqual(p.start.call_args.args, ("com.android.settings", ".Settings$AdAndPrivacyActivityForOsTwo"))
 
     def test_plain_activity_is_left_alone(self):
-        p = Mock()
+        p = fixtures.phone_mock()
         entries.open_direct(p, entries.Direct("com.android.settings", ".ad.AdServiceSettings"))
         self.assertEqual(p.start.call_args.args, ("com.android.settings", ".ad.AdServiceSettings"))
 

@@ -74,13 +74,16 @@ def browser_settings():
 
 
 def opened(start):
-    """试一条直达页面：到了返回真。18 Fold 这类版本不同的机器可能没有这一页，返回假走菜单；断线照常上抛。"""
+    """试一条直达页面：到了返回真。18 Fold 这类版本不同的机器可能没有这一页，返回假走菜单；
+    断线照常上抛——跑到一半掉线时 Phone 只置 lost、抛的是普通 RuntimeError（#293）。"""
     try:
         start()
         return True
     except adb_link.DeviceLost:
         raise
     except RuntimeError as e:
+        if p.lost:
+            raise
         print(f"  · 直达不通（{e}），走菜单")
         return False
 
@@ -180,7 +183,8 @@ def _():
     # 设置页都有导出，直达：后台屏上首页的工具栏和底栏认不出来，走菜单会报「入口未找到」（#667）
     if opened(lambda: p.start("com.android.browser", ".preferences.activity.CustomizationPreferenceActivity", expect="个性化内容推荐", budget=2)):
         p.off(only=["个性化内容推荐", "个性化广告推荐"], page="浏览器·个性化推荐")
-        p.start("com.android.browser", ".BrowserSettingsActivity")
+        # 子项页老版本可能没导出：打不开只跳过下面三项，不让整段报未完成
+        opened(lambda: p.start("com.android.browser", ".BrowserSettingsActivity"))
     else:
         p.start("com.android.browser")
         if "basicmode" in p.focus().lower():

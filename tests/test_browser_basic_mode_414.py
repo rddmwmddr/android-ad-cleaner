@@ -39,7 +39,10 @@ class BrowserBasicModeTests(unittest.TestCase):
 
     def test_basic_mode_page_is_skipped_with_a_readable_reason(self):
         p, out = self.run_browser_step(BASIC)
-        p.start.assert_called_with("com.android.browser")
+        # 先试一次直达，落空后才裸拉起首页：两次调用，顺序固定
+        self.assertEqual([c.args for c in p.start.call_args_list],
+                         [("com.android.browser", ".preferences.activity.CustomizationPreferenceActivity"),
+                          ("com.android.browser",)])
         self.assertIn("基本模式", out)
         self.assertNotIn("出错", out)
         p.click.assert_not_called()
@@ -49,7 +52,9 @@ class BrowserBasicModeTests(unittest.TestCase):
 
     def test_normal_home_page_still_goes_through_the_settings_entries(self):
         p, out = self.run_browser_step(HOME)
-        p.start.assert_called_with("com.android.browser")
+        self.assertEqual([c.args for c in p.start.call_args_list],
+                         [("com.android.browser", ".preferences.activity.CustomizationPreferenceActivity"),
+                          ("com.android.browser",)])
         self.assertNotIn("基本模式", out)
         self.assertIn("浏览器设置入口未找到", out)
 

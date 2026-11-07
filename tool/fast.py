@@ -11,7 +11,7 @@
   fast.py -s SERIAL run 机型脚本.py         跑一个品牌机型脚本
 在脚本里：from fast import Phone
 """
-import os, re, sys, time, unicodedata, xml.etree.ElementTree as ET
+import os, re, shlex, sys, time, unicodedata, xml.etree.ElementTree as ET
 from dataclasses import dataclass
 for _st in (sys.stdout, sys.stderr):
     try:
@@ -229,6 +229,7 @@ class Phone:
         self.vivo_seen = False              # 见过 vivo 的通知页：渠道页与应用通知页是同一个 Activity，只从应用列表进
         self.changed = []          # (页面, 标题) 记录本次关掉的
         self.miss = 0              # 本段已经没找到几次；>0 说明路径对不上，后面只看当前屏、不再翻页找
+        self.lost = False          # 已确认断线：调用方据此分开「这一页打不开」与「手机不见了」
         self.skeleton_sigs = set()  # 本次运行已上报的骨架布局（#428）：同布局只留第一份
         self.skeleton_count = 0     # 本次运行已上报的骨架份数，上限见 chan_fast.SKELETON_PER_RUN
         self.mismatch_probes = 0    # 本次运行已补的 MISMATCH 判据读数，上限见 chan_fast.MISMATCH_PER_RUN
@@ -1238,7 +1239,9 @@ class Phone:
         self.check_alive()
         self.miss = 0
         if activity:
-            result = self.reader.shell(f"am start -f 0x10008000 -n {pkg}/{activity}")
+            # 页面名可能带 $（vivo `.Settings$AdAndPrivacyActivityForOsTwo`）：交给 shell 前整串引用一次。
+            # 脚本与 entries.Direct 保持字面量，used_by() 才认得出来源（#667）
+            result = self.reader.shell(f"am start -f 0x10008000 -n {shlex.quote(pkg + '/' + activity)}")
         else:
             self._u2(self.reader.app_stop, pkg)
             result = self.reader.shell(f"monkey -p {pkg} -c android.intent.category.LAUNCHER 1")

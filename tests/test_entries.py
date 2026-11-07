@@ -99,7 +99,8 @@ class FakeReader:
         self.shells.append(cmd)
         out = ""
         if cmd.startswith("am start"):
-            pkg, act = cmd.rsplit(" ", 1)[-1].split("/", 1)
+            target = cmd.rsplit(" ", 1)[-1].strip("'")     # 手机上的 sh 会剥掉引号，替身照做
+            pkg, act = target.split("/", 1)
             page = f"{pkg}/{pkg + act if act.startswith('.') else act}"
             # 页面不在 lands 里就落在同 App 的别的页：App 到了前台，但不是要的那一页
             self.current = page if page in self.lands else f"{pkg}/.SomeOtherActivity"
@@ -176,6 +177,17 @@ class ReachTest(unittest.TestCase):
         p.setting = lambda kw, result, **extra: seen.append((kw, result, extra)) or False
         self.assertIsNone(self.reach(p, entry))
         self.assertEqual(seen, [("广告", "广告与隐私", {"path": "隐私与安全 > 隐私"})])
+
+    def test_dollar_in_the_page_name_is_quoted_at_the_shell(self):
+        """页面名带 $ 时手机上的 shell 会当变量展开（vivo `.Settings$AdAndPrivacy…`，#667）：引擎边界引用一次。"""
+        r = FakeReader(lands={"com.a/com.a.Settings$Ad"})
+        phone(r).start("com.a", ".Settings$Ad")
+        self.assertEqual(r.shells[0], "am start -f 0x10008000 -n 'com.a/.Settings$Ad'")
+
+    def test_plain_page_name_reaches_the_shell_unchanged(self):
+        r = FakeReader(lands={"com.a/com.a.One"})
+        phone(r).start("com.a", ".One")
+        self.assertEqual(r.shells[0], "am start -f 0x10008000 -n com.a/.One")
 
     def test_keep_task_page_is_launched_bare(self):
         """ColorOS 17 的浏览器设置页带清栈参数会立刻退出（#165），只能裸 am start。"""
