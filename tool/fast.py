@@ -1451,10 +1451,11 @@ def main():
         print(f"✗ {e}", flush=True)
         sys.exit(1)
     except Exception as e:
-        gone = adb_link.lost_from(e, a[1])     # 读屏库的断线异常不是 RuntimeError（错误日志 10-28）
-        if gone is None:
+        # 断线 / 读屏慢一次：给一句人话，不打印 Python 报错堆栈（#731）
+        message = adb_link.failure_message(e, a[1])
+        if message is None:
             raise
-        print(f"✗ {gone}", flush=True)
+        print(f"✗ {message}", flush=True)
         sys.exit(1)
 
 

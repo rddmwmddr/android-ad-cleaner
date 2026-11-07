@@ -18,7 +18,11 @@ CLIENT_GONE = re.compile(r"(?mi)^(?:adb[\w.]*|error): .*(?:not found|offline|no 
 # 外部 adb server 退出后 u2 报的是连接层错误（requests 的 Connection refused / Max retries exceeded，#293）。
 LIB_GONE = re.compile(r"device '[^']*' not found|device offline|no devices/emulators found|device still authorizing"
                       r"|\Aclosed\Z|connection refused|max retries exceeded|newconnectionerror|remotedisconnected"
-                      r"|cannot connect to|couldn't connect to|failed to establish", re.I)
+                      r"|cannot connect to|couldn't connect to|failed to establish"
+                      # 手机版 App 自己的命令服务没了：读线程退出后，在途请求统一回这句（#731）
+                      r"|命令服务(?:已)?断开|命令服务不可用", re.I)
+# 手机版 App 自己的读屏请求超时（aac_android/bridge.py 的「读屏请求超时（30 秒）」）：慢一次，通道还在（#731）。
+READ_TIMEOUT = re.compile(r"读屏请求超时")
 
 # 手机版（tool/host.py 的 ON_PHONE）的调试连接是 App 自己的 Shizuku / 内置无线调试，没有电脑、线缆和
 # USB 授权框，排查动作要换成「回首页看连接状态」。桌面版逐字不变（#729）。
@@ -73,6 +77,19 @@ def client_gone(stderr):
 
 def lib_gone(message):
     return bool(LIB_GONE.search(message or ""))
+
+
+def read_failed(error):
+    """读屏这一次没读成、连接还在时给人看的一句；不是这种失败返回 None（#731）。
+    与 lost_from 同一个形状：调用方拿到什么就直接用，不用再判断。"""
+    return f"这一步没有完成：{error}" if READ_TIMEOUT.search(str(error) or "") else None
+
+
+def failure_message(error, serial, adb=None):
+    """脚本入口的收场：断线拿那段排查说明，读屏慢一次拿「这一步没有完成」，都不是返回 None。
+    两个入口（chan_fast / fast）只管加自己的 ✗ 前缀和退出码，判定只此一份（#731）。"""
+    gone = lost_from(error, serial, adb)
+    return str(gone) if gone is not None else read_failed(error)
 
 
 def wait_for(serial, adb=None, timeout=15):
@@ -256,13 +273,16 @@ class Connection:
 
 def lost_from(error, serial, adb=None):
     """读屏库的异常（HTTPError、AdbShellError 等，不是 RuntimeError）说设备不在、手机也确实不在列表里
-    → 返回 DeviceLost，由调用方抛出；否则返回 None。以前这类异常一路带着堆栈打到界面上（错误日志 10-28）。"""
+    → 返回 DeviceLost，由调用方抛出；否则返回 None。以前这类异常一路带着堆栈打到界面上（错误日志 10-28）。
+
+    手机版没有可另查的 adb 服务：`get-state` 也由同一个 bridge 回答，通道死了它照样回「device」，
+    所以那里以消息本身为证据（#731）。桌面版仍要双向确认，手机还在列表里就不算断开。"""
     seen, e = set(), error
     while e is not None and id(e) not in seen:
         seen.add(id(e))
         if isinstance(e, DeviceLost):
             return e
-        if lib_gone(str(e)) and serial and not present(serial, adb):
+        if lib_gone(str(e)) and serial and (ON_PHONE or not present(serial, adb)):
             return lost(f"{type(error).__name__}: {error}")
         e = e.__cause__ or e.__context__
     return None
