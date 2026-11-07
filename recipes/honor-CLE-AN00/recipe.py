@@ -310,7 +310,7 @@ def _():
         enter("消息和隐私设置", scrolls=6)
         p.off(only=["朋友页显示推荐动态", "展示“摇一摇”类开屏广告"], page="音乐·消息和隐私")
         enter("广告推荐设置")
-        p.off(only=["个性化广告推荐"], page="音乐·广告推荐")
+        p.off(only=["个性化广告推荐", "减少广告"], page="音乐·广告推荐")      # 「减少广告」方向相反，引擎会把它打开
         p.back(4)
     finally:
         hush_music(listening)
