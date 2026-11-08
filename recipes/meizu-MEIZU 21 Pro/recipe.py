@@ -6,39 +6,7 @@ BUILD = "Flyme 12.6.0.0A"
 MODELS = ["MEIZU 21 Pro"]
 
 import time
-
-ONLY = globals().get("ONLY") or []
-FAILED_STEPS = []
 TARGET_PACKAGE = ""
-
-
-def require(ok, message):
-    if not ok:
-        raise RuntimeError(message)
-
-
-def step(name):
-    def decorate(action):
-        if ONLY and name not in ONLY:
-            return action
-        print(f"\n== {name}", flush=True)
-        try:
-            # 安全模式（别的魅族机型借这份脚本、或本机版本不符）下不因型号拒跑：
-            # 每段照常找入口、找不到就跳过，与其它族的参考脚本一致（#379）。
-            if not p.safe_mode:
-                model = p.d.shell("getprop ro.product.model").output.strip()
-                build = p.d.shell("getprop ro.build.display.id").output.strip()
-                require(model in MODELS and build == BUILD,
-                        "型号或系统版本不符，未操作；请逐页核对")
-            require(not p.locked(), "手机锁屏，请机主解锁")
-            p.miss = 0
-            action()
-        except Exception as error:
-            FAILED_STEPS.append(name)
-            print(f"  ✗ 未完成：{error}", flush=True)
-            print(f"  · {page_summary()}", flush=True)
-        return action
-    return decorate
 
 
 def page_summary():
@@ -56,6 +24,19 @@ def page_summary():
         return f"当前页 {p.focus() or '未知'}；{summary(root, p.W, p.H)}；底栏 {bottom} 条"
     except Exception:
         return "当前页面结构读取失败"
+
+
+detail = page_summary
+
+
+def guard():
+    # 安全模式（别的魅族机型借这份脚本、或本机版本不符）下不因型号拒跑：
+    # 每段照常找入口、找不到就跳过，与其它族的参考脚本一致（#379）。
+    if p.safe_mode:
+        return
+    model = p.d.shell("getprop ro.product.model").output.strip()
+    build = p.d.shell("getprop ro.build.display.id").output.strip()
+    require(model in MODELS and build == BUILD, "型号或系统版本不符，未操作；请逐页核对")
 
 
 def wait_page(activity, title, timeout=8):

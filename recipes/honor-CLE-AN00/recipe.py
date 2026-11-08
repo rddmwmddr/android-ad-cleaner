@@ -8,36 +8,7 @@ MODELS = ["CLE-AN00"]
 import re
 import time
 
-import adb_link
 from fast import bounds
-
-ONLY = globals().get("ONLY") or []
-FAILED_STEPS = []
-
-
-class SkipStep(Exception):
-    """这一段按约定不跑（比如协议还没同意），不算失败。"""
-
-
-def step(name):
-    def deco(f):
-        if (not ONLY or name in ONLY) and p.locked():
-            print(f"\n== {name}：手机锁屏了，后面的都不跑"); return f
-        if not ONLY or name in ONLY:
-            print(f"\n== {name}"); p.miss = 0
-            t = time.time()
-            try:
-                f()
-            except adb_link.DeviceLost:
-                raise
-            except SkipStep as e:
-                print(f"  · 跳过：{e}")
-            except Exception as e:
-                FAILED_STEPS.append(name)
-                print(f"  ✗ 未完成：{e}")
-            print(f"  ({time.time()-t:.0f} 秒)")
-        return f
-    return deco
 
 
 def enter(text, scrolls=4):
@@ -50,7 +21,7 @@ def no_agreement(app):
     """App 还弹着用户协议就停：引擎的弹窗处理会点「取消」，App 随之退出，后面全是空跑。
     按钮贴着屏幕底也要算：find 默认不看最底下那一条，而后台屏上协议框的按钮可能正好落在那里。"""
     if p.find("同意", exact=True, edge_ok="tab") or p.find("同意并继续", exact=True, edge_ok="tab"):
-        raise SkipStep(f"{app}还没同意用户协议，不代为同意。需要的话打开{app}同意后，单独跑这一段")
+        skip(f"{app}还没同意用户协议，不代为同意。需要的话打开{app}同意后，单独跑这一段")
 
 
 def wait_open(pkg, app):
@@ -166,7 +137,7 @@ def _():
             if p.find("头像", exact=True):
                 break
         else:
-            raise SkipStep("负一屏在后台屏上进不去。要关的话手动：桌面向右滑 → 头像 → 设置 → 智能推荐、个性化广告、个性化消息")
+            skip("负一屏在后台屏上进不去。要关的话手动：桌面向右滑 → 头像 → 设置 → 智能推荐、个性化广告、个性化消息")
     enter("头像", scrolls=0)
     enter("设置", scrolls=0)
     # 页面切换时前台还是上一页，这时翻页引擎会判成「离开了设置页」（实测 3 次出现 1 次）
@@ -189,7 +160,7 @@ def _():
         # 晚到的「发现新版本」盖住底栏时也读不到「我的」：关掉弹窗再看一次，别误判成基本服务模式
         p.dismiss(); time.sleep(1.5)
     if p.find("基本服务", exact=True, edge_ok="tab") and not p.find("我的", edge_ok="tab"):
-        raise SkipStep("已是基本服务模式，没有推荐，也没有设置入口")
+        skip("已是基本服务模式，没有推荐，也没有设置入口")
     my_tab("市场")                           # 底栏带角标，读作「我的,您在应用市场共有 N 条通知」，精确匹配找不到
     enter("设置", scrolls=0)
     enter("内容推荐服务")

@@ -91,7 +91,7 @@ FAILING_SEGMENTS = [
 ]
 
 
-# 一加脚本的 step 先读型号与版本，对不上就整段不跑（RESULTS 记 version_mismatch）。
+# 一加脚本的 guard() 先读型号与版本，对不上就整段跳过（RESULTS 记「跳过」）。
 BUILD_GATED = {"oneplus-PHK110": ("PHK110", "PHK110_16.0.5.1201")}
 
 

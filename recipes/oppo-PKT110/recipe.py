@@ -4,9 +4,6 @@
 # 也不覆盖负一屏（速览）——那边没有「推荐服务」分组。详见 docs/清单/OPPO-ColorOS.md。
 BUILD = "PKT110_17.0.0.102(CN01)"
 import time
-
-ONLY = globals().get("ONLY") or []
-FAILED_STEPS = []
 VERIFIED_SWITCHES = 0
 # 全局搜索的设置页没有导出：adb am start 会被系统拒绝（SecurityException: not exported），
 # 只能用它自己的 gs:// scheme 打开。
@@ -19,27 +16,6 @@ HOME_CARD_CHILDREN = ["未下载应用推荐", "应用建议小卡"]
 HOME_CARD_PARENT = "应用建议"
 # 搜索结果里带出来的推荐源。「榜单」「小红书」「购物」这些是内容源不是广告位，保持不动。
 SEARCH_SOURCES = ["个性化推荐", "精选资讯", "搜索建议"]
-
-
-def require(ok, reason):
-    if not ok:
-        raise RuntimeError(reason)
-
-
-def step(name):
-    def decorate(action):
-        if ONLY and name not in ONLY:
-            return action
-        print(f"\n== {name}", flush=True)
-        p.miss = 0
-        try:
-            require(not p.locked(), "手机锁屏了，请机主解锁后再跑")
-            action()
-        except Exception as error:
-            FAILED_STEPS.append(name)
-            print(f"  ✗ 未完成：{error}", flush=True)
-        return action
-    return decorate
 
 
 def tap(name, scrolls=4, exact=True):

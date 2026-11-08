@@ -2,39 +2,9 @@
 # 路径来自 2026-10-30 真机逐页操作；验证范围及复跑记录见同目录 README.md。
 BUILD = "PD2417D_A_16.2.14.1.W10"
 MODELS = ["V2417A"]
-import time
 
-import adb_link
 from wait import until
-
-ONLY = globals().get("ONLY") or []
-FAILED_STEPS = []
 VERIFIED_SWITCHES = 0
-
-
-def require(ok, reason):
-    if not ok:
-        raise RuntimeError(reason)
-
-
-def step(name):
-    def decorate(action):
-        if ONLY and name not in ONLY:
-            return action
-        print(f"\n== {name}", flush=True)
-        p.miss = 0
-        started = time.monotonic()
-        try:
-            require(not p.locked(), "手机锁屏了，请机主解锁后重试")
-            action()
-        except adb_link.DeviceLost:
-            raise
-        except Exception as error:
-            FAILED_STEPS.append(name)
-            print(f"  ✗ 未完成：{error}", flush=True)
-        print(f"  ({time.monotonic() - started:.0f} 秒)", flush=True)
-        return action
-    return decorate
 
 
 def tap(name, scrolls=4):

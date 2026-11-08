@@ -24,9 +24,6 @@
 BUILD = "RMX3700_16.0.5.1300"
 
 import time
-
-ONLY = globals().get("ONLY") or []
-FAILED_STEPS = []
 RESULTS = []
 
 # 商店「服务管理」是「关掉后隐藏对应服务入口」的开关。服务类入口要留，推广入口才关。
@@ -48,36 +45,6 @@ SEARCH_SOURCES = ["个性化推荐", "精选资讯", "搜索建议"]
 SEARCH_CARDS = ["应用建议", "热搜应用", "精选推荐", "热搜榜单", "活动皮肤", "推荐卡片"]
 # 这两个是「应用建议」的子项：父开关一关，这两行直接从页面上消失，所以要先关它们。
 SEARCH_CARD_CHILDREN = ["未下载应用推荐", "应用建议小卡"]
-
-
-def step(name):
-    def deco(function):
-        if ONLY and name not in ONLY:
-            return function
-        model = p.d.shell("getprop ro.product.model").output.strip()
-        build = p.d.shell("getprop ro.build.display.id").output.strip()
-        if model != "RMX3700" or not build.startswith(BUILD):
-            print(f"\n== {name}：型号或系统版本不同，跳过；请重新核对页面")
-            RESULTS.append((name, "version_mismatch"))
-            return function
-        if p.locked():
-            print(f"\n== {name}：手机锁屏，跳过，请机主解锁")
-            RESULTS.append((name, "locked"))
-            return function
-        print(f"\n== {name}", flush=True)
-        p.miss = 0
-        started = time.monotonic()
-        try:
-            completed = function()
-            state = "completed" if completed else "incomplete"
-        except Exception as error:
-            FAILED_STEPS.append(name)
-            print(f"  ✗ 未完成：{error}")
-            state = "failed"
-        RESULTS.append((name, state))
-        print(f"  ({time.monotonic() - started:.0f} 秒，{state})", flush=True)
-        return function
-    return deco
 
 
 def wait_page(activity, title, timeout=8):
@@ -181,6 +148,13 @@ def open_search_sub(name, activity):
         print(f"  ! 没到「{name}」页")
         return False
     return True
+
+
+def guard():
+    model = p.d.shell("getprop ro.product.model").output.strip()
+    build = p.d.shell("getprop ro.build.display.id").output.strip()
+    if model != "RMX3700" or not build.startswith(BUILD):
+        skip("型号或系统版本不同，跳过；请重新核对页面")
 
 
 @step("广告跟踪")

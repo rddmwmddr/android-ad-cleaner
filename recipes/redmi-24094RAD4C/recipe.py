@@ -7,26 +7,6 @@ BUILD = "OS3.0.306.0"
 MODELS = ["24094RAD4C"]
 import time
 
-ONLY = globals().get("ONLY") or []
-FAILED_STEPS = []
-
-
-def step(name):
-    def deco(f):
-        if (not ONLY or name in ONLY) and p.locked():
-            print(f"\n== {name}：手机锁屏了，后面的都不跑"); return f
-        if not ONLY or name in ONLY:
-            print(f"\n== {name}"); p.miss = 0
-            t = time.time()
-            try:
-                f()
-            except Exception as e:
-                FAILED_STEPS.append(name)
-                print(f"  ✗ 未完成：{e}")
-            print(f"  ({time.time()-t:.0f} 秒)")
-        return f
-    return deco
-
 
 def gear(toolbar_only=False):
     """很多小米 App 的设置是右上角齿轮图标，没有文字。
@@ -90,11 +70,6 @@ def wait_bottom_tab(name, tries=5):
             return True
         time.sleep(0.8)
     return False
-
-
-def maybe(name, scrolls=6):
-    """可选入口：有就点，没有不报「走丢」。"""
-    return p.entry(name, scrolls=scrolls)
 
 
 def tap_any(*names, scrolls=6):

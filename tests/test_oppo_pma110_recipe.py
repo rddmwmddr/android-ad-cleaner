@@ -106,7 +106,7 @@ class Pma110RecipeTests(unittest.TestCase):
                                       SimpleNamespace(output="PMA110_17.0.0.106(CN01)")]
         with patch.dict(os.environ, {"AAC_REF": "1"}):
             scope = load(self.p, ["广告跟踪"])
-        self.assertEqual(scope["RESULTS"], [("广告跟踪", "skipped")])
+        self.assertEqual(scope["RESULTS"], [("广告跟踪", "跳过")])
         self.p.off.assert_not_called()
 
     def test_lock_stops_subsequent_steps_before_navigation(self):

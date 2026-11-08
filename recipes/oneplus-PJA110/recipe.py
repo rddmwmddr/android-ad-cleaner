@@ -3,35 +3,11 @@
 # 不代表系统广告跟踪、负一屏、主题、视频等均已适配。
 BUILD = "PJA110_14.0.0.812"
 import time
-
-ONLY = globals().get("ONLY") or []
-FAILED_STEPS = []
 VERIFIED_SWITCHES = 0
 PROMOTIONS = ["首页：悬浮活动图标", "首页：活动弹窗", "首页：顶部轮播卡片", "底部活动专区",
               "游戏详情页：游戏活动卡片", "软件专区：福利"]
 # 浏览器使用实机解析出的公开入口；商店沿用先停止、再从桌面启动，避免复用旧子页。
 START_ACTIVITIES = {"com.heytap.browser": "com.android.browser.BrowserActivity"}
-
-
-def require(ok, reason):
-    if not ok:
-        raise RuntimeError(reason)
-
-
-def step(name):
-    def decorate(action):
-        if ONLY and name not in ONLY:
-            return action
-        print(f"\n== {name}", flush=True)
-        p.miss = 0
-        try:
-            require(not p.locked(), "手机锁屏了，请机主解锁后再跑")
-            action()
-        except Exception as error:
-            FAILED_STEPS.append(name)
-            print(f"  ✗ 未完成：{error}", flush=True)
-        return action
-    return decorate
 
 
 def tap(name, scrolls=4):

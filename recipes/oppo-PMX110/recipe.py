@@ -12,13 +12,9 @@ import adb_link
 from fast import ScreenLocked, bounds
 
 MenuState = namedtuple("MenuState", "close_all_disabled system_apps_shown")
-
-ONLY = globals().get("ONLY") or []
-FAILED_STEPS = globals().get("FAILED_STEPS") or []
 RESULTS = []
 SKIPPED_ITEMS = []
 VERIFIED_SWITCHES = 0
-HALTED = False
 
 SEARCH = "com.heytap.quicksearchbox"
 MARKET = "com.heytap.market"
@@ -43,44 +39,6 @@ STORE_PROMOS = [
 ]
 
 
-def require(ok, reason):
-    if not ok:
-        raise RuntimeError(reason)
-
-
-class SkipStep(RuntimeError):
-    pass
-
-
-def step(name):
-    def decorate(action):
-        global HALTED
-        if ONLY and name not in ONLY:
-            return action
-        print(f"\n== {name}", flush=True)
-        started = time.monotonic()
-        p.miss = 0
-        try:
-            if HALTED or p.locked():
-                raise ScreenLocked("手机锁屏或前段已停止，请机主解锁后重试")
-            action()
-            RESULTS.append((name, "completed"))
-        except adb_link.DeviceLost:
-            raise
-        except SkipStep as reason:
-            RESULTS.append((name, "skipped"))
-            print(f"  · 跳过：{reason}", flush=True)
-        except Exception as error:
-            if isinstance(error, ScreenLocked):
-                HALTED = True
-            FAILED_STEPS.append(name)
-            RESULTS.append((name, "incomplete"))
-            print(f"  ✗ 未完成：{error}", flush=True)
-        print(f"  ({time.monotonic() - started:.0f} 秒)", flush=True)
-        return action
-    return decorate
-
-
 def page(title, package=None, activity=None):
     # 等待由引擎负责；旧页面即使已稳定，也必须通过下面的落点与标题检查。
     p.await_page(budget=6)
@@ -91,7 +49,7 @@ def page(title, package=None, activity=None):
     if any(text in {"同意", "同意并继续", "同意并使用", "允许", "仅在使用中允许"}
            and "Button" in node.get("class", "") for text, _, node in p.texts()):
         p.dismiss()
-        raise SkipStep("出现协议或权限申请，不代为同意")
+        skip("出现协议或权限申请，不代为同意")
     if p.locked():
         raise ScreenLocked("手机锁屏，请机主解锁")
 
@@ -221,7 +179,7 @@ def require_installed(package, label):
     result = p.d.shell("pm path " + package)
     require(not result.exit_code, f"无法读取{label}安装状态")
     if "package:" not in result.output:
-        raise SkipStep(f"本机未安装{label}")
+        skip(f"本机未安装{label}")
 
 
 def system_settings():
@@ -301,7 +259,7 @@ def _():
     # 以前逐行读整个列表（547 个具名项）两遍，约 27 分钟；现在不用滚动列表，个人应用名单也不必读出来。
     # 版本由引擎判（录制版本对不上会置 safe_mode）；这里只挡「拿这份脚本去跑别的型号」。
     if p.safe_mode or p.d.shell("getprop ro.product.model").output.strip() != "PMX110":
-        raise SkipStep("仅在 PMX110 上批量处理广告跟踪")
+        skip("仅在 PMX110 上批量处理广告跟踪")
     ad_id_page()
     row("广告跟踪", activity="OAIDActivity")
     state = menu_state()
@@ -504,5 +462,5 @@ def _():
     close_named(["资讯服务"], "资讯服务")
 
 
-print(f"\n逐项回读确认 {VERIFIED_SWITCHES} 项；完成 {sum(state == 'completed' for _, state in RESULTS)} 段，"
-      f"跳过 {sum(state == 'skipped' for _, state in RESULTS)} 段，未显示项 {len(SKIPPED_ITEMS)} 组", flush=True)
+print(f"\n逐项回读确认 {VERIFIED_SWITCHES} 项；完成 {sum(state == '完成' for _, state in RESULTS)} 段，"
+      f"跳过 {sum(state == '跳过' for _, state in RESULTS)} 段，未显示项 {len(SKIPPED_ITEMS)} 组", flush=True)

@@ -13,26 +13,6 @@ BUILD = "PD2547B_A_17.1.10.2"          # ro.build.display.id 的开头；对不�
 import re
 import time
 
-ONLY = globals().get("ONLY") or []
-FAILED_STEPS = []
-
-
-def step(name):
-    def deco(f):
-        if (not ONLY or name in ONLY) and p.locked():
-            print(f"\n== {name}：手机锁屏了，后面的都不跑"); return f
-        if not ONLY or name in ONLY:
-            print(f"\n== {name}"); p.miss = 0
-            t = time.time()
-            try:
-                f()
-            except Exception as e:
-                FAILED_STEPS.append(name)
-                print(f"  ✗ 未完成：{e}")
-            print(f"  ({time.time()-t:.0f} 秒)")
-        return f
-    return deco
-
 
 # ---------- vivo 专用 ----------
 BOUNDS = re.compile(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]")

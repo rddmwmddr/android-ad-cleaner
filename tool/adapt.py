@@ -96,34 +96,9 @@ def step_name(pkg, page):
 
 
 DRAFT_HELPERS = '''
-import time
-
-ONLY = globals().get("ONLY") or []
-FAILED_STEPS = []
 VERIFIED_SWITCHES = 0        # 回读确认关闭的开关数
 MISSING_SWITCHES = []        # 没找到的开关（待人工确认）
 PENDING_SWITCHES = []        # 找到了但回读没确认关闭（待人工确认）
-
-
-def require(ok, reason):
-    if not ok:
-        raise RuntimeError(reason)
-
-
-def step(name):
-    def decorate(action):
-        if ONLY and name not in ONLY:
-            return action
-        print(f"\\n== {name}", flush=True)
-        p.miss = 0
-        try:
-            require(not p.locked(), "手机锁屏了，请机主解锁后再跑")
-            action()
-        except Exception as error:
-            FAILED_STEPS.append(name)
-            print(f"  ✗ 未完成：{error}", flush=True)
-        return action
-    return decorate
 
 
 def read_switches(max_screens):

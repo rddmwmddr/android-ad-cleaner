@@ -4,37 +4,7 @@ BUILD = "PHK110_15.0.0.601(CN01)"
 
 import time
 from wait import GiveUp, until
-
-ONLY = globals().get("ONLY") or []
-FAILED_STEPS = []
 RESULTS = []
-
-
-def step(name):
-    def decorator(function):
-        if ONLY and name not in ONLY:
-            return function
-        if (p.d.shell("getprop ro.product.model").output.strip() != "PHK110"
-                or p.d.shell("getprop ro.build.display.id").output.strip() != BUILD):
-            print(f"\n== {name}：型号或系统版本不匹配，跳过")
-            RESULTS.append((name, "version_mismatch"))
-            return function
-        if p.locked():
-            print(f"\n== {name}：手机锁屏，跳过")
-            RESULTS.append((name, "locked"))
-            return function
-        print(f"\n== {name}", flush=True)
-        p.miss = 0
-        try:
-            state = "completed" if function() else "incomplete"
-        except Exception as error:
-            FAILED_STEPS.append(name)
-            print(f"  ✗ 未完成：{error}")
-            state = "failed"
-        RESULTS.append((name, state))
-        print(f"  {state}", flush=True)
-        return function
-    return decorator
 
 
 def page(activity, title, timeout=6):
@@ -115,6 +85,13 @@ def search_settings():
     if out.exit_code or "Error" in out.output:
         return False
     return page("com.heytap.quicksearchbox.ui.activity.SearchSettingActivity", "搜索设置")
+
+
+def guard():
+    model = p.d.shell("getprop ro.product.model").output.strip()
+    build = p.d.shell("getprop ro.build.display.id").output.strip()
+    if model != "PHK110" or not build.startswith(BUILD):
+        skip("型号或系统版本不匹配，跳过")
 
 
 @step("搜索卡片")

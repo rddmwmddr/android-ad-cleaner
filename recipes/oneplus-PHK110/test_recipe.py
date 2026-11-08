@@ -2,12 +2,14 @@
 import contextlib
 import io
 from pathlib import Path
-import runpy
+import sys
 from types import SimpleNamespace
 import unittest
 
 
 RECIPE = Path(__file__).with_name("recipe.py")
+sys.path.insert(0, str(RECIPE.parents[2] / "tests"))
+from fixtures import load_recipe  # noqa: E402  装载器与引擎注入同一份前导
 
 
 class FakePhone:
@@ -30,8 +32,7 @@ class FakePhone:
 
 
 def load(phone=None, only=None):
-    with contextlib.redirect_stdout(io.StringIO()):
-        return runpy.run_path(str(RECIPE), init_globals={"p": phone or FakePhone(), "ONLY": only or ["__offline__"]})
+    return load_recipe(phone or FakePhone(), RECIPE, only)[0]
 
 
 class RecipeSafetyTests(unittest.TestCase):
@@ -45,16 +46,19 @@ class RecipeSafetyTests(unittest.TestCase):
         phone = FakePhone(model="OTHER")
         result = load(phone, ["广告跟踪", "软件商店", "浏览器首页", "浏览器广告", "浏览器个性化"])
         self.assertEqual(len(result["RESULTS"]), 5)
-        self.assertTrue(all(state == "version_mismatch" for _, state in result["RESULTS"]))
+        self.assertTrue(all(state == "跳过" for _, state in result["RESULTS"]))
+        self.assertEqual(result["FAILED_STEPS"], [])
         self.assertTrue(all(command.startswith("getprop ") for command in phone.commands))
 
     def test_different_build_skips(self):
         result = load(FakePhone(build="PHK110_17.0.0"), ["软件商店"])
-        self.assertEqual(result["RESULTS"], [("软件商店", "version_mismatch")])
+        self.assertEqual(result["RESULTS"], [("软件商店", "跳过")])
 
-    def test_locked_phone_skips(self):
+    def test_locked_phone_fails_the_step(self):
+        """锁屏不再静默跳过：这一段记未完成，退出码由失败台账给出（#839）。"""
         result = load(FakePhone(locked=True), ["软件商店"])
-        self.assertEqual(result["RESULTS"], [("软件商店", "locked")])
+        self.assertEqual(result["RESULTS"], [("软件商店", "未完成")])
+        self.assertEqual(result["FAILED_STEPS"], ["软件商店"])
 
     def test_protected_store_features_not_selected(self):
         targets = load()["STORE_PROMOTIONS"]
