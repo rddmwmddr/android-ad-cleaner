@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 import events
 
 # 冻结的期望词表：只遍历 events.KINDS 的话，删掉一个词连样例一起消失，用例照样绿。
-FROZEN_KINDS = ("paused", "resumed", "locked", "ui_busy", "link_lost", "failed_steps")
+FROZEN_KINDS = ("paused", "resumed", "locked", "ui_busy", "link_lost", "failed_steps", "guard_audit")
 
 
 def emit(kind, on, **data):
@@ -31,7 +31,7 @@ class EmitTests(unittest.TestCase):
         self.assertEqual(emit("paused", on=False), "")
         self.assertEqual(emit("paused", on=True), '#aac:event {"kind": "paused"}\n')
 
-    def test_the_vocabulary_is_still_the_same_six(self):
+    def test_the_vocabulary_is_still_the_same_seven(self):
         self.assertEqual(events.KINDS, FROZEN_KINDS)
 
     def test_every_kind_round_trips_through_parse(self):

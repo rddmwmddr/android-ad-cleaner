@@ -9,7 +9,7 @@ import os
 PREFIX = "#aac:event "
 PAYLOAD_PREFIX = "#aac:payload "
 
-KINDS = ("paused", "resumed", "locked", "ui_busy", "link_lost", "failed_steps")
+KINDS = ("paused", "resumed", "locked", "ui_busy", "link_lost", "failed_steps", "guard_audit")
 
 
 def emit(kind, **data):
