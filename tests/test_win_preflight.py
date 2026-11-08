@@ -1,5 +1,5 @@
 """Windows 启动失败归因：缺 WebView2 / 程序文件带 MOTW / 本地 dll 被 .NET 判成远程来源 / 其他
-（#228、#597）。
+（#228、#597）；以及免安装版启动时旧名安装还在的检测（#872）。
 
 注册表读取与 ADS 探测都从外面注入，所以这套判定在 macOS 上也能跑。
 """
@@ -46,7 +46,7 @@ def fake_read(values):
 
 
 def always_raise(error):
-    def read(hive, path):
+    def read(*_args):
         raise error
 
     return read
@@ -313,6 +313,103 @@ class StartupFailedWiringTests(unittest.TestCase):
                                         "utf-16-le", "\ud800", 0, 1, "孤立代理项"))
         self.assertEqual(len(shown), 1)
         self.assertIn("Ctrl+C", shown[0])
+
+
+# 旧产品名与 0.4.0 起的名字；旧安装项写在哪个视图取决于当时的权限与 Inno 的架构设置，
+# 所以按键名把四处可能的位置都写死，不从被测代码里取。
+OLD_PRODUCT = "安卓去广告"
+NEW_PRODUCT = "肉呆去广告"
+# Inno 的 UninstallDisplayName 默认是 AppVerName（AppName + 版本），旧版没有覆写它，
+# 所以真实注册表里读到的是带版本后缀的串，不是产品名本身。
+OLD_DISPLAY = OLD_PRODUCT + " 版本 0.3.2"
+NEW_DISPLAY = NEW_PRODUCT + " 版本 0.4.0"
+OLD_APP_ID = "{6C1E3F2A-8B7D-4E55-9A41-AAC0ADC1EA01}_is1"
+OLD_USER = r"Software\Microsoft\Windows\CurrentVersion\Uninstall" + "\\" + OLD_APP_ID
+OLD_USER_WOW = r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall" + "\\" + OLD_APP_ID
+OLD_MACHINE = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall" + "\\" + OLD_APP_ID
+OLD_MACHINE_WOW = r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall" + "\\" + OLD_APP_ID
+
+PORTABLE_DIR = r"C:\Users\me\Desktop\AndroidAdCleaner"
+INSTALLED_DIR = r"C:\Program Files\AndroidAdCleaner"
+
+
+def fake_values(values):
+    """values: {(hive, 完整键路径, 值名): 值或异常}；不在表里的值一律当作不存在。"""
+    def read(hive, path, name):
+        value = values.get((hive, path, name))
+        if isinstance(value, Exception):
+            raise value
+        if value is None:
+            raise FileNotFoundError(name)
+        return value
+
+    return read
+
+
+def old_entry(hive="HKCU", key=OLD_USER, name=OLD_DISPLAY, path=INSTALLED_DIR):
+    """一条卸载项：DisplayName 与安装目录；path=None 时两个目录值都不写。"""
+    values = {(hive, key, "DisplayName"): name}
+    if path is not None:
+        values[(hive, key, "Inno Setup: App Path")] = path
+    return values
+
+
+class OldInstallTests(unittest.TestCase):
+    """免安装版启动时，旧产品名的安装是否还留着（#872）。"""
+
+    def present(self, values, exe_dir=PORTABLE_DIR):
+        return winpreflight.old_install_present(fake_values(values), exe_dir=exe_dir)
+
+    def test_an_old_install_next_to_a_portable_copy_is_reported(self):
+        self.assertTrue(self.present(old_entry()))
+
+    def test_the_same_install_is_found_in_every_registry_view(self):
+        for hive, key in (("HKCU", OLD_USER), ("HKCU", OLD_USER_WOW),
+                          ("HKLM", OLD_MACHINE), ("HKLM", OLD_MACHINE_WOW)):
+            with self.subTest(hive=hive, key=key):
+                self.assertTrue(self.present(old_entry(hive=hive, key=key)))
+
+    def test_every_display_name_inno_can_produce_still_matches(self):
+        """没下到中文语言包时是英文模板，Inno 6.3 起还可能追加架构 / 安装范围的后缀。"""
+        for name in (OLD_DISPLAY, OLD_PRODUCT + " version 0.3.2",
+                     OLD_DISPLAY + " (64 位)", OLD_PRODUCT):
+            with self.subTest(name=name):
+                self.assertTrue(self.present(old_entry(name=name)))
+
+    def test_a_current_install_under_the_new_name_is_not_reported(self):
+        self.assertFalse(self.present(old_entry(name=NEW_DISPLAY)))
+
+    def test_no_uninstall_entry_is_not_reported(self):
+        self.assertFalse(self.present({}))
+
+    def test_a_reader_that_raises_stays_silent(self):
+        self.assertFalse(winpreflight.old_install_present(
+            always_raise(OSError("拒绝访问")), exe_dir=PORTABLE_DIR))
+
+    def test_the_installed_copy_running_from_its_own_folder_is_not_reported(self):
+        self.assertFalse(self.present(old_entry(), exe_dir=INSTALLED_DIR))
+
+    def test_path_comparison_ignores_case_and_a_trailing_separator(self):
+        self.assertFalse(self.present(old_entry(), exe_dir=INSTALLED_DIR.upper() + "\\"))
+
+    def test_install_location_stands_in_when_the_inno_value_is_missing(self):
+        values = {("HKCU", OLD_USER, "DisplayName"): OLD_PRODUCT,
+                  ("HKCU", OLD_USER, "InstallLocation"): INSTALLED_DIR}
+        self.assertTrue(self.present(values))
+        self.assertFalse(self.present(values, exe_dir=INSTALLED_DIR))
+
+    def test_an_entry_without_install_folder_still_counts(self):
+        """读不出目录就没法证明新版顶掉了它，宁可信其有——提示只是提示，不动任何文件。"""
+        self.assertTrue(self.present(old_entry(path=None)))
+
+    def test_a_broken_entry_does_not_hide_a_later_one(self):
+        values = {("HKCU", OLD_USER, "DisplayName"): PermissionError("拒绝访问")}
+        values.update(old_entry(hive="HKLM", key=OLD_MACHINE))
+        self.assertTrue(self.present(values))
+
+    @unittest.skipIf(sys.platform == "win32", "Windows 上默认读取会真读注册表")
+    def test_default_reader_does_not_raise_off_windows(self):
+        self.assertFalse(winpreflight.old_install_present(exe_dir=PORTABLE_DIR))
 
 
 if __name__ == "__main__":

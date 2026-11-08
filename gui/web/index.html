@@ -164,6 +164,7 @@ function showConnect(){
   main().innerHTML = `
     <h1>连接手机</h1>
     <p class="lead">用数据线把手机连到这台电脑。手机要打开开发者模式和 USB 调试。</p>
+    <div id="oldver"></div>
     <div class="note info"><b>设备支持范围</b>：支持通过 adb 连接的安卓设备。使用 HDC 的华为原生鸿蒙暂不支持；升级客户端也不会获得鸿蒙适配。荣耀 MagicOS 属于另一种情况，可先连接检测，没有本型号脚本时可自选同品牌参考脚本。</div>
     <div id="adbwarn"></div>
     <div id="adbbox"></div>
@@ -173,9 +174,28 @@ function showConnect(){
       <div class="tut" style="margin-top:14px">${TUT.map(([f,c]) => `<figure><img src="img/${f}" alt=""><figcaption>${c}</figcaption></figure>`).join("")}</div>
       <p class="lead" style="margin:14px 0 0">插线后：手机下拉通知栏，USB 用途选「传输文件」；弹出「允许 USB 调试吗？」时勾「始终允许」，点「允许」。</p>
     </details>`;
+  oldInstallNotice();
   adbWarning();
   if (!ENV.adb){ renderAdb(); return; }
   refreshDevices(); pollDev = setInterval(refreshDevices, 2000);
+}
+let oldQueried = false, OLD_INSTALL = "";
+function oldInstallNotice(){
+  /* 免安装版不替换旧名安装，解压后直接双击的用户看不到下载页那句说明，所以在程序里说一次（#872）。 */
+  if (oldQueried){ paintOldInstall(); return; }
+  api.old_install_notice().then(n => {
+    oldQueried = true; OLD_INSTALL = (n && n.text) || "";
+    paintOldInstall();
+  }).catch(() => { oldQueried = true; });
+}
+function paintOldInstall(){
+  const box = $("#oldver");
+  if (box) box.innerHTML = OLD_INSTALL
+    ? `<div class="note warn">${esc(OLD_INSTALL)} <button class="link" onclick="dismissOldInstall()">知道了</button></div>` : "";
+}
+function dismissOldInstall(){
+  OLD_INSTALL = ""; paintOldInstall();
+  api.dismiss_old_install().catch(() => {});
 }
 function adbWarning(){
   /* 手填的 adb 后来被挪走或卸载时，说清楚现在用的是哪一份，不要静默换掉（#311）。 */
