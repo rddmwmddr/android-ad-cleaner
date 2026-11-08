@@ -1,0 +1,23 @@
+# 提交约定此前只在本机 commit-msg 钩子里执行，换个提交环境就失效（#848，姊妹票 #849）。
+# 这里只让问题可见，不阻断合并：要拦在合并之前需要分支保护 + required status checks，属 admin 权限。
+name: commit-checks
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  # 每个非 merge 提交都要带与作者邮箱一致的 `Signed-off-by`。
+  # 只判 PR 范围内的提交，不判 main 上的历史；网页 / API 合并产生的合并提交不带 signoff，
+  # 属于已知例外，由脚本按多父跳过（见 tool/check_dco.py 的模块说明）。
+  # 脚本只用标准库，跑同一条命令即可本地复现：
+  #   python3 tool/check_dco.py origin/main..HEAD
+  dco:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0          # 浅克隆里 base 不是本地祖先，`base..head` 会取不到 PR 的提交
+      - name: 校验 DCO
+        run: >-
+          python3 tool/check_dco.py
+          "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
