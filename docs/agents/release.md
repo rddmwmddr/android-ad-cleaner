@@ -83,7 +83,7 @@ GitHub 搜索索引有延迟，刚合上没几小时的 PR 可能还查不到；
 
 手机版随桌面版一起发布，产物是 arm64 APK（`android/build.sh assembleRelease`）。签名与分发由 owner 掌握：构建读 `.private/android-signing/keystore.properties`（见 `android/app/build.gradle.kts`），缺失就退回 debug 签名。这一节只记口径，不写实际操作步骤；本机没有这份证书，签名与分发路径未验证。 <!-- rule:doc.release.apk-ships-with-desktop -->
 
-`android/**` 的改动由 `.github/workflows/android.yml` 在 PR 上跑 `assembleDebug` 编译闸门，不产出发版产物。 <!-- rule:doc.release.android-ci-gate -->
+`android/**` 的改动由 `.github/workflows/android.yml` 在 PR 上跑 `assembleDebug` 编译闸门与协议层 JVM 单测，不产出发版产物。 <!-- rule:doc.release.android-ci-gate -->
 
 APK 由 owner 构建并传到同一个 Release，构建不在「一轮发版的产物顺序」里；但第 8 步的上传脚本按 Release 里的文件现算清单，APK 在 Release 里就一并传到 Gitee，所以那一版多传一个包。当次 Release 里已有 APK 时，README 下载区与 `docs/手机版教程/README.md` 的「下载」一节一并更新链接；没有就维持「随下一版发布」。 <!-- rule:doc.release.apk-link-sync -->
 

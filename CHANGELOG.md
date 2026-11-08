@@ -53,6 +53,7 @@
 
 ### 内部
 
+- CI：Android job 加跑 JVM 单测，ruff 只留 Linux 一份；workflow 加重推取消，test 与打包加超时（#856）
 - 新增 `CONTRIBUTING.md` 人类贡献者入口，只做路由不复述规则（#851）
 - PR 新增 `dco` 检查：非 merge 提交缺 signoff 或邮箱与作者不符就红，只判 PR 范围（#848）
 - `dev.git.dco-signoff` 登记进 `rules.toml`，`ci:dco` 是第一个指向 workflow 的 enforced 条目（#848、#842）

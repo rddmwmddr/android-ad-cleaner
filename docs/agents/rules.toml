@@ -94,8 +94,8 @@ id = "dev.ruff.pinned-and-scoped"
 source = "CLAUDE.md#开发"
 check = "test:test_doc_consistency::LintCommandTests.test_ruff_targets_match_everywhere"
 status = "enforced"
-why = "CLAUDE.md 曾只写「同一份 CI 里跑 ruff」，本地没有可执行命令，agent 各自猜版本；现在版本钉 0.17.3、目标清单在 CLAUDE.md、release.md 与 CI 两个 job 三处逐字一致（b17d420、#624）。守卫比的是目标清单，版本号三处一致仍靠人。"
-expires_if = "CI 与本地共用一个命令来源、目标清单不再需要三处对照时，连同 LintCommandTests 一起删。"
+why = "CLAUDE.md 曾只写「同一份 CI 里跑 ruff」，本地没有可执行命令，agent 各自猜版本；现在版本钉 0.17.3、目标清单在 CLAUDE.md、release.md、CONTRIBUTING.md 与 CI 逐字一致（b17d420、#624；CONTRIBUTING.md 由 #851 补入），ruff 平台无关，只在 Linux job 跑一次（#856）。守卫比的是目标清单，版本号多处一致仍靠人。"
+expires_if = "CI 与本地共用一个命令来源、目标清单不再需要多处对照时，连同 LintCommandTests 一起删。"
 since = "b17d420"
 
 [[rule]]
@@ -961,7 +961,7 @@ id = "doc.release.android-ci-gate"
 source = "docs/agents/release.md#手机版 APK"
 check = "ci:assemble"
 status = "enforced"
-why = "Kotlin 侧此前没有任何 CI 覆盖，`Shell.kt` 编译不过能一路进 main（#678）；`android.yml` 的 assemble job 只编译 debug，不产出发版产物。"
+why = "Kotlin 侧此前没有任何 CI 覆盖，`Shell.kt` 编译不过能一路进 main（#678）；`android.yml` 的 assemble job 编译 debug 并跑协议层 JVM 单测，不产出发版产物（#856）。"
 expires_if = "手机版不再用 Gradle 构建、或发版流水线自己编译 APK 时删。"
 
 [[rule]]

@@ -71,10 +71,10 @@ def ruff_targets(text):
 
 
 class LintCommandTests(unittest.TestCase):
-    """静态检查的目标清单在 CLAUDE.md、发版文档与 CI 三处一致（#624）：加目录时四处一起改。"""
+    """静态检查的目标清单在 CLAUDE.md、发版文档、CONTRIBUTING.md 与 CI 四处一致（#624、#851）：加目录时四处一起改。"""
 
     def test_ruff_targets_match_everywhere(self):
-        docs = [ROOT / "CLAUDE.md", ROOT / "docs/agents/release.md"]
+        docs = [ROOT / "CLAUDE.md", ROOT / "docs/agents/release.md", ROOT / "CONTRIBUTING.md"]
         expected = ruff_targets(docs[0].read_text(encoding="utf-8"))
         self.assertEqual(len(expected), 1, "CLAUDE.md 里应当恰好一条 ruff 命令")
         self.assertIn("tool", expected[0], "目标清单没读到，守卫会空转")
@@ -82,8 +82,9 @@ class LintCommandTests(unittest.TestCase):
             with self.subTest(path=str(path.relative_to(ROOT))):
                 self.assertEqual(ruff_targets(path.read_text(encoding="utf-8")), expected)
         ci = ruff_targets((ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8"))
-        self.assertEqual(len(ci), 2, "CI 应当两个 job 各跑一次 ruff，读到 %d 条" % len(ci))
-        self.assertEqual(ci, [expected[0], expected[0]])
+        self.assertEqual(len(ci), 1,
+                         "CI 应当恰好一条 ruff 命令（平台无关，只在 Linux job 跑），读到 %d 条" % len(ci))
+        self.assertEqual(ci, [expected[0]])
 
 
 class BrandTapsDocTests(unittest.TestCase):

@@ -1,5 +1,5 @@
 # 手机版的编译闸门：Kotlin 侧此前没有任何 CI 覆盖，`Shell.kt` 编译不过能一路进 main（#678）。
-# 只编译 debug（不签名、不上架）；正式包仍走 build-windows.yml 那套发布流程。
+# 编译 debug 并跑协议层的 JVM 单测（不签名、不上架）；正式包仍走 build-windows.yml 那套发布流程。
 name: android
 on:
   pull_request:
@@ -13,6 +13,10 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # 同一 PR 重推时取消上一轮；main push 与手动触发不取消
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   assemble:
     runs-on: ubuntu-latest
@@ -38,5 +42,5 @@ jobs:
           python-version: "3.12"
       - name: 告诉 Gradle 用哪个 Python
         run: echo "CHAQUOPY_PYTHON=$(command -v python3.12 || command -v python3)" >> "$GITHUB_ENV"
-      - name: 编译 debug APK
-        run: gradle --console=plain assembleDebug
+      - name: 编译 debug APK 并跑协议层 JVM 单测
+        run: gradle --console=plain assembleDebug testDebugUnitTest
