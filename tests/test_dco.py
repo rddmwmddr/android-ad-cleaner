@@ -134,6 +134,16 @@ class RangeTest(unittest.TestCase):
         self.assertEqual(code, 2, out)
         self.assertIn("git", out)
 
+    def test_output_survives_a_non_utf8_console(self):
+        # Windows 控制台与管道默认 cp1252：打印中文不能把校验本身打崩（#848 的 Windows CI 抓到过）。
+        base = self.commit("chore: 起点")
+        sha = self.commit("fix: 没签的改动")
+        done = subprocess.run([sys.executable, str(SCRIPT), f"{base}..HEAD"], cwd=self.dir,
+                              env=dict(self.env, PYTHONIOENCODING="cp1252"), capture_output=True,
+                              text=True, encoding="utf-8", errors="replace")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertIn(sha, done.stdout)
+
 
 def uncommented(text):
     """去掉整行注释：workflow 的说明里也写着脚本路径与 sha 表达式，全文子串匹配会被注释满足。"""

@@ -12,6 +12,12 @@ merge 提交整条跳过——GitHub 网页 / API 合并产生的合并提交不
 import re
 import subprocess
 import sys
+
+for _st in (sys.stdout, sys.stderr):
+    try:
+        _st.reconfigure(encoding="utf-8", errors="replace")   # Windows 控制台默认不是 UTF-8
+    except Exception:
+        pass
 from dataclasses import dataclass
 
 SIGNOFF = re.compile(r"^[ \t]*Signed-off-by:[ \t]*.*?<([^<>]*)>[ \t]*$", re.IGNORECASE | re.MULTILINE)
