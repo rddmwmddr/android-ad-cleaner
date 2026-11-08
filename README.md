@@ -185,7 +185,7 @@ python3 tool/run.py -s <序列号> dev-off --yes  # 从电脑关闭开发者模�
 ## 仓库结构
 
 ```text
-AGENTS.md            给用户侧 AI 智能体的操作手册（产品契约）；维护规范见 CLAUDE.md
+AGENTS.md            给用户侧 AI 智能体的操作手册（产品契约）
 CHANGELOG.md         本版起的变更记录（一条一行）；详细历史见 docs/归档/
 docs/
   00-打开开发者模式.md 带截图的分步教程
