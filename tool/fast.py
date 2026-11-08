@@ -26,6 +26,7 @@ from troubleshooting import (TAPPED, UI_INSTALL_FAILED, UI_RECOVERY, XIAOMI_INPU
 import adb_link
 import backups
 import events
+import recipe_kit
 import wait
 from reader import Reader
 from row import (SWITCH_ROW_DEPTH, bounds, control, dedupe, disabled_at, is_switch, own,
@@ -1486,10 +1487,15 @@ def report_run(g, p):
     `g` 是 `exec` 的脚本作用域，`p` 是这一轮的 Phone。
     段名同时发 `failed_steps` 事件（客户端按它只重跑那几段，#638）；没拨动的开关只有人读的这一行，
     客户端按退出码把整个任务标「失败」。#758 的摘要要把它算进「K 段未完成」，得先有页→段映射。
+    中止过的段落另起一行「因中止未执行：…」；第一行与 `failed_steps` 事件仍列全部段名（#838）。
     """
     if g.get("FAILED_STEPS"):
-        events.emit("failed_steps", steps=list(g["FAILED_STEPS"]))
-        print("未完成步骤：" + "、".join(g["FAILED_STEPS"]), flush=True)
+        failed = list(g["FAILED_STEPS"])
+        halted = [name for name in failed if name in (g.get("HALTED_STEPS") or [])]
+        events.emit("failed_steps", steps=failed)
+        print("未完成步骤：" + "、".join(failed), flush=True)
+        if halted:
+            print("因中止未执行：" + "、".join(halted), flush=True)
     if p.missed:
         print(missed_line(p.missed), flush=True)
     return 1 if g.get("FAILED_STEPS") or p.missed else 0
@@ -1555,6 +1561,7 @@ def execute(p, cmd, rest):
         if not p.wait_unlocked():
             print("✗ 手机一直锁屏，本步骤没有执行。请解锁手机、保持亮屏后重试"); sys.exit(2)
         g = {"p": p, "__name__": "__recipe__", "ONLY": rest[1:]}
+        recipe_kit.preamble(p, g)
         with open(rest[0], encoding="utf-8") as f:
             src = f.read()
         build = p.d.shell("getprop ro.build.display.id").output.strip()

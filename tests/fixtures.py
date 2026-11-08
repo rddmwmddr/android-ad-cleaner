@@ -271,6 +271,9 @@ def load_recipe(phone, path, only=None, out=None, **extra):
     """
     clock = RecipeClock()
     scope = {"p": phone, "ONLY": _only_list(only), **extra}
+    load_tool()
+    import recipe_kit                      # 与引擎注入同一份；tool/ 只在 load_tool() 之后才在 sys.path 上
+    recipe_kit.preamble(phone, scope)
     out = out if out is not None else io.StringIO()
     with patch.object(_time, "sleep", clock.sleep), patch.object(_time, "time", clock.time), \
             patch.object(_time, "monotonic", clock.monotonic), contextlib.redirect_stdout(out):
