@@ -92,9 +92,12 @@ ENTRIES = {
             direct=(Direct("com.miui.personalassistant", ".settings.PASettingActivity", ""),)),
         "天气和日历": Entry(
             menu="天气 → 右上「更多设置」→ 设置 → 用户体验计划；日历 → 右上「设置」→ 设置 → 用户体验计划",
-            direct=(Direct("com.android.calendar", ".settings.UserExperienceActionBarActivity", ""),),
+            direct=(Direct("com.android.calendar", ".settings.UserExperienceActionBarActivity", ""),
+                    Direct("com.android.calendar", ".settings.CalendarActionbarSettingsActivity",
+                           "显示跨月日期")),
             app="com.miui.weather2",
-            note="日历右上「更多」对读屏点击不响应，只能 input tap"),
+            note="日历右上「更多」对读屏点击不响应，只能 input tap；"
+                 "第二条直达是日历设置页本身，没有「用户体验计划」的版本（MIX Flip 2，#832）到此为止"),
     },
     "oppo": {
         "广告跟踪": Entry(
