@@ -6,32 +6,6 @@
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 BUILD = "OS2.0.208"
 MODELS = ["2410CRP4CC"]
-import time
-
-ONLY = globals().get("ONLY") or []
-FAILED_STEPS = []
-
-
-def step(name):
-    def deco(f):
-        if (not ONLY or name in ONLY) and p.locked():
-            print(f"\n== {name}：手机锁屏了，后面的都不跑"); return f
-        if not ONLY or name in ONLY:
-            print(f"\n== {name}"); p.miss = 0
-            t = time.time()
-            try:
-                f()
-            except Exception as e:
-                FAILED_STEPS.append(name)
-                print(f"  ✗ 未完成：{e}")
-            print(f"  ({time.time()-t:.0f} 秒)")
-        return f
-    return deco
-
-
-def maybe(name, scrolls=6):
-    """可选入口：有就点，没有不报「走丢」。"""
-    return p.entry(name, scrolls=scrolls)
 
 
 def tap_any(*names, scrolls=6):

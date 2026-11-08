@@ -25,39 +25,7 @@ BUILD = "BP2A.250605.031"
 MODELS = ["24129PN74C"]
 import time
 from wait import until
-
-ONLY = globals().get("ONLY") or []
-FAILED_STEPS = []
 VERIFIED_SWITCHES = 0
-
-
-def step(name):
-    def deco(f):
-        if ONLY and name not in ONLY:
-            return f
-        print(f"\n== {name}", flush=True)
-        p.miss = 0
-        t = time.time()
-        try:
-            if p.locked():
-                raise RuntimeError("手机锁屏了，请机主解锁后再跑")
-            f()
-        except Exception as e:
-            FAILED_STEPS.append(name)
-            print(f"  ✗ 未完成：{e}", flush=True)
-        print(f"  ({time.time()-t:.0f} 秒)", flush=True)
-        return f
-    return deco
-
-
-def require(ok, reason):
-    if not ok:
-        raise RuntimeError(reason)
-
-
-def maybe(name, scrolls=6):
-    """可选入口：有就点，没有不算「走丢」。"""
-    return p.entry(name, scrolls=scrolls)
 
 
 def tap_any(*names, scrolls=6):
