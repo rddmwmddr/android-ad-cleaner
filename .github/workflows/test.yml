@@ -103,6 +103,10 @@ jobs:
   coverage:
     needs: [unittest, unittest-windows]
     runs-on: ubuntu-latest
+    # 只有这个 job 要写 checks（挂带百分比的 check run）；两个测试 job 保持只读
+    permissions:
+      contents: read
+      checks: write
     # 实测这一步 15–20s；取值口径同两个测试 job
     timeout-minutes: 10
     steps:
@@ -118,14 +122,42 @@ jobs:
           path: cov
           merge-multiple: true
       - name: 合并并出报告
+        id: report
         # 目录参数只认 `.coverage*` 开头的文件名，两份 `coverage-Linux.data` / `coverage-Windows.data`
         # 会被当成不存在（实测报 "No data to combine"）；让 bash 先展开 glob 成显式文件路径
         run: |
           coverage combine cov/coverage-*.data
           coverage report --show-missing
           coverage xml -o coverage.xml
+          percent="$(coverage report --format=total)"
+          echo "percent=$percent" >> "$GITHUB_OUTPUT"
+          {
+            echo "### 覆盖率（Linux + Windows 合并）"
+            echo
+            echo "**总行覆盖率 ${percent}%** —— 无阈值，仅供参考。"
+            echo
+            coverage report --format=markdown
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v5
         with:
           name: coverage-report
           path: coverage.xml
           retention-days: 7
+      # check 名里带百分比，PR 的 Checks 区一眼可见。fork PR 的 GITHUB_TOKEN 只读，建 check 会失败，直接跳过
+      - name: 挂带百分比的 check
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PERCENT: ${{ steps.report.outputs.percent }}
+        run: |
+          jq -n --arg name "coverage ${PERCENT}%" --arg sha "$HEAD_SHA" --arg pct "$PERCENT" '{
+            name: $name,
+            head_sha: $sha,
+            status: "completed",
+            conclusion: "success",
+            output: {
+              title: ("总行覆盖率 " + $pct + "%"),
+              summary: "Linux + Windows 合并后的总行覆盖率。无阈值，仅供参考；完整表格见本次 run 的 job summary。"
+            }
+          }' | gh api -X POST "repos/${GITHUB_REPOSITORY}/check-runs" --input -
