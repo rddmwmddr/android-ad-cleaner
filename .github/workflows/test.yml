@@ -29,6 +29,8 @@ jobs:
           cache: npm
       - name: 安装依赖
         run: pip install -r requirements.txt
+      - name: 安装覆盖率工具（与 coverage job 同版本，数据文件格式随版本变）
+        run: pip install coverage==7.17.2
       - name: 安装前端用例依赖（tests/js 用 jsdom，版本按 package-lock.json）
         run: npm ci
       - name: 准备 adb（不用手机，但套件里有用例在入口就解析 adb，缺了直接报「找不到 adb」）
@@ -48,7 +50,13 @@ jobs:
           pip install ruff==0.17.3
           ruff check --select F,E9 tool tests gui android/app/src/main/python
       - name: 设备无关回归测试
-        run: python -m unittest discover -s tests -v
+        # COVERAGE_FILE 的字面量与下面 artifact 的 name / path 必须逐字对上
+        run: COVERAGE_FILE=coverage-Linux.data coverage run -m unittest discover -s tests -v
+      - uses: actions/upload-artifact@v5
+        with:
+          name: coverage-${{ runner.os }}
+          path: coverage-${{ runner.os }}.data
+          retention-days: 7
 
   # Windows 专属的用例（expanduser 靠 USERPROFILE、open() 默认 cp1252）只在打 Windows 包时才暴露，
   # 每轮发版才发现太晚，所以 PR 阶段也跑一遍。步骤与 Linux job 对齐，差别只在 adb 从哪来，
@@ -68,6 +76,8 @@ jobs:
           cache: npm
       - name: 安装依赖
         run: pip install -r requirements.txt
+      - name: 安装覆盖率工具（与 coverage job 同版本，数据文件格式随版本变）
+        run: pip install coverage==7.17.2
       - name: 安装前端用例依赖（tests/js 用 jsdom，版本按 package-lock.json）
         run: npm ci
       - name: 准备 adb（镜像自带 Android SDK，不额外安装；缺了跟 Linux 一样会有一批用例报「找不到 adb」）
@@ -78,4 +88,44 @@ jobs:
           "ADB=$adb" >> $env:GITHUB_ENV
           & $adb version
       - name: 设备无关回归测试
-        run: python -m unittest discover -s tests -v
+        # 这里是 PowerShell，赋值只能走 $env:；COVERAGE_FILE 与 artifact 的 name / path 逐字对上
+        run: |
+          $env:COVERAGE_FILE = "coverage-Windows.data"
+          coverage run -m unittest discover -s tests -v
+      - uses: actions/upload-artifact@v5
+        with:
+          name: coverage-${{ runner.os }}
+          path: coverage-${{ runner.os }}.data
+          retention-days: 7
+
+  # 覆盖率是平台相关的：Windows-only 分支在 Linux 上永远 0 覆盖，Windows job 又 skip 掉 POSIX-only
+  # 用例，单平台数字都低估，所以两份数据必须合并。只出报告、不设阈值（omit 清单与阈值都是判断题）。
+  coverage:
+    needs: [unittest, unittest-windows]
+    runs-on: ubuntu-latest
+    # 实测这一步 15–20s；取值口径同两个测试 job
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: 安装覆盖率工具（与两个测试 job 同版本，数据格式必须一致）
+        run: pip install coverage==7.17.2
+      - name: 取两份数据（平铺到同一目录，文件名不同不会冲突）
+        uses: actions/download-artifact@v5
+        with:
+          path: cov
+          merge-multiple: true
+      - name: 合并并出报告
+        # 目录参数只认 `.coverage*` 开头的文件名，两份 `coverage-Linux.data` / `coverage-Windows.data`
+        # 会被当成不存在（实测报 "No data to combine"）；让 bash 先展开 glob 成显式文件路径
+        run: |
+          coverage combine cov/coverage-*.data
+          coverage report --show-missing
+          coverage xml -o coverage.xml
+      - uses: actions/upload-artifact@v5
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 7

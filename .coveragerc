@@ -1,0 +1,24 @@
+# 只统计产品代码。omit 的是单测从不执行的脚本（生成提示音、截图、冒烟测试自身、打包入口、
+# 打包期的数据与 .config 生成、发版上传）与三行的常量模块；盖不住的产品路径（baidu_rows 的
+# 网盘 fallback、launch 的启动器、要真机的 explore）留着，它们是盲区地图，藏起来就看不见了。
+[run]
+branch = True
+# 数据里存相对路径，两份数据才能跨平台合并：绝对路径在另一台机器上找不到源文件，
+# `coverage report` 会以 "No source for code" 退出。两个 job 都在仓库根跑，相对路径一致。
+relative_files = True
+source =
+    tool
+    gui
+omit =
+    gui/bundle_data.py
+    gui/dotnet_config.py
+    gui/make_chime.py
+    gui/shots.py
+    gui/smoke_test.py
+    gui/standalone.py
+    gui/upload_gitee.py
+    gui/version.py
+
+[report]
+show_missing = True
+skip_covered = True
