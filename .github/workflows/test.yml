@@ -23,7 +23,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22.23.4"
           cache: npm
@@ -58,7 +58,7 @@ jobs:
           rc=${PIPESTATUS[0]}
           python tool/unittest_summary.py unittest.log "Linux / 3.13" "${HEAD_SHA:0:7}" >> "$GITHUB_STEP_SUMMARY" || true
           exit "$rc"
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: coverage-${{ runner.os }}
           path: coverage-${{ runner.os }}.data
@@ -76,7 +76,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22.23.4"
           cache: npm
@@ -103,7 +103,7 @@ jobs:
           rc=${PIPESTATUS[0]}
           python tool/unittest_summary.py unittest.log "Windows / 3.12" "${HEAD_SHA:0:7}" >> "$GITHUB_STEP_SUMMARY" || true
           exit "$rc"
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: coverage-${{ runner.os }}
           path: coverage-${{ runner.os }}.data
@@ -128,7 +128,7 @@ jobs:
       - name: 安装覆盖率工具（与两个测试 job 同版本，数据格式必须一致）
         run: pip install coverage==7.17.2
       - name: 取两份数据（平铺到同一目录，文件名不同不会冲突）
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           path: cov
           merge-multiple: true
@@ -149,7 +149,7 @@ jobs:
             echo
             coverage report --format=markdown
           } >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: coverage.xml
