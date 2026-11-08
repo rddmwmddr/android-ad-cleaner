@@ -1,7 +1,7 @@
 # 维护规则的注册表。规则正文留在各文档里，这里只做索引，不复述正文。
 # 每条在正文对应行的行尾挂 `<!-- rule:<id> -->` 锚点（ADR-0028），
-# `tests/test_rules_registry.py` 守三条不变式：source 指得到真实出处、enforced 的 check 解析得到真实守卫、
-# 锚点与条目双向一致。`AGENTS.md` 的产品契约不进这张表，由发版 checklist 对照。
+# `tests/test_rules_registry.py` 守四条不变式：source 指得到真实出处、enforced 的 check 解析得到真实守卫、
+# 锚点与条目双向一致、锚点落在 source 点名的那一小节里。`AGENTS.md` 的产品契约不进这张表，由发版 checklist 对照。
 #
 # 字段（除 since 外必填）：
 #   id          `域.对象.断言`，域取 dev | doc | domain
@@ -19,8 +19,8 @@ id = "doc.rules.registry-indexes-prose"
 source = "CLAUDE.md#开发"
 check = "test:test_rules_registry::RulesRegistryTests.test_anchors_and_registry_agree"
 status = "enforced"
-why = "新增规则不入注册表就没人能判断它有没有守卫、该不该留；三条不变式让「正文有锚点、注册表有登记」互相拽住（#840、#842）。只挂锚点不登记、或登记了不挂锚点都会红；两条都不做的那种新条目，守卫看不见。"
-expires_if = "规则正文与注册表合并成一份、不再需要双向对照时，连同三条不变式一起删。"
+why = "新增规则不入注册表就没人能判断它有没有守卫、该不该留；四条不变式让「正文有锚点、注册表有登记」互相拽住（#840、#842、#845）。只挂锚点不登记、登记了不挂锚点、或出处指到别的小节都会红；两条都不做的那种新条目，守卫看不见。"
+expires_if = "规则正文与注册表合并成一份、不再需要双向对照时，连同四条不变式一起删。"
 since = "7f54928"
 
 [[rule]]
@@ -530,10 +530,10 @@ expires_if = "国内下载改走自建对象存储时删。"
 
 [[rule]]
 id = "doc.release.followup-queue"
-source = "CLAUDE.md#发版"
+source = "docs/agents/release-followup.md#每次发版后照做"
 check = "none"
 status = "manual"
-why = "新版不送到报告者手上，不复测催就永远关不掉 waiting-for-verify（#544、#560）。"
+why = "新版不送到报告者手上，不复测催就永远关不掉 waiting-for-verify（#544、#560）：队列只有发版时过一次，漏一次就多一张永远开着的票。"
 expires_if = "发版流程自动给报告者发复测通知时删。"
 
 [[rule]]
@@ -551,3 +551,495 @@ check = "none"
 status = "manual"
 why = "别的会话合了 PR 之后 `origin/main` 尖端会把别人的提交算进本分支的改动面，各轴数到不同的树（#684 那轮两轴各报同一条）。"
 expires_if = "审查改为按平台给出的 PR diff 运行、基线由平台钉住时删。"
+
+# ---- docs/agents/code-review.md ----
+
+[[rule]]
+id = "doc.review.worktree-diff-path"
+source = "docs/agents/code-review.md#基线钉 SHA"
+check = "none"
+status = "manual"
+why = "审查代理在 cwd 上跑时，cwd 通常是主副本：别的会话未提交的改动与已合并的历史提交都会算进本分支的改动面，未跟踪的新文件还根本不出现在 git diff 里。"
+expires_if = "审查按平台给出的 PR diff 运行、工作区位置不再影响取数时删。"
+
+[[rule]]
+id = "doc.review.axis-ownership"
+source = "docs/agents/code-review.md#基线钉 SHA"
+check = "none"
+status = "manual"
+why = "两轴都去数用例总数时各自读到哪棵树看运气，同一条会被报两次；计数归 Standards 轴一次说清，Spec 轴才只看票面覆盖。"
+expires_if = "审查轴合并成一个代理、计数不再需要跨轴对齐时删。"
+
+[[rule]]
+id = "doc.review.freeze-workspace"
+source = "docs/agents/code-review.md#评审期间冻结工作区"
+check = "none"
+status = "manual"
+why = "并发上限 3、五路必然分两批，后一批读到的是更晚的树；候选 1 那轮三个代理读到同一文件的三个快照，一路把刚修好的用例报成「1 红」，另一路把 ADR 里改前的行号当成新文件的行号。"
+expires_if = "审查按提交快照而不是工作区运行、每个代理读到同一棵树时删。"
+
+[[rule]]
+id = "doc.review.default-three-axes"
+source = "docs/agents/code-review.md#轴的分工"
+check = "none"
+status = "manual"
+why = "只跑规范轴会漏掉功能错误，只跑 bug 轴会漏掉破坏当年保护的改动；三类问题各由一轴负责，结论才既能对上文档也能对上历史。"
+expires_if = "审查改由一个代理一次覆盖三类问题时删。"
+
+[[rule]]
+id = "doc.review.extra-axis-for-legacy"
+source = "docs/agents/code-review.md#轴的分工"
+check = "none"
+status = "manual"
+why = "历史包袱重的区域要加「既往 PR / issue 评论」轴，否则只看得见 diff 看不见当年保护过的行为；单开一路「注释一致性」则相反，产出通常只有低置信度措辞问题（候选 1 那轮五路约 70 万 token，其中两路只有这类结论），并进 bug 轴一次问完即可。"
+expires_if = "注释与代码的一致性由工具检查、不再需要人读时删。"
+
+[[rule]]
+id = "doc.review.prompt-contract"
+source = "docs/agents/code-review.md#轴的分工"
+check = "none"
+status = "manual"
+why = "审查代理默认会顺手改代码、往 GitHub 发评论；不把「只读、只回问题清单」写进每路 prompt，改动就会绕过实现者直接落在分支上。"
+expires_if = "审查代理由平台限制成只读、问题清单格式由工具固定时删。"
+
+[[rule]]
+id = "doc.review.findings-threshold"
+source = "docs/agents/code-review.md#结论去哪"
+check = "none"
+status = "manual"
+why = "80 分以下的推测条目会把真问题挤到后面，评审得先逐条反驳才能收口。"
+expires_if = "审查代理不再给置信度、改由工具判定是否成立时删。"
+
+[[rule]]
+id = "doc.review.no-pr-no-comment"
+source = "docs/agents/code-review.md#结论去哪"
+check = "none"
+status = "manual"
+why = "为了留评论先建 PR，等于让审查流程反过来决定要不要发 PR，审完还得去关掉它。"
+expires_if = "审查结论有独立落点、不进 PR 评论时删。"
+
+[[rule]]
+id = "doc.review.verify-before-fix"
+source = "docs/agents/code-review.md#结论去哪"
+check = "none"
+status = "manual"
+why = "代理给的 0–100 置信度不是证据；「撤掉修复就返红」才证明改的是它点的那条，而不是碰巧一起绿了。"
+expires_if = "变异测试进了 CI，返红由工具判定时删。"
+
+[[rule]]
+id = "doc.review.scale-quota"
+source = "docs/agents/code-review.md#规模与配额"
+check = "none"
+status = "manual"
+why = "超过 20 个文件或碰到核心状态机还只跑三轴，改动面铺开后每轴都只能泛读；并发上限 3 也让五路必然分两批。"
+expires_if = "审查并发上限提高、或改动面不再按文件数衡量时删。"
+
+[[rule]]
+id = "doc.review.non-prod-two-axes"
+source = "docs/agents/code-review.md#规模与配额"
+check = "none"
+status = "manual"
+why = "不碰生产代码的 diff 加历史意图轴，产出的多半是规范轴的重述（#684 那轮规格轴与规范轴各报了同一条）。"
+expires_if = "历史包袱改由区域标签自动带出、不再靠加轴时删。"
+
+[[rule]]
+id = "doc.review.hunk-scoped-prompts"
+source = "docs/agents/code-review.md#规模与配额"
+check = "none"
+status = "advisory"
+why = "圈定 hunk 范围比「读整个仓库找相关代码」省一半 token；没有判据，只是成本上的偏好。"
+expires_if = "审查代理自己按 diff 定位、不再需要 prompt 圈范围时删。"
+
+[[rule]]
+id = "doc.review.no-rerun-suite"
+source = "docs/agents/code-review.md#规模与配额"
+check = "none"
+status = "advisory"
+why = "实现刚跑过全量回归，三轴各再跑一遍只是重复；要跑就跑被怀疑的那一条。没有判据，靠人自律。"
+expires_if = "回归耗时降到可以随手重跑、或 CI 结果直接喂给审查代理时删。"
+
+# ---- docs/agents/domain.md ----
+
+[[rule]]
+id = "domain.read-before-exploring"
+source = "docs/agents/domain.md#Before exploring, read these"
+check = "none"
+status = "manual"
+why = "不看词表与相关 ADR 就命名或提方案，产出会用同义词重述已有决定，或者与一条已定案的决定正面冲突。"
+expires_if = "词表与 ADR 由 IDE 或检索工具在提问时自动带出时删。"
+
+[[rule]]
+id = "domain.missing-files-proceed-silently"
+source = "docs/agents/domain.md#Before exploring, read these"
+check = "none"
+status = "advisory"
+why = "这些文件按需惰性创建；缺文件就报「文档缺失」会把正常的空目录当成问题，打断探索。"
+expires_if = "词表与 ADR 在仓库初始化时就一定存在时删。"
+
+[[rule]]
+id = "domain.use-glossary-vocabulary"
+source = "docs/agents/domain.md#Use the glossary's vocabulary"
+check = "none"
+status = "manual"
+why = "词表明确避开的同义词一出现，同一个概念在票、ADR 与代码里就有两个名字，检索与对照都会漏。"
+expires_if = "术语不再靠散文维护、改由结构化词表约束时删。"
+
+[[rule]]
+id = "domain.gap-is-a-signal"
+source = "docs/agents/domain.md#Use the glossary's vocabulary"
+check = "none"
+status = "advisory"
+why = "概念不在词表里时，要么是自造词（该改回既有说法），要么是真的缺口（该记给 /domain-modeling）；不区分就会让两者都悄悄留在代码里。"
+expires_if = "词表由代码里的标识符自动生成、缺口能自动报出时删。"
+
+[[rule]]
+id = "domain.adr-number-from-directory"
+source = "docs/agents/domain.md#Numbering a new ADR"
+check = "none"
+status = "manual"
+why = "CLAUDE.md 的 ADR 列表会落后于目录，并行会话还会抢号：#447 按列表写了 0009，rebase 时发现 0009 已被占用，只能改成 0010 并重写所有引用。"
+expires_if = "ADR 改由工具按合并顺序分配编号时删。"
+
+[[rule]]
+id = "domain.flag-adr-conflicts"
+source = "docs/agents/domain.md#Flag ADR conflicts"
+check = "none"
+status = "manual"
+why = "静默覆盖一条已定案的决定，读者后来只在 ADR 里看到旧结论、在代码里看到新做法，两边都不知道哪个算数。"
+expires_if = "ADR 之间有机器可查的取代关系（supersedes 字段）时删。"
+
+# ---- docs/agents/triage-labels.md ----
+
+[[rule]]
+id = "doc.triage.five-roles-map"
+source = "docs/agents/triage-labels.md#Triage Labels"
+check = "none"
+status = "manual"
+why = "skill 说的是角色名（needs-triage 等），仓库用的是标签字符串；不按这张表翻译，会打出 skill 自己都不认的标签。"
+expires_if = "仓库直接采用 skill 的角色名作标签、不再需要映射时删。"
+
+[[rule]]
+id = "doc.triage.waiting-for-verify-outranks"
+source = "docs/agents/triage-labels.md#Triage Labels"
+check = "none"
+status = "manual"
+why = "它和 ready-for-agent 的票外观一模一样：已修完的 #293 在 2026-10-29 还挂在 `ready-for-agent` 下，下一个会话随时可以拿它再实现一遍。定义、互斥与关票条件只在这里写，其余文档指过来。"
+expires_if = "issue 状态改由平台的原生状态机表达、标签不再承担这个语义时删。"
+
+[[rule]]
+id = "doc.triage.in-progress-is-a-claim"
+source = "docs/agents/triage-labels.md#Triage Labels"
+check = "none"
+status = "manual"
+why = "`in-progress` 是认领而不是角色，和 `waiting-for-verify` 不并存；两个标签叠在同一张票上时，读的人分不清是有人在改还是等复测。摘标时机只写在 issue-tracker 的「票的生命周期」里。"
+expires_if = "认领改由平台原生的 assignee 表达、标签不再表示进行中时删。"
+
+[[rule]]
+id = "doc.triage.one-category-label"
+source = "docs/agents/triage-labels.md#分类标签"
+check = "none"
+status = "manual"
+why = "分类是筛选与统计的口径；2026-11-01 复查时全库 150 张 open 票里有 8 张缺分类、3 张双分类，按分类检索会漏票。"
+expires_if = "issue 类型改由 GitHub 原生 issue type 表达时删。"
+
+[[rule]]
+id = "doc.triage.new-device-is-a-topic"
+source = "docs/agents/triage-labels.md#分类标签"
+check = "none"
+status = "manual"
+why = "把 `新机型` 当第三个分类用，分类就不再互斥；它是主题标签，机型请求仍按 `enhancement` 处理并同时保留它，才能既按类型统计又按主题检索。"
+expires_if = "机型请求有独立的 issue 模板与类型、不再靠主题标签时删。"
+
+[[rule]]
+id = "doc.triage.grilling-boundary"
+source = "docs/agents/triage-labels.md#Triage 与 grilling 的边界"
+check = "none"
+status = "manual"
+why = "`/triage` 自行发起 grilling 会把初筛变成一轮方案讨论，待定的决定还没写进票面就先聊散了；grilling 由用户单独触发。"
+expires_if = "triage 与 grilling 合并成一个流程时删。"
+
+# ---- docs/agents/issue-tracker.md ----
+
+[[rule]]
+id = "doc.tracker.gh-cli-for-everything"
+source = "docs/agents/issue-tracker.md#Issue tracker: GitHub"
+check = "none"
+status = "manual"
+why = "票、PR 与评论都只在 GitHub 上；换一个客户端或手写 API 调用会让取数口径（comments、labels、association）与这里的命令对不上。"
+expires_if = "issue 迁移到别的平台时删。"
+
+[[rule]]
+id = "doc.tracker.issue-command-recipes"
+source = "docs/agents/issue-tracker.md#Conventions"
+check = "none"
+status = "advisory"
+why = "这一节是操作清单而不是约束：照抄能省一次试错，换成等价的 gh 调用不算违规，所以没有判据。"
+expires_if = "命令清单改由 skill 自带、本仓库不再维护时删。"
+
+[[rule]]
+id = "doc.issue.claim-removes-ready"
+source = "docs/agents/issue-tracker.md#票的生命周期"
+check = "none"
+status = "manual"
+why = "`ready-*` 与 `needs-triage` 的意思是「在待办池里等人挑」；认领时留着它们，别的会话会再挑一次同一张票。"
+expires_if = "派单改由平台原生 assignee 加队列机制承担时删。"
+
+[[rule]]
+id = "doc.issue.in-progress-until-merge"
+source = "docs/agents/issue-tracker.md#票的生命周期"
+check = "none"
+status = "manual"
+why = "PR 开着但没合并时改动不在 main，别人仍可能拿同一张票再做一遍；两个标签同时挂着又分不清是在改还是等复测。时机只在这里写，其余文档指过来。"
+expires_if = "开工到合入由同一条流水线独占、无法被第二个会话接手时删。"
+
+[[rule]]
+id = "doc.issue.abandon-restores-labels"
+source = "docs/agents/issue-tracker.md#票的生命周期"
+check = "none"
+status = "manual"
+why = "弃单只摘 in-progress 不恢复原来的 ready-* / needs-triage，标签就烂在票上：既不在待办池里，也没人知道为什么停，下一个会话不敢碰。"
+expires_if = "标签历史由平台自动保留并可一键回滚时删。"
+
+[[rule]]
+id = "doc.issue.number-from-output"
+source = "docs/agents/issue-tracker.md#票的生命周期"
+check = "none"
+status = "manual"
+why = "并行会话会占用按顺序推出来的编号；照 gh issue create 打印的 URL 取号，互链才不会指到别人的票。"
+expires_if = "开票后由工具直接回填编号与互链时删。"
+
+[[rule]]
+id = "doc.issue.close-on-merge"
+source = "docs/agents/issue-tracker.md#票的生命周期"
+check = "none"
+status = "manual"
+why = "合入即关（需真机复测的例外，见 waiting-for-verify），否则已修的票会一直留在待办池里；票里没做的 Follow-up 要转进跟踪票，拖着这张票会让它永远关不掉。"
+expires_if = "issue 与 PR 按平台原生关联自动关闭时删。"
+
+[[rule]]
+id = "doc.issue.ticket-is-spec"
+source = "docs/agents/issue-tracker.md#票的生命周期"
+check = "none"
+status = "manual"
+why = "Spec 审查只认票面；grilling 定下的交付物漏写，已批准的东西会在审查里被报成 scope creep。"
+expires_if = "spec 改由独立文档承载、票只做索引时删。"
+
+[[rule]]
+id = "doc.pr.same-states-split-by-kind"
+source = "docs/agents/issue-tracker.md#Pull requests as a triage surface"
+check = "none"
+status = "manual"
+why = "外部 PR 和 issue 走同一套标签，但机型/清单类与核心行为类的处置不同；不先按类型分，要么把该重写的外部实现整单合进来，要么把一张只改配方表的 PR 当成架构提案退回。"
+expires_if = "PR 模板强制按类型分栏、处置方式从模板取时删。"
+
+[[rule]]
+id = "doc.pr.device-pr-three-checks"
+source = "docs/agents/issue-tracker.md#Pull requests as a triage surface"
+check = "none"
+status = "manual"
+why = "机型 PR 只靠 CI 挡不住三件必查的事：开关换成配方自己逐个点、确认框自己写 helper、CHANGELOG / README 机型表 / 清单三处不齐。`p.confirm()` 只是「可能点到确认按钮」的匹配，不是「弹窗存在」的判据，所以三查不能省。"
+expires_if = "配方改由引擎统一的 DSL 表达、这三件事不再有手工写法时删。"
+
+[[rule]]
+id = "doc.pr.core-pr-reimplement"
+source = "docs/agents/issue-tracker.md#Pull requests as a triage surface"
+check = "none"
+status = "manual"
+why = "外部 PR 常夹带与本仓库模型冲突的写法（ADR 与模块边界在对方看不到的上下文里）；整单合并会把冲突一起带进来。"
+expires_if = "仓库对外开放到外部 PR 能完整跑一遍架构审查时删。"
+
+[[rule]]
+id = "doc.pr.triage-filter"
+source = "docs/agents/issue-tracker.md#Pull requests as a triage surface"
+check = "none"
+status = "manual"
+why = "维护者自己的 PR 进 triage 队列会与 issue 池重复计数；只留 CONTRIBUTOR / FIRST_TIME_CONTRIBUTOR / NONE 才是外部请求面。"
+expires_if = "外部 PR 有独立队列、不再与 issue 共用 triage 时删。"
+
+[[rule]]
+id = "doc.pr.shared-number-space"
+source = "docs/agents/issue-tracker.md#Pull requests as a triage surface"
+check = "none"
+status = "advisory"
+why = "issue 与 PR 共用一个编号空间，裸 #42 可能是任一种；没有判据，只是读票时的习惯。"
+expires_if = "平台给 PR 单独编号时删。"
+
+[[rule]]
+id = "doc.wayfinder.protocol"
+source = "docs/agents/issue-tracker.md#Wayfinding operations"
+check = "none"
+status = "advisory"
+why = "这一节是 /wayfinder 的操作协议（map / child / blocking / frontier / claim / resolve），没有可违反的断言；登记在此只让它出现在索引里。"
+expires_if = "仓库不再使用 /wayfinder、或它自带这份协议时删。"
+
+# ---- docs/agents/release.md ----
+
+[[rule]]
+id = "doc.release.two-readers"
+source = "docs/agents/release.md#两个落点，两个读者"
+check = "none"
+status = "manual"
+why = "CHANGELOG 给维护者、Release 正文给用户；把维护者口径的字样（函数名、基线 SHA）搬进正文，用户读不出「现在会怎样」，把用户口径搬进 CHANGELOG 则让条目膨胀成段落。"
+expires_if = "CHANGELOG 不再对外发布、只剩一种读者时删。"
+
+[[rule]]
+id = "doc.release.note-sources"
+source = "docs/agents/release.md#正文的原料"
+check = "none"
+status = "manual"
+why = "只凭记忆写正文会漏掉合并的 PR 与「其他」里的内部改动；原料固定取「上次发版后合入的 PR」与 `## 未发布` 两边，并按用户会不会遇到筛选。"
+expires_if = "Release 正文改由 PR 列表自动生成时删。"
+
+[[rule]]
+id = "doc.release.symptom-in-user-words"
+source = "docs/agents/release.md#正文的格式"
+check = "none"
+status = "manual"
+why = "用户按症状（「关快应用后快递卡片打不开」）判断自己遇没遇到，按实现原因（「平台包被挂起」）写，他会跳过整条。"
+expires_if = "正文不再面向最终用户时删。"
+
+[[rule]]
+id = "doc.release.never-omit-unverified"
+source = "docs/agents/release.md#正文的格式"
+check = "none"
+status = "manual"
+why = "把「没有真机复测」写成「已验证」或「应该没问题」，报告者会跳过复测，问题留到下一版才被发现。"
+expires_if = "每版都有真机复测、这句不再需要时删。"
+
+[[rule]]
+id = "doc.release.count-regression-once"
+source = "docs/agents/release.md#正文的格式"
+check = "none"
+status = "manual"
+why = "用例数写成拼接或推算的复合计数就没有任何一次运行对得上；只写第 1 步 discover 那一次的输出，且只写一次。"
+expires_if = "正文不再写用例数时删。"
+
+[[rule]]
+id = "doc.release.credits-from-authors"
+source = "docs/agents/release.md#致谢谁"
+check = "none"
+status = "manual"
+why = "凭印象致谢会漏人、也会写进没有贡献的人；名单从本版合并的 PR 与「分析被采纳、本仓库重实现后关闭」的 PR 取，去掉 OWNER / MEMBER / COLLABORATOR，写 @handle 而不是笼统称呼。"
+expires_if = "致谢由平台按贡献自动生成时删。"
+
+[[rule]]
+id = "doc.release.search-index-lag"
+source = "docs/agents/release.md#致谢谁"
+check = "none"
+status = "advisory"
+why = "GitHub 搜索索引有延迟，刚合上没几小时的 PR 可能查不到；对着本版 PR 列表手工补一遍即可，没有判据。"
+expires_if = "致谢取数改走 Releases API、不再依赖搜索索引时删。"
+
+[[rule]]
+id = "doc.release.apk-ships-with-desktop"
+source = "docs/agents/release.md#手机版 APK"
+check = "none"
+status = "manual"
+why = "手机版与桌面版同一版发布，但签名与分发由 owner 掌握；把它当成发版流水线的一步，会让没有证书的机器卡在打包上。"
+expires_if = "APK 改由 CI 签名并随 Release 自动产出时删。"
+
+[[rule]]
+id = "doc.release.android-ci-gate"
+source = "docs/agents/release.md#手机版 APK"
+check = "ci:assemble"
+status = "enforced"
+why = "Kotlin 侧此前没有任何 CI 覆盖，`Shell.kt` 编译不过能一路进 main（#678）；`android.yml` 的 assemble job 只编译 debug，不产出发版产物。"
+expires_if = "手机版不再用 Gradle 构建、或发版流水线自己编译 APK 时删。"
+
+[[rule]]
+id = "doc.release.apk-link-sync"
+source = "docs/agents/release.md#手机版 APK"
+check = "none"
+status = "manual"
+why = "Release 里有 APK 而下载区还写「随下一版发布」，用户就找不到包；上传脚本按 Release 现有文件现算清单，链接不同步会让 Gitee 那一版多传的对象没人指向。"
+expires_if = "下载页改由 Release 资产自动渲染时删。"
+
+[[rule]]
+id = "doc.release.product-contract-check"
+source = "docs/agents/release.md#一轮发版的产物顺序"
+check = "none"
+status = "manual"
+why = "动了 `AGENTS.md` §1 的契约或实现侧对应的名单（`run.py` 的 NEVER、`polarity.NEG_PREFIX`、`off()` 的走向），用户侧 agent 的行为就变了；正文不提这一句，用户会在下一版发现步骤对不上。"
+expires_if = "`AGENTS.md` 随实现自动生成、契约变化不再需要人工转述时删。"
+
+[[rule]]
+id = "doc.release.numbers-from-one-run"
+source = "docs/agents/release.md#一轮发版的产物顺序"
+check = "none"
+status = "manual"
+why = "正文验证行与 CHANGELOG 那一行必须是同一次 discover 的输出；跑两遍或从别处抄数，两个数字会互相对不上。两版解释器结论不一致时以 3.12 的发版构建为准。"
+expires_if = "验证数字由平台在发版时统一给出时删。"
+
+[[rule]]
+id = "doc.release.sha-and-credits-before-publish"
+source = "docs/agents/release.md#一轮发版的产物顺序"
+check = "none"
+status = "manual"
+why = "发布前不核对每个包（含 APK）与 `SHA256SUMS.txt` 一致，装不上的包会直接发出去；致谢名单同一刻核对，发布后再改只能编辑已公开的正文。"
+expires_if = "校验清单改由流水线生成并比对时删。"
+
+[[rule]]
+id = "doc.release.apk-id-android"
+source = "docs/agents/release.md#一轮发版的产物顺序"
+check = "none"
+status = "manual"
+why = "APK 条目的 `id` 逐字写 `android`：卡片角标、手机端高亮与 `baidu_rows.py` 生成的安装说明都按它匹配，换一个 id 线上就看不到手机版。"
+expires_if = "下载页不再用 id 区分平台时删。"
+
+[[rule]]
+id = "doc.release.gitee-portable-wording"
+source = "docs/agents/release.md#一轮发版的产物顺序"
+check = "none"
+status = "manual"
+why = "国内走 Gitee 时 Windows 访客只拿得到免安装版，它不替换也不卸载旧版；正文、下载页、README、docs/08 与 Gitee 发行版正文各覆盖自己那一处，页面写了不代表正文可以省。"
+expires_if = "Gitee 也收 Windows 安装版、免安装版不再独占国内渠道时删。"
+
+[[rule]]
+id = "doc.release.changelog-close-last"
+source = "docs/agents/release.md#一轮发版的产物顺序"
+check = "none"
+status = "manual"
+why = "验证行里是发版那一刻跑出来的数；提前写，rebase 之后正文与 CHANGELOG 会对不上同一个版本的两次读数。CHANGELOG 收口因此放在最后一步。"
+expires_if = "验证行由工件生成、不再手写时删。"
+
+# ---- docs/agents/release-followup.md ----
+
+[[rule]]
+id = "doc.release.followup-version-gate"
+source = "docs/agents/release-followup.md#每次发版后照做"
+check = "none"
+status = "manual"
+why = "让报告者跑旧版去验新代码，只会再收一份重复上报，还会把「没修好」的结论记到新版本头上。"
+expires_if = "催复测通知由流水线按版本自动筛选时删。"
+
+[[rule]]
+id = "doc.release.followup-request-template"
+source = "docs/agents/release-followup.md#每次发版后照做"
+check = "none"
+status = "manual"
+why = "复测请求只说「好了吗」，报告者没法判断，只会再发一张截图；每条票留一条请求、写清装哪个版本、看哪一行、正确长什么样，回执才直接可判。"
+expires_if = "复测结果由客户端自动上报、不再需要人贴输出时删。"
+
+[[rule]]
+id = "doc.release.followup-close-or-reopen"
+source = "docs/agents/release-followup.md#每次发版后照做"
+check = "none"
+status = "manual"
+why = "确认后不关票，`waiting-for-verify` 会一直压在队列里；失败后不摘标改回 `needs-triage`，日志就不是新证据而是一次没人处理的复测。"
+expires_if = "issue 状态由报告者的客户端回执自动推进时删。"
+
+[[rule]]
+id = "doc.release.followup-pending-feedback-is-not-verify"
+source = "docs/agents/release-followup.md#待真机反馈（不是 `waiting-for-verify`）"
+check = "none"
+status = "manual"
+why = "缺真机数据（代码还没动）与「已修等确认」是两回事；挂错标签，要么让待实现的问题看起来已经修了，要么让等数据的票被当成复测催。"
+expires_if = "缺数据的票改由 issue 模板字段区分时删。"
+
+[[rule]]
+id = "doc.release.followup-why-not-ready"
+source = "docs/agents/release-followup.md#为什么不用 `ready-for-agent` 顶着"
+check = "none"
+status = "manual"
+why = "已修完只等真机确认的票，外观和待实现的票一模一样；2026-10-29 两种误判各发生过一次——一次被从头重做，一次被当成缺诊断数据。"
+expires_if = "队列改由平台原生状态表达、不再靠标签区分时删。"

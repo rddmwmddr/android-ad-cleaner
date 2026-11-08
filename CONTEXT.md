@@ -167,13 +167,9 @@
 
 除 GitHub 标准标签和 `docs/agents/triage-labels.md` 里的五个角色外，本仓库还有三个自有状态。
 
-**`waiting-for-verify`** — 修复已合进 `main`，但**没有任何已发布版本包含它**，或已发布但没在报告者真机上确认。带这个标签的 issue：
+**`waiting-for-verify`** — 修复已合进 `main`，但**没有任何已发布版本包含它**，或已发布但没在报告者真机上确认。它的互斥标签与关票条件只在 [docs/agents/triage-labels.md](docs/agents/triage-labels.md) 里定义，每版欠的复测在 [release-followup.md](docs/agents/release-followup.md)。
 
-- 不能被当成待实现重新做一遍（这是它存在的原因 —— 2026-10-29 发生过一次，已修完的 #293 还挂在 `ready-for-agent` 下）
-- 只有报告者本人在真机上确认后才关闭
-- 每次发版后按 `docs/agents/release-followup.md` 催复测
-
-**`in-progress`** — 已认领，有人正在改。动第一行代码之前加上，同时摘掉 `ready-for-agent` / `ready-for-human` / `needs-triage`。未合并的 PR 不释放它 —— 改动没进 `main`，别人仍可能拿同一张票再做一遍；合入 `main` 时才摘，等真机复测的换成 `waiting-for-verify`。弃单则摘掉并恢复原来的 `ready-*` 或 `needs-triage`。
+**`in-progress`** — 已认领，有人正在改。认领、摘标与弃单的时机只在 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md) 的「票的生命周期」里定义。
 
 **`out-of-scope`** — 明确拒绝的需求，理由写在 `.out-of-scope/<概念>.md`。和 `wontfix` 的区别：`wontfix` 是这次不做，`out-of-scope` 是**这个方向不做**，理由要能被后来者读懂，同一个需求再出现时直接引用而不是重新论证。
 

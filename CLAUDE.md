@@ -60,25 +60,17 @@
 - 新版本提示读官网的 `android-ad-cleaner-latest.json`，发版后要更新它（步骤记在本机 `CLAUDE.local.md`）。 <!-- rule:doc.release.latest-json-after-release -->
 - 官网另有一份放在机主的服务器上，发版后同步，方法记在本机 `CLAUDE.local.md`。 <!-- rule:doc.release.site-mirror-sync -->
 - 国内下载走 Gitee：`python3 gui/upload_gitee.py <版本>` 从公开的 GitHub Release 下载安装包并核对 SHA256，推代码和标签，建发行版传附件，再匿名下载回来核对。令牌在本机 `~/.config/gitee/token`，不进仓库和对话。百度网盘暂停使用；Gitee 不可用时把 `index.html` 的 `REL.gitee` 留空，改跑 `gui/upload_baidu.sh [版本]`，它回写网盘链接、按钮随之恢复，`#dl-lead` 那句文案要手动改回「国内下载走百度网盘，链接里带提取码」，后半句「安装版会原地替换旧版，原来的备份保留；免安装版不会」原样留着。 <!-- rule:doc.release.gitee-upload -->
-- 发完版按 [docs/agents/release-followup.md](docs/agents/release-followup.md) 把 `waiting-for-verify` 的 issue 逐条发给报告者复测。新版不送到报告者手上，这些 issue 永远关不掉。 <!-- rule:doc.release.followup-queue -->
+- 发完版按 [docs/agents/release-followup.md](docs/agents/release-followup.md) 的清单催复测：新版不送到报告者手上，`waiting-for-verify` 的 issue 不催就永远关不掉。
 
 ## Agent skills
 
 ### Issue tracker
 
-GitHub Issues（`gh` CLI）：「开工前先有票」的判据（先开票、分支名带票号、实现完补票等于跳过 spec）见 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md) 的「票的生命周期」；认领与摘标的时机见下一节。
-
-### Issue claiming
-
-一张票在动之前先打 `in-progress`（`gh issue edit <N> --add-label in-progress`），同时摘掉 `ready-for-agent` / `ready-for-human` / `needs-triage`。动手前先 `gh issue list --label in-progress` 查重：命中一张不是本会话认领的票，先看它有没有开着的 PR 或在改的分支，别开第二份实现。**合入 main 之前不摘**：PR 开着没合并，别人仍可能拿同一张票再做一遍。摘只有两个时机——合入 main 且不需要真机复测就直接摘，合入 main 但等真机复测就摘 `in-progress`、加 `waiting-for-verify`（两者不并存）；放弃或改派则摘掉并把原来的 `ready-*` 或 `needs-triage` 加回，票面写一句为什么停。细节见 `docs/agents/issue-tracker.md` 的「票的生命周期」。
+GitHub Issues（`gh` CLI）：「开工前先有票」的判据（先开票、分支名带票号、实现完补票等于跳过 spec）、认领与摘标的时机、弃单的恢复都在 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md) 的「票的生命周期」里；标签语义（含 `waiting-for-verify`）见 [docs/agents/triage-labels.md](docs/agents/triage-labels.md)。
 
 ### Triage labels
 
 默认五个角色标签，标签名即角色名；另加本仓库自有的两个状态标签：`waiting-for-verify`（已修、等真机复测）与 `in-progress`（已认领、正在改）。见 `docs/agents/triage-labels.md`。
-
-### Release followup
-
-发版后要催哪些复测、报告者确认前不关闭哪些 issue，见 `docs/agents/release-followup.md`。每次发版都要过一遍这张清单。
 
 ### Code review
 

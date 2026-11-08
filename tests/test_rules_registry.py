@@ -1,6 +1,6 @@
-"""规则注册表的三条不变式（#842）：`source` 指得到真实出处、`check` 与 `status` 配得上且解析得到真实守卫、
-正文锚点与注册表条目双向一致。三条各是一个用例，单条不变式失败不影响另外两条；
-注册表整体读不出（TOML 语法或字段表）时三条一并报，消息带条目标识。
+"""规则注册表的四条不变式（#842、#845）：`source` 指得到真实出处、`check` 与 `status` 配得上且解析得到真实守卫、
+正文锚点与注册表条目双向一致、锚点落在 `source` 点名的那一小节里。四条各是一个用例，
+单条不变式失败不影响另外三条；注册表整体读不出（TOML 语法或字段表）时四条一并报，消息带条目标识。
 """
 import ast
 import re
@@ -81,6 +81,20 @@ def anchors(path):
         if match:
             found.append((lineno, match.group(1)))
     return found
+
+
+def section_of(path):
+    """{行号: 该行所属小节标题}；标题行自己算它开的那一节。围栏代码块内不算（`# 注释` 不是标题）。"""
+    owners, stack = {}, []
+    for lineno, line in prose_lines(path):
+        match = ATX.match(line)
+        if match:
+            title = TRAILING_HASHES.sub("", TRAILING_ANCHOR.sub("", match.group(1))).strip()
+            stack = [item for item in stack if item[0] < len(line) - len(line.lstrip("#"))]
+            stack.append((len(line) - len(line.lstrip("#")), title))
+        if stack:
+            owners[lineno] = stack[-1][1]
+    return owners
 
 
 def module_level(body):
@@ -259,6 +273,27 @@ class RulesRegistryTests(unittest.TestCase):
                 continue                                # 出处本身坏了，由第一条不变式报
             problems.append(f"注册表里的 {row['id']} 在正文里没有行尾锚点 `<!-- rule:{row['id']} -->`")
         self.assertEqual(problems, [], "锚点与注册表条目要对得上：\n" + "\n".join(problems))
+
+    def test_each_anchor_sits_under_the_section_it_names(self):
+        rows = self.rows()
+        self.assertTrue(rows, "注册表一条都没有，这条守卫会空转")
+        by_id = {row["id"]: row for row in rows}
+        problems = []
+        for name in sorted({row["source"].partition("#")[0] for row in rows}):
+            path = ROOT / name
+            if not path.is_file():
+                continue                                # 由第一条不变式报
+            owners = section_of(path)
+            for lineno, anchor_id in anchors(path):
+                row = by_id.get(anchor_id)
+                if row is None:
+                    continue                            # 由第三条不变式报
+                heading = row["source"].partition("#")[2]
+                if owners.get(lineno) != heading:
+                    problems.append(
+                        f"{row['id']}: 锚点在 {name}:{lineno}，那一行属于「{owners.get(lineno)}」，"
+                        f"source 却写「{heading}」")
+        self.assertEqual(problems, [], "锚点要落在 source 点名的那一小节里：\n" + "\n".join(problems))
 
 
 if __name__ == "__main__":
