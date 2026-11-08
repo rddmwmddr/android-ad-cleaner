@@ -55,6 +55,7 @@
 
 ### 内部
 
+- 覆盖率报告写进 job summary，main 与同仓 PR 上挂 `coverage <百分比>%` 的 check；两个测试 job 也把通过/失败/跳过贴进 summary（#875）
 - CI 新增 `coverage` job：Linux 与 Windows 两份数据合并成一份报告，进日志与 artifact，不设阈值（#858）
 - CI：Android job 加跑 JVM 单测，ruff 只留 Linux 一份；workflow 加重推取消，test 与打包加超时（#856）
 - 新增 `CONTRIBUTING.md` 人类贡献者入口，只做路由不复述规则（#851）
