@@ -128,19 +128,44 @@ class RangeTest(unittest.TestCase):
         for sha in (first, second):
             self.assertIn(sha, out)
 
+    def test_git_error_is_not_reported_as_a_pass(self):
+        # 读不出提交时必须红：吞掉错误返回空范围，会被当成「全都合规」。
+        code, out = self.run_check("no-such-ref", head="HEAD")
+        self.assertEqual(code, 2, out)
+        self.assertIn("git", out)
+
+
+def uncommented(text):
+    """去掉整行注释：workflow 的说明里也写着脚本路径与 sha 表达式，全文子串匹配会被注释满足。"""
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+
 
 class WorkflowTest(unittest.TestCase):
     """CI 跑的就是这条命令：workflow 与脚本、PR 范围三者必须对得上。"""
 
     def setUp(self):
-        self.text = WORKFLOW.read_text(encoding="utf-8")
+        self.text = uncommented(WORKFLOW.read_text(encoding="utf-8"))
+
+    def step(self, name):
+        """`- name: <name>` 到下一个 step 之间那一段，只在这一段里断言。"""
+        lines = self.text.splitlines()
+        start = next((i for i, line in enumerate(lines) if line.strip() == f"- name: {name}"), None)
+        self.assertIsNotNone(start, f"workflow 里没有 step「{name}」")
+        rest = lines[start + 1:]
+        end = next((i for i, line in enumerate(rest) if line.strip().startswith("- ")), len(rest))
+        return "\n".join(rest[:end])
+
+    def test_job_is_named_dco(self):
+        # PR 检查列表显示的就是 job id；改名等于验收条件里的 `dco` 不成立。
+        self.assertIn("\n  dco:\n", self.text)
 
     def test_dco_job_runs_the_script(self):
-        self.assertIn("tool/check_dco.py", self.text)
+        self.assertIn("python3 tool/check_dco.py", self.step("校验 DCO"))
 
     def test_job_checks_the_pull_request_range(self):
-        self.assertIn("github.event.pull_request.base.sha", self.text)
-        self.assertIn("github.event.pull_request.head.sha", self.text)
+        step = self.step("校验 DCO")
+        self.assertIn("pull_request.base.sha", step)
+        self.assertIn("pull_request.head.sha", step)
 
     def test_checkout_keeps_enough_history(self):
         # 浅克隆里 base 不是本地的祖先，`base..head` 取不到 PR 的提交。
