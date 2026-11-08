@@ -21,3 +21,18 @@ jobs:
         run: >-
           python3 tool/check_dco.py
           "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+
+  # 主题要是 Conventional Commits：`type(scope): subject`。类型清单只钉在
+  # tool/check_conventional.py 的 TYPES 一处，CLAUDE.md 的「开发」一节列同一份。
+  # 同样只判 PR 范围，main 上的老提交不因这条检查被翻旧账；本地复现：
+  #   python3 tool/check_conventional.py origin/main..HEAD
+  conventional:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0          # 浅克隆里 base 不是本地祖先，`base..head` 会取不到 PR 的提交
+      - name: 校验提交主题前缀
+        run: >-
+          python3 tool/check_conventional.py
+          "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"

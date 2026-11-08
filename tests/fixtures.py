@@ -1,4 +1,4 @@
-"""纯重构要「改前改后对拍」时用的现成材料：页面样本、假时钟、按时间轴换页的假设备、假 Phone、假 Runner。
+"""纯重构要「改前改后对拍」时用的现成材料：页面样本、假时钟、按时间轴换页的假设备、假 Phone、假 Runner，以及提交校验用的临时 git 仓。
 
 CODING_STANDARDS.md 要求纯重构给出对拍证据，页面样本取 tests/ 里所有 <hierarchy>、至少两种屏尺寸。
 以前每做一次同类重构都要现场把这五样东西重搭一遍，现在 import 一下就有：
@@ -14,8 +14,11 @@ CODING_STANDARDS.md 要求纯重构给出对拍证据，页面样本取 tests/ �
 """
 import contextlib
 import io
+import os
 import re
+import subprocess
 import sys
+import tempfile
 import time as _time
 from collections import namedtuple
 import xml.etree.ElementTree as ET
@@ -414,3 +417,49 @@ def fake_adb(case):
     patcher = patch.object(adb_link, "adb_path", return_value="adb")
     patcher.start()
     case.addCleanup(patcher.stop)
+
+
+class GitRepo:
+    """临时 git 仓：写提交、按范围跑一个校验脚本、读回退出码与输出（两条提交校验共用）。
+
+    全局 git 配置必须绕开：本机装了 commit-msg 钩子，测试仓得写得进未签署、无前缀的提交。
+    """
+
+    def __init__(self, name="Rikki", email="rikki@example.com"):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tmp.name)
+        config = self.dir / "gitconfig"
+        config.write_text("", encoding="utf-8")
+        self.env = dict(os.environ, GIT_CONFIG_GLOBAL=str(config), GIT_CONFIG_NOSYSTEM="1", HOME=str(self.dir))
+        self.git("init", "-q", "-b", "main")
+        self.git("config", "user.name", name)
+        self.git("config", "user.email", email)
+        self._count = 0
+
+    def cleanup(self):
+        self._tmp.cleanup()
+
+    def git(self, *args, author_email=None):
+        env = self.env if author_email is None else dict(self.env, GIT_AUTHOR_EMAIL=author_email)
+        done = subprocess.run(["git", *args], cwd=self.dir, env=env, capture_output=True,
+                              text=True, encoding="utf-8", errors="replace", check=True)
+        return done.stdout.strip()
+
+    def commit(self, subject, body=None, author_email=None):
+        """写一个有内容的提交（空提交会被 git 拒绝），返回它的 sha。"""
+        self._count += 1
+        name = f"{self._count}.txt"
+        (self.dir / name).write_text(name, encoding="utf-8")
+        self.git("add", name)
+        args = ["commit", "-q", "-m", subject]
+        if body:
+            args += ["-m", body]
+        self.git(*args, author_email=author_email)
+        return self.git("rev-parse", "HEAD")
+
+    def run(self, script, rev_range, env_extra=None):
+        """跑一个校验脚本，返回 (退出码, stdout + stderr)。"""
+        done = subprocess.run([sys.executable, str(script), rev_range], cwd=self.dir,
+                              env=dict(self.env, **(env_extra or {})),
+                              capture_output=True, text=True, encoding="utf-8", errors="replace")
+        return done.returncode, done.stdout + done.stderr
