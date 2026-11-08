@@ -87,7 +87,7 @@ GitHub 搜索索引有延迟，刚合上没几小时的 PR 可能还查不到；
 
 APK 由 owner 构建并传到同一个 Release，构建不在「一轮发版的产物顺序」里；但第 8 步的上传脚本按 Release 里的文件现算清单，APK 在 Release 里就一并传到 Gitee，所以那一版多传一个包。当次 Release 里已有 APK 时，README 下载区与 `docs/手机版教程/README.md` 的「下载」一节一并更新链接；没有就维持「随下一版发布」。 <!-- rule:doc.release.apk-link-sync -->
 
-## 一轮发版的产物顺序 <!-- rule:doc.release.steps-order -->
+## 一轮发版的产物顺序
 
 0. **核对产品契约**：`git diff <上一版 tag>..HEAD -- AGENTS.md`，§1 有没有变化——既看 `<!-- rule:product.* -->` 锚点集合，也看正文措辞和条数；实现侧动了挂包拒绝名单（`run.py` 的 `NEVER`）、极性词表（`polarity.NEG_PREFIX`）或 `off()` 的走向，同样算触碰。有变化就在 Release 正文的「其他」里写一句用户侧 agent 以后该怎么做。放在最前面，因为它决定正文怎么写。 <!-- rule:doc.release.product-contract-check -->
 1. **跑验证**：`python -m unittest discover -s tests`（本机 `.venv`，3.13，与 Linux job 同一版）一套，加 `uvx ruff@0.17.3 check --select F,E9 tool tests gui android/app/src/main/python`。这一步的数字就是正文验证行与 CHANGELOG 那一行的来源，只跑一次。两个安装包都是 3.12 产物，tag 构建时 `build-windows.yml` 会在 3.12 上再跑一遍套件（Windows 平台，POSIX-only 用例会 skip）；两版结论不一致时以那次为准。 <!-- rule:doc.release.numbers-from-one-run -->

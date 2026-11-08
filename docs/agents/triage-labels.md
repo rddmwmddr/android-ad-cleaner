@@ -21,6 +21,8 @@ The repo adds two labels the five roles do not cover:
 
 `in-progress` is a claim, not a role: it stays out of the five-role set and must not coexist with `waiting-for-verify`. When to add it, when it ends, and what to restore when a claim is abandoned are in [issue-tracker.md](issue-tracker.md) 的「票的生命周期」. <!-- rule:doc.triage.in-progress-is-a-claim -->
 
+When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table. <!-- rule:doc.triage.five-roles-map -->
+
 ## 分类标签
 
 分类只有两个：`bug`（坏了）与 `enhancement`（新功能或改进）。**每张票必须恰好带其中一个。** <!-- rule:doc.triage.one-category-label -->
@@ -30,5 +32,3 @@ The repo adds two labels the five roles do not cover:
 ## Triage 与 grilling 的边界
 
 需要 grilling 的票标 `needs-triage`，把待定的决定逐条写进票面；`/triage` 不自行发起 grilling，那一步由用户单独触发。 <!-- rule:doc.triage.grilling-boundary -->
-
-When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table. <!-- rule:doc.triage.five-roles-map -->

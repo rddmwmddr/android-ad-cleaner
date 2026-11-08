@@ -1,6 +1,6 @@
 # 发版后复测清单
 
-Issues labelled `waiting-for-verify` have a fix on `main` that the reporter has not confirmed on hardware yet; [triage-labels.md](triage-labels.md) owns what the label means and what closes it. This file is the queue of what each release owes.
+[triage-labels.md](triage-labels.md) owns what `waiting-for-verify` means and what closes it; this file is the queue of what each release owes those issues.
 
 发版本身——跑验证、打 tag、写 Release 正文、同步 README / `index.html` / `latest.json` / Gitee——见 [release.md](release.md)。这份文件只管发版**之后**。
 
@@ -14,7 +14,7 @@ Issues labelled `waiting-for-verify` have a fix on `main` that the reporter has 
 
 2. 逐条确认修复是否进了本次构建。版本号对不上就跳过 —— 让报告者跑旧版去验新代码，只会再收一份重复上报。 <!-- rule:doc.release.followup-version-gate -->
 
-3. 在每条 issue 上留一条复测请求，`@` 报告者，写清装了哪个版本、要观察哪一句输出。模板见下。
+3. 在每条 issue 上留一条复测请求，`@` 报告者，写清装了哪个版本、要观察哪一句输出。模板见下。 <!-- rule:doc.release.followup-request-template -->
 
 4. 报告者确认后关闭 issue 并摘掉 `waiting-for-verify`；报告失败就摘标、改回 `needs-triage`，把日志当新证据重新归类。 <!-- rule:doc.release.followup-close-or-reopen -->
 
@@ -29,7 +29,7 @@ Issues labelled `waiting-for-verify` have a fix on `main` that the reporter has 
 不方便复测也没关系，这条先留着，等有同机型的反馈再一起确认。
 ```
 
-要点：说清装哪个版本、看哪一行、正确长什么样。别问「好了吗」—— 报告者没法据此判断，只会再发一张截图。 <!-- rule:doc.release.followup-request-template -->
+要点：说清装哪个版本、看哪一行、正确长什么样。别问「好了吗」—— 报告者没法据此判断，只会再发一张截图。
 
 ## 当前队列
 

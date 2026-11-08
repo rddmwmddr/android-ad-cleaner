@@ -1,7 +1,7 @@
 # 维护规则的注册表。规则正文留在各文档里，这里只做索引，不复述正文。
 # 每条在正文对应行的行尾挂 `<!-- rule:<id> -->` 锚点（ADR-0028），
-# `tests/test_rules_registry.py` 守三条不变式：source 指得到真实出处、enforced 的 check 解析得到真实守卫、
-# 锚点与条目双向一致。`AGENTS.md` 的产品契约不进这张表，由发版 checklist 对照。
+# `tests/test_rules_registry.py` 守四条不变式：source 指得到真实出处、enforced 的 check 解析得到真实守卫、
+# 锚点与条目双向一致、锚点落在 source 点名的那一小节里。`AGENTS.md` 的产品契约不进这张表，由发版 checklist 对照。
 #
 # 字段（除 since 外必填）：
 #   id          `域.对象.断言`，域取 dev | doc | domain
@@ -19,8 +19,8 @@ id = "doc.rules.registry-indexes-prose"
 source = "CLAUDE.md#开发"
 check = "test:test_rules_registry::RulesRegistryTests.test_anchors_and_registry_agree"
 status = "enforced"
-why = "新增规则不入注册表就没人能判断它有没有守卫、该不该留；三条不变式让「正文有锚点、注册表有登记」互相拽住（#840、#842）。只挂锚点不登记、或登记了不挂锚点都会红；两条都不做的那种新条目，守卫看不见。"
-expires_if = "规则正文与注册表合并成一份、不再需要双向对照时，连同三条不变式一起删。"
+why = "新增规则不入注册表就没人能判断它有没有守卫、该不该留；四条不变式让「正文有锚点、注册表有登记」互相拽住（#840、#842、#845）。只挂锚点不登记、登记了不挂锚点、或出处指到别的小节都会红；两条都不做的那种新条目，守卫看不见。"
+expires_if = "规则正文与注册表合并成一份、不再需要双向对照时，连同四条不变式一起删。"
 since = "7f54928"
 
 [[rule]]
@@ -567,7 +567,7 @@ id = "doc.review.axis-ownership"
 source = "docs/agents/code-review.md#基线钉 SHA"
 check = "none"
 status = "manual"
-why = "两轴都去数用例总数时各自读到哪棵树看运气，同一条会被报两次（#684 那轮）；计数归 Standards 轴一次说清，Spec 轴才只看票面覆盖。"
+why = "两轴都去数用例总数时各自读到哪棵树看运气，同一条会被报两次；计数归 Standards 轴一次说清，Spec 轴才只看票面覆盖。"
 expires_if = "审查轴合并成一个代理、计数不再需要跨轴对齐时删。"
 
 [[rule]]
@@ -591,7 +591,7 @@ id = "doc.review.extra-axis-for-legacy"
 source = "docs/agents/code-review.md#轴的分工"
 check = "none"
 status = "manual"
-why = "单开一路「注释一致性」的产出通常只有低置信度的措辞问题（候选 1 那轮五路约 70 万 token，其中两路只有这类结论），并进 bug 轴一次问完即可。"
+why = "历史包袱重的区域要加「既往 PR / issue 评论」轴，否则只看得见 diff 看不见当年保护过的行为；单开一路「注释一致性」则相反，产出通常只有低置信度措辞问题（候选 1 那轮五路约 70 万 token，其中两路只有这类结论），并进 bug 轴一次问完即可。"
 expires_if = "注释与代码的一致性由工具检查、不再需要人读时删。"
 
 [[rule]]
@@ -723,7 +723,7 @@ id = "doc.triage.waiting-for-verify-outranks"
 source = "docs/agents/triage-labels.md#Triage Labels"
 check = "none"
 status = "manual"
-why = "它和 ready-for-agent 的票外观一模一样：已修好的 #293 曾一直挂在 ready-for-agent 下，2026-10-29 被当成待实现重做了一遍。定义、互斥与关票条件只在这里写，其余文档指过来。"
+why = "它和 ready-for-agent 的票外观一模一样：已修完的 #293 在 2026-10-29 还挂在 `ready-for-agent` 下，下一个会话随时可以拿它再实现一遍。定义、互斥与关票条件只在这里写，其余文档指过来。"
 expires_if = "issue 状态改由平台的原生状态机表达、标签不再承担这个语义时删。"
 
 [[rule]]
@@ -762,7 +762,7 @@ expires_if = "triage 与 grilling 合并成一个流程时删。"
 
 [[rule]]
 id = "doc.tracker.gh-cli-for-everything"
-source = "docs/agents/issue-tracker.md#Conventions"
+source = "docs/agents/issue-tracker.md#Issue tracker: GitHub"
 check = "none"
 status = "manual"
 why = "票、PR 与评论都只在 GitHub 上；换一个客户端或手写 API 调用会让取数口径（comments、labels、association）与这里的命令对不上。"
@@ -789,7 +789,7 @@ id = "doc.issue.in-progress-until-merge"
 source = "docs/agents/issue-tracker.md#票的生命周期"
 check = "none"
 status = "manual"
-why = "PR 开着但没合并时改动不在 main，别人仍可能拿同一张票再做一遍；摘标只有两个时机——合入且不需真机就直接摘，合入但要复测就换成 waiting-for-verify（两者不并存）。摘标时机只在这里写，其余文档指过来。"
+why = "PR 开着但没合并时改动不在 main，别人仍可能拿同一张票再做一遍；两个标签同时挂着又分不清是在改还是等复测。时机只在这里写，其余文档指过来。"
 expires_if = "开工到合入由同一条流水线独占、无法被第二个会话接手时删。"
 
 [[rule]]
@@ -955,14 +955,6 @@ why = "Release 里有 APK 而下载区还写「随下一版发布」，用户就
 expires_if = "下载页改由 Release 资产自动渲染时删。"
 
 [[rule]]
-id = "doc.release.steps-order"
-source = "docs/agents/release.md#一轮发版的产物顺序"
-check = "none"
-status = "manual"
-why = "各步骤之间有依赖：tag 触发 `build-windows.yml` 要求 Release 先存在，正文的验证数字要求第 1 步只跑一次，CHANGELOG 收口要求数字已经定下来。顺序打乱过一次，就要重跑或回写。"
-expires_if = "发版改由一条脚本端到端执行、顺序写进代码时删。"
-
-[[rule]]
 id = "doc.release.product-contract-check"
 source = "docs/agents/release.md#一轮发版的产物顺序"
 check = "none"
@@ -1007,7 +999,7 @@ id = "doc.release.changelog-close-last"
 source = "docs/agents/release.md#一轮发版的产物顺序"
 check = "none"
 status = "manual"
-why = "验证行里是发版那一刻跑出来的数，提前写会随 rebase 失效（#355 被打回三次）；CHANGELOG 收口因此放在最后一步。"
+why = "验证行里是发版那一刻跑出来的数；提前写，rebase 之后正文与 CHANGELOG 会对不上同一个版本的两次读数。CHANGELOG 收口因此放在最后一步。"
 expires_if = "验证行由工件生成、不再手写时删。"
 
 # ---- docs/agents/release-followup.md ----
@@ -1022,10 +1014,10 @@ expires_if = "催复测通知由流水线按版本自动筛选时删。"
 
 [[rule]]
 id = "doc.release.followup-request-template"
-source = "docs/agents/release-followup.md#复测请求模板"
+source = "docs/agents/release-followup.md#每次发版后照做"
 check = "none"
 status = "manual"
-why = "只说「好了吗」报告者没法判断，只会再发一张截图；写清装哪个版本、看哪一行、正确长什么样，回执才直接可判。"
+why = "复测请求只说「好了吗」，报告者没法判断，只会再发一张截图；每条票留一条请求、写清装哪个版本、看哪一行、正确长什么样，回执才直接可判。"
 expires_if = "复测结果由客户端自动上报、不再需要人贴输出时删。"
 
 [[rule]]
