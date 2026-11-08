@@ -51,3 +51,15 @@
 上面的「不搬走」与「新开模块被否决」针对的是「为拆 `off()` 值不值得」；这次的理由不同：文档生成器 `tool/vocab.py` 也要同一份极性判据，而它不能连带 `adbutils`（`fast` 那条链会）。并且词库此前按 `p.off()` 的字面量一律标「要关」，把保护类开关写反了（#693 的「减少广告」）。判据只定义一处、引擎与文档同源，比少一个模块更重要。
 
 `vocab.py` 的方向因此分四档：`要关` / `要开` / `不碰` / `同页保留`。`不碰` 是 `want_state()` 为 `None` 的行——`plan_switches()` 对它直接 `continue`，脚本点了名也等于没写，词库把这个死名字显出来。点名方式（写进 `p.off(only=[...])`）与引擎行为都不改——保护类开关的放行仍由 `plan_switches()` 按 `TRACK_WORDS` 判，不看调用名。
+
+## 增补：精确命中压过子串命中（#861）
+
+**一行同时命中 `keep` 与 `only` 时看命中精度**：`only` 精确点名了这一行（`match_key()` 归一化后与标题相等）、而 `keep` 只是子串命中它的标题，就按 `only` 处理；其余组合（两者都精确、两者都子串、`keep` 精确而 `only` 子串）仍 `keep` 优先。
+
+起因是 `close_named()` 把整页未点名的行都塞进 `keep`：商店「服务管理」页既有「应用安全」（功能入口，保留）又有「应用安全安全内容推荐」（推广位，点名要关），后者被前者的子串命中所拦，既不在 `targets` 也不在 `checked`，静默消失。`close_named()` 传的 `only` 本来就是页面上的完整标题，所以精确命中在多少屏上都成立。
+
+**为什么不采用「同屏存在精确同名行时把 `keep` 收窄成精确匹配」**：`plan_switches()` 每屏调用一次，只拿得到当前屏的 `rows`；「服务管理」页 30–46 项跨多屏，保留词的同名行与目标行可能不在同一屏，收窄规则不触发就等于没修。要跨屏就得给这个纯函数加累积状态，代价高于收益。代价是「`keep` 一概压过 `only`」不再成立：`test_keep_wins_over_only` 改为 `test_exact_only_wins_over_a_fragment_keep`。
+
+**`only=None` 的全页扫描不变**：没有 `only` 可供精确命中，`keep` 的子串命中照旧拦行。`STORE_KEEP`（`oppo-PLP120` / `oneplus-PLR110` / `realme-RMX3700`）走这条路径，同类漏关是已知缺口（#861 的 Out of scope），等真机证据再定改哪一侧——那三份脚本没有非目标行回读，误关功能入口不会被发现。
+
+影响面是用 `keep=[name for name in before if name not in names]` 这一形状的 5 份脚本（`oppo-PMX110`、`oneplus-PLZ110`、`oppo-PMA110`、`vivo-V2417A`、`oppo-PLG110`），另加 `oppo-PKT110`——它的 `close_named` 不传 `keep`，只在回读侧有同一形状的名字过滤；引擎改一处即覆盖，配方不动。

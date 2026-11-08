@@ -133,6 +133,20 @@ def match_key(text):
     return text.lower()
 
 
+MATCH_EXACT = 2      # 归一化后与名单词完全相等
+MATCH_FRAGMENT = 1   # 只是包含了名单词
+
+
+def match_rank(key, keys):
+    """一行标题对名单的命中精度：精确（归一化后相等）高于子串，没命中是 0。
+    keys 为 None 表示调用方没给名单。"""
+    if not keys:
+        return 0
+    if key in keys:
+        return MATCH_EXACT
+    return MATCH_FRAGMENT if any(k in key for k in keys) else 0
+
+
 def plan_switches(rows, keep=(), only=None, safe_mode=False, *, screen_h, disabled=None):
     """这一页该拨哪些开关。rows 是 `Phone.switches()` 的输出；函数不读屏、不点击。
 
@@ -140,7 +154,13 @@ def plan_switches(rows, keep=(), only=None, safe_mode=False, *, screen_h, disabl
     kept 是安全模式放过的普通开关。disabled 是按坐标判「这一行的开关是灰的」的谓词：
     命中的行不进 targets，也不报成拨不动。screen_h 无默认值：带过滤是这一页几何的一部分。
     keep/only 的匹配走 match_key 归一化（#559）：页面标题的字间空格、全角标点与脚本里
-    写的保留词不一致时（「首页 AI 搜索」vs「首页：AI搜索」），保留词照样命中。"""
+    写的保留词不一致时（「首页 AI 搜索」vs「首页：AI搜索」），保留词照样命中。
+
+    命中的精度决定谁先：keep 仍然压过 only，唯一例外是 only 精确点名了这一行、keep 只是
+    子串命中它的标题（#861）。close_named() 把整页未点名的行都塞进 keep，短保留词会连带
+    吞掉以它为前缀的目标行（「应用安全」吞掉「应用安全安全内容推荐」）。判据只看这一行
+    自己的两次命中，不依赖同名行是否也在本屏——plan_switches() 每屏调用一次，多屏页面上
+    保留词的同名行可能在别的屏。"""
     keep_keys = {match_key(k) for k in keep if match_key(k)}
     only_keys = {match_key(k) for k in only if match_key(k)} if only is not None else None
     checked, kept, candidates = set(), set(), []
@@ -151,9 +171,11 @@ def plan_switches(rows, keep=(), only=None, safe_mode=False, *, screen_h, disabl
         want = want_state(title)
         if want is None:
             continue
-        if any(k in key for k in keep_keys):
+        keep_rank = match_rank(key, keep_keys)
+        only_rank = match_rank(key, only_keys)
+        if keep_rank and not (only_rank == MATCH_EXACT and keep_rank == MATCH_FRAGMENT):
             continue
-        if only is not None and not any(k in key for k in only_keys) and not (want and TRACK_WORDS.search(title)):
+        if only_keys is not None and not only_rank and not (want and TRACK_WORDS.search(title)):
             continue                              # 「限制广告跟踪」这类保护开关：不在名单里也要打开
         if safe_mode and only is None and not want:
             kept.add(title)
@@ -985,6 +1007,7 @@ class Phone:
 
     def off(self, keep=(), only=None, page="", max_screens=40):
         """当前列表：关掉开着的开关。keep=标题含这些词的不动；only=只关含这些词的。
+        only 精确点名、keep 只是子串命中同一行时按 only（#861）。
         每屏第一下单独点、看有没有弹窗/跳页；没有就把这一屏剩下的连着点完，最后统一核对。
         关掉一项这一行就消失的页面（下面的行整体上移）：从下往上点，上移的只可能是已经点过的行；
         首击后剩下的目标若已不在原坐标，这一屏剩下的改成每点一项前重读坐标（#480）。

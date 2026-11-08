@@ -36,10 +36,65 @@ class TargetSelectionTests(unittest.TestCase):
         self.assertEqual(plan.targets, ())
         self.assertEqual(plan.checked, frozenset())
 
-    def test_keep_wins_over_only(self):
+    def test_exact_only_wins_over_a_fragment_keep(self):
+        # #861：only 点名的是这个完整标题，keep 只是它的前缀子串，关掉它才是调用方的本意。
         plan = fast.plan_switches([("个性化推荐", True, (500, 800))],
                                   keep=["推荐"], only=["个性化推荐"], screen_h=2340)
+        self.assertEqual(plan.targets, (("个性化推荐", (500, 800), False),))
+
+    def test_keep_wins_when_both_sides_hit_exactly(self):
+        """旧树也绿，守的是不回退：两边都精确命中时不翻转，脚本自相矛盾就保守不动（#861）。"""
+        plan = fast.plan_switches([("个性化推荐", True, (500, 800))],
+                                  keep=["个性化推荐"], only=["个性化推荐"], screen_h=2340)
         self.assertEqual(plan.targets, ())
+
+    def test_exact_keep_wins_over_a_fragment_only(self):
+        """旧树也绿，守的是不回退：keep 精确、only 只是子串时不翻转（#861）。"""
+        plan = fast.plan_switches([("个性化推荐", True, (500, 800))],
+                                  keep=["个性化推荐"], only=["推荐"], screen_h=2340)
+        self.assertEqual(plan.targets, ())
+
+    def test_a_fragment_keep_wins_over_a_fragment_only(self):
+        """旧树也绿，守的是不回退：两边都只是子串命中时不翻转（#861）。"""
+        plan = fast.plan_switches([("个性化推荐", True, (500, 800))],
+                                  keep=["推荐"], only=["推荐"], screen_h=2340)
+        self.assertEqual(plan.targets, ())
+
+    def test_a_short_keep_word_does_not_swallow_the_target_it_prefixes(self):
+        # #861 / PMX110 商店·服务管理：「应用安全」是保留项，「应用安全安全内容推荐」是推广位。
+        plan = fast.plan_switches([("应用安全", True, (100, 300)),
+                                   ("应用安全安全内容推荐", True, (100, 400)),
+                                   ("福利专区", True, (100, 500))],
+                                  keep=["应用安全"],
+                                  only=["应用安全安全内容推荐", "福利专区"], screen_h=1000)
+        self.assertEqual(plan.targets, (("应用安全安全内容推荐", (100, 400), False),
+                                        ("福利专区", (100, 500), False)))
+        self.assertIn("应用安全安全内容推荐", plan.checked)
+        self.assertNotIn("应用安全", plan.checked)
+
+    def test_the_prefix_target_is_seen_even_when_its_keep_word_is_not_on_this_screen(self):
+        # plan_switches() 每屏调用一次，保留词的同名行可能在别的屏上：判据不能依赖同屏共存。
+        keep, only = ["应用安全"], ["应用安全安全内容推荐"]
+        with_neighbour = fast.plan_switches([("应用安全", True, (100, 300)),
+                                             ("应用安全安全内容推荐", True, (100, 400))],
+                                            keep=keep, only=only, screen_h=1000)
+        alone = fast.plan_switches([("应用安全安全内容推荐", True, (100, 400))],
+                                   keep=keep, only=only, screen_h=1000)
+        self.assertEqual(with_neighbour.targets, (("应用安全安全内容推荐", (100, 400), False),))
+        self.assertEqual(alone.targets, (("应用安全安全内容推荐", (100, 400), False),))
+
+    def test_normalized_equality_counts_as_an_exact_keep_hit(self):
+        """旧树也绿，守的是不回退：#559 的归一化键同时决定精度，全角冒号与字间空格不算差异（#861）。"""
+        plan = fast.plan_switches([("首页：AI搜索", True, (500, 800))],
+                                  keep=["首页 AI 搜索"], only=["AI搜索"], screen_h=2340)
+        self.assertEqual(plan.targets, ())
+
+    def test_a_full_page_scan_still_lets_a_fragment_keep_win(self):
+        """旧树也绿，守的是不回退：only=None 时没有精确命中可言，行为与本票合入前一致（#861 的已知缺口）。"""
+        plan = fast.plan_switches([("应用安全安全内容推荐", True, (100, 400)),
+                                   ("福利专区", True, (100, 500))],
+                                  keep=["应用安全"], screen_h=1000)
+        self.assertEqual(plan.targets, (("福利专区", (100, 500), False),))
 
     def test_a_switch_without_ad_words_is_not_touched_at_all(self):
         plan = fast.plan_switches([("关闭推送", True, (500, 800))], screen_h=2340)
