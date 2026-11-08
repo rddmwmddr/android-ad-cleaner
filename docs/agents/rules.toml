@@ -77,7 +77,7 @@ id = "dev.git.conventional-commits"
 source = "CLAUDE.md#开发"
 check = "ci:conventional"
 status = "enforced"
-why = "Conventional Commits 此前只在本机 commit-msg 钩子里执行：装着钩子的那条线合规率 97%，另一条 72%，同一条写下来的规则约束力取决于谁在哪台机器提交（#849）。job 在 PR 上跑，主题没有前缀、type 不在清单里或 scope 不合规就红，并点名 sha 与主题；类型清单只在 `tool/check_conventional.py` 的 `TYPES`，CLAUDE.md 列同一份，`tests/test_conventional.py` 守着两处一致。"
+why = "Conventional Commits 此前只在本机 commit-msg 钩子里执行：装着钩子的那条线合规率 97%，另一条 72%，同一条写下来的规则约束力取决于谁在哪台机器提交（#849）。job 在 PR 上跑，主题没有前缀、type 不在清单里或 scope 不合规就红，并点名 sha 与主题。"
 expires_if = "分支保护改用别的守卫接管主题校验，或仓库不再要求 Conventional Commits 时删。"
 since = "4d90593"
 
