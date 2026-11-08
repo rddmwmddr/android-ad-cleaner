@@ -42,6 +42,7 @@ UNRESOLVED_ONLY = {
 }
 # close_named() 第一个参数解析不出的，和上面分开冻结，免得一个口径盖住另一个。
 UNRESOLVED_CLOSE = {
+    "oneplus-PLZ110/recipe.py": 2,
     "oppo-PKT110/recipe.py": 3,
     "oppo-PMX110/recipe.py": 2,
     "redmi-23117RK66C/recipe.py": 1,
@@ -51,6 +52,7 @@ UNRESOLVED_CLOSE = {
 UNRESOLVED_KEEP = {
     "oneplus-PHK110/recipe.py": 1,
     "oneplus-PKX110/recipe.py": 1,
+    "oneplus-PLZ110/recipe.py": 1,
     "oppo-PKH110/recipe.py": 1,
     "oppo-PLG110/recipe.py": 2,
     "oppo-PMA110/recipe.py": 1,
@@ -72,8 +74,8 @@ SILENT = (
 # 页面标签归不到分组的调用。多出来的先看能不能加进 vocab.PAGES。
 UNCLASSIFIED = {
     ("oppo", "<page>"): 7,
-    ("oppo", "个性化管理"): 2,
-    ("oppo", "隐私"): 2,
+    ("oppo", "个性化管理"): 3,
+    ("oppo", "隐私"): 4,
 }
 
 
@@ -126,7 +128,7 @@ class RealRecipesTest(unittest.TestCase):
         self.assertEqual(dict(Counter(c.script for c in self.scan.unresolved_close)), UNRESOLVED_CLOSE)
 
     def test_unresolved_keep_is_frozen_per_script(self):
-        """守卫用例，旧树也绿：守的是这 8 处 keep= 不回退，不被静默读成别的词、也不被悄悄丢掉。"""
+        """守卫用例，旧树也绿：守的是各处 keep= 不回退，不被静默读成别的词、也不被悄悄丢掉。"""
         self.assertEqual(dict(Counter(c.script for c in self.scan.unresolved_keep)), UNRESOLVED_KEEP)
         doc = vocab.render(RECIPES)
         for call in self.scan.unresolved_keep:
