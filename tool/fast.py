@@ -26,6 +26,7 @@ from troubleshooting import (TAPPED, UI_INSTALL_FAILED, UI_RECOVERY, XIAOMI_INPU
 import adb_link
 import backups
 import events
+import json
 import wait
 from reader import Reader
 from row import (SWITCH_ROW_DEPTH, bounds, control, dedupe, disabled_at, is_switch, own,
@@ -130,6 +131,12 @@ def match_key(text):
     text = re.sub(r"[\s\u3000]+", "", text)
     text = re.sub(r"[，。：；、！？·「」『』（）【】—－–,.:;!?()(\[\]){}\"'~*#@&%$+=|<>]", "", text)
     return text.lower()
+
+
+# 守护复查（#823/ADR-0027）：审计模式下 off() 不点击开关本体，只按同一套计划读状态、
+# 按四档（被改回/找不到/灰的/未确认）报告。默认关：执行期路径一个字节都不变。
+AUDIT_MODE = False
+AUDIT_SEEN = set()   # 审计模式全程读到的标题（守护复查的「找不到」对账用）
 
 
 def plan_switches(rows, keep=(), only=None, safe_mode=False, *, screen_h, disabled=None):
@@ -992,6 +999,9 @@ class Phone:
         开关是灰的（被上级开关禁用）的行不点、也不算失败：点了也不会变，以前报成「关不掉」（#333）。
         补点两轮仍没到位的，回退到点整行标题（只认行标题的页面，ADR-0024）：照样由回读确认。
         仍没拨到目标态的记进 `self.missed`：光打一行 ✗ 的话退出码还是 0、结果页标「成功」（#788）。"""
+        if AUDIT_MODE:
+            # 守护复查（#823/ADR-0027）：导航照常，开关本体不点；四档结局走结构化事件。
+            return Phone._audit_off(self, keep, only, page, max_screens)
         # 页面刚打开还没画完：等开关出现，最多试 10 次（本段已走丢就不等）
         wait.until(self.switches, tries=2 if self.miss else 10, poll=0.2,
                    now=time.time, sleep=time.sleep)
@@ -1149,6 +1159,53 @@ class Phone:
             else:
                 self.say(f"  · {page}：核对 {len(checked)} 项，调整 {done} 项" + ("（本页未找到目标开关）" if not checked else ""))
         return done
+
+    def _audit_off(self, keep=(), only=None, page="", max_screens=40):
+        """守护复查的只读 off()（#823/ADR-0027）：走 off() 的同一套计划（keep/only/安全模式/
+        灰态判定/滚动），导航照常点击，开关本体一个都不点。结局按四档分开——
+        被改回（行在、状态非目标）、找不到（要靠调用方给的期望清单对账，这里只交原材料）、
+        灰的（行在、enabled=false）、未确认（读屏失败/断线/中途锁屏）。每页一条
+        `guard_audit` 事件（ADR-0004 形状），人读的那行照打。"""
+        reverted, greyed, unconfirmed = [], [], []
+        seen = set()
+        pages = 0
+        try:
+            wait.until(self.switches, tries=2 if self.miss else 10, poll=0.2,
+                       now=time.time, sleep=time.sleep)
+            for _ in range(max_screens):
+                root = self.tree()
+                rows = self.switches(root)
+                pages += 1
+                plan = plan_switches(rows, keep, only, self.safe_mode, screen_h=self.H,
+                                     disabled=lambda xy: disabled_at(root, xy))
+                seen |= {t for t, *_ in rows if t}
+                AUDIT_SEEN.update(seen)
+                greyed += sorted(plan.disabled)
+                states = {}
+                for title, on, *_ in rows:
+                    states.setdefault(title, []).append(on)
+                for title, xy, want in plan.targets:
+                    # 同名行任意一行还在非目标态就算被改回（与 readback 的合并口径一致，#403）
+                    ons = states.get(title)
+                    if ons is None or not all(on == want for on in ons):
+                        reverted.append(title)
+                if not self.scroll_more():
+                    break
+        except (adb_link.DeviceLost, ScreenLocked):
+            raise
+        except Exception as e:
+            unconfirmed.append(str(e))
+        report = {"page": page, "pages": pages,
+                  "reverted": sorted(set(reverted)), "greyed": sorted(set(greyed)),
+                  "unconfirmed": unconfirmed}
+        if unconfirmed:
+            self.say(f"  ! 守护复查未确认：{unconfirmed[0]}")
+        if reverted:
+            self.say(f"  · 守护复查：{len(reverted)} 项被改回")
+        elif not unconfirmed:
+            self.say(f"  · 守护复查：本段 {pages} 页，没有开关被改回")
+        events.emit("guard_audit", **report)
+        return len(report["reverted"])
 
     # ---------- 设置搜索：输入框、打字、按关键词进页 ----------
     def focused_text(self):
@@ -1530,6 +1587,37 @@ def execute(p, cmd, rest):
         for t in rest:
             p.tap(t)
         p.ls()
+    elif cmd == "audit":
+        # 守护复查（#823/ADR-0027）：按机型脚本原路径走一遍，只读不点。
+        # --expect <json 文件> 给上次记录的标题清单：本次没读到的行进「找不到」档。
+        global AUDIT_MODE
+        expect = None
+        rest2 = []
+        i = 0
+        while i < len(rest):
+            if rest[i] == "--expect" and i + 1 < len(rest):
+                with open(rest[i + 1], encoding="utf-8") as f:
+                    expect = set(json.load(f))
+                i += 2
+                continue
+            rest2.append(rest[i]); i += 1
+        rest = rest2
+        if not p.wait_unlocked():
+            print("✗ 手机一直锁屏，本步骤没有执行。请解锁手机、保持亮屏后重试"); sys.exit(2)
+        AUDIT_MODE = True
+        g = {"p": p, "__name__": "__recipe__", "ONLY": rest[1:]}
+        with open(rest[0], encoding="utf-8") as f:
+            src = f.read()
+        t = time.time()
+        try:
+            exec(src, g)
+        except adb_link.DeviceLost as e:
+            print(f"✗ {e}｜守护复查中断：{time.time()-t:.0f} 秒", flush=True); sys.exit(1)
+        print(f"守护复查跑完：{time.time()-t:.0f} 秒")
+        if expect is not None:
+            from events import emit as _emit
+            _emit("guard_audit", page="__final__", missing=sorted(expect - AUDIT_SEEN))
+        print("结局明细见 AAC_EVENTS 的 guard_audit 事件（每页一条；reverted/greyed/unconfirmed/missing）。")
     elif cmd == "off":
         keep = rest[0].split(",") if rest and rest[0] else ()
         t = time.time(); n = p.off(keep=keep)
