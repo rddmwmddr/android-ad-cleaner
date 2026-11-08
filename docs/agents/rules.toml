@@ -305,14 +305,6 @@ why = "无设备用例真等 adb 超时会把回归从秒级拖到分钟级，�
 expires_if = "读屏与等待全部走可注入的时钟、不再有真实超时路径时删。"
 
 [[rule]]
-id = "dev.tests.chan-page-comparison"
-source = "CLAUDE.md#开发"
-check = "none"
-status = "manual"
-why = "只喂成功路径的对拍不算证据：断线、超时各要一条，守卫数字非零才算测到。"
-expires_if = "认页逻辑有直接的行为用例覆盖、不再需要改前改后对拍时删。"
-
-[[rule]]
 id = "dev.reader.unified-adapter"
 source = "CLAUDE.md#开发"
 check = "code:tool/reader.py:Reader"
@@ -351,6 +343,150 @@ check = "test:test_win_preflight::StartupAdviceTests.test_motw_wins_over_the_loa
 status = "enforced"
 why = "启动失败有三种来源（缺 WebView2、MOTW、原文拒载），顺序错了会把带 MOTW 的 dll 报成「需要重装运行时」（#597、#811、ADR-0003）；判据只在 winpreflight.py。"
 expires_if = "Windows 安装包不再用 pywebview 与托管的 dll 时删。"
+
+[[rule]]
+id = "doc.numbers.reproducible-baselines"
+source = "CODING_STANDARDS.md#用户可见文档里的数字要能复现"
+check = "none"
+status = "manual"
+why = "「switch_row 14 处由假变真」是「7 个文字节点 × 2 种屏尺寸」的记录条数，写进文档后读者没法重算，评审只能从头数一遍才发现对不上。"
+expires_if = "CHANGELOG 与 PR 里的计数由流水线自动生成、不再手写时删。"
+
+[[rule]]
+id = "doc.numbers.recompute-after-rebase"
+source = "CODING_STANDARDS.md#用户可见文档里的数字要能复现"
+check = "none"
+status = "manual"
+why = "#355 的「518 项全过」被 rebase 打回三次（518 → 524 → 527 → 533），两轴审查各报两次数字对不上，返工半个回合；换一个更新的绝对数救不了，只会在下一次合入时再失效。"
+expires_if = "用例总数不再写进文档、或 CI 直接给出带基线的计数时删。"
+
+[[rule]]
+id = "doc.numbers.ask-for-the-baseline"
+source = "CODING_STANDARDS.md#用户可见文档里的数字要能复现"
+check = "none"
+status = "manual"
+why = "#356 审查只要求「改成实测值 513」，作者照改 541，main 前进后两个数都不可复现，第二轮才补成带基线的 575；不连基线一起要，返工是必然的。"
+expires_if = "审查意见改由模板带出基线口径、不再靠评审逐条写时删。"
+
+[[rule]]
+id = "doc.refs.symbols-not-lines"
+source = "CODING_STANDARDS.md#文档指向代码位置用符号名，行号必须带基线"
+check = "none"
+status = "manual"
+why = "ADR-0004 初稿把改前基线的行号与改后的位置混写，评审把旧行号当成新文件的行号；CONTEXT.md 也曾指到一行会漂的注释上（320ce35）。"
+expires_if = "文档不再引用代码位置、改由 IDE 跳转或自动生成的索引承担时删。"
+
+[[rule]]
+id = "doc.refs.cleanup-on-move"
+source = "CODING_STANDARDS.md#文档指向代码位置用符号名，行号必须带基线"
+check = "none"
+status = "manual"
+why = "VIVO_MARKETING 迁到 channel_policy.py 后，docs/09 与测试注释仍指 chan_fast.py 与 gui/app.py，读者按旧路径找不到定义。"
+expires_if = "文档里的代码引用改由机器生成、移动符号时自动重写时删。"
+
+[[rule]]
+id = "dev.tests.behaviour-change-needs-red-test"
+source = "CODING_STANDARDS.md#行为变化要有测试直接守住；纯重构要给对拍证据"
+check = "none"
+status = "manual"
+why = "#674 的读屏错误分流只断言了旧树也满足的性质，新旧两边都绿、看着有覆盖；不把新用例搬回旧树跑红，空覆盖就看不出来。"
+expires_if = "变异测试进了 CI，返红由工具判定时删。"
+
+[[rule]]
+id = "dev.tests.guard-case-declares-itself"
+source = "CODING_STANDARDS.md#行为变化要有测试直接守住；纯重构要给对拍证据"
+check = "none"
+status = "manual"
+why = "允许旧树也绿的守卫用例与什么都没测的空覆盖在报告里长得一样，评审只能靠 docstring 分清。"
+expires_if = "用例是否守卫不回退由工具自动标注时删。"
+
+[[rule]]
+id = "dev.tests.refactor-needs-comparison"
+source = "CODING_STANDARDS.md#行为变化要有测试直接守住；纯重构要给对拍证据"
+check = "none"
+status = "manual"
+why = "「只是搬家」最容易被当成免测：搬家改的是执行顺序与落点，行为可以不变也可以变，不算出差异就没人知道是哪一种。允许差异与样本口径不写清，读数的人没法复算。"
+expires_if = "重构等价性由工具保证（自动重写加快照对拍流水线）时删。"
+
+[[rule]]
+id = "dev.tests.comparison-must-be-falsifiable"
+source = "CODING_STANDARDS.md#行为变化要有测试直接守住；纯重构要给对拍证据"
+check = "none"
+status = "manual"
+why = "对拍只喂成功路径时两边走的都是同一条捷径，零差异不证明任何事：#373 的 29 组对拍没走到 quickapp 与 finally 恢复，两个真 bug 由评审抓出；渠道判定那次用实现自己的词表生成样例，删掉「种草」仍全绿。"
+expires_if = "改前改后的对拍不再是证明等价或差异的手段时删。"
+
+[[rule]]
+id = "dev.tests.stub-and-assert"
+source = "CODING_STANDARDS.md#桩住协作方就断言它被调到"
+check = "none"
+status = "manual"
+why = "候选 5 把 via_app_page 改成一行前向壳后，四处 patch 成了哑桩、其中三处继续绿；只有 assert_called_once() 把它们暴露出来。"
+expires_if = "测试替身改由依赖注入给出、不再 patch 模块级名字时删。"
+
+[[rule]]
+id = "dev.tests.autospec-class-members"
+source = "CODING_STANDARDS.md#桩住协作方就断言它被调到"
+check = "none"
+status = "manual"
+why = "普通 Mock 照单全收实参，签名改了、self 绑错了都不会红；autospec=True 当场报出来。"
+expires_if = "测试替身由类型检查或协议替身自动生成时删。"
+
+[[rule]]
+id = "dev.tests.stubs-follow-the-refactor"
+source = "CODING_STANDARDS.md#桩住协作方就断言它被调到"
+check = "none"
+status = "manual"
+why = "桩住的协作方已经不在调用链上，用例就成了什么都没测的空壳；改不动的桩留着只会骗下一个 patch 它的人（ADR-0011）。"
+expires_if = "调用关系由静态图守护、改完自动报出失效的桩时删。"
+
+[[rule]]
+id = "dev.tests.substitute-identity"
+source = "CODING_STANDARDS.md#桩住协作方就断言它被调到"
+check = "none"
+status = "manual"
+why = "#684 的用例对着一个从没被创建过的值断言，把 clearInterval(pollJob) 改成 clearInterval(undefined) 也全绿。"
+expires_if = "前端不再用全局 timer id 表示待清除的调度、改由可断言的调度对象时删。"
+
+[[rule]]
+id = "dev.errors.sweep-the-receivers"
+source = "CODING_STANDARDS.md#换掉一个 helper 的错误契约时，遍历它的收容点"
+check = "none"
+status = "manual"
+why = "#373 把 run.adb_shell() 从 sys.exit 改成抛 DeviceLost 后，quickapp 的 except (RuntimeError, OSError, ValueError) 开始接住断线并报成组件关闭失败、off 返回 0，cmd_recipe 的 finally 多打一行；两处都是评审逐行读出来的。"
+expires_if = "helper 的终止方式统一成一种、或调用方不再宽泛捕异常时删。"
+
+[[rule]]
+id = "dev.fields.read-declared-directly"
+source = "CODING_STANDARDS.md#`Phone` 构造处声明的字段直接读，不用 `getattr` 兜底"
+check = "test:test_declared_fields::DeclaredFieldTests.test_declared_fields_are_read_directly"
+status = "enforced"
+why = "#344 把六个字段收进 Phone 时，locked() 里留了一处 getattr 兜底，回归全绿，直到自查才发现声明与读取不一致。守卫只查 tool/ 里类自己 __init__ 声明过的字段（含 self.W, self.H 这类解包与 default= 关键字写法），范围外的 getattr（如上游库对象的 _process）不管；正文末句「Mock() 冒充走 fixtures.phone_mock()」没有守卫。"
+expires_if = "Phone 改由结构化配置对象构造、字段不再由 __init__ 逐个声明时删。"
+
+[[rule]]
+id = "dev.wait.budget-unit"
+source = "CODING_STANDARDS.md#搬等待 / 重试循环时，先查旧预算按次数还是按时长"
+check = "none"
+status = "manual"
+why = "把 wait_page / off 的 tries 换成 timeout 后单测全绿、本机看不出差别，只有慢读屏对拍才暴露更早放弃。"
+expires_if = "等待预算统一按时间计、不再有按次数的循环时删。"
+
+[[rule]]
+id = "doc.adr.mechanism-pointable"
+source = "CODING_STANDARDS.md#ADR / 文档声称的机制要能在代码里指认"
+check = "none"
+status = "manual"
+why = "这条规则的反例本身就被查出引文与代码都对不上：ADR-0010 原文没有「关键写段」这句，`_work()` 的四处写点自 a5d98c5 起就在 `with j.lock:` 内。机制断言不逐条指认，连转述它的反例也会跟着漂。"
+expires_if = "ADR 不再写机制性断言、只记录决定与取舍时删。"
+
+[[rule]]
+id = "doc.comments.current-ticket"
+source = "CODING_STANDARDS.md#新增注释里的票号是这次做的票"
+check = "none"
+status = "manual"
+why = "一批为 #674 / #675 新写的注释与 docstring 全写成 #662（上一个 PR 的票），CHANGELOG 与提交标题对、注释全错，检索整批漏掉。"
+expires_if = "注释里的票号改由提交信息推导、不再手写时删。"
 
 [[rule]]
 id = "doc.reports.private-infra-stays-local"
