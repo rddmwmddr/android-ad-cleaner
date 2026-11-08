@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-本仓库的维护规范就是本文件：开工前读完，判断标准在 [CODING_STANDARDS.md](CODING_STANDARDS.md)。[AGENTS.md](AGENTS.md) 不在这里——它是交付给用户侧执行 agent 的手机操作手册，不是维护规范（[ADR-0028](docs/adr/0028-agent-audience-boundary.md)）。
+本仓库的维护规范就是本文件：开工前读完，判断标准在 [CODING_STANDARDS.md](CODING_STANDARDS.md)。[AGENTS.md](AGENTS.md) 不在这里——它是交付给用户侧执行 agent 的手机操作手册，不是维护规范（[ADR-0028](docs/adr/0028-agent-audience-boundary.md)）；但改引擎行为（挂包拒绝名单、极性词表、`off()` 的走向）时，§1 的 11 条产品契约就是这条改动的边界，先读一遍。
 
 本文件只写会改变 agent 行为的指令。逐次变更记录见 [CHANGELOG.md](CHANGELOG.md)，用户看的更新说明与发版流程见 [docs/agents/release.md](docs/agents/release.md)，上报归类见 [docs/09](docs/09-社区问题处理.md)，不在这里复述。
 
