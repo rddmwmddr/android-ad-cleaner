@@ -55,6 +55,8 @@
 
 - PR 新增 `dco` 检查：非 merge 提交缺 signoff 或邮箱与作者不符就红，只判 PR 范围（#848）
 - `dev.git.dco-signoff` 登记进 `rules.toml`，`ci:dco` 是第一个指向 workflow 的 enforced 条目（#848、#842）
+- PR 新增 `conventional` 检查：非 merge 提交主题不合规就红，只判 PR 范围（#849）
+- `dev.git.conventional-commits` 登记进 `rules.toml`，类型清单与 `CLAUDE.md` 由用例比对（#849）
 - 新增 `tool/recipe_kit.py`，机型脚本的前导改由引擎注入，现有脚本行为不变（#838，ADR-0029）
 - `CONTEXT.md` 两条 domain 约束登记进 `rules.toml`，其余三条指向已有规则与产品契约（#846、#840）
 - `docs/agents` 六份登记进 `rules.toml`，补「锚点须在 source 小节」守卫，三处重复正文各留一处（#845）
