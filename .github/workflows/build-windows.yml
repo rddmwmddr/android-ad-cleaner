@@ -7,9 +7,16 @@ on:
     tags: ["v*"]
 permissions:
   contents: write
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # 本 workflow 只由 tag push 与手动触发，条件恒为 false：同一 ref 重复触发时排队而非并发，
+  # 两个 run 不会同时往同一个 Release 上传附件；取消会打断发版产物构建
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   windows:
     runs-on: windows-latest
+    # 实测最慢 2m50s；20m 留出 choco 装 Inno Setup 这类环境抖动的余量
+    timeout-minutes: 20
     defaults:
       run:
         shell: pwsh

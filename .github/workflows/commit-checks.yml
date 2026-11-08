@@ -5,6 +5,10 @@ on:
   pull_request:
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # 只由 PR 触发，重推时取消上一轮
+  cancel-in-progress: true
 jobs:
   # 每个非 merge 提交都要带与作者邮箱一致的 `Signed-off-by`。
   # 只判 PR 范围内的提交，不判 main 上的历史；网页 / API 合并产生的合并提交不带 signoff，

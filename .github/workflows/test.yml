@@ -6,12 +6,18 @@ on:
     branches: [main]
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # 同一 PR 重推时取消上一轮；main push 不取消，免得主分支缺 CI 记录
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   # Linux 跑 3.13，Windows 跑 3.12：两版解释器各跑一次，不重复跑同一组合。
   # 3.13 与仓库根的 .python-version 一致；3.12 与两个发版打包同版。3.13 起编译器会剥掉文档字符串
   # 的公共缩进，异常 repr、argparse 帮助同理，同一份源码在两版下可能逐字不同。
   unittest:
     runs-on: ubuntu-latest
+    # 实测 40s；15m 既吞得下镜像缺 adb 时的 apt-get，又能把「挂住」从 6 小时压到一刻钟
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -49,6 +55,8 @@ jobs:
   # 以及这里跑 3.12（与打包同版）、Linux 跑 3.13。
   unittest-windows:
     runs-on: windows-latest
+    # 实测 98s；取值理由同 Linux job。ruff 不在这里跑：静态分析与平台无关，只留 Linux 一份副本
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -69,9 +77,5 @@ jobs:
           if (-not (Test-Path $adb)) { throw "找不到 adb：PATH 和 ANDROID_HOME 下都没有" }
           "ADB=$adb" >> $env:GITHUB_ENV
           & $adb version
-      - name: 静态检查（未定义名 / 未使用导入；recipes/ 靠注入作用域执行，查不了）
-        run: |
-          pip install ruff==0.17.3
-          ruff check --select F,E9 tool tests gui android/app/src/main/python
       - name: 设备无关回归测试
         run: python -m unittest discover -s tests -v
