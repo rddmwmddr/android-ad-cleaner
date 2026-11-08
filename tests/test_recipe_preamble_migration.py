@@ -158,6 +158,14 @@ class BehaviourTests(unittest.TestCase):
                 self.assertEqual(code, 1)
                 self.assertEqual(calls, ["后段"], "一段失败不该中断整批")
 
+    def test_a_middle_step_failure_fails_the_run(self):
+        for path in RECIPES:
+            with self.subTest(recipe=str(path.relative_to(ROOT))):
+                scope, p = probe(path, lambda *a, **k: False)
+                code = drive(scope, p, [("甲", _ok([], "甲")), ("乙", _boom), ("丙", _ok([], "丙"))])
+                self.assertEqual(scope["FAILED_STEPS"], ["乙"])
+                self.assertEqual(code, 1)
+
     def test_a_lock_in_the_middle_halts_the_batch(self):
         for path in RECIPES:
             with self.subTest(recipe=str(path.relative_to(ROOT))):

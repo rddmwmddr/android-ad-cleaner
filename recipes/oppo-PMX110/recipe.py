@@ -462,5 +462,5 @@ def _():
     close_named(["资讯服务"], "资讯服务")
 
 
-print(f"\n逐项回读确认 {VERIFIED_SWITCHES} 项；完成 {sum(state == 'completed' for _, state in RESULTS)} 段，"
-      f"跳过 {sum(state == 'skipped' for _, state in RESULTS)} 段，未显示项 {len(SKIPPED_ITEMS)} 组", flush=True)
+print(f"\n逐项回读确认 {VERIFIED_SWITCHES} 项；完成 {sum(state == '完成' for _, state in RESULTS)} 段，"
+      f"跳过 {sum(state == '跳过' for _, state in RESULTS)} 段，未显示项 {len(SKIPPED_ITEMS)} 组", flush=True)

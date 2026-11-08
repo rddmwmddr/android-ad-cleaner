@@ -51,7 +51,9 @@ def preamble(p, g):
         def decorate(action):
             if g["ONLY"] and name not in g["ONLY"]:
                 return action
-            results = g.get("RESULTS")      # 调用时读：脚本的赋值在注入之后
+            # 段体在装饰那一刻就跑（`@step` 是执行式装饰器），所以这里读到的都是脚本自己
+            # 已经赋值过的：钩子要写在第一个 `@step` 之前，见 docs/04。
+            results = g.get("RESULTS")
             if g["HALTED"]:
                 # 中止之后不再碰手机：不读锁屏、不碰页面，只把这一条记成「未执行」。
                 g["FAILED_STEPS"].append(name)
@@ -65,6 +67,7 @@ def preamble(p, g):
             p.miss = 0
             started = time.monotonic()
             state = DONE
+            outcome = None
             try:
                 guard = g.get("guard")
                 if guard is not None:
@@ -73,7 +76,7 @@ def preamble(p, g):
                     raise ScreenLocked("手机锁屏了，请机主解锁后重跑")
                 wrap = g.get("wrap")
                 with (wrap() if wrap is not None else nullcontext()):
-                    action()                # 脚本可选的段内包装（等价于以前 `with safe_ui():`）
+                    outcome = action()      # 脚本可选的段内包装（等价于以前 `with safe_ui():`）
             except adb_link.DeviceLost:
                 raise                  # 断线交还引擎：整轮停下，不逐段报
             except g.get("SkipStep", SkipStep) as reason:
@@ -89,6 +92,8 @@ def preamble(p, g):
                 detail = g.get("detail")
                 if detail is not None:
                     print(f"  · {detail()}", flush=True)
+            if outcome is False:
+                state = FAILED             # 段体自己说没做成：只影响分段结果，与迁移前一致
             if results is not None:
                 results.append((name, state))
             print(f"  ({time.monotonic() - started:.0f} 秒)", flush=True)

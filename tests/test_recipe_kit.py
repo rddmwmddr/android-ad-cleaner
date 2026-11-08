@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import adapt
+import adb_link
 import fast
 from fixtures import EMPTY_PAGE, Clock, fake_phone, install_clock, load_recipe, phone_stub
 
@@ -366,6 +367,32 @@ def _c():
     def test_a_halted_step_is_recorded_as_not_executed(self):
         scope = self.run_results(allowed=1)
         self.assertEqual(scope["RESULTS"], [("甲", "完成"), ("乙", "未完成"), ("丙", "未执行")])
+
+    def test_a_step_body_returning_false_is_recorded_as_unfinished(self):
+        """四份脚本的段体用 `return False` 表示「这一段没做全」，旧段包装据此记 incomplete。
+
+        迁移前它只影响分段结果、不影响退出码；迁移后照旧，所以这里同时断言两份台账。"""
+        scope = self.run_results("return False")
+        self.assertEqual(scope["RESULTS"], [("甲", "完成"), ("乙", "未完成"), ("丙", "完成")])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+
+
+class DeviceLostTests(unittest.TestCase):
+    def test_a_lost_connection_goes_back_to_the_engine(self):
+        """断线不是「这一段没做成」：段包装不记台账，交回引擎整轮停下（ADR-0029）。"""
+        script = '''
+import adb_link
+
+@step("甲")
+def _a():
+    raise adb_link.DeviceLost("adb 断了")
+'''
+        p = phone()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "recipe.py")
+            path.write_text(script, encoding="utf-8")
+            with self.assertRaises(adb_link.DeviceLost):
+                load_recipe(p, path, ())
 
 
 class InjectionPointTests(unittest.TestCase):
