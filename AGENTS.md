@@ -1,4 +1,4 @@
-# AGENTS.md —— 给 AI 智能体的操作规范
+# AGENTS.md —— 给用户侧执行 agent 的操作手册（产品契约）
 
 读者：能在用户电脑上执行命令的 AI 智能体（WorkBuddy、Claude Code、Codex、Trae、Cursor 等）。
 任务：通过 adb 关掉用户安卓手机里的广告、热搜、资讯推荐和营销推送。
