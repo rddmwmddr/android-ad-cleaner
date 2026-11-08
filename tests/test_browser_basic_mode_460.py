@@ -25,6 +25,7 @@ RECIPES = (
     (ROOT / "recipes/xiaomi-24129PN74C/recipe.py", ("com.android.browser",)),
     (ROOT / "recipes/redmi-23113RKC6C/recipe.py", ("com.android.browser",)),
     (ROOT / "recipes/xiaomi-2512BPNDAC/recipe.py", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi-2505APX7BC/recipe.py", ("com.android.browser",)),
     # 这份不走 p.start：强停后用 monkey 拉起
     (ROOT / "recipes/xiaomi-24129PN74C/recipe_os4.py", None),
     (ROOT / "recipes/redmi-24122RKC7C/recipe.py", ("com.android.browser", ".BrowserActivity")),
