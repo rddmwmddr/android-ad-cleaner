@@ -1,8 +1,11 @@
 """Xiaomi 15（24129PN74C）：本机实测入口、回读保护、与同底包脚本的差异。
 
 2026-10-29 无线调试实测：底包 BP2A.250605.031.A3 与 recipes/redmi-25060RK16C 一致，
-但浏览器入口是「菜单 → 设置」（不是底栏「我的」），商店没有隐私设置入口，
+浏览器入口是「菜单 → 设置」（不是底栏「我的」），商店没有隐私设置入口，
 系统广告走设置搜索 / 深链（隐私与安全页里没有「更多安全设置」）。
+
+同一份脚本也被底包 BP2A.250605.031 一族里没写专属脚本的小米机借去跑（#833）：它们底栏没有
+「菜单」，设置入口在「我的」页里。两条入口各有用例，落点校验两边都成立（#586）。
 """
 import contextlib
 import io
@@ -30,6 +33,60 @@ WEATHER_SETTINGS = "com.miui.weather2/com.miui.weather2.settings.WeatherSettings
 POPUP = "PopupWindow:9e12e45"
 RECIPES = ("recipe.py", "recipe_os4.py")
 
+BROWSER = "com.android.browser/com.android.browser.BrowserActivity"
+BROWSER_SETTINGS = "com.android.browser/com.android.browser.BrowserSettingsActivity"
+MENU_CENTER = (756, 2340)
+MINE_CENTER = (972, 2340)
+MENU_POPUP_SETTING = (870, 760)
+MINE_PAGE_GEAR = (1008, 144)
+
+# 底栏两种实测布局：Xiaomi 15 有「菜单」（菜单在、我的也在），MIX Flip 2 只有「我的」。
+BOTTOM_WITH_MENU = """<hierarchy rotation="0">
+  <node class="android.widget.FrameLayout" package="com.android.browser" bounds="[0,0][1080,2400]">
+    <node class="android.widget.TextView" text="主页" bounds="[0,2280][216,2400]" />
+    <node class="android.widget.TextView" text="视频" bounds="[216,2280][432,2400]" />
+    <node class="android.widget.TextView" text="AI搜索" bounds="[432,2280][648,2400]" />
+    <node class="android.widget.TextView" text="菜单" bounds="[648,2280][864,2400]" />
+    <node class="android.widget.TextView" text="我的" bounds="[864,2280][1080,2400]" />
+  </node>
+</hierarchy>"""
+
+BOTTOM_WITHOUT_MENU = """<hierarchy rotation="0">
+  <node class="android.widget.FrameLayout" package="com.android.browser" bounds="[0,0][1080,2400]">
+    <node class="android.widget.TextView" text="主页" bounds="[0,2280][216,2400]" />
+    <node class="android.widget.TextView" text="视频" bounds="[216,2280][432,2400]" />
+    <node class="android.widget.TextView" text="AI搜索" bounds="[432,2280][648,2400]" />
+    <node class="android.widget.TextView" text="免费小说" bounds="[648,2280][864,2400]" />
+    <node class="android.widget.TextView" text="我的" bounds="[864,2280][1080,2400]" />
+  </node>
+</hierarchy>"""
+
+MENU_POPUP = """<hierarchy rotation="0">
+  <node class="android.widget.FrameLayout" package="com.android.browser" bounds="[0,0][1080,2400]">
+    <node class="android.widget.TextView" text="设置" clickable="true" bounds="[720,730][1020,790]" />
+  </node>
+</hierarchy>"""
+
+MINE_PAGE = """<hierarchy rotation="0">
+  <node class="android.widget.FrameLayout" package="com.android.browser" bounds="[0,0][1080,2400]">
+    <node class="android.widget.TextView" text="登录同步书签" clickable="true" bounds="[48,300][600,400]" />
+    <node class="android.widget.ImageView" content-desc="设置" clickable="true" bounds="[960,96][1056,192]" />
+  </node>
+</hierarchy>"""
+
+BROWSER_SETTINGS_PAGE = """<hierarchy rotation="0">
+  <node class="android.widget.FrameLayout" package="com.android.browser" bounds="[0,0][1080,2400]">
+    <node class="android.widget.TextView" text="隐私和安全" clickable="true" bounds="[48,320][600,420]" />
+  </node>
+</hierarchy>"""
+
+# 点到工具栏那个「设置」之后落的页：首页编辑面板，Activity 不是设置页（#586 的错路）
+TOOLBAR_PANEL = """<hierarchy rotation="0">
+  <node class="android.widget.FrameLayout" package="com.android.browser" bounds="[0,0][1080,2400]">
+    <node class="android.widget.TextView" text="页面布局" bounds="[48,300][600,400]" />
+  </node>
+</hierarchy>"""
+
 
 class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
     def load(self, phone, recipe="recipe.py"):
@@ -55,12 +112,12 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
         self.assertTrue(run.build_ok(this_phone, "OS3.0.307.0"))
 
     def test_same_base_package_as_k80_script_but_own_entry_points(self):
-        # 底包相同不等于入口相同：浏览器走「菜单」而不是底栏「我的」，商店没有隐私设置。
+        # 底包相同不等于入口相同：浏览器两条入口都在，底栏「菜单」优先；商店没有隐私设置。
         k80 = run.recipe_meta(ROOT / "recipes/redmi-25060RK16C/recipe.py")["build"]
         self.assertEqual(k80, "BP2A")
         source = (ROOT / "recipes/xiaomi-24129PN74C/recipe.py").read_text(encoding="utf-8")
-        self.assertIn('p.tap("菜单", exact=True, scrolls=0)', source)
-        self.assertNotIn('p.tap("我的", exact=True, scrolls=0), "未找到浏览器', source)
+        self.assertIn('p.tap("菜单", exact=True, scrolls=0, quiet=True)', source)
+        self.assertIn('if not p.tab("我的"):', source)
 
     def test_system_ads_uses_search_or_deep_link_not_more_security_settings(self):
         source = (ROOT / "recipes/xiaomi-24129PN74C/recipe.py").read_text(encoding="utf-8")
@@ -79,6 +136,78 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
         # 扫一扫 / 搜索历史 / 书签 / 最常访问是功能项，不能进 only 名单。
         for functional in ("显示扫一扫模块", "显示搜索历史模块", "显示书签模块", "显示最常访问模块"):
             self.assertNotIn(functional, source)
+
+    def browser_phone(self, stages, focus, clicked=None, backed=None, only=None, **fields):
+        """假手机 + 按时间轴换页：底栏点「菜单」会先空转 6 秒，页面切换都排在这之后。"""
+        clock = Clock(click_cost=0.05)
+        original = fast.time
+        install_clock(fast, clock)
+        self.addCleanup(setattr, fast, "time", original)
+        p = fake_phone(clock=clock, size=(1080, 2400), stages=stages, focus=focus, **fields)
+        if clicked is not None:
+            p.click = lambda x, y: (clicked.append((x, y)), clock.click())[1]
+        if backed is not None:
+            p.back = lambda *a, **k: (backed.append(clock.t), clock.click())[1]
+        scope, out = load_recipe(p, ROOT / "recipes/xiaomi-24129PN74C/recipe.py", only=only)
+        scope["time"] = clock              # 脚本里的 sleep 也推进设备时间轴，否则点完齿轮页面不会换
+        return p, scope, out
+
+    def test_browser_prefers_the_menu_entry_and_never_touches_my_tab(self):
+        """Xiaomi 15 底栏有「菜单」：走实测过的弹窗路径，「我的」标签一次都不点（#833）。"""
+        clicked, backed = [], []
+        _p, scope, _out = self.browser_phone(
+            [(0.0, BOTTOM_WITH_MENU), (0.3, MENU_POPUP), (1.2, BROWSER_SETTINGS_PAGE)],
+            focus=((0.0, BROWSER), (1.2, BROWSER_SETTINGS)), clicked=clicked, backed=backed)
+        with contextlib.redirect_stdout(io.StringIO()):
+            scope["browser_settings"]()
+        self.assertEqual(clicked, [MENU_CENTER, MENU_POPUP_SETTING])
+        self.assertEqual(backed, [])
+
+    def test_browser_falls_back_to_the_my_tab_when_the_bar_has_no_menu(self):
+        """MIX Flip 2 底栏没有「菜单」：走「我的」→ 齿轮，进了设置页才算成功（#833）。"""
+        clicked, backed = [], []
+        # 「我的」页排在 6.2 秒：tap() 探测底栏文字时最多空转 6 秒才放弃，6.2 就是它刚放弃之后。
+        _p, scope, _out = self.browser_phone(
+            [(0.0, BOTTOM_WITHOUT_MENU), (6.2, MINE_PAGE), (7.0, BROWSER_SETTINGS_PAGE)],
+            focus=((0.0, BROWSER), (7.0, BROWSER_SETTINGS)), clicked=clicked, backed=backed)
+        with contextlib.redirect_stdout(io.StringIO()):
+            scope["browser_settings"]()
+        self.assertIn(MINE_CENTER, clicked)
+        self.assertIn(MINE_PAGE_GEAR, clicked)
+        self.assertEqual(backed, [])
+
+    def test_menu_entry_stopping_on_a_blank_focus_still_fails_loudly(self):
+        """底栏有「菜单」却两次都没进设置页、中途读不出前台：不能当成「没有菜单」改走「我的」（#581）。"""
+        _p, scope, _out = self.browser_phone(
+            [(0.0, BOTTOM_WITH_MENU), (0.3, MENU_POPUP), (1.2, TOOLBAR_PANEL),
+             (2.0, BOTTOM_WITHOUT_MENU)],
+            focus=((0.0, BROWSER), (1.0, "")))
+        with contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(RuntimeError, "浏览器设置页没有打开；停在 读不出前台"):
+                scope["browser_settings"]()
+
+    def test_my_entry_closes_the_login_popup_before_looking_for_settings(self):
+        """「我的」页先弹一键登录框，得先关掉再找设置，不然齿轮被浮层盖住（#833）。"""
+        p = phone_mock()
+        p.tap.return_value = False           # 底栏没有「菜单」
+        p.tab.return_value = True
+        scope = self.load(p)
+        scope["gear"] = gear = Mock(return_value=True)
+        with contextlib.redirect_stdout(io.StringIO()):
+            scope["browser_settings"]()
+        p.tab.assert_called_once_with("我的")
+        p.dismiss.assert_called_once_with()
+        gear.assert_called_once_with()
+
+    def test_my_tab_without_a_settings_page_fails_the_segment_without_touching_switches(self):
+        """「我的」页里没进成设置页：整段报失败、报出停在哪一页，不在旧页上找子项（#586 / #833）。"""
+        clicked = []
+        p, scope, out = self.browser_phone([(0.0, BOTTOM_WITHOUT_MENU), (6.2, MINE_PAGE)],
+                                           focus=((0.0, BROWSER),), clicked=clicked,
+                                           only="浏览器", start=Mock(return_value=True), off=Mock())
+        self.assertEqual(scope["FAILED_STEPS"], ["浏览器"])
+        p.off.assert_not_called()
+        self.assertIn(f"浏览器设置页没有打开；停在 {BROWSER}", out.getvalue())
 
     def test_missing_target_aborts_without_touching_switches(self):
         p = Mock()

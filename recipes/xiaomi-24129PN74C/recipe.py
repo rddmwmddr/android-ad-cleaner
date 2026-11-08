@@ -10,7 +10,8 @@
 #    也没有「秒装」；「其他功能」只是分类标题不是入口。设置页可见的是
 #    通知设置、极速下载、模式切换、自动升级、WLAN 加速。
 #  · 浏览器 20.29.1031010：底栏是 主页/视频/AI搜索/菜单/我的，入口是
-#    底部「菜单」→ 弹窗右上「设置」（不是底栏「我的」）。
+#    底部「菜单」→ 弹窗右上「设置」（不是底栏「我的」）；底栏没有「菜单」的机型
+#    （MIX Flip 2）在「我的」页里找设置（#833）。
 #    「隐私和安全」在设置页最底部，要滚 8 屏才看得到，脚本用 scroll_more 往下翻。
 #    实测默认开着的广告项只有「显示猜你想搜模块」（搜索设置）和「运营任务」（功能设置）；
 #    「个性化内容推荐」「个性化广告推荐」「小说」「宫格位推送」出厂就是关的。
@@ -78,11 +79,14 @@ def menu_settings(tries=2):
 
     工具栏右上角也有一个叫「设置」的图标，弹窗还没画出来时按文字点会落到它上面、进首页编辑面板，
     后面几页入口全部找不到，整段 0 项又不报错。所以只点下半屏那一行，且没落进设置页就退回来
-    重开菜单再试；两次都不成就报当前页，不在工具栏面板上继续找。"""
-    stopped = ""
+    重开菜单再试；两次都不成就报当前页，不在工具栏面板上继续找。
+    底栏没有「菜单」的机型（MIX Flip 2）返回 False，交给 browser_settings() 的「我的」入口（#833）。"""
+    stopped = None
     for _ in range(tries):
-        if not p.tap("菜单", exact=True, scrolls=0):
-            raise RuntimeError("未找到浏览器底部「菜单」")
+        if not p.tap("菜单", exact=True, scrolls=0, quiet=True):
+            if stopped is None:
+                return False
+            raise RuntimeError(f"浏览器设置页没有打开；停在 {stopped}")
         xy = popup_row("设置")
         if not xy:
             raise RuntimeError(f"浏览器菜单里没有「设置」；停在 {p.focus()}")
@@ -90,11 +94,28 @@ def menu_settings(tries=2):
         p.click(*xy)
         p.settle(before, 1.5)
         if p.in_settings_page():
-            return
+            return True
         # 弹窗这一行在屏上才走到这里，所以按返回是收起弹窗或退出面板，不会离开浏览器首页
-        stopped = p.focus()
+        # focus 读不出前台时是空串，别让它被当成「还没进过弹窗」
+        stopped = p.focus() or "读不出前台"
         p.back()
     raise RuntimeError(f"浏览器设置页没有打开；停在 {stopped}")
+
+
+def browser_settings():
+    """底栏「菜单」→ 弹窗「设置」；底栏没有「菜单」的机型在「我的」页里找设置（#833）。
+
+    借这份脚本的机型底栏布局不同：Xiaomi 15 是 主页/视频/AI搜索/菜单/我的，MIX Flip 2 是
+    主页/视频/AI搜索/免费小说/我的。两条入口点完都要认出设置页；「我的」那条没进去时报出
+    停在哪一页，不在旧页上继续找「隐私和安全」等子项（#586）。"""
+    if menu_settings():
+        return
+    print("  · 底栏没有「菜单」，改走「我的」→ 设置", flush=True)
+    if not p.tab("我的"):
+        raise RuntimeError(f"浏览器底部没有「菜单」，也没有「我的」标签；停在 {p.focus()}")
+    p.dismiss()                       # 「我的」页可能先弹一键登录框，盖住齿轮
+    if not gear():
+        raise RuntimeError(f"浏览器设置页没有打开；停在 {p.focus()}")
 
 
 def gear(toolbar_only=False):
@@ -255,15 +276,15 @@ def _():
 
 @step("浏览器")
 def _():
-    # 2026-10-29 实测：底栏是 主页/视频/AI搜索/菜单/我的，没有「我的」标签；
-    # 入口是底部「菜单」→ 弹窗右上「设置」。
+    # 2026-10-29 实测：底栏是 主页/视频/AI搜索/菜单/我的，入口是底部「菜单」→ 弹窗右上「设置」；
+    # 底栏没有「菜单」的机型（MIX Flip 2）在「我的」页里找设置（#833）。
     p.start("com.android.browser")
     if "basicmode" in p.focus().lower():
         # 拒绝浏览器协议后落到基本模式设置页，设置入口都不在这条路径上，找下去只会空转报错（#414、#460）
         print("  · 浏览器处在基本模式，设置入口不在这条路径上，本段跳过")
         return
     time.sleep(2)
-    menu_settings()
+    browser_settings()
     # 「隐私和安全」在设置页最底部（实测要滚 8 屏），往下翻着找。
     if maybe("隐私和安全", scrolls=12):
         p.off(only=["个性化内容推荐", "个性化广告推荐"], page="浏览器·隐私和安全")
