@@ -15,7 +15,7 @@ Infer the repo from `git remote -v` — `gh` does this automatically when run in
 
 ## 票的生命周期
 
-- **开工前先有票**：任何实现 / 重构 / 文档改造，先对应一个 GitHub issue；没有就先开票，分支名带 issue 号（`feat/<描述>-<issue>`）。实现完再补票等于跳过了 spec 与 triage，PR 会被当成无源改动。
+- **开工前先有票**：任何实现 / 重构 / 文档改造，先对应一个 GitHub issue；没有就先开票，分支名带 issue 号（`feat/<描述>-<issue>`）。实现完再补票等于跳过了 spec 与 triage，PR 会被当成无源改动。 <!-- rule:doc.issue.ticket-before-work -->
 - **认领即出池**：动第一行代码之前 `gh issue edit <N> --add-label in-progress`，并摘掉 `ready-for-agent` / `ready-for-human` / `needs-triage`——这三张标签的意思是「在待办池里等人挑」，留着会让别的会话再挑一次。动手前先 `gh issue list --label in-progress` 查重：命中一张不是本会话认领的票，先看它有没有开着的 PR 或在改的分支，别开第二份实现。
 - **`in-progress` 留到合入 main 才摘**：开了 PR 也不摘，PR 开着没合并时改动没进 main，别人仍可能拿同一张票再做一遍。摘只有两个时机——合入 main 且不需要真机复测就直接摘；合入 main 但等真机复测就摘 `in-progress`、加 `waiting-for-verify`（两者不并存）。
 - **弃单要恢复原状**：放弃或改派时摘掉 `in-progress`，把原来的 `ready-*` 或 `needs-triage` 加回，票面写一句为什么停——否则标签烂在票上，下一个会话不敢碰。

@@ -51,6 +51,7 @@
 
 ### 内部
 
+- `CLAUDE.md` 每条规则登记进 `rules.toml`，「开工前先有票」与「基线钉 SHA」只留一处正文（#843）
 - 新增规则注册表 `docs/agents/rules.toml`，守出处、守卫与锚点双向一致（#842）
 - vivo V2547DA 与 xiaomi M154FF 补机型 README：验证范围、分段用时与未验证项（#784）
 - 回读判定收成 `readback()`，每条目标一个结局；补点挑行另立（#706，ADR-0021）
