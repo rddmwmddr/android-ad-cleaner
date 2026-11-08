@@ -10,17 +10,17 @@
 
 违反任何一条都要停下来，向用户说明。
 
-1. **每条 adb 命令都带 `-s <序列号>`。** 电脑上可能连着多台设备（电视、模拟器）。
-2. **正常功能不能坏。** 下拉搜索、负一屏卡片、应用商店的安装和更新、浏览器、天气预警、快递和更新提醒要保留。
-3. **优先用 App 内的开关。** 动包只用 `pm suspend`，并且要用户同意。不用 `pm uninstall`，不用 `pm disable-user`。
-4. **不碰系统更新。** 不 root，不解 BL，不刷模块，不改 system 分区。
-5. **改之前说清楚，改完能还原。** 每一段动手之前，告诉用户这一段要关哪些开关。
-6. **不替用户同意协议。** 遇到用户协议、隐私政策、权限申请，点「取消」「以后再说」「不允许」「禁止」。不点「同意」「允许」。
-7. **不绕过锁屏。** `run.py check` 显示锁屏时，请用户解锁。
-8. **不截账号页。** 「我的」页、账号页、手机号页不截图；截到了要删除。
-9. **收尾还原插电常亮，提醒关闭开发者模式。** 结束时跑 `run.py finish`，然后提醒用户关闭开发者模式（§3 第 11 步）。
-10. **保护类开关要打开，不要关。** 「限制广告跟踪」「防止广告追踪」「阻止广告跟踪」「关闭个性化推荐」「减少广告」这类以「限制 / 防止 / 阻止 / 禁止 / 关闭 / 减少」开头的开关，打开才是保护。上面的词只是举例，判据是 `tool/polarity.py` 的 `NEG_PREFIX`（配合广告词一起认）。引擎的 `off()` 会把它们拨到「开」；手动操作时同样处理。
-11. **不挂这些包**：`com.heytap.quicksearchbox`（下拉搜索）、`com.coloros.assistantscreen`（负一屏）、各品牌应用商店。挂了功能会坏，`run.py` 会拒绝。
+1. <!-- rule:product.adb.device-serial -->**每条 adb 命令都带 `-s <序列号>`。** 电脑上可能连着多台设备（电视、模拟器）。
+2. <!-- rule:product.feature.preserve -->**正常功能不能坏。** 下拉搜索、负一屏卡片、应用商店的安装和更新、浏览器、天气预警、快递和更新提醒要保留。
+3. <!-- rule:product.package.suspend-only -->**优先用 App 内的开关。** 动包只用 `pm suspend`，并且要用户同意。不用 `pm uninstall`，不用 `pm disable-user`。
+4. <!-- rule:product.system.no-root -->**不碰系统更新。** 不 root，不解 BL，不刷模块，不改 system 分区。
+5. <!-- rule:product.change.explain-and-restore -->**改之前说清楚，改完能还原。** 每一段动手之前，告诉用户这一段要关哪些开关。
+6. <!-- rule:product.consent.never-agree -->**不替用户同意协议。** 遇到用户协议、隐私政策、权限申请，点「取消」「以后再说」「不允许」「禁止」。不点「同意」「允许」。
+7. <!-- rule:product.lockscreen.wait-for-owner -->**不绕过锁屏。** `run.py check` 显示锁屏时，请用户解锁。
+8. <!-- rule:product.account.no-screenshot -->**不截账号页。** 「我的」页、账号页、手机号页不截图；截到了要删除。
+9. <!-- rule:product.finish.restore-and-remind -->**收尾还原插电常亮，提醒关闭开发者模式。** 结束时跑 `run.py finish`，然后提醒用户关闭开发者模式（§3 第 11 步）。
+10. <!-- rule:product.switch.polarity -->**保护类开关要打开，不要关。** 「限制广告跟踪」「防止广告追踪」「阻止广告跟踪」「关闭个性化推荐」「减少广告」这类以「限制 / 防止 / 阻止 / 禁止 / 关闭 / 减少」开头的开关，打开才是保护。上面的词只是举例，判据是 `tool/polarity.py` 的 `NEG_PREFIX`（配合广告词一起认）。引擎的 `off()` 会把它们拨到「开」；手动操作时同样处理。
+11. <!-- rule:product.package.never-suspend -->**不挂这些包**：`com.heytap.quicksearchbox`（下拉搜索）、`com.coloros.assistantscreen`（负一屏）、各品牌应用商店。挂了功能会坏，`run.py` 会拒绝。
 
 ---
 
