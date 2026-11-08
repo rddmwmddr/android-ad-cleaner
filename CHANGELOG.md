@@ -51,6 +51,7 @@
 
 ### 内部
 
+- `CODING_STANDARDS.md` 判断项收成 18 条并逐条登记：「对拍要能证伪」9 条合一，补 `getattr` 守卫（#844）
 - `CLAUDE.md` 每条规则登记进 `rules.toml`，「开工前先有票」与「基线钉 SHA」只留一处正文（#843）
 - 新增规则注册表 `docs/agents/rules.toml`，守出处、守卫与锚点双向一致（#842）
 - vivo V2547DA 与 xiaomi M154FF 补机型 README：验证范围、分段用时与未验证项（#784）
