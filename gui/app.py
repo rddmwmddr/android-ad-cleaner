@@ -1146,6 +1146,17 @@ class Dispatcher:
         return True
 
 
+# 免安装版与旧名安装并存时的那条提示（#872）。必须写明「0.3.2 及更早版本装的名字」：
+# 0.4.0 安装包的 AppName 已经换成「肉呆去广告」，只写旧名字用户会对不上号。
+OLD_INSTALL_NOTE = (
+    "这台电脑上还装着旧版的「安卓去广告」（0.3.2 及更早版本装的名字），"
+    "它不会被现在运行的这份替换。"
+    "两种做法任选：从官网下载 Windows 安装版覆盖安装，新版会顶掉旧的；"
+    "或者先卸载旧的「安卓去广告」。卸载只删程序目录，数据和备份都保留。"
+)
+OLD_INSTALL_MARK = "old_install_noticed"
+
+
 class Api:
     def __init__(self, data_dir, adb=None, runner=None):
         self.data = ClientData(data_dir)
@@ -1203,6 +1214,19 @@ class Api:
     def env(self):
         return {"adb": self.adb, "data": self.data.root, "version": VERSION, "os": platform.system(),
                 "images": [f for f in sorted(os.listdir(os.path.join(BASE, "images"))) if f.startswith("dev-")]}
+
+    def old_install_notice(self):
+        """旧名安装还在时给一次提示；用户关掉后这一版不再出现（#872）。"""
+        if self.data.setting(OLD_INSTALL_MARK) == VERSION:
+            return {}
+        if not winpreflight.old_install_present():
+            return {}
+        return {"text": OLD_INSTALL_NOTE}
+
+    def dismiss_old_install(self):
+        """用户关掉提示：这一版不再出现，换下一版时再问一次（#872）。"""
+        self.data.put_setting(OLD_INSTALL_MARK, VERSION)
+        return True
 
     def latest_version(self):
         """有新版时返回 {version, url}，没有或查不到返回 {}。旧版不会自动更新：0.2.6 发布后，

@@ -371,6 +371,14 @@ why = "启动失败有三种来源（缺 WebView2、MOTW、原文拒载），顺
 expires_if = "Windows 安装包不再用 pywebview 与托管的 dll 时删。"
 
 [[rule]]
+id = "dev.windows.old-install-notice"
+source = "CLAUDE.md#开发"
+check = "test:test_win_preflight::OldInstallTests.test_an_old_install_next_to_a_portable_copy_is_reported"
+status = "enforced"
+why = "免安装版与安装版共用同一个 AppId，便携版完全在注册表之外，旧名「安卓去广告」的安装会一直留着（#814、#872）；判定要看四处键与当前 exe 目录，漏一处会漏提示，少比较一次目录会在新版已顶掉旧版时误提示。"
+expires_if = "免安装版不再与原安装并存，或 Windows 安装版不再走 Inno Setup 的卸载键时删。"
+
+[[rule]]
 id = "doc.numbers.reproducible-baselines"
 source = "CODING_STANDARDS.md#用户可见文档里的数字要能复现"
 check = "none"
@@ -1017,7 +1025,7 @@ id = "doc.release.gitee-portable-wording"
 source = "docs/agents/release.md#一轮发版的产物顺序"
 check = "none"
 status = "manual"
-why = "国内走 Gitee 时 Windows 访客只拿得到免安装版，它不替换也不卸载旧版；正文、下载页、README、docs/08 与 Gitee 发行版正文各覆盖自己那一处，页面写了不代表正文可以省。"
+why = "国内走 Gitee 时 Windows 访客只拿得到免安装版，它不替换也不卸载旧版；正文、下载页、README、docs/08 与 Gitee 发行版正文各覆盖自己那一处，页面写了不代表正文可以省；程序启动时的那条提示（#872）只在两个程序已经并存时出现，也不替代正文。"
 expires_if = "Gitee 也收 Windows 安装版、免安装版不再独占国内渠道时删。"
 
 [[rule]]

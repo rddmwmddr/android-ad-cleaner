@@ -52,6 +52,7 @@
 - adb 固定 platform-tools 37.0.1（`gui/app.py` 的 `ADB_PINNED`）；升级时改那张表，校验值按 Google `repository2-3.xml` 的 SHA-1 核对。 <!-- rule:dev.adb.pinned-platform-tools -->
 - 客户端数据路径看 `gui/app.py` 的 `ClientData`，备份目录看 [tool/backups.py](tool/backups.py) 的 `Backups`（root 由调用方给），工具模块用 `_tool()` 惰性取。 <!-- rule:dev.client.data-paths -->
 - 找「Windows 启动失败是缺 WebView2、被 MOTW 拦还是托管的 dll 被判成远程来源」先看 [gui/winpreflight.py](gui/winpreflight.py)：注册表三态、两个关键 dll 的 `Zone.Identifier` 判定与 `load_rejected()` 认的那两个原文子串只在那里定义（[ADR-0003](docs/adr/0003-desktop-client-import-and-dependencies.md)）；`gui/app.py` 的 `startup_advice()` 只按结论选文案，顺序是缺运行时 → MOTW → 原文拒载 → 未确认 → 兜底（带 MOTW 的 dll 也报同一句 `Failed to resolve`，所以 MOTW 在前）；`startup_failed()` 先经 `win_clipboard()` 把整段写进剪贴板再弹窗，写不进去才退回「按 Ctrl+C」（#811）。随包的 `<exe>.config` 由 [gui/dotnet_config.py](gui/dotnet_config.py) 写，`windows.spec` 收集完产物后调用。 <!-- rule:dev.windows.startup-verdicts -->
+- 找「免安装版启动时该不该提示旧版还在」先看 [gui/winpreflight.py](gui/winpreflight.py) 的 `old_install_present()`：旧产品名「安卓去广告」、四处卸载键（HKCU / HKLM 各含 32 位视图）、`Inno Setup: App Path` / `InstallLocation` 与当前 exe 目录的比较只在那里定义；`gui/app.py` 的 `Api.old_install_notice()` 只把结论变成一条提示，用户点「知道了」后 `settings.json` 的 `old_install_noticed` 记下这一版、下次不再出现；不写注册表，也不自动卸载（#872）。 <!-- rule:dev.windows.old-install-notice -->
 
 ## 错误日志上报
 
