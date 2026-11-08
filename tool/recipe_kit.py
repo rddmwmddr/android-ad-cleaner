@@ -6,8 +6,12 @@
 """
 
 import time
+from contextlib import nullcontext
 
 import adb_link
+
+# 脚本自带 `RESULTS` 时，每个段的结局用这四个词记一条（机型脚本的分段结果台账）
+DONE, SKIPPED, FAILED, NOT_RUN = "完成", "跳过", "未完成", "未执行"
 
 
 class SkipStep(RuntimeError):
@@ -20,6 +24,10 @@ def preamble(p, g):
     段包装与助手读 `g` 而不捕获初值：脚本重绑 ONLY / FAILED_STEPS 后立刻生效，
     测试装载之后再改名单驱动单段也生效。`SkipStep` 同样按 `g` 里的当前值取——
     脚本只换跳过异常类、仍用注入的段包装时，抛的和接的仍是同一个类。
+
+    `guard()` / `wrap()` / `detail()` / `RESULTS` 是四个可选的脚本侧钩子：段入口的型号守卫、
+    段内包装（等价于以前 `with safe_ui():`）、失败时的页面摘要、分段结果台账。脚本定义了就按它走，
+    没定义就什么都不做 —— 大多数脚本不需要，前导也不替它们造一个。
     """
     from fast import ScreenLocked     # fast 在顶部 import 本模块，取在调用时才不绕进循环
 
@@ -43,30 +51,46 @@ def preamble(p, g):
         def decorate(action):
             if g["ONLY"] and name not in g["ONLY"]:
                 return action
+            results = g.get("RESULTS")      # 调用时读：脚本的赋值在注入之后
             if g["HALTED"]:
                 # 中止之后不再碰手机：不读锁屏、不碰页面，只把这一条记成「未执行」。
                 g["FAILED_STEPS"].append(name)
                 g["HALTED_STEPS"].append(name)
+                if results is not None:
+                    results.append((name, NOT_RUN))
                 print(f"\n== {name}", flush=True)
                 print("  · 未执行：前一段中止了整批", flush=True)
                 return action
             print(f"\n== {name}", flush=True)
             p.miss = 0
             started = time.monotonic()
+            state = DONE
             try:
+                guard = g.get("guard")
+                if guard is not None:
+                    guard()                 # 型号 / 版本守卫：抛什么就按什么结局记
                 if p.locked():
                     raise ScreenLocked("手机锁屏了，请机主解锁后重跑")
-                action()
+                wrap = g.get("wrap")
+                with (wrap() if wrap is not None else nullcontext()):
+                    action()                # 脚本可选的段内包装（等价于以前 `with safe_ui():`）
             except adb_link.DeviceLost:
                 raise                  # 断线交还引擎：整轮停下，不逐段报
             except g.get("SkipStep", SkipStep) as reason:
                 g["SKIPPED_STEPS"].append(name)
+                state = SKIPPED
                 print(f"  · 跳过：{reason}", flush=True)
             except Exception as error:
                 g["FAILED_STEPS"].append(name)
+                state = FAILED
                 if isinstance(error, ScreenLocked):
                     g["HALTED"] = True
                 print(f"  ✗ 未完成：{error}", flush=True)
+                detail = g.get("detail")
+                if detail is not None:
+                    print(f"  · {detail()}", flush=True)
+            if results is not None:
+                results.append((name, state))
             print(f"  ({time.monotonic() - started:.0f} 秒)", flush=True)
             return action
         return decorate

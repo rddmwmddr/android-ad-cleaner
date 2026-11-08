@@ -216,6 +216,158 @@ class OnlyListTests(unittest.TestCase):
         self.assertEqual(scope["CALLS"], ["乙"])
 
 
+class DeviceGuardTests(unittest.TestCase):
+    """`guard()`：脚本自己声明「这台机对不上就不跑这一段」，由前导在段入口调用。"""
+
+    GUARDED = '''
+CALLS = []
+
+def guard():
+    GUARD()
+
+
+@step("甲")
+def _a():
+    CALLS.append("甲")
+
+@step("乙")
+def _b():
+    CALLS.append("乙")
+'''
+
+    def run_guarded(self, guard_body):
+        p = phone()
+        script = self.GUARDED.replace("GUARD()", guard_body)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "recipe.py")
+            path.write_text(script, encoding="utf-8")
+            scope, out = load_recipe(p, path, ())
+        return scope, out.getvalue()
+
+    def test_a_guard_that_skips_leaves_the_failed_ledger_empty(self):
+        scope, printed = self.run_guarded('skip("型号不匹配，跳过")')
+        self.assertEqual(scope["CALLS"], [])
+        self.assertEqual(scope["SKIPPED_STEPS"], ["甲", "乙"])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        self.assertIn("· 跳过：型号不匹配，跳过", printed)
+
+    def test_a_guard_that_raises_lands_in_the_failed_ledger(self):
+        scope, printed = self.run_guarded('require(False, "型号或系统版本不符")')
+        self.assertEqual(scope["CALLS"], [])
+        self.assertEqual(scope["FAILED_STEPS"], ["甲", "乙"])
+        self.assertIn("✗ 未完成：型号或系统版本不符", printed)
+
+    def test_a_guard_that_passes_lets_the_step_run(self):
+        scope, _ = self.run_guarded("pass")
+        self.assertEqual(scope["CALLS"], ["甲", "乙"])
+        self.assertEqual(scope["SKIPPED_STEPS"], [])
+
+
+class StepWrapTests(unittest.TestCase):
+    """`wrap()`：脚本声明「这一段在它的界面守卫里跑」，等价于以前每份脚本各写一次 `with safe_ui():`。"""
+
+    WRAPPED = '''
+from contextlib import contextmanager
+
+CALLS = []
+
+@contextmanager
+def wrap():
+    CALLS.append("进入")
+    try:
+        yield
+    finally:
+        CALLS.append("离开")
+
+
+@step("甲")
+def _a():
+    CALLS.append("甲")
+'''
+
+    def test_the_action_runs_inside_the_wrap(self):
+        p = phone()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "recipe.py")
+            path.write_text(self.WRAPPED, encoding="utf-8")
+            scope, _ = load_recipe(p, path, ())
+        self.assertEqual(scope["CALLS"], ["进入", "甲", "离开"])
+
+    def test_a_failure_inside_the_action_leaves_the_wrap(self):
+        p = phone()
+        script = self.WRAPPED.replace("CALLS.append(\"甲\")", 'require(False, "入口没找到")')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "recipe.py")
+            path.write_text(script, encoding="utf-8")
+            scope, _ = load_recipe(p, path, ())
+        self.assertEqual(scope["CALLS"], ["进入", "离开"])
+        self.assertEqual(scope["FAILED_STEPS"], ["甲"])
+
+
+class FailureDetailTests(unittest.TestCase):
+    """`detail()`：失败时再多打一行脚本自己的现场摘要（页面结构、计数器之类）。"""
+
+    def test_the_detail_line_follows_a_failed_step(self):
+        script = '''
+def detail():
+    return "当前页 com.example/.Main；标题 3 个"
+
+
+@step("甲")
+def _a():
+    require(False, "入口没找到")
+'''
+        p = phone()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "recipe.py")
+            path.write_text(script, encoding="utf-8")
+            scope, out = load_recipe(p, path, ())
+        self.assertIn("✗ 未完成：入口没找到\n  · 当前页 com.example/.Main；标题 3 个", out.getvalue())
+        self.assertEqual(scope["FAILED_STEPS"], ["甲"])
+
+
+class ResultsLedgerTests(unittest.TestCase):
+    """脚本自带 `RESULTS` 时，前导按同一个结局给它记一条 —— 分段结果台账不该只活在本地副本里。"""
+
+    WITH_RESULTS = '''
+CALLS = []
+RESULTS = []
+
+@step("甲")
+def _a():
+    CALLS.append("甲")
+
+@step("乙")
+def _b():
+    BODY
+
+@step("丙")
+def _c():
+    CALLS.append("丙")
+'''
+
+    def run_results(self, body='CALLS.append("乙")', allowed=None):
+        p = phone(**({"locked": locked_after(allowed)[0]} if allowed is not None else {}))
+        script = self.WITH_RESULTS.replace("BODY", body)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "recipe.py")
+            path.write_text(script, encoding="utf-8")
+            scope, _ = load_recipe(p, path, ())
+        return scope
+
+    def test_every_step_lands_in_the_ledger_with_its_outcome(self):
+        scope = self.run_results('skip("按约定跳过")')
+        self.assertEqual(scope["RESULTS"], [("甲", "完成"), ("乙", "跳过"), ("丙", "完成")])
+
+    def test_a_failed_step_is_recorded_as_unfinished(self):
+        scope = self.run_results('require(False, "入口没找到")')
+        self.assertEqual(scope["RESULTS"], [("甲", "完成"), ("乙", "未完成"), ("丙", "完成")])
+
+    def test_a_halted_step_is_recorded_as_not_executed(self):
+        scope = self.run_results(allowed=1)
+        self.assertEqual(scope["RESULTS"], [("甲", "完成"), ("乙", "未完成"), ("丙", "未执行")])
+
+
 class InjectionPointTests(unittest.TestCase):
     """三处执行点注入同一份：引擎跑脚本、适配自检、测试装载。这里验前两处，装载由本文件其余用例覆盖。"""
 
