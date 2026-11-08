@@ -51,6 +51,7 @@
 
 ### 内部
 
+- `CONTEXT.md` 两条 domain 约束登记进 `rules.toml`，其余三条指向已有规则与产品契约（#846、#840）
 - `docs/agents` 六份登记进 `rules.toml`，补「锚点须在 source 小节」守卫，三处重复正文各留一处（#845）
 - `CODING_STANDARDS.md` 判断项收成 18 条并逐条登记：「对拍要能证伪」9 条合一，补 `getattr` 守卫（#844）
 - `CLAUDE.md` 每条规则登记进 `rules.toml`，「开工前先有票」与「基线钉 SHA」只留一处正文（#843）
