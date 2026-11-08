@@ -64,6 +64,15 @@ why = "并行会话会在开工到推送之间推进 main，基于旧 SHA 推送
 expires_if = "平台保证 PR 冲突时仍跑 CI，或改由机器人自动 rebase 时删。"
 
 [[rule]]
+id = "dev.git.dco-signoff"
+source = "CLAUDE.md#开发"
+check = "ci:dco"
+status = "enforced"
+why = "DCO 此前只在本机 commit-msg 钩子里执行：未装钩子的那条线签署率 1%、外部贡献者 0%，同一条写下来的规则约束力取决于谁在哪台机器提交（#848）。job 在 PR 上跑，缺 signoff 或签署邮箱与作者不符就红，并点名 sha 与主题。"
+expires_if = "分支保护改用别的守卫接管 DCO，或仓库不再要求 DCO、改由平台自动签署时删。"
+since = "42e5a40"
+
+[[rule]]
 id = "dev.ci.two-interpreters"
 source = "CLAUDE.md#开发"
 check = "none"
