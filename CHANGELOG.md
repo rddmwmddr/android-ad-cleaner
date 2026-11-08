@@ -53,6 +53,7 @@
 
 ### 内部
 
+- 新增 `CONTRIBUTING.md` 人类贡献者入口，只做路由不复述规则（#851）
 - PR 新增 `dco` 检查：非 merge 提交缺 signoff 或邮箱与作者不符就红，只判 PR 范围（#848）
 - `dev.git.dco-signoff` 登记进 `rules.toml`，`ci:dco` 是第一个指向 workflow 的 enforced 条目（#848、#842）
 - PR 新增 `conventional` 检查：非 merge 提交主题不合规就红，只判 PR 范围（#849）
