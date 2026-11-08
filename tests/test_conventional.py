@@ -1,9 +1,6 @@
 """Conventional Commits 校验（tool/check_conventional.py）：`base..head` 里每个非 merge 提交的主题都要带合规前缀（#849）。"""
-import os
 import re
-import subprocess
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -11,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 
 import check_conventional  # noqa: E402
+import fixtures  # noqa: E402
 
 SCRIPT = ROOT / "tool" / "check_conventional.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "commit-checks.yml"
@@ -67,35 +65,14 @@ class RangeTest(unittest.TestCase):
     """端到端：在真 git 仓上跑脚本，退出码与输出就是 CI 看到的结论。"""
 
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.dir = Path(self.tmp.name)
-        config = self.dir / "gitconfig"
-        config.write_text("", encoding="utf-8")
-        # 本机全局配置里有 commit-msg 钩子，测试仓必须绕开它，否则写不出不合规的提交。
-        self.env = dict(os.environ, GIT_CONFIG_GLOBAL=str(config), GIT_CONFIG_NOSYSTEM="1", HOME=str(self.dir))
-        self.git("init", "-q", "-b", "main")
-        self.git("config", "user.name", "Rikki")
-        self.git("config", "user.email", "rikki@example.com")
-
-    def git(self, *args):
-        done = subprocess.run(["git", *args], cwd=self.dir, env=self.env, capture_output=True,
-                              text=True, encoding="utf-8", errors="replace", check=True)
-        return done.stdout.strip()
+        self.repo = fixtures.GitRepo()
+        self.addCleanup(self.repo.cleanup)
 
     def commit(self, subject):
-        self.count = getattr(self, "count", 0) + 1
-        name = f"{self.count}.txt"
-        (self.dir / name).write_text(name, encoding="utf-8")   # 每个提交都要有内容，否则 git 拒绝提交
-        self.git("add", name)
-        self.git("commit", "-q", "-m", subject)
-        return self.git("rev-parse", "HEAD")
+        return self.repo.commit(subject)
 
     def run_check(self, base, head="HEAD"):
-        done = subprocess.run([sys.executable, str(SCRIPT), f"{base}..{head}"], cwd=self.dir,
-                              env=self.env, capture_output=True, text=True,
-                              encoding="utf-8", errors="replace")
-        return done.returncode, done.stdout + done.stderr
+        return self.repo.run(SCRIPT, f"{base}..{head}")
 
     def test_subject_without_prefix_fails_and_names_it(self):
         base = self.commit("fix: 起点")
@@ -122,11 +99,11 @@ class RangeTest(unittest.TestCase):
 
     def test_merge_commit_does_not_participate(self):
         base = self.commit("chore: 起点")
-        self.git("checkout", "-q", "-b", "side")
+        self.repo.git("checkout", "-q", "-b", "side")
         self.commit("fix: 侧支")
-        self.git("checkout", "-q", "main")
+        self.repo.git("checkout", "-q", "main")
         self.commit("fix: 主干")
-        self.git("merge", "-q", "--no-ff", "side", "-m", "Merge branch 'side'")
+        self.repo.git("merge", "-q", "--no-ff", "side", "-m", "Merge branch 'side'")
         code, out = self.run_check(base)
         self.assertEqual(code, 0, out)
 
@@ -140,11 +117,9 @@ class RangeTest(unittest.TestCase):
         # Windows 控制台与管道默认 cp1252：打印中文不能把校验本身打崩。
         base = self.commit("chore: 起点")
         sha = self.commit("初版：引擎")
-        done = subprocess.run([sys.executable, str(SCRIPT), f"{base}..HEAD"], cwd=self.dir,
-                              env=dict(self.env, PYTHONIOENCODING="cp1252"), capture_output=True,
-                              text=True, encoding="utf-8", errors="replace")
-        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
-        self.assertIn(sha, done.stdout)
+        code, out = self.repo.run(SCRIPT, f"{base}..HEAD", env_extra={"PYTHONIOENCODING": "cp1252"})
+        self.assertEqual(code, 1, out)
+        self.assertIn(sha, out)
 
 
 def uncommented(text):
