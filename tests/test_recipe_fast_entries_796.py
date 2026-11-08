@@ -118,11 +118,13 @@ class PnmAdTrackingEntryTests(unittest.TestCase):
         p.setting.assert_called_once_with("广告", "广告与隐私")
 
     def test_ad_tracking_does_not_swallow_a_lost_connection(self):
-        """断线不是「这一档不通」：不许当成入口改名去走设置搜索。"""
+        """断线不是「这一档不通」：不许当成入口改名去走设置搜索。
+
+        段包装把 `DeviceLost` 交还引擎，整轮停下、退出码 1；不逐段记台账（ADR-0029）。"""
         p = phone()
         p.start.side_effect = adb_link.DeviceLost("adb 断了")
-        scope, _ = load(p, PNM, "广告跟踪")
-        self.assertEqual(scope["FAILED_STEPS"], ["广告跟踪"])
+        with self.assertRaises(adb_link.DeviceLost):
+            load(p, PNM, "广告跟踪")
         p.setting.assert_not_called()
 
     def test_ad_tracking_does_not_swallow_a_locked_screen(self):

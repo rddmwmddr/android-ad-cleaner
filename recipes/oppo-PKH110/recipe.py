@@ -5,9 +5,6 @@ BUILD = "PKH110_17.0.0.103"
 MODELS = ["PKH110"]
 
 import time
-
-ONLY = globals().get("ONLY") or []
-FAILED_STEPS = []
 RESULTS = []
 
 # 仅关闭明确列名的推广入口。没有列出的入口（包括未来新增项）不主动处理。
@@ -20,36 +17,6 @@ STORE_PROMOTIONS = [
     "更新&下载专区：底部弹窗推荐", "活动式详情页", "详情页：活动", "游戏详情页：游戏礼包",
     "手机管家：应用推荐", "文件管理：应用推荐", "游戏专区：活动集合", "详情页：限时活动", "福利专区",
 ]
-
-
-def step(name):
-    def deco(function):
-        if ONLY and name not in ONLY:
-            return function
-        model = p.d.shell("getprop ro.product.model").output.strip()
-        build = p.d.shell("getprop ro.build.display.id").output.strip()
-        if model not in MODELS or not build.startswith(BUILD):
-            print(f"\n== {name}：型号或系统版本不同，跳过；请重新核对页面")
-            RESULTS.append((name, "version_mismatch"))
-            return function
-        if p.locked():
-            print(f"\n== {name}：手机锁屏，跳过，请机主解锁")
-            RESULTS.append((name, "locked"))
-            return function
-        print(f"\n== {name}", flush=True)
-        p.miss = 0
-        started = time.monotonic()
-        try:
-            completed = function()
-            state = "completed" if completed else "incomplete"
-        except Exception as error:
-            FAILED_STEPS.append(name)
-            print(f"  ✗ 未完成：{error}")
-            state = "failed"
-        RESULTS.append((name, state))
-        print(f"  ({time.monotonic() - started:.0f} 秒，{state})", flush=True)
-        return function
-    return deco
 
 
 def wait_page(activity, title, timeout=6):
@@ -162,6 +129,13 @@ def off_exact(names, page, max_screens=16):
         print(f"  ! 未关闭 {sorted(failed)}；本机型无此项 {sorted(wanted - seen)}")
         return not failed
     return True
+
+
+def guard():
+    model = p.d.shell("getprop ro.product.model").output.strip()
+    build = p.d.shell("getprop ro.build.display.id").output.strip()
+    if model not in MODELS or not build.startswith(BUILD):
+        skip("型号或系统版本不同，跳过；请重新核对页面")
 
 
 @step("广告跟踪")

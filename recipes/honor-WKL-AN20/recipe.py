@@ -8,14 +8,9 @@ import copy
 from contextlib import contextmanager
 import time
 
-import adb_link
 from fast import CONFIRM, Phone, bounds, want_state
-
-ONLY = globals().get("ONLY") or []
-FAILED_STEPS = []
 RESULTS = []
 VERIFIED_SWITCHES = 0
-HALTED = False
 CHANGES = {
     "广告跟踪": "应用的 OAID 读取权限",
     "智能推荐服务": "智能推荐服务",
@@ -31,15 +26,6 @@ CHANGES = {
     "魔法画报": "锁屏壁纸轮播、锁屏进入魔法画报、数据流量自动更新",
     "音乐": "朋友页显示推荐动态、展示“摇一摇”类开屏广告、个性化广告推荐",
 }
-
-
-class SkipStep(Exception):
-    """本段按约定跳过，不算失败：型号或版本不符，或前面已因锁屏中止。"""
-
-
-def require(ok, reason):
-    if not ok:
-        raise RuntimeError(reason)
 
 
 def labels(root=None):
@@ -126,44 +112,14 @@ def safe_ui():
             setattr(p, name, value)
 
 
-def step(name):
-    def decorate(action):
-        global HALTED
-        if ONLY and name not in ONLY:
-            return action
-        print("\n== " + name + "：将核对并调整「" + CHANGES[name] + "」", flush=True)
-        started = time.monotonic()
-        status = "未完成"
-        try:
-            if HALTED:
-                raise SkipStep("前面检测到锁屏，后续段已停止")
-            model = p.d.shell("getprop ro.product.model").output.strip()
-            build = p.d.shell("getprop ro.build.display.id").output.strip()
-            if model not in MODELS:
-                raise SkipStep("型号不匹配，跳过；不使用其他型号的路径")
-            if not build.startswith(BUILD):
-                raise SkipStep("系统版本不匹配，跳过；请重新核对页面")
-            if p.locked():
-                HALTED = True
-                raise RuntimeError("手机锁屏，请机主解锁后重跑")
-            p.miss = 0
-            with safe_ui():
-                action()
-            status = "已回读"
-        except adb_link.DeviceLost:
-            raise  # 交还引擎，整轮停止；不继续操作其他应用。
-        except SkipStep as error:
-            status = "跳过"
-            print("  · " + str(error), flush=True)
-        except Exception as error:
-            FAILED_STEPS.append(name)
-            print("  ✗ 未完成：" + str(error), flush=True)
-            if p.locked():
-                HALTED = True
-        RESULTS.append((name, status))
-        print(f"  {status}，{time.monotonic() - started:.0f} 秒", flush=True)
-        return action
-    return decorate
+def guard():
+    if p.d.shell("getprop ro.product.model").output.strip() not in MODELS:
+        skip("型号不匹配，跳过；不使用其他型号的路径")
+    if not p.d.shell("getprop ro.build.display.id").output.strip().startswith(BUILD):
+        skip("系统版本不匹配，跳过；请重新核对页面")
+
+
+wrap = safe_ui
 
 
 def scan(max_screens):
@@ -418,7 +374,7 @@ def _():
     # 此机之前由机主手动打开，未验证从首页可靠自动进入；不复制其他机型的图标位置。
     # 全跑时跳过此段；手动进入「更多设置」后用 recipe 音乐 单独执行。
     if ONLY != ["音乐"]:
-        raise SkipStep("请手动打开荣耀音乐 → 我的 → 设置 → 更多设置，再单段运行「音乐」")
+        skip("请手动打开荣耀音乐 → 我的 → 设置 → 更多设置，再单段运行「音乐」")
     package = "com.hihonor.cloudmusic"
     page(package, "消息和隐私设置")
     tap("消息和隐私设置")

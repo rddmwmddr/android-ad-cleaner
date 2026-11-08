@@ -65,10 +65,11 @@ class XiaomiTest(unittest.TestCase):
         self.assertEqual(p.entry.call_args_list[0].args[0], "隐私与安全")
 
     def test_lost_connection_does_not_walk_the_menu(self):
+        """断线交还引擎、整轮停下，不逐段记台账（ADR-0029）；这里只守「不许改走菜单」。"""
         p = phone(adb_link.DeviceLost("断了"))
-        scope, _ = self.run_step("系统广告", p)
+        with self.assertRaises(adb_link.DeviceLost):
+            self.run_step("系统广告", p)
         self.assertEqual(shells(p), [])
-        self.assertEqual(scope["FAILED_STEPS"], ["系统广告"])
 
     def test_lost_in_the_middle_does_not_look_like_an_unreachable_page(self):
         """读到一半断线时 Phone 只置 lost、抛的是普通 RuntimeError（#293、#667）：不能当成「这一页打不开」。"""
