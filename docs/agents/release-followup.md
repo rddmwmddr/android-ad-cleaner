@@ -140,6 +140,7 @@ Issues labelled `waiting-for-verify` have a fix on `main` that the reporter has 
 | #702 | @woosphinx | 荣耀 600 超级版 / VKJ-AN00 / MagicOS（Android 16） | 诊断在 `adb 设备：0 台` 时说明调试接口有没有登记 adb 需要的 GUID（#802，未发布） | 报告者的机器已按排障文档补过 GUID，应看到「ADB 接口已登记 adb 需要的 device interface GUID」这一行；换一台没修过的同类机能验到「未登记…（实际登记的 GUID：{…}）」。原有的 `- USB 设备：…硬件 ID：…` 行仍在、末尾没有序列号，也能顺带销掉 #673 在 docs/09 的缺口 |
 | #639 | @neurotracee | HONOR DVD-AN00 / MagicOS 10.0.0.179（Android 16，借 `recipes/honor-PNM-AN10`） | 设置搜索失败后离开搜索页并回到设置首页（未发布） | YOYO 段搜不到「新闻资讯」时日志出现「✗ 没搜到「新闻资讯」，跳过」后直接进下一段，手写输入法收起，不再一直画「丨」、不再空转 78 秒。若退场没成功会多一行「· 设置搜索页退不出去，当前停在 …」，把那行贴回来 |
 | #597 | @AAAAAPang | Windows 11 24H2，便携版 zip 解压（手机是 REDMI K80 Pro / 24122RKC7C） | 随包 `<exe>.config` 打开 `loadFromRemoteSources`，并给这一类失败单独归因（PR #810，未发布） | 解压后 `AndroidAdCleaner.exe` 与 `aac-cli.exe` 旁应各有一份同名 `.exe.config`，双击直接能起，不用再手工建文件；仍起不来时弹窗单独说「本地程序集被判成远程来源」并给出这两步，不再是「按别的原因退出」；`--smoke-gui` 的 `startup:` 行是 `webview2=… motw=… load=unresolved` |
+| #832 | @SonettoGu14 | Xiaomi MIX Flip 2 / 2505APX7BC / HyperOS、Android 16（底包 `BP2A.250605.031.A3`，合盖外屏） | 新增专用脚本 `recipes/xiaomi-2505APX7BC`（PR #836，未发布） | 不带 `--ref` 跑 `recipe`：`check` 的「机型脚本」一行写 `recipes/xiaomi-2505APX7BC/recipe.py`、版本判定「相同」。主题段不再停在「「隐私设置」没找到」，浏览器段不再报「未找到浏览器底部「菜单」」，两段都该出现逐项核对行；天气与日历两段各打一行「天气：本版无此类开关…跳过」「日历：本版无此类开关…跳过」，这两页上不该有任何开关被拨动。仍有段失败时会打印停在哪个 Activity，把那行贴回来 |
 
 2026-11-07：#597 随 PR #810 合入 `main`（`8b52891`），本行补登。修复是随包配置加一条启动归因，报告者的机器要装下一版 zip 才验得到；`build-windows.yml` 不守 PR，两份 config 真进 zip 只在构建机上跑一次才能确认。
 
