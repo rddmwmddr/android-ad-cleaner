@@ -10,28 +10,16 @@ merge 提交整条跳过——GitHub 网页 / API 合并产生的合并提交不
 退出码：0 全部合规，1 有违规（日志逐条点名 sha 与主题），2 参数或 git 出错。
 """
 import re
-import subprocess
 import sys
-
-for _st in (sys.stdout, sys.stderr):
-    try:
-        _st.reconfigure(encoding="utf-8", errors="replace")   # Windows 控制台默认不是 UTF-8
-    except Exception:
-        pass
 from dataclasses import dataclass
+
+from commits import Commit, read_commits, use_utf8_console
+
+use_utf8_console()
 
 SIGNOFF = re.compile(r"^[ \t]*Signed-off-by:[ \t]*.*?<([^<>]*)>[ \t]*$", re.IGNORECASE | re.MULTILINE)
 MISSING = "missing"
 MISMATCH = "mismatch"
-
-
-@dataclass(frozen=True)
-class Commit:
-    sha: str
-    author_email: str
-    subject: str
-    body: str
-    merge: bool
 
 
 @dataclass(frozen=True)
@@ -59,22 +47,6 @@ def violations(commits):
                 item, MISMATCH,
                 f"Signed-off-by 邮箱与作者不符（作者 {item.author_email}，签署 {', '.join(signed)}）"))
     return found
-
-
-def git(*args):
-    done = subprocess.run(["git", *args], capture_output=True, text=True,
-                          encoding="utf-8", errors="replace")
-    if done.returncode:
-        raise RuntimeError(f"git {' '.join(args)} 失败：{done.stderr.strip()}")
-    return done.stdout
-
-
-def read_commits(rev_range):
-    """按 `%x00` 分字段读提交：NUL 不可能出现在提交信息或邮箱里，正文换行不会切错。"""
-    for sha in git("rev-list", rev_range).split():
-        parents, email, subject, body = git(
-            "log", "-1", "--format=%P%x00%ae%x00%s%x00%b", sha).split("\x00", 3)
-        yield Commit(sha, email, subject, body, merge=len(parents.split()) > 1)
 
 
 def main(argv):
