@@ -1,0 +1,24 @@
+# 维护规则的注册表。规则正文留在各文档里，这里只做索引，不复述正文。
+# 每条在正文对应行的行尾挂 `<!-- rule:<id> -->` 锚点（ADR-0028），
+# `tests/test_rules_registry.py` 守三条不变式：source 指得到真实出处、enforced 的 check 解析得到真实守卫、
+# 锚点与条目双向一致。`AGENTS.md` 的产品契约不进这张表，由发版 checklist 对照。
+#
+# 字段（除 since 外必填）：
+#   id          `域.对象.断言`，域取 dev | doc | domain
+#   source      `<文档>#<小节标题>`
+#   check       与 status 配对：enforced 指到真实守卫（`test:<模块>::<用例>` / `ci:<job>` / `code:<路径>:<名字>`）；
+#               code 指到写死这条规则的代码（`code:<路径>:<名字>`）；manual / advisory / dead 写 none
+#   status      enforced 有能返红的守卫 | manual 有判据但只能人看 | advisory 偏好、无判据
+#               dead 指不到东西或被取代、待删 | code 在实现里写死，改坏要改代码本身
+#   why         这条规则为什么存在：事故，或删掉它会坏的具体场景
+#   expires_if  什么情况下可以删
+#   since       引入该规则的提交（可选）
+
+[[rule]]
+id = "dev.ruff.pinned-and-scoped"
+source = "CLAUDE.md#开发"
+check = "test:test_doc_consistency::LintCommandTests.test_ruff_targets_match_everywhere"
+status = "enforced"
+why = "CLAUDE.md 曾只写「同一份 CI 里跑 ruff」，本地没有可执行命令，agent 各自猜版本；现在版本钉 0.17.3，目标清单在 CLAUDE.md、release.md 与 CI 两个 job 三处逐字一致（b17d420、#624）。"
+expires_if = "CI 与本地共用一个命令来源、目标清单不再需要三处对照时，连同 LintCommandTests 一起删。"
+since = "b17d420"
