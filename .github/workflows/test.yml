@@ -50,8 +50,14 @@ jobs:
           pip install ruff==0.17.3
           ruff check --select F,E9 tool tests gui android/app/src/main/python
       - name: 设备无关回归测试
-        # COVERAGE_FILE 的字面量与下面 artifact 的 name / path 必须逐字对上
-        run: COVERAGE_FILE=coverage-Linux.data coverage run -m unittest discover -s tests -v
+        # COVERAGE_FILE 的字面量与下面 artifact 的 name / path 必须逐字对上；日志留下来给 summary 解析
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          COVERAGE_FILE=coverage-Linux.data coverage run -m unittest discover -s tests -v 2>&1 | tee unittest.log
+          rc=${PIPESTATUS[0]}
+          python tool/unittest_summary.py unittest.log "Linux / 3.13" "${HEAD_SHA:0:7}" >> "$GITHUB_STEP_SUMMARY" || true
+          exit "$rc"
       - uses: actions/upload-artifact@v5
         with:
           name: coverage-${{ runner.os }}
@@ -88,10 +94,15 @@ jobs:
           "ADB=$adb" >> $env:GITHUB_ENV
           & $adb version
       - name: 设备无关回归测试
-        # 这里是 PowerShell，赋值只能走 $env:；COVERAGE_FILE 与 artifact 的 name / path 逐字对上
+        # 统一用 bash：summary 解析与 Linux 是同一份脚本，PowerShell 下 VAR=value 和 PIPESTATUS 都不成立
+        shell: bash
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          $env:COVERAGE_FILE = "coverage-Windows.data"
-          coverage run -m unittest discover -s tests -v
+          COVERAGE_FILE=coverage-Windows.data coverage run -m unittest discover -s tests -v 2>&1 | tee unittest.log
+          rc=${PIPESTATUS[0]}
+          python tool/unittest_summary.py unittest.log "Windows / 3.12" "${HEAD_SHA:0:7}" >> "$GITHUB_STEP_SUMMARY" || true
+          exit "$rc"
       - uses: actions/upload-artifact@v5
         with:
           name: coverage-${{ runner.os }}
