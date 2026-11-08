@@ -1,4 +1,4 @@
-"""文档与单一来源一致：ADR 字段表（#467）、品牌连点表（#654）、官网共享样式（#653）、教程截图 alt（#655）、站点与侧栏图标同源（#669）、ADR 索引（#624）、静态检查目标（#624）、手机版措辞的宿主边界（#732）、adapt 的 -s 写法（#740）、Windows USB 提示三分支（#785）。"""
+"""文档与单一来源一致：ADR 字段表（#467）、品牌连点表（#654）、官网共享样式（#653）、教程截图 alt（#655）、站点与侧栏图标同源（#669）、ADR 索引（#624）、静态检查目标（#624）、手机版措辞的宿主边界（#732）、adapt 的 -s 写法（#740）、Windows USB 提示三分支（#785）、贡献入口不复述规则（#851）。"""
 import re
 import sys
 import unittest
@@ -16,6 +16,9 @@ import run
 
 ADR = ROOT / "docs/adr/0006-channel-classification.md"
 CLAUDE = ROOT / "CLAUDE.md"
+CONTRIBUTING = ROOT / "CONTRIBUTING.md"
+REPEAT_WINDOW = 40
+ENTRY_DOCS = ("CLAUDE.md", "CODING_STANDARDS.md", "docs/agents/", "CONTEXT.md", "AGENTS.md")
 ADR_NAME = re.compile(r"^(\d{4})-[a-z0-9-]+\.md$")
 BRAND_TAP_TARGETS = {"html", "readme", "dev_doc"}
 TUTORIAL_PAGE = ROOT / "android-tutorial.html"
@@ -360,6 +363,70 @@ class SharedAssetTests(unittest.TestCase):
         self.assertEqual((ROOT / "gui/web/img/logo.png").read_bytes(),
                          (ROOT / "images/roudai-icon.png").read_bytes(),
                          "两处图标已不一致：换图时把 gui/web/img/logo.png 一并更新")
+
+
+def rule_docs():
+    return [CLAUDE, ROOT / "CODING_STANDARDS.md"] + sorted((ROOT / "docs/agents").glob("*.md"))
+
+
+def flat_text(text):
+    """抹掉空白、链接目标、围栏代码块与行内代码：命令与路径本来就该重复写，只比散文。"""
+    text = re.sub(r"```.*?```", "", text, flags=re.S)
+    text = re.sub(r"\]\([^)\s]*\)", "]", text)
+    text = re.sub(r"`[^`\n]*`", "", text)
+    return re.sub(r"\s+", "", text)
+
+
+def ngrams(text, size):
+    return {text[i:i + size] for i in range(len(text) - size + 1)}
+
+
+class ContributingDocTests(unittest.TestCase):
+    """CONTRIBUTING.md 只做路由：五步流程、指针表、与 AGENTS.md 的分工（#851）。"""
+
+    @classmethod
+    def setUpClass(cls):
+        if not CONTRIBUTING.exists():
+            raise AssertionError("CONTRIBUTING.md 不存在")
+        cls.text = CONTRIBUTING.read_text(encoding="utf-8")
+
+    def test_file_fits_the_line_budget(self):
+        """票面 #851 的验收项：全文 ≤ 80 行。"""
+        lines = self.text.splitlines()
+        self.assertLessEqual(len(lines), 80, "CONTRIBUTING.md 应 ≤ 80 行（票面 #851），实为 %d 行" % len(lines))
+
+    def test_every_linked_path_exists(self):
+        links = re.findall(r"\]\(([^)#\s]+)\)", self.text)
+        self.assertTrue(links, "没读到任何相对链接，守卫会空转")
+        missing = [link for link in links if not (ROOT / link).exists()]
+        self.assertEqual(missing, [], "这些指向的文件不存在：" + "、".join(missing))
+
+    def test_does_not_repeat_rule_prose(self):
+        """散文与规则文档不重合 ≥40 字（票面 #851）：规则正文一处定义、其余只给指针。"""
+        mine = flat_text(self.text)
+        self.assertGreaterEqual(len(mine), REPEAT_WINDOW, "正文太短，守卫会空转")
+        shared = set()
+        for path in rule_docs():
+            shared |= ngrams(flat_text(path.read_text(encoding="utf-8")), REPEAT_WINDOW)
+        repeated = sorted(w for w in ngrams(mine, REPEAT_WINDOW) if w in shared)
+        self.assertEqual(repeated, [],
+                         "这些片段与规则文档逐字重合，改成指向：" + "、".join(repeated[:3]))
+
+    def test_five_steps_and_the_audience_boundary(self):
+        for step in ("开票", "分支", "提交", "回归", "PR"):
+            with self.subTest(step=step):
+                self.assertIn(step, self.text, "五步流程缺「%s」" % step)
+        self.assertIn("用户侧", self.text, "要写清 AGENTS.md 面向用户侧 agent")
+        self.assertIn("人类贡献者", self.text, "要写清本文件面向人类贡献者")
+
+    def test_pointer_table_covers_the_entrypoints(self):
+        """只查「规则在哪」那张表：表外顺带提到某个文件不算收录（票面 #851）。"""
+        starts = [i for i, line in enumerate(self.text.splitlines()) if line.strip() == "## 规则在哪"]
+        self.assertEqual(len(starts), 1, "应有一节「## 规则在哪」")
+        table = "\n".join(self.text.splitlines()[starts[0]:])
+        for path in ENTRY_DOCS:
+            with self.subTest(path=path):
+                self.assertIn("](%s)" % path, table, "指针表缺 %s" % path)
 
 
 if __name__ == "__main__":
