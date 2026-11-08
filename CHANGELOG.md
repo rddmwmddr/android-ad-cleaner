@@ -53,6 +53,7 @@
 
 ### 内部
 
+- CI 新增 `coverage` job：Linux 与 Windows 两份数据合并成一份报告，进日志与 artifact，不设阈值（#858）
 - CI：Android job 加跑 JVM 单测，ruff 只留 Linux 一份；workflow 加重推取消，test 与打包加超时（#856）
 - 新增 `CONTRIBUTING.md` 人类贡献者入口，只做路由不复述规则（#851）
 - PR 新增 `dco` 检查：非 merge 提交缺 signoff 或邮箱与作者不符就红，只判 PR 范围（#848）

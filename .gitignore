@@ -27,3 +27,8 @@ node_modules/
 android/local.properties
 android/.gradle/
 android/app/build/
+
+# 覆盖率产物：本地一份、CI 两个平台各一份中间数据，合并 job 产 coverage.xml
+.coverage
+coverage-*.data
+coverage.xml

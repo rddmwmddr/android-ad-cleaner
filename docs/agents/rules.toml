@@ -28,7 +28,7 @@ id = "dev.tests.regression-command"
 source = "CLAUDE.md#开发"
 check = "none"
 status = "manual"
-why = "回归命令与解释器写过三种说法，agent 各自猜，报一串 ModuleNotFoundError 或跑出不同结果；CI 的 unittest job 恰好跑同一条命令、只装 requirements.txt，但没有测试比对正文与 CI，改错正文不会红。"
+why = "回归命令与解释器写过三种说法，agent 各自猜，报一串 ModuleNotFoundError 或跑出不同结果；CI 的 unittest job 跑的是同一条 discover，只是外面包了一层 coverage 收集（见 dev.coverage.two-platform-merge），但没有测试比对正文与 CI，改错正文不会红。"
 expires_if = "本地入口收成一条脚本、CI 不再直接跑 unittest discover 时删。"
 
 [[rule]]
@@ -97,6 +97,14 @@ status = "enforced"
 why = "CLAUDE.md 曾只写「同一份 CI 里跑 ruff」，本地没有可执行命令，agent 各自猜版本；现在版本钉 0.17.3、目标清单在 CLAUDE.md、release.md、CONTRIBUTING.md 与 CI 逐字一致（b17d420、#624；CONTRIBUTING.md 由 #851 补入），ruff 平台无关，只在 Linux job 跑一次（#856）。守卫比的是目标清单，版本号多处一致仍靠人。"
 expires_if = "CI 与本地共用一个命令来源、目标清单不再需要多处对照时，连同 LintCommandTests 一起删。"
 since = "b17d420"
+
+[[rule]]
+id = "dev.coverage.two-platform-merge"
+source = "CLAUDE.md#开发"
+check = "ci:coverage"
+status = "enforced"
+why = "覆盖率与 ruff 相反，结论依平台而变：`gui/app.py` 的 Windows 剪贴板分支在 Linux 上永远 0 覆盖，Windows job 又 skip 掉 POSIX-only 用例，任何单平台数字都低估。`coverage` job 只保证两份数据合得上（日志里的 `Combined 2 files`）与报告产出，不保证数字本身，也不设阈值——omit 清单与阈值都是判断题，硬编码进 CI 会长期误伤 Windows-only 分支（#858）。"
+expires_if = "Phase 2 上了 diff coverage 或门禁、这条要换成带判据的守卫时重写；只剩一个平台的 CI 时删。"
 
 [[rule]]
 id = "dev.tests.frontend-harness"
