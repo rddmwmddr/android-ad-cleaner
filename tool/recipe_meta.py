@@ -1,8 +1,15 @@
-"""机型脚本头部的元数据：录制版本（`BUILD`）、机型列表（`MODELS`）与段名（`@step`）。
+"""机型脚本：有哪些文件，以及头部的元数据（录制版本 `BUILD`、机型列表 `MODELS`、段名 `@step`）。
 
 单独成模块是为了让非 CLI 代码读得到：`run.py` 一 import 就注入路径、导 adb、重配输出流、解析备份根目录。
 """
+import glob
+import os
 import re
+
+
+def recipe_files(recipes_dir):
+    """`recipes_dir` 下每个机型脚本的路径，含 `recipe_android15.py` 这类变体。"""
+    return sorted(glob.glob(os.path.join(recipes_dir, "*", "recipe*.py")))
 
 
 def recipe_meta(path):

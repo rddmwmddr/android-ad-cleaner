@@ -1,0 +1,8 @@
+# 每份机型脚本最后一次真机验证（#916）。读它、打印它：python3 tool/verify_ledger.py
+#
+# key 是相对 recipes/ 的路径：同一目录下的变体各记一条，不是目录级。
+# ["xiaomi-24129PN74C/recipe_os4.py"]
+# build = "24129PN74C_OS4.0.1.0.WNDCNXM"   # 真机上的完整系统 build 串，不是脚本的 BUILD 前缀
+# date = "2026-11-05"                      # 验证日期，YYYY-MM-DD
+# by = "@login"                            # 验证人：@login 或 机主，与复测队列同格式
+# tier = "部分验证"                        # 已验证 / 部分验证 / 未记录
