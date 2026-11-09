@@ -455,24 +455,24 @@ footer a:hover { color: var(--ink); }
 /* ===== 发布信息：发新版时只改这里。国内下载走 gitee（gui/upload_gitee.py 上传）。
    Gitee 不可用时的退路：gitee 留空，跑 gui/upload_baidu.sh，它会把网盘链接写回下面的 baidu，按钮随之恢复。 ===== */
 const REL = {
-  version: "0.4.0",
-  github: "https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.0/",
-  gitee: "https://gitee.com/rddmw/android-ad-cleaner/releases/download/v0.4.0/",
+  version: "0.4.1",
+  github: "https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.1/",
+  gitee: "https://gitee.com/rddmw/android-ad-cleaner/releases/download/v0.4.1/",
   baidu: { url: "", code: "" },
   files: [
-    { id: "mac-arm64", folder: "Mac-Apple芯片", baidu: { url: "", code: "" }, title: "Mac · Apple 芯片", sub: "M1 / M2 / M3 / M4 及以后", file: "AndroidAdCleaner-0.4.0-mac-arm64.dmg", size: "37.0 MB",
-      note: "苹果公证通过，双击打开", sha: "dfd8120e60e16476e03f0f1fc0268ef6ccd583da80c16a59cd3d4a709246c149" },
-    { id: "mac-intel", folder: "Mac-Intel芯片", baidu: { url: "", code: "" }, title: "Mac · Intel 芯片", sub: "2020 年及以前的 Intel Mac，macOS 11 及以上", file: "AndroidAdCleaner-0.4.0-mac-intel.dmg", size: "43.0 MB",
-      note: "苹果公证通过，双击打开", sha: "6f797904f80399c4ccaf39a2c608adac893f40afba6f0a5e5627d5373bc79787" },
-    { id: "win-setup", folder: "Windows-安装版", baidu: { url: "", code: "" }, title: "Windows · 安装版", sub: "Windows 10 / 11（64 位）", file: "AndroidAdCleaner-0.4.0-windows-setup.exe", size: "30.7 MB",
-      note: "弹出安全提示时点「更多信息」→「仍要运行」", sha: "5e345d159df1b1afb3f63bec58c37424a5c226a4f477576fd1736b0b40c8962e", gitee: false },
-    { id: "win-zip", folder: "Windows-免安装版", baidu: { url: "", code: "" }, title: "Windows · 免安装", sub: "Windows 10 / 11（64 位）", file: "AndroidAdCleaner-0.4.0-windows-portable.zip", size: "45.5 MB",
-      note: "解压后双击 AndroidAdCleaner.exe。不会替换、也不会卸载已安装的旧版；要顶掉旧版请用安装版覆盖安装，或先在 Windows「设置」的应用列表里卸载旧的「安卓去广告」（0.3.2 及更早版本装的名字）。卸载只删程序目录，数据与备份保留", sha: "cdcfa806a8963a701f959918915cb512d6385abfc8376bcabf36719bf073fecf" },
-    { id: "android", folder: "安卓手机", baidu: { url: "", code: "" }, title: "安卓手机 · 手机版", sub: "安卓 11 及以上", file: "AndroidAdCleaner-0.4.0-android-arm64.apk", size: "52.7 MB",
-      note: "不用连电脑，在手机上点一下", sha: "07f04bdbfb5d5a516e0f605bcf0cea362a6e600b8515bea6689c3cae92102dc9" },
+    { id: "mac-arm64", folder: "Mac-Apple芯片", baidu: { url: "", code: "" }, title: "Mac · Apple 芯片", sub: "M1 / M2 / M3 / M4 及以后", file: "AndroidAdCleaner-0.4.1-mac-arm64.dmg", size: "37.2 MB",
+      note: "苹果公证通过，双击打开", sha: "c7104749e9e04601bb5d659f493f62e2e8536d4503cbd81de70ab83d71258e4c" },
+    { id: "mac-intel", folder: "Mac-Intel芯片", baidu: { url: "", code: "" }, title: "Mac · Intel 芯片", sub: "2020 年及以前的 Intel Mac，macOS 11 及以上", file: "AndroidAdCleaner-0.4.1-mac-intel.dmg", size: "43.0 MB",
+      note: "苹果公证通过，双击打开", sha: "94acf988f597f1e72b1e18064ac58c25bc79d994ef06662e653841badd5c6534" },
+    { id: "win-setup", folder: "Windows-安装版", baidu: { url: "", code: "" }, title: "Windows · 安装版", sub: "Windows 10 / 11（64 位）", file: "AndroidAdCleaner-0.4.1-windows-setup.exe", size: "30.7 MB",
+      note: "弹出安全提示时点「更多信息」→「仍要运行」", sha: "e10fc949c38d397fe9a87c6f2b04257caa1100792d6eab7ebf9007d754bf5500", gitee: false },
+    { id: "win-zip", folder: "Windows-免安装版", baidu: { url: "", code: "" }, title: "Windows · 免安装", sub: "Windows 10 / 11（64 位）", file: "AndroidAdCleaner-0.4.1-windows-portable.zip", size: "45.6 MB",
+      note: "解压后双击 AndroidAdCleaner.exe。不会替换、也不会卸载已安装的旧版；要顶掉旧版请用安装版覆盖安装，或先在 Windows「设置」的应用列表里卸载旧的「安卓去广告」（0.3.2 及更早版本装的名字）。卸载只删程序目录，数据与备份保留", sha: "7a15604cae928c2eef0f44074a639c6f71ff1f5475e4151e8dd7eb76badbfe6c" },
+    { id: "android", folder: "安卓手机", baidu: { url: "", code: "" }, title: "安卓手机 · 手机版", sub: "安卓 11 及以上", file: "AndroidAdCleaner-0.4.1-android-arm64.apk", size: "52.7 MB",
+      note: "不用连电脑，在手机上点一下", sha: "80f29c17baefb0e12cb49c8ebea16f8332d09dbf091a9ed177f627c0ca214a5d" },
   ],
 };
-const RELEASED = "2026-11-07";
+const RELEASED = "2026-11-09";
 const REPO = "https://github.com/rddmwmddr/android-ad-cleaner";
 const GITEE = "https://gitee.com/rddmw/android-ad-cleaner";
 
