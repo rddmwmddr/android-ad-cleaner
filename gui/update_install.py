@@ -43,7 +43,7 @@ def safe_extract(archive, destination):
             parts = PurePosixPath(name).parts
             raw_parts = name.rstrip("/").split("/")
             mode = info.external_attr >> 16
-            if (not parts or parts[0] != "AndroidAdCleaner" or "\\" in name or ":" in name
+            if (info.orig_filename != name or not parts or parts[0] != "AndroidAdCleaner" or "\\" in name or ":" in name
                     or name.startswith("/") or any(p in ("", "..", ".") or p.rstrip(" .") != p for p in raw_parts)
                     or stat.S_ISLNK(mode) or stat.S_IFMT(mode) not in (0, stat.S_IFREG, stat.S_IFDIR)):
                 raise UpdateError("更新包包含不安全的文件路径")

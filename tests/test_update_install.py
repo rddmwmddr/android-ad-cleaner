@@ -69,7 +69,7 @@ class InstallTests(unittest.TestCase):
             return self.child
         rc = install.apply_update(self.plan_path, alive=lambda _: False, sleep=lambda _: None, launch=start, attempts=3)
         self.assertEqual(rc, 0)
-        self.assertTrue(json.loads(Path(self.plan['result']).read_text())['ok'])
+        self.assertTrue(json.loads(Path(self.plan['result']).read_text(encoding='utf-8'))['ok'])
         self.assertEqual((self.target / 'unins000.exe').read_text(), 'uninstaller')
         self.assertEqual((self.target / 'user.txt').read_text(), 'user file')
         self.assertEqual(self.launches[0][1]['env']['PYINSTALLER_RESET_ENVIRONMENT'], '1')
@@ -82,7 +82,7 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(self.run_helper(), 1)
         self.assert_old()
         self.assertEqual(len(self.launches), 2)
-        self.assertIn('恢复', json.loads(Path(self.plan['result']).read_text())['error'])
+        self.assertIn('恢复', json.loads(Path(self.plan['result']).read_text(encoding='utf-8'))['error'])
         self.child.terminate.assert_not_called()
 
     def test_new_app_hang_is_terminated_before_rollback(self):
@@ -104,7 +104,7 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assert_old()
         self.assertEqual(self.launches, [])
-        self.assertIn('没有退出', json.loads(Path(self.plan['result']).read_text())['error'])
+        self.assertIn('没有退出', json.loads(Path(self.plan['result']).read_text(encoding='utf-8'))['error'])
 
     def test_wrong_health_cannot_commit_new_version(self):
         install.write_json(self.plan['health'], dict(token='b' * 32, version='0.4.2'))
@@ -188,6 +188,11 @@ class ZipTests(unittest.TestCase):
                 zf.writestr('AndroidAdCleaner/' + name, b'program')
             zf.writestr('AndroidAdCleaner/_internal/python.dll', b'runtime')
             if extra is not None:
+                if isinstance(extra, str):
+                    info = zipfile.ZipInfo()
+                    # #888：写入原始坏路径，不能让 Windows 的 ZipInfo 构造先修正它。
+                    info.filename = extra
+                    extra = info
                 zf.writestr(extra, b'evil')
         return path
 
@@ -211,6 +216,17 @@ class ZipTests(unittest.TestCase):
         info.external_attr = (stat.S_IFLNK | 0o777) << 16
         with self.assertRaises(UpdateError):
             install.safe_extract(self.archive(info), self.root / 'extract')
+
+    def test_windows_normalization_does_not_hide_backslash(self):
+        archive = self.archive('AndroidAdCleaner/_internal\\evil')
+        with patch.object(zipfile.os, 'sep', '\\'):
+            with zipfile.ZipFile(archive) as zf:
+                entry = zf.infolist()[-1]
+                self.assertEqual(entry.filename, 'AndroidAdCleaner/_internal/evil')
+                self.assertEqual(entry.orig_filename, 'AndroidAdCleaner/_internal\\evil')
+            with self.assertRaises(UpdateError):
+                install.safe_extract(archive, self.root / 'extract')
+        self.assertFalse((self.root / 'extract').exists())
 
 
 class MacTests(unittest.TestCase):
