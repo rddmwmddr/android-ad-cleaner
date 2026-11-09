@@ -22,6 +22,7 @@ BRIDGE = {
     "cancel_update": (),
     "install_update": (),
     "devices": (),
+    "harmony": ("action", "serial", "mode", "segments"),
     "usb_hint": (),
     "status": ("serial",),
     "chan_scan": ("serial",),
@@ -70,6 +71,15 @@ class BridgeTests(unittest.TestCase):
 
     def test_poll_keeps_its_default_offset(self):
         self.assertEqual(inspect.signature(app.Api.poll).parameters["since"].default, 0)
+
+    def test_api_holds_no_harmony_state(self):
+        """鸿蒙状态与构造逻辑属于独立块，Api 只转发（#898）。"""
+        api = classes()["Api"]
+        assigned = {"self." + node.attr for node in ast.walk(api)
+                    if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
+                    and node.value.id == "self" and isinstance(node.ctx, ast.Store)}
+        self.assertFalse(assigned & {"self.harmony_service", "self.harmony_lock"})
+        self.assertIn("self.harmony_bridge", assigned)
 
 
 class BoundaryTests(unittest.TestCase):

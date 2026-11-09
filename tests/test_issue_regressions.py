@@ -11,7 +11,7 @@ import sys
 import tempfile
 import types
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 import xml.etree.ElementTree as ET
 
 from PIL import Image
@@ -738,7 +738,7 @@ class DesktopTests(unittest.TestCase):
             self.assertEqual(api.chan_scan("test"), {"error": "读取失败", "detail": "读取失败"})
 
     def test_gui_loads_file_uri_without_http_server(self):
-        fake = types.SimpleNamespace(create_window=Mock(), start=Mock())
+        fake = types.SimpleNamespace(create_window=Mock(return_value=MagicMock()), start=Mock())
         with tempfile.TemporaryDirectory() as directory, \
              patch.dict(sys.modules, {"webview": fake}), patch.object(app, "IS_WIN", True), \
              patch.object(app, "data_dir", return_value=directory), \

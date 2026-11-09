@@ -9,9 +9,9 @@ import hashlib, importlib, json, os, platform, re, runpy, subprocess, sys, threa
 from pathlib import Path
 
 try:                                # 当包导入（测试）；直接跑脚本、打包时它是顶层模块
-    from . import winpreflight, updates, update_install
+    from . import winpreflight, updates, update_install, harmony_bridge
 except ImportError:
-    import winpreflight, updates, update_install
+    import winpreflight, updates, update_install, harmony_bridge
 
 APP_NAME = "肉呆去广告"
 VERSION = "0.4.1"
@@ -1180,6 +1180,9 @@ class Api:
         self.last_devices = ""
         self.last_scan_notes = []
         self.last_chans = None        # 上一次通知扫描的候选；None 表示没扫成
+        self.harmony_bridge = harmony_bridge.HarmonyBridge(
+            self.data.root, self.dispatcher.claim, self.dispatcher.release,
+            sys.platform in ("darwin", "win32"))
 
     @property
     def adb(self):
@@ -1224,7 +1227,12 @@ class Api:
     def env(self):
         update_install.confirm_started(self.data.updates, VERSION, sys.executable)
         return {"adb": self.adb, "data": self.data.root, "version": VERSION, "os": platform.system(),
+                "harmony": self.harmony_bridge.enabled,
                 "images": [f for f in sorted(os.listdir(os.path.join(BASE, "images"))) if f.startswith("dev-")]}
+
+    def harmony(self, action, serial="", mode="clean", segments=None):
+        """鸿蒙窗口桥只转发；装配与状态在 `harmony_bridge.HarmonyBridge`（#898）。"""
+        return self.harmony_bridge.command(action, serial, mode, segments)
 
     def old_install_notice(self):
         """旧名安装还在时给一次提示；用户关掉后这一版不再出现（#872）。"""
@@ -1651,7 +1659,8 @@ class Api:
             return False
 
     def open_path(self, which):
-        path = {"data": self.data.root, "backups": self.data.backups}.get(which, self.data.root)
+        path = {"data": self.data.root, "backups": self.data.backups,
+                "harmony": os.path.join(self.data.root, "harmony")}.get(which, self.data.root)
         os.makedirs(path, exist_ok=True)
         if IS_WIN:
             os.startfile(path)

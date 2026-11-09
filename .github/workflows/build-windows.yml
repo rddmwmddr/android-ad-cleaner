@@ -42,6 +42,13 @@ jobs:
         run: |
           $v = python gui/version.py
           "ver=$v" >> $env:GITHUB_OUTPUT
+      # HDC 不入库，打包时按钉死的哈希下载校验（gui/hdc_fetch.py）。key 取三个平台 tarball 的
+      # SHA-256 组合：上游重发 SDK 时缓存自然失效，冷构建只下载一次。
+      - name: 缓存鸿蒙 HDC
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/android-ad-cleaner/hdc
+          key: hdc-7.0-Release-391d76cb90d69b476ae0b65a9f311c572e1a9cdd77da71734af62ed63b108dcc-df46e398b391d3406d1eb05e7322c5874f6bf6821e93b1211b36cfcf7a0bbf6f-130a438cbcddd46a2a5b09ee9925339cddf4cca99223329b860f96a5c72f338f
       - name: PyInstaller 打包
         run: pyinstaller --noconfirm --distpath gui/dist --workpath gui/build gui/windows.spec
       - name: 冒烟测试（命令行、GUI 页面、图片与 JS API）

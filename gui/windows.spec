@@ -9,6 +9,9 @@ ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 sys.path.insert(0, os.path.join(ROOT, "gui"))
 from bundle_data import bundle_data
 import dotnet_config
+import hdc_fetch
+# HDC 不入库：按钉死的哈希下载校验后放进 vendor，再由 bundle_data 收进打包资源（#898）
+hdc_fetch.stage_vendor(ROOT, "windows")
 datas = bundle_data(ROOT)
 binaries, hidden = [], ["uiautomator2", "adbutils", "PIL"]
 for pkg in ("uiautomator2", "adbutils", "webview"):

@@ -355,6 +355,14 @@ why = "adb 版本漂移会让读屏输出一起变，出问题先要能排除 ad
 expires_if = "安装包自带 adb、客户端不再下载 platform-tools 时删。"
 
 [[rule]]
+id = "dev.hdc.build-time-download"
+source = "CLAUDE.md#开发"
+check = "test:test_hdc_fetch::PlatformTableTest.test_pins_the_official_release_hashes"
+status = "enforced"
+why = "HDC 与共享库共约 19MB，曾经直接入库、永久留在 main 历史里；改成构建期从 OpenHarmony 7.0-Release 下载后，哈希是唯一的信任锚。守卫只比对三张表里的 tarball 与解出文件哈希，官方是否换了包仍靠人按 #898 的核对方式重验。"
+expires_if = "OpenHarmony SDK 有了可直接引用的包管理源、不再按 tarball 哈希取工具时删。"
+
+[[rule]]
 id = "dev.client.data-paths"
 source = "CLAUDE.md#开发"
 check = "code:gui/app.py:ClientData"

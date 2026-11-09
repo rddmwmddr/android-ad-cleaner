@@ -13,7 +13,7 @@ import types
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -115,7 +115,7 @@ def launch_once(argv, executable, start_error=None):
     `start_error` 让假 webview 在 `start()` 时抛出，模拟打包件起不来；此时 `main()` 会把异常
     抛回来（`--smoke-gui` 打完诊断行就 re-raise）。
     """
-    webview = types.SimpleNamespace(create_window=Mock(), start=Mock(side_effect=start_error))
+    webview = types.SimpleNamespace(create_window=Mock(return_value=MagicMock()), start=Mock(side_effect=start_error))
     out, err = io.StringIO(), io.StringIO()
     code = crash = None
     with tempfile.TemporaryDirectory() as directory, \

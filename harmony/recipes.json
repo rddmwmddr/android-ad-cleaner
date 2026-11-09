@@ -1,0 +1,258 @@
+[
+ {
+  "id": "ads",
+  "name": "华为广告",
+  "kind": "uri",
+  "value": "privacy_settings",
+  "ability": "",
+  "path": [
+   "数据和隐私",
+   "华为广告",
+   "广告偏好设置"
+  ],
+  "pages": [
+   {
+    "path": [],
+    "targets": [
+     {
+      "title": "个性化广告",
+      "want": false,
+      "below": true,
+      "radio": -1,
+      "moot": ""
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "tracking",
+  "name": "跨应用关联",
+  "kind": "uri",
+  "value": "privacy_settings",
+  "ability": "",
+  "path": [
+   "跨应用关联"
+  ],
+  "pages": [
+   {
+    "path": [],
+    "targets": [
+     {
+      "title": "要求应用请求关联",
+      "want": true,
+      "below": false,
+      "radio": -1,
+      "moot": ""
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "search",
+  "name": "小艺搜索",
+  "kind": "home",
+  "value": "",
+  "ability": "",
+  "path": [
+   "小艺",
+   "小艺搜索"
+  ],
+  "pages": [
+   {
+    "path": [],
+    "targets": [
+     {
+      "title": "热搜榜",
+      "want": false,
+      "below": false,
+      "radio": -1,
+      "moot": ""
+     },
+     {
+      "title": "小艺建议",
+      "want": false,
+      "below": false,
+      "radio": -1,
+      "moot": ""
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "feed",
+  "name": "负一屏",
+  "kind": "home",
+  "value": "",
+  "ability": "",
+  "path": [
+   "桌面和个性化",
+   "桌面设置",
+   "负一屏"
+  ],
+  "pages": [
+   {
+    "path": [],
+    "targets": [
+     {
+      "title": "资讯",
+      "want": false,
+      "below": false,
+      "radio": -1,
+      "moot": ""
+     }
+    ]
+   },
+   {
+    "path": [
+     "个性化推荐"
+    ],
+    "targets": [
+     {
+      "title": "个性化推荐",
+      "want": false,
+      "below": false,
+      "radio": -1,
+      "moot": ""
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "browser",
+  "name": "浏览器",
+  "kind": "app",
+  "value": "com.huawei.hmos.browser",
+  "ability": "MainAbility",
+  "path": [
+   "我的",
+   "设置"
+  ],
+  "pages": [
+   {
+    "path": [
+     "消息通知"
+    ],
+    "targets": [
+     {
+      "title": "应用内资讯推送",
+      "want": false,
+      "below": false,
+      "radio": -1,
+      "moot": ""
+     }
+    ]
+   },
+   {
+    "path": [
+     "主页设置"
+    ],
+    "targets": [
+     {
+      "title": "简洁主页",
+      "want": true,
+      "below": false,
+      "radio": 1,
+      "moot": ""
+     }
+    ]
+   },
+   {
+    "path": [
+     "个性化推荐"
+    ],
+    "targets": [
+     {
+      "title": "个性化推荐",
+      "want": false,
+      "below": false,
+      "radio": -1,
+      "moot": ""
+     }
+    ]
+   },
+   {
+    "path": [
+     "个性化搜索建议"
+    ],
+    "targets": [
+     {
+      "title": "个性化搜索建议",
+      "want": false,
+      "below": false,
+      "radio": -1,
+      "moot": ""
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "market",
+  "name": "应用市场",
+  "kind": "app",
+  "value": "com.huawei.hmsapp.appgallery",
+  "ability": "MainAbility",
+  "path": [
+   "我的",
+   "设置"
+  ],
+  "pages": [
+   {
+    "path": [
+     "个性化推荐"
+    ],
+    "targets": [
+     {
+      "title": "个性化推荐",
+      "want": false,
+      "below": false,
+      "radio": -1,
+      "moot": ""
+     }
+    ]
+   },
+   {
+    "path": [
+     "消息通知"
+    ],
+    "targets": [
+     {
+      "title": "应用活动与资讯",
+      "want": false,
+      "below": false,
+      "radio": -1,
+      "moot": "通知已关闭"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "telemetry",
+  "name": "用户体验改进计划",
+  "kind": "uri",
+  "value": "system_and_updates",
+  "ability": "",
+  "path": [
+   "用户体验改进计划"
+  ],
+  "pages": [
+   {
+    "path": [],
+    "targets": [
+     {
+      "title": "加入用户体验改进计划",
+      "want": false,
+      "below": false,
+      "radio": -1,
+      "moot": ""
+     }
+    ]
+   }
+  ]
+ }
+]

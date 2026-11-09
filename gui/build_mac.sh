@@ -26,13 +26,16 @@ VER=$($PY -c "import re;print(re.search(r'VERSION = \"([^\"]+)\"', open('gui/app
 OUT=gui/dist/$ARCH
 rm -rf gui/build/$ARCH $OUT; mkdir -p gui/build
 DATA="$PWD/gui/build/$ARCH/data"
-$PY gui/bundle_data.py "$DATA"
+# HDC 不入库：先按平台取到缓存并复制进 vendor，再让 bundle_data 收进打包资源（#898）
+$PY gui/hdc_fetch.py stage "$PWD" "$ARCH"
+$PY gui/bundle_data.py "$DATA" "$ARCH"
 $RUN $PY -m PyInstaller --noconfirm --windowed --name "$NAME" \
   --distpath $OUT --workpath gui/build/$ARCH --specpath gui/build/$ARCH \
   --osx-bundle-identifier com.rddmwmddr.androidadcleaner \
   --icon "$PWD/gui/icon.icns" \
   --add-data "$DATA/tool:tool" --add-data "$DATA/recipes:recipes" \
   --add-data "$DATA/images:images" --add-data "$DATA/gui/web:gui/web" \
+  --add-data "$DATA/harmony:harmony" \
   --collect-all uiautomator2 --collect-all adbutils \
   --hidden-import uiautomator2 --hidden-import adbutils --hidden-import PIL --hidden-import fcntl \
   gui/launch.py >/dev/null 2>gui/build/pyinstaller-$ARCH.log
@@ -48,6 +51,9 @@ if [ -n "$NEWER" ]; then echo "以下文件要求高于 macOS 11：\n$NEWER" >&2
 echo "架构：$(file "$APP/Contents/MacOS/$NAME" | sed 's/.*: //')"
 
 if [ -n "$SIGN_ID" ]; then
+  for f in "$APP"/Contents/Resources/harmony/desktop/vendor/*/*; do
+    codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$f"
+  done
   codesign --force --deep --options runtime --timestamp --sign "$SIGN_ID" "$APP"
   if [ "$ARCH" = "x86_64" ]; then
     # PyObjC/libffi 的 Intel 回调桩需要此权限；只签主程序，不给所有嵌套库放宽权限。
