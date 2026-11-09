@@ -5,6 +5,7 @@
 脚本自己的同名定义后执行、覆盖注入的名字，所以在迁移之前跑任何现有脚本，用户看到的东西一个字节都不变。
 """
 
+import re
 import time
 from contextlib import nullcontext
 
@@ -12,6 +13,13 @@ import adb_link
 
 # 脚本自带 `RESULTS` 时，每个段的结局用这四个词记一条（机型脚本的分段结果台账）
 DONE, SKIPPED, FAILED, NOT_RUN = "完成", "跳过", "未完成", "未执行"
+
+# `Phone.start` 里「落点不对」的两句。只有这两类才按落点判入口不可达：
+# 「本机没有安装 / 无法打开」时前台可能只是桌面，不能当成证据（#902）。
+WRONG_LANDING = ("没有进入前台", "启动后离开前台")
+# 那两句里的落点原文 `停在 包名/页面；…`。从报错里取，不再重读前台：
+# 抛出之后再读有一小段窗口期，前台已经切走就会判错。
+LANDING = re.compile(r"停在 ([^\s/；]+)")
 
 
 class SkipStep(RuntimeError):
@@ -46,6 +54,23 @@ def preamble(p, g):
 
     def maybe(name, scrolls=6):
         return p.entry(name, scrolls=scrolls)
+
+    def start_or_skip(pkg, activity, dead_ends, reason):
+        """拉起 App；前台没到、报错里的落点又在前 `dead_ends` 里时按跳过结束本段，不算失败。
+
+        给「本机缺了配套 App，入口会被系统转去别处」这一类用（#902：没有主题商店时，
+        主题管理包的代理页会落到应用商店详情页或桌面）。落点在别的 App、或失败根本不是
+        「落点不对」（没装 / 拉不起来）时照旧上抛，保留 `Phone.start` 的落点诊断（#547）。"""
+        try:
+            p.start(pkg, activity)
+        except adb_link.DeviceLost:
+            raise                       # 断线不是入口不可达：整轮停下，不按跳过收尾
+        except RuntimeError as error:
+            lost = str(error)
+            landed = LANDING.search(lost)
+            if landed and landed.group(1) in dead_ends and any(mark in lost for mark in WRONG_LANDING):
+                skip(f"{reason}（停在 {landed.group(1)}）")
+            raise
 
     def step(name):
         def decorate(action):
@@ -101,5 +126,5 @@ def preamble(p, g):
         return decorate
 
     g.update({"SkipStep": SkipStep, "skip": skip, "require": require,
-              "maybe": maybe, "step": step})
+              "maybe": maybe, "start_or_skip": start_or_skip, "step": step})
     return g

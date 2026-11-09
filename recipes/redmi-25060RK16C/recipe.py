@@ -7,6 +7,7 @@
 BUILD = "BP2A"
 MODELS = ["25060RK16C"]
 import time
+from entries import THEME_DEAD_ENDS
 
 
 def gear(toolbar_only=False):
@@ -152,7 +153,8 @@ def _():
     if "package:" not in p.d.shell("pm path com.android.thememanager").output:
         print("  · 本机没有主题商店，跳过"); return
     # 实测：themestore 冷启动重定向到 thememanager 的过渡窗会把引擎前台校验搞崩；直接拉最终页最稳
-    p.start("com.android.thememanager", ".ThemeResourceProxyTabActivity")
+    start_or_skip("com.android.thememanager", ".ThemeResourceProxyTabActivity",
+                  dead_ends=THEME_DEAD_ENDS, reason="主题页打不开")
     if not (tab_bot("我的") or p.tap("我的", exact=True, scrolls=0)):
         print("  · 主题商店没有「我的」标签，跳过"); p.back(3); return
     if not (gear(toolbar_only=True) or gear()):

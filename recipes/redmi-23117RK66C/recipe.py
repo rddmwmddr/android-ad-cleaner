@@ -3,6 +3,7 @@
 BUILD = "OS3.0.306.0.WNMCNXM"
 MODELS = ["23117RK66C"]
 import time
+from entries import THEME_DEAD_ENDS
 VERIFIED_SWITCHES = 0
 
 
@@ -109,7 +110,8 @@ def _():
 @step("主题")
 def _():
     # 从壳包启动会复用上次设置页，显式重建主题首页以支持连续复跑。
-    p.start("com.android.thememanager", ".ThemeResourceProxyTabActivity")
+    start_or_skip("com.android.thememanager", ".ThemeResourceProxyTabActivity",
+                  dead_ends=THEME_DEAD_ENDS, reason="主题页打不开")
     require(p.go("我的", "设置"), "未进入主题「我的」")
     require(gear(), "主题设置入口未找到")
     close_named(["每次联网时通知"], "主题·设置")

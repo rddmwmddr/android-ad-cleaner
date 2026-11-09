@@ -28,6 +28,10 @@ FAMILY = {
 LABEL = {"xiaomi": "小米", "oppo": "OPPO", "vivo": "vivo", "honor": "荣耀",
          "huawei": "华为", "meizu": "魅族", "samsung": "三星"}
 
+# 没有主题商店的小米 / 红米机型上，主题管理包的代理页会被系统转去这两个包：应用商店详情页
+# 或桌面。落在这里说明主题设置不可达，段体按跳过收尾（#902）。
+THEME_DEAD_ENDS = frozenset({"com.xiaomi.market", "com.miui.home"})
+
 
 @dataclass(frozen=True)
 class Direct:
@@ -276,7 +280,8 @@ def used_by(recipes_dir):
     """{("direct", 包名, 完整页面名) 或 ("search", 关键词, 结果): {机型型号}}，从机型脚本源码现算。
 
     `p.start(package, ".X")` 这种先赋值再传变量的写法也要认出来：honor-WKL-AN20 就是这么写的，
-    只认字面量会把它的机型漏掉（生成表里「用过的机型」少一台）。
+    只认字面量会把它的机型漏掉（生成表里「用过的机型」少一台）。经共享入口助手
+    `start_or_skip(package, ".X", …)` 拉起的那几条同样是这台机用过的直达（#902）。
     """
     import glob, os
     found = {}
@@ -284,7 +289,7 @@ def used_by(recipes_dir):
         model = os.path.basename(os.path.dirname(f)).split("-", 1)[-1]
         with open(f, encoding="utf-8") as fh:
             src = fh.read()
-        for call in re.finditer(r"p\.start\(([^)]*)\)", src):
+        for call in re.finditer(r"(?:p\.start|start_or_skip)\(([^)]*)\)", src):
             parts = call.group(1).split(",")
             pkg = _arg_at(parts[0], src, call.start())
             act = _arg_at(parts[1], src, call.start()) if len(parts) > 1 else None

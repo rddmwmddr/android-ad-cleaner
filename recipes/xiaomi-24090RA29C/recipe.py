@@ -6,6 +6,7 @@
 BUILD = "OS3.0.309.0"
 MODELS = ["24090RA29C"]
 import time
+from entries import THEME_DEAD_ENDS
 
 
 def gear(toolbar_only=False):
@@ -139,7 +140,8 @@ def _():
         # 直达代理页前台就是它自己，没有上面那条前台误判，可以交给 start() 等落点。
         if "package:" not in p.d.shell("pm path com.android.thememanager").output:
             print("  · 本机没有主题商店，跳过"); return
-        p.start("com.android.thememanager", ".ThemeResourceProxyTabActivity")
+        start_or_skip("com.android.thememanager", ".ThemeResourceProxyTabActivity",
+                      dead_ends=THEME_DEAD_ENDS, reason="没有主题商店，主题页打不开")
     time.sleep(3)
     p.dismiss()
     # 底部「我的」标签 → 右上齿轮（desc=设置，无文字）
