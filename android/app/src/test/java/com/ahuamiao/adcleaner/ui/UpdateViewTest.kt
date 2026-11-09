@@ -20,6 +20,7 @@ class UpdateViewTest {
     @Test fun snapshotWithoutVersionShowsNoNewVersionAndLeavesTheChosenSourceAlone() {
         val view = UpdateView.of(JSONObject().put("state", "current"))
         assertNull(view.version)
-        assertNull(view.source, "没有 source 时调用方要保持用户选的渠道，不能重置成默认值")
+        // 消息在前：JUnit 4.13 另有 assertNull(String, Object)，写成 (值, 说明) 会被解析反。
+        assertNull("没有 source 时调用方要保持用户选的渠道，不能重置成默认值", view.source)
     }
 }
