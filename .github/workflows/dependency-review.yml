@@ -1,5 +1,6 @@
 # PR 上的依赖审查：只比对本次 PR 引入 / 变更的依赖，不扫存量；存量由 dependency-audit.yml 每周看（#859）。
-# 公开仓库免费，不需要 GitHub Advanced Security，也不需要仓库设置里的任何开关。
+# 公开仓库免费，不需要 GitHub Advanced Security；但必须先打开仓库 Settings → Security → Dependency graph，
+# 否则 action 直接报 "Dependency review is not supported on this repository"。
 # 结果写在 job 的 Summary 页与日志里；要拦在合并之前需要分支保护 + required status checks（admin 权限）。
 name: dependency-review
 on:
