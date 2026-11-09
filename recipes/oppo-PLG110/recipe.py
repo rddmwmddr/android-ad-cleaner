@@ -96,7 +96,7 @@ def close_named(names, page, activity, title=None, max_screens=8, reopen=None, d
     """精确核对标题再调用引擎；回读关闭状态，同时保留其他功能开关。"""
     global VERIFIED_SWITCHES
     before = read_switches(activity, title, max_screens, expect=names)
-    require(all(name in before for name in names), f"{page}：未识别全部目标开关，未操作")
+    require_switches(before, names, page)
     if any(before[name] for name in names):
         p.top(max_screens)
         p.off(only=list(names), keep=[name for name in before if name not in names],

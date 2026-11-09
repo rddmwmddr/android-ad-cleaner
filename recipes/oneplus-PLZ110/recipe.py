@@ -145,8 +145,7 @@ def close_named(names, title, max_screens=12, dependent=(), reopen=None, snapsho
     """
     global VERIFIED_SWITCHES
     before = read_switches(title, max_screens) if snapshot is None else snapshot
-    missing = [name for name in names if name not in before and name not in optional]
-    require(not missing, f"{title}：未识别全部目标开关，未操作")
+    require_switches(before, names, title, optional=optional)
     present = [name for name in names if name in before]
     absent = [name for name in names if name not in before]
     if absent:

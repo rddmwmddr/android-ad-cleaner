@@ -1,4 +1,4 @@
-"""机型脚本的前导：段包装、必需入口断言、可选入口助手、跳过出口与两个台账（#838）。
+"""机型脚本的前导：段包装、必需入口断言、开关名单断言、可选入口助手、跳过出口与两个台账（#838）。
 
 三个执行点注入同一份：`fast.execute` 的 run 分支、`adapt.check_draft`、`tests/fixtures.load_recipe`。
 不做成可 import 的函数：段包装要绑定当次的 Phone 与执行作用域，import 来的模块级函数拿不到这两个。
@@ -54,6 +54,25 @@ def preamble(p, g):
 
     def maybe(name, scrolls=6):
         return p.entry(name, scrolls=scrolls)
+
+    def require_switches(before, names, title, optional=(), contains=False):
+        """点名要关的开关没全部出现时整段不动，并把页面证据带进报错（#903）。
+
+        `before` 是这次读到的开关（{标题: 状态}，按页面顺序）：报错里带上停在哪个页、结构摘要
+        与当次读到的标题，下一轮上报才能分辨「改名了 / 页面是空的 / 页面根本没打开」。
+        `contains=True` 表示名单是关键词，标题附带整段说明也算命中（小米系脚本的写法）；
+        默认要求标题与名单逐字相同。`optional` 里的名字允许这次没有。
+        名单为空也算没识别到：整页开关那条路（页面上有哪行关哪行）一页空着同样是失败。
+        成功时不建这段证据，也不重读页面，输出与加它之前逐字一致。
+        """
+        def found(name):
+            if name in optional:
+                return True
+            return any(name in t for t in before) if contains else name in before
+
+        if names and all(found(name) for name in names):
+            return
+        raise RuntimeError(f"{title}：未识别全部目标开关，未操作；{p.page_evidence(list(before))}")
 
     def start_or_skip(pkg, activity, dead_ends, reason):
         """拉起 App；前台没到、报错里的落点又在前 `dead_ends` 里时按跳过结束本段，不算失败。
@@ -126,5 +145,6 @@ def preamble(p, g):
         return decorate
 
     g.update({"SkipStep": SkipStep, "skip": skip, "require": require,
-              "maybe": maybe, "start_or_skip": start_or_skip, "step": step})
+              "maybe": maybe, "start_or_skip": start_or_skip, "step": step,
+              "require_switches": require_switches})
     return g

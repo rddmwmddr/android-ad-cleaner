@@ -82,8 +82,7 @@ def close_with_plain_tap(names, page):
     """下载管理和浏览器会吞掉短按；普通 tap 后确认，并核对其他开关未变。"""
     before = {title: on for title, on, _ in p.switches()}
     targets = [title for title in before if any(name in title for name in names)]
-    if not all(any(name in title for title in targets) for name in names):
-        raise RuntimeError(f"{page}：未识别全部目标开关，未操作")
+    require_switches(before, names, page, contains=True)
     for title in targets:
         if not before[title]:
             continue

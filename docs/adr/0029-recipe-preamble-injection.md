@@ -65,3 +65,20 @@
 
 `tests/test_recipe_preamble_migration.py` 的禁定义名单随之加上这个名字。`tests/test_theme_unreachable_902.py`
 守着三种落点与两个反例（别的 App 顶掉、断线），并逐份跑 15 份小米 / 红米主题脚本。
+
+## #903 之后：注入面多一个 `require_switches`
+
+注入的名字从七个扩到八个：`require_switches(读到的开关, 名单, 页面, optional=(), contains=False)`。
+它顶替的是原本在 14 处机型脚本里各写一份的「点名开关没全部出现就整段不动」守卫，
+失败时的文案与判据不变，只在报错末尾补上 `Phone.page_evidence()` 的现场。
+
+为什么不放进引擎：名单是脚本对某台机某页的实测结论（哪几个开关必须一起在），
+引擎的 `off()` 只认 `only=` / `keep=` 的子串匹配，本来就不做「缺一项就整段不动」这个决定；
+把它搬进 `plan_switches()` 会让引擎替脚本判断一项缺失该不该停，那是 ADR-0008 分工的反向。
+页面证据反过来属于引擎——「停在哪个页、页面上有哪些开关」只有 `Phone` 读得到，
+所以 `page_evidence()` 在 `Phone` 上，`require_switches()` 只是把它接进报错。
+
+收成一处要守的是判据等价：小米系的 `contains=True`（标题可能附带整段说明）、
+PMX110 / PLZ110 的 `optional`（部分安装版本没有那一行）、honor 的「整页所有开关且空页算失败」
+都要原样保留；`tests/test_missing_switch_evidence_903.py` 守着三种输出（缺项 / 空页 / 通过）
+与「文案只在 `recipe_kit` 一处」，`tests/test_recipe_preamble_migration.py` 的禁定义名单随之加上这个名字。
