@@ -23,7 +23,7 @@
 - `CLAUDE.md` 正文去掉与注册表 `why` 重复的理由，`npm test` 的说法改指 `package.json`（#885）
 - README 机型表压成状态符号，长验证记录搬到表下，表格不再横向溢出（#883）
 - 机型脚本头部元数据解析挪到 `tool/recipe_meta.py`，CLI 入口只转发（#920）
-- 新增配方验证台账 `recipes/verified.toml` 与 `python3 tool/verify_ledger.py`，每份配方一行（#916）
+- 新增配方验证台账 `recipes/verified.toml` 与 `python3 tool/verify_ledger.py`，每份配方一行（#921）
 
 ## 0.4.1 · 2026-11-09
 
