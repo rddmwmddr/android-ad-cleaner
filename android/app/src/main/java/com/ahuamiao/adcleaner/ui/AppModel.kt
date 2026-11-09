@@ -37,6 +37,7 @@ sealed interface Screen {
 }
 
 sealed interface Sheet {
+    data object Update : Sheet
     data object More : Sheet
     data object Restore : Sheet
     data class Feedback(val kind: String, val diag: String) : Sheet
@@ -76,6 +77,11 @@ class AppModel(
         private set
     var newVersion by mutableStateOf<NewVersion?>(null)
         private set
+    var update by mutableStateOf(JSONObject())
+        private set
+    var updateSource by mutableStateOf("gitee")
+    private var updateJob: Job? = null
+
     /** 首次设置的三步与「第几步」都来自 view.py，页面和通知栏读同一份（#646）。 */
     var setup by mutableStateOf(SetupGuide())
         private set
@@ -142,10 +148,36 @@ class AppModel(
     }
 
     private suspend fun loadExtras() {
-        runCatching {
-            val o = backend.call("latest_version") as? JSONObject ?: return@runCatching
-            val v = o.optString("version")
-            if (v.isNotEmpty()) newVersion = NewVersion(v, o.optString("url"))
+        updateAction("check_update")
+    }
+
+    fun openUpdates() {
+        sheet = Sheet.Update
+        updateAction("update_state")
+    }
+
+    fun checkUpdates() = updateAction("check_update")
+    fun downloadUpdate() = updateAction("download_update", updateSource)
+    fun cancelUpdate() = updateAction("cancel_update")
+    fun installUpdate() = updateAction("install_update")
+
+    private fun updateAction(method: String, vararg args: Any?) {
+        updateJob?.cancel()
+        updateJob = scope.launch {
+            try {
+                var result = backend.call(method, *args) as? JSONObject ?: JSONObject()
+                while (isActive) {
+                    update = result
+                    val v = result.optString("version")
+                    newVersion = if (v.isNotEmpty()) NewVersion(v, result.optString("notes_url")) else null
+                    if (result.has("source")) updateSource = result.optString("source", "gitee")
+                    if (!result.optBoolean("busy")) break
+                    delay(500)
+                    result = backend.call("update_state") as? JSONObject ?: JSONObject()
+                }
+            } catch (e: EngineError) {
+                update = JSONObject().put("state", "error").put("error", e.message.orEmpty())
+            }
         }
     }
 
@@ -566,6 +598,11 @@ class AppModel(
     /** 演示按品牌看三步文案（小米多一条「USB 调试（安全设置）」）；真机上品牌取自 Build.BRAND。 */
     internal fun demoBrand(brand: String) {
         brandOverride = brand
+    }
+
+    internal fun demoUpdate(state: JSONObject) {
+        updateJob?.cancel()
+        update = state
     }
 
     internal fun demoVersion(version: String, newer: NewVersion?) {

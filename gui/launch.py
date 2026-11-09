@@ -35,6 +35,8 @@ def is_cli_program(executable=None):
 
 def dispatch(argv, executable=None):
     """这次启动去哪：'cli' 转发给引擎、'help' 打用法、'usage' 报用法错、'window' 起窗口。"""
+    if len(argv) == 2 and argv[0] == "--apply-update":
+        return "update"
     if len(argv) > 1 and argv[0] == "--cli":
         return "cli"
     if not is_cli_program(executable):
@@ -91,6 +93,8 @@ def smoke_gui(window, result):
 
 def main():
     action = dispatch(sys.argv[1:])
+    if action == "update":
+        sys.exit(app.update_install.apply_update(sys.argv[2]))
     if action == "cli":
         app.cli_main(); return
     if action != "window":
@@ -109,6 +113,7 @@ def main():
     url = Path(app.BASE, "gui", "web", "index.html").resolve().as_uri()
     w = webview.create_window(app.APP_NAME, url, js_api=api, hidden=smoke,
                               width=1080, height=780, min_size=(900, 640))
+    api.updater.installer.close = w.destroy
     options = {"debug": "--debug" in sys.argv, "http_server": False}
     if smoke:
         options.update(func=smoke_gui, args=(w, result))

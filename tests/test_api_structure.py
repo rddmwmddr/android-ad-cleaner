@@ -16,6 +16,11 @@ ROOT = Path(__file__).resolve().parents[1]
 BRIDGE = {
     "env": (),
     "latest_version": (),
+    "check_update": (),
+    "update_state": (),
+    "download_update": ("source",),
+    "cancel_update": (),
+    "install_update": (),
     "devices": (),
     "usb_hint": (),
     "status": ("serial",),

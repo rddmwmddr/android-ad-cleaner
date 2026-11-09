@@ -164,6 +164,9 @@ def boot(base, data_dir, cache_dir, package="com.ahuamiao.adcleaner"):
     app.ENGINE_HOST = "phone"                             # child_env() 只认它，不认继承来的 AAC_HOST
 
     api = app.Api(data_dir, adb=adb.ADB_PATH)
+    from .updates import AndroidInstaller
+    api.updater.target = "android-arm64"
+    api.updater.installer = AndroidInstaller(native)
     api.runner = inproc.Runner(api._child_env)
     # 执行与还原都会切到别的 App 的设置页：期间开前台服务保活，结束后回到本 App
     api.dispatcher._work = in_front(api.dispatcher._work, package, "去广告", lambda: was_stopped(api.job))

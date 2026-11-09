@@ -9,7 +9,7 @@ import org.json.JSONObject
  * `adb shell am start -n com.ahuamiao.adcleaner/.MainActivity --es demo home [--es sheet more]`
  * 页面：setup1 setup2 setup3 setup3mi old stopped-sh ask denied nodev home prepare0 prepare1 choose
  * blocked norecipe scanfail run paused pausing stalled fgmode stopping done failed stopped failed2
- * 面板：more newer restore restored feedback report log；对话框：devoff
+ * 面板：more newer update update-downloading update-ready update-error restore restored feedback report log；对话框：devoff
  *
  * 首次设置的三个演示页仍从真的 view.py 取三步文案（#646）：要先等 Python 启动，期间显示启动页。
  */
@@ -17,6 +17,13 @@ object Demo {
     private val device = Device("demo", "OPPO Find X10 Pro Max", "PKD110")
 
     fun handle(intent: Intent?, model: AppModel) {
+        // 仅 debug：验收同签名 APK 的系统安装入口；正式包不包含 Demo。
+        if (intent?.getStringExtra("call") == "install-update") {
+            val result = com.ahuamiao.adcleaner.Native.installUpdate(
+                intent.getStringExtra("path").orEmpty(), intent.getStringExtra("version").orEmpty())
+            android.util.Log.i("AACUpdateTest", result)
+            return
+        }
         intent?.getStringExtra("plan")?.let {        // 真引擎验收：--es plan '<计划 JSON>'
             model.debugStart(JSONObject(it))
             return
@@ -74,6 +81,15 @@ object Demo {
         model.sheet = null
         when (sheet) {
             "more", "newer" -> model.sheet = Sheet.More
+            "update", "update-downloading", "update-ready", "update-error" -> {
+                model.demoUpdate(JSONObject().put("version", "0.4.2").put("source", "gitee")
+                    .put("state", if (sheet == "update-downloading") "downloading" else "available")
+                    .put("busy", sheet == "update-downloading").put("received", 30).put("size", 100)
+                    .put("can_cancel", sheet == "update-downloading")
+                    .put("can_install", sheet == "update-ready").put("can_download", sheet == "update")
+                    .put("error", if (sheet == "update-error") "下载不完整或校验失败，请重试或切换渠道" else ""))
+                model.sheet = Sheet.Update
+            }
             "restore" -> model.openRestore()
             "restored" -> {
                 model.openRestore()

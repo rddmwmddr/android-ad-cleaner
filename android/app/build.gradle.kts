@@ -74,7 +74,7 @@ val syncEngine by tasks.registering(Sync::class) {
     into(layout.buildDirectory.dir("generated/aac-assets/aac"))
     from(repo.resolve("tool")) { into("tool"); include("*.py", "*.dex") }
     from(repo.resolve("recipes")) { into("recipes"); include("*/recipe*.py"); exclude("zztest-*/**") }
-    from(repo.resolve("gui")) { into("gui"); include("app.py", "winpreflight.py", "version.py", "web/chime.wav") }
+    from(repo.resolve("gui")) { into("gui"); include("app.py", "winpreflight.py", "version.py", "updates.py", "update_install.py", "web/chime.wav") }
     from(repo.resolve("docs/手机版教程")) { into("docs"); include("brand-taps.json") }   // 首次设置按品牌说路径
 }
 tasks.named("preBuild") { dependsOn(syncEngine) }

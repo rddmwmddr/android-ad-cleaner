@@ -9,9 +9,9 @@ import hashlib, importlib, json, os, platform, re, runpy, subprocess, sys, threa
 from pathlib import Path
 
 try:                                # 当包导入（测试）；直接跑脚本、打包时它是顶层模块
-    from . import winpreflight
+    from . import winpreflight, updates, update_install
 except ImportError:
-    import winpreflight
+    import winpreflight, updates, update_install
 
 APP_NAME = "肉呆去广告"
 VERSION = "0.4.1"
@@ -928,10 +928,10 @@ class Dispatcher:
         拿锁只等 `wait` 秒：`ui_check()` 持着同一把锁最长 75 秒，按界面按钮的线程不该被按在那里等，
         拿不到就直接回一句。"""
         if not self.lock.acquire(timeout=wait):
-            return "正在检查读屏连接，等它结束后再还原"
+            return "正在检查读屏连接，等它结束后再" + ("安装更新" if name == "安装更新" else "还原")
         try:
             if self.busy():
-                return "正在执行去广告，等它结束后再还原"
+                return "正在执行去广告，等它结束后再" + ("安装更新" if name == "安装更新" else "还原")
             if self.side:
                 return f"「{self.side}」还没做完，请稍后"
             self.side = name
@@ -1166,6 +1166,12 @@ class Api:
         self.runner = runner or Runner(self._child_env)
         self.dispatcher = Dispatcher(lambda: self.runner, lambda: self.backups, self.data,
                                      lambda: self.adb, self._on_error)
+        update_root = Path(self.data.root) / "updates"
+        self.updater = updates.Updates(VERSION, update_root, update_install.DesktopInstaller(update_root),
+                                       source=self.data.setting("update_source", "gitee"),
+                                       claim=lambda: self.dispatcher.claim("安装更新"),
+                                       release=self.dispatcher.release,
+                                       save_source=lambda source: self.data.put_setting("update_source", source))
         self.last_status = None
         self.last_devices = ""
         self.last_scan_notes = []
@@ -1212,6 +1218,7 @@ class Api:
 
     # ----- 基础 -----
     def env(self):
+        update_install.confirm_started(Path(self.data.root) / "updates", VERSION, sys.executable)
         return {"adb": self.adb, "data": self.data.root, "version": VERSION, "os": platform.system(),
                 "images": [f for f in sorted(os.listdir(os.path.join(BASE, "images"))) if f.startswith("dev-")]}
 
@@ -1227,6 +1234,21 @@ class Api:
         """用户关掉提示：这一版不再出现，换下一版时再问一次（#872）。"""
         self.data.put_setting(OLD_INSTALL_MARK, VERSION)
         return True
+
+    def check_update(self):
+        return self.updater.check()
+
+    def update_state(self):
+        return self.updater.snapshot()
+
+    def download_update(self, source="gitee"):
+        return self.updater.download(source)
+
+    def cancel_update(self):
+        return self.updater.cancel()
+
+    def install_update(self):
+        return self.updater.install()
 
     def latest_version(self):
         """有新版时返回 {version, url}，没有或查不到返回 {}。旧版不会自动更新：0.2.6 发布后，

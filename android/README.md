@@ -106,3 +106,11 @@ AAC_BRIDGE_ADB=$(which adb) AAC_BRIDGE_SERIAL=emulator-5554 python -c "from aac_
 `tests/test_android_shim.py` 不连手机，验 adb 语义、进程内脚本与选择器。
 
 `app/src/test/java/com/ahuamiao/adcleaner/ShellServerTest.java` 用 JUnit 验命令服务的协议层：帧、stdout / stderr 分开、退出码、并发编号、取消。它只用 `java.io` 与 `ProcessBuilder`，不需要模拟器；开发机上把 sh 指到 `/bin/sh` 跑。
+
+## 应用内更新（未发布，#888）
+
+启动时检查版本，「更多 → 检查更新」可重新检查。国内默认 Gitee，也可选 GitHub；下载显示进度，可取消，大小和 SHA256 校验通过后才能安装。系统会要求允许本 App 安装应用，并请用户确认覆盖安装；包名、版本和签名必须与当前 App 匹配。无需卸载，数据和备份保留；正在执行或还原时不开始安装。
+
+0.4.1 及更早版本仍要先手动覆盖安装第一版带更新功能的客户端。调试 APK 与正式 APK 签名不同，不能互相覆盖。实现边界见 [ADR-0030](../docs/adr/0030-in-app-update.md)。
+
+Debug 构建可在模拟器验收系统安装入口（正式包没有这个入口）：先把同签名、更高版本 APK 放到 App 私有的 `files/data/updates/`，用 `adb -s <模拟器序列号> shell am start -n com.ahuamiao.adcleaner/.MainActivity --es call install-update --es path /data/user/0/com.ahuamiao.adcleaner/files/data/updates/candidate.apk --es version <候选版本>`。结果写入 `AACUpdateTest` 日志，系统授权与覆盖安装仍需在界面确认。界面演示可用 `--es demo home --es sheet update-downloading`（另有 `update` / `update-ready` / `update-error`）。
