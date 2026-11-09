@@ -37,6 +37,7 @@ sealed interface Screen {
 }
 
 sealed interface Sheet {
+    data object Update : Sheet
     data object More : Sheet
     data object Restore : Sheet
     data class Feedback(val kind: String, val diag: String) : Sheet
@@ -57,6 +58,23 @@ enum class RunMode { Deciding, Background, Foreground }
 
 data class NewVersion(val version: String, val url: String)
 
+/**
+ * 更新快照 → 界面要用的三件东西。轮询留在 [AppModel.updateAction]，这里只做派生；
+ * 抽成纯函数才能用 JVM 单测直接验，不必起 Android 运行时。
+ */
+internal data class UpdateView(val state: JSONObject, val version: NewVersion?, val source: String?) {
+    companion object {
+        fun of(state: JSONObject): UpdateView {
+            val version = state.optString("version")
+            return UpdateView(
+                state = state,
+                version = if (version.isEmpty()) null else NewVersion(version, state.optString("notes_url")),
+                source = if (state.has("source")) state.optString("source", "gitee") else null,
+            )
+        }
+    }
+}
+
 /** 进程级：Activity 被系统回收、从通知点回来，都接着这一份。 */
 class AppModel(
     /** 首次设置的三步只从真的 Python 取；演示用的假后台不答这部分（#646）。 */
@@ -76,6 +94,11 @@ class AppModel(
         private set
     var newVersion by mutableStateOf<NewVersion?>(null)
         private set
+    var update by mutableStateOf(JSONObject())
+        private set
+    var updateSource by mutableStateOf("gitee")
+    private var updateJob: Job? = null
+
     /** 首次设置的三步与「第几步」都来自 view.py，页面和通知栏读同一份（#646）。 */
     var setup by mutableStateOf(SetupGuide())
         private set
@@ -142,10 +165,36 @@ class AppModel(
     }
 
     private suspend fun loadExtras() {
-        runCatching {
-            val o = backend.call("latest_version") as? JSONObject ?: return@runCatching
-            val v = o.optString("version")
-            if (v.isNotEmpty()) newVersion = NewVersion(v, o.optString("url"))
+        updateAction("check_update")
+    }
+
+    fun openUpdates() {
+        sheet = Sheet.Update
+        updateAction("update_state")
+    }
+
+    fun checkUpdates() = updateAction("check_update")
+    fun downloadUpdate() = updateAction("download_update", updateSource)
+    fun cancelUpdate() = updateAction("cancel_update")
+    fun installUpdate() = updateAction("install_update")
+
+    private fun updateAction(method: String, vararg args: Any?) {
+        updateJob?.cancel()
+        updateJob = scope.launch {
+            try {
+                var result = backend.call(method, *args) as? JSONObject ?: JSONObject()
+                while (isActive) {
+                    val view = UpdateView.of(result)
+                    update = view.state
+                    newVersion = view.version
+                    view.source?.let { updateSource = it }
+                    if (!result.optBoolean("busy")) break
+                    delay(500)
+                    result = backend.call("update_state") as? JSONObject ?: JSONObject()
+                }
+            } catch (e: EngineError) {
+                update = JSONObject().put("state", "error").put("error", e.message.orEmpty())
+            }
         }
     }
 
@@ -566,6 +615,11 @@ class AppModel(
     /** 演示按品牌看三步文案（小米多一条「USB 调试（安全设置）」）；真机上品牌取自 Build.BRAND。 */
     internal fun demoBrand(brand: String) {
         brandOverride = brand
+    }
+
+    internal fun demoUpdate(state: JSONObject) {
+        updateJob?.cancel()
+        update = state
     }
 
     internal fun demoVersion(version: String, newer: NewVersion?) {

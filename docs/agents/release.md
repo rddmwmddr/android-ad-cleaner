@@ -47,7 +47,7 @@ sed -n '/^## 未发布/,/^## /p' CHANGELOG.md
 
 - 引擎重构一句话带过。
 - 验证：N 项设备无关回归通过；模拟器 / 真机验证了哪几项；**没有真机复测**就直说。
-- 旧版不会自动更新：0.2.7 起的客户端左下角会提示新版。Windows 安装程序暂未签名。附 `SHA256SUMS.txt`。
+- 0.4.1 及以前需先手动安装首个带应用内升级的版本；之后可在 App 内检查、下载并安装更新，Android 仍需系统确认。Windows 安装程序暂未签名。附 `SHA256SUMS.txt`。
 
 感谢 <本期贡献者>。
 
@@ -96,10 +96,11 @@ APK 由 owner 构建并传到同一个 Release，构建不在「一轮发版的�
 4. **上传 macOS 安装包**到同一个草稿（本机打包与公证步骤在 `CLAUDE.local.md`）。
 5. **写正文并发布**。正文可以在草稿阶段写好；发布前核对这一版发出去的每个安装包（含 APK）的 SHA256 与 `SHA256SUMS.txt` 一致，并按「致谢谁」核对待致谢名单。那份校验清单是手写的，漏掉哪个包，`baidu_rows.py --legacy` 生成安装说明时会直接报错，不会写出空校验值。 <!-- rule:doc.release.sha-and-credits-before-publish -->
 6. **同步用户侧文本**：
-   - `README.md` 的版本摘要：首段从 Release 正文首段复制，后面接「旧版不会自动更新……」；下载表格换版本号与链接。
+   - `README.md` 的版本摘要：首段从 Release 正文首段复制，后面接旧版升级方法（0.4.1 及以前仍需先手动覆盖安装）；下载表格换版本号与链接。
    - `index.html` 的 `REL`（`version` / `github` / `gitee` / `files[].file` / `size` / `sha`）与 `RELEASED` 日期。APK 条目的 `id` 逐字写 `android`：卡片角标、手机端高亮和 `baidu_rows.py` 生成的安装说明都靠它，没有这一条，线上就看不到手机版。 <!-- rule:doc.release.apk-id-android -->
-7. **同步版本提示**：官网的 `android-ad-cleaner-latest.json`，以及放在机主服务器上的官网副本（两处的步骤在本机 `CLAUDE.local.md`）。
+7. **同步官网副本**：放在机主服务器上的页面副本（步骤在本机 `CLAUDE.local.md`）。版本清单等下一步国内附件校验完成后再发布。
 8. **国内下载**：`python3 gui/upload_gitee.py <版本>`，从公开的 Release 下载安装包、核对 SHA256，推代码和标签到 Gitee、建发行版传附件，再匿名下载回来核对。Windows 安装版被 Gitee 拒收，不上传，下载页上它标 `gitee: false`，只给 GitHub 按钮。`index.html` 的 `REL.gitee` 换成这一版的路径。百度网盘暂停使用，页面上不显示；Gitee 不可用时把 `REL.gitee` 留空，改跑 `gui/upload_baidu.sh <版本>`，它会回写网盘链接、按钮随之恢复，但 `#dl-lead` 那句文案是手写的，要把「国内下载走 Gitee，不用登录」改回「国内下载走百度网盘，链接里带提取码」，后半句「安装版会原地替换旧版，原来的备份保留；免安装版不会」原样留着。国内走 Gitee 时 Windows 访客只拿得到免安装版，它不替换、也不卸载已安装的旧版：发版正文的 Windows 侧要像 0.4.0 对 Mac 那样写明这一句，并给出两条出路（用安装版覆盖安装，或先卸载旧的「安卓去广告」，数据与备份保留）。下载页、`README`、`docs/08` 与 `gui/upload_gitee.py` 生成的 Gitee 发行版正文各自只覆盖自己那一处，不能因为页面已经写了就在发版正文里省掉。免安装版启动时也会在界面里提示一次（#872），但那只在用户已经遇到并存时出现，同样不能替代正文那一句。 <!-- rule:doc.release.gitee-portable-wording -->
+   应用内更新使用 APK、两份 DMG 和 Windows 便携 ZIP。附件回下载校验通过后，运行 `python3 gui/update_manifest.py <版本> /tmp/android-ad-cleaner-latest.json`，将生成文件发布到官网同名地址并 GET 回读核对。它保留旧客户端读取的 `version`，并附四个平台的大小、SHA256 和双渠道地址；不要再手写只有版本号的 JSON，也不要在 Gitee 附件未就绪时推送新清单。Gitee 暂不可用时保留上一份完整清单，让用户先走官网手动下载。
 9. **CHANGELOG 收口**：把 `## 未发布` 改名为 `## <版本> · <日期>`，在标题下补一行验证（回归项数 + 验证了什么 + 缺什么），再重开一个空的 `## 未发布`。回归项数写第 1 步 `discover` 的输出，不记基线 SHA——那个 tag 上重跑一遍就能得到同一个数。
 10. **催复测**：按 [release-followup.md](release-followup.md) 逐条发给 `waiting-for-verify` 的报告者。
 

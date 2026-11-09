@@ -112,7 +112,7 @@ pre.report{background:var(--log);color:var(--logtext);font-family:var(--mono);fo
       <button class="link" onclick="openSettings()">⚙ 设置</button>
       <button class="link" onclick="openFeedback()">💬 反馈问题</button>
       <button class="link" onclick="api.open_url('https://github.com/rddmwmddr/android-ad-cleaner')">？使用说明</button>
-      <button class="link newver hide" id="newver"></button>
+      <button class="link newver" id="newver" onclick="openUpdates()">检查更新</button>
       <div class="ver" id="ver"></div>
     </div>
   </aside>
@@ -133,22 +133,63 @@ function setStep(n){
     const k = +e.dataset.s; e.classList.toggle("on", k === n); e.classList.toggle("done", k < n);
   });
 }
-function modal(html, wide){ $("#modalbox").innerHTML = html; $("#modalbox").classList.toggle("wide", !!wide); $("#modal").classList.add("show"); }
-function closeModal(){ $("#modal").classList.remove("show"); }
+function modal(html, wide){ updateVisible = false; $("#modalbox").innerHTML = html; $("#modalbox").classList.toggle("wide", !!wide); $("#modal").classList.add("show"); }
+function closeModal(){ updateVisible = false; $("#modal").classList.remove("show"); }
 
 window.addEventListener("pywebviewready", async () => {
   api = window.pywebview.api;
   ENV = await api.env();
   $("#ver").textContent = "版本 " + ENV.version;
   showConnect();
-  api.latest_version().then(r => {      // 旧版不会自动更新：有新版就在侧栏提示
-    if (!r || !r.version) return;
-    const b = $("#newver");
-    b.textContent = `有新版本 ${r.version}，点这里下载`;
-    b.onclick = () => api.open_url(r.url);
-    b.classList.remove("hide");
-  }).catch(() => {});
+  updateAction("check_update");
 });
+
+/* ---------- 应用内更新 ---------- */
+let updateState = {}, updateVisible = false, updateTimer = null, updateSource = "gitee", updateRequest = 0;
+async function updateAction(method, ...args){
+  const request = ++updateRequest;
+  clearTimeout(updateTimer);
+  try {
+    const state = await api[method](...args);
+    if (request !== updateRequest) return;
+    updateState = state || {};
+    if (state.source) updateSource = state.source;
+    $("#newver").textContent = state.version ? `更新到 ${state.version}` : "检查更新";
+    if (updateVisible) paintUpdate();
+    if (state.busy) updateTimer = setTimeout(() => updateAction("update_state"), 500);
+  } catch(e){
+    if (request !== updateRequest) return;
+    updateState = {...updateState, busy: false, error: String(e)};
+    if (updateVisible) paintUpdate();
+  }
+}
+function openUpdates(){
+  updateVisible = true;
+  paintUpdate();
+  updateAction("update_state");
+}
+function paintUpdate(){
+  const u = updateState, progress = Math.max(0, Math.min(100, Math.round((u.received || 0) * 100 / (u.size || 1))));
+  modal(`<h3>${u.version ? `更新到 ${esc(u.version)}` : "检查更新"}</h3>
+    <p class="lead">当前版本 ${esc(ENV.version)}。更新会保留数据和备份。</p>
+    <label>下载渠道 <select id="update-source" ${u.busy ? "disabled" : ""} onchange="updateSource=this.value">
+      <option value="gitee" ${updateSource === "gitee" ? "selected" : ""}>国内 · Gitee</option>
+      <option value="github" ${updateSource === "github" ? "selected" : ""}>GitHub</option>
+    </select></label>
+    ${u.state === "downloading" ? `<p>正在下载 ${progress}%</p><progress value="${progress}" max="100" style="width:100%"></progress>` : ""}
+    ${u.busy && u.state !== "downloading" ? `<p>${u.state === "checking" ? "正在检查更新…" : "正在准备更新…"}</p>` : ""}
+    ${u.message ? `<p>${esc(u.message)}</p>` : ""}
+    ${u.error ? `<p class="note warn" role="alert">${esc(u.error)}</p>` : ""}
+    ${u.previous_error ? `<p class="note warn">上次更新：${esc(u.previous_error)}</p>` : ""}
+    <p class="lead">安装会关闭并重新打开本程序，请先完成正在进行的去广告或还原操作。</p>
+    <div class="actions">
+      ${u.can_install ? '<button class="btn" onclick="updateAction(\'install_update\')">安装并重启</button>' : u.can_download ? '<button class="btn" onclick="updateAction(\'download_update\',updateSource)">下载更新</button>' : ""}
+      ${u.can_cancel ? '<button class="btn plain" onclick="updateAction(\'cancel_update\')">取消下载</button>' : ""}
+      ${!u.busy ? '<button class="btn plain" onclick="updateAction(\'check_update\')">重新检查</button>' : ""}
+      <button class="btn plain" onclick="closeModal()">稍后</button>
+    </div>`);
+  updateVisible = true;
+}
 
 /* ---------- 1 连接 ---------- */
 const TUT = [

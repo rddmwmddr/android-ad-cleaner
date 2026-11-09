@@ -74,7 +74,7 @@ val syncEngine by tasks.registering(Sync::class) {
     into(layout.buildDirectory.dir("generated/aac-assets/aac"))
     from(repo.resolve("tool")) { into("tool"); include("*.py", "*.dex") }
     from(repo.resolve("recipes")) { into("recipes"); include("*/recipe*.py"); exclude("zztest-*/**") }
-    from(repo.resolve("gui")) { into("gui"); include("app.py", "winpreflight.py", "version.py", "web/chime.wav") }
+    from(repo.resolve("gui")) { into("gui"); include("app.py", "winpreflight.py", "version.py", "updates.py", "update_install.py", "web/chime.wav") }
     from(repo.resolve("docs/手机版教程")) { into("docs"); include("brand-taps.json") }   // 首次设置按品牌说路径
 }
 tasks.named("preBuild") { dependsOn(syncEngine) }
@@ -95,4 +95,6 @@ dependencies {
     implementation("org.conscrypt:conscrypt-android:2.5.3")
     // ShellServer 只用 java.io 与 ProcessBuilder，能在 JVM 上单测协议层（android/README.md）
     testImplementation("junit:junit:4.13.2")
+    // JVM 单测里 android.jar 的 org.json 是空壳（方法一律抛 not mocked），更新快照的派生要用真的
+    testImplementation("org.json:json:20240303")
 }

@@ -33,6 +33,9 @@ object Native {
     }
 
     @JvmStatic
+    fun installUpdate(path: String, version: String): String = UpdateInstaller.install(app, path, version)
+
+    @JvmStatic
     fun openUrl(url: String) = main.post {
         app.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
