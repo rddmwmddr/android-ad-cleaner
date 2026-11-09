@@ -137,7 +137,7 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
         for functional in ("显示扫一扫模块", "显示搜索历史模块", "显示书签模块", "显示最常访问模块"):
             self.assertNotIn(functional, source)
 
-    def browser_phone(self, stages, focus, clicked=None, backed=None, only=None, **fields):
+    def browser_phone(self, stages, focus, clicked=None, backed=None, only=None, recipe="recipe.py", **fields):
         """假手机 + 按时间轴换页：底栏点「菜单」会先空转 6 秒，页面切换都排在这之后。"""
         clock = Clock(click_cost=0.05)
         original = fast.time
@@ -148,7 +148,7 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
             p.click = lambda x, y: (clicked.append((x, y)), clock.click())[1]
         if backed is not None:
             p.back = lambda *a, **k: (backed.append(clock.t), clock.click())[1]
-        scope, out = load_recipe(p, ROOT / "recipes/xiaomi-24129PN74C/recipe.py", only=only)
+        scope, out = load_recipe(p, ROOT / "recipes/xiaomi-24129PN74C" / recipe, only=only)
         scope["time"] = clock              # 脚本里的 sleep 也推进设备时间轴，否则点完齿轮页面不会换
         return p, scope, out
 
@@ -164,17 +164,27 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
         self.assertEqual(backed, [])
 
     def test_browser_falls_back_to_the_my_tab_when_the_bar_has_no_menu(self):
-        """MIX Flip 2 底栏没有「菜单」：走「我的」→ 齿轮，进了设置页才算成功（#833）。"""
-        clicked, backed = [], []
-        # 「我的」页排在 6.2 秒：tap() 探测底栏文字时最多空转 6 秒才放弃，6.2 就是它刚放弃之后。
-        _p, scope, _out = self.browser_phone(
-            [(0.0, BOTTOM_WITHOUT_MENU), (6.2, MINE_PAGE), (7.0, BROWSER_SETTINGS_PAGE)],
-            focus=((0.0, BROWSER), (7.0, BROWSER_SETTINGS)), clicked=clicked, backed=backed)
-        with contextlib.redirect_stdout(io.StringIO()):
-            scope["browser_settings"]()
-        self.assertIn(MINE_CENTER, clicked)
-        self.assertIn(MINE_PAGE_GEAR, clicked)
-        self.assertEqual(backed, [])
+        """MIX Flip 2 底栏没有「菜单」：走「我的」→ 齿轮，进了设置页才算成功（#833）。
+        HyperOS 4 那份 recipe_os4.py 当初漏改，Xiaomi 15 OS4 上整段报「底栏菜单未找到」（#900）。"""
+        for recipe in RECIPES:
+            with self.subTest(recipe=recipe):
+                clicked, backed = [], []
+                # 「我的」页排在 6.2 秒：tap() 探测底栏文字时最多空转 6 秒才放弃，6.2 就是它刚放弃之后。
+                _p, scope, _out = self.browser_phone(
+                    [(0.0, BOTTOM_WITHOUT_MENU), (6.2, MINE_PAGE), (7.0, BROWSER_SETTINGS_PAGE)],
+                    focus=((0.0, BROWSER), (7.0, BROWSER_SETTINGS)), clicked=clicked, backed=backed,
+                    recipe=recipe)
+                with contextlib.redirect_stdout(io.StringIO()):
+                    scope["browser_settings"]()
+                self.assertIn(MINE_CENTER, clicked)
+                self.assertIn(MINE_PAGE_GEAR, clicked)
+                self.assertEqual(backed, [])
+
+    def test_os4_browser_segment_goes_through_browser_settings(self):
+        """OS4 浏览器段调的是带兜底的 browser_settings()，不是只认「菜单」的那条（#900）。"""
+        src = (ROOT / "recipes/xiaomi-24129PN74C/recipe_os4.py").read_text(encoding="utf-8")
+        self.assertIn("    browser_settings()\n", src)
+        self.assertNotIn("浏览器底栏「菜单」未找到", src)
 
     def test_menu_entry_stopping_on_a_blank_focus_still_fails_loudly(self):
         """底栏有「菜单」却两次都没进设置页、中途读不出前台：不能当成「没有菜单」改走「我的」（#581）。"""

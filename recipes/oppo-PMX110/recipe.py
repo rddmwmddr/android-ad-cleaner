@@ -176,10 +176,13 @@ def close_named(names, title, max_screens=12, dependent=(), reopen=None, snapsho
 
 
 def require_installed(package, label):
+    """没装的包 `pm path` 输出为空，退出码是 1（adb shell v2 带回）或 0（不带回退出码的通道）：
+    那是「没装」，跳过本段，不算读不出（#899）。有报错文字或别的退出码才算读不出。"""
     result = p.d.shell("pm path " + package)
-    require(not result.exit_code, f"无法读取{label}安装状态")
-    if "package:" not in result.output:
-        skip(f"本机未安装{label}")
+    if "package:" in result.output:
+        return
+    require(result.exit_code in (0, 1) and not result.output.strip(), f"无法读取{label}安装状态")
+    skip(f"本机未安装{label}")
 
 
 def system_settings():
