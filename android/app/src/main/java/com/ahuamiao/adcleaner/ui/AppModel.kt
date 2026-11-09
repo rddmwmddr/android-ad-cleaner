@@ -58,6 +58,23 @@ enum class RunMode { Deciding, Background, Foreground }
 
 data class NewVersion(val version: String, val url: String)
 
+/**
+ * 更新快照 → 界面要用的三件东西。轮询留在 [AppModel.updateAction]，这里只做派生；
+ * 抽成纯函数才能用 JVM 单测直接验，不必起 Android 运行时。
+ */
+internal data class UpdateView(val state: JSONObject, val version: NewVersion?, val source: String?) {
+    companion object {
+        fun of(state: JSONObject): UpdateView {
+            val version = state.optString("version")
+            return UpdateView(
+                state = state,
+                version = if (version.isEmpty()) null else NewVersion(version, state.optString("notes_url")),
+                source = if (state.has("source")) state.optString("source", "gitee") else null,
+            )
+        }
+    }
+}
+
 /** 进程级：Activity 被系统回收、从通知点回来，都接着这一份。 */
 class AppModel(
     /** 首次设置的三步只从真的 Python 取；演示用的假后台不答这部分（#646）。 */
@@ -167,10 +184,10 @@ class AppModel(
             try {
                 var result = backend.call(method, *args) as? JSONObject ?: JSONObject()
                 while (isActive) {
-                    update = result
-                    val v = result.optString("version")
-                    newVersion = if (v.isNotEmpty()) NewVersion(v, result.optString("notes_url")) else null
-                    if (result.has("source")) updateSource = result.optString("source", "gitee")
+                    val view = UpdateView.of(result)
+                    update = view.state
+                    newVersion = view.version
+                    view.source?.let { updateSource = it }
                     if (!result.optBoolean("busy")) break
                     delay(500)
                     result = backend.call("update_state") as? JSONObject ?: JSONObject()

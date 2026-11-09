@@ -50,6 +50,10 @@ class ClientData:
         return os.path.join(self.root, "backups")
 
     @property
+    def updates(self):
+        return os.path.join(self.root, "updates")
+
+    @property
     def logs(self):
         return os.path.join(self.root, "logs")
 
@@ -928,10 +932,10 @@ class Dispatcher:
         拿锁只等 `wait` 秒：`ui_check()` 持着同一把锁最长 75 秒，按界面按钮的线程不该被按在那里等，
         拿不到就直接回一句。"""
         if not self.lock.acquire(timeout=wait):
-            return "正在检查读屏连接，等它结束后再" + ("安装更新" if name == "安装更新" else "还原")
+            return f"正在检查读屏连接，等它结束后再{name}"
         try:
             if self.busy():
-                return "正在执行去广告，等它结束后再" + ("安装更新" if name == "安装更新" else "还原")
+                return f"正在执行去广告，等它结束后再{name}"
             if self.side:
                 return f"「{self.side}」还没做完，请稍后"
             self.side = name
@@ -1166,7 +1170,7 @@ class Api:
         self.runner = runner or Runner(self._child_env)
         self.dispatcher = Dispatcher(lambda: self.runner, lambda: self.backups, self.data,
                                      lambda: self.adb, self._on_error)
-        update_root = Path(self.data.root) / "updates"
+        update_root = Path(self.data.updates)
         self.updater = updates.Updates(VERSION, update_root, update_install.DesktopInstaller(update_root),
                                        source=self.data.setting("update_source", "gitee"),
                                        claim=lambda: self.dispatcher.claim("安装更新"),
@@ -1218,7 +1222,7 @@ class Api:
 
     # ----- 基础 -----
     def env(self):
-        update_install.confirm_started(Path(self.data.root) / "updates", VERSION, sys.executable)
+        update_install.confirm_started(self.data.updates, VERSION, sys.executable)
         return {"adb": self.adb, "data": self.data.root, "version": VERSION, "os": platform.system(),
                 "images": [f for f in sorted(os.listdir(os.path.join(BASE, "images"))) if f.startswith("dev-")]}
 

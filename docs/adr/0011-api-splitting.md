@@ -76,3 +76,7 @@
 执行与还原互斥：`Dispatcher` 多一个自有状态 `side`（正在跑的旁路操作）与 `claim(name)` / `release()` 一对方法，`Api.restore()` 退成「占位 → 做事 → 放出」，还原体留在 `_restore_work`。占位与 `start()` 共用 `lock`，`start()` 在锁内也拒「旁路操作还没做完」。手机版 `aac_android.main.boot()` 的 patch 点随之从 `api.restore` 换成 `api._restore_work`（保活与后台屏要落在互斥判断之后才开），`_restore_work` 记为门面保留的私有名。`restore` 的窗口桥签名与三块不互读的守卫不变。
 
 （2026-11-07，#675 续）占位拿锁改成 `claim(name, wait=0.2)`：`ui_check()` 持着同一把锁最长 75 秒，按界面按钮的那条线程不该被按在那里，拿不到就直接回一句。反过来 `ui_check()` 也拒「还原正在做」，两边不再抢同一块屏。`side` 的读写仍只发生在这对方法里。
+
+## 补记（2026-11-09，#888）
+
+应用内更新（[ADR-0030](0030-in-app-update.md)）在门面上加了 `check_update` / `update_state` / `download_update` / `cancel_update` / `install_update`：状态、清单与下载都在 `gui/updates.py`，门面只转发。上面写的「22 个窗口桥」「13 个方法」是拆分当时的口径，本文不改写历史；当前窗口桥以 `tests/test_api_structure.py` 的 `BRIDGE` 为准——#888 之前已经是 27 个，本次增至 32 个。

@@ -26,6 +26,11 @@ class RestoreExclusionTests(unittest.TestCase):
         self.assertIn("正在执行去广告", self.api.restore("test", "quickapp"))
         self.assertEqual(self.ran, [], "执行中不能碰手机")
 
+    def test_side_operation_is_named_by_the_caller_that_asked(self):
+        """#889：安装更新与还原共用这把锁，回的那句话要说出是谁在等。"""
+        self.api.dispatcher.job = job_stub(running=True)
+        self.assertEqual(self.api.dispatcher.claim("安装更新"), "正在执行去广告，等它结束后再安装更新")
+
     def test_run_is_refused_while_restoring(self):
         def restoring(serial, what):
             self.ran.append(self.api.dispatcher.start("test", {"backup": False}))

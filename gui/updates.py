@@ -8,6 +8,7 @@ import threading
 import urllib.error
 import urllib.parse
 import urllib.request
+from contextlib import contextmanager
 from pathlib import Path
 
 MANIFEST_URL = "https://ahuamiao.com/sites/other/android-ad-cleaner-latest.json"
@@ -24,6 +25,49 @@ ACTIVE = {"checking", "downloading", "cancelling", "installing"}
 
 class UpdateError(Exception):
     pass
+
+
+def _try_lock(stream):
+    if os.name == "nt":
+        import msvcrt
+        try:
+            msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+            return True
+        except OSError:
+            return False
+    import fcntl
+    try:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except OSError:
+        return False
+
+
+def _unlock(stream):
+    stream.seek(0)
+    if os.name == "nt":
+        import msvcrt
+        msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def file_lock(path, message):
+    """跨进程互斥：拿不到就抛 UpdateError。锁随进程退出由系统释放，锁文件本身保留。"""
+    with Path(path).open("a+b") as stream:
+        stream.seek(0, 2)
+        if stream.tell() == 0:
+            stream.write(b"0")
+            stream.flush()
+        stream.seek(0)
+        if not _try_lock(stream):
+            raise UpdateError(message)
+        try:
+            yield
+        finally:
+            _unlock(stream)
 
 
 class Cancelled(UpdateError):
@@ -200,6 +244,11 @@ class Updates:
             row, source = dict(self.offer), self.state["source"]
             self.path = None
         self.root.mkdir(parents=True, exist_ok=True)
+        # 两个窗口会写同一个 .part：后完成的那份会把已经校验过的成品再写坏。
+        with file_lock(self.root / "download.lock", "另一个窗口正在下载更新，等它完成后再试"):
+            self._fetch(row, source)
+
+    def _fetch(self, row, source):
         destination = self.root / row["file"]
         partial = self.root / (row["file"] + ".part")
         # 不跟随已有软链接；下载不触碰程序目录或备份目录。

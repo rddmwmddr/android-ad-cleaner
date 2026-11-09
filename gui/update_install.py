@@ -15,9 +15,9 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 try:
-    from .updates import UpdateError, version_tuple
+    from .updates import UpdateError, file_lock, version_tuple
 except ImportError:
-    from updates import UpdateError, version_tuple
+    from updates import UpdateError, file_lock, version_tuple
 
 WINDOWS_FILES = ("AndroidAdCleaner.exe", "aac-cli.exe", "AndroidAdCleaner.exe.config", "aac-cli.exe.config", "_internal")
 BUNDLE_ID = "com.rddmwmddr.androidadcleaner"
@@ -109,6 +109,43 @@ def prepare_mac(archive, destination, installed, version, run=subprocess.run):
             run(["/usr/bin/hdiutil", "detach", str(mount)], check=False, capture_output=True, timeout=30)
 
 
+def install_cwd(target, platform):
+    """替换与启动的工作目录：mac 是 bundle 的父目录，Windows 就是程序目录本身。"""
+    return Path(target).parent if platform == "darwin" else Path(target)
+
+
+def launch_target(target, platform, name):
+    """要启动的程序，以及它的 cwd。mac 在 bundle 里、Windows 在程序目录根上。"""
+    target = Path(target)
+    if platform == "darwin":
+        return target / "Contents" / "MacOS" / name, target.parent
+    return target / name, target
+
+
+def target_units(target, platform):
+    """一次替换的单元：mac 换整个 bundle，Windows 只换程序自带的五份。"""
+    return [Path(target).name] if platform == "darwin" else list(WINDOWS_FILES)
+
+
+def sweep_stale(root):
+    """清掉上次没收尾的准备目录；只动一天前创建的，另一个窗口刚建的那份不能碰。"""
+    cutoff = time.time() - 24 * 3600
+    for path in Path(root).glob("install-*"):
+        try:
+            if path.is_dir() and path.stat().st_mtime < cutoff:
+                remove_item(path)
+        except OSError:
+            pass
+
+
+def _helper_error(work):
+    """助手退出前留下的原因；没有就用调用方的通用文案。"""
+    try:
+        return json.loads((Path(work) / "error.json").read_text(encoding="utf-8")).get("error", "")
+    except (OSError, ValueError, AttributeError):
+        return ""
+
+
 def writable(directory):
     try:
         with tempfile.TemporaryFile(dir=directory):
@@ -118,18 +155,22 @@ def writable(directory):
 
 
 class DesktopInstaller:
-    def __init__(self, root, *, system=None, executable=None, frozen=None, close=None):
+    def __init__(self, root, *, system=None, executable=None, frozen=None, close=None, popen=None):
         self.root = Path(root)
         self.system = system or sys.platform
         self.executable = Path(executable or sys.executable).resolve()
         self.frozen = getattr(sys, "frozen", False) if frozen is None else frozen
         self.close = close or (lambda: None)
+        self.popen = popen or subprocess.Popen
         self.helper = None
 
     def abort(self):
         if self.helper and self.helper.poll() is None:
             self.helper.terminate()
-            self.helper.wait(timeout=10)
+            try:
+                self.helper.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.helper.kill()
 
     def install(self, archive, version):
         if not self.frozen:
@@ -140,47 +181,55 @@ class DesktopInstaller:
         if self.system == "darwin" and (str(target).startswith("/Volumes/") or "AppTranslocation" in target.parts):
             raise UpdateError("请先把 App 放进「应用程序」，再从那里打开并更新")
         # 不自动提权。标准按用户安装可直接更新；只读/管理员目录保留原程序并说明出路。
-        if not writable(target.parent if self.system == "darwin" else target):
+        if not writable(install_cwd(target, self.system)):
             raise UpdateError("当前安装目录不可写，请用管理员权限重新打开后更新，或从官网下载并覆盖安装；备份不受影响")
         self.root.mkdir(parents=True, exist_ok=True)
+        sweep_stale(self.root)
         work = Path(tempfile.mkdtemp(prefix="install-", dir=self.root))
-        if self.system == "darwin":
-            prepared = prepare_mac(archive, work, target, version)
-            helper = work / "helper.app"
-            subprocess.run(["/usr/bin/ditto", str(target), str(helper)], check=True, capture_output=True, timeout=180)
-            helper_exe = helper / "Contents" / "MacOS" / self.executable.name
-        else:
-            prepared = safe_extract(archive, work / "extracted")
-            helper = work / "helper"
-            helper.mkdir()
-            for name in ("aac-cli.exe", "aac-cli.exe.config"):
-                shutil.copy2(target / name, helper / name)
-            shutil.copytree(target / "_internal", helper / "_internal")
-            helper_exe = helper / "aac-cli.exe"
-        token = uuid.uuid4().hex
-        handoff = self.root / "handoff.json"
-        plan = {"schema": 1, "token": token, "platform": self.system, "target": str(target),
-                "prepared": str(prepared), "version": version, "parent_pid": os.getpid(),
-                "executable": self.executable.name, "health": str(work / "healthy.json"), "ready": str(work / "ready.json"),
-                "result": str(self.root / "last-result.json"), "handoff": str(handoff)}
-        path = work / "plan.json"
-        write_json(path, plan)
-        kwargs = process_options()
-        if self.system == "win32":
-            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
-        else:
-            kwargs["start_new_session"] = True
-        self.helper = subprocess.Popen([str(helper_exe), "--apply-update", str(path)], **kwargs)
-        # 助手先校验计划并回执；它没正常启动时不能关闭仍可用的旧程序。
-        for _ in range(100):
-            if Path(plan["ready"]).is_file():
-                break
-            if self.helper.poll() is not None:
-                raise UpdateError("更新助手未能启动，原程序仍可继续使用")
-            time.sleep(0.1)
-        else:
-            self.abort()
-            raise UpdateError("更新助手启动超时，原程序仍可继续使用")
+        try:
+            if self.system == "darwin":
+                prepared = prepare_mac(archive, work, target, version)
+                helper = work / "helper.app"
+                subprocess.run(["/usr/bin/ditto", str(target), str(helper)], check=True, capture_output=True, timeout=180)
+                helper_exe = helper / "Contents" / "MacOS" / self.executable.name
+            else:
+                prepared = safe_extract(archive, work / "extracted")
+                helper = work / "helper"
+                helper.mkdir()
+                for name in ("aac-cli.exe", "aac-cli.exe.config"):
+                    shutil.copy2(target / name, helper / name)
+                shutil.copytree(target / "_internal", helper / "_internal")
+                helper_exe = helper / "aac-cli.exe"
+            token = uuid.uuid4().hex
+            handoff = self.root / "handoff.json"
+            plan = {"schema": 1, "token": token, "platform": self.system, "target": str(target),
+                    "prepared": str(prepared), "version": version, "parent_pid": os.getpid(),
+                    "executable": self.executable.name, "health": str(work / "healthy.json"), "ready": str(work / "ready.json"),
+                    "result": str(self.root / "last-result.json"), "handoff": str(handoff)}
+            path = work / "plan.json"
+            write_json(path, plan)
+            kwargs = process_options()
+            if self.system == "win32":
+                kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
+            else:
+                kwargs["start_new_session"] = True
+            self.helper = self.popen([str(helper_exe), "--apply-update", str(path)], **kwargs)
+            # 助手先校验计划并回执；它没正常启动时不能关闭仍可用的旧程序。
+            for _ in range(100):
+                if Path(plan["ready"]).is_file():
+                    break
+                if self.helper.poll() is not None:
+                    raise UpdateError(_helper_error(work) or "更新助手未能启动，原程序仍可继续使用")
+                time.sleep(0.1)
+            else:
+                self.abort()
+                raise UpdateError("更新助手启动超时，原程序仍可继续使用")
+        except Exception:
+            try:
+                remove_item(work)  # 助手没接手的准备目录由本进程清掉，不留整份程序副本
+            except OSError:
+                pass               # 删不掉不能顶掉正在报的那个错
+            raise
         return {"exit": True, "message": "正在退出并安装更新，完成后会自动重新打开"}
 
 
@@ -232,23 +281,28 @@ class Replacement:
     def __init__(self, target, prepared, system, token):
         self.target, self.prepared = Path(target), Path(prepared)
         self.system, self.token = system, token
-        parent = self.target.parent if system == "darwin" else self.target
-        self.backup = parent / (".aac-old-" + token)
-        self.incoming = parent / (".aac-new-" + token)
+        self.backup = install_cwd(self.target, system) / (".aac-old-" + token)
+        self.incoming = install_cwd(self.target, system) / (".aac-new-" + token)
         self.old = []
         self.new = []
+
+    def _slot(self, name):
+        """这一份在目标目录里的落点；mac 的整包替换里 name 只用作临时目录里的文件名。"""
+        return self.target if self.system == "darwin" else self.target / name
+
+    def _prepared(self, name):
+        return self.prepared if self.system == "darwin" else self.prepared / name
 
     def install(self):
         self.incoming.mkdir()
         self.backup.mkdir()
-        names = [self.target.name] if self.system == "darwin" else list(WINDOWS_FILES)
+        names = target_units(self.target, self.system)
         try:
             # 所有复制先完成；磁盘不足时原程序完全不动。
             for name in names:
-                source = self.prepared if self.system == "darwin" else self.prepared / name
-                copy_item(source, self.incoming / name)
+                copy_item(self._prepared(name), self.incoming / name)
             for name in names:
-                dest = self.target if self.system == "darwin" else self.target / name
+                dest = self._slot(name)
                 if dest.exists() or dest.is_symlink():
                     os.replace(dest, self.backup / name)
                     self.old.append(name)
@@ -256,19 +310,24 @@ class Replacement:
                 self.new.append(name)
         except Exception:
             self.rollback()
+            self.cleanup()     # 回滚成功了才轮到清临时目录；rollback 抛出时它们要看守备份
             raise
 
     def rollback(self):
         for name in reversed(self.new):
-            remove_item(self.target if self.system == "darwin" else self.target / name)
+            remove_item(self._slot(name))
         for name in reversed(self.old):
-            os.replace(self.backup / name, self.target if self.system == "darwin" else self.target / name)
+            os.replace(self.backup / name, self._slot(name))
         self.new.clear()
         self.old.clear()
 
-    def finish(self):
-        remove_item(self.backup)
-        remove_item(self.incoming)
+    def cleanup(self):
+        """删掉两份临时目录。它是收尾，不是判定：删不掉也不该顶掉调用方正在报的那个错。"""
+        for path in (self.backup, self.incoming):
+            try:
+                remove_item(path)
+            except OSError:
+                pass
 
 
 def confirm_started(root, current, executable):
@@ -277,7 +336,7 @@ def confirm_started(root, current, executable):
     try:
         plan = json.loads((root / "handoff.json").read_text(encoding="utf-8"))
         target = Path(plan["target"])
-        expected = target / "Contents" / "MacOS" / plan["executable"] if plan["platform"] == "darwin" else target / plan["executable"]
+        expected = launch_target(target, plan["platform"], plan["executable"])[0]
         if current == plan["version"] and Path(executable).resolve() == expected.resolve():
             health = Path(plan["health"])
             if health.resolve().is_relative_to(root.resolve()):
@@ -320,43 +379,27 @@ def validate_plan(path):
 @contextmanager
 def installation_lock(root):
     """不同进程的更新助手互斥；进程退出时由系统释放，锁文件本身保留。"""
-    with (Path(root) / "install.lock").open("a+b") as stream:
-        stream.seek(0, 2)
-        if stream.tell() == 0:
-            stream.write(b"0")
-            stream.flush()
-        stream.seek(0)
-        try:
-            if os.name == "nt":
-                import msvcrt
-                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError as exc:
-            raise UpdateError("另一个窗口正在安装更新，请等它完成后重试") from exc
-        try:
-            yield
-        finally:
-            if os.name == "nt":
-                stream.seek(0)
-                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
-            else:
-                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+    with file_lock(Path(root) / "install.lock", "另一个窗口正在安装更新，请等它完成后重试"):
+        yield
 
 
 def apply_update(path, *, alive=parent_alive, sleep=time.sleep, launch=subprocess.Popen, attempts=120):
     """由复制到更新缓存的旧程序执行。失败先恢复旧文件，再启动旧程序。"""
     plan = validate_plan(path)
-    with installation_lock(Path(plan["result"]).parent):
-        write_json(plan["handoff"], plan)
-        return _apply_plan(plan, alive=alive, sleep=sleep, launch=launch, attempts=attempts)
+    try:
+        with installation_lock(Path(plan["result"]).parent):
+            write_json(plan["handoff"], plan)
+            return _apply_plan(plan, alive=alive, sleep=sleep, launch=launch, attempts=attempts)
+    except UpdateError as exc:
+        # 锁冲突发生在写回执之前：留给父窗口一份原因，否则它只能报「助手没起来」。
+        write_json(Path(path).parent / "error.json", {"error": str(exc)})
+        raise
 
 
 def _apply_plan(plan, *, alive, sleep, launch, attempts):
     target = Path(plan["target"])
     receipt = Path(plan["result"])
-    executable = target / "Contents" / "MacOS" / plan["executable"] if plan["platform"] == "darwin" else target / plan["executable"]
+    executable, cwd = launch_target(target, plan["platform"], plan["executable"])
     replacement = Replacement(target, plan["prepared"], plan["platform"], plan["token"])
     write_json(plan["ready"], {"token": plan["token"]})
     child = None
@@ -370,7 +413,7 @@ def _apply_plan(plan, *, alive, sleep, launch, attempts):
             raise UpdateError("原程序没有退出，本次更新未安装")
         replacement.install()
         replaced = True
-        child = launch([str(executable)], cwd=str(target.parent if plan["platform"] == "darwin" else target), **process_options())
+        child = launch([str(executable)], cwd=str(cwd), **process_options())
         for _ in range(attempts):
             try:
                 health = json.loads(Path(plan["health"]).read_text(encoding="utf-8"))
@@ -378,7 +421,7 @@ def _apply_plan(plan, *, alive, sleep, launch, attempts):
                     write_json(receipt, {"ok": True, "version": plan["version"]})
                     # 新版已确认可用；清理失败不能再回滚（备份可能已部分删除）。
                     try:
-                        replacement.finish()
+                        replacement.cleanup()
                         Path(plan["handoff"]).unlink(missing_ok=True)
                         remove_item(Path(plan["prepared"]))
                     except OSError:
@@ -402,6 +445,7 @@ def _apply_plan(plan, *, alive, sleep, launch, attempts):
                     child.wait(timeout=15)
             if replaced:
                 replacement.rollback()
+                replacement.cleanup()
             Path(plan["handoff"]).unlink(missing_ok=True)
         except Exception as recovery_error:
             error += f"；恢复未完成：{recovery_error}。旧程序文件保留在 {replacement.backup}"
@@ -409,5 +453,5 @@ def _apply_plan(plan, *, alive, sleep, launch, attempts):
             return 1
         write_json(receipt, {"ok": False, "version": plan["version"], "error": error})
         if not alive(plan["parent_pid"]):
-            launch([str(executable)], cwd=str(target.parent if plan["platform"] == "darwin" else target), **process_options())
+            launch([str(executable)], cwd=str(cwd), **process_options())
         return 1

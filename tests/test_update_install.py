@@ -83,6 +83,7 @@ class InstallTests(unittest.TestCase):
         self.assert_old()
         self.assertEqual(len(self.launches), 2)
         self.assertIn('恢复', json.loads(Path(self.plan['result']).read_text(encoding='utf-8'))['error'])
+        self.assertFalse(list(self.target.glob('.aac-*')), '回滚成功后不能把临时目录留在程序目录里')
         self.child.terminate.assert_not_called()
 
     def test_new_app_hang_is_terminated_before_rollback(self):
@@ -135,11 +136,27 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(replacement.new, [])
         self.assertEqual(replacement.old, [])
 
+    def test_failed_replace_cleans_its_own_temporary_directories(self):
+        """install() 自己回滚后要顺手清掉 .aac-*：这时 _apply_plan 的 replaced 还是 False。"""
+        real_replace = os.replace
+
+        def replace(source, dest):
+            if str(source).endswith('.aac-new-' + self.plan['token'] + os.sep + 'aac-cli.exe'):
+                raise PermissionError('file locked')
+            return real_replace(source, dest)
+
+        replacement = install.Replacement(self.target, self.prepared, 'win32', self.plan['token'])
+        with patch.object(install.os, 'replace', side_effect=replace):
+            with self.assertRaises(PermissionError):
+                replacement.install()
+        self.assert_old()
+        self.assertFalse(list(self.target.glob('.aac-*')), '回滚成功后不能把临时目录留在程序目录里')
+
     def test_cleanup_failure_after_health_does_not_rollback(self):
         def start(args, **kwargs):
             install.confirm_started(self.work.parent, '0.4.2', args[0])
             return self.child
-        with patch.object(install.Replacement, 'finish', autospec=True, side_effect=OSError('cleanup failed')) as cleanup:
+        with patch.object(install.Replacement, 'cleanup', autospec=True, side_effect=OSError('cleanup failed')) as cleanup:
             self.assertEqual(install.apply_update(self.plan_path, alive=lambda _: False, sleep=lambda _: None,
                                                  launch=start, attempts=2), 0)
             cleanup.assert_called_once()
@@ -162,11 +179,56 @@ class InstallTests(unittest.TestCase):
             with self.assertRaisesRegex(UpdateError, '另一个窗口'):
                 self.run_helper()
             self.assertEqual(handoff.read_text(), 'first helper owns this plan')
+            # 父窗口靠这份回执把「另一个窗口在装」说出来，而不是「助手没起来」。
+            self.assertIn('另一个窗口', json.loads(
+                (self.work / 'error.json').read_text(encoding='utf-8'))['error'])
             self.assert_old()
             self.assertEqual(self.launches, [])
         self.child.poll.return_value = 1
         self.assertEqual(self.run_helper(), 1)
         self.assertEqual(len(self.launches), 2)
+
+    def test_helper_that_exits_before_ready_reports_its_own_reason(self):
+        """锁冲突时助手直接退出：父窗口要把它的原因说出来，不能报成「助手没起来」。"""
+        archive = self.root / 'update.zip'
+        with zipfile.ZipFile(archive, 'w') as zf:
+            for name in install.WINDOWS_FILES[:-1]:
+                zf.writestr('AndroidAdCleaner/' + name, b'program')
+            zf.writestr('AndroidAdCleaner/_internal/python.dll', b'runtime')
+
+        class Exited:
+            def poll(self):
+                return 1
+
+        def popen(args, **kwargs):
+            plan = json.loads(Path(args[2]).read_text(encoding='utf-8'))
+            Path(plan['ready']).parent.joinpath('error.json').write_text(
+                json.dumps({'error': '另一个窗口正在安装更新，请等它完成后重试'}, ensure_ascii=False), encoding='utf-8')
+            return Exited()
+
+        adapter = install.DesktopInstaller(self.work.parent, system='win32',
+                                           executable=self.target / 'AndroidAdCleaner.exe', frozen=True, popen=popen)
+        aged = self.work.parent / 'install-yesterday'
+        aged.mkdir()
+        os.utime(aged, (1, 1))
+        before = set(self.work.parent.glob('install-*'))
+        # 非 Windows 上这两个常量不存在；测的是父窗口怎么读助手的退出原因，不是进程属性。
+        with patch.object(install.subprocess, 'CREATE_NO_WINDOW', 0, create=True), \
+                patch.object(install.subprocess, 'DETACHED_PROCESS', 0, create=True):
+            with self.assertRaisesRegex(UpdateError, '另一个窗口'):
+                adapter.install(archive, '0.4.2')
+        self.assertEqual(set(self.work.parent.glob('install-*')) - before, set(), '助手没接手时准备目录由本进程清掉')
+        self.assertFalse(aged.exists(), '开始一次安装时要顺手清掉一天前没收尾的准备目录')
+
+    def test_stale_preparation_directories_are_swept_on_next_start(self):
+        root = self.root / 'updates'
+        old, fresh = root / 'install-old', root / 'install-fresh'
+        old.mkdir(parents=True)
+        fresh.mkdir()
+        os.utime(old, (1, 1))
+        install.sweep_stale(root)
+        self.assertFalse(old.exists())
+        self.assertTrue(fresh.exists(), '另一个窗口刚建的准备目录不能清')
 
     def test_source_mode_rejects_install_without_touching_target(self):
         adapter = install.DesktopInstaller(self.work.parent, system='win32', executable=self.target / 'AndroidAdCleaner.exe', frozen=False)

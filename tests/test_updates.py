@@ -134,6 +134,16 @@ class UpdatesTests(unittest.TestCase):
         self.assertFalse(list(Path(self.tmp.name).glob('*.part')))
         self.assertEqual(self.up.snapshot()['source'], 'gitee')
 
+    def test_second_window_cannot_write_the_same_partial_download(self):
+        """两个窗口会写同一个 .part：后完成的那份把已经校验通过的成品再写坏。"""
+        self.available()
+        with updates.file_lock(Path(self.tmp.name) / 'download.lock', '另一个窗口正在下载更新'):
+            self.up.download()
+            state = self.finish()
+        self.assertIn('另一个窗口', state['error'])
+        self.assertFalse(list(Path(self.tmp.name).glob('*.part')))
+        self.assertFalse(list(Path(self.tmp.name).glob('*.zip')))
+
     def test_active_phone_job_blocks_install_and_can_retry(self):
         self.ready()
         self.claim.return_value = '请先完成正在运行的任务'
@@ -212,6 +222,13 @@ class ManifestTests(unittest.TestCase):
 
 
 class BridgeIntegrationTests(unittest.TestCase):
+    def test_update_root_comes_from_client_data(self):
+        """更新目录只由 ClientData 给出：各处自己拼一遍，漂移时健康回执永远写不出来。"""
+        from gui import app
+        with tempfile.TemporaryDirectory() as root:
+            api = app.Api(root)
+            self.assertEqual(api.updater.root, Path(api.data.updates))
+
     def test_api_blocks_install_during_real_dispatcher_job(self):
         from types import SimpleNamespace
         from gui import app
