@@ -1,0 +1,33 @@
+# PR 上的依赖审查：只比对本次 PR 引入 / 变更的依赖，不扫存量；存量由 dependency-audit.yml 每周看（#859）。
+# 公开仓库免费，不需要 GitHub Advanced Security；但必须先打开仓库 Settings → Security → Dependency graph，
+# 否则 action 直接报 "Dependency review is not supported on this repository"。
+# 结果写在 job 的 Summary 页与日志里；要拦在合并之前需要分支保护 + required status checks（admin 权限）。
+name: dependency-review
+on:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # 只由 PR 触发，重推时取消上一轮
+  cancel-in-progress: true
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      # 判据按「有现成红基线」起步：默认 low 会让任何 moderate 变红，本仓库从 high 起。
+      # fail-on-scopes 显式写默认值 runtime：package.json 的 devDependency（jsdom）不进产品，变化不阻塞。
+      # libadb-android 是 GPL-3.0-or-later / Apache-2.0 双许可，按 Apache-2.0 使用
+      # （android/app/build.gradle.kts 里 `com.github.MuntashirAkon:libadb-android`）。
+      # 许可证只做精确豁免、不关整个 license check；注意 v5 先按 scope 过滤再判许可证，
+      # Gradle 变更的 scope 是 unknown，所以这条豁免当前不改变结果——它是在补上 Gradle 的
+      # scope 或 allow / deny 许可证清单时，不用重新推理要不要放过这个包。#859
+      - name: 依赖审查
+        uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+          fail-on-scopes: runtime
+          allow-dependencies-licenses: 'pkg:maven/com.github.MuntashirAkon/libadb-android'
+          show-openssf-scorecard: false

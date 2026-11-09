@@ -1,0 +1,29 @@
+# 存量依赖的 CVE 扫描：dependency-review 只看 PR 引入的变化，看不了「时间」（#859）。
+# 每周一次 + 手动触发；失败只体现在 Actions 页面，不做主动通知。
+# 只扫 pip：npm 唯一的依赖 jsdom 是 devDependency、不随产品分发，Gradle 侧本票不承诺。
+name: dependency-audit
+on:
+  schedule:
+    - cron: "0 1 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # 手动重跑时取消上一轮
+  cancel-in-progress: true
+jobs:
+  pip-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      # 与 ruff 同一种钉法：工具版本不进 requirements.txt。
+      # --strict 让「解析不出被审计版本」也失败，而不是静默跳过。
+      - name: 安装 pip-audit
+        run: pip install pip-audit==2.10.1
+      - name: 扫描 requirements.txt
+        run: pip-audit -r requirements.txt --strict

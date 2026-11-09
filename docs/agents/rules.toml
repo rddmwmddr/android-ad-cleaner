@@ -1111,3 +1111,11 @@ check = "test:test_recipe_preamble_migration::StructureTests.test_recipes_do_not
 status = "enforced"
 why = "43 份脚本各抄一份段包装，已经分化成两代：锁屏时一代抛异常（记未完成），一代打印一句「后面的都不跑」就返回（退出码仍是 0，结果页显示成功）。#838 把前导收进引擎、#839 删掉 43 份本地副本；再留一份副本就会长出第三代，而且新写脚本的人不知道该抄哪一版。"
 expires_if = "不再按 exec 跑脚本（改成 import 一个自带前导的模块）时，这条与 docs/04 的那一段一起删。"
+
+[[rule]]
+id = "dev.deps.dependency-review"
+source = "CLAUDE.md#开发"
+check = "ci:dependency-review"
+status = "enforced"
+why = "仓库此前没有任何依赖安全检查：没有 dependabot.yml、没有依赖审查 workflow，Dependabot alerts 因要 admin 权限打不开（404），而本账号只有 write（#859）。依赖版本又是刻意钉死的（uiautomator2 在手机上被 u2.py 顶掉），版本更新型 PR 每张都要重新验真机，是纯噪音。所以改由 workflow 承担：PR 侧卡新增高危漏洞依赖、每周扫存量；两个 job 都只让问题可见，拦合并要分支保护。"
+expires_if = "开了 Dependabot（版本更新或安全更新），或依赖不再钉版、改由平台托管升级时删，两个 workflow 一起撤。"
