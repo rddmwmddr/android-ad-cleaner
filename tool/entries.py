@@ -127,7 +127,7 @@ ENTRIES = {
         "小布建议": Entry(
             menu="设置 → OPPO AI → 小布建议 → 资讯服务（「内容资讯」是分组标题，点不动）"),
         "负一屏": Entry(
-            menu="桌面从左边缘向右滑 → 左上头像 → 设置",
+            menu="桌面从偏左向右滑（最左边缘会拉出返回 / 侧边栏手势）→ 左上头像 → 设置",
             direct=(Direct("com.coloros.assistantscreen",
                            "com.oplus.assistantscreen.card.infoflow.setting.activity.InfoFlowSettingActivity", "热点资讯"),),
             note="设置页受 oppo.permission.OPPO_COMPONENT_SAFE 保护，am start 被拒，只能走手势；"
