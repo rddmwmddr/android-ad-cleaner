@@ -1,5 +1,6 @@
 """桌面更新安装：先准备新程序，旧程序退出后由独立副本替换、启动并等待界面确认。"""
 import json
+from contextlib import contextmanager
 import os
 import plistlib
 import re
@@ -164,7 +165,6 @@ class DesktopInstaller:
                 "result": str(self.root / "last-result.json"), "handoff": str(handoff)}
         path = work / "plan.json"
         write_json(path, plan)
-        write_json(handoff, plan)
         kwargs = process_options()
         if self.system == "win32":
             kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
@@ -317,9 +317,43 @@ def validate_plan(path):
     return plan
 
 
+@contextmanager
+def installation_lock(root):
+    """不同进程的更新助手互斥；进程退出时由系统释放，锁文件本身保留。"""
+    with (Path(root) / "install.lock").open("a+b") as stream:
+        stream.seek(0, 2)
+        if stream.tell() == 0:
+            stream.write(b"0")
+            stream.flush()
+        stream.seek(0)
+        try:
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            raise UpdateError("另一个窗口正在安装更新，请等它完成后重试") from exc
+        try:
+            yield
+        finally:
+            if os.name == "nt":
+                stream.seek(0)
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+
 def apply_update(path, *, alive=parent_alive, sleep=time.sleep, launch=subprocess.Popen, attempts=120):
     """由复制到更新缓存的旧程序执行。失败先恢复旧文件，再启动旧程序。"""
     plan = validate_plan(path)
+    with installation_lock(Path(plan["result"]).parent):
+        write_json(plan["handoff"], plan)
+        return _apply_plan(plan, alive=alive, sleep=sleep, launch=launch, attempts=attempts)
+
+
+def _apply_plan(plan, *, alive, sleep, launch, attempts):
     target = Path(plan["target"])
     receipt = Path(plan["result"])
     executable = target / "Contents" / "MacOS" / plan["executable"] if plan["platform"] == "darwin" else target / plan["executable"]

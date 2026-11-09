@@ -155,6 +155,19 @@ class InstallTests(unittest.TestCase):
                 install.validate_plan(self.plan_path)
             self.plan[key] = original
 
+    def test_second_helper_cannot_replace_or_overwrite_active_handoff(self):
+        handoff = Path(self.plan['handoff'])
+        handoff.write_text('first helper owns this plan', encoding='utf-8')
+        with install.installation_lock(self.work.parent):
+            with self.assertRaisesRegex(UpdateError, '另一个窗口'):
+                self.run_helper()
+            self.assertEqual(handoff.read_text(), 'first helper owns this plan')
+            self.assert_old()
+            self.assertEqual(self.launches, [])
+        self.child.poll.return_value = 1
+        self.assertEqual(self.run_helper(), 1)
+        self.assertEqual(len(self.launches), 2)
+
     def test_source_mode_rejects_install_without_touching_target(self):
         adapter = install.DesktopInstaller(self.work.parent, system='win32', executable=self.target / 'AndroidAdCleaner.exe', frozen=False)
         with self.assertRaisesRegex(UpdateError, '源码'):
