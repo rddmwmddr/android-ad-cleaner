@@ -158,7 +158,7 @@ def close_named(names, title, package, marker, max_screens=6, drawn=False):
         before = scan(max_screens)
         # OAID 的应用名称随安装列表变化，不把机主应用清单写入脚本。
         wanted = set(before) if names is None else set(names)
-        require(bool(wanted) and wanted <= before.keys(), title + "：未识别全部目标开关，未操作")
+        require_switches(before, wanted, title)
         p.top(max_screens)
         p.switches = lambda root=None: [item for item in read(root) if item[0] in wanted]
         p.off(only=sorted(wanted), page=title, max_screens=max_screens)

@@ -817,6 +817,16 @@ class Phone:
         where, detail = self._page_diagnosis()
         self.say(f"  · 「{text}」没找到；停在 {where}；{detail}")
 
+    def page_evidence(self, titles=()):
+        """点名要关的开关没找到时的现场：与 note_miss() 的入口失败行同形，末尾按页面顺序补上
+        当次读到的开关标题（#903）。没有它分不清是改名了、页面是空的，还是页面根本没打开。
+
+        `titles` 由调用方给（该翻的几屏已经读过了），这里不重读开关：
+        自绘开关的页面每读一次开关就要截一次图。"""
+        where, detail = self._page_diagnosis()
+        names = list(titles)
+        return f"停在 {where}；{detail}；当次读到 {len(names)} 个开关：{'、'.join(names) or '无'}"
+
     def icon_candidates(self, area=(0.72, 0.0, 1.0, 0.16)):
         """没有文字、点了才知道去哪的图标（右上角齿轮、更多）：按位置从右往左给候选坐标。
         整块卡片/列表项点了会进别的页面，按尺寸排除掉。"""

@@ -219,6 +219,14 @@ why = "目标选择、屏带过滤与 checked / kept / disabled 分散会让灰�
 expires_if = "拨动计划与回读合并成一个对象、调用方不再各自拼判定时删。"
 
 [[rule]]
+id = "dev.switches.missing-target-evidence"
+source = "CLAUDE.md#开发"
+check = "code:tool/recipe_kit.py:preamble"
+status = "code"
+why = "点名开关没出现时只报一句「未识别全部目标开关，未操作」，9 份 HyperOS 3.0 上报分不清是改名、页面空着还是根本没进页面（#903）；守卫原本在 14 处脚本里各写一份，补证据要改 14 遍，漏一处输出又分叉。"
+expires_if = "开关名单断言并入引擎、机型脚本不再各自核对页面上有哪些标题时删。"
+
+[[rule]]
 id = "dev.launch.foreground-ownership"
 source = "CLAUDE.md#开发"
 check = "test:test_launch_foreground_581::LaunchForegroundTests.test_one_frame_in_another_app_is_not_leaving"
