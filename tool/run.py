@@ -37,6 +37,7 @@ import wait
 from backups import Backups, root_from_env
 from entries import FAMILY          # 品牌族只此一份；广告包、参考脚本与版本比较都按它归
 from host import ON_PHONE           # 手机版不写插电常亮（#731）
+from recipe_meta import recipe_meta
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOL = os.path.join(ROOT, "tool")
@@ -210,15 +211,6 @@ VERSION_MARKER = {"oppo": "_", "vivo": "_A_", "honor": " ", "meizu": "Flyme"}
 # vivo 的 build 不都带机型前缀：Android 17 起有的机器直接报 AOSP 平台构建号（#580 的
 # CP2A.260605.016），没有 _A_ 可切，整条就是版本核心。按形状认，不写死某一代的首字母。
 AOSP_BUILD_ID = re.compile(r"^[A-Z]{1,3}\d[A-Z0-9]{0,2}\.\d{6}\.\d{3}")
-
-
-def recipe_meta(path):
-    with open(path, encoding="utf-8") as f:
-        src = f.read()
-    m = re.search(r'^BUILD\s*=\s*"([^"]*)"', src, re.M)
-    models = re.search(r'^MODELS\s*=\s*\[([^\]]*)\]', src, re.M)
-    return {"build": m.group(1) if m else "", "steps": re.findall(r'^@step\("([^"]+)"\)', src, re.M),
-            "models": re.findall(r'"([^"]+)"', models.group(1)) if models else []}
 
 
 def version_core(value, fam):

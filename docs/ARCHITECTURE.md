@@ -33,6 +33,7 @@
 | `run.py` | 总入口：命令分派、退出码、设备信息、备份的存取 |
 | `fast.py` | 引擎核心：`Phone`（采样 / 导航 / 拨动）、`plan_switches()` |
 | `recipe_kit.py` | 机型脚本的前导：段包装、入口断言、跳过出口、两个台账（[ADR-0029](adr/0029-recipe-preamble-injection.md)） |
+| `recipe_meta.py` | 机型脚本头部的元数据：录制版本、机型列表、段名；只有正则，不背 CLI 入口的副作用 |
 | `chan_fast.py` | 营销通知渠道：`ChannelPage`（到页 + 认行）、批处理循环 |
 | `channel_policy.py` | 渠道判定：营销候选、扫描排除、默认不勾、受保护、前台服务 |
 | `row.py` | 「开关所属的那一行」的唯一定义 |

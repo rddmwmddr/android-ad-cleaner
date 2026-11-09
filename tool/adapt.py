@@ -88,7 +88,7 @@ def select_rows(rows, pick_titles=()):
 # ---------- 生成草稿 ----------
 
 def step_name(pkg, page):
-    """@step("...") 里不能出现引号/反斜杠/换行：run.py recipe_meta 按这个字面格式解析步骤名。"""
+    """@step("...") 里不能出现引号/反斜杠/换行：recipe_meta 按这个字面格式解析步骤名。"""
     name = f"{pkg} · {page}"
     for bad in ('"', "\\", "\r", "\n"):
         name = name.replace(bad, "")
