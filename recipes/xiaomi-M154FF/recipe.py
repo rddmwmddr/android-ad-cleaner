@@ -5,6 +5,7 @@
 BUILD = "OS4.0"
 MODELS = ["M154FF", "2608BPX34C"]
 import time
+from entries import THEME_DEAD_ENDS
 
 import adb_link
 
@@ -146,7 +147,8 @@ def _():
         # 没有主题商店时直接起 thememanager：它没有 LAUNCHER activity，monkey 拉不起来（#730）
         if "package:" not in p.d.shell("pm path com.android.thememanager").output:
             print("  · 本机没有主题商店，跳过"); return
-        p.start("com.android.thememanager", ".ThemeResourceProxyTabActivity")
+        start_or_skip("com.android.thememanager", ".ThemeResourceProxyTabActivity",
+                      dead_ends=THEME_DEAD_ENDS, reason="没有主题商店，主题页打不开")
     p.go("我的", "设置")
     gear()
     p.off(only=["每次联网时通知"], keep=["自动更新"], page="主题·设置")

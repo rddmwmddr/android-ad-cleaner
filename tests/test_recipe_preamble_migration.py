@@ -23,7 +23,7 @@ from fixtures import load_recipe, phone_mock
 RECIPES = tuple(sorted(p for p in (ROOT / "recipes").rglob("*.py")
                        if p.name != "test_recipe.py"))               # 43 份：目录里除 test_recipe.py 之外的脚本
 
-# 前导的六个名字，外加 #838 的中止标记与两个新台账 —— 迁到引擎之后脚本一个都不该再定义
+# 前导的六个名字，外加 #838 的中止标记、两个新台账与 #902 的拉起助手 —— 迁到引擎之后脚本一个都不该再定义
 LOCAL_PREAMBLE = {
     "ONLY": "段过滤名单",
     "FAILED_STEPS": "失败台账",
@@ -35,6 +35,7 @@ LOCAL_PREAMBLE = {
     "maybe": "可选入口助手",
     "skip": "跳过出口",
     "SkipStep": "跳过异常类",
+    "start_or_skip": "带落点判定的拉起助手",
 }
 
 # 记录在案的例外：脚本相对路径 → 允许保留的名字。迁移完成后为空。

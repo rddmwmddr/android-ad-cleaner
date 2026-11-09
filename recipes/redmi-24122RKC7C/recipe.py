@@ -12,6 +12,7 @@
 BUILD = "OS3.0.304.0"
 MODELS = ["24122RKC7C"]
 import time
+from entries import THEME_DEAD_ENDS
 VERIFIED_SWITCHES = 0
 
 
@@ -179,7 +180,8 @@ def _():
 def _():
     # 主题商店冷启动会跳到 thememanager，引擎的前台校验会停段；直达代理标签页最稳。
     if "package:" in p.d.shell("pm path com.android.thememanager").output:
-        p.start("com.android.thememanager", ".ThemeResourceProxyTabActivity")
+        start_or_skip("com.android.thememanager", ".ThemeResourceProxyTabActivity",
+                      dead_ends=THEME_DEAD_ENDS, reason="主题页打不开")
     else:
         p.start("com.miui.themestore", foreground="com.android.thememanager")
     require(p.tap("我的", exact=True, scrolls=0), "未找到主题「我的」")

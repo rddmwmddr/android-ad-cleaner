@@ -152,6 +152,7 @@ HyperOS OS3.0.309.0.WMCCNXM / Android 16，2026-11-05 社区实测（[Issue #281
 - 🔴 隐私设置 → 个性化推荐
 - ⚠️ K90 Pro Max 打开主题商店会落到 `com.android.thememanager` 的 `ThemeResourceProxyTabActivity`；系统广告组件 `com.miui.systemAdSolution` 未挂起时，开屏窗会抢焦点，自动化会被中断。先执行 `run.py -s 序列号 suspend com.miui.systemAdSolution`（可还原）再跑这一段。
 - ⚠️ REDMI K80 Pro（HyperOS 3.0.304.0）同样会跳包：`com.miui.themestore` 拉起后立刻变成 `com.android.thememanager`，`p.start()` 的前台校验曾把它判成「启动后离开前台」并停段；#581 起读不出前台与一两帧的跳包过渡不算离开，连续外占才停段（[ADR-0022](../adr/0022-launch-foreground.md)）。直达 `com.android.thememanager/.ThemeResourceProxyTabActivity` 后「我的 → 齿轮」稳定可达。
+- ⚠️ 本机没有主题商店、主题管理包的代理页又被系统转去应用商店详情页（`com.xiaomi.market`）或桌面（`com.miui.home`）时，这段记「跳过」并在理由里带上落点，不再算未完成；落点在别的 App 仍是未完成，保留落点诊断（#902）。
 
 ## 6. 浏览器
 

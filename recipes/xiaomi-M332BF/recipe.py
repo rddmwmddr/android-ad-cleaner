@@ -5,6 +5,7 @@
 BUILD = "OS4.0.4"
 MODELS = ["M332BF"]
 import time
+from entries import THEME_DEAD_ENDS
 
 import adb_link
 
@@ -122,7 +123,8 @@ def _():
     else:
         if "package:" not in p.d.shell("pm path com.android.thememanager").output:
             print("  · 本机没有主题商店，跳过"); return
-        p.start("com.android.thememanager", ".ThemeResourceProxyTabActivity")
+        start_or_skip("com.android.thememanager", ".ThemeResourceProxyTabActivity",
+                      dead_ends=THEME_DEAD_ENDS, reason="没有主题商店，主题页打不开")
     before = p.sig()
     if not p.tab("我的"):
         raise RuntimeError("主题商店底部「我的」标签没找到")
