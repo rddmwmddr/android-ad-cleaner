@@ -6,6 +6,11 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 exe = sys.argv[1]
 ok = True
+hdc = subprocess.run([exe, "--smoke-harmony"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+print(hdc.stdout)
+if hdc.returncode:
+    print(hdc.stderr[-1500:])
+ok &= hdc.returncode == 0 and "Harmony smoke:" in hdc.stdout
 for args, expect in ((["run.py", "--help"], "run.py"), (["fast.py", "--help"], "fast.py"),
                      (["chan_fast.py", "--help"], "chan_fast.py"), (["run.py", "devices"], None)):
     r = subprocess.run([exe, "--cli", *args], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180)

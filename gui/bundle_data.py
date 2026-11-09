@@ -1,13 +1,25 @@
 """Mac / Windows 共用的发布资源清单，不打包本地日志、备份或测试机型。"""
 from pathlib import Path
+import platform
 import shutil
 import sys
 
+try:
+    from . import hdc_fetch
+except ImportError:
+    import hdc_fetch
 
-def bundle_data(root):
+
+def bundle_data(root, platform_name=None, machine=None):
     root = Path(root).resolve()
     patterns = ("tool/*.py", "tool/*.dex", "recipes/*/recipe.py", "recipes/*/recipe_*.py", "images/*.png",
-                "gui/web/index.html", "gui/web/chime.wav", "gui/web/img/*.png")
+                "gui/web/index.html", "gui/web/chime.wav", "gui/web/img/*.png",
+                "harmony/recipes.json", "harmony/desktop/vendor/NOTICE-hdc.txt")
+    system = platform_name or sys.platform
+    arch = machine or platform.machine()
+    vendor = hdc_fetch.arch_of(system, arch)
+    if vendor:
+        patterns += (f"harmony/desktop/vendor/{vendor}/*",)
     data = []
     for pattern in patterns:
         for path in sorted(root.glob(pattern)):
@@ -20,13 +32,13 @@ def bundle_data(root):
     return data
 
 
-def stage(root, destination):
+def stage(root, destination, machine=None):
     destination = Path(destination)
-    for source, directory in bundle_data(root):
+    for source, directory in bundle_data(root, machine=machine):
         target = destination / directory / Path(source).name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
 
 
 if __name__ == "__main__":
-    stage(Path(__file__).resolve().parents[1], sys.argv[1])
+    stage(Path(__file__).resolve().parents[1], sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None)

@@ -108,7 +108,7 @@ pre.report{background:var(--log);color:var(--logtext);font-family:var(--mono);fo
     <div class="step" data-s="5"><b>5</b>完成</div>
     <div class="side-foot">
       <button class="link" onclick="openRestore()">↺ 还原改动</button>
-      <button class="link" onclick="api.open_path('backups')">📁 打开备份文件夹</button>
+      <button class="link" onclick="api.open_path(S.deviceKind === 'harmony' ? 'harmony' : 'backups')">📁 打开备份文件夹</button>
       <button class="link" onclick="openSettings()">⚙ 设置</button>
       <button class="link" onclick="openFeedback()">💬 反馈问题</button>
       <button class="link" onclick="api.open_url('https://github.com/rddmwmddr/android-ad-cleaner')">？使用说明</button>
@@ -191,6 +191,110 @@ function paintUpdate(){
   updateVisible = true;
 }
 
+/* ---------- 鸿蒙：同一窗口、单独的规则与还原记录 ---------- */
+let H = null, pollHarmony = null, harmonyEpoch = 0, harmonyListing = false, harmonyDevices = [];
+const H_STATUS = {waiting:'待执行', running:'进行中', done:'完成', partial:'部分未完成',
+  unreachable:'未找到入口', skipped:'已跳过', interrupted:'未完成'};
+function harmonyOutcome(row){
+  if (row.result === 'changed') return row.want ? '已打开' : '已关闭';
+  if (row.result === 'already') return row.want ? '原本已开' : '原本已关';
+  return {moot:'通知原本已关闭', missing:'未找到', locked:'系统锁定', failed:'未改成'}[row.result] || (row.want ? '打开保护或选项' : '关闭');
+}
+async function refreshHarmonyDevices(){
+  if (S.step !== 1 || harmonyListing) return;
+  harmonyListing = true;
+  const epoch = harmonyEpoch;
+  try {
+    const result = await api.harmony('devices');
+    if (S.step !== 1 || epoch !== harmonyEpoch || !$('#harmonydevbox')) return;
+    harmonyDevices = result.list || [];
+    const box = $('#harmonydevbox');
+    if (result.error){ box.innerHTML = `<div class="note warn">${esc(result.error)}</div>`; return; }
+    if (!harmonyDevices.length){ box.innerHTML = `<details class="card"><summary>连接鸿蒙手机</summary><p>在手机「设置 → 关于本机」连点版本号，打开开发者选项和 USB 调试，再用可传数据的数据线连接电脑。信任弹窗需要你在手机上确认。</p></details>`; return; }
+    box.innerHTML = harmonyDevices.map((d, i) => `<div class="dev"><div class="ico">📱</div><div class="meta"><b>${esc(d.name || d.model || '鸿蒙手机')}</b><small>${esc(d.model)} · ${esc(d.serial)}</small><span class="tag info">鸿蒙</span> ${d.state === 'Connected' ? d.supported ? '<span class="tag ok">已连接</span>' : '<span class="tag warn">此系统版本暂不支持</span>' : '<span class="tag warn">请在手机上确认信任，或重新插线</span>'}</div>${d.state === 'Connected' && d.supported ? `<button class="btn" onclick="pickHarmony(${i})">用这台</button>` : ''}</div>`).join('');
+  } catch (_) {
+    if (epoch === harmonyEpoch && $('#harmonydevbox')) $('#harmonydevbox').innerHTML = '<div class="note warn">鸿蒙设备检测失败，请重新插线后重试。</div>';
+  } finally { harmonyListing = false; }
+}
+function pickHarmony(index){
+  const device = harmonyDevices[index];
+  if (device) showHarmony(device.serial);
+}
+async function showHarmony(serial){
+  clearInterval(pollDev); clearInterval(pollHarmony);
+  const epoch = ++harmonyEpoch;
+  S.deviceKind = 'harmony'; S.serial = serial; setStep(2);
+  main().innerHTML = '<h1>检测鸿蒙手机</h1><p class="lead">只读取设备信息和已有还原记录。</p><div class="spin"></div>';
+  try {
+    const result = await api.harmony('select', serial);
+    if (epoch !== harmonyEpoch) return;
+    if (result.error) throw new Error(result.error);
+    H = result; renderHarmony();
+  } catch (error) {
+    if (epoch === harmonyEpoch) main().innerHTML = `<h1>未能检测这台手机</h1><div class="note bad">${esc(error.message)}</div><button class="btn plain" onclick="showConnect()">返回连接</button>`;
+  }
+}
+function renderHarmony(){
+  if (!H || S.deviceKind !== 'harmony') return;
+  const running = ['preparing','running'].includes(H.phase), done = H.phase === 'done';
+  setStep(running ? 4 : done ? 5 : 3);
+  const retry = done && H.segments.some(s => ['partial','unreachable','interrupted','waiting'].includes(s.status));
+  main().innerHTML = `<h1>鸿蒙去广告</h1><p class="lead">${esc(H.device.name || H.device.model || '鸿蒙手机')} · ${running ? H.mode === 'restore' ? '正在还原原始设置' : '正在关闭广告与推荐' : done ? '请核对每一项结果' : '选择要调整的设置'}</p>
+    ${!running ? '<div class="note info">规则来自 Pura X Max（HOP-AL10 / 7.0.0.111）实测。其他鸿蒙机型未整轮验证；找不到的入口会标为未完成。保留应用正常功能和服务通知，不替你同意协议。</div>' : ''}
+    <div id="harmony-message">${H.message ? `<div class="note warn">${esc(H.message)}</div>` : ''}</div>
+    ${H.stalled ? '<div class="note warn">这一步耗时较长，请查看手机是否锁屏或弹出提示。可以停止，程序会先完成当前开关的回读和记账。</div>' : ''}
+    <div id="harmony-segments">${H.segments.map(s => `<div class="card"><div class="row" style="justify-content:space-between"><h3>${!running && !done ? `<label class="chk" style="padding:0"><input type="checkbox" value="${esc(s.id)}" checked>${esc(s.name)}</label>` : esc(s.name)}</h3>${running || done ? `<span class="tag ${s.status === 'done' ? 'ok' : s.status === 'running' ? 'info' : 'warn'}">${esc(H_STATUS[s.status] || s.status)}</span>` : ''}</div>${s.note ? `<p class="lead">${esc(s.note)}</p>` : ''}${s.rows.map(row => `<div class="row" style="justify-content:space-between"><span>${esc(row.title)}</span><span class="lead" style="margin:0">${esc(harmonyOutcome(row))}</span></div>`).join('')}</div>`).join('')}</div>
+    ${running ? '<p class="lead">请保持手机解锁，不要同时操作手机。停止会等当前开关的回读和原状态保存完成。</p>' : done ? '<div class="note info">如不再重试，建议在手机上关闭开发者选项和 USB 调试；关闭后不会撤销本次改动。</div>' : '<p class="lead">每次拨动前保存原状态；旧鸿蒙客户端的还原记录会自动沿用。</p>'}
+    <div class="actions" id="harmony-actions">${running ? `<button class="btn danger" onclick="stopHarmony()" ${H.stopping ? 'disabled' : ''}>${H.stopping ? '正在停止…' : '停止'}</button>` : `<button class="btn plain" onclick="showConnect()">换一台</button><button class="btn plain" onclick="harmonyLog()">运行日志</button>${H.can_restore ? '<button class="btn plain" onclick="confirmHarmonyRestore()">还原改动</button>' : ''}${done ? '<button class="btn plain" onclick="openHarmonyDeveloper()">打开开发者选项</button><button class="btn ghost" onclick="showHarmony(S.serial)">重新选择</button>' : '<button class="btn" onclick="startHarmony()">开始去广告</button>'}${retry ? '<button class="btn" onclick="retryHarmony()">仅重试未完成</button>' : ''}`}</div>`;
+}
+let harmonyPolling = false;
+async function refreshHarmony(){
+  if (harmonyPolling || S.deviceKind !== 'harmony') return;
+  harmonyPolling = true;
+  const epoch = harmonyEpoch;
+  try {
+    const state = await api.harmony('poll');
+    if (epoch !== harmonyEpoch) return;
+    H = state; renderHarmony();
+    if (['idle','done'].includes(H.phase)) clearInterval(pollHarmony);
+  } catch (_) {
+    if (epoch === harmonyEpoch && $('#harmony-message')) $('#harmony-message').textContent = '进度暂时读取失败，正在重试。请勿强行关闭程序。';
+  } finally { harmonyPolling = false; }
+}
+async function harmonyRun(action, mode='clean', selected=null){
+  const controls = document.querySelectorAll('#harmony-actions button');
+  controls.forEach(b => b.disabled = true);
+  try {
+    const result = await api.harmony(action, S.serial, mode, selected);
+    if (result.error) throw new Error(result.error);
+    clearInterval(pollHarmony);
+    pollHarmony = setInterval(refreshHarmony, 750);
+    await refreshHarmony();
+  } catch (error) {
+    if ($('#harmony-message')) $('#harmony-message').innerHTML = `<div class="note bad">${esc(error.message)}</div>`;
+    controls.forEach(b => b.disabled = false);
+  }
+}
+function startHarmony(){
+  const selected = [...document.querySelectorAll('#harmony-segments input:checked')].map(x => x.value);
+  return harmonyRun('start', 'clean', selected);
+}
+function retryHarmony(){ return harmonyRun('retry'); }
+async function stopHarmony(){ await api.harmony('stop'); await refreshHarmony(); }
+function confirmHarmonyRestore(){
+  if (!H || ['preparing','running'].includes(H.phase) || !H.can_restore){ modal('<h3>暂时不能还原</h3><p>请等当前任务结束，并确认这台手机有已保存的改动记录。</p><button class="btn plain" onclick="closeModal()">关闭</button>'); return; }
+  modal('<h3>还原鸿蒙改动</h3><p>只恢复这台手机已记录的原始开关状态。之前关闭的广告或推荐可能重新出现。</p><div class="actions"><button class="btn plain" onclick="closeModal()">取消</button><button class="btn" onclick="closeModal();harmonyRun(\'start\',\'restore\')">开始还原</button></div>');
+}
+async function openHarmonyDeveloper(){
+  const result = await api.harmony('developer_options', S.serial);
+  modal(`<h3>关闭开发者选项</h3><p>${esc(result.error || '已打开手机的开发者选项，请你手动关闭总开关。连接断开是正常现象，去广告改动会保留。')}</p><button class="btn plain" onclick="closeModal()">知道了</button>`);
+}
+async function harmonyLog(){
+  const text = await api.harmony('log');
+  modal(`<h3>鸿蒙运行日志</h3><p class="lead">仅包含本轮设置名称和结果，不含设备序列号、账号或页面原文。</p><pre style="max-height:320px;overflow:auto;white-space:pre-wrap">${esc(text || '还没有运行记录')}</pre><div class="actions"><button class="btn plain" onclick="closeModal()">关闭</button><button class="btn" onclick="copyHarmonyLog()">复制日志</button></div>`, true);
+}
+async function copyHarmonyLog(){ await api.copy_text(await api.harmony('log')); }
+
 /* ---------- 1 连接 ---------- */
 const TUT = [
   ["dev-1-about.png", "① 设置 → 关于本机 → 版本信息（小米：我的设备 → 全部参数；vivo：系统管理与升级 → 版本信息）"],
@@ -201,15 +305,17 @@ const TUT = [
 ];
 let pollDev = null;
 function showConnect(){
-  setStep(1); clearInterval(pollDev);
+  setStep(1); clearInterval(pollDev); clearInterval(pollHarmony); harmonyEpoch++;
+  S.deviceKind = "android"; S.serial = null;
   main().innerHTML = `
     <h1>连接手机</h1>
     <p class="lead">用数据线把手机连到这台电脑。手机要打开开发者模式和 USB 调试。</p>
     <div id="oldver"></div>
-    <div class="note info"><b>设备支持范围</b>：支持通过 adb 连接的安卓设备。使用 HDC 的华为原生鸿蒙暂不支持；升级客户端也不会获得鸿蒙适配。荣耀 MagicOS 属于另一种情况，可先连接检测，没有本型号脚本时可自选同品牌参考脚本。</div>
+    <div class="note info"><b>设备支持范围</b>：支持安卓手机与纯血鸿蒙手机。安卓和鸿蒙 4 及以前通过 adb 连接；纯血鸿蒙通过随包提供的 HDC 连接，手机上不用安装 App。连接后请在下方选择要操作的手机。</div>
     <div id="adbwarn"></div>
     <div id="adbbox"></div>
     <div id="devbox"></div>
+    <div id="harmonydevbox"></div>
     <details class="card" id="tutbox">
       <summary>还没打开 USB 调试？看图文教程</summary>
       <div class="tut" style="margin-top:14px">${TUT.map(([f,c]) => `<figure><img src="img/${f}" alt=""><figcaption>${c}</figcaption></figure>`).join("")}</div>
@@ -217,8 +323,10 @@ function showConnect(){
     </details>`;
   oldInstallNotice();
   adbWarning();
-  if (!ENV.adb){ renderAdb(); return; }
-  refreshDevices(); pollDev = setInterval(refreshDevices, 2000);
+  if (!ENV.adb) renderAdb();
+  if (ENV.adb) refreshDevices();
+  if (ENV.harmony) refreshHarmonyDevices();
+  pollDev = setInterval(() => { if (ENV.adb) refreshDevices(); if (ENV.harmony) refreshHarmonyDevices(); }, 2000);
 }
 let oldQueried = false, OLD_INSTALL = "";
 function oldInstallNotice(){
@@ -248,7 +356,7 @@ function adbWarning(){
   }).catch(() => {});
 }
 function renderAdb(){
-  $("#adbbox").innerHTML = `<div class="card"><h3>第一次使用：需要 adb 工具</h3>
+  $("#adbbox").innerHTML = `<div class="card"><h3>安卓手机连接工具：adb（鸿蒙手机无需下载）</h3>
     <p class="lead" style="margin:0 0 12px">adb 是 Google 官方的安卓调试工具，用来和手机通信。点下面的按钮下载（约 10 MB）：先从 Google 官网下，下不了再换腾讯云镜像，下完核对文件校验值。下载即表示同意 Android SDK 平台工具的使用条款。</p>
     <div class="row"><button class="btn" id="dlbtn" onclick="dlAdb()">下载 adb</button><span id="dlmsg" class="lead" style="margin:0"></span></div>
     <div class="bar hide" id="dlbar" style="margin-top:12px"><i style="width:0"></i></div>
@@ -276,7 +384,7 @@ async function refreshDevices(){
     }
     box.innerHTML = `<div class="card"><div class="row"><span class="spin"></span><span>正在等待手机……插上数据线后这里会出现你的手机。</span></div>
       <div id="usbhint" class="note warn ${S.usbHint ? "" : "hide"}" style="margin-top:12px">${esc(S.usbHint || "")}</div>
-      <p class="lead" style="margin:12px 0 0">一直没有出现：换可传数据的数据线，确认 USB 调试授权；退出电脑上的手机助手类软件和安卓模拟器。荣耀 / 华为还要打开「仅充电模式下允许 ADB 调试」；三星在 Windows 上要装三星 USB 驱动。仅支持通过 adb 连接的安卓设备，原生鸿蒙（HarmonyOS NEXT）暂不支持。</p></div>`;
+      <p class="lead" style="margin:12px 0 0">一直没有出现：换可传数据的数据线，确认 USB 调试授权；退出电脑上的手机助手类软件和安卓模拟器。荣耀 / 华为还要打开「仅充电模式下允许 ADB 调试」；三星在 Windows 上要装三星 USB 驱动。纯血鸿蒙手机会单独列在下方的鸿蒙设备中。</p></div>`;
     $("#tutbox").open = true; return;
   }
   S.usbHint = "";
@@ -288,7 +396,7 @@ async function refreshDevices(){
     return `<div class="dev"><div class="ico">📱</div><div class="meta"><b>${esc(d.name || (d.brand + " " + d.model) || d.serial)}</b><small>${esc(d.model)} · ${esc(d.serial)}</small><div style="margin-top:4px">${tag}</div></div>${btn}</div>`;
   }).join("");
 }
-function pick(d){ clearInterval(pollDev); S.serial = d.serial; S.dev = d; S.chans = null; S.chanNotes = []; showDetect(); }
+function pick(d){ S.deviceKind = "android"; harmonyEpoch++; clearInterval(pollDev); S.serial = d.serial; S.dev = d; S.chans = null; S.chanNotes = []; showDetect(); }
 
 /* ---------- 2 检测 ---------- */
 async function showDetect(){
@@ -549,6 +657,7 @@ function selfOff(){
 const REPO = "https://github.com/rddmwmddr/android-ad-cleaner";
 const FB = {bug: ["遇到问题", "bug_report.md", "[问题] "], idea: ["功能建议", "feature_request.md", "[建议] "], device: ["适配新机型", "new_device.md", "[新机型] "]};
 async function openFeedback(type){
+  if (S.deviceKind === "harmony"){ await harmonyLog(); return; }
   type = type || "bug";
   const diag = await api.diagnostics();
   modal(`<h3>反馈问题</h3>
@@ -621,6 +730,7 @@ async function sendFeedback(){
 
 /* ---------- 还原 ---------- */
 function openRestore(){
+  if (S.deviceKind === "harmony"){ confirmHarmonyRestore(); return; }
   if (!S.serial){ modal(`<h3>先连接手机</h3><p class="lead">还原要连着手机操作。请先在「连接手机」里选中要还原的手机。</p><div class="actions"><button class="btn" onclick="closeModal()">好</button></div>`); return; }
   modal(`<h3>还原改动</h3><p class="lead">选一项恢复。App 内的开关要按清单路径手动打开。</p>
     <div style="display:flex;flex-direction:column;gap:10px;margin:14px 0">
