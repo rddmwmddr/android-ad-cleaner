@@ -3,9 +3,9 @@
 # 机型也靠这个前缀把这份脚本当同族参考（#319 / #483）。
 # 只关点名的广告与推荐；搜索数据源、服务通知与消息总开关保留，营销由 chan-scan / chan-off
 # 在渠道级处理。通知渠道、组件挂起和快应用继续走 run.py 的独立确认流程。
+# 2026-11-10 负一屏入口改从内侧右滑、已在负一屏不再滑走、认不到入口时留页面现场（#901），未复测。
 BUILD = "PMX110_17.0.0"
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
-import time
 from collections import namedtuple
 
 import adb_link
@@ -379,20 +379,59 @@ def hide_carousel():
     VERIFIED_SWITCHES += 1
 
 
-@step("负一屏")
-def _():
-    p.d.shell("input keyevent HOME")
-    time.sleep(.6)
-    p.d.shell("input keyevent HOME")
-    for _ in range(3):
-        p.d.shell(f"input swipe 8 {p.H//2} {p.W*3//4} {p.H//2} 700")
-        p.await_page()
-        if any("head_icon" in n.get("resource-id", "") for n in p.tree().iter("node")):
-            break
+LAUNCHER = "com.android.launcher/"
+# 负一屏首页的两条已知文案（PLG110 / PMA110 实测）：头像入口万一改名，两条都在也算到了（#901）
+ASSISTANT_HOME = {"我的服务", "添加卡片"}
+
+
+def at_assistant():
+    """当前页是不是负一屏首页：先要求前台是桌面，再看头像入口或首页的两条已知文案。
+
+    负一屏内嵌在桌面进程里，焦点窗口不再是它自己的包名（PLR110 实测）；反过来，
+    它自己的包名对应的是负一屏设置页，那页不能当成「已经到了」。别的 App 上的同名
+    头像 / 文案同样不算，否则这一段会在错的应用里点下去（#901）。"""
+    if not p.focus().startswith(LAUNCHER):
+        return False
+    root = p.tree()
+    if any(n.get("resource-id", "").endswith("head_icon") for n in root.iter("node")):
+        return True
+    return ASSISTANT_HOME <= {t for t, _, _ in p.texts(root)}
+
+
+def assistant_icon():
+    """回默认桌面、从左侧内侧右滑进负一屏，返回唯一的头像入口。
+
+    ColorOS 最左一条是返回 / 侧边栏手势区，起点从 W//7 起、滑动 250 ms（同族 PLG110 实测）。
+    两次 HOME 回默认桌面：多主页时一次可能停在别的页；HOME 也可能正好落在负一屏，那就不再滑，
+    再滑一次会把自己划走（#901）。"""
+    if at_assistant():
+        p.await_page()                  # 已到也可能是刚划进来的过渡帧：等这一页画完再取坐标
+    else:
+        reached = False
+        for _ in range(2):
+            p.d.shell("input keyevent HOME")
+            p.await_page()
+            reached = at_assistant()
+            if reached:
+                break
+        if not reached:
+            for _ in range(4):
+                require(p.focus().startswith(LAUNCHER), "未停在系统桌面，请勿同时操作手机")
+                p.d.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250")
+                p.await_page()
+                if at_assistant():
+                    break
     icons = [n for n in p.tree().iter("node") if n.get("resource-id", "").endswith("head_icon")
              and p.on_screen(n)]
+    if len(icons) != 1:
+        p.note_miss(f"唯一的负一屏头像入口（读到 {len(icons)} 个）")
     require(len(icons) == 1, "未确认负一屏头像入口")
-    l, t, r, b = bounds(icons[0])
+    return icons[0]
+
+
+@step("负一屏")
+def _():
+    l, t, r, b = bounds(assistant_icon())
     before = p.sig()
     p.click((l + r) // 2, (t + b) // 2)
     p.settle(before, 2.4)

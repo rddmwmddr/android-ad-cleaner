@@ -564,7 +564,8 @@ class NegativeScreenTests(unittest.TestCase):
           <node resource-id="com.coloros.assistantscreen:id/head_icon"
                 clickable="true" bounds="[40,80][160,200]"/>
         </hierarchy>''')
-        p.focus.return_value = "com.coloros.assistantscreen/Setting"
+        # 负一屏内嵌在桌面进程里，前台仍是 launcher（#901）
+        p.focus.return_value = "com.android.launcher/com.android.launcher3.Launcher"
         scope = load(p)
         scope["row"] = Mock()
         scope["hide_carousel"] = Mock(side_effect=RuntimeError("单选缺失"))
