@@ -16,7 +16,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
-sys.path.insert(0, str(ROOT / "tests"))
 
 import recipe_meta  # noqa: E402
 import run  # noqa: E402
@@ -94,7 +93,7 @@ class ParseTests(unittest.TestCase):
 class SingleDefinitionTests(unittest.TestCase):
     def test_run_reuses_the_neutral_function(self):
         self.assertIs(run.recipe_meta, recipe_meta.recipe_meta,
-                      "CLI 入口又自己持有一份解析（#915：同一份元数据只解析一处）")
+                      "CLI 入口又自己定义了一份解析（#915）")
 
 
 if __name__ == "__main__":
