@@ -1,8 +1,11 @@
-"""配方验证台账（tool/verify_ledger.py，#916、#917）：每个配方文件一行、缺记录显示「未记录」、
-按距今天数降序、末行三档分布、验证之后改过的标「待复核」。
+"""配方验证台账（tool/verify_ledger.py，#916、#917、#918）：每个配方文件一行、缺记录显示「未记录」、
+按距今天数降序、末行三档分布、验证之后改过的标「待复核」、记录的 build 对不上脚本 BUILD 的标「build 不符」。
 
-前两类用例只验外部行为：给定配方目录、已解析的台账、一个注入的「今天」与注入的改动日期，
-算出什么结果；不钉真实日期，也不验输出的列宽。`changed_dates()` 单独在临时 git 仓库里验。
+前两类用例只验外部行为：给定配方目录、已解析的台账、一个注入的「今天」、注入的改动日期与注入的
+脚本 BUILD，算出什么结果；不钉真实日期，也不验输出的列宽。`changed_dates()` 单独在临时 git 仓库里验。
+
+最后一类是数据契约：直接读真实 `recipes/` 与 `recipes/verified.toml`，不注入假数据——它的价值就是
+「真实数据符合契约」（形状照 tests/test_vocab.py 的 RealRecipesTest）。
 """
 import os
 import subprocess
@@ -173,6 +176,60 @@ class RowsTest(unittest.TestCase):
         self.assertEqual(verify_ledger.render(self.dir, records, TODAY).splitlines()[-1],
                          "30 天以内 2 · 31–90 天 2 · 90 天以上 2（共 6 份）")
 
+    def test_recorded_build_must_start_with_the_scripts_declared_build(self):
+        self.recipes("xiaomi-A/recipe.py", "oppo-B/recipe.py", "vivo-C/recipe.py")
+        records = {
+            "xiaomi-A/recipe.py": {"build": "A_1.0.2(CN01)", "date": "2026-11-08",
+                                   "by": "机主", "tier": "部分验证"},
+            "oppo-B/recipe.py": {"build": "B_3.0", "date": "2026-11-08", "by": "机主", "tier": "部分验证"},
+            "vivo-C/recipe.py": {"build": "C_3.0", "date": "2026-11-08", "by": "机主", "tier": "部分验证"},
+        }
+        builds = {"xiaomi-A/recipe.py": "A_1.0", "oppo-B/recipe.py": "B_2.0", "vivo-C/recipe.py": ""}
+        rows = {row.path: row for row in verify_ledger.rows(self.dir, records, TODAY, builds=builds)}
+        self.assertFalse(rows["xiaomi-A/recipe.py"].build_mismatch)
+        self.assertTrue(rows["oppo-B/recipe.py"].build_mismatch)    # 记录不是脚本声明的 B_2.0 打头
+        self.assertFalse(rows["vivo-C/recipe.py"].build_mismatch)   # 脚本没声明 BUILD，无从比较
+        lines = verify_ledger.render(self.dir, records, TODAY, builds=builds).splitlines()
+        marked = [line.split("\t")[0] for line in lines if line.endswith(verify_ledger.BUILD_MISMATCH)]
+        self.assertEqual(marked, ["oppo-B/recipe.py"])
+
+    def test_a_record_without_a_build_fails_the_prefix_check(self):
+        self.recipe("xiaomi-A/recipe.py")
+        records = {"xiaomi-A/recipe.py": {"date": "2026-11-08", "by": "机主", "tier": "部分验证"}}
+        [row] = verify_ledger.rows(self.dir, records, TODAY, builds={"xiaomi-A/recipe.py": "A_1.0"})
+        self.assertTrue(row.build_mismatch)   # 记录缺 build 就不是「对得上」
+
+    def test_a_missing_record_is_not_reported_as_a_build_mismatch(self):
+        self.recipe("xiaomi-A/recipe.py")
+        [row] = verify_ledger.rows(self.dir, {}, TODAY, builds={"xiaomi-A/recipe.py": "A_1.0"})
+        self.assertEqual((row.tier, row.build_mismatch), (verify_ledger.UNRECORDED, False))
+
+    def test_an_unrecorded_record_is_not_checked_against_the_script_build(self):
+        """「未记录」是说这份脚本没有可信记录，不是「验的时候脚本是旧版」：build 不参与校验，
+        否则只想登记「还没验」的人会被报成版本不符。"""
+        self.recipe("vivo-C/recipe.py")
+        records = {"vivo-C/recipe.py": {"build": "", "date": "", "by": "", "tier": "未记录"}}
+        rows = verify_ledger.rows(self.dir, records, TODAY, builds={"vivo-C/recipe.py": "C_3.0"})
+        self.assertFalse(rows[0].build_mismatch)
+        self.assertEqual(verify_ledger.render(self.dir, records, TODAY,
+                                              builds={"vivo-C/recipe.py": "C_3.0"}).splitlines()[0],
+                         f"vivo-C/recipe.py\t{verify_ledger.UNRECORDED}")
+
+    def test_review_and_build_mismatch_marks_share_the_line_tail(self):
+        self.recipe("xiaomi-A/recipe.py")
+        records = {"xiaomi-A/recipe.py": {"build": "OLD_1.0", "date": "2026-11-01",
+                                          "by": "机主", "tier": "部分验证"}}
+        line = verify_ledger.render(self.dir, records, TODAY, changed={"xiaomi-A/recipe.py": "2026-11-08"},
+                                    builds={"xiaomi-A/recipe.py": "A_2.0"}).splitlines()[0]
+        self.assertTrue(line.endswith(f"{verify_ledger.REVIEW} · {verify_ledger.BUILD_MISMATCH}"))
+
+    def test_declared_builds_are_read_from_the_scripts(self):
+        self.recipe("xiaomi-A/recipe.py")
+        Path(self.dir, "oppo-B").mkdir()
+        Path(self.dir, "oppo-B", "recipe.py").write_text('# 无 BUILD\nVERIFIED = 0\n', encoding="utf-8")
+        self.assertEqual(verify_ledger.declared_builds(self.dir),
+                         {"xiaomi-A/recipe.py": "PMX110_17.0.0", "oppo-B/recipe.py": ""})
+
 
 class ChangedDatesTest(unittest.TestCase):
     """生产路径：从 git 取每个配方最后一次改动的作者日期。用临时仓库，不碰真实 `recipes/`。"""
@@ -212,6 +269,51 @@ class ChangedDatesTest(unittest.TestCase):
         (self.recipes / "xiaomi-A").mkdir()
         (self.recipes / "xiaomi-A" / "recipe.py").write_text('BUILD = "A_1.0"\n', encoding="utf-8")
         self.assertEqual(verify_ledger.changed_dates(self.recipes), {})
+
+
+class RealRecipesContractTest(unittest.TestCase):
+    """真实仓库的数据契约，无注入点：每份配方都有条目、记录的 build 对得上脚本 BUILD、
+    档位词与日期格式合法。台账真正的失效方式是「新配方悄悄不在里面」，这一类就是拦它。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dir = str(ROOT / "recipes")
+        cls.records = verify_ledger.load(os.path.join(cls.dir, "verified.toml"))
+        cls.paths = verify_ledger.recipe_paths(cls.dir)
+
+    def test_every_recipe_file_has_a_record(self):
+        missing = sorted(set(self.paths) - set(self.records))
+        self.assertEqual(missing, [],
+                         "新配方要在 recipes/verified.toml 里登记，内容可以是「未记录」：\n" + "\n".join(missing))
+
+    def test_no_record_is_left_for_a_recipe_that_no_longer_exists(self):
+        stale = sorted(set(self.records) - set(self.paths))
+        self.assertEqual(stale, [], "配方改名或删除后，台账里的旧 key 要跟着删：\n" + "\n".join(stale))
+
+    def test_every_record_has_the_four_fields(self):
+        for path, record in sorted(self.records.items()):
+            with self.subTest(path):
+                self.assertEqual(set(record), {"build", "date", "by", "tier"})
+                for field in ("build", "date", "by"):
+                    self.assertIsInstance(record[field], str)
+
+    def test_recorded_builds_start_with_the_scripts_declared_build(self):
+        builds = verify_ledger.declared_builds(self.dir)
+        bad = [f"{path}: 记录 {self.records[path]['build']!r} 不以脚本 BUILD {builds[path]!r} 打头"
+               for path in self.paths
+               if path in self.records and self.records[path]["tier"] != verify_ledger.UNRECORDED
+               and not verify_ledger.build_matches(self.records[path]["build"], builds[path])]
+        self.assertEqual(bad, [], "\n".join(bad))
+
+    def test_tiers_are_known_words_and_dates_are_strict_iso(self):
+        for path, record in sorted(self.records.items()):
+            with self.subTest(path):
+                self.assertIn(record["tier"], verify_ledger.TIERS)
+                day = record["date"]
+                if record["tier"] == verify_ledger.UNRECORDED:
+                    self.assertEqual(day, "")   # 没有可信记录就不该有日期，否则排序与分档会被假数据带偏
+                else:
+                    self.assertEqual(str(date.fromisoformat(day)), day, "日期要写成 YYYY-MM-DD 且真有这一天")
 
 
 if __name__ == "__main__":
