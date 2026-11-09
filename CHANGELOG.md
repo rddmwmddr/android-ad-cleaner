@@ -4,6 +4,15 @@
 
 ## 未发布
 
+### 内部
+
+- `CLAUDE.md` 正文去掉与注册表 `why` 重复的理由，`npm test` 的说法改指 `package.json`（#885）
+- README 机型表压成状态符号，长验证记录搬到表下，表格不再横向溢出（#883）
+
+## 0.4.1 · 2026-11-09
+
+2037 项设备无关回归通过；Mac 两包签名公证与命令行冒烟、Windows 两包 CI 冒烟通过；手机版模拟器覆盖安装与启动通过，签名证书与上一版一致。没有真机复测。
+
 ### 新增
 
 - 新增一加 15T（PLZ110）七段本机路径：商店走隐私授权管理，整轮未验证（#138）
@@ -55,8 +64,6 @@
 
 ### 内部
 
-- `CLAUDE.md` 正文去掉与注册表 `why` 重复的理由，`npm test` 的说法改指 `package.json`（#885）
-- README 机型表压成状态符号，长验证记录搬到表下，表格不再横向溢出（#883）
 - CI 的 `setup-node` 与 artifact action 升到 node24 版本，summary 不再报 node20（#879）
 - 覆盖率报告写进 job summary，main 与同仓 PR 上挂 `coverage <百分比>%` 的 check；两个测试 job 也把通过/失败/跳过贴进 summary（#875）
 - CI 新增 `coverage` job：Linux 与 Windows 两份数据合并成一份报告，进日志与 artifact，不设阈值（#858）
