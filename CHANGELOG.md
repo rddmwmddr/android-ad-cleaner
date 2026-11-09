@@ -55,6 +55,7 @@
 
 ### 内部
 
+- `CLAUDE.md` 正文去掉与注册表 `why` 重复的理由，`npm test` 的说法改指 `package.json`（#885）
 - README 机型表压成状态符号，长验证记录搬到表下，表格不再横向溢出（#883）
 - CI 的 `setup-node` 与 artifact action 升到 node24 版本，summary 不再报 node20（#879）
 - 覆盖率报告写进 job summary，main 与同仓 PR 上挂 `coverage <百分比>%` 的 check；两个测试 job 也把通过/失败/跳过贴进 summary（#875）
