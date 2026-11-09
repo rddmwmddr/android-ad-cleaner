@@ -1,1 +1,2 @@
 uiautomator2==3.7.1
+urllib3==1.24.1
