@@ -9,6 +9,8 @@ import time
 from urllib.parse import quote
 
 BASE = ""       # 解出来的 aac/ 目录，boot() 填
+# 引擎的机器行（tool/events.py 的 PREFIX / PAYLOAD_PREFIX）的公共段；结果页不许显示它们。
+MACHINE_PREFIX = "#aac:"
 
 REPO = "https://github.com/rddmwmddr/android-ad-cleaner"
 URL_LIMIT = 7500        # 网址太长浏览器会截断
@@ -68,8 +70,12 @@ def _run_summary(text, turned_off):
 
 
 def summarize(result):
-    """一步的结果用一句话说；认不出模式就取日志末行（所以机器行不能进 tail）。"""
-    tail = result.get("tail") or []
+    """一步的结果用一句话说；认不出模式就取日志末行（所以机器行不能进 tail）。
+
+    `MACHINE_PREFIX` 是 tool/events.py 两个前缀的公共段：`gui/app.py` 的 `_log()` 本来就把
+    事件行与载荷行挡在 tail 外面，漏一处就会让末行变成 `#aac:payload {"…"}`，这里再剥一次。
+    """
+    tail = [line for line in result.get("tail") or [] if not line.startswith(MACHINE_PREFIX)]
     text = "\n".join(tail)
     m = re.search(r"机型脚本跑完：关了 (\d+) 个，(\d+) 秒", text)
     if m:

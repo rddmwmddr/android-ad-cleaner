@@ -1,15 +1,27 @@
-"""文档内容类四条规则的守卫（#1000）：CHANGELOG 条目一行一个票号、文档里的代码位置用符号名、
-指到的 `.py` 路径要存在、上报服务地址与凭据不写进仓库。
+"""规则守卫：文档内容类四条（`DocGuards`，#1000）与引擎结构类两条（`EngineGuards`，#1002）。
 
-四条都只读文件、比字符串：不联网、不执行被测代码、不引入 Markdown 解析依赖。
+文档那四条只读文件、比字符串：不联网、不执行被测代码、不引入 Markdown 解析依赖。
 三条守的是「文档现在长什么样」，旧树也绿，守的是不回退（`dev.tests.behaviour-change-needs-red-test`
 允许守卫用例如此，但要求写明）。`doc.refs.symbols-not-lines` 不是：落地时顺手清了
 `docs/09` 那处裸行号，它在旧树上是红的。
+
+引擎那两条：替换层只读 AST（不 import 手机版的模块，它们依赖只在手机上装得下的库），
+结果页喂 `tests/summary_cases.json` 的同一批样例给手机版的 `summarize()`；网页版那条在
+`tests/js/client.test.js`，跑的是真实的 `gui/web/index.html`（ADR-0017）。不需要 Android 设备或 JDK。
 """
+import json
 import os
 import re
+import sys
 import unittest
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "android" / "app" / "src" / "main" / "python"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from aac_android import view  # noqa: E402
+from test_rules_registry import top_level_names  # noqa: E402  同一份「模块层名字」判据，别再抄一份
+from tool import events  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -206,6 +218,77 @@ class DocGuards(unittest.TestCase):
         self.assertGreater(scanned, 0, "一个文件都没扫到，这条守卫会空转")
         self.assertEqual(hits, [], "内网服务地址与凭据只写在本机 CLAUDE.local.md 或 .private/：\n"
                          + "\n".join(hits))
+
+
+# 手机版的替换层（ADR-0019）：这四个文件把引擎接到手机上，少一个或导出名改了，桌面版测试全绿
+# 而手机版起不来。清单是模块层不带下划线的名字——加新名字不红，删或改名会红；改它等于改
+# ADR-0019 的边界。main.py / screen.py / updates.py / view.py 是手机版自己的东西，不在这层。
+ANDROID = ROOT / "android" / "app" / "src" / "main" / "python" / "aac_android"
+REPLACEMENT_LAYER = {
+    "adb.py": ("ADB_PATH", "NOT_READY", "SERIAL", "VERSION_TEXT", "answer", "install"),
+    "bridge.py": ("AdbBridge", "MONKEY", "Result", "SLOW", "ShizukuBridge", "get", "launcher",
+                  "prepare", "slow"),
+    "inproc.py": ("EXECUTABLE", "Proc", "Runner", "TOOL", "after_run", "call", "interrupt", "setup",
+                  "top"),
+    "u2.py": ("ATTR", "AccessibilityServiceAlreadyRegisteredError", "AdbError", "AdbShellError",
+              "BaseError", "ConnectError", "Device", "DeviceBusyError", "DeviceError", "EMPTY_XML",
+              "FLAGS", "HTTPError", "HTTPTimeoutError", "HierarchyEmptyError", "KEYS",
+              "LaunchUiAutomationError", "NormalError", "RPCError", "RPCInvalidError",
+              "RPCUnknownError", "Selector", "ShellResponse", "UiAutomationError",
+              "UiAutomationNotConnectedError", "UiObject", "UiObjectNotFoundError", "bounds_of",
+              "connect", "display", "install", "matches", "read_failed", "select_all", "text_of"),
+}
+
+# 结果页要挡住的机器行记号：唯一来源是 tool/events.py 的两个前缀，它们的公共前缀就是两处
+# summarize() 该剥掉的那一段。写死字面量的话，改前缀后守卫会变成哑桩。
+MACHINE_TOKEN = os.path.commonprefix([events.PREFIX, events.PAYLOAD_PREFIX])
+
+
+class EngineGuards(unittest.TestCase):
+    def test_ui_result_line_routing(self):
+        """结果页的摘要不许出现引擎的机器行（`tool/events.py` 的 PREFIX / PAYLOAD_PREFIX）。
+
+        与 `tests/js/client.test.js` 的「完成页摘要把机器行挡在外面（#1002）」读同一份
+        `tests/summary_cases.json`：那条真跑 jsdom 里的 `summarize()`，这条喂
+        `aac_android/view.py` 的同名函数。`gui/app.py` 的 `_log()` 今天已经把两类行挡在外面，
+        但只要有一处漏进 `tail`，用户看到的就是 `#aac:payload {"…"}`——两处 summarize 各自再剥一次。
+        """
+        cases = json.loads((ROOT / "tests" / "summary_cases.json").read_text(encoding="utf-8"))
+        self.assertTrue(cases, "一份样例都没有，这条守卫会空转")
+        fixtures = [line for case in cases for line in case.get("machine", [])]
+        self.assertTrue(fixtures, "样例里一条机器行都没有，这条守卫吵不到任何人")
+        stray = [line for line in fixtures if not line.startswith(MACHINE_TOKEN)]
+        self.assertEqual(stray, [],
+                         f"样例里的机器行要以 {MACHINE_TOKEN!r} 开头"
+                         "（前缀的唯一来源是 tool/events.py）：\n" + "\n".join(stray))
+        for case in cases:
+            with self.subTest(case=case["name"]):
+                got = view.summarize({"tail": list(case["tail"]) + list(case.get("machine", []))})
+                self.assertEqual(got, case["want"])
+                leaked = [line for line in got.splitlines() if line.startswith(MACHINE_TOKEN)]
+                self.assertEqual(leaked, [], "结果页不能显示引擎的机器行")
+        for line in (events.PREFIX + '{"kind": "ui_busy"}',
+                     events.PAYLOAD_PREFIX + '{"skeleton": "<node text=…>"}'):
+            self.assertEqual(view.summarize({"tail": ["开始执行", line]}), "开始执行",
+                             "按 events.py 的两个前缀现造的机器行也要挡住")
+
+    def test_android_replacement_layer(self):
+        """`aac_android/` 的替换层四个文件都在，模块层的公开名字一个都不能少（ADR-0019）。
+
+        冻结清单是模块层不带下划线的名字：加新名字不红，删或改名会红。改它等于改 ADR-0019
+        的边界。本仓库没有 JDK / Android SDK，这条只证明文件与名字在，不证明 APK 跑得起来。
+        """
+        problems = []
+        for name, frozen in sorted(REPLACEMENT_LAYER.items()):
+            path = ANDROID / name
+            if not path.is_file():
+                problems.append(f"aac_android/{name} 不存在")
+                continue
+            absent = sorted(set(frozen) - top_level_names(path))
+            if absent:
+                problems.append(f"aac_android/{name} 少了 {'、'.join(absent)}")
+        self.assertEqual(problems, [], "替换层少了文件或导出名，手机会在打包后才暴露：\n"
+                         + "\n".join(problems))
 
 
 if __name__ == "__main__":
