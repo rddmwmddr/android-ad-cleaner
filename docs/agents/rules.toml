@@ -785,6 +785,14 @@ why = "`in-progress` 是认领而不是角色，和 `waiting-for-verify` 不并�
 expires_if = "认领改由平台原生的 assignee 表达、标签不再表示进行中时删。"
 
 [[rule]]
+id = "doc.triage.stale-is-a-modifier"
+source = "docs/agents/triage-labels.md#Triage Labels"
+check = "test:test_stale_scan::MainTests.test_dry_run_lists_candidates_and_never_writes"
+status = "enforced"
+why = "`stale` 只在票没有前进时才该出现，而 GitHub 的 `updatedAt` 会被机器人、AI 评论和标签变更推到最近一次，读它等于永远等不到停摆的票；本机制只看末评作者与那条评论的服务器时间，一条评论都没有时从 `createdAt` 起算（#977）。加标只是把球在谁那边摆出来，报告者随时可能补上缺的信息，自动关闭会把还开得下去的票扫地出门；摘标又能恢复，所以关票留给维护者按现有信息判断（#978）。守卫是判定层只读：`--dry-run` 下除 `issue list` 外不发任何写命令。"
+expires_if = "GitHub 原生 stale 规则接管加标与摘标、标签不再代表维护者的判断时删。"
+
+[[rule]]
 id = "doc.triage.one-category-label"
 source = "docs/agents/triage-labels.md#分类标签"
 check = "none"

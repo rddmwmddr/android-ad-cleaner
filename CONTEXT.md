@@ -181,7 +181,7 @@
 
 ## Issue 状态
 
-除 GitHub 标准标签和 `docs/agents/triage-labels.md` 里的五个角色外，本仓库还有三个自有状态。
+除 GitHub 标准标签和 `docs/agents/triage-labels.md` 里的五个角色外，本仓库还有三个自有状态，以及一个不是状态的修饰符。
 
 **`waiting-for-verify`** — 修复已合进 `main`，但**没有任何已发布版本包含它**，或已发布但没在报告者真机上确认。它的互斥标签与关票条件只在 [docs/agents/triage-labels.md](docs/agents/triage-labels.md) 里定义，每版欠的复测在 [release-followup.md](docs/agents/release-followup.md)。
 
@@ -190,6 +190,8 @@
 **`out-of-scope`** — 明确拒绝的需求，理由写在 `.out-of-scope/<概念>.md`。和 `wontfix` 的区别：`wontfix` 是这次不做，`out-of-scope` 是**这个方向不做**，理由要能被后来者读懂，同一个需求再出现时直接引用而不是重新论证。
 
 目前只有一条：`.out-of-scope/app-splash-ads.md`（App 自身的开屏广告）。
+
+**`stale`** — 修饰符，不是状态：`needs-info` 的票在报告者那边停摆时由 `python3 tool/stale.py` 每日扫描打上，报告者回话后摘掉。它不改变票的角色，也不构成关票依据。加标条件与认领时的处置只在 [issue-tracker.md](docs/agents/issue-tracker.md) 的「票的生命周期」里定义，标签语义见 [docs/agents/triage-labels.md](docs/agents/triage-labels.md)。
 
 ## 规则
 
