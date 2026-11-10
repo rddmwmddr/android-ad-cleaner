@@ -36,6 +36,8 @@ class DeviceLock:
         while True:
             self.file.seek(0)
             try:
+                # 平台判据写成 sys.platform 而不是 os.name：mypy 只认前者，Linux 上会把
+                # Windows-only 的 msvcrt 分支整段剪掉，否则类型检查读不到那个模块的方法。
                 if sys.platform == "win32":
                     import msvcrt
                     msvcrt.locking(self.file.fileno(), msvcrt.LK_NBLCK, 1)

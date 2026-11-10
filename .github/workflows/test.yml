@@ -26,8 +26,9 @@ jobs:
           pip install ruff==0.17.3
           ruff check tool tests gui android/app/src/main/python
   # 类型检查单独一个 job：红了就是类型问题，不与「用例挂了」混在一起。扫描范围（`tool/`）与宽松档
-  # 参数都在 pyproject.toml 的 `[tool.mypy]` 里，所以这里只有一条不带参数的 `mypy`；与 ruff 一样
-  # 与平台无关，只留 Linux 一份。版本只在 CI 与 CLAUDE.md 里，不进 requirements.txt（同 coverage）。
+  # 参数都在 pyproject.toml 的 `[tool.mypy]` 里，所以这里只有一条不带参数的 `mypy`。只跑 Linux：
+  # mypy 按平台裁剪分支，Windows-only 的段落在别的平台上连看都不看，两边结论不等价（ruff 才是无关的）。
+  # 版本在 CLAUDE.md、CONTRIBUTING、发版文档与本文件四处，改时一起改；不进 requirements.txt（同 coverage）。
   types:
     runs-on: ubuntu-latest
     timeout-minutes: 5
