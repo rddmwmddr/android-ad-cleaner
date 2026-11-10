@@ -310,6 +310,18 @@ PMX110 / ColorOS 17 上逐个单独挂起实测（Issue #335，2026-10-30）。
 - 主题、视频、游戏中心、负一屏等仍有入口差异；专用脚本只列出已识别的有限范围，不沿用 ColorOS 16 的全部步骤冒充已验证。
 
 本机经机主同意挂起广告服务、乐划和两个快应用组件后，仍观察到部分进程被重新拉起；收尾广告服务仍运行。挂起状态不能作为后台彻底停止的证明，详细状态与还原方法见上述实测记录。
+
+### 一加 Ace 2 Pro（PJA110 / ColorOS 16.0.5.1201 / Android 16）
+
+2026-11-10 按 #911 的报告补变体脚本 `recipes/oneplus-PJA110/recipe_android16.py`。路径取自**同平台版本** `PHK110_16.0.5.1201`（一加 Ace 2）已实测的公开入口与 `tool/entries.py` 的 oppo 条目，**没有在 PJA110 上跑过**，合并不等于已走通；等报告者复测。
+
+- **软件商店 / 浏览器**：认 `oppo.intent.action.APP_SETTINGS`（`am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p 包名`）直达设置页，不再走「我的 → 设置」三下连点；落地后同时核对前台 Activity 与页标题。商店落点 `com.heytap.market.mine.cn.setting.ui.SettingActivity`（注意 `.cn.` 段），页标题「应用与服务」；服务管理是 `ServeManagerActivity`。
+- **商店隐私入口**：「隐私」与「隐私授权管理」两种叫法都试——同平台的 ColorOS 16 机型上两种都出现过（Find N6 / Find X9 Pro 叫「隐私授权管理」，13T 叫「隐私」）。
+- **下拉搜索**：`SearchSettingActivity` 未导出，先用它自己的 scheme `am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'` 落地（Find N6 / Find X9 Pro 的 ColorOS 16 实测过）；scheme 不通时才退回 `com.heytap.quicksearchbox/.ui.activity.SearchHomeActivity` 点页面底部（`top > 0.8H`）最靠下的「设置」。两条都不通就带着页面现场失败，不碰桌面下滑手势。
+- **开关叫法**：商店个性化页仍是「个性化推荐」；浏览器个性化是「个性化优惠推荐」「个性化广告推荐」（与商店不同名）。
+- **推广位名单**：沿用 ColorOS 14 的六项，不扩成 PHK110 的 26 项；没出现的行记一行「本次未显示」继续，六项一项都认不出才按失败收尾。
+- **未覆盖**：广告跟踪、负一屏、主题、视频、游戏中心。启动后被别的 App 抢前台的取证缺口见 #940。
+
 ## 一加 13T（PKX110）
 实测日期：2026-10-28；系统：`PKX110_16.0.10.500(CN01)`，Android 16。
 机型脚本：`recipes/oneplus-PKX110/recipe.py`（广告跟踪、软件商店·服务管理、软件商店·个性化、小布建议四段实测通过；浏览器三段、小布建议幂等重跑均 completed）。

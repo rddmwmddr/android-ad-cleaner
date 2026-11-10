@@ -60,6 +60,13 @@ date = "2026-10-25"
 by = "机主"
 tier = "部分验证"
 
+# 路径照同平台 PHK110_16.0.5.1201 已实测的公开入口改写，未在 PJA110 上跑过（#911）。
+["oneplus-PJA110/recipe_android16.py"]
+build = "PJA110_16.0.5.1201"
+date = ""
+by = ""
+tier = "未记录"
+
 ["oneplus-PKX110/recipe.py"]
 build = "PKX110_16.0.10.500"
 date = "2026-10-28"
