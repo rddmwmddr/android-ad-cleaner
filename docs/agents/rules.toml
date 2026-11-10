@@ -967,9 +967,9 @@ expires_if = "手机版不再用 Gradle 构建、或发版流水线自己编译 
 [[rule]]
 id = "doc.release.apk-link-sync"
 source = "docs/agents/release.md#手机版 APK"
-check = "none"
-status = "manual"
-why = "Release 里有 APK 而下载区还写「随下一版发布」，用户就找不到包；上传脚本按 Release 现有文件现算清单，链接不同步会让 Gitee 那一版多传的对象没人指向。"
+check = "ci:assets"
+status = "enforced"
+why = "Release 里有 APK 而下载区还写「随下一版发布」，用户就找不到包；上传脚本按 Release 现有文件现算清单，链接不同步会让 Gitee 那一版多传的对象没人指向。`release-assets.yml` 的 `assets` job 每周取一次 Release 附件名与 `REL.files[].file` 比对，不一致就红并列出两边差集；取数失败走退出码 2，网络抖动不当成不一致（#1003）。"
 expires_if = "下载页改由 Release 资产自动渲染时删。"
 
 [[rule]]
@@ -991,9 +991,9 @@ expires_if = "校验清单改由流水线生成并比对时删。"
 [[rule]]
 id = "doc.release.apk-id-android"
 source = "docs/agents/release.md#一轮发版的产物顺序"
-check = "none"
-status = "manual"
-why = "APK 条目的 `id` 逐字写 `android`：卡片角标、手机端高亮与 `baidu_rows.py` 生成的安装说明都按它匹配，换一个 id 线上就看不到手机版。"
+check = "test:test_rules_guards::ReleaseGuards.test_doc_release_apk_id_android"
+status = "enforced"
+why = "APK 条目的 `id` 逐字写 `android`：卡片角标、手机端高亮与 `baidu_rows.py` 生成的安装说明都按它匹配，换一个 id 线上就看不到手机版。`ReleaseGuards.test_doc_release_apk_id_android` 冻结整个 id 集合，并顺带核对每条 `file` 里的版本号等于 `REL.version`（#1003）。"
 expires_if = "下载页不再用 id 区分平台时删。"
 
 [[rule]]
