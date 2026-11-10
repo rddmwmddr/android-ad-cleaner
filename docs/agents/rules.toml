@@ -117,8 +117,8 @@ expires_if = "前端换成 unittest 里能直接跑的框架时删。"
 [[rule]]
 id = "doc.changelog.one-line-entry"
 source = "CLAUDE.md#开发"
-check = "none"
-status = "manual"
+check = "test:test_rules_guards::DocGuards.test_doc_changelog_one_line_entry"
+status = "enforced"
 why = "条目膨胀成段落会把用户看的更新说明塞回 CHANGELOG，而 Release Note 才是唯一权威（#448）；测试数写进 CHANGELOG 后 rebase 一次就失效。"
 expires_if = "CHANGELOG 改由 PR 标题自动生成时删。"
 
@@ -405,17 +405,17 @@ expires_if = "文档不再写计数、或 CI 直接给出基线数时删；审�
 [[rule]]
 id = "doc.refs.symbols-not-lines"
 source = "CODING_STANDARDS.md#文档指向代码位置用符号名，行号必须带基线"
-check = "none"
-status = "manual"
+check = "test:test_rules_guards::DocGuards.test_doc_refs_symbols_not_lines"
+status = "enforced"
 why = "ADR-0004 初稿把改前基线的行号与改后的位置混写，评审把旧行号当成新文件的行号；CONTEXT.md 也曾指到一行会漂的注释上（320ce35）。机制性断言同理：ADR-0010 的「关键写段」引文与它的反例本身就被查出对不上，`_work()` 的四处写点自 a5d98c5 起就在 `with j.lock:` 内——指认不到代码就是措辞夸大或实现缺漏，连转述它的反例也会跟着漂。"
 expires_if = "文档不再引用代码位置、改由 IDE 跳转或自动生成的索引承担时删；ADR 不再写机制性断言、只记录决定与取舍时也删。"
 
 [[rule]]
 id = "doc.refs.cleanup-on-move"
 source = "CODING_STANDARDS.md#文档指向代码位置用符号名，行号必须带基线"
-check = "none"
-status = "manual"
-why = "VIVO_MARKETING 迁到 channel_policy.py 后，docs/09 与测试注释仍指 chan_fast.py 与 gui/app.py，读者按旧路径找不到定义。"
+check = "test:test_rules_guards::DocGuards.test_doc_refs_cleanup_on_move"
+status = "enforced"
+why = "VIVO_MARKETING 迁到 channel_policy.py 后，docs/09 与测试注释仍指 chan_fast.py 与 gui/app.py，读者按旧路径找不到定义。守卫只核对文档里 `tool/` `gui/` `tests/` `recipes/` 下路径是否存在：符号搬进另一个仍然存在的文件、以及测试注释里的旧路径仍靠 grep 与评审。"
 expires_if = "文档里的代码引用改由机器生成、移动符号时自动重写时删。"
 
 [[rule]]
@@ -501,8 +501,8 @@ expires_if = "注释里的票号改由提交信息推导、不再手写时删。
 [[rule]]
 id = "doc.reports.private-infra-stays-local"
 source = "CLAUDE.md#错误日志上报"
-check = "none"
-status = "manual"
+check = "test:test_rules_guards::DocGuards.test_doc_reports_private_infra_stays_local"
+status = "enforced"
 why = "上报服务的地址、数据库与运维入口进了仓库就会被克隆、索引与镜像；`CLAUDE.local.md` 与 `.private/` 是唯一落点。"
 expires_if = "上报服务下线、或改由公开文档说明时删。"
 
