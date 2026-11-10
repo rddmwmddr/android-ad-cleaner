@@ -240,7 +240,8 @@ REPLACEMENT_LAYER = {
 }
 
 # 结果页要挡住的机器行记号：唯一来源是 tool/events.py 的两个前缀，它们的公共前缀就是两处
-# summarize() 该剥掉的那一段。写死字面量的话，改前缀后守卫会变成哑桩。
+# summarize() 该剥掉的那一段。手机版与网页版都只能写死这个字面量（屏幕上没有 tool/ 可 import），
+# 由本文件把它和 events.py 拴住：改前缀而不同步，这条与样例的漂移检查都会红。
 MACHINE_TOKEN = os.path.commonprefix([events.PREFIX, events.PAYLOAD_PREFIX])
 
 
@@ -248,15 +249,19 @@ class EngineGuards(unittest.TestCase):
     def test_ui_result_line_routing(self):
         """结果页的摘要不许出现引擎的机器行（`tool/events.py` 的 PREFIX / PAYLOAD_PREFIX）。
 
-        与 `tests/js/client.test.js` 的「完成页摘要把机器行挡在外面（#1002）」读同一份
-        `tests/summary_cases.json`：那条真跑 jsdom 里的 `summarize()`，这条喂
-        `aac_android/view.py` 的同名函数。`gui/app.py` 的 `_log()` 今天已经把两类行挡在外面，
-        但只要有一处漏进 `tail`，用户看到的就是 `#aac:payload {"…"}`——两处 summarize 各自再剥一次。
+        两条同口径用例：本条（`EngineGuards.test_ui_result_line_routing`）喂 `aac_android/view.py`
+        的 `summarize()`，`tests/js/client.test.js` 的「完成页摘要把机器行挡在外面（#1002）」
+        真跑 jsdom 里 `gui/web/index.html` 的同名函数；两端读同一份 `tests/summary_cases.json`。
+        `gui/app.py` 的 `_log()` 今天已经把两类行挡在外面，但只要有一处漏进 `tail`，用户看到的
+        就是 `#aac:payload {"…"}`——两处 summarize 各自再剥一次。期望串本身由
+        `tests/test_android_view.py::SummarizeTest.test_shared_cases_with_web_client` 守，这里只管漏没漏。
         """
         cases = json.loads((ROOT / "tests" / "summary_cases.json").read_text(encoding="utf-8"))
         self.assertTrue(cases, "一份样例都没有，这条守卫会空转")
         fixtures = [line for case in cases for line in case.get("machine", [])]
         self.assertTrue(fixtures, "样例里一条机器行都没有，这条守卫吵不到任何人")
+        self.assertEqual(view.MACHINE_PREFIX, MACHINE_TOKEN,
+                         "手机版剥掉的记号要和 tool/events.py 的前缀对得上")
         stray = [line for line in fixtures if not line.startswith(MACHINE_TOKEN)]
         self.assertEqual(stray, [],
                          f"样例里的机器行要以 {MACHINE_TOKEN!r} 开头"
@@ -264,7 +269,6 @@ class EngineGuards(unittest.TestCase):
         for case in cases:
             with self.subTest(case=case["name"]):
                 got = view.summarize({"tail": list(case["tail"]) + list(case.get("machine", []))})
-                self.assertEqual(got, case["want"])
                 leaked = [line for line in got.splitlines() if line.startswith(MACHINE_TOKEN)]
                 self.assertEqual(leaked, [], "结果页不能显示引擎的机器行")
         for line in (events.PREFIX + '{"kind": "ui_busy"}',
@@ -275,8 +279,9 @@ class EngineGuards(unittest.TestCase):
     def test_android_replacement_layer(self):
         """`aac_android/` 的替换层四个文件都在，模块层的公开名字一个都不能少（ADR-0019）。
 
-        冻结清单是模块层不带下划线的名字：加新名字不红，删或改名会红。改它等于改 ADR-0019
-        的边界。本仓库没有 JDK / Android SDK，这条只证明文件与名字在，不证明 APK 跑得起来。
+        旧树也绿，守的是不回退：冻结清单是模块层不带下划线的名字，加新名字不红，删或改名会红。
+        改它等于改 ADR-0019 的边界；正文那句「新增读屏能力要先加进 `u2.py` 与 `tool/reader.py`
+        两边」这条守卫看不见。本仓库没有 JDK / Android SDK，它也证明不了 APK 跑得起来。
         """
         problems = []
         for name, frozen in sorted(REPLACEMENT_LAYER.items()):

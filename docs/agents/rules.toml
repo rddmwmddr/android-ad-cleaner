@@ -287,7 +287,7 @@ id = "dev.ui.result-line-routing"
 source = "CLAUDE.md#开发"
 check = "test:test_rules_guards::EngineGuards.test_ui_result_line_routing"
 status = "enforced"
-why = "机器行进 results[].tail 会被当成结果摘要显示给用户；手机版的同一批摘要口径由 tests/summary_cases.json 钉住两边，_log() 的取舍与 tail 的边界没有守卫。守卫（#1002）拿同一份样例带机器行喂两处 summarize()，摘要里出现 `#aac:` 就红；上游 `_log()` 漏不漏它看不见，只证明结果页自己剥得掉。"
+why = "机器行进 results[].tail 会被当成结果摘要显示给用户；手机版的同一批摘要口径由 tests/summary_cases.json 钉住两边，_log() 的取舍与 tail 的边界没有守卫。守卫（#1002）拿同一份样例带机器行喂手机版 summarize()，摘要里出现 `#aac:` 就红；网页版那条同口径用例在 tests/js/client.test.js，注册表的 check 语法只能指一条。上游 `_log()` 漏不漏它看不见，只证明结果页自己剥得掉。"
 expires_if = "结果页改由结构化字段渲染、不再解析 tail 末行时删。"
 
 [[rule]]
@@ -319,7 +319,7 @@ id = "dev.android.replacement-layer"
 source = "CLAUDE.md#开发"
 check = "test:test_rules_guards::EngineGuards.test_android_replacement_layer"
 status = "enforced"
-why = "adb.py 按 adb 语义回答、bridge.py 是 shell 门面、inproc.py 在本进程跑脚本、u2.py 顶掉 uiautomator2（ADR-0019）；替换层与桌面依赖不一致时，引擎到手机上才第一次跑起来就红。守卫（#1002）查四个文件在不在、模块层公开名字少没少；名字在而语义不对、或 APK 根本起不来，它看不见（本仓库没有 JDK / Android SDK）。"
+why = "adb.py 按 adb 语义回答、bridge.py 是 shell 门面、inproc.py 在本进程跑脚本、u2.py 顶掉 uiautomator2（ADR-0019）；替换层与桌面依赖不一致时，引擎到手机上才第一次跑起来就红。守卫（#1002）查四个文件在不在、模块层公开名字少没少；正文第二句「新增读屏能力要先加进 u2.py 与 tool/reader.py 两边」它看不见，名字在而语义不对、或 APK 根本起不来也看不见（本仓库没有 JDK / Android SDK）。"
 expires_if = "手机版不再靠替换层跑引擎（例如改走真实 adb）时删。"
 
 [[rule]]
