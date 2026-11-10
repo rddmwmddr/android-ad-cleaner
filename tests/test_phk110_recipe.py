@@ -5,44 +5,44 @@ from pathlib import Path
 from types import SimpleNamespace
 import unittest
 
-from fixtures import load_recipe
+from fixtures import load_recipe, phone_stub
 
 ROOT = Path(__file__).resolve().parents[1]
 RECIPE = ROOT / "recipes/oneplus-PHK110/recipe.py"
 
 
-class FakePhone:
-    W, H = 1240, 2772
+def fake_shell(model, build, commands):
+    """回答两条 getprop，其余命令当场失败：这一段只该读型号与版本号。"""
+    values = {"getprop ro.product.model": model, "getprop ro.build.display.id": build}
 
-    def __init__(self, model="PHK110", build="PHK110_16.0.5.1201(CN01)", locked=False):
-        self.model, self.build, self.is_locked = model, build, locked
-        self.commands, self.changed = [], []
-        self.d = SimpleNamespace(shell=self.shell)
-
-    def shell(self, command):
-        self.commands.append(command)
-        values = {"getprop ro.product.model": self.model, "getprop ro.build.display.id": self.build}
+    def shell(command, timeout=None):
+        commands.append(command)
         if command not in values:
             raise AssertionError("Unexpected phone command: " + command)
         return SimpleNamespace(output=values[command])
 
-    def locked(self):
-        return self.is_locked
+    return shell
+
+
+def make_phone(model="PHK110", build="PHK110_16.0.5.1201(CN01)", locked=False):
+    commands = []
+    d = SimpleNamespace(shell=fake_shell(model, build, commands))
+    return phone_stub("PHK110", d=d, W=1240, H=2772, locked=lambda: locked, commands=commands)
 
 
 def load(phone=None, only=None):
-    return load_recipe(phone or FakePhone(), RECIPE, only)[0]
+    return load_recipe(phone or make_phone(), RECIPE, only)[0]
 
 
 class RecipeSafetyTests(unittest.TestCase):
     def test_no_selection_does_not_touch_phone(self):
-        phone = FakePhone()
+        phone = make_phone()
         result = load(phone)
         self.assertEqual(result["RESULTS"], [])
         self.assertEqual(phone.commands, [])
 
     def test_wrong_model_skips_all_steps(self):
-        phone = FakePhone(model="OTHER")
+        phone = make_phone(model="OTHER")
         result = load(phone, ["广告跟踪", "软件商店", "浏览器首页", "浏览器广告", "浏览器个性化"])
         self.assertEqual(len(result["RESULTS"]), 5)
         self.assertTrue(all(state == "跳过" for _, state in result["RESULTS"]))
@@ -50,12 +50,12 @@ class RecipeSafetyTests(unittest.TestCase):
         self.assertTrue(all(command.startswith("getprop ") for command in phone.commands))
 
     def test_different_build_skips(self):
-        result = load(FakePhone(build="PHK110_17.0.0"), ["软件商店"])
+        result = load(make_phone(build="PHK110_17.0.0"), ["软件商店"])
         self.assertEqual(result["RESULTS"], [("软件商店", "跳过")])
 
     def test_locked_phone_fails_the_step(self):
         """锁屏不再静默跳过：这一段记未完成，退出码由失败台账给出（#839）。"""
-        result = load(FakePhone(locked=True), ["软件商店"])
+        result = load(make_phone(locked=True), ["软件商店"])
         self.assertEqual(result["RESULTS"], [("软件商店", "未完成")])
         self.assertEqual(result["FAILED_STEPS"], ["软件商店"])
 
@@ -69,7 +69,7 @@ class RecipeSafetyTests(unittest.TestCase):
 
     def test_permission_denial_does_not_retry_with_privileges(self):
         namespace = load()
-        phone = FakePhone()
+        phone = make_phone()
         phone.d.shell = lambda command: SimpleNamespace(output="Permission Denial: not exported")
         function = namespace["open_app_settings"]
         function.__globals__["p"] = phone
@@ -78,7 +78,7 @@ class RecipeSafetyTests(unittest.TestCase):
 
     def test_wait_page_rejects_out_of_screen_coordinates(self):
         function = load()["wait_page"]
-        phone = FakePhone()
+        phone = make_phone()
         phone.focus = lambda: "example.app/ExampleActivity"
         phone.tree = lambda: None
         phone.texts = lambda root: [("设置", (0, 0, 100, 100), {"class": "TextView"})]
@@ -89,7 +89,7 @@ class RecipeSafetyTests(unittest.TestCase):
 
     def test_wait_page_rejects_consent_button(self):
         function = load()["wait_page"]
-        phone = FakePhone()
+        phone = make_phone()
         phone.focus = lambda: "example.app/ExampleActivity"
         phone.tree = lambda: None
         phone.texts = lambda root: [("同意并继续", (0, 0, 100, 100), {"class": "android.widget.Button"})]
@@ -99,7 +99,7 @@ class RecipeSafetyTests(unittest.TestCase):
 
     def test_missing_switch_is_not_reported_completed(self):
         function = load()["off_exact"]
-        phone = FakePhone()
+        phone = make_phone()
         phone.tree = lambda: None
         phone.switches = lambda root=None: [("帮助与客服", True, (1000, 600))]
         phone.scroll_more = lambda: False
@@ -109,7 +109,7 @@ class RecipeSafetyTests(unittest.TestCase):
 
     def test_failed_switch_is_not_reported_completed(self):
         function = load()["off_exact"]
-        phone = FakePhone()
+        phone = make_phone()
         phone.tree = lambda: None
         phone.switches = lambda root=None: [("开屏广告", True, (1000, 600))]
         phone.off = lambda **kwargs: 0
@@ -119,7 +119,7 @@ class RecipeSafetyTests(unittest.TestCase):
 
     def test_similar_unknown_service_is_explicitly_preserved(self):
         function = load()["off_exact"]
-        phone = FakePhone()
+        phone = make_phone()
         calls = []
         phone.tree = lambda: None
         phone.switches = lambda root=None: [

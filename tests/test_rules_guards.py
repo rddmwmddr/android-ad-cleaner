@@ -1,17 +1,18 @@
 """规则守卫：文档内容类四条（`DocGuards`）、注册表类一条（`RegistryGuards`）、引擎结构类两条（`EngineGuards`）、
-手机版界面一条（`AndroidGuards`）、流程 / CI 类三条（`CiGuards`）、发版产物一条（`ReleaseGuards`）
-与标准流一条（`StdioGuards`），沿用 #1000、#1002 的做法。
+手机版界面一条（`AndroidGuards`）、流程 / CI 类三条（`CiGuards`）、夹具装配类两条（`FixtureGuards`）、
+发版产物一条（`ReleaseGuards`）与标准流一条（`StdioGuards`），沿用 #1000、#1002 的做法。
 
 `DocGuards`：CHANGELOG 条目一行一个票号、文档里的代码位置用符号名、指到的 `.py` 路径要存在、
 上报服务地址与凭据不写进仓库。`RegistryGuards`：无锚点的顶层列表项按文档冻结上限。
 `AndroidGuards`：手机版页面状态只由 `AppModel.show()` 改写。`CiGuards`：回归命令与 CI 同一条、
-`.python-version` 与 Linux job 同版、两个平台各跑一版解释器。
+`.python-version` 与 Linux job 同版、两个平台各跑一版解释器。`FixtureGuards`：`tests/` 里绕过
+`fixtures.phone_stub()` 手搓假 `Phone` 的文件按清单冻结。
 
-都只读文件、比字符串：不联网、不执行被测代码、不引入 Markdown 或 YAML 解析依赖。
+都只读文件、比字符串或解析 AST：不联网、不执行被测代码、不引入 Markdown 或 YAML 解析依赖。
 守的是「仓库现在长什么样」，旧树也绿，守的是不回退（`dev.tests.behaviour-change-needs-red-test`
-允许守卫用例如此，但要求写明）。两条不是：`doc.refs.symbols-not-lines` 落地时顺手清了
+允许守卫用例如此，但要求写明）。三条不是：`doc.refs.symbols-not-lines` 落地时顺手清了
 `docs/09` 那处裸行号，`dev.android.screen-state` 随之修了 `AppModel.start()` 那处直写，
-两条在旧树上是红的。
+`FixtureGuards` 落地时把那两个机型用例的本地假类换成了 `phone_stub()`，三条在旧树上是红的。
 
 引擎那两条：替换层只读 AST（不 import 手机版的模块，它们依赖只在手机上装得下的库），
 结果页喂 `tests/summary_cases.json` 的同一批样例给手机版的 `summarize()`；网页版那条在
@@ -20,6 +21,7 @@
 发版产物那一条读 `index.html` 的源码：解析只走 `tool/release_assets.py`（定时 job 用同一份），
 不联网、不需要 GitHub 凭据；附件名集合与真实 Release 的比对在 `.github/workflows/release-assets.yml`。
 """
+import ast
 import json
 import os
 import re
@@ -492,6 +494,130 @@ class EngineGuards(unittest.TestCase):
                 problems.append(f"aac_android/{name} 少了 {'、'.join(absent)}")
         self.assertEqual(problems, [], "替换层少了文件或导出名，手机会在打包后才暴露：\n"
                          + "\n".join(problems))
+
+
+TESTS = ROOT / "tests"
+# `Phone` 的装配只此一处（CLAUDE.md 的 `dev.tests.fixtures-single-assembly`）：直接构造
+# `Phone` / `FakePhone` 的文件集合冻结在这里，只许减不许增。豁免理由见对应用例的 docstring。
+PHONE_CONSTRUCTED = ("Phone", "FakePhone")
+PHONE_CONSTRUCTION_FROZEN = {
+    "fixtures.py",              # 装配的唯一定义处：今天走 Phone.__new__，命中不到，留给改用构造器之后
+    "test_engine_events.py",    # 刻意构造真 Phone 触发构造期失败（以下三份同）
+    "test_error_logs_1028.py",
+    "test_ui_session.py",
+    "test_harmony_client.py",   # 鸿蒙引擎自己的 Phone 类（hdc 传输，ADR-0019）
+    "test_harmony_engine.py",
+    "test_phone_interface.py",  # 测的就是 Phone 本体
+}
+PHONE_CLASS_FROZEN = {
+    "test_adb_link.py",         # OldShellPhone 是旧 Connection.shell 的回放副本，改前改后对拍用
+    "test_harmony_client.py",   # 鸿蒙引擎自己的 Phone 类（ADR-0019）
+    "test_harmony_engine.py",
+}
+
+
+def python_sources():
+    """`tests/` 下的 Python 源文件，跳过 `__pycache__`。"""
+    for path in sorted(TESTS.rglob("*.py")):
+        if "__pycache__" not in path.parts:
+            yield path
+
+
+def called_name(node):
+    """`f(...)` 的被调名：`Phone` 取裸名、`fast.Phone` 取属性名；其它形态返回 None。"""
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return None
+
+
+def phone_constructors():
+    """{相对 tests/ 的路径: [行号]}：名字逐字是 `Phone` / `FakePhone` 的调用。"""
+    found = {}
+    for path in python_sources():
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Call) and called_name(node) in PHONE_CONSTRUCTED:
+                found.setdefault(path.relative_to(TESTS).as_posix(), []).append(node.lineno)
+    return found
+
+
+def phone_classes():
+    """{相对 tests/ 的路径: [(类名, 行号)]}：名字是 `Phone` 或以 `Phone` 结尾的类定义。"""
+    found = {}
+    for path in python_sources():
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ClassDef) and node.name.endswith("Phone"):
+                found.setdefault(path.relative_to(TESTS).as_posix(), []).append((node.name, node.lineno))
+    return found
+
+
+def hit_text(hit):
+    """命中点的可读形态：构造点是行号，类定义是 `类名@行号`。"""
+    return f"{hit[0]}@{hit[1]}" if isinstance(hit, tuple) else str(hit)
+
+
+def freeze_report(found, frozen, summary):
+    """冻结清单的报告：清单外的文件逐条列出命中点；全部在清单内时返回 None。"""
+    extra = {name: hits for name, hits in found.items() if name not in frozen}
+    if not extra:
+        return None
+    lines = [f"  tests/{name}: {', '.join(hit_text(hit) for hit in sorted(hits))}"
+             for name, hits in sorted(extra.items())]
+    return f"{summary}：\n" + "\n".join(lines)
+
+
+class FixtureGuards(unittest.TestCase):
+    """`tests/` 里的 Phone 装配：构造点与本地假类都按文件集合冻结，只许减不许增。"""
+
+    def test_phone_is_assembled_only_in_fixtures(self):
+        """直接构造 `Phone` / `FakePhone` 的文件集合 ⊆ `PHONE_CONSTRUCTION_FROZEN`。
+
+        装配只此一处（CLAUDE.md 的 `dev.tests.fixtures-single-assembly`）：手搓的假 Phone 只实现
+        被用到的那几个属性，`Phone.__init__` 新增一个构造期字段时那份拷贝不会跟着长，引擎与夹具
+        会各自漂移，两者对拍出来的「一致」也就不证明任何事。新用例要用 `phone_stub()`。
+
+        冻结的是文件集合而不是处数：清单内的文件都是已解释的豁免形态，继续多造几个点的风险
+        低于多出一个绕开装配的文件。清单只许减——修好一处就从这里删掉文件名，不会因此在红。
+
+        豁免四类：`fixtures.py` 是装配的唯一定义处；`test_phone_interface.py` 测的就是 `Phone` 本体；
+        `test_engine_events.py` / `test_error_logs_1028.py` / `test_ui_session.py` 刻意构造真 `Phone`
+        去触发 `connect` / `__init__` 的失败路径，`phone_stub()` 绕开构造期，用不了；
+        `test_harmony_engine.py` / `test_harmony_client.py` 是鸿蒙引擎自己的 `Phone` 类（hdc 传输，
+        ADR-0019），与 `fast.Phone` 的装配不是一件事。
+
+        已知漏口：判据认类名，`getattr(fast, "Phone")("x")` 或别名 `P = fast.Phone; P("x")` 能绕过；
+        `fast.Phone.__new__(fast.Phone)` 同样看不见，而本仓有三处这么写（`fixtures.py` 的装配、
+        `test_adb_link.py` 与 `test_community_1027.py` 的假 Phone），照抄它等于绕过这条守卫。
+        守卫也不看 `phone_stub()` 本身（把它换成返回 Mock 照样绿）：它守的是调用点在哪。
+        真要做等价改写时评审看得见 diff，不为它加数据流分析。
+        """
+        found = phone_constructors()
+        self.assertTrue(found, "tests/ 里一个 Phone 构造点都没扫到，这条守卫会空转")
+        problem = freeze_report(found, PHONE_CONSTRUCTION_FROZEN,
+                                "这些文件直接构造了 Phone / FakePhone，绕过 fixtures.phone_stub()")
+        self.assertIsNone(problem, problem)
+
+    def test_no_new_local_phone_classes(self):
+        """`tests/` 里名字以 `Phone` 结尾的类定义只许留在这三份文件（ADR-0019、#1021）。
+
+        判据取「名字以 `Phone` 结尾」：`class TinyPhone:` 这种没有基类的假替身也照样拦得住
+        （只认「继承了 Phone」会漏掉它）。`PhoneStubTests` / `PhoneBootTests` / `FakePhoneTests`
+        是 unittest 的用例类，不以 `Phone` 结尾，不进候选集。
+
+        三份豁免都不是 `fast.Phone` 的装配：`test_harmony_engine.py` 与 `test_harmony_client.py`
+        造的是鸿蒙引擎自己的 `Phone`（hdc 传输，ADR-0019 的第二个执行宿主）；`test_adb_link.py`
+        的 `OldShellPhone` 是旧 `Connection.shell` 的回放副本，改前改后对拍要用它。
+
+        已知漏口与上一条相同：`class FakePhoneStub:` 这种不落在「以 Phone 结尾」的形状里，
+        `Phone.__new__(Phone)` 手搓出来的对象也算不上一个类，两条都看不见——评审看得见 diff。
+        """
+        found = phone_classes()
+        self.assertTrue(found, "tests/ 里一个 Phone 类都没扫到，这条守卫会空转")
+        problem = freeze_report(found, PHONE_CLASS_FROZEN,
+                                "这些文件定义了本地的 Phone 类，改用 fixtures.phone_stub()")
+        self.assertIsNone(problem, problem)
 
 
 ANDROID_SRC = ROOT / "android"

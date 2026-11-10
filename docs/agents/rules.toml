@@ -341,9 +341,9 @@ expires_if = "手机版不再靠替换层跑引擎（例如改走真实 adb）�
 [[rule]]
 id = "dev.tests.fixtures-single-assembly"
 source = "CLAUDE.md#开发"
-check = "none"
-status = "manual"
-why = "`Phone` 的装配散到各用例里，夹具与真实装配会各自漂移，靠它对拍出来的「一致」也就不证明任何事。"
+check = "test:test_rules_guards::FixtureGuards.test_phone_is_assembled_only_in_fixtures"
+status = "enforced"
+why = "`Phone` 的装配散到各用例里，夹具与真实装配会各自漂移，靠它对拍出来的「一致」也就不证明任何事。守卫（#1021）把直接构造 `Phone` / `FakePhone` 与定义本地 `Phone` 类的文件集合冻在清单上；一条 check 只挂得住前者，后者是同一个类里的 `FixtureGuards.test_no_new_local_phone_classes`。两条都认类名：`getattr(fast, \"Phone\")` 与 `fast.Phone.__new__(…)` 这种写法看不见，清单内文件多造几个点也不拦。"
 expires_if = "Phone 改由工厂函数或依赖注入统一构造时删。"
 
 [[rule]]
