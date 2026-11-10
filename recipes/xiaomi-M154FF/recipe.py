@@ -60,7 +60,8 @@ def opened(start):
     try:
         start()
         return True
-    except adb_link.DeviceLost:
+    except (adb_link.DeviceLost, SkipStep):
+        # 跳过（App 本机没装 / 按约定不跑）不是「这条路不通」：放行，由段包装记跳过（#908）
         raise
     except RuntimeError as e:
         if p.lost:

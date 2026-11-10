@@ -105,6 +105,8 @@ def _():
     try:
         p.start("com.bbk.appstore", ".ui.menu.AppstoreSettingsActivity")
         reached = "AppstoreSettingsActivity" in p.focus()
+    except SkipStep:
+        raise                     # App 本机没装：放行，由段包装记跳过（#908）
     except RuntimeError as e:
         print(f"  · 直达商店设置页失败（{e}），改走「我的 → 设置」")
         reached = False

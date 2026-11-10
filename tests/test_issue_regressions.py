@@ -23,6 +23,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 import adb_link
 import chan_fast as chan
 import fast
+import recipe_kit
 import run
 from fixtures import FakeRunner, fake_adb, phone_stub
 
@@ -519,11 +520,12 @@ class ExternalAdbServerTests(unittest.TestCase):
         detached.assert_not_called()                           # 输出已经说明是断连，不再多查一次
 
     def test_missing_app_is_still_named_when_phone_is_there(self):
+        """「本机没装」仍是这一句、仍带包名，但类型是跳过（#908）：段包装按跳过收尾，不再记未完成。"""
         p = self.phone()
         p.d.shell.side_effect = [types.SimpleNamespace(exit_code=0, output="No activities found to run, monkey aborted."),
                                  types.SimpleNamespace(exit_code=0, output="")]
         with patch.object(adb_link, "detached", return_value=False):
-            with self.assertRaisesRegex(RuntimeError, "本机没有安装 com.heytap.yoli"):
+            with self.assertRaisesRegex(recipe_kit.MissingPackage, "本机没有安装 com.heytap.yoli"):
                 p.start("com.heytap.yoli")
         self.assertFalse(p.lost)
 

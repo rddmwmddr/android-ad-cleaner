@@ -57,8 +57,8 @@ def _():
     skip_in_safe_mode()
     try:
         p.start("com.hihonor.id", ".oaid.ui.AdvertisingPrivacyActivity", expect="应用广告跟踪管理")
-    except (adb_link.DeviceLost, ScreenLocked):
-        raise
+    except (adb_link.DeviceLost, ScreenLocked, SkipStep):
+        raise                 # 断线 / 锁屏 / 跳过（App 本机没装）都不是「直达不通」，别退回去走菜单（#908）
     except RuntimeError:
         if not p.setting("广告", "广告与隐私"):
             # 部分 MagicOS 10 机型设置搜索框打不开（#88 #99），按菜单进：隐私和安全 → 其他隐私和安全功能 → 广告与隐私

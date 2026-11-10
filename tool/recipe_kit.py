@@ -28,6 +28,10 @@ class SkipStep(RuntimeError):
     """这一条按约定不跑（型号 / 版本不符、必须机主手动进入），不算失败。"""
 
 
+class MissingPackage(SkipStep):
+    """这一段要用的 App 本机没装（#908）：结局与「按约定不跑」同一档，来源在引擎的 `Phone.start`。"""
+
+
 def preamble(p, g):
     """前导写进 `g` 后原样返回它，调用点写成 `recipe_kit.preamble(p, g)`。
 
@@ -86,7 +90,8 @@ def preamble(p, g):
 
         给「本机缺了配套 App，入口会被系统转去别处」这一类用（#902：没有主题商店时，
         主题管理包的代理页会落到应用商店详情页或桌面）。落点在别的 App、或失败根本不是
-        「落点不对」（没装 / 拉不起来）时照旧上抛，保留 `Phone.start` 的落点诊断（#547）。"""
+        「落点不对」（拉不起来）时照旧上抛，保留 `Phone.start` 的落点诊断（#547）；
+        包没装时 `Phone.start` 抛的是 `MissingPackage`，上抛后由段包装记跳过（#908）。"""
         try:
             p.start(pkg, activity)
         except adb_link.DeviceLost:
@@ -130,7 +135,7 @@ def preamble(p, g):
                     outcome = action()      # 脚本可选的段内包装（等价于以前 `with safe_ui():`）
             except adb_link.DeviceLost:
                 raise                  # 断线交还引擎：整轮停下，不逐段报
-            except g.get("SkipStep", SkipStep) as reason:
+            except (g.get("SkipStep", SkipStep), MissingPackage) as reason:
                 g["SKIPPED_STEPS"].append(name)
                 state = SKIPPED
                 print(f"  · 跳过：{reason}", flush=True)
