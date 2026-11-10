@@ -29,22 +29,25 @@ class PlanTasksTests(unittest.TestCase):
     def reason_of(self, tasks, title):
         return next(t.skip_reason for t in tasks if t.title == title)
 
+    def recipe_row(self, tasks):
+        return next(t for t in tasks if t.kind == "recipe")
+
     def test_unchecked_recipe_gets_a_row_saying_it_was_not_ticked(self):
         tasks = app.plan_tasks("S", {"backup": False}, offered())
         self.assertEqual(self.reason_of(tasks, "关闭各 App 里的广告开关"), "未勾选，本次没有执行")
 
     def test_a_phone_without_a_recipe_says_so_instead_of_not_ticked(self):
         tasks = app.plan_tasks("S", {"backup": False}, offered(steps=()))
-        self.assertEqual(tasks[0].skip_reason, "没有专用脚本，这一步要照清单手动做")
+        self.assertEqual(self.recipe_row(tasks).skip_reason, "没有专用脚本，这一步要照清单手动做")
 
     def test_partly_ticked_segments_show_how_many_ran(self):
         tasks = app.plan_tasks("S", {"backup": False, "steps": ["桌面"]}, offered(steps=("桌面", "浏览器", "商店")))
-        self.assertEqual(tasks[0].title, "关闭各 App 里的广告开关（1 / 3 段）")
-        self.assertEqual(tasks[0].skip_reason, "")
+        self.assertEqual(self.recipe_row(tasks).title, "关闭各 App 里的广告开关（1 / 3 段）")
+        self.assertEqual(self.recipe_row(tasks).skip_reason, "")
 
     def test_all_segments_ticked_keep_the_plain_title(self):
         tasks = app.plan_tasks("S", {"backup": False, "steps": ["桌面", "浏览器"]}, offered(steps=("桌面", "浏览器")))
-        self.assertEqual(tasks[0].title, "关闭各 App 里的广告开关")
+        self.assertEqual(self.recipe_row(tasks).title, "关闭各 App 里的广告开关")
 
     def test_channels_are_told_apart_unchecked_from_none_found(self):
         unchecked = app.plan_tasks("S", {"backup": False}, offered(channels=[{"pkg": "p", "id": "1", "name": "活动"}]))
@@ -66,8 +69,8 @@ class PlanTasksTests(unittest.TestCase):
     def test_rows_keep_the_order_the_run_would_have_had(self):
         tasks = app.plan_tasks("S", {"backup": True}, offered())
         self.assertEqual([t.title for t in tasks],
-                         ["存改动前的快照", "关闭各 App 里的广告开关", "关闭营销通知",
-                          "关闭快应用", "挂起广告组件", "收尾"])
+                         ["存改动前的快照", "挂起广告组件", "关闭各 App 里的广告开关", "关闭营销通知",
+                          "关闭快应用", "收尾"])
 
     def test_without_a_detection_nothing_is_claimed(self):
         # 没有检测结果就不知道选择页摆过什么，不能凭空说「没勾」
@@ -130,8 +133,8 @@ class StartTests(unittest.TestCase):
         api.last_chans = []
         tasks = self.started_tasks(api, {"backup": False})
         self.assertEqual([t.title for t in tasks],
-                         ["关闭各 App 里的广告开关", "关闭营销通知", "关闭快应用", "挂起广告组件", "收尾"])
-        self.assertEqual(tasks[1].skip_reason, "没有扫描到可关闭的营销渠道")
+                         ["挂起广告组件", "关闭各 App 里的广告开关", "关闭营销通知", "关闭快应用", "收尾"])
+        self.assertEqual(tasks[2].skip_reason, "没有扫描到可关闭的营销渠道")
 
     def test_start_counts_only_the_steps_that_run(self):
         api = app.Api(self._dir.name, runner=FakeRunner())

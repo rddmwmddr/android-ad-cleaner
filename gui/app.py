@@ -348,6 +348,17 @@ def plan_tasks(serial, plan, offered=None):
     tasks = []
     if plan.get("backup", True):
         tasks.append(Task("存改动前的快照", "run.py", ["-s", serial, "backup"], kind="backup"))
+    # msa 没挂起时它的开屏窗会抢走主题段的前台，所以挂起排在广告段之前（#968）
+    ads = list(plan.get("ads") or [])
+    if ads:
+        tasks.append(Task("挂起广告组件", "run.py", ["-s", serial, "suspend", *ads], kind="ads"))
+    elif offered is not None:
+        seen = offered.get("ads") or []
+        tasks.append(not_run("挂起广告组件",
+                             "没有已知的广告组件" if not seen
+                             else "广告组件已经挂起" if all(a.get("suspended") for a in seen)
+                             else UNCHECKED,
+                             kind="ads"))
     steps = list(plan.get("steps") or [])
     if steps:
         title = "关闭各 App 里的广告开关"
@@ -379,16 +390,6 @@ def plan_tasks(serial, plan, offered=None):
                              else "可关闭的快应用组件都已关闭" if all(q.get("closed") or q.get("keep") for q in apps)
                              else UNCHECKED,
                              kind="quickapp"))
-    ads = list(plan.get("ads") or [])
-    if ads:
-        tasks.append(Task("挂起广告组件", "run.py", ["-s", serial, "suspend", *ads], kind="ads"))
-    elif offered is not None:
-        seen = offered.get("ads") or []
-        tasks.append(not_run("挂起广告组件",
-                             "没有已知的广告组件" if not seen
-                             else "广告组件已经挂起" if all(a.get("suspended") for a in seen)
-                             else UNCHECKED,
-                             kind="ads"))
     # 重试轮只在收尾上一轮没做成时才跑它（#638）；首次执行没有这个键，照旧收尾
     if plan.get("finish", True):
         tasks.append(Task("收尾", "run.py", ["-s", serial, "finish"], kind="finish"))
