@@ -622,7 +622,7 @@ expires_if = "审查轴合并成一个代理、计数不再需要跨轴对齐时
 
 [[rule]]
 id = "doc.review.freeze-workspace"
-source = "docs/agents/code-review.md#评审期间冻结工作区"
+source = "docs/agents/code-review.md#审查期间冻结工作区"
 check = "none"
 status = "manual"
 why = "并发上限 3、五路必然分两批，后一批读到的是更晚的树；候选 1 那轮三个代理读到同一文件的三个快照，一路把刚修好的用例报成「1 红」，另一路把 ADR 里改前的行号当成新文件的行号。"
@@ -653,20 +653,12 @@ why = "审查代理默认会顺手改代码、往 GitHub 发评论；不把「�
 expires_if = "审查代理由平台限制成只读、问题清单格式由工具固定时删。"
 
 [[rule]]
-id = "doc.review.findings-threshold"
+id = "doc.review.conclusion"
 source = "docs/agents/code-review.md#结论去哪"
 check = "none"
 status = "manual"
-why = "80 分以下的推测条目会把真问题挤到后面，评审得先逐条反驳才能收口。"
-expires_if = "审查代理不再给置信度、改由工具判定是否成立时删。"
-
-[[rule]]
-id = "doc.review.no-pr-no-comment"
-source = "docs/agents/code-review.md#结论去哪"
-check = "none"
-status = "manual"
-why = "为了留评论先建 PR，等于让审查流程反过来决定要不要发 PR，审完还得去关掉它。"
-expires_if = "审查结论有独立落点、不进 PR 评论时删。"
+why = "结论不外化等于没跑：342 张已合并 PR 里 339 张零 review，外部读不出哪些改动经过交叉校验，下一个接手的会话只能重跑一遍；而 80 分以下的推测条目会把真问题挤到后面，评审得先逐条反驳才能收口。"
+expires_if = "评审改由平台或 CI 自动执行并自动留痕、条目由工具判定时删。"
 
 [[rule]]
 id = "doc.review.verify-before-fix"
