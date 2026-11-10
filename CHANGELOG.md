@@ -41,6 +41,7 @@
 
 ### 内部
 
+- `AppModel.start()` 换页改走 `show()`，并加「`screen` 只由它改写」的守卫（#1020）
 - 新增每日只读审计 `tool/triage_audit.py`：open 票的四条标签集合判据（#1019）
 - `ruff` 规则集收进 `pyproject.toml` 并加上 `B`，静态检查拆成独立 CI job（#994）
 - 无锚点的顶层列表项按文档冻结上限，往正文加规则不登记就红（#1010）
