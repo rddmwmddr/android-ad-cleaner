@@ -129,6 +129,19 @@ class SurveyResultTests(unittest.TestCase):
         command = next(cmd for cmd in shell_calls(p) if cmd.startswith("am start"))
         self.assertNotIn("-f", command)
 
+    def test_public_intent_entries_are_probed_with_the_action(self):
+        """Intent 档没有页面名可指定，survey 走与 reach() 同一条拉起命令（#956）。"""
+        direct = entries.Direct("com.heytap.market",
+                                "com.heytap.market.mine.cn.setting.ui.SettingActivity",
+                                action="oppo.intent.action.APP_SETTINGS")
+        p = survey_phone(focus="com.heytap.market/com.heytap.market.mine.cn.setting.ui.SettingActivity",
+                         packages="package:com.heytap.market\n")
+        fmap = {"oppo": {"软件商店": entries.Entry(menu="软件商店 → 我的 → 右上齿轮", direct=(direct,))}}
+        rows, _out = run_survey(p, [], family="oppo", family_map=fmap)
+        self.assertEqual([row["landed"] for row in rows], [True])
+        command = next(cmd for cmd in shell_calls(p) if cmd.startswith("am start"))
+        self.assertEqual(command, "am start -W -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.heytap.market")
+
     def test_dollar_in_activity_is_shell_quoted(self):
         """vivo 的 `$` 类名不 quote 会被 shell 当变量吃掉。"""
         direct = entries.Direct("com.android.settings", ".Settings$AdAndPrivacyActivityForOsTwo")

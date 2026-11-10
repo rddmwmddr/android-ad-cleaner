@@ -1,6 +1,7 @@
 """各系统广告 / 推荐入口速查：品牌家族 × 分组，按快慢排三档。
 
-1. direct：直达页面（`am start -n 包名/页面`），不点菜单，最快。有的页面要裸启动、或者没导出、要权限，`note` 里写着。
+1. direct：直达页面（`am start -n 包名/页面`），不点菜单，最快。有的页面要裸启动、或者没导出、要权限，
+   `note` 里写着；有的 App 只认公开 Intent（`am start -f 0x10008000 -a <action> -p 包名`），用 `Direct.action` 声明。
 2. search：系统设置顶部搜索（`Phone.setting(关键词, 结果)`），只对系统设置里的项有用；搜到但点不跳的版本记在 `note`。
 3. menu：人工路径，与 docs/清单 一致，前两档都不行时照它走。
 
@@ -32,13 +33,17 @@ LABEL = {"xiaomi": "小米", "oppo": "OPPO", "vivo": "vivo", "honor": "荣耀",
 # 或桌面。落在这里说明主题设置不可达，段体按跳过收尾（#902）。
 THEME_DEAD_ENDS = frozenset({"com.xiaomi.market", "com.miui.home"})
 
+# NEW_TASK | CLEAR_TASK，与 Phone._launch 同值：直达与公开 Intent 都带它。
+CLEAR_TASK = "0x10008000"
+
 
 @dataclass(frozen=True)
 class Direct:
     pkg: str
-    activity: str
+    activity: str               # 落点判据：前台应当是这一页
     expect: str = ""            # 落点判据：页面上应当出现的一段文字
     keep_task: bool = False     # 带清栈参数会把这一页顶掉，只能裸启动（ColorOS 17 浏览器设置页，#165）
+    action: str = ""            # 公开 Intent：`am start -f 0x10008000 -a <action> -p <pkg>`（OPPO / 一加的设置页）
 
 
 @dataclass(frozen=True)
@@ -116,13 +121,19 @@ ENTRIES = {
             note="SearchSettingActivity 未导出，只能直达搜索首页再点最靠下的「设置」；adb 下桌面下滑手势不稳"),
         "软件商店": Entry(
             menu="软件商店 → 我的 → 右上齿轮",
+            direct=(Direct("com.heytap.market",
+                           "com.heytap.market.mine.cn.setting.ui.SettingActivity",
+                           action="oppo.intent.action.APP_SETTINGS"),),
             app="com.heytap.market",
-            note="设置页认 oppo.intent.action.APP_SETTINGS（am start -a … -p 包名），直达"),
+            note="公开设置 Intent 直接落到设置页，绕开含账号信息的「我的」页；PJA110 旧版商店的落点是 "
+                 "`com.heytap.market.mine.ui.SettingActivity`（没有 `.cn.`），与本档不同，那条照菜单走"),
         "浏览器": Entry(
             menu="浏览器 → 底部 ☰ 或「我的」→ 设置",
             direct=(Direct("com.heytap.browser", ".settings.component.BrowserPreferencesPage",
-                           keep_task=True),),
-            note="带清栈参数启动会立刻退出，只能裸 am start；首页切成「简洁」后没有「我的」和菜单（#165）"),
+                           action="oppo.intent.action.APP_SETTINGS"),
+                    Direct("com.heytap.browser", ".settings.component.BrowserPreferencesPage",
+                           keep_task=True)),
+            note="带清栈参数用 `-n` 启动会立刻退出，这一档只能裸 am start；首页切成「简洁」后没有「我的」和菜单（#165）"),
         "小布建议": Entry(
             menu="设置 → OPPO AI → 小布建议 → 资讯服务（「内容资讯」是分组标题，点不动）"),
         "负一屏": Entry(
@@ -248,6 +259,33 @@ def full(pkg, activity):
     return pkg + activity if activity.startswith(".") else activity
 
 
+def start_command(d, wait=False):
+    """这一档在手机上执行的拉起命令。Intent 档（`d.action`）指定包，其余指定页面；
+    `keep_task` 的页面带清栈参数会立刻退出，只能裸启动（#165）。`wait` 给 `adapt survey` 加 `-W`。"""
+    flags = " -W" if wait else ""
+    if d.action:
+        return f"am start{flags} -f {CLEAR_TASK} -a {d.action} -p {d.pkg}"
+    page = d.pkg + "/" + full(d.pkg, d.activity)
+    if d.keep_task:
+        return f"am start{flags} -n {shlex.quote(page)}"
+    return f"am start{flags} -f {CLEAR_TASK} -n {shlex.quote(page)}"
+
+
+def describe(d):
+    """入口速查里怎么写这一档：直达写页面，Intent 档写拉起命令再把落点跟在后面。"""
+    if d.action:
+        return f"`{start_command(d)}` 落 `{d.pkg}/{d.activity}`"
+    return f"`{d.pkg}/{d.activity}`"
+
+
+def source_key(d):
+    """这一档在 `used_by()` 里的键。Intent 档按「动作 + 包」认：同一个页面有两条走法时，
+    各自算各自的出处与提速提示。"""
+    if d.action:
+        return ("intent", d.action, d.pkg)
+    return ("direct", d.pkg, full(d.pkg, d.activity))
+
+
 # 脚本里的赋值，用来把 `p.start(package, …)` 还原成包名。
 _ASSIGN = re.compile(r'^[ \t]*(\w+)[ \t]*=(?!=)[ \t]*(.*?)[ \t]*$', re.M)
 _LITERAL = re.compile(r'^"([\w.$]*)"$|^\'([\w.$]*)\'$')
@@ -275,12 +313,89 @@ def _arg_at(token, src, pos):
     return value
 
 
+_DEF = re.compile(r"^([ \t]*)def[ \t]+(\w+)[ \t]*\(([^)]*)\)", re.M)
+_TEMPLATE = re.compile(r"^[ \t]*(\w+)[ \t]*=[ \t]+([\"'])((?:(?!\2).)*)\2", re.M)
+_FORMAT = re.compile(r"\b(\w+)\.format\(\s*([\w.]+)\s*\)")
+# 公开 Intent 入口：`am start … -a <action> … -p <包名>`。包名有三种写法：字面量、
+# 拼接的变量（`-p " + package`）、模板常量的 `{}` 在别处 `.format(…)` 传进来。
+_INTENT = re.compile(
+    r"am start[^\"']*?-a\s+([\w.]+)[^\"']*?-p\s+(?:([\w.$]+)|\{\}|[\"']\s*\+\s*(\w+))")
+
+
+def _enclosing_def(src, pos):
+    """包住这一行的函数定义：位置之前、缩进比这一行列浅的最近一个。"""
+    line_start = src.rfind("\n", 0, pos) + 1
+    column = len(src[line_start:pos].expandtabs())
+    found = None
+    for m in _DEF.finditer(src, 0, pos):
+        if len(m.group(1).expandtabs()) < column:
+            found = m
+    return found
+
+
+def _param_values(name, src, pos):
+    """变量是外层函数的形参时，从调用它的地方取对应实参：机型脚本常把包名往助手函数里传一层。"""
+    m = _enclosing_def(src, pos)
+    if not m:
+        return []
+    params = [p.split("=")[0].strip() for p in m.group(3).split(",")]
+    if name not in params:
+        return []
+    index = params.index(name)
+    values = []
+    for call in re.finditer(rf"\b{re.escape(m.group(2))}\s*\(([^)]*)\)", src):
+        if call.start() < m.end():
+            continue
+        parts = call.group(1).split(",")
+        value = _arg_at(parts[index], src, call.start()) if index < len(parts) else None
+        if value:
+            values.append(value)
+    return values
+
+
+def _named(src, name, pos):
+    """一个变量在这个位置的值：同文件里最后一次字面量赋值，或它是外层形参时调用处传的实参。"""
+    if not name.isidentifier():
+        return []
+    value = _arg_at(name, src, pos)
+    return [value] if value else _param_values(name, src, pos)
+
+
+def _template_owner(src, pos, action):
+    """`-p {}` 这种模板的常量名：它的包名在别处用 `.format(…)` 补上。赋值行包住 pos，不能拿 pos 截断。"""
+    owner = None
+    for m in _TEMPLATE.finditer(src):
+        if m.start() < pos and action in m.group(3) and "-p {}" in m.group(3):
+            owner = m.group(1)
+    return owner
+
+
+def _intent_packages(src, m):
+    """一条 Intent 拉起命令里 `-p` 的包名；认不出来返回空。"""
+    if m.group(2):
+        token = m.group(2)
+        # 包名一定带点；没有点的是变量名（`-p package`），照变量还原
+        return [token] if "." in token else _named(src, token, m.start())
+    if m.group(3):
+        return _named(src, m.group(3), m.start())
+    owner = _template_owner(src, m.start(), m.group(1))
+    if not owner:
+        return []
+    out = []
+    for call in _FORMAT.finditer(src):
+        if call.group(1) == owner:
+            out += _named(src, call.group(2), call.start())
+    return out
+
+
 def used_by(recipes_dir):
-    """{("direct", 包名, 完整页面名) 或 ("search", 关键词, 结果): {机型型号}}，从机型脚本源码现算。
+    """{("direct", 包名, 完整页面名) 或 ("intent", 动作, 包名) 或 ("search", 关键词, 结果): {机型型号}}，
+    从机型脚本源码现算。
 
     `p.start(package, ".X")` 这种先赋值再传变量的写法也要认出来：honor-WKL-AN20 就是这么写的，
     只认字面量会把它的机型漏掉（生成表里「用过的机型」少一台）。经共享入口助手
     `start_or_skip(package, ".X", …)` 拉起的那几条同样是这台机用过的直达（#902）。
+    `am start -a <action> -p <包名>` 这类公开 Intent 入口单记一档（#956）。
     """
     import glob, os
     found = {}
@@ -296,6 +411,9 @@ def used_by(recipes_dir):
                 found.setdefault(("direct", pkg, full(pkg, act)), set()).add(model)
         for m in re.finditer(r'am start[^"\']*?-n\s+([\w.]+)/([\w.$]+)', src):
             found.setdefault(("direct", m.group(1), full(m.group(1), m.group(2))), set()).add(model)
+        for m in _INTENT.finditer(src):
+            for pkg in _intent_packages(src, m):
+                found.setdefault(("intent", m.group(1), pkg), set()).add(model)
         for call in re.finditer(r"p\.setting\(([^)]*)\)", src):
             parts = call.group(1).split(",")
             kw = _arg_at(parts[0], src, call.start())
@@ -306,17 +424,18 @@ def used_by(recipes_dir):
 
 
 def open_direct(p, d, settle=1.2):
-    """打开一条直达页面。默认走 Phone.start（顺手收掉开屏 / 权限弹窗、核对前台），
-    带清栈参数就会自己退出的页面（`keep_task`）裸启动，失败时照样抛出。打不开由 reach() 记一笔换下一档。
+    """打开一条直达页面。默认走 Phone.start（顺手收掉开屏 / 权限弹窗、核对前台）；
+    Intent 档与带清栈参数就会自己退出的页面（`keep_task`）裸启动，失败时照样抛出。
+    打不开由 reach() 记一笔换下一档。
 
     页面名按字面量传下去：走 `Phone.start` 的那条由 `Phone._launch` 在 shell 边界引用一次，
-    这里再 quote 一层会让 used_by() 的源码扫描认不出机型（#667）；`keep_task` 那条不经
-    `Phone.start`，引用由这里做。"""
-    if not d.keep_task:
+    这里再 quote 一层会让 used_by() 的源码扫描认不出机型（#667）；裸启动那两条不经
+    `Phone.start`，引用由 `start_command()` 做。"""
+    if not d.action and not d.keep_task:
         p.start(d.pkg, d.activity, settle=settle)
         return
     page = full(d.pkg, d.activity)
-    result = p.reader.shell(f"am start -n {shlex.quote(d.pkg + '/' + page)}")
+    result = p.reader.shell(start_command(d))
     if getattr(result, "exit_code", 0) or re.search(r"Error|Exception", result.output or "", re.I):
         raise RuntimeError(f"无法打开 {page}：{(result.output or '').strip()[-200:]}")
 
@@ -341,7 +460,7 @@ def reach(p, entry, log=print, now=None, sleep=None, settle=1.2):
     now = now or time.time
     sleep = sleep or time.sleep
     for d in entry.direct:
-        page = full(d.pkg, d.activity)
+        where = start_command(d) if d.action else full(d.pkg, d.activity)
         try:
             open_direct(p, d, settle=settle)
         except Exception as e:
@@ -350,12 +469,12 @@ def reach(p, entry, log=print, now=None, sleep=None, settle=1.2):
             # 但 _u2 会把 Phone.lost 置位，一并认。
             if isinstance(e, adb_link.DeviceLost) or p.lost:
                 raise
-            log(f"  · 直达 {page} 打不开（{e}），换下一档")
+            log(f"  · 直达 {where} 打不开（{e}），换下一档")
             continue
         ok = wait.until(lambda: landed(p, d), timeout=4, poll=0.2, now=now, sleep=sleep)
         if ok and (not d.expect or p.expect_page(d.expect, 3)):
             return "direct"
-        log(f"  · 直达 {page} 没落在这一页，换下一档")
+        log(f"  · 直达 {where} 没落在这一页，换下一档")
     for s in entry.search:
         extra = {"path": s.path} if s.path else {}
         if p.setting(s.keyword, s.result, **extra):
@@ -377,7 +496,7 @@ def speedups(recipes_dir):
     for fam, groups in ENTRIES.items():
         for name, e in groups.items():
             for d in e.direct:
-                proven = used.get(("direct", d.pkg, full(d.pkg, d.activity)), set()) & models.get(fam, set())
+                proven = used.get(source_key(d), set()) & models.get(fam, set())
                 if proven and models[fam] - proven:
                     out.append((fam, name, sorted(models[fam] - proven), d))
     return out
@@ -388,17 +507,18 @@ def markdown(recipes_dir):
     used = used_by(recipes_dir)
     lines = ["# 入口速查：广告与推荐开关在哪", "",
              "由 `tool/entries.py` 生成（`python3 tool/entries.py > docs/清单/入口速查.md`），不要手改。",
-             "每个分组按快慢排三档：**直达页面**（不点菜单）→ **设置搜索**（系统设置顶部搜索框）→ **菜单路径**。",
+             "每个分组按快慢排三档：**直达**（页面或公开 Intent，不点菜单）→ **设置搜索**（系统设置顶部搜索框）→ **菜单路径**。",
              "「用过的机型」从机型脚本里现算；没写机型的条目出自同品牌的手动清单。快应用按包名处理，不在这张表里。", ""]
     for fam, groups in ENTRIES.items():
         brands = "、".join(b for b, f in FAMILY.items() if f == fam)
         lines += [f"## {LABEL.get(fam, fam)}（{brands}）", "",
-                  "| 分组 | 直达页面 | 设置搜索 | 菜单路径 | 注意 |", "|---|---|---|---|---|"]
+                  "| 分组 | 直达 | 设置搜索 | 菜单路径 | 注意 |", "|---|---|---|---|---|"]
         for name, e in groups.items():
-            direct = "<br>".join(
-                f"`{d.pkg}/{d.activity}`" + (f"（{'、'.join(sorted(used.get(('direct', d.pkg, full(d.pkg, d.activity)), ())))}）"
-                                              if used.get(("direct", d.pkg, full(d.pkg, d.activity))) else "")
-                for d in e.direct) or "—"
+            cells = []
+            for d in e.direct:
+                models = used.get(source_key(d))
+                cells.append(describe(d) + (f"（{'、'.join(sorted(models))}）" if models else ""))
+            direct = "<br>".join(cells) or "—"
             search = "<br>".join(
                 f"搜「{s.keyword}」点「{s.result}」" + (f"（位置：{s.path}）" if s.path else "")
                 + (f"（{'、'.join(sorted(used.get(('search', s.keyword, s.result), ())))}）"
@@ -410,7 +530,7 @@ def markdown(recipes_dir):
     lines += ["## 可提速提示", "",
               "同家族里有机型的脚本用过这条直达，下面这些机型的脚本还没有。脚本未走这条直达 ≠ 缺陷："
               "页面可能没导出、版本不同或者没装这个 App，要换先真机试。", ""]
-    lines += [f"- {LABEL.get(fam, fam)} / {name} / {'、'.join(missing)} / `{d.pkg}/{d.activity}`"
+    lines += [f"- {LABEL.get(fam, fam)} / {name} / {'、'.join(missing)} / {describe(d)}"
               for fam, name, missing, d in speedups(recipes_dir)]
     lines.append("")
     return "\n".join(lines)

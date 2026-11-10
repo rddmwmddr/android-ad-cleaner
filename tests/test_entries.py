@@ -1,4 +1,5 @@
 """入口速查表（tool/entries.py）：每条入口有出处、文档与表同步、reach() 按快慢回退。"""
+import re
 import sys
 import types
 import unittest
@@ -29,6 +30,12 @@ class SourceTest(unittest.TestCase):
             for name, e in groups.items():
                 self.assertTrue(e.menu, f"{fam}·{name} 缺菜单路径")
                 for d in e.direct:
+                    if d.action:
+                        self.assertTrue(d.activity, f"{fam}·{name} 的 Intent 档缺落点页面")
+                        self.assertTrue(("intent", d.action, d.pkg) in used
+                                        or (d.action in DOCS and d.pkg in DOCS),
+                                        f"{fam}·{name} 的 Intent 入口 {d.action}（{d.pkg}）没有出处")
+                        continue
                     key = ("direct", d.pkg, entries.full(d.pkg, d.activity))
                     self.assertTrue(key in used or d.activity.lstrip(".") in DOCS,
                                     f"{fam}·{name} 直达 {key} 没有出处")
@@ -68,6 +75,29 @@ class SourceTest(unittest.TestCase):
         self.assertIn(key, used)
         self.assertIn("WKL-AN20", used[key])
 
+    def test_used_by_reads_public_intent_launches(self):
+        """9 份脚本把 APP_SETTINGS 抄成三种写法：字面量、拼接的变量、模板常量 .format 传参。
+        漏掉任何一种，「用过的机型」与「可提速提示」都会少机型（#956）。"""
+        used = entries.used_by(RECIPES)
+        market = ("intent", "oppo.intent.action.APP_SETTINGS", "com.heytap.market")
+        self.assertIn(market, used)
+        self.assertIn("PMX110", used[market])      # `-p " + package` + app_settings(MARKET)
+        self.assertIn("PJA110", used[market])      # SETTINGS_INTENT.format(package)
+        self.assertIn("PKX110", used[market])      # 助手函数被传入字面量
+        browser = ("intent", "oppo.intent.action.APP_SETTINGS", "com.heytap.browser")
+        self.assertIn("PLG110", used[browser])
+        self.assertNotIn("PMX110", used[browser])  # PMX110 的浏览器走裸 `-n`，不是这个 Intent
+        self.assertIn(("intent", "oppo.intent.action.APP_SETTINGS", "com.heytap.themestore"),
+                      used)                        # 字面量：PKH110
+
+    def test_markdown_shows_the_public_intent_and_its_models(self):
+        doc = entries.markdown(RECIPES)
+        row = next(line for line in doc.splitlines() if line.startswith("| 软件商店 |"))
+        self.assertIn("`am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.heytap.market`", row)
+        self.assertIn("PMX110", row)               # 「用过的机型」进了这一格
+        self.assertIn("`am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.heytap.browser`", doc)
+        self.assertIn("OPPO / 软件商店 / ", doc)    # 可提速提示覆盖这一档
+
     def test_non_literal_reassignment_does_not_reuse_an_older_literal(self):
         """最后一次赋值不是字面量时不记出处：退回更早的旧值会把机型挂到别的包上。"""
         import tempfile
@@ -92,10 +122,12 @@ class SourceTest(unittest.TestCase):
 
 
 class FakeReader:
-    """读屏替身：按命令回前台与页面文字。`lands` 是这台「手机」进得去的包名/页面。"""
+    """读屏替身：按命令回前台与页面文字。`lands` 是这台「手机」进得去的包名/页面，
+    `intents` 是公开 Intent 按包名落到的页面。"""
 
-    def __init__(self, lands=(), searches=(), page_text="首页"):
+    def __init__(self, lands=(), searches=(), page_text="首页", intents=None):
         self.lands, self.searches = set(lands), set(searches)
+        self.intents = dict(intents or {})
         self.page_text = page_text
         self.shells, self.searched = [], []
         self.settings = {}
@@ -104,7 +136,12 @@ class FakeReader:
     def shell(self, cmd, timeout=None):
         self.shells.append(cmd)
         out = ""
-        if cmd.startswith("am start"):
+        if cmd.startswith("am start") and " -a " in cmd:
+            pkg = re.search(r" -p (\S+)", cmd).group(1)
+            # 不在 intents 里就落在同 App 的别的页：App 到了前台，但不是要的那一页
+            self.current = self.intents.get(pkg, f"{pkg}/.SomeOtherActivity")
+            out = f"Starting: Intent {{ pkg={pkg} }}"
+        elif cmd.startswith("am start"):
             target = cmd.rsplit(" ", 1)[-1].strip("'")     # 手机上的 sh 会剥掉引号，替身照做
             pkg, act = target.split("/", 1)
             page = f"{pkg}/{pkg + act if act.startswith('.') else act}"
@@ -208,6 +245,39 @@ class ReachTest(unittest.TestCase):
         entry = entries.Entry(menu="…", direct=(entries.Direct("com.b", ".Settings$Ad", keep_task=True),))
         self.assertEqual(self.reach(phone(r), entry), "direct")
         self.assertEqual(r.shells[0], "am start -n 'com.b/com.b.Settings$Ad'")
+
+    INTENT = entries.Entry(menu="…", direct=(
+        entries.Direct("com.a", ".Market", action="oppo.intent.action.APP_SETTINGS"),))
+
+    def test_public_intent_entry_launches_with_the_action(self):
+        """Intent 档用 `am start -f 0x10008000 -a <action> -p <包名>` 拉起，落点仍按包名/页面核对。"""
+        r = FakeReader(intents={"com.a": "com.a/com.a.Market"})
+        self.assertEqual(self.reach(phone(r), self.INTENT), "direct")
+        self.assertEqual(r.shells[0],
+                         "am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.a")
+
+    def test_intent_landing_on_another_page_moves_to_the_next_entry(self):
+        """Intent 把 App 拉到前台却落在别的页：这一档不算到，换下一条。"""
+        r = FakeReader(lands={"com.a/com.a.Market"})   # Intent 没登记落点 → 停在别的页
+        entry = entries.Entry(menu="…", direct=(
+            entries.Direct("com.a", ".Market", action="oppo.intent.action.APP_SETTINGS"),
+            entries.Direct("com.a", ".Market")))
+        self.assertEqual(self.reach(phone(r), entry), "direct")
+        launches = [c for c in r.shells if c.startswith("am start")]
+        self.assertEqual(len(launches), 2)
+        self.assertTrue(launches[0].startswith("am start -f 0x10008000 -a "))
+        self.assertEqual(launches[1], "am start -f 0x10008000 -n com.a/.Market")
+
+    def test_intent_disconnect_is_not_treated_as_a_dead_entry(self):
+        """Intent 档断线同样上抛，不当成「这一档不通」。"""
+        import adb_link
+        r = FakeReader()
+
+        def gone(cmd, timeout=None):
+            raise adb_link.DeviceLost("device offline")
+        r.shell = gone
+        with self.assertRaises(adb_link.DeviceLost):
+            self.reach(phone(r), self.INTENT)
 
     def test_expect_keeps_a_landed_page_out_of_the_fast_path(self):
         """落在对的页面但没看见判据文字，仍算没到。"""
