@@ -15,7 +15,7 @@ Infer the repo from `git remote -v` — `gh` does this automatically when run in
 
 ## 票的生命周期
 
-- **开工前先有票**：任何实现 / 重构 / 文档改造，先对应一个 GitHub issue；没有就先开票，分支名带 issue 号（`feat/<描述>-<issue>`）。实现完再补票等于跳过了 spec 与 triage，PR 会被当成无源改动。 <!-- rule:doc.issue.ticket-before-work -->
+- **开工前先有票**：任何实现 / 重构 / 文档改造，先对应一个 GitHub issue；没有就先开票，分支名带 issue 号（`feat/<描述>-<issue>`）。实现完再补票等于跳过了 spec 与 triage，PR 会被当成无源改动。CI 的 `ticket-ref` job 在 PR 上核这两处对得上：分支名以 `-<票号>` 结尾，正文有 `Refs #N` / `Closes #N` 且是同一张；同 `dco` / `conventional`，只让问题可见，不阻断合并。 <!-- rule:doc.issue.ticket-before-work -->
 - **认领即出池**：动第一行代码之前跑 `python3 tool/claim.py <N>`。它按票下的认领评论仲裁，再写一条认领评论、加 `in-progress`、摘掉 `ready-for-agent` / `ready-for-human` / `needs-triage`。仲裁只看未收尾的认领，`Record.created`（服务器时间）最早的一条赢；同 identity 重复认领是幂等的 reaffirm，不追加评论。身份是 `sha1(<主机名>\0<worktree 绝对路径>)` 的前 8 位，主机名只进哈希，认领评论里只出现这 8 位——公开 issue 上不出现本机主机名与目录；同一个 GitHub 账号下的两路会话因此也分得开。
 - **三种结局各是一个退出码**：0 认领到手（含本会话已持有），2 被别人占，3 `gh` 调用失败；其余拒绝（票已关闭、票面读不出确定结局、收尾时本会话没有未收尾认领、命令行不合规）都是 1。拿到 2 就停下上报、不自动改挑别的票；拿到 1 不要猜，照消息处理。
 - **认领记录是评论，标签只是可见信号**：认领落在票下一条固定格式的评论里（`gh issue view <N> --comments` 就能看到），标签写失败只是 advisory，不改认领的结局。两路会话同时读到空票时都会写出评论，写完后 `claim.py` 重读一次，最早的那条赢、后写的那条撤回自己——仍不是原子的，极小窗口里两条会同时立住，看评论时间就能判。

@@ -26,9 +26,9 @@ since = "7f54928"
 [[rule]]
 id = "dev.tests.regression-command"
 source = "CLAUDE.md#开发"
-check = "none"
-status = "manual"
-why = "回归命令与解释器写过三种说法，agent 各自猜，报一串 ModuleNotFoundError 或跑出不同结果；CI 的 unittest job 跑的是同一条 discover，只是外面包了一层 coverage 收集（见 dev.coverage.two-platform-merge），但没有测试比对正文与 CI，改错正文不会红。"
+check = "test:test_rules_guards::CiGuards.test_dev_tests_regression_command"
+status = "enforced"
+why = "回归命令与解释器写过三种说法，agent 各自猜，报一串 ModuleNotFoundError 或跑出不同结果；CI 的 unittest job 跑的是同一条 discover，只是外面包了一层 coverage 收集（见 dev.coverage.two-platform-merge）。守卫比 CLAUDE.md 的锚点行与 CI job 里的 `-m unittest discover -s tests`，改一边就红（#1001）。"
 expires_if = "本地入口收成一条脚本、CI 不再直接跑 unittest discover 时删。"
 
 [[rule]]
@@ -42,9 +42,9 @@ expires_if = "收集起点不再是 `-s tests`、或 CI 改成全仓发现用例
 [[rule]]
 id = "dev.tests.interpreter-version"
 source = "CLAUDE.md#开发"
-check = "none"
-status = "manual"
-why = "3.13 起编译器剥掉文档字符串的公共缩进，异常 repr 与 argparse 帮助随之逐字不同；两版解释器混跑会让逐字节对拍本地绿、CI 红。"
+check = "test:test_rules_guards::CiGuards.test_dev_tests_interpreter_version"
+status = "enforced"
+why = "3.13 起编译器剥掉文档字符串的公共缩进，异常 repr 与 argparse 帮助随之逐字不同；两版解释器混跑会让逐字节对拍本地绿、CI 红。守卫比 `.python-version` 与跑 unittest 的 ubuntu job 的 `python-version`，同一版才绿（#1001）。"
 expires_if = "对拍不再比较逐字输出、或只剩一版解释器时删。"
 
 [[rule]]
@@ -84,9 +84,9 @@ since = "4d90593"
 [[rule]]
 id = "dev.ci.two-interpreters"
 source = "CLAUDE.md#开发"
-check = "none"
-status = "manual"
-why = "Windows 侧 skip 掉 POSIX-only 的一批（含 CLI 逐字节对拍），两版解释器各跑一次才盖得住 expanduser 与编码差异；没有测试比对正文与 workflow，改解释器版本或删掉一个 job 都不会红。"
+check = "test:test_rules_guards::CiGuards.test_dev_ci_two_interpreters"
+status = "enforced"
+why = "Windows 侧 skip 掉 POSIX-only 的一批（含 CLI 逐字节对拍），两版解释器各跑一次才盖得住 expanduser 与编码差异。守卫按 job 块解析 test.yml，要同时读到 ubuntu × `.python-version` 与 windows × 3.12 的回归 job，删掉一个或换成同一版就红（#1001）。"
 expires_if = "只剩一个要支持的平台，或 Windows job 不再跑同一套用例时删。"
 
 [[rule]]
@@ -493,8 +493,8 @@ expires_if = "等待预算统一按时间计、不再有按次数的循环时删
 [[rule]]
 id = "doc.comments.current-ticket"
 source = "CODING_STANDARDS.md#新增注释里的票号是这次做的票"
-check = "none"
-status = "manual"
+check = "ci:comment-tickets"
+status = "enforced"
 why = "一批为 #674 / #675 新写的注释与 docstring 全写成 #662（上一个 PR 的票），CHANGELOG 与提交标题对、注释全错，检索整批漏掉。"
 expires_if = "注释里的票号改由提交信息推导、不再手写时删。"
 
@@ -549,8 +549,8 @@ expires_if = "发版流程自动给报告者发复测通知时删。"
 [[rule]]
 id = "doc.issue.ticket-before-work"
 source = "docs/agents/issue-tracker.md#票的生命周期"
-check = "none"
-status = "manual"
+check = "ci:ticket-ref"
+status = "enforced"
 why = "实现完再补票等于跳过 spec 与 triage，PR 会被当成无源改动；分支名不带票号时也串不回验收面。"
 expires_if = "仓库改由外部需求管理系统直接生成分支时删。"
 
