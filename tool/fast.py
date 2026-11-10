@@ -640,8 +640,9 @@ class Phone:
         """挡路的更新/推荐/权限弹窗：点拒绝类按钮（不替用户同意任何东西）。
         纯图片的广告弹窗没有文字，只有一个 ✕ 图标：找 desc/id 里带 close 的可点元素。
         返回非空表示这次关掉了东西，返回前已经等过界面过渡（0.4~0.6 秒），调用方不必再等；
-        返回 None 表示这次没有改动页面，调用方按自己的节奏等待或重试。轮询处写成
-        `self.dismiss() or time.sleep(x)`：刚关掉就立刻重读，什么都没关才按间隔再读。"""
+        返回 None 表示这次没关掉任何东西（推广位的 ✕ 点过也已退回原 App），
+        调用方按自己的节奏等待或重试。轮询处写成 `self.dismiss() or time.sleep(x)`：
+        刚关掉就立刻重读，什么都没关才按间隔再读。"""
         root = self.tree()
         # Android 运行时权限页只点明确的拒绝按钮，不替用户授予权限或修改“不再询问”。
         if (any(n.get("package") in PERMISSION_CONTROLLERS for n in root.iter("node"))
