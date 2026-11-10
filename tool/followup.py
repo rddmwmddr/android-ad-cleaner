@@ -13,7 +13,8 @@
 
 一行可以登记多张票（`#193 / #581`），两边的号都算已登记。
 
-退出码：0 一致；1 有差异（清单已打印）；2 `gh` 读失败或表格结构不可识别（不写任何文件）。
+退出码：0 一致；1 有差异（清单已打印）；2 给不出结论——`gh` 读失败或超时、表格结构不可识别、
+命令行给了参数。前两种情形都不写任何文件。
 """
 import json
 import re
@@ -32,6 +33,7 @@ LABEL = "waiting-for-verify"
 HEADING = "当前队列"
 ISSUE_COLUMN = "Issue"
 LIMIT = 1000
+TIMEOUT = 120
 DOC = Path(__file__).resolve().parents[1] / "docs" / "agents" / "release-followup.md"
 
 EXIT_OK, EXIT_DIFF, EXIT_UNREADABLE = 0, 1, 2
@@ -39,6 +41,7 @@ EXIT_OK, EXIT_DIFF, EXIT_UNREADABLE = 0, 1, 2
 ISSUE_CELL = re.compile(r"^#\d+(\s*/\s*#\d+)*$")
 TOKEN = re.compile(r"#(\d+)")
 RULE = re.compile(r"^[|\s:-]+$")
+SPLIT = re.compile(r"(?<!\\)\|")
 
 
 class Unreadable(RuntimeError):
@@ -69,12 +72,13 @@ class Result:
 
 
 def cells(line):
+    """一行表格 -> 单元格；`\\|` 是单元格里的竖线，不当分隔符。"""
     text = line.strip()
     if text.startswith("|"):
         text = text[1:]
-    if text.endswith("|"):
+    if text.endswith("|") and not text.endswith("\\|"):
         text = text[:-1]
-    return [item.strip() for item in text.split("|")]
+    return [item.strip().replace("\\|", "|") for item in SPLIT.split(text)]
 
 
 def is_rule(line):
@@ -85,7 +89,8 @@ def is_rule(line):
 def section(lines):
     """`## <HEADING>` 到下一个一 / 二级标题之间的行；找不到返回 None。
 
-    `###` 子小节留在这个范围内：主表必须是**第一张**表，后面的批次表不参与核对。
+    `###` 子小节留在这个范围内，所以小节里的每一张表都是队列的一部分：
+    主表之外还有分批登记的表，它们的票号同样算已登记。
     """
     title = re.compile(r"^##\s+" + re.escape(HEADING) + r"\s*$")
     start = None
@@ -176,10 +181,13 @@ def read_open(runner):
 
 
 def runner_for(cwd=None):
-    """默认的 `gh` 执行器：签名 `(script, *args) -> (标准输出, 错误输出, 返回码)`。"""
+    """默认的 `gh` 执行器：签名 `(script, *args) -> (标准输出, 错误输出, 返回码)`。
+
+    带超时：`gh` 卡在网络请求上时进程不能一直挂着，发版前这一步是有时限的。
+    """
     def run(script, *args):
         done = subprocess.run([script, *args], cwd=cwd, capture_output=True,
-                              text=True, encoding="utf-8", errors="replace")
+                              text=True, encoding="utf-8", errors="replace", timeout=TIMEOUT)
         return done.stdout, done.stderr, done.returncode
     return run
 
@@ -190,10 +198,10 @@ def render(result):
         lines.append("一致：没有缺行，也没有过期行。")
         return "\n".join(lines)
 
-    lines.append(f"缺行 {len(result.missing)}（标签里有、主表里没有）：")
+    lines.append(f"缺行 {len(result.missing)}（标签里有、队列里没有）：")
     for number, who in result.missing:
         lines.append(f"  #{number}  @{who}" if who else f"  #{number}  （无作者）")
-    lines.append(f"过期行 {len(result.expired)}（主表里有、标签里没有）：")
+    lines.append(f"过期行 {len(result.expired)}（队列里有、标签里没有）：")
     for number in result.expired:
         lines.append(f"  #{number}")
     return "\n".join(lines)
@@ -209,6 +217,9 @@ def main(argv, runner=None, doc=None):
         issues = read_open(runner)
     except GhError as error:
         print(error, file=sys.stderr)
+        return EXIT_UNREADABLE
+    except subprocess.TimeoutExpired:
+        print(f"`gh issue list` 超过 {TIMEOUT} 秒没有返回，这一次给不出结论", file=sys.stderr)
         return EXIT_UNREADABLE
     except OSError as error:      # 没装 gh 或不在 PATH 上
         print(f"跑不了 gh：{error}", file=sys.stderr)

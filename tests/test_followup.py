@@ -2,6 +2,7 @@
 import contextlib
 import io
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -72,6 +73,12 @@ class TableTests(unittest.TestCase):
                                [{"number": 193}, {"number": 581}])
         self.assertEqual(result.expired, (), "合列行里的两个号都算已登记")
         self.assertEqual(result.rows, 2)
+
+    def test_an_escaped_pipe_inside_a_cell_does_not_split_the_row(self):
+        text = doc("| #10 | @a | 机型 \\| 系统 | PR #1 | 输出 \\| 预期 |")
+        result = followup.scan(text, [{"number": 10}])
+        self.assertEqual(result.rows, 1, "`\\|` 是单元格里的竖线，不是分隔符")
+        self.assertEqual(result.expired, ())
 
 
 class DiffTests(unittest.TestCase):
@@ -184,6 +191,17 @@ class CommandTests(unittest.TestCase):
         self.assertIn("结构认不出", err)
         self.assertEqual(out, "")
         self.assertEqual(self.path.read_text(encoding="utf-8"), text)
+
+    def test_a_hung_gh_call_exits_two_instead_of_hanging(self):
+        def hung(script, *args):
+            raise subprocess.TimeoutExpired("gh", followup.TIMEOUT)
+
+        self.path.write_text(doc(), encoding="utf-8")
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = followup.main([], runner=hung, doc=self.path)
+        self.assertEqual(code, 2)
+        self.assertIn("没有返回", err.getvalue())
 
     def test_arguments_are_refused_rather_than_ignored(self):
         gh = FakeGh()
