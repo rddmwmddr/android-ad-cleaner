@@ -25,6 +25,21 @@ jobs:
         run: |
           pip install ruff==0.17.3
           ruff check tool tests gui android/app/src/main/python
+  # 类型检查单独一个 job：红了就是类型问题，不与「用例挂了」混在一起。扫描范围（`tool/`）与宽松档
+  # 参数都在 pyproject.toml 的 `[tool.mypy]` 里，所以这里只有一条不带参数的 `mypy`；与 ruff 一样
+  # 与平台无关，只留 Linux 一份。版本只在 CI 与 CLAUDE.md 里，不进 requirements.txt（同 coverage）。
+  types:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: 类型检查（引擎目录，宽松档）
+        run: |
+          pip install mypy==1.18.2
+          mypy
   # Linux 跑 3.13，Windows 跑 3.12：两版解释器各跑一次，不重复跑同一组合。
   # 3.13 与仓库根的 .python-version 一致；3.12 与两个发版打包同版。3.13 起编译器会剥掉文档字符串
   # 的公共缩进，异常 repr、argparse 帮助同理，同一份源码在两版下可能逐字不同。

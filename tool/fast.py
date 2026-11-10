@@ -747,7 +747,8 @@ class Phone:
                     if seen is not None:
                         seen.append(b)
                     return True
-                self.dismiss() or time.sleep(0.2)
+                if not self.dismiss():
+                    time.sleep(0.2)
             if not quiet:
                 self.say(f"  ✗ 没找到「{text}」" + self.residual_note())
             return False
@@ -916,7 +917,8 @@ class Phone:
             for _ in range(5):
                 if self.find(expect) or self.find(expect, edge_ok="tab"):
                     return True
-                self.dismiss() or time.sleep(0.3)
+                if not self.dismiss():
+                    time.sleep(0.3)
         self.say(f"  ✗ 点「{text}」后没出现「{expect}」" + self.residual_note())
         return False
 
@@ -938,7 +940,8 @@ class Phone:
             if time.time() >= deadline:
                 self.say(f"  ✗ 底部没有「{name}」标签")
                 return False
-            self.dismiss() or time.sleep(0.2)
+            if not self.dismiss():
+                time.sleep(0.2)
 
     def _tab_xy(self, name):
         """底部带内按三层递进找标签，返回点击坐标或 None。"""

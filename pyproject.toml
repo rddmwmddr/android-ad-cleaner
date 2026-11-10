@@ -7,3 +7,23 @@ extend-exclude = [".private"]
 # F：未定义名 / 未使用导入；E9：语法错误；B：bugbear 的「形状」类错误（闭包捕获循环变量、
 # zip 缺 strict、盲断异常等）。不加格式与行长规则。
 select = ["F", "E9", "B"]
+
+# 类型检查只接窄口径：扫引擎目录，扫界面目录与机型脚本不在范围；为什么不做全量注解
+# 写在 CLAUDE.md 开发段的那一条里。
+[tool.mypy]
+# 扫描范围属于配置：`gui/` 有自己的平台分支与假对象，`recipes/` 靠注入作用域执行，
+# 静态分析在那里看到的全是未定义名。
+files = ["tool"]
+python_version = "3.13"
+# 宽松档：函数体里的表达式照查，但不要求给每个函数补注解——这个仓库的 bug 主要是
+# 「静默成功 / 静默跳过」，全量注解会撞上它赖以灵活的假对象。
+check_untyped_defs = true
+# 空列表 / 空字典补注解（var-annotated）是宽松档唯一的例外：只影响「请给空列表补类型」，
+# 不掩盖任何一处「None 上取属性」这类错误。其余存量错误一律改代码，没有别的压制。
+disable_error_code = ["var-annotated"]
+
+# 两个运行时依赖没有 py.typed、也没出 stub 包；按「解析不到」处理，
+# 不把它们的 Any 算进我们自己的检查面。
+[[tool.mypy.overrides]]
+module = ["adbutils", "adbutils.*", "uiautomator2", "uiautomator2.*"]
+ignore_missing_imports = true

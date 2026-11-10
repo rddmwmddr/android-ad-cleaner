@@ -41,6 +41,7 @@
 
 ### 内部
 
+- `mypy` 接入 CI：新增独立 `types` job，范围与宽松档参数收进 `pyproject.toml`（#996）
 - 机型用例的本地假 `Phone` 收进 `phone_stub()`，并加装配单点守卫（#1021）
 - 标准流 UTF-8 重配置收成唯一出口 `use_utf8_console()`，新增源码守卫防复发（#995）
 - `AppModel.start()` 换页改走 `show()`，并加「`screen` 只由它改写」的守卫（#1020）
