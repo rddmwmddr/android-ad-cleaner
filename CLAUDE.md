@@ -6,7 +6,7 @@
 
 ## 开发
 
-- 找「某条维护规则有没有守卫」先看 [docs/agents/rules.toml](docs/agents/rules.toml)：规则正文留在文档里，注册表每条给 `id` / `source` / `check` / `status` / `why` / `expires_if`（可选 `since`），正文对应行的行尾挂 `<!-- rule:<id> -->` 锚点。新增或删除规则时两处一起改，`tests/test_rules_registry.py` 守双向一致；规则的理由只写在注册表的 `why` 里，正文不复述理由——判断与反例仍留在正文。 <!-- rule:doc.rules.registry-indexes-prose -->
+- 找「某条维护规则有没有守卫」先看 [docs/agents/rules.toml](docs/agents/rules.toml)：规则正文留在文档里，注册表每条给 `id` / `source` / `check` / `status` / `why` / `expires_if`（可选 `since`），正文对应行的行尾挂 `<!-- rule:<id> -->` 锚点。新增或删除规则时两处一起改，`tests/test_rules_registry.py` 守双向一致，没挂锚点的新条目由 `tests/test_rules_guards.py` 按文档冻结上限挡；规则的理由只写在注册表的 `why` 里，正文不复述理由——判断与反例仍留在正文。 <!-- rule:doc.rules.registry-indexes-prose -->
 - 回归：`python -m unittest discover -s tests`；本机用仓库根的 `.venv/bin/python`（系统 python 缺 adbutils，会报一串 ModuleNotFoundError）。只装 `requirements.txt` 就够，不需要 pywebview / pillow。并行会话在各自的 worktree 里干活时，那个目录没有 `.venv`，用主副本 `.venv/bin/python` 的绝对路径；Read/Edit 也一律用该 worktree 的绝对路径。只跑一个文件时加 `PYTHONPATH=tests`：`PYTHONPATH=tests python -m unittest tests.test_row`（`tests/` 里的用例按顶层模块 import `fixtures`）。 <!-- rule:dev.tests.regression-command -->
 - 用例只在 `tests/` 下定义：`recipes/`、`gui/` 里的脚本不进收集，别处写 `def test_` 也不会被 `discover -s tests` 跑到。`tests/test_test_collection.py` 扫全仓 `.py`（跳过隐藏目录与 `node_modules` / `build`），`tests/` 之外命中即汇总成一条失败，逐文件列出命中数。 <!-- rule:dev.tests.cases-live-under-tests -->
 - 本机 `.venv` 是 3.13（仓库根的 `.python-version` 钉着这一版），与 CI 的 Linux job 同一版，上面那条回归命令就是本机口径，不必再用别的解释器跑一遍；重建时照 `.python-version` 走，别升到更新的版本。3.12 只剩 Windows job 与发版打包在跑，而那两边会 skip 掉 POSIX-only 的一批用例（包括 CLI 逐字节对拍），macOS 打包不跑回归，别假设两版逐字相同。 <!-- rule:dev.tests.interpreter-version -->

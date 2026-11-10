@@ -1,9 +1,9 @@
-"""规则守卫：文档内容类四条（`DocGuards`）、引擎结构类两条（`EngineGuards`）、流程 / CI 类三条
-（`CiGuards`）与发版产物一条（`ReleaseGuards`），沿用 #1000、#1002 的做法。
+"""规则守卫：文档内容类四条（`DocGuards`）、注册表类一条（`RegistryGuards`）、引擎结构类两条（`EngineGuards`）、
+流程 / CI 类三条（`CiGuards`）与发版产物一条（`ReleaseGuards`），沿用 #1000、#1002 的做法。
 
 `DocGuards`：CHANGELOG 条目一行一个票号、文档里的代码位置用符号名、指到的 `.py` 路径要存在、
-上报服务地址与凭据不写进仓库。`CiGuards`：回归命令与 CI 同一条、`.python-version` 与 Linux job 同版、
-两个平台各跑一版解释器。
+上报服务地址与凭据不写进仓库。`RegistryGuards`：无锚点的顶层列表项按文档冻结上限。
+`CiGuards`：回归命令与 CI 同一条、`.python-version` 与 Linux job 同版、两个平台各跑一版解释器。
 
 都只读文件、比字符串：不联网、不执行被测代码、不引入 Markdown 或 YAML 解析依赖。
 守的是「仓库现在长什么样」，旧树也绿，守的是不回退（`dev.tests.behaviour-change-needs-red-test`
@@ -28,7 +28,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "android" / "app" /
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from aac_android import view  # noqa: E402
-from test_rules_registry import top_level_names  # noqa: E402  同一份「模块层名字」判据，别再抄一份
+from test_rules_registry import ANCHOR as RULE_ANCHOR  # noqa: E402  同一份锚点口径，别再抄一份
+from test_rules_registry import read_rows, top_level_names  # noqa: E402
 from tool import events, release_assets  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -330,6 +331,88 @@ class DocGuards(unittest.TestCase):
         self.assertGreater(scanned, 0, "一个文件都没扫到，这条守卫会空转")
         self.assertEqual(hits, [], "内网服务地址与凭据只写在本机 CLAUDE.local.md 或 .private/：\n"
                          + "\n".join(hits))
+
+
+# 顶层列表项：缩进 0–3 列的 `-` / `*` / `+` / `1.` / `1)` 加空白加非空正文。
+# 缩进 ≥4 的是嵌套子项，不在候选集里——`CODING_STANDARDS.md` 里被合并成一条规则的 9 条子项就是这样排除的。
+# 2–3 列的嵌套子项按 CommonMark 仍算文档级列表项，会一并计数（现有 5 处，已含在底数里）。
+ITEM = re.compile(r"^ {0,3}(?:[-*+]|\d+[.)])\s+\S")
+# `- - -` / `* * *` 也落在 ITEM 的形状里，但它们是水平分隔线。
+THEMATIC = re.compile(r"^[-*_](?:\s*[-*_]){2,}$")
+
+# 每份文档「无锚点顶层列表项」的条数上限，是 #840 起的存量，只许降。上限 0 的也列出来，
+# 让这份表就是注册表文档的全集。涨一个必须在这里改数字：那是一次公开的「我往正文里加了东西
+# 却没登记规则」，评审要看见。注册表里新出现的文档默认 0（有列表项就红），要给余量才显式入表。
+UNANCHORED_BOUND = {
+    "CLAUDE.md": 4,
+    "CODING_STANDARDS.md": 9,
+    "CONTEXT.md": 0,
+    "docs/04-给新机型写脚本.md": 11,
+    "docs/agents/code-review.md": 3,
+    "docs/agents/domain.md": 2,
+    "docs/agents/issue-tracker.md": 20,
+    "docs/agents/release-followup.md": 0,
+    "docs/agents/release.md": 12,
+    "docs/agents/triage-labels.md": 0,
+}
+
+
+def unanchored_items(path, ids):
+    """[(行号, 行)]：顶层列表项里行尾没有登记锚点的那些。
+
+    锚点要落在条目行尾且 id 在注册表里（`RULE_ANCHOR` 与 `test_rules_registry` 同一份口径）：
+    模板里引用锚点写法时后面还接着正文，那不是登记。
+    """
+    found = []
+    for lineno, line in prose_lines(path):
+        if THEMATIC.match(line.strip()):
+            continue
+        if not ITEM.match(line):
+            continue
+        match = RULE_ANCHOR.search(line)
+        if match and match.group(1) in ids:
+            continue
+        found.append((lineno, line.strip()))
+    return found
+
+
+class RegistryGuards(unittest.TestCase):
+    def test_unanchored_items_stay_within_the_frozen_bound(self):
+        """每份文档里没挂锚点的顶层列表项不许超过冻结上限（#840、#1010）。
+
+        `test_rules_registry` 的四条不变式只看「带锚点的」：一条规则写进正文、根本没人给它锚点，
+        四条全绿。这里按文档冻结尾数，新增一条不带锚点的列表项就超线。旧树也绿，守的是不回退。
+
+        报错列出该文档**全部**无锚点项的行号与首 80 字，不只列超出的尾部：新项可能插在中间，
+        列尾部会指到别的行。
+
+        已知漏口（不宣称已闭合）：删一条再加一条、或把一根已有的无锚点项原地改写成规则，总数不变，
+        计数看不见——现存的无锚点项绝大多数落在已有锚点的小节里，是已登记规则的展开，评审能对照。
+        缩进 ≥4 的嵌套子项不在候选集里；2–3 列的按 CommonMark 仍算文档级列表项，会一并计数
+        （现有 5 处，已含在底数里），往这类子项里加一条也会红。
+        """
+        try:
+            rows = read_rows()
+        except (OSError, ValueError) as error:
+            self.fail(f"读不出 docs/agents/rules.toml：{error}")
+        self.assertTrue(rows, "注册表一条都没有，这条守卫会空转")
+        ids = {row["id"] for row in rows}
+        problems, scanned = [], 0
+        for name in sorted({row["source"].split("#")[0] for row in rows}):
+            path = ROOT / name
+            if not path.is_file():
+                continue                                # 由 test_rules_registry 的第一条不变式报
+            scanned += 1
+            bound = UNANCHORED_BOUND.get(name, 0)
+            items = unanchored_items(path, ids)
+            if len(items) <= bound:
+                continue
+            detail = "\n".join(f"  {name}:{lineno}: {text[:80]}" for lineno, text in items)
+            problems.append(f"{name}: 上限 {bound}，实测 {len(items)}；无锚点的顶层列表项：\n{detail}")
+        self.assertGreater(scanned, 0, "一份文档都没扫到，这条守卫会空转")
+        self.assertEqual(problems, [], "正文里新增了没挂锚点的列表项；给它挂 `<!-- rule:<id> -->` "
+                         "并登记进 docs/agents/rules.toml，或确认它是流程步骤后把上限显式调高：\n"
+                         + "\n".join(problems))
 
 
 # 手机版的替换层（ADR-0019）：这四个文件把引擎接到手机上，少一个或导出名改了，桌面版测试全绿
