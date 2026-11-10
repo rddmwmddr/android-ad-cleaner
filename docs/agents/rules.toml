@@ -827,11 +827,27 @@ why = "这一节是操作清单而不是约束：照抄能省一次试错，换�
 expires_if = "命令清单改由 skill 自带、本仓库不再维护时删。"
 
 [[rule]]
+id = "doc.issue.claim-command"
+source = "CLAUDE.md#Issue tracker"
+check = "test:test_claim::PinnedContractTests.test_claude_md_names_the_command"
+status = "enforced"
+why = "认领以前只写在 issue-tracker.md 里、没有命令，`/implement` 的流程里根本没有这一步：2026-11-10 #906 被两路会话同时实现，票上始终零评论、标签从没动过（#932）。一条命令把认领记录写进 `--comments`（实现会话必读的载荷），标签只是随附信号；同账号下的两路会话靠 worktree 散列区分身份。"
+expires_if = "认领改由平台原生 assignee 或排他队列表达，且实现会话的必读载荷里带持有者时删。"
+
+[[rule]]
+id = "doc.issue.claim-record-is-a-comment"
+source = "docs/agents/issue-tracker.md#票的生命周期"
+check = "none"
+status = "manual"
+why = "标签不在 `gh issue view --comments` 的载荷里，只挂标签的认领会被下一路会话漏掉；两路同时读到空票时都会写评论，没有比较交换，只能靠重读让后写的那路撤回，极小窗口里仍会留下两条。"
+expires_if = "平台提供原子的认领操作（带条件写或排他队列）时删。"
+
+[[rule]]
 id = "doc.issue.claim-removes-ready"
 source = "docs/agents/issue-tracker.md#票的生命周期"
 check = "none"
 status = "manual"
-why = "`ready-*` 与 `needs-triage` 的意思是「在待办池里等人挑」；认领时留着它们，别的会话会再挑一次同一张票。"
+why = "`ready-*` 与 `needs-triage` 的意思是「在待办池里等人挑」；认领时留着它们，别的会话会再挑一次同一张票。现由 `tool/claim.py` 执行，退出码 2 是让别人也让会话知道停下的信号。"
 expires_if = "派单改由平台原生 assignee 加队列机制承担时删。"
 
 [[rule]]
