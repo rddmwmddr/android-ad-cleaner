@@ -4,7 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "android" / "app" / "src" / "main" / "python"))
@@ -180,6 +180,24 @@ class DetectTest(unittest.TestCase):
         self.assertIsNone(d["recipe_label"])
         self.assertEqual(d["manual_name"], "OPPO / ColorOS")
         self.assertIn("OPPO-ColorOS.md", d["manual_url"])
+
+    def test_samsung_huawei_meizu_land_on_their_own_checklist(self):
+        """没有专用脚本时，这三家的按钮要落到自己那份清单并写上品牌名（#952）。"""
+        want = {"samsung": ("三星 / One UI", "三星-OneUI.md"),
+                "huawei": ("华为 / HarmonyOS", "华为-HarmonyOS.md"),
+                "meizu": ("魅族 / Flyme", "魅族-Flyme.md")}
+        for brand, (name, filename) in want.items():
+            with self.subTest(brand=brand):
+                d = self.detect(steps=[], recipe=None, info={"brand": brand})
+                self.assertEqual(d["manual_name"], name)
+                self.assertEqual(unquote(d["manual_url"]), f"{view.REPO}/blob/main/docs/清单/{filename}")
+
+    def test_every_checklist_entry_has_a_name_and_a_file(self):
+        """旧树也绿，守的是表里每一项都有名字、对应文件也真在仓库里，不回退。"""
+        for filename in view.CHECKLIST.values():
+            with self.subTest(filename=filename):
+                self.assertTrue(view.CHECKLIST_NAME.get(filename))
+                self.assertTrue((ROOT / "docs" / "清单" / filename).is_file())
 
     def test_reference_recipe_runs_in_safe_mode(self):
         d = self.detect(recipe="oppo/PX9", recipe_ref=True, recipe_ok=False)
