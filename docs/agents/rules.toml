@@ -285,9 +285,9 @@ expires_if = "界面提供结构化的底部导航节点、不再靠文字匹配
 [[rule]]
 id = "dev.ui.result-line-routing"
 source = "CLAUDE.md#开发"
-check = "none"
-status = "manual"
-why = "机器行进 results[].tail 会被当成结果摘要显示给用户；手机版的同一批摘要口径由 tests/summary_cases.json 钉住两边，_log() 的取舍与 tail 的边界没有守卫。"
+check = "test:test_rules_guards::EngineGuards.test_ui_result_line_routing"
+status = "enforced"
+why = "机器行进 results[].tail 会被当成结果摘要显示给用户；手机版的同一批摘要口径由 tests/summary_cases.json 钉住两边，_log() 的取舍与 tail 的边界没有守卫。守卫（#1002）拿同一份样例带机器行喂手机版 summarize()，摘要里出现 `#aac:` 就红；网页版那条同口径用例在 tests/js/client.test.js，注册表的 check 语法只能指一条。上游 `_log()` 漏不漏它看不见，只证明结果页自己剥得掉。"
 expires_if = "结果页改由结构化字段渲染、不再解析 tail 末行时删。"
 
 [[rule]]
@@ -317,9 +317,9 @@ expires_if = "手机版换成非 Compose 的界面栈时删。"
 [[rule]]
 id = "dev.android.replacement-layer"
 source = "CLAUDE.md#开发"
-check = "none"
-status = "manual"
-why = "adb.py 按 adb 语义回答、bridge.py 是 shell 门面、inproc.py 在本进程跑脚本、u2.py 顶掉 uiautomator2（ADR-0019）；替换层与桌面依赖不一致时，引擎到手机上才第一次跑起来就红。"
+check = "test:test_rules_guards::EngineGuards.test_android_replacement_layer"
+status = "enforced"
+why = "adb.py 按 adb 语义回答、bridge.py 是 shell 门面、inproc.py 在本进程跑脚本、u2.py 顶掉 uiautomator2（ADR-0019）；替换层与桌面依赖不一致时，引擎到手机上才第一次跑起来就红。守卫（#1002）查四个文件在不在、模块层公开名字少没少；正文第二句「新增读屏能力要先加进 u2.py 与 tool/reader.py 两边」它看不见，名字在而语义不对、或 APK 根本起不来也看不见（本仓库没有 JDK / Android SDK）。"
 expires_if = "手机版不再靠替换层跑引擎（例如改走真实 adb）时删。"
 
 [[rule]]
@@ -1101,7 +1101,7 @@ id = "dev.recipes.skip-passes-through-helpers"
 source = "docs/04-给新机型写脚本.md#一段机型脚本长什么样"
 check = "none"
 status = "manual"
-why = "「先试直达、失败再走菜单」的助手按 `except RuntimeError` 收下「这条路不通」；跳过若被它吞掉，这一段会从跳过退化成走菜单后的空跑或假失败，用户看到的是「没关掉」而不是「这台机没有这个 App」（#908 的 Redmi 15 5G）。判据只认类型（`SkipStep`）：按中文文案判会在措辞调整时静默失效。"
+why = "「先试直达、失败再走菜单」的助手按 `except RuntimeError` 收下「这条路不通」；跳过若被它吞掉，这一段会从跳过退化成走菜单后的空跑或假失败，用户看到的是「没关掉」而不是「这台机没有这个 App」（#908 的 Redmi 15 5G）。判据只认类型（`SkipStep`）：按中文文案判会在措辞调整时静默失效。机器判据探过（#1002）：AST 查「宽捕获的 try 体可能抛跳过、块里又没有 raise」会命中 PLZ110 / PMX110 的 `hide_carousel`（经 `read_switches` → `page` 可能按跳过收场，是真命中，修它要改机型脚本行为），判据还依赖一份「哪些调用会抛跳过」的名单，引擎新增跳过出口时会静默漏判——故仍记 manual，探针输出在票面。"
 expires_if = "`Phone.start()` 不再用异常表达「本机没装」时删。"
 
 [[rule]]

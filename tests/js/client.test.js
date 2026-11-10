@@ -97,6 +97,23 @@ test("机型脚本摘要说清三类结局，与手机版逐字一致（#758）"
   } finally { page.close(); }
 });
 
+/* 机器行（tool/events.py 的 `#aac:event ` / `#aac:payload `）只在客户端设了 AAC_EVENTS 时出现，
+   正常走不到 results[].tail；但只要有一处漏进来，兜底那句就会把它原样显示给用户（#1002）。
+   与 tests/test_rules_guards.py 的 EngineGuards 读同一份样例。 */
+test("完成页摘要把机器行挡在外面（#1002）", async () => {
+  const page = await openPage();
+  try {
+    for (const c of SUMMARY_CASES){
+      const tail = [...c.tail, ...(c.machine || [])];
+      const got = page.window.summarize({ tail });
+      assert.equal(got, c.want, c.name);
+      assert.ok(!got.split("\n").some(line => line.startsWith("#aac:")), `${c.name}：摘要里漏出了机器行`);
+    }
+    const machine = ["#aac:event {\"kind\": \"ui_busy\"}", "#aac:payload {\"skeleton\": \"<node>\"}"];
+    assert.equal(page.window.summarize({ tail: ["开始执行", ...machine] }), "开始执行");
+  } finally { page.close(); }
+});
+
 test("完成页摘要认不出模式时显示最后一条非空行", async () => {
   const page = await openPage();
   try {

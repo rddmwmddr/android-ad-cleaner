@@ -604,8 +604,11 @@ function runSummary(t, turnedOff){
   }
   return parts.join("；");
 }
+/* 机器行（tool/events.py 的 `#aac:event ` / `#aac:payload `）本该被 gui/app.py 的 _log() 挡在 tail
+   外面；漏一处，末行兜底就会把它原样显示给用户。两边各剥一次（手机版同名函数，见 view.py，#1002）。 */
 function summarize(res){
-  const t = res.tail.join("\n");
+  const tail = res.tail.filter(line => !line.startsWith("#aac:"));
+  const t = tail.join("\n");
   let m;
   if ((m = t.match(/机型脚本跑完：关了 (\d+) 个，(\d+) 秒/))) return runSummary(t, Number(m[1]));
   if ((m = t.match(/拨了 (\d+) 个/))){ const left = (t.match(/仍开着: (\d+) 个/) || [])[1]; return `关了 ${m[1]} 个渠道` + (left !== undefined ? `，复查仍开着 ${left} 个` : ""); }
@@ -613,7 +616,7 @@ function summarize(res){
   if (/快照已存/.test(t)) return "已保存";
   if ((m = t.match(/插电常亮已改回 (\d+)/))) return `插电常亮已改回 ${m[1]}`;
   if (/插电常亮未改动/.test(t)) return "插电常亮未改动";
-  return res.tail.filter(Boolean).slice(-1)[0] || "";
+  return tail.filter(Boolean).slice(-1)[0] || "";
 }
 function showDone(r){
   setStep(5);
