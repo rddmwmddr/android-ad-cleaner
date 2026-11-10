@@ -13,9 +13,11 @@ sys.path.insert(0, str(ROOT / "tool"))
 import claim  # noqa: E402
 import fixtures  # noqa: E402
 
-ME = "host-12345678"
-OTHER = "host-99999999"
-WHO = claim.Session(ME, "host", "feat/claim-command-932", "/wt/932")
+HOST = "box"
+WORKTREE = "/Volumes/wt/932"
+ME = claim.session_id(HOST, WORKTREE)
+OTHER = claim.session_id(HOST, "/Volumes/wt/999")
+WHO = claim.Session(ME, "feat/claim-command-932")
 NOW = datetime(2026, 11, 10, 12, 30)
 POSTED = "2026-11-10T04:30:00Z"
 COMMENT_URL = "https://github.com/owner/repo/issues/932#issuecomment-777"
@@ -34,15 +36,23 @@ def ticket(comments=(), labels=("ready-for-agent",), state="OPEN"):
 def claim_comment(session, created="2026-11-10T04:03:00Z", labels=("ready-for-agent",),
                   branch="feat/x", stamp="2026-11-10 12:03"):
     kept = ", ".join(f"`{name}`" for name in labels) if labels else claim.EMPTY_LABELS
-    body = (f"**认领中**：session `{session}` · host `h` · branch `{branch}` · "
-            f"worktree `/wt/{session}` · {stamp}\n{claim.LABEL_KEY}{kept}")
+    body = f"**认领中**：session `{session}` · branch `{branch}` · {stamp}\n{claim.LABEL_KEY}{kept}"
+    return {"body": body, "createdAt": created, "url": f"https://example/{session}",
+            "author": {"login": "rikki"}}
+
+
+def legacy_claim_comment(host, worktree, session="old-style-key",
+                         created="2026-11-10T04:03:00Z", branch="feat/x",
+                         stamp="2026-11-10 12:03"):
+    """#970 之前的格式：评论里写着 host 与 worktree，键要靠它们重算。"""
+    body = (f"**认领中**：session `{session}` · host `{host}` · branch `{branch}` · "
+            f"worktree `{worktree}` · {stamp}\n{claim.LABEL_KEY}`ready-for-agent`")
     return {"body": body, "createdAt": created, "url": f"https://example/{session}",
             "author": {"login": "rikki"}}
 
 
 def end_comment(kind, session, created):
-    body = (f"**{kind}**：session `{session}` · host `h` · branch `feat/x` · "
-            f"worktree `/wt/{session}` · 2026-11-10 13:00")
+    body = f"**{kind}**：session `{session}` · branch `feat/x` · 2026-11-10 13:00"
     return {"body": body, "createdAt": created, "url": "https://example/end",
             "author": {"login": "rikki"}}
 
@@ -120,6 +130,8 @@ class ClaimTests(unittest.TestCase):
         self.assertEqual(len(gh.comments), 1, "空票上要留一条认领评论")
         self.assertIn("**认领中**", gh.comments[0])
         self.assertIn(f"session `{ME}`", gh.comments[0])
+        self.assertNotIn(HOST, gh.comments[0], "评论里不该出现主机名（#970）")
+        self.assertNotIn(WORKTREE, gh.comments[0], "评论里不该出现 worktree 绝对路径（#970）")
         self.assertIn(f"{claim.LABEL_KEY}`ready-for-agent`", gh.comments[0])
         self.assertEqual(gh.edits, [["issue", "edit", "932",
                                      "--add-label", "in-progress",
@@ -142,6 +154,7 @@ class ClaimTests(unittest.TestCase):
         self.assertIn(OTHER, message)
         self.assertIn("feat/x", message)
         self.assertIn("天前", message)
+        self.assertNotIn(WORKTREE, message, "被别人占时也不该把对方的绝对路径打出来（#970）")
         # 展示的是服务器时间换算出来的那一刻，不是正文里手写的 stamp（那条写的是 12:03）
         self.assertNotIn("2026-11-10 12:03", message)
         self.assertEqual(gh.comments, [], "被别人占时不该再写认领评论")
@@ -259,15 +272,48 @@ class ParsingTests(unittest.TestCase):
         with patch.object(claim.socket, "gethostname", return_value="box.example.com"), \
                 patch.object(claim, "git_text", side_effect=["/wt/x", "feat/y"]):
             who = claim.session_context()
-        self.assertEqual((who.host, who.branch, who.worktree), ("box", "feat/y", "/wt/x"))
+        self.assertEqual(who.branch, "feat/y")
         self.assertEqual(who.session, claim.session_id("box", "/wt/x"))
+
+    def test_the_identity_key_depends_on_both_the_host_and_the_worktree(self):
+        self.assertNotEqual(claim.session_id("a", "/w"), claim.session_id("b", "/w"),
+                            "换主机名要换键，否则 #970 里主机名就成了白丢的信息")
+        self.assertNotEqual(claim.session_id("a", "/w1"), claim.session_id("a", "/w2"))
+        self.assertEqual(claim.session_id("a", "/w"), claim.session_id("a", "/w"))
 
     def test_a_written_claim_body_parses_back_into_itself(self):
         body = claim.claim_body(WHO, NOW, ("ready-for-agent",))
         record = claim.parse_comment({"body": body, "createdAt": POSTED, "url": COMMENT_URL})
-        self.assertEqual((record.kind, record.session, record.host, record.branch, record.worktree),
-                         (claim.CLAIMED, ME, "host", "feat/claim-command-932", "/wt/932"))
+        self.assertEqual((record.kind, record.session, record.branch),
+                         (claim.CLAIMED, ME, "feat/claim-command-932"))
         self.assertEqual(record.labels, ("ready-for-agent",))
+
+    def test_a_written_claim_body_does_not_name_the_host_or_worktree(self):
+        body = claim.claim_body(WHO, NOW, ("ready-for-agent",))
+        self.assertNotIn(HOST, body)
+        self.assertNotIn(WORKTREE, body)
+        self.assertNotIn("host `", body)
+        self.assertNotIn("worktree `", body)
+        self.assertIn(f"session `{ME}`", body)
+
+    def test_a_legacy_comment_is_rekeyed_from_its_host_and_worktree(self):
+        record = claim.parse_comment(legacy_claim_comment(HOST, WORKTREE))
+        self.assertEqual(record.session, ME, "旧格式用 host 与 worktree 重算成同一个键")
+
+    def test_a_legacy_claim_and_a_new_claim_resolve_to_the_same_session(self):
+        legacy = claim.parse_comment(legacy_claim_comment(HOST, WORKTREE))
+        fresh = claim.parse_comment({"body": claim.claim_body(WHO, NOW, ()), "createdAt": POSTED})
+        self.assertEqual(legacy.session, fresh.session)
+
+    def test_a_legacy_comment_rekeys_even_when_the_session_literal_disagrees(self):
+        record = claim.parse_comment(
+            legacy_claim_comment(HOST, WORKTREE, session="someone-typed-this"))
+        self.assertEqual(record.session, ME, "有 host 与 worktree 时以重算值为准")
+
+    def test_a_legacy_comment_with_only_one_of_host_and_worktree_is_unreadable(self):
+        body = "**认领中**：session `old` · host `box` · branch `feat/x` · 2026-11-10 12:03"
+        with self.assertRaises(claim.Unreadable):
+            claim.parse_comment({"body": body, "createdAt": POSTED, "url": COMMENT_URL})
 
     def test_an_ordinary_comment_is_not_a_claim(self):
         self.assertIsNone(claim.parse_comment({"body": "看起来不错", "createdAt": POSTED}))
