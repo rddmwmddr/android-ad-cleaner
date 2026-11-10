@@ -359,7 +359,8 @@ class CheckLineTests(unittest.TestCase):
                  contextlib.redirect_stdout(out):
                 run.main()
         text = out.getvalue()
-        self.assertIn("recipes/xiaomi-2512BPNDAC/recipe.py（同族同版本，非固定参考）", text)
+        picked = str(Path("recipes", "xiaomi-2512BPNDAC", "recipe.py"))
+        self.assertIn(f"{picked}（同族同版本，非固定参考）", text)
         self.assertIn("这台 OS4.0.5.0.XPKCNXM（相同）", text)
 
     def test_different_version_says_so(self):
