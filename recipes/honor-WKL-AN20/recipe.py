@@ -220,6 +220,7 @@ def radio(root, text):
 
 @step("广告跟踪")
 def _():
+    skip_in_safe_mode()
     require(p.setting("广告", "广告与隐私"), "未进入广告与隐私")
     page("com.hihonor.id", "广告与隐私")
     tap("更多选项", scrolls=0)

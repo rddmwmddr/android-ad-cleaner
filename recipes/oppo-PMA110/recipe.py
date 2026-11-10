@@ -3,7 +3,6 @@
 # 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，未复测（#933）。
 BUILD = "PMA110_17.0.0.106(CN01)"
 
-import os
 import re
 import time
 
@@ -191,9 +190,10 @@ def hide_carousel():
 @step("广告跟踪")
 def _():
     global VERIFIED_SWITCHES
+    skip_in_safe_mode()
     model = p.d.shell("getprop ro.product.model").output.strip()
     build = p.d.shell("getprop ro.build.display.id").output.strip()
-    if os.environ.get("AAC_REF") or model != "PMA110" or not build.startswith(BUILD):
+    if model != "PMA110" or not build.startswith(BUILD):
         skip("参考或版本不同时不批量处理逐应用广告跟踪，需重新核对")
     print("  将关闭逐应用广告跟踪许可；应用清单从本机读取，不写入脚本。", flush=True)
     system_settings()

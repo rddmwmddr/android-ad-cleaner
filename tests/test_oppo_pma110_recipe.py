@@ -1,7 +1,6 @@
 """PMA110：未确认页面/控件时不点击，并保留服务类开关。"""
 import contextlib
 import io
-import os
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -100,13 +99,17 @@ class Pma110RecipeTests(unittest.TestCase):
         self.scope["wait_page"].assert_not_called()
         self.p.tap.assert_not_called()
 
-    def test_reference_mode_skips_bulk_tracking(self):
+    def test_safe_mode_skips_bulk_tracking(self):
+        """`--ref` 现在经 `Phone.safe_mode` 下来，不再有 AAC_REF 环境变量（#909、#947）。
+
+        型号与版本喂对：没有段首出口时这条路会走到 `p.off` 才收场，用例才会红。"""
         self.p.locked.return_value = False
+        self.p.safe_mode = True
         self.p.d.shell.side_effect = [SimpleNamespace(output="PMA110"),
                                       SimpleNamespace(output="PMA110_17.0.0.106(CN01)")]
-        with patch.dict(os.environ, {"AAC_REF": "1"}):
-            scope = load(self.p, ["广告跟踪"])
+        scope = load(self.p, ["广告跟踪"])
         self.assertEqual(scope["RESULTS"], [("广告跟踪", "跳过")])
+        self.assertEqual(scope["SKIPPED_STEPS"], ["广告跟踪"])
         self.p.off.assert_not_called()
 
     def test_lock_stops_subsequent_steps_before_navigation(self):
