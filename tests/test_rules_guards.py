@@ -1,5 +1,5 @@
-"""规则守卫：文档内容类四条（`DocGuards`）、引擎结构类两条（`EngineGuards`）与流程 / CI 类三条（`CiGuards`），
-沿用 #1000、#1002 的做法。
+"""规则守卫：文档内容类四条（`DocGuards`）、引擎结构类两条（`EngineGuards`）、流程 / CI 类三条
+（`CiGuards`）与发版产物一条（`ReleaseGuards`），沿用 #1000、#1002 的做法。
 
 `DocGuards`：CHANGELOG 条目一行一个票号、文档里的代码位置用符号名、指到的 `.py` 路径要存在、
 上报服务地址与凭据不写进仓库。`CiGuards`：回归命令与 CI 同一条、`.python-version` 与 Linux job 同版、
@@ -13,6 +13,9 @@
 引擎那两条：替换层只读 AST（不 import 手机版的模块，它们依赖只在手机上装得下的库），
 结果页喂 `tests/summary_cases.json` 的同一批样例给手机版的 `summarize()`；网页版那条在
 `tests/js/client.test.js`，跑的是真实的 `gui/web/index.html`（ADR-0017）。不需要 Android 设备或 JDK。
+
+发版产物那一条读 `index.html` 的源码：解析只走 `tool/release_assets.py`（定时 job 用同一份），
+不联网、不需要 GitHub 凭据；附件名集合与真实 Release 的比对在 `.github/workflows/release-assets.yml`。
 """
 import json
 import os
@@ -26,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from aac_android import view  # noqa: E402
 from test_rules_registry import top_level_names  # noqa: E402  同一份「模块层名字」判据，别再抄一份
-from tool import events  # noqa: E402
+from tool import events, release_assets  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -403,6 +406,36 @@ class EngineGuards(unittest.TestCase):
                 problems.append(f"aac_android/{name} 少了 {'、'.join(absent)}")
         self.assertEqual(problems, [], "替换层少了文件或导出名，手机会在打包后才暴露：\n"
                          + "\n".join(problems))
+
+
+# 下载页的卡片身份。`android` 那一条尤其不能改名：卡片角标、手机端高亮与 `baidu_rows.py`
+# 生成的安装说明都按它匹配，换一个 id 线上就看不到手机版。改这份清单要同时改卡片、手机端
+# 与 `baidu_rows.py`（`gui/baidu_rows.py` 的 SETUP / CHECK）。
+DOWNLOAD_IDS = {"mac-arm64", "mac-intel", "win-setup", "win-zip", "android"}
+
+
+class ReleaseGuards(unittest.TestCase):
+    def test_doc_release_apk_id_android(self):
+        """下载页 `REL.files` 的 id 集合冻结，且每个 `file` 的文件名里那段版本号等于 `REL.version`。
+
+        旧树也绿，守的是不回退：id 改名、或升级 `REL.version` 时漏改某一条的 `file`，
+        用户点下载就是 404，而页面脚本不报错。清单的增删要同时改卡片、手机端高亮与
+        `gui/baidu_rows.py` 的 SETUP / CHECK。与真实 Release 附件名的比对不在这里——
+        `tool/release_assets.py` 做那一半，由 `.github/workflows/release-assets.yml` 每周跑。
+        """
+        version, entries = release_assets.read_page((ROOT / "index.html").read_text(encoding="utf-8"))
+        self.assertTrue(version and entries, "index.html 里读不到 REL，这条守卫会空转")
+        ids = [entry_id for entry_id, _ in entries]
+        self.assertEqual(set(ids), DOWNLOAD_IDS,
+                         "REL.files 的 id 清单变了：改它要同时改下载卡片、手机端高亮与 "
+                         "gui/baidu_rows.py 的 SETUP / CHECK")
+        self.assertIn("android", ids, "手机版卡片的 id 必须逐字是 android，线上靠它匹配")
+        # 附件名固定是 `AndroidAdCleaner-<版本>-<平台>.<后缀>`，版本就是第二段。
+        stray = [f"{entry_id}: {name}" for entry_id, name in entries
+                 if name.split("-")[1:2] != [version]]
+        self.assertEqual(stray, [],
+                         f"这些附件的文件名第二段不是 REL.version（{version}）：升级版本时漏改了：\n"
+                         + "\n".join(stray))
 
 
 if __name__ == "__main__":

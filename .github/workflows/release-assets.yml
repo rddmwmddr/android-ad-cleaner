@@ -1,0 +1,36 @@
+# 下载页的 REL.files 与 GitHub Release 附件名对账（#1003）。
+# 附件改名、漏传，或 REL 里留了上一版的文件名，用户点下载就是 404，而页面脚本不报错。
+# 本地复现同一条命令：
+#   python3 tool/release_assets.py          # 比 REL.version 那个 tag
+#   python3 tool/release_assets.py v0.4.0   # 比指定的 tag
+# 退出码：0 一致；1 两侧文件名不一致（输出两份差集）；2 取数失败——网络抖动不该被当成不一致。
+# 只比文件名集合，不比 sha：sha 每次发版都变，比对会天天误报。
+name: release-assets
+on:
+  schedule:
+    # 每周一 UTC 02:00 = 北京时间 10:00
+    - cron: "0 2 * * 1"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 要比对的 Release tag（留空取 index.html 的 REL.version）
+        required: false
+permissions:
+  contents: read          # 读公开 Release 的附件名就够，不需要额外 secret
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+jobs:
+  assets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: 比对附件名
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: python3 tool/release_assets.py "$TAG"
