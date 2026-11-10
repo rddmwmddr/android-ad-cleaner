@@ -1,12 +1,14 @@
 """规则守卫：文档内容类四条（`DocGuards`）、注册表类一条（`RegistryGuards`）、引擎结构类两条（`EngineGuards`）、
 手机版界面一条（`AndroidGuards`）、流程 / CI 类三条（`CiGuards`）、夹具装配类两条（`FixtureGuards`）、
-发版产物一条（`ReleaseGuards`）与标准流一条（`StdioGuards`），沿用 #1000、#1002 的做法。
+桩与断言两条（`StubGuards`）、发版产物一条（`ReleaseGuards`）与标准流一条（`StdioGuards`），
+沿用 #1000、#1002 的做法。
 
 `DocGuards`：CHANGELOG 条目一行一个票号、文档里的代码位置用符号名、指到的 `.py` 路径要存在、
 上报服务地址与凭据不写进仓库。`RegistryGuards`：无锚点的顶层列表项按文档冻结上限。
 `AndroidGuards`：手机版页面状态只由 `AppModel.show()` 改写。`CiGuards`：回归命令与 CI 同一条、
 `.python-version` 与 Linux job 同版、两个平台各跑一版解释器。`FixtureGuards`：`tests/` 里绕过
-`fixtures.phone_stub()` 手搓假 `Phone` 的文件按清单冻结。
+`fixtures.phone_stub()` 手搓假 `Phone` 的文件按清单冻结。`StubGuards`：`with patch(...) as X`
+之后函数体里没再用过 `X` 的哑桩。
 
 都只读文件、比字符串或解析 AST：不联网、不执行被测代码、不引入 Markdown 或 YAML 解析依赖。
 守的是「仓库现在长什么样」，旧树也绿，守的是不回退（`dev.tests.behaviour-change-needs-red-test`
@@ -618,6 +620,166 @@ class FixtureGuards(unittest.TestCase):
         problem = freeze_report(found, PHONE_CLASS_FROZEN,
                                 "这些文件定义了本地的 Phone 类，改用 fixtures.phone_stub()")
         self.assertIsNone(problem, problem)
+
+
+# 桩住协作方就要用它（`dev.tests.stub-and-assert`、#1022）：`with patch(...) as X` 之后，
+# 函数体里必须再提到 X——断言、`X.called`、`X.return_value`、交给调用方都算。绑了名却从头
+# 到尾没再用，协作方的调用点被改成前向壳之后它照样绿，那才是哑桩。豁免按
+# (文件, 函数, 名字) 冻结；今天为空——判据只认「从头到尾没再用」，没有需要放行的形态。
+STUB_ALLOW = set()
+
+
+def scope_nodes(roots):
+    """从 `roots` 起的节点流，不进入嵌套的 def / lambda / class（它们有自己的局部名）。
+
+    过滤放在出栈处而不是入栈处：`func.body` 顶层直接写的嵌套 `def` 也是根之一，
+    只在入栈时过滤会让它连同里面绑的桩一起算到外层函数头上。
+    """
+    stack, out = list(roots), []
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+            continue
+        out.append(node)
+        stack.extend(ast.iter_child_nodes(node))
+    return out
+
+
+def patches(node):
+    """`patch(...)` 或 `patch.object(...)` 的调用；`patch.dict` 等其它形态不在判据内。"""
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id == "patch"
+    return (isinstance(func, ast.Attribute) and func.attr == "object"
+            and isinstance(func.value, ast.Name) and func.value.id == "patch")
+
+
+def patch_bound_names(func):
+    """[(名字, 行号)]：函数自身作用域里 `with patch(...) as NAME` 绑定的名字。"""
+    found = []
+    for node in scope_nodes(func.body):
+        if not isinstance(node, (ast.With, ast.AsyncWith)):
+            continue
+        for item in node.items:
+            if isinstance(item.optional_vars, ast.Name) and patches(item.context_expr):
+                found.append((item.optional_vars.id, node.lineno))
+    return found
+
+
+def uses_patch(func, name):
+    """`as` 之后还有没有提到这个桩：任何位置以读的方式出现即算（断言、`.called`、`return_value`、交接）。
+
+    `as NAME` 里的那次绑定是 `Store`，不算「用过」——正因为它是唯一一次出现才判哑桩。
+    这一处刻意进入嵌套函数与 lambda：桩被闭包用掉也是用掉了，按作用域切开会把
+    `callback = lambda: spy.assert_called_once()` 这类写法误判成哑桩。
+    """
+    return any(isinstance(node, ast.Name) and node.id == name and isinstance(node.ctx, ast.Load)
+               for node in ast.walk(func))
+
+
+def unobserved_stubs(source, filename, allow=STUB_ALLOW):
+    """([`文件:行号 函数 <- 名字`], 桩总数)：绑了名却从没再用过的桩。"""
+    hits, bound = [], 0
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for name, lineno in patch_bound_names(node):
+            bound += 1
+            if (filename, node.name, name) in allow or uses_patch(node, name):
+                continue
+            hits.append(f"{filename}:{lineno} {node.name} <- {name}")
+    return hits, bound
+
+
+# 合成样例：`dumb_stub` 绑了名从头到尾没用（哑桩），其余各式都该绿——`assert_*`、
+# `X.called`、把桩交给调用方、在闭包里用它。`outer` / `inner` 证明嵌套函数绑的桩记在
+# 它自己名下，不算到外层。字符串字面量不是真代码，守卫扫不到它。
+STUB_SAMPLE = """
+def dumb_stub(self):
+    with patch("m.other") as spy:
+        run()
+
+def loud_stub(self):
+    with patch("m.other") as spy:
+        run()
+    spy.assert_called_once()
+
+def negative_stub(self):
+    with patch("m.other") as out:
+        run()
+    self.assertFalse(out.called)
+
+def config_stub(self):
+    with patch("m.other") as spy:
+        run()
+    self.spy = spy
+
+def nested_use(self):
+    with patch("m.other") as spy:
+        callback = lambda: spy.assert_called_once()
+    self.callback = callback
+
+def outer(self):
+    with patch("m.a") as a:
+        run()
+    def inner():
+        with patch("m.b") as b:
+            run()
+    return a
+"""
+
+
+class StubGuards(unittest.TestCase):
+    def test_patched_collaborators_are_used(self):
+        """`with ... as X` 之后函数体里必须再提到 X，否则就是哑桩（`dev.tests.stub-and-assert`、#1022）。
+
+        现场是 `via_app_page` 被改成一行前向壳之后：四处 `patch` 成了哑桩，其中三处继续绿，
+        只有 `assert_called_once()` 把它们暴露出来。旧树也绿，守的是不回退。
+
+        「用过」按机械可判的宽形态算：`X.assert_*`（含 `assert_not_called`）、`X.call_args*` /
+        `call_count` / `mock_calls`、`X.called`、配置 `X.return_value`、`self.x = X` 交接、
+        `for stub in (…, X, …)` 收集后统一断言——凡是以读的方式提到 X 都算。`patch("builtins.print")`
+        这类静音器没有 `as`，`patch.object(x, y, return_value=…)` 不绑名，都不进判据。
+
+        #1022 票面按一个只认四条断言形态的正则量到「2 处」；那个正则漏了多参数 `patch.object`、
+        单引号与「收集后统一断言」的写法。按本条判据重算（每个函数自身作用域里的 `as NAME`
+        绑定）：`tests/` 全库 14 处、13 个函数、6 份文件，全部有后续使用，没有真哑桩。
+        票面设想的豁免（`test_adapt_survey_690.py` 的 `run_cmd <- factory`、`forward <- shell`）
+        都是 `self.factory = factory` 形态，按本条判据本来就绿，所以 `STUB_ALLOW` 今天为空。
+
+        已知漏口：只认裸名 `patch(...)` / `patch.object(...)`，`unittest.mock.patch(...)` 这类
+        限定名、`patcher.start()`、`@patch(...)` 装饰器传参、`patch.multiple` 都不在判据内
+        （仓库今天没有这几种形态，引入时扩判据并补用例）；`as` 的目标是属性（`as self.x`）
+        时既不计数也不判；「用过」不区分「断言了调用」与「只配了返回值」——桩被配置成返回
+        mock、协作方却已不调用它时仍会绿，那类要 `assert_called_once()`，本守卫看不到；
+        名字被重新赋值（`spy = obj()`）后再读也算「用过」，同理漏报；它也不检查
+        `assert_called_once_with` 的实参写对没有。
+        """
+        hits, bound = [], 0
+        for path in python_sources():
+            found, count = unobserved_stubs(path.read_text(encoding="utf-8"),
+                                            path.relative_to(TESTS).as_posix())
+            hits.extend(found)
+            bound += count
+        self.assertGreater(bound, 0, "tests/ 里一个 `patch(...) as name` 都没扫到，这条守卫会空转")
+        self.assertEqual(hits, [], "桩住协作方就要用它；`as` 绑了名却从没再提到的桩，"
+                         "协作方的调用点被改掉时它们照样绿：\n" + "\n".join(hits))
+
+    def test_judgement_and_exemptions(self):
+        """判据本身：只用绑定的名字才红；断言 / `.called` / 交接 / 闭包都算用过；豁免点名即跳过（#1022）。"""
+        hits, bound = unobserved_stubs(STUB_SAMPLE, "sample.py")
+        self.assertEqual(bound, 7, "合成样例的桩没扫全，这条用例就测不到判据")
+        self.assertEqual(hits, ["sample.py:3 dumb_stub <- spy", "sample.py:30 inner <- b"],
+                         "哑桩要红；断言 / `.called` / 交接 / 闭包四种形态不该被误伤")
+        self.assertFalse(any(" outer <- " in line for line in hits),
+                         "嵌套函数绑的桩要记在它自己名下，不能算到外层函数头上")
+        one = 'def one():\n    with patch("m.x") as spy:\n        go()\n'
+        self.assertEqual(unobserved_stubs(one, "sample.py")[0], ["sample.py:2 one <- spy"])
+        self.assertEqual(unobserved_stubs(one, "sample.py",
+                                          allow={("sample.py", "one", "spy")})[0], [],
+                         "豁免清单点到的要跳过，否则清单是摆设")
 
 
 ANDROID_SRC = ROOT / "android"
