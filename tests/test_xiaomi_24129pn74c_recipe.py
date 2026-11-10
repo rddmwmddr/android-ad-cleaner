@@ -189,13 +189,14 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
         self.assertNotIn("浏览器底栏「菜单」未找到", src)
 
     def test_menu_entry_stopping_on_a_blank_focus_still_fails_loudly(self):
-        """底栏有「菜单」却两次都没进设置页、中途读不出前台：不能当成「没有菜单」改走「我的」（#581）。"""
+        """底栏有「菜单」却两次都没进设置页、中途读不出前台：不能当成「没有菜单」改走「我的」（#581）。
+        收尾行与「到了但页面不对」同形，读不出前台时落点是「未知页面」（#912）。"""
         _p, scope, _out = self.browser_phone(
             [(0.0, BOTTOM_WITH_MENU), (0.3, MENU_POPUP), (1.2, TOOLBAR_PANEL),
              (2.0, BOTTOM_WITHOUT_MENU)],
             focus=((0.0, BROWSER), (1.0, "")))
         with contextlib.redirect_stdout(io.StringIO()):
-            with self.assertRaisesRegex(RuntimeError, "浏览器设置页没有打开；停在 读不出前台"):
+            with self.assertRaisesRegex(RuntimeError, "浏览器设置页没有打开；停在 未知页面"):
                 scope["browser_settings"]()
 
     def test_my_entry_closes_the_login_popup_before_looking_for_settings(self):

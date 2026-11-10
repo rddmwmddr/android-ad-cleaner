@@ -396,7 +396,9 @@ def used_by(recipes_dir):
     只认字面量会把它的机型漏掉（生成表里「用过的机型」少一台）。经共享入口助手
     `start_or_skip(package, ".X", …)` 拉起的那几条同样是这台机用过的直达（#902）。
     `am start -a <action> -p <包名>` 这类公开 Intent 入口单记一档（#956）。
-    """
+
+    只认字面量：经 `reach(p, ENTRIES[...])` 消费的那几条（浏览器段，#912）看不出来，
+    这张表会把用得上的机型算成没用过。"""
     import glob, os
     found = {}
     for f in glob.glob(os.path.join(recipes_dir, "*", "recipe*.py")):
@@ -451,9 +453,12 @@ def landed(p, d):
     return got_pkg.lower() == d.pkg.lower() and got_act.lower() == full(d.pkg, d.activity).lower()
 
 
-def reach(p, entry, log=print, now=None, sleep=None, settle=1.2):
+def reach(p, entry, log=print, now=None, sleep=None, settle=1.2, allow_search=True):
     """按快慢依次试：直达页面 → 设置搜索。到了返回用的是哪一档（"direct" / "search"），都不行返回 None，
-    由调用方照 `entry.menu` 走菜单或跳过。`now` / `sleep` / `settle` 给测试换掉真实等待。"""
+    由调用方照 `entry.menu` 走菜单或跳过。`now` / `sleep` / `settle` 给测试换掉真实等待。
+
+    `allow_search=False` 只试直达档：设置搜索会把设备交给系统设置（另一个 App 的搜索页），
+    入口必须留在本 App 里的分组（浏览器段，#912）搜到了也是错的地方。"""
     import time
     import wait
 
@@ -475,6 +480,8 @@ def reach(p, entry, log=print, now=None, sleep=None, settle=1.2):
         if ok and (not d.expect or p.expect_page(d.expect, 3)):
             return "direct"
         log(f"  · 直达 {where} 没落在这一页，换下一档")
+    if not allow_search:
+        return None
     for s in entry.search:
         extra = {"path": s.path} if s.path else {}
         if p.setting(s.keyword, s.result, **extra):

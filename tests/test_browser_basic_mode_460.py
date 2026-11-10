@@ -48,7 +48,12 @@ class BrowserBasicMode460(unittest.TestCase):
         for recipe, start_args in RECIPES:
             with self.subTest(recipe=str(recipe)):
                 p, out = self.run_browser_step(recipe, BASIC)
-                if start_args:
+                if recipe.parent.name == "xiaomi-24129PN74C" and start_args:
+                    # 这份先试直达设置页、落空后才裸拉起首页，跳过判定仍落在首页这一页（#912）
+                    self.assertEqual([c.args for c in p.start.call_args_list],
+                                     [("com.android.browser", ".BrowserSettingsActivity"),
+                                      start_args])
+                elif start_args:
                     p.start.assert_called_once_with(*start_args)
                 self.assertIn("== 浏览器", out)
                 self.assertIn("基本模式", out)
@@ -63,7 +68,7 @@ class BrowserBasicMode460(unittest.TestCase):
         for recipe, start_args in RECIPES:
             with self.subTest(recipe=str(recipe)):
                 p, out = self.run_browser_step(recipe, HOME)
-                if start_args:
+                if start_args and recipe.parent.name != "xiaomi-24129PN74C":
                     p.start.assert_called_once_with(*start_args)
                 self.assertIn("== 浏览器", out)
                 self.assertNotIn("基本模式", out)
