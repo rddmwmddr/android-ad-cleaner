@@ -5,6 +5,7 @@
 """
 import json
 import os
+from typing import Any, cast
 
 PREFIX = "#aac:event "
 PAYLOAD_PREFIX = "#aac:payload "
@@ -12,7 +13,7 @@ PAYLOAD_PREFIX = "#aac:payload "
 KINDS = ("paused", "resumed", "locked", "ui_busy", "link_lost", "failed_steps")
 
 
-def emit(kind, **data):
+def emit(kind: str, **data: Any) -> None:
     """发一条事件。kind 拼错是编程错误，直接抛；没设 AAC_EVENTS 时什么都不做。
 
     `data` 是这条事件的载荷（`failed_steps` 的段名列表），跟 kind 进同一行 JSON。
@@ -25,28 +26,28 @@ def emit(kind, **data):
     print(PREFIX + json.dumps({"kind": kind, **data}, ensure_ascii=False), flush=True)
 
 
-def payload(text):
+def payload(text: str) -> None:
     """发一段上报载荷（比如页面骨架），一行一个前缀。没设 AAC_EVENTS 时什么都不做。"""
     if not os.environ.get("AAC_EVENTS"):
         return
-    for line in str(text).splitlines():
+    for line in text.splitlines():
         if line.strip():
             print(PAYLOAD_PREFIX + line, flush=True)
 
 
-def is_event(line):
+def is_event(line: str) -> bool:
     return line.startswith(PREFIX)
 
 
-def is_payload(line):
+def is_payload(line: str) -> bool:
     return line.startswith(PAYLOAD_PREFIX)
 
 
-def strip_payload(line):
+def strip_payload(line: str) -> str:
     return line[len(PAYLOAD_PREFIX):] if is_payload(line) else line
 
 
-def parse_data(line):
+def parse_data(line: str) -> dict[str, Any] | None:
     """事件行 → 整个 dict（kind 与载荷）；不是事件行、kind 不在词表里、解析不出来，一律 None。"""
     if not is_event(line):
         return None
@@ -59,7 +60,8 @@ def parse_data(line):
     return data
 
 
-def parse(line):
+def parse(line: str) -> str | None:
     """事件行 → kind；不是事件行、或解析不出来，一律返回 None。"""
     data = parse_data(line)
-    return data["kind"] if data else None
+    # parse_data 已经把 kind 收在 KINDS 里，这里的 Any 只是 JSON 解析出来的值类型。
+    return cast(str, data["kind"]) if data else None

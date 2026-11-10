@@ -5,14 +5,23 @@
 import glob
 import os
 import re
+from typing import TypedDict
 
 
-def recipe_files(recipes_dir):
+class RecipeMeta(TypedDict):
+    """脚本头部的三段元数据。调用方按字段名取值，缺省时是空串 / 空列表，不是缺键。"""
+
+    build: str
+    steps: list[str]
+    models: list[str]
+
+
+def recipe_files(recipes_dir: str) -> list[str]:
     """`recipes_dir` 下每个机型脚本的路径，含 `recipe_android15.py` 这类变体。"""
     return sorted(glob.glob(os.path.join(recipes_dir, "*", "recipe*.py")))
 
 
-def recipe_meta(path):
+def recipe_meta(path: str | os.PathLike[str]) -> RecipeMeta:
     with open(path, encoding="utf-8") as f:
         src = f.read()
     m = re.search(r'^BUILD\s*=\s*"([^"]*)"', src, re.M)

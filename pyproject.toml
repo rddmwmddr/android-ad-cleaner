@@ -21,6 +21,28 @@ check_untyped_defs = true
 # 不掩盖别的错误。其余错误的压制一律不做。
 disable_error_code = ["var-annotated"]
 
+# 这六个模块不碰设备、不碰手机界面、不依赖假对象，注解可以一路追到调用方；
+# 严格档给它们，其余引擎目录保持宽松档（#997）。`tool/` 没有 `__init__.py`，
+# 模块名就是文件名，不是 `tool.<名字>`。
+#
+# 不写 `strict = true`：实测 mypy 1.18.2 在 overrides 里把它当全局设置（全仓一起变严格），
+# per-module 只认逐项 flag。`warn_redundant_casts` 不是 per-module 可写项，
+# `warn_unused_configs` 只对全局有意义，两项只能留在缺省。
+[[tool.mypy.overrides]]
+module = ["polarity", "channel_policy", "host", "events", "recipe_meta", "reader"]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_calls = true
+disallow_untyped_decorators = true
+disallow_any_generics = true
+disallow_subclassing_any = true
+warn_return_any = true
+no_implicit_optional = true
+warn_unused_ignores = true
+no_implicit_reexport = true
+strict_equality = true
+extra_checks = true
+
 # 两个运行时依赖没有 py.typed、也没出 stub 包；按「解析不到」处理，
 # 不把它们的 Any 算进我们自己的检查面。
 [[tool.mypy.overrides]]

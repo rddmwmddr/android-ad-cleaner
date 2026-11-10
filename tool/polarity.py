@@ -16,8 +16,9 @@ AD_WORDS = re.compile(r"广告|廣告|跟踪|追踪|追蹤|推荐|推薦|个性�
 TRACK_WORDS = re.compile(r"广告|廣告|跟踪|追踪|追蹤")
 
 
-def want_state(title):
+def want_state(title: str | None) -> bool | None:
     """这个开关该处在什么状态：False=关（普通广告开关）；True=开（保护类开关）；None=不碰。"""
-    if NEG_PREFIX.search(title or ""):
-        return True if AD_WORDS.search(title) else None
+    text = title or ""
+    if NEG_PREFIX.search(text):
+        return True if AD_WORDS.search(text) else None
     return False
