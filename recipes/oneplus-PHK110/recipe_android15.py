@@ -1,5 +1,6 @@
 # 一加 Ace 2，Android 15；2026-10-29 手动路径实测，自动脚本尚未在真机整段验证。
 # 不修改通知、挂起包、快应用、系统广告跟踪或服务类开关。
+# 2026-11-10 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，未复测（#933）。
 BUILD = "PHK110_15.0.0.601(CN01)"
 
 import time
@@ -8,7 +9,11 @@ RESULTS = []
 
 
 def page(activity, title, timeout=6):
-    """确认前台 Activity、标题和开关坐标稳定；出现协议时不操作。"""
+    """确认前台 Activity、标题和开关坐标稳定；出现协议时不操作。
+
+    `title` 可以给一组等价标题：软件商店的隐私页随商店 App 版本叫「隐私」或「隐私授权管理」（#933）。"""
+    titles = (title,) if isinstance(title, str) else tuple(title)
+
     def sample():
         if p.locked():
             raise GiveUp()
@@ -21,7 +26,7 @@ def page(activity, title, timeout=6):
             print("  ! 出现协议或权限提示，跳过")
             raise GiveUp()
         switches = p.switches(root)
-        if (not any(t == title for t, _, _ in texts)
+        if (not any(t in titles for t, _, _ in texts)
                 or any(not (0 < xy[0] < p.W and 0 < xy[1] < p.H)
                        for _, _, xy in switches)):
             return None
@@ -29,12 +34,18 @@ def page(activity, title, timeout=6):
 
     found = until(sample, timeout=timeout, poll=.2, same=2, now=time.monotonic, sleep=time.sleep)
     if not found:
-        print(f"  ✗ 未确认页面「{title}」，跳过")
+        print(f"  ✗ 未确认页面「{'、'.join(titles)}」，跳过")
     return bool(found)
 
 
 def navigate(label, activity, title):
-    return p.tap(label, exact=True) and page(activity, title)
+    """`label` 可以给一组等价入口文案，按顺序试；点到第一个就按落点页面判（#933）。"""
+    labels = (label,) if isinstance(label, str) else tuple(label)
+    for name in labels:
+        if p.tap(name, exact=True, quiet=len(labels) > 1):
+            return page(activity, title)
+    p.note_miss(" / ".join(labels))
+    return False
 
 
 def off_exact(names, activity, title):
@@ -120,7 +131,7 @@ def _():
 def _():
     if not open_settings("com.heytap.market", "SettingActivity", "软件商店"):
         return False
-    if not navigate("隐私授权管理", "PrivacyActivity", "隐私授权管理"):
+    if not navigate(("隐私", "隐私授权管理"), "PrivacyActivity", ("隐私", "隐私授权管理")):
         return False
     if not navigate("个性化推荐", "PersonalRecommendActivity", "个性化推荐"):
         return False

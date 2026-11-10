@@ -1,5 +1,6 @@
 # realme GT Neo5 SE（RMX3700，ColorOS 16.0.5.1300(CN01)）机型脚本。
-# 路径实测：2026-10-30，下拉搜索 2026-11-02 补测。只收录已走通的：
+# 路径实测：2026-10-30，下拉搜索 2026-11-02 补测。软件商店隐私入口接受「隐私」与
+# 「隐私授权管理」两种叫法（#933，未复测）。只收录已走通的：
 # 广告跟踪、软件商店、浏览器、下拉搜索、小布建议、应用建议。
 # 不挂包、不动通知渠道；这些操作仍走 run.py 的独立、需确认流程。
 #
@@ -48,7 +49,10 @@ SEARCH_CARD_CHILDREN = ["未下载应用推荐", "应用建议小卡"]
 
 
 def wait_page(activity, title, timeout=8):
-    """等到活动、页标题以及可点击区域连续稳定，避免横向动画期间的越界坐标。"""
+    """等到活动、页标题以及可点击区域连续稳定，避免横向动画期间的越界坐标。
+
+    `title` 可以给一组等价标题：软件商店的隐私页随商店 App 版本叫「隐私」或「隐私授权管理」（#933）。"""
+    titles = (title,) if isinstance(title, str) else tuple(title)
     deadline, previous = time.monotonic() + timeout, None
     while time.monotonic() < deadline:
         if p.locked():
@@ -63,7 +67,7 @@ def wait_page(activity, title, timeout=8):
                and "Button" in n.get("class", "") for t, _, n in texts):
             print("  ! 出现协议/权限按钮，本段跳过，不代为同意")
             return False
-        if not any(t == title for t, _, _ in texts):
+        if not any(t in titles for t, _, _ in texts):
             time.sleep(0.2)
             continue
         switches = p.switches(root)
@@ -76,7 +80,7 @@ def wait_page(activity, title, timeout=8):
             return True
         previous = signature
         time.sleep(0.25)
-    print(f"  ✗ 未确认目标页面「{title}」，不操作开关")
+    print(f"  ✗ 未确认目标页面「{'、'.join(titles)}」，不操作开关")
     return False
 
 
@@ -84,11 +88,13 @@ def tap_by_scroll(text, max_scrolls=12):
     """在长列表里自己往下翻着找并点击。
 
     p.tap 内部会先回到页顶；小布建议页（小布建议 Activity）回顶时会判定「离开了当前页」并抛错，
-    所以那一类页面必须用这个手动翻找的写法。
+    所以那一类页面必须用这个手动翻找的写法。`text` 可以给一组等价文案，按顺序试（#933）。
     """
+    names = (text,) if isinstance(text, str) else tuple(text)
     for _ in range(max_scrolls):
-        if p.find(text, exact=True):
-            return p.tap(text, exact=True, scrolls=0)
+        for name in names:
+            if p.find(name, exact=True):
+                return p.tap(name, exact=True, scrolls=0)
         if not p.scroll_more():
             break
     return False
@@ -203,9 +209,11 @@ def _():
         time.sleep(1.2)
 
     # 个性化推荐不在「隐私」页，在「账号与隐私 → 隐私授权管理 → 个性化推荐」。
+    # 商店 App 自己升级，这一行在有的版本里叫「隐私」（#933）；两页都可以当落点判。
     tap_by_scroll("账号与隐私")
-    if tap_by_scroll("隐私授权管理"):
-        if wait_page("com.heytap.market.mine.cn.setting.ui.PrivacyActivity", "隐私授权管理"):
+    privacy = ("隐私", "隐私授权管理")
+    if tap_by_scroll(privacy):
+        if wait_page("com.heytap.market.mine.cn.setting.ui.PrivacyActivity", privacy):
             if tap_by_scroll("个性化推荐"):
                 if wait_page("com.heytap.market.mine.cn.setting.ui.PersonalRecommendActivity",
                              "个性化推荐"):
@@ -219,6 +227,7 @@ def _():
         p.back()
         time.sleep(1.0)
     else:
+        p.note_miss(" / ".join(privacy))
         print("  ! 没找到「隐私授权管理」")
     return True
 

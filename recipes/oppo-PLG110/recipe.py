@@ -1,5 +1,6 @@
 # OPPO Find X9 Pro（PLG110），ColorOS 16.0.10.501(CN01) / Android 16。
 # 2026-11-01 真机逐页记录；仅收录本机已识别的开关，不包含包操作和通知渠道。
+# 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，未复测（#933）。
 BUILD = "PLG110_16.0.10"
 MODELS = ["PLG110"]
 
@@ -70,9 +71,17 @@ def open_page(command, activity, title=None):
 
 
 def tap_page(text, activity, title=None, scrolls=4, exact=True):
-    require(p.tap(text, exact=exact, scrolls=scrolls), f"未找到入口「{text}」")
-    wait_page(activity, title or text)
-    return True
+    """`text` 可以给一组等价文案，按顺序试，先命中的点进去。
+
+    软件商店的隐私入口随商店 App 版本叫「隐私」或「隐私授权管理」（#933），单写一支就一定有一段
+    0 项。认不到时留下停在哪个页面与结构摘要，与 note_miss 同形。"""
+    names = (text,) if isinstance(text, str) else tuple(text)
+    for name in names:
+        if p.tap(name, exact=exact, scrolls=scrolls, quiet=len(names) > 1):
+            wait_page(activity, title or name)
+            return True
+    p.note_miss(" / ".join(names))
+    raise RuntimeError(f"未找到入口「{names[0]}」")
 
 
 def read_switches(activity, title=None, max_screens=8, expect=None):
@@ -213,7 +222,7 @@ def _():
     global VERIFIED_SWITCHES
     print("  将关闭个性化推荐与推广服务；保留下载更新与应用安全。", flush=True)
     app_settings("com.heytap.market", MARKET + "SettingActivity", "软件商店")
-    tap_page("隐私授权管理", MARKET + "PrivacyActivity", scrolls=8)
+    tap_page(("隐私", "隐私授权管理"), MARKET + "PrivacyActivity", scrolls=8)
     activity = MARKET + "PersonalRecommendActivity"
     tap_page("个性化推荐", activity, scrolls=0)
     close_named(["个性化推荐"], "软件商店·个性化推荐", activity, "个性化推荐", 4)
