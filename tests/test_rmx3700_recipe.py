@@ -2,14 +2,13 @@
 import contextlib
 import io
 from pathlib import Path
-import sys
 from types import SimpleNamespace
 import unittest
 
+from fixtures import load_recipe
 
-RECIPE = Path(__file__).with_name("recipe.py")
-sys.path.insert(0, str(RECIPE.parents[2] / "tests"))
-from fixtures import load_recipe  # noqa: E402  装载器与引擎注入同一份前导
+ROOT = Path(__file__).resolve().parents[1]
+RECIPE = ROOT / "recipes/realme-RMX3700/recipe.py"
 
 STEPS = ["广告跟踪", "软件商店", "浏览器", "下拉搜索", "小布建议", "应用建议"]
 
