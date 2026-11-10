@@ -58,7 +58,7 @@ class AuditTests(unittest.TestCase):
     def test_missing_category_is_reported(self):
         lines = triage_audit.audit([ticket(11, "needs-triage")])
         self.assertEqual(rules_hit(lines), {"doc.triage.one-category-label"})
-        self.assertTrue(lines[0].startswith("#11 "))
+        self.assertTrue(lines[0].startswith(f"#{11} "))
 
     def test_two_categories_are_reported(self):
         lines = triage_audit.audit([ticket(12, "bug", "enhancement")])
@@ -81,11 +81,11 @@ class AuditTests(unittest.TestCase):
 
     def test_line_carries_rule_and_labelled_set(self):
         lines = triage_audit.audit([ticket(9, "needs-triage", "bug", "enhancement")])
-        self.assertIn("#9  doc.triage.one-category-label  bug,enhancement,needs-triage", lines)
+        self.assertIn(f"#{9}  doc.triage.one-category-label  bug,enhancement,needs-triage", lines)
 
     def test_findings_stay_sorted_by_ticket(self):
         lines = triage_audit.audit([ticket(30), ticket(2), ticket(11)])
-        self.assertEqual([line.split()[0] for line in lines], ["#2", "#11", "#30"])
+        self.assertEqual([line.split()[0] for line in lines], [f"#{2}", f"#{11}", f"#{30}"])
 
     def test_second_category_clears_once_removed(self):
         self.assertTrue(triage_audit.audit([ticket(16, "bug", "enhancement")]))
@@ -116,7 +116,7 @@ class MainTests(unittest.TestCase):
         payload = [ticket(5, "bug", "enhancement")]
         code, out, _ = self.run_main(["--input", self.write_dump(payload)])
         self.assertEqual(code, triage_audit.EXIT_FINDINGS)
-        self.assertIn("#5  doc.triage.one-category-label", out)
+        self.assertIn(f"#{5}  doc.triage.one-category-label", out)
 
     def test_fetch_failure_is_not_a_finding(self):
         def boom():
