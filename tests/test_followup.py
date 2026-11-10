@@ -1,7 +1,8 @@
-"""复测队列核对（tool/followup.py）：只读报出标签与主表的差异（#988）。"""
+"""复测队列核对与写回（tool/followup.py）：报出标签与队列的差异，`--write` 把表补到一致（#988、#989）。"""
 import contextlib
 import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -135,18 +136,91 @@ class FakeGh:
         return self.out if self.out is not None else json.dumps(self.issues), "", 0
 
 
-class CommandTests(unittest.TestCase):
+def main_rows(text):
+    """`## 当前队列` 里第一张表的数据行（不含表头与分隔行）。"""
+    lines = text.splitlines()
+    start, end = followup.table_ranges(lines, *followup.section_bounds(lines))[0]
+    return lines[start + 2:end]
+
+
+class ApplyTests(unittest.TestCase):
+    def test_missing_rows_land_at_the_end_of_the_main_table_in_number_order(self):
+        text = doc("| #20 | @b | 机型 | PR #2 | 输出 |")
+        result = followup.scan(text, [{"number": 20, "author": {"login": "b"}},
+                                      {"number": 31, "author": {"login": "c"}},
+                                      {"number": 25, "author": {"login": "d"}}])
+        out = followup.apply(text, result)
+        self.assertEqual(main_rows(out)[-2:], ["| #25 | @d | — | — | — |",
+                                               "| #31 | @c | — | — | — |"],
+                         "缺行按票号升序补在主表末尾，五列都用 `—` 占位")
+
+    def test_a_ticket_without_an_author_gets_the_placeholder_without_an_at_sign(self):
+        text = doc()
+        out = followup.apply(text, followup.scan(text, [{"number": 7}]))
+        self.assertIn("| #7 | — | — | — | — |", out)
+        self.assertNotIn("@—", out)
+
+    def test_an_expired_row_leaves_the_main_table(self):
+        text = doc("| #11 | @b | 机型 | PR #2 | 输出 |",
+                   "| #12 | @c | 机型 | PR #3 | 输出 |")
+        out = followup.apply(text, followup.scan(text, [{"number": 11}]))
+        gone = [line for line in text.splitlines() if line not in out.splitlines()]
+        self.assertEqual(gone, ["| #12 | @c | 机型 | PR #3 | 输出 |"])
+        self.assertEqual(out.splitlines(), [line for line in text.splitlines() if line not in gone],
+                         "除了删掉那一行，别的逐字不动")
+
+    def test_an_expired_row_leaves_the_batch_table_it_is_in(self):
+        text = doc("| #11 | @b | 机型 | PR #2 | 输出 |",
+                   batch=("| #90 | @old | 机型 | PR #1 | 输出 |",))
+        out = followup.apply(text, followup.scan(text, [{"number": 11}]))
+        self.assertNotIn("#90", out, "过期行从它实际所在的那张表里删")
+        self.assertIn("### 更早的一批", out)
+        self.assertEqual(len(out.splitlines()), len(text.splitlines()) - 1)
+
+    def test_a_row_whose_tickets_are_only_partly_expired_is_kept(self):
+        text = doc("| #193 / #581 | @a | 机型 | PR #1 | 输出 |")
+        out = followup.apply(text, followup.scan(text, [{"number": 581},
+                                                        {"number": 12}]))
+        self.assertIn("| #193 / #581 | @a | 机型 | PR #1 | 输出 |", out,
+                      "删整行会连带丢掉仍开着的那张票，宁可留着让核对继续报差异")
+
+    def test_a_consistent_queue_comes_back_byte_for_byte(self):
+        text = doc("| #11 | @b | 机型 | PR #2 | 输出 |")
+        self.assertEqual(followup.apply(text, followup.scan(text, [{"number": 11}])), text)
+
+    def test_everything_outside_the_queue_tables_is_unchanged(self):
+        text = doc("| #11 | @b | 机型 | PR #2 | 输出 |")
+        out = followup.apply(text, followup.scan(text, [{"number": 11},
+                                                        {"number": 7, "author": {"login": "s"}}]))
+        self.assertIn("2026-11-10：一段日期记录，不该被当成表。", out)
+        self.assertIn("| #91 | @q | 机型 | 数据 |", out, "别的 `##` 小节里的表不动")
+        self.assertIn("| #88 | @early |", out, "队列小节之前的表也不动")
+
+    def test_applying_twice_changes_nothing_more(self):
+        text = doc("| #11 | @b | 机型 | PR #2 | 输出 |")
+        issues = [{"number": 11, "author": {"login": "b"}},
+                  {"number": 7, "author": {"login": "s"}}]
+        once = followup.apply(text, followup.scan(text, issues))
+        self.assertEqual(followup.apply(once, followup.scan(once, issues)), once)
+
+
+class DocumentCase(unittest.TestCase):
+    """跑 `main()` 的基线：临时目录里一份样例文档 + 假 `gh`。"""
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.path = Path(self.tmp.name) / "release-followup.md"
 
-    def run_main(self, text, gh):
+    def run_main(self, text, gh, argv=()):
         self.path.write_text(text, encoding="utf-8")
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = followup.main([], runner=gh.runner.run, doc=self.path)
+            code = followup.main(list(argv), runner=gh.runner.run, doc=self.path)
         return code, out.getvalue(), err.getvalue()
+
+
+class CommandTests(DocumentCase):
 
     def test_the_gh_query_covers_every_open_ticket(self):
         gh = FakeGh([{"number": 11}])
@@ -207,9 +281,78 @@ class CommandTests(unittest.TestCase):
         gh = FakeGh()
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = followup.main(["--write"], runner=gh.runner.run, doc=self.path)
+            code = followup.main(["--dry-run"], runner=gh.runner.run, doc=self.path)
         self.assertEqual(code, 2)
         self.assertEqual(gh.runner.run_calls, [], "参数不合规时不碰 gh")
+
+
+class WriteTests(DocumentCase):
+    def test_write_adds_the_missing_row_and_rechecks_clean(self):
+        gh = FakeGh([{"number": 11, "author": {"login": "b"}},
+                     {"number": 7, "author": {"login": "s"}}])
+        code, out, _ = self.run_main(doc("| #11 | @b | 机型 | PR #2 | 输出 |"), gh,
+                                     argv=["--write"])
+        self.assertEqual(code, 0, "写回后再核对一遍，应当一致")
+        self.assertIn("补 1 行", out)
+        self.assertIn("一致", out)
+        stored = self.path.read_text(encoding="utf-8")
+        self.assertIn("| #7 | @s | — | — | — |", stored)
+
+    def test_write_drops_an_expired_row_from_the_batch_table(self):
+        text = doc("| #11 | @b | 机型 | PR #2 | 输出 |",
+                   batch=("| #90 | @old | 机型 | PR #1 | 输出 |",))
+        gh = FakeGh([{"number": 11, "author": {"login": "b"}}])
+        code, _, _ = self.run_main(text, gh, argv=["--write"])
+        self.assertEqual(code, 0)
+        stored = self.path.read_text(encoding="utf-8")
+        self.assertNotIn("#90", stored)
+        self.assertIn("### 更早的一批", stored, "批次表本身还在，只少了那一行")
+
+    def test_a_second_write_changes_nothing(self):
+        gh = FakeGh([{"number": 11, "author": {"login": "b"}},
+                     {"number": 7, "author": {"login": "s"}}])
+        self.run_main(doc("| #11 | @b | 机型 | PR #2 | 输出 |"), gh, argv=["--write"])
+        first = self.path.read_text(encoding="utf-8")
+        code, _, _ = self.run_main(first, gh, argv=["--write"])
+        self.assertEqual(code, 0)
+        self.assertEqual(self.path.read_text(encoding="utf-8"), first, "第二次一个字都不该改")
+
+    def test_write_does_not_touch_a_consistent_document(self):
+        text = doc("| #11 | @b | 机型 | PR #2 | 输出 |")
+        gh = FakeGh([{"number": 11, "author": {"login": "b"}}])
+        self.path.write_text(text, encoding="utf-8")
+        if os.name == "posix":
+            os.chmod(self.path, 0o444)      # 真去写就会失败，只读是「没动文件」的判据
+            self.addCleanup(os.chmod, self.path, 0o644)
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = followup.main(["--write"], runner=gh.runner.run, doc=self.path)
+        self.assertEqual(code, 0, err.getvalue())
+        self.assertEqual(self.path.read_text(encoding="utf-8"), text)
+
+    def test_a_failed_gh_call_leaves_the_document_alone_even_with_write(self):
+        text = doc("| #11 | @b | 机型 | PR #2 | 输出 |")
+        code, out, err = self.run_main(text, FakeGh(rc=1), argv=["--write"])
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "")
+        self.assertEqual(self.path.read_text(encoding="utf-8"), text)
+
+    def test_write_keeps_lf_line_endings(self):
+        gh = FakeGh([{"number": 11, "author": {"login": "b"}},
+                     {"number": 7, "author": {"login": "s"}}])
+        self.run_main(doc("| #11 | @b | 机型 | PR #2 | 输出 |"), gh, argv=["--write"])
+        # macOS / Linux 的 os.linesep 就是 `\n`，这条只有 Windows job 能证伪
+        self.assertNotIn(b"\r\n", self.path.read_bytes())
+
+    def test_write_still_reports_a_difference_it_will_not_resolve(self):
+        # `#193 / #581` 只有一半过期：删整行会丢掉仍开着的那张，所以留着，写回后照报差异
+        text = doc("| #193 / #581 | @a | 机型 | PR #1 | 输出 |")
+        gh = FakeGh([{"number": 581, "author": {"login": "a"}}])
+        code, out, _ = self.run_main(text, gh, argv=["--write"])
+        self.assertEqual(code, 1)
+        self.assertIn("过期行 1", out)
+        self.assertIn("| #193 / #581 | @a | 机型 | PR #1 | 输出 |",
+                      self.path.read_text(encoding="utf-8"))
 
 
 class RealQueueTests(unittest.TestCase):
@@ -221,6 +364,17 @@ class RealQueueTests(unittest.TestCase):
         self.assertGreater(len(table.issues), 0)
         self.assertIn(193, table.issues)
         self.assertIn(581, table.issues, "`#193 / #581` 这种合列行要两个号都算")
+
+    def test_apply_handles_the_checked_in_document(self):
+        text = followup.DOC.read_text(encoding="utf-8")
+        known = [{"number": number} for number in followup.table_of(text).issues]
+        self.assertEqual(followup.apply(text, followup.scan(text, known)), text,
+                         "既有票号全在时，真实文档原样返回")
+
+        out = followup.apply(text, followup.scan(text, known + [{"number": 999999}]))
+        self.assertIn(999999, followup.table_of(out).issues, "写回后的文档仍是合法队列")
+        self.assertEqual(len(out.splitlines()), len(text.splitlines()) + 1)
+        self.assertIn("\n| #999999 | — | — | — | — |\n", out, "补行落在主表末尾而不是文件末尾")
 
 
 if __name__ == "__main__":

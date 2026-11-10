@@ -1,11 +1,13 @@
-"""复测队列核对（#988）：只读报出 `waiting-for-verify` 标签与复测主表的差异。
+"""复测队列核对（#988）：报出 `waiting-for-verify` 标签与复测主表的差异，可选写回（#989）。
 
 用法：
 
-    python3 tool/followup.py
+    python3 tool/followup.py            # 只读：打印差异，一个字节都不写
+    python3 tool/followup.py --write    # 把表补到与标签一致，写完再核对一遍
 
 两类差异：**缺行**（标签里有、主表里没有）与**过期行**（主表里有、标签里没有，已关闭或已摘标）。
-只读——不写回文件，也不改任何 issue。
+`--write` 只补缺行（追加到 `## 当前队列` 的第一张表末尾，其余几列留 `—` 等发版时现场填）、
+只删过期行（从它实际所在的那张表删），既有行与其他小节逐字不动。两次 `--write` 的结果相同。
 
 只解析 `## 当前队列` 小节里的表（含它 `###` 子小节里的批次表），靠表头含 `Issue` 列判定；
 别的 `##` 小节（尤其「待真机反馈」）与日期记录段一律不看。结构认不出时报错退出，
@@ -14,7 +16,7 @@
 一行可以登记多张票（`#193 / #581`），两边的号都算已登记。
 
 退出码：0 一致；1 有差异（清单已打印）；2 给不出结论——`gh` 读失败或超时、表格结构不可识别、
-命令行给了参数。前两种情形都不写任何文件。
+命令行给了不认识的参数。读不到标签或结构认不出时不写任何文件。
 """
 import json
 import re
@@ -34,6 +36,8 @@ HEADING = "当前队列"
 ISSUE_COLUMN = "Issue"
 LIMIT = 1000
 TIMEOUT = 120
+PLACEHOLDER = "—"
+USAGE = "用法：python3 tool/followup.py [--write]"
 DOC = Path(__file__).resolve().parents[1] / "docs" / "agents" / "release-followup.md"
 
 EXIT_OK, EXIT_DIFF, EXIT_UNREADABLE = 0, 1, 2
@@ -86,8 +90,8 @@ def is_rule(line):
     return "-" in text and bool(RULE.match(text))
 
 
-def section(lines):
-    """`## <HEADING>` 到下一个一 / 二级标题之间的行；找不到返回 None。
+def section_bounds(lines):
+    """`## <HEADING>` 之后到下个一 / 二级标题之前的行索引区间 `[起, 止)`；找不到返回 None。
 
     `###` 子小节留在这个范围内，所以小节里的每一张表都是队列的一部分：
     主表之外还有分批登记的表，它们的票号同样算已登记。
@@ -100,47 +104,71 @@ def section(lines):
                 start = index + 1
             continue
         if re.match(r"^#{1,2}\s", line):
-            return lines[start:index]
-    return None if start is None else lines[start:]
+            return start, index
+    return None if start is None else (start, len(lines))
 
 
-def blocks(lines):
-    """小节里所有 Markdown 表的行组（连续以 `|` 开头的行为一张表）。"""
-    found, current = [], None
-    for line in lines:
-        if line.strip().startswith("|"):
-            if current is None:
-                current = []
-                found.append(current)
-            current.append(line)
+def table_ranges(lines, start, end):
+    """`[start, end)` 里每张 Markdown 表的行索引区间 `[起, 止)`。
+
+    连续以 `|` 开头的行为一张表；表之间隔着的记录段、`###` 标题都不算。
+    """
+    found, open_at = [], None
+    for index in range(start, end):
+        if lines[index].strip().startswith("|"):
+            if open_at is None:
+                open_at = index
+                found.append([index, index + 1])
+            else:
+                found[-1][1] = index + 1
         else:
-            current = None
-    return found
+            open_at = None
+    return [tuple(item) for item in found]
+
+
+def rows_of(lines, start, end):
+    """一张表（行索引区间）-> (表头单元格, [(行索引, 这张票据号元组), ...])。
+
+    表头、分隔行与票号列读不出来时抛 Unreadable；`table_of` 与 `apply` 都走这一份判据。
+    """
+    if end - start < 2 or not is_rule(lines[start + 1]):
+        raise Unreadable(f"「## {HEADING}」小节里有一张表没有表头：{lines[start].strip()}")
+    header = cells(lines[start])
+    if ISSUE_COLUMN not in header:
+        raise Unreadable(f"「## {HEADING}」小节有一张表没有 `{ISSUE_COLUMN}` 列："
+                         f"{' | '.join(header)}")
+    at = header.index(ISSUE_COLUMN)
+    found = []
+    for index in range(start + 2, end):
+        row = cells(lines[index])
+        if len(row) != len(header) or not ISSUE_CELL.match(row[at]):
+            raise Unreadable(f"有一行的 `{ISSUE_COLUMN}` 读不成票号：{lines[index].strip()}")
+        found.append((index, tuple(int(number) for number in TOKEN.findall(row[at]))))
+    return header, found
+
+
+def queue_tables(lines):
+    """`## <HEADING>` 小节里的每张表 -> [(行索引区间, 表头, [(行索引, 票号元组)])]。"""
+    bounds = section_bounds(lines)
+    if bounds is None:
+        raise Unreadable(f"找不到「## {HEADING}」小节")
+    found = table_ranges(lines, *bounds)
+    if not found:
+        raise Unreadable(f"「## {HEADING}」小节里没有可识别的 Markdown 表")
+    parsed = []
+    for start, end in found:
+        header, rows = rows_of(lines, start, end)
+        parsed.append(((start, end), header, rows))
+    return parsed
 
 
 def table_of(text):
     """Markdown 文本 -> 复测队列表；小节或表头认不出时抛 Unreadable。"""
-    body = section(text.splitlines())
-    if body is None:
-        raise Unreadable(f"找不到「## {HEADING}」小节")
-    found = blocks(body)
-    if not found:
-        raise Unreadable(f"「## {HEADING}」小节里没有可识别的 Markdown 表")
     columns, numbers = None, []
-    for block in found:
-        if len(block) < 2 or not is_rule(block[1]):
-            raise Unreadable(f"「## {HEADING}」小节里有一张表没有表头：{block[0].strip()}")
-        header = cells(block[0])
-        if ISSUE_COLUMN not in header:
-            raise Unreadable(f"「## {HEADING}」小节有一张表没有 `{ISSUE_COLUMN}` 列："
-                             f"{' | '.join(header)}")
+    for _, header, rows in queue_tables(text.splitlines()):
         columns = columns or tuple(header)
-        at = header.index(ISSUE_COLUMN)
-        for line in block[2:]:
-            row = cells(line)
-            if len(row) != len(header) or not ISSUE_CELL.match(row[at]):
-                raise Unreadable(f"有一行的 `{ISSUE_COLUMN}` 读不成票号：{line.strip()}")
-            numbers += [int(number) for number in TOKEN.findall(row[at])]
+        for _, tickets in rows:
+            numbers += list(tickets)
     return Table(columns=columns, issues=tuple(dict.fromkeys(numbers)))
 
 
@@ -207,10 +235,54 @@ def render(result):
     return "\n".join(lines)
 
 
+def skeleton(number, who, columns):
+    """补出来的一行：票号与报告者照实填，机型、版本、要观察的输出留 `—` 等发版时现场补。"""
+    fields = [f"#{number}", f"@{who}" if who else PLACEHOLDER]
+    fields += [PLACEHOLDER] * max(columns - len(fields), 0)
+    return "| " + " | ".join(fields) + " |"
+
+
+def apply(text, result):
+    """把一轮核对的结果写进 `text`：缺行补到主表末尾，过期行从它所在的表里删掉。
+
+    纯函数，输入输出都是字符串。既有的行、表的顺序与表外的内容逐字保留；
+    没有差异时原样返回，所以同一份结果连写两次不会再变。
+    """
+    if result.same:
+        return text
+    lines = text.splitlines(keepends=True)
+    tables = queue_tables(lines)
+
+    expired = set(result.expired)
+    drop, header = set(), None
+    for _, header_of_table, rows in tables:
+        header = header or header_of_table
+        for index, numbers in rows:
+            # 一行可以登记多张票（`#193 / #581`）。只有这一行的票全过期才删：
+            # 删掉仍开着的那张会连带丢掉它的机型与要观察的输出，宁可留着让核对继续报差异。
+            if numbers and set(numbers) <= expired:
+                drop.add(index)
+
+    added = [skeleton(number, who, len(header)) + "\n" for number, who in result.missing]
+    anchor = tables[0][0][1] - 1      # 主表最后一行，补行落在它后面
+
+    out, pending = [], list(added)
+    for index, line in enumerate(lines):
+        if index > anchor and pending:
+            out.extend(pending)
+            pending = []
+        if index in drop:
+            continue
+        out.append(line)
+    out.extend(pending)
+    return "".join(out)
+
+
 def main(argv, runner=None, doc=None):
-    if argv:
-        print(f"不接受参数：{LABEL} 队列核对只有一个固定形状\n用法：python3 tool/followup.py",
-              file=sys.stderr)
+    args = list(argv)
+    write = args == ["--write"]
+    if args and not write:
+        print(f"不认识的参数：{' '.join(args)}\n{USAGE}", file=sys.stderr)
         return EXIT_UNREADABLE
     runner = runner or runner_for()
     try:
@@ -224,8 +296,9 @@ def main(argv, runner=None, doc=None):
     except OSError as error:      # 没装 gh 或不在 PATH 上
         print(f"跑不了 gh：{error}", file=sys.stderr)
         return EXIT_UNREADABLE
+    path = Path(doc or DOC)
     try:
-        text = Path(doc or DOC).read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8")
     except OSError as error:
         print(f"读不到复测队列文档：{error}", file=sys.stderr)
         return EXIT_UNREADABLE
@@ -233,6 +306,30 @@ def main(argv, runner=None, doc=None):
         result = scan(text, issues)
     except Unreadable as error:
         print(f"复测队列文档的结构认不出：{error}", file=sys.stderr)
+        return EXIT_UNREADABLE
+    print(render(result))
+    if not write or result.same:
+        return EXIT_OK if result.same else EXIT_DIFF
+
+    before = len(text.splitlines())
+    try:
+        # newline 钉死 LF：默认写法会把整份文档改写成 CRLF，Windows 上「逐字不动」就破了
+        updated = apply(text, result)
+        path.write_text(updated, encoding="utf-8", newline="\n")
+        text = path.read_text(encoding="utf-8")
+    except Unreadable as error:
+        print(f"复测队列文档的结构认不出：{error}", file=sys.stderr)
+        return EXIT_UNREADABLE
+    except OSError as error:
+        print(f"写不回复测队列文档：{error}", file=sys.stderr)
+        return EXIT_UNREADABLE
+
+    removed = len(result.missing) - (len(updated.splitlines()) - before)
+    print(f"写回 {path}：补 {len(result.missing)} 行，删 {removed} 行")
+    try:
+        result = scan(text, issues)
+    except Unreadable as error:
+        print(f"写回后的复测队列文档结构认不出：{error}", file=sys.stderr)
         return EXIT_UNREADABLE
     print(render(result))
     return EXIT_OK if result.same else EXIT_DIFF
