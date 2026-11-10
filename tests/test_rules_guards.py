@@ -1,14 +1,17 @@
 """规则守卫：文档内容类四条（`DocGuards`）、注册表类一条（`RegistryGuards`）、引擎结构类两条（`EngineGuards`）、
-流程 / CI 类三条（`CiGuards`）与发版产物一条（`ReleaseGuards`），沿用 #1000、#1002 的做法。
+手机版界面一条（`AndroidGuards`）、流程 / CI 类三条（`CiGuards`）与发版产物一条（`ReleaseGuards`），
+沿用 #1000、#1002 的做法。
 
 `DocGuards`：CHANGELOG 条目一行一个票号、文档里的代码位置用符号名、指到的 `.py` 路径要存在、
 上报服务地址与凭据不写进仓库。`RegistryGuards`：无锚点的顶层列表项按文档冻结上限。
-`CiGuards`：回归命令与 CI 同一条、`.python-version` 与 Linux job 同版、两个平台各跑一版解释器。
+`AndroidGuards`：手机版页面状态只由 `AppModel.show()` 改写。`CiGuards`：回归命令与 CI 同一条、
+`.python-version` 与 Linux job 同版、两个平台各跑一版解释器。
 
 都只读文件、比字符串：不联网、不执行被测代码、不引入 Markdown 或 YAML 解析依赖。
 守的是「仓库现在长什么样」，旧树也绿，守的是不回退（`dev.tests.behaviour-change-needs-red-test`
-允许守卫用例如此，但要求写明）。`doc.refs.symbols-not-lines` 不是：落地时顺手清了
-`docs/09` 那处裸行号，它在旧树上是红的。
+允许守卫用例如此，但要求写明）。两条不是：`doc.refs.symbols-not-lines` 落地时顺手清了
+`docs/09` 那处裸行号，`dev.android.screen-state` 随之修了 `AppModel.start()` 那处直写，
+两条在旧树上是红的。
 
 引擎那两条：替换层只读 AST（不 import 手机版的模块，它们依赖只在手机上装得下的库），
 结果页喂 `tests/summary_cases.json` 的同一批样例给手机版的 `summarize()`；网页版那条在
@@ -489,6 +492,76 @@ class EngineGuards(unittest.TestCase):
                 problems.append(f"aac_android/{name} 少了 {'、'.join(absent)}")
         self.assertEqual(problems, [], "替换层少了文件或导出名，手机会在打包后才暴露：\n"
                          + "\n".join(problems))
+
+
+ANDROID_SRC = ROOT / "android"
+# 页面状态的写点：`screen =`（可带 `this.`），不要求落在行首——`if (c) screen = Screen.Home`
+# 这种同行写法同样是换页。左边界排除标识符与 `.`：`myScreen =` 与 `foo.screen =` 不是这个字段。
+# `(?!=)` 放过 `screen == Screen.X` 这类比较；声明 `var screen by mutableStateOf(...)` 里没有 `=`，本来就不匹配。
+SCREEN_WRITE = re.compile(r"(?<![\w.])(?:this\.)?screen\s*=(?!=)")
+# 唯一允许的写点：`show()` 体内。`private fun show(` 起点的后 3 行内，
+# 与「换页都经过 AppModel 的方法」同一条不变量（ADR-0018）。
+SHOW_DECL = re.compile(r"^\s*private fun show\((\w+: )?Screen\)\s*\{")
+SHOW_SPAN = 3
+SHOW_OWNER = "AppModel.kt"
+
+
+def kt_files():
+    """`android/` 下的 Kotlin 源文件，含 `debug/`、`test/` 源集。
+
+    跳过构建产物与隐藏目录（与 `test_test_collection` 同一份 `SKIP_DIRS` 口径）：
+    本机构建过的树里 `android/app/build` 可能有生成的 `.kt`，那不是要守的源。
+    """
+    for path in sorted(ANDROID_SRC.rglob("*.kt")):
+        parts = path.relative_to(ANDROID_SRC).parts[:-1]
+        if any(part in SKIP_DIRS or part.startswith(".") for part in parts):
+            continue
+        yield path
+
+
+def screen_write_offenders():
+    """[(相对路径, 行号, 行文本)]：落在 `show()` 之外的 `screen =` 赋值。
+
+    换页写点不管写在哪个源集，都不该绕过 `AppModel.show()`；文件里一处
+    `private fun show(` 都没有时，任何写点都算越界。
+    """
+    hits = []
+    for path in kt_files():
+        lines = path.read_text(encoding="utf-8").splitlines()
+        spans = [index for index, line in enumerate(lines, 1) if SHOW_DECL.match(line)]
+        for lineno, line in enumerate(lines, 1):
+            if not SCREEN_WRITE.search(line):
+                continue
+            inside = path.name == SHOW_OWNER and any(
+                0 <= lineno - start <= SHOW_SPAN for start in spans)
+            if not inside:
+                hits.append((path.relative_to(ROOT).as_posix(), lineno, line.strip()))
+    return hits
+
+
+class AndroidGuards(unittest.TestCase):
+    def test_screen_is_only_written_by_show(self):
+        """手机版页面状态的写点只许在 `AppModel.show()` 里（CLAUDE.md、ADR-0018）。
+
+        换页只走 `show()` 是沿用 #646 的做法——进 / 出首次设置页时顺手改通知栏；绕过它写
+        `screen = ...` 今天未必有可见后果，但下一个照抄这句的人会把这层副作用丢掉（#1020）。
+
+        判据认形态不认语义：Kotlin 字符串字面量里出现 `screen = ` 会误报，出现时改那段文字，
+        不要放宽判据。只覆盖 `screen` 一个状态量，`setup`、`run` 等其他可变状态不在范围内。
+        另半条规则——「带判断的逻辑放 `aac_android/view.py`」——静态扫描给不出结论，仍靠人工。
+        `show()` 的签名一改（加修饰符或换行）这条会报假失败：方向是 fail-closed，改签名时
+        一并改 `SHOW_DECL`，别去放宽判据。
+
+        本机没有 JDK / Android SDK，这条只证明谁写 `screen`；改完的 Kotlin 能不能编译
+        由 `android.yml` 的 `assemble` job 回答。
+        """
+        scanned = sorted(ANDROID_SRC.rglob("*.kt"))
+        self.assertTrue(scanned, "android/ 下一个 .kt 都没扫到，这条守卫会空转")
+        hits = screen_write_offenders()
+        self.assertEqual(
+            hits, [],
+            "`screen` 只许由 AppModel.kt 的 `private fun show()` 改写，这些写点绕过了它：\n"
+            + "\n".join(f"{name}:{lineno}  {text}" for name, lineno, text in hits))
 
 
 # 下载页的卡片身份。`android` 那一条尤其不能改名：卡片角标、手机端高亮与 `baidu_rows.py`

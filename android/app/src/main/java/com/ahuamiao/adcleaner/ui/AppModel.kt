@@ -147,7 +147,7 @@ class AppModel(
             try {
                 version = backend.boot()
             } catch (e: EngineError) {
-                screen = Screen.Failed(e.message.orEmpty())
+                show(Screen.Failed(e.message.orEmpty()))
                 return@flow
             }
             runCatching { loadSetup() }     // 三步文案取不到不该把整个 App 钉在失败页，refreshOnce 会再试

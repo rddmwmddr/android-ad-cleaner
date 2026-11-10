@@ -317,9 +317,9 @@ expires_if = "客户端不再提供重试、或引擎自己按段续跑时删。
 [[rule]]
 id = "dev.android.screen-state"
 source = "CLAUDE.md#开发"
-check = "none"
-status = "manual"
-why = "页面流程只有一个 Screen 状态，切换都经过 AppModel 的方法（ADR-0018）；判断逻辑放 view.py 才好用 Python 测，写进 Kotlin 就只能靠手点。"
+check = "test:test_rules_guards::AndroidGuards.test_screen_is_only_written_by_show"
+status = "enforced"
+why = "页面流程只有一个 Screen 状态，切换都经过 AppModel 的方法（ADR-0018）；判断逻辑放 view.py 才好用 Python 测，写进 Kotlin 就只能靠手点。另一半「判断逻辑该放 view.py」评的是代码该放哪，静态扫描给不出结论，仍是 manual。"
 expires_if = "手机版换成非 Compose 的界面栈时删。"
 
 [[rule]]
