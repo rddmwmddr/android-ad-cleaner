@@ -19,7 +19,7 @@ id = "doc.rules.registry-indexes-prose"
 source = "CLAUDE.md#开发"
 check = "test:test_rules_registry::RulesRegistryTests.test_anchors_and_registry_agree"
 status = "enforced"
-why = "新增规则不入注册表就没人能判断它有没有守卫、该不该留；四条不变式让「正文有锚点、注册表有登记」互相拽住（#840、#842、#845）。只挂锚点不登记、登记了不挂锚点、或出处指到别的小节都会红；两条都不做的那种新条目，守卫看不见。"
+why = "新增规则不入注册表就没人能判断它有没有守卫、该不该留；四条不变式让「正文有锚点、注册表有登记」互相拽住（#840、#842、#845）。只挂锚点不登记、登记了不挂锚点、或出处指到别的小节都会红；两条都不做的那种新条目由 `tests/test_rules_guards.py` 的逐文档锚点上限挡住（#1010，超线即红），把已有无锚点项改写成规则仍看不见。"
 expires_if = "规则正文与注册表合并成一份、不再需要双向对照时，连同四条不变式一起删。"
 since = "7f54928"
 
