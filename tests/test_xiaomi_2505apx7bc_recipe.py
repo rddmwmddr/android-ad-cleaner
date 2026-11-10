@@ -120,7 +120,7 @@ class MixFlip2RecipeTests(unittest.TestCase):
         self.assertEqual(p.off.call_args_list[0].kwargs["page"], "主题·设置")
 
     def test_theme_settings_page_that_does_not_open_fails_the_step(self):
-        # ThemePreferenceActivity 的类名不含 Setting，落点只能看页面上的项：判据不过必须报失败
+        # 落点判据看页面上的项：页面没画出这些项就报失败
         p = self.phone("com.android.thememanager/.ThemePreferenceActivity")
         p.d.shell.return_value.output = "package:/data/app/themestore/base.apk"
         p.tab.return_value = True
