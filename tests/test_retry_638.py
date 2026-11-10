@@ -90,7 +90,7 @@ class PlanTasksKindTests(unittest.TestCase):
     def test_every_step_carries_its_own_kind(self):
         tasks = app.plan_tasks("S", dict(PLAN, finish=True))
         self.assertEqual([t.kind for t in tasks],
-                         ["backup", "recipe", "channels", "quickapp", "ads", "finish"])
+                         ["backup", "ads", "recipe", "channels", "quickapp", "finish"])
 
     def test_a_retry_round_can_leave_cleanup_out(self):
         tasks = app.plan_tasks("S", {"backup": False, "steps": ["商店"], "ref": True, "finish": False})
@@ -99,7 +99,12 @@ class PlanTasksKindTests(unittest.TestCase):
     def test_unchecked_steps_keep_their_kind_too(self):
         offered = {"steps": ["桌面"], "quickapps": [], "ads": [], "channels": None}
         tasks = app.plan_tasks("S", {"backup": False, "finish": False}, offered)
-        self.assertEqual([t.kind for t in tasks], ["recipe", "channels", "quickapp", "ads"])
+        self.assertEqual([t.kind for t in tasks], ["ads", "recipe", "channels", "quickapp"])
+
+    def test_the_suspend_step_still_runs_without_a_snapshot_before_it(self):
+        # cmd_suspend 自己会建快照目录，不勾备份也能挂起
+        tasks = app.plan_tasks("S", {"backup": False, "steps": ["商店"], "ads": ["com.a"], "finish": True})
+        self.assertEqual([t.kind for t in tasks], ["ads", "recipe", "finish"])
 
 
 class MergeTests(unittest.TestCase):
