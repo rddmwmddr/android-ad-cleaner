@@ -1,7 +1,12 @@
-"""规则守卫：文档内容类四条（`DocGuards`，#1000）与引擎结构类两条（`EngineGuards`，#1002）。
+"""规则守卫：文档内容类四条（`DocGuards`）、引擎结构类两条（`EngineGuards`）与流程 / CI 类三条（`CiGuards`），
+沿用 #1000、#1002 的做法。
 
-文档那四条只读文件、比字符串：不联网、不执行被测代码、不引入 Markdown 解析依赖。
-三条守的是「文档现在长什么样」，旧树也绿，守的是不回退（`dev.tests.behaviour-change-needs-red-test`
+`DocGuards`：CHANGELOG 条目一行一个票号、文档里的代码位置用符号名、指到的 `.py` 路径要存在、
+上报服务地址与凭据不写进仓库。`CiGuards`：回归命令与 CI 同一条、`.python-version` 与 Linux job 同版、
+两个平台各跑一版解释器。
+
+都只读文件、比字符串：不联网、不执行被测代码、不引入 Markdown 或 YAML 解析依赖。
+守的是「仓库现在长什么样」，旧树也绿，守的是不回退（`dev.tests.behaviour-change-needs-red-test`
 允许守卫用例如此，但要求写明）。`doc.refs.symbols-not-lines` 不是：落地时顺手清了
 `docs/09` 那处裸行号，它在旧树上是红的。
 
@@ -137,6 +142,110 @@ def unreleased_entries(text):
         elif entries and line[:1] in (" ", "\t") and line.strip():
             entries[-1][1].append(line.strip())
     return [(lineno, " ".join(parts)) for lineno, parts in entries]
+
+
+TEST_YML = ROOT / ".github/workflows/test.yml"
+CLAUDE_MD = ROOT / "CLAUDE.md"
+# 回归口径的一条字符串：CLAUDE.md 与本机、CI 都是这一条，只差外面包的 coverage 收集。
+REGRESSION = "-m unittest discover -s tests"
+# Windows job 的版本只能钉在这里：Linux 侧跟着 `.python-version` 走，Windows 侧与发版打包同版，
+# 没有第二份文件写着它。升版本时 workflow 与这一行一起改，正是这条守卫要的显式动作。
+WINDOWS_PYTHON = "3.12"
+
+
+def workflow_jobs(path):
+    """`jobs:` 下每个一级键与它的整段文本：[(名字, 段)]。缩进扫描，不引入 YAML 依赖。
+
+    job 的判据是缩进等于 `jobs:` 下一级第一列的键；`runs-on` / `steps` / `with:` 这些子键
+    比它深，不会误当成 job。注释行不进段文本，免得说明里的版本号与命令算数。
+    """
+    jobs, inside, indent, current, lines = [], False, None, None, []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not inside:
+            if line.rstrip() == "jobs:":
+                inside = True
+            continue
+        if stripped and not stripped.startswith("#") and not line.startswith(" "):
+            break                                       # 回到顶层键，jobs 段结束
+        key = re.match(r"^(\s+)([A-Za-z0-9_-]+):\s*$", line)
+        if key and indent is None:
+            indent = len(key.group(1))
+        if key and len(key.group(1)) == indent:
+            if current is not None:
+                jobs.append((current, "\n".join(lines)))
+            current, lines = key.group(2), []
+            continue
+        if current is not None and not stripped.startswith("#"):
+            lines.append(line)
+    if current is not None:
+        jobs.append((current, "\n".join(lines)))
+    return jobs
+
+
+def job_field(block, key):
+    """job 段里 `key: value` 的值，去掉引号；没有这个键返回 None。"""
+    match = re.search(rf"^\s*{re.escape(key)}:\s*(.+?)\s*$", block, re.MULTILINE)
+    return match.group(1).strip().strip("\"'") if match else None
+
+
+class CiGuards(unittest.TestCase):
+    """流程与 CI 类三条：回归命令只写一处口径、解释器版本三处一致、两个平台各跑一版。"""
+
+    def setUp(self):
+        self.jobs = workflow_jobs(TEST_YML)
+
+    def unittest_jobs(self):
+        """跑回归的 job。
+
+        按 `unittest discover` 认，不按完整的回归命令认：按后者筛出来的 job 再断言它含那句话
+        是恒真的，把 `-s tests` 改成 `-s test` 反而筛不到任何 job、三种结局都报成「空转」。
+        """
+        return [(name, block) for name, block in self.jobs if "unittest discover" in block]
+
+    def pinned(self):
+        return (ROOT / ".python-version").read_text(encoding="utf-8").strip()
+
+    def test_dev_tests_regression_command(self):
+        """CLAUDE.md 的「回归：」那一行与 CI 的 unittest job 是同一条发现口径。
+
+        改一边不改另一边时，agent 照正文跑出的是一串 `ModuleNotFoundError` 或者跑错目录。
+        """
+        lines = [line for line in CLAUDE_MD.read_text(encoding="utf-8").splitlines()
+                 if "<!-- rule:dev.tests.regression-command -->" in line]
+        self.assertEqual(len(lines), 1,
+                         "CLAUDE.md 里要有且只有一行挂 `<!-- rule:dev.tests.regression-command -->`")
+        self.assertIn(REGRESSION, lines[0], "CLAUDE.md 的回归命令与 CI 不再是同一条")
+        runs = self.unittest_jobs()
+        self.assertTrue(runs, f"test.yml 里没有跑 `{REGRESSION}` 的 job，这条守卫会空转")
+        for name, block in runs:
+            self.assertIn(REGRESSION, block, f"job {name} 的 run 不是 `{REGRESSION}`")
+
+    def test_dev_tests_interpreter_version(self):
+        """`.python-version` 与 CI 里跑 unittest 的 Linux job 是同一版。
+
+        两版混跑会让 CLI 逐字节对拍本地绿、CI 红（3.13 起编译器剥掉文档字符串的公共缩进）。
+        """
+        pinned = self.pinned()
+        self.assertRegex(pinned, r"^\d+\.\d+$", ".python-version 要写成 `3.13` 这种形态")
+        linux = [(name, block) for name, block in self.unittest_jobs()
+                 if job_field(block, "runs-on") == "ubuntu-latest"]
+        self.assertTrue(linux, "test.yml 里没有跑 unittest 的 ubuntu job，这条守卫会空转")
+        for name, block in linux:
+            self.assertEqual(job_field(block, "python-version"), pinned,
+                             f"job {name} 的解释器与 .python-version 不一致")
+
+    def test_dev_ci_two_interpreters(self):
+        """两个平台各跑一版解释器：ubuntu 跟 `.python-version`，windows 钉 `WINDOWS_PYTHON`。
+
+        把 Windows job 删掉或换成同一个解释器时立刻红——「两版其实一样」这件事要显式改守卫。
+        """
+        runs = {(job_field(block, "runs-on"), job_field(block, "python-version"))
+                for _, block in self.unittest_jobs()}
+        self.assertIn(("ubuntu-latest", self.pinned()), runs,
+                      f"没有 ubuntu × {self.pinned()} 的回归 job，读到的是 {sorted(runs)}")
+        self.assertIn(("windows-latest", WINDOWS_PYTHON), runs,
+                      f"没有 windows × {WINDOWS_PYTHON} 的回归 job，读到的是 {sorted(runs)}")
 
 
 class DocGuards(unittest.TestCase):

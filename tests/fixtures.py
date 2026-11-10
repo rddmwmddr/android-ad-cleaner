@@ -457,9 +457,9 @@ class GitRepo:
         self.git(*args, author_email=author_email)
         return self.git("rev-parse", "HEAD")
 
-    def run(self, script, rev_range, env_extra=None):
-        """跑一个校验脚本，返回 (退出码, stdout + stderr)。"""
-        done = subprocess.run([sys.executable, str(script), rev_range], cwd=self.dir,
+    def run(self, script, *args, env_extra=None):
+        """跑一个校验脚本，返回 (退出码, stdout + stderr)。参数原样交给脚本。"""
+        done = subprocess.run([sys.executable, str(script), *args], cwd=self.dir,
                               env=dict(self.env, **(env_extra or {})),
                               capture_output=True, text=True, encoding="utf-8", errors="replace")
         return done.returncode, done.stdout + done.stderr

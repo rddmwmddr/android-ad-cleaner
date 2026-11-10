@@ -1,0 +1,50 @@
+# 票与改动之间要有可机器核对的连接（#1001）：分支名与 PR 正文指的票要对得上，
+# 新写的行里挂的票号要与这次 PR 有关。
+# 这里只让问题可见，不阻断合并：要拦在合并之前需要分支保护 + required status checks，属 admin 权限。
+name: ticket-checks
+on:
+  pull_request:
+    # 正文就是判据：补一行 `Refs #N` 之后要能重跑，不必为它空推一个提交
+    types: [opened, synchronize, reopened, edited]
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # 只由 PR 触发，重推时取消上一轮
+  cancel-in-progress: true
+jobs:
+  # 分支名要带票号，PR 正文要写 `Refs #N` / `Closes #N`，两处指到同一张。
+  # 脚本只用标准库，跑同一条命令即可本地复现：
+  #   printf '%s\n%s\n' "标题" "正文" > /tmp/pr.txt
+  #   python3 tool/check_ticket_ref.py feat/x-1001 /tmp/pr.txt
+  ticket-ref:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: 校验分支名与 PR 正文的票号
+        env:
+          BRANCH: ${{ github.head_ref }}
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s\n%s\n' "$TITLE" "$BODY" > "$RUNNER_TEMP/pr.txt"
+          python3 tool/check_ticket_ref.py "$BRANCH" "$RUNNER_TEMP/pr.txt"
+
+  # 新写的行里挂的票号要在 PR 引用的范围内。只为 PR 的 base..head 判，main 上的历史不翻旧账；
+  # 本地复现：
+  #   python3 tool/check_comment_tickets.py origin/main..HEAD /tmp/pr.txt
+  comment-tickets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0          # 浅克隆里 base 不是本地祖先，`base..head` 取不到 PR 的改动
+      - name: 校验新增行里的票号
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s\n%s\n' "$TITLE" "$BODY" > "$RUNNER_TEMP/pr.txt"
+          python3 tool/check_comment_tickets.py \
+            "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" \
+            "$RUNNER_TEMP/pr.txt"

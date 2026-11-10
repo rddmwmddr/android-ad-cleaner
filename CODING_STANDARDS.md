@@ -81,4 +81,6 @@ README、PR 描述、Release Note 里的计数，必须交代它在什么样本�
 
 新写的注释、docstring、CHANGELOG 行，票号要与提交挂的票一致；引用旧票是为了说明来历时，写成「沿用 #xxx 的做法」这类明确引用。审查时对不上就报——同一处代码挂着两个票号，后来的人不知道该去读哪一张。 <!-- rule:doc.comments.current-ticket -->
 
+CI 的 `comment-tickets` job 核这一条：取 `base..head` 的新增行，票号不在 PR 标题 / 正文引用的范围内就红；`docs/adr/` 与含「沿用」的行两处豁免。同 `dco` / `conventional`，只让问题可见，不阻断合并。
+
 反例：一批为 #674 / #675 新写的注释与用例 docstring 都写成 `#662`，而 `#662` 是上一个 PR 的票；CHANGELOG 与提交标题对，注释全错，检索时会漏。
