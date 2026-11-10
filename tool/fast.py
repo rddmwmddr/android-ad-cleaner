@@ -851,7 +851,7 @@ class Phone:
     def icon_candidates(self, area=(0.72, 0.0, 1.0, 0.16)):
         """没有文字、点了才知道去哪的图标（右上角齿轮、更多）：按位置从右往左给候选坐标。
         整块卡片/列表项点了会进别的页面，按尺寸排除掉。"""
-        x0, y0, x1, y1 = (v * s for v, s in zip(area, (self.W, self.H, self.W, self.H)))
+        x0, y0, x1, y1 = (v * s for v, s in zip(area, (self.W, self.H, self.W, self.H), strict=True))    # area 是 (x0,y0,x1,y1)
         out = []
         for n in self.tree().iter("node"):
             if n.get("clickable") != "true":
@@ -1118,9 +1118,9 @@ class Phone:
                         if not stayed:
                             stayed.append(self.focus() == start)
                         return stayed[0]
-                    return readback(targets, rows, clicked=clicked, others=others,
+                    return readback(targets, rows, clicked=clicked, others=others,  # noqa: B023 - 本屏的 targets / clicked / others 当轮创建，read_page 同步调用
                                     page_same=page_same,
-                                    disabled=lambda xy: disabled_at(root, xy)), root
+                                    disabled=lambda xy: disabled_at(root, xy)), root  # noqa: B023 - lambda 的 xy 是形参，root 是本屏读到的树
 
                 def retry(still):
                     # 只重试当前仍能识别的开关，不能在节点消失后沿用旧坐标；灰掉的点了也不会变。
@@ -1132,18 +1132,18 @@ class Phone:
                                                         # here 为空只是这一次没读到前台，不拦补点
                     root = self.tree()
                     rows = self.switches(root)
-                    for t, xy in pick_retry_rows(targets, rows, still,
+                    for t, xy in pick_retry_rows(targets, rows, still,  # noqa: B023 - targets 当轮创建，pick_retry_rows 同步调用
                                                  lambda xy: disabled_at(root, xy)):
                         self.click(*xy); self.confirm()
-                        clicked.add(t)                  # 补点也算点过：行随后消失同样是随行消失（#486）
+                        clicked.add(t)                  # 补点也算点过：行随后消失同样是随行消失（#486）  # noqa: B023 - clicked 当轮创建
 
                 def retry_titles(still, root):
                     # 开关本体点了不动、只认行标题的页面（Google 广告设置页，#608）：改点这一行的标题。
                     # 每点一次都按新树重取坐标：点掉一行会让下面的行整体上移，旧坐标会落到邻行（#480 同一口子）。
                     done_here, pending = False, set(still)
                     while pending:
-                        picked = pick_title_rows(targets, self.switch_rows(root), pending,
-                                                 lambda xy: disabled_at(root, xy))
+                        picked = pick_title_rows(targets, self.switch_rows(root), pending,  # noqa: B023 - targets 当轮创建，pick_title_rows 同步调用
+                                                 lambda xy: disabled_at(root, xy))  # noqa: B023 - lambda 的 xy 是形参，root 是 retry_titles 的入参
                         if not picked:
                             break                       # 没有独立标题可点：不多读前台、也不多回读
                         here = self.focus()
@@ -1151,7 +1151,7 @@ class Phone:
                             break                       # 页面已经换了：新页上的同名行不是这一屏的开关
                         t, xy = picked[0]
                         self.click(*xy); self.confirm()
-                        clicked.add(t)
+                        clicked.add(t)  # noqa: B023 - clicked 当轮创建
                         done_here, pending = True, pending - {t}
                         here = self.focus()
                         if here and here != start:      # 标题不是开关：有的页面点它进的是详情页

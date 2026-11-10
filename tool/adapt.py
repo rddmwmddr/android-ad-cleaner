@@ -45,7 +45,7 @@ def parse_tsv(path):
         if cols and cols[0] == "包名":
             continue                            # 表头
         cols += [""] * (len(TSV_COLS) - len(cols))
-        rows.append(dict(zip(TSV_COLS, cols[:len(TSV_COLS)])))
+        rows.append(dict(zip(TSV_COLS, cols[:len(TSV_COLS)], strict=True)))    # 上一行已把 cols 补齐到 len(TSV_COLS)
     return rows
 
 
@@ -364,7 +364,7 @@ def survey(p, family, words, log=print, now=None, sleep=None):
                 log(f"✗ 打不开  {group} {page}")
                 rows.append({"group": group, "page": page, "landed": False, "expect": False, "words": []})
                 continue
-            if not wait.until(lambda: entries.landed(p, d), timeout=4, poll=0.2, now=now, sleep=sleep):
+            if not wait.until(lambda: entries.landed(p, d), timeout=4, poll=0.2, now=now, sleep=sleep):  # noqa: B023 - d 当轮创建当轮消费，until 同步轮询
                 log(f"落在别处（实际 {p.focus() or '未知页面'}）  {group} {page}")
                 rows.append({"group": group, "page": page, "landed": False, "expect": False, "words": []})
                 continue

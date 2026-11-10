@@ -45,10 +45,11 @@ def write(stream):
         key, url, code = line.rstrip("\n").split("\t")
         value = 'baidu: { url: "%s", code: "%s" }' % (url, code)
         if key == "all":
-            html, n = re.subn(r"(\n  )baidu: \{[^}]*\}(,)", lambda m: m.group(1) + value + m.group(2), html, count=1)
+            html, n = re.subn(r"(\n  )baidu: \{[^}]*\}(,)", lambda m: m.group(1) + value + m.group(2),  # noqa: B023 - re.subn 同步调用，value 当轮创建当轮消费
+                              html, count=1)
         else:
             html, n = re.subn(r'(\{ id: "%s", folder: "[^"]+", )baidu: \{[^}]*\}' % re.escape(key),
-                              lambda m: m.group(1) + value, html)
+                              lambda m: m.group(1) + value, html)  # noqa: B023 - 同上，re.subn 同步调用
         if n != 1:
             sys.exit(f"index.html 里没找到 {key}")
         print(f"{key:10} {url}  提取码 {code}")
@@ -97,7 +98,7 @@ def legacy(ver, out, sums_path):
                 "\n\n不知道 Mac 是哪种芯片：点屏幕左上角的苹果图标 → 关于本机，\n"
                 "「芯片」一栏写 Apple M 开头的选 Mac-Apple芯片，写 Intel 的选 Mac-Intel芯片。\n\n"
                 "每个文件夹里有安装包和这个版本的安装说明。旧版本在官网和 GitHub 的「全部版本」里。\n")
-    for key, folder, title, sub, file, note in items:
+    for key, folder, title, sub, file, _note in items:
         kind = kind_of(key)
         digest = sums.get(file)
         if not digest:

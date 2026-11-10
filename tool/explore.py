@@ -25,7 +25,7 @@ def entries(p, pkg):
     """当前页可点的文字条目（不带开关的行），作为子页候选。pkg=这一页属于哪个 App。"""
     sw_rows = {xy[1] // 60 for _, _, xy in p.switches()}
     out = []
-    for t, (l, tp, r, b), n in p.texts():
+    for t, (l, tp, _r, b), n in p.texts():
         cy = (tp + b) // 2
         if len(t) > 12 or len(t) < 2 or cy < p.H * 0.1 or ENTRY_SKIP.search(t) or cy // 60 in sw_rows:
             continue

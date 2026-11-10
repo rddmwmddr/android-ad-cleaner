@@ -549,8 +549,8 @@ class ExternalAdbServerTests(unittest.TestCase):
 
     def test_lost_screen_library_error_marks_the_run_lost(self):
         p = self.phone()
-        p.d.dump_hierarchy.side_effect = Exception("HTTPConnectionPool(host='127.0.0.1', port=5037): Max retries exceeded")
-        with self.assertRaises(Exception):
+        p.d.dump_hierarchy.side_effect = RuntimeError("HTTPConnectionPool(host='127.0.0.1', port=5037): Max retries exceeded")
+        with self.assertRaises(RuntimeError):
             p.tree()
         self.assertTrue(p.lost)                                # 后面的段据此快速跳过
 

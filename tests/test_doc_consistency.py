@@ -65,23 +65,36 @@ class AdrIndexTests(unittest.TestCase):
         self.assertEqual(missing, [], "这些 ADR 没被 CLAUDE.md 的 ADR 列表收录：" + "、".join(missing))
 
 
+RUFF_CMD = re.compile(r"ruff[@\w.]* check (.+)")
+
+
 def ruff_targets(text):
-    """把文本里每条 `ruff check … --select F,E9 <目标>` 的目标清单切出来（到反引号或行末为止）。"""
-    return [line.split("`")[0].split() for line in re.findall(r"--select F,E9 (.+)", text)]
+    """把文本里每条 `ruff check <目标>` 的目标清单切出来（到反引号或行末为止）。
+
+    规则集（`F` / `E9` / `B`）已收进 `pyproject.toml`，命令里不再有 `--select`，
+    所以这里比的是目标清单而不是整条命令（#994）。"""
+    return [line.split("`")[0].split() for line in RUFF_CMD.findall(text)]
 
 
 class LintCommandTests(unittest.TestCase):
-    """静态检查的目标清单在 CLAUDE.md、发版文档、CONTRIBUTING.md 与 CI 四处一致（#624、#851）：加目录时四处一起改。"""
+    """静态检查的目标清单在 CLAUDE.md、发版文档、CONTRIBUTING.md 与 CI 四处一致（#624、#851）：加目录时四处一起改。
+    规则集收进 `pyproject.toml` 后命令里不再有 `--select`（#994）：命令里再写会盖掉配置，加进去的规则不生效。"""
 
     def test_ruff_targets_match_everywhere(self):
-        docs = [ROOT / "CLAUDE.md", ROOT / "docs/agents/release.md", ROOT / "CONTRIBUTING.md"]
-        expected = ruff_targets(docs[0].read_text(encoding="utf-8"))
+        docs = [ROOT / "CLAUDE.md", ROOT / "docs/agents/release.md", ROOT / "CONTRIBUTING.md",
+                ROOT / ".github/workflows/test.yml"]
+        texts = [(path, path.read_text(encoding="utf-8")) for path in docs]
+        for path, text in texts:
+            with self.subTest(path=str(path.relative_to(ROOT))):
+                self.assertNotIn("--select", text,
+                                 "规则集已收进 pyproject.toml，命令里不该再有 --select")
+        expected = ruff_targets(texts[0][1])
         self.assertEqual(len(expected), 1, "CLAUDE.md 里应当恰好一条 ruff 命令")
         self.assertIn("tool", expected[0], "目标清单没读到，守卫会空转")
-        for path in docs[1:]:
+        for path, text in texts[1:-1]:
             with self.subTest(path=str(path.relative_to(ROOT))):
-                self.assertEqual(ruff_targets(path.read_text(encoding="utf-8")), expected)
-        ci = ruff_targets((ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8"))
+                self.assertEqual(ruff_targets(text), expected)
+        ci = ruff_targets(texts[-1][1])
         self.assertEqual(len(ci), 1,
                          "CI 应当恰好一条 ruff 命令（平台无关，只在 Linux job 跑），读到 %d 条" % len(ci))
         self.assertEqual(ci, [expected[0]])
@@ -124,7 +137,7 @@ class BrandTapsDocTests(unittest.TestCase):
                         "00 文档第二张表的表头被静默改掉了")
 
     def test_end_marker_indent_matches_start(self):
-        for key, path in gen.TARGETS.items():
+        for path in gen.TARGETS.values():
             indents = {"start": set(), "end": set()}
             for line in path.read_text(encoding="utf-8").splitlines():
                 kind = "start" if line.strip() == gen.START else "end" if line.strip() == gen.END else None
@@ -144,7 +157,7 @@ class SiteCssTests(unittest.TestCase):
     def test_both_pages_carry_the_shared_block(self):
         css = site_css.load_css()
         self.assertIn("--paper:", css, "site.css 里没读到调色板，守卫会空转")
-        for key, path in site_css.TARGETS.items():
+        for path in site_css.TARGETS.values():
             with self.subTest(page=path.name):
                 text = path.read_text(encoding="utf-8")
                 site_css.check_markers(text, path.name)
@@ -156,7 +169,7 @@ class SiteCssTests(unittest.TestCase):
         shared = [line for line in site_css.load_css().splitlines()
                   if line.strip() and not line.strip().startswith(("/*", "}"))]
         self.assertGreater(len(shared), 20, "共享块没读到规则行，守卫会空转")
-        for key, path in site_css.TARGETS.items():
+        for path in site_css.TARGETS.values():
             outside = site_css.replace_region(path.read_text(encoding="utf-8"), "")
             with self.subTest(page=path.name):
                 self.assertEqual([line for line in shared if line in outside], [],

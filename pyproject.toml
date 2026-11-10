@@ -1,0 +1,9 @@
+# ruff 的规则集只在这里定义；目标路径属于命令，写在 CI 与文档里的那条命令上。
+[tool.ruff]
+# 仓库根另有一个独立 git 仓（.private），本地全量 lint 不该扫进去。
+extend-exclude = [".private"]
+
+[tool.ruff.lint]
+# F：未定义名 / 未使用导入；E9：语法错误；B：bugbear 的「形状」类错误（闭包捕获循环变量、
+# zip 缺 strict、盲断异常等）。不加格式与行长规则。
+select = ["F", "E9", "B"]

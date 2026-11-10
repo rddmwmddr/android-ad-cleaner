@@ -207,7 +207,7 @@ def probe(tool):
             p.click = Mock(side_effect=click)
             p.locked = Mock(return_value=fault == "locked")
             ticks = iter(range(10 ** 6))
-            p.sig = Mock(side_effect=lambda: str(next(ticks)))
+            p.sig = Mock(side_effect=lambda: str(next(ticks)))  # noqa: B023 - 每轮新建 ticks，Mock 同步调用
             p.settle = Mock(return_value=True)
             p.scroll, p.scroll_more = Mock(), Mock(return_value=False)
             p.confirm = Mock()

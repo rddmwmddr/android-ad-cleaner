@@ -128,7 +128,7 @@ def _bucket(days):
 
 
 def _footer(ledger_rows):
-    parts = " · ".join(f"{name} {n}" for name, n in zip(BUCKETS, distribution(ledger_rows)))
+    parts = " · ".join(f"{name} {n}" for name, n in zip(BUCKETS, distribution(ledger_rows), strict=True))    # 两边都恒为 3 档
     return f"{parts}（共 {len(ledger_rows)} 份）"
 
 

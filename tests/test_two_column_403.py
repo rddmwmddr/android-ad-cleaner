@@ -203,8 +203,8 @@ class SameLayoutTests(unittest.TestCase):
                 with self.subTest(page=label, size=size):
                     p = fake_phone(size=size, stages=[(0.0, xml)])
                     root = ET.fromstring(xml)
-                    old = result(lambda: old_switches(p, root))
-                    new = result(lambda: p.switches(ET.fromstring(xml)))
+                    old = result(lambda: old_switches(p, root))  # noqa: B023 - 当轮创建当轮消费，result 同步调用
+                    new = result(lambda: p.switches(ET.fromstring(xml)))  # noqa: B023 - 同上
                     if shell_around_switch(root, size):
                         # 有意的差异：旧实现去截图猜外层颜色（假手机不能截图，这里会报错），新实现只报真开关
                         shells += 1

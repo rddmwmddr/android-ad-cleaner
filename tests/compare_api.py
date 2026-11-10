@@ -316,7 +316,8 @@ def diff(old, new, path=""):
     elif isinstance(old, list) and isinstance(new, list):
         if len(old) != len(new):
             found.append(f"{path}: 长度 {len(old)} != {len(new)}")
-        for i, (a, b) in enumerate(zip(old, new)):
+        # 长度不等时上面已经记了一条差异；这里只比公共前缀，strict=True 会在报过之后再造一次异常
+        for i, (a, b) in enumerate(zip(old, new, strict=False)):
             found += diff(a, b, f"{path}[{i}]")
     elif old != new:
         found.append(f"{path}: {old!r} != {new!r}")

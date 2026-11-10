@@ -49,7 +49,7 @@ git commit -s -m "fix(chan_fast): keep the channel page open when a row vanishes
 
 ```bash
 .venv/bin/python -m unittest discover -s tests
-uvx ruff@0.17.3 check --select F,E9 tool tests gui android/app/src/main/python
+uvx ruff@0.17.3 check tool tests gui android/app/src/main/python
 ```
 
 第一条跑全量回归，第二条是仓库的静态检查。口径、解释器版本与为什么钉这个 ruff 版本，见 [CLAUDE.md](CLAUDE.md) 的「开发」一节。

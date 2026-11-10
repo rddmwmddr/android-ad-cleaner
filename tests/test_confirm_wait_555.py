@@ -54,7 +54,7 @@ def store_page(states, dialog):
         f'<node text="{title}" bounds="[40,{top}][700,{top + 142}]"/>'
         f'<node class="android.widget.Switch" checkable="true"'
         f' checked="{"true" if on else "false"}" bounds="[984,{top}][1125,{top + 142}]"/></node>'
-        for title, top, on in zip(TITLES, TOPS, states))
+        for title, top, on in zip(TITLES, TOPS, states, strict=True))    # TOPS 按 len(TITLES) 生成，states 同长
     overlay = ('<node class="android.widget.Button" content-desc="取消" clickable="true" bounds="[308,2333][951,2474]"/>'
                '<node class="android.widget.Button" content-desc="确认关闭" clickable="true" bounds="[308,2524][951,2665]"/>'
                ) if dialog else ""
