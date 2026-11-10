@@ -184,8 +184,11 @@ def _quickapp(status):
 
 
 def _ads(status):
+    """`default_on` 是选择页上要不要预先勾上（#973）：引擎侧已把「已挂起」算进去，
+    这里只透传，Compose 那边不按包名再判一次。"""
     ads = status.get("ads") or []
-    on = [{"pkg": a["pkg"], "name": AD_NAMES.get(a["pkg"], "系统广告组件")} for a in ads if not a.get("suspended")]
+    on = [{"pkg": a["pkg"], "name": AD_NAMES.get(a["pkg"], "系统广告组件"),
+           "default_on": bool(a.get("default_on"))} for a in ads if not a.get("suspended")]
     return on, "" if on else ("已挂起" if ads else "没有已知的")
 
 

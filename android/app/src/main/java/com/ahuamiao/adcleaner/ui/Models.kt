@@ -134,7 +134,7 @@ data class RunProgress(
     }
 }
 
-data class AdItem(val pkg: String, val name: String)
+data class AdItem(val pkg: String, val name: String, val defaultOn: Boolean)
 
 data class Detection(
     val name: String,
@@ -168,7 +168,9 @@ data class Detection(
             quickapps = o.optJSONArray("quickapps").strings(),
             quickappNote = o.text("quickapp_note"),
             quickappState = o.text("quickapp_state"),
-            ads = o.optJSONArray("ads").objects().map { AdItem(it.optString("pkg"), it.optString("name")) },
+            ads = o.optJSONArray("ads").objects().map {
+                AdItem(it.optString("pkg"), it.optString("name"), it.optBoolean("default_on"))
+            },
             adsState = o.text("ads_state"),
         )
     }
@@ -193,13 +195,15 @@ sealed interface ScanState {
     data class Ready(val notes: List<String>) : ScanState
 }
 
-/** 确认页的勾选。默认值和桌面版一致：参考脚本不勾，快应用、广告组件不勾。 */
+/** 确认页的勾选。默认值和桌面版一致：参考脚本不勾，快应用不勾；
+ *  广告组件按检测给出的 `default`（小米 msa 默认勾上，见 #973）。 */
 class Selection(val detection: Detection) {
     var recipe by mutableStateOf(detection.steps.isNotEmpty() && !detection.ref)
         private set
     val steps = mutableStateMapOf<String, Boolean>().apply { detection.steps.forEach { put(it, !detection.ref) } }
     var quickapp by mutableStateOf(false)
     val ads = mutableStateMapOf<String, Boolean>()
+        .apply { detection.ads.filter { it.defaultOn }.forEach { put(it.pkg, true) } }
     var scan by mutableStateOf<ScanState>(ScanState.Loading)
     val groups = mutableStateListOf<ChannelGroup>()
 

@@ -466,7 +466,7 @@ async function showChoose(){
       <small>广告常用 hap:// 链接把人跳进快应用。${qaKeepNote}；vivo 优先使用快应用服务开关，其他支持的机型使用挂起。${qaOn.some(q => q.used) ? "检测到近期打开过，确认不是你主动在用。" : "请确认负一屏快递卡片等常用服务不依赖快应用。"}可还原。</small></span></label>`
       : `<p class="lead" style="margin:0">${st.quickapps.length ? "可关闭的快应用组件都已关闭。" : "没有检测到快应用组件。"}</p>`}</div>
     <div class="card"><h3>系统广告组件</h3>${adsOn.length ? adsOn.map(a => `
-      <label class="chk"><input type="checkbox" class="c-ad" value="${esc(a.pkg)}"><span>挂起 <code>${esc(a.pkg)}</code><small>${adName(a.pkg)}。挂起只是暂停运行，可还原，不影响系统更新。</small></span></label>`).join("")
+      <label class="chk"><input type="checkbox" class="c-ad" value="${esc(a.pkg)}"${a.default_on ? " checked" : ""}><span>挂起 <code>${esc(a.pkg)}</code><small>${adName(a.pkg)}。挂起只是暂停运行，可还原，不影响系统更新。</small></span></label>`).join("")
       : `<p class="lead" style="margin:0">${st.ads.length ? "已经挂起。" : "没有已知的广告组件。"}</p>`}</div>
     <div class="note info">执行期间请保持手机亮屏、解锁、插着线，不要碰手机。</div>
     <div class="actions"><button class="btn plain" onclick="showDetect()">上一步</button><button class="btn plain" id="ui-check" onclick="checkUi()">检查读屏连接</button><button class="btn" onclick="go()">开始执行</button></div>`;

@@ -283,6 +283,85 @@ test("没标录制版本的机型脚本不说「版本一致」（#942）", asyn
   } finally { page.close(); }
 });
 
+/* #973：选择页「挂起广告组件」的默认值来自 status-json 的 default_on ——
+   小米 msa 预先勾上，其他品牌不勾，已挂起的项根本不出勾选框（走「已经挂起」那句）。 */
+function chooseStatus(ads, over = {}) {
+  return {
+    info: { model: "2510DRK44C", brand: "Redmi", name: "REDMI K90", os: "OS4.0.5.0", build: "", android: "17" },
+    recipe: "xiaomi-M154FF/recipe.py", recipe_ref: false, recipe_ok: true, recipe_build: "OS4.0",
+    steps: ["主题"], ads, quickapps: [], locked: false, dev: false, backup: null,
+    fold_open: false, input_blocked: false, stay_on: "",
+    ...over,
+  };
+}
+
+async function openChoose(ads, over = {}) {
+  const status = chooseStatus(ads, over);
+  const page = await openPage({ api: { status: () => status, chan_scan: () => ({ chans: [], notes: [] }) } });
+  page.window.eval(`S.serial = "X"; S.status = ${JSON.stringify(status)}; S.chans = []; S.chanNotes = [];`);
+  await page.window.showChoose();
+  return page;
+}
+
+test("选择页：default_on 的广告包预先勾上（#973）", async () => {
+  const page = await openChoose([{ pkg: "com.miui.systemAdSolution", suspended: false, default_on: true }]);
+  try {
+    const boxes = [...page.document.querySelectorAll(".c-ad")];
+    assert.deepEqual(boxes.map(b => [b.value, b.checked]), [["com.miui.systemAdSolution", true]]);
+  } finally { page.close(); }
+});
+
+test("选择页：非默认广告包不勾，已挂起的 msa 不出勾选框（#973）", async () => {
+  const page = await openChoose([
+    { pkg: "com.opos.ads", suspended: false, default_on: false },              // 非小米：不预勾
+    { pkg: "com.miui.systemAdSolution", suspended: true, default_on: false },  // 小米已挂起：不出勾选框
+  ]);
+  try {
+    const boxes = [...page.document.querySelectorAll(".c-ad")];
+    assert.deepEqual(boxes.map(b => [b.value, b.checked]), [["com.opos.ads", false]]);
+    assert.match(page.document.querySelector("#main").textContent, /挂起只是暂停运行/);
+  } finally { page.close(); }
+});
+
+test("选择页：取消预勾后开始，计划里不含挂起（#973）", async () => {
+  const started = [];
+  const status = chooseStatus([{ pkg: "com.miui.systemAdSolution", suspended: false, default_on: true }]);
+  const page = await openPage({ api: {
+    status: () => status, chan_scan: () => ({ chans: [], notes: [] }),
+    start: (serial, plan) => { started.push(plan); return { ok: true, total: 1 }; },
+    poll: () => pollResult(),
+  } });
+  try {
+    page.window.eval(`S.serial = "X"; S.status = ${JSON.stringify(status)}; S.chans = []; S.chanNotes = [];`);
+    await page.window.showChoose();
+    page.document.querySelector(".c-ad").checked = false;
+    await page.window.go();
+    assert.deepEqual(Array.from(started[0].ads), []);
+  } finally {
+    page.window.eval("clearInterval(pollJob); pollJob = null");
+    page.close();
+  }
+});
+
+test("选择页：直接开始就把 msa 排进计划（#973）", async () => {
+  const started = [];
+  const status = chooseStatus([{ pkg: "com.miui.systemAdSolution", suspended: false, default_on: true }]);
+  const page = await openPage({ api: {
+    status: () => status, chan_scan: () => ({ chans: [], notes: [] }),
+    start: (serial, plan) => { started.push(plan); return { ok: true, total: 1 }; },
+    poll: () => pollResult(),
+  } });
+  try {
+    page.window.eval(`S.serial = "X"; S.status = ${JSON.stringify(status)}; S.chans = []; S.chanNotes = [];`);
+    await page.window.showChoose();
+    await page.window.go();
+    assert.deepEqual(Array.from(started[0].ads), ["com.miui.systemAdSolution"]);   // 跨 realm 的数组要先摊成 Node 的
+  } finally {
+    page.window.eval("clearInterval(pollJob); pollJob = null");
+    page.close();
+  }
+});
+
 test("没有机型脚本时，桌面版手动清单认三星、华为、魅族（#952）", async () => {
   const urls = [];
   const cases = [["samsung", "三星 / One UI ", "三星-OneUI.md"],

@@ -835,12 +835,12 @@ class AdPackagesHarness:
             run.main()
         return out.getvalue()
 
-    def status_json(self, brand):
+    def status_json(self, brand, suspended=False):
         out = io.StringIO()
         with patch.object(run, "info", return_value=dict(self.INFO, brand=brand)), \
              patch.object(run, "recipe_for", return_value=(None, False)), \
              patch.object(run, "locked", return_value=False), \
-             patch.object(run, "suspended", return_value=False), \
+             patch.object(run, "suspended", return_value=suspended), \
              patch.object(run, "quickapps", return_value=[]), \
              patch.object(run, "fold_open", return_value=False), \
              patch.object(run, "input_blocked", return_value=False), \
@@ -861,7 +861,7 @@ class AdPackagesTests(AdPackagesHarness, unittest.TestCase):
 
     def test_status_json_lists_xiaomi_ad_package_for_poco_brand(self):
         self.assertEqual(self.status_json("POCO")["ads"],
-                         [{"pkg": "com.miui.systemAdSolution", "suspended": False}])
+                         [{"pkg": "com.miui.systemAdSolution", "suspended": False, "default_on": True}])
 
     def test_iqoo_brand_stays_empty_in_both_entries(self):
         self.assertNotIn("com.miui.systemAdSolution", self.check_output("iQOO"))
@@ -888,7 +888,8 @@ class GlobalMsaTests(AdPackagesHarness, unittest.TestCase):
         self.assertIn("广告包 com.miui.msa.global：未挂起", self.check_output("Redmi"))
 
     def test_status_json_lists_global_msa_on_global_rom(self):
-        self.assertEqual(self.status_json("Redmi")["ads"], [{"pkg": "com.miui.msa.global", "suspended": False}])
+        self.assertEqual(self.status_json("Redmi")["ads"],
+                         [{"pkg": "com.miui.msa.global", "suspended": False, "default_on": True}])
 
     def test_check_on_china_rom_does_not_mention_global_msa(self):
         self.INSTALLED = AdPackagesHarness.INSTALLED

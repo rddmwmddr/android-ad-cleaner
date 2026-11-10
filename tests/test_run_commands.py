@@ -5,7 +5,8 @@
 - 多余往返与冗余写入不许回来（usagestats 白拉、逐包 pm path、wm size 双读、suspended.txt 重复行、hap:// 只报第一个应答组件）。
 - 对外可观察的行为（退出码 / stdout / stderr）与改动前逐字节相同：基线
   `tests/baselines/run_cli.json` 由 `tests/make_run_cli_baseline.py` 在 `git archive e319126`
-  的干净副本上生成，喂的是同一份假 adb（`tests/run_cli_cases.py`）。
+  的干净副本上生成，喂的是同一份假 adb（`tests/run_cli_cases.py`）。有意改变某条输出时在改动后
+  的树上重生成，并在 provenance 的 `note` 里写明原因（#973 加的 `default_on` 就是这样）。
 
 `ui-check` / `chan-scan` / `chan-off` / `chan-on` / `recipe` 会真的起子进程（fast.py /
 chan_fast.py），输出取决于本机 adb 服务，所以不做逐字节对拍，改在这里替身化后断言返回值。

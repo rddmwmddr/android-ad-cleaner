@@ -53,6 +53,12 @@ AD_PKGS = {
     "vivo": [],
 }
 
+# 选择页上默认勾上「挂起」的包（#973）。小米族的 msa 就是去广告目标本身，未挂起时
+# 默认勾上，省掉「首轮主题段被开屏窗抢前台 → 再跑一轮」；其他品牌的这一项要改锁屏 /
+# 服务，维持不勾。显式列包名而不是取 AD_PKGS 整族：给小米族加新包时先想清楚它该不该
+# 跟着默认勾上（tests/test_msa_default_973.py 守着）。
+DEFAULT_ON = frozenset({"com.miui.systemAdSolution", "com.miui.msa.global"})
+
 # 快应用组件：免安装的「轻 App」，广告常用 hap:// 链接把人跳进去。
 # (包名, 名称, 品牌, 是否实测过挂起)
 QUICKAPP = [
@@ -923,7 +929,13 @@ def cmd_status_json(serial, rest):
         meta = recipe_meta(r)
         steps, rb = meta["steps"], meta["build"]
         ok = (not ref) and build_ok(i, rb)
-    ads = [{"pkg": p, "suspended": suspended(serial, p)} for p in ad_packages(i["brand"]) if installed(serial, p)]
+    # 预勾与否在这里一次算好（已挂起的不预勾），两个客户端只消费，不再自己读 suspended（#973）。
+    ads = []
+    for p in ad_packages(i["brand"]):
+        if not installed(serial, p):
+            continue
+        sus = suspended(serial, p)
+        ads.append({"pkg": p, "suspended": sus, "default_on": (not sus) and p in DEFAULT_ON})
     backup = Backups(BACKUPS).latest(i["model"])
     print(json.dumps({
         "info": i, "locked": locked(serial),
