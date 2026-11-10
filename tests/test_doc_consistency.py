@@ -1,6 +1,7 @@
 """文档与单一来源一致：ADR 字段表（#467）、品牌连点表（#654）、官网共享样式（#653）、教程截图 alt（#655）、站点与侧栏图标同源（#669）、ADR 索引（#624）、静态检查目标（#624）、手机版措辞的宿主边界（#732）、adapt 的 -s 写法（#740）、Windows USB 提示三分支（#785）、贡献入口不复述规则（#851）、agent 手册的挂起顺序（#981）。"""
 import re
 import sys
+import tomllib
 import unittest
 from dataclasses import fields
 from pathlib import Path
@@ -77,7 +78,7 @@ def ruff_targets(text):
 
 
 class LintCommandTests(unittest.TestCase):
-    """静态检查的目标清单在 CLAUDE.md、发版文档、CONTRIBUTING.md 与 CI 四处一致（#624、#851）：加目录时四处一起改。
+    """静态检查的目标清单在 CLAUDE.md、发版文档、CONTRIBUTING.md 与 CI 四处一致（沿用 #624、#851）：加目录时四处一起改。
     规则集收进 `pyproject.toml` 后命令里不再有 `--select`（#994）：命令里再写会盖掉配置，加进去的规则不生效。"""
 
     def test_ruff_targets_match_everywhere(self):
@@ -96,8 +97,10 @@ class LintCommandTests(unittest.TestCase):
                 self.assertEqual(ruff_targets(text), expected)
         ci = ruff_targets(texts[-1][1])
         self.assertEqual(len(ci), 1,
-                         "CI 应当恰好一条 ruff 命令（平台无关，只在 Linux job 跑），读到 %d 条" % len(ci))
+                         "CI 应当恰好一条 ruff 命令（平台无关，只在 lint job 跑），读到 %d 条" % len(ci))
         self.assertEqual(ci, [expected[0]])
+        select = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["ruff"]["lint"]["select"]
+        self.assertIn("B", select, "pyproject.toml 的 select 要含 B：删掉它 lint job 仍绿，bugbear 会静默失效")
 
 
 class BrandTapsDocTests(unittest.TestCase):

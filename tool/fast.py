@@ -1135,7 +1135,7 @@ class Phone:
                     for t, xy in pick_retry_rows(targets, rows, still,  # noqa: B023 - targets 当轮创建，pick_retry_rows 同步调用
                                                  lambda xy: disabled_at(root, xy)):
                         self.click(*xy); self.confirm()
-                        clicked.add(t)                  # 补点也算点过：行随后消失同样是随行消失（#486）  # noqa: B023 - clicked 当轮创建
+                        clicked.add(t)                  # 补点也算点过：行随后消失同样是随行消失（沿用 #486）  # noqa: B023 - clicked 当轮创建
 
                 def retry_titles(still, root):
                     # 开关本体点了不动、只认行标题的页面（Google 广告设置页，#608）：改点这一行的标题。
