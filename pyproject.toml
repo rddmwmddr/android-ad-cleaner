@@ -25,8 +25,8 @@ disable_error_code = ["var-annotated"]
 # 严格档给它们，其余引擎目录保持宽松档（#997）。`tool/` 没有 `__init__.py`，
 # 模块名就是文件名，不是 `tool.<名字>`。
 #
-# 不写 `strict = true`：实测 mypy 1.18.2 在 overrides 里把它当全局设置（全仓 37 个文件
-# 报 1694 项），per-module 只认逐项 flag。`warn_redundant_casts` 不是 per-module 可写项，
+# 不写 `strict = true`：实测 mypy 1.18.2 在 overrides 里把它当全局设置（全仓一起变严格），
+# per-module 只认逐项 flag。`warn_redundant_casts` 不是 per-module 可写项，
 # `warn_unused_configs` 只对全局有意义，两项只能留在缺省。
 [[tool.mypy.overrides]]
 module = ["polarity", "channel_policy", "host", "events", "recipe_meta", "reader"]

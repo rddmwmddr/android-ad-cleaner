@@ -26,11 +26,11 @@ def emit(kind: str, **data: Any) -> None:
     print(PREFIX + json.dumps({"kind": kind, **data}, ensure_ascii=False), flush=True)
 
 
-def payload(text: object) -> None:
+def payload(text: str) -> None:
     """发一段上报载荷（比如页面骨架），一行一个前缀。没设 AAC_EVENTS 时什么都不做。"""
     if not os.environ.get("AAC_EVENTS"):
         return
-    for line in str(text).splitlines():
+    for line in text.splitlines():
         if line.strip():
             print(PAYLOAD_PREFIX + line, flush=True)
 
@@ -63,5 +63,5 @@ def parse_data(line: str) -> dict[str, Any] | None:
 def parse(line: str) -> str | None:
     """事件行 → kind；不是事件行、或解析不出来，一律返回 None。"""
     data = parse_data(line)
-    # parse_data 已经把 kind 收在 KINDS 里，这里的 Any 只是 dict 字面量的值类型。
+    # parse_data 已经把 kind 收在 KINDS 里，这里的 Any 只是 JSON 解析出来的值类型。
     return cast(str, data["kind"]) if data else None
