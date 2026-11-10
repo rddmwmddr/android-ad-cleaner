@@ -1,4 +1,4 @@
-"""文档与单一来源一致：ADR 字段表（#467）、品牌连点表（#654）、官网共享样式（#653）、教程截图 alt（#655）、站点与侧栏图标同源（#669）、ADR 索引（#624）、静态检查目标（#624）、手机版措辞的宿主边界（#732）、adapt 的 -s 写法（#740）、Windows USB 提示三分支（#785）、贡献入口不复述规则（#851）。"""
+"""文档与单一来源一致：ADR 字段表（#467）、品牌连点表（#654）、官网共享样式（#653）、教程截图 alt（#655）、站点与侧栏图标同源（#669）、ADR 索引（#624）、静态检查目标（#624）、手机版措辞的宿主边界（#732）、adapt 的 -s 写法（#740）、Windows USB 提示三分支（#785）、贡献入口不复述规则（#851）、agent 手册的挂起顺序（#981）。"""
 import re
 import sys
 import unittest
@@ -356,6 +356,85 @@ class AdaptCommandDocTests(unittest.TestCase):
         """旧树也绿，守的是不回退：守卫本身要认得出带与不带 -s 两种写法，否则文本改了也照样绿。"""
         text = "run.py -s S adapt survey\nrun.py adapt gen x.tsv\nrun.py adapt --help\n"
         self.assertEqual(adapt_calls(text), {"survey": True, "gen": False})
+
+
+STEP_ROW = re.compile(r"^\|\s*(\d+)\s*\|\s*([^|]*?)\s*\|[^|]*\|$")
+
+
+def agents_steps(text):
+    """AGENTS.md §3 标准流程表 → {步号: 命令}；adapt 那张表另算，不进来。"""
+    main = text.split("### 新机型适配辅助")[0]
+    return {int(m.group(1)): m.group(2) for m in map(STEP_ROW.match, main.splitlines()) if m}
+
+
+def step_number(steps, token):
+    """命令含 token 的步号；一步没有或不止一步都当文档写错。"""
+    hits = [n for n, cmd in steps.items() if token in cmd]
+    if len(hits) != 1:
+        raise AssertionError("§3 里命令含 %r 的步应恰好一条，实为 %r" % (token, hits))
+    return hits[0]
+
+
+class AgentFlowOrderDocTests(unittest.TestCase):
+    """agent 手册的执行顺序跟着客户端 `plan_tasks()` 走：挂起广告组件排在机型脚本之前（#981）。
+
+    顺序本身以 `gui/app.py` 的 `plan_tasks()` 为准——msa 没挂起时它的开屏窗会抢走主题段前台
+    （#968），客户端已前置，手册照抄同一顺序，否则跟着手册走的宿主仍会撞上同一个根因。
+    """
+
+    def agents_text(self):
+        return (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+
+    def test_suspend_precedes_the_recipe(self):
+        steps = agents_steps(self.agents_text())
+        self.assertLess(step_number(steps, "suspend"), step_number(steps, "recipe"))
+
+    def test_quickapp_off_stays_after_its_detection(self):
+        """旧树也绿，守的是不回退：`quickapp off` 消费 `quickapp` 的检测结果，客户端同样不前置。"""
+        steps = agents_steps(self.agents_text())
+        detect = [n for n, cmd in steps.items() if "quickapp" in cmd and "quickapp off" not in cmd]
+        self.assertEqual(len(detect), 1, "§3 应有一行只做 quickapp 检测")
+        self.assertLess(detect[0], step_number(steps, "quickapp off"))
+
+    def test_step_numbers_are_contiguous(self):
+        """旧树也绿，守的是不回退：某行被解析丢掉时步号会断开，静默漏行要红。"""
+        steps = agents_steps(self.agents_text())
+        self.assertEqual(sorted(steps), list(range(1, len(steps) + 1)))
+
+    def test_cross_references_point_at_the_rows_they_mean(self):
+        """表外按步号引用的两处：硬规则 9 的「§3 第 N 步」、§3 末尾的通用部分区间。"""
+        text = self.agents_text()
+        steps = agents_steps(text)
+        rule = re.search(r"（§3 第 (\d+) 步）", text)
+        self.assertIsNotNone(rule, "硬规则 9 应写着「§3 第 N 步」")
+        self.assertIn("开发者模式", steps[int(rule.group(1))], "硬规则 9 引到的步不是「提醒关闭开发者模式」")
+
+        span = re.search(r"跑通用部分（第 (\d+) 步与第 (\d+) 到 (\d+) 步", text)
+        self.assertIsNotNone(span, "§3 末尾应写着通用部分的步号")
+        first, low, high = (int(n) for n in span.groups())
+        self.assertTrue({first, low, high} <= set(steps), "通用部分引用了不存在的步号")
+        self.assertEqual(first, step_number(steps, "suspend"), "通用部分的第一段应是挂起广告组件")
+        self.assertEqual(high, step_number(steps, "quickapp off"), "通用部分应跑到 quickapp off 为止")
+        self.assertNotEqual(low, step_number(steps, "recipe"), "机型脚本那一步不属于通用部分")
+
+    def test_docs02_asks_about_suspending_before_running_the_recipe(self):
+        text = (ROOT / "docs/02-用AI智能体.md").read_text(encoding="utf-8")
+        body = text.split("AI 会依次做这些事：")[1].split("\n## ")[0]
+        steps = re.findall(r"^\d+\.\s*(.*)$", body, re.M)
+        suspend = [i for i, s in enumerate(steps) if "挂起" in s]
+        recipe = [i for i, s in enumerate(steps) if "跑机型脚本" in s]
+        self.assertEqual((len(suspend), len(recipe)), (1, 1), "docs/02 的步骤列表应各有一条挂起与跑机型脚本")
+        self.assertLess(suspend[0], recipe[0])
+
+    def test_readme_command_block_suspends_before_the_recipe(self):
+        """README 的「一次完整的流程」原先没有挂起，照它走会先跑机型脚本、再想起来挂。"""
+        text = (ROOT / "README.md").read_text(encoding="utf-8")
+        block = text.split("## 一次完整的流程")[1].split("```")[1]
+        cmds = [line for line in block.splitlines() if "run.py" in line]
+        suspend = [i for i, line in enumerate(cmds) if " suspend " in line]
+        recipe = [i for i, line in enumerate(cmds) if " recipe " in line]
+        self.assertEqual((len(suspend), len(recipe)), (1, 1), "README 的命令块应各有一条挂起与跑机型脚本")
+        self.assertLess(suspend[0], recipe[0])
 
 
 class SharedAssetTests(unittest.TestCase):

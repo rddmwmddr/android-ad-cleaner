@@ -230,6 +230,7 @@ pip3 install -r requirements.txt
 python3 tool/run.py devices                 # 看序列号、型号、有没有机型脚本
 python3 tool/run.py -s <序列号> check        # 只读检查
 python3 tool/run.py -s <序列号> backup       # 改动前快照
+python3 tool/run.py -s <序列号> suspend <包…> # 可选：机主同意后挂起广告组件，要排在跑机型脚本之前
 python3 tool/run.py -s <序列号> recipe       # 跑机型脚本
 python3 tool/run.py -s <序列号> chan-scan    # 列营销通知渠道
 python3 tool/run.py -s <序列号> chan-off backups/<型号>-<时间>/channels.tsv
