@@ -6,8 +6,8 @@
     python3 tool/claim.py 932 --release
     python3 tool/claim.py 932 --abandon [--restore ready-for-agent]
 
-身份是 `<主机名>-<worktree 绝对路径的 sha1 前 8 位>`：同一 worktree 里恢复的会话仍认得出自己，
-不同会话必然不同。同账号下的两个会话因此也能分开。
+身份是 `sha1(<主机名>\0<worktree 绝对路径>)` 的前 8 位：同一 worktree 里恢复的会话仍认得出自己，
+不同会话必然不同。主机名只进哈希，评论里只留那 8 位——公开 issue 上不出现本机主机名与目录。
 
 认领记录是票下的一条评论，标签只是随附的可见信号。评论落在 `gh issue view --comments` 里，
 实现会话本来就会读；标签不在那个载荷里，只靠标签的认领会被漏掉。
@@ -72,9 +72,7 @@ class Unreadable(RuntimeError):
 class Record:
     kind: str
     session: str
-    host: str
     branch: str
-    worktree: str
     stamp: str
     labels: tuple
     url: str
@@ -87,16 +85,15 @@ class Record:
 
 @dataclass(frozen=True)
 class Session:
-    """一次认领的身份：`session` 是机器可比的键，其余三项只写进评论给人看。"""
+    """一次认领的身份：`session` 是机器可比的键，`branch` 只写进评论给人看。"""
     session: str
-    host: str
     branch: str
-    worktree: str
 
 
 def session_id(host, worktree):
-    digest = hashlib.sha1(str(worktree).encode("utf-8")).hexdigest()[:8]
-    return f"{host}-{digest}"
+    """身份键：主机名与 worktree 绝对路径的 sha1 前 8 位，主机名不进明文（#970）。"""
+    digest = hashlib.sha1(f"{host}\x00{worktree}".encode("utf-8")).hexdigest()[:8]
+    return digest
 
 
 def git_text(*args, cwd=None):
@@ -115,7 +112,7 @@ def session_context(cwd=None, host=None):
     worktree = git_text("rev-parse", "--show-toplevel", cwd=cwd)
     branch = git_text("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd)
     host = host or socket.gethostname().split(".")[0]
-    return Session(session_id(host, worktree), host, branch, worktree)
+    return Session(session_id(host, worktree), branch)
 
 
 def runner_for(cwd=None):
@@ -152,7 +149,11 @@ def role_labels(issue):
 
 
 def parse_comment(comment):
-    """认领评论 -> Record；不是认领评论返回 None；前缀对上但字段读不全抛 Unreadable。"""
+    """认领评论 -> Record；不是认领评论返回 None；前缀对上但字段读不全抛 Unreadable。
+
+    #970 之前的评论带 `host` 与 `worktree` 两个字段，用它们重算身份键；之后的评论只留
+    `session`，直接用评论里的值。两种格式算出来的是同一个键，历史认领不必回填。
+    """
     body = (comment.get("body") or "").strip()
     first = body.splitlines()[0] if body else ""
     match = HEADER.match(first)
@@ -165,19 +166,25 @@ def parse_comment(comment):
             fields[found.group("name")] = found.group("value")
         elif TIME.match(part.strip()):
             stamp = part.strip()
-    missing = [name for name in ("session", "host", "branch", "worktree") if name not in fields]
+    missing = [name for name in ("session", "branch") if name not in fields]
     if missing or stamp is None:
         where = comment.get("url") or "无链接"
         raise Unreadable(f"{where} 的认领评论读不全：缺 {'、'.join(missing) or '时间'}")
     created = (comment.get("createdAt") or "").strip()
     if not created:
         raise Unreadable(f"{comment.get('url') or '无链接'} 的认领评论没有 createdAt，判不了先后")
+    host, worktree = fields.get("host", ""), fields.get("worktree", "")
+    if "host" in fields or "worktree" in fields:
+        if not (host and worktree):
+            where = comment.get("url") or "无链接"
+            raise Unreadable(f"{where} 的认领评论只写了 host 与 worktree 中的一个，判不了身份键")
+        session = session_id(host, worktree)
+    else:
+        session = fields["session"]
     return Record(
         kind=match.group("kind"),
-        session=fields["session"],
-        host=fields["host"],
+        session=session,
         branch=fields["branch"],
-        worktree=fields["worktree"],
         stamp=stamp,
         labels=original_labels(body),
         url=comment.get("url") or "",
@@ -226,8 +233,7 @@ def arbiter(records):
 
 
 def header(kind, who, now):
-    return (f"**{kind}**：session `{who.session}` · host `{who.host}` · "
-            f"branch `{who.branch}` · worktree `{who.worktree}` · {now.strftime(STAMP)}")
+    return f"**{kind}**：session `{who.session}` · branch `{who.branch}` · {now.strftime(STAMP)}"
 
 
 def claim_body(who, now, labels):
@@ -289,10 +295,10 @@ def taken_message(number, owner, runner, now):
         pr_line = "该分支有开着的 PR" if pr else "该分支没有开着的 PR"
     return "\n".join([
         f"#{number} 已被 session `{owner.session}` 认领（{stamp}，{since}）",
-        f"  branch `{owner.branch}` · worktree `{owner.worktree}`",
+        f"  branch `{owner.branch}`",
         f"  {pr_line}",
         f"  认领记录：{owner.url or '无链接'}",
-        "  停下上报，不要在另一张 worktree 上重做这张票。",
+        "  停下上报，不要另开 worktree 重做这张票。",
     ])
 
 
