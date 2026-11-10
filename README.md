@@ -128,6 +128,7 @@ https://t.me/+A5X3Mxzs-Cg3NjYx
 | 小米 | 15（24129PN74C） | HyperOS OS3.0.307.0.WOCCNXM<br>Android 16 | ⚠️ 10-29 | ✅ | ✅ 17 |
 | 小米 | REDMI K90 Pro Max（25102RKBEC） | HyperOS OS4.0.2.0.XPMCNXM<br>Android 17 | ✅ 10-27 | ✅ | ✅ 26 |
 | 小米 | REDMI K90 Ultra（M332BF） | HyperOS OS4.0.4.0.XHPCNXM<br>Android 17 | ⚠️ 10-31 | ✅ | ✅ 19 |
+| 小米 | REDMI K90（2510DRK44C） | HyperOS OS4.0.5.0.XPKCNXM<br>Android 17 | ⚠️ 11-10 | ✅ | ✅ 8 |
 | 小米 | MIX Flip 2（2505APX7BC） | HyperOS<br>Android 16 | ⚠️ 11-05 | ✅ | ✅ 22 |
 | 小米 | REDMI K80 Pro（24122RKC7C） | HyperOS OS3.0.304.0.WOMCNXM<br>Android 16 | ✅ 10-29 | ✅ | ✅ 48 |
 | 小米 | Redmi Note 14 Pro（24090RA29C） | HyperOS 3.0.309.0<br>Android 16 | ✅ 10-26 | ✅ | ✅ 11 |
@@ -191,6 +192,7 @@ https://t.me/+A5X3Mxzs-Cg3NjYx
 - **小米 15（24129PN74C）· HyperOS OS3.0.307.0.WOCCNXM**：10-29 路径逐项实测、开关已实际关闭；新脚本整轮待复测、用时未测，底包同 K80 但浏览器/商店入口不同。营销通知 17 个渠道，全部关闭。
 - **小米 REDMI K90 Pro Max（25102RKBEC）**：10-27 九段实测通过，重跑 169 秒。营销通知 26 个渠道。
 - **小米 REDMI K90 Ultra（M332BF）**：10-31 社区实测，@Sin1ery 本机九段跑通、复跑 179 秒、0 调整；按他的实测规格重写、本仓库未复跑，待其复测，见[实测记录](docs/16-红米K90至尊实测.md)。手动清单见[清单](docs/清单/小米-HyperOS.md)。营销通知 19 个渠道（21 候选，剔除 2 条服务类）。
+- **小米 REDMI K90（2510DRK44C）**：11-10 社区实测（[Issue #929](https://github.com/rddmwmddr/android-ad-cleaner/issues/929)）：借 18 Pro Max 脚本跑通九段中的八段、关 16 项；挂起 `com.miui.systemAdSolution` 后主题段补关 2 项，累计 18 项。已按本型号登记进 `recipes/xiaomi-M154FF`，本仓库未在该机复跑。手动清单见[清单](docs/清单/小米-HyperOS.md)。营销通知 8 个第三方渠道全部关闭并回读确认（系统 App 的 msa 营销渠道是系统锁定、不可关闭）。
 - **小米 MIX Flip 2（2505APX7BC）**：底包 BP2A.250605.031.A3；11-05 社区实测（合盖外屏）：该机借同底包参考脚本跑通六段，主题 / 浏览器 / 天气 / 日历四处入口不同；专用脚本按该机实测路径写成、本仓库未复跑、用时未测，待其复测，见[说明](recipes/xiaomi-2505APX7BC/README.md)。手动清单见[清单](docs/清单/小米-HyperOS.md)。营销通知关闭 22 个渠道，复查仍开着 0 个。
 - **小米 REDMI K80 Pro（24122RKC7C）**：10-29 九段实测，首轮关 20 项，复跑 172 秒；[实测记录](docs/15-红米K80Pro实测.md)。营销通知 48 个渠道（54 候选）。
 - **小米 Redmi Note 14 Pro（24090RA29C）**：10-26 八段实测通过，整轮约 5 分钟。营销通知 11 个渠道。

@@ -16,6 +16,7 @@
 | REDMI K80 Pro（24122RKC7C） | HyperOS OS3.0.304.0.WOMCNXM，Android 16 | 2026-10-29 真机实测；首轮借 K70 路径关 20 项，专用脚本九段复跑 172 秒、0 异常（`recipes/redmi-24122RKC7C`，见 [实测记录](../15-红米K80Pro实测.md)） |
 | REDMI K90 Pro Max（25102RKBEC） | HyperOS OS4.0.2.0.XPMCNXM，Android 17 | 2026-10-27 实测，九段机型脚本全通过（169 秒） |
 | REDMI K90 Ultra（M332BF） | HyperOS OS4.0.4.0.XHPCNXM，Android 17 | 2026-10-31 社区实测（[Issue #374](https://github.com/rddmwmddr/android-ad-cleaner/issues/374)）；专用脚本按报告者规格重写，待其用新版复测 |
+| REDMI K90（2510DRK44C） | HyperOS OS4.0.5.0.XPKCNXM，Android 17 | 2026-11-10 社区实测（[Issue #929](https://github.com/rddmwmddr/android-ad-cleaner/issues/929)）；与 18 Pro Max 共用 `recipes/xiaomi-M154FF`（本票登记），本仓库未在该机复跑。借参考脚本九段中八段跑通，**主题段需先挂起 `com.miui.systemAdSolution`**（挂起后补关 2 项，九段累计 18 项） |
 | MIX Flip 2（2505APX7BC） | HyperOS / Android 16，底包 `BP2A.250605.031.A3` | 2026-11-05 社区实测（合盖外屏，[Issue #832](https://github.com/rddmwmddr/android-ad-cleaner/issues/832)）；专用脚本按报告者实测路径写成，待其用新版复测 |
 | Redmi Note 12 Turbo（23049RAD8C） | HyperOS OS3.0.5.0.VMRCNXM，Android 15 | 2026-10-25 实测（九段脚本跑通，用时约 3.5 分钟） |
 | Redmi K70（23113RKC6C） | HyperOS OS3.0.307.0.WNKCNXM，Android 16 | 2026-10-26 无线+有线：9 段专用脚本；当前目标 20 项；本轮实测含已移除的小说 1 项；浏览器「最新资讯」disabled，未操作 |
