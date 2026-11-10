@@ -387,6 +387,30 @@ class BackgroundScreenTest(unittest.TestCase):
                 u2.Device()
         self.assertIn("UiAutomation 被别的无障碍服务占用", str(caught.exception))
 
+    def test_a_missing_display_is_not_an_empty_page(self):
+        """#928：显示不存在时 dump 报错，不能回一个空 hierarchy 让引擎当空白页继续跑。
+
+        旧树也绿，守的是不回退：假 reader 代表 Java 侧新报文，真正的判据在 AndroidScreenReader
+        （本机没有 JDK，未验）。"""
+        gone = "java.lang.IllegalStateException: 显示 7 不存在（这块屏已经没了）"
+        with _using(_Reader(dump=(None, 255, gone))):
+            with self.assertRaises(u2.UiAutomationError) as caught:
+                u2.Device()
+        self.assertIn("显示 7 不存在", str(caught.exception))
+
+    def test_window_size_names_the_display_that_is_gone(self):
+        """#928：问尺寸时读到的是哪块屏没了，要让用户看得出来，而不是一句 NullPointerException。
+
+        旧树也绿，守的是不回退：报文由 AndroidScreenReader 给，本机没有 JDK，未验。"""
+        page = '<hierarchy><node display-id="7" text="菜单" /></hierarchy>'
+        gone = "java.lang.IllegalStateException: 显示 7 不存在（这块屏已经没了）"
+        with _using(_Reader(dump=(page, 0), size=(None, 255, gone))):
+            dev = u2.Device()
+            with self.assertRaises(u2.UiAutomationError) as caught:
+                dev.window_size()
+        self.assertIn("显示 7 不存在", str(caught.exception))
+        self.assertIn("已经没了", str(caught.exception))
+
     def test_a_registered_reader_maps_to_the_busy_type(self):
         """两个客户端抢读屏时，引擎靠这个类型报「读屏服务被占用」，别改成泛泛的读屏错误。"""
         with _using(_Reader((None, 255, "UiAutomationService already registered"))):

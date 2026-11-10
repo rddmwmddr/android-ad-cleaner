@@ -23,6 +23,13 @@ LIB_GONE = re.compile(r"device '[^']*' not found|device offline|no devices/emula
                       r"|命令服务(?:已)?断开|命令服务不可用", re.I)
 # 手机版 App 自己的读屏请求超时（aac_android/bridge.py 的「读屏请求超时（30 秒）」）：慢一次，通道还在（#731）。
 READ_TIMEOUT = re.compile(r"读屏请求超时")
+# 后台屏没了：读屏打到一块已经不存在的显示（AndroidScreenReader 的「显示 N 不存在（这块屏已经没了）」），
+# 或 screen.LOST 那条早退（#928）。与断线不同：通道还在，重试一次通常能继续。
+SCREEN_GONE = re.compile(r"后台屏意外关闭|(?:这块|那块)屏已经没了|显示 ?\d+ ?不存在")
+# 屏没了这个事实，结尾按场景补：构造 Phone 时确实一个开关都没点，段中途则不成立（#928）。
+SCREEN_GONE_TEXT = "后台执行用的那块屏已经关了"
+SCREEN_GONE_CONNECT = f"{SCREEN_GONE_TEXT}，本次未点击开关。请重试一次。"
+SCREEN_GONE_STEP = f"{SCREEN_GONE_TEXT}，这一步没有完成。请重试一次。"
 
 # 手机版（tool/host.py 的 ON_PHONE）的调试连接是 App 自己的 Shizuku / 内置无线调试，没有电脑、线缆和
 # USB 授权框，排查动作要换成「回首页看连接状态」。桌面版逐字不变（#729）。
@@ -85,11 +92,20 @@ def read_failed(error):
     return f"这一步没有完成：{error}" if READ_TIMEOUT.search(str(error) or "") else None
 
 
+def screen_gone(message):
+    """后台屏没了的整句（带上原始错误，与 lost() 同一个形状）；不是这一族返回 None。
+    `Phone` 构造与段入口共用这一份判定，只是结尾不同（#928）。"""
+    message = str(message or "")
+    return f"{SCREEN_GONE_STEP}\n原始错误：{message}" if SCREEN_GONE.search(message) else None
+
+
 def failure_message(error, serial, adb=None):
-    """脚本入口的收场：断线拿那段排查说明，读屏慢一次拿「这一步没有完成」，都不是返回 None。
-    两个入口（chan_fast / fast）只管加自己的 ✗ 前缀和退出码，判定只此一份（#731）。"""
+    """脚本入口的收场：断线拿那段排查说明，屏没了拿「那块屏已经关了」，读屏慢一次拿「这一步没有完成」，
+    都不是返回 None。两个入口（chan_fast / fast）只管加自己的 ✗ 前缀和退出码，判定只此一份（#731 / #928）。"""
     gone = lost_from(error, serial, adb)
-    return str(gone) if gone is not None else read_failed(error)
+    if gone is not None:
+        return str(gone)
+    return screen_gone(error) or read_failed(error)
 
 
 def wait_for(serial, adb=None, timeout=15):
