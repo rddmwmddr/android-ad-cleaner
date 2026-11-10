@@ -416,23 +416,25 @@ DOWNLOAD_IDS = {"mac-arm64", "mac-intel", "win-setup", "win-zip", "android"}
 
 class ReleaseGuards(unittest.TestCase):
     def test_doc_release_apk_id_android(self):
-        """下载页 `REL.files` 的 id 集合冻结，且每个 `file` 里的版本串等于 `REL.version`。
+        """下载页 `REL.files` 的 id 集合冻结，且每个 `file` 的文件名里那段版本号等于 `REL.version`。
 
         旧树也绿，守的是不回退：id 改名、或升级 `REL.version` 时漏改某一条的 `file`，
         用户点下载就是 404，而页面脚本不报错。清单的增删要同时改卡片、手机端高亮与
         `gui/baidu_rows.py` 的 SETUP / CHECK。与真实 Release 附件名的比对不在这里——
         `tool/release_assets.py` 做那一半，由 `.github/workflows/release-assets.yml` 每周跑。
         """
-        version, ids, files = release_assets.read_page((ROOT / "index.html").read_text(encoding="utf-8"))
-        self.assertTrue(version and files, "index.html 里读不到 REL，这条守卫会空转")
+        version, entries = release_assets.read_page((ROOT / "index.html").read_text(encoding="utf-8"))
+        self.assertTrue(version and entries, "index.html 里读不到 REL，这条守卫会空转")
+        ids = [entry_id for entry_id, _ in entries]
         self.assertEqual(set(ids), DOWNLOAD_IDS,
                          "REL.files 的 id 清单变了：改它要同时改下载卡片、手机端高亮与 "
                          "gui/baidu_rows.py 的 SETUP / CHECK")
         self.assertIn("android", ids, "手机版卡片的 id 必须逐字是 android，线上靠它匹配")
-        self.assertEqual(len(ids), len(files), "每条 REL.files 都要有 id 与 file")
-        stray = [name for name in files if version not in name.split("-")]
+        # 附件名固定是 `AndroidAdCleaner-<版本>-<平台>.<后缀>`，版本就是第二段。
+        stray = [f"{entry_id}: {name}" for entry_id, name in entries
+                 if name.split("-")[1:2] != [version]]
         self.assertEqual(stray, [],
-                         f"这些附件的文件名里没有 REL.version（{version}）：升级版本时漏改了：\n"
+                         f"这些附件的文件名第二段不是 REL.version（{version}）：升级版本时漏改了：\n"
                          + "\n".join(stray))
 
 

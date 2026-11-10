@@ -17,6 +17,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")   # Windows 控制台默认不是 UTF-8
+    except Exception:
+        pass
+
 PAGE = Path(__file__).resolve().parents[1] / "index.html"
 
 # 只认 `const REL = {` 到顶格 `};` 这一段：页面别处也有 `id` / `file` 字样（DOM 与文案）。
@@ -32,14 +38,20 @@ EXIT_OK, EXIT_MISMATCH, EXIT_UNREACHABLE = 0, 1, 2
 
 
 def read_page(text):
-    """从 index.html 的源码里读出 (REL.version, 各条 id, 各条 file)；读不出返回 (None, [], [])。"""
+    """从 index.html 的源码里读出 (REL.version, [(id, file)])；读不出返回 (None, [])。
+
+    id 与 file 的条数对不上时也按「读不出」处理：配对关系是这个模块唯一要保证的东西，
+    给不出配对比给出一份空清单更安全。
+    """
     match = BLOCK.search(text)
     if not match:
-        return None, [], []
+        return None, []
     block = match.group(1)
     found = VERSION.search(block)
-    return (found.group(1) if found else None,
-            ENTRY_ID.findall(block), ENTRY_FILE.findall(block))
+    ids, files = ENTRY_ID.findall(block), ENTRY_FILE.findall(block)
+    if not found or not ids or len(ids) != len(files):
+        return None, []
+    return found.group(1), list(zip(ids, files))
 
 
 def compare(page_files, release_files):
@@ -64,16 +76,18 @@ def fetch_assets(tag):
 
 
 def main(argv, fetch=fetch_assets, page=PAGE):
-    version, _, files = read_page(Path(page).read_text(encoding="utf-8"))
-    if not version or not files:
-        print(f"{page} 里读不到 REL.files：页面结构变了，这条检查没法比对。", file=sys.stderr)
+    version, entries = read_page(Path(page).read_text(encoding="utf-8"))
+    if version is None:
+        print(f"{page} 里读不到 REL 的 version 与 files：页面结构变了，这条检查没法比对。",
+              file=sys.stderr)
         return EXIT_UNREACHABLE
-    tag = argv[1].strip() if len(argv) > 1 and argv[1].strip() else f"v{version}"
+    tag = argv[0].strip() if argv and argv[0].strip() else f"v{version}"
     try:
         release = fetch(tag)
     except RuntimeError as error:
         print(f"取不到 {tag} 的附件，没法比对：{error}", file=sys.stderr)
         return EXIT_UNREACHABLE
+    files = [name for _, name in entries]
     only_page, only_release = compare(files, release)
     if only_page or only_release:
         print(f"{tag} 与 {Path(page).name} 的 REL.files 对不上：", file=sys.stderr)
@@ -87,4 +101,4 @@ def main(argv, fetch=fetch_assets, page=PAGE):
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    sys.exit(main(sys.argv[1:]))
