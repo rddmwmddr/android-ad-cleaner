@@ -3,6 +3,7 @@
 # 浏览器原已停用，跳过且不启用；系统广告跟踪未验证，不纳入本脚本。
 # 通知渠道、广告组件及快应用仍由 run.py 独立确认。
 # 2026-11-10 负一屏入口改从内侧右滑、已在负一屏不再滑走、认不到入口时留页面现场（#901），未复测。
+# 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，按落在商店隐私页判，未复测（#907）。
 BUILD = "PLZ110_17.0.0.107(CN01)"
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 import adb_link
@@ -40,9 +41,10 @@ def page(title, package=None, activity=None):
     # 等待由引擎负责；旧页面即使已稳定，也必须通过下面的落点与标题检查。
     p.await_page(budget=6)
     where = p.focus()
+    titles = (title,) if isinstance(title, str) else tuple(title)
     require(not package or where.split("/", 1)[0] == package, "未进入目标应用，未操作开关")
     require(not activity or activity in where.split("/", 1)[-1], "未进入目标设置页，未操作开关")
-    require(p.find(title, exact=True), f"未确认页面「{title}」，未操作开关")
+    require(any(p.find(t, exact=True) for t in titles), f"未确认页面「{'、'.join(titles)}」，未操作开关")
     if any(text in {"同意", "同意并继续", "同意并使用", "允许", "仅在使用中允许"}
            and "Button" in node.get("class", "") for text, _, node in p.texts()):
         p.dismiss()
@@ -63,17 +65,24 @@ def app_settings(package):
               "返回" if package == THEME else "软件商店", package, "SettingActivity")
 
 
-def row(text, title=None, package=None, activity=None, scrolls=8):
-    """只点具名导航行，避免点隐私页的过度授权横幅；坐标来自当前节点。"""
+def row(text, title=None, package=None, activity=None, scrolls=8, tries=1):
+    """只点具名导航行，避免点隐私页的过度授权横幅；坐标来自当前节点。
+
+    `text` 可以给一组等价文案，按顺序试：软件商店的隐私入口随商店 App 版本叫「隐私」或
+    「隐私授权管理」（#907）。认不到时留下停在哪个页面与结构摘要，与 note_miss 同形。
+    `tries` 是点击被弹窗淡出动画吞掉时的重试次数（#286）；页面没换才重点，坐标仍然有效。"""
+    names = (text,) if isinstance(text, str) else tuple(text)
     p.await_page()
     where = p.focus()
     for index in range(scrolls + 2):
         root = p.tree()
         parents = {child: node for node in root.iter() for child in node}
-        matches = [n for n in root.iter("node")
-                   if (n.get("text") or n.get("content-desc") or "").strip() == text and p.on_screen(n)]
-        require(len(matches) <= 1, f"「{text}」入口不唯一，未点击")
-        if matches:
+        for name in names:
+            matches = [n for n in root.iter("node")
+                       if (n.get("text") or n.get("content-desc") or "").strip() == name and p.on_screen(n)]
+            require(len(matches) <= 1, f"「{name}」入口不唯一，未点击")
+            if not matches:
+                continue
             node = matches[0]
             target = node
             while target is not None and target.get("clickable") != "true":
@@ -82,16 +91,21 @@ def row(text, title=None, package=None, activity=None, scrolls=8):
             l, t, r, b = bounds(target)
             require(r > l and b > t and p.on_screen(target), "入口坐标无效")
             require(p.focus() == where, "找入口期间页面变了，未点击")
-            before = p.sig()
-            p.click((l + r) // 2, (t + b) // 2)
-            require(p.settle(before, 2.4), f"点击「{text}」后页面没有变化")
-            page(title or text, package, activity)
+            for _ in range(tries):
+                before = p.sig()
+                p.click((l + r) // 2, (t + b) // 2)
+                if p.settle(before, 2.4):
+                    break
+            else:
+                raise RuntimeError(f"点击「{name}」后页面没有变化")
+            page(title or (name if len(names) == 1 else names), package, activity)
             return
         if index == 0:
             p.top(scrolls)
         elif index == scrolls + 1 or not p.scroll_more():
             break
-    raise RuntimeError(f"没找到入口「{text}」，未继续本段")
+    p.note_miss(" / ".join(names))
+    raise RuntimeError(f"没找到入口「{names[0]}」，未继续本段")
 
 
 def switch_signature():
@@ -188,7 +202,9 @@ def system_settings():
 @step("软件商店")
 def _():
     app_settings(MARKET)
-    p.enter("隐私授权管理", scrolls=8)
+    # 本版商店叫「隐私授权管理」，同族另有叫「隐私」的（#907）。tries 保住原来 p.enter 的
+    # 「点击被弹窗动画吞掉就再点」：这一行必须点开，后面的行都指着它（#286）。
+    row(("隐私", "隐私授权管理"), package=MARKET, activity="PrivacyActivity", tries=3)
     row("个性化推荐", package=MARKET, activity="PersonalRecommendActivity")
     close_named(["个性化推荐"], "个性化推荐")
     app_settings(MARKET)

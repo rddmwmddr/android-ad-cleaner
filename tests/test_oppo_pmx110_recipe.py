@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from fixtures import load_recipe, phone_mock, phone_stub
+from fixtures import Clock, fake_phone, install_clock, load_recipe, phone_mock, phone_stub
 import fast
 import run
 
@@ -331,6 +331,86 @@ class SearchStepTests(unittest.TestCase):
         self.assertFalse([c for c in commands if "input swipe" in c])
 
 
+class MarketPrivacyEntryTests(unittest.TestCase):
+    """软件商店的隐私入口随商店 App 版本叫「隐私」或「隐私授权管理」（#907）。
+
+    上报里这一段的失败句只有「没找到入口「隐私」」，分不清是改名、换页还是没加载完，
+    所以失败行要带页面现场；点进去后按落在商店的隐私页判，不能只看设置页上还留着同名的那一行。
+    """
+    SETTINGS = "com.heytap.market/com.heytap.market.mine.cn.setting.ui.SettingActivity"
+    PRIVACY = "com.heytap.market/com.heytap.market.mine.cn.setting.ui.PrivacyActivity"
+    NAMES = ("隐私", "隐私授权管理")
+
+    def setUp(self):
+        self.p = phone_mock(W=1080, H=2340)
+        self.p.locked.return_value = False
+        self.p.texts.return_value = []
+        self.p.settle.return_value = True
+        self.p.scroll_more.return_value = False
+        self.scope = load(self.p)
+
+    def market_page(self, *names):
+        rows = "".join(
+            f'<node class="android.widget.TextView" text="{name}" clickable="true" '
+            f'bounds="[40,{300 + index * 200}][900,{380 + index * 200}]"/>'
+            for index, name in enumerate(names))
+        return ('<hierarchy rotation="0"><node class="android.widget.FrameLayout" '
+                f'bounds="[0,0][1080,2340]">{rows}</node></hierarchy>')
+
+    def enter(self, *names):
+        self.p.tree.return_value = ET.fromstring(self.market_page(*names))
+        self.p.focus.return_value = self.PRIVACY
+        return self
+
+    def test_privacy_authorization_entry_lands_on_the_store_privacy_page(self):
+        self.enter("隐私授权管理", "个性化推荐").p.find.side_effect = (
+            lambda text, exact=False: text == "隐私授权管理")
+        self.scope["row"](self.NAMES, package="com.heytap.market", activity="PrivacyActivity")
+        self.p.click.assert_called_once_with(470, 340)
+
+    def test_privacy_wording_wins_when_both_are_on_the_page(self):
+        self.enter("隐私授权管理", "隐私").p.find.side_effect = lambda text, exact=False: text == "隐私"
+        self.scope["row"](self.NAMES, package="com.heytap.market", activity="PrivacyActivity")
+        self.p.click.assert_called_once_with(470, 540)
+
+    def test_staying_on_the_settings_page_is_a_failed_landing(self):
+        # 设置页上本来就有同名的那一行，标题匹配会放过它；判据必须是落到商店的隐私页
+        self.enter("隐私").p.find.side_effect = lambda text, exact=False: text == "隐私"
+        self.p.focus.return_value = self.SETTINGS
+        with self.assertRaisesRegex(RuntimeError, "未进入目标设置页"):
+            self.scope["row"](self.NAMES, package="com.heytap.market", activity="PrivacyActivity")
+
+    def test_neither_wording_keeps_the_page_scene(self):
+        clock = Clock()
+        original = fast.time
+        install_clock(fast, clock)
+        self.addCleanup(setattr, fast, "time", original)
+        phone = fake_phone(clock=clock, stages=((0.0, self.market_page("个性化推荐")),),
+                           focus=((0.0, self.SETTINGS),))
+        lines = []
+        phone.say = lambda *a, **k: lines.append(" ".join(str(x) for x in a))
+        scope = load(phone)
+        with self.assertRaisesRegex(RuntimeError, "没找到入口「隐私」，未继续本段"):
+            scope["row"](self.NAMES, package="com.heytap.market", activity="PrivacyActivity")
+        log = "\n".join(lines)
+        self.assertIn(self.SETTINGS, log)
+        self.assertIn("结构", log)
+        self.assertIn("隐私授权管理", log)
+
+    def test_failed_landing_ends_the_segment_without_touching_later_rows(self):
+        self.scope["app_settings"] = Mock()
+        self.scope["row"] = Mock(side_effect=RuntimeError("未进入目标设置页，未操作开关"))
+        self.scope["close_named"] = Mock()
+        self.scope["read_switches"] = Mock()
+        with self.assertRaisesRegex(RuntimeError, "未进入目标设置页"):
+            action(self.scope, "软件商店")()
+        self.scope["row"].assert_called_once_with(
+            ("隐私", "隐私授权管理"), package="com.heytap.market", activity="PrivacyActivity")
+        self.scope["app_settings"].assert_called_once_with("com.heytap.market")
+        self.scope["close_named"].assert_not_called()
+        self.scope["read_switches"].assert_not_called()
+
+
 class StoreThemeVideoTests(unittest.TestCase):
     def setUp(self):
         self.p = phone_mock(W=1080, H=2340)
@@ -349,7 +429,9 @@ class StoreThemeVideoTests(unittest.TestCase):
         self.assertEqual(self.scope["app_settings"].call_args_list,
                          [call("com.heytap.market"), call("com.heytap.market")])
         self.assertEqual(self.scope["row"].call_args_list,
-                         [call("隐私"), call("个性化推荐"), call("服务管理")])
+                         [call(("隐私", "隐私授权管理"), package="com.heytap.market",
+                               activity="PrivacyActivity"),
+                          call("个性化推荐"), call("服务管理")])
         self.assertEqual([c.args[0] for c in self.scope["close_named"].call_args_list],
                          [["个性化推荐"], ["首页：活动弹窗"]])
 
