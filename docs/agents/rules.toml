@@ -839,7 +839,7 @@ id = "doc.issue.claim-removes-ready"
 source = "CLAUDE.md#Issue tracker"
 check = "none"
 status = "manual"
-why = "`ready-*` 与 `needs-triage` 的意思是「在待办池里等人挑」；认领时留着它们，别的会话会再挑一次同一张票。"
+why = "`ready-*` 与 `needs-triage` 的意思是「在待办池里等人挑」；认领时留着它们，别的会话会再挑一次同一张票。`stale` 的意思是「球在报告者那边」，认领之后不成立；`--abandon` 不把它加回来，把票还给待办池，要不要再标由下一次扫描重判。"
 expires_if = "派单改由平台原生 assignee 加队列机制承担时删。"
 
 [[rule]]

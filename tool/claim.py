@@ -24,6 +24,8 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from stale import STALE_LABEL     # 停摆标记只此一份；认领时要摘掉（#978）
+
 for _stream in (sys.stdout, sys.stderr):
     try:
         _stream.reconfigure(encoding="utf-8", errors="replace")   # Windows 控制台默认不是 UTF-8
@@ -327,8 +329,15 @@ def set_labels(number, runner, add, remove):
 
 
 def mark_claimed(number, issue, runner):
-    """认领或 reaffirm 时把待办池标签换成 `in-progress`。"""
-    return set_labels(number, runner, [IN_PROGRESS], role_labels(issue))
+    """认领或 reaffirm 时把待办池标签换成 `in-progress`，顺带摘掉停摆标记。
+
+    `stale` 表示「球在报告者那边」，认领之后就不成立了；`--abandon` 不把它加回来——
+    票回到待办池，是否再次停摆由下一次扫描重新判。
+    """
+    remove = role_labels(issue)
+    if STALE_LABEL in label_names(issue):
+        remove.append(STALE_LABEL)
+    return set_labels(number, runner, [IN_PROGRESS], remove)
 
 
 def comment_id(url):
