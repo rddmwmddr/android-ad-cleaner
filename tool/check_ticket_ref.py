@@ -61,8 +61,9 @@ def main(argv):
     if not found:
         print(f"分支名与 PR 正文都指到 #{branch_ticket(branch)}")
         return 0
+    print(f"分支名与 PR 正文对不上（{len(found)} 处）：")
     for line in found:
-        print(line, file=sys.stderr)
+        print(f"  {line}")
     return 1
 
 

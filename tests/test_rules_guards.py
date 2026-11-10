@@ -196,8 +196,12 @@ class CiGuards(unittest.TestCase):
         self.jobs = workflow_jobs(TEST_YML)
 
     def unittest_jobs(self):
-        """跑回归的 job：`run:` 里出现同一条 discover 的那些。"""
-        return [(name, block) for name, block in self.jobs if REGRESSION in block]
+        """跑回归的 job。
+
+        按 `unittest discover` 认，不按完整的回归命令认：按后者筛出来的 job 再断言它含那句话
+        是恒真的，把 `-s tests` 改成 `-s test` 反而筛不到任何 job、三种结局都报成「空转」。
+        """
+        return [(name, block) for name, block in self.jobs if "unittest discover" in block]
 
     def pinned(self):
         return (ROOT / ".python-version").read_text(encoding="utf-8").strip()

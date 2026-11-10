@@ -18,6 +18,9 @@ WORKFLOW = ROOT / ".github" / "workflows" / "ticket-checks.yml"
 FOREIGN = "#" + "903"
 OTHER = "#" + "904"
 ABSENT = "#" + "999"
+BLACK = "#" + "000"
+GREY = "#" + "333"
+INK = "#" + "101820"
 
 
 class DiffTest(unittest.TestCase):
@@ -85,6 +88,15 @@ class DiffTest(unittest.TestCase):
 
     def test_url_fragment_and_html_entity_are_not_tickets(self):
         self.assertEqual(self.problems({"a.md": "见 https://example.com/x#42 与 &#1001;\n"}), [])
+
+    def test_css_colours_are_not_tickets(self):
+        # 调色行与票号同形：冒号开头的属性值与收在分号 / 右花括号前的一律当颜色。
+        css = f"body {{ color: {BLACK}; border: 1px solid {GREY} }}\na {{ color:{INK} }}\n"
+        self.assertEqual(self.problems({"site.css": css}), [])
+
+    def test_ticket_right_after_a_cjk_word_still_counts(self):
+        # 按「ASCII 词字符」排除会漏掉紧挨中文的写法：`见#903` 也是挂票号。
+        self.assertEqual(len(self.problems({"a.py": "见#903 的做法\n"})), 1)
 
 
 class RangeTest(unittest.TestCase):

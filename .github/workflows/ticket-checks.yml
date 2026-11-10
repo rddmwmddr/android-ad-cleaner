@@ -4,6 +4,8 @@
 name: ticket-checks
 on:
   pull_request:
+    # 正文就是判据：补一行 `Refs #N` 之后要能重跑，不必为它空推一个提交
+    types: [opened, synchronize, reopened, edited]
 permissions:
   contents: read
 concurrency:

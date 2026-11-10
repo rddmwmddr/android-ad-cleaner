@@ -19,11 +19,23 @@ from commits import git, use_utf8_console
 
 use_utf8_console()
 
-# `#` 前面是字母或数字的是 URL 片段与实体，`&#123;` 同理：都不是票号。
-TICKET = re.compile(r"(?<![\w#&])#(\d+)\b")
+# `#` 前面是 ASCII 字母 / 数字的是 URL 片段，`&#123;` 是 HTML 实体：都不是票号。
+# 不用 `\w`：Python 的 `\w` 认 CJK，`见#1001` 这种紧挨着中文的写法会被整条漏掉。
+TICKET = re.compile(r"(?<![A-Za-z0-9_#&])#(\d+)\b")
 HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
 EXEMPT_DIR = "docs/adr/"
 EXEMPT_WORD = "沿用"
+
+
+def looks_like_a_colour(line, match):
+    """CSS 颜色与票号同形（`#000`、`#101820`）。按位置认：属性值开头或收在 `;` / `}` 前。
+
+    覆盖 `background: #000;` 与 `border: 1px solid #333`（前者靠冒号、后者靠分号），
+    票号在中文句子里不会紧跟冒号、也不会以 `;` / `}` 收尾。
+    """
+    before = line[:match.start()].rstrip()
+    after = line[match.end():].lstrip()
+    return before.endswith(":") or after[:1] in (";", "}")
 
 
 def added_lines(rev_range, run=git):
@@ -58,7 +70,7 @@ def problems(rev_range, pr_text, run=git):
             continue
         for match in TICKET.finditer(line):
             ticket = match.group(1)
-            if ticket not in allowed:
+            if ticket not in allowed and not looks_like_a_colour(line, match):
                 found.append(f"{path}:{lineno}: #{ticket} 不在 PR 引用的票号里（引用的是 {described}）")
     return found
 

@@ -128,6 +128,10 @@ class WorkflowTest(unittest.TestCase):
         self.assertIn("github.event.pull_request.title", job)
         self.assertIn("github.event.pull_request.body", job)
 
+    def test_editing_the_pull_request_reruns_the_checks(self):
+        # 正文就是判据：补一行 `Refs #N` 之后要能重跑，不必为它空推一个提交。
+        self.assertIn("edited", self.text)
+
 
 if __name__ == "__main__":
     unittest.main()
