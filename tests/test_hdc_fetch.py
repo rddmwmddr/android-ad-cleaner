@@ -152,3 +152,31 @@ class FetchTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DownloadRequestTest(unittest.TestCase):
+    def test_download_does_not_use_the_python_default_user_agent(self):
+        """华为云镜像对 Python-urllib 回 403，0.4.2 两个平台的打包都死在这一步（#1050）。"""
+        from unittest.mock import patch
+        seen = []
+
+        def fake_urlopen(request, *a, **k):
+            seen.append(request)
+            return io.BytesIO(b'payload')
+
+        with tempfile.TemporaryDirectory() as tmp, patch.object(hdc_fetch.urllib.request, 'urlopen', fake_urlopen):
+            hdc_fetch._download('https://example.test/x.tar.gz', Path(tmp) / 'x.tar.gz')
+            self.assertEqual((Path(tmp) / 'x.tar.gz').read_bytes(), b'payload')
+        agent = seen[0].get_header('User-agent')
+        self.assertEqual(agent, hdc_fetch.USER_AGENT)
+        self.assertNotIn('Python-urllib', agent)
+
+
+class MacBuildScriptTest(unittest.TestCase):
+    def test_build_mac_passes_platform_keys_to_stage(self):
+        """stage 只认 PLATFORMS 的键，传机器架构名 arm64 / x86_64 会在第一步退出（#1050）。"""
+        src = (Path(__file__).resolve().parents[1] / 'gui/build_mac.sh').read_text(encoding='utf-8')
+        self.assertIn('hdc_fetch.py stage "$PWD" "$HDC_PLATFORM"', src)
+        for key in ('HDC_PLATFORM=mac-arm64', 'HDC_PLATFORM=mac-x64'):
+            self.assertIn(key, src)
+            self.assertIn(key.split('=')[1], hdc_fetch.PLATFORMS)
