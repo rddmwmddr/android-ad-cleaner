@@ -32,6 +32,31 @@ When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the 
 
 `新机型` 不是分类，是主题标签，用来标出「这台机器没有专用机型脚本」。它和 `enhancement` 同时出现是常态 —— 机型请求按 `enhancement` 处理，并保留 `新机型` 以便按主题检索；只有内容确实是报障（例如同一型号跑通了但某项没关掉）时才标 `bug`。 <!-- rule:doc.triage.new-device-is-a-topic -->
 
+## 标签登记
+
+上面两表与「分类标签」一节提到的标签收在这一张表里，`tool/triage_audit.py` 的 `KNOWN` 与它逐项对拍，脚本只是镜像。最后七个沿用 GitHub 的默认标签，不算分类 —— `documentation` 也一样。`/wayfinder` 建的票带 `wayfinder:*`，第一次出现时登记进来。
+
+| Label                 | 归属                                        |
+| --------------------- | ------------------------------------------- |
+| `needs-triage`        | 五角色                                      |
+| `needs-info`          | 五角色                                      |
+| `ready-for-agent`     | 五角色                                      |
+| `ready-for-human`     | 五角色                                      |
+| `wontfix`             | 五角色                                      |
+| `waiting-for-verify`  | 状态（压过五角色）                          |
+| `in-progress`         | 状态（认领）                                |
+| `stale`               | 修饰符（只挂在 `needs-info` 上）            |
+| `bug`                 | 分类                                        |
+| `enhancement`         | 分类                                        |
+| `新机型`              | 主题                                        |
+| `documentation`       | 默认标签，不是分类                          |
+| `accessibility`       | 默认标签，不是分类                          |
+| `duplicate`           | 默认标签，不是分类                          |
+| `good first issue`    | 默认标签，不是分类                          |
+| `help wanted`         | 默认标签，不是分类                          |
+| `invalid`             | 默认标签，不是分类                          |
+| `question`            | 默认标签，不是分类                          |
+
 ## Triage 与 grilling 的边界
 
 需要 grilling 的票标 `needs-triage`，把待定的决定逐条写进票面；`/triage` 不自行发起 grilling，那一步由用户单独触发。 <!-- rule:doc.triage.grilling-boundary -->
