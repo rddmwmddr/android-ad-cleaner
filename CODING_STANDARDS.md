@@ -4,11 +4,11 @@
 
 ## 用户可见文档里的数字要能复现
 
-README、PR 描述、Release Note 里的计数，必须交代它在什么样本上、怎么数出来的，并标基线（`origin/main@<sha>`）。CHANGELOG 的验证行可省基线：它只写当次跑出来的项数，任何人在那个 tag 上重跑就能得到同一个数；拼接或推算出来的复合计数不进 CHANGELOG，只进 PR 描述，且照样要标基线。 <!-- rule:doc.numbers.carry-the-baseline -->
+README、PR 描述、Release Note 里的计数，必须交代它在什么样本上、怎么数出来的，并标基线（`origin/main@<sha>`）。CHANGELOG 的验证行可省基线：它只写 `python -m unittest discover -s tests` 当次跑出来的项数，任何人在那个 tag 上重跑就能得到同一个数；拼接或推算出来的复合计数不进 CHANGELOG，只进 PR 描述，且照样要标基线。 <!-- rule:doc.numbers.carry-the-baseline -->
 
 反例：「`switch_row` 14 处由假变真」——14 是「7 个文字节点 × 2 种屏尺寸」的记录条数，写进文档后读者无法复现，评审只能重数才发现。
 
-rebase 之后重算一遍再合；数基线用 `git rev-parse origin/main` 记下的 SHA 解出来的干净副本（`git archive <sha> | tar -x -C /tmp/x`），不在会漂的工作区里数。干净副本与新 worktree 都没有 `node_modules`，跑之前先 `npm ci`，否则前端用例那条会红在 `Cannot find module 'jsdom'`。用例总数优先写「新增 N 项」，绝对总数只在最后一次 rebase 之后填。
+改过基线的数字要重算：写下时标明基线（`origin/main@<sha>`），rebase 之后重算一遍再合；数基线用 `git rev-parse origin/main` 记下的 SHA 解出来的干净副本（`git archive <sha> | tar -x -C /tmp/x`），不在会漂的工作区里数。干净副本与新 worktree 都没有 `node_modules`，跑之前先 `npm ci`，否则前端用例那条会红在 `Cannot find module 'jsdom'`。用例总数优先写「新增 N 项」，绝对总数只在最后一次 rebase 之后填。
 
 提数字类修改意见时，连基线和「新增 N 项」一起要：「`N 项全过（基线 <sha> M 项，新增 K 项）`」。只要求「改成实测值」，作者填的那个数会在下一次有人合入时再次失效。
 
@@ -20,11 +20,11 @@ rebase 之后重算一遍再合；数基线用 `git rev-parse origin/main` 记�
 
 反例：ADR-0004 初稿把改前基线的行号和改后的位置混着写，评审把旧行号当成新文件的行号报错；`CONTEXT.md` 也曾指到一行会漂的注释上，后来专门删掉（`320ce35`）。
 
-移动或删除符号时，grep `docs/`、`CLAUDE.md` 与测试注释里的旧引用，一并改掉。反例：`VIVO_MARKETING` 迁到 `channel_policy.py` 后，`docs/09` 与测试注释仍指 `chan_fast.py` / `gui/app.py`。 <!-- rule:doc.refs.cleanup-on-move -->
-
-ADR 里写「所有写都在锁内」「每次都会回读」「只走这一条路径」这类机制性断言时，实现里要能逐条指到对应代码。指认不到，就是措辞夸大或实现缺漏，评审都该报出来，别让文档承诺一个代码没兑现的保证。
+同一件事的机制版：ADR 里写「所有写都在锁内」「每次都会回读」「只走这一条路径」这类机制性断言时，实现里也要能逐条指到对应代码。指认不到，就是措辞夸大或实现缺漏，评审都该报出来，别让文档承诺一个代码没兑现的保证。
 
 反例：本页曾用「ADR-0010 写『`snapshot()` 与关键写段都在锁内』，而 `_work()` 的 `idx` / `title` / `proc` / `running` 仍在锁外写」当反例——ADR-0010 原文是「`snapshot()`、`request_*()` 与 `_work` 的状态发布点都在锁内」，四处写点从 `a5d98c5` 起就在 `with j.lock:` 内。机制断言不逐条指认代码，连引用它的反例也会跟着漂。
+
+移动或删除符号时，grep `docs/`、`CLAUDE.md` 与测试注释里的旧引用，一并改掉。反例：`VIVO_MARKETING` 迁到 `channel_policy.py` 后，`docs/09` 与测试注释仍指 `chan_fast.py` / `gui/app.py`。 <!-- rule:doc.refs.cleanup-on-move -->
 
 ## 行为变化要有测试直接守住；纯重构要给对拍证据
 

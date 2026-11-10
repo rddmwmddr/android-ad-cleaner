@@ -239,7 +239,7 @@ id = "dev.wait.single-loop"
 source = "CLAUDE.md#开发"
 check = "code:tool/wait.py:until"
 status = "code"
-why = "settle / setting / ChannelPage.refresh / off / confirm 五个消费点各写一份轮询，会各自长出不同的超时与站稳判定；全仓 AST 禁令会误报 14 处，所以只登记、不派守卫。"
+why = "settle / setting / ChannelPage.refresh / off / confirm 五个消费点各写一份轮询，会各自长出不同的超时与站稳判定。全仓 AST 禁令会误报 14 处，所以没有行为守卫；`code:` 只钉住 `until()` 是唯一的轮询入口，另起一份循环仍抓不到。"
 expires_if = "等待能力移进读屏库、调用方不再自己轮询时删。"
 
 [[rule]]
@@ -399,8 +399,8 @@ id = "doc.numbers.carry-the-baseline"
 source = "CODING_STANDARDS.md#用户可见文档里的数字要能复现"
 check = "none"
 status = "manual"
-why = "「switch_row 14 处由假变真」是「7 个文字节点 × 2 种屏尺寸」的记录条数，写进文档后读者没法重算；#355 的「518 项全过」被 rebase 打回三次（518 → 524 → 527 → 533），换一个更新的绝对数救不了；#356 审查只要求「改成实测值 513」，作者照改 541，main 前进后两个数都不可复现；就算数得对，主副本里还躺着别的会话没提交的用例。写、重算、评审要基线，三处讲的是同一件事——少一处，返工就换个入口再来。"
-expires_if = "文档不再写计数、或 CI 直接给出基线数时删。"
+why = "「switch_row 14 处由假变真」是「7 个文字节点 × 2 种屏尺寸」的记录条数，写进文档后读者没法重算；#355 的「518 项全过」被 rebase 打回三次（518 → 524 → 527 → 533），换一个更新的绝对数救不了；#356 审查只要求「改成实测值 513」，作者照改 541，main 前进后两个数都不可复现；就算数得对，主副本里还躺着别的会话没提交的用例。写、重算、评审要基线，三处讲的是同一件事——少一处，返工就换个入口再来。`test_source_text` 只拦住「不许写浮动引用」这一半，干净副本与 npm ci 靠人。"
+expires_if = "文档不再写计数、或 CI 直接给出基线数时删；审查意见改由模板带出基线口径、不再靠评审逐条写时也删。"
 
 [[rule]]
 id = "doc.refs.symbols-not-lines"
@@ -424,7 +424,7 @@ source = "CODING_STANDARDS.md#行为变化要有测试直接守住；纯重构�
 check = "none"
 status = "manual"
 why = "#674 的读屏错误分流只断言了旧树也满足的性质，新旧两边都绿、看着有覆盖；不把新用例搬回旧树跑红，空覆盖就看不出来。允许旧树也绿的守卫用例与什么都没测的空覆盖在报告里长得一样，评审只能靠 docstring 分清。"
-expires_if = "变异测试进了 CI，返红由工具判定时删。"
+expires_if = "变异测试进了 CI，返红由工具判定时删；用例是否守卫不回退由工具自动标注时也删。"
 
 [[rule]]
 id = "dev.tests.refactor-needs-comparison"
@@ -448,7 +448,7 @@ source = "CODING_STANDARDS.md#桩住协作方就断言它被调到"
 check = "none"
 status = "manual"
 why = "候选 5 把 via_app_page 改成一行前向壳后，四处 patch 成了哑桩、其中三处继续绿；只有 assert_called_once() 把它们暴露出来。普通 Mock 照单全收实参，签名改了、self 绑错了都不会红，autospec=True 当场报出来。"
-expires_if = "测试替身改由依赖注入给出、不再 patch 模块级名字时删。"
+expires_if = "测试替身改由依赖注入给出、不再 patch 模块级名字时删；替身由类型检查或协议替身自动生成时也删。"
 
 [[rule]]
 id = "dev.tests.stubs-follow-the-refactor"
@@ -807,7 +807,7 @@ id = "doc.issue.merge-is-the-boundary"
 source = "docs/agents/issue-tracker.md#票的生命周期"
 check = "none"
 status = "manual"
-why = "「已经做完」的唯一判据是合入 main，PR 开着不算：`--release` 之所以只在合入后才跑，是因为 PR 开着时改动还没进 main，同一个账号下的第二个会话仍可能拿同一张票重做一遍（#932）。机制本身写死在 `claim.py` 的 `command()` 里，判据在文档这一句。"
+why = "「已经做完」的唯一判据是合入 main，PR 开着不算：`--release` 之所以只在合入后才跑，是因为 PR 开着时改动还没进 main，同一个账号下的第二个会话仍可能拿同一张票重做一遍（#932）。`claim.py` 只提供 `--release` 这个动作、查不到 PR 是否已合入，时机只能靠人读文档判断。"
 expires_if = "PR 合入前就能把改动锁在主线可见处（例如平台原生 merge queue 独占）时删。"
 
 [[rule]]
@@ -930,7 +930,7 @@ source = "docs/agents/release.md#正文的格式"
 check = "none"
 status = "manual"
 why = "用例数写成拼接或推算的复合计数就没有任何一次运行对得上；跑两遍或从别处抄数，正文验证行与 CHANGELOG 那一行的两个数字也会互相对不上。只写第 1 步 discover 那一次的输出，且只写一次；两版解释器结论不一致时以 3.12 的发版构建为准。"
-expires_if = "正文不再写用例数时删。"
+expires_if = "正文不再写用例数时删；验证数字由平台在发版时统一给出时也删。"
 
 [[rule]]
 id = "doc.release.credits-from-authors"
