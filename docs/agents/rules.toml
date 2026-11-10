@@ -48,19 +48,11 @@ why = "3.13 起编译器剥掉文档字符串的公共缩进，异常 repr 与 a
 expires_if = "对拍不再比较逐字输出、或只剩一版解释器时删。"
 
 [[rule]]
-id = "dev.tests.baseline-clean-copy"
-source = "CLAUDE.md#开发"
-check = "none"
-status = "manual"
-why = "基线数写进文档后会被下一次 rebase 作废（#355 被打回三次），主副本里还躺着别的会话没提交的用例；test_source_text 只拦住「不许写浮动引用」这一半，干净副本与 npm ci 靠人。"
-expires_if = "基线数不再进文档、或 CI 直接给出基线数时删。"
-
-[[rule]]
 id = "dev.workspace.worktree-only"
 source = "CLAUDE.md#开发"
 check = "none"
 status = "manual"
-why = "主副本的当前分支随时被别的会话切走，`git checkout --` / `reset` / `stash` 在那里做会丢掉别人的未提交改动。"
+why = "主副本的当前分支随时被别的会话切走，`git checkout --` / `reset` / `stash` 在那里做会丢掉别人的未提交改动；并行会话互踩是出过事故的，所以不降成 advisory。判据明确（agent 有没有在主副本上切分支或丢改动），守不住是因为没有任何守卫读得到 agent 的工作目录。"
 expires_if = "每个会话都有自己的克隆或容器、主副本不再共享时删。"
 
 [[rule]]
@@ -68,8 +60,8 @@ id = "dev.git.rebase-before-push"
 source = "CLAUDE.md#开发"
 check = "none"
 status = "manual"
-why = "并行会话会在开工到推送之间推进 main，基于旧 SHA 推送让 PR 直接 CONFLICTING，而冲突的 PR 不触发 CI——看着像语法问题，其实一次 fetch 就没了。"
-expires_if = "平台保证 PR 冲突时仍跑 CI，或改由机器人自动 rebase 时删。"
+why = "并行会话会在开工到推送之间推进 main，基于旧 SHA 推送让 PR 直接 CONFLICTING，而冲突的 PR 不触发 CI——看着像语法问题，其实一次 fetch 就没了。判据明确（PR 的 merge-base 是不是 `origin/main` 尖端），守不住是因为维护者没有 admin、开不了 required 分支保护。"
+expires_if = "开了「Require branches to be up to date before merging」就改回 `enforced`；平台保证 PR 冲突时仍跑 CI，或改由机器人自动 rebase 时删。"
 
 [[rule]]
 id = "dev.git.dco-signoff"
@@ -245,8 +237,8 @@ expires_if = "启动归属改由系统事件而不是逐帧焦点判定时删。
 [[rule]]
 id = "dev.wait.single-loop"
 source = "CLAUDE.md#开发"
-check = "none"
-status = "manual"
+check = "code:tool/wait.py:until"
+status = "code"
 why = "settle / setting / ChannelPage.refresh / off / confirm 五个消费点各写一份轮询，会各自长出不同的超时与站稳判定；全仓 AST 禁令会误报 14 处，所以只登记、不派守卫。"
 expires_if = "等待能力移进读屏库、调用方不再自己轮询时删。"
 
@@ -403,36 +395,20 @@ why = "免安装版与安装版共用同一个 AppId，便携版完全在注册�
 expires_if = "免安装版不再与原安装并存，或 Windows 安装版不再走 Inno Setup 的卸载键时删。"
 
 [[rule]]
-id = "doc.numbers.reproducible-baselines"
+id = "doc.numbers.carry-the-baseline"
 source = "CODING_STANDARDS.md#用户可见文档里的数字要能复现"
 check = "none"
 status = "manual"
-why = "「switch_row 14 处由假变真」是「7 个文字节点 × 2 种屏尺寸」的记录条数，写进文档后读者没法重算，评审只能从头数一遍才发现对不上。"
-expires_if = "CHANGELOG 与 PR 里的计数由流水线自动生成、不再手写时删。"
-
-[[rule]]
-id = "doc.numbers.recompute-after-rebase"
-source = "CODING_STANDARDS.md#用户可见文档里的数字要能复现"
-check = "none"
-status = "manual"
-why = "#355 的「518 项全过」被 rebase 打回三次（518 → 524 → 527 → 533），两轴审查各报两次数字对不上，返工半个回合；换一个更新的绝对数救不了，只会在下一次合入时再失效。"
-expires_if = "用例总数不再写进文档、或 CI 直接给出带基线的计数时删。"
-
-[[rule]]
-id = "doc.numbers.ask-for-the-baseline"
-source = "CODING_STANDARDS.md#用户可见文档里的数字要能复现"
-check = "none"
-status = "manual"
-why = "#356 审查只要求「改成实测值 513」，作者照改 541，main 前进后两个数都不可复现，第二轮才补成带基线的 575；不连基线一起要，返工是必然的。"
-expires_if = "审查意见改由模板带出基线口径、不再靠评审逐条写时删。"
+why = "「switch_row 14 处由假变真」是「7 个文字节点 × 2 种屏尺寸」的记录条数，写进文档后读者没法重算；#355 的「518 项全过」被 rebase 打回三次（518 → 524 → 527 → 533），换一个更新的绝对数救不了；#356 审查只要求「改成实测值 513」，作者照改 541，main 前进后两个数都不可复现；就算数得对，主副本里还躺着别的会话没提交的用例。写、重算、评审要基线，三处讲的是同一件事——少一处，返工就换个入口再来。"
+expires_if = "文档不再写计数、或 CI 直接给出基线数时删。"
 
 [[rule]]
 id = "doc.refs.symbols-not-lines"
 source = "CODING_STANDARDS.md#文档指向代码位置用符号名，行号必须带基线"
 check = "none"
 status = "manual"
-why = "ADR-0004 初稿把改前基线的行号与改后的位置混写，评审把旧行号当成新文件的行号；CONTEXT.md 也曾指到一行会漂的注释上（320ce35）。"
-expires_if = "文档不再引用代码位置、改由 IDE 跳转或自动生成的索引承担时删。"
+why = "ADR-0004 初稿把改前基线的行号与改后的位置混写，评审把旧行号当成新文件的行号；CONTEXT.md 也曾指到一行会漂的注释上（320ce35）。机制性断言同理：ADR-0010 的「关键写段」引文与它的反例本身就被查出对不上，`_work()` 的四处写点自 a5d98c5 起就在 `with j.lock:` 内——指认不到代码就是措辞夸大或实现缺漏，连转述它的反例也会跟着漂。"
+expires_if = "文档不再引用代码位置、改由 IDE 跳转或自动生成的索引承担时删；ADR 不再写机制性断言、只记录决定与取舍时也删。"
 
 [[rule]]
 id = "doc.refs.cleanup-on-move"
@@ -447,16 +423,8 @@ id = "dev.tests.behaviour-change-needs-red-test"
 source = "CODING_STANDARDS.md#行为变化要有测试直接守住；纯重构要给对拍证据"
 check = "none"
 status = "manual"
-why = "#674 的读屏错误分流只断言了旧树也满足的性质，新旧两边都绿、看着有覆盖；不把新用例搬回旧树跑红，空覆盖就看不出来。"
+why = "#674 的读屏错误分流只断言了旧树也满足的性质，新旧两边都绿、看着有覆盖；不把新用例搬回旧树跑红，空覆盖就看不出来。允许旧树也绿的守卫用例与什么都没测的空覆盖在报告里长得一样，评审只能靠 docstring 分清。"
 expires_if = "变异测试进了 CI，返红由工具判定时删。"
-
-[[rule]]
-id = "dev.tests.guard-case-declares-itself"
-source = "CODING_STANDARDS.md#行为变化要有测试直接守住；纯重构要给对拍证据"
-check = "none"
-status = "manual"
-why = "允许旧树也绿的守卫用例与什么都没测的空覆盖在报告里长得一样，评审只能靠 docstring 分清。"
-expires_if = "用例是否守卫不回退由工具自动标注时删。"
 
 [[rule]]
 id = "dev.tests.refactor-needs-comparison"
@@ -479,16 +447,8 @@ id = "dev.tests.stub-and-assert"
 source = "CODING_STANDARDS.md#桩住协作方就断言它被调到"
 check = "none"
 status = "manual"
-why = "候选 5 把 via_app_page 改成一行前向壳后，四处 patch 成了哑桩、其中三处继续绿；只有 assert_called_once() 把它们暴露出来。"
+why = "候选 5 把 via_app_page 改成一行前向壳后，四处 patch 成了哑桩、其中三处继续绿；只有 assert_called_once() 把它们暴露出来。普通 Mock 照单全收实参，签名改了、self 绑错了都不会红，autospec=True 当场报出来。"
 expires_if = "测试替身改由依赖注入给出、不再 patch 模块级名字时删。"
-
-[[rule]]
-id = "dev.tests.autospec-class-members"
-source = "CODING_STANDARDS.md#桩住协作方就断言它被调到"
-check = "none"
-status = "manual"
-why = "普通 Mock 照单全收实参，签名改了、self 绑错了都不会红；autospec=True 当场报出来。"
-expires_if = "测试替身由类型检查或协议替身自动生成时删。"
 
 [[rule]]
 id = "dev.tests.stubs-follow-the-refactor"
@@ -529,14 +489,6 @@ check = "none"
 status = "manual"
 why = "把 wait_page / off 的 tries 换成 timeout 后单测全绿、本机看不出差别，只有慢读屏对拍才暴露更早放弃。"
 expires_if = "等待预算统一按时间计、不再有按次数的循环时删。"
-
-[[rule]]
-id = "doc.adr.mechanism-pointable"
-source = "CODING_STANDARDS.md#ADR / 文档声称的机制要能在代码里指认"
-check = "none"
-status = "manual"
-why = "这条规则的反例本身就被查出引文与代码都对不上：ADR-0010 原文没有「关键写段」这句，`_work()` 的四处写点自 a5d98c5 起就在 `with j.lock:` 内。机制断言不逐条指认，连转述它的反例也会跟着漂。"
-expires_if = "ADR 不再写机制性断言、只记录决定与取舍时删。"
 
 [[rule]]
 id = "doc.comments.current-ticket"
@@ -607,18 +559,10 @@ id = "doc.review.base-sha-pinned"
 source = "docs/agents/code-review.md#基线钉 SHA"
 check = "none"
 status = "manual"
-why = "别的会话合了 PR 之后 `origin/main` 尖端会把别人的提交算进本分支的改动面，各轴数到不同的树（#684 那轮两轴各报同一条）。"
+why = "别的会话合了 PR 之后 `origin/main` 尖端会把别人的提交算进本分支的改动面，各轴数到不同的树（#684 那轮两轴各报同一条）；审查代理在 cwd 上跑时，cwd 通常是主副本，别的会话未提交的改动与已合并的历史提交同样会混进来，未跟踪的新文件还根本不出现在 `git diff` 里。"
 expires_if = "审查改为按平台给出的 PR diff 运行、基线由平台钉住时删。"
 
 # ---- docs/agents/code-review.md ----
-
-[[rule]]
-id = "doc.review.worktree-diff-path"
-source = "docs/agents/code-review.md#基线钉 SHA"
-check = "none"
-status = "manual"
-why = "审查代理在 cwd 上跑时，cwd 通常是主副本：别的会话未提交的改动与已合并的历史提交都会算进本分支的改动面，未跟踪的新文件还根本不出现在 git diff 里。"
-expires_if = "审查按平台给出的 PR diff 运行、工作区位置不再影响取数时删。"
 
 [[rule]]
 id = "doc.review.axis-ownership"
@@ -812,7 +756,7 @@ expires_if = "机型请求有独立的 issue 模板与类型、不再靠主题�
 id = "doc.triage.grilling-boundary"
 source = "docs/agents/triage-labels.md#Triage 与 grilling 的边界"
 check = "none"
-status = "manual"
+status = "advisory"
 why = "`/triage` 自行发起 grilling 会把初筛变成一轮方案讨论，待定的决定还没写进票面就先聊散了；grilling 由用户单独触发。"
 expires_if = "triage 与 grilling 合并成一个流程时删。"
 
@@ -822,7 +766,7 @@ expires_if = "triage 与 grilling 合并成一个流程时删。"
 id = "doc.tracker.gh-cli-for-everything"
 source = "docs/agents/issue-tracker.md#Issue tracker: GitHub"
 check = "none"
-status = "manual"
+status = "advisory"
 why = "票、PR 与评论都只在 GitHub 上；换一个客户端或手写 API 调用会让取数口径（comments、labels、association）与这里的命令对不上。"
 expires_if = "issue 迁移到别的平台时删。"
 
@@ -845,24 +789,32 @@ expires_if = "认领改由平台原生 assignee 或排他队列表达，且实�
 [[rule]]
 id = "doc.issue.claim-removes-ready"
 source = "CLAUDE.md#Issue tracker"
-check = "none"
-status = "manual"
+check = "code:tool/claim.py:mark_claimed"
+status = "code"
 why = "`ready-*` 与 `needs-triage` 的意思是「在待办池里等人挑」；认领时留着它们，别的会话会再挑一次同一张票。`stale` 的意思是「球在报告者那边」，认领之后不成立；`--abandon` 不把它加回来，把票还给待办池，要不要再标由下一次扫描重判。"
 expires_if = "派单改由平台原生 assignee 加队列机制承担时删。"
 
 [[rule]]
 id = "doc.issue.in-progress-until-merge"
 source = "docs/agents/issue-tracker.md#票的生命周期"
-check = "none"
-status = "manual"
+check = "code:tool/claim.py:command"
+status = "code"
 why = "PR 开着但没合并时改动不在 main，别人仍可能拿同一张票再做一遍；两个标签同时挂着又分不清是在改还是等复测。时机只在这里写，其余文档指过来。"
 expires_if = "开工到合入由同一条流水线独占、无法被第二个会话接手时删。"
 
 [[rule]]
-id = "doc.issue.abandon-restores-labels"
+id = "doc.issue.merge-is-the-boundary"
 source = "docs/agents/issue-tracker.md#票的生命周期"
 check = "none"
 status = "manual"
+why = "「已经做完」的唯一判据是合入 main，PR 开着不算：`--release` 之所以只在合入后才跑，是因为 PR 开着时改动还没进 main，同一个账号下的第二个会话仍可能拿同一张票重做一遍（#932）。机制本身写死在 `claim.py` 的 `command()` 里，判据在文档这一句。"
+expires_if = "PR 合入前就能把改动锁在主线可见处（例如平台原生 merge queue 独占）时删。"
+
+[[rule]]
+id = "doc.issue.abandon-restores-labels"
+source = "docs/agents/issue-tracker.md#票的生命周期"
+check = "code:tool/claim.py:finish"
+status = "code"
 why = "弃单只摘 in-progress 不恢复原来的 ready-* / needs-triage，标签就烂在票上：既不在待办池里，也没人知道为什么停，下一个会话不敢碰。"
 expires_if = "标签历史由平台自动保留并可一键回滚时删。"
 
@@ -870,7 +822,7 @@ expires_if = "标签历史由平台自动保留并可一键回滚时删。"
 id = "doc.issue.number-from-output"
 source = "docs/agents/issue-tracker.md#票的生命周期"
 check = "none"
-status = "manual"
+status = "advisory"
 why = "并行会话会占用按顺序推出来的编号；照 gh issue create 打印的 URL 取号，互链才不会指到别人的票。"
 expires_if = "开票后由工具直接回填编号与互链时删。"
 
@@ -977,7 +929,7 @@ id = "doc.release.count-regression-once"
 source = "docs/agents/release.md#正文的格式"
 check = "none"
 status = "manual"
-why = "用例数写成拼接或推算的复合计数就没有任何一次运行对得上；只写第 1 步 discover 那一次的输出，且只写一次。"
+why = "用例数写成拼接或推算的复合计数就没有任何一次运行对得上；跑两遍或从别处抄数，正文验证行与 CHANGELOG 那一行的两个数字也会互相对不上。只写第 1 步 discover 那一次的输出，且只写一次；两版解释器结论不一致时以 3.12 的发版构建为准。"
 expires_if = "正文不再写用例数时删。"
 
 [[rule]]
@@ -1027,14 +979,6 @@ check = "none"
 status = "manual"
 why = "动了 `AGENTS.md` §1 的契约或实现侧对应的名单（`run.py` 的 NEVER、`polarity.NEG_PREFIX`、`off()` 的走向），用户侧 agent 的行为就变了；正文不提这一句，用户会在下一版发现步骤对不上。"
 expires_if = "`AGENTS.md` 随实现自动生成、契约变化不再需要人工转述时删。"
-
-[[rule]]
-id = "doc.release.numbers-from-one-run"
-source = "docs/agents/release.md#一轮发版的产物顺序"
-check = "none"
-status = "manual"
-why = "正文验证行与 CHANGELOG 那一行必须是同一次 discover 的输出；跑两遍或从别处抄数，两个数字会互相对不上。两版解释器结论不一致时以 3.12 的发版构建为准。"
-expires_if = "验证数字由平台在发版时统一给出时删。"
 
 [[rule]]
 id = "doc.release.sha-and-credits-before-publish"
@@ -1123,17 +1067,17 @@ expires_if = "失败说明改由结构化诊断字段给出、脚本自己就能
 [[rule]]
 id = "domain.steps.optional-entry-not-unfinished"
 source = "CONTEXT.md#执行"
-check = "none"
-status = "manual"
-why = "可选入口经 maybe() / p.entry() 找不到只返回 False，不记 FAILED_STEPS、退出码仍是 0；记成未完成，没装某个 App 的机型会整段失败。与 dev.navigation.raise-vs-false 相邻但不同：那条判写脚本时该选哪个方法（该 raise 的写成返回 False 就是 #776，段内空跑还按成功记），这条判引擎把哪种失败算进退出码。方法选择的对照表在 docs/04 的「该用哪个导航方法」。"
+check = "code:tool/recipe_kit.py:preamble"
+status = "code"
+why = "可选入口经 maybe() / p.entry() 找不到只返回 False，不记 FAILED_STEPS、退出码仍是 0；记成未完成，没装某个 App 的机型会整段失败。与 dev.navigation.raise-vs-false 相邻但不同：那条判写脚本时该选哪个方法（该 raise 的写成返回 False 就是 #776，段内空跑还按成功记），这条判引擎把哪种失败算进退出码。方法选择的对照表在 docs/04 的「该用哪个导航方法」。实现在 `preamble()` 注入的 `maybe` 闭包里。"
 expires_if = "可选入口与必需入口统一成一种失败语义、脚本不再自己选时删。"
 
 [[rule]]
 id = "domain.steps.skip-ledger"
 source = "CONTEXT.md#执行"
-check = "none"
-status = "manual"
-why = "「按约定不跑」与「没跑成」共用一个台账时，结果页会把型号 / 版本不符、要机主手动进入的段算成失败并可重试，重跑还是同样跳过。跳过台账独立、不进 failed_steps 事件，退出码只看失败台账（#838、ADR-0029）。"
+check = "code:tool/recipe_kit.py:preamble"
+status = "code"
+why = "「按约定不跑」与「没跑成」共用一个台账时，结果页会把型号 / 版本不符、要机主手动进入的段算成失败并可重试，重跑还是同样跳过。跳过台账独立、不进 failed_steps 事件，退出码只看失败台账（#838、ADR-0029）。实现在 `preamble()` 注入的 `skip` 闭包里。"
 expires_if = "结果页与退出码改由单独的结局字段表达、不再从台账推断时删。"
 
 [[rule]]
