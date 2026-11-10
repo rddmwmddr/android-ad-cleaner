@@ -707,24 +707,24 @@ expires_if = "ADR 之间有机器可查的取代关系（supersedes 字段）时
 [[rule]]
 id = "doc.triage.five-roles-map"
 source = "docs/agents/triage-labels.md#Triage Labels"
-check = "none"
-status = "manual"
-why = "skill 说的是角色名（needs-triage 等），仓库用的是标签字符串；不按这张表翻译，会打出 skill 自己都不认的标签。"
+check = "ci:triage-audit"
+status = "enforced"
+why = "skill 说的是角色名（needs-triage 等），仓库用的是标签字符串；不按这张表翻译，会打出 skill 自己都不认的标签。`## 标签登记` 是这张表的完整版：票上的标签必须都在里面，新标签不登记，`ci:triage-audit` 会点名。"
 expires_if = "仓库直接采用 skill 的角色名作标签、不再需要映射时删。"
 
 [[rule]]
 id = "doc.triage.waiting-for-verify-outranks"
 source = "docs/agents/triage-labels.md#Triage Labels"
-check = "none"
-status = "manual"
+check = "ci:triage-audit"
+status = "enforced"
 why = "它和 ready-for-agent 的票外观一模一样：已修完的 #293 在 2026-10-29 还挂在 `ready-for-agent` 下，下一个会话随时可以拿它再实现一遍。定义、互斥与关票条件只在这里写，其余文档指过来。"
 expires_if = "issue 状态改由平台的原生状态机表达、标签不再承担这个语义时删。"
 
 [[rule]]
 id = "doc.triage.in-progress-is-a-claim"
 source = "docs/agents/triage-labels.md#Triage Labels"
-check = "none"
-status = "manual"
+check = "ci:triage-audit"
+status = "enforced"
 why = "`in-progress` 是认领而不是角色，和 `waiting-for-verify` 不并存；两个标签叠在同一张票上时，读的人分不清是有人在改还是等复测。摘标时机只写在 issue-tracker 的「票的生命周期」里。"
 expires_if = "认领改由平台原生的 assignee 表达、标签不再表示进行中时删。"
 
@@ -739,8 +739,8 @@ expires_if = "GitHub 原生 stale 规则接管加标与摘标、标签不再代�
 [[rule]]
 id = "doc.triage.one-category-label"
 source = "docs/agents/triage-labels.md#分类标签"
-check = "none"
-status = "manual"
+check = "ci:triage-audit"
+status = "enforced"
 why = "分类是筛选与统计的口径；2026-11-01 复查时全库 150 张 open 票里有 8 张缺分类、3 张双分类，按分类检索会漏票。"
 expires_if = "issue 类型改由 GitHub 原生 issue type 表达时删。"
 
