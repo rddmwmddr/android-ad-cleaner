@@ -469,8 +469,8 @@ expires_if = "改前改后的对拍不再是证明等价或差异的手段时删
 [[rule]]
 id = "dev.tests.stub-and-assert"
 source = "CODING_STANDARDS.md#桩住协作方就断言它被调到"
-check = "none"
-status = "manual"
+check = "test:test_rules_guards::StubGuards.test_patched_collaborators_are_used"
+status = "enforced"
 why = "候选 5 把 via_app_page 改成一行前向壳后，四处 patch 成了哑桩、其中三处继续绿；只有 assert_called_once() 把它们暴露出来。普通 Mock 照单全收实参，签名改了、self 绑错了都不会红，autospec=True 当场报出来。"
 expires_if = "测试替身改由依赖注入给出、不再 patch 模块级名字时删；替身由类型检查或协议替身自动生成时也删。"
 
