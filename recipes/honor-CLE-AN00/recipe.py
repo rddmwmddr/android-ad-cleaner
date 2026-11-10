@@ -70,6 +70,7 @@ def my_tab(app):
 
 @step("广告跟踪")
 def _():
+    skip_in_safe_mode()
     p.start("com.hihonor.id", ".oaid.ui.AdvertisingPrivacyActivity", expect="应用广告跟踪管理")
     enter("更多选项", scrolls=0)
     if p.find("显示系统程序", exact=True):

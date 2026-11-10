@@ -4,7 +4,6 @@
 BUILD = "PLG110_16.0.10"
 MODELS = ["PLG110"]
 
-import os
 import re
 import time
 
@@ -198,9 +197,10 @@ def assistant_settings():
 @step("广告跟踪")
 def _():
     global VERIFIED_SWITCHES
+    skip_in_safe_mode()
     model = p.d.shell("getprop ro.product.model").output.strip()
     build = p.d.shell("getprop ro.build.display.id").output.strip()
-    if os.environ.get("AAC_REF") or model != "PLG110" or not build.startswith(BUILD):
+    if model != "PLG110" or not build.startswith(BUILD):
         skip("参考或版本不同时不批量处理逐应用广告跟踪，需重新核对")
     print("  将关闭逐应用 OAID 广告跟踪许可；不重置设备标识符。", flush=True)
     system_settings()
