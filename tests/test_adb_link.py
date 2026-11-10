@@ -354,8 +354,8 @@ class ParityTests(unittest.TestCase):
             with self.subTest(name):
                 old, new = phone(script), phone(script)
                 with patch.object(adb_link, "wait_for", return_value=wait_ok):
-                    seen[name] = outcome(lambda: old_resilient_shell(old, "dumpsys window"))
-                    new_result = outcome(lambda: new._resilient_shell("dumpsys window"))
+                    seen[name] = outcome(lambda: old_resilient_shell(old, "dumpsys window"))  # noqa: B023 - 当轮创建当轮消费，outcome 同步调用
+                    new_result = outcome(lambda: new._resilient_shell("dumpsys window"))  # noqa: B023 - 同上
                 self.assertEqual(seen[name], new_result)
                 self.assertEqual(len(old.calls), len(new.calls))
         # 对拍不能靠巧合：这两条必须真的走到「断线」和「非断线的命令失败」

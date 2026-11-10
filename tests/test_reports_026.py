@@ -259,7 +259,7 @@ class DisconnectTests(unittest.TestCase):
                 try:
                     raise fast.adbutils.AdbError("closed")
                 except fast.adbutils.AdbError as e:
-                    raise fast.u2.exceptions.AdbShellError(e)
+                    raise fast.u2.exceptions.AdbShellError(e) from e
             except Exception as chained:
                 self.assertIsInstance(adb_link.lost_from(chained, "x"), adb_link.DeviceLost)
         with patch.object(adb_link, "present", return_value=True):

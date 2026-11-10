@@ -32,7 +32,7 @@ def page(titles, states, tops, dialog=False):
         f'<node text="{title}" bounds="[80,{top + 40}][700,{top + 120}]"/>'
         f'<node class="android.widget.Switch" checkable="true" checked="{str(on).lower()}"'
         f' bounds="[900,{top + 40}][1000,{top + 120}]"/></node>'
-        for title, on, top in zip(titles, states, tops))
+        for title, on, top in zip(titles, states, tops, strict=True))    # tops 由 len(titles) 生成，states 与 ROWS 同长
     overlay = ('<node class="android.widget.Button" content-desc="取消" clickable="true" bounds="[80,1850][420,2050]"/>'
                '<node class="android.widget.Button" content-desc="确定" clickable="true" bounds="[420,1850][760,2050]"/>'
                ) if dialog else ""

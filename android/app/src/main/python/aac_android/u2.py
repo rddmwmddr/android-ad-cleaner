@@ -215,7 +215,7 @@ class UiObject:
                     return False
                 time.sleep(0.3)
         except DeviceError as e:
-            warnings.warn(f"wait readTimeout: {e}", RuntimeWarning)
+            warnings.warn(f"wait readTimeout: {e}", RuntimeWarning, stacklevel=2)
         try:
             return self.exists if exists else not self.exists
         except DeviceError:
@@ -233,7 +233,7 @@ class UiObject:
     def info(self):
         node = self._found_node("info")
         return {"text": node.get("text") or "", "contentDescription": node.get("content-desc") or "",
-                "bounds": dict(zip(("left", "top", "right", "bottom"), bounds_of(node))),
+                "bounds": dict(zip(("left", "top", "right", "bottom"), bounds_of(node), strict=True)),  # bounds_of 恒返回 4 元组
                 "packageName": node.get("package") or "", "className": node.get("class") or ""}
 
     def bounds(self):

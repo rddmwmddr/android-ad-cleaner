@@ -196,7 +196,7 @@ class VivoBrowserRealPageTests(unittest.TestCase):
                 clicks = []
                 p = fake_phone(clock=clock, size=(1080, 2400), stages=[(0.0, BOTTOM_MENU_PAGE)],
                                focus=((0.0, "com.vivo.browser/.BrowserActivity"),),
-                               click=lambda x, y: clicks.append((x, y)))
+                               click=lambda x, y: clicks.append((x, y)))  # noqa: B023 - 每轮新建 clicks，点击同步发生
                 p.start = lambda *a, **k: None
                 p.await_page = lambda *a, **k: True
                 p.settle = lambda *a, **k: True

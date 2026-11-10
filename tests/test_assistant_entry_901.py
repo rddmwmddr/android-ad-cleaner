@@ -204,7 +204,7 @@ class AssistantEntryTests(unittest.TestCase):
                 out = io.StringIO()
                 p = fake_phone(size=(1080, 2340), stages=((0.0, HOME_PAGE),),
                                focus=((0.0, LAUNCHER),), await_page=lambda *a, **k: None,
-                               say=lambda *a, **k: print(*a, file=out, flush=True))
+                               say=lambda *a, **k: print(*a, file=out, flush=True))  # noqa: B023 - 当轮创建当轮消费，load() 同步执行
                 with self.assertRaisesRegex(RuntimeError, "未确认负一屏头像入口"):
                     load(p, recipe)["assistant_icon"]()
                 text = out.getvalue()

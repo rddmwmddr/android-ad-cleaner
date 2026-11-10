@@ -476,7 +476,7 @@ def reach(p, entry, log=print, now=None, sleep=None, settle=1.2, allow_search=Tr
                 raise
             log(f"  · 直达 {where} 打不开（{e}），换下一档")
             continue
-        ok = wait.until(lambda: landed(p, d), timeout=4, poll=0.2, now=now, sleep=sleep)
+        ok = wait.until(lambda: landed(p, d), timeout=4, poll=0.2, now=now, sleep=sleep)  # noqa: B023 - d 当轮创建当轮消费，until 同步轮询
         if ok and (not d.expect or p.expect_page(d.expect, 3)):
             return "direct"
         log(f"  · 直达 {where} 没落在这一页，换下一档")

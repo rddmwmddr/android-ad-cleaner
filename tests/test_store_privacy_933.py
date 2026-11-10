@@ -204,7 +204,7 @@ class Rmx3700EntryTests(unittest.TestCase):
         for wording in PRIVACY:
             with self.subTest(wording):
                 p = phone_mock(W=1080, H=2340)
-                p.find.side_effect = lambda text, exact=False: text == wording
+                p.find.side_effect = lambda text, exact=False: text == wording  # noqa: B023 - 当轮创建当轮消费，tap_by_scroll 同步调用
                 scope = load(p, RECIPES["RMX3700"])
                 self.assertTrue(scope["tap_by_scroll"](PRIVACY))
                 p.tap.assert_called_once_with(wording, exact=True, scrolls=0)

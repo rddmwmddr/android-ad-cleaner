@@ -181,8 +181,8 @@ class BehaviourTests(unittest.TestCase):
                 reads = {"n": 0}
 
                 def locked(*_a, **_k):
-                    reads["n"] += 1
-                    return reads["n"] > 1
+                    reads["n"] += 1  # noqa: B023 - reads 每轮新建、当轮传给 probe，同步消费
+                    return reads["n"] > 1  # noqa: B023 - 同上，当轮创建当轮消费
 
                 scope, p = probe(path, locked)
                 code = drive(scope, p, [("甲", _ok([], "甲")), ("乙", _ok([], "乙")),

@@ -206,7 +206,8 @@ def _dicts(tree):
                 if isinstance(target, ast.Name):
                     found.pop(target.id, None)
                     if isinstance(node.value, ast.Dict):
-                        found[target.id] = {k.value: v for k, v in zip(node.value.keys, node.value.values)
+                        # ast.Dict 的 keys 与 values 恒等长
+                        found[target.id] = {k.value: v for k, v in zip(node.value.keys, node.value.values, strict=True)
                                             if isinstance(k, ast.Constant)}
     return found
 
@@ -230,7 +231,7 @@ def _notes(tree, script):
     out = []
     for node in tree.body:
         if isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict):
-            for key, value in zip(node.value.keys, node.value.values):
+            for key, value in zip(node.value.keys, node.value.values, strict=True):    # ast.Dict 的 keys 与 values 恒等长
                 if (isinstance(key, ast.Constant) and isinstance(value, ast.Constant)
                         and isinstance(value.value, str) and CJK.search(value.value)):
                     out += [Note(part.strip(), str(key.value), script, value.lineno)
@@ -516,7 +517,7 @@ if __name__ == "__main__":
             sys.stdout.write(gaps(_recipes_dir(), sys.argv[2]))
         except (FileNotFoundError, ValueError) as error:
             print(error, file=sys.stderr)
-            raise SystemExit(1)
+            raise SystemExit(1) from None
     else:
         print("用法：python3 tool/vocab.py [gaps <目录名>]", file=sys.stderr)
         raise SystemExit(1)

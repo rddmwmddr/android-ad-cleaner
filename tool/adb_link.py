@@ -253,7 +253,7 @@ class Connection:
                 return self._send(command, timeout)
             except LinkBroken as broken:
                 if attempt and not self.lost_on_retry:
-                    raise broken.error
+                    raise broken.error from broken
                 if attempt or not wait_for(self.serial, self.adb):
                     self.mark_lost()
                     raise lost(str(broken.error)) from broken.error

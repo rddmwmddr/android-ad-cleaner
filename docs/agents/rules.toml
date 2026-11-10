@@ -99,6 +99,14 @@ expires_if = "CI 与本地共用一个命令来源、目标清单不再需要多
 since = "b17d420"
 
 [[rule]]
+id = "dev.ruff.bugbear-rules"
+source = "CLAUDE.md#开发"
+check = "ci:lint"
+status = "enforced"
+why = "只查 F/E9 时，闭包捕获循环变量（B023）与 zip 静默截断（B905）只能靠人读，状态机里会表现为「重试沿用上一轮坐标」这类错误。规则集收进 pyproject.toml 后命令里不再有 --select，加规则只改配置一处；静态检查拆成独立 lint job，红了不与用例失败混在一起（#993、#994）。"
+expires_if = "静态检查不再跑 ruff，或规则集重新回到命令行参数里时删。"
+
+[[rule]]
 id = "dev.coverage.two-platform-merge"
 source = "CLAUDE.md#开发"
 check = "ci:coverage"

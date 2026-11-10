@@ -51,7 +51,7 @@ def read_page(text):
     ids, files = ENTRY_ID.findall(block), ENTRY_FILE.findall(block)
     if not found or not ids or len(ids) != len(files):
         return None, []
-    return found.group(1), list(zip(ids, files))
+    return found.group(1), list(zip(ids, files, strict=True))    # 上面已判过 len(ids) == len(files)
 
 
 def compare(page_files, release_files):
