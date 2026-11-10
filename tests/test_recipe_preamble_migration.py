@@ -129,7 +129,7 @@ class StructureTests(unittest.TestCase):
     def test_recipes_do_not_define_the_preamble(self):
         offenders = {}
         for path in RECIPES:
-            key = str(path.relative_to(ROOT))
+            key = path.relative_to(ROOT).as_posix()      # ALLOWED 的键不分平台，Windows 的反斜杠不能漏
             found = defined_names(path.read_text(encoding="utf-8"), str(path)) - set(ALLOWED.get(key, ()))
             if found:
                 offenders[key] = sorted(found)
