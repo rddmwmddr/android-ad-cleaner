@@ -32,6 +32,14 @@ why = "回归命令与解释器写过三种说法，agent 各自猜，报一串 
 expires_if = "本地入口收成一条脚本、CI 不再直接跑 unittest discover 时删。"
 
 [[rule]]
+id = "dev.tests.cases-live-under-tests"
+source = "CLAUDE.md#开发"
+check = "test:test_test_collection::CollectionTests.test_no_test_functions_outside_the_tests_folder"
+status = "enforced"
+why = "`recipes/` 下两份社区配方的 `test_recipe.py` 定义了 21 个用例，`discover -s tests` 收不到，`.coveragerc` 的 source 与 ruff 的范围也不含 `recipes/`，收集、覆盖率、静态检查三道关都没看见，白跑了 16 天；`tests/test_recipe_preamble_migration.py` 当时是按文件名绕过去，而不是报出来（#972）。"
+expires_if = "收集起点不再是 `-s tests`、或 CI 改成全仓发现用例时删。"
+
+[[rule]]
 id = "dev.tests.interpreter-version"
 source = "CLAUDE.md#开发"
 check = "none"

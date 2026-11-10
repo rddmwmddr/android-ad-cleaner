@@ -1,6 +1,6 @@
 """机型脚本不再自带前导（#839）：结构守卫 + 每份脚本三个场景的行为守卫。
 
-结构层：43 份脚本不得再定义前导六个名字，`adapt gen` 生成的草稿同样不得带。
+结构层：45 份脚本不得再定义前导六个名字，`adapt gen` 生成的草稿同样不得带。
 行为层：每份脚本三个场景 —— 跑前锁屏、首段失败、中途锁屏 —— 失败台账非空且退出码 1。
 只断言外部行为：装载脚本、驱动段包装、看台账与退出码；不断言段包装内部调用了谁。
 """
@@ -20,8 +20,7 @@ import adapt
 import fast
 from fixtures import load_recipe, phone_mock
 
-RECIPES = tuple(sorted(p for p in (ROOT / "recipes").rglob("*.py")
-                       if p.name != "test_recipe.py"))               # 43 份：目录里除 test_recipe.py 之外的脚本
+RECIPES = tuple(sorted((ROOT / "recipes").rglob("*.py")))               # 45 份脚本
 
 # 前导的六个名字，外加 #838 的中止标记、两个新台账、#902 的拉起助手、#903 的开关名单断言、
 # #909 的整页关闭出口与 #939 的页面落点断言 —— 迁到引擎之后脚本一个都不该再定义
@@ -143,10 +142,10 @@ class StructureTests(unittest.TestCase):
 
 
 class BehaviourTests(unittest.TestCase):
-    """43 份 × 3 个场景：锁屏与段失败都要在失败台账里留下名字，退出码为 1。
+    """45 份 × 3 个场景：锁屏与段失败都要在失败台账里留下名字，退出码为 1。
 
     只问「台账非空、退出码 1」。中止之后不读屏、后来的段记「未执行」这些是注入那份前导的
-    内部契约，由 `tests/test_recipe_kit.py` 守一次；这里重复断言只会让 43 份一起红，
+    内部契约，由 `tests/test_recipe_kit.py` 守一次；这里重复断言只会让 45 份一起红，
     看不出是哪一份真的在静默跳过。
     """
 
