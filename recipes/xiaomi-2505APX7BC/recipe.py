@@ -153,22 +153,30 @@ def _():
 
 @step("主题")
 def _():
-    if "package:" in p.d.shell("pm path com.miui.themestore").output:
-        p.start("com.miui.themestore", foreground="com.android.thememanager")
-    else:
-        # 没有主题商店时直接起 thememanager：它没有 LAUNCHER activity，monkey 拉不起来（#730）
-        if "package:" not in p.d.shell("pm path com.android.thememanager").output:
-            print("  · 本机没有主题商店，跳过"); return
-        start_or_skip("com.android.thememanager", ".ThemeResourceProxyTabActivity",
-                      dead_ends=THEME_DEAD_ENDS, reason="没有主题商店，主题页打不开")
+    # 直达主题管理包的代理页（沿用 #730 的做法：它没有 LAUNCHER，monkey 拉不起来）；经主题商店冷启动
+    # 还要过一道重定向过渡窗，前台校验容易误判（#906）。落点被系统转走时仍按跳过收尾。
+    if "package:" not in p.d.shell("pm path com.android.thememanager").output:
+        print("  · 本机没有主题管理包，跳过"); return
+    start_or_skip("com.android.thememanager", ".ThemeResourceProxyTabActivity",
+                  dead_ends=THEME_DEAD_ENDS, reason="主题页打不开")
     time.sleep(2)
-    require(p.tab("我的"), "主题底部「我的」标签没找到")
+    if not p.tab("我的"):
+        raise RuntimeError("主题底部「我的」标签没找到；" + p.page_evidence())
     time.sleep(1)
     # 「设置」在这台是「我的」页上的文字按钮（精确匹配不会命中「设置壁纸」），图标形态也认
-    require(p.tap("设置", exact=True, scrolls=0), "主题「我的」页没有「设置」")
+    if not p.tap("设置", exact=True, scrolls=0):
+        raise RuntimeError("主题「我的」页没有「设置」；" + p.page_evidence())
     # 落点判据用页面上的项：ThemePreferenceActivity 类名不含 Setting，in_settings_page() 对它恒假
-    require(p.expect_page("每次联网时通知", timeout=3) or p.expect_page("自动更新", timeout=1),
-            f"主题设置页没有打开；停在 {p.focus()}")
+    if not (p.expect_page("每次联网时通知", timeout=3) or p.expect_page("自动更新", timeout=1)):
+        raise RuntimeError("主题设置页没有打开；" + p.page_evidence())
+    p.await_page()                              # 齿轮点完这一页可能还没画完
+    before = {}
+    for _ in range(2):                          # 行也可能在首屏之下，off() 自己会翻页找
+        before.update({title: on for title, on, _ in p.switches()})
+        if not p.scroll_more():
+            break
+    p.top(2)
+    require_switches(before, ["每次联网时通知"], "主题·设置", contains=True)
     p.off(only=["每次联网时通知"], keep=["自动更新"], page="主题·设置")
     if maybe("隐私设置"):
         p.off(only=["个性化推荐"], page="主题·隐私")

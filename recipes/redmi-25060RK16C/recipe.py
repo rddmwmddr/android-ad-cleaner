@@ -149,16 +149,24 @@ def _():
 
 @step("主题")
 def _():
-    # 实测 resolve-activity：K80 的 themestore 直达自己的 ThemeResourceTabActivity，不再走 18 的 thememanager 中转（那会离开前台）
+    # 实测：经 themestore 冷启动重定向到 thememanager 的过渡窗会把引擎前台校验搞崩；直接拉最终页最稳
     if "package:" not in p.d.shell("pm path com.android.thememanager").output:
-        print("  · 本机没有主题商店，跳过"); return
-    # 实测：themestore 冷启动重定向到 thememanager 的过渡窗会把引擎前台校验搞崩；直接拉最终页最稳
+        print("  · 本机没有主题管理包，跳过"); return
     start_or_skip("com.android.thememanager", ".ThemeResourceProxyTabActivity",
                   dead_ends=THEME_DEAD_ENDS, reason="主题页打不开")
+    # 导航失败以前记成跳过、与「本页没有目标开关」同形：三步都校验，报错带页面现场（#906）。
     if not (tab_bot("我的") or p.tap("我的", exact=True, scrolls=0)):
-        print("  · 主题商店没有「我的」标签，跳过"); p.back(3); return
+        raise RuntimeError("主题「我的」标签没找到；" + p.page_evidence())
     if not (gear(toolbar_only=True) or gear()):
-        print("  · 主题商店设置入口没找到，跳过"); p.back(3); return
+        raise RuntimeError("主题设置入口没找到；" + p.page_evidence())
+    p.await_page()                              # 齿轮点完这一页可能还没画完
+    before = {}
+    for _ in range(2):                          # 行也可能在首屏之下，off() 自己会翻页找
+        before.update({title: on for title, on, _ in p.switches()})
+        if not p.scroll_more():
+            break
+    p.top(2)
+    require_switches(before, ["每次联网时通知"], "主题·设置", contains=True)
     p.off(only=["每次联网时通知"], keep=["自动更新"], page="主题·设置")
     if maybe("隐私设置"):
         p.off(only=["个性化推荐"], page="主题·隐私"); p.back()

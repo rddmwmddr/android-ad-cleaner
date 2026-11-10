@@ -133,17 +133,16 @@ class ThemeUnreachableTests(unittest.TestCase):
         with self.assertRaises(adb_link.DeviceLost):
             load_recipe(p, ROOT / "recipes/xiaomi-24129PN74C/recipe.py", only="主题", out=io.StringIO())
 
-    def test_installed_store_keeps_the_original_launch(self):
-        """主题商店在的机器走原路径：直达商店、前台等 thememanager，行为不变（旧树也绿）。
+    def test_installed_store_does_not_change_the_launch(self):
+        """主题商店在不在都直达代理页（#906），不再经商店冷启动过一次重定向过渡窗。
 
-        先找商店的那几份才适用；另外两份反过来先找 thememanager（见 #730 的实测记录）。"""
-        for path in (ROOT / "recipes/xiaomi-24129PN74C/recipe.py",
-                     ROOT / "recipes/xiaomi-M154FF/recipe.py"):
+        商店路径只在 #730 的兜底里出现过；现在统一成一条，落点被转走仍按跳过收尾。"""
+        for path in theme_recipes():
             with self.subTest(recipe=str(path.relative_to(ROOT))):
-                _, _, p = self.run_theme(path, MARKET, store="package:/system/app/ThemeStore/ThemeStore.apk")
-                self.assertEqual(p.start.call_args_list[0].args[0], STORE)
-                self.assertEqual(p.start.call_args_list[0].kwargs.get("foreground"), THEME)
-                self.assertNotIn(THEME, [call.args[0] for call in p.start.call_args_list])
+                _, _, p = self.run_theme(path, MARKET,
+                                         store="package:/system/app/ThemeStore/ThemeStore.apk")
+                self.assertEqual(p.start.call_args_list[0].args[0], THEME)
+                self.assertNotIn(STORE, [call.args[0] for call in p.start.call_args_list])
 
 
 if __name__ == "__main__":

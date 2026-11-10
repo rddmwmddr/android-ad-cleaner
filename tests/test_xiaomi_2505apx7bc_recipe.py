@@ -15,6 +15,7 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
+import fast
 import run
 from fixtures import load_recipe, phone_mock
 
@@ -36,6 +37,9 @@ class MixFlip2RecipeTests(unittest.TestCase):
         p.entry.return_value = False
         p.scroll_more.return_value = False
         p.switches.return_value = []
+        # 主题段导航失败时要把页面现场拼进报错（#906）：用真实实现，别让 Mock 替掉它
+        p._page_diagnosis = lambda: fast.Phone._page_diagnosis(p)
+        p.page_evidence = lambda titles=(): fast.Phone.page_evidence(p, list(titles))
         return p
 
     def test_actual_model_selects_own_recipe_and_pins_recorded_build(self):
@@ -109,6 +113,7 @@ class MixFlip2RecipeTests(unittest.TestCase):
         p.tab.return_value = True
         p.tap.return_value = True
         p.expect_page.return_value = True
+        p.switches.return_value = [("每次联网时通知", True, (900, 500))]
         load_recipe(p, self.path, ["主题"])
         self.assertEqual(p.tab.call_args_list[0].args, ("我的",))
         # 「设置」在这台是文字按钮：精确匹配那一下要真的点出去
