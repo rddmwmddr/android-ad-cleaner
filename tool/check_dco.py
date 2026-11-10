@@ -13,7 +13,8 @@ import re
 import sys
 from dataclasses import dataclass
 
-from commits import Commit, read_commits, use_utf8_console
+from commits import Commit, read_commits
+from stdio import use_utf8_console
 
 use_utf8_console()
 

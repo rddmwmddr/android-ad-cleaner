@@ -13,11 +13,9 @@
 """
 import os, re, shlex, sys, time, unicodedata, xml.etree.ElementTree as ET
 from dataclasses import dataclass
-for _st in (sys.stdout, sys.stderr):
-    try:
-        _st.reconfigure(encoding="utf-8", errors="replace")   # Windows 控制台默认不是 UTF-8
-    except Exception:
-        pass
+from stdio import use_utf8_console
+
+use_utf8_console()
 import adbutils
 import uiautomator2 as u2
 from ui_session import connect

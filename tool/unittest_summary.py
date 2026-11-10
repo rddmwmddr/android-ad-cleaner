@@ -11,6 +11,8 @@ import re
 import sys
 from pathlib import Path
 
+from stdio import use_utf8_console
+
 RAN = re.compile(r"^Ran (\d+) tests? in ([\d.]+)s", re.MULTILINE)
 VERDICT = re.compile(r"^(OK|FAILED)\b(.*)$", re.MULTILINE)
 
@@ -49,16 +51,8 @@ def render(label, text, sha=""):
     return "\n".join(lines) + "\n"
 
 
-def _utf8_stdout():
-    """Windows 上 stdout 默认 cp1252，写中文与 ✅ / ❌ 会 UnicodeEncodeError（#875 的第一次 CI 就栽在这）。"""
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")
-    except (AttributeError, ValueError):
-        pass
-
-
 def main(argv):
-    _utf8_stdout()
+    use_utf8_console()
     if len(argv) < 2:
         print("用法：python3 tool/unittest_summary.py <日志> [标签] [提交短哈希]", file=sys.stderr)
         return 2

@@ -26,11 +26,9 @@ from datetime import datetime, timezone
 
 from stale import STALE_LABEL     # 停摆标记只此一份；认领时要摘掉（#978）
 
-for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8", errors="replace")   # Windows 控制台默认不是 UTF-8
-    except Exception:
-        pass
+from stdio import use_utf8_console
+
+use_utf8_console()
 
 CLAIMED = "认领中"
 RELEASED = "认领结束"

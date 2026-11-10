@@ -25,11 +25,9 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8", errors="replace")   # Windows 控制台默认不是 UTF-8
-    except Exception:
-        pass
+from stdio import use_utf8_console
+
+use_utf8_console()
 
 LABEL = "waiting-for-verify"
 HEADING = "当前队列"

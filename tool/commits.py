@@ -3,17 +3,7 @@
 只读 git、不做判定：每条记录原样交出，判什么由各自的校验脚本决定。
 """
 import subprocess
-import sys
 from dataclasses import dataclass
-
-
-def use_utf8_console():
-    """Windows 控制台与管道默认不是 UTF-8：打印中文不能把校验本身打崩。"""
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
 
 
 @dataclass(frozen=True)

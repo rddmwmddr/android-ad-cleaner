@@ -107,6 +107,14 @@ why = "只查 F/E9 时，闭包捕获循环变量（B023）与 zip 静默截断�
 expires_if = "静态检查不再跑 ruff，或规则集重新回到命令行参数里时删。"
 
 [[rule]]
+id = "dev.stdio.single-exit"
+source = "CLAUDE.md#开发"
+check = "test:test_rules_guards::StdioGuards.test_stdio_utf8_single_exit"
+status = "enforced"
+why = "同一段四行重配置在 16 个文件里各抄一份、另有一份写成 commits 的助手，改一处漏十几处的风险是实打实的：新入口忘了转，Windows 上打印中文与 ✓ / ✗ 就崩。抽成唯一出口后，这段写法重新长回来没有任何别的东西会红，所以加了扫源码的守卫（#995）。正文不能照抄那行写法——守卫扫全仓文本，会把文档一起抓。"
+expires_if = "标准流重配置不再需要（打包环境默认就是 UTF-8 模式），或该助手被并入别的基础模块时删。"
+
+[[rule]]
 id = "dev.coverage.two-platform-merge"
 source = "CLAUDE.md#开发"
 check = "ci:coverage"

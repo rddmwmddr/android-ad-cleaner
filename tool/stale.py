@@ -24,11 +24,9 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8", errors="replace")   # Windows 控制台默认不是 UTF-8
-    except Exception:
-        pass
+from stdio import use_utf8_console
+
+use_utf8_console()
 
 STATE_LABEL = "needs-info"
 STALE_LABEL = "stale"

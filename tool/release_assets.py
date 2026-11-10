@@ -17,11 +17,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8", errors="replace")   # Windows 控制台默认不是 UTF-8
-    except Exception:
-        pass
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # 直接跑脚本与作为 tool.<模块> import 两种都认
+from stdio import use_utf8_console                         # noqa: E402
+
+use_utf8_console()
 
 PAGE = Path(__file__).resolve().parents[1] / "index.html"
 

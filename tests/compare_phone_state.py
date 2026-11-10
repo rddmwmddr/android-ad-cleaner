@@ -26,11 +26,10 @@ import tempfile
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager
 from pathlib import Path
-for _st in (sys.stdout, sys.stderr):
-    try:
-        _st.reconfigure(encoding="utf-8", errors="replace")   # Windows 控制台默认不是 UTF-8
-    except Exception:
-        pass
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))
+from stdio import use_utf8_console  # noqa: E402  出口取当前副本的，不对拍基线的那一份
+
+use_utf8_console()
 
 TESTS = Path(__file__).resolve().parent
 

@@ -13,7 +13,7 @@
 import re
 import sys
 
-from commits import use_utf8_console
+from stdio import use_utf8_console
 
 use_utf8_console()
 
