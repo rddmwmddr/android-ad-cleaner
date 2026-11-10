@@ -4,6 +4,10 @@
   git archive <sha> | tar -x -C /tmp/aac-base
   .venv/bin/python tests/make_run_cli_baseline.py /tmp/aac-base <sha>
 
+**有意改变**某条命令的输出时，在改动后的树上重生成，并加第三个参数写明原因：
+  .venv/bin/python tests/make_run_cli_baseline.py <改动后的树> <基点 sha> "<票号: 变了什么>"
+这个说明会作为 provenance 的 `note` 留下，重跑比对时能分清「搬家」与「有意改」。
+
 产物里只放退出码与两路输出，路径与备份目录名已规范化（见 tests/run_cli_driver.py）。
 """
 import json
@@ -21,7 +25,7 @@ HOW = "git archive <sha> | tar -x -C /tmp/aac-base && .venv/bin/python tests/mak
 
 
 def main(argv):
-    if len(argv) != 2:
+    if len(argv) not in (2, 3):
         print(__doc__)
         return 2
     root, sha = Path(argv[0]), argv[1]
@@ -31,9 +35,12 @@ def main(argv):
             result, _ = run_cli_driver.run_once(root, spec, work)
         cases[spec["name"]] = result
         print(f"{spec['name']}\trc={result['rc']}")
+    provenance = {"baseline": sha, "how": HOW, "cases": len(cases)}
+    if len(argv) == 3:
+        provenance["note"] = argv[2]
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps({"provenance": {"baseline": sha, "how": HOW, "cases": len(cases)},
-                               "cases": cases}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    OUT.write_text(json.dumps({"provenance": provenance, "cases": cases}, ensure_ascii=False, indent=2) + "\n",
+                   encoding="utf-8")
     return 0
 
 

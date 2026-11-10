@@ -219,7 +219,7 @@ class DetectTest(unittest.TestCase):
         self.assertIn("保留", d["quickapp_note"])
         self.assertIn("hap://", d["quickapp_note"])
         self.assertIn("vivo 优先使用快应用服务开关", d["quickapp_note"])
-        self.assertEqual(d["ads"], [{"pkg": "com.opos.ads", "name": "OPPO 广告服务"}])
+        self.assertEqual(d["ads"], [{"pkg": "com.opos.ads", "name": "OPPO 广告服务", "default_on": False}])
         d = self.detect(quickapps=[{"name": "A", "closed": True}], ads=[{"pkg": "x", "suspended": True}])
         self.assertEqual((d["quickapp_state"], d["ads_state"]), ("已关闭", "已挂起"))
         d = self.detect(quickapps=[{"name": "A", "closed": True}, {"name": "C", "keep": True}])
@@ -230,6 +230,13 @@ class DetectTest(unittest.TestCase):
     def test_xiaomi_ad_component_says_partial_success_is_reported(self):
         d = self.detect(ads=[{"pkg": "com.miui.systemAdSolution"}])
         self.assertIn("会报告部分完成", d["ads"][0]["name"])
+
+    def test_default_mark_reaches_the_phone_selection_page(self):
+        """#973：预勾与否由 status-json 的 default_on 给，手机版只透传，不在 Kotlin 里再判一次。"""
+        d = self.detect(ads=[{"pkg": "com.miui.systemAdSolution", "default_on": True},
+                             {"pkg": "com.opos.ads", "default_on": False}])
+        self.assertEqual([(a["pkg"], a["default_on"]) for a in d["ads"]],
+                         [("com.miui.systemAdSolution", True), ("com.opos.ads", False)])
 
 
 class BrandGuideTest(unittest.TestCase):
