@@ -282,3 +282,29 @@ test("没标录制版本的机型脚本不说「版本一致」（#942）", asyn
     assert.doesNotMatch(kv.textContent, /版本一致/);
   } finally { page.close(); }
 });
+
+test("没有机型脚本时，桌面版手动清单认三星、华为、魅族（#952）", async () => {
+  const urls = [];
+  const cases = [["samsung", "三星 / One UI ", "三星-OneUI.md"],
+                 ["huawei", "华为 / HarmonyOS ", "华为-HarmonyOS.md"],
+                 ["meizu", "魅族 / Flyme ", "魅族-Flyme.md"]];
+  for (const [brand, label, file] of cases) {
+    const status = {
+      info: { model: "X", brand, name: "Phone", os: "16", build: "", android: "16" },
+      recipe: null, recipe_ref: false, recipe_ok: false, recipe_build: "",
+      steps: [], ads: [], quickapps: [], locked: false, dev: false, backup: null,
+      fold_open: false, input_blocked: false, stay_on: "",
+    };
+    const page = await openPage({ api: { status: () => status, open_url: url => urls.push(url) } });
+    try {
+      page.window.eval("S.serial = 'X'");
+      await page.window.showDetect();
+      const link = [...page.document.querySelectorAll("#main a")]
+        .find(a => a.textContent.includes("手动清单"));
+      assert.equal(link.textContent, `${label}手动清单`);
+      link.dispatchEvent(new page.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+      assert.equal(urls.pop(), "https://github.com/rddmwmddr/android-ad-cleaner/blob/main/docs/"
+        + encodeURIComponent("清单") + "/" + encodeURIComponent(file));
+    } finally { page.close(); }
+  }
+});
