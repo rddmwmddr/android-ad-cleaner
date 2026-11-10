@@ -28,10 +28,10 @@ EXEMPT_WORD = "沿用"
 
 
 def looks_like_a_colour(line, match):
-    """CSS 颜色与票号同形（`#000`、`#101820`）。按位置认：属性值开头或收在 `;` / `}` 前。
+    """CSS 颜色与票号同形（三到八位十六进制）。按位置认：属性值开头或收在 `;` / `}` 前。
 
-    覆盖 `background: #000;` 与 `border: 1px solid #333`（前者靠冒号、后者靠分号），
-    票号在中文句子里不会紧跟冒号、也不会以 `;` / `}` 收尾。
+    覆盖冒号后的属性值与以分号或右花括号收尾的声明；票号在中文句子里不会紧跟冒号，
+    也不会以 `;` / `}` 收尾。
     """
     before = line[:match.start()].rstrip()
     after = line[match.end():].lstrip()

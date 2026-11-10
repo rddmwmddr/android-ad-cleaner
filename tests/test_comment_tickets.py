@@ -95,8 +95,8 @@ class DiffTest(unittest.TestCase):
         self.assertEqual(self.problems({"site.css": css}), [])
 
     def test_ticket_right_after_a_cjk_word_still_counts(self):
-        # 按「ASCII 词字符」排除会漏掉紧挨中文的写法：`见#903` 也是挂票号。
-        self.assertEqual(len(self.problems({"a.py": "见#903 的做法\n"})), 1)
+        # 按「ASCII 词字符」排除会漏掉紧挨中文的写法：中文与 `#` 之间没有空格也是挂票号。
+        self.assertEqual(len(self.problems({"a.py": f"见{FOREIGN} 的做法\n"})), 1)
 
 
 class RangeTest(unittest.TestCase):
