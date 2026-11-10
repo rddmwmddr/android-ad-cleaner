@@ -232,10 +232,13 @@ class BridgeIntegrationTests(unittest.TestCase):
     def test_api_blocks_install_during_real_dispatcher_job(self):
         from types import SimpleNamespace
         from gui import app
+        # 用真实的 app.VERSION：「新版」要比它大，写死 0.4.2 的话发 0.4.2 那天就不算新版了
+        major, minor, patch = map(int, app.VERSION.split('.'))
+        newer = f'{major}.{minor}.{patch + 1}'
         with tempfile.TemporaryDirectory() as root:
             api = app.Api(root)
             api.updater.target = 'windows'
-            api.updater.opener = lambda req, **kw: io.BytesIO(json.dumps(manifest()).encode() if req.full_url == updates.MANIFEST_URL else PAYLOAD)
+            api.updater.opener = lambda req, **kw: io.BytesIO(json.dumps(manifest(newer)).encode() if req.full_url == updates.MANIFEST_URL else PAYLOAD)
             installer = Mock()
             installer.install.return_value = {'exit': False}
             api.updater.installer = installer
@@ -253,7 +256,7 @@ class BridgeIntegrationTests(unittest.TestCase):
             installer.install.assert_not_called()
             api.dispatcher.side = ''
             api.install_update(); api.updater.worker.join(2)
-            installer.install.assert_called_once_with(api.updater.path, '0.4.2')
+            installer.install.assert_called_once_with(api.updater.path, newer)
             self.assertEqual(api.dispatcher.side, '')
 
     def test_updater_helper_dispatch_does_not_open_window_or_run_cli(self):
