@@ -42,6 +42,7 @@ UNRESOLVED_ONLY = {
 }
 # close_named() 第一个参数解析不出的，和上面分开冻结，免得一个口径盖住另一个。
 UNRESOLVED_CLOSE = {
+    "oneplus-PJA110/recipe_android16.py": 1,
     "oneplus-PLZ110/recipe.py": 2,
     "oppo-PKT110/recipe.py": 3,
     "oppo-PMX110/recipe.py": 2,
