@@ -11,7 +11,7 @@
 草稿不是适配：入口路径来自探路读屏，未经人工逐步核对；自检只证明「进得去、关得掉、回读确认」。
 转正式机型脚本前必须人工在手机上核对，并补上 BUILD 录制版本。不要直接放进 recipes/。
 """
-import datetime, json, os, re, shlex, subprocess, sys
+import datetime, json, os, re, subprocess, sys
 import xml.etree.ElementTree as ET
 for _st in (sys.stdout, sys.stderr):
     try:
@@ -324,8 +324,6 @@ def cmd_check(rest):
 
 # ---------- 试入口 ----------
 
-CLEAR_TASK = "0x10008000"
-
 
 def _installed_packages(p):
     """一次 `pm list packages` 换成集合：逐条 `pm path` 每次都要起一个进程。"""
@@ -359,9 +357,7 @@ def survey(p, family, words, log=print, now=None, sleep=None):
     for group, entry in entries.ENTRIES.get(family, {}).items():
         for d in entry.direct:
             page = entries.full(d.pkg, d.activity)
-            # 带清栈参数启动会立刻退出的页面只能裸启动（entries.Direct.keep_task）
-            flag = "" if d.keep_task else f" -f {CLEAR_TASK}"
-            result = p.reader.shell(f"am start -W{flag} -n {shlex.quote(d.pkg + '/' + page)}")
+            result = p.reader.shell(entries.start_command(d, wait=True))
             if getattr(result, "exit_code", 0) or re.search(r"Error|Exception", result.output or "", re.I):
                 log(f"✗ 打不开  {group} {page}")
                 rows.append({"group": group, "page": page, "landed": False, "expect": False, "words": []})
