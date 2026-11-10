@@ -196,6 +196,18 @@ class ReachTest(unittest.TestCase):
         r.current = "com.a/.One"
         self.assertTrue(entries.landed(p, entries.Direct("com.a", ".One")))
 
+    def test_allow_search_false_never_opens_the_settings_search(self):
+        """只试直达档：设置搜索会把设备交给系统设置，入口必须留在本 App 里时不能走（#912）。"""
+        r = FakeReader()
+        seen = []
+        p = phone(r)
+        p.setting = lambda *a, **kw: seen.append(a) or True
+        self.assertIsNone(entries.reach(p, self.ENTRY, log=lambda *a: None,
+                                        sleep=no_wait, settle=0, allow_search=False))
+        self.assertEqual(seen, [])
+        launches = [c for c in r.shells if c.startswith("am start") and "com.a/" in c]
+        self.assertEqual(len(launches), 2)          # 两条直达都试过，只是不降级到搜索
+
     def test_falls_back_to_search(self):
         r = FakeReader()
         r.setting = lambda kw, result: r.searched.append(kw) or kw in ("广告",)
