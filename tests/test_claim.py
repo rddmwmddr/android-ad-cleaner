@@ -176,6 +176,25 @@ class ClaimTests(unittest.TestCase):
         self.assertEqual(gh.comments, [], "我最早，成功且不追加评论")
         self.assertEqual(len(gh.issue["comments"]), 2, "对方那条认领记录原样留着")
 
+    def test_claiming_a_stale_ticket_drops_the_stale_marker(self):
+        gh = FakeGh(ticket(labels=("ready-for-agent", "needs-info", "stale")))
+        code, _ = self.go(gh)
+        self.assertEqual(code, 0)
+        self.assertEqual(gh.edits, [["issue", "edit", "932",
+                                     "--add-label", "in-progress",
+                                     "--remove-label", "ready-for-agent",
+                                     "--remove-label", "stale"]])
+
+    def test_abandon_does_not_bring_the_stale_marker_back(self):
+        """旧树也绿，守的是不回退：放弃要把票还给待办池，停摆标记交给下一次扫描重判。"""
+        gh = FakeGh(ticket([claim_comment(ME, created="2026-11-10T03:00:00Z")],
+                           labels=("in-progress", "needs-info")))
+        code, _ = self.go(gh, action="abandon")
+        self.assertEqual(code, 0)
+        self.assertEqual(gh.edits, [["issue", "edit", "932",
+                                     "--add-label", "ready-for-agent",
+                                     "--remove-label", "in-progress"]])
+
     def test_release_only_drops_in_progress(self):
         gh = FakeGh(ticket([claim_comment(ME, created="2026-11-10T03:00:00Z")],
                            labels=("in-progress",)))

@@ -1,4 +1,4 @@
-"""needs-info 停摆判定（tool/stale.py）：判据、阈值覆盖与只读回放（#977）。"""
+"""needs-info 停摆机制（tool/stale.py）：判定与阈值覆盖（#977）、写入与幂等（#978）。"""
 import io
 import json
 import sys
@@ -205,17 +205,10 @@ class MainTests(unittest.TestCase):
         self.assertIn("#7", out)
         self.assertIn("加标 1", out)
         self.assertIn("不动 1", out)
-        self.assertNotIn("本脚本只算不写", out)
+        self.assertIn("--dry-run", out)
         calls = [(call.script, call.args) for call in self.runner.run_calls]
         self.assertEqual(calls, [("gh", ("issue", "list", "--state", "open", "--label", "needs-info",
                                          "--limit", "1000", "--json", stale.FIELDS))])
-
-    def test_without_dry_run_still_writes_nothing(self):
-        code, out, _ = self.run_main([])
-        self.assertEqual(code, stale.EXIT_OK)
-        self.assertIn("本脚本只算不写", out)
-        self.assertEqual(len(self.runner.run_calls), 1)
-        self.assertEqual(self.runner.run_calls[0].args[:2], ("issue", "list"))
 
     def test_gh_failure_is_reported(self):
         code, out, err = self.run_main(["--dry-run"], rc_reply=1)
@@ -249,6 +242,109 @@ class MainTests(unittest.TestCase):
         self.assertEqual(code, stale.EXIT_OK)
         self.assertIn("跳过 1", out)
         self.assertIn("waiting-for-verify", out)
+
+
+class WriteTests(unittest.TestCase):
+    """写层（#978）：只在状态跃迁时动作、一张票一条评论、标签没写上就不写评论。"""
+
+    def setUp(self):
+        self.issues = [ticket(number=7, comments=[said("maintainer", ago(days=20))])]
+        self.writes = []                  # 读以外的 gh 调用，按发生顺序
+        self.fail = lambda args: False    # 哪些写入返回非零
+        self.runner = fixtures.FakeRunner(runs=self.reply)
+
+    def reply(self, script, *args):
+        assert script == "gh", f"只该调 gh，收到 {script}"
+        if args[:2] == ("issue", "list"):
+            return json.dumps(self.issues), "", 0
+        self.writes.append(args)
+        if self.fail(args):
+            return "", "boom", 1
+        return "", "", 0
+
+    def run_main(self, argv=()):
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = stale.main(list(argv), runner=self.runner.run, now=NOW)
+        return code, out.getvalue(), err.getvalue()
+
+    def test_mark_adds_label_then_one_comment(self):
+        code, out, _ = self.run_main()
+        self.assertEqual(code, stale.EXIT_OK)
+        self.assertIn("写入 1", out)
+        self.assertEqual(len(self.writes), 2)
+        self.assertEqual(self.writes[0], ("issue", "edit", "7", "--add-label", "stale"))
+        self.assertEqual(self.writes[1][:4], ("issue", "comment", "7", "--body"))
+
+    def test_comment_says_how_long_and_what_to_do(self):
+        _, _, _ = self.run_main()
+        body = self.writes[1][4]
+        self.assertIn("距上一次回复已 20 天", body)
+        self.assertIn("补齐后直接在本票回复；如果确实拿不到，说一声，我们会按现有信息评估后关票", body)
+        self.assertNotIn("@", body)
+
+    def test_comment_without_any_earlier_reply_counts_from_creation(self):
+        self.issues = [ticket(number=7, created=ago(days=20))]
+        self.run_main()
+        self.assertIn("本票创建已 20 天，还没有收到过回复", self.writes[1][4])
+        self.assertNotIn("上一次回复", self.writes[1][4])
+
+    def test_second_run_on_the_same_ticket_writes_nothing(self):
+        self.run_main()
+        self.assertEqual(len(self.writes), 2)
+        # 打标后的票就是下一次扫描读到的形状：同一张票再跑零新增
+        self.issues = [dict(self.issues[0],
+                            labels=[{"name": "needs-info"}, {"name": "stale"}])]
+        self.writes.clear()
+        code, out, _ = self.run_main()
+        self.assertEqual(code, stale.EXIT_OK)
+        self.assertEqual(self.writes, [])
+        self.assertIn("写入 0", out)
+
+    def test_reporter_reply_removes_the_label_without_a_comment(self):
+        self.issues = [ticket(number=7, labels=("needs-info", "stale"),
+                              comments=[said("maintainer", ago(days=40)),
+                                        said(REPORTER, ago(days=2))])]
+        code, _, _ = self.run_main()
+        self.assertEqual(code, stale.EXIT_OK)
+        self.assertEqual(self.writes, [("issue", "edit", "7", "--remove-label", "stale")])
+
+    def test_label_failure_skips_the_comment_and_exits_write(self):
+        self.fail = lambda args: "--add-label" in args
+        code, out, _ = self.run_main()
+        self.assertEqual(code, stale.EXIT_WRITE)
+        self.assertEqual(self.writes, [("issue", "edit", "7", "--add-label", "stale")])
+        self.assertIn("失败 1", out)
+        self.assertIn("boom", out)
+
+    def test_comment_failure_rolls_the_label_back_so_the_next_scan_retries(self):
+        self.fail = lambda args: args[:2] == ("issue", "comment")
+        code, out, _ = self.run_main()
+        self.assertEqual(code, stale.EXIT_WRITE)
+        self.assertEqual(len(self.writes), 3, self.writes)
+        self.assertEqual(self.writes[0], ("issue", "edit", "7", "--add-label", "stale"))
+        self.assertEqual(self.writes[1][:4], ("issue", "comment", "7", "--body"))
+        self.assertEqual(self.writes[2], ("issue", "edit", "7", "--remove-label", "stale"))
+        self.assertIn("失败 1", out)
+        # 标签退回了：下一次扫描仍判成该加，补写一条评论，而不是永远停在「有标没说明」
+        self.fail = lambda args: False
+        self.issues = [dict(self.issues[0], labels=[{"name": "needs-info"}])]
+        self.writes.clear()
+        self.run_main()
+        self.assertEqual(len([call for call in self.writes
+                              if call[:2] == ("issue", "comment")]), 1)
+
+    def test_one_failed_ticket_does_not_stop_the_others(self):
+        self.issues = [
+            ticket(number=7, comments=[said("maintainer", ago(days=20))]),
+            ticket(number=8, comments=[said("maintainer", ago(days=20))]),
+        ]
+        self.fail = lambda args: args[2] == "7"
+        code, out, _ = self.run_main()
+        self.assertEqual(code, stale.EXIT_WRITE)
+        self.assertIn("写入 1", out)
+        self.assertIn("失败 1", out)
+        self.assertEqual([call[2] for call in self.writes], ["7", "8", "8"])
 
 
 class CommentTopUpTests(unittest.TestCase):

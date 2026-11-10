@@ -1,7 +1,8 @@
-"""needs-info 停摆判定（#977）：算出今天哪些票该标 `stale`、哪些该摘，只打印、不写入。
+"""needs-info 停摆判定与写入（#977 判定 / #978 写层）：给该停摆的票打 `stale` 并留一条说明，报告者回话后摘掉。
 
 用法：
 
+    python3 tool/stale.py
     python3 tool/stale.py --dry-run
     python3 tool/stale.py --dry-run --days 12
 
@@ -9,11 +10,13 @@
 一条评论都没有时从票的 `createdAt` 起算。带 `in-progress` / `waiting-for-verify` 的票不参与。
 已带 `stale` 的票不再进加标名单，所以同一张票重复扫描不会多出一条评论。
 
+动作只在状态跃迁时发生：加标新打上的那一次才写评论，摘标只摘标签不写评论。加标写入顺序是
+先加标签后写评论——标签没加上就不写评论，否则下次扫描仍判成「该加」，会再留一条。
+
 时间一律由调用方注入：判定函数不读真实时钟，回放才能用同一份代码跑不同天数。
 
-写层见 #978：本脚本只读 `gh issue list`，任何参数都不会产生 `gh` 写操作。
-
-退出码：0 算出结论；1 参数不合规；2 `gh` 调用失败（读不到票时给不出结论）。
+退出码：0 算出结论且写入都成功；1 参数不合规；2 `gh` 读失败（读不到票时给不出结论）；
+3 有票写失败（其余票照常写，失败逐张列出）。
 """
 import json
 import subprocess
@@ -37,11 +40,14 @@ FIELDS = "number,title,createdAt,author,labels,comments"
 
 MARK, UNMARK, KEEP, SKIP = "mark", "unmark", "keep", "skip"
 
-EXIT_OK, EXIT_USAGE, EXIT_GH = 0, 1, 2
+EXIT_OK, EXIT_USAGE, EXIT_GH, EXIT_WRITE = 0, 1, 2, 3
+
+# 评论文案只在这里拼：不 @ 任何人，也不给关票的承诺——是否关票由维护者按现有信息判断。
+REPLY_HINT = "补齐后直接在本票回复；如果确实拿不到，说一声，我们会按现有信息评估后关票。"
 
 USAGE = """用法：python3 tool/stale.py [--dry-run] [--days N]
 
-  --dry-run   只打印，不产生任何写操作（#978 上线前这也是唯一的行为）
+  --dry-run   只打印，不产生任何写操作
   --days N    阈值天数，默认 14；历史回放时用 12"""
 
 
@@ -243,6 +249,80 @@ def render(report, now, days):
     return "\n".join(lines)
 
 
+def comment_body(decision):
+    """停摆说明：说清隔了多久、下一步该谁做什么。没有评论的票不说「上一次回复」。"""
+    lead = (f"距上一次回复已 {decision.days} 天。" if decision.last_author
+            else f"本票创建已 {decision.days} 天，还没有收到过回复。")
+    return "\n\n".join([lead, REPLY_HINT])
+
+
+def gh(runner, *args):
+    """一次 `gh` 调用 -> (标准输出或错误文本, 返回码)；与 tool/claim.py 里那组同名 helper 同形。
+
+    两份而不共用一份：claim 已经 import 本模块的 `STALE_LABEL`，反过来 import 就成环。
+    """
+    out, err, rc = runner("gh", *args)
+    return (out if rc == 0 else (err or out)).strip(), rc
+
+
+def set_labels(number, runner, add, remove):
+    """加 / 摘标签 -> 失败原因或 None。"""
+    if not add and not remove:
+        return None
+    args = ["issue", "edit", str(number)]
+    for name in add:
+        args += ["--add-label", name]
+    for name in remove:
+        args += ["--remove-label", name]
+    text, rc = gh(runner, *args)
+    return None if rc == 0 else f"改标签失败：{text or 'gh 返回非零'}"
+
+
+def post_comment(number, body, runner):
+    """写一条评论 -> 失败原因或 None。"""
+    text, rc = gh(runner, "issue", "comment", str(number), "--body", body)
+    return None if rc == 0 else f"写评论失败：{text or 'gh 返回非零'}"
+
+
+def apply_one(decision, runner):
+    """执行一条判定 -> (动作说明, 失败原因或 None)；只处理 MARK 与 UNMARK。"""
+    if decision.action == MARK:
+        # 先加标签再写评论：标签一旦加上，下次扫描就判成 KEEP，不会为这张票再写一条评论
+        problem = set_labels(decision.number, runner, [STALE_LABEL], [])
+        if problem:
+            return "", problem
+        problem = post_comment(decision.number, comment_body(decision), runner)
+        if problem:
+            # 评论没写成就把标签退回：留着它这张票永远不会再被补一句说明。
+            # 退回失败时由下面那条失败上报兜着，不会静默。
+            set_labels(decision.number, runner, [], [STALE_LABEL])
+            return "", problem
+        return "加标+评论", None
+    if decision.action == UNMARK:
+        return "摘标", set_labels(decision.number, runner, [], [STALE_LABEL])
+    return "", None
+
+
+def apply_report(report, runner):
+    """按判定写入 -> (成功 [(票号, 动作)], 失败 [(票号, 原因)])；一张失败不影响其余。"""
+    done, failed = [], []
+    for decision in report.mark + report.unmark:
+        note, problem = apply_one(decision, runner)
+        if problem:
+            failed.append((decision.number, problem))
+        else:
+            done.append((decision.number, note))
+    return done, failed
+
+
+def render_writes(done, failed):
+    lines = [f"写入 {len(done)}："] + [f"  #{number}  {note}" for number, note in done]
+    if failed:
+        lines.append(f"失败 {len(failed)}：")
+        lines += [f"  #{number}  {problem}" for number, problem in failed]
+    return "\n".join(lines)
+
+
 def parse_args(argv):
     """命令行 -> Options；不合规抛 ValueError（文案即用法）。"""
     options, pending = Options(dry_run=False, days=DEFAULT_DAYS), list(argv)
@@ -268,8 +348,9 @@ def main(argv, runner=None, now=None):
     except ValueError as error:
         print(error, file=sys.stderr)
         return EXIT_USAGE
+    runner = runner or runner_for()
     try:
-        issues = read_open(runner or runner_for())
+        issues = read_open(runner)
     except GhError as error:
         print(error, file=sys.stderr)
         return EXIT_GH
@@ -279,9 +360,12 @@ def main(argv, runner=None, now=None):
     now = now or datetime.now(timezone.utc)
     report = scan(issues, now, options.days)
     print(render(report, now, options.days))
-    if not options.dry_run:
-        print("本脚本只算不写：没有改动任何票（写层见 #978）。")
-    return EXIT_OK
+    if options.dry_run:
+        print("--dry-run：只算不写，没有改动任何票。")
+        return EXIT_OK
+    done, failed = apply_report(report, runner)
+    print(render_writes(done, failed))
+    return EXIT_WRITE if failed else EXIT_OK
 
 
 if __name__ == "__main__":

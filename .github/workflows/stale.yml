@@ -1,0 +1,32 @@
+# needs-info 票停摆判定每天生效（父票 #976；判定 #977、写层 #978）。
+# 只走 `gh`：`actions/github-script` 不在本仓的依赖面里，同一条命令在本地就是
+#   python3 tool/stale.py --dry-run
+# 要打标、写评论，`issues: write` 必须写在 workflow 里——不声明时仓库给的 token 只读。
+name: stale
+on:
+  schedule:
+    # UTC 21:00 = 北京时间 05:00
+    - cron: "0 21 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  # 固定分组，不按 ref：定时与手动触发落在同一组里排队，一次只跑一个。
+  # 两次并发会各自读到「还没有 stale」，然后各写一条评论——串行才能保住幂等。
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      # 写失败的票会以退出码 3 收场，Actions 页面能看见；成功的票不重跑也不会重复写。
+      - name: 扫描并写入
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tool/stale.py
