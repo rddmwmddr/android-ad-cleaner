@@ -159,7 +159,7 @@ id = "doc.community.local-knowledge-only"
 source = "CLAUDE.md#开发"
 check = "none"
 status = "manual"
-why = "把逐条回复与 issue 编号抄进文档会与 issue 上的现状漂移；文档只留 GitHub 上看不到的判据与真机缺口。"
+why = "逐票处置（哪张票什么时候改了什么、关没关、归谁复测）会与 issue 上的现状漂移；票号只作出处，文档只留 GitHub 上看不到的判据与真机缺口。什么算处置流水是语义判断，词表匹配只会逼人改措辞，故无守卫。"
 expires_if = "社区判据改为 issue 模板里的结构化字段时删。"
 
 [[rule]]
