@@ -73,7 +73,9 @@
 
 ### Issue tracker
 
-GitHub Issues（`gh` CLI）：「开工前先有票」的判据、认领与摘标的时机、弃单的恢复见 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md) 的「票的生命周期」；标签语义见 [docs/agents/triage-labels.md](docs/agents/triage-labels.md)。
+GitHub Issues（`gh` CLI）：开工第一条命令是 `python3 tool/claim.py <票号>`，退出码 2 表示别人已持有，停下上报、不要在另一张 worktree 上重做；合入后 `--release`，放弃改派用 `--abandon`。「开工前先有票」的判据与仲裁规则见 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md) 的「票的生命周期」；标签语义见 [docs/agents/triage-labels.md](docs/agents/triage-labels.md)。 <!-- rule:doc.issue.claim-command -->
+
+认领时一并摘掉 `ready-for-agent` / `ready-for-human` / `needs-triage`：这三张的意思是「在待办池里等人挑」，留着别的会话会再挑一次。 <!-- rule:doc.issue.claim-removes-ready -->
 
 ### Triage labels
 

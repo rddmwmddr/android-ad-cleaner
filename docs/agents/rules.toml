@@ -827,8 +827,16 @@ why = "这一节是操作清单而不是约束：照抄能省一次试错，换�
 expires_if = "命令清单改由 skill 自带、本仓库不再维护时删。"
 
 [[rule]]
+id = "doc.issue.claim-command"
+source = "CLAUDE.md#Issue tracker"
+check = "test:test_claim::PinnedContractTests.test_the_command_and_its_exit_codes_are_pinned"
+status = "enforced"
+why = "认领以前只写在 issue-tracker.md 里、没有命令，`/implement` 的流程里根本没有这一步：2026-11-10 #906 被两路会话同时实现，票上始终零评论、标签从没动过（#932）。一条命令把认领记录写进 `--comments`（实现会话必读的载荷），标签只是随附信号；同账号下的两路会话靠 worktree 散列区分身份。"
+expires_if = "认领改由平台原生 assignee 或排他队列表达，且实现会话的必读载荷里带持有者时删。"
+
+[[rule]]
 id = "doc.issue.claim-removes-ready"
-source = "docs/agents/issue-tracker.md#票的生命周期"
+source = "CLAUDE.md#Issue tracker"
 check = "none"
 status = "manual"
 why = "`ready-*` 与 `needs-triage` 的意思是「在待办池里等人挑」；认领时留着它们，别的会话会再挑一次同一张票。"

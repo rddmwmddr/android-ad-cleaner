@@ -19,7 +19,7 @@ The repo adds two labels the five roles do not cover:
 
 `waiting-for-verify` outranks the five roles above — an issue carrying it must not also carry `ready-for-agent`, `ready-for-human`, or `needs-info`. It moves to a closed state only after the reporter confirms on a real device; the checks owed at each release are listed in [release-followup.md](release-followup.md). <!-- rule:doc.triage.waiting-for-verify-outranks -->
 
-`in-progress` is a claim, not a role: it stays out of the five-role set and must not coexist with `waiting-for-verify`. When to add it, when it ends, and what to restore when a claim is abandoned are in [issue-tracker.md](issue-tracker.md) 的「票的生命周期」. <!-- rule:doc.triage.in-progress-is-a-claim -->
+`in-progress` is a claim, not a role: it stays out of the five-role set and must not coexist with `waiting-for-verify`. The claim itself is recorded as a comment on the issue — `python3 tool/claim.py <N>` writes it — and the label is only the visible signal. When to add it, when it ends, and what to restore when a claim is abandoned are in [issue-tracker.md](issue-tracker.md) 的「票的生命周期」. <!-- rule:doc.triage.in-progress-is-a-claim -->
 
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table. <!-- rule:doc.triage.five-roles-map -->
 
