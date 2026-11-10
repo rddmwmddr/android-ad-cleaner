@@ -83,7 +83,7 @@ GitHub Issues（`gh` CLI）：开工第一条命令是 `python3 tool/claim.py <�
 
 ### Code review
 
-派审查的方法与规则见 `docs/agents/code-review.md`：基线钉 SHA、评审期间不改工作区、默认三轴。
+派审查的方法与规则见 `docs/agents/code-review.md`：基线钉 SHA、审查期间不改工作区、默认三轴。
 
 ### Domain docs
 
