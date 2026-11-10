@@ -6,11 +6,13 @@
 
 ## 每次发版后照做
 
-1. 取出当前队列： <!-- rule:doc.release.followup-queue -->
+1. 取出当前队列，并核对它与 GitHub 标签一致： <!-- rule:doc.release.followup-queue -->
 
    ```bash
-   gh issue list --label waiting-for-verify --state open
+   python3 tool/followup.py
    ```
+
+   只读，报出两类差异：**缺行**（标签里有、`## 当前队列` 的表里没有）与**过期行**（表里有、标签里没有，已关闭或已摘标）。退出码 `0` 一致、`1` 有差异、`2` 读不到标签或表格结构认不出；有差异时先补登记或摘标，再往下走。
 
 2. 逐条确认修复是否进了本次构建。版本号对不上就跳过 —— 让报告者跑旧版去验新代码，只会再收一份重复上报。 <!-- rule:doc.release.followup-version-gate -->
 
