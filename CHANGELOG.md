@@ -40,6 +40,7 @@
 
 ### 内部
 
+- 规则注册表收口：6 条改判 `code`、6 组合并、5 条复核（3 条降 `advisory`），条目从 142 降到 135（#1004）
 - `AGENTS.md`、`docs/02`、`README` 的挂起广告包步排到机型脚本之前（#981）
 - 新增 `tool/followup.py`：报出 `waiting-for-verify` 与复测队列的缺行、过期行（#988）
 - `tool/followup.py --write` 一条命令把复测队列补到与标签一致，可重复跑（#989）

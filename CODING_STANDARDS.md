@@ -4,13 +4,13 @@
 
 ## 用户可见文档里的数字要能复现
 
-README、PR 描述、Release Note 里的计数，必须交代它在什么样本上、怎么数出来的。CHANGELOG 的验证行可省基线：它只写 `python -m unittest discover -s tests` 当次跑出来的项数，任何人在那个 tag 上重跑就能得到同一个数；拼接或推算出来的复合计数不进 CHANGELOG，只进 PR 描述，且照样要标基线。 <!-- rule:doc.numbers.reproducible-baselines -->
+README、PR 描述、Release Note 里的计数，必须交代它在什么样本上、怎么数出来的，并标基线（`origin/main@<sha>`）。CHANGELOG 的验证行可省基线：它只写 `python -m unittest discover -s tests` 当次跑出来的项数，任何人在那个 tag 上重跑就能得到同一个数；拼接或推算出来的复合计数不进 CHANGELOG，只进 PR 描述，且照样要标基线。 <!-- rule:doc.numbers.carry-the-baseline -->
 
 反例：「`switch_row` 14 处由假变真」——14 是「7 个文字节点 × 2 种屏尺寸」的记录条数，写进文档后读者无法复现，评审只能重数才发现。
 
-改过基线的数字要重算：写下时标明基线（`origin/main@<sha>`），rebase 之后重算一遍再合。用例总数优先写「新增 N 项」，绝对总数只在最后一次 rebase 之后填。 <!-- rule:doc.numbers.recompute-after-rebase -->
+改过基线的数字要重算：写下时标明基线（`origin/main@<sha>`），rebase 之后重算一遍再合；数基线用 `git rev-parse origin/main` 记下的 SHA 解出来的干净副本（`git archive <sha> | tar -x -C /tmp/x`），不在会漂的工作区里数。干净副本与新 worktree 都没有 `node_modules`，跑之前先 `npm ci`，否则前端用例那条会红在 `Cannot find module 'jsdom'`。用例总数优先写「新增 N 项」，绝对总数只在最后一次 rebase 之后填。
 
-提数字类修改意见时，连基线和「新增 N 项」一起要：「`N 项全过（基线 <sha> M 项，新增 K 项）`」。只要求「改成实测值」，作者填的那个数会在下一次有人合入时再次失效。 <!-- rule:doc.numbers.ask-for-the-baseline -->
+提数字类修改意见时，连基线和「新增 N 项」一起要：「`N 项全过（基线 <sha> M 项，新增 K 项）`」。只要求「改成实测值」，作者填的那个数会在下一次有人合入时再次失效。
 
 反例：#355 里的「518 项全过」被 rebase 打回三次（518 → 524 → 527 → 533），两轴审查各报了两次数字对不上，返工半个回合。同一件事的另一面是 #356：审查要求「改成实测值 513」，作者照改 541，main 前进后两个数都不可复现，第二轮才补成带基线的 575。
 
@@ -20,12 +20,15 @@ README、PR 描述、Release Note 里的计数，必须交代它在什么样本�
 
 反例：ADR-0004 初稿把改前基线的行号和改后的位置混着写，评审把旧行号当成新文件的行号报错；`CONTEXT.md` 也曾指到一行会漂的注释上，后来专门删掉（`320ce35`）。
 
+同一件事的机制版：ADR 里写「所有写都在锁内」「每次都会回读」「只走这一条路径」这类机制性断言时，实现里也要能逐条指到对应代码。指认不到，就是措辞夸大或实现缺漏，评审都该报出来，别让文档承诺一个代码没兑现的保证。
+
+反例：本页曾用「ADR-0010 写『`snapshot()` 与关键写段都在锁内』，而 `_work()` 的 `idx` / `title` / `proc` / `running` 仍在锁外写」当反例——ADR-0010 原文是「`snapshot()`、`request_*()` 与 `_work` 的状态发布点都在锁内」，四处写点从 `a5d98c5` 起就在 `with j.lock:` 内。机制断言不逐条指认代码，连引用它的反例也会跟着漂。
+
 移动或删除符号时，grep `docs/`、`CLAUDE.md` 与测试注释里的旧引用，一并改掉。反例：`VIVO_MARKETING` 迁到 `channel_policy.py` 后，`docs/09` 与测试注释仍指 `chan_fast.py` / `gui/app.py`。 <!-- rule:doc.refs.cleanup-on-move -->
 
 ## 行为变化要有测试直接守住；纯重构要给对拍证据
 
-- 声称改变了某个行为，就要有一个「去掉这次改动就会红」的测试，不能只测周边。返红要真的跑出来：把新用例搬回改动前的树（`git archive <旧 SHA>`）跑一遍，看到红再收工。断言要落在被改的那句话上——「原始文案仍被保留」「异常仍被抛出」这类旧树也满足的性质，新旧两边都绿，看着覆盖了其实什么也没测（#674 的读屏错误分流就这样漏过一轮）。 <!-- rule:dev.tests.behaviour-change-needs-red-test -->
-- 只能用「行为不变」守的用例（守卫用例）允许旧树也绿，但要在 docstring 里写明「旧树也绿，守的是不回退」，否则审查无法把它和空覆盖区分开。 <!-- rule:dev.tests.guard-case-declares-itself -->
+- 声称改变了某个行为，就要有一个「去掉这次改动就会红」的测试，不能只测周边。返红要真的跑出来：把新用例搬回改动前的树（`git archive <旧 SHA>`）跑一遍，看到红再收工。断言要落在被改的那句话上——「原始文案仍被保留」「异常仍被抛出」这类旧树也满足的性质，新旧两边都绿，看着覆盖了其实什么也没测（#674 的读屏错误分流就这样漏过一轮）。只能用「行为不变」守的用例（守卫用例）允许旧树也绿，但要在 docstring 里写明「旧树也绿，守的是不回退」，否则审查无法把它和空覆盖区分开。 <!-- rule:dev.tests.behaviour-change-needs-red-test -->
 - 声称只是搬家或抽定义，就要给出改前改后的对拍结果，并说明哪些差异属于允许范围。页面样本取 `tests/` 里所有 `<hierarchy>` 字面量，至少两种屏尺寸。现成材料见 `tests/fixtures.py`。 <!-- rule:dev.tests.refactor-needs-comparison -->
 
 对拍要能证伪：只喂成功路径的对拍不算证据。一次对拍要同时满足下面几条，缺任何一条，零差异就什么也不证明。 <!-- rule:dev.tests.comparison-must-be-falsifiable -->
@@ -48,8 +51,7 @@ README、PR 描述、Release Note 里的计数，必须交代它在什么样本�
 
 `patch.object(module, "func", return_value=...)` 只保证这个名字存在时可打。重构把函数改成转调别处的壳之后，patch 照样成功、测试照样绿，而被测代码已经不再调它——桩住的部分静默失效，用例退化成一个什么都没测的空壳。三条一起用：
 
-- 桩住一个协作方，就对它断言 `assert_called_once()` / `assert_called_with(...)`；本来就该不调的，用 `assert_not_called()` 把这件事写下来。 <!-- rule:dev.tests.stub-and-assert -->
-- patch 类成员用 `autospec=True`。`self` 怎么绑、实参能不能对上签名都会当场报出来，普通 `Mock` 会照单全收。 <!-- rule:dev.tests.autospec-class-members -->
+- 桩住一个协作方，就对它断言 `assert_called_once()` / `assert_called_with(...)`；本来就该不调的，用 `assert_not_called()` 把这件事写下来。patch 类成员用 `autospec=True`：`self` 怎么绑、实参能不能对上签名都会当场报出来，普通 `Mock` 会照单全收。 <!-- rule:dev.tests.stub-and-assert -->
 - 重构动了调用关系时，把「桩住谁」当成被测面一起改；改不动的桩直接删掉，留着只会骗下一个人。 <!-- rule:dev.tests.stubs-follow-the-refactor -->
 - 替身记下的是标识（id / 路径 / 句柄）时，断言要对着被测代码**真正创建**的那个对象，并且先让它存在。对着一个从没被创建过的值断言，等于断言 `None == None`：先 `showRun()` 拿到 `pollJob`，再 `assert.deepEqual(cleared, [polling])`；否则把 `clearInterval(pollJob)` 改成 `clearInterval(undefined)` 也照样全绿（#684）。 <!-- rule:dev.tests.substitute-identity -->
 
@@ -74,12 +76,6 @@ README、PR 描述、Release Note 里的计数，必须交代它在什么样本�
 两种数法在同一份代码里并存，「最多试 12 次」和「最多等 2.4 秒」只在快机器上等价：一轮读屏要 0.5 秒时，12 轮的旧实现有 8.4 秒可用，换成 2.4 秒只剩 4 轮，慢机型会更早放弃。按名字或按「更整齐」统一成秒，是这类重构最常见的行为变化。 <!-- rule:dev.wait.budget-unit -->
 
 反例：把 `wait_page` / `off` 的 `tries` 换成 `timeout`，单测全绿、本机也看不出来，只有慢读屏对拍才暴露。
-
-## ADR / 文档声称的机制要能在代码里指认
-
-ADR 里写「所有写都在锁内」「每次都会回读」「只走这一条路径」这类机制性断言时，实现里要能逐条指到对应代码。指认不到，就是措辞夸大或实现缺漏，评审都该报出来，别让文档承诺一个代码没兑现的保证。 <!-- rule:doc.adr.mechanism-pointable -->
-
-反例：本页曾用「ADR-0010 写『`snapshot()` 与关键写段都在锁内』，而 `_work()` 的 `idx` / `title` / `proc` / `running` 仍在锁外写」当反例——ADR-0010 原文是「`snapshot()`、`request_*()` 与 `_work` 的状态发布点都在锁内」，四处写点从 `a5d98c5` 起就在 `with j.lock:` 内。机制断言不逐条指认代码，连引用它的反例也会跟着漂。
 
 ## 新增注释里的票号是这次做的票
 
