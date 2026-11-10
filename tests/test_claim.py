@@ -11,9 +11,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 
 import claim  # noqa: E402
+import fixtures  # noqa: E402
 
 ME = "host-12345678"
 OTHER = "host-99999999"
+WHO = claim.Session(ME, "host", "feat/claim-command-932", "/wt/932")
 NOW = datetime(2026, 11, 10, 12, 30)
 POSTED = "2026-11-10T04:30:00Z"
 COMMENT_URL = "https://github.com/owner/repo/issues/932#issuecomment-777"
@@ -57,8 +59,9 @@ class FakeGh:
         self.prs = list(prs)
         self.comment_rc, self.edit_rc = comment_rc, edit_rc
         self.views, self.comments, self.edits, self.deletes = 0, [], [], []
+        self.runner = fixtures.FakeRunner(runs=self.route)
 
-    def run(self, script, *args):
+    def route(self, script, *args):
         assert script == "gh", f"只该调 gh，收到 {script}"
         if args[:2] == ("issue", "view"):
             return self._view()
@@ -104,9 +107,10 @@ class FakeGh:
 
 class ClaimTests(unittest.TestCase):
     def go(self, gh, **kwargs):
-        with patch.object(claim, "session_context",
-                          return_value=(ME, "host", "feat/claim-command-932", "/wt/932")):
-            return claim.run(932, now=NOW, runner=gh.run, **kwargs)
+        with patch.object(claim, "session_context", return_value=WHO) as context:
+            result = claim.command(932, now=NOW, runner=gh.runner.run, **kwargs)
+        context.assert_called_once_with(cwd=None, host=None)
+        return result
 
     def test_empty_ticket_is_claimed_with_a_comment_and_a_label_swap(self):
         gh = FakeGh(ticket())
@@ -138,6 +142,8 @@ class ClaimTests(unittest.TestCase):
         self.assertIn(OTHER, message)
         self.assertIn("feat/x", message)
         self.assertIn("天前", message)
+        # 展示的是服务器时间换算出来的那一刻，不是正文里手写的 stamp（那条写的是 12:03）
+        self.assertNotIn("2026-11-10 12:03", message)
         self.assertEqual(gh.comments, [], "被别人占时不该再写认领评论")
         self.assertEqual(gh.edits, [], "被别人占时不该动标签")
 
@@ -252,37 +258,40 @@ class ParsingTests(unittest.TestCase):
     def test_the_host_is_shortened_to_its_first_label(self):
         with patch.object(claim.socket, "gethostname", return_value="box.example.com"), \
                 patch.object(claim, "git_text", side_effect=["/wt/x", "feat/y"]):
-            session, host, branch, worktree = claim.session_context()
-        self.assertEqual((host, branch, worktree), ("box", "feat/y", "/wt/x"))
-        self.assertEqual(session, claim.session_id("box", "/wt/x"))
+            who = claim.session_context()
+        self.assertEqual((who.host, who.branch, who.worktree), ("box", "feat/y", "/wt/x"))
+        self.assertEqual(who.session, claim.session_id("box", "/wt/x"))
 
     def test_a_written_claim_body_parses_back_into_itself(self):
-        body = claim.claim_body(ME, "host", "feat/x", "/wt/932", NOW, ("ready-for-agent",))
+        body = claim.claim_body(WHO, NOW, ("ready-for-agent",))
         record = claim.parse_comment({"body": body, "createdAt": POSTED, "url": COMMENT_URL})
         self.assertEqual((record.kind, record.session, record.host, record.branch, record.worktree),
-                         (claim.CLAIMED, ME, "host", "feat/x", "/wt/932"))
+                         (claim.CLAIMED, ME, "host", "feat/claim-command-932", "/wt/932"))
         self.assertEqual(record.labels, ("ready-for-agent",))
 
     def test_an_ordinary_comment_is_not_a_claim(self):
         self.assertIsNone(claim.parse_comment({"body": "看起来不错", "createdAt": POSTED}))
 
     def test_claiming_on_an_empty_ticket_records_no_original_labels(self):
-        body = claim.claim_body(ME, "host", "feat/x", "/wt/932", NOW, ())
+        body = claim.claim_body(WHO, NOW, ())
         record = claim.parse_comment({"body": body, "createdAt": POSTED})
         self.assertEqual(record.labels, ())
+
+    def test_a_claim_comment_without_created_at_is_unreadable(self):
+        body = claim.claim_body(WHO, NOW, ())
+        with self.assertRaises(claim.Unreadable):
+            claim.parse_comment({"body": body, "url": COMMENT_URL})
 
 
 class PinnedContractTests(unittest.TestCase):
     """守卫：命令名与退出码是文档与实现之间的契约，改一处就会红。"""
 
-    def test_exit_codes_and_command_are_pinned(self):
+    def test_the_command_and_its_exit_codes_are_pinned(self):
         self.assertEqual(
             (claim.EXIT_OK, claim.EXIT_REFUSED, claim.EXIT_TAKEN, claim.EXIT_GH), (0, 1, 2, 3))
         self.assertEqual(claim.COMMAND, "python3 tool/claim.py")
-
-    def test_claude_md_names_the_command(self):
         text = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
-        self.assertIn("python3 tool/claim.py", text)
+        self.assertIn(claim.COMMAND, text)
 
 
 if __name__ == "__main__":

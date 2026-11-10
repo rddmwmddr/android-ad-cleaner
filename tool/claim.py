@@ -24,6 +24,12 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")   # Windows 控制台默认不是 UTF-8
+    except Exception:
+        pass
+
 CLAIMED = "认领中"
 RELEASED = "认领结束"
 ABANDONED = "认领放弃"
@@ -79,8 +85,16 @@ class Record:
         return self.kind == CLAIMED
 
 
+@dataclass(frozen=True)
+class Session:
+    """一次认领的身份：`session` 是机器可比的键，其余三项只写进评论给人看。"""
+    session: str
+    host: str
+    branch: str
+    worktree: str
+
+
 def session_id(host, worktree):
-    """`<主机名>-<worktree 绝对路径 sha1 前 8 位>`，同一 worktree 的恢复会话认得出自己。"""
     digest = hashlib.sha1(str(worktree).encode("utf-8")).hexdigest()[:8]
     return f"{host}-{digest}"
 
@@ -94,14 +108,14 @@ def git_text(*args, cwd=None):
 
 
 def session_context(cwd=None, host=None):
-    """(session, host, branch, worktree)：worktree 与分支取当前仓库，host 取 `hostname -s` 那个短名。
+    """Session：worktree 与分支取当前仓库，host 取 `hostname -s` 那个短名。
 
     macOS 的 `socket.gethostname()` 带 `.local` 后缀，不截掉就和手工认领写下的主机名对不上。
     """
     worktree = git_text("rev-parse", "--show-toplevel", cwd=cwd)
     branch = git_text("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd)
     host = host or socket.gethostname().split(".")[0]
-    return session_id(host, worktree), host, branch, worktree
+    return Session(session_id(host, worktree), host, branch, worktree)
 
 
 def runner_for(cwd=None):
@@ -155,6 +169,9 @@ def parse_comment(comment):
     if missing or stamp is None:
         where = comment.get("url") or "无链接"
         raise Unreadable(f"{where} 的认领评论读不全：缺 {'、'.join(missing) or '时间'}")
+    created = (comment.get("createdAt") or "").strip()
+    if not created:
+        raise Unreadable(f"{comment.get('url') or '无链接'} 的认领评论没有 createdAt，判不了先后")
     return Record(
         kind=match.group("kind"),
         session=fields["session"],
@@ -162,13 +179,13 @@ def parse_comment(comment):
         branch=fields["branch"],
         worktree=fields["worktree"],
         stamp=stamp,
-        labels=labelled(body),
+        labels=original_labels(body),
         url=comment.get("url") or "",
-        created=comment.get("createdAt") or "",
+        created=created,
     )
 
 
-def labelled(body):
+def original_labels(body):
     """认领评论里的 `原标签：` 行；没写或写「（无）」时为空。"""
     for line in body.splitlines()[1:]:
         line = line.strip()
@@ -208,31 +225,43 @@ def arbiter(records):
     return pending[0] if pending else None
 
 
-def header(kind, session, host, branch, worktree, now):
-    return (f"**{kind}**：session `{session}` · host `{host}` · branch `{branch}` · "
-            f"worktree `{worktree}` · {now.strftime(STAMP)}")
+def header(kind, who, now):
+    return (f"**{kind}**：session `{who.session}` · host `{who.host}` · "
+            f"branch `{who.branch}` · worktree `{who.worktree}` · {now.strftime(STAMP)}")
 
 
-def claim_body(session, host, branch, worktree, now, labels):
+def claim_body(who, now, labels):
     kept = ", ".join(f"`{name}`" for name in labels) if labels else EMPTY_LABELS
-    return "\n".join([header(CLAIMED, session, host, branch, worktree, now), LABEL_KEY + kept])
+    return "\n".join([header(CLAIMED, who, now), LABEL_KEY + kept])
 
 
-def closing_body(kind, session, host, branch, worktree, now, restored=()):
-    lines = [header(kind, session, host, branch, worktree, now)]
+def closing_body(kind, who, now, restored=()):
+    lines = [header(kind, who, now)]
     if restored:
         lines.append(RESTORE_KEY + ", ".join(f"`{name}`" for name in restored))
     return "\n".join(lines)
 
 
-def age_days(created, now):
-    """认领距今天数；时间戳读不出来时返回 None——不猜。"""
+def instant(created):
+    """服务器时间戳 -> 带时区的 datetime；读不出来返回 None——不猜。"""
     try:
-        started = datetime.fromisoformat(created.replace("Z", "+00:00"))
+        value = datetime.fromisoformat(created.replace("Z", "+00:00"))
     except ValueError:
         return None
-    if started.tzinfo is None:
-        started = started.replace(tzinfo=timezone.utc)
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def local_stamp(created):
+    """服务器时间戳 -> 本地墙钟，与评论正文里那串 `YYYY-MM-DD HH:MM` 同形。"""
+    value = instant(created)
+    return value.astimezone().strftime(STAMP) if value else None
+
+
+def age_days(created, now):
+    """认领距今天数；时间戳读不出来时返回 None——不猜。"""
+    started = instant(created)
+    if started is None:
+        return None
     if now.tzinfo is None:
         now = now.astimezone()
     return max((now - started).days, 0)
@@ -252,13 +281,14 @@ def open_pr(branch, runner):
 def taken_message(number, owner, runner, now):
     days = age_days(owner.created, now)
     since = f"{days} 天前" if days is not None else "时间未知"
+    stamp = local_stamp(owner.created) or owner.stamp
     pr = open_pr(owner.branch, runner)
     if pr is None:
         pr_line = "该分支的 PR 状态未知"
     else:
         pr_line = "该分支有开着的 PR" if pr else "该分支没有开着的 PR"
     return "\n".join([
-        f"#{number} 已被 session `{owner.session}` 认领（{owner.stamp}，{since}）",
+        f"#{number} 已被 session `{owner.session}` 认领（{stamp}，{since}）",
         f"  branch `{owner.branch}` · worktree `{owner.worktree}`",
         f"  {pr_line}",
         f"  认领记录：{owner.url or '无链接'}",
@@ -290,6 +320,11 @@ def set_labels(number, runner, add, remove):
     return ""
 
 
+def mark_claimed(number, issue, runner):
+    """认领或 reaffirm 时把待办池标签换成 `in-progress`。"""
+    return set_labels(number, runner, [IN_PROGRESS], role_labels(issue))
+
+
 def comment_id(url):
     found = COMMENT_URL.search(url or "")
     return found.group(1) if found else None
@@ -311,34 +346,33 @@ def withdraw(url, issue, runner):
     return ""
 
 
-def finish(number, action, owner, mine, session, host, branch, worktree, now,
-           runner, restore):
+def finish(number, action, owner, mine, who, now, runner, restore):
     """收尾（--release）与放弃（--abandon）：都要求本会话持有，放弃还要恢复原标签。"""
     if not mine:
-        return EXIT_REFUSED, f"#{number} 上没有本会话（{session}）的未收尾认领，不用收尾"
+        return EXIT_REFUSED, f"#{number} 上没有本会话（{who.session}）的未收尾认领，不用收尾"
     if action == "release":
-        body = closing_body(RELEASED, session, host, branch, worktree, now)
+        body = closing_body(RELEASED, who, now)
         _, problem = post_comment(number, body, runner)
         if problem:
             return EXIT_GH, problem
         note = set_labels(number, runner, [], [IN_PROGRESS])
-        return EXIT_OK, f"#{number} 的认领已收尾（{session}）" + note
+        return EXIT_OK, f"#{number} 的认领已收尾（{who.session}）" + note
     back = list(restore) if restore else list(owner.labels)
-    body = closing_body(ABANDONED, session, host, branch, worktree, now, back)
+    body = closing_body(ABANDONED, who, now, back)
     _, problem = post_comment(number, body, runner)
     if problem:
         return EXIT_GH, problem
     note = set_labels(number, runner, back, [IN_PROGRESS])
     restored = f"，已恢复 {', '.join(back)}" if back else ""
-    return EXIT_OK, f"#{number} 的认领已放弃（{session}）{restored}" + note
+    return EXIT_OK, f"#{number} 的认领已放弃（{who.session}）{restored}" + note
 
 
-def run(number, action="claim", restore=(), runner=None, cwd=None, host=None, now=None):
+def command(number, action="claim", restore=(), runner=None, cwd=None, host=None, now=None):
     """整条命令的判定：返回 (退出码, 给人看的消息)。"""
     runner = runner or runner_for(cwd)
     now = now or datetime.now()
     try:
-        session, hostname, branch, worktree = session_context(cwd=cwd, host=host)
+        who = session_context(cwd=cwd, host=host)
     except RuntimeError as error:
         return EXIT_REFUSED, f"读不到当前 worktree 与分支：{error}"
     try:
@@ -350,21 +384,22 @@ def run(number, action="claim", restore=(), runner=None, cwd=None, host=None, no
     try:
         records = parse_records(issue.get("comments") or [])
     except Unreadable as error:
-        return EXIT_REFUSED, f"#{number} 的认领记录读不出确定结局：{error}"
+        return EXIT_REFUSED, (
+            f"#{number} 的认领记录读不出确定结局：{error}。"
+            f"先手工核对那条评论；票被卡住时可以 gh issue edit {number} --remove-label {IN_PROGRESS}"
+        )
     owner = arbiter(records)
-    mine = owner is not None and owner.session == session
+    mine = owner is not None and owner.session == who.session
 
     if action in ("release", "abandon"):
-        return finish(number, action, owner, mine, session, hostname, branch, worktree,
-                      now, runner, restore)
+        return finish(number, action, owner, mine, who, now, runner, restore)
     if owner is not None and not mine:
         return EXIT_TAKEN, taken_message(number, owner, runner, now)
     if mine:
-        note = set_labels(number, runner, [IN_PROGRESS], role_labels(issue))
-        return EXIT_OK, f"#{number} 已由本会话持有（{session}），不重复认领" + note
+        return EXIT_OK, f"#{number} 已由本会话持有（{who.session}），不重复认领" \
+            + mark_claimed(number, issue, runner)
 
-    url, problem = post_comment(number, claim_body(session, hostname, branch, worktree,
-                                                   now, role_labels(issue)), runner)
+    url, problem = post_comment(number, claim_body(who, now, role_labels(issue)), runner)
     if problem:
         return EXIT_GH, problem
     # 两路都读到空票时都会写出评论：重读一次，最早的那条赢，后写的撤回自己那条。
@@ -375,12 +410,11 @@ def run(number, action="claim", restore=(), runner=None, cwd=None, host=None, no
         winner = arbiter(fresh)
     except (GhError, Unreadable) as error:
         return EXIT_GH, f"认领评论已写（{url}），但重读校验没做成：{error}；请人工核对持有者"
-    if winner is not None and winner.session == session:
-        ours = [record for record in fresh if record.open and record.session == session]
+    if winner is not None and winner.session == who.session:
+        ours = [record for record in fresh if record.open and record.session == who.session]
         if ours and ours[0].url != url:
             withdraw(url, again, runner)
-        note = set_labels(number, runner, [IN_PROGRESS], role_labels(issue))
-        return EXIT_OK, f"#{number} 已认领（{session}）" + note
+        return EXIT_OK, f"#{number} 已认领（{who.session}）" + mark_claimed(number, issue, runner)
     note = withdraw(url, again, runner)
     holder = taken_message(number, winner, runner, now) if winner else f"#{number} 上没有可判定的认领记录"
     return EXIT_TAKEN, f"并发认领：{holder}\n已撤回本会话刚写的认领评论{note}"
@@ -421,8 +455,8 @@ def main(argv, runner=None, cwd=None, host=None, now=None):
     except ValueError as error:
         print(error, file=sys.stderr)
         return EXIT_REFUSED
-    code, message = run(number, action=action, restore=restore, runner=runner,
-                        cwd=cwd, host=host, now=now)
+    code, message = command(number, action=action, restore=restore, runner=runner,
+                            cwd=cwd, host=host, now=now)
     print(message, file=sys.stderr if code else sys.stdout)
     return code
 

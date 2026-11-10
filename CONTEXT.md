@@ -12,7 +12,7 @@
 
 **handler** — 一条命令在进程内的入口：给序列号和这条命令剩下的参数，回一个退出码。和「命令」的区别是：命令是用户敲的那个词，handler 是它在进程里的那一段；一条命令恰好一个 handler。它不解析命令行，也不退出进程——那两件事只发生在总入口。
 
-**退出码** — 一条命令对外报的成败，也是客户端判断「这一步成不成」的唯一依据：0 是成功；1 是失败，失败原因以人话写在 stderr 上。0 与 1 之外的值只出现在「这条命令只是转发另一条命令」的场合——`ui-check`、`recipe`、`chan-off` / `chan-on`、`chan-scan` 把子进程的码原样透出。
+**退出码** — 一条命令对外报的成败，也是客户端判断「这一步成不成」的唯一依据：0 是成功；1 是失败，失败原因以人话写在 stderr 上。0 与 1 之外的值只出现在两类场合：这条命令只是转发另一条命令（`ui-check`、`recipe`、`chan-off` / `chan-on`、`chan-scan` 把子进程的码原样透出），或维护侧脚本有自己的语义（`tool/claim.py` 的 2 是票被别人认领、3 是 `gh` 调用失败，见 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md)）。
 
 ## 脚本
 
@@ -183,7 +183,7 @@
 
 **`waiting-for-verify`** — 修复已合进 `main`，但**没有任何已发布版本包含它**，或已发布但没在报告者真机上确认。它的互斥标签与关票条件只在 [docs/agents/triage-labels.md](docs/agents/triage-labels.md) 里定义，每版欠的复测在 [release-followup.md](docs/agents/release-followup.md)。
 
-**`in-progress`** — 已认领，有人正在改。认领、摘标与弃单的时机只在 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md) 的「票的生命周期」里定义。
+**`in-progress`** — 已认领，有人正在改。认领记录是票下的一条评论（`python3 tool/claim.py` 写），标签只是可见信号；认领、摘标与弃单的时机只在 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md) 的「票的生命周期」里定义。
 
 **`out-of-scope`** — 明确拒绝的需求，理由写在 `.out-of-scope/<概念>.md`。和 `wontfix` 的区别：`wontfix` 是这次不做，`out-of-scope` 是**这个方向不做**，理由要能被后来者读懂，同一个需求再出现时直接引用而不是重新论证。
 

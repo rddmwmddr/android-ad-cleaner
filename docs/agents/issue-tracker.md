@@ -16,8 +16,9 @@ Infer the repo from `git remote -v` — `gh` does this automatically when run in
 ## 票的生命周期
 
 - **开工前先有票**：任何实现 / 重构 / 文档改造，先对应一个 GitHub issue；没有就先开票，分支名带 issue 号（`feat/<描述>-<issue>`）。实现完再补票等于跳过了 spec 与 triage，PR 会被当成无源改动。 <!-- rule:doc.issue.ticket-before-work -->
-- **认领即出池**：动第一行代码之前跑 `python3 tool/claim.py <N>`。它按票下的认领评论仲裁，再写一条认领评论、加 `in-progress`、摘掉 `ready-for-agent` / `ready-for-human` / `needs-triage`——这三张标签的意思是「在待办池里等人挑」，留着会让别的会话再挑一次。仲裁只看未收尾的认领，`started` 最早的一条赢；同 identity 重复认领是幂等的 reaffirm，不追加评论。身份是 `<主机名>-<worktree 绝对路径 sha1 前 8 位>`，同一个 GitHub 账号下的两路会话因此也分得开。退出码 2 表示被别人占，停下上报、不自动改挑别的票；退出码 1 是票已关闭或票面读不出确定结局，也不要猜。 <!-- rule:doc.issue.claim-removes-ready -->
-- **认领记录是评论，标签只是可见信号**：认领落在票下一条固定格式的评论里（`gh issue view <N> --comments` 就能看到），标签写失败只是 advisory，不改认领的结局。两路会话同时读到空票时都会写出评论，写完后 `claim.py` 重读一次，最早的那条赢、后写的那条撤回自己——仍不是原子的，极小窗口里两条会同时立住，看评论时间就能判。 <!-- rule:doc.issue.claim-record-is-a-comment -->
+- **认领即出池**：动第一行代码之前跑 `python3 tool/claim.py <N>`。它按票下的认领评论仲裁，再写一条认领评论、加 `in-progress`、摘掉 `ready-for-agent` / `ready-for-human` / `needs-triage`。仲裁只看未收尾的认领，`Record.created`（服务器时间）最早的一条赢；同 identity 重复认领是幂等的 reaffirm，不追加评论。身份是 `<主机名>-<worktree 绝对路径 sha1 前 8 位>`，同一个 GitHub 账号下的两路会话因此也分得开。
+- **三种结局各是一个退出码**：0 认领到手（含本会话已持有），2 被别人占，3 `gh` 调用失败；其余拒绝（票已关闭、票面读不出确定结局、收尾时本会话没有未收尾认领、命令行不合规）都是 1。拿到 2 就停下上报、不自动改挑别的票；拿到 1 不要猜，照消息处理。
+- **认领记录是评论，标签只是可见信号**：认领落在票下一条固定格式的评论里（`gh issue view <N> --comments` 就能看到），标签写失败只是 advisory，不改认领的结局。两路会话同时读到空票时都会写出评论，写完后 `claim.py` 重读一次，最早的那条赢、后写的那条撤回自己——仍不是原子的，极小窗口里两条会同时立住，看评论时间就能判。
 - **`in-progress` 留到合入 main 才摘**：开了 PR 也不摘，PR 开着没合并时改动没进 main，别人仍可能拿同一张票再做一遍。收尾只有两个时机——合入 main 且不需要真机复测就 `python3 tool/claim.py <N> --release`；合入 main 但等真机复测就 `--release` 再挂 `waiting-for-verify`（`in-progress` 与它不并存）。`--release` 不恢复 `ready-*`。 <!-- rule:doc.issue.in-progress-until-merge -->
 - **弃单要恢复原状**：放弃或改派时跑 `python3 tool/claim.py <N> --abandon`：它写放弃评论、摘掉 `in-progress`，并把认领评论里记下的 `ready-*` / `needs-triage` 加回（`--restore <标签>` 可覆盖），票面再补一句为什么停——否则标签烂在票上，下一个会话不敢碰。 <!-- rule:doc.issue.abandon-restores-labels -->
 - **票号从返回值取**：并行会话会占用按顺序推出来的编号。开票后照 `gh issue create` 打印的 URL 取号，互链等内容建完再回填。 <!-- rule:doc.issue.number-from-output -->
