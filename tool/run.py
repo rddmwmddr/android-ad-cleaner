@@ -373,7 +373,7 @@ def recipe_for(model, brand="", device_info=None):
                     if recorded and build_ok(device_info, recorded):
                         return variant, False
             return r, False
-    fam = FAMILY.get((brand or "").lower())
+    fam = FAMILY.get((brand or "").lower(), "")
     preferred = os.path.join(ROOT, "recipes", REFERENCE.get(fam, ""), "recipe.py")
     if fam in REFERENCE and os.path.exists(preferred):
         # 固定参考的 BUILD 常写得粗（OS4.0、16），前缀一命中就到它为止，同族里录在同版本上的
@@ -617,7 +617,7 @@ def cmd_check(serial, rest):
         print(troubleshooting.CLICK + "：被系统拒绝。" + troubleshooting.XIAOMI_INPUT)
     if r and ref:
         rb = recipe_meta(r)["build"]
-        fam = FAMILY.get((i["brand"] or "").lower())
+        fam = FAMILY.get((i["brand"] or "").lower(), "")
         matched = version_match(i, rb, fam)
         this = matched or i["build"] or i["os"]
         if not rb:

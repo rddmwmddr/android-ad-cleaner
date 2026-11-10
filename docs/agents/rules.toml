@@ -107,6 +107,14 @@ why = "只查 F/E9 时，闭包捕获循环变量（B023）与 zip 静默截断�
 expires_if = "静态检查不再跑 ruff，或规则集重新回到命令行参数里时删。"
 
 [[rule]]
+id = "dev.types.narrow-scope-in-config"
+source = "CLAUDE.md#开发"
+check = "ci:types"
+status = "enforced"
+why = "类型错误此前只能靠人读：`None` 上取属性、传错参数类型都要等真机走到那条分支才炸，审查 agent 每轮在用 token 替代机器本该做的事。扫描范围与宽松档参数收进 pyproject.toml，命令不带参数，没有第二份口径；类型检查拆成独立 types job，红了不与用例失败混在一起（#993、#996）。不做全量注解：这个仓库的 bug 主要是「静默成功 / 静默跳过」，全量注解的收益不确定，代价是撞上它赖以灵活的假对象与注入作用域。"
+expires_if = "类型检查不再跑 mypy，或扫描范围重新回到命令行参数里时删。"
+
+[[rule]]
 id = "dev.stdio.single-exit"
 source = "CLAUDE.md#开发"
 check = "test:test_rules_guards::StdioGuards.test_stdio_utf8_single_exit"

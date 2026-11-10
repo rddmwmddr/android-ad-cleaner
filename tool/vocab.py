@@ -248,8 +248,12 @@ def _page_label(node):
         return node.value
     if isinstance(node, ast.JoinedStr):
         parts = []
+        # JoinedStr 的成员只有两类：常量与 FormattedValue（后者取它包着的那个表达式）
         for value in node.values:
-            parts.append(value.value if isinstance(value, ast.Constant) else "{" + ast.unparse(value.value) + "}")
+            if isinstance(value, ast.Constant):
+                parts.append(str(value.value))            # f-string 的字面量段恒是 str
+            elif isinstance(value, ast.FormattedValue):
+                parts.append("{" + ast.unparse(value.value) + "}")
         return "".join(parts)
     return f"<{ast.unparse(node)}>"
 

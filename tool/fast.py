@@ -639,7 +639,7 @@ class Phone:
         纯图片的广告弹窗没有文字，只有一个 ✕ 图标：找 desc/id 里带 close 的可点元素。
         返回非空表示这次关掉了东西，返回前已经等过界面过渡（0.4~0.6 秒），调用方不必再等；
         返回 None 表示这次没关掉任何东西（推广位的 ✕ 点过也已退回原 App），
-        调用方按自己的节奏等待或重试。轮询处写成 `self.dismiss() or time.sleep(x)`：
+        调用方按自己的节奏等待或重试。轮询处写成 `if not self.dismiss(): time.sleep(x)`：
         刚关掉就立刻重读，什么都没关才按间隔再读。"""
         root = self.tree()
         # Android 运行时权限页只点明确的拒绝按钮，不替用户授予权限或修改“不再询问”。
@@ -747,7 +747,8 @@ class Phone:
                     if seen is not None:
                         seen.append(b)
                     return True
-                self.dismiss() or time.sleep(0.2)
+                if not self.dismiss():
+                    time.sleep(0.2)
             if not quiet:
                 self.say(f"  ✗ 没找到「{text}」" + self.residual_note())
             return False
@@ -916,7 +917,8 @@ class Phone:
             for _ in range(5):
                 if self.find(expect) or self.find(expect, edge_ok="tab"):
                     return True
-                self.dismiss() or time.sleep(0.3)
+                if not self.dismiss():
+                    time.sleep(0.3)
         self.say(f"  ✗ 点「{text}」后没出现「{expect}」" + self.residual_note())
         return False
 
@@ -938,7 +940,8 @@ class Phone:
             if time.time() >= deadline:
                 self.say(f"  ✗ 底部没有「{name}」标签")
                 return False
-            self.dismiss() or time.sleep(0.2)
+            if not self.dismiss():
+                time.sleep(0.2)
 
     def _tab_xy(self, name):
         """底部带内按三层递进找标签，返回点击坐标或 None。"""

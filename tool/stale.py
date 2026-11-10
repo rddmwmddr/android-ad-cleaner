@@ -153,12 +153,13 @@ def decide(issue, now, days=DEFAULT_DAYS):
         last = last_comment(issue.get("comments") or [])
     except Unreadable as error:
         return no(SKIP, str(error))
+    replied: bool | None                              # None = 末评作者读不出，不猜
     if last is None:
         # 没有任何评论：没人回过话，从票的 createdAt 起算
         since, who, replied = instant(issue.get("createdAt")), "", False
     else:
         since, who = last
-        replied = (who == reporter) if who else None      # None = 末评作者读不出，不猜
+        replied = (who == reporter) if who else None
     if since is None:
         return no(SKIP, "起算时间读不出来")
 

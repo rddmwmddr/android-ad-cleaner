@@ -14,7 +14,12 @@ import sys
 def use_utf8_console():
     """把标准流转成 UTF-8，出错字节替换；不支持重配置的流静默跳过。"""
     for stream in (sys.stdout, sys.stderr):
+        # `sys.stdout` 的静态类型 `TextIO` 没声明 `reconfigure`，所以先取属性再判有无；
+        # 与「直接调用后捕获 AttributeError」行为一致，但不靠异常兜住属性的缺失。
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
         try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
+            reconfigure(encoding="utf-8", errors="replace")
         except Exception:
             pass

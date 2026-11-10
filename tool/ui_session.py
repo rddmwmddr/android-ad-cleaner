@@ -4,10 +4,11 @@
 """
 import atexit
 import hashlib
-import os
+import sys
 from pathlib import Path
 import tempfile
 import time
+from typing import Any
 
 import uiautomator2 as u2
 
@@ -35,7 +36,9 @@ class DeviceLock:
         while True:
             self.file.seek(0)
             try:
-                if os.name == "nt":
+                # 平台判据写成 sys.platform 而不是 os.name：mypy 只认前者，Linux 上会把
+                # Windows-only 的 msvcrt 分支整段剪掉，否则类型检查读不到那个模块的方法。
+                if sys.platform == "win32":
                     import msvcrt
                     msvcrt.locking(self.file.fileno(), msvcrt.LK_NBLCK, 1)
                 else:
@@ -52,7 +55,7 @@ class DeviceLock:
 
     def close(self):
         if not self.file.closed:
-            if os.name == "nt":
+            if sys.platform == "win32":
                 import msvcrt
                 self.file.seek(0)
                 msvcrt.locking(self.file.fileno(), msvcrt.LK_UNLCK, 1)
@@ -60,6 +63,10 @@ class DeviceLock:
 
 
 class ManagedDevice(u2.Device):
+    # 上游 `Device` 在这里解析不到类型（uiautomator2 没有 stub），进程句柄只能自己声明；
+    # 赋值仍归上游 `launch()`，复用来的服务没有属于我们的那份，保持 None。
+    _process: Any
+
     def __init__(self, serial):
         self._session_lock = DeviceLock(serial)
         try:

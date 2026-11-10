@@ -162,12 +162,12 @@ def queue_tables(lines):
 
 def table_of(text):
     """Markdown 文本 -> 复测队列表；小节或表头认不出时抛 Unreadable。"""
-    columns, numbers = None, []
-    for _, header, rows in queue_tables(text.splitlines()):
-        columns = columns or tuple(header)
+    tables = queue_tables(text.splitlines())          # 一张表都没有时已经 raise，列表非空
+    numbers = []
+    for _, _, rows in tables:
         for _, tickets in rows:
             numbers += list(tickets)
-    return Table(columns=columns, issues=tuple(dict.fromkeys(numbers)))
+    return Table(columns=tuple(tables[0][1]), issues=tuple(dict.fromkeys(numbers)))
 
 
 def login(author):
@@ -252,16 +252,15 @@ def apply(text, result):
     tables = queue_tables(lines)
 
     expired = set(result.expired)
-    drop, header = set(), None
-    for _, header_of_table, rows in tables:
-        header = header or header_of_table
+    drop = set()
+    for _, _, rows in tables:
         for index, numbers in rows:
             # 一行可以登记多张票（`#193 / #581`）。只有这一行的票全过期才删：
             # 删掉仍开着的那张会连带丢掉它的机型与要观察的输出，宁可留着让核对继续报差异。
             if numbers and set(numbers) <= expired:
                 drop.add(index)
 
-    added = [skeleton(number, who, len(header)) + "\n" for number, who in result.missing]
+    added = [skeleton(number, who, len(tables[0][1])) + "\n" for number, who in result.missing]
     anchor = tables[0][0][1] - 1      # 主表最后一行，补行落在它后面
 
     out, pending = [], list(added)
