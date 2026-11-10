@@ -5,7 +5,7 @@
 | 华为 | [华为-HarmonyOS.md](华为-HarmonyOS.md) | ALN-AL00（4.2.0.223；通知路径实测，新脚本待整轮复测） |
 | OPPO / 一加 / realme | [OPPO-ColorOS.md](OPPO-ColorOS.md) | Find N6、Find X10 Pro Max、Find X8s、Find X9 Ultra（部分）、Find N3 典藏版（部分）、Find N5、Pad Mini、Reno5 Z（海外版）、一加 Ace 2、Ace 2 Pro、Ace 5、Ace 6T、13T |
 | 荣耀 | [荣耀-MagicOS.md](荣耀-MagicOS.md) | PNM-AN10、WKL-AN20（MagicOS 11；路径逐项实测，整轮待复测） |
-| 小米 / Redmi | [小米-HyperOS.md](小米-HyperOS.md) | Xiaomi 18 Pro Max、18 Fold、17 Ultra、17、15、13 Ultra、Pad 7、REDMI K80 至尊版、K80 Pro、K90 Pro Max、K90 Ultra、Redmi K70、K70 Pro、Note 12 Turbo、Note 14 Pro、Note 14 5G |
+| 小米 / Redmi | [小米-HyperOS.md](小米-HyperOS.md) | Xiaomi 18 Pro Max、18 Fold、17 Ultra、17、15、13 Ultra、Pad 7、REDMI K80 至尊版、K80 Pro、K90 Pro Max、K90 Ultra、K90、Redmi K70、K70 Pro、Note 12 Turbo、Note 14 Pro、Note 14 5G |
 | vivo / iQOO | [vivo-OriginOS.md](vivo-OriginOS.md) | X300 Ultra（V2547DA、V2547A）、X Fold6（V2545A，负一屏需手动）、iQOO V2324HA、V2361A、V1986A、V2417A、iQOO Z11 Turbo（V2536A）、vivo V2309A |
 | 魅族 | [魅族-Flyme.md](魅族-Flyme.md) | 21 Pro（MEIZU 21 Pro，Flyme 12.6.0.0A；路径手动核对，脚本整段待验证） |
 | 三星 | [三星-OneUI.md](三星-OneUI.md) | Galaxy Note10+ 5G（SM-N9760，One UI 4 / Android 12；机型脚本仅「广告」一段） |
