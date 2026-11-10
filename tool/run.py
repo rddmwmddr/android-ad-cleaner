@@ -327,11 +327,17 @@ def _dir_family(path):
 
 
 def same_version_family_recipe(allr, fam, preferred, device_info):
-    """同族里挑一份录制版本相同的专用脚本，且不比固定参考窄；挑不到返回 None。
+    """同族里挑一份比固定参考更贴这台、且不比它窄的专用脚本；挑不到返回 None。
 
-    段数门槛是硬条件：版本对得上但更窄的脚本会让一次运行少关一类广告（#319）。
+    固定参考与候选同池比版本核心的具体程度：候选要严格更长才换。等长意味着两者对这台机
+    同样贴，保固定参考——否则目录名字母序就成了决定因素（#969）。固定参考对不上这台时它
+    不设门槛，任何对得上的同版本候选都比它贴（#319）。段数门槛是硬条件：版本对得上但更窄
+    的脚本会让一次运行少关一类广告（#319）。
     """
-    ref_steps = len(recipe_meta(preferred)["steps"])
+    ref_meta = recipe_meta(preferred)
+    ref_core = version_core(ref_meta["build"], fam)
+    ref_matches = bool(matching_device_version(device_info, ref_core, fam))
+    ref_steps = len(ref_meta["steps"])
     ranked = []
     for r in allr:
         if _dir_family(r) != fam:
@@ -340,11 +346,13 @@ def same_version_family_recipe(allr, fam, preferred, device_info):
         core = version_core(meta["build"], fam)
         if not matching_device_version(device_info, core, fam):
             continue
+        if ref_matches and len(core) <= len(ref_core):
+            continue
         if len(meta["steps"]) < ref_steps:
             continue
-        # 录制得越具体越贴这台；同长度按目录名，不随遍历顺序变。
-        ranked.append((-len(core), os.path.basename(os.path.dirname(r)), r))
-    return sorted(ranked)[0][2] if ranked else None
+        # 录制得越具体越贴这台；同长度按段数、再按目录名，不随遍历顺序变。
+        ranked.append((-len(core), -len(meta["steps"]), os.path.basename(os.path.dirname(r)), r))
+    return sorted(ranked)[0][3] if ranked else None
 
 
 def recipe_for(model, brand="", device_info=None):
@@ -364,8 +372,9 @@ def recipe_for(model, brand="", device_info=None):
     fam = FAMILY.get((brand or "").lower())
     preferred = os.path.join(ROOT, "recipes", REFERENCE.get(fam, ""), "recipe.py")
     if fam in REFERENCE and os.path.exists(preferred):
-        # 固定参考是按别的版本录的就先在同族里找一份同版本的；同版本的那份更可能对得上入口（#319）。
-        if device_info and not version_match(device_info, recipe_meta(preferred)["build"], fam):
+        # 固定参考的 BUILD 常写得粗（OS4.0、16），前缀一命中就到它为止，同族里录在同版本上的
+        # 脚本永远进不了候选。两条路径同池排（#969）；固定参考的 BUILD 写粗只是让它自己不够贴。
+        if device_info:
             picked = same_version_family_recipe(allr, fam, preferred, device_info)
             if picked:
                 return picked, True
@@ -604,7 +613,8 @@ def cmd_check(serial, rest):
         print(troubleshooting.CLICK + "：被系统拒绝。" + troubleshooting.XIAOMI_INPUT)
     if r and ref:
         rb = recipe_meta(r)["build"]
-        matched = version_match(i, rb, FAMILY.get((i["brand"] or "").lower()))
+        fam = FAMILY.get((i["brand"] or "").lower())
+        matched = version_match(i, rb, fam)
         this = matched or i["build"] or i["os"]
         if not rb:
             ver = "录制版本 未标"
@@ -614,7 +624,11 @@ def cmd_check(serial, rest):
             # 「相同」只陈述版本对得上，不说这份脚本适配套过了（CONTEXT.md 的「参考脚本」）。
             same = "相同" if matched else "不同"
             ver = f"录制版本 {rb}，这台 {this}（{same}）"
-        print(f"机型脚本：本型号没有；同品牌参考 {os.path.relpath(r, ROOT)}，{ver}。"
+        # 换到同族更贴的那份时要说清楚：报告者据此判断要不要手动补入口再报障（#969）。
+        # 没有固定参考的品牌（三星、华为）走的是「取同品牌第一份」，没比过版本，不能这么说。
+        pinned = REFERENCE.get(fam)
+        note = "（同族同版本，非固定参考）" if pinned and os.path.basename(os.path.dirname(r)) != pinned else ""
+        print(f"机型脚本：本型号没有；同品牌参考 {os.path.relpath(r, ROOT)}{note}，{ver}。"
               f"要用：recipe --ref（安全模式：只关脚本里点名的开关，找不到就跳过）")
     elif r:
         rb = recipe_meta(r)["build"]
