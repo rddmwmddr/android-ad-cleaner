@@ -41,6 +41,7 @@
 
 ### 内部
 
+- 六个纯逻辑模块补注解并在 `pyproject.toml` 里对它们开 mypy 严格档（#997）
 - `mypy` 接入 CI：新增独立 `types` job，范围与宽松档参数收进 `pyproject.toml`（#996）
 - 新增哑桩守卫：`patch(...) as X` 之后从不使用 X 即红，规则转 `enforced`（#1022）
 - 机型用例的本地假 `Phone` 收进 `phone_stub()`，并加装配单点守卫（#1021）

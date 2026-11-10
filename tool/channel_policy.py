@@ -51,13 +51,13 @@ class ChannelJudgement:
     foreground_service: bool = False
 
 
-def protected_channel(name, channel_id="", list_label=""):
+def protected_channel(name: str, channel_id: str = "", list_label: str = "") -> bool:
     # 名称可能带空格 / 零宽字符；当前名称、ID、旧清单描述任一命中就保留。
     text = re.sub(r"[\s\u200b\ufeff]+", "", " ".join((name, channel_id, list_label)))
     return bool(PHOTO_SPOT.search(text))
 
 
-def _youtube_channel_two(fields):
+def _youtube_channel_two(fields: list[str]) -> bool:
     """旧 SERVICE 的 `youtube\\t2\\t`：某字段以 youtube 结尾，紧邻的下一字段是 2，且 2 后面还有字段。"""
     for i in range(len(fields) - 2):
         if fields[i].lower().endswith("youtube") and fields[i + 1] == "2":
@@ -65,7 +65,8 @@ def _youtube_channel_two(fields):
     return False
 
 
-def classify(name, channel_id="", list_label="", package="", app="", foreground_service=False):
+def classify(name: str, channel_id: str = "", list_label: str = "", package: str = "",
+             app: str = "", foreground_service: bool = False) -> ChannelJudgement:
     vivo = bool(VIVO_MARKETING.match(channel_id))
     ad_network = bool(AD_NETWORK.search(channel_id))
     # scan 只在读到应用名时打第四列；没有第四列时，最后一个字段就是渠道名。

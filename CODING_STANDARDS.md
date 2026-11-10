@@ -84,3 +84,7 @@ README、PR 描述、Release Note 里的计数，必须交代它在什么样本�
 CI 的 `comment-tickets` job 核这一条：取 `base..head` 的新增行，票号不在 PR 标题 / 正文引用的范围内就红；`docs/adr/` 与含「沿用」的行两处豁免。同 `dco` / `conventional`，只让问题可见，不阻断合并。
 
 反例：一批为 #674 / #675 新写的注释与用例 docstring 都写成 `#662`，而 `#662` 是上一个 PR 的票；CHANGELOG 与提交标题对，注释全错，检索时会漏。
+
+## 纯逻辑模块优先带注解
+
+不碰设备、不碰手机界面、不依赖假对象的模块优先补上参数与返回注解，让未定义参数与返回类型在调用方也被查出来；判据与当前名单见 `CLAUDE.md` 的「开发」段。不设强制：一个模块值不值得补按它的规模与调用面判断，审查不能因为「这里没注解」要求返工。 <!-- rule:doc.types.annotations-preferred-not-required -->
