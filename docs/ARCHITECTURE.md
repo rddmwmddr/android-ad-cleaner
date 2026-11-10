@@ -31,7 +31,7 @@
 | 模块 | 拥有什么 |
 |---|---|
 | `run.py` | 总入口：命令分派、退出码、设备信息、备份的存取 |
-| `fast.py` | 引擎核心：`Phone`（采样 / 导航 / 拨动）、`plan_switches()` |
+| `fast.py` | 引擎核心与出口：`Phone`（采样 / 导航 / 拨动）、`plan_switches()`；`Phone` 正在拆成 `tool/phone/` 子包（[ADR-0033](adr/0033-phone-phase-modules.md)） |
 | `recipe_kit.py` | 机型脚本的前导：段包装、入口断言、跳过出口、两个台账（[ADR-0029](adr/0029-recipe-preamble-injection.md)） |
 | `recipe_meta.py` | 机型脚本头部的元数据：录制版本、机型列表、段名；只有正则，不背 CLI 入口的副作用 |
 | `chan_fast.py` | 营销通知渠道：`ChannelPage`（到页 + 认行）、批处理循环 |
@@ -65,6 +65,9 @@
 
 `commits.py` 不是命令：它是上面几条 PR 校验共用的 `base..head` 读取与 UTF-8 控制台，沿用 #848、#849 起的那份设计。
 
+`Phone` 正在按 [ADR-0033](adr/0033-phone-phase-modules.md) 拆进 `tool/phone/`，搬迁完成前仍在
+`tool/fast.py` 且对外名字一个不改。
+
 客户端侧：`gui/app.py` 是主体（`ClientData` / `AdbDownloader` / `Reporter` / `Dispatcher` / `Api`），`gui/launch.py` 是入口与打包冒烟，`gui/web/` 是桌面版的界面，`gui/winpreflight.py` 归因 Windows 启动失败，`gui/dotnet_config.py` 在打包时写随包的 `<exe>.config`。
 
 ## 四、一次执行的路径
@@ -82,5 +85,5 @@
 
 ## 五、状态
 
-- **桌面宿主与引擎：稳定。** 模块边界由 ADR-0001–0020 钉住；主流程不做整体重构，`Phone` 保持今天的宽度（[ADR-0020](adr/0020-no-read-write-split.md)）。
+- **桌面宿主与引擎：稳定，`Phone` 正在拆分。** 模块边界由 ADR-0001–0020 与 ADR-0033 钉住；主流程不做整体重构。「按读 / 写拆」仍然不成立（[ADR-0020](adr/0020-no-read-write-split.md)），`Phone` 改沿阶段轴拆成两个基座 + 五个阶段 + 薄门面（[ADR-0033](adr/0033-phone-phase-modules.md)），分七步进行。
 - **手机宿主：provisional。** ADR-0014 / 0018 / 0019 落地晚于其余决定，Kotlin 侧未在本机编译，配对、自动重开无线调试、后台屏等仍待真机验收——读这一层时不要当成定稿。
