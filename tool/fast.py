@@ -1406,6 +1406,16 @@ class Phone:
             note += f"，没看到「{'、'.join(missed)}」"
         return f"{note}；{detail}"
 
+    def _launch_evidence(self, seizer="", frames=0):
+        """启动两条短路的现场：当前落点 + 页面结构摘要，能确知抢夺者时与落点分开写（#940）。
+
+        抛错那一刻前台可能已经被抢回目标包，轮询里记下的那一帧才是抢夺者。门槛与停段同档
+        （同一个包连续 FOREIGN_STREAK 帧）：一两帧过渡、空焦点交替都不算确知，不写也不伪造。"""
+        where, detail = self._page_diagnosis()
+        if seizer and frames >= FOREIGN_STREAK and seizer.split("/", 1)[0] != where.split("/", 1)[0]:
+            return f"（被 {seizer} 抢了前台，连续 {frames} 帧；当前停在 {where}；{detail}）"
+        return f"（停在 {where}；{detail}）"
+
     def _launch(self, pkg, activity, settle, foreground):
         """发启动命令、等前台回到目标 App、顺手关掉可识别的弹窗。落点对不对由 start() 判。"""
         self.check_alive()
@@ -1434,30 +1444,41 @@ class Phone:
         started = time.monotonic()
         last = started
         waited = 0.0                       # 只有确知「不是目标 App」的时间才计入启动等待
+        # 最后读到的那一帧外来前台与它同一个包连读的帧数：抛错时前台可能已被抢回目标包（#940）。
+        # 读空只打断 seizer_run（这个包当前的连读），不抹掉 seizer / seizer_frames：
+        # 空焦点只是「读不出」，之前确知过的那一段仍是唯一的线索。
+        seizer, seizer_frames, seizer_run = "", 0, 0
         while self.focus().split("/", 1)[0] != expected:
-            current = self.focus().split("/", 1)[0]
+            focus = self.focus()
+            current = focus.split("/", 1)[0]
             now = time.monotonic()
             if not unknown_focus(current):
                 waited += now - last       # 空焦点是窗口还没画出来，顺延到 LAUNCH_HARD_STOP 为止
             last = now
             if current in PERMISSION_CONTROLLERS:
                 self.dismiss()
+            if unknown_focus(current) or current in PERMISSION_CONTROLLERS or current == expected:
+                seizer_run = 0
+            else:
+                seizer_run = seizer_run + 1 if focus == seizer else 1
+                seizer, seizer_frames = focus, seizer_run
             if waited >= LAUNCH_WAIT or now >= started + LAUNCH_HARD_STOP:
                 # 带上落点（谁抢了前台、页面长什么样）：没有包名就分不清该加白名单还是改判据（#547）。
-                where, detail = self._page_diagnosis()
-                raise RuntimeError(f"{pkg} 没有进入前台，跳过本段（停在 {where}；{detail}）")
+                raise RuntimeError(f"{pkg} 没有进入前台，跳过本段{self._launch_evidence(seizer, seizer_frames)}")
             time.sleep(0.2)
 
-        def leave_foreground():
+        def leave_foreground(seizer="", frames=0):
             # 同 #547：这条报错命中 79 份上报、51 个型号，缺的从来都是「是谁盖住了」。
-            where, detail = self._page_diagnosis()
-            raise RuntimeError(f"{pkg} 启动后离开前台，停止本段以免操作其他 App（停在 {where}；{detail}）")
+            raise RuntimeError(f"{pkg} 启动后离开前台，停止本段以免操作其他 App"
+                               f"{self._launch_evidence(seizer, frames)}")
 
         streak = 0                          # 连续读到别的 App 的帧数，读到目标包或读空就清零
+        seizer, seizer_frames, seizer_run = "", 0, 0    # 「被谁抢了前台」的记录，从这一阶段重新起算
         def check_foreground():
             """确认前台：落在目标 App 返回真（这一屏可以读、可以关弹窗），读不出或别的 App 返回假。"""
-            nonlocal streak
-            current = self.focus().split("/", 1)[0]
+            nonlocal streak, seizer, seizer_frames, seizer_run
+            focus = self.focus()
+            current = focus.split("/", 1)[0]
             # 权限申请可能在首页已出现后才弹出，也只能拒绝；不在其他 App 上找关闭按钮。
             if current in PERMISSION_CONTROLLERS:
                 give_up_at = time.monotonic() + 3
@@ -1467,18 +1488,23 @@ class Phone:
                     if current and not self.dismiss():
                         break
                     time.sleep(.2)
-                    current = self.focus().split("/", 1)[0]
+                    focus = self.focus()
+                    current = focus.split("/", 1)[0]
                 if current in PERMISSION_CONTROLLERS:      # 等满 3 秒仍在：确知被它占住
                     leave_foreground()
             if unknown_focus(current):
                 streak = 0
+                seizer_run = 0
                 return False
             if current == expected:
                 streak = 0
+                seizer_run = 0
                 return True
             streak += 1
+            seizer_run = seizer_run + 1 if focus == seizer else 1
+            seizer, seizer_frames = focus, seizer_run
             if streak >= FOREIGN_STREAK:
-                leave_foreground()
+                leave_foreground(seizer, seizer_frames)
             return False
 
         # 旧版商店冷启动可能暂时没有可读文字；空白不等于广告，不能盲按返回退出 App。
