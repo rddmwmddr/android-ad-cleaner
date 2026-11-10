@@ -127,29 +127,100 @@ MSA = "com.miui.systemAdSolution"
 MSA_PKGS = (MSA, "com.miui.msa.global")      # 国行 / 海外版的 msa，挂起后都要断网
 
 
-def msa_net(serial, enable, pkg=MSA):
-    """仅用本系统确实提供的接口；Android 13 等旧系统不伪报断网成功。"""
+CHAIN3_STATES = {"chain:enabled": "enabled", "true": "enabled",
+                 "chain:disabled": "disabled", "false": "disabled"}
+CHAIN3_GLOB = "chain3-setting*.json"
+DEVICE_SERIAL_KEYS = ("ro.serialno", "ro.boot.serialno")
+
+
+def msa_command(help_text, command):
+    return re.search(r"(?m)^\s*" + re.escape(command) + r"(?:\s|$)", help_text) is not None
+
+
+def device_key(serial):
+    """记录用的设备标识。无线调试的 adb serial 是「IP:端口」，重连就变，还原时对不上上一轮。"""
+    return first_nonempty(prop(serial, key) for key in DEVICE_SERIAL_KEYS) or serial
+
+
+def chain3_state(serial):
+    """设备级开关 chain3 的当前值；读不到返回空串（旧系统没有该接口）。"""
+    return CHAIN3_STATES.get(sh_all(serial, "cmd connectivity get-chain3-enabled").strip().lower(), "")
+
+
+def chain3_record(key):
+    """跨多次 backup 找回本设备没还原的原值。快照目录只按型号分，同型号另一台要按设备标识过滤。
+    坏文件跳过：任何一份历史记录损坏都不该把挂起与还原一起带崩。"""
+    for path in sorted(glob.glob(os.path.join(BACKUPS, "*", CHAIN3_GLOB)), reverse=True):
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if data.get("serial") == key and data.get("original") in ("enabled", "disabled"):
+            return path, data
+    return None, None
+
+
+def chain3_remember(key, backup, original):
+    """先落盘再改 chain3；重复挂起不覆盖最初原值，否则还原会写回「挂起后」的值。"""
+    path, _ = chain3_record(key)
+    if path is not None:
+        return path
+    path = os.path.join(backup, "chain3-setting.json")
+    if os.path.exists(path):            # 同型号另一台设备占着这个名字，别覆盖它的还原记录
+        safe = re.sub(r"[^A-Za-z0-9._-]", "_", key)
+        path = os.path.join(backup, f"chain3-setting-{safe}.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"serial": key, "original": original}, f)
+    return path
+
+
+def msa_net(serial, enable, pkg=MSA, chain3=None):
+    """仅用本系统确实提供的接口；Android 13 等旧系统不伪报断网成功。
+
+    chain3 不按包生效（挂起时强制打开），还原要按挂起前的原值写回，不能一律写 false（#945）。
+    chain3=None 表示由本函数读当前值；调用方先读过就传进来，好让落盘早于这次改动。
+    """
     help_text = sh_all(serial, "cmd connectivity help")
     required = ["set-package-networking-enabled", "get-package-networking-enabled"]
     if not enable:
         required += ["set-chain3-enabled", "get-chain3-enabled"]
-    if not all(re.search(r"(?m)^\s*" + re.escape(command) + r"(?:\s|$)", help_text) for command in required):
-        return {"ok": False, "supported": False, "reason": "本系统不支持 msa 断网接口；仅挂起仍可能出现广告"}
+    if not all(msa_command(help_text, command) for command in required):
+        return {"ok": False, "supported": False, "chain3": "",
+                "reason": "本系统不支持 msa 断网接口；仅挂起仍可能出现广告"}
+    if chain3 is not None:
+        original = chain3
+    else:
+        original = "" if enable else chain3_state(serial)
+    if not enable and not original:
+        # 读不到原值就不动设备级开关：改了就没有依据还原（#945）
+        return {"ok": False, "supported": True, "chain3": "",
+                "reason": "读不到 chain3 原值，未更改网络设置"}
+    if enable and original and not msa_command(help_text, "set-chain3-enabled"):
+        original = ""                    # 降级后的系统没有这个接口，按包联网照常还原
     commands = [f"cmd connectivity set-package-networking-enabled {'true' if enable else 'false'} {pkg}"]
     if not enable:
         commands.append("cmd connectivity set-chain3-enabled true")
+    elif original:
+        commands.append("cmd connectivity set-chain3-enabled " + ("true" if original == "enabled" else "false"))
     for command in commands:
         result = sh_all(serial, command)
         if re.search(r"unknown command|exception|permission denial|error|not supported|denied", result, re.I):
-            return {"ok": False, "supported": True, "reason": "系统拒绝更改 msa 网络状态：" + result[-180:]}
+            return {"ok": False, "supported": True, "chain3": original,
+                    "reason": "系统拒绝更改 msa 网络状态：" + result[-180:]}
     result = sh_all(serial, f"cmd connectivity get-package-networking-enabled {pkg}").strip().lower()
     # HyperOS 实机返回「包名:allow/deny」，部分接口返回布尔值；不接受错误信息中的碰巧匹配。
     expected = {"true", f"{pkg}:allow".lower()} if enable else {"false", f"{pkg}:deny".lower()}
-    ok = result in expected
-    if ok and not enable:
-        chain = sh_all(serial, "cmd connectivity get-chain3-enabled").strip().lower()
-        ok = chain in {"chain:enabled", "true"}
-    return {"ok": ok, "supported": True, "reason": "" if ok else "msa 网络状态回读未确认成功"}
+    if result not in expected:
+        return {"ok": False, "supported": True, "chain3": original,
+                "reason": "msa 网络状态回读未确认成功"}
+    if not enable and chain3_state(serial) != "enabled":
+        return {"ok": False, "supported": True, "chain3": original,
+                "reason": "chain3 状态回读未确认成功"}
+    if enable and original and chain3_state(serial) != original:
+        return {"ok": False, "supported": True, "chain3": original,
+                "reason": f"chain3 未回到原值 {original}"}
+    return {"ok": True, "supported": True, "chain3": original, "reason": ""}
 
 
 # 部分 ROM 上 ro.build.version.release 单键读为空，真值在分区属性里（#195：HyperOS 4 /
@@ -655,7 +726,10 @@ def cmd_suspend(serial, rest):
             extra = ""
             if p in MSA_PKGS:
                 sh(serial, f"am force-stop {p}")
-                network = msa_net(serial, False, p)
+                original = chain3_state(serial)
+                if original:
+                    chain3_remember(device_key(serial), d, original)     # 落盘早于打开 chain3
+                network = msa_net(serial, False, p, chain3=original)
                 if network["ok"]:
                     extra = "，已禁止联网"
                 elif not network["supported"]:
@@ -676,18 +750,22 @@ def cmd_unsuspend(serial, rest):
     if not pk:
         f = os.path.join(latest_backup(serial), "suspended.txt")
         pk = sorted(set(open(f, encoding="utf-8").read().split())) if os.path.exists(f) else []
+    key = device_key(serial)
     failures = 0
     for p in pk:
         sh(serial, f"pm unsuspend --user 0 {p}")
+        still = suspended(serial, p)
         extra = ""
         if p in MSA_PKGS:
-            network = msa_net(serial, True, p)
+            path, data = chain3_record(key)
+            network = msa_net(serial, True, p, chain3=data["original"] if data else "")
             if network["supported"] and not network["ok"]:
                 failures += 1
                 extra = "；联网还原失败：" + network["reason"]
             elif not network["supported"]:
                 extra = "；本机无 msa 断网接口，未更改联网设置"
-        still = suspended(serial, p)
+            elif path and not still:
+                os.remove(path)          # 包还挂着或联网没还原成，记录留着下次重试
         failures += still
         print(p, ("解除挂起失败" if still else "已恢复挂起状态") + extra)
     return 1 if failures else 0

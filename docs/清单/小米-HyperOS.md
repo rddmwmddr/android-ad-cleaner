@@ -232,7 +232,7 @@ adb -s S shell pm unsuspend --user 0 com.miui.systemAdSolution
 adb -s S shell cmd connectivity set-package-networking-enabled true com.miui.systemAdSolution
 ```
 
-⚠️ 当前 `unsuspend` 不会恢复共享的 `chain3` 原值；请在挂起前记录 `cmd connectivity get-chain3-enabled` 的结果。若原值是 `disabled`，还原后手动执行 `adb -s S shell cmd connectivity set-chain3-enabled false`；若原值是 `enabled`，保持原值。没有记录时不要猜测，先核对其他网络规则。
+⚠️ `chain3` 是设备级开关（不按包生效）。`run.py suspend` 先记下它的原值再打开，读不到原值就不改这两项网络设置、按「部分完成」报告；`run.py unsuspend` 成功后按原值写回（原值 `disabled` 写 `false`，`enabled` 写 `true`），记录随之删除。手动还原时仍要自己先记录 `cmd connectivity get-chain3-enabled` 的结果再写回；旧快照没有记录时不猜测、不动 `chain3`，先核对其他网络规则。
 
 ---
 
