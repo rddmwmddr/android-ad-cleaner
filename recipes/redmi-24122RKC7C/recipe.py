@@ -111,6 +111,8 @@ def browser_start():
         try:
             p.start("com.android.browser", ".BrowserActivity")
             return True
+        except SkipStep:
+            raise                 # App 本机没装：放行，不走下面那句按文案判的重试分支（#908）
         except RuntimeError as e:
             if attempt or "离开前台" not in str(e):
                 raise

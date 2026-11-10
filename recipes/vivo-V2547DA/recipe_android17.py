@@ -88,7 +88,8 @@ def opened(start):
     try:
         start()
         return True
-    except adb_link.DeviceLost:
+    except (adb_link.DeviceLost, SkipStep):
+        # 跳过（App 本机没装 / 按约定不跑）不是「这条路不通」：放行，由段包装记跳过（#908）
         raise
     except RuntimeError as e:
         if p.lost:
@@ -146,8 +147,8 @@ def _():
     try:
         p.start("com.bbk.appstore", ".ui.menu.AppstoreSettingsActivity")
         reached = "AppstoreSettingsActivity" in p.focus()
-    except adb_link.DeviceLost:
-        raise                     # DeviceLost 也是 RuntimeError：断线不能当成「这一页打不开」再空跑一次
+    except (adb_link.DeviceLost, SkipStep):
+        raise                     # DeviceLost 也是 RuntimeError：断线不能当成「这一页打不开」再空跑一次；跳过同样放行（#908）
     except RuntimeError as e:
         print(f"  · 直达商店设置页失败（{e}），改走「我的 → 设置」")
         reached = False

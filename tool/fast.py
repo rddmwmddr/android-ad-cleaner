@@ -1427,7 +1427,8 @@ class Phone:
                         or adb_link.detached(self.serial):
                     self.lost = True
                     raise adb_link.lost((result.output or pm).strip())
-                raise RuntimeError(f"本机没有安装 {pkg}，跳过本段")
+                # 包确实不在：这一页在这台机上本来就没有，按跳过收尾，别记成未完成（#908）。
+                raise recipe_kit.MissingPackage(f"本机没有安装 {pkg}")
             raise RuntimeError(f"无法打开 {pkg}：{result.output.strip()[-250:]}")
         expected = foreground or pkg
         started = time.monotonic()

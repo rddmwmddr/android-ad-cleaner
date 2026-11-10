@@ -59,6 +59,8 @@ def _():
     # 直达设置页，避免从首页弹窗或“我的”页面图标迷路
     try:
         p.start("com.xiaomi.market", "com.xiaomi.market.ui.MarketPreferenceActivity")
+    except SkipStep:
+        raise                     # App 本机没装：放行，由段包装记跳过，别退到「我的 → 设置」再空跑（#908）
     except Exception:
         p.start("com.xiaomi.market")
         p.go("我的", "设置")
@@ -187,6 +189,8 @@ def _():
         p.start("com.android.calendar", ".settings.UserExperienceActionBarActivity")
         p.off(only=["推荐", "广告", "个性化", "内容推广"], page="日历·用户体验计划")
         p.back(2)
+    except SkipStep:
+        raise                     # App 本机没装：放行，由段包装记跳过（#908）
     except Exception:
         p.start("com.android.calendar")
         gear()
