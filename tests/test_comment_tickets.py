@@ -13,6 +13,12 @@ import fixtures  # noqa: E402
 SCRIPT = ROOT / "tool" / "check_comment_tickets.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "ticket-checks.yml"
 
+# 用例里构造的票号是数据、不是引用：写成字面量会被本 PR 的 comment-tickets job 自己抓到，
+# 与 test_source_text.py 处理零宽字符同一做法。
+FOREIGN = "#" + "903"
+OTHER = "#" + "904"
+ABSENT = "#" + "999"
+
 
 class DiffTest(unittest.TestCase):
     """在真 git 仓上造 diff：只判新增行，豁免两种明确引用。"""
@@ -43,37 +49,37 @@ class DiffTest(unittest.TestCase):
         self.assertEqual(self.problems({"a.py": "# 修好落点（#1001）\n"}), [])
 
     def test_ticket_outside_the_reference_is_reported_with_file_and_line(self):
-        bad = self.problems({"a.py": "# 修好落点（#903）\n"})
+        bad = self.problems({"a.py": f"# 修好落点（{FOREIGN}）\n"})
         self.assertEqual(len(bad), 1)
         self.assertIn("a.py:1", bad[0])
-        self.assertIn("#903", bad[0])
+        self.assertIn(FOREIGN, bad[0])
 
     def test_the_reference_set_comes_from_title_and_body_together(self):
         # CI 把标题与正文拼成一份交给脚本：标题里写了票号同样算数。
-        self.assertEqual(self.problems({"a.py": "# 见 #903\n"}, "修落点\n\nRefs #903"), [])
+        self.assertEqual(self.problems({"a.py": f"# 见 {FOREIGN}\n"}, f"修落点\n\nRefs {FOREIGN}"), [])
 
     def test_line_saying_yan_yong_is_exempt(self):
         # 规则本身允许「沿用 #xxx 的做法」这类明确引用。
-        self.assertEqual(self.problems({"a.py": "# 沿用 #903 的做法\n"}), [])
+        self.assertEqual(self.problems({"a.py": f"# 沿用 {FOREIGN} 的做法\n"}), [])
 
     def test_adr_lines_are_exempt(self):
         # ADR 记的就是当时引用了哪张票，改它等于改写历史。
-        self.assertEqual(self.problems({"docs/adr/0033-x.md": "见 #903 的判据\n"}), [])
+        self.assertEqual(self.problems({"docs/adr/0033-x.md": f"见 {FOREIGN} 的判据\n"}), [])
 
     def test_only_added_lines_are_checked(self):
         # base 里已有的票号不因这条检查翻旧账。
-        old = self.commit_files({"a.py": "# 老注释（#903）\n"}, subject="chore: 旧注释")
+        old = self.commit_files({"a.py": f"# 老注释（{FOREIGN}）\n"}, subject="chore: 旧注释")
         self.assertEqual(self.problems({"b.py": "# 新注释（#1001）\n"}, base=old), [])
 
     def test_every_violation_is_listed(self):
-        bad = self.problems({"a.py": "# 见 #903\n# 见 #904\n"})
+        bad = self.problems({"a.py": f"# 见 {FOREIGN}\n# 见 {OTHER}\n"})
         self.assertEqual(len(bad), 2)
         self.assertIn("a.py:1", bad[0])
         self.assertIn("a.py:2", bad[1])
 
     def test_line_numbers_are_those_of_the_new_file(self):
         old = self.commit_files({"notes.md": "第一行\n第二行\n"}, subject="docs: 两行")
-        bad = self.problems({"notes.md": "第一行\n第二行\n见 #999\n"}, base=old)
+        bad = self.problems({"notes.md": f"第一行\n第二行\n见 {ABSENT}\n"}, base=old)
         self.assertEqual(len(bad), 1)
         self.assertIn("notes.md:3", bad[0])
 
@@ -101,10 +107,10 @@ class RangeTest(unittest.TestCase):
         return self.repo.run(SCRIPT, rev_range, str(path), env_extra=env_extra)
 
     def test_foreign_ticket_fails_and_names_it(self):
-        code, out = self.run_check(self.stage("# 见 #903\n"))
+        code, out = self.run_check(self.stage(f"# 见 {FOREIGN}\n"))
         self.assertEqual(code, 1, out)
         self.assertIn("a.py:1", out)
-        self.assertIn("#903", out)
+        self.assertIn(FOREIGN, out)
 
     def test_referenced_ticket_passes(self):
         code, out = self.run_check(self.stage("# 见 #1001\n"))
@@ -122,9 +128,9 @@ class RangeTest(unittest.TestCase):
         self.assertIn("用法", out)
 
     def test_output_survives_a_non_utf8_console(self):
-        code, out = self.run_check(self.stage("# 见 #903\n"), env_extra={"PYTHONIOENCODING": "cp1252"})
+        code, out = self.run_check(self.stage(f"# 见 {FOREIGN}\n"), env_extra={"PYTHONIOENCODING": "cp1252"})
         self.assertEqual(code, 1, out)
-        self.assertIn("#903", out)
+        self.assertIn(FOREIGN, out)
 
 
 def uncommented(text):

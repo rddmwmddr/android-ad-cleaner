@@ -13,6 +13,11 @@ import fixtures  # noqa: E402
 SCRIPT = ROOT / "tool" / "check_ticket_ref.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "ticket-checks.yml"
 
+# 用例里构造的票号是数据、不是引用：写成字面量会被本 PR 的 comment-tickets job 自己抓到，
+# 与 test_source_text.py 处理零宽字符同一做法。
+OTHER = "#" + "903"
+HISTORIC = "#" + "840"
+
 
 class ProblemsTest(unittest.TestCase):
     """三种结局各有各的说法：分支名没票号、正文没引用、两边不是同一张；合规的不报。"""
@@ -28,10 +33,10 @@ class ProblemsTest(unittest.TestCase):
         self.assertIn("Refs", bad[0])
 
     def test_mismatched_ticket_names_both_sides(self):
-        bad = check_ticket_ref.problems("feat/x-1001", "Refs #903")
+        bad = check_ticket_ref.problems("feat/x-1001", f"Refs {OTHER}")
         self.assertEqual(len(bad), 1)
         self.assertIn("#1001", bad[0])
-        self.assertIn("#903", bad[0])
+        self.assertIn(OTHER, bad[0])
 
     def test_matching_reference_passes(self):
         self.assertEqual(check_ticket_ref.problems("feat/x-1001", "Refs #1001"), [])
@@ -43,8 +48,8 @@ class ProblemsTest(unittest.TestCase):
         self.assertEqual(check_ticket_ref.problems("fix/x-1001", "refs #1001"), [])
 
     def test_one_matching_reference_among_several_is_enough(self):
-        # 正文常写 `Refs #840` 说明由来、`Closes #1001` 才算本票，多引一张不该红。
-        self.assertEqual(check_ticket_ref.problems("fix/x-1001", "Refs #840、Closes #1001"), [])
+        # 正文常写历史票说明由来、`Closes #1001` 才算本票，多引一张不该红。
+        self.assertEqual(check_ticket_ref.problems("fix/x-1001", f"Refs {HISTORIC}、Closes #1001"), [])
 
     def test_ticket_must_be_at_the_end_of_the_branch_name(self):
         # `feat/1001-fix` 不是约定形态：票号在末尾才能从分支名直接读出来。
@@ -64,10 +69,10 @@ class RangeTest(unittest.TestCase):
         return self.repo.run(SCRIPT, branch, str(path), env_extra=env_extra)
 
     def test_mismatch_fails(self):
-        code, out = self.run_check("feat/x-1001", "Refs #903")
+        code, out = self.run_check("feat/x-1001", f"Refs {OTHER}")
         self.assertEqual(code, 1, out)
         self.assertIn("#1001", out)
-        self.assertIn("#903", out)
+        self.assertIn(OTHER, out)
 
     def test_match_passes(self):
         code, out = self.run_check("feat/x-1001", "Refs #1001")
@@ -85,7 +90,7 @@ class RangeTest(unittest.TestCase):
 
     def test_output_survives_a_non_utf8_console(self):
         # Windows 控制台与管道默认不是 UTF-8：打印中文不能把校验本身打崩。
-        code, out = self.run_check("feat/x-1001", "Refs #903", {"PYTHONIOENCODING": "cp1252"})
+        code, out = self.run_check("feat/x-1001", f"Refs {OTHER}", {"PYTHONIOENCODING": "cp1252"})
         self.assertEqual(code, 1, out)
         self.assertIn("#1001", out)
 
