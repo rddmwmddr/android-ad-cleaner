@@ -78,9 +78,8 @@ ENTRIES = {
             app="com.android.providers.downloads.ui"),
         "主题": Entry(
             menu="主题 → 我的 → 右上设置",
-            direct=(Direct("com.android.thememanager", ".ThemeResourceProxyTabActivity", ""),
-                    Direct("com.miui.themestore", "com.miui.thememanagerstore.ThemeResourceTabActivity", "")),
-            note="themestore 冷启动的重定向过渡窗会让前台校验误判，主题管理包的首页更稳"),
+            direct=(Direct("com.android.thememanager", ".ThemeResourceProxyTabActivity", ""),),
+            note="themestore 冷启动的重定向过渡窗会让前台校验误判，主题管理包的首页更稳（#906 起统一走这一条）"),
         "浏览器": Entry(
             menu="浏览器 → 底部「菜单」或「我的」→ 设置",
             direct=(Direct("com.android.browser", ".BrowserSettingsActivity", ""),

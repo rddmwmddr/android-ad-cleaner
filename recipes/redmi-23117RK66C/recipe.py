@@ -109,10 +109,15 @@ def _():
 @step("主题")
 def _():
     # 从壳包启动会复用上次设置页，显式重建主题首页以支持连续复跑。
+    if "package:" not in p.d.shell("pm path com.android.thememanager").output:
+        print("  · 本机没有主题管理包，跳过"); return
     start_or_skip("com.android.thememanager", ".ThemeResourceProxyTabActivity",
                   dead_ends=THEME_DEAD_ENDS, reason="主题页打不开")
-    require(p.go("我的", "设置"), "未进入主题「我的」")
-    require(gear(), "主题设置入口未找到")
+    # 导航失败不能与「本页没有目标开关」同形：三步都校验，报错带页面现场（#906）。
+    if not p.go("我的", "设置"):
+        raise RuntimeError("未进入主题「我的」；" + p.page_evidence())
+    if not gear():
+        raise RuntimeError("主题设置入口没找到；" + p.page_evidence())
     close_named(["每次联网时通知"], "主题·设置")
     enter("隐私设置")
     close_named(["个性化推荐"], "主题·隐私")

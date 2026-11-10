@@ -20,7 +20,7 @@ from fixtures import load_recipe, phone_mock
 # 活动名只认 entries 这一处：它改名时守卫要跟着红，而不是脚本与用例一起静默漂移。
 _ENTRY = next(d for d in entries.ENTRIES["xiaomi"]["主题"].direct if d.pkg == "com.android.thememanager")
 THEME, DIRECT = _ENTRY.pkg, _ENTRY.activity
-SKIP = "本机没有主题商店，跳过"
+SKIP = "本机没有主题管理包，跳过"
 
 
 def recipes():
@@ -102,8 +102,8 @@ class ThemeFallbackBehaviourTests(unittest.TestCase):
         for path in (ROOT / "recipes/xiaomi-24129PN74C/recipe.py",
                      ROOT / "recipes/xiaomi-24090RA29C/recipe.py"):
             with self.subTest(recipe=path.parent.name):
-                p, _, scope = self.load(path, "", "package:/system/app/ThemeManager/ThemeManager.apk")
-                self.assertEqual(scope["FAILED_STEPS"], [])
+                p, _, _ = self.load(path, "", "package:/system/app/ThemeManager/ThemeManager.apk")
+                # 只比对拉起那一步：往后的「我的 → 齿轮」与开关校验由 #906 的用例守
                 p.d.shell.assert_any_call(f"pm path {THEME}")
                 p.start.assert_called_once_with(THEME, DIRECT)
 
