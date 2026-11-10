@@ -41,6 +41,7 @@
 
 ### 内部
 
+- 机型用例的本地假 `Phone` 收进 `phone_stub()`，并加装配单点守卫（#1021）
 - 标准流 UTF-8 重配置收成唯一出口 `use_utf8_console()`，新增源码守卫防复发（#995）
 - `AppModel.start()` 换页改走 `show()`，并加「`screen` 只由它改写」的守卫（#1020）
 - 新增每日只读审计 `tool/triage_audit.py`：open 票的四条标签集合判据（#1019）
