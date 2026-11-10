@@ -52,6 +52,7 @@ class FakePage:
         self.flips = flips
         self.blank = blank
         self.grey = set(grey)
+        self.safe_mode = False          # 假 Phone 也要声明：脚本按它决定点不点无标题开关（#909）
         self.clicks = []
         self.confirms = 0
         self.changed = []

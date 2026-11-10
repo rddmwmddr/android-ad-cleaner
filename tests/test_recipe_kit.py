@@ -264,6 +264,41 @@ def _b():
         self.assertEqual(scope["SKIPPED_STEPS"], [])
 
 
+class SafeModePageWideTests(unittest.TestCase):
+    """`skip_in_safe_mode()`：整页关闭的段落在安全模式下一个开关都点不到，按跳过收尾（#909）。"""
+
+    SCRIPT = '''
+CALLS = []
+
+@step("甲")
+def _a():
+    skip_in_safe_mode()
+    CALLS.append("甲")
+'''
+
+    def run_step(self, safe_mode):
+        p = phone(safe_mode=safe_mode)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "recipe.py")
+            path.write_text(self.SCRIPT, encoding="utf-8")
+            scope, out = load_recipe(p, path, ())
+        return scope, out.getvalue()
+
+    def test_safe_mode_skips_the_step_with_the_page_wide_reason(self):
+        scope, printed = self.run_step(True)
+        self.assertEqual(scope["CALLS"], [])
+        self.assertEqual(scope["SKIPPED_STEPS"], ["甲"])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        self.assertIn("· 跳过：安全模式不做整页全关", printed)
+
+    def test_without_safe_mode_the_step_runs(self):
+        """旧树也绿，守的是不回退：出口在非安全模式下必须是惰性的。"""
+        scope, printed = self.run_step(False)
+        self.assertEqual(scope["CALLS"], ["甲"])
+        self.assertEqual(scope["SKIPPED_STEPS"], [])
+        self.assertNotIn("跳过", printed)
+
+
 class StepWrapTests(unittest.TestCase):
     """`wrap()`：脚本声明「这一段在它的界面守卫里跑」，等价于以前每份脚本各写一次 `with safe_ui():`。"""
 

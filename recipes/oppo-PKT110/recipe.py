@@ -120,6 +120,7 @@ def close_all(page, max_screens):
 def _():
     """设置 → 隐私与安全 → 设备标识与广告 → 广告跟踪。
     每个 App 一个开关、没有总开关，本机 96 个 App，分五屏。"""
+    skip_in_safe_mode()
     p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
     p.miss = 0
     # 17 把入口改名叫「隐私与安全」：先试新名字，免得在旧名字上白翻一轮、还打印一行失败（#292）。
@@ -257,6 +258,7 @@ def _():
 def _():
     """小布建议 → 其他 → 应用建议：搜索首页上那排「应用建议」卡片，
     每个被推荐的应用一个开关（com.oplus.metis），整页关掉。"""
+    skip_in_safe_mode()
     p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
     tap("OPPO AI", scrolls=6)
     tap("小布建议", scrolls=6)

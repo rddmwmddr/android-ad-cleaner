@@ -15,6 +15,7 @@ def settings_page(*path):
 @step("广告跟踪")
 def _():
     # 每个 App 一个开关、没有总开关；新装的 App 默认开。ColorOS 17 首页改叫「隐私与安全」（#165 社区实测）
+    skip_in_safe_mode()
     found = settings_page("隐私", "设备标识与广告", "广告跟踪")
     if not found:
         p.miss = 0
