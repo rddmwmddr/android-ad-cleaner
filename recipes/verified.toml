@@ -253,7 +253,7 @@ by = "机主"
 tier = "部分验证"
 
 ["xiaomi-24129PN74C/recipe.py"]
-build = "BP2A.250605.031.A3"
+build = "OS3.0.307.0.WOCCNXM"
 date = "2026-10-29"
 by = "机主"
 tier = "部分验证"

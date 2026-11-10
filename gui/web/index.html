@@ -421,7 +421,7 @@ async function showDetect(){
     <div class="grid">
       <div class="kv"><small>手机</small><span>${esc(name)}</span></div>
       <div class="kv"><small>型号 / 系统</small><span>${esc(i.model)}</span> · ${esc(i.os || i.build)}</div>
-      <div class="kv"><small>机型脚本</small>${!st.recipe ? `<span class="tag info">还没有</span>` : st.recipe_ref ? `<span class="tag info">有同品牌参考</span>` : st.recipe_ok ? `<span class="tag ok">有，版本一致</span>` : `<span class="tag warn">有，系统版本不同</span>`}</div>
+      <div class="kv"><small>机型脚本</small>${!st.recipe ? `<span class="tag info">还没有</span>` : st.recipe_ref ? `<span class="tag info">有同品牌参考</span>` : !st.recipe_build ? `<span class="tag info">有，录制版本未标</span>` : st.recipe_ok ? `<span class="tag ok">有，版本一致</span>` : `<span class="tag warn">有，系统版本不同</span>`}</div>
       <div class="kv"><small>快应用</small>${qa.length ? `<span>${qa.length} 个组件</span> ${qa.every(q => q.closed || q.keep) ? `<span class="tag ok">已关闭${qaKeep ? `（保留 ${qaKeep} 个系统组件）` : ""}</span>` : `<span class="tag warn">开着</span>`}` : `<span>没有检测到</span>`}</div>
       <div class="kv"><small>广告组件</small>${st.ads.length ? `<span>${st.ads.length} 个</span> ${st.ads.every(a => a.suspended) ? `<span class="tag ok">已挂起</span>` : `<span class="tag warn">在运行</span>`}` : `<span>没有已知的</span>`}</div>
       <div class="kv"><small>开发者模式</small><span>开着</span></div>

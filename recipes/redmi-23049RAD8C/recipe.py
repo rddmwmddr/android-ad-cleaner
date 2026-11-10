@@ -2,7 +2,7 @@
 # 适配机型：Redmi Note 12 Turbo（23049RAD8C）
 # 路径来源：2026-10-25 实测（OS3.0.5.0.VMRCNXM，Android 15）
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
-BUILD = "OS3.0"
+BUILD = "OS3.0.5.0"
 MODELS = ["23049RAD8C"]
 import time
 from entries import THEME_DEAD_ENDS

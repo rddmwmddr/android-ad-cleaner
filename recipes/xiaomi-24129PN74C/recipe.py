@@ -21,7 +21,8 @@
 #  · 主题：每次联网时通知实测已关；隐私设置「个性化推荐」出厂就是关的。
 #
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
-BUILD = "BP2A.250605.031"
+# BUILD 写 ROM 版本、不写底包：底包被多台同代小米机共用，写进 BUILD 会让它们都被选到这份脚本（#942）。
+BUILD = "OS3.0.307.0"
 MODELS = ["24129PN74C"]
 import time
 from entries import THEME_DEAD_ENDS

@@ -145,7 +145,8 @@ def render_draft(groups, model, build, source):
         f"# 生成时间：{when}；来源：{source}",
         "# 自检：python3 tool/run.py -s <序列号> adapt check <本文件>",
         "#   自检只证明「进得去、关得掉、回读确认」，不代表适配完成；",
-        "#   转为正式机型脚本前，必须人工在手机上核对每一步，并补 BUILD 录制版本。",
+        "#   转为正式机型脚本前，必须人工在手机上核对每一步，并补 BUILD 录制版本"
+        "（小米系填 HyperOS 版本号，别填 Android 底包）。",
         "# 不要直接放进 recipes/：放进去会被当成本型号的正式脚本自动匹配。",
         "# ======================================================================",
         f"BUILD = {json.dumps(build)}",
@@ -244,7 +245,8 @@ def cmd_gen(rest):
     if not model:
         print("没能从文件名认出型号，MODELS 为空；补型号用 --model，或直接把文件名改成 探路-<型号>.tsv")
     if not build:
-        print("BUILD 为空：自检时不比对系统版本；转正式脚本前请填上录制版本（ro.build.display.id）")
+        print("BUILD 为空：自检时不比对系统版本；转正式脚本前请填上录制版本"
+              "（小米系填 ro.mi.os.version.incremental，别填 ro.build.display.id 的 Android 底包）")
     print(f"下一步：python3 tool/run.py -s <序列号> adapt check {out}")
     print("自检通过也不等于适配完成：请人工在手机上核对每一步，再决定是否转为正式机型脚本。")
     return 0

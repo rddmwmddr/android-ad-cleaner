@@ -1595,7 +1595,10 @@ class Api:
             elif st.get("recipe_ref"):
                 script = f"{recipe}（同品牌参考脚本，录制版本 {st.get('recipe_build') or '未标'}）"
             else:
-                script = f"{recipe}（录制版本 {st.get('recipe_build')}，{'一致' if st.get('recipe_ok') else '不一致'}）"
+                # 没标录制版本就无从比对，别写成「一致」（#942）。
+                rb = st.get("recipe_build")
+                script = f"{recipe}（录制版本 {rb}，{'一致' if st.get('recipe_ok') else '不一致'}）" if rb \
+                    else f"{recipe}（录制版本 未标）"
             lines += [f"- 手机：{nm}（{i.get('model')}）",
                       f"- 系统：{i.get('os') or i.get('build')}（{i.get('build')}），Android {i.get('android')}",
                       f"- 机型脚本：{script}",

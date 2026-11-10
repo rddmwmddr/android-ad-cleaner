@@ -262,3 +262,23 @@ test("没有可重试的步时结果页不给按钮（#638）", async () => {
     assert.equal(button, undefined);
   } finally { page.close(); }
 });
+
+test("没标录制版本的机型脚本不说「版本一致」（#942）", async () => {
+  const status = {
+    info: { model: "25060RK16C", brand: "Redmi", name: "REDMI K80 Ultra", os: "",
+            build: "BP2A.250605.031.A3", android: "16" },
+    recipe: "recipes/redmi-25060RK16C/recipe.py", recipe_ref: false,
+    recipe_build: "", recipe_ok: true, steps: ["系统广告"],
+    ads: [], quickapps: [], locked: false, dev: false, backup: null,
+    fold_open: false, input_blocked: false, stay_on: "",
+  };
+  const page = await openPage({ api: { status: () => status } });
+  try {
+    page.window.eval("S.serial = 'X'");
+    await page.window.showDetect();
+    const kv = [...page.document.querySelectorAll(".kv")]
+      .find(n => n.textContent.includes("机型脚本"));
+    assert.match(kv.textContent, /录制版本未标/);
+    assert.doesNotMatch(kv.textContent, /版本一致/);
+  } finally { page.close(); }
+});

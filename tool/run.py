@@ -283,10 +283,17 @@ VERSION_MARKER = {"oppo": "_", "vivo": "_A_", "honor": " ", "meizu": "Flyme"}
 # CP2A.260605.016），没有 _A_ 可切，整条就是版本核心。按形状认，不写死某一代的首字母。
 AOSP_BUILD_ID = re.compile(r"^[A-Z]{1,3}\d[A-Z0-9]{0,2}\.\d{6}\.\d{3}")
 
+# 小米的 ro.build.display.id 可能是 Android 底包（BP2A.250605.031、SKQ1.210908.001）：同一代
+# 机型共用一个号，对「两台机是不是同一个 ROM 版本」零信息量，抽出的核心必须为空、不参与比对
+# （#942）。与上面 vivo 的方向相反——那个 AOSP 号是逐版本的，这边是跨机型共享的。
+XIAOMI_BASE_BUILD = re.compile(r"^[A-Z]{1,3}\d[A-Z0-9]{0,2}\.\d{6}\.\d{3}")
+
 
 def version_core(value, fam):
     """抽出可比的版本号：切掉机型名、去掉括号。抽不出来返回空串，空值不参与比对。"""
     v = (value or "").strip()
+    if fam == "xiaomi" and XIAOMI_BASE_BUILD.match(v):
+        return ""
     marker = VERSION_MARKER.get(fam)
     if marker:
         if marker in v:
@@ -611,8 +618,10 @@ def cmd_check(serial, rest):
               f"要用：recipe --ref（安全模式：只关脚本里点名的开关，找不到就跳过）")
     elif r:
         rb = recipe_meta(r)["build"]
-        ok = build_ok(i, rb)
-        print(f"机型脚本：{os.path.relpath(r, ROOT)}；录制版本 {rb or '未标'}，{'版本一致' if ok else '版本不同：用安全模式跑，部分步骤可能找不到入口'}")
+        # 没标录制版本就无从比对，不能说成「一致」：置空是「只录到底包」这类脚本的常态（#942）。
+        ver = f"录制版本 {rb}，{'版本一致' if build_ok(i, rb) else '版本不同：用安全模式跑，部分步骤可能找不到入口'}" if rb \
+            else "录制版本 未标，不比对版本"
+        print(f"机型脚本：{os.path.relpath(r, ROOT)}；{ver}")
     else:
         print("机型脚本：没有。可跑：通知渠道 chan-scan/chan-off、广告包挂起；其余照 docs/清单 手动做，或用 tool/explore.py 探路")
     for p in ad_packages(i["brand"]):
