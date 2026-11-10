@@ -40,6 +40,7 @@
 
 ### 内部
 
+- `AGENTS.md`、`docs/02`、`README` 的挂起广告包步排到机型脚本之前（#981）
 - 新增 `tool/followup.py`：报出 `waiting-for-verify` 与复测队列的缺行、过期行（#988）
 - `recipes/` 下两份 `test_recipe.py` 搬进 `tests/`，新增 `tests/` 之外定义用例即红的收集守卫（#972）
 - 认领评论只留身份哈希，不再写主机名与 worktree 绝对路径（#970）

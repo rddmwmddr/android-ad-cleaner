@@ -20,7 +20,7 @@
 6. **不替用户同意协议。** 遇到用户协议、隐私政策、权限申请，点「取消」「以后再说」「不允许」「禁止」。不点「同意」「允许」。<!-- rule:product.consent.never-agree -->
 7. **不绕过锁屏。** `run.py check` 显示锁屏时，请用户解锁。<!-- rule:product.lockscreen.wait-for-owner -->
 8. **不截账号页。** 「我的」页、账号页、手机号页不截图；截到了要删除。<!-- rule:product.account.no-screenshot -->
-9. **收尾还原插电常亮，提醒关闭开发者模式。** 结束时跑 `run.py finish`，然后提醒用户关闭开发者模式（§3 第 11 步）。<!-- rule:product.finish.restore-and-remind -->
+9. **收尾还原插电常亮，提醒关闭开发者模式。** 结束时跑 `run.py finish`，然后提醒用户关闭开发者模式（§3 第 12 步）。<!-- rule:product.finish.restore-and-remind -->
 10. **保护类开关要打开，不要关。** 「限制广告跟踪」「防止广告追踪」「阻止广告跟踪」「关闭个性化推荐」「减少广告」这类以「限制 / 防止 / 阻止 / 禁止 / 关闭 / 减少」开头的开关，打开才是保护。上面的词只是举例，判据是 `tool/polarity.py` 的 `NEG_PREFIX`（配合广告词一起认）。引擎的 `off()` 会把它们拨到「开」；手动操作时同样处理。<!-- rule:product.switch.polarity -->
 11. **不挂这些包**：`com.heytap.quicksearchbox`（下拉搜索）、`com.coloros.assistantscreen`（负一屏）、各品牌应用商店。挂了功能会坏，`run.py` 会拒绝。<!-- rule:product.package.never-suspend -->
 
@@ -52,19 +52,20 @@ python3 tool/run.py devices
 |---|---|---|
 | 1 | `run.py -s S check` | 只读。看锁屏、机型脚本匹配、广告包状态 |
 | 2 | `run.py -s S backup` | 改动前快照，存到 `backups/` |
-| 3 | `run.py -s S recipe` | 有机型脚本时跑机型脚本。可以只跑某几段：`recipe 浏览器 主题`。只有同品牌参考脚本时，问过用户再加 `--ref` |
-| 4 | `run.py -s S chan-scan` | 只读。列出开着的营销通知渠道 |
-| 5 | 编辑 `channels.tsv` | 删掉服务类渠道（见 §5），给用户看清单。第四列是手机上显示的应用名（读不到时为空），给用户看时用它，不要只给包名 |
-| 6 | `run.py -s S chan-off <清单>` | 关掉清单里的渠道；结尾会复查，「仍开着: 0 个」为成功 |
-| 7 | `run.py -s S quickapp` | 只读。检测快应用组件：装没装、挂没挂、在不在跑、用户用没用过 |
-| 8 | 问用户 | 列出 `check` 里的广告包和快应用，问要不要关 |
-| 9 | `run.py -s S suspend <包…>`、`run.py -s S quickapp off` | 用户同意后执行。`quickapp off` 自动保留快应用平台（负一屏快递卡片依赖它） |
-| 10 | `run.py -s S finish` | 收尾。开发者模式开着时会打印提醒 |
-| 11 | 提醒用户关闭开发者模式 | 把 `finish` 打印的提醒转述给用户；用户要你代关，执行 `run.py -s S dev-off --yes`（执行后连接断开，放在最后；执行完请用户在手机上核对开发者选项总开关是关的） |
+| 3 | 问用户要不要挂起广告包，同意后 `run.py -s S suspend <包…>` | 列出 `check` 里的广告包问用户；不同意就跳过这步，后面的照常走。不挂起也能继续，但小米机型主题段可能被开屏广告打断、脚本会停段，这不算机型不适配 |
+| 4 | `run.py -s S recipe` | 有机型脚本时跑机型脚本。可以只跑某几段：`recipe 浏览器 主题`。只有同品牌参考脚本时，问过用户再加 `--ref` |
+| 5 | `run.py -s S chan-scan` | 只读。列出开着的营销通知渠道 |
+| 6 | 编辑 `channels.tsv` | 删掉服务类渠道（见 §5），给用户看清单。第四列是手机上显示的应用名（读不到时为空），给用户看时用它，不要只给包名 |
+| 7 | `run.py -s S chan-off <清单>` | 关掉清单里的渠道；结尾会复查，「仍开着: 0 个」为成功 |
+| 8 | `run.py -s S quickapp` | 只读。检测快应用组件：装没装、挂没挂、在不在跑、用户用没用过 |
+| 9 | 问用户 | 列出 `check` 里的快应用，问要不要关 |
+| 10 | `run.py -s S quickapp off` | 用户同意后执行。`quickapp off` 自动保留快应用平台（负一屏快递卡片依赖它） |
+| 11 | `run.py -s S finish` | 收尾。开发者模式开着时会打印提醒 |
+| 12 | 提醒用户关闭开发者模式 | 把 `finish` 打印的提醒转述给用户；用户要你代关，执行 `run.py -s S dev-off --yes`（执行后连接断开，放在最后；执行完请用户在手机上核对开发者选项总开关是关的） |
 
 没有机型脚本的机型：
 
-1. 跑通用部分（第 4 到 9 步）。
+1. 跑通用部分（第 3 步与第 5 到 10 步）。
 2. 打开 `docs/清单/` 里同品牌的清单，用 `fast.py` 的单步命令照着做（§4）。
 3. 做完问用户要不要把路径存成机型脚本，写法见 `docs/04-给新机型写脚本.md`。
 
