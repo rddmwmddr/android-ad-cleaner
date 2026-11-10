@@ -80,6 +80,38 @@ def preamble(p, g):
             return
         raise RuntimeError(f"{title}：未识别全部目标开关，未操作；{p.page_evidence(list(before))}")
 
+    def page(title, package=None, activity=None):
+        """确认当前页面落在预期上：包名、Activity、页面标题三段判据（#939）。
+
+        三段失败时先 `p.note_miss()` 留一行与入口失败同形的现场（停在哪个 Activity、
+        结构摘要），再抛原来的错：报错文案是上报与用例逐字认的第一句，现场只走那条
+        独立输出行。没有它，`未确认页面「游戏中心」` 分不清是标题改名还是页面没加载完。
+        现场行里「没找到」的是这一段缺的那样东西（包名 / Activity / 标题），不是一律写标题：
+        落点跑偏时标题往往就在屏上，写成标题会把人引去查改名。
+        等待由引擎负责；页面即使已经站稳也必须过这三段，旧页不能当成目标页。
+        `title` 给一组时任一出现即算到页；`package` / `activity` 按 `包名/Activity` 判。
+        """
+        p.await_page(budget=6)
+        where = p.focus()
+        titles = (title,) if isinstance(title, str) else tuple(title)
+
+        def miss(found, reason):
+            p.note_miss(found)
+            raise RuntimeError(reason)
+
+        if package and where.split("/", 1)[0] != package:
+            miss(package, "未进入目标应用，未操作开关")
+        if activity and activity not in where.split("/", 1)[-1]:
+            miss(activity, "未进入目标设置页，未操作开关")
+        if not any(p.find(t, exact=True) for t in titles):
+            miss(" / ".join(titles), f"未确认页面「{'、'.join(titles)}」，未操作开关")
+        if any(text in {"同意", "同意并继续", "同意并使用", "允许", "仅在使用中允许"}
+               and "Button" in node.get("class", "") for text, _, node in p.texts()):
+            p.dismiss()
+            skip("出现协议或权限申请，不代为同意")
+        if p.locked():
+            raise ScreenLocked("手机锁屏，请机主解锁")
+
     def skip_in_safe_mode():
         """整页关闭的段落在安全模式下按跳过结束（#909）：只记跳过台账，不动失败台账与退出码。"""
         if p.safe_mode:
@@ -157,6 +189,6 @@ def preamble(p, g):
         return decorate
 
     g.update({"SkipStep": SkipStep, "skip": skip, "require": require,
-              "maybe": maybe, "start_or_skip": start_or_skip, "step": step,
+              "maybe": maybe, "start_or_skip": start_or_skip, "step": step, "page": page,
               "require_switches": require_switches, "skip_in_safe_mode": skip_in_safe_mode})
     return g

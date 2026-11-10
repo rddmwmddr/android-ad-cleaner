@@ -40,22 +40,6 @@ STORE_PROMOS = [
 ]
 
 
-def page(title, package=None, activity=None):
-    # 等待由引擎负责；旧页面即使已稳定，也必须通过下面的落点与标题检查。
-    p.await_page(budget=6)
-    where = p.focus()
-    titles = (title,) if isinstance(title, str) else tuple(title)
-    require(not package or where.split("/", 1)[0] == package, "未进入目标应用，未操作开关")
-    require(not activity or activity in where.split("/", 1)[-1], "未进入目标设置页，未操作开关")
-    require(any(p.find(t, exact=True) for t in titles), f"未确认页面「{'、'.join(titles)}」，未操作开关")
-    if any(text in {"同意", "同意并继续", "同意并使用", "允许", "仅在使用中允许"}
-           and "Button" in node.get("class", "") for text, _, node in p.texts()):
-        p.dismiss()
-        skip("出现协议或权限申请，不代为同意")
-    if p.locked():
-        raise ScreenLocked("手机锁屏，请机主解锁")
-
-
 def open_page(command, title, package, activity=None):
     result = p.d.shell(command)
     require(not result.exit_code and not any(word in result.output for word in

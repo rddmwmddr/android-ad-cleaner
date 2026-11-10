@@ -23,8 +23,8 @@ from fixtures import load_recipe, phone_mock
 RECIPES = tuple(sorted(p for p in (ROOT / "recipes").rglob("*.py")
                        if p.name != "test_recipe.py"))               # 43 份：目录里除 test_recipe.py 之外的脚本
 
-# 前导的六个名字，外加 #838 的中止标记、两个新台账、#902 的拉起助手、#903 的开关名单断言
-# 与 #909 的整页关闭出口 —— 迁到引擎之后脚本一个都不该再定义
+# 前导的六个名字，外加 #838 的中止标记、两个新台账、#902 的拉起助手、#903 的开关名单断言、
+# #909 的整页关闭出口与 #939 的页面落点断言 —— 迁到引擎之后脚本一个都不该再定义
 LOCAL_PREAMBLE = {
     "ONLY": "段过滤名单",
     "FAILED_STEPS": "失败台账",
@@ -38,11 +38,17 @@ LOCAL_PREAMBLE = {
     "SkipStep": "跳过异常类",
     "start_or_skip": "带落点判定的拉起助手",
     "require_switches": "开关名单断言",
+    "page": "页面落点断言",
     "skip_in_safe_mode": "整页关闭在安全模式下的跳过出口",
 }
 
 # 记录在案的例外：脚本相对路径 → 允许保留的名字。迁移完成后为空。
-ALLOWED = {}
+ALLOWED = {
+    # 荣耀轮询等标题出现，失败是「没等到」而不是「到了但标题不对」（#939 票面留待再议）
+    "recipes/honor-WKL-AN20/recipe.py": {"page"},
+    # 一加旧的 `page(activity, title, timeout=6)`：同样的轮询形状，不在 #939 的改动面
+    "recipes/oneplus-PHK110/recipe_android15.py": {"page"},
+}
 
 
 def defined_names(source, filename="<script>"):
@@ -123,7 +129,7 @@ class StructureTests(unittest.TestCase):
     def test_recipes_do_not_define_the_preamble(self):
         offenders = {}
         for path in RECIPES:
-            key = str(path.relative_to(ROOT))
+            key = path.relative_to(ROOT).as_posix()      # ALLOWED 的键不分平台，Windows 的反斜杠不能漏
             found = defined_names(path.read_text(encoding="utf-8"), str(path)) - set(ALLOWED.get(key, ()))
             if found:
                 offenders[key] = sorted(found)
