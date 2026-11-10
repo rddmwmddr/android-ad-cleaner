@@ -4,8 +4,9 @@
 浏览器入口是「菜单 → 设置」（不是底栏「我的」），商店没有隐私设置入口，
 系统广告走设置搜索 / 深链（隐私与安全页里没有「更多安全设置」）。
 
-同一份脚本也被底包 BP2A.250605.031 一族里没写专属脚本的小米机借去跑（#833）：它们底栏没有
-「菜单」，设置入口在「我的」页里。两条入口各有用例，落点校验两边都成立（#586）。
+#942 起录制值写 ROM 版本（OS3.0.307.0），底包不再参与挑选，同底包机型不会再被借到这一份。
+浏览器两条入口仍各有用例：底栏有「菜单」时走弹窗、没有时走「我的」页，落点校验两边都成立
+（#586 / #833）。
 """
 import contextlib
 import io
@@ -97,24 +98,25 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
         path, reference = run.recipe_for("24129PN74C", "Xiaomi")
         self.assertFalse(reference)
         self.assertEqual(Path(path).parent.name, "xiaomi-24129PN74C")
-        self.assertEqual(run.recipe_meta(path)["build"], "BP2A.250605.031")
+        self.assertEqual(run.recipe_meta(path)["build"], "OS3.0.307.0")
         self.assertEqual(run.recipe_meta(path)["models"], ["24129PN74C"])
         self.assertEqual(run.recipe_meta(path)["steps"],
                          ["系统广告", "应用商店", "手机管家", "下载管理", "主题",
                           "浏览器", "全局搜索", "负一屏", "天气和日历"])
 
     def test_build_matches_this_phone_and_not_other_base_packages(self):
+        # 录制值是 ROM 版本，靠 ro.mi.os.version.incremental 命中（#942）；底包不是录制值。
         this_phone = {"build": "BP2A.250605.031.A3", "os": "OS3.0.307.0.WOCCNXM"}
-        self.assertTrue(run.build_ok(this_phone, "BP2A.250605.031"))
-        # OS4.0（小米 18 系列）不是这台机的底包。
-        self.assertFalse(run.build_ok(this_phone, "OS4.0"))
-        # build_ok 同时比对 HyperOS 版本号，这台的 OS3.0.307.0 与 K70 同号。
         self.assertTrue(run.build_ok(this_phone, "OS3.0.307.0"))
+        # OS4.0（小米 18 系列）不是这台机的系统版本。
+        self.assertFalse(run.build_ok(this_phone, "OS4.0"))
 
     def test_same_base_package_as_k80_script_but_own_entry_points(self):
         # 底包相同不等于入口相同：浏览器两条入口都在，底栏「菜单」优先；商店没有隐私设置。
+        # 两份脚本也都不把底包写进 BUILD，同底包机型不会被任一份「同版本」命中（#942）。
         k80 = run.recipe_meta(ROOT / "recipes/redmi-25060RK16C/recipe.py")["build"]
-        self.assertEqual(k80, "BP2A")
+        self.assertEqual(k80, "")
+        self.assertNotIn("BP2A", run.recipe_meta(ROOT / "recipes/xiaomi-24129PN74C/recipe.py")["build"])
         source = (ROOT / "recipes/xiaomi-24129PN74C/recipe.py").read_text(encoding="utf-8")
         self.assertIn('p.tap("菜单", exact=True, scrolls=0, quiet=True)', source)
         self.assertIn('if not p.tab("我的"):', source)

@@ -4,7 +4,8 @@
 #   保留「扫一扫、搜索历史、快捷功能模块、翻译提示、密码保存、自动填充、删除安装包、计算器语音播报」；商店保持标准模式（不切极简）。
 # 浏览器「隐私防护」页的广告过滤 / 防跟踪 / 下载防护是保护类（开着才对），本脚本不碰。
 # 用法：python tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
-BUILD = "BP2A"
+# BUILD 置空：只录到底包，没记到 HyperOS 版本号；底包跨机型共享、不能进 BUILD（#942）。
+BUILD = ""
 MODELS = ["25060RK16C"]
 import time
 from entries import THEME_DEAD_ENDS

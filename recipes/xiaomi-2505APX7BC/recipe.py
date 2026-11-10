@@ -10,12 +10,11 @@
 # 这台机的底栏标签在第 5 个位置（y≈94% 屏高），用 p.tab() 点；p.tap() 会先命中内容区同名文字。
 # 本仓库没有这台机器，未在真机上复跑。
 #
-# BUILD 写到 `.031` 为止、不带 `.A3`：带上的话这份脚本比同底包的 24129PN74C 更「具体」，
-# run.same_version_family_recipe() 会把所有没有专属脚本的同底包小米机（如 Xiaomi 13）改借这一份，
-# 而它们的底栏是「菜单」、天气也没有「更多设置」入口，会被这里的必需入口卡住。选脚本只按型号，不受此影响。
+# BUILD 置空：只录到 Android 16 的底包，没记到 ROM 版本号。底包跨机型共享、不能进 BUILD（#942）；
+# 没标录制版本的脚本不参与同版本挑选，选脚本只按型号，不受此影响。
 #
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
-BUILD = "BP2A.250605.031"
+BUILD = ""
 MODELS = ["2505APX7BC"]
 import time
 from entries import THEME_DEAD_ENDS
