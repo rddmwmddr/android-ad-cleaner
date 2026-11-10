@@ -35,6 +35,9 @@ public final class AndroidScreenReader implements ScreenReader {
     /** 只有一块 UiAutomation 连接：并发的读屏请求在这里排队。 */
     @Override
     public synchronized String dump(int display) throws Exception {
+        // 显示不存在时按屏号筛不到任何窗口，回一个空 hierarchy 会被引擎当成空白页继续跑（#928）。
+        // 这一步放在 try 外面：屏没了不代表连接坏了，别把它也当成失效去重连。
+        if (display >= 0) requireDisplay(display);
         try {
             return dumpAll(display);
         } catch (Throwable t) {
@@ -45,12 +48,19 @@ public final class AndroidScreenReader implements ScreenReader {
 
     @Override
     public String size(int display) throws Exception {
-        Object global = Class.forName("android.hardware.display.DisplayManagerGlobal")
-                .getMethod("getInstance").invoke(null);
-        Object info = global.getClass().getMethod("getDisplayInfo", int.class).invoke(global, display);
+        Object info = requireDisplay(display);
         int w = info.getClass().getField("logicalWidth").getInt(info);
         int h = info.getClass().getField("logicalHeight").getInt(info);
         return w + " " + h;
+    }
+
+    /** 第 display 块显示的 DisplayInfo；显示不存在（后台屏已经没了）就抛出能读懂的原因，不让 info.getClass() 冒 NPE（#928）。 */
+    private static Object requireDisplay(int display) throws Exception {
+        Object global = Class.forName("android.hardware.display.DisplayManagerGlobal")
+                .getMethod("getInstance").invoke(null);
+        Object info = global.getClass().getMethod("getDisplayInfo", int.class).invoke(global, display);
+        if (info == null) throw new IllegalStateException("显示 " + display + " 不存在（这块屏已经没了）");
+        return info;
     }
 
     private String dumpAll(int display) throws Exception {

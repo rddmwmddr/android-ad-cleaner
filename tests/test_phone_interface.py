@@ -751,6 +751,60 @@ class ScreenGoneTests(unittest.TestCase):
         self.assertIn("那块屏已经关了", str(caught.exception))
         self.assertNotIn("读屏服务（UiAutomation）启动失败", str(caught.exception))
 
+    def test_a_gone_screen_found_on_the_first_read_gets_the_same_sentence(self):
+        """#928：connect() 成功、紧接着的第一次读屏才发现屏没了，结局与 #674 同形，并且要关掉 reader。"""
+        for message in ("显示 7 不存在（这块屏已经没了）",
+                        "后台屏意外关闭（建屏进程已退出），这一步无法继续"):
+            reader = GoneOnFirstRead(message)
+            with self.assertRaises(RuntimeError) as caught:
+                fast.Phone("S", log=False, reader=reader)
+            self.assertIn("那块屏已经关了", str(caught.exception), message)
+            self.assertIn("本次未点击开关", str(caught.exception), message)
+            self.assertNotIn("读屏服务（UiAutomation）启动失败", str(caught.exception))
+            self.assertTrue(reader.closed, f"首读失败也要关掉 reader：{message}")
+
+    def test_a_broken_reader_on_the_first_read_still_points_at_the_reader_service(self):
+        """不是屏没了的那种首读失败仍要说读屏服务起不来，别把用户指去重试后台屏。"""
+        reader = GoneOnFirstRead("UiAutomation 被别的无障碍服务占用")
+        with self.assertRaises(RuntimeError) as caught:
+            fast.Phone("S", log=False, reader=reader)
+        self.assertIn("读屏服务（UiAutomation）启动失败", str(caught.exception))
+        self.assertTrue(reader.closed)
+
+    def test_a_dead_command_service_on_the_first_read_is_still_a_disconnect(self):
+        """#731：命令服务断开要以消息为证据判成断线，不能被首读那一层包成「读屏服务启动失败」。"""
+        reader = GoneOnFirstRead("命令服务断开")
+        with patch.object(fast.adb_link, "ON_PHONE", True):
+            with self.assertRaises(fast.adb_link.DeviceLost) as caught:
+                fast.Phone("S", log=False, reader=reader)
+        self.assertIn("连接断开了", str(caught.exception))
+        self.assertTrue(reader.closed)
+
+    def test_a_slow_first_read_is_still_one_unfinished_step(self):
+        """#731：读屏请求超时只是这一步没成，不是读屏服务起不来。"""
+        reader = GoneOnFirstRead("读屏请求超时（30 秒）")
+        with self.assertRaises(RuntimeError) as caught:
+            fast.Phone("S", log=False, reader=reader)
+        self.assertEqual(str(caught.exception), "这一步没有完成：读屏请求超时（30 秒）")
+        self.assertTrue(reader.closed)
+
+
+class GoneOnFirstRead:
+    """假读屏：connect() 成功，第一次问尺寸时才失败（#928）。
+
+    不进 fixtures：`phone_stub()` 绕开 `Phone.__init__` 造对象，而这两组用例要跑的正是构造处的翻译。
+    """
+
+    def __init__(self, message):
+        self.message, self.closed, self.settings = message, False, {}
+        self.shell = lambda *a, **k: None
+
+    def window_size(self):
+        raise fast.u2.exceptions.UiAutomationError(self.message)
+
+    def close(self):
+        self.closed = True
+
 
 if __name__ == "__main__":
     unittest.main()

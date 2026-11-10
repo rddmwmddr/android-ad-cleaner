@@ -288,6 +288,15 @@ def _shell_transport(shell):
     return send
 
 
+def reader_failure(serial, error):
+    """读屏连不上、或连上后的第一次读屏失败：屏没了与读屏服务坏了是两回事，两处共用这一份翻译（#928）。"""
+    if adb_link.screen_gone(error):     # 屏已经没了不是读屏服务坏了：别把用户指去关别的客户端（#674）
+        return RuntimeError(f"{adb_link.SCREEN_GONE_CONNECT}\n原始异常：{type(error).__name__}: {error}")
+    return RuntimeError("手机读屏服务（UiAutomation）启动失败，本次未点击开关。"
+                        f"\n{accessibility_summary(serial)}\n{UI_RECOVERY}\n"
+                        f"原始异常：{type(error).__name__}: {error}")
+
+
 class Phone:
     def __init__(self, serial, log=True, reader: Reader | None = None):
         if log:
@@ -302,11 +311,7 @@ class Phone:
                                f"{accessibility_summary(serial)}\n{UI_RECOVERY}\n"
                                f"原始异常：{type(e).__name__}: {e}") from e
         except u2.exceptions.UiAutomationError as e:
-            if "后台屏" in str(e):      # 屏已经没了不是读屏服务坏了：别把用户指去关别的客户端（#674）
-                raise RuntimeError(f"后台执行用的那块屏已经关了，本次未点击开关。请重试一次。\n原始异常：{type(e).__name__}: {e}") from e
-            raise RuntimeError("手机读屏服务（UiAutomation）启动失败，本次未点击开关。"
-                               f"\n{accessibility_summary(serial)}\n{UI_RECOVERY}\n"
-                               f"原始异常：{type(e).__name__}: {e}") from e
+            raise reader_failure(serial, e) from e
         except (u2.exceptions.AdbShellError, adbutils.AdbError) as e:
             # 读屏服务文件传不进手机（adb push 返回 FAIL）或命令无回应：多半是连接中途断了（错误日志 10-27）。
             if not adb_link.present(serial):
@@ -321,6 +326,15 @@ class Phone:
             # 小米没开「USB 调试（安全设置）」时能读不能点：先探一下，别跑几分钟全是「没找到」。
             if input_blocked(self.reader.shell("input keyevent 0").output):
                 raise RuntimeError(f"INPUT_BLOCKED：系统拒绝了{TAPPED}，本次未点击开关。\n" + XIAOMI_INPUT)
+        except u2.exceptions.UiAutomationError as e:
+            self.reader.close()
+            lost = adb_link.lost_from(e, serial)    # 命令服务断开这一族仍是断线（#731），别包成读屏服务起不来
+            if lost is not None:
+                raise lost from e
+            slow = adb_link.read_failed(e)          # 读屏慢一次只是这一步没成（#731）
+            if slow:
+                raise RuntimeError(slow) from e
+            raise reader_failure(serial, e) from e
         except BaseException:
             self.reader.close()
             raise
