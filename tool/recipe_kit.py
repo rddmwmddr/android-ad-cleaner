@@ -20,6 +20,8 @@ WRONG_LANDING = ("没有进入前台", "启动后离开前台")
 # 那两句里的落点原文 `停在 包名/页面；…`。从报错里取，不再重读前台：
 # 抛出之后再读有一小段窗口期，前台已经切走就会判错。
 LANDING = re.compile(r"停在 ([^\s/；]+)")
+# 整页关闭的段落在安全模式下的跳过原因（#909）
+SAFE_MODE_PAGE_WIDE = "安全模式不做整页全关：本段没有可点名的开关，请按清单手动关"
 
 
 class SkipStep(RuntimeError):
@@ -73,6 +75,11 @@ def preamble(p, g):
         if names and all(found(name) for name in names):
             return
         raise RuntimeError(f"{title}：未识别全部目标开关，未操作；{p.page_evidence(list(before))}")
+
+    def skip_in_safe_mode():
+        """整页关闭的段落在安全模式下按跳过结束（#909）：只记跳过台账，不动失败台账与退出码。"""
+        if p.safe_mode:
+            skip(SAFE_MODE_PAGE_WIDE)
 
     def start_or_skip(pkg, activity, dead_ends, reason):
         """拉起 App；前台没到、报错里的落点又在前 `dead_ends` 里时按跳过结束本段，不算失败。
@@ -146,5 +153,5 @@ def preamble(p, g):
 
     g.update({"SkipStep": SkipStep, "skip": skip, "require": require,
               "maybe": maybe, "start_or_skip": start_or_skip, "step": step,
-              "require_switches": require_switches})
+              "require_switches": require_switches, "skip_in_safe_mode": skip_in_safe_mode})
     return g

@@ -142,6 +142,7 @@ def guard():
 def _():
     # ColorOS 17：「隐私」已并入「隐私与安全」。设置搜索能搜到「设备标识与广告」但点搜索结果不跳转，
     # 因此走面板路径；该页 Activity 为 OplusSettingsActivity$DevicesIdentifySettingsActivity。
+    skip_in_safe_mode()
     p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
     time.sleep(1.5)
     if not p.tap("隐私与安全", scrolls=3):

@@ -236,6 +236,7 @@ class OppoPkt110ParentChildTests(unittest.TestCase):
     def test_ad_tracking_tries_the_renamed_entry_first(self):
         """ColorOS 17 叫「隐私与安全」：先试新名字，不要在旧名字上白翻一轮再打一行失败（#292）。"""
         phone = Mock()
+        phone.safe_mode = False        # 要走到入口回退：安全模式下这一段整段跳过（#909）
         phone.locked.return_value = False
         phone.tap.return_value = False
         scope = self.load_only(phone, ["广告跟踪"])

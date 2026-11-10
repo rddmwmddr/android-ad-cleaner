@@ -19,6 +19,7 @@ def settings_page(*path):
 @step("广告跟踪")
 def _():
     # ColorOS 17 设置首页是「隐私与安全」聚合入口；旧版本叫「隐私」，两个都试
+    skip_in_safe_mode()
     found = settings_page("隐私与安全", "设备标识与广告", "广告跟踪")
     if not found:
         p.miss = 0

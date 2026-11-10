@@ -160,6 +160,7 @@ def guard():
 @step("广告跟踪")
 def _():
     # 每个 App 一个 OAID 开关、没有总开关，新装 App 默认开。
+    skip_in_safe_mode()
     if not settings_page("隐私"):
         return False
     if not wait_page("com.oplusos.securitypermission.privacy.PrivacySettingsDashboardActivity", "隐私"):
@@ -282,6 +283,7 @@ def _():
 @step("应用建议")
 def _():
     # 负一屏/助手里的「应用建议」：每个已装 App 一个开关，关掉即不再出现在推荐里。
+    skip_in_safe_mode()
     if not settings_page("NEXT AI", "小布建议"):
         return False
     if not wait_page("com.oplus.advice.settings.ui.AdviceSettingActivity", "小布建议"):

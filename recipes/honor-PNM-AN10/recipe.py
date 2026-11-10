@@ -54,6 +54,7 @@ def open_entry(text, scrolls=0):
 @step("广告跟踪")
 def _():
     # 同代的 CLE-AN00 实测这一页能直达（#671），省掉设置搜索与三层菜单（#796）
+    skip_in_safe_mode()
     try:
         p.start("com.hihonor.id", ".oaid.ui.AdvertisingPrivacyActivity", expect="应用广告跟踪管理")
     except (adb_link.DeviceLost, ScreenLocked):
@@ -135,6 +136,7 @@ def _():
 @step("桌面文件夹")
 def _():
     # 「热门推荐」「精品应用」文件夹底部的更多推荐：设置页由应用市场提供
+    skip_in_safe_mode()
     p.start("com.hihonor.appmarket", ".module.topapps.TopAppsSettingActivity")
     p.off(page="精品应用·更多推荐")
     p.start("com.hihonor.appmarket", ".popularapps.activity.PopularAppsSettingActivity")
@@ -230,6 +232,7 @@ def _():
 
 @step("主题")
 def _():
+    skip_in_safe_mode()
     p.start("com.hihonor.android.thememanager")
     p.dismiss()
     # 底栏标签只在屏幕最下方找，比原来的全屏点击严；底栏不在最下方的机型退回原写法，
