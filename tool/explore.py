@@ -7,11 +7,9 @@
 进了子页回不去时：有界重试返回 → 重进设置页恢复 → 仍失败就明确中断本 App，不死循环。
 """
 import re, sys, time, os
-for _st in (sys.stdout, sys.stderr):
-    try:
-        _st.reconfigure(encoding="utf-8", errors="replace")   # Windows 控制台默认不是 UTF-8
-    except Exception:
-        pass
+from stdio import use_utf8_console
+
+use_utf8_console()
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fast import Phone
 

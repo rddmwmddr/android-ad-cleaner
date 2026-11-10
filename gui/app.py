@@ -126,17 +126,14 @@ def _fix_stdio():
                                                     errors="replace", line_buffering=True, write_through=True))
             except OSError:
                 setattr(sys, name, open(os.devnull, "w", encoding="utf-8"))
-    for st in (sys.stdout, sys.stderr):        # Windows 控制台默认 cp1252/GBK，中文和 ✗ ▶ 会报错；打包后 PYTHONIOENCODING 不生效
-        try:
-            st.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
+    # Windows 控制台默认 cp1252/GBK，中文和 ✗ ▶ 会报错；打包后 PYTHONIOENCODING 不生效
+    _tool("stdio").use_utf8_console()
 
 
 def cli_main():
+    sys.path.insert(0, TOOL)
     _fix_stdio()
     script, args = sys.argv[2], sys.argv[3:]
-    sys.path.insert(0, TOOL)
     sys.argv = [os.path.join(TOOL, script)] + args
     try:
         runpy.run_path(os.path.join(TOOL, script), run_name="__main__")

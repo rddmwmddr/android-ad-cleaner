@@ -11,11 +11,9 @@
 """
 import hashlib, re, shlex, sys, time, os
 from dataclasses import dataclass
-for _st in (sys.stdout, sys.stderr):
-    try:
-        _st.reconfigure(encoding="utf-8", errors="replace")   # Windows 控制台默认不是 UTF-8
-    except Exception:
-        pass
+from stdio import use_utf8_console
+
+use_utf8_console()
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fast import Phone, ScreenLocked, pause_point
 from row import PATH_DEPTH, SAME_LINE, bounds, disabled_at as row_disabled_at, link, own, skeleton

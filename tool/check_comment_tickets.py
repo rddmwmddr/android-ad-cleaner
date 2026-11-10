@@ -15,7 +15,8 @@
 import re
 import sys
 
-from commits import git, use_utf8_console
+from commits import git
+from stdio import use_utf8_console
 
 use_utf8_console()
 

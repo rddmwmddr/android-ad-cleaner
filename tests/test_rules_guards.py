@@ -1,6 +1,6 @@
 """规则守卫：文档内容类四条（`DocGuards`）、注册表类一条（`RegistryGuards`）、引擎结构类两条（`EngineGuards`）、
-手机版界面一条（`AndroidGuards`）、流程 / CI 类三条（`CiGuards`）与发版产物一条（`ReleaseGuards`），
-沿用 #1000、#1002 的做法。
+手机版界面一条（`AndroidGuards`）、流程 / CI 类三条（`CiGuards`）、发版产物一条（`ReleaseGuards`）
+与标准流一条（`StdioGuards`），沿用 #1000、#1002 的做法。
 
 `DocGuards`：CHANGELOG 条目一行一个票号、文档里的代码位置用符号名、指到的 `.py` 路径要存在、
 上报服务地址与凭据不写进仓库。`RegistryGuards`：无锚点的顶层列表项按文档冻结上限。
@@ -592,6 +592,35 @@ class ReleaseGuards(unittest.TestCase):
         self.assertEqual(stray, [],
                          f"这些附件的文件名第二段不是 REL.version（{version}）：升级版本时漏改了：\n"
                          + "\n".join(stray))
+
+
+# 标准流的 UTF-8 重配置只许出现在 helper 模块里（#995）。针脚拼出来：写死的话这条守卫
+# 会把自己的源码当成违规，永远红。
+STDIO_NEEDLE = "reconfigure(" + "encoding="
+STDIO_HOME = "tool/stdio.py"
+
+
+class StdioGuards(unittest.TestCase):
+    def test_stdio_utf8_single_exit(self):
+        """除 `tool/stdio.py` 外，任何文件都不许自己 `reconfigure` 标准流。
+
+        旧树不绿（落地前这段四行被抄了十几遍，本条就是那条改动的守卫），之后守的是不回退：
+        把任意一处内联写法抄回去即红。语义上的「尽力而为、失败静默」由
+        `tests/test_stdio.py` 守，这里只看调用点有没有绕过唯一出口。
+        """
+        self.assertTrue((ROOT / STDIO_HOME).is_file(), f"{STDIO_HOME} 不在，这条守卫会空转")
+        hits, scanned = [], 0
+        for path in repo_paths():
+            scanned += 1
+            if rel(path) == STDIO_HOME:
+                continue
+            for lineno, line in enumerate(
+                    path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+                if STDIO_NEEDLE in line:
+                    hits.append(f"{rel(path)}:{lineno}")
+        self.assertGreater(scanned, 0, "一个文件都没扫到，这条守卫会空转")
+        self.assertEqual(hits, [], "标准流只经 tool/stdio.py 的 use_utf8_console() 重配，"
+                         "别再各写一份：「改一处漏十二处」就是从那里来的：\n" + "\n".join(hits))
 
 
 if __name__ == "__main__":

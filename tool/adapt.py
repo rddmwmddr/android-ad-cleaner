@@ -13,11 +13,9 @@
 """
 import datetime, json, os, re, subprocess, sys
 import xml.etree.ElementTree as ET
-for _st in (sys.stdout, sys.stderr):
-    try:
-        _st.reconfigure(encoding="utf-8", errors="replace")   # Windows 控制台默认不是 UTF-8
-    except Exception:
-        pass
+from stdio import use_utf8_console
+
+use_utf8_console()
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import entries
 import fast                                    # 只读 want_state / 驱动 Phone；不改引擎

@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from entries import ENTRIES, FAMILY, LABEL
 from polarity import want_state       # 只取极性与词表；不 import fast，那条链会连带 adbutils（#693）
+from stdio import use_utf8_console
 
 # (家族, 页面标签前缀) → 分组。前缀是 page= 里「·」前面那段，是脚本内部写法，只在这里翻译成分组。
 PAGES = {
@@ -505,11 +506,7 @@ def _recipes_dir():
 
 
 if __name__ == "__main__":
-    for _stream in (sys.stdout, sys.stderr):
-        try:
-            _stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
+    use_utf8_console()
     if len(sys.argv) == 1:
         sys.stdout.write(render(_recipes_dir()))
     elif len(sys.argv) == 3 and sys.argv[1] == "gaps":

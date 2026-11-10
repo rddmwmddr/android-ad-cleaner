@@ -25,11 +25,9 @@
 """
 import glob, json, os, re, subprocess, sys, time
 from pathlib import Path
-for _st in (sys.stdout, sys.stderr):
-    try:
-        _st.reconfigure(encoding="utf-8", errors="replace")   # Windows 控制台默认不是 UTF-8
-    except Exception:
-        pass
+from stdio import use_utf8_console
+
+use_utf8_console()
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import adb_link
 import troubleshooting
