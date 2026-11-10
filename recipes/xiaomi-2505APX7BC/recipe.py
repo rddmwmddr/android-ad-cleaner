@@ -165,7 +165,7 @@ def _():
     # 「设置」在这台是「我的」页上的文字按钮（精确匹配不会命中「设置壁纸」），图标形态也认
     if not p.tap("设置", exact=True, scrolls=0):
         raise RuntimeError("主题「我的」页没有「设置」；" + p.page_evidence())
-    # 落点判据用页面上的项：ThemePreferenceActivity 类名不含 Setting，in_settings_page() 对它恒假
+    # 落点判据用页面上的项：比只看 Activity 名更严，这一页没画出这些项就不算进去
     if not (p.expect_page("每次联网时通知", timeout=3) or p.expect_page("自动更新", timeout=1)):
         raise RuntimeError("主题设置页没有打开；" + p.page_evidence())
     p.await_page()                              # 齿轮点完这一页可能还没画完

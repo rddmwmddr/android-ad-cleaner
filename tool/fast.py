@@ -52,6 +52,9 @@ CONFIRM = ("确定", "確定", "关闭", "關閉", "仍要关闭", "仍要關閉
 CONFIRM_WAIT = 1.0
 CONFIRM_SETTLE = 0.2
 PERMISSION_CONTROLLERS = {"com.android.permissioncontroller", "com.google.android.permissioncontroller"}
+# 设置页的焦点窗口签名：同一批小米 / OPPO App 里两种命名并存，只认 Setting 会把
+# ThemePreferenceActivity、BrowserPreferencesPage 这类判成「没进去」（#960）。
+SETTINGS_MARKS = ("Setting", "Preference")
 # 拉起后等目标 App 到前台：只有「确知不是它」的时间计入预算，空焦点是窗口还没画出来，不计（#581）。
 LAUNCH_WAIT = 5
 # 冷启动过渡能把启动等待顺延到的挂钟上限：与下面「启动后 8 秒仍读不到页面」同一个界，空焦点不能无限等。
@@ -786,9 +789,9 @@ class Phone:
         return False
 
     def in_settings_page(self):
-        """当前页是某个 App 的设置页（类名含 Setting）。点完齿轮用它确认真的进去了：
-        点击被吞时页面没换，接着在旧页上找入口会整段失败（#331）。"""
-        return "Setting" in self.focus()
+        """当前页是某个 App 的设置页（焦点类名含 SETTINGS_MARKS 里的任一签名）。点完齿轮用它
+        确认真的进去了：点击被吞时页面没换，接着在旧页上找入口会整段失败（#331）。"""
+        return any(mark in self.focus() for mark in SETTINGS_MARKS)
 
     def await_page(self, budget=2.4, poll=0.2, stable=0.15, changed_from=wait.UNSET):
         """等当前页面站稳：读不到文字、或文字还在变时继续等；预算耗尽就照常往下判定。
