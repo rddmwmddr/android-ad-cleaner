@@ -1107,7 +1107,7 @@ expires_if = "队列改由平台原生状态表达、不再靠标签区分时删
 [[rule]]
 id = "domain.confirm.residual-note-only"
 source = "CONTEXT.md#执行"
-check = "code:tool/fast.py:Phone"
+check = "code:tool/phone/screen.py:Screen"
 status = "code"
 why = "残留确认框把整页盖成遮罩，查找失败只剩「没找到」、渠道页只剩「开关 0 个」，读者会当成这一版没适配（#557）；顺手点掉它等于替脚本做了「要不要停」的决定，而这个决定属于脚本里的 require。residual_confirm() 只读、弹窗留着不动，Screen.confirm_target() 返回坐标而不是动作；tests/test_residual_confirm_557.py 守的是那句说明挂得上去，不守「没点」。"
 expires_if = "失败说明改由结构化诊断字段给出、脚本自己就能判断要不要点掉残留弹窗时删。"

@@ -196,9 +196,9 @@ class Toggler:
     脚本的 `p.safe_mode = …` 与 `p.changed.append(...)` 照旧可用。
     """
 
-    def __init__(self, screen, lost):
+    def __init__(self, screen, lost_note):
         self.screen = screen
-        self.lost = lost                 # 丢失记录：off() 读 `miss`、读写 `missed`（ADR-0033）
+        self.lost_note = lost_note                 # 丢失记录：off() 读 `miss`、读写 `missed`（ADR-0033）
         self.safe_mode = False           # 安全模式（参考脚本 / 录制版本不符）：只关点名的开关，不做整页全关
         self.changed = []                # (页面, 标题) 记录本次关掉的
 
@@ -230,7 +230,7 @@ class Toggler:
         仍没拨到目标态的记进丢失记录：光打一行 ✗ 的话退出码还是 0、结果页标「成功」（#788）。"""
         screen = self.screen
         # 页面刚打开还没画完：等开关出现，最多试 10 次（本段已走丢就不等）
-        wait.until(screen.switches, tries=2 if self.lost.miss else 10, poll=0.2,
+        wait.until(screen.switches, tries=2 if self.lost_note.miss else 10, poll=0.2,
                    now=time.time, sleep=time.sleep)
         start = screen.focus()
         done, slow, checked, kept, greyed = 0, False, set(), set(), set()
@@ -249,8 +249,8 @@ class Toggler:
                 plan, planned = plan_page(root)
             checked |= plan.checked
             for t in plan.checked:                      # 已经到位的：上一屏或上一次 off() 记的那条不再算没拨动
-                if (page, t) in self.lost.missed:
-                    self.lost.missed.remove((page, t))
+                if (page, t) in self.lost_note.missed:
+                    self.lost_note.missed.remove((page, t))
             kept |= plan.kept
             page_greyed = set(plan.disabled)
             targets = plan.targets
@@ -365,14 +365,14 @@ class Toggler:
                         continue                        # 下面单独说明
                     if v == MISSED:
                         screen.say(f"  ✗ {'打不开' if w else '关不掉'} {t}")
-                        if (page, t) not in self.lost.missed:      # 滚动后同一行会再成为目标
-                            self.lost.missed.append((page, t))
+                        if (page, t) not in self.lost_note.missed:      # 滚动后同一行会再成为目标
+                            self.lost_note.missed.append((page, t))
                     else:
                         screen.say(f"  {'开（保护类开关）' if w else '关'} {t}"
                                    + ("（点后从列表消失）" if v == VANISHED else ""))
                         self.changed.append((page, t))
-                        if (page, t) in self.lost.missed:          # 下一屏补点拨到了
-                            self.lost.missed.remove((page, t))
+                        if (page, t) in self.lost_note.missed:          # 下一屏补点拨到了
+                            self.lost_note.missed.remove((page, t))
                         done += 1
             for t in page_greyed - greyed:
                 screen.say(f"  · 被上级开关禁用（开关是灰的），未改动 {t}")

@@ -18,20 +18,9 @@ sys.path.insert(0, str(ROOT / "tool"))
 import explore
 import fast
 from phone import connection as phone_connection
-from phone import screen as phone_screen
-from phone import toggler as phone_toggler
-from fixtures import Clock, Device, Timeline, fake_phone, install_clock, load_recipe, phone_stub
+from fixtures import Clock, Device, Timeline, fake_phone, install_clock, load_recipe, patched_clock
+from fixtures import phone_stub
 from reader import Reader
-
-
-
-@contextlib.contextmanager
-def patched_clock(clock):
-    """假钟同时装进门面、两个基座与拨动会话：`off()` 已搬进 Toggler，只换门面那一份不生效（ADR-0033）。"""
-    with contextlib.ExitStack() as stack:
-        for module in (fast, phone_connection, phone_screen, phone_toggler):
-            stack.enter_context(patch.object(module, "time", clock))
-        yield clock
 
 
 # 同一屏里两个 App 的文字：Settings 自己的一行，和浮在它上面的另一个窗口

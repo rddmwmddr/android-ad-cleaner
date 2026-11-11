@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 import adb_link
 import fast
 import run
+import fixtures
 from fixtures import load_recipe, phone_mock
 
 
@@ -75,9 +76,7 @@ class VivoV2417ARecipeTests(unittest.TestCase):
 
         p.click.side_effect = toggle
         # 拨动已搬进 Toggler（#1040）：把真引擎架在这台 Mock 上跑，门面只剩转发、调不到实现。
-        toggler = fast.Toggler.__new__(fast.Toggler)
-        toggler.screen = toggler.lost = p
-        toggler.safe_mode, toggler.changed = False, p.changed
+        toggler = fixtures.bind_toggler(p, fast)
         toggler.confirm = p.confirm          # 页面没有真弹窗：确认框仍由这条桩回答 None
         p.off.side_effect = lambda **kwargs: fast.Toggler.off(toggler, **kwargs)
         scope = self.load(p)

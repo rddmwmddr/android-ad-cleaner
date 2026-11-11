@@ -1,7 +1,7 @@
 """观测基座：读屏、认行、页面诊断、视口几何，以及动作原语（ADR-0033）。
 
 构造时注入 `Connection`：读屏 adapter 与断线判定都只经它，不认识 `Phone`。
-四个动作原语是 `click` / `back` / `settle` / `find`，翻页的 `scroll` / `scroll_more` 同在
+动作原语是 `click` / `back` / `settle` / `find`，翻页的 `scroll` / `scroll_more` 同在
 这一层（拨动与导航都要翻页，不该由其中一方提供）。后续阶段一律经它们动作，不直接碰传输。
 确认框的认法（`confirm_target`）也在这一层：拨动用它点掉遮罩，导航用它说清失败原因（#557），
 两条路共用同一份匹配，谁也不依赖谁。

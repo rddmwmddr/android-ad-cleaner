@@ -104,19 +104,37 @@ class Clock:
         self.t += self.click_cost
 
 
-def install_clock(module, clock):
-    """把这个时钟装进 fast / chan_fast：两个模块各自 import 了 time，要分别换。
+def clock_targets(module):
+    """换 `time` 时要一起换的模块：给的是 `fast` 就连两个基座与拨动会话一起（ADR-0033）。
 
-    给的是 `fast` 时连两个基座与拨动会话一起换：等待与锁屏都读各自模块的 `time`（ADR-0033），
     只换门面那一份的话，`Screen.settle` 会按真实时间空转、假时间轴再也不推进。
     """
-    module.time = clock
+    targets = [module]
     if getattr(module, "__name__", "") == "fast":
-        for name in ("phone.connection", "phone.screen", "phone.toggler"):
-            sub = sys.modules.get(name)
-            if sub is not None:
-                sub.time = clock
+        targets += [sys.modules[name] for name in ("phone.connection", "phone.screen", "phone.toggler")
+                    if name in sys.modules]
+    return targets
+
+
+def install_clock(module, clock):
+    """把这个时钟装进 fast / chan_fast（以及它背后的基座与拨动会话），不还原。"""
+    for target in clock_targets(module):
+        target.time = clock
     return clock
+
+
+@contextlib.contextmanager
+def patched_clock(clock, module=None):
+    """同 `install_clock()`，但退出时把每个模块的 `time` 放回去：用例要连续跑几段、段间换钟时用它。"""
+    targets = clock_targets(module or sys.modules["fast"])
+    saved = [(target, target.time) for target in targets]
+    try:
+        for target in targets:
+            target.time = clock
+        yield clock
+    finally:
+        for target, value in saved:
+            target.time = value
 
 
 class Timeline:
@@ -209,9 +227,7 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
         p.lost_note, p.launch_session, p.channel_session = (
             fast_mod.LostNote(), fast_mod.LaunchSession(), fast_mod.ChannelSession())
     if hasattr(fast_mod, "Toggler"):           # 拨动会话绑在假手机上：`off()` 内部走它，门面只转发
-        p.toggler = fast_mod.Toggler.__new__(fast_mod.Toggler)
-        p.toggler.screen = p.screen
-        p.toggler.lost = p.lost_note
+        p.toggler = bind_toggler(p, fast_mod)
     p.link = fast_mod.adb_link.Connection(serial, transport=shell or _silent_shell)
     p.log, p.pause_at_lock_check, p.systemui_text = False, False, False
     p.changed, p.safe_mode = [], False
@@ -222,6 +238,23 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
     for name, value in fields.items():
         setattr(p, name, value)
     return p
+
+
+def bind_toggler(phone, fast_mod):
+    """在一台门面或 Mock 替身上架一个拨动会话（#1040）：装配只此一处。
+
+    观测基座取 `phone.screen`（拆分前的树里就是门面自己）；真门面的丢失记录用它的
+    `lost_note`，Mock 替身上门面与基座是同一个对象，直接用它的字段——`off()` 内部照旧读写
+    同一批桩（`p.miss`、`p.missed`、`p.changed`）。
+    """
+    toggler = fast_mod.Toggler.__new__(fast_mod.Toggler)
+    toggler.screen = _base(phone, "screen")
+    if isinstance(phone, Mock):
+        toggler.lost_note = phone
+        toggler.safe_mode, toggler.changed = phone.safe_mode, phone.changed
+    else:
+        toggler.lost_note, toggler.safe_mode, toggler.changed = phone.lost_note, False, []
+    return toggler
 
 
 def job_stub(**fields):
