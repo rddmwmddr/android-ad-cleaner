@@ -52,8 +52,10 @@ UPDATE_TITLE = re.compile(r"检测到新版本|发现新版本|版本更新提�
 SETTINGS_MARKS = ("Setting", "Preference")
 
 
-# 输入框：荣耀 MagicOS 10（PNM-AN10 10.0.0.102）设置搜索框是 AutoCompleteTextView，类名里没有 EditText
-EDIT = re.compile(r"EditText|AutoCompleteTextView")
+# 设置搜索框的识别式与直达动作随 `setting()` 搬进 tool/phone/settings_search.py（#1042），
+# 这里显式 re-export：`fast.EDIT` 是模块级名字，门面上的 `BOX` / `SEARCH_ACTION` 仍是类常量。
+from phone.settings_search import BOX as BOX, EDIT as EDIT, SEARCH_ACTION as SEARCH_ACTION
+from phone.settings_search import SettingsSearch
 
 
 class ScreenLocked(RuntimeError):
@@ -85,10 +87,14 @@ from phone.toggler import Toggler
 class Phone:
     """门面：只做转发与组合，公开名字一个不改（ADR-0033）。
 
-    两个基座、拨动与启动已搬进 `tool/phone/`：`Connection`（连接与生命周期）、`Screen`（观测、
-    视口几何、动作原语）、`Toggler`（整页拨动）与 `Launcher`（启动与落点）。设置搜索、弹窗与
-    导航三个阶段仍在本文件，后续步骤再搬。
+    两个基座、拨动、启动与设置搜索已搬进 `tool/phone/`：`Connection`（连接与生命周期）、
+    `Screen`（观测、视口几何、动作原语）、`Toggler`（整页拨动）、`Launcher`（启动与落点）与
+    `SettingsSearch`（设置搜索）。弹窗与导航两个阶段仍在本文件，后续步骤再搬。
     """
+
+    # 设置搜索框的识别式与直达动作归 `SettingsSearch`，门面保留同名类常量（公开面不改）。
+    BOX = BOX
+    SEARCH_ACTION = SEARCH_ACTION
 
     def __init__(self, serial, log=True, reader: Reader | None = None):
         self.conn = Connection(serial, log=log, reader=reader)
@@ -98,6 +104,7 @@ class Phone:
         self.launch_session = LaunchSession()
         self.channel_session = ChannelSession()
         self.toggler = Toggler(self.screen, self.lost_note)
+        self.search = SettingsSearch(self.screen, self.lost_note)
         # 启动阶段注入弹窗侧的窄接口：`dismiss()` 还没搬，这里先交门面的那一份。
         self.launcher = Launcher(self.screen, self.lost_note, self.launch_session, self.dismiss)
         self.conn.check_input()
@@ -663,152 +670,19 @@ class Phone:
         """当前列表：关掉开着的开关（判定与补点见 `Toggler.off()`）。"""
         return self.toggler.off(keep, only, page, max_screens)
 
-    # ---------- 设置搜索：输入框、打字、按关键词进页 ----------
+    # ---------- 设置搜索（SettingsSearch） ----------
+    # 进搜索页、打字的多级退化链与退场都归设置搜索会话；失败只返回假、不抛异常（沿用 #776 的判据）。
     def focused_text(self):
-        for n in self.tree().iter("node"):
-            if n.get("focused") == "true" and EDIT.search(n.get("class") or "") and self.on_screen(n):
-                return n.get("text") or ""
-        return None
+        return self.search.focused_text()
 
     def type_text(self, kw, timeout=4.0):
-        """往当前输入框打字。部分机型（小米 HyperOS 设置搜索）用 setText 会卡住、一直打「%」：
-        加超时，打完核对；不对就清掉、改用剪贴板粘贴；还不对就返回 False，不卡住。
-        失败时不退场：离开搜索页只由调用方的 `_leave_search()` 做（#639）。"""
-        if not self.edit_ready():
-            return False
-
-        def attempt(fn):
-            try:
-                fn()
-            except Exception:
-                return False
-            time.sleep(0.4)
-            return (self.focused_text() or "").strip() == kw
-
-        def clear():
-            if not self.edit_ready():
-                return
-            try:
-                self.reader.jsonrpc.clearTextField(selector, http_timeout=timeout)
-            except Exception:
-                pass
-
-        # 直接对已确认的输入框发有超时的 RPC，不启动无法取消的后台线程。
-        # 旧线程超时后仍会等控件出现，可能在下一页补打文字；也不能退回任意 focused 节点（键盘也有）。
-        selector = self.reader(classNameMatches=r".*(EditText|AutoCompleteTextView)$", focused=True).selector
-        def set_text():
-            self.reader.jsonrpc.setText(selector, kw, http_timeout=timeout)
-        if attempt(set_text):
-            return True
-        if not self.edit_ready():
-            return False
-        clear()
-        def paste():
-            self.reader.jsonrpc.setClipboard(None, kw, http_timeout=timeout)
-            self.reader.shell("input keyevent KEYCODE_PASTE", timeout=timeout)
-        if attempt(paste):
-            return True
-        clear()
-        return False
-
-    BOX = re.compile(r"^搜索.{0,6}设置|^Search settings", re.I)
+        return self.search.type_text(kw, timeout)
 
     def edit_ready(self):
-        """搜索页打开了：屏幕上有获得焦点的输入框。"""
-        for n in self.tree().iter("node"):
-            if EDIT.search(n.get("class") or "") and n.get("focused") == "true" and self.on_screen(n):
-                return True
-        return False
-
-    # 直接打开系统设置搜索页的动作（#650）：打得开就省掉「设置首页 → 找框 → 点框 → 等输入框」。
-    # 没有这个动作的系统 am start 当场报解析不到（退出码非零），回到老路，不额外等。
-    SEARCH_ACTION = "oplus.intent.action.settings.MAIN_SEARCH"        # ColorOS（OPPO / 一加 / 真我）
-
-    def _search_page(self):
-        res = self.reader.shell(f"am start -f 0x10008000 -a {self.SEARCH_ACTION}")
-        out = str(getattr(res, "output", "") or "")
-        if getattr(res, "exit_code", 0) or "Error" in out or "unable to resolve" in out.lower():
-            return False
-        return bool(wait.until(self.edit_ready, timeout=2.5, poll=0.15, now=time.time, sleep=time.sleep))
-
-    def _leave_search(self):
-        """离开设置搜索页并回到设置首页（#639）：按 BACK 收起键盘、退出搜索页，
-        再拉起设置首页——直达搜索页时它是新任务根，BACK 会落到桌面而不是设置首页。
-        搜索失败的各条路径共用这一处退场。"""
-        if not self.edit_ready():
-            return True
-        for _ in range(3):
-            self.back()
-            if not self.edit_ready():
-                break
-        else:
-            return False
-        self.reader.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
-        time.sleep(0.5)
-        return True
+        return self.search.edit_ready()
 
     def setting(self, kw, entry=None, box=None, path=None):
-        """系统设置里搜 kw，点结果 entry（默认就是 kw）。
-        box：搜索框文字，不给就自动认（小米「搜索系统设置项」、OPPO「搜索设置项」等）。
-        path：结果下一行的位置文字（如「隐私与安全 > 隐私 > 设备标识与广告」）。同名结果有好几条时按它挑。
-        先试直达搜索页的动作（ColorOS），没有就回设置首页点搜索框。
-        设置首页刚打开时点搜索框会被忽略（小米 18 Pro Max 实测）：点完要看到输入框才往下走，没打开就再点。"""
-        self.miss = 0
-
-        def box_at():
-            for t, (l, tp, r, b), _ in self.texts():
-                if (box and box in t) or (not box and self.BOX.search(t)):
-                    return ((l + r) // 2, (tp + b) // 2)
-            return None
-
-        def result_at():
-            # 输入框里也有同一段文字；只认非输入框的结果，不能点回搜索框后假报成功。
-            items = self.texts()
-            for i, (t, (l, tp, r, b), n) in enumerate(items):
-                if t != (entry or kw) or EDIT.search(n.get("class", "")):
-                    continue
-                if path and not (i + 1 < len(items) and items[i + 1][0] == path):
-                    continue
-                return ((l + r) // 2, (tp + b) // 2)
-            return None
-
-        def give_up(msg):
-            # 失败前把页面退回设置首页：留在搜索页上，调用方后续的滚屏会全落在输入法上（#639）
-            self.say(msg)
-            if not self._leave_search():
-                self.say(f"  · 设置搜索页退不出去，当前停在 {self.focus()}")
-            return False
-
-        opened = self._search_page()
-        if not opened:
-            self.reader.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
-            for _ in range(4):
-                xy = wait.until(box_at, timeout=3, poll=0.15, now=time.time, sleep=time.sleep)
-                if not xy:
-                    break
-                time.sleep(0.4)                      # 首页还在加载时点击会被吞
-                self.click(*xy)
-                opened = bool(wait.until(self.edit_ready, timeout=2, poll=0.15,
-                                         now=time.time, sleep=time.sleep))
-                if opened:
-                    break
-        if not opened:
-            return give_up(f"  ✗ 设置搜索框没打开，跳过「{kw}」")
-        if not self.type_text(kw):
-            return give_up(f"  ✗ 设置搜索框输入「{kw}」失败，跳过")
-        xy = wait.until(result_at, timeout=3, poll=0.15, now=time.time, sleep=time.sleep)
-        if not xy:
-            return give_up(f"  ✗ 没搜到「{entry or kw}」，跳过")
-        before = self.focus()
-        self.click(*xy)
-
-        def left_search():
-            return self.focus() != before or not self.edit_ready()
-
-        if not wait.until(left_search, timeout=3, poll=0.15, now=time.time, sleep=time.sleep):
-            return give_up(f"  ✗ 搜索结果「{entry or kw}」没有打开，跳过")
-        time.sleep(0.3)                      # 结果页起来了，给它的内容留一拍
-        return True
+        return self.search.setting(kw, entry, box, path)
 
     # ---------- 生命周期：拉起 App 与落点确认（Launcher） ----------
     def start(self, pkg, activity=None, settle=1.2, foreground=None, expect=None, budget=6.0):

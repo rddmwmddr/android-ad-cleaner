@@ -31,7 +31,7 @@
 | 模块 | 拥有什么 |
 |---|---|
 | `run.py` | 总入口：命令分派、退出码、设备信息、备份的存取 |
-| `fast.py` | 引擎出口：`Phone` 门面与它尚未搬走的阶段；拨动计划与回读搬进 `tool/phone/toggler.py`、启动与落点搬进 `tool/phone/launcher.py`，模块级名字仍从这里可 import（[ADR-0033](adr/0033-phone-phase-modules.md)） |
+| `fast.py` | 引擎出口：`Phone` 门面与它尚未搬走的阶段；拨动计划与回读搬进 `tool/phone/toggler.py`、启动与落点搬进 `tool/phone/launcher.py`、设置搜索搬进 `tool/phone/settings_search.py`，模块级名字仍从这里可 import（[ADR-0033](adr/0033-phone-phase-modules.md)） |
 | `recipe_kit.py` | 机型脚本的前导：段包装、入口断言、跳过出口、两个台账（[ADR-0029](adr/0029-recipe-preamble-injection.md)） |
 | `recipe_meta.py` | 机型脚本头部的元数据：录制版本、机型列表、段名；只有正则，不背 CLI 入口的副作用 |
 | `chan_fast.py` | 营销通知渠道：`ChannelPage`（到页 + 认行）、批处理循环 |
@@ -66,7 +66,7 @@
 `commits.py` 不是命令：它是上面几条 PR 校验共用的 `base..head` 读取与 UTF-8 控制台，沿用 #848、#849 起的那份设计。
 
 `Phone` 正在按 [ADR-0033](adr/0033-phone-phase-modules.md) 拆进 `tool/phone/`：两个基座、三个会话
-对象、拨动与启动已搬走，设置搜索、弹窗与导航仍在 `tool/fast.py`。搬迁完成前对外名字一个不改。
+对象、拨动、启动与设置搜索已搬走，弹窗与导航仍在 `tool/fast.py`。搬迁完成前对外名字一个不改。
 
 客户端侧：`gui/app.py` 是主体（`ClientData` / `AdbDownloader` / `Reporter` / `Dispatcher` / `Api`），`gui/launch.py` 是入口与打包冒烟，`gui/web/` 是桌面版的界面，`gui/winpreflight.py` 归因 Windows 启动失败，`gui/dotnet_config.py` 在打包时写随包的 `<exe>.config`。
 

@@ -112,7 +112,7 @@ def clock_targets(module):
     targets = [module]
     if getattr(module, "__name__", "") == "fast":
         targets += [sys.modules[name] for name in ("phone.connection", "phone.screen", "phone.toggler",
-                                                    "phone.launcher")
+                                                    "phone.launcher", "phone.settings_search")
                     if name in sys.modules]
     return targets
 
@@ -231,7 +231,8 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
     `sig` / `settle` / `switch_rows` / `on_screen` / `click` / `back` / `scroll` / `scroll_more`）打
     `p.screen`，连接与生命周期（`say` / `locked` / `wait_unlocked`）打 `p.conn`。要同时拦住门面上的
     调用点（机型脚本直接写 `p.say(...)`）就两处一起桩。
-    三个会话对象（`lost_note` / `launch_session` / `channel_session`）与拨动会话（`toggler`）也在这里造；
+    三个会话对象（`lost_note` / `launch_session` / `channel_session`）与三个阶段（`toggler` / `launcher` /
+    `search`）也在这里造；
     它们的默认值归各自的类，这里不抄第二份。`changed` / `safe_mode` 归拨动会话，经门面的属性转发生效。
     另有一处与构造处不同：`pause_at_lock_check` 默认 False，因为假手机后面没有客户端在点「暂停」。
     屏尺寸 `W` / `H` 与读屏 adapter `d` 不设默认：它们是每条用例的前提，由调用方传。
@@ -251,6 +252,8 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
         p.toggler = bind_toggler(p, fast_mod)
     if hasattr(fast_mod, "Launcher"):          # 启动阶段同理：`start()` 内部走它
         p.launcher = bind_launcher(p, fast_mod)
+    if hasattr(fast_mod, "SettingsSearch"):    # 设置搜索同理：`setting()` / `type_text()` 内部走它
+        p.search = bind_search(p, fast_mod)
     p.link = fast_mod.adb_link.Connection(serial, transport=shell or _silent_shell)
     p.log, p.pause_at_lock_check, p.systemui_text = False, False, False
     p.changed, p.safe_mode = [], False
@@ -261,6 +264,23 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
     for name, value in fields.items():
         setattr(p, name, value)
     return p
+
+
+def screen_stub(page=EMPTY_PAGE, size=SIZES[0], conn=None, fast_mod=None):
+    """只造观测基座：读屏按给定页面返回，`on_screen` 一律算在屏内，其余不碰（#1042）。
+
+    阶段用例要验「只造这一步」时用它，别在用例里手拼 `SimpleNamespace`——装配仍只落在
+    fixtures 这一处。要别的动作原语再往实例上桩，`stub()` 对门面不拥有的名字直接落到实例。
+    """
+    if fast_mod is None:
+        load_tool()
+        import fast as fast_mod
+    base = fast_mod.Screen.__new__(fast_mod.Screen)
+    base.conn = conn or SimpleNamespace()
+    base.W, base.H = size
+    base.tree = lambda: ET.fromstring(page)
+    base.on_screen = lambda n: True
+    return base
 
 
 def bind_toggler(phone, fast_mod):
@@ -278,6 +298,19 @@ def bind_toggler(phone, fast_mod):
     else:
         toggler.lost_note, toggler.safe_mode, toggler.changed = phone.lost_note, False, []
     return toggler
+
+
+def bind_search(phone, fast_mod):
+    """在一台门面或 Mock 替身上架一个设置搜索会话（#1042）：装配只此一处。
+
+    观测与动作取 `phone.screen`，传输取它背后的 `conn`（`type_text()` 要发 jsonrpc 与 shell），
+    丢失记录取门面的 `lost_note`，Mock 替身上门面与基座是同一个对象。
+    """
+    search = fast_mod.SettingsSearch.__new__(fast_mod.SettingsSearch)
+    search.screen = _base(phone, "screen")
+    search.conn = _base(phone, "conn")
+    search.lost_note = phone if isinstance(phone, Mock) else phone.lost_note
+    return search
 
 
 def bind_launcher(phone, fast_mod):
@@ -405,6 +438,8 @@ _BASE_OWNED_ = {
     "conn": ("locked", "wait_unlocked", "say", "check_alive", "close"),
     "screen": ("focus", "tree", "texts", "sig", "settle", "switch_rows", "on_screen",
                "click", "back", "scroll", "scroll_more"),
+    # 设置搜索阶段自己的三个读数：`setting()` 内部调它们，门面只是转发（#1042）
+    "search": ("type_text", "edit_ready", "focused_text"),
 }
 
 
@@ -454,7 +489,7 @@ def fake_phone(clock=None, size=SIZES[0], stages=((0.0, EMPTY_PAGE),),
         return None
 
     p.dismiss = lambda *a, **k: None
-    p.type_text = lambda text, *a, **k: (clock.click(), True)[1]
+    stub(p, "type_text", lambda text, *a, **k: (clock.click(), True)[1])
     on_screen_base("scroll", lambda *a, **k: None)
     on_screen_base("scroll_more", lambda *a, **k: False)
     stubs = {"focus": lambda: timeline.focus_at(clock.t), "say": silent,
