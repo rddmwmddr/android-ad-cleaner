@@ -632,8 +632,7 @@ class AppModel(
                     backend.call("view.smoke_export", smokeShell) as JSONObject
                 }.onFailure { Log.i(SMOKE_ENTRY_TAG, "export failed: " + it.message) }.getOrNull()
                 Log.i(SMOKE_ENTRY_TAG, "export " + (if (out == null) "null" else "ok") +
-                    " in " + (System.currentTimeMillis() - started) + "ms " +
-                    (out?.toString()?.take(160) ?: ""))
+                    " in " + (System.currentTimeMillis() - started) + "ms")
                 if (out == null) {
                     // 导出自己出错要说出来：不然脚本只看到「没有导出」，分不清是没跑起来还是 Python 侧报错
                     runCatching { exportSmoke(listOf("""{"finished": false, "error": "smoke_export 调用失败"}""")) }
@@ -645,7 +644,8 @@ class AppModel(
                         Log.i(SMOKE_ENTRY_TAG, "done")
                         return@launch
                     }
-                    idle = if (out.optJSONObject("run")?.optBoolean("running") == true) 0 else idle + 1
+                    // running 是 view.smoke_export 顶层给的；执行结果在 chunks 里，别去里面找
+                    idle = if (out.optBoolean("running")) 0 else idle + 1
                     Log.i(SMOKE_ENTRY_TAG, "idle=$idle")
                 }
                 // 没在跑、也没有结果：这一轮没起来，别在这里空转；脚本等不到新导出会自己重敲入口
