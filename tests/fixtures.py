@@ -191,8 +191,9 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
     桩打在它所属的基座上，门面只是转发、内部调用绕过门面：观测与动作（`tree` / `focus` / `texts` /
     `sig` / `settle` / `switch_rows` / `on_screen`）打 `p.screen`，连接与生命周期（`say` / `locked` /
     `wait_unlocked`）打 `p.conn`。要同时拦住门面上的调用点（机型脚本直接写 `p.say(...)`）就两处一起桩。
-    声明在 `Phone.__init__` 里的状态在这里补默认值，和构造处保持一致——只有一处例外：
-    `pause_at_lock_check` 默认 False，因为假手机后面没有客户端在点「暂停」。
+    三个会话对象（`lost_note` / `launch_session` / `channel_session`）也在这里造；它们的默认值归
+    各自的类，这里不抄第二份。门面自己声明的 `changed` / `safe_mode` 才在这里补默认值。
+    另有一处与构造处不同：`pause_at_lock_check` 默认 False，因为假手机后面没有客户端在点「暂停」。
     屏尺寸 `W` / `H` 与读屏 adapter `d` 不设默认：它们是每条用例的前提，由调用方传。
     """
     if fast_mod is None:
@@ -203,13 +204,16 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
         p.conn = fast_mod.Connection.__new__(fast_mod.Connection)
         p.screen = fast_mod.Screen.__new__(fast_mod.Screen)
         p.screen.conn = p.conn
+    if hasattr(fast_mod, "LostNote"):          # 同上：会话对象的默认值由它自己的类给，这里不抄第二份
+        p.lost_note, p.launch_session, p.channel_session = (
+            fast_mod.LostNote(), fast_mod.LaunchSession(), fast_mod.ChannelSession())
     p.link = fast_mod.adb_link.Connection(serial, transport=shell or _silent_shell)
     p.log, p.pause_at_lock_check, p.systemui_text = False, False, False
-    p.miss, p.changed, p.missed, p.promoted = 0, [], [], set()
-    p.app = ""
-    p.vivo_seen, p.safe_mode = False, False
-    p.skeleton_sigs, p.skeleton_count = set(), 0
-    p.mismatch_probes = 0
+    p.changed, p.safe_mode = [], False
+    if not hasattr(fast_mod, "LostNote"):      # 旧树：这些字段直接落在实例上
+        p.miss, p.missed, p.promoted, p.app = 0, [], set(), ""
+        p.vivo_seen = False
+        p.skeleton_sigs, p.skeleton_count, p.mismatch_probes = set(), 0, 0
     for name, value in fields.items():
         setattr(p, name, value)
     return p
@@ -248,6 +252,8 @@ def phone_mock(fast_mod=None, **fields):
     p.pause_at_lock_check, p.systemui_text, p.vivo_seen, p.safe_mode = False, False, False, False
     p.lost = False              # Phone 上这是代理 link 的属性，Mock 上没有：不补就恒为真
     p.missed = []               # `report_run()` 读它：Mock 恒真会把干净的一轮判成失败（#788）
+    # 三个会话对象（#1039）不造：没有代码直接读 `p.lost_note` 这类对象本身，读的都是它的字段，
+    # 而字段在 Mock 上本来就是可写可读的替身。
     p.skeleton_sigs, p.skeleton_count = set(), 0
     p.mismatch_probes = 0
     p.reader = p.d = Mock(name="reader")

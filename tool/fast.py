@@ -25,6 +25,7 @@ from phone.connection import reader_failure as reader_failure
 from phone.connection import u2 as u2
 from phone.connection import _shell_transport as _shell_transport
 from phone.screen import Screen
+from phone.session import ChannelSession, LaunchSession, LostNote
 import adb_link
 import backups
 import events
@@ -267,17 +268,13 @@ class Phone:
     def __init__(self, serial, log=True, reader: Reader | None = None):
         self.conn = Connection(serial, log=log, reader=reader)
         self.screen = Screen(self.conn)
+        # 三个跨阶段会话各有对象；门面只转发，写者与读者写在对象接口上（#1039）
+        self.lost_note = LostNote()
+        self.launch_session = LaunchSession()
+        self.channel_session = ChannelSession()
         self.conn.check_input()
         self.safe_mode = False              # 安全模式（参考脚本 / 录制版本不符）：off() 只关点名的开关，不做整页全关
-        self.vivo_seen = False              # 见过 vivo 的通知页：渠道页与应用通知页是同一个 Activity，只从应用列表进
         self.changed = []          # (页面, 标题) 记录本次关掉的
-        self.missed = []           # (页面, 标题) 记录本次没拨到目标态的；与 changed 同源、同生命周期（#788）
-        self.miss = 0              # 本段已经没找到几次；>0 说明路径对不上，后面只看当前屏、不再翻页找
-        self.skeleton_sigs = set()  # 本次运行已上报的骨架布局（#428）：同布局只留第一份
-        self.skeleton_count = 0     # 本次运行已上报的骨架份数，上限见 chan_fast.SKELETON_PER_RUN
-        self.mismatch_probes = 0    # 本次运行已补的 MISMATCH 判据读数，上限见 chan_fast.MISMATCH_PER_RUN
-        self.promoted = set()      # 点过才发现是推广位的 ✕：(App, 控件) 同一处不再点第二次（#420）
-        self.app = ""              # 最近一次 start 拉起的目标 App：推广位只在这个 App 里判
 
     # ---------- 转发：连接（Connection）与观测（Screen） ----------
     # 显式属性 + 赋值器，不用 `__getattr__` 兜底：搬漏的方法必须当场 AttributeError（ADR-0033）。
@@ -366,6 +363,80 @@ class Phone:
     @systemui_text.setter
     def systemui_text(self, value):
         self.screen.systemui_text = value
+
+    # ---------- 转发：三个跨阶段会话（LostNote / LaunchSession / ChannelSession） ----------
+    # 谁在什么时候写它们，写在 `tool/phone/session.py` 的类 docstring 上，这里只给归属。
+    @property
+    def miss(self):
+        """本段已经没找到几次。归 `LostNote`。"""
+        return self.lost_note.miss
+
+    @miss.setter
+    def miss(self, value):
+        self.lost_note.miss = value
+
+    @property
+    def missed(self):
+        """本次没拨到目标态的 (页面, 标题)。归 `LostNote`。"""
+        return self.lost_note.missed
+
+    @missed.setter
+    def missed(self, value):
+        self.lost_note.missed = value
+
+    @property
+    def app(self):
+        """最近一次 start 拉起的目标 App。归 `LaunchSession`。"""
+        return self.launch_session.app
+
+    @app.setter
+    def app(self, value):
+        self.launch_session.app = value
+
+    @property
+    def promoted(self):
+        """点过才发现是推广位的 ✕。归 `LaunchSession`。"""
+        return self.launch_session.promoted
+
+    @promoted.setter
+    def promoted(self, value):
+        self.launch_session.promoted = value
+
+    @property
+    def vivo_seen(self):
+        """见过 vivo 的通知页。归 `ChannelSession`。"""
+        return self.channel_session.vivo_seen
+
+    @vivo_seen.setter
+    def vivo_seen(self, value):
+        self.channel_session.vivo_seen = value
+
+    @property
+    def skeleton_sigs(self):
+        """本次运行已上报的骨架布局。归 `ChannelSession`。"""
+        return self.channel_session.skeleton_sigs
+
+    @skeleton_sigs.setter
+    def skeleton_sigs(self, value):
+        self.channel_session.skeleton_sigs = value
+
+    @property
+    def skeleton_count(self):
+        """本次运行已上报的骨架份数。归 `ChannelSession`。"""
+        return self.channel_session.skeleton_count
+
+    @skeleton_count.setter
+    def skeleton_count(self, value):
+        self.channel_session.skeleton_count = value
+
+    @property
+    def mismatch_probes(self):
+        """本次运行已补的 MISMATCH 判据读数。归 `ChannelSession`。"""
+        return self.channel_session.mismatch_probes
+
+    @mismatch_probes.setter
+    def mismatch_probes(self, value):
+        self.channel_session.mismatch_probes = value
 
     def _resilient_shell(self, *args, **kwargs):
         return self.conn._resilient_shell(*args, **kwargs)
