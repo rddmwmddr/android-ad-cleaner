@@ -13,7 +13,7 @@ worktree、跑完删掉：
 比九处：`Phone.texts()`（页面 × 两种屏尺寸 × 读屏策略开 / 关）、
 `explore.entries()`（页面 × 包名）、`Phone.off()`（两种屏尺寸 × 安全模式 × 三档 `only`）、
 `Phone.tap()` / `Phone._promoted_click()`（丢失记录与推广位已带前置状态的几条路径）、
-`Phone._confirm_target()` / `residual_confirm()` / `residual_note()`（确认框判定与残留提示）、
+`Screen.confirm_target()`（改前是 `Phone._confirm_target()`）/ `residual_confirm()` / `residual_note()`（确认框判定与残留提示）、
 `Phone.start()`（启动与落点）、`Phone.setting()` / `Phone.type_text()`（设置搜索的往返与打字退化链）、
 `Phone.dismiss()`（四条弹窗退化链与推广位退回，另加全仓页面样本的扫描）、
 `Phone.tap()` / `go()` / `enter()` / `entry()` / `tab()` / `tap_icon()` / `top()` /
