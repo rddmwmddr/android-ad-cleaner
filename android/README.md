@@ -100,8 +100,8 @@ android/build.sh assembleRelease
 
 ```bash
 .venv/bin/python android/smoke.py                 # origin 的 main 最新提交
-.venv/bin/python android/smoke.py --commit 9a5d6e6   # 指定提交：推一个 smoke/<短 SHA> 临时分支，跑完删掉
-.venv/bin/python android/smoke.py --ref some-branch  # 指定分支或标签
+.venv/bin/python android/smoke.py --commit 9a5d6e6  # 指定提交或标签：推一个 smoke/<短 SHA> 临时分支，跑完删掉
+.venv/bin/python android/smoke.py --ref some-branch  # 指定分支
 .venv/bin/python android/smoke.py --screens          # 追加 demo 逐屏，逐页判进程与 FATAL
 ```
 
@@ -110,7 +110,7 @@ android/build.sh assembleRelease
 - 构建失败就停，不碰手机；装机失败（签名冲突、系统拦截）与启动失败（进程不在、logcat 有 `FATAL EXCEPTION`）各自报出该段。
 - 设备多于一台时用 `--serial` 指定；只连一台自动取。
 - `--screens` 的页面名来自 `app/src/debug/.../Demo.kt`，每屏之间强停进程（demo 换后端且不还原）。
-- 执行段、结构化结果与自动还原是下一张票（#1072）。
+- 执行段与自动还原是下一张票（#1072）。
 
 首次准备（配对只做一次）：
 

@@ -3,8 +3,11 @@
 外部命令全由 fixtures 的 FakeRunner 回答，这里不碰 git、gh 与 adb。断言落在脚本实际发出的
 命令序列、两段判定（构建 / 安装 + 启动）与报告文本上，不读内部结构。
 """
+import contextlib
 import importlib.util
+import io
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -49,8 +52,6 @@ def adb(*args):
 
 def base_table(target, conclusion="success"):
     return {
-        ("git", "fetch", "origin", "main"): [("", "", 0)],
-        ("git", "rev-parse", "origin/main"): [(SHA + "\n", "", 0)],
         list_key("main"): [('[{"databaseId": 111}]', "", 0),
                            ('[{"databaseId": %d, "headSha": "%s"}, {"databaseId": 111}]' % (RUN_ID, SHA), "", 0)],
         dispatch_key("main"): [("", "", 0)],
@@ -71,7 +72,7 @@ def launched(target, pidof=("4321\n", "", 0), logcat=("", "", 0)):
 
 def list_key(branch):
     return ("gh", "run", "list", "--workflow", WORKFLOW, "--branch", branch,
-            "--limit", "20", "--json", "databaseId,headSha")
+            "--event", "workflow_dispatch", "--limit", "20", "--json", "databaseId,headSha")
 
 
 def dispatch_key(ref):
@@ -90,6 +91,20 @@ def install_key(target):
     return adb("install", "-r", str(target / APK))
 
 
+def commit_table(target, branch, base=None, delete=("", "", 0)):
+    """指定提交时的表：先 rev-parse 认提交、推临时分支，跑完删掉；其余部分沿用 base。"""
+    table = base if base is not None else launched(target)
+    del table[list_key("main")]
+    del table[dispatch_key("main")]
+    table[("git", "rev-parse", "--verify", SHA + "^{commit}")] = [(SHA + "\n", "", 0)]
+    table[("git", "push", "origin", SHA + ":refs/heads/" + branch)] = [("", "", 0)]
+    table[list_key(branch)] = [('[{"databaseId": 111}]', "", 0),
+                               ('[{"databaseId": %d, "headSha": "%s"}]' % (RUN_ID, SHA), "", 0)]
+    table[dispatch_key(branch)] = [("", "", 0)]
+    table[("git", "push", "origin", "--delete", branch)] = [delete]
+    return table
+
+
 def push_apk(target):
     """gh run download 的假回答：把 APK 写进脚本要读的目录。"""
 
@@ -105,12 +120,38 @@ class SmokeWorkflowTests(unittest.TestCase):
     """入口与 CI 产物是连着的：脚本按 ARTIFACT 这个名字下载，workflow 就用这个名字上传（#1071）。"""
 
     def test_entry_point_and_ci_artifact_are_wired(self):
-        self.assertTrue(callable(smoke.main), "android/smoke.py 要能当命令跑")
-        self.assertTrue(callable(smoke.smoke), "编排入口要能注入执行器")
+        source = (ROOT / "android/smoke.py").read_text(encoding="utf-8")
+        self.assertIn('if __name__ == "__main__":', source, "脚本要能当命令跑")
+        with contextlib.redirect_stdout(io.StringIO()) as printed:
+            with self.assertRaises(SystemExit) as exited:
+                smoke.main(["--help"])
+        self.assertEqual(exited.exception.code, 0)
+        self.assertIn("--screens", printed.getvalue(), "命令行参数没接上")
         text = (ROOT / ".github/workflows/android.yml").read_text(encoding="utf-8")
         self.assertIn("upload-artifact", text)
         self.assertIn("name: " + smoke.ARTIFACT, text)
         self.assertIn("*.apk", text)
+        self.assertIn("workflow_dispatch", text, "脚本靠 workflow_dispatch 触发，删了就触发不了")
+
+    def test_screen_list_matches_the_demo_pages(self):
+        text = (ROOT / "android/app/src/debug/java/com/ahuamiao/adcleaner/ui/Demo.kt").read_text(encoding="utf-8")
+        pages = text[text.index("页面：") + len("页面："):text.index("面板：")].replace("*", " ").split()
+        self.assertEqual(sorted(pages), sorted(smoke.DEFAULT_SCREENS),
+                         "--screens 的默认名单要与 Demo.kt 的页面名同步")
+
+
+class RunnerTests(unittest.TestCase):
+    """外部命令的两种常见失败要翻成 SmokeError（退出码 2「没跑起来」），不能抛栈。"""
+
+    def test_missing_command_is_a_smoke_error(self):
+        with self.assertRaises(smoke.SmokeError) as caught:
+            smoke.Runner().run("aac-no-such-command-1071")
+        self.assertIn("找不到命令", str(caught.exception))
+
+    def test_timeout_is_a_smoke_error(self):
+        with self.assertRaises(smoke.SmokeError) as caught:
+            smoke.Runner().run(sys.executable, "-c", "import time; time.sleep(5)", timeout=0.2)
+        self.assertIn("没返回", str(caught.exception))
 
 
 class SmokeTests(unittest.TestCase):
@@ -174,8 +215,19 @@ class SmokeTests(unittest.TestCase):
         table[download_key(target)] = [("", "", 0)]
         report, runner, notes = self.run_smoke(root, table)
         self.assertIn("安装 + 启动：失败", report.text())
-        self.assertIn("没找到 APK", report.text())
+        self.assertIn("下载 APK 失败", report.text())
         self.assertNotIn(adb("shell", "am", "start", "-n", smoke.ACTIVITY), self.calls(runner))
+
+    def test_download_failure_does_not_reuse_a_stale_apk(self):
+        root, target = self.workdir()
+        target.mkdir(parents=True, exist_ok=True)
+        (target / APK).write_bytes(b"stale")          # 上一次跑留下的包
+        table = base_table(target)
+        table[download_key(target)] = [("gh: artifact expired\n", "", 1)]
+        report, runner, notes = self.run_smoke(root, table)
+        self.assertIn("安装 + 启动：失败", report.text())
+        self.assertIn("下载 APK 失败", report.text())
+        self.assertNotIn(install_key(target), self.calls(runner), "本次没下到包就不能装")
 
     def test_dead_process_is_a_launch_failure(self):
         root, target = self.workdir()
@@ -185,12 +237,21 @@ class SmokeTests(unittest.TestCase):
 
     def test_fatal_in_logcat_is_a_launch_failure_even_when_process_survived(self):
         logcat = ("01-01 00:00:03.000  4321  4321 E AndroidRuntime: FATAL EXCEPTION: main\n"
-                  "01-01 00:00:03.000  4321  4321 E AndroidRuntime: java.lang.RuntimeException: boom\n")
+                  "01-01 00:00:03.000  4321  4321 E AndroidRuntime: Process: %s, PID: 4321\n"
+                  "01-01 00:00:03.000  4321  4321 E AndroidRuntime: java.lang.RuntimeException: boom\n"
+                  % smoke.PACKAGE)
         root, target = self.workdir()
         report, runner, notes = self.run_smoke(root, launched(target, logcat=(logcat, "", 0)))
         self.assertIn("安装 + 启动：失败", report.text())
         self.assertIn("FATAL EXCEPTION", report.text())
         self.assertIn("FATAL EXCEPTION", (target / "logcat.txt").read_text(encoding="utf-8"))
+
+    def test_another_apps_crash_in_the_same_window_is_not_ours(self):
+        logcat = ("01-01 00:00:03.000   999   999 E AndroidRuntime: FATAL EXCEPTION: main\n"
+                  "01-01 00:00:03.000   999   999 E AndroidRuntime: Process: com.example.other, PID: 999\n")
+        root, target = self.workdir()
+        report, runner, notes = self.run_smoke(root, launched(target, logcat=(logcat, "", 0)))
+        self.assertTrue(report.ok, report.text())
 
     # —— 命令序列 ——
 
@@ -214,17 +275,7 @@ class SmokeTests(unittest.TestCase):
     def test_commit_goes_through_a_temporary_branch_and_cleans_it_up(self):
         root, target = self.workdir()
         branch = "smoke/" + SHORT
-        table = launched(target)
-        for key in (("git", "fetch", "origin", "main"), ("git", "rev-parse", "origin/main"), list_key("main"),
-                    dispatch_key("main")):
-            del table[key]
-        table[("git", "rev-parse", "--verify", SHA + "^{commit}")] = [(SHA + "\n", "", 0)]
-        table[("git", "push", "origin", SHA + ":refs/heads/" + branch)] = [("", "", 0)]
-        table[list_key(branch)] = [('[{"databaseId": 111}]', "", 0),
-                                   ('[{"databaseId": %d, "headSha": "%s"}]' % (RUN_ID, SHA), "", 0)]
-        table[dispatch_key(branch)] = [("", "", 0)]
-        table[("git", "push", "origin", "--delete", branch)] = [("", "", 0)]
-        report, runner, notes = self.run_smoke(root, table, commit=SHA)
+        report, runner, notes = self.run_smoke(root, commit_table(target, branch), commit=SHA)
         self.assertTrue(report.ok, report.text())
         calls = self.calls(runner)
         self.assertIn(("git", "push", "origin", SHA + ":refs/heads/" + branch), calls)
@@ -234,19 +285,18 @@ class SmokeTests(unittest.TestCase):
     def test_a_failed_build_still_deletes_the_temporary_branch(self):
         root, target = self.workdir()
         branch = "smoke/" + SHORT
-        table = base_table(target, conclusion="failure")
-        for key in (("git", "fetch", "origin", "main"), ("git", "rev-parse", "origin/main"), list_key("main"),
-                    dispatch_key("main")):
-            del table[key]
-        table[("git", "rev-parse", "--verify", SHA + "^{commit}")] = [(SHA + "\n", "", 0)]
-        table[("git", "push", "origin", SHA + ":refs/heads/" + branch)] = [("", "", 0)]
-        table[list_key(branch)] = [('[{"databaseId": 111}]', "", 0),
-                                   ('[{"databaseId": %d, "headSha": "%s"}]' % (RUN_ID, SHA), "", 0)]
-        table[dispatch_key(branch)] = [("", "", 0)]
-        table[("git", "push", "origin", "--delete", branch)] = [("", "", 0)]
+        table = commit_table(target, branch, base=base_table(target, conclusion="failure"))
         report, runner, notes = self.run_smoke(root, table, commit=SHA)
         self.assertIn("构建：失败", report.text())
         self.assertEqual(self.calls(runner)[-1], ("git", "push", "origin", "--delete", branch))
+
+    def test_a_branch_that_cannot_be_deleted_is_reported(self):
+        root, target = self.workdir()
+        branch = "smoke/" + SHORT
+        table = commit_table(target, branch, delete=("", "remote: permission denied\n", 1))
+        report, runner, notes = self.run_smoke(root, table, commit=SHA)
+        self.assertTrue(report.ok, "删临时分支失败不该把结论改成失败")
+        self.assertTrue(any("没删掉" in line and branch in line for line in notes), notes)
 
     # —— 预检 ——
 
@@ -255,8 +305,16 @@ class SmokeTests(unittest.TestCase):
         runner = FakeRunner(runs=Replies({("adb", "devices"): [("List of devices attached\n", "", 0)]}))
         with self.assertRaises(smoke.SmokeError) as caught:
             smoke.smoke(runner, sleep=lambda seconds: None, note=lambda line: None, root=root)
-        self.assertIn("没有连着手机", str(caught.exception))
+        self.assertIn("没有可用的手机", str(caught.exception))
         self.assertEqual(self.calls(runner), [("adb", "devices")], "没设备时不该触发 CI")
+
+    def test_an_unauthorized_device_says_so(self):
+        root, target = self.workdir()
+        listed = "List of devices attached\nAAA\tunauthorized\n"
+        runner = FakeRunner(runs=Replies({("adb", "devices"): [(listed, "", 0)]}))
+        with self.assertRaises(smoke.SmokeError) as caught:
+            smoke.smoke(runner, sleep=lambda seconds: None, note=lambda line: None, root=root)
+        self.assertIn("unauthorized", str(caught.exception), "要把设备状态说出来，别只说没连手机")
 
     def test_several_devices_ask_for_a_serial(self):
         root, target = self.workdir()

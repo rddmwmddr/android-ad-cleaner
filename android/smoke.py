@@ -9,6 +9,7 @@
 """
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -52,8 +53,13 @@ class Runner:
     """
 
     def run(self, *cmd, timeout=600):
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                                errors="replace", timeout=timeout)
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                                    errors="replace", timeout=timeout)
+        except FileNotFoundError:
+            raise SmokeError("找不到命令 %s：装好它或放进 PATH" % cmd[0]) from None
+        except subprocess.TimeoutExpired:
+            raise SmokeError("命令 %s 超过 %d 秒没返回" % (" ".join(cmd), timeout)) from None
         return result.stdout, result.stderr, result.returncode
 
 
@@ -113,13 +119,12 @@ def pick_serial(runner):
     out, err, rc = runner.run("adb", "devices")
     if rc != 0:
         raise SmokeError("adb 跑不起来：" + first_line(err or out))
-    devices = []
-    for line in out.splitlines()[1:]:
-        parts = line.split()
-        if len(parts) == 2 and parts[1] == "device":
-            devices.append(parts[0])
+    listed = [line.split() for line in out.splitlines()[1:] if len(line.split()) == 2]
+    devices = [parts[0] for parts in listed if parts[1] == "device"]
     if not devices:
-        raise SmokeError("没有连着手机：插上开发机的 USB，`adb devices` 里要能看到它")
+        seen = "、".join("%s（%s）" % (parts[0], parts[1]) for parts in listed)
+        raise SmokeError("没有可用的手机：%s。授权 USB 调试后 `adb devices` 里的状态要是 device"
+                         % (seen or "一台都没连上"))
     if len(devices) > 1:
         raise SmokeError("连着 %d 台手机，用 --serial 指定一台：%s" % (len(devices), "、".join(devices)))
     return devices[0]
@@ -139,23 +144,29 @@ def first_line(text):
     return "（没有输出）"
 
 
-def run_ids(runner, branch):
-    """该分支上已有的 CI 运行。触发之前先记一份，之后靠差集认出本次那条。"""
+def runs(runner, branch):
+    """该分支上手动触发的 CI 运行（按创建时间倒序）。
+
+    只要 workflow_dispatch：并行会话往 main push 也会建运行，混进来就会被当成「本次」，
+    等错构建、下载错包，报告里的 SHA 也是别人的。
+    """
     out, err, rc = runner.run("gh", "run", "list", "--workflow", WORKFLOW, "--branch", branch,
-                              "--limit", "20", "--json", "databaseId,headSha")
+                              "--event", "workflow_dispatch", "--limit", "20",
+                              "--json", "databaseId,headSha")
     if rc != 0:
         raise SmokeError("列不出 CI 运行记录：" + first_line(err or out))
-    return {run["databaseId"] for run in json.loads(out or "[]")}
+    return json.loads(out or "[]")
+
+
+def run_ids(runner, branch):
+    """触发之前先记一份已有的运行，之后靠差集认出本次那条。"""
+    return {run["databaseId"] for run in runs(runner, branch)}
 
 
 def await_new_run(runner, branch, before, sleep, poll, timeout):
     waited = 0
     while waited <= timeout:
-        out, err, rc = runner.run("gh", "run", "list", "--workflow", WORKFLOW, "--branch", branch,
-                                  "--limit", "20", "--json", "databaseId,headSha")
-        if rc != 0:
-            raise SmokeError("列不出 CI 运行记录：" + first_line(err or out))
-        fresh = [run for run in json.loads(out or "[]") if run["databaseId"] not in before]
+        fresh = [run for run in runs(runner, branch) if run["databaseId"] not in before]
         if fresh:
             return fresh[0]
         sleep(poll)
@@ -173,14 +184,22 @@ def await_build(runner, run_id, sleep, poll, timeout):
             raise SmokeError("读不到 CI 运行 %s：%s" % (run_id, first_line(err or out)))
         state = json.loads(out)
         if state["status"] == "completed":
-            return state.get("conclusion") or ""
+            return state.get("conclusion") or "未知"
         sleep(poll)
         waited += poll
     return None
 
 
 def crashes(logcat):
-    return [line for line in logcat.splitlines() if "FATAL EXCEPTION" in line]
+    """logcat 里属于本 App 的 FATAL 行；没有返回 None。
+
+    按崩溃块里有没有包名收敛：开发机上别的 App 崩在同一个 5 秒窗口里，不该算到本次头上。
+    """
+    lines = logcat.splitlines()
+    for index, line in enumerate(lines):
+        if "FATAL EXCEPTION" in line and PACKAGE in "\n".join(lines[index:index + 6]):
+            return line
+    return None
 
 
 def launch(runner, serial, land, sleep, dumps, demo=None):
@@ -192,7 +211,7 @@ def launch(runner, serial, land, sleep, dumps, demo=None):
     runner.run("adb", "-s", serial, "logcat", "-c")
     extra = ("--es", "demo", demo) if demo else ()
     out, err, rc = runner.run("adb", "-s", serial, "shell", "am", "start", "-n", ACTIVITY, *extra)
-    started = rc == 0 and "Error" not in out
+    started = rc == 0 and "Error" not in (out + err)
     sleep(land)
     pid, _, _ = runner.run("adb", "-s", serial, "shell", "pidof", PACKAGE)
     dump, _, _ = runner.run("adb", "-s", serial, "logcat", "-d")
@@ -208,7 +227,7 @@ def judge_launch(started, started_output, pid, logcat, land):
     if not pid:
         return False, "启动失败：启动后 %d 秒进程不在" % land
     if fatal:
-        return False, "启动失败：logcat 有 " + fatal[0].split("AndroidRuntime:", 1)[-1].strip()
+        return False, "启动失败：logcat 有 " + fatal.split("AndroidRuntime:", 1)[-1].strip()
     return True, "启动后 %d 秒进程存活（pid %s），logcat 无 FATAL" % (land, pid)
 
 
@@ -249,13 +268,14 @@ def smoke(runner, *, ref=None, commit=None, serial=None, screens=(), root=None,
                 Step("安装 + 启动", SKIP, "构建失败")])
 
         note("下载 APK（run %s）" % run_id)
+        shutil.rmtree(directory, ignore_errors=True)      # 同一个 commit 重跑时别拿上一次的包
         directory.mkdir(parents=True, exist_ok=True)
         out, err, rc = runner.run("gh", "run", "download", str(run_id), "-R", REPO,
                                   "-n", ARTIFACT, "-D", str(directory))
         apks = sorted(directory.glob("**/*.apk"))
-        if not apks:
+        if rc != 0 or not apks:
             return finished(sha, ref, serial, directory, [
-                built, Step("安装 + 启动", FAIL, "下载后没找到 APK：" + first_line(err or out))])
+                built, Step("安装 + 启动", FAIL, "下载 APK 失败：" + first_line(err or out))])
 
         note("装到 %s" % serial)
         out, err, rc = runner.run("adb", "-s", serial, "install", "-r", str(apks[0]))
@@ -276,7 +296,9 @@ def smoke(runner, *, ref=None, commit=None, serial=None, screens=(), root=None,
         return finished(sha, ref, serial, directory, steps, walked, "".join(dumps))
     finally:
         if temporary:
-            runner.run("git", "push", "origin", "--delete", temporary)
+            out, err, rc = runner.run("git", "push", "origin", "--delete", temporary)
+            if rc != 0:
+                note("临时分支 %s 没删掉（%s），手动删一下" % (temporary, first_line(err or out)))
 
 
 def finished(sha, ref, serial, directory, steps, screens=(), logcat=""):
@@ -288,8 +310,8 @@ def finished(sha, ref, serial, directory, steps, screens=(), logcat=""):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="真机冒烟：CI 出 debug 包 → 装开发机 → 启动 → 报告")
     parser.add_argument("--serial", help="设备序列号；只连一台时可以省")
-    parser.add_argument("--ref", help="分支或标签，默认 %s" % DEFAULT_REF)
-    parser.add_argument("--commit", help="指定提交（SHA / 短 SHA / 分支名），会推一个临时分支")
+    parser.add_argument("--ref", help="分支，默认 %s；标签与提交用 --commit" % DEFAULT_REF)
+    parser.add_argument("--commit", help="指定提交或标签（SHA / 短 SHA / 分支名 / tag），会推一个临时分支")
     parser.add_argument("--screens", nargs="?", const=",".join(DEFAULT_SCREENS), metavar="页面",
                         help="把 demo 逐屏走一遍并逐页判存活；不给值就是全部页面，逗号分隔")
     parser.add_argument("--root", help="产物父目录，默认 %s" % DEFAULT_ROOT)
