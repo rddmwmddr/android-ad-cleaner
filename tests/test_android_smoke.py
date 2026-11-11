@@ -202,11 +202,14 @@ class SmokeTests(unittest.TestCase):
         root, target = self.workdir()
         table = launched(target)
         table[install_key(target)] = [
-            ("adb: failed to install app-debug.apk: Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE]\n", "", 0)]
+            ("Performing Streamed Install\n"
+             "adb: failed to install app-debug.apk: Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE]\n", "", 0)]
         report, runner, notes = self.run_smoke(root, table)
         self.assertFalse(report.ok)
         self.assertIn("安装 + 启动：失败", report.text())
-        self.assertIn("INSTALL_FAILED_UPDATE_INCOMPATIBLE", report.text())
+        self.assertIn("INSTALL_FAILED_UPDATE_INCOMPATIBLE", report.text(),
+                      "adapter 的进度行不能把真正的原因挤掉")
+        self.assertIn("Performing Streamed Install", report.text())
         self.assertNotIn(adb("shell", "am", "start", "-n", smoke.ACTIVITY), self.calls(runner))
 
     def test_missing_apk_after_download_is_an_install_failure(self):
