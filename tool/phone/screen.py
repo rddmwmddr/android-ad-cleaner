@@ -20,6 +20,9 @@ from troubleshooting import TAPPED, XIAOMI_INPUT, input_blocked
 CONFIRM = ("确定", "確定", "关闭", "關閉", "仍要关闭", "仍要關閉", "确认关闭", "確認關閉",
            "确认", "確認", "继续关闭", "繼續關閉", "关闭推荐", "關閉推薦", "仍然关闭", "仍然關閉")
 
+# 运行时权限页所在的包：启动侧靠它判「这一帧是不是权限页占着前台」，弹窗侧只在这类页上点拒绝。
+PERMISSION_CONTROLLERS = {"com.android.permissioncontroller", "com.google.android.permissioncontroller"}
+
 
 class Screen:
     """当前这一屏：文字、开关行、前台窗口、屏宽高。

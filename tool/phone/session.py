@@ -23,10 +23,10 @@ class LostNote:
 class LaunchSession:
     """启动会话：由启动写、被弹窗读。
 
-    `app` 是最近一次 `start()` 拉起的目标 App，`start()` 写、`Launcher.promoted_click()`（弹窗一侧）读，
+    `app` 是最近一次 `start()` 拉起的目标 App，`start()` 写、`Dismisser.promoted_click()`（弹窗一侧）读，
     用来判「点了 ✕ 之后跳走的是不是推广位」。
     `promoted` 是点过才发现是推广位的 ✕，同一处不再点第二次（#420）：`start()` 换 App 时清空，
-    `Launcher.promoted_click()` 记下。
+    `Dismisser.promoted_click()` 记下。
     """
 
     def __init__(self):
