@@ -73,6 +73,12 @@ def export(shell="ready", finished=True, results=None, seq=1, running=None):
                    for i, part in enumerate(parts))
 
 
+def failed_export(message="smoke_export 调用失败"):
+    """App 那边导出自己出错：要带着原因说出来，不能只剩「没有新的导出」。"""
+    text = json.dumps({"finished": False, "error": message}, ensure_ascii=False)
+    return "11-12 10:00:00.000  1234  1234 I %s: 1794415389257 1/1 %s\n" % (smoke.SMOKE_TAG, text)
+
+
 class Replies:
     """按命令回话：同一个命令给一串回答时按顺序用，用完后重复最后一条。
 
@@ -529,6 +535,14 @@ class SmokeTests(unittest.TestCase):
         prefix = smoke.start_cmd(SERIAL, "--es", "plan")
         plans = [call for call in self.calls(runner) if call[:len(prefix)] == prefix]
         self.assertGreaterEqual(len(plans), 3, "导出停住时要把计划连同导出入口再发一次")
+
+    def test_an_export_that_reports_an_error_is_surfaced(self):
+        root, target = self.workdir()
+        table = happy_table(target, export_replies=[(failed_export(), "", 0)])
+        report, runner, notes = self.run_smoke(root, table)
+        self.assertFalse(report.ok)
+        self.assertIn("smoke_export 调用失败", report.text())
+        self.assertIn("真流程 + 还原：失败", report.text())
 
     def test_commit_goes_through_a_temporary_branch_and_cleans_it_up(self):
         root, target = self.workdir()

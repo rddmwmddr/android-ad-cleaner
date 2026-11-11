@@ -410,6 +410,11 @@ class SmokeExportTest(unittest.TestCase):
         self.assertTrue(view.smoke_export(FakeApi(run={"running": False, "cancel": True,
                                                        "results": []}))["finished"])
 
+    def test_running_is_reported_at_the_top_level(self):
+        """Kotlin 靠这个字段决定导出循环要不要继续；藏在 chunks 里它读不到（#1072 真机）。"""
+        self.assertTrue(view.smoke_export(FakeApi(run={"running": True, "results": []}))["running"])
+        self.assertFalse(view.smoke_export(FakeApi(run={"running": False, "results": []}))["running"])
+
     def test_the_export_is_registered_for_the_client(self):
         self.assertIn("smoke_export", view.EXPORTS)
 

@@ -177,7 +177,8 @@ def smoke_export(api, shell=""):
                        "title": run.get("title", ""), "sec": run.get("sec", 0),
                        "outcome": run.get("outcome", ""), "recovery": run.get("recovery", ""),
                        "results": results}}
-    return {"finished": finished, "chunks": _chunks(json.dumps(payload, ensure_ascii=False))}
+    return {"finished": finished, "running": bool(run.get("running")),
+            "chunks": _chunks(json.dumps(payload, ensure_ascii=False))}
 
 
 def _warnings(status, fold_block):
