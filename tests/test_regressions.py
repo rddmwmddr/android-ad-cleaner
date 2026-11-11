@@ -85,8 +85,8 @@ class SwitchTests(unittest.TestCase):
         # wait / plan / shift 探测都看到 ON 页；点击后的回读才看到 OFF
         p.screen.tree = Mock(side_effect=[ET.fromstring(xml_on)] * 3 + [ET.fromstring(xml_off)] * 12)
         p.screen.focus = Mock(return_value="app/settings")
-        p.click, p.confirm = Mock(), Mock(return_value=None)
-        p.scroll_more = Mock(return_value=False)
+        p.screen.click, p.toggler.confirm = Mock(), Mock(return_value=None)
+        p.screen.scroll_more = Mock(return_value=False)
         self.assertEqual(p.off(only=["个性化"], page="商店·个性化推荐"), 2)
         self.assertEqual(p.changed, [("商店·个性化推荐", "个性化推荐"), ("商店·个性化推荐", "个性化广告推荐")])
 
@@ -135,18 +135,18 @@ class SwitchTests(unittest.TestCase):
     def test_disappeared_switch_is_not_reported_as_success_or_retapped(self, _sleep):
         p = phone()
         switches = [[("广告推荐", True, (1000, 500))]] * 2 + [[]] * 8
-        p.switches = Mock(side_effect=switches)
+        p.screen.switches = Mock(side_effect=switches)
         p.screen.tree = Mock(return_value=ET.fromstring('<hierarchy/>'))
         p.screen.focus = Mock(return_value="app/settings")
-        p.click, p.confirm = Mock(), Mock(return_value=None)
-        p.scroll_more = Mock(return_value=False)
+        p.screen.click, p.toggler.confirm = Mock(), Mock(return_value=None)
+        p.screen.scroll_more = Mock(return_value=False)
         self.assertEqual(p.off(only=["广告推荐"]), 0)
         self.assertEqual(p.changed, [])
-        p.click.assert_called_once_with(1000, 500)
-        p.confirm.assert_called()
+        p.screen.click.assert_called_once_with(1000, 500)
+        p.toggler.confirm.assert_called()
         p.screen.focus.assert_called()
         p.screen.tree.assert_called()          # 回读时取灰态也要 dump；switches 被 mock 了，tree 的次数不说明读屏次数
-        p.scroll_more.assert_called_once_with()
+        p.screen.scroll_more.assert_called_once_with()
 
 
 class InputTests(unittest.TestCase):

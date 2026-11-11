@@ -31,7 +31,7 @@
 | 模块 | 拥有什么 |
 |---|---|
 | `run.py` | 总入口：命令分派、退出码、设备信息、备份的存取 |
-| `fast.py` | 引擎核心与出口：`Phone`（采样 / 导航 / 拨动）、`plan_switches()`；`Phone` 正在拆成 `tool/phone/` 子包（[ADR-0033](adr/0033-phone-phase-modules.md)） |
+| `fast.py` | 引擎出口：`Phone` 门面与它尚未搬走的阶段；拨动计划与回读已搬进 `tool/phone/toggler.py`，模块级名字仍从这里可 import（[ADR-0033](adr/0033-phone-phase-modules.md)） |
 | `recipe_kit.py` | 机型脚本的前导：段包装、入口断言、跳过出口、两个台账（[ADR-0029](adr/0029-recipe-preamble-injection.md)） |
 | `recipe_meta.py` | 机型脚本头部的元数据：录制版本、机型列表、段名；只有正则，不背 CLI 入口的副作用 |
 | `chan_fast.py` | 营销通知渠道：`ChannelPage`（到页 + 认行）、批处理循环 |
@@ -80,7 +80,7 @@
 - 没做成的步可以在结果页再跑一轮：`retry_plan()` 按各步的 `kind` 与失败段名重建一份计划，新 `Job` 接住上一轮的结果、按 `kind` 就地覆盖（[ADR-0026](adr/0026-retry-failed-steps.md)）。
 - 状态全部收在 `Job` 里：单写者 + 锁内快照，界面轮询只拿快照（[ADR-0010](adr/0010-execution-state.md)）。
 - 引擎发回来的东西分三路：人话进日志、事件改状态、载荷进上报（见「四条契约」）。
-- 广告开关那一步里，「这一页该拨哪些」是纯函数 `plan_switches()` 算的，点击与回读在 `off()` 里（[ADR-0008](adr/0008-switch-plan.md)）。
+- 广告开关那一步里，「这一页该拨哪些」是纯函数 `plan_switches()` 算的，点击与回读在 `off()` 里，两者都在 `tool/phone/toggler.py`（[ADR-0008](adr/0008-switch-plan.md)）。
 - 营销通知那一步里，「到页 + 认行」归 `ChannelPage`，判定归 `channel_policy.classify()`（[ADR-0007](adr/0007-channel-page.md)、[ADR-0006](adr/0006-channel-classification.md)）。
 
 ## 五、状态

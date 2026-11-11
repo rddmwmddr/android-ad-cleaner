@@ -59,6 +59,14 @@ def icon_hit(node):
     return rid.startswith("setting") or "_setting" in rid
 
 
+def residual_note(label, sep="——"):
+    """查找失败时挂在说明后面的那句「屏上还挂着没点掉的确认框「X」」；没有确认框时是空串。
+
+    `label` 是调用方读到的确认按钮文字（`Screen.residual_confirm()`）。这个函数不读屏、不点击——
+    拨动与导航都调用它，导航因此不必认识拨动那一侧（#557、ADR-0033）。"""
+    return f"{sep}屏上还挂着没点掉的确认框「{label}」" if label else ""
+
+
 def ident(node):
     """同一个控件在 dump 里的身份：resource-id、文字（text / content-desc）、类名与坐标。
     华为 HarmonyOS 4 会把同一个控件吐出两次，这四项全同才算同一个（#510）；

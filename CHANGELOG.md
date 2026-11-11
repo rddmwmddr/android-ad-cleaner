@@ -8,6 +8,7 @@
 
 - `Phone` 的连接与观测抽成 `tool/phone/` 的两个基座，门面只剩转发（#1038，ADR-0033）
 - `Phone` 的丢失记录、启动会话与渠道会话收成三个对象，门面显式转发（#1039，ADR-0033）
+- `Phone` 的整页拨动与确认框搬进 `tool/phone/toggler.py`，残留提示降为纯函数（#1040，ADR-0033）
 - 新增 `android/smoke.py`：CI 出 debug 包、装开发机并判启动，`--screens` 逐屏判存活（#1071）
 
 ### 修复

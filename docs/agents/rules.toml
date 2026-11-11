@@ -253,7 +253,7 @@ expires_if = "官网改由构建产物生成、可以引外链时删。"
 [[rule]]
 id = "dev.switches.plan-and-readback"
 source = "CLAUDE.md#开发"
-check = "code:tool/fast.py:plan_switches"
+check = "code:tool/phone/toggler.py:plan_switches"
 status = "code"
 why = "目标选择、屏带过滤与 checked / kept / disabled 分散会让灰开关被当成没拨动（ADR-0008、ADR-0021）；off() 只做点击 → 回读 → 重试 → 报告，两个纯函数给出补点落点与回读结论。"
 expires_if = "拨动计划与回读合并成一个对象、调用方不再各自拼判定时删。"
@@ -1109,7 +1109,7 @@ id = "domain.confirm.residual-note-only"
 source = "CONTEXT.md#执行"
 check = "code:tool/fast.py:Phone"
 status = "code"
-why = "残留确认框把整页盖成遮罩，查找失败只剩「没找到」、渠道页只剩「开关 0 个」，读者会当成这一版没适配（#557）；顺手点掉它等于替脚本做了「要不要停」的决定，而这个决定属于脚本里的 require。residual_confirm() 只读、弹窗留着不动，_confirm_target() 返回坐标而不是动作；tests/test_residual_confirm_557.py 守的是那句说明挂得上去，不守「没点」。"
+why = "残留确认框把整页盖成遮罩，查找失败只剩「没找到」、渠道页只剩「开关 0 个」，读者会当成这一版没适配（#557）；顺手点掉它等于替脚本做了「要不要停」的决定，而这个决定属于脚本里的 require。residual_confirm() 只读、弹窗留着不动，Screen.confirm_target() 返回坐标而不是动作；tests/test_residual_confirm_557.py 守的是那句说明挂得上去，不守「没点」。"
 expires_if = "失败说明改由结构化诊断字段给出、脚本自己就能判断要不要点掉残留弹窗时删。"
 
 [[rule]]

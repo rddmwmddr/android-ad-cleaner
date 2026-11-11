@@ -107,12 +107,12 @@ class Clock:
 def install_clock(module, clock):
     """把这个时钟装进 fast / chan_fast：两个模块各自 import 了 time，要分别换。
 
-    给的是 `fast` 时连两个基座一起换：等待与锁屏都读各自模块的 `time`（ADR-0033），
+    给的是 `fast` 时连两个基座与拨动会话一起换：等待与锁屏都读各自模块的 `time`（ADR-0033），
     只换门面那一份的话，`Screen.settle` 会按真实时间空转、假时间轴再也不推进。
     """
     module.time = clock
     if getattr(module, "__name__", "") == "fast":
-        for name in ("phone.connection", "phone.screen"):
+        for name in ("phone.connection", "phone.screen", "phone.toggler"):
             sub = sys.modules.get(name)
             if sub is not None:
                 sub.time = clock
@@ -189,10 +189,11 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
     门面只转发。它们只能用 `__new__` 造——`Connection.__init__` 要真连手机，`Screen.__init__`
     要真读屏，假手机两样都不能做。
     桩打在它所属的基座上，门面只是转发、内部调用绕过门面：观测与动作（`tree` / `focus` / `texts` /
-    `sig` / `settle` / `switch_rows` / `on_screen`）打 `p.screen`，连接与生命周期（`say` / `locked` /
-    `wait_unlocked`）打 `p.conn`。要同时拦住门面上的调用点（机型脚本直接写 `p.say(...)`）就两处一起桩。
-    三个会话对象（`lost_note` / `launch_session` / `channel_session`）也在这里造；它们的默认值归
-    各自的类，这里不抄第二份。门面自己声明的 `changed` / `safe_mode` 才在这里补默认值。
+    `sig` / `settle` / `switch_rows` / `on_screen` / `click` / `back` / `scroll` / `scroll_more`）打
+    `p.screen`，连接与生命周期（`say` / `locked` / `wait_unlocked`）打 `p.conn`。要同时拦住门面上的
+    调用点（机型脚本直接写 `p.say(...)`）就两处一起桩。
+    三个会话对象（`lost_note` / `launch_session` / `channel_session`）与拨动会话（`toggler`）也在这里造；
+    它们的默认值归各自的类，这里不抄第二份。`changed` / `safe_mode` 归拨动会话，经门面的属性转发生效。
     另有一处与构造处不同：`pause_at_lock_check` 默认 False，因为假手机后面没有客户端在点「暂停」。
     屏尺寸 `W` / `H` 与读屏 adapter `d` 不设默认：它们是每条用例的前提，由调用方传。
     """
@@ -207,6 +208,10 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
     if hasattr(fast_mod, "LostNote"):          # 同上：会话对象的默认值由它自己的类给，这里不抄第二份
         p.lost_note, p.launch_session, p.channel_session = (
             fast_mod.LostNote(), fast_mod.LaunchSession(), fast_mod.ChannelSession())
+    if hasattr(fast_mod, "Toggler"):           # 拨动会话绑在假手机上：`off()` 内部走它，门面只转发
+        p.toggler = fast_mod.Toggler.__new__(fast_mod.Toggler)
+        p.toggler.screen = p.screen
+        p.toggler.lost = p.lost_note
     p.link = fast_mod.adb_link.Connection(serial, transport=shell or _silent_shell)
     p.log, p.pause_at_lock_check, p.systemui_text = False, False, False
     p.changed, p.safe_mode = [], False
@@ -323,7 +328,8 @@ def _only_list(only):
 
 _BASE_OWNED_ = {
     "conn": ("locked", "wait_unlocked", "say", "check_alive", "close"),
-    "screen": ("focus", "tree", "texts", "sig", "settle", "switch_rows", "on_screen"),
+    "screen": ("focus", "tree", "texts", "sig", "settle", "switch_rows", "on_screen",
+               "click", "back", "scroll", "scroll_more"),
 }
 
 
@@ -347,16 +353,21 @@ def fake_phone(clock=None, size=SIZES[0], stages=((0.0, EMPTY_PAGE),),
     p = phone_stub("fake", shell=device.shell, fast_mod=fast_mod)
     p.W, p.H = size
     p.d = device
-    p.click = lambda *a, **k: clock.click()
-    p.back = lambda *a, **k: clock.click()
+
+    def on_screen_base(name, value):
+        """动作桩落在观测基座：门面的 `click` / `scroll` 只是转发，拆分前后内部调用都落到这里。"""
+        setattr(_base(p, "screen"), name, value)
+
+    on_screen_base("click", lambda *a, **k: clock.click())
+    on_screen_base("back", lambda *a, **k: clock.click())
 
     def silent(*a, **k):
         return None
 
     p.dismiss = lambda *a, **k: None
     p.type_text = lambda text, *a, **k: (clock.click(), True)[1]
-    p.scroll = lambda *a, **k: None
-    p.scroll_more = lambda *a, **k: False
+    on_screen_base("scroll", lambda *a, **k: None)
+    on_screen_base("scroll_more", lambda *a, **k: False)
     stubs = {"focus": lambda: timeline.focus_at(clock.t), "say": silent,
              "locked": lambda *a, **k: False, "wait_unlocked": lambda *a, **k: True}
     stubs.update(fields)                       # 调用方给的桩压过默认值

@@ -1,16 +1,24 @@
-"""观测基座：读屏、认行、页面诊断、视口几何，以及四个动作原语（ADR-0033）。
+"""观测基座：读屏、认行、页面诊断、视口几何，以及动作原语（ADR-0033）。
 
 构造时注入 `Connection`：读屏 adapter 与断线判定都只经它，不认识 `Phone`。
-四个动作原语是 `click` / `back` / `settle` / `find`：后续五个阶段的模块一律经它们动作，
-不直接碰传输。
+四个动作原语是 `click` / `back` / `settle` / `find`，翻页的 `scroll` / `scroll_more` 同在
+这一层（拨动与导航都要翻页，不该由其中一方提供）。后续阶段一律经它们动作，不直接碰传输。
+确认框的认法（`confirm_target`）也在这一层：拨动用它点掉遮罩，导航用它说清失败原因（#557），
+两条路共用同一份匹配，谁也不依赖谁。
 """
 import re
 import time
 import xml.etree.ElementTree as ET
 
+import adb_link
 import wait
 from row import bounds, control, dedupe, summary, switch_row, title_hit, unique
+from row import residual_note as confirm_note
 from troubleshooting import TAPPED, XIAOMI_INPUT, input_blocked
+
+# 确认框的按钮文字。认法在 `confirm_target()`：点开关后要再点一次才生效的对话框，按钮落在这些词里。
+CONFIRM = ("确定", "確定", "关闭", "關閉", "仍要关闭", "仍要關閉", "确认关闭", "確認關閉",
+           "确认", "確認", "继续关闭", "繼續關閉", "关闭推荐", "關閉推薦", "仍然关闭", "仍然關閉")
 
 
 class Screen:
@@ -24,6 +32,10 @@ class Screen:
         self.systemui_text = False          # 读屏时是否算上 com.android.systemui 的文字（vivo OriginOS Ocean 的通知页就挂在那里）
         with conn.guarded():                # 读屏坏了：三种结局的翻译与收尾都在 Connection 那一份
             self.W, self.H = conn.reader.window_size()
+
+    def say(self, *a):
+        """一行诊断：五个阶段都经它说，日志开关仍归 `Connection`。"""
+        self.conn.say(*a)
 
     # ---------- 采样：读屏、页面状态与签名 ----------
     def tree(self):
@@ -176,6 +188,62 @@ class Screen:
         names = list(titles)
         return f"停在 {where}；{detail}；当次读到 {len(names)} 个开关：{'、'.join(names) or '无'}"
 
+    def confirm_target(self, root=None):
+        """屏上第一个确认类按钮的 (文字, 落点)；没有返回 None。只看不点，等弹窗与防遮罩共用它。
+
+        严格档只认 Button 类，ColorOS 开关旁边的「开启/关闭」状态文字不算——点了会把开关又拨回去。
+        按钮文字不一定在 text 上：vivo 阅图锁屏的 Button text 为空、文字在 content-desc（#246 / PR #249）；
+        vivo / iQOO 另一种弹窗把文字放在 Button 下级的 TextView（vbutton_title，PR #239）。
+        都要整段等于确认词，避免点到说明文字。
+        屏幕外的节点跳过：页面里常留着上一层对话框的按钮，点它会抛「点击坐标在屏幕外」把整段打断（PR #248）。
+        严格档全没命中再退一档：HyperOS 4 的部分弹窗把确认键画成可点击的 TextView（小米 17 热榜页，PR #408 / #500）。
+        兜底档靠 TextView 类过滤挡掉 ColorOS 的 View 状态文字，尺寸只用来排除整行。"""
+        root = root if root is not None else self.tree()
+
+        def button_hit(n, c):
+            if "Button" not in (n.get("class") or ""):
+                return False
+            label = (n.get("text") or "").strip() or (n.get("content-desc") or "").strip()
+            inner = {(x.get("text") or "").strip() for x in n.iter("node") if x is not n}
+            return label == c or (not label and c in inner)
+
+        def text_view_hit(n, c):
+            if "TextView" not in (n.get("class") or ""):
+                return False
+            if (n.get("text") or "").strip() != c or n.get("clickable") != "true":
+                return False
+            l, t, r, b = bounds(n)
+            return r - l < self.W * 0.5 and b - t < self.H * 0.12
+
+        for hit in (button_hit, text_view_hit):
+            for c in CONFIRM:
+                for n in root.iter("node"):
+                    if not hit(n, c):
+                        continue
+                    l, t, r, b = bounds(n)
+                    if r > l and b > t and self.on_screen(n):
+                        return c, ((l + r) // 2, (t + b) // 2)
+        return None
+
+    def residual_confirm(self, root=None):
+        """屏上还挂着没被点掉的确认框时返回确认按钮的文字，没有返回 None。
+
+        查找失败时用它补一句原因：整页读不到行常常是遮罩挡着，而不是这一版没适配（#557）。
+        只读不点，弹窗留着不动。读页读不到也按「没有确认框」算：这是失败路径上的诊断，
+        它抛错会把脚本里大量 `if p.tap(...)` 的可选探测一起打断；只有断线照常冒泡。"""
+        try:
+            found = self.confirm_target(root)
+        except adb_link.DeviceLost:
+            raise
+        except Exception:
+            return None
+        return found[0] if found else None
+
+    def residual_note(self, sep="——", root=None):
+        """查找失败时挂在说明后面的那句「屏上还挂着没点掉的确认框「X」」；没有确认框时是空串。
+        句子本身是 `row.residual_note()` 的纯函数，这里只负责读一次屏（导航与拨动共用这一份）。"""
+        return confirm_note(self.residual_confirm(root), sep)
+
     def icon_candidates(self, area=(0.72, 0.0, 1.0, 0.16)):
         """没有文字、点了才知道去哪的图标（右上角齿轮、更多）：按位置从右往左给候选坐标。
         整块卡片/列表项点了会进别的页面，按尺寸排除掉。"""
@@ -218,6 +286,31 @@ class Screen:
         """等新的非空页面稳定；跳页动画中的空树不算已经加载好。"""
         return bool(wait.until(self.sig, maxwait, poll=0.1, stable=0.2,
                                changed_from=before, now=time.time, sleep=time.sleep))
+
+    def scroll(self, frac=0.45, up=False):
+        """按下-移动-停 0.12 秒-松开：没有惯性，翻多少是多少，约 0.45 秒。"""
+        x = self.W * 7 // 10 if self.W > 2000 else self.W // 2
+        frac = min(frac, 0.58)                   # 留在 0.22H~0.80H 之间拖，避开标题栏和底栏
+        y1, y2 = int(self.H * 0.80), int(self.H * (0.80 - frac))
+        if up:
+            y1, y2 = y2, y1
+        c = [f"input motionevent DOWN {x} {y1}"]
+        c += [f"input motionevent MOVE {x} {int(y1 + (y2 - y1) * i / 6)}" for i in range(1, 7)]
+        c += ["sleep 0.12", f"input motionevent UP {x} {y2}"]
+        self.conn.reader.shell(";".join(c))
+        time.sleep(0.15)
+
+    def scroll_more(self):
+        """翻一页；翻完没出现新文字（到底、回弹）返回 False。拨动与导航都经它翻页。"""
+        if not any(n.get("scrollable") == "true" and self.on_screen(n) for n in self.tree().iter("node")):
+            return False                       # 单屏面板上滑动可能直接关掉页面
+        focus = self.focus()
+        before = {t for t, _, _ in self.texts()}
+        self.scroll()
+        if self.focus() != focus:
+            raise RuntimeError("翻页离开了当前设置页，停止本段以免操作其他 App")
+        after = {t for t, _, _ in self.texts()}
+        return not after <= before
 
     def find(self, text, exact=False, root=None, edge_ok=False, nav=False):
         """先找文字完全相同的，再找包含的。nav=True（tap 导航用）：包含匹配不点开关所在行里的文字——

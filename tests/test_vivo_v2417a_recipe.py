@@ -74,7 +74,12 @@ class VivoV2417ARecipeTests(unittest.TestCase):
             states[name] = not states[name]
 
         p.click.side_effect = toggle
-        p.off.side_effect = lambda **kwargs: fast.Phone.off(p, **kwargs)
+        # 拨动已搬进 Toggler（#1040）：把真引擎架在这台 Mock 上跑，门面只剩转发、调不到实现。
+        toggler = fast.Toggler.__new__(fast.Toggler)
+        toggler.screen = toggler.lost = p
+        toggler.safe_mode, toggler.changed = False, p.changed
+        toggler.confirm = p.confirm          # 页面没有真弹窗：确认框仍由这条桩回答 None
+        p.off.side_effect = lambda **kwargs: fast.Toggler.off(toggler, **kwargs)
         scope = self.load(p)
         scope["close_named"](["个性化广告"], "系统广告")
         self.assertEqual(states, {"个性化广告": False, "个性化广告推荐": True})
