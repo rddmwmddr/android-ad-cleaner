@@ -33,14 +33,14 @@ def phone(pages, focus=APP_FOCUS):
     p = phone_stub("test", d=Mock())
     p.W, p.H = 1080, 2340
     p.locked = Mock(return_value=False)
-    p.focus = Mock(return_value=focus)
+    p.screen.focus = Mock(return_value=focus)
     p.confirm = Mock()
     p.click = Mock(side_effect=click)
     seen = iter(range(10 ** 6))
-    p.sig = Mock(side_effect=lambda: str(next(seen)))
-    p.settle = Mock(return_value=True)
+    p.screen.sig = Mock(side_effect=lambda: str(next(seen)))
+    p.screen.settle = Mock(return_value=True)
     p.scroll, p.scroll_more = Mock(), Mock(return_value=False)
-    p.tree = tree
+    p.screen.tree = tree
     p.reader = Mock()
     p.reader.shell.return_value = Mock(output="")
     return p

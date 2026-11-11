@@ -53,8 +53,8 @@ SETTINGS = "com.vivo.browser/com.vivo.browser.setting.SettingActivity"
 
 def dismiss_phone(page, focus="com.vivo.browser/com.vivo.browser.BrowserActivity"):
     p = phone_stub("test", d=Mock(), W=1080, H=2400)
-    p.tree = Mock(return_value=ET.fromstring(page))
-    p.focus = Mock(return_value=focus)
+    p.screen.tree = Mock(return_value=ET.fromstring(page))
+    p.screen.focus = Mock(return_value=focus)
     p.app = "com.vivo.browser"
     p.click = Mock()
     return p
@@ -89,15 +89,15 @@ def menu_phone(**fields):
     p.start.return_value = None
     p.back.return_value = None
     p.click.return_value = None
-    p.sig.return_value = "sig"
+    p.screen.sig.return_value = "sig"
     p.await_page.return_value = True
-    p.settle.return_value = True
+    p.screen.settle.return_value = True
     p.in_settings_page.return_value = True
     p.find.return_value = (540, 750)
     p.entry.return_value = False
     p.off.return_value = None
     p.top.return_value = None
-    p.focus.return_value = SETTINGS
+    p.screen.focus.return_value = SETTINGS
     p.d.return_value.click_exists.return_value = True
     return p
 
@@ -199,7 +199,7 @@ class VivoBrowserRealPageTests(unittest.TestCase):
                                click=lambda x, y: clicks.append((x, y)))  # noqa: B023 - 每轮新建 clicks，点击同步发生
                 p.start = lambda *a, **k: None
                 p.await_page = lambda *a, **k: True
-                p.settle = lambda *a, **k: True
+                p.screen.settle = lambda *a, **k: True
                 p.in_settings_page = lambda: True
                 p.back = lambda *a, **k: None
                 p.top = lambda *a, **k: None

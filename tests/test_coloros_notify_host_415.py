@@ -42,9 +42,9 @@ def phone(xml, focus):
     p = phone_stub("test", d=Mock())
     p.W, p.H = 1080, 2340
     p.locked = Mock(return_value=False)
-    p.focus = Mock(return_value=focus)
+    p.screen.focus = Mock(return_value=focus)
     p.confirm, p.click = Mock(), Mock()
-    p.tree = Mock(return_value=ET.fromstring(xml))
+    p.screen.tree = Mock(return_value=ET.fromstring(xml))
     return p
 
 

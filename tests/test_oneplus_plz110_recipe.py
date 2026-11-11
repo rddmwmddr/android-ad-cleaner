@@ -98,7 +98,7 @@ class Plz110RecipeTests(unittest.TestCase):
         focus = 'com.heytap.market/com.heytap.market.mine.cn.setting.ui.SettingActivity'
         phone = fake_phone(clock=clock, stages=((0.0, page),), focus=((0.0, focus),))
         lines = []
-        phone.say = lambda *a, **k: lines.append(' '.join(str(x) for x in a))
+        phone.say = phone.conn.say = lambda *a, **k: lines.append(' '.join(str(x) for x in a))
         scope, _ = load_recipe(phone, RECIPE, ['__no_steps__'])
         with self.assertRaisesRegex(RuntimeError, '没找到入口「隐私」，未继续本段'):
             scope['row'](('隐私', '隐私授权管理'), package='com.heytap.market',

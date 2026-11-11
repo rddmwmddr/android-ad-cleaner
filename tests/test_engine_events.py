@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 import adb_link
 import events
 import fast
+from phone import connection as phone_connection
 import run
 import wait
 from fixtures import phone_stub
@@ -96,7 +97,7 @@ class PausePointTests(unittest.TestCase):
 class LockedTests(unittest.TestCase):
     def phone_wait(self, on):
         p = phone_stub("test", d=Mock())
-        p.locked = Mock(side_effect=[True, False])
+        p.conn.locked = Mock(side_effect=[True, False])
         with patch.object(fast.time, "sleep"):
             return capture(lambda: p.wait_unlocked(), on=on)
 
@@ -123,7 +124,7 @@ class LockedTests(unittest.TestCase):
     def test_both_call_sites_go_through_the_shared_wait(self):
         # 文案与节奏只有一份（#709）：两处都调 wait.wait_unlocked，只交出锁屏判据与亮屏命令
         p = phone_stub("test", d=Mock())
-        p.locked = Mock(return_value=False)
+        p.conn.locked = Mock(return_value=False)
         with patch.object(wait, "wait_unlocked", return_value=True) as shared, \
              patch.object(run, "sh") as sh, patch.object(run, "locked", return_value=False) as run_locked:
             self.assertTrue(run.wait_unlocked("test"))
@@ -134,7 +135,7 @@ class LockedTests(unittest.TestCase):
             phone_wake()
         run_locked.assert_called_once_with("test")
         sh.assert_called_once_with("test", adb_link.WAKEUP)
-        self.assertIs(phone_locked, p.locked)
+        self.assertIs(phone_locked, p.conn.locked)
         p.d.shell.assert_called_once_with(adb_link.WAKEUP)
 
 
@@ -147,8 +148,8 @@ class UiBusyTests(unittest.TestCase):
             with self.assertRaises(RuntimeError) as caught:
                 fast.Phone("test", False)
             raised["message"] = str(caught.exception)
-        with patch.object(fast, "connect", side_effect=AccessibilityServiceAlreadyRegisteredError("first cause")), \
-             patch.object(fast, "accessibility_summary", return_value="只读检查"):
+        with patch.object(phone_connection, "connect", side_effect=AccessibilityServiceAlreadyRegisteredError("first cause")), \
+             patch.object(phone_connection, "accessibility_summary", return_value="只读检查"):
             human, sent, _ = capture(call, on=on)
         return human, sent, raised["message"]
 

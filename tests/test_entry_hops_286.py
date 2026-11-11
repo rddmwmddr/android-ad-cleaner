@@ -20,7 +20,7 @@ def phone(taps=1):
     """真 `Phone`，只把读屏、点击、等页面换成可编排的替身。`taps` 次点击后 tap 返回 False。"""
     p = phone_stub("test", W=1080, H=2400)
     p.say = Mock()
-    p.sig = Mock(return_value="点击前的页面")
+    p.screen.sig = Mock(return_value="点击前的页面")
     p.page_text = Mock(return_value="主题 / 壁纸 / 字体")
     p.find = Mock(return_value=(540, 2300))
     rounds = {"left": taps}
@@ -47,20 +47,20 @@ class EnterRetriesSwallowedTapTests(unittest.TestCase):
     def test_swallowed_first_tap_is_tapped_again(self):
         """第一次点完页面没换：enter 要再点一次，第二次换页后返回。"""
         p = phone(taps=2)
-        p.settle = Mock(side_effect=[False, True])
+        p.screen.settle = Mock(side_effect=[False, True])
         p.enter("我的")
         self.assertEqual([c.args[0] for c in p.tap.call_args_list], ["我的", "我的"])
 
     def test_a_tap_that_lands_is_not_repeated(self):
         p = phone()
-        p.settle = Mock(return_value=True)
+        p.screen.settle = Mock(return_value=True)
         p.enter("我的")
         p.tap.assert_called_once()
         self.assertEqual(p.tap.call_args.kwargs["scrolls"], 0)
 
     def test_page_that_never_changes_reports_the_page_it_stayed_on(self):
         p = phone(taps=3)
-        p.settle = Mock(return_value=False)
+        p.screen.settle = Mock(return_value=False)
         with self.assertRaisesRegex(RuntimeError, "页面没有变化.*主题 / 壁纸 / 字体"):
             p.enter("我的")
         self.assertEqual(p.tap.call_count, 3)
@@ -74,24 +74,24 @@ class EnterRetriesSwallowedTapTests(unittest.TestCase):
     def test_change_is_measured_from_the_click_not_from_before_the_scroll(self):
         """入口要翻页才找得到：翻页也会改页面，基准要取点击那一刻，否则点被吞也判成功。"""
         p = phone()
-        p.sig = Mock(return_value="翻页前")
+        p.screen.sig = Mock(return_value="翻页前")
         rounds = {"left": 1}
 
         def tap(text, **kw):
-            p.sig.return_value = "翻到入口那一屏"
+            p.screen.sig.return_value = "翻到入口那一屏"
             kw["seen"].append(p.sig())
             rounds["left"] -= 1
             return True
 
         p.tap = Mock(side_effect=tap)
-        p.settle = Mock(return_value=True)
+        p.screen.settle = Mock(return_value=True)
         p.enter("个性化管理", scrolls=6)
-        p.settle.assert_called_once_with("翻到入口那一屏", 2.0)
+        p.screen.settle.assert_called_once_with("翻到入口那一屏", 2.0)
 
     def test_suffixed_bottom_tab_is_tapped_by_contains_match(self):
         """底栏常读作「我的，有新消息」：精确找不到时退回包含匹配，换页仍由页面变化判定。"""
         p = phone()
-        p.settle = Mock(return_value=True)
+        p.screen.settle = Mock(return_value=True)
         p.find = Mock(side_effect=lambda text, **kw: (540, 2300) if not kw.get("exact") else None)
         p.enter("我的")
         self.assertIs(p.tap.call_args.kwargs["exact"], False)
@@ -168,12 +168,12 @@ class VideoStepTests(unittest.TestCase):
 class PageTextTests(unittest.TestCase):
     def test_page_text_joins_the_visible_texts(self):
         p = phone_stub("test", W=1080, H=2400)
-        p.texts = Mock(return_value=[("我的", (0, 0, 1, 1), None), ("设置", (0, 2, 1, 3), None)])
+        p.screen.texts = Mock(return_value=[("我的", (0, 0, 1, 1), None), ("设置", (0, 2, 1, 3), None)])
         self.assertEqual(p.page_text(), "我的 / 设置")
 
     def test_page_text_is_empty_on_an_empty_page(self):
         p = phone_stub("test", W=1080, H=2400)
-        p.texts = Mock(return_value=[])
+        p.screen.texts = Mock(return_value=[])
         self.assertEqual(p.page_text(), "")
 
 

@@ -29,10 +29,10 @@ def page():
     p = phone_stub("test", d=Mock())
     p.W, p.H = 1080, 2340
     p.locked = Mock(return_value=False)
-    p.focus = Mock(return_value=FOCUS)
+    p.screen.focus = Mock(return_value=FOCUS)
     p.confirm = Mock()
     p.click = Mock()
-    p.tree = Mock(return_value=ET.fromstring(CHANNEL_PAGE))
+    p.screen.tree = Mock(return_value=ET.fromstring(CHANNEL_PAGE))
     return p
 
 

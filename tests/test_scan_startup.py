@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 import adb_link
 import chan_fast as chan
 import fast
+from phone import connection as phone_connection
 
 
 def dump(importance=3):
@@ -32,7 +33,7 @@ class ReadOnlyTests(unittest.TestCase):
     def invoke(self, args, output):
         fake_adb(self)
         result = SimpleNamespace(returncode=0, stdout=output, stderr="")
-        with patch.object(fast, "connect", side_effect=AssertionError("只读操作不应启动 UiAutomation")) as connect, \
+        with patch.object(phone_connection, "connect", side_effect=AssertionError("只读操作不应启动 UiAutomation")) as connect, \
              patch.object(subprocess, "run", return_value=result) as shell, \
              patch.object(chan, "app_labels", return_value={}), \
              patch.object(sys, "argv", ["chan_fast.py", "-s", "test-device", *args]), \
@@ -67,7 +68,7 @@ class ReadOnlyTests(unittest.TestCase):
             self.assertIn("拨了 0 个", self.invoke(["off", str(path)], dump(0)))
 
     def test_missing_list_fails_before_device_access(self):
-        with tempfile.TemporaryDirectory() as directory, patch.object(fast, "connect") as connect, \
+        with tempfile.TemporaryDirectory() as directory, patch.object(phone_connection, "connect") as connect, \
              patch.object(subprocess, "run") as shell, \
              patch.object(sys, "argv", ["chan_fast.py", "-s", "test", "off", str(Path(directory, "missing.tsv"))]):
             with self.assertRaises(FileNotFoundError):
@@ -80,8 +81,8 @@ class ReadOnlyTests(unittest.TestCase):
             path = Path(directory, "channels.tsv")
             path.write_text("com.example\tpromo\t活动优惠\n", encoding="utf-8")
             with patch.object(chan.ShellPhone, "shell", return_value=SimpleNamespace(output=dump())), \
-                 patch.object(fast, "accessibility_summary", return_value="只读检查不可用"), \
-                 patch.object(fast, "connect", side_effect=fast.u2.exceptions.LaunchUiAutomationError("java.lang.IllegalStateException: example")), \
+                 patch.object(phone_connection, "accessibility_summary", return_value="只读检查不可用"), \
+                 patch.object(phone_connection, "connect", side_effect=fast.u2.exceptions.LaunchUiAutomationError("java.lang.IllegalStateException: example")), \
                  patch.object(sys, "argv", ["chan_fast.py", "-s", "test", "off", str(path)]), \
                  contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaises(SystemExit) as stop:

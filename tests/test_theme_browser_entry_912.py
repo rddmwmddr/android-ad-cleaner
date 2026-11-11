@@ -113,7 +113,7 @@ class BrowserDirectTests(ClockCase):
         def start(pkg, activity=None, **kw):
             started.append((pkg, activity))
             if activity:
-                p.focus = lambda: f"{pkg}/{activity}"
+                p.screen.focus = lambda: f"{pkg}/{activity}"
         p.start = start
         scope, out = load_recipe(p, RECIPE, only="浏览器")
         self.assertIn("直达浏览器设置页", out.getvalue())
@@ -201,7 +201,7 @@ class ThemeSettingsTests(ClockCase):
         p.in_settings_page.return_value = True
         pages = [ET.fromstring(THEME_MINE_EARLY), ET.fromstring(THEME_MINE_EARLY),
                  ET.fromstring(THEME_MINE)]
-        p.tree.side_effect = lambda: pages[min(p.tree.call_count - 1, len(pages) - 1)]
+        p.screen.tree.side_effect = lambda: pages[min(p.tree.call_count - 1, len(pages) - 1)]
         scope, _ = load_recipe(p, RECIPE)
         with contextlib.redirect_stdout(io.StringIO()):
             scope["theme_settings"]()

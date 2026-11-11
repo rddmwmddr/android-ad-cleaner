@@ -74,7 +74,7 @@ class FakePhoneTests(unittest.TestCase):
 
     def test_settle_sees_the_new_page_without_waiting_out_the_budget(self):
         clock = fixtures.Clock()
-        fast.time = clock
+        fixtures.install_clock(fast, clock)
         p = fixtures.fake_phone(clock=clock, stages=[(0.0, fixtures.EMPTY_PAGE), (0.2, PAGE)])
         self.assertTrue(p.settle(p.sig(), 1.0))
         self.assertLess(clock.time(), 1.0)

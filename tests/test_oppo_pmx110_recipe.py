@@ -388,7 +388,7 @@ class MarketPrivacyEntryTests(unittest.TestCase):
         phone = fake_phone(clock=clock, stages=((0.0, self.market_page("个性化推荐")),),
                            focus=((0.0, self.SETTINGS),))
         lines = []
-        phone.say = lambda *a, **k: lines.append(" ".join(str(x) for x in a))
+        phone.say = phone.conn.say = lambda *a, **k: lines.append(" ".join(str(x) for x in a))
         scope = load(phone)
         with self.assertRaisesRegex(RuntimeError, "没找到入口「隐私」，未继续本段"):
             scope["row"](self.NAMES, package="com.heytap.market", activity="PrivacyActivity")

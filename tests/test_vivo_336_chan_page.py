@@ -27,14 +27,14 @@ def phone(pages, w=1080, h=2340):
     p = phone_stub("test", d=Mock())
     p.W, p.H = w, h
     p.locked = Mock(return_value=False)
-    p.focus = Mock(return_value=FOCUS)
+    p.screen.focus = Mock(return_value=FOCUS)
     p.confirm, p.click = Mock(), Mock()
     pages_seen = iter(range(10 ** 6))
-    p.sig = Mock(side_effect=lambda: str(next(pages_seen)))
-    p.settle = Mock(return_value=True)
+    p.screen.sig = Mock(side_effect=lambda: str(next(pages_seen)))
+    p.screen.settle = Mock(return_value=True)
     p.scroll, p.scroll_more = Mock(), Mock(return_value=False)
     queue = [ET.fromstring(x) for x in pages]
-    p.tree = Mock(side_effect=lambda: queue.pop(0) if len(queue) > 1 else queue[0])
+    p.screen.tree = Mock(side_effect=lambda: queue.pop(0) if len(queue) > 1 else queue[0])
     return p
 
 
@@ -205,7 +205,7 @@ class AppPageTests(unittest.TestCase):
     def test_scroll_that_moves_nothing_stops_instead_of_swiping_nine_times(self):
         # 滑了页面没动（到底了）：不再连滑，也不把「没找到这一行」说成别的
         p = phone([app_page_with_row(y=2500, scrollable=False)])
-        p.sig = Mock(return_value="same")
+        p.screen.sig = Mock(return_value="same")
         at = chan.Attempt()
         with patch.object(chan.time, "sleep"):
             self.assertIsNone(chan.via_app_page(p, "com.kuaishou.nebula", NAME, at))
@@ -217,7 +217,7 @@ class AppPageTests(unittest.TestCase):
         # 自己翻页这条路要照 scroll_more 的规矩查焦点：页面被滑走了就停，不当成「没找到这一行」
         p = phone([app_page_with_row(y=2500, scrollable=False)])
         page_now = {"focus": FOCUS}
-        p.focus = Mock(side_effect=lambda: page_now["focus"])
+        p.screen.focus = Mock(side_effect=lambda: page_now["focus"])
         p.scroll = Mock(side_effect=lambda: page_now.update(focus="com.android.settings/.SubSettings"))
         at = chan.Attempt()
         with patch.object(chan.time, "sleep"):

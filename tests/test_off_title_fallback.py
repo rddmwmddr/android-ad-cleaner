@@ -127,7 +127,7 @@ class TitleFallbackTests(unittest.TestCase):
             self.backs.append("back")
             self.clock.click()
         p = fake_phone(clock=self.clock, size=SIZE, click=click, d=device, back=back, say=Mock())
-        p.focus = lambda: device.focus        # focus 这条时间轴由设备自己管：标题可能点进详情页
+        p.screen.focus = lambda: device.focus        # focus 这条时间轴由设备自己管：标题可能点进详情页
         return p
 
     def test_a_body_that_does_nothing_falls_back_to_the_row_title(self):
@@ -186,7 +186,7 @@ class TitleFallbackTests(unittest.TestCase):
         done = p.off(page="页", only=["猜你喜欢"])
         self.assertEqual((done, p.changed), (0, []))
         self.assertEqual(len(self.backs), 1)
-        self.assertTrue(any("  ✗ 关不掉 猜你喜欢" in c.args[0] for c in p.say.call_args_list))
+        self.assertTrue(any("  ✗ 关不掉 猜你喜欢" in c.args[0] for c in p.conn.say.call_args_list))
 
 
 class PickTitleRowsTests(unittest.TestCase):

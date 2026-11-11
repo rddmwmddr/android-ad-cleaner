@@ -96,9 +96,9 @@ class RecipeSafetyTests(unittest.TestCase):
     def test_wait_page_rejects_out_of_screen_coordinates(self):
         function = load()["wait_page"]
         phone = make_phone()
-        phone.focus = lambda: "example.app/ExampleActivity"
-        phone.tree = lambda: None
-        phone.texts = lambda root: [("设置", (0, 0, 100, 100), {"class": "TextView"})]
+        phone.screen.focus = lambda: "example.app/ExampleActivity"
+        phone.screen.tree = lambda: None
+        phone.screen.texts = lambda root: [("设置", (0, 0, 100, 100), {"class": "TextView"})]
         phone.switches = lambda root: [("广告", True, (2294, 600))]
         function.__globals__["p"] = phone
         with contextlib.redirect_stdout(io.StringIO()):
@@ -107,9 +107,9 @@ class RecipeSafetyTests(unittest.TestCase):
     def test_wait_page_rejects_consent_button(self):
         function = load()["wait_page"]
         phone = make_phone()
-        phone.focus = lambda: "example.app/ExampleActivity"
-        phone.tree = lambda: None
-        phone.texts = lambda root: [("同意并继续", (0, 0, 100, 100), {"class": "android.widget.Button"})]
+        phone.screen.focus = lambda: "example.app/ExampleActivity"
+        phone.screen.tree = lambda: None
+        phone.screen.texts = lambda root: [("同意并继续", (0, 0, 100, 100), {"class": "android.widget.Button"})]
         function.__globals__["p"] = phone
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertFalse(function("ExampleActivity", "设置", timeout=0.01))
@@ -117,9 +117,9 @@ class RecipeSafetyTests(unittest.TestCase):
     def test_wait_page_requires_matching_activity(self):
         function = load()["wait_page"]
         phone = make_phone()
-        phone.focus = lambda: "example.app/OtherActivity"
-        phone.tree = lambda: None
-        phone.texts = lambda root: [("设置", (0, 0, 100, 100), {"class": "TextView"})]
+        phone.screen.focus = lambda: "example.app/OtherActivity"
+        phone.screen.tree = lambda: None
+        phone.screen.texts = lambda root: [("设置", (0, 0, 100, 100), {"class": "TextView"})]
         phone.switches = lambda root: []
         function.__globals__["p"] = phone
         with contextlib.redirect_stdout(io.StringIO()):

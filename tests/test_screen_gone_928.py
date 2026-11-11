@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "android" / "app" / "src" / "main" / "python"))
 import adb_link
 import chan_fast as chan
 import fast
+from phone import connection as phone_connection
 from aac_android import screen
 
 NPE_READ = "显示 7 不存在（这块屏已经没了）"
@@ -92,7 +93,7 @@ class EntryTests(unittest.TestCase):
     def test_fast_exits_with_one_sentence(self):
         out = io.StringIO()
         gone = fast.u2.exceptions.UiAutomationError(NPE_READ)
-        with patch.object(fast, "connect", side_effect=gone), \
+        with patch.object(phone_connection, "connect", side_effect=gone), \
                 patch.object(sys, "argv", ["fast.py", "-s", "test", "run", "recipe.py"]), \
                 contextlib.redirect_stdout(out):
             with self.assertRaises(SystemExit) as caught:

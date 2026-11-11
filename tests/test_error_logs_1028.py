@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 import adb_link
 import chan_fast as chan
 import fast
+from phone import connection as phone_connection
 from fixtures import FakeProc, FakeRunner, job_stub, phone_stub
 import run
 
@@ -73,7 +74,7 @@ class KeyguardTests(unittest.TestCase):
 class WaitUnlockedTests(unittest.TestCase):
     def phone(self, states):
         p = phone_stub("test", d=Mock())
-        p.locked = Mock(side_effect=states)
+        p.conn.locked = Mock(side_effect=states)      # 锁屏判定归连接基座（ADR-0033）
         return p
 
     def test_waits_for_owner_to_unlock(self):
@@ -199,10 +200,10 @@ class DisconnectTests(unittest.TestCase):
 
     def test_failed_service_push_maps_to_disconnect_or_clear_message(self):
         push = fast.adbutils.AdbError("FAIL")
-        with patch.object(fast, "connect", side_effect=push), patch.object(adb_link, "present", return_value=False):
+        with patch.object(phone_connection, "connect", side_effect=push), patch.object(adb_link, "present", return_value=False):
             with self.assertRaises(adb_link.DeviceLost):
                 fast.Phone("test", log=False)
-        with patch.object(fast, "connect", side_effect=push), patch.object(adb_link, "present", return_value=True):
+        with patch.object(phone_connection, "connect", side_effect=push), patch.object(adb_link, "present", return_value=True):
             with self.assertRaisesRegex(RuntimeError, "读屏服务没能装到手机上"):
                 fast.Phone("test", log=False)
 
@@ -227,12 +228,12 @@ class ListRowTests(unittest.TestCase):
         p = phone_stub("test", d=Mock())
         p.W, p.H = 1080, 2340
         p.locked = Mock(return_value=False)
-        p.focus = Mock(return_value=self.focus)
+        p.screen.focus = Mock(return_value=self.focus)
         p.click = Mock()
-        p.settle = Mock(return_value=False)
-        p.sig = Mock(return_value="")
+        p.screen.settle = Mock(return_value=False)
+        p.screen.sig = Mock(return_value="")
         p.scroll_more = Mock(return_value=False)
-        p.tree = Mock(return_value=ET.fromstring(LISTVIEW_APP_PAGE))
+        p.screen.tree = Mock(return_value=ET.fromstring(LISTVIEW_APP_PAGE))
         return p
 
     def test_listview_rows_without_clickable_flag_are_found(self):

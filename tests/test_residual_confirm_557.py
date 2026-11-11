@@ -89,7 +89,7 @@ class ResidualConfirmTests(unittest.TestCase):
     def test_lost_link_still_raises(self):
         """断线不是「没有确认框」：诊断只吞读页失败，不吞断线（#293 的形态）。"""
         p = self.phone(page(dialog=True))
-        p.tree = Mock(side_effect=adb_link.DeviceLost("设备已断开"))
+        p.screen.tree = Mock(side_effect=adb_link.DeviceLost("设备已断开"))
         with self.assertRaises(adb_link.DeviceLost):
             p.residual_confirm()
 

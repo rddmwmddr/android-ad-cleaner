@@ -27,10 +27,10 @@ def page(xml, focus, w=1080, h=2340):
     p = phone_stub("test", d=Mock())
     p.W, p.H = w, h
     p.locked = Mock(return_value=False)
-    p.focus = Mock(return_value=focus)
+    p.screen.focus = Mock(return_value=focus)
     p.confirm = Mock()
     p.click = Mock()
-    p.tree = Mock(return_value=ET.fromstring(xml))
+    p.screen.tree = Mock(return_value=ET.fromstring(xml))
     return p
 
 
@@ -161,7 +161,7 @@ class SideEffectTests(unittest.TestCase):
 
     def test_unconfirmed_page_reports_where_it_stopped(self, _sleep):
         p = self.phone()
-        p.focus.return_value = "com.vendor.notify/.UnknownPage"
+        p.screen.focus.return_value = "com.vendor.notify/.UnknownPage"
         with patch.object(chan, "parse", return_value=snap()), \
              patch.object(chan.ChannelPage, "_enter_app_page", return_value=None):
             self.assertIn("停在 com.vendor.notify/.UnknownPage",
@@ -247,8 +247,8 @@ class DismissTests(unittest.TestCase):
     def phone(self, xml):
         p = phone_stub("test", d=Mock())
         p.W, p.H = 1272, 2772
-        p.tree = Mock(return_value=ET.fromstring(xml))
-        p.focus = Mock(return_value="com.oplus.securitypermission/.privacy.PrivacySecuritySettingsDashboardActivity")
+        p.screen.tree = Mock(return_value=ET.fromstring(xml))
+        p.screen.focus = Mock(return_value="com.oplus.securitypermission/.privacy.PrivacySecuritySettingsDashboardActivity")
         p.click = Mock()
         return p
 
@@ -289,7 +289,7 @@ class DismissTests(unittest.TestCase):
             <node text="精彩内容持续上新，更多有趣玩法等你体验，快来更新吧！" bounds="[100,500][980,700]"/></node>
           <node text="下载并更新" class="android.widget.Button" clickable="true" bounds="[120,1300][960,1450]"/>
           <node text="取消" clickable="true" bounds="[400,1550][680,1650]"/></node></hierarchy>''')
-        p.focus = Mock(return_value="com.heytap.themestore/.MainActivity")
+        p.screen.focus = Mock(return_value="com.heytap.themestore/.MainActivity")
         with patch.object(fast.time, "sleep"):
             self.assertEqual(p.dismiss(), "取消")
         p.click.assert_called_once_with(540, 1600)
@@ -308,13 +308,10 @@ class BottomBarWaitTests(unittest.TestCase):
     """底栏按钮在应用内更新弹窗晚到时也要等到它被关掉（#286）。"""
 
     def tap_after(self, found_at):
-        p = fast.Phone.__new__(fast.Phone)
-        p.link = fast.adb_link.Connection("test")
-        p.W, p.H, p.log = 1272, 2772, False
-        p.d = Mock()
+        p = phone_stub("test", W=1272, H=2772, d=Mock())
         p.say = Mock()
-        p.sig = Mock(return_value="page")
-        p.settle = Mock(return_value=True)
+        p.screen.sig = Mock(return_value="page")
+        p.screen.settle = Mock(return_value=True)
         p.click = Mock()
         clock = [0.0]
         p.find = Mock(side_effect=lambda *a, **k: (540, 2400) if clock[0] >= found_at else None)
@@ -361,7 +358,7 @@ class SearchBoxTests(unittest.TestCase):
         # 荣耀 PNM-AN10 10.0.0.102 真机：设置搜索框是 AutoCompleteTextView，以前判成「搜索框没打开」
         p = phone_stub("test")
         p.W, p.H = 1080, 2420
-        p.tree = Mock(return_value=ET.fromstring('''<hierarchy><node class="android.widget.AutoCompleteTextView"
+        p.screen.tree = Mock(return_value=ET.fromstring('''<hierarchy><node class="android.widget.AutoCompleteTextView"
             focused="true" text="广告" bounds="[138,509][930,629]"/></hierarchy>'''))
         self.assertTrue(p.edit_ready())
         self.assertEqual(p.focused_text(), "广告")

@@ -124,10 +124,10 @@ class ThemeSettingsLandingTests(unittest.TestCase):
         p = phone_mock()
         p.W, p.H = 1080, 2400
         p.locked = lambda: False
-        p.focus = lambda: FOCUS
-        p.tree.return_value = ET.fromstring(page)
+        p.screen.focus = lambda: FOCUS
+        p.screen.tree.return_value = ET.fromstring(page)
         texts = [("我的", (0, 2180, 270, 2380), ET.fromstring(page))] if page is PAGE else []
-        p.texts.return_value = texts
+        p.screen.texts.return_value = texts
         rows = dict(state or {})
 
         def shell(command, timeout=None):
@@ -146,8 +146,8 @@ class ThemeSettingsLandingTests(unittest.TestCase):
         p.find.return_value = (900, 150) if nav else None
         p.entry.return_value = True
         # 页面现场用真实实现：报错文案正是这条用例要护住的东西；包一层 Mock 好数调用次数。
-        p._page_diagnosis = lambda: fast.Phone._page_diagnosis(p)
-        p.page_evidence = Mock(side_effect=lambda titles=(): fast.Phone.page_evidence(p, list(titles)))
+        p.screen._page_diagnosis = lambda: fast.Screen._page_diagnosis(p.screen)
+        p.page_evidence = Mock(side_effect=lambda titles=(): fast.Screen.page_evidence(p.screen, list(titles)))
         return p
 
     def test_zero_named_switches_fails_the_step_with_page_evidence(self):

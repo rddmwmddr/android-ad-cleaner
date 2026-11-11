@@ -45,7 +45,7 @@ class LaunchSeizerTests(unittest.TestCase):
     def test_transient_takeover_names_the_seizer_and_the_landing(self):
         """目标 → 别的包连续 3 帧 → 回到目标包：抢夺者与当前落点分开写。"""
         p = self.phone()
-        p.focus = frames(APP, OTHER, OTHER, OTHER, APP)
+        p.screen.focus = frames(APP, OTHER, OTHER, OTHER, APP)
         with self.assertRaises(RuntimeError) as caught:
             p.start(PKG, settle=0)
         msg = str(caught.exception)
@@ -60,7 +60,7 @@ class LaunchSeizerTests(unittest.TestCase):
         """目标 → 一直停在别的 App：落点已经写着抢夺者，不重复那一句。
         旧树也绿，守的是不回退。"""
         p = self.phone()
-        p.focus = frames(APP, tail=OTHER)
+        p.screen.focus = frames(APP, tail=OTHER)
         with self.assertRaises(RuntimeError) as caught:
             p.start(PKG, settle=0)
         msg = str(caught.exception)
@@ -92,7 +92,7 @@ class LaunchSeizerTests(unittest.TestCase):
         """A → B → A：外来前台连读 3 帧才停段，但没有哪个包连占 3 帧，不把帧数记到某个包头上。
         旧树也绿，守的是不回退。"""
         p = self.phone()
-        p.focus = frames(APP, OTHER, LAUNCHER, OTHER, APP)
+        p.screen.focus = frames(APP, OTHER, LAUNCHER, OTHER, APP)
         with self.assertRaises(RuntimeError) as caught:
             p.start(PKG, settle=0)
         msg = str(caught.exception)

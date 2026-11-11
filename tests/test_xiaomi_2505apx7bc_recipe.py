@@ -38,8 +38,8 @@ class MixFlip2RecipeTests(unittest.TestCase):
         p.scroll_more.return_value = False
         p.switches.return_value = []
         # 主题段导航失败时要把页面现场拼进报错（#906）：用真实实现，别让 Mock 替掉它
-        p._page_diagnosis = lambda: fast.Phone._page_diagnosis(p)
-        p.page_evidence = lambda titles=(): fast.Phone.page_evidence(p, list(titles))
+        p._page_diagnosis = lambda: fast.Screen._page_diagnosis(p.screen)
+        p.page_evidence = lambda titles=(): fast.Screen.page_evidence(p.screen, list(titles))
         return p
 
     def test_actual_model_selects_own_recipe_and_pins_recorded_build(self):

@@ -34,12 +34,12 @@ def node(text=None, desc=None, area=BAND):
 
 def phone(*nodes):
     p = phone_stub("test", W=W, H=H)
-    p.tree = Mock(return_value=page(*nodes))
+    p.screen.tree = Mock(return_value=page(*nodes))
     p.click = Mock()
     p.say = Mock()
     p.dismiss = Mock(return_value=None)
-    p.sig = Mock(return_value="page")
-    p.settle = Mock(return_value=True)
+    p.screen.sig = Mock(return_value="page")
+    p.screen.settle = Mock(return_value=True)
     return p
 
 
@@ -48,7 +48,7 @@ class TabTests(unittest.TestCase):
         p = phone(node(text="我的"))
         self.assertTrue(p.tab("我的"))
         p.click.assert_called_once_with(108, 2250)
-        p.settle.assert_called_once()
+        p.screen.settle.assert_called_once()
 
     def test_selected_state_prefix_in_content_desc_is_ignored(self):
         p = phone(node(desc="未选中,我的"))
@@ -106,7 +106,7 @@ class TabTests(unittest.TestCase):
     def test_tab_that_shows_up_late_is_still_clicked(self):
         pages = [page(), page(), page(node(text="我的"))]
         p = phone()
-        p.tree = Mock(side_effect=lambda: pages.pop(0) if len(pages) > 1 else pages[0])
+        p.screen.tree = Mock(side_effect=lambda: pages.pop(0) if len(pages) > 1 else pages[0])
         clock = [0.0]
         with patch.object(fast.time, "time", side_effect=lambda: clock[0]), \
                 patch.object(fast.time, "sleep", side_effect=lambda s: clock.__setitem__(0, clock[0] + s)):

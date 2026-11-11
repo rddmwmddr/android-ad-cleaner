@@ -180,9 +180,9 @@ def phone(pages):
     p = phone_stub("test", d=Mock())
     p.W, p.H = 1080, 2340
     p.locked = Mock(return_value=False)
-    p.focus = Mock(return_value=FOCUS)
+    p.screen.focus = Mock(return_value=FOCUS)
     queue = [ET.fromstring(x) for x in pages]
-    p.tree = Mock(side_effect=lambda: queue.pop(0) if len(queue) > 1 else queue[0])
+    p.screen.tree = Mock(side_effect=lambda: queue.pop(0) if len(queue) > 1 else queue[0])
     return p
 
 
@@ -226,7 +226,7 @@ class ChannelPageSkeletonTests(unittest.TestCase):
         page.raw_focus = FOCUS
         page._hint()
         self.assertTrue(page.skeleton.startswith("骨架 v1"))
-        p.focus.assert_not_called()
+        p.screen.focus.assert_not_called()
 
     def test_a_second_channel_name_on_the_same_layout_is_not_a_new_skeleton(self):
         # 同一页、换了目标渠道名：布局没变，不该再带一份
@@ -253,7 +253,7 @@ class ChannelPageSkeletonTests(unittest.TestCase):
 
     def test_a_page_that_cannot_be_read_keeps_the_step_alive(self):
         p = phone([HUAWEI_CARD])
-        p.tree = Mock(side_effect=RuntimeError("dump 失败"))
+        p.screen.tree = Mock(side_effect=RuntimeError("dump 失败"))
         page = chan.ChannelPage(p, "营销通知")
         page.stage = chan.ROW_NOT_FOUND
         self.assertEqual(page._hint(), "")

@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 import adb_link
 import chan_fast as chan
 import fast
+from phone import connection as phone_connection
 from fixtures import phone_stub
 
 
@@ -35,14 +36,14 @@ def phone(pages, focus, w=1080, h=2340):
     p = phone_stub("test", d=Mock())
     p.W, p.H = w, h
     p.locked = Mock(return_value=False)
-    p.focus = Mock(return_value=focus)
+    p.screen.focus = Mock(return_value=focus)
     p.confirm = Mock()
     p.click = Mock()
-    p.sig = Mock(return_value="")
-    p.settle = Mock(return_value=True)
+    p.screen.sig = Mock(return_value="")
+    p.screen.settle = Mock(return_value=True)
     p.scroll_more = Mock(return_value=False)
     queue = [ET.fromstring(x) for x in pages]
-    p.tree = Mock(side_effect=lambda: queue.pop(0) if len(queue) > 1 else queue[0])
+    p.screen.tree = Mock(side_effect=lambda: queue.pop(0) if len(queue) > 1 else queue[0])
     return p
 
 
@@ -158,7 +159,7 @@ class VivoTests(unittest.TestCase):
         p = phone([VIVO_CHANNEL], VIVO_FOCUS)
         with patch.object(chan.time, "sleep"):
             self.assertIsNone(chan.wait_page(p, "营销通知", chan.Attempt()))
-        self.assertEqual(p.tree.call_count, 1)
+        self.assertEqual(p.screen.tree.call_count, 1)
         self.assertTrue(p.vivo_seen)
 
     def test_deep_link_page_gives_up_without_a_single_poll(self):
@@ -269,7 +270,7 @@ class DisconnectTests(unittest.TestCase):
     def test_toggle_turns_library_disconnect_into_device_lost(self):
         p = phone([HUAWEI_CARD], APP_FOCUS)
         p.serial = "x"
-        p.tree = Mock(side_effect=fast.u2.exceptions.HTTPError("device 'x' not found"))
+        p.screen.tree = Mock(side_effect=fast.u2.exceptions.HTTPError("device 'x' not found"))
         with patch.object(chan, "parse", return_value=({("com.x", "promo"): ("营销通知", 3, False)}, {})), \
              patch.object(adb_link, "present", return_value=False), patch.object(chan.time, "sleep"):
             with self.assertRaises(adb_link.DeviceLost):
@@ -417,10 +418,10 @@ class PauseTests(unittest.TestCase):
 
     def test_recipe_segments_pause_at_their_lock_check_and_wait_for_unlock(self):
         p = phone_stub("test", d=Mock(), pause_at_lock_check=True)
-        p.wait_unlocked = Mock(return_value=True)
-        with patch.object(fast, "pause_point", return_value=True):
+        p.conn.wait_unlocked = Mock(return_value=True)
+        with patch.object(phone_connection, "pause_point", return_value=True):
             self.assertFalse(p.locked())
-        p.wait_unlocked.assert_called_once()
+        p.conn.wait_unlocked.assert_called_once()
         p.d.shell.assert_not_called()
 
     def test_channels_pause_only_between_channels(self):

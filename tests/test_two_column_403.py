@@ -116,7 +116,7 @@ def old_switches(p, root):
                         shot = p.reader.screenshot()
                     if shot.size != (p.W, p.H):
                         continue
-                    on = p._pixel_on(shot, l, t, r, b)
+                    on = fast.Screen._pixel_on(shot, l, t, r, b)
                     if on is None:
                         continue
                     n.set("checked", "true" if on else "false")

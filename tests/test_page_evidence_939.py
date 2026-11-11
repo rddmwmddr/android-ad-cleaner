@@ -44,6 +44,7 @@ def phone(focus=SETTING_PAGE, screen=PAGE, **fields):
     p = fake_phone(size=(1080, 2340), stages=((0.0, screen),), focus=((0.0, focus),), **fields)
     p.log = True
     p.say = fast.Phone.say.__get__(p)
+    p.conn.say = fast.Connection.say.__get__(p.conn)      # 现场行走连接基座（ADR-0033）
     return p
 
 

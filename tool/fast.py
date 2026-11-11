@@ -16,19 +16,23 @@ from dataclasses import dataclass
 from stdio import use_utf8_console
 
 use_utf8_console()
-import adbutils
-import uiautomator2 as u2
-from ui_session import connect
-from troubleshooting import (TAPPED, UI_INSTALL_FAILED, UI_RECOVERY, XIAOMI_INPUT,
-                             accessibility_summary, input_blocked)
+# 两个基座已搬进 tool/phone/（ADR-0033）。读屏库与 adb 库继续从这里显式 re-export：
+# 测试与机型脚本拿它们取异常类型（`fast.u2.exceptions.X`），与 `Phone` 是同一个出口。
+from phone.connection import Connection
+from phone.connection import adbutils as adbutils
+from phone.connection import pause_point as pause_point
+from phone.connection import reader_failure as reader_failure
+from phone.connection import u2 as u2
+from phone.connection import _shell_transport as _shell_transport
+from phone.screen import Screen
 import adb_link
 import backups
 import events
 import recipe_kit
 import wait
 from reader import Reader
-from row import (SWITCH_ROW_DEPTH, bounds, control, dedupe, disabled_at, is_switch, own,
-                 summary, switches_in, title_hit, unique)
+from row import bounds, disabled_at, is_switch, switches_in
+from row import switch_row as switch_row
 # 显式 re-export：机型脚本从 fast 取这个判据（与 bounds 同一处引用）。
 from row import icon_hit as icon_hit
 # 极性词表定义在 polarity.py（文档生成器也要同一份，见 #693），这里显式 re-export，
@@ -73,29 +77,6 @@ EDIT = re.compile(r"EditText|AutoCompleteTextView")
 
 class ScreenLocked(RuntimeError):
     """手机锁屏了：调用方等机主解锁，或停下整批，不逐项报同一个原因。"""
-
-
-def pause_point():
-    """客户端点了「暂停」（创建 AAC_PAUSE_FILE）就在这里等，点「继续」（删掉文件）再往下走；暂停过返回 True。
-    只放在安全的位置：机型脚本每段开始前（段首的锁屏检查）、营销通知每个渠道开始前。
-    暂停期间不读屏、不点击；继续后重新读页面，不用暂停前的坐标。"""
-    path = os.environ.get("AAC_PAUSE_FILE")
-    if not path or not os.path.exists(path):
-        return False
-    print("⏸ 已暂停：现在可以操作手机。操作完回到桌面、保持解锁，再点「继续」", flush=True)
-    events.emit("paused")
-    while os.path.exists(path):
-        time.sleep(0.5)
-    print("▶ 继续执行", flush=True)
-    events.emit("resumed")
-    return True
-
-
-def switch_row(node, parents, depth=SWITCH_ROW_DEPTH):
-    """文字所在的那一行里有开关：这一行是开关，不是导航入口。
-    只看结构：调用方 find() 已经自己筛过可视区域，这里不重复筛。"""
-    _, boxes = own(node, parents, lambda _: True, depth)
-    return any("RadioButton" not in (n.get("class") or "") for n in boxes)
 
 
 # 判据词后面只能是结尾或分隔符：底栏读作「我的，有新消息」算命中，「我的应用」不算
@@ -276,73 +257,18 @@ def pick_title_rows(targets, rows, still, disabled):
             for t, xy in pick_retry_rows(targets, rows, still, disabled) if (t, xy) in hits]
 
 
-def _shell_transport(shell):
-    """读屏库的 shell 当传输。断线只有它认得出来（异常类型加错误串），判定留在这一层。"""
-    def send(command, timeout=None):
-        try:
-            return shell(command) if timeout is None else shell(command, timeout=timeout)
-        except Exception as e:
-            # 「shell output invalid … b''」：命令没有任何回应，连接正在断开（错误日志 10-27）。
-            if adb_link.lib_gone(str(e)) or (isinstance(e, u2.exceptions.AdbShellError) and "output invalid" in str(e)):
-                raise adb_link.LinkBroken(e) from e
-            raise
-    return send
-
-
-def reader_failure(serial, error):
-    """读屏连不上、或连上后的第一次读屏失败：屏没了与读屏服务坏了是两回事，两处共用这一份翻译（#928）。"""
-    if adb_link.screen_gone(error):     # 屏已经没了不是读屏服务坏了：别把用户指去关别的客户端（#674）
-        return RuntimeError(f"{adb_link.SCREEN_GONE_CONNECT}\n原始异常：{type(error).__name__}: {error}")
-    return RuntimeError("手机读屏服务（UiAutomation）启动失败，本次未点击开关。"
-                        f"\n{accessibility_summary(serial)}\n{UI_RECOVERY}\n"
-                        f"原始异常：{type(error).__name__}: {error}")
-
-
 class Phone:
+    """门面：只做转发与组合，公开名字一个不改（ADR-0033）。
+
+    两个基座已搬进 `tool/phone/`：`Connection`（连接与生命周期）与 `Screen`（观测、视口几何、
+    四个动作原语）。五个阶段仍在本文件，按 #1039–#1044 逐步搬走。
+    """
+
     def __init__(self, serial, log=True, reader: Reader | None = None):
-        if log:
-            print("正在连接手机读屏服务……", flush=True)
-        try:
-            self.reader = reader if reader is not None else connect(serial)
-        except u2.exceptions.AccessibilityServiceAlreadyRegisteredError as e:
-            events.emit("ui_busy")
-            raise RuntimeError("UIAUTOMATION_BUSY：手机读屏服务已被占用，本次未点击开关。"
-                               "已清理本次失败的启动并重试一次，仍无法连接。"
-                               "请退出旧版客户端，只保留一个客户端。\n"
-                               f"{accessibility_summary(serial)}\n{UI_RECOVERY}\n"
-                               f"原始异常：{type(e).__name__}: {e}") from e
-        except u2.exceptions.UiAutomationError as e:
-            raise reader_failure(serial, e) from e
-        except (u2.exceptions.AdbShellError, adbutils.AdbError) as e:
-            # 读屏服务文件传不进手机（adb push 返回 FAIL）或命令无回应：多半是连接中途断了（错误日志 10-27）。
-            if not adb_link.present(serial):
-                raise adb_link.lost(f"{type(e).__name__}: {e}") from e
-            raise RuntimeError(UI_INSTALL_FAILED + f"\n原始异常：{type(e).__name__}: {str(e)[:200]}") from e
-        self._shell = self.reader.shell
-        self.link = adb_link.Connection(serial, transport=_shell_transport(self._shell), lost_on_retry=False)
-        self.reader.shell = self._resilient_shell
-        try:
-            self.reader.settings["operation_delay"] = (0, 0)
-            self.W, self.H = self.reader.window_size()
-            # 小米没开「USB 调试（安全设置）」时能读不能点：先探一下，别跑几分钟全是「没找到」。
-            if input_blocked(self.reader.shell("input keyevent 0").output):
-                raise RuntimeError(f"INPUT_BLOCKED：系统拒绝了{TAPPED}，本次未点击开关。\n" + XIAOMI_INPUT)
-        except u2.exceptions.UiAutomationError as e:
-            self.reader.close()
-            lost = adb_link.lost_from(e, serial)    # 命令服务断开这一族仍是断线（#731），别包成读屏服务起不来
-            if lost is not None:
-                raise lost from e
-            slow = adb_link.read_failed(e)          # 读屏慢一次只是这一步没成（#731）
-            if slow:
-                raise RuntimeError(slow) from e
-            raise reader_failure(serial, e) from e
-        except BaseException:
-            self.reader.close()
-            raise
-        self.log = log
-        self.pause_at_lock_check = True     # 机型脚本每段开头都查锁屏：这里就是段与段之间，可以暂停
+        self.conn = Connection(serial, log=log, reader=reader)
+        self.screen = Screen(self.conn)
+        self.conn.check_input()
         self.safe_mode = False              # 安全模式（参考脚本 / 录制版本不符）：off() 只关点名的开关，不做整页全关
-        self.systemui_text = False          # 读屏时是否算上 com.android.systemui 的文字（vivo OriginOS Ocean 的通知页就挂在那里）
         self.vivo_seen = False              # 见过 vivo 的通知页：渠道页与应用通知页是同一个 Activity，只从应用列表进
         self.changed = []          # (页面, 标题) 记录本次关掉的
         self.missed = []           # (页面, 标题) 记录本次没拨到目标态的；与 changed 同源、同生命周期（#788）
@@ -352,6 +278,17 @@ class Phone:
         self.mismatch_probes = 0    # 本次运行已补的 MISMATCH 判据读数，上限见 chan_fast.MISMATCH_PER_RUN
         self.promoted = set()      # 点过才发现是推广位的 ✕：(App, 控件) 同一处不再点第二次（#420）
         self.app = ""              # 最近一次 start 拉起的目标 App：推广位只在这个 App 里判
+
+    # ---------- 转发：连接（Connection）与观测（Screen） ----------
+    # 显式属性 + 赋值器，不用 `__getattr__` 兜底：搬漏的方法必须当场 AttributeError（ADR-0033）。
+    @property
+    def reader(self):
+        """读屏 adapter：引擎看手机的唯一接口（ADR-0001），实体归 `Connection`。"""
+        return self.conn.reader
+
+    @reader.setter
+    def reader(self, value):
+        self.conn.reader = value
 
     @property
     def d(self):
@@ -363,46 +300,84 @@ class Phone:
         self.reader = value
 
     @property
+    def link(self):
+        """adb 连接与断线判定，状态归 `Connection`，这里只是读写它的一个别名。"""
+        return self.conn.link
+
+    @link.setter
+    def link(self, value):
+        self.conn.link = value
+
+    @property
     def serial(self):
         """串号归 Connection：每条命令都要带 -s，不存在「手机对象认一台、命令发给另一台」。"""
-        return self.link.serial
+        return self.conn.serial
 
     @serial.setter
     def serial(self, value):
-        self.link.serial = value
+        self.conn.serial = value
 
     @property
     def lost(self):
         """本轮是否已确认断线；状态归 Connection，这里只是读写它的一个别名。"""
-        return self.link.lost
+        return self.conn.lost
 
     @lost.setter
     def lost(self, value):
-        if value:
-            self.link.mark_lost()
+        self.conn.lost = value
+
+    @property
+    def log(self):
+        return self.conn.log
+
+    @log.setter
+    def log(self, value):
+        self.conn.log = value
+
+    @property
+    def pause_at_lock_check(self):
+        return self.conn.pause_at_lock_check
+
+    @pause_at_lock_check.setter
+    def pause_at_lock_check(self, value):
+        self.conn.pause_at_lock_check = value
+
+    @property
+    def W(self):
+        return self.screen.W
+
+    @W.setter
+    def W(self, value):
+        self.screen.W = value
+
+    @property
+    def H(self):
+        return self.screen.H
+
+    @H.setter
+    def H(self, value):
+        self.screen.H = value
+
+    @property
+    def systemui_text(self):
+        """读屏时是否算上 com.android.systemui 的文字：归观测基座，`texts()` 在读它。"""
+        return self.screen.systemui_text
+
+    @systemui_text.setter
+    def systemui_text(self, value):
+        self.screen.systemui_text = value
 
     def _resilient_shell(self, *args, **kwargs):
-        """手机短暂掉线（另一个 adb 服务重启、接口抖动）等它回来重试一次；仍不在就整段停下。"""
-        return self.link.shell(*args, **kwargs)
-
-    def check_alive(self):
-        """本轮已确认断线：本段立刻停下，不再读屏、不再逐段重试（#293）。
-        排查说明由第一次报错给出，后面的段只报这一句。"""
-        self.link.check_alive()
+        return self.conn._resilient_shell(*args, **kwargs)
 
     def _u2(self, fn, *a, **k):
-        """u2 直连的调用（dump_hierarchy、window_size、app_stop）不走 shell；
-        连接级异常也在这里记下断线，否则后面的段会一遍遍重复同样的失败（#293）。"""
-        self.check_alive()
-        try:
-            return fn(*a, **k)
-        except Exception as e:
-            if adb_link.lib_gone(str(e)):
-                self.lost = True
-            raise
+        return self.conn._u2(fn, *a, **k)
+
+    def check_alive(self):
+        self.conn.check_alive()
 
     def close(self):
-        self.reader.close()
+        self.conn.close()
 
     def __enter__(self):
         return self
@@ -411,130 +386,39 @@ class Phone:
         self.close()
 
     def say(self, *a):
-        if self.log:
-            print(*a, flush=True)
-
-    # ---------- 采样：读屏、页面状态与签名 ----------
-    # 区内的 scroll_more、locked、wait_unlocked 会动屏幕（翻页、拉通知栏、亮屏等人解锁），不是纯读。
-    def tree(self):
-        root = ET.fromstring(self._u2(self.reader.dump_hierarchy))
-        # Mi 10 的热榜子页会横屏；不能一直用连接时的竖屏尺寸过滤节点。
-        self.W, self.H = self._u2(self.reader.window_size)
-        return root
-
-    def focus(self):
-        """当前前台窗口：多数是 `包名/页面名`，锁屏 / 通知栏 / 输入法抢焦点时是裸窗口名，读不到返回空串
-        （~0.1 秒；u2 的 app_current 在浮窗上会卡 10 秒）。判「还在不在这个 App」用 `split("/", 1)[0]`。
-        不是聚焦控件，也不是焦点元素：判断有没有聚焦的输入框用 `edit_ready()`，读框里的文字用 `focused_text()`。"""
-        self.check_alive()
-        # 不能加 grep -m / head：提前退出会让 dumpsys 收到 SIGPIPE，u2 判「shell output invalid」（#205）。
-        # sed 读完整个流再截断，行数与原来一致。
-        out = self.reader.shell("dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' | sed -n '1,4p'").output
-        # vivo OriginOS 3 / Android 13 行尾是「Activity}}」（错误日志 10-27）。
-        # 焦点窗口为 null 时看 mFocusedApp：华为 HarmonyOS 4.2、vivo OriginOS Ocean 页面明明在，以前报「停在 未知页面」（错误日志 10-29）
-        for field in ("mCurrentFocus", "mFocusedApp"):
-            m = re.search(field + r"=.*? u0 ([^\s}]+)", out)
-            if m:
-                return m.group(1)
-        out = self.reader.shell("dumpsys activity activities | grep -E 'topResumedActivity|mResumedActivity|ResumedActivity:'"
-                           " | sed -n '1p'").output
-        m = re.search(r"u0 (\S+/[^\s}]+)", out) or re.search(r" (\S+/[^\s}]+)", out)
-        return m.group(1) if m else ""
-
-    def texts(self, root=None):
-        root = root if root is not None else self.tree()
-        out = []
-        # 华为 HarmonyOS 4 把同一个控件吐出两次；按节点身份数行时会变成「同名 2 行」（#510）
-        for n in unique(root.iter("node")):
-            if n.get("package") == "com.android.systemui" and not self.systemui_text:
-                continue                      # 状态栏/通知栏文字不算
-            t = (n.get("text") or n.get("content-desc") or "").strip()
-            if t and self.on_screen(n):
-                out.append((t, bounds(n), n))
-        return out
-
-    def page_text(self):
-        """失败诊断用：当前屏可见文字拼成一行。入口找不到时说明停在哪个页面，光报「没找到」分不清
-        是点击被吞还是这个版本换了布局（#286）。"""
-        return " / ".join(t for t, _, _ in self.texts()[:20])
-
-    def on_screen(self, n):
-        """折叠屏合上时，dump 里还留着内屏那份节点，坐标在外屏之外（Issue #2）；点上去没反应。"""
-        if n.get("visible-to-user") == "false":
-            return False
-        l, t, r, b = bounds(n)
-        cx, cy = (l + r) // 2, (t + b) // 2
-        return r > l and b > t and 0 <= cx < self.W and 0 <= cy < self.H
-
-    def switches(self, root=None):
-        """[(标题, checked, (cx,cy))]，标题取开关所在行的第一段文字。落点是开关本体。"""
-        return [(title, on, xy) for title, on, xy, hit in self.switch_rows(root)]
-
-    def switch_rows(self, root=None):
-        """[(标题, checked, 开关本体落点, 行标题落点)]：与 switches() 同一次遍历，多带标题落点。
-        落点为 None 表示这一行没有独立标题（标题取自开关自己的标签）；`off()` 在开关本体
-        点了不动时改点标题（#608）。"""
-        root = root if root is not None else self.tree()
-        parent = {c: p for p in root.iter() for c in p}
-        out = []
-        shot = None
-        for n in unique(root.iter("node")):
-            if not self.on_screen(n) or "RadioButton" in n.get("class", ""):
-                continue
-            if n.get("checkable") != "true":
-                rid = (n.get("resource-id") or "").lower()
-                # 自绘开关：看颜色；TextSwitcher 是文字轮播。里面已经有真开关的（AOSP 渠道页的 main_switch_bar）不算：
-                # 按颜色猜出的状态会盖过里面那个真开关，关着的渠道被读成开着，还原营销通知失败（0.3.1 发版前模拟器发现）
-                if ("switch" in rid and "switcher" not in rid and n.get("clickable") == "true"
-                        and not any(c is not n and c.get("checkable") == "true" for c in n.iter("node"))):
-                    l, t, r, b = bounds(n)
-                    if r - l > 0 and b - t > 0:
-                        if shot is None:
-                            shot = self.reader.screenshot()
-                        # UI 坐标与截图可能来自不同分辨率/旋转状态。不能越界取样，也不能把未知状态当关。
-                        if shot.size != (self.W, self.H):
-                            continue
-                        on = self._pixel_on(shot, l, t, r, b)
-                        if on is None:
-                            continue
-                        n.set("checked", "true" if on else "false")
-                        n.set("checkable", "true")
-                        n.set("class", "SelfDrawnSwitch")
-                if n.get("checkable") != "true":
-                    continue
-            cls = n.get("class", "")
-            if not any(k in cls for k in ("Switch", "CheckBox", "ToggleButton", "Compound")) and n.get("clickable") != "true":
-                continue
-            l, t, r, b = bounds(n)
-            if r - l <= 0 or b - t <= 0 or not self.on_screen(n):
-                continue
-            ctrl = control(n, self.on_screen)       # 卡片整体 checkable 时点在卡片中心不生效
-            l, t, r, b = bounds(ctrl)
-            # 卡片自己报状态时以卡片为准；缺这个属性才读内层开关，别把缺属性当成「关」
-            checked = n.get("checked") if n.get("checked") is not None else ctrl.get("checked")
-            title, hit = title_hit(n, parent, self.on_screen, self.H)
-            out.append((title, checked == "true", (l, t, r, b), hit))
-        return [(title, on, ((l + r) // 2, (t + b) // 2), hit)
-                for title, on, (l, t, r, b), hit in dedupe(out)]
+        self.conn.say(*a)
 
     def locked(self):
-        if self.pause_at_lock_check and pause_point():
-            return not self.wait_unlocked()      # 暂停时机主可能锁了屏：亮屏等他解锁
-        out = self.reader.shell(adb_link.KEYGUARD_CMD).output
-        if adb_link.focus_window(out) == "NotificationShade" and not adb_link.LOCK_FIELD.search(out):
-            # 可能只是通知栏被拉下来了：收起后再看；锁屏界面收不起来，焦点仍是 NotificationShade
-            self.reader.shell("cmd statusbar collapse")
-            time.sleep(0.4)
-            out = self.reader.shell(adb_link.KEYGUARD_CMD).output
-        return adb_link.keyguard_showing(out)
+        return self.conn.locked()
 
     def wait_unlocked(self, timeout=wait.UNLOCK_TIMEOUT):
-        """锁屏时点亮屏幕，等机主解锁。文案、节奏与事件在 wait.wait_unlocked（#709）。"""
-        return wait.wait_unlocked(self.locked, lambda: self.reader.shell(adb_link.WAKEUP),
-                                  timeout, now=time.time, sleep=time.sleep)
+        return self.conn.wait_unlocked(timeout)
+
+    # ---------- 采样：读屏、页面状态与签名 ----------
+    # 区内的 scroll_more 会动屏幕（翻页），不是纯读。
+    def tree(self):
+        return self.screen.tree()
+
+    def focus(self):
+        return self.screen.focus()
+
+    def texts(self, root=None):
+        return self.screen.texts(root)
+
+    def page_text(self):
+        return self.screen.page_text()
+
+    def on_screen(self, n):
+        return self.screen.on_screen(n)
+
+    def switches(self, root=None):
+        return self.screen.switches(root)
+
+    def switch_rows(self, root=None):
+        return self.screen.switch_rows(root)
 
     def sig(self):
-        return "|".join(t for t, _, _ in self.texts())
+        return self.screen.sig()
 
     def scroll_more(self):
         """翻一页；翻完没出现新文字（到底、回弹）返回 False。"""
@@ -548,37 +432,34 @@ class Phone:
         after = {t for t, _, _ in self.texts()}
         return not after <= before
 
-    @staticmethod
-    def _pixel_on(img, l, t, r, b):
-        """开关轨道取几个点：彩色（蓝/绿/橙，饱和度高）=开，灰白=关。"""
-        w, h = img.size
-        if not (0 <= l < r <= w and 0 <= t < b <= h):
-            return None
-        img = img.convert("RGB")
-        sat = 0
-        for fx in (0.25, 0.5, 0.75):
-            R, G, B = img.getpixel((int(l + (r - l) * fx), (t + b) // 2))
-            sat = max(sat, max(R, G, B) - min(R, G, B))
-        return sat > 60
-
     def ls(self):
-        root = self.tree()
-        print("·", self.focus())
-        print(" / ".join(t for t, _, _ in self.texts(root)))
-        for t, c, xy in self.switches(root):
-            print(f"  [{'开' if c else '关'}] {t}  @{xy}")
+        self.screen.ls()
 
-    # ---------- 认行与导航：点击、翻页、按文字找入口 ----------
+    # ---------- 页面诊断 ----------
+    def _page_diagnosis(self):
+        return self.screen._page_diagnosis()
+
+    def note_miss(self, text):
+        self.screen.note_miss(text)
+
+    def page_evidence(self, titles=()):
+        return self.screen.page_evidence(titles)
+
+    def icon_candidates(self, area=(0.72, 0.0, 1.0, 0.16)):
+        return self.screen.icon_candidates(area)
+
+    # ---------- 四个动作原语：后续阶段一律经它们动作 ----------
     def click(self, x, y):
-        size = self._u2(self.reader.window_size)
-        if tuple(size) != (self.W, self.H):
-            self.W, self.H = size
-            raise RuntimeError("屏幕方向或尺寸已变化，停止使用旧坐标；请重新读取页面")
-        if not (0 <= x < self.W and 0 <= y < self.H):
-            raise RuntimeError("点击坐标在屏幕外，未操作")
-        out = self.reader.shell(f"input swipe {x} {y} {x} {y} 80").output   # 有的 App 吞 input tap
-        if input_blocked(out):
-            raise RuntimeError(f"系统拒绝了{TAPPED}。" + XIAOMI_INPUT)
+        self.screen.click(x, y)
+
+    def back(self, n=1):
+        self.screen.back(n)
+
+    def settle(self, before, maxwait=0.8):
+        return self.screen.settle(before, maxwait)
+
+    def find(self, text, exact=False, root=None, edge_ok=False, nav=False):
+        return self.screen.find(text, exact, root, edge_ok, nav)
 
     def scroll(self, frac=0.45, up=False):
         """按下-移动-停 0.12 秒-松开：没有惯性，翻多少是多少，约 0.45 秒。"""
@@ -604,30 +485,6 @@ class Phone:
                 raise RuntimeError("回到页顶时离开了当前设置页，停止本段")
             if {t for t, _, _ in self.texts()} <= before:
                 break
-
-    def find(self, text, exact=False, root=None, edge_ok=False, nav=False):
-        """先找文字完全相同的，再找包含的。nav=True（tap 导航用）：包含匹配不点开关所在行里的文字——
-        那是开关的说明，点了等于拨开关（#247：「隐私」命中「边下边玩」的说明「不涉及隐私数据」，把功能关了）。"""
-        root = root if root is not None else self.tree()
-        items, parents = self.texts(root), None
-        for whole in ((True,) if exact else (True, False)):
-            for t, (l, tp, r, b), n in items:
-                if not ((t == text) if whole else (text in t and t != text)):
-                    continue
-                if b <= tp or r <= l:
-                    continue
-                if nav and not whole:
-                    parents = parents or {c: q for q in root.iter() for c in q}
-                    if switch_row(n, parents):
-                        continue
-                cy = (tp + b) // 2
-                if cy < self.H * 0.92:
-                    return ((l + r) // 2, cy)
-                if edge_ok == "tab":                     # 底部标签栏：直接点中心
-                    return ((l + r) // 2, cy)
-                if edge_ok and tp < self.H * 0.975:      # 已到页底翻不上来：点这一行的上沿
-                    return ((l + r) // 2, tp + 15)
-        return None
 
     CLOSE = re.compile(r"close|关闭|跳过|skip|cancel|dismiss|iv_x\b|btn_x\b", re.I)
     # 描述精确读作「返回」的不是弹窗的 ✕，是浮层/页面自己的返回键：点了是导航，会把刚打开的
@@ -822,51 +679,6 @@ class Phone:
         self.note_miss(text)
         return False
 
-    def _page_diagnosis(self):
-        """停在哪个 Activity、页面结构摘要（不含页面文字）：区分「没加载完」与「入口真的没了」。
-        只吞页面解析失败；断线（DeviceLost）照常冒泡，不能被当成「页面没认出来」。"""
-        where = self.focus() or "未知页面"
-        try:
-            detail = summary(self.tree(), self.W, self.H)
-        except ET.ParseError:
-            detail = "页面结构读不到"
-        return where, detail
-
-    def note_miss(self, text):
-        """入口没找到时留下能定位的页面骨架，与渠道「未确认」日志同一风格。"""
-        where, detail = self._page_diagnosis()
-        self.say(f"  · 「{text}」没找到；停在 {where}；{detail}")
-
-    def page_evidence(self, titles=()):
-        """点名要关的开关没找到时的现场：与 note_miss() 的入口失败行同形，末尾按页面顺序补上
-        当次读到的开关标题（#903）。没有它分不清是改名了、页面是空的，还是页面根本没打开。
-
-        `titles` 由调用方给（该翻的几屏已经读过了），这里不重读开关：
-        自绘开关的页面每读一次开关就要截一次图。"""
-        where, detail = self._page_diagnosis()
-        names = list(titles)
-        return f"停在 {where}；{detail}；当次读到 {len(names)} 个开关：{'、'.join(names) or '无'}"
-
-    def icon_candidates(self, area=(0.72, 0.0, 1.0, 0.16)):
-        """没有文字、点了才知道去哪的图标（右上角齿轮、更多）：按位置从右往左给候选坐标。
-        整块卡片/列表项点了会进别的页面，按尺寸排除掉。"""
-        x0, y0, x1, y1 = (v * s for v, s in zip(area, (self.W, self.H, self.W, self.H), strict=True))    # area 是 (x0,y0,x1,y1)
-        out = []
-        for n in self.tree().iter("node"):
-            if n.get("clickable") != "true":
-                continue
-            if (n.get("text") or "").strip() or (n.get("content-desc") or "").strip():
-                continue
-            l, t, r, b = bounds(n)
-            cx, cy = (l + r) // 2, (t + b) // 2
-            if not (x0 <= cx <= x1 and y0 <= cy <= y1 and self.on_screen(n)):
-                continue
-            if r - l > self.W * 0.25 or b - t > self.H * 0.10:
-                continue
-            out.append((cx, cy))
-        out.sort(key=lambda xy: -xy[0])        # 齿轮在最右边，先试它
-        return out
-
     def tap_icon(self, expect, area=(0.72, 0.0, 1.0, 0.16), tries=3):
         """点一个没有文字的图标入口，点完要求 expect 里任一文字精确出现在新页面上；
         点开的不是目标页就退回来换下一个（#292）。游戏中心 14.43.3 把「设置」做成「我的」页右上角的齿轮，
@@ -953,17 +765,6 @@ class Phone:
                 if top > self.H * 0.85 and hit(text):
                     return (l + r) // 2, (top + b) // 2
         return None
-
-    def settle(self, before, maxwait=0.8):
-        """等新的非空页面稳定；跳页动画中的空树不算已经加载好。"""
-        return bool(wait.until(self.sig, maxwait, poll=0.1, stable=0.2,
-                               changed_from=before, now=time.time, sleep=time.sleep))
-
-    def back(self, n=1):
-        for _ in range(n):
-            b = self.sig()
-            self.reader.shell("input keyevent BACK")
-            self.settle(b, 0.6)
 
     # ---------- 拨动：确认框与整页开关 ----------
     def confirm(self):

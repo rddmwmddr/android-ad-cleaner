@@ -18,6 +18,7 @@ from gui import app
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 import fast
+from phone import connection as phone_connection
 import run
 import ui_session as session
 
@@ -125,8 +126,8 @@ class LifecycleTests(unittest.TestCase):
         start.assert_called_once()
 
     def test_phone_conflict_message_preserves_cause_and_recovery_steps(self):
-        with patch.object(fast, "connect", side_effect=session.AccessibilityServiceAlreadyRegisteredError("first cause")), \
-             patch.object(fast, "accessibility_summary", return_value="只读检查：配置了 2 项服务"), \
+        with patch.object(phone_connection, "connect", side_effect=session.AccessibilityServiceAlreadyRegisteredError("first cause")), \
+             patch.object(phone_connection, "accessibility_summary", return_value="只读检查：配置了 2 项服务"), \
              contextlib.redirect_stdout(io.StringIO()):
             with self.assertRaises(RuntimeError) as error:
                 fast.Phone("test")
@@ -137,7 +138,7 @@ class LifecycleTests(unittest.TestCase):
 
     def test_cli_operation_exception_still_closes_phone(self):
         d = Mock(); d.window_size.return_value = (1080, 2400); d.settings = {}
-        with patch.object(fast, "connect", return_value=d), \
+        with patch.object(phone_connection, "connect", return_value=d), \
              patch.object(fast, "execute", side_effect=RuntimeError("failed step")), \
              patch.object(sys, "argv", ["fast.py", "-s", "test", "check"]), \
              contextlib.redirect_stdout(io.StringIO()) as out:
@@ -149,7 +150,7 @@ class LifecycleTests(unittest.TestCase):
 
     def test_phone_setup_failure_closes_connected_service(self):
         d = Mock(); d.settings = {}; d.window_size.side_effect = RuntimeError("display unavailable")
-        with patch.object(fast, "connect", return_value=d), contextlib.redirect_stdout(io.StringIO()):
+        with patch.object(phone_connection, "connect", return_value=d), contextlib.redirect_stdout(io.StringIO()):
             with self.assertRaisesRegex(RuntimeError, "display unavailable"):
                 fast.Phone("test")
         d.close.assert_called_once()
