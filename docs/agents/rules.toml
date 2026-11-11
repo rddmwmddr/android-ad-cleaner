@@ -524,7 +524,7 @@ expires_if = "helper 的终止方式统一成一种、或调用方不再宽泛�
 
 [[rule]]
 id = "dev.fields.read-declared-directly"
-source = "CODING_STANDARDS.md#`Phone` 构造处声明的字段直接读，不用 `getattr` 兜底"
+source = "CODING_STANDARDS.md#`Phone` 与 `tool/phone/` 各对象构造处声明的字段直接读，不用 `getattr` 兜底"
 check = "test:test_declared_fields::DeclaredFieldTests.test_declared_fields_are_read_directly"
 status = "enforced"
 why = "#344 把六个字段收进 Phone 时，locked() 里留了一处 getattr 兜底，回归全绿，直到自查才发现声明与读取不一致。守卫只查 tool/ 里类自己 __init__ 声明过的字段（含 self.W, self.H 这类解包与 default= 关键字写法），范围外的 getattr（如上游库对象的 _process）不管；正文末句「Mock() 冒充走 fixtures.phone_mock()」没有守卫。"

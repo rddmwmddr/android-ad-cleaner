@@ -65,9 +65,9 @@ README、PR 描述、Release Note 里的计数，必须交代它在什么样本�
 
 反例：#373 把 `run.adb_shell()` 从 `sys.exit` 改成抛 `DeviceLost`。`quickapp off` / `on` 里包住 `set_quickapp_service()` 的 `except (RuntimeError, OSError, ValueError)` 从此接得住断线，把它报成「某个组件关闭失败」，`off` 甚至返回 0（#293 反对的混判）；`cmd_recipe` 的 `finally` 恢复插电常亮失败时，新写法比旧写法多打一行。两处都是评审逐行读出来的。
 
-## `Phone` 构造处声明的字段直接读，不用 `getattr` 兜底
+## `Phone` 与 `tool/phone/` 各对象构造处声明的字段直接读，不用 `getattr` 兜底
 
-`Phone.__init__` 里声明的每个字段都有默认值；读的地方写 `getattr(self, "x", 默认值)` 等于把「忘了初始化」变成静默默认值，`.__new__` 装配永远发现不了漏掉的字段。要求写 `self.x`，漏了就当场 `AttributeError`。（`Mock()` 冒充 `Phone` 的用例走 `fixtures.phone_mock()`，它替你把声明字段补上。） <!-- rule:dev.fields.read-declared-directly -->
+`Phone` 与 `tool/phone/` 各对象在 `__init__` 里声明的每个字段都有默认值；读的地方写 `getattr(self, "x", 默认值)` 等于把「忘了初始化」变成静默默认值，`.__new__` 装配永远发现不了漏掉的字段。要求写 `self.x`，漏了就当场 `AttributeError`。（`Mock()` 冒充 `Phone` 的用例走 `fixtures.phone_mock()`，它替你把声明字段补上。） <!-- rule:dev.fields.read-declared-directly -->
 
 反例：#344 把六个字段收进 `Phone` 时，`locked()` 里那一处 `getattr(self, "pause_at_lock_check", False)` 留了下来——所有测试照样绿，直到自查才发现声明与读取不一致。
 

@@ -31,7 +31,7 @@
 | 模块 | 拥有什么 |
 |---|---|
 | `run.py` | 总入口：命令分派、退出码、设备信息、备份的存取 |
-| `fast.py` | 引擎出口：`Phone` 门面只做转发；两个基座与五个阶段都在 `tool/phone/`——拨动计划与回读在 `toggler.py`、启动与落点在 `launcher.py`、设置搜索在 `settings_search.py`、弹窗与推广位在 `dismisser.py`、导航在 `navigator.py`，模块级名字仍从这里可 import（[ADR-0033](adr/0033-phone-phase-modules.md)） |
+| `fast.py` | 引擎出口：`Phone` 门面只做转发与组合；协作者都在 `tool/phone/`（下一张表），模块级名字仍从这里可 import（[ADR-0033](adr/0033-phone-phase-modules.md)） |
 | `recipe_kit.py` | 机型脚本的前导：段包装、入口断言、跳过出口、两个台账（[ADR-0029](adr/0029-recipe-preamble-injection.md)） |
 | `recipe_meta.py` | 机型脚本头部的元数据：录制版本、机型列表、段名；只有正则，不背 CLI 入口的副作用 |
 | `chan_fast.py` | 营销通知渠道：`ChannelPage`（到页 + 认行）、批处理循环 |
@@ -47,6 +47,26 @@
 | `ui_session.py` | 读屏会话的本机互斥 |
 | `troubleshooting.py` | 读屏失败的排查提示 |
 | `host.py` | 这次执行跑在哪个宿主（手机版 / 桌面），以及随之切换的称呼 |
+
+`tool/phone/` 里是 [ADR-0033](adr/0033-phone-phase-modules.md) 的七个协作者模块（两个基座 + 五个阶段）
+加三个跨阶段会话对象；两个基座与五个阶段分三层（`Connection` → `Screen` → 阶段），
+`fast.py` 的 `Phone` 是包外的薄门面：
+
+| 层 | 模块 | 拥有什么 |
+|---|---|---|
+| 基座一 | `phone/connection.py` | 连接与生命周期：设备、串号、断线判定、锁屏等待、日志开关 |
+| 基座二 | `phone/screen.py` | 读屏与认行、页面诊断、视口几何（`W` / `H`）、动作原语（含翻页）、确认框的认法 |
+| 跨阶段状态 | `phone/session.py` | 三个会话对象：丢失记录（`LostNote`）、启动会话（`LaunchSession`）、渠道会话（`ChannelSession`） |
+| 阶段 | `phone/toggler.py` | 拨动：`off()` 与它的计划、回读、补点、结局 |
+| 阶段 | `phone/launcher.py` | 启动与落点：拉起、前台归属、落点证据 |
+| 阶段 | `phone/settings_search.py` | 设置搜索：进搜索框、输入、退化链、往返 |
+| 阶段 | `phone/dismisser.py` | 弹窗与推广位：`dismiss()` 的退化链、点了 ✕ 之后的推广位退回 |
+| 阶段 | `phone/navigator.py` | 导航：`tap` / `go` / `enter` / `entry` / `tab` / `top`、换页校验与等页 |
+| 门面（包外） | `fast.py` 的 `Phone` | 只做转发与组合，公开名字一个不改 |
+
+调用关系单向：两个基座不认识任何阶段，阶段只经 `Screen` 的动作原语与观测做事，彼此之间只传注入的
+窄接口（导航与启动拿弹窗的 `dismiss`），不互相 import；包内 import 图由 `tests/test_phone_navigator.py`
+的 `CallGraphTests` 扫源码钉住。
 
 只有人手动敲命令才会跑的：
 
@@ -64,9 +84,6 @@
 | `check_comment_tickets.py` | PR 新增行里的票号要在正文引用的范围内，`docs/adr/` 与含「沿用」的行豁免（#1001） |
 
 `commits.py` 不是命令：它是上面几条 PR 校验共用的 `base..head` 读取与 UTF-8 控制台，沿用 #848、#849 起的那份设计。
-
-`Phone` 已按 [ADR-0033](adr/0033-phone-phase-modules.md) 拆进 `tool/phone/`：两个基座、三个会话
-对象与五个阶段（拨动、启动、设置搜索、弹窗、导航）各在一个模块里，门面只剩转发。对外名字一个不改。
 
 客户端侧：`gui/app.py` 是主体（`ClientData` / `AdbDownloader` / `Reporter` / `Dispatcher` / `Api`），`gui/launch.py` 是入口与打包冒烟，`gui/web/` 是桌面版的界面，`gui/winpreflight.py` 归因 Windows 启动失败，`gui/dotnet_config.py` 在打包时写随包的 `<exe>.config`。
 
