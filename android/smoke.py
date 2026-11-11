@@ -623,7 +623,7 @@ def smoke(runner, *, ref=None, commit=None, serial=None, screens=(), root=None,
         dump, _, _ = runner.run("adb", "-s", serial, "logcat", "-d")
         dumps.append("== 执行段 ==\n%s\n" % dump)
 
-        # 导出停住但引擎还在手机上跑：这时还原会和执行抢同一块屏（#662），停手并如实说
+        # 导出停住但引擎还在手机上跑：这时还原会和执行抢同一块屏，停手并如实说（沿用 #662 的互斥）
         running = blob is None and running_now(runner, serial, sleep=sleep)
         note("还原")
         restore = []

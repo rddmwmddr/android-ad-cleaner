@@ -505,7 +505,7 @@ class SmokeTests(unittest.TestCase):
                          self.calls(runner))
 
     def test_a_run_still_going_blocks_restore_and_screens(self):
-        """导出停住但引擎还在跑：这时还原 / 强停会和执行抢同一块屏（#662），停手并如实说。"""
+        """导出停住但引擎还在跑：这时还原 / 强停会和执行抢同一块屏，停手并如实说（沿用 #662 的互斥）。"""
         root, target = self.workdir()
         table = happy_table(target, export_replies=[(export(finished=False), "", 0)])
         report, runner, notes = self.run_smoke(root, table, screens=("home",))
