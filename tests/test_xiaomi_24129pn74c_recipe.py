@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import fast
 import run
-from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock
+from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock, stub
 
 GEAR_PAGE = """<hierarchy rotation="0">
   <node class="android.widget.FrameLayout" package="com.android.calendar" bounds="[0,0][1080,2340]">
@@ -145,9 +145,10 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
         clocked(self, fast, clock)
         p = fake_phone(clock=clock, size=(1080, 2400), stages=stages, focus=focus, **fields)
         if clicked is not None:
-            p.click = lambda x, y: (clicked.append((x, y)), clock.click())[1]
+            # 导航阶段经观测基座点击与返回（ADR-0033）：桩要落到 `p.screen`
+            stub(p, "click", lambda x, y: (clicked.append((x, y)), clock.click())[1])
         if backed is not None:
-            p.back = lambda *a, **k: (backed.append(clock.t), clock.click())[1]
+            stub(p, "back", lambda *a, **k: (backed.append(clock.t), clock.click())[1])
         scope, out = load_recipe(p, ROOT / "recipes/xiaomi-24129PN74C" / recipe, only=only)
         scope["time"] = clock              # 脚本里的 sleep 也推进设备时间轴，否则点完齿轮页面不会换
         return p, scope, out

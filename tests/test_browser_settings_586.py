@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import fast
-from fixtures import Clock, fake_phone, install_clock, load_recipe, phone_mock
+from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock, stub
 
 XIAOMI = ROOT / "recipes/xiaomi-24129PN74C"
 RECIPES = ("recipe.py", "recipe_os4.py")
@@ -67,13 +67,17 @@ POPUP_SETTING = (870, 760)           # top=730：刚过 0.3 屏高，弹窗里�
 TOOLBAR_SETTING_Y = 144              # 工具栏图标的 y
 
 
-def timeline_phone(stages, focus, clicked=None):
-    """假手机 + 播放时间轴：一次点击/返回换一页，页面由时间轴决定。"""
+def timeline_phone(case, stages, focus, clicked=None):
+    """假手机 + 播放时间轴：一次点击/返回换一页，页面由时间轴决定。
+
+    假钟经 `clocked()` 装入并登记还原（ADR-0033 的五个阶段各读一份 `time`）：只装不还，
+    后面的用例会拿到这只钟，导航里「等 6 秒」那类循环就按残留时间跑。
+    """
     clock = Clock(click_cost=2.0)
-    install_clock(fast, clock)
+    clocked(case, fast, clock)
     p = fake_phone(clock=clock, size=(1080, 2400), stages=stages, focus=focus)
     if clicked is not None:
-        p.click = lambda x, y: (clicked.append((x, y)), clock.click())[1]
+        stub(p, "click", lambda x, y: (clicked.append((x, y)), clock.click())[1])
     p.start = Mock(return_value=True)
     p.off = Mock()
     return p
@@ -91,10 +95,9 @@ class XiaomiBrowserSettingsTests(unittest.TestCase):
             "recipe.py": [ADS, call(only=["显示猜你想搜模块"], page="浏览器·搜索设置")],
             "recipe_os4.py": [ADS],
         }
-        self.addCleanup(setattr, fast, "time", fast.time)
         for name in RECIPES:
             with self.subTest(recipe=name):
-                p = timeline_phone([(0.0, HOME), (1.0, POPUP), (3.0, SETTINGS)],
+                p = timeline_phone(self, [(0.0, HOME), (1.0, POPUP), (3.0, SETTINGS)],
                                    focus=((0.0, BROWSER), (3.0, BROWSER_SETTINGS)))
                 scope, _out = self.browser_step(p, name)
                 self.assertEqual(scope["FAILED_STEPS"], [])
@@ -102,11 +105,10 @@ class XiaomiBrowserSettingsTests(unittest.TestCase):
 
     def test_toolbar_panel_is_not_taken_for_the_settings_page(self):
         """落到工具栏面板时：不点任何开关、不在面板上找子页，报出停在哪一页。"""
-        self.addCleanup(setattr, fast, "time", fast.time)
         for name in RECIPES:
             with self.subTest(recipe=name):
                 clicked = []
-                p = timeline_phone([(0.0, HOME), (1.0, POPUP), (3.0, TOOLBAR_PANEL),
+                p = timeline_phone(self, [(0.0, HOME), (1.0, POPUP), (3.0, TOOLBAR_PANEL),
                                     (5.0, HOME), (7.0, POPUP), (9.0, TOOLBAR_PANEL), (11.0, HOME)],
                                    focus=((0.0, BROWSER),), clicked=clicked)
                 scope, out = self.browser_step(p, name)

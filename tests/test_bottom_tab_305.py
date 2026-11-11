@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import fast
-from fixtures import phone_stub
+from fixtures import phone_stub, stub
 
 
 def phone(*, exact_tab, loose_tab, lands):
@@ -17,14 +17,15 @@ def phone(*, exact_tab, loose_tab, lands):
     p = phone_stub("test", W=1080, H=2400)
     p.say = Mock()
     p.dismiss = Mock(return_value=None)
-    p.tap = Mock(return_value=True)
+    # `go()` 内部调的是导航阶段的 `tap()`、观测基座的 `find()`（ADR-0033）：桩要落到那里
+    stub(p, "tap", Mock(return_value=True))
 
     def find(text, exact=False, root=None, edge_ok=False, nav=False):
         if text == "我的":
             return exact_tab if exact else loose_tab
         return (300, 300) if lands else None
 
-    p.find = find
+    stub(p, "find", find)
     return p
 
 
@@ -32,12 +33,12 @@ class GoBottomTabTests(unittest.TestCase):
     def test_exact_tab_is_used_when_it_reads_exactly_my(self):
         p = phone(exact_tab=(540, 2300), loose_tab=None, lands=True)
         self.assertTrue(p.go("我的", "设置"))
-        p.tap.assert_called_once_with("我的", exact=True, scrolls=0)
+        p.navigator.tap.assert_called_once_with("我的", exact=True, scrolls=0)
 
     def test_suffixed_tab_falls_back_to_contains(self):
         p = phone(exact_tab=None, loose_tab=(540, 2300), lands=True)
         self.assertTrue(p.go("我的", "设置"))
-        p.tap.assert_called_once_with("我的", exact=False, scrolls=0)
+        p.navigator.tap.assert_called_once_with("我的", exact=False, scrolls=0)
 
     def test_loose_click_that_lands_nowhere_still_fails(self):
         p = phone(exact_tab=None, loose_tab=(540, 2300), lands=False)
@@ -47,7 +48,7 @@ class GoBottomTabTests(unittest.TestCase):
     def test_caller_requesting_loose_match_skips_the_probe(self):
         p = phone(exact_tab=(540, 2300), loose_tab=(540, 2300), lands=True)
         self.assertTrue(p.go("我的", "设置", exact=False))
-        p.tap.assert_called_with("我的", exact=False, scrolls=0)
+        p.navigator.tap.assert_called_with("我的", exact=False, scrolls=0)
 
 
 if __name__ == "__main__":

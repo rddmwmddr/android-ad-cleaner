@@ -47,9 +47,10 @@ from row import icon_hit as icon_hit
 from polarity import AD_WORDS as AD_WORDS, NEG_PREFIX as NEG_PREFIX, TRACK_WORDS as TRACK_WORDS
 from polarity import want_state as want_state
 
-# 设置页的焦点窗口签名：同一批小米 / OPPO App 里两种命名并存，只认 Setting 会把
-# ThemePreferenceActivity、BrowserPreferencesPage 这类判成「没进去」（#960）。
-SETTINGS_MARKS = ("Setting", "Preference")
+# 导航已搬进 tool/phone/navigator.py（#1044），这里显式 re-export：`fast.SETTINGS_MARKS` 是
+# 模块级名字，门面上的 `in_settings_page()` 只是转发。设置页的焦点签名与导航判据只有那一份。
+from phone.navigator import SETTINGS_MARKS as SETTINGS_MARKS
+from phone.navigator import Navigator
 
 
 # 设置搜索框的识别式与直达动作随 `setting()` 搬进 tool/phone/settings_search.py（#1042），
@@ -92,9 +93,9 @@ from phone.toggler import Toggler
 class Phone:
     """门面：只做转发与组合，公开名字一个不改（ADR-0033）。
 
-    两个基座、拨动、启动、设置搜索与弹窗已搬进 `tool/phone/`：`Connection`（连接与生命周期）、
+    两个基座与五个阶段已全部搬进 `tool/phone/`：`Connection`（连接与生命周期）、
     `Screen`（观测、视口几何、动作原语）、`Toggler`（整页拨动）、`Launcher`（启动与落点）、
-    `SettingsSearch`（设置搜索）与 `Dismisser`（弹窗与推广位）。导航仍在后续步骤里搬。
+    `SettingsSearch`（设置搜索）、`Dismisser`（弹窗与推广位）与 `Navigator`（导航）。
     """
 
     # 设置搜索框的识别式与直达动作归 `SettingsSearch`，弹窗的 ✕ 判据归 `Dismisser`；
@@ -116,6 +117,8 @@ class Phone:
         # 弹窗读启动会话（推广位退回），启动阶段拿到关弹窗的窄接口：两边的边都经注入，不互相 import。
         self.dismisser = Dismisser(self.screen, self.launch_session)
         self.launcher = Launcher(self.screen, self.lost_note, self.launch_session, self.dismisser.dismiss)
+        # 导航拿到弹窗阶段的窄接口（挡路的先点掉）：导航调它，它不回调导航，调用图无环（#1044）。
+        self.navigator = Navigator(self.screen, self.lost_note, self.dismisser.dismiss)
         self.conn.check_input()
 
     # ---------- 转发：连接（Connection）与观测（Screen） ----------
@@ -364,23 +367,11 @@ class Phone:
         return self.screen.settle(before, maxwait)
 
     def find(self, text, exact=False, root=None, edge_ok=False, nav=False):
-        return self.screen.find(text, exact, root, edge_ok, nav)
+        return self.screen.find(text, exact=exact, root=root, edge_ok=edge_ok, nav=nav)
 
     def scroll(self, frac=0.45, up=False):
         """按下-移动-停 0.12 秒-松开：没有惯性，翻多少是多少，约 0.45 秒。"""
         self.screen.scroll(frac, up)
-
-    def top(self, n=4):
-        for _ in range(n):
-            if not any(x.get("scrollable") == "true" and self.on_screen(x) for x in self.tree().iter("node")):
-                break
-            focus = self.focus()
-            before = {t for t, _, _ in self.texts()}
-            self.scroll(0.58, up=True)
-            if self.focus() != focus:
-                raise RuntimeError("回到页顶时离开了当前设置页，停止本段")
-            if {t for t, _, _ in self.texts()} <= before:
-                break
 
     # ---------- 弹窗与推广位（Dismisser） ----------
     # 四条退化链（权限拒绝 / 更新标题 / ✕ 图标 / 推广位退回）与词表都在弹窗阶段；门面只转发。
@@ -394,183 +385,35 @@ class Phone:
     def _promoted_click(self, x, y, key):
         return self.dismisser.promoted_click(x, y, key)
 
+    # ---------- 导航（Navigator） ----------
+    # 按文字点、换页校验、等页、底栏、图标入口与回顶都在导航阶段；失败语义各方法不同（有的抛、
+    # 有的只返回假），门面只转发。挡路的弹窗由阶段经注入的窄接口调 `Dismisser`，不回调门面。
     def tap(self, text, exact=False, scrolls=6, wait=0.6, quiet=False, seen=None):
-        """找到就点。往下翻着找；翻到底没有，就回顶部再找一遍。
-        scrolls=0（点底栏/按钮）：不翻页，但 6 秒内边等边关弹窗——应用内更新弹窗要等版本检查
-        回来才冒出来，3 秒够不着（#286）。
-        quiet=True 时不打印「没找到」：入口探测会自己重试并给出诊断，中间的失败不该各报一行。
-        seen：传一个 list，点击前把当时的页面签名放进去。翻页找入口时翻页本身就会改变页面，
-        调用方要拿「点击那一刻」的页面当基准，才分得清是翻到了还是换页了（#286）。"""
-        if scrolls == 0:
-            t0 = time.time()
-            while time.time() - t0 < 6.0:
-                xy = self.find(text, exact, edge_ok="tab", nav=True)
-                if xy:
-                    b = self.sig(); self.click(*xy); self.settle(b, wait + 0.4)
-                    if seen is not None:
-                        seen.append(b)
-                    return True
-                if not self.dismiss():
-                    time.sleep(0.2)
-            if not quiet:
-                self.say(f"  ✗ 没找到「{text}」" + self.residual_note())
-            return False
-        if self.miss:                                   # 本段已经走丢：只看当前这一屏
-            xy = self.find(text, exact, nav=True)
-            if xy:
-                b = self.sig(); self.click(*xy); self.settle(b, wait + 0.4)
-                if seen is not None:
-                    seen.append(b)
-                self.miss = 0
-                return True
-            self.miss += 1
-            if not quiet:
-                self.say(f"  ✗ 没找到「{text}」（快速放弃）" + self.residual_note())
-            return False
-        for rnd in range(2 if scrolls else 1):
-            for i in range(scrolls + 1):
-                edge = "tab" if scrolls == 0 else False
-                xy = self.find(text, exact, edge_ok=edge, nav=True)
-                if not xy and self.dismiss():
-                    xy = self.find(text, exact, edge_ok=edge, nav=True)
-                if xy:
-                    b = self.sig(); self.click(*xy); self.settle(b, wait + 0.4)
-                    if seen is not None:
-                        seen.append(b)
-                    return True
-                if i < scrolls and not self.scroll_more():
-                    xy = self.find(text, exact, edge_ok=True, nav=True)
-                    if xy:
-                        b = self.sig()
-                        if seen is not None:
-                            seen.append(b)
-                        self.click(*xy); time.sleep(wait)
-                        return True
-                    break
-            if rnd == 0 and scrolls:
-                self.top(scrolls + 2)
-        self.miss += 1
-        if not quiet:
-            self.say(f"  ✗ 没找到「{text}」" + self.residual_note())
-        return False
+        return self.navigator.tap(text, exact, scrolls, wait, quiet, seen)
 
     def in_settings_page(self):
-        """当前页是某个 App 的设置页（焦点类名含 SETTINGS_MARKS 里的任一签名）。点完齿轮用它
-        确认真的进去了：点击被吞时页面没换，接着在旧页上找入口会整段失败（#331）。"""
-        return any(mark in self.focus() for mark in SETTINGS_MARKS)
+        return self.navigator.in_settings_page()
 
     def await_page(self, budget=2.4, poll=0.2, stable=0.15, changed_from=wait.UNSET):
-        """等当前页面站稳：读不到文字、或文字还在变时继续等；预算耗尽就照常往下判定。
-        Android 17 上设置页渲染更慢，点完齿轮 Activity 已换、内容还是空白（#331）。
-        给了 changed_from 就额外要求「换成了别的页」——重试时用它等页面再画一版；
-        不给时只等「这一页画完」，点击被吞、旧页仍在会立刻返回，那种情况要在导航处校验 Activity。"""
-        return wait.until(self.sig, timeout=budget, poll=poll, stable=stable,
-                          changed_from=changed_from, now=time.time, sleep=time.sleep)
+        return self.navigator.await_page(budget, poll, stable, changed_from)
 
     def entry(self, text, scrolls=6, budget=2.4, poll=0.2, tries=2):
-        """可选入口：先等页面站稳再找；找不到返回假，让可选入口不中断整段，并留下
-        Activity 与结构摘要，区分「没加载完」和「入口确实没了」（#331）。
-        一轮没命中不算结论：等页预算摊到几轮，后一轮等「与上一轮不同」的页面，
-        页面在预算内又画完一版就还能找回来；预算耗尽才判失败。
-        真正该中断的错误照常抛：断线、翻页离开了当前设置页。"""
-        seen = wait.UNSET
-        for _ in range(tries):
-            self.miss = 0
-            self.await_page(budget / tries, poll, changed_from=seen)
-            if self.tap(text, exact=True, scrolls=scrolls, quiet=True):
-                self.miss = 0
-                return True
-            self.miss = 0
-            seen = self.sig()
-        self.note_miss(text)
-        return False
+        return self.navigator.entry(text, scrolls, budget, poll, tries)
 
     def tap_icon(self, expect, area=(0.72, 0.0, 1.0, 0.16), tries=3):
-        """点一个没有文字的图标入口，点完要求 expect 里任一文字精确出现在新页面上；
-        点开的不是目标页就退回来换下一个（#292）。游戏中心 14.43.3 把「设置」做成「我的」页右上角的齿轮，
-        没有文字，按文字找永远找不到。
-        用精确匹配：页面上本来就有「隐私政策」之类的文字时，包含匹配会把第一次点击当成成功、不再回退。"""
-        expects = (expect,) if isinstance(expect, str) else tuple(expect)
-        for x, y in self.icon_candidates(area)[:tries]:
-            focus, sig = self.focus(), self.sig()
-            self.click(x, y)
-            # 页面慢时多等几轮，别把还没画出来的页面 back() 掉
-            if wait.until(lambda: any(self.find(e, exact=True) for e in expects),
-                          timeout=2.4, poll=0.6, now=time.monotonic, sleep=time.sleep):
-                self.say(f"  · 点开了右上角图标（出现「{expects[0]}」）")
-                return True
-            # 换了页面或弹出浮层：都要回到原页，不能留在别处接着点下一个候选。
-            # 退回来也要等页面站稳，否则下一个候选的坐标可能落在跳页动画上。
-            if self.focus() != focus or self.sig() != sig:
-                self.back()
-                time.sleep(0.6)
-        self.say("  · 当前页文字：" + self.page_text())
-        return False
+        return self.navigator.tap_icon(expect, area, tries)
 
     def enter(self, text, scrolls=0, tries=3):
-        """点开一个会换页的入口，并确认页面真的换了：点击常被弹窗淡出动画吞掉，页面没换就再点（#286）。
-        基准取「点击那一刻」的页面：入口要翻页才找得到时，翻页本身会改页面，不能当成换页。
-        只给会换页的入口用——没换页会再点一次，所以别用在开关行上。
-        精确匹配找不到时退回包含匹配（底栏常读作「我的，有新消息」）；换没换页仍由页面变化判定。"""
-        exact = True
-        if not self.find(text, exact=True, edge_ok="tab", nav=True):
-            exact = False
-        for _ in range(tries):
-            seen = []
-            if not self.tap(text, exact=exact, scrolls=scrolls, seen=seen):
-                raise RuntimeError(f"未找到入口「{text}」{self.residual_note('；')}；当前页：{self.page_text()}")
-            if self.settle(seen[0], 2.0):
-                return
-        raise RuntimeError(f"点「{text}」后页面没有变化{self.residual_note('；')}；当前页：{self.page_text()}")
+        return self.navigator.enter(text, scrolls, tries)
 
     def go(self, text, expect, tries=3, exact=True):
-        """点 text，直到 expect 出现在屏幕上（被弹窗吞掉就再点）。
-        精确匹配找不到时退回包含匹配：底部标签常读作「我的，有新消息」，精确匹配「我的」返回空（#305）。
-        已知边界：落点只核对 expect 此刻在不在屏上，不与点击前的页面比较——expect 本来就在屏上时，
-        点击被吞或入口没找到也返回 True。底栏标签改用 tab()，它按屏底带定位。"""
-        if exact and not self.find(text, exact=True, edge_ok="tab", nav=True):
-            exact = False
-        for _ in range(tries):
-            self.tap(text, exact=exact, scrolls=0)
-            for _ in range(5):
-                if self.find(expect) or self.find(expect, edge_ok="tab"):
-                    return True
-                if not self.dismiss():
-                    time.sleep(0.3)
-        self.say(f"  ✗ 点「{text}」后没出现「{expect}」" + self.residual_note())
-        return False
+        return self.navigator.go(text, expect, tries, exact)
 
     def tab(self, name, maxwait=6.0):
-        """点屏幕底部的标签。
-        只在底部带（节点上沿 `top` 超过屏高 85%）里找：标签常读作「未选中,我的」或「我的，有新消息」，
-        精确匹配「我的」找不到；退回包含匹配又会先命中内容区里同名的文字（商店有游戏叫
-        「我的奇妙小镇」，#305 / #386）。带内按「精确 → 逗号末段等于 → 包含」递进，越靠前越优先。
-        6 秒内边等边关弹窗——应用内更新弹窗晚到时会盖住底栏（#286）；点完等页面换掉再返回。
-        找不到返回 False，不回退 tap() / go()：失败要响亮，不能静默点到内容区的同名文字。"""
-        deadline = time.time() + maxwait
-        while True:
-            xy = self._tab_xy(name)
-            if xy:
-                before = self.sig()
-                self.click(*xy)
-                self.settle(before, 1.0)
-                return True
-            if time.time() >= deadline:
-                self.say(f"  ✗ 底部没有「{name}」标签")
-                return False
-            if not self.dismiss():
-                time.sleep(0.2)
+        return self.navigator.tab(name, maxwait)
 
-    def _tab_xy(self, name):
-        """底部带内按三层递进找标签，返回点击坐标或 None。"""
-        items = self.texts()
-        for hit in (lambda t: t == name,
-                    lambda t: re.split(r"[,，]", t)[-1].strip() == name,
-                    lambda t: name in t):
-            for text, (l, top, r, b), _ in items:
-                if top > self.H * 0.85 and hit(text):
-                    return (l + r) // 2, (top + b) // 2
-        return None
+    def top(self, n=4):
+        self.navigator.top(n)
 
     # ---------- 拨动（Toggler） ----------
     # 整页拨动与确认框都归拨动会话；确认框的认法与残留确认在观测基座（`Screen.confirm_target`），

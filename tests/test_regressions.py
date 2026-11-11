@@ -542,8 +542,8 @@ class TapIconTests(unittest.TestCase):
         p.screen.tree = Mock(return_value=ET.fromstring(self.PAGE))
         p.screen.focus = Mock(return_value="com.nearme.gamecenter/.Home")
         p.screen.sig = Mock(return_value="我的游戏")
-        p.click = Mock()
-        p.back = Mock()
+        stub(p, "click", Mock())       # 导航阶段经观测基座点击与返回，桩要落到 `p.screen`
+        stub(p, "back", Mock())
         return p
 
     def clock(self):
@@ -565,35 +565,36 @@ class TapIconTests(unittest.TestCase):
 
     def test_tap_icon_accepts_the_first_icon_when_the_target_text_appears(self):
         p = self.page_phone()
-        p.find = Mock(return_value=(5, 5))
+        stub(p, "find", Mock(return_value=(5, 5)))
         self.assertTrue(p.tap_icon("隐私开关设置"))
-        self.assertEqual([c.args for c in p.click.call_args_list], [(1030, 180)])
+        self.assertEqual([c.args for c in p.screen.click.call_args_list], [(1030, 180)])
         # 必须精确匹配：页面上本来就有「隐私政策」这类文字时，包含匹配会把第一次点击当成成功、不再回退
-        self.assertTrue(p.find.call_args.kwargs.get("exact"))
+        self.assertTrue(p.screen.find.call_args.kwargs.get("exact"))
 
     def test_tap_icon_goes_back_and_tries_the_next_icon_when_the_page_changes(self):
         p = self.page_phone()
         Clock = self.clock()
         p.screen.focus = Mock(side_effect=["home", "message", "message"])
-        p.find = Mock(side_effect=lambda *a, **k: (5, 5) if Clock.t > 2.5 else None)
+        stub(p, "find", Mock(side_effect=lambda *a, **k: (5, 5) if Clock.t > 2.5 else None))
         with patch.object(fast.time, "monotonic", Clock.monotonic), patch.object(fast.time, "sleep", Clock.sleep):
             self.assertTrue(p.tap_icon("隐私开关设置"))
-        self.assertEqual([c.args for c in p.click.call_args_list], [(1030, 180), (910, 180)])
-        p.back.assert_called_once()
+        self.assertEqual([c.args for c in p.screen.click.call_args_list], [(1030, 180), (910, 180)])
+        p.screen.back.assert_called_once()
 
     def test_tap_icon_gives_up_when_no_icon_opens_the_target(self):
         p = self.page_phone()
         Clock = self.clock()
-        p.find = Mock(return_value=None)
+        stub(p, "find", Mock(return_value=None))
         with patch.object(fast.time, "monotonic", Clock.monotonic), patch.object(fast.time, "sleep", Clock.sleep):
             self.assertFalse(p.tap_icon("隐私开关设置"))
-        self.assertEqual([c.args for c in p.click.call_args_list], [(1030, 180), (910, 180)])
-        p.back.assert_not_called()          # 页面没变就不 back，避免把用户留在别的页面
+        self.assertEqual([c.args for c in p.screen.click.call_args_list], [(1030, 180), (910, 180)])
+        p.screen.back.assert_not_called()   # 页面没变就不 back，避免把用户留在别的页面
 
     def test_tap_icon_prints_page_text_when_no_icon_works(self):
         p = self.page_phone()
         Clock = self.clock()
-        p.log, p.find = True, Mock(return_value=None)
+        p.log = True
+        stub(p, "find", Mock(return_value=None))
         p.screen.texts = Mock(return_value=[("我的游戏", (0, 0, 1, 1), None)])
         out = io.StringIO()
         with patch.object(fast.time, "monotonic", Clock.monotonic), patch.object(fast.time, "sleep", Clock.sleep), \

@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import fast
-from fixtures import Clock, clocked, load_recipe, phone_stub
+from fixtures import Clock, clocked, load_recipe, phone_stub, stub
 
 # 仓库里已有的真机读数：设置页命名分「Setting」与「Preference」两族
 SETTINGS_PAGES = [
@@ -51,8 +51,13 @@ GEAR_PAGE = """<hierarchy rotation="0">
 
 
 def focus_phone(**fields):
-    """不连手机、焦点窗口由参数给的 Phone：判据只读 focus()。"""
-    return phone_stub("test", d=Mock(), W=1080, H=2400, **fields)
+    """不连手机、焦点窗口由参数给的 Phone：判据只读 focus()。
+
+    `focus` 归观测基座（ADR-0033）：桩要落在 `p.screen` 上，门面与导航阶段读的才是同一处。"""
+    p = phone_stub("test", d=Mock(), W=1080, H=2400)
+    for name, value in fields.items():
+        stub(p, name, value)
+    return p
 
 
 class SettingsPageTests(unittest.TestCase):
@@ -83,17 +88,17 @@ class GearLandingTests(unittest.TestCase):
     def gear_phone(self):
         p = focus_phone(focus=lambda: THEME_MINE)
         p.screen.tree = Mock(return_value=ET.fromstring(GEAR_PAGE))
-        p.click = Mock(side_effect=lambda x, y: setattr(p, "focus", lambda: THEME_SETTINGS))
-        p.back = Mock()
-        p.find = Mock(return_value=None)
-        p.tap = Mock(return_value=False)
+        stub(p, "click", Mock(side_effect=lambda x, y: setattr(p.screen, "focus", lambda: THEME_SETTINGS)))
+        stub(p, "back", Mock())
+        stub(p, "find", Mock(return_value=None))
+        stub(p, "tap", Mock(return_value=False))
         return p
 
     def test_gear_landing_on_a_preference_activity_counts_as_entering_settings(self):
         p = self.gear_phone()
         scope, _ = load_recipe(p, ROOT / "recipes/xiaomi-24129PN74C/recipe_os4.py")
         self.assertTrue(scope["gear"]())
-        p.back.assert_not_called()
+        p.screen.back.assert_not_called()
 
 
 if __name__ == "__main__":

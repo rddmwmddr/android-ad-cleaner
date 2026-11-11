@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import fast
-from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock
+from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock, stub
 
 RECIPE = ROOT / "recipes/xiaomi-24129PN74C/recipe.py"
 BROWSER_HOME = "com.android.browser/com.android.browser.BrowserActivity"
@@ -123,7 +123,7 @@ class BrowserDirectTests(ClockCase):
         """直达落空时按「菜单」→「我的」→ 齿轮走，用的是报告者贴的「我的」页节点。"""
         clicked = []
         p, clock = self.browser_phone([(0.0, BROWSER_MINE)], ((0.0, BROWSER_HOME),))
-        p.click = lambda x, y: (clicked.append((x, y)), clock.click())[1]
+        stub(p, "click", lambda x, y: (clicked.append((x, y)), clock.click())[1])
         p.in_settings_page = Mock(return_value=True)    # 落点判据由 #960 的用例守
 
         def start(pkg, activity=None, **kw):
@@ -169,7 +169,7 @@ class ThemeSettingsTests(ClockCase):
         self.clicked = []
         self.p = fake_phone(clock=clock, size=(1080, 2400), stages=[(0.0, THEME_MINE)],
                             focus=((0.0, THEME_MINE_FOCUS),))
-        self.p.click = lambda x, y: (self.clicked.append((x, y)), clock.click())[1]
+        stub(self.p, "click", lambda x, y: (self.clicked.append((x, y)), clock.click())[1])
 
     def load(self):
         scope, _ = load_recipe(self.p, RECIPE)

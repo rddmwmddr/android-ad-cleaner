@@ -314,7 +314,7 @@ class BottomBarWaitTests(unittest.TestCase):
         p.screen.settle = Mock(return_value=True)
         p.click = p.screen.click = Mock()
         clock = [0.0]
-        p.find = Mock(side_effect=lambda *a, **k: (540, 2400) if clock[0] >= found_at else None)
+        p.screen.find = Mock(side_effect=lambda *a, **k: (540, 2400) if clock[0] >= found_at else None)
         p.dismiss = Mock(return_value=None)
         with patch.object(fast.time, "time", side_effect=lambda: clock[0]), \
                 patch.object(fast.time, "sleep", side_effect=lambda s: clock.__setitem__(0, clock[0] + s)):

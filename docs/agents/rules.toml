@@ -317,7 +317,7 @@ expires_if = "渠道判定改成服务端规则、或机型脚本各自声明时
 [[rule]]
 id = "dev.navigation.bottom-tab"
 source = "CLAUDE.md#开发"
-check = "code:tool/fast.py:Phone"
+check = "code:tool/phone/navigator.py:Navigator"
 status = "code"
 why = "底部标签要在屏底带内按三层匹配找，退化成全屏文字匹配会点到同名列表项（ADR-0012）；它不重试不确认，需要文字确认的导航仍用 go()。"
 expires_if = "界面提供结构化的底部导航节点、不再靠文字匹配时删。"

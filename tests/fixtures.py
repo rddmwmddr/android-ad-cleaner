@@ -113,7 +113,7 @@ def clock_targets(module):
     if getattr(module, "__name__", "") == "fast":
         targets += [sys.modules[name] for name in ("phone.connection", "phone.screen", "phone.toggler",
                                                     "phone.launcher", "phone.settings_search",
-                                                    "phone.dismisser")
+                                                    "phone.dismisser", "phone.navigator")
                     if name in sys.modules]
     return targets
 
@@ -257,6 +257,8 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
         p.search = bind_search(p, fast_mod)
     if hasattr(fast_mod, "Dismisser"):         # 弹窗同理：`dismiss()` / `_promoted_click()` 内部走它
         p.dismisser = bind_dismisser(p, fast_mod)
+    if hasattr(fast_mod, "Navigator"):         # 导航同理：`tap()` / `go()` / `tab()` 内部走它
+        p.navigator = bind_navigator(p, fast_mod)
     p.link = fast_mod.adb_link.Connection(serial, transport=shell or _silent_shell)
     p.log, p.pause_at_lock_check, p.systemui_text = False, False, False
     p.changed, p.safe_mode = [], False
@@ -345,6 +347,20 @@ def bind_dismisser(phone, fast_mod):
     dismisser.screen = _base(phone, "screen")
     dismisser.session = phone if isinstance(phone, Mock) else phone.launch_session
     return dismisser
+
+
+def bind_navigator(phone, fast_mod):
+    """在一台门面或 Mock 替身上架一个导航阶段（#1044）：装配只此一处。
+
+    观测与动作取 `phone.screen`，丢失记录取门面的 `lost_note`（Mock 替身上门面与基座是同一个
+    对象）。`dismiss` 是弹窗阶段的窄接口，按调用时取门面的那一份：用例随后把 `p.dismiss` 换成
+    别的桩也必须生效，所以不在这里捕获绑定方法。
+    """
+    navigator = fast_mod.Navigator.__new__(fast_mod.Navigator)
+    navigator.screen = _base(phone, "screen")
+    navigator.dismiss = lambda *a, **k: phone.dismiss(*a, **k)
+    navigator.lost_note = phone if isinstance(phone, Mock) else phone.lost_note
+    return navigator
 
 
 def job_stub(**fields):
@@ -452,9 +468,13 @@ def _only_list(only):
 _BASE_OWNED_ = {
     "conn": ("locked", "wait_unlocked", "say", "check_alive", "close"),
     "screen": ("focus", "tree", "texts", "sig", "settle", "switch_rows", "on_screen",
-               "click", "back", "scroll", "scroll_more"),
+               "click", "back", "scroll", "scroll_more", "find", "page_text"),
     # 设置搜索阶段自己的三个读数：`setting()` 内部调它们，门面只是转发（#1042）
     "search": ("type_text", "edit_ready", "focused_text"),
+    # 导航阶段内部互相调用的入口：`go()` 调 `tap()`、`entry()` 调 `await_page()` / `tap()`、
+    # `enter()` 调 `tap()`；门面只是转发（#1044）
+    "navigator": ("tap", "tab", "go", "enter", "entry", "top", "tap_icon", "await_page",
+                  "in_settings_page"),
 }
 
 
