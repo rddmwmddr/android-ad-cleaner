@@ -1,12 +1,13 @@
-"""启动与落点：拉起 App、确认前台归属、判落点，以及推广位的退回（ADR-0033、#1041）。
+"""启动与落点：拉起 App、确认前台归属、判落点（ADR-0033、#1041）。
 
 这一段对外可观察的东西最难替代：启动后到底算不算还在目标 App、落点不对时报什么，都是报告者
 能看见的。所以判据与现场一起搬：`unknown_focus()` 判「读不出 ≠ 离开」，连续 `FOREIGN_STREAK`
 帧外占才停段，启动等待按 `LAUNCH_WAIT` 计、顺延不超过 `LAUNCH_HARD_STOP`；落点不对时
 `_landing_note()` / `_launch_evidence()` 仍带「停在哪 / 标题 / 结构」。
 
-观测只经 `Screen`，传输经它背后的 `Connection`；`dismiss` 是注入的窄接口（弹窗阶段还没搬来，
-门面把当前的 `dismiss()` 传进来）。启动会话（`app` / `promoted`）归这里用，对象本身由门面建。
+观测只经 `Screen`，传输经它背后的 `Connection`；`dismiss` 是注入的窄接口（弹窗与推广位归
+`Dismisser`，启动只顺手关一下）。启动会话（`app` / `promoted`）的对象由门面建：`app` 在这里写，
+`promoted` 在这里换 App 时清空、另由弹窗侧读写——`promoted_click()` 在 `Dismisser` 里。
 """
 import re
 import shlex
@@ -17,7 +18,8 @@ import adb_link
 import recipe_kit
 import wait
 
-PERMISSION_CONTROLLERS = {"com.android.permissioncontroller", "com.google.android.permissioncontroller"}
+from phone.screen import PERMISSION_CONTROLLERS
+
 # 拉起后等目标 App 到前台：只有「确知不是它」的时间计入预算，空焦点是窗口还没画出来，不计（#581）。
 LAUNCH_WAIT = 5
 # 冷启动过渡能把启动等待顺延到的挂钟上限：与下面「启动后 8 秒仍读不到页面」同一个界，空焦点不能无限等。
@@ -44,10 +46,10 @@ def expect_match(word, text):
 
 
 class Launcher:
-    """启动会话：拉起、前台归属、落点判据与推广位退回。
+    """启动会话：拉起、前台归属与落点判据。
 
     `session` 是启动会话对象（`app` / `promoted`），`dismiss` 是注入的窄接口：
-    关弹窗的退化链归弹窗阶段，这里只要「顺手关一下」。
+    关弹窗的退化链归 `Dismisser`，这里只要「顺手关一下」。
     """
 
     def __init__(self, screen, lost_note, session, dismiss):
@@ -255,26 +257,3 @@ class Launcher:
             if check_foreground() or not streak:
                 break
             time.sleep(.2)
-
-    def promoted_click(self, x, y, key):
-        """点 ✕ 之后前台换成了别的 App：多半是页面里的推广位（#420），退回原 App 并记下这一处。
-        点前不在目标 App（抢焦点的广告浮层）或点后读不到前台时不算推广位，调用方照旧算关闭。
-        返回真表示这次没关掉弹窗。"""
-        before = self.screen.focus().split("/", 1)[0]
-        if before and (before, key) in self.session.promoted:
-            return True                     # 这个 App 的这一处点过并跳走了：再点还是跳
-        self.screen.click(x, y); time.sleep(0.6)
-        after = self.screen.focus().split("/", 1)[0]
-        if not (before and after and before == self.session.app and after != before):
-            return False
-        self.session.promoted.add((before, key))
-        self.screen.back(); time.sleep(.4)
-        where = self.screen.focus().split("/", 1)[0]
-        if where and where != before:        # 一次返回还没退回来，再退一次
-            self.screen.back(); time.sleep(.4)
-            where = self.screen.focus().split("/", 1)[0]
-        if where and where != before:
-            # 退不回来就停：不能把用户留在别的 App 里，也不能在陌生页面上接着找入口
-            raise RuntimeError(f"点 ✕ 后跳到了 {after}，返回两次仍停在 {where}，停止本段以免操作其他 App")
-        self.screen.say(f"  · 点了 ✕ 后跳到 {after}，疑似推广位，已退回（{key[:40]}）")
-        return True

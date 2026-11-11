@@ -10,11 +10,12 @@ worktree、跑完删掉：
     git worktree add /tmp/aac-baseline <改动前的提交>
     python tests/compare_phone_state.py /tmp/aac-baseline/tool
 
-比七处：`Phone.texts()`（页面 × 两种屏尺寸 × 读屏策略开 / 关）、
+比八处：`Phone.texts()`（页面 × 两种屏尺寸 × 读屏策略开 / 关）、
 `explore.entries()`（页面 × 包名）、`Phone.off()`（两种屏尺寸 × 安全模式 × 三档 `only`）、
 `Phone.tap()` / `Phone._promoted_click()`（丢失记录与推广位已带前置状态的几条路径）、
 `Phone._confirm_target()` / `residual_confirm()` / `residual_note()`（确认框判定与残留提示）、
-`Phone.start()`（启动与落点）、`Phone.setting()` / `Phone.type_text()`（设置搜索的往返与打字退化链）。
+`Phone.start()`（启动与落点）、`Phone.setting()` / `Phone.type_text()`（设置搜索的往返与打字退化链）、
+`Phone.dismiss()`（四条弹窗退化链与推广位退回，另加全仓页面样本的扫描）。
 两边必须各起一个子进程：模块名相同，同进程里 import 不了两份 `fast`。
 
 结论不只看「相等」——驱动同时打印守卫数字（策略 / 包名 / `off` 每个场景点到了哪些标题，
@@ -57,6 +58,82 @@ LAUNCH_PROMO = f'''<hierarchy rotation="0"><node package="{LAUNCH_PKG}" bounds="
   <node class="android.widget.TextView" text="推荐 1 款应用" bounds="[60,300][900,380]"/>
   <node class="android.widget.TextView" text="推荐 2 款应用" bounds="[60,420][900,500]"/>
 </node></hierarchy>'''
+
+# 弹窗样本（#1043）：权限页的两支、✕ 图标的四道守卫、更新标题、拒绝类按钮，以及形状像设置页的反例。
+PERMISSION_DENY = '''<hierarchy rotation="0">
+  <node package="com.android.permissioncontroller" bounds="[0,0][1080,2340]">
+    <node package="com.android.permissioncontroller" class="android.widget.Button" text="允许" bounds="[100,1800][500,1940]"/>
+    <node package="com.android.permissioncontroller" class="android.widget.Button" text="拒绝" bounds="[580,1800][980,1940]"/>
+  </node>
+</hierarchy>'''
+PERMISSION_ALLOW_ONLY = '''<hierarchy rotation="0">
+  <node package="com.android.permissioncontroller" bounds="[0,0][1080,2340]">
+    <node package="com.android.permissioncontroller" class="android.widget.Button" text="允许" bounds="[100,1800][500,1940]"/>
+  </node>
+</hierarchy>'''
+# 纯图标的广告弹窗：desc 读作「关闭」，页面上没有开关、也没有可滚动列表
+POPUP_CLOSE = '''<hierarchy rotation="0">
+  <node package="com.vivo.browser" bounds="[0,0][1080,2340]">
+    <node class="android.widget.TextView" text="推荐内容" bounds="[140,660][900,720]"/>
+    <node class="android.widget.ImageView" content-desc="关闭" clickable="true"
+          resource-id="com.vivo.browser:id/iv_close" bounds="[900,600][990,690]"/>
+  </node>
+</hierarchy>'''
+# 守卫一：desc 精确读作「返回」的是浮层自己的返回键，点了是导航（沿用 #753）
+POPUP_BACK_LABEL = POPUP_CLOSE.replace('content-desc="关闭"', 'content-desc="返回"')
+# 守卫二：列表里卡片的 ✕ 点了会打开别的页面
+POPUP_IN_LIST = '''<hierarchy rotation="0">
+  <node package="com.android.settings" bounds="[0,0][1080,2340]">
+    <node class="android.widget.ListView" scrollable="true" bounds="[0,300][1080,2200]">
+      <node class="android.widget.ImageView" content-desc="关闭" clickable="true"
+            resource-id="com.android.settings:id/close_hint" bounds="[900,600][990,690]"/>
+    </node>
+  </node>
+</hierarchy>'''
+# 守卫三：含「关闭」的说明行本身就是开关，点它等于替用户拨一次（沿用 #378）
+POPUP_SWITCH_ROW = '''<hierarchy rotation="0">
+  <node package="com.android.settings" bounds="[0,0][1080,2340]">
+    <node text="个性化广告推荐" bounds="[60,300][900,380]"/>
+    <node class="android.widget.LinearLayout" content-desc="关闭后，广告内容的相关性会降低" clickable="true"
+          bounds="[900,420][1060,560]">
+      <node class="android.widget.Switch" checkable="true" checked="true" bounds="[920,440][1040,540]"/>
+    </node>
+  </node>
+</hierarchy>'''
+# 守卫四：尺寸越界的图标不点（整行 / 整块卡片会进别的页面）
+POPUP_TOO_WIDE = POPUP_CLOSE.replace('bounds="[900,600][990,690]"', 'bounds="[100,600][980,690]"')
+# 更新弹窗：标题在可滚动容器里，下面的「带滚动列表」守卫会漏掉它，所以先按标题认（沿用 #286）
+UPDATE_POPUP = '''<hierarchy rotation="0">
+  <node package="com.heytap.themestore" bounds="[0,0][1080,2340]">
+    <node class="android.widget.ScrollView" scrollable="true" bounds="[0,300][1080,2000]">
+      <node class="android.widget.TextView" text="检测到新版本" bounds="[140,660][900,720]"/>
+      <node class="android.widget.TextView" text="修复了一些问题" bounds="[140,760][900,820]"/>
+    </node>
+    <node class="android.widget.Button" text="取消" clickable="true" bounds="[100,2100][500,2240]"/>
+  </node>
+</hierarchy>'''
+# 拒绝类按钮：小弹窗、没有开关也没有滚动列表
+REFUSE_POPUP = '''<hierarchy rotation="0">
+  <node package="com.some.app" bounds="[0,0][1080,2340]">
+    <node class="android.widget.TextView" text="要开启通知吗" bounds="[140,660][900,720]"/>
+    <node class="android.widget.Button" text="同意" clickable="true" bounds="[100,1100][500,1240]"/>
+    <node class="android.widget.Button" text="不同意" clickable="true" bounds="[580,1100][980,1240]"/>
+  </node>
+</hierarchy>'''
+# 反例一：文字太多，像一个正常页面，不当弹窗
+MANY_TEXTS_POPUP = ('<hierarchy rotation="0"><node package="com.some.app" bounds="[0,0][1080,2340]">'
+                    + "".join(f'<node class="android.widget.TextView" text="第 {i} 项" bounds="[60,{200 + i * 100}][900,{280 + i * 100}]"/>'
+                              for i in range(17))
+                    + '<node class="android.widget.Button" text="取消" clickable="true" bounds="[100,2100][500,2240]"/>'
+                    + '</node></hierarchy>')
+# 反例二：正常设置面板也有「取消」，带开关或滚动列表的页面不能仅凭文字当弹窗关掉
+SETTINGS_WITH_SWITCH = '''<hierarchy rotation="0">
+  <node package="com.android.settings" bounds="[0,0][1080,2340]">
+    <node class="android.widget.TextView" text="自动更新" bounds="[60,300][900,380]"/>
+    <node class="android.widget.Switch" checkable="true" checked="true" bounds="[900,300][1060,400]"/>
+    <node class="android.widget.Button" text="取消" clickable="true" bounds="[100,2100][500,2240]"/>
+  </node>
+</hierarchy>'''
 
 # 挂在屏上的确认框：没有「取消」这类 DISMISS 词，`dismiss()` 关不掉它，才叫「残留」。
 DIALOG_PAGE = '''<hierarchy rotation="0">
@@ -453,8 +530,56 @@ def dump(tool_dir):
         record("type|not-ready", lambda p: p.type_text("广告", timeout=0.5), page=SEARCH_HOME)
         return out
 
+    def dismiss():
+        """弹窗与推广位（#1043）：四条退化链各自要走到，四道守卫各自要挡下，推广位退回还要退回原 App。
+        每条样本记返回值、点击坐标、返回次数、诊断行与耗时，两边逐字比；最后把全仓页面样本也扫一遍，
+        防「只在造出来的页面上对得上」。"""
+        out = []
+        settings = "com.android.settings/.Settings"
+        permission = "com.android.permissioncontroller/.permission.ui.GrantPermissionsActivity"
+
+        def run(label, page, focus=settings, app="", promote=False):
+            for size in SIZES:
+                clock = fixtures.Clock()
+                fixtures.install_clock(fast, clock)
+                lines, clicks, backs = [], [], []
+                axis = ((0.0, focus),) if not promote else PROMO_FOCUS
+                p = fixtures.fake_phone(clock=clock, size=size, stages=[(0.0, fit(page, size))],
+                                        focus=axis, fast_mod=fast, say=lines.append)
+                p.app = app
+                p.__dict__.pop("dismiss", None)      # `fake_phone()` 默认把 dismiss 桩成空：这一段要真的跑它
+                click = lambda x, y, _c=clock, _a=clicks: (_c.click(), _a.append((x, y)))  # noqa: E731
+                p.click = p.screen.click = click     # 改前 dismiss() 走门面、改后走观测基座
+                p.screen.back = lambda *a, _c=clock, _b=backs, **k: (_c.click(), _b.append(round(_c.t, 2)))
+                try:
+                    got = p.dismiss()
+                except Exception as e:                   # noqa: BLE001 - 对拍要的是原文，不是分类
+                    got = f"{type(e).__name__}: {e}"
+                out.append({"id": f"{label}|{size[0]}x{size[1]}", "got": got, "clicks": clicks,
+                            "backs": backs, "promoted": sorted(p.promoted), "lines": lines,
+                            "t": round(clock.t, 2), "reads": clock.page_reads})
+
+        run("permission|deny", PERMISSION_DENY, focus=permission)
+        run("permission|allow-only", PERMISSION_ALLOW_ONLY, focus=permission)
+        run("close|icon", POPUP_CLOSE)
+        run("close|back-label", POPUP_BACK_LABEL)
+        run("close|in-list", POPUP_IN_LIST)
+        run("close|switch-row", POPUP_SWITCH_ROW)
+        run("close|too-wide", POPUP_TOO_WIDE)
+        run("update|title", UPDATE_POPUP)
+        run("refuse|word", REFUSE_POPUP)
+        run("guard|many-texts", MANY_TEXTS_POPUP)
+        run("guard|page-with-switch", SETTINGS_WITH_SWITCH)
+        # 推广位：点的是目标 App 里的 ✕，点完前台换成商店，退回原 App 并记下这一处
+        run("promoted|fallback", POPUP_CLOSE.replace('package="com.vivo.browser"', 'package="com.promo"')
+            .replace("com.vivo.browser:id/iv_close", "com.promo:id/iv_close"),
+            app="com.promo", promote=True)
+        for label, xml in fixtures.all_pages(str(TESTS)):
+            run(f"page|{label}", xml)
+        return out
+
     return {"texts": texts(), "entries": entries(), "off": off(), "sessions": sessions(),
-            "toggling": toggling(), "launch": launch(), "search": search()}
+            "toggling": toggling(), "launch": launch(), "search": search(), "dismiss": dismiss()}
 
 
 @contextmanager
@@ -643,6 +768,47 @@ def search_guards(records):
     return 0 if not problems else 1
 
 
+def dismiss_guards(records):
+    """弹窗样本必须真的走完四条退化链与四道守卫：每一支的返回值、点击次数与返回次数逐一核对，
+    推广位样本还要真的换了前台、退回原 App 并记下那一处。任何一支退化（全都关不掉、或全都关掉）
+    时「两边一样」是必然相等，不能当证据。"""
+    by = {rec["id"]: rec for rec in records}
+    problems = []
+    for size in SIZES:
+        tag = f"{size[0]}x{size[1]}"
+
+        def check(label, got, clicks=0, backs=0, promoted=None, tag=tag):
+            rec = by.get(f"{label}|{tag}")
+            if rec is None:
+                problems.append(f"{tag} 缺样本 {label}")
+                return
+            if (rec["got"] != got or len(rec["clicks"]) != clicks
+                    or len(rec["backs"]) != backs
+                    or (promoted is not None and rec["promoted"] != promoted)):
+                problems.append(f"{tag} {label} 走成了 {rec['got']!r}／点击 {len(rec['clicks'])}"
+                                f"／返回 {len(rec['backs'])}／推广位 {rec['promoted']}")
+
+        check("permission|deny", "拒绝权限", clicks=1)
+        check("permission|allow-only", None)
+        check("close|icon", "✕", clicks=1)
+        check("close|back-label", None)          # 返回键不是弹窗 ✕（沿用 #753）
+        check("close|in-list", None)             # 列表里卡片的 ✕ 点了会打开别的页面
+        check("close|switch-row", None)          # 含「关闭」的说明行是开关（沿用 #378）
+        check("close|too-wide", None)            # 整行/整块尺寸的候选不点
+        check("update|title", "取消", clicks=1)   # 标题在滚动容器里也先按标题认（沿用 #286）
+        check("refuse|word", "不同意", clicks=1)
+        check("guard|many-texts", None)          # 文字多得像正常页面
+        check("guard|page-with-switch", None)    # 带开关的页面不当弹窗
+        check("promoted|fallback", None, clicks=1, backs=1,
+              promoted=[["com.promo", "关闭 com.promo:id/iv_close"]])
+        hit = {rec["got"] for rec in records if rec["id"].endswith(f"|{tag}")}
+        if not ({"✕", "取消", "不同意", "拒绝权限"} <= hit):
+            problems.append(f"{tag} 四种关掉弹窗的结局没都走到：{sorted(str(x) for x in hit)}")
+    print("守卫：弹窗样本 " + ("两种屏尺寸下四条退化链与四道守卫全部到位"
+                             if not problems else "；".join(problems)))
+    return 0 if not problems else 1
+
+
 def compare(baseline_tool):
     before, after = collect(str(baseline_tool)), collect(str(TESTS.parent / "tool"))
     bad = 0
@@ -665,6 +831,7 @@ def compare(baseline_tool):
     bad += toggling_guards(after["toggling"])
     bad += launch_guards(after["launch"])
     bad += search_guards(after["search"])
+    bad += dismiss_guards(after["dismiss"])
     return 1 if bad else 0
 
 

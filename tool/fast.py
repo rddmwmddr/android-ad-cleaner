@@ -26,6 +26,7 @@ from phone.connection import reader_failure as reader_failure
 from phone.connection import u2 as u2
 from phone.connection import _shell_transport as _shell_transport
 from phone.screen import CONFIRM as CONFIRM
+from phone.screen import PERMISSION_CONTROLLERS as PERMISSION_CONTROLLERS
 from phone.screen import Screen
 from phone.session import ChannelSession, LaunchSession, LostNote
 import adb_link
@@ -34,8 +35,11 @@ import events
 import recipe_kit
 import wait
 from reader import Reader
-from row import bounds, is_switch, switches_in
+from row import bounds as bounds
 from row import switch_row as switch_row
+# 弹窗搬走后本文件不再用它们，但改前这两个名字就在模块命名空间里（ADR-0033 的出口承诺）：
+# 照 bounds / icon_hit 的写法显式 re-export，站外脚本的 `from fast import switches_in` 不会断。
+from row import is_switch as is_switch, switches_in as switches_in
 # 显式 re-export：机型脚本从 fast 取这个判据（与 bounds 同一处引用）。
 from row import icon_hit as icon_hit
 # 极性词表定义在 polarity.py（文档生成器也要同一份，见 #693），这里显式 re-export，
@@ -43,10 +47,6 @@ from row import icon_hit as icon_hit
 from polarity import AD_WORDS as AD_WORDS, NEG_PREFIX as NEG_PREFIX, TRACK_WORDS as TRACK_WORDS
 from polarity import want_state as want_state
 
-DISMISS = ("以后再说", "暂不更新", "暂不", "取消", "我知道了", "跳过", "禁止", "不再提示", "不同意")
-# 应用内更新弹窗的标题（主题商店 17.22.0beta2 是「检测到新版本」，#286）。它通常把更新说明放进可滚动容器，
-# 只按标题认，不按按钮认：单个「取消」在正常设置面板里也有。
-UPDATE_TITLE = re.compile(r"检测到新版本|发现新版本|版本更新提示")
 # 设置页的焦点窗口签名：同一批小米 / OPPO App 里两种命名并存，只认 Setting 会把
 # ThemePreferenceActivity、BrowserPreferencesPage 这类判成「没进去」（#960）。
 SETTINGS_MARKS = ("Setting", "Preference")
@@ -58,6 +58,12 @@ from phone.settings_search import BOX as BOX, EDIT as EDIT, SEARCH_ACTION as SEA
 from phone.settings_search import SettingsSearch
 
 
+# 弹窗与推广位已搬进 tool/phone/dismisser.py（#1043），这里显式 re-export：`fast.DISMISS` /
+# `fast.UPDATE_TITLE` 是模块级名字；`CLOSE` / `BACK_LABELS` 仍是门面的类常量。
+from phone.dismisser import DISMISS as DISMISS, UPDATE_TITLE as UPDATE_TITLE
+from phone.dismisser import Dismisser
+
+
 class ScreenLocked(RuntimeError):
     """手机锁屏了：调用方等机主解锁，或停下整批，不逐项报同一个原因。"""
 
@@ -67,7 +73,6 @@ class ScreenLocked(RuntimeError):
 from phone.launcher import EXPECT_TAIL as EXPECT_TAIL
 from phone.launcher import FOREIGN_STREAK as FOREIGN_STREAK
 from phone.launcher import LAUNCH_HARD_STOP as LAUNCH_HARD_STOP, LAUNCH_WAIT as LAUNCH_WAIT
-from phone.launcher import PERMISSION_CONTROLLERS as PERMISSION_CONTROLLERS
 from phone.launcher import Launcher
 from phone.launcher import expect_match as expect_match, unknown_focus as unknown_focus
 
@@ -87,14 +92,17 @@ from phone.toggler import Toggler
 class Phone:
     """门面：只做转发与组合，公开名字一个不改（ADR-0033）。
 
-    两个基座、拨动、启动与设置搜索已搬进 `tool/phone/`：`Connection`（连接与生命周期）、
-    `Screen`（观测、视口几何、动作原语）、`Toggler`（整页拨动）、`Launcher`（启动与落点）与
-    `SettingsSearch`（设置搜索）。弹窗与导航两个阶段仍在本文件，后续步骤再搬。
+    两个基座、拨动、启动、设置搜索与弹窗已搬进 `tool/phone/`：`Connection`（连接与生命周期）、
+    `Screen`（观测、视口几何、动作原语）、`Toggler`（整页拨动）、`Launcher`（启动与落点）、
+    `SettingsSearch`（设置搜索）与 `Dismisser`（弹窗与推广位）。导航仍在后续步骤里搬。
     """
 
-    # 设置搜索框的识别式与直达动作归 `SettingsSearch`，门面保留同名类常量（公开面不改）。
+    # 设置搜索框的识别式与直达动作归 `SettingsSearch`，弹窗的 ✕ 判据归 `Dismisser`；
+    # 门面保留同名类常量（公开面不改）。
     BOX = BOX
     SEARCH_ACTION = SEARCH_ACTION
+    CLOSE = Dismisser.CLOSE
+    BACK_LABELS = Dismisser.BACK_LABELS
 
     def __init__(self, serial, log=True, reader: Reader | None = None):
         self.conn = Connection(serial, log=log, reader=reader)
@@ -105,8 +113,9 @@ class Phone:
         self.channel_session = ChannelSession()
         self.toggler = Toggler(self.screen, self.lost_note)
         self.search = SettingsSearch(self.screen, self.lost_note)
-        # 启动阶段注入弹窗侧的窄接口：`dismiss()` 还没搬，这里先交门面的那一份。
-        self.launcher = Launcher(self.screen, self.lost_note, self.launch_session, self.dismiss)
+        # 弹窗读启动会话（推广位退回），启动阶段拿到关弹窗的窄接口：两边的边都经注入，不互相 import。
+        self.dismisser = Dismisser(self.screen, self.launch_session)
+        self.launcher = Launcher(self.screen, self.lost_note, self.launch_session, self.dismisser.dismiss)
         self.conn.check_input()
 
     # ---------- 转发：连接（Connection）与观测（Screen） ----------
@@ -373,87 +382,17 @@ class Phone:
             if {t for t, _, _ in self.texts()} <= before:
                 break
 
-    CLOSE = re.compile(r"close|关闭|跳过|skip|cancel|dismiss|iv_x\b|btn_x\b", re.I)
-    # 描述精确读作「返回」的不是弹窗的 ✕，是浮层/页面自己的返回键：点了是导航，会把刚打开的
-    # 浮层收起来。vivo 浏览器菜单的 iv_back_cancel 就长这样，id 里的 cancel 本来会命中 CLOSE（#753）。
-    BACK_LABELS = {"返回", "back"}
-
+    # ---------- 弹窗与推广位（Dismisser） ----------
+    # 四条退化链（权限拒绝 / 更新标题 / ✕ 图标 / 推广位退回）与词表都在弹窗阶段；门面只转发。
     def dismiss(self):
-        """挡路的更新/推荐/权限弹窗：点拒绝类按钮（不替用户同意任何东西）。
-        纯图片的广告弹窗没有文字，只有一个 ✕ 图标：找 desc/id 里带 close 的可点元素。
-        返回非空表示这次关掉了东西，返回前已经等过界面过渡（0.4~0.6 秒），调用方不必再等；
-        返回 None 表示这次没关掉任何东西（推广位的 ✕ 点过也已退回原 App），
-        调用方按自己的节奏等待或重试。轮询处写成 `if not self.dismiss(): time.sleep(x)`：
-        刚关掉就立刻重读，什么都没关才按间隔再读。"""
-        root = self.tree()
-        # Android 运行时权限页只点明确的拒绝按钮，不替用户授予权限或修改“不再询问”。
-        if (any(n.get("package") in PERMISSION_CONTROLLERS for n in root.iter("node"))
-                and self.focus().split("/", 1)[0] in PERMISSION_CONTROLLERS):
-            for n in root.iter("node"):
-                if (n.get("package") in PERMISSION_CONTROLLERS and "Button" in n.get("class", "")
-                        and n.get("text") in ("拒绝", "不允许", "Deny", "Don't allow") and self.on_screen(n)):
-                    l, t, r, b = bounds(n)
-                    self.click((l+r)//2, (t+b)//2); time.sleep(.4)
-                    self.say("  · 已拒绝运行时权限申请，未授予权限")
-                    return "拒绝权限"
-            return None
-        parent = {c: p for p in root.iter() for c in p}
+        """挡路的更新/推荐/权限弹窗：点拒绝类按钮，不替用户同意任何东西（退化链见 `Dismisser`）。
 
-        def in_list(n):
-            # 列表里卡片的 ✕（ColorOS 17 隐私页「关闭提示」）点了会打开别的页面；广告弹窗的 ✕ 在列表外的浮层里。
-            n = parent.get(n)
-            while n is not None:
-                if n.get("scrollable") == "true":
-                    return True
-                n = parent.get(n)
-            return False
-
-        # 设置页里含「关闭」的说明行本身可能就是开关，点它等于替用户拨一次（#378）。
-        # 按候选子树判定而不是整屏——ColorOS 17 隐私页的浮层 ✕ 盖在带开关的页面上，仍然要能点。
-        def is_switch_row(n):
-            return is_switch(n) or bool(switches_in(n, self.on_screen))
-
-        for n in root.iter("node"):
-            if n.get("clickable") != "true" or n.get("package") == "com.android.systemui":
-                continue
-            desc = (n.get("content-desc") or "").strip()
-            key = desc + " " + (n.get("resource-id") or "")
-            if (self.CLOSE.search(key) and desc.casefold() not in self.BACK_LABELS
-                    and not (n.get("text") or "").strip()
-                    and not in_list(n) and not is_switch_row(n)):
-                l, t, r, b = bounds(n)
-                # 只点屏幕内的图标：屏幕外还留着上一层的节点，点它会抛「点击坐标在屏幕外」把整段打断
-                if 0 < r - l < self.W * 0.3 and 0 < b - t < self.H * 0.12 and self.on_screen(n):
-                    if self._promoted_click((l + r) // 2, (t + b) // 2, key.strip()):
-                        return None         # 没关掉弹窗，调用方按「这次什么也没关」处理
-                    self.say(f"  · 弹窗点了 ✕（{key.strip()[:40]}）")
-                    return "✕"
-        tx = self.texts(root)
-
-        def refuse():
-            for w in DISMISS:
-                for t, (l, tp, r, b), _ in tx:
-                    if t == w:
-                        self.click((l + r) // 2, (tp + b) // 2); time.sleep(0.6)
-                        self.say(f"  · 弹窗点了「{w}」")
-                        return w
-            return None
-
-        # 更新弹窗先认，且不看有没有滚动列表：主题商店把更新说明放在可滚动容器里，下面的守卫会漏掉它（#286）；
-        # 正常设置面板没有「检测到新版本」这类标题，所以仍不会被当成弹窗。
-        if any(UPDATE_TITLE.search(t) for t, _, _ in tx):
-            hit = refuse()
-            if hit:
-                return hit
-        if len(tx) > 16:
-            return None
-        # 天气等 App 的正常设置面板也有「取消」。带开关/滚动列表的页面不能仅凭文字当弹窗关掉。
-        if any(n.get("checkable") == "true" or n.get("scrollable") == "true" for n in root.iter("node")):
-            return None
-        return refuse()
+        返回非空表示这次关掉了东西、返回前已经等过界面过渡，调用方不必再等；返回 None 表示这次
+        什么也没关（推广位的 ✕ 点过也已退回原 App），调用方按自己的节奏等待或重试（沿用 #999）。"""
+        return self.dismisser.dismiss()
 
     def _promoted_click(self, x, y, key):
-        return self.launcher.promoted_click(x, y, key)
+        return self.dismisser.promoted_click(x, y, key)
 
     def tap(self, text, exact=False, scrolls=6, wait=0.6, quiet=False, seen=None):
         """找到就点。往下翻着找；翻到底没有，就回顶部再找一遍。

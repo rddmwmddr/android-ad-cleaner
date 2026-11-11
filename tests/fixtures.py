@@ -112,7 +112,8 @@ def clock_targets(module):
     targets = [module]
     if getattr(module, "__name__", "") == "fast":
         targets += [sys.modules[name] for name in ("phone.connection", "phone.screen", "phone.toggler",
-                                                    "phone.launcher", "phone.settings_search")
+                                                    "phone.launcher", "phone.settings_search",
+                                                    "phone.dismisser")
                     if name in sys.modules]
     return targets
 
@@ -231,8 +232,8 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
     `sig` / `settle` / `switch_rows` / `on_screen` / `click` / `back` / `scroll` / `scroll_more`）打
     `p.screen`，连接与生命周期（`say` / `locked` / `wait_unlocked`）打 `p.conn`。要同时拦住门面上的
     调用点（机型脚本直接写 `p.say(...)`）就两处一起桩。
-    三个会话对象（`lost_note` / `launch_session` / `channel_session`）与三个阶段（`toggler` / `launcher` /
-    `search`）也在这里造；
+    三个会话对象（`lost_note` / `launch_session` / `channel_session`）与四个阶段（`toggler` / `launcher` /
+    `search` / `dismisser`）也在这里造；
     它们的默认值归各自的类，这里不抄第二份。`changed` / `safe_mode` 归拨动会话，经门面的属性转发生效。
     另有一处与构造处不同：`pause_at_lock_check` 默认 False，因为假手机后面没有客户端在点「暂停」。
     屏尺寸 `W` / `H` 与读屏 adapter `d` 不设默认：它们是每条用例的前提，由调用方传。
@@ -254,6 +255,8 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
         p.launcher = bind_launcher(p, fast_mod)
     if hasattr(fast_mod, "SettingsSearch"):    # 设置搜索同理：`setting()` / `type_text()` 内部走它
         p.search = bind_search(p, fast_mod)
+    if hasattr(fast_mod, "Dismisser"):         # 弹窗同理：`dismiss()` / `_promoted_click()` 内部走它
+        p.dismisser = bind_dismisser(p, fast_mod)
     p.link = fast_mod.adb_link.Connection(serial, transport=shell or _silent_shell)
     p.log, p.pause_at_lock_check, p.systemui_text = False, False, False
     p.changed, p.safe_mode = [], False
@@ -318,7 +321,7 @@ def bind_launcher(phone, fast_mod):
 
     观测取 `phone.screen`、传输取它背后的 `conn`（`_launch()` 要发 `am start` / `pm path`）。
     启动会话取门面的 `launch_session`，Mock 替身上门面与基座是同一个对象。
-    `dismiss` 是弹窗侧的窄接口（弹窗阶段搬走时才换成独立阶段），这里按调用时取门面的那一份：
+    `dismiss` 是弹窗阶段的窄接口（`Dismisser.dismiss`），这里按调用时取门面的那一份：
     用例随后把 `p.dismiss` 换成别的桩也必须生效，所以不能在这里捕获绑定方法。
     """
     launcher = fast_mod.Launcher.__new__(fast_mod.Launcher)
@@ -330,6 +333,18 @@ def bind_launcher(phone, fast_mod):
     else:
         launcher.lost_note, launcher.session = phone.lost_note, phone.launch_session
     return launcher
+
+
+def bind_dismisser(phone, fast_mod):
+    """在一台门面或 Mock 替身上架一个弹窗阶段（#1043）：装配只此一处。
+
+    观测与动作取 `phone.screen`；推广位退回读启动会话（`app` / `promoted`），
+    Mock 替身上门面与基座是同一个对象。
+    """
+    dismisser = fast_mod.Dismisser.__new__(fast_mod.Dismisser)
+    dismisser.screen = _base(phone, "screen")
+    dismisser.session = phone if isinstance(phone, Mock) else phone.launch_session
+    return dismisser
 
 
 def job_stub(**fields):

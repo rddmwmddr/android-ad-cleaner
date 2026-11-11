@@ -326,7 +326,7 @@ class LaunchTests(unittest.TestCase):
           <node package="com.android.permissioncontroller" class="android.widget.Button" text="允许" bounds="[10,100][200,200]"/>
           <node package="com.android.permissioncontroller" class="android.widget.Button" text="拒绝" bounds="[10,300][200,400]"/>
         </hierarchy>'''))
-        p.click = Mock()
+        p.click = p.screen.click = Mock()       # 弹窗阶段经基座的动作原语点击，桩要落到 `p.screen`
         with patch.object(fast.time, "sleep"):
             self.assertEqual(p.dismiss(), "拒绝权限")
         p.click.assert_called_once_with(105, 350)
@@ -335,7 +335,7 @@ class LaunchTests(unittest.TestCase):
         p = phone(); p.screen.focus = Mock(return_value="com.android.permissioncontroller/.permission.ui.GrantPermissionsActivity")
         p.screen.tree = Mock(return_value=ET.fromstring('''<hierarchy><node package="com.android.permissioncontroller"
           class="android.widget.Button" text="允许" bounds="[10,100][200,200]"/></hierarchy>'''))
-        p.click = Mock()
+        p.click = p.screen.click = Mock()
         self.assertIsNone(p.dismiss())
         p.click.assert_not_called()
 
