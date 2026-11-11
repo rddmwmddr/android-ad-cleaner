@@ -56,7 +56,7 @@ def dismiss_phone(page, focus="com.vivo.browser/com.vivo.browser.BrowserActivity
     p.screen.tree = Mock(return_value=ET.fromstring(page))
     p.screen.focus = Mock(return_value=focus)
     p.app = "com.vivo.browser"
-    p.click = Mock()
+    p.click = p.screen.click = Mock()
     return p
 
 

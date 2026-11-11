@@ -29,7 +29,7 @@ def page(xml, focus, w=1080, h=2340):
     p.locked = Mock(return_value=False)
     p.screen.focus = Mock(return_value=focus)
     p.confirm = Mock()
-    p.click = Mock()
+    p.click = p.screen.click = Mock()
     p.screen.tree = Mock(return_value=ET.fromstring(xml))
     return p
 
@@ -249,7 +249,7 @@ class DismissTests(unittest.TestCase):
         p.W, p.H = 1272, 2772
         p.screen.tree = Mock(return_value=ET.fromstring(xml))
         p.screen.focus = Mock(return_value="com.oplus.securitypermission/.privacy.PrivacySecuritySettingsDashboardActivity")
-        p.click = Mock()
+        p.click = p.screen.click = Mock()
         return p
 
     def test_close_icon_inside_list_card_is_not_clicked(self):
@@ -312,7 +312,7 @@ class BottomBarWaitTests(unittest.TestCase):
         p.say = Mock()
         p.screen.sig = Mock(return_value="page")
         p.screen.settle = Mock(return_value=True)
-        p.click = Mock()
+        p.click = p.screen.click = Mock()
         clock = [0.0]
         p.find = Mock(side_effect=lambda *a, **k: (540, 2400) if clock[0] >= found_at else None)
         p.dismiss = Mock(return_value=None)
@@ -380,7 +380,7 @@ class XiaomiInputTests(unittest.TestCase):
 
     def test_blocked_click_names_the_security_setting(self):
         p = page("<hierarchy/>", "x/y")
-        del p.click
+        del p.click, p.screen.click
         p.d.window_size.return_value = (1080, 2340)
         p.d.shell.return_value = types.SimpleNamespace(output=self.MIUI, exit_code=1)
         with self.assertRaisesRegex(RuntimeError, "USB 调试（安全设置）"):

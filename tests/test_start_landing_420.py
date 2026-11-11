@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import adb_link
 import fast
-from fixtures import EMPTY_PAGE, Clock, fake_phone, install_clock, phone_stub
+from fixtures import EMPTY_PAGE, Clock, fake_phone, install_clock, phone_stub, stub
 
 
 def promo_page(n=17):
@@ -65,7 +65,7 @@ class LandingTests(unittest.TestCase):
     def test_promo_page_is_left_before_looking_for_entries(self):
         """落在开屏推广页：退一次回到主页后才去点「我的」（#420）。"""
         p, clock = self.phone([(0.0, promo_page()), (30.0, HOME)])
-        p.back = lambda *a, **k: setattr(clock, "t", 30.0)   # 推广页不会自己消失，返回一次才回主页
+        stub(p, "back", lambda *a, **k: setattr(clock, "t", 30.0))   # 推广页不会自己消失，返回一次才回主页
         p.start("com.bbk.appstore", settle=0, expect=("我的",))
         self.assertTrue(p.tap("我的", exact=True, scrolls=0))
 
@@ -80,7 +80,7 @@ class LandingTests(unittest.TestCase):
         """推广页始终不消失：有界失败，日志写清停在哪、期望什么、实际结构，不打印页面文字。"""
         p, clock = self.phone([(0.0, promo_page())])
         lines = []
-        p.say = lambda *a, **k: lines.append(" ".join(str(x) for x in a))
+        stub(p, "say", lambda *a, **k: lines.append(" ".join(str(x) for x in a)))
         with self.assertRaisesRegex(RuntimeError, "非预期页面"):
             p.start("com.bbk.appstore", settle=0, expect=("我的",))
         out = "\n".join(lines)
@@ -98,7 +98,7 @@ class LandingTests(unittest.TestCase):
             [(0.0, promo_page()), (30.0, HOME)],
             focus=((0.0, APP), (30.0, "com.android.launcher/.Launcher"), (31.0, APP)))
         p.d.app_stop = Mock()
-        p.back = lambda *a, **k: setattr(clock, "t", 30.0)
+        stub(p, "back", lambda *a, **k: setattr(clock, "t", 30.0))
         p.start("com.bbk.appstore", settle=0, expect=("我的",))
         self.assertEqual(p.d.app_stop.call_count, 2)  # 首次拉起 + 返回后重拉
         self.assertTrue(p.tap("我的", exact=True, scrolls=0))
@@ -111,20 +111,22 @@ class LandingTests(unittest.TestCase):
     def test_landing_failure_only_presses_back_and_never_taps(self):
         """恢复只发一次返回，不在陌生页面上猜着点。"""
         p, _ = self.phone([(0.0, promo_page())])
-        p.click = Mock()
-        p.back = Mock()
+        click, back = Mock(), Mock()
+        stub(p, "click", click)
+        stub(p, "back", back)
         with self.assertRaises(RuntimeError):
             p.start("com.bbk.appstore", settle=0, expect=("我的",))
-        p.back.assert_called_once()
-        p.click.assert_not_called()
+        back.assert_called_once()
+        click.assert_not_called()
 
     def test_blank_page_is_not_treated_as_a_promo_page(self):
         """页面重绘成空白（还没画完）时不按返回：空白不等于推广页。"""
         p, _ = self.phone([(0.0, promo_page()), (2.0, EMPTY_PAGE)])
-        p.back = Mock()
+        back = Mock()
+        stub(p, "back", back)
         with self.assertRaises(RuntimeError):
             p.start("com.bbk.appstore", settle=0, expect=("我的",))
-        p.back.assert_not_called()
+        back.assert_not_called()
 
     def test_a_string_criterion_is_not_split_into_characters(self):
         p, _ = self.phone([(0.0, HOME)])
@@ -158,9 +160,10 @@ class PromotedClickTests(unittest.TestCase):
         p.W, p.H = 1272, 2772
         p.screen.tree = Mock(return_value=ET.fromstring(POPUP))
         p.screen.focus = Mock(side_effect=list(focus))
-        p.click = Mock()
-        p.back = Mock()
-        p.say = Mock()
+        self.click, self.back, self.say = Mock(), Mock(), Mock()
+        stub(p, "click", self.click)
+        stub(p, "back", self.back)
+        stub(p, "say", self.say)
         p.app = app
         return p
 
@@ -169,9 +172,9 @@ class PromotedClickTests(unittest.TestCase):
                         "com.heytap.market/.Main"])
         with patch.object(fast.time, "sleep"):
             self.assertIsNone(p.dismiss())            # 不算关掉了弹窗
-        p.back.assert_called_once()
-        p.click.assert_called_once_with(1100, 670)
-        said = " ".join(" ".join(map(str, c.args)) for c in p.say.call_args_list)
+        self.back.assert_called_once()
+        self.click.assert_called_once_with(1100, 670)
+        said = " ".join(" ".join(map(str, c.args)) for c in self.say.call_args_list)
         self.assertIn("疑似推广位", said)
         self.assertIn("com.kuaishou.nebula", said)
 
@@ -182,7 +185,7 @@ class PromotedClickTests(unittest.TestCase):
         with patch.object(fast.time, "sleep"):
             self.assertIsNone(p.dismiss())
             self.assertIsNone(p.dismiss())
-        self.assertEqual(p.click.call_count, 1)
+        self.assertEqual(self.click.call_count, 1)
 
     def test_the_same_close_label_in_another_app_is_still_clicked(self):
         """「关闭」是常见标签：在别的 App 里不能因为这一处点过就跳过。"""
@@ -193,23 +196,23 @@ class PromotedClickTests(unittest.TestCase):
         p.screen.focus = Mock(return_value="com.heytap.themestore/.Main")
         with patch.object(fast.time, "sleep"):
             self.assertEqual(p.dismiss(), "✕")
-        self.assertEqual(p.click.call_count, 2)
+        self.assertEqual(self.click.call_count, 2)
 
     def test_close_icon_without_leaving_the_app_keeps_the_output(self):
         """前台没变：返回值、点击坐标与日志逐字不变。"""
         p = self.phone(["com.heytap.market/.Main"] * 2)
         with patch.object(fast.time, "sleep"):
             self.assertEqual(p.dismiss(), "✕")
-        p.click.assert_called_once_with(1100, 670)
-        p.back.assert_not_called()
-        self.assertEqual([c.args[0] for c in p.say.call_args_list], ["  · 弹窗点了 ✕（关闭）"])
+        self.click.assert_called_once_with(1100, 670)
+        self.back.assert_not_called()
+        self.assertEqual([c.args[0] for c in self.say.call_args_list], ["  · 弹窗点了 ✕（关闭）"])
 
     def test_unreadable_foreground_after_click_is_not_a_promotion(self):
         """点击后读不到前台：不知道去了哪，不当作推广位，也不回退。"""
         p = self.phone(["com.heytap.market/.Main", ""])
         with patch.object(fast.time, "sleep"):
             self.assertEqual(p.dismiss(), "✕")
-        p.back.assert_not_called()
+        self.back.assert_not_called()
 
     def test_close_icon_of_a_foreign_overlay_is_not_a_promotion(self):
         """点前前台是抢焦点的广告浮层、点后回到目标 App：这是正常关弹窗。"""
@@ -217,7 +220,7 @@ class PromotedClickTests(unittest.TestCase):
                        app="com.example.target")
         with patch.object(fast.time, "sleep"):
             self.assertEqual(p.dismiss(), "✕")
-        p.back.assert_not_called()
+        self.back.assert_not_called()
 
     def test_return_that_cannot_get_back_stops_the_step(self):
         """两次返回仍在别的 App：停下，不继续在陌生页面上操作。"""
@@ -226,7 +229,7 @@ class PromotedClickTests(unittest.TestCase):
         with patch.object(fast.time, "sleep"):
             with self.assertRaisesRegex(RuntimeError, "仍停在"):
                 p.dismiss()
-        self.assertEqual(p.back.call_count, 2)
+        self.assertEqual(self.back.call_count, 2)
 
 
 if __name__ == "__main__":
