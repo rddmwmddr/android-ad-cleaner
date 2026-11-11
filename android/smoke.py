@@ -345,8 +345,11 @@ def read_export(runner, serial):
     return parse_export(out) if rc == 0 else None
 
 
-def await_export(runner, serial, *, sleep, poll=EXPORT_POLL, wait=EXPORT_WAIT, tries=2):
-    """敲入口，等 App 打出一份完整的结果；读不到返回 None（旧包没有这个入口、App 没起来都算读不到）。"""
+def await_export(runner, serial, *, sleep, poll=EXPORT_POLL, wait=EXPORT_WAIT, tries=2, field=""):
+    """敲入口，等 App 打出一份完整的结果；读不到返回 None（旧包没有这个入口、App 没起来都算读不到）。
+
+    `field` 非空时只认填了这个字段的导出：shell 状态在 App 那边是旁路算的，头一两份可能还是空的。
+    """
     for _ in range(tries):
         runner.run(*export_cmd(serial))
         waited = 0
@@ -354,7 +357,7 @@ def await_export(runner, serial, *, sleep, poll=EXPORT_POLL, wait=EXPORT_WAIT, t
             sleep(poll)
             waited += poll
             got = read_export(runner, serial)
-            if got:
+            if got and (not field or got[1].get(field) not in (None, "")):
                 return got[1]
     return None
 
@@ -372,7 +375,7 @@ def check_shell(runner, serial, *, sleep, note=print):
     if not installed(runner, serial):
         note("手机上还没装这个 App，跳过配对检查（首次跑装好后要配对一次，见 android/README.md）")
         return
-    blob = await_export(runner, serial, sleep=sleep)
+    blob = await_export(runner, serial, sleep=sleep, field="shell")
     if blob is None:
         # 旧版调试包 / 正式包都没有这个入口；这一轮装完才有。不能因此拦下整轮。
         note("读不到 App 的状态（可能还装着旧版）：跳过配对检查，执行段会照实报")
