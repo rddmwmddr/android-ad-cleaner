@@ -175,6 +175,7 @@ class MacBuildScriptTest(unittest.TestCase):
         """stage 只认 PLATFORMS 的键，传机器架构名 arm64 / x86_64 会在第一步退出（#1050）。"""
         src = BUILD_MAC.read_text(encoding='utf-8')
         self.assertIn('hdc_fetch.py stage "$PWD" "$HDC_PLATFORM"', src)
+        self.assertEqual(src.count('HDC_PLATFORM='), 2, '平台键只在两个架构分支各写一处，多写一处会盖掉分支里的值')
         branches = re.search(r'if \[ "\$ARCH" = "x86_64" \]; then\n(?P<x86>.+?)\nelse\n(?P<arm>.+?)\nfi', src, re.S)
         self.assertIsNotNone(branches, 'build_mac.sh 的架构分支结构变了，用例要跟着改')
         self.assertIn('HDC_PLATFORM=mac-x64', branches['x86'])
