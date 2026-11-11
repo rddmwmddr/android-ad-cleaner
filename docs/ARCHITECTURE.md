@@ -64,9 +64,10 @@
 | 阶段 | `phone/navigator.py` | 导航：`tap` / `go` / `enter` / `entry` / `tab` / `top`、换页校验与等页 |
 | 门面（包外） | `fast.py` 的 `Phone` | 只做转发与组合，公开名字一个不改 |
 
-调用关系单向：两个基座不认识任何阶段，阶段只经 `Screen` 的动作原语与观测做事，彼此之间只传注入的
-窄接口（导航与启动拿弹窗的 `dismiss`），不互相 import；包内 import 图由 `tests/test_phone_navigator.py`
-的 `CallGraphTests` 扫源码钉住。
+调用关系单向：两个基座不 import 任何阶段，阶段之间也不互相 import，只经注入的窄接口协作（导航与
+启动拿弹窗的 `dismiss`）。阶段做事有两条路：观测与点击走 `Screen` 的动作原语，拉起 App、切设置页、
+打字这类传输走它背后的 `Connection`（`reader.shell` / `_u2`）。`tests/test_phone_navigator.py` 的
+`CallGraphTests` 只钉住两条——「阶段只 import 基座」与「包内无环」，基座反向 import 阶段今天没有守卫。
 
 只有人手动敲命令才会跑的：
 
