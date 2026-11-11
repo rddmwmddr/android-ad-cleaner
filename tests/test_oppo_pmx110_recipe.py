@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from fixtures import Clock, fake_phone, install_clock, load_recipe, phone_mock, phone_stub
+from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock, phone_stub
 import fast
 import run
 
@@ -382,9 +382,7 @@ class MarketPrivacyEntryTests(unittest.TestCase):
 
     def test_neither_wording_keeps_the_page_scene(self):
         clock = Clock()
-        original = fast.time
-        install_clock(fast, clock)
-        self.addCleanup(setattr, fast, "time", original)
+        clocked(self, fast, clock)
         phone = fake_phone(clock=clock, stages=((0.0, self.market_page("个性化推荐")),),
                            focus=((0.0, self.SETTINGS),))
         lines = []

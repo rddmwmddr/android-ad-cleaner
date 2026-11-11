@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import adb_link
 import fast
-from fixtures import EMPTY_PAGE, Clock, fake_phone, install_clock, phone_stub, stub
+from fixtures import EMPTY_PAGE, Clock, clocked, fake_phone, phone_stub, stub
 
 
 def promo_page(n=17):
@@ -57,9 +57,7 @@ class LandingTests(unittest.TestCase):
 
     def phone(self, stages, focus=((0.0, APP),), **fields):
         clock = Clock()
-        original = fast.time
-        install_clock(fast, clock)
-        self.addCleanup(setattr, fast, "time", original)
+        clocked(self, fast, clock)
         return fake_phone(clock=clock, stages=stages, focus=focus, **fields), clock
 
     def test_promo_page_is_left_before_looking_for_entries(self):

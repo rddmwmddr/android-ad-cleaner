@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import fast
 import run
-from fixtures import Clock, fake_phone, install_clock, load_recipe, phone_mock
+from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock
 
 GEAR_PAGE = """<hierarchy rotation="0">
   <node class="android.widget.FrameLayout" package="com.android.calendar" bounds="[0,0][1080,2340]">
@@ -142,9 +142,7 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
     def browser_phone(self, stages, focus, clicked=None, backed=None, only=None, recipe="recipe.py", **fields):
         """假手机 + 按时间轴换页：底栏点「菜单」会先空转 6 秒，页面切换都排在这之后。"""
         clock = Clock(click_cost=0.05)
-        original = fast.time
-        install_clock(fast, clock)
-        self.addCleanup(setattr, fast, "time", original)
+        clocked(self, fast, clock)
         p = fake_phone(clock=clock, size=(1080, 2400), stages=stages, focus=focus, **fields)
         if clicked is not None:
             p.click = lambda x, y: (clicked.append((x, y)), clock.click())[1]
@@ -269,9 +267,7 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
 
     def gear_phone(self, focus_stages, recipe="recipe.py"):
         clock = Clock()
-        original = fast.time
-        install_clock(fast, clock)
-        self.addCleanup(setattr, fast, "time", original)
+        clocked(self, fast, clock)
         p = fake_phone(clock=clock, stages=[(0.0, GEAR_PAGE)], focus=focus_stages)
         p.back = Mock()
         scope = self.load(p, recipe)

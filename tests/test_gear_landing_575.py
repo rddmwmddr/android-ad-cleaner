@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import fast
-from fixtures import Clock, install_clock, load_recipe, phone_stub
+from fixtures import Clock, clocked, load_recipe, phone_stub
 
 RECIPES = [ROOT / "recipes/vivo-V2547DA/recipe.py",
            ROOT / "recipes/vivo-V2547DA/recipe_android17.py"]
@@ -68,9 +68,7 @@ def gear(p, recipe=RECIPES[0]):
 class GearLandingTests(unittest.TestCase):
     def setUp(self):
         """点完要等页面站稳：await_page 读的是 fast 的时钟，换成假的才不真睡。"""
-        original = fast.time
-        install_clock(fast, Clock())
-        self.addCleanup(setattr, fast, "time", original)
+        clocked(self, fast, Clock())
     def test_a_gear_that_does_not_open_settings_is_not_success(self):
         """点击被吞（页面没换）：不能当成进了设置页，要继续试下一个候选（#575）。"""
         p = gear_phone(TWO_GEARS)

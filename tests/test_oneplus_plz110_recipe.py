@@ -11,7 +11,7 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tool'))
-from fixtures import Clock, fake_phone, install_clock, load_recipe, phone_mock
+from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock
 import fast
 import run
 
@@ -90,9 +90,7 @@ class Plz110RecipeTests(unittest.TestCase):
     def test_missing_privacy_entry_keeps_the_page_scene(self):
         """一加这份 row() 也要在认不到入口时留下停在哪个页面与结构摘要（#907）。"""
         clock = Clock()
-        original = fast.time
-        install_clock(fast, clock)
-        self.addCleanup(setattr, fast, 'time', original)
+        clocked(self, fast, clock)
         page = ('<hierarchy rotation="0"><node class="android.widget.TextView" text="个性化推荐" '
                 'clickable="true" bounds="[40,300][900,380]"/></hierarchy>')
         focus = 'com.heytap.market/com.heytap.market.mine.cn.setting.ui.SettingActivity'

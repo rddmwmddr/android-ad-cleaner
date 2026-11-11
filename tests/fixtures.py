@@ -118,9 +118,29 @@ def clock_targets(module):
 
 
 def install_clock(module, clock):
-    """把这个时钟装进 fast / chan_fast（以及它背后的基座与拨动会话），不还原。"""
+    """把这个时钟装进 fast / chan_fast（以及它背后的基座与阶段），不还原；返回 clock。"""
     for target in clock_targets(module):
         target.time = clock
+    return clock
+
+
+def clocked(case, module, clock):
+    """同 `install_clock()`，并登记到 `case.addCleanup` 还原；返回 clock。
+
+    用例里别只 `self.addCleanup(setattr, fast, "time", original)`：那只还门面那份，基座与阶段
+    留在假钟上，后面的用例 `patch.object(fast.time, …)` 打的是真模块、`_launch()` 读的却是残留
+    假钟，等待循环就脱管了（#1041 审查实测：`test_start_landing_420` 之后跑 `test_regressions`
+    会 StopIteration，全量回归只因文件顺序凑巧才没红）。
+    """
+    saved = [(target, target.time) for target in clock_targets(module)]
+    for target, _ in saved:
+        target.time = clock
+
+    def restore():
+        for target, value in saved:
+            target.time = value
+
+    case.addCleanup(restore)
     return clock
 
 
@@ -265,7 +285,7 @@ def bind_launcher(phone, fast_mod):
 
     观测取 `phone.screen`、传输取它背后的 `conn`（`_launch()` 要发 `am start` / `pm path`）。
     启动会话取门面的 `launch_session`，Mock 替身上门面与基座是同一个对象。
-    `dismiss` 是弹窗侧的窄接口（#1043 才把它搬成独立阶段），这里按调用时取门面的那一份：
+    `dismiss` 是弹窗侧的窄接口（弹窗阶段搬走时才换成独立阶段），这里按调用时取门面的那一份：
     用例随后把 `p.dismiss` 换成别的桩也必须生效，所以不能在这里捕获绑定方法。
     """
     launcher = fast_mod.Launcher.__new__(fast_mod.Launcher)

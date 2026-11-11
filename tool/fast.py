@@ -85,9 +85,9 @@ from phone.toggler import Toggler
 class Phone:
     """门面：只做转发与组合，公开名字一个不改（ADR-0033）。
 
-    两个基座与拨动会话已搬进 `tool/phone/`：`Connection`（连接与生命周期）、`Screen`（观测、
-    视口几何、动作原语）与 `Toggler`（整页拨动）。其余四个阶段仍在本文件，按 #1041–#1044
-    逐步搬走。
+    两个基座、拨动与启动已搬进 `tool/phone/`：`Connection`（连接与生命周期）、`Screen`（观测、
+    视口几何、动作原语）、`Toggler`（整页拨动）与 `Launcher`（启动与落点）。设置搜索、弹窗与
+    导航三个阶段仍在本文件，后续步骤再搬。
     """
 
     def __init__(self, serial, log=True, reader: Reader | None = None):
@@ -98,7 +98,7 @@ class Phone:
         self.launch_session = LaunchSession()
         self.channel_session = ChannelSession()
         self.toggler = Toggler(self.screen, self.lost_note)
-        # 启动阶段注入弹窗侧的窄接口：`dismiss()` 还没搬（#1043 才走），这里先交门面的那一份。
+        # 启动阶段注入弹窗侧的窄接口：`dismiss()` 还没搬，这里先交门面的那一份。
         self.launcher = Launcher(self.screen, self.lost_note, self.launch_session, self.dismiss)
         self.conn.check_input()
 

@@ -29,6 +29,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))
 from stdio import use_utf8_console  # noqa: E402  出口取当前副本的，不对拍基线的那一份
 
@@ -228,8 +229,9 @@ def dump(tool_dir):
 
     def launch():
         """启动与落点（#1041）：这段的对外可观察面是「启动后算不算还在目标 App」与「落点不对时报
-        什么」，所以样本按分支铺开——正常进入、空焦点顺延、一直进不去、持续被外占、落点可恢复、
-        落点不可恢复。每条都记抛没抛、抛的原文、诊断行与耗时，两边逐字比。"""
+        什么」，所以样本按分支铺开——正常进入、空焦点顺延（8 秒硬停）、确知外占（5 秒预算）、
+        持续被外占、落点可恢复、落点不可恢复，以及启动命令失败的断线与缺包两支。
+        每条都记抛没抛、抛的原文、诊断行与耗时，两边逐字比。"""
         out = []
 
         def case(label, stages, focus, expect=("我的",), prepare=None):
@@ -260,6 +262,30 @@ def dump(tool_dir):
         case("landing-recovered", [(0.0, LAUNCH_PROMO), (30.0, LAUNCH_HOME)],
              focus=((0.0, LAUNCH_APP),),
              prepare=lambda p, clock: fixtures.stub(p, "back", lambda *a, **k: clock.sleep(30)))
+        # 确知外占的 5 秒预算：与空焦点的 8 秒硬停是两条路径（#581），只有确知不是目标 App 才计数
+        case("stuck-in-other", [(0.0, LAUNCH_HOME)], focus=((0.0, LAUNCH_OTHER),), expect=None)
+
+        def shell_reply(output, rc, only=None):
+            """启动命令返回什么。`only` 给子串时只让命中的那条命令失败，其余照常成功
+            （缺包样本要让 `am start` 失败、`pm path` 返回空，而不是整条传输都坏）。"""
+            def shell(cmd, timeout=60):
+                failed = only is None or only in cmd
+                return SimpleNamespace(output=output if failed else "", exit_code=rc if failed else 0)
+            return shell
+
+        # 启动命令失败的两支（#293 / #908）：断线要报断线，包不在要按跳过收尾。
+        # `detached()` 会跑真 adb，样本里按「没有 adb」处理，否则假序列号一律被判成断线。
+        real_adb = fast.adb_link.detached
+        fast.adb_link.detached = lambda serial, adb=None: False
+        try:
+            case("link-lost", [(0.0, LAUNCH_HOME)], focus=((0.0, LAUNCH_APP),), expect=None,
+                 prepare=lambda p, clock: setattr(p.d, "shell",
+                                                  shell_reply("error: device 'x' not found", 1)))
+            case("missing-package", [(0.0, LAUNCH_HOME)], focus=((0.0, LAUNCH_APP),), expect=None,
+                 prepare=lambda p, clock: setattr(p.d, "shell",
+                                                  shell_reply("monkey aborted", 1, only="monkey")))
+        finally:
+            fast.adb_link.detached = real_adb
         return out
 
     return {"texts": texts(), "entries": entries(), "off": off(), "sessions": sessions(),
@@ -366,15 +392,22 @@ def launch_guards(records):
     by_id = {rec["id"]: rec for rec in records}
     entered = sum(1 for r in records if r["err"] is None)
     never = by_id["never-enters"]
+    stuck = by_id["stuck-in-other"]
     landing = by_id["landing-fail"]
+    lost = by_id["link-lost"]["err"] or ""
+    missing = by_id["missing-package"]["err"] or ""
     notes = "".join(landing["lines"]).count("启动后没落在预期页面")
     recovered = "退出非预期页面重进后" in "".join(by_id["landing-recovered"]["lines"])
     ok = (entered == 3
+          # 空焦点顺延到 8 秒硬停；确知外占按 5 秒预算先到期 —— 两条路径各自成立才算证据
           and "没有进入前台" in (never["err"] or "") and never["t"] > 7.0
+          and "没有进入前台" in (stuck["err"] or "") and 5.0 <= stuck["t"] < 6.0
           and "离开前台" in (by_id["foreign-sustained"]["err"] or "")
+          and "DeviceLost" in lost and "本机没有安装" in missing
           and "非预期页面" in (landing["err"] or "") and notes == 2
           and recovered)
-    print(f"守卫：启动样本进入 {entered} 组，「进不去」报在 {never['t']} 秒、"
+    print(f"守卫：启动样本进入 {entered} 组，空焦点报在 {never['t']} 秒、确知外占报在 {stuck['t']} 秒，"
+          f"断线与缺包各{'到位' if lost and missing else '没走到'}，"
           f"落点失败打了 {notes} 条诊断，落点恢复{'走通' if recovered else '没走到'}")
     return 0 if ok else 1
 

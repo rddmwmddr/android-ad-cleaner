@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import fast
-from fixtures import Clock, fake_phone, install_clock, load_recipe, phone_mock, phone_stub
+from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock, phone_stub
 
 RECIPES = [ROOT / "recipes/vivo-V2547DA/recipe.py",
            ROOT / "recipes/vivo-V2547DA/recipe_android17.py",
@@ -190,9 +190,7 @@ class VivoBrowserRealPageTests(unittest.TestCase):
         for path in RECIPES:
             with self.subTest(path=path.parent.name + "/" + path.name):
                 clock = Clock()
-                original = fast.time
-                install_clock(fast, clock)
-                self.addCleanup(setattr, fast, "time", original)
+                clocked(self, fast, clock)
                 clicks = []
                 p = fake_phone(clock=clock, size=(1080, 2400), stages=[(0.0, BOTTOM_MENU_PAGE)],
                                focus=((0.0, "com.vivo.browser/.BrowserActivity"),),
