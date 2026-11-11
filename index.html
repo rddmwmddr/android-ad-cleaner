@@ -455,21 +455,21 @@ footer a:hover { color: var(--ink); }
 /* ===== 发布信息：发新版时只改这里。国内下载走 gitee（gui/upload_gitee.py 上传）。
    Gitee 不可用时的退路：gitee 留空，跑 gui/upload_baidu.sh，它会把网盘链接写回下面的 baidu，按钮随之恢复。 ===== */
 const REL = {
-  version: "0.4.2",
-  github: "https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.2/",
-  gitee: "https://gitee.com/rddmw/android-ad-cleaner/releases/download/v0.4.2/",
+  version: "0.4.3",
+  github: "https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.3/",
+  gitee: "https://gitee.com/rddmw/android-ad-cleaner/releases/download/v0.4.3/",
   baidu: { url: "", code: "" },
   files: [
-    { id: "mac-arm64", folder: "Mac-Apple芯片", baidu: { url: "", code: "" }, title: "Mac · Apple 芯片", sub: "M1 / M2 / M3 / M4 及以后", file: "AndroidAdCleaner-0.4.2-mac-arm64.dmg", size: "40.7 MB",
-      note: "苹果公证通过，双击打开", sha: "e9fb5ec6305b37ee513ef2c7a0a5f2f32ba660fde995a2857049732da19bc4dc" },
-    { id: "mac-intel", folder: "Mac-Intel芯片", baidu: { url: "", code: "" }, title: "Mac · Intel 芯片", sub: "2020 年及以前的 Intel Mac，macOS 11 及以上", file: "AndroidAdCleaner-0.4.2-mac-intel.dmg", size: "46.0 MB",
-      note: "苹果公证通过，双击打开", sha: "669815cb6a77aa374d7f2066e643f046c05906cca77e58c342569c6cd6b7dbf8" },
-    { id: "win-setup", folder: "Windows-安装版", baidu: { url: "", code: "" }, title: "Windows · 安装版", sub: "Windows 10 / 11（64 位）", file: "AndroidAdCleaner-0.4.2-windows-setup.exe", size: "32.8 MB",
-      note: "弹出安全提示时点「更多信息」→「仍要运行」", sha: "f93ecd46b314a5c3de34235666cfa72ed466182c12bf1c25ce050fba4e09aab6", gitee: false },
-    { id: "win-zip", folder: "Windows-免安装版", baidu: { url: "", code: "" }, title: "Windows · 免安装", sub: "Windows 10 / 11（64 位）", file: "AndroidAdCleaner-0.4.2-windows-portable.zip", size: "48.6 MB",
-      note: "解压后双击 AndroidAdCleaner.exe。不会替换、也不会卸载已安装的旧版；要顶掉旧版请用安装版覆盖安装，或先在 Windows「设置」的应用列表里卸载旧的「安卓去广告」（0.3.2 及更早版本装的名字）。卸载只删程序目录，数据与备份保留", sha: "9284d600460e355982b38ab3947ea42d50992f68b2253b57aa3fd3a82af61466" },
-    { id: "android", folder: "安卓手机", baidu: { url: "", code: "" }, title: "安卓手机 · 手机版", sub: "安卓 11 及以上", file: "AndroidAdCleaner-0.4.2-android-arm64.apk", size: "52.8 MB",
-      note: "不用连电脑，在手机上点一下", sha: "19645bcada972e08136cf225cff25b7352639d6bf7f80d88d26231bf9a0e0932" },
+    { id: "mac-arm64", folder: "Mac-Apple芯片", baidu: { url: "", code: "" }, title: "Mac · Apple 芯片", sub: "M1 / M2 / M3 / M4 及以后", file: "AndroidAdCleaner-0.4.3-mac-arm64.dmg", size: "40.4 MB",
+      note: "苹果公证通过，双击打开", sha: "b7d2ca303027f3116c91ccb87b13dbe0674ec9860c82e24b696bf7ce253e4a04" },
+    { id: "mac-intel", folder: "Mac-Intel芯片", baidu: { url: "", code: "" }, title: "Mac · Intel 芯片", sub: "2020 年及以前的 Intel Mac，macOS 11 及以上", file: "AndroidAdCleaner-0.4.3-mac-intel.dmg", size: "46.0 MB",
+      note: "苹果公证通过，双击打开", sha: "2f5fcb3f39da10c5579362d892bae2cf31be12bf3f2c12c7a19de0e8d020acd0" },
+    { id: "win-setup", folder: "Windows-安装版", baidu: { url: "", code: "" }, title: "Windows · 安装版", sub: "Windows 10 / 11（64 位）", file: "AndroidAdCleaner-0.4.3-windows-setup.exe", size: "32.8 MB",
+      note: "弹出安全提示时点「更多信息」→「仍要运行」", sha: "b61e6ad1ac877424a26c81cf229ad131b330cda359fca4f7d946259ce4ba8887", gitee: false },
+    { id: "win-zip", folder: "Windows-免安装版", baidu: { url: "", code: "" }, title: "Windows · 免安装", sub: "Windows 10 / 11（64 位）", file: "AndroidAdCleaner-0.4.3-windows-portable.zip", size: "48.7 MB",
+      note: "解压后双击 AndroidAdCleaner.exe。不会替换、也不会卸载已安装的旧版；要顶掉旧版请用安装版覆盖安装，或先在 Windows「设置」的应用列表里卸载旧的「安卓去广告」（0.3.2 及更早版本装的名字）。卸载只删程序目录，数据与备份保留", sha: "d285eb00c9f6e51dcb7dc49e38ed49c2ec611e00437d6c334f6e475e3717e139" },
+    { id: "android", folder: "安卓手机", baidu: { url: "", code: "" }, title: "安卓手机 · 手机版", sub: "安卓 11 及以上", file: "AndroidAdCleaner-0.4.3-android-arm64.apk", size: "52.8 MB",
+      note: "不用连电脑，在手机上点一下", sha: "10d6027622ceaca5be751e8f2b2b060d47f25d398b5ac321c831c7e9e6733592" },
   ],
 };
 const RELEASED = "2026-11-11";
