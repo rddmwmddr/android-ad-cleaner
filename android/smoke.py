@@ -377,7 +377,10 @@ def check_shell(runner, serial, *, sleep, note=print):
         # 旧版调试包 / 正式包都没有这个入口；这一轮装完才有。不能因此拦下整轮。
         note("读不到 App 的状态（可能还装着旧版）：跳过配对检查，执行段会照实报")
         return
-    state = str(blob.get("shell") or "unknown")
+    state = str(blob.get("shell") or "")
+    if not state:                             # 导出出错 / 没有这个字段：判不了，别拦整轮
+        note("App 的状态里没有 shell 信息，跳过配对检查，执行段会照实报")
+        return
     if state != SHELL_READY:
         raise SmokeError("App 现在不能以 shell 身份执行（状态 %s）。在手机上重新走一遍「开始授权」再跑；"
                          "这一轮没有触发 CI。" % state)
@@ -408,6 +411,8 @@ def await_run(runner, serial, *, sleep, cmd=None, poll=EXPORT_POLL, timeout=RUN_
         got = read_export(runner, serial)
         if got and got[1].get("finished"):
             return got[1]
+        if got and got[1].get("error"):
+            raise SmokeError("App 的导出报错：" + str(got[1]["error"]))
         if got and got[0] != seen:
             seen, still = got[0], 0
             continue
@@ -534,11 +539,12 @@ def judge_run(blob, restore, error=""):
     if bad:
         return False, "设备可能残留改动：%s %s" % (bad[0].name, bad[0].detail)
     if not (blob or {}).get("finished"):
-        return False, "执行段没跑完：" + (error or run.get("error") or "App 没给出这一轮的结局")
+        return False, "执行段没跑完：" + (error or run.get("error") or (blob or {}).get("error")
+                                         or "App 没给出这一轮的结局")
     detail = "执行段跑完，关了 %d 项（只记录）" % len(done)
     if unfinished:
         detail += "，%d 项没做成（只记录）" % len(unfinished)
-    return True, detail + "；还原三项完成"
+    return True, detail + "；还原完成"
 
 
 def smoke(runner, *, ref=None, commit=None, serial=None, screens=(), root=None,

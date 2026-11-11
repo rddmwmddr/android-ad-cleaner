@@ -14,6 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 
 /**
@@ -619,22 +620,26 @@ class AppModel(
     internal fun debugSmoke() {
         smokeJob?.cancel()
         smokeJob = scope.launch {
-            val shell = runCatching { backend.shellState() }.getOrDefault("need_pair")
             val deadline = System.currentTimeMillis() + SMOKE_TIMEOUT
             var idle = 0
             while (true) {
+                // 引擎跑着的时候不要去问 shell 状态：那条通道正被它占着，问一次会把导出拖到这一轮结束，
+                // 脚本先放弃、把跑通的执行段判成没跑起来（#1072 真机首跑）。只有脚本的配对预检要这个字段，
+                // 那时 App 是闲的。
+                val shell = if (progress.running) "" else
+                    runCatching { withTimeoutOrNull(5_000) { backend.shellState() } }.getOrNull().orEmpty()
                 val out = runCatching {
                     backend.boot()          // 冷启动时 Python 还没起来，等它
                     backend.call("view.smoke_export", shell) as JSONObject
                 }.getOrNull()
-                exportSmoke(out?.optJSONArray("chunks")?.strings() ?: emptyList())
                 if (out == null) {
-                    idle = 2                 // Python 侧出错：脚本按「没有新的导出」处理
-                } else if (out.optBoolean("finished")) {
-                    return@launch
+                    // 导出自己出错要说出来：不然脚本只看到「没有导出」，分不清是没跑起来还是 Python 侧报错
+                    exportSmoke(listOf("""{"finished": false, "error": "smoke_export 调用失败"}"""))
+                    idle = 2
                 } else {
-                    val running = out.optJSONObject("run")?.optBoolean("running") == true
-                    idle = if (running) 0 else idle + 1
+                    exportSmoke(out.optJSONArray("chunks")?.strings() ?: emptyList())
+                    if (out.optBoolean("finished")) return@launch
+                    idle = if (out.optJSONObject("run")?.optBoolean("running") == true) 0 else idle + 1
                 }
                 // 没在跑、也没有结果：这一轮没起来，别在这里空转；脚本等不到新导出会自己重敲入口
                 if (idle >= 2 || System.currentTimeMillis() > deadline) return@launch
