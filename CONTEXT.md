@@ -189,7 +189,7 @@
 
 **`out-of-scope`** — 明确拒绝的需求，理由写在 `.out-of-scope/<概念>.md`。和 `wontfix` 的区别：`wontfix` 是这次不做，`out-of-scope` 是**这个方向不做**，理由要能被后来者读懂，同一个需求再出现时直接引用而不是重新论证。
 
-目前只有一条：`.out-of-scope/app-splash-ads.md`（App 自身的开屏广告）。
+文件都在 `.out-of-scope/` 目录下，一份概念一份，文件名即概念名；该目录就是清单，新增时不必改这里。
 
 **`stale`** — 修饰符，不是状态：`needs-info` 的票在报告者那边停摆时由 `python3 tool/stale.py` 每日扫描打上，报告者回话后摘掉。它不改变票的角色，也不构成关票依据。加标条件与认领时的处置只在 [issue-tracker.md](docs/agents/issue-tracker.md) 的「票的生命周期」里定义，标签语义见 [docs/agents/triage-labels.md](docs/agents/triage-labels.md)。
 
