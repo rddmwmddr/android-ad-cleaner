@@ -90,7 +90,7 @@ APK 由 owner 构建并传到同一个 Release，构建不在「一轮发版的�
 ## 一轮发版的产物顺序
 
 0. **核对产品契约**：`git diff <上一版 tag>..HEAD -- AGENTS.md`，§1 有没有变化——既看 `<!-- rule:product.* -->` 锚点集合，也看正文措辞和条数；实现侧动了挂包拒绝名单（`run.py` 的 `NEVER`）、极性词表（`polarity.NEG_PREFIX`）或 `off()` 的走向，同样算触碰。有变化就在 Release 正文的「其他」里写一句用户侧 agent 以后该怎么做。放在最前面，因为它决定正文怎么写。 <!-- rule:doc.release.product-contract-check -->
-1. **跑验证**：`python -m unittest discover -s tests`（本机 `.venv`，3.13，与 Linux job 同一版）一套，加 `uvx ruff@0.17.3 check tool tests gui android/app/src/main/python`，再加 `.venv/bin/pip install mypy==1.18.2 && .venv/bin/mypy`（引擎目录的类型检查，范围与宽松档在 `pyproject.toml`）。这里只跑这一次，数字怎么落到正文与 CHANGELOG，按「正文的格式」里那条用例数的约束办。两个安装包都是 3.12 产物，tag 构建时 `build-windows.yml` 会在 3.12 上再跑一遍套件（Windows 平台，POSIX-only 用例会 skip）。
+1. **跑验证**：`python -m unittest discover -s tests`（本机 `.venv`，3.13，与 Linux job 同一版）一套，加 `uvx ruff@0.17.3 check tool tests gui android/app/src/main/python android/smoke.py`，再加 `.venv/bin/pip install mypy==1.18.2 && .venv/bin/mypy`（引擎目录的类型检查，范围与宽松档在 `pyproject.toml`）。这里只跑这一次，数字怎么落到正文与 CHANGELOG，按「正文的格式」里那条用例数的约束办。两个安装包都是 3.12 产物，tag 构建时 `build-windows.yml` 会在 3.12 上再跑一遍套件（Windows 平台，POSIX-only 用例会 skip）。
 2. **补齐 `## 未发布`**：确认这一版的每一笔都在里面、都是一行一条。这时还没写验证行。
 3. **建 Release 草稿并推 tag**：`build-windows.yml` 由 `v*` 标签触发，要求对应 Release **先存在**（草稿即可，否则 workflow 报「请先创建对应的 Release 草稿」）。它打包两个 Windows 安装包、跑冒烟测试、把产物传进草稿。草稿已公开时它保留已验证的文件、不重建。
 4. **上传 macOS 安装包**到同一个草稿（本机打包与公证步骤在 `CLAUDE.local.md`）。

@@ -24,7 +24,7 @@ jobs:
       - name: 静态检查（语法 / 未定义名 / bugbear 形状约束）
         run: |
           pip install ruff==0.17.3
-          ruff check tool tests gui android/app/src/main/python
+          ruff check tool tests gui android/app/src/main/python android/smoke.py
   # 类型检查单独一个 job：红了就是类型问题，不与「用例挂了」混在一起。扫描范围（`tool/`）与宽松档
   # 参数都在 pyproject.toml 的 `[tool.mypy]` 里，所以这里只有一条不带参数的 `mypy`。只跑 Linux：
   # mypy 按平台裁剪分支，Windows-only 的段落在别的平台上连看都不看，两边结论不等价（ruff 才是无关的）。
