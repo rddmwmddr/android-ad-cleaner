@@ -144,6 +144,12 @@ def first_line(text):
     return "（没有输出）"
 
 
+def output_detail(text, limit=300):
+    """命令输出压成一行给报告：多行都留着（进度行不是原因），过长才截断。"""
+    joined = "；".join(line.strip() for line in text.splitlines() if line.strip())
+    return joined if len(joined) <= limit else joined[:limit] + "…"
+
+
 def runs(runner, branch):
     """该分支上手动触发的 CI 运行（按创建时间倒序）。
 
@@ -275,13 +281,13 @@ def smoke(runner, *, ref=None, commit=None, serial=None, screens=(), root=None,
         apks = sorted(directory.glob("**/*.apk"))
         if rc != 0 or not apks:
             return finished(sha, ref, serial, directory, [
-                built, Step("安装 + 启动", FAIL, "下载 APK 失败：" + first_line(err or out))])
+                built, Step("安装 + 启动", FAIL, "下载 APK 失败：" + output_detail(err or out))])
 
         note("装到 %s" % serial)
         out, err, rc = runner.run("adb", "-s", serial, "install", "-r", str(apks[0]))
         if rc != 0 or "Success" not in out:
             return finished(sha, ref, serial, directory, [
-                built, Step("安装 + 启动", FAIL, "安装失败：" + first_line(out + err))])
+                built, Step("安装 + 启动", FAIL, "安装失败：" + output_detail(out + err))])
 
         note("启动")
         dumps = []

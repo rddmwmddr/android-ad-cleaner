@@ -29,6 +29,15 @@ android {
     // 正式签名：证书与密码在仓库被忽略的 .private/android-signing/（不进 GitHub）。丢了就没法覆盖安装更新，只能卸载重装
     val ks = repo.resolve(".private/android-signing/keystore.properties")
     signingConfigs {
+        // 固定调试签名（#1077）：CI 每次都是全新 runner，AGP 现生成的 ~/.android/debug.keystore 每跑一次
+        // 就换一把密钥，冒烟覆盖安装会报 INSTALL_FAILED_UPDATE_INCOMPATIBLE。这把只签调试包，不是秘密。
+        getByName("debug") {
+            storeFile = repo.resolve("android/debug.keystore")
+            storeType = "PKCS12"
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         if (ks.exists()) create("release") {
             val p = Properties().apply { ks.reader(Charsets.UTF_8).use { load(it) } }
             storeFile = file(p.getProperty("storeFile"))

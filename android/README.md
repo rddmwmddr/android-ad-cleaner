@@ -93,6 +93,7 @@ android/build.sh assembleRelease
 - `build.sh` 认 `JAVA_HOME` / `ANDROID_HOME` / `GRADLE_HOME`，不设就用维护者机器上的默认值；构建用的 Python 3.12 由 `CHAQUOPY_PYTHON` 指定，不设时 `app/build.gradle.kts` 会退回本机 uv 装的那份 macOS aarch64 路径，配置期 `require()` 一查不到就直接失败——别的机器必须设。仓库里没有 `gradlew`，构建走 PATH 上的 `gradle`；构建目录固定落在 `~/Library/Caches/aac-android/`。维护者机器以外没有验证过完整构建。
 - 协议层的 JVM 单测（`app/src/test/…/ShellServerTest.java`）不碰 Android：`cd android && gradle :app:testDebugUnitTest` 就能跑，读屏用假的 `ScreenReader` 注入；配置期同样要一份可执行的 Python 3.12。
 - 正式签名读 `.private/android-signing/keystore.properties`，没有就退回 debug 签名。证书丢了，已安装的 App 就没法覆盖更新。
+- 调试签名是仓库里的 `android/debug.keystore`（PKCS12，别名 `androiddebugkey`，口令 `android`），只签调试包、不是秘密。以前用 AGP 现生成的调试密钥，CI 每次都是新 runner、每跑一次换一把，冒烟覆盖安装必报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`（#1077）。
 
 ## 真机冒烟：CI 出包 → 装机 → 启动
 
@@ -116,7 +117,8 @@ android/build.sh assembleRelease
 
 1. 开发机打开开发者选项与 USB 调试（[docs/00](../docs/00-打开开发者模式.md)），插 USB，`adb devices` 里要能看到它。
 2. 调试包与正式包签名不同，`adb install -r` 覆盖不了：机器上装着正式包时先卸一次。之后一直用调试包覆盖。
-3. 首次装好后在 App 里走一次「开始授权」（无线调试 + 配对，[docs/手机版教程](../docs/手机版教程/README.md) 的前三步）。配对状态与管理员授权靠「同签名 + 从不卸载」保住，所以**不要 `adb uninstall`**，否则下一次要重新配对。
+   ColorOS / 一加首次装调试包会弹系统的安装引导页，要在手机上点一次「继续安装」；之后同签名覆盖安装不再弹。
+3. 首次装好后在 App 里走一次「开始授权」（无线调试 + 配对，[docs/手机版教程](../docs/手机版教程/README.md) 的前三步）。配对状态与管理员授权靠「同签名 + 从不卸载」保住，所以**不要 `adb uninstall`**，否则下一次要重新配对。调试签名换了（例如从旧版临时密钥签的包升上来）时，必须 `adb uninstall` 一次，那一轮配对要重做。
 
 ## 在电脑上调试替换层
 
