@@ -109,6 +109,7 @@ https://t.me/+A5X3Mxzs-Cg3NjYx
 | 一加 | Ace 2 Pro（PJA110） | ColorOS 16.0.5.1201<br>Android 16 | ⚠️ | 部分 | — |
 | 一加 | 13T（PKX110） | ColorOS 16.0.10.500<br>Android 16 | ✅ 10-28 | ✅ | ✅ 17 |
 | 一加 | Ace 6T（PLR110） | ColorOS 17.0.0.101<br>Android 17 | ✅ 10-31 | ✅ | — |
+| 一加 | 一加 16（PYB110） | ColorOS 17.0.0.155<br>Android 17 | ✅ 11-12 | ✅ | — |
 | OPPO | Find N6（PLP120） | ColorOS 16.0.9 | ⚠️ | ✅ | ✅ 30 |
 | OPPO | Find X8s（PKT110） | ColorOS 17.0.0.102<br>Android 17 | ✅ 10-28 | ✅ | ✅ 26 |
 | OPPO | Find X9 Ultra（PMA110） | ColorOS 17.0.0.106<br>Android 17 | ✅ 10-29 | ✅ | ✅ 6 |
@@ -173,6 +174,7 @@ https://t.me/+A5X3Mxzs-Cg3NjYx
 - **一加 Ace 2 Pro（PJA110，ColorOS 16）**：脚本入口照同代系统（ColorOS 16）在一加 Ace 2 与 OPPO 机型上已实测的路径改写，本机未跑过、等复测；差异见[清单](docs/清单/OPPO-ColorOS.md)。营销通知未测。
 - **一加 13T（PKX110）**：2026-10-28 实测：广告跟踪 76 项、商店两段、小布建议；浏览器/下拉搜索/负一屏见清单差异。营销通知 17 个渠道。
 - **一加 Ace 6T（PLR110）**：2026-10-31 贡献者真机九段全跑 224 秒；本仓库无该机型，未复测，见[清单差异](docs/清单/OPPO-ColorOS.md)。营销通知未测。
+- **一加 16（PYB110）**：2026-11-12 本机九段全跑 397 秒，二次重跑幂等；商店「我的」页没有设置文字行，走 `APP_SETTINGS` 直达，负一屏的个性化开关挪到了「隐私」里，见[清单差异](docs/清单/OPPO-ColorOS.md)。营销通知未测。
 - **OPPO Find N6（PLP120）**：路径实测，整段待验证。营销通知 30 个渠道。
 - **OPPO Find X8s（PKT110）**：10-28 真机整段重跑通过：广告跟踪 96 项 + 搜索与建议等 12 项逐项回读确认。营销通知 26 个渠道。
 - **OPPO Find X9 Ultra（PMA110）**：2026-10-29 八段整轮通过，重跑 211 秒，回读确认 173 项；见[说明](recipes/oppo-PMA110/README.md)。营销通知独立关闭并回读 6 个营销渠道，其他原有渠道及总开关未变。
