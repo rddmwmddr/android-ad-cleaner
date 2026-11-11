@@ -34,9 +34,9 @@ class ConfirmButtonTests(unittest.TestCase):
           <node class="android.widget.Button" content-desc="保持开启" clickable="true" bounds="[270,1944][810,2082]"/>
           <node class="android.widget.Button" content-desc="关闭" clickable="true" bounds="[270,2130][810,2268]"/>
         </hierarchy>''')
-        p.tree, p.click = Mock(return_value=root), Mock()
+        p.screen.tree, p.screen.click = Mock(return_value=root), Mock()
         self.assertEqual(p.confirm(), "关闭")
-        p.click.assert_called_once_with(540, 2199)
+        p.screen.click.assert_called_once_with(540, 2199)
 
     @patch.object(fast.time, "sleep")
     def test_state_text_without_button_class_is_ignored(self, _sleep):
@@ -46,9 +46,9 @@ class ConfirmButtonTests(unittest.TestCase):
           <node class="android.widget.TextView" text="关闭" clickable="false" bounds="[900,400][1000,450]"/>
           <node class="android.view.View" text="关闭" clickable="true" bounds="[900,500][1000,550]"/>
         </hierarchy>''')
-        p.tree, p.click = Mock(return_value=root), Mock()
+        p.screen.tree, p.screen.click = Mock(return_value=root), Mock()
         self.assertIsNone(p.confirm())
-        p.click.assert_not_called()
+        p.screen.click.assert_not_called()
 
     @patch.object(fast.time, "sleep")
     def test_sentence_in_content_desc_is_not_a_confirm_label(self, _sleep):
@@ -58,9 +58,9 @@ class ConfirmButtonTests(unittest.TestCase):
           <node class="android.widget.Button" content-desc="关闭后将无法自动切换锁屏壁纸及滑动浏览图集，建议保持开启。"
                 clickable="true" bounds="[60,2200][1020,2320]"/>
         </hierarchy>''')
-        p.tree, p.click = Mock(return_value=root), Mock()
+        p.screen.tree, p.screen.click = Mock(return_value=root), Mock()
         self.assertIsNone(p.confirm())
-        p.click.assert_not_called()
+        p.screen.click.assert_not_called()
 
     @patch.object(fast.time, "sleep")
     def test_traditional_confirm_button(self, _sleep):
@@ -70,9 +70,9 @@ class ConfirmButtonTests(unittest.TestCase):
           <node class="android.widget.Button" text="取消" clickable="true" bounds="[120,2200][480,2320]"/>
           <node class="android.widget.Button" text="確定" clickable="true" bounds="[600,2200][960,2320]"/>
         </hierarchy>''')
-        p.tree, p.click = Mock(return_value=root), Mock()
+        p.screen.tree, p.screen.click = Mock(return_value=root), Mock()
         self.assertEqual(p.confirm(), "確定")
-        p.click.assert_called_once_with(780, 2260)
+        p.screen.click.assert_called_once_with(780, 2260)
 
     @patch.object(fast.time, "sleep")
     def test_clickable_text_view_is_a_confirm_button(self, _sleep):
@@ -86,9 +86,9 @@ class ConfirmButtonTests(unittest.TestCase):
           <node class="android.widget.TextView" text="取消" clickable="true" bounds="[120,2200][480,2320]"/>
           <node class="android.widget.TextView" text="关闭" clickable="true" bounds="[600,2200][960,2320]"/>
         </hierarchy>''')
-        p.tree, p.click = Mock(return_value=root), Mock()
+        p.screen.tree, p.screen.click = Mock(return_value=root), Mock()
         self.assertEqual(p.confirm(), "关闭")
-        p.click.assert_called_once_with(780, 2260)
+        p.screen.click.assert_called_once_with(780, 2260)
 
     @patch.object(fast.time, "sleep")
     def test_button_class_wins_over_clickable_text_view(self, _sleep):
@@ -98,9 +98,9 @@ class ConfirmButtonTests(unittest.TestCase):
           <node class="android.widget.TextView" text="确定" clickable="true" bounds="[600,2200][960,2320]"/>
           <node class="android.widget.Button" text="确定" clickable="true" bounds="[120,2200][480,2320]"/>
         </hierarchy>''')
-        p.tree, p.click = Mock(return_value=root), Mock()
+        p.screen.tree, p.screen.click = Mock(return_value=root), Mock()
         self.assertEqual(p.confirm(), "确定")
-        p.click.assert_called_once_with(300, 2260)
+        p.screen.click.assert_called_once_with(300, 2260)
 
     @patch.object(fast.time, "sleep")
     def test_text_view_fallback_skips_wide_or_tall_nodes(self, _sleep):
@@ -111,9 +111,9 @@ class ConfirmButtonTests(unittest.TestCase):
                 root = ET.fromstring(
                     f'<hierarchy><node class="android.widget.TextView" text="关闭" '
                     f'clickable="true" bounds="{bounds}"/></hierarchy>')
-                p.tree, p.click = Mock(return_value=root), Mock()
+                p.screen.tree, p.screen.click = Mock(return_value=root), Mock()
                 self.assertIsNone(p.confirm())
-                p.click.assert_not_called()
+                p.screen.click.assert_not_called()
 
     @patch.object(fast.time, "sleep")
     def test_text_view_fallback_skips_bounds_at_the_threshold(self, _sleep):
@@ -124,9 +124,9 @@ class ConfirmButtonTests(unittest.TestCase):
                 root = ET.fromstring(
                     f'<hierarchy><node class="android.widget.TextView" text="关闭" '
                     f'clickable="true" bounds="{bounds}"/></hierarchy>')
-                p.tree, p.click = Mock(return_value=root), Mock()
+                p.screen.tree, p.screen.click = Mock(return_value=root), Mock()
                 self.assertIsNone(p.confirm())
-                p.click.assert_not_called()
+                p.screen.click.assert_not_called()
 
     @patch.object(fast.time, "sleep")
     def test_text_view_fallback_skips_offscreen_nodes(self, _sleep):
@@ -135,9 +135,9 @@ class ConfirmButtonTests(unittest.TestCase):
         root = ET.fromstring('''<hierarchy>
           <node class="android.widget.TextView" text="关闭" clickable="true" bounds="[600,2500][960,2700]"/>
         </hierarchy>''')
-        p.tree, p.click = Mock(return_value=root), Mock()
+        p.screen.tree, p.screen.click = Mock(return_value=root), Mock()
         self.assertIsNone(p.confirm())
-        p.click.assert_not_called()
+        p.screen.click.assert_not_called()
 
     @patch.object(fast.time, "sleep")
     def test_text_view_fallback_scales_with_the_screen(self, _sleep):
@@ -147,9 +147,9 @@ class ConfirmButtonTests(unittest.TestCase):
           <node class="android.widget.TextView" text="关闭" clickable="true" bounds="[40,1320][680,1420]"/>
           <node class="android.widget.TextView" text="关闭" clickable="true" bounds="[380,1200][700,1300]"/>
         </hierarchy>''')
-        p.tree, p.click = Mock(return_value=root), Mock()
+        p.screen.tree, p.screen.click = Mock(return_value=root), Mock()
         self.assertEqual(p.confirm(), "关闭")
-        p.click.assert_called_once_with(540, 1250)
+        p.screen.click.assert_called_once_with(540, 1250)
 
 
 if __name__ == "__main__":

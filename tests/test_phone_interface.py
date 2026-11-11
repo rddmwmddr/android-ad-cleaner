@@ -18,8 +18,10 @@ sys.path.insert(0, str(ROOT / "tool"))
 import explore
 import fast
 from phone import connection as phone_connection
-from fixtures import Clock, Device, Timeline, fake_phone, install_clock, load_recipe, phone_stub
+from fixtures import Clock, Device, Timeline, fake_phone, install_clock, load_recipe, patched_clock
+from fixtures import phone_stub
 from reader import Reader
+
 
 # 同一屏里两个 App 的文字：Settings 自己的一行，和浮在它上面的另一个窗口
 TWO_WINDOWS = '''<hierarchy rotation="0">
@@ -195,20 +197,21 @@ class OffDriverTests(unittest.TestCase):
         p = phone_stub("S")
         p.W, p.H = size
         p.screen.tree = Mock(return_value=ET.fromstring("<hierarchy/>"))
-        p.switches = Mock(side_effect=reads)
+        p.screen.switches = p.switches = Mock(side_effect=reads)
         # off() 的回退还会问 switch_rows()：一起桩掉，否则它跑真实现、对着空树空转，
         # 这批用例就测不到「回退拿到的行」与实际读到的是同一份（标题回退的行为在 test_off_title_fallback）
         p.screen.switch_rows = Mock(return_value=[])
         p.screen.focus = Mock(return_value="app/settings")
-        p.click = Mock()
-        p.confirm = Mock(return_value=None)
-        p.scroll_more = Mock(return_value=False)
-        p.say = Mock()
-        p.back = Mock()
+        p.screen.click = p.click = Mock()
+        p.toggler.confirm = p.confirm = Mock(return_value=None)
+        p.screen.scroll_more = p.scroll_more = Mock(return_value=False)
+        p.screen.say = p.say = Mock()
+        p.screen.back = p.back = Mock()
         return p
 
     def run_off(self, p, clock=None, **kwargs):
-        with patch.object(fast, "time", clock or Clock()):
+        clock = clock or Clock()
+        with patched_clock(clock):
             done = p.off(**kwargs)
         p.screen.tree.assert_called()
         p.switches.assert_any_call(p.screen.tree.return_value)   # 主循环真的带着这一棵树读屏
@@ -230,7 +233,7 @@ class OffDriverTests(unittest.TestCase):
         mid = [("广告甲", True, (500, 800)), ("广告乙", False, (500, 1000))]
         after = [("广告甲", False, (500, 800)), ("广告乙", False, (500, 1000))]
         p = self.phone([rows, rows, mid, after, after, after])
-        p.confirm = Mock(return_value="确定")       # 第一个目标弹出确认框
+        p.toggler.confirm = p.confirm = Mock(return_value="确定")       # 第一个目标弹出确认框
         self.run_off(p, clock=Clock(click_cost=0.0), page="页")
         self.assertEqual([c.args for c in p.click.call_args_list], [(500, 1000), (500, 800)])
         self.assertEqual(p.confirm.call_count, 3)   # 首击 + 第二个目标各确认一次，收尾再一次
@@ -243,7 +246,7 @@ class OffDriverTests(unittest.TestCase):
         p = self.phone([rows, rows, mid, after, after, after, after])
         clock = Clock(click_cost=0.0)
         moments = []
-        p.click = Mock(side_effect=lambda *a: moments.append(clock.t))
+        p.screen.click = p.click = Mock(side_effect=lambda *a: moments.append(clock.t))
         self.run_off(p, clock=clock, page="页")
         self.assertEqual(round(moments[1] - moments[0], 2), 0.3)   # 首击后只核对坐标，不等确认框
         self.assertEqual(round(moments[2] - moments[1], 2), 0.06)  # 非 slow 的点击后停 0.06
@@ -466,7 +469,7 @@ class OffDriverTests(unittest.TestCase):
     def test_the_same_grey_row_is_reported_once_across_screens(self):
         rows = [("摇一摇广告", True, (500, 800))]
         p = self.phone([rows] * 5)
-        p.scroll_more = Mock(side_effect=[True, False])
+        p.screen.scroll_more = p.scroll_more = Mock(side_effect=[True, False])
         p.screen.tree = Mock(return_value=ET.fromstring(
             '<hierarchy><node class="android.widget.Switch" checkable="true" checked="true"'
             ' enabled="false" bounds="[400,750][600,850]"/></hierarchy>'))
@@ -529,7 +532,7 @@ class OffDriverTests(unittest.TestCase):
         first = [("个性化推荐", False, (500, 800))]
         second = [("猜你喜欢", False, (500, 1000))]
         p = self.phone([first, first, second])
-        p.scroll_more = Mock(side_effect=[True, False])
+        p.screen.scroll_more = p.scroll_more = Mock(side_effect=[True, False])
         done = self.run_off(p, page="页")
         self.assertEqual((done, p.switches.call_count), (0, 3))
         p.click.assert_not_called()
@@ -540,7 +543,7 @@ class OffDriverTests(unittest.TestCase):
         second = [("猜你喜欢", True, (500, 1000))]
         p = self.phone([first, first, second])
         p.safe_mode = True
-        p.scroll_more = Mock(side_effect=[True, False])
+        p.screen.scroll_more = p.scroll_more = Mock(side_effect=[True, False])
         self.run_off(p, page="页")
         p.click.assert_not_called()
         p.say.assert_any_call("  · 页：安全模式不做整页全关，本页 2 个开关未改动，需要时请按清单手动关")
@@ -553,18 +556,18 @@ class MissedLedgerTests(unittest.TestCase):
         p = phone_stub("S")
         p.W, p.H = size
         p.screen.tree = Mock(return_value=ET.fromstring("<hierarchy/>"))
-        p.switches = Mock(side_effect=reads)
+        p.screen.switches = p.switches = Mock(side_effect=reads)
         p.screen.switch_rows = Mock(return_value=[])
         p.screen.focus = Mock(return_value="app/settings")
-        p.click = Mock()
-        p.confirm = Mock(return_value=None)
-        p.scroll_more = Mock(return_value=False)
-        p.say = Mock()
-        p.back = Mock()
+        p.screen.click = p.click = Mock()
+        p.toggler.confirm = p.confirm = Mock(return_value=None)
+        p.screen.scroll_more = p.scroll_more = Mock(return_value=False)
+        p.screen.say = p.say = Mock()
+        p.screen.back = p.back = Mock()
         return p
 
     def run_off(self, p, **kwargs):
-        with patch.object(fast, "time", Clock()):        # 假钟的 sleep 只推进读数，不真等
+        with patched_clock(Clock()):                     # 假钟的 sleep 只推进读数，不真等
             done = p.off(**kwargs)
         p.screen.tree.assert_called()
         p.switches.assert_any_call(p.screen.tree.return_value)   # 主循环真的带着这一棵树读屏
@@ -573,7 +576,7 @@ class MissedLedgerTests(unittest.TestCase):
     def test_a_switch_that_will_not_budge_lands_in_the_ledger(self):
         rows = [("广告推荐", True, (500, 800))]
         p = self.phone([])
-        p.switches = Mock(return_value=rows)       # 一直拨不动：读几次都是开着
+        p.screen.switches = p.switches = Mock(return_value=rows)       # 一直拨不动：读几次都是开着
         done = self.run_off(p, page="页")
         self.assertEqual({c.args for c in p.click.call_args_list}, {(500, 800)})   # 首击 + 两轮补点都点它
         self.assertEqual((done, p.changed), (0, []))
@@ -583,8 +586,8 @@ class MissedLedgerTests(unittest.TestCase):
         """滚动后同一行还留在屏带里：每屏都会重新成为目标，但不能记成两个（#788 复核）。"""
         rows = [("广告推荐", True, (500, 800))]
         p = self.phone([])
-        p.switches = Mock(return_value=rows)
-        p.scroll_more = Mock(side_effect=[True, False])
+        p.screen.switches = p.switches = Mock(return_value=rows)
+        p.screen.scroll_more = p.scroll_more = Mock(side_effect=[True, False])
         self.run_off(p, page="页")
         self.assertEqual(p.missed, [("页", "广告推荐")])
 
@@ -594,8 +597,8 @@ class MissedLedgerTests(unittest.TestCase):
         after = [("广告推荐", False, (500, 800))]
         clicked = []
         p = self.phone([])
-        p.click = Mock(side_effect=lambda *a: clicked.append(a))
-        p.switches = Mock(side_effect=lambda *a: after if clicked else rows)
+        p.screen.click = p.click = Mock(side_effect=lambda *a: clicked.append(a))
+        p.screen.switches = p.switches = Mock(side_effect=lambda *a: after if clicked else rows)
         p.missed = [("页", "广告推荐")]            # 上一次 off() 留下的
         done = self.run_off(p, page="页")
         self.assertEqual((done, p.changed), (1, [("页", "广告推荐")]))
@@ -606,10 +609,10 @@ class MissedLedgerTests(unittest.TestCase):
         rows = [("广告推荐", True, (500, 800))]
         after = [("广告推荐", False, (500, 800))]
         p = self.phone([])
-        p.switches = Mock(return_value=rows)
+        p.screen.switches = p.switches = Mock(return_value=rows)
         self.run_off(p, page="页")
         self.assertEqual(p.missed, [("页", "广告推荐")])
-        p.switches = Mock(return_value=after)
+        p.screen.switches = p.switches = Mock(return_value=after)
         self.run_off(p, page="页")
         self.assertEqual(p.missed, [])
 
@@ -625,8 +628,8 @@ class MissedLedgerTests(unittest.TestCase):
         after = [("广告甲", False, (500, 800))]
         clicked = []
         p = self.phone([])
-        p.click = Mock(side_effect=lambda *a: clicked.append(a))
-        p.switches = Mock(side_effect=lambda *a: after if clicked else rows)
+        p.screen.click = p.click = Mock(side_effect=lambda *a: clicked.append(a))
+        p.screen.switches = p.switches = Mock(side_effect=lambda *a: after if clicked else rows)
         self.run_off(p, page="页")
         self.assertEqual(p.missed, [])
 

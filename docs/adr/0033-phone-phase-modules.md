@@ -30,9 +30,9 @@
 | 模块 | 拥有什么 |
 |---|---|
 | `Connection` | 连接与生命周期：设备、串号、断线判定、锁屏等待、日志开关 |
-| `Screen` | 基座第二、三层：读屏与认行、页面诊断、视口几何（`W` / `H`），以及四个动作原语 |
-| `Navigator` | 导航：`tap` / `go` / `enter` / `entry` / `tab` / `back` / 确认框 |
-| `Toggler` | 拨动会话：`off()` 与它的计划、回读、补点、结局 |
+| `Screen` | 基座第二、三层：读屏与认行、页面诊断、视口几何（`W` / `H`）、动作原语（含翻页 `scroll` / `scroll_more`），以及确认框的认法（`confirm_target()` / `residual_confirm()` / `residual_note()`） |
+| `Navigator` | 导航：`tap` / `go` / `enter` / `entry` / `tab` / `back` |
+| `Toggler` | 拨动会话：`off()`、`confirm()` 与它的计划、回读、补点、结局 |
 | `Launcher` | 启动与落点：`start()`、前台归属、落点证据 |
 | `SettingsSearch` | 设置搜索：进搜索框、输入、往返 |
 | `Dismisser` | 弹窗与推广位：`dismiss()` 的退化链 |
@@ -69,12 +69,14 @@ ADR-0002 与 ADR-0020 都提过同一句否决：只在 `Phone` 内部拆，只�
 复杂度确实下降，四处可数：
 
 1. **共享可变状态减少。** 19 个 `self.` 字段写点收成三个会话对象 + 门面上的显式转发属性；`Phone.__init__`
-   里赋值的成员从 12 个降到 7 个（#1039 实测：三个对象吸收 8 个裸字段，对象本身占 3 个槽位）。
+   里赋值的成员从 12 个降到 7 个（#1039 实测：三个对象吸收 8 个裸字段，对象本身占 3 个槽位），
+   拨动会话再收走 `safe_mode` / `changed` 后是 6 个（#1040）。
 2. **改动面收敛到一个文件。** 最密的四个改动区（回读与补点、启动前台、`dismiss` 与确认框、设置搜索）
    从同一文件分到四个模块，一条改动只动一个文件。
 3. **环边断掉。** 现状有三条环边：`Navigator ⇄ Dismisser`（`tap` / `go` / `tab` 调 `dismiss`，
    `dismiss` 回调 `click` / `back`）与 `Navigator ⇄ Toggler`（导航调残留提示）。`Dismisser` 保持独立，
-   `Navigator` 只经注入的窄接口调它；残留提示降为纯函数放进 `row.py`，`Toggler → Navigator` 方向消失。
+   `Navigator` 只经注入的窄接口调它；残留提示降为纯函数放进 `row.py`（#1040 已落地：
+   `row.residual_note()` 拼句子，读屏与确认框判定在基座上，导航侧不再经过拨动会话）。
 4. **测试面下沉。** 一处行为可以只造 `Screen` 或一个阶段，不必造整台 `Phone`；读屏替身仍从既有的
    `reader=` 构造参数下传一层，不新发明装配。
 

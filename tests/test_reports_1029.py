@@ -26,7 +26,7 @@ from fixtures import phone_stub
 def phone(xml, w=1080, h=2340):
     p = phone_stub("test", d=Mock())
     p.W, p.H = w, h
-    p.click = Mock()
+    p.screen.click = Mock()
     p.screen.tree = Mock(return_value=ET.fromstring(xml))
     return p
 
@@ -77,7 +77,7 @@ class ConfirmTests(unittest.TestCase):
           </node></node></hierarchy>''')
         with patch.object(fast.time, "sleep"):
             self.assertEqual(p.confirm(), "关闭")
-        p.click.assert_called_once_with(540, 2199)
+        p.screen.click.assert_called_once_with(540, 2199)
 
     def test_off_screen_leftover_button_is_skipped(self):
         # PR #248：页面里留着上一层对话框的按钮，坐标在屏幕外
@@ -87,7 +87,7 @@ class ConfirmTests(unittest.TestCase):
         </node></hierarchy>''')
         with patch.object(fast.time, "sleep"):
             self.assertEqual(p.confirm(), "确定")
-        p.click.assert_called_once_with(550, 1550)
+        p.screen.click.assert_called_once_with(550, 1550)
 
     def test_button_with_its_own_label_ignores_child_words(self):
         p = phone('''<hierarchy><node bounds="[0,0][1080,2340]">

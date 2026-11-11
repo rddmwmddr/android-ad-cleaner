@@ -10,14 +10,15 @@ worktree、跑完删掉：
     git worktree add /tmp/aac-baseline <改动前的提交>
     python tests/compare_phone_state.py /tmp/aac-baseline/tool
 
-比四处：`Phone.texts()`（页面 × 两种屏尺寸 × 读屏策略开 / 关）、
+比五处：`Phone.texts()`（页面 × 两种屏尺寸 × 读屏策略开 / 关）、
 `explore.entries()`（页面 × 包名）、`Phone.off()`（两种屏尺寸 × 安全模式 × 三档 `only`）、
-`Phone.tap()` / `Phone._promoted_click()`（丢失记录与推广位已带前置状态的几条路径）。
+`Phone.tap()` / `Phone._promoted_click()`（丢失记录与推广位已带前置状态的几条路径）、
+`Phone._confirm_target()` / `residual_confirm()` / `residual_note()`（确认框判定与残留提示）。
 两边必须各起一个子进程：模块名相同，同进程里 import 不了两份 `fast`。
 
 结论不只看「相等」——驱动同时打印守卫数字（策略 / 包名 / `off` 每个场景点到了哪些标题，
-以及会话样本真的走到了「快速放弃」与「推广位退回」两支），全是 0 或某一支退化了
-就说明对拍什么也没测到。
+会话样本真的走到了「快速放弃」与「推广位退回」两支，确认框样本真的认出了弹窗），
+全是 0 或某一支退化了就说明对拍什么也没测到。
 """
 import json
 import os
@@ -40,6 +41,15 @@ SIZES = ((1080, 2340), (720, 1600))
 # 推广位样本的焦点轴：点击（0.05 秒）加 sleep(0.6) 之后前台已经换成商店，
 # back 一次（0.05 秒）加 sleep(0.4) 之后回到原 App —— `_promoted_click()` 的判据两段都走得到。
 PROMO_FOCUS = ((0.0, "com.promo/Main"), (0.06, "com.shop/Promo"), (0.72, "com.promo/Main"))
+
+# 挂在屏上的确认框：没有「取消」这类 DISMISS 词，`dismiss()` 关不掉它，才叫「残留」。
+DIALOG_PAGE = '''<hierarchy rotation="0">
+  <node package="com.vivo.appstore" bounds="[0,0][1080,2340]">
+    <node text="个性化推荐" bounds="[60,300][700,400]"/>
+    <node class="android.widget.Switch" checkable="true" checked="true" bounds="[900,300][1060,400]"/>
+    <node class="android.widget.Button" content-desc="确认关闭" clickable="true" bounds="[270,1900][810,2040]"/>
+  </node>
+</hierarchy>'''
 
 TWO_WINDOWS = '''<hierarchy rotation="0">
   <node package="com.android.settings" text="隐私" bounds="[60,300][400,360]"/>
@@ -131,7 +141,8 @@ def dump(tool_dir):
                     p = fixtures.fake_phone(clock=clock, size=size, stages=[(0.0, page)], fast_mod=fast,
                                             say=lines.append)
                     p.safe_mode = safe
-                    p.click = lambda x, y, _c=clock, _a=clicked: (_c.click(), _a.append((x, y)))
+                    click = lambda x, y, _c=clock, _a=clicked: (_c.click(), _a.append((x, y)))  # noqa: E731
+                    p.click = p.screen.click = click    # 改前 off() 走门面、改后走观测基座
                     label = "None" if only is None else only[0]
                     previous = os.environ.pop("AAC_REF", None)
                     try:
@@ -185,7 +196,25 @@ def dump(tool_dir):
                     "got": [p.vivo_seen, sorted(p.skeleton_sigs), p.skeleton_count, p.mismatch_probes]})
         return out
 
-    return {"texts": texts(), "entries": entries(), "off": off(), "sessions": sessions()}
+    def toggling():
+        """确认框判定与残留提示（#1040）：判定搬进观测基座、句子降成 `row.residual_note()` 纯函数，
+        两边对同一批页面要逐字相同。改前判定叫 `_confirm_target`，改后在基座上叫 `confirm_target`。"""
+        out = []
+        for label, xml in [("empty", fixtures.EMPTY_PAGE), ("dialog", DIALOG_PAGE)] \
+                + fixtures.all_pages(str(TESTS)):
+            for size in SIZES:
+                p = page_phone(xml, size)
+                root = ET.fromstring(xml)
+                screen = getattr(p, "screen", p)     # noqa: B009 - 拆分前的树没有这个基座
+                finder = screen.confirm_target if hasattr(screen, "confirm_target") else p._confirm_target
+                target = finder()
+                out.append({"id": f"target|{label}|{size}", "got": target})
+                out.append({"id": f"confirm|{label}|{size}", "got": p.residual_confirm(root)})
+                out.append({"id": f"note|{label}|{size}", "got": p.residual_note("；", root)})
+        return out
+
+    return {"texts": texts(), "entries": entries(), "off": off(), "sessions": sessions(),
+            "toggling": toggling()}
 
 
 @contextmanager
@@ -270,6 +299,18 @@ def session_guards(records):
     return 0 if quick and promo and seen else 1
 
 
+def toggling_guards(records):
+    """确认框样本必须真的走两支：有一页认出确认框、有一页没有。全都认不出（或全都认出）
+    说明样本退化了，那时「两边一样」是必然相等，不能当证据。"""
+    by_id = {rec["id"]: rec["got"] for rec in records}
+    targets = [v for k, v in by_id.items() if k.startswith("target|")]
+    notes = [v for k, v in by_id.items() if k.startswith("note|")]
+    found = sum(1 for v in targets if v)
+    empty = sum(1 for v in targets if not v)
+    print(f"守卫：认出确认框的样本 {found} 组，没认出的 {empty} 组，残留提示非空的 {sum(1 for v in notes if v)} 组")
+    return 0 if found and empty else 1
+
+
 def compare(baseline_tool):
     before, after = collect(str(baseline_tool)), collect(str(TESTS.parent / "tool"))
     bad = 0
@@ -289,6 +330,7 @@ def compare(baseline_tool):
     print(f"守卫：读屏策略改变输出的组数 {flipped}，包名过滤改变输出的页数 {filtered}")
     bad += off_guards(after["off"])
     bad += session_guards(after["sessions"])
+    bad += toggling_guards(after["toggling"])
     return 1 if bad else 0
 
 

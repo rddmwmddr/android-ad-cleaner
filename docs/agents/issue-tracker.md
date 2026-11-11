@@ -35,7 +35,7 @@ Infer the repo from `git remote -v` — `gh` does this automatically when run in
 
 - **机型/清单类**（只碰 `recipes/`、`docs/清单/`、`tests/`、`CHANGELOG.md`、README 机型表）：CI 过 + 三查即可合并。三查： <!-- rule:doc.pr.device-pr-three-checks -->
   - 关开关用 `p.off()`，不在配方里自己逐个点开关；
-  - 确认框用引擎的 `p.confirm()`，默认不自己写确认 helper；确需绕过的机型要在脚本注释里写明 `p.confirm()` 为什么不适用。它的保证只有四条：优先只点 Button 类节点；Button 自身没有文字时，下级节点整段等于 `CONFIRM`（`tool/fast.py`）里的词也算；一个 Button 都没命中时，退到可点击、按钮级尺寸（宽 < 0.5W、高 < 0.12H）的 TextView；跳过屏外节点。它不判断弹窗是否存在——页面上任何整段标着「关闭」「确定」的 Button 或这样的 TextView 都可能被点到，所以不能把它当成「确认框已经出现」的证据。引擎自己也是这个口径：`off()` 连点前会借同一份匹配避开遮罩（看到就先点掉再继续），那同样只是「可能有遮罩」，不是弹窗的判定；
+  - 确认框用引擎的 `p.confirm()`，默认不自己写确认 helper；确需绕过的机型要在脚本注释里写明 `p.confirm()` 为什么不适用。它的保证只有四条：优先只点 Button 类节点；Button 自身没有文字时，下级节点整段等于 `CONFIRM`（`tool/phone/screen.py`）里的词也算；一个 Button 都没命中时，退到可点击、按钮级尺寸（宽 < 0.5W、高 < 0.12H）的 TextView；跳过屏外节点。它不判断弹窗是否存在——页面上任何整段标着「关闭」「确定」的 Button 或这样的 TextView 都可能被点到，所以不能把它当成「确认框已经出现」的证据。引擎自己也是这个口径：`off()` 连点前会借同一份匹配避开遮罩（看到就先点掉再继续），那同样只是「可能有遮罩」，不是弹窗的判定；
   - CHANGELOG / README 机型表 / 清单三处齐。
 - **核心行为类**（碰 `tool/`、`gui/`、`AGENTS.md`、架构）：采纳分析，按本仓库的模型重新实现，不整单合并。口径见 [docs/09](../09-社区问题处理.md) 的「相关 PR 的采用范围」。 <!-- rule:doc.pr.core-pr-reimplement -->
 
