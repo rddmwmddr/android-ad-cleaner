@@ -10,6 +10,7 @@ import org.json.JSONObject
  * 页面：setup1 setup2 setup3 setup3mi old stopped-sh ask denied nodev home prepare0 prepare1 choose
  * blocked norecipe scanfail run paused pausing stalled fgmode stopping done failed stopped failed2
  * 面板：more newer update update-downloading update-ready update-error restore restored feedback report log；对话框：devoff
+ * 另有 `--es call smoke`：真机冒烟用，把 shell 状态与这一轮执行结果按块打到 logcat（#1072）。
  *
  * 首次设置的三个演示页仍从真的 view.py 取三步文案（#646）：要先等 Python 启动，期间显示启动页。
  */
@@ -22,6 +23,10 @@ object Demo {
             val result = com.ahuamiao.adcleaner.Native.installUpdate(
                 intent.getStringExtra("path").orEmpty(), intent.getStringExtra("version").orEmpty())
             android.util.Log.i("AACUpdateTest", result)
+            return
+        }
+        if (intent?.getStringExtra("call") == "smoke") {   // 真机冒烟的导出入口：shell 状态 + 这一轮结果（#1072）
+            model.debugSmoke()
             return
         }
         intent?.getStringExtra("plan")?.let {        // 真引擎验收：--es plan '<计划 JSON>'

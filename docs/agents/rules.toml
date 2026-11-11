@@ -367,7 +367,7 @@ id = "dev.android.smoke-entry"
 source = "CLAUDE.md#开发"
 check = "test:test_android_smoke::SmokeWorkflowTests.test_entry_point_and_ci_artifact_are_wired"
 status = "enforced"
-why = "维护者本机没有 Android 构建环境（无 JDK / Gradle / SDK 组件），每个改动只能等别人在真机上试；这一条命令把「这个提交的 APK 装得上、起得来」变成一次可复现的运行（#1071）。守卫钉住两头：脚本能当命令跑（`main` 与可注入执行器的 `smoke`），`android.yml` 用脚本要下载的那个名字（`debug-apk`）留下 APK——名字一改，脚本会静默下载不到、报成安装失败。执行段与还原在 #1072，本规则不覆盖。"
+why = "维护者本机没有 Android 构建环境（无 JDK / Gradle / SDK 组件），每个改动只能等别人在真机上试；这一条命令把「这个提交的 APK 装得上、起得来、执行段跑得通、手机还原得回去」变成一次可复现的运行（#1071、#1072）。守卫钉住两头：脚本能当命令跑（`main` 与可注入执行器的 `smoke`），`android.yml` 用脚本要下载的那个名字（`debug-apk`）留下 APK——名字一改，脚本会静默下载不到、报成安装失败。"
 expires_if = "CI 不再留产物、或真机冒烟改由手机版自带的自检承担时删。"
 
 [[rule]]

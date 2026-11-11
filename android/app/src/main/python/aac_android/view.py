@@ -126,12 +126,58 @@ class StallWatch:
 WATCH = StallWatch()
 
 
-def poll(api, since=0):
+def _snapshot(api, since=0):
+    """与 poll 同一份口径，但不碰卡住计时：冒烟的导出与界面的轮询可能同时发生（#1072）。"""
     run = dict(api.poll(since))
     run["results"] = [{**r, "summary": summarize(r)} for r in run.get("results") or []]
     run["outcome"] = outcome(run)
+    return run
+
+
+def poll(api, since=0):
+    run = _snapshot(api, since)
     run["stalled"] = WATCH.update(run)
     return run
+
+
+# 真机冒烟的 debug 导出（#1072）：一行 logcat 的写入上限约 4 KB，按字符数切中文会超三倍。
+EXPORT_LIMIT = 3000
+EXPORT_FIELDS = ("title", "rc", "skipped", "stopped", "sec", "summary")
+
+
+def _chunks(text, limit=EXPORT_LIMIT):
+    """按 UTF-8 字节数切块：中文一个字三个字节，按字符切会被 logd 截成半截 JSON（#1072）。"""
+    out, part, size = [], [], 0
+    for char in text:
+        width = len(char.encode())
+        if size + width > limit and part:
+            out.append("".join(part))
+            part, size = [char], width
+        else:
+            part.append(char)
+            size += width
+    if part:
+        out.append("".join(part))
+    return out
+
+
+def smoke_export(api, shell=""):
+    """这一轮执行结果与是否结束，给维护者的冒烟脚本（#1072）。
+
+    只留每一步的结果与摘要：日志行、每步的原始输出（`tail`）与上报载荷都不进来，它们要么在
+    logcat 里、要么只属于 App 自己。Kotlin 那边只负责把这些块打到 logcat，判断都在这里。
+    """
+    run = _snapshot(api, 0)
+    results = [{key: row.get(key) for key in EXPORT_FIELDS if key in row}
+               for row in run.get("results") or []]
+    finished = not run.get("running") and bool(results or run.get("cancel"))
+    payload = {"shell": shell, "finished": finished,
+               "run": {"running": bool(run.get("running")), "cancel": bool(run.get("cancel")),
+                       "idx": run.get("idx", 0), "total": run.get("total", 0),
+                       "title": run.get("title", ""), "sec": run.get("sec", 0),
+                       "outcome": run.get("outcome", ""), "recovery": run.get("recovery", ""),
+                       "results": results}}
+    return {"finished": finished, "chunks": _chunks(json.dumps(payload, ensure_ascii=False))}
 
 
 def _warnings(status, fold_block):
@@ -314,4 +360,4 @@ def send_feedback(api, kind, text, diag):
 
 
 EXPORTS = {"poll": poll, "detect": detect, "brand_guide": brand_guide, "setup_guide": setup_guide,
-           "send_feedback": send_feedback}
+           "send_feedback": send_feedback, "smoke_export": smoke_export}

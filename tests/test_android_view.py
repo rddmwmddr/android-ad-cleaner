@@ -375,5 +375,44 @@ class BrandTapsShapeTest(unittest.TestCase):
             self.assertTrue(any(word in r["brand"] for r in rows), word)
 
 
+class SmokeExportTest(unittest.TestCase):
+    """真机冒烟的 debug 导出（#1072）：logd 单条约 4 KB，按字节切、只留每一步的结果。"""
+
+    def test_chunks_fit_the_logcat_limit_in_bytes(self):
+        chunks = view._chunks("关闭的渠道" * 2000)
+        self.assertGreater(len(chunks), 1, "这份结果要真的被分成多块")
+        for chunk in chunks:
+            self.assertLessEqual(len(chunk.encode()), view.EXPORT_LIMIT, "中文按字节算才不会超")
+        self.assertEqual("".join(chunks), "关闭的渠道" * 2000, "拼回来要一字不差")
+
+    def test_lines_are_left_out_and_chunks_reassemble(self):
+        run = {"running": True, "cancel": False, "results": [], "lines": ["一行日志" * 500]}
+        out = view.smoke_export(FakeApi(run=run), "ready")
+        payload = json.loads("".join(out["chunks"]))
+        self.assertEqual(payload["shell"], "ready")
+        self.assertNotIn("lines", payload["run"])
+
+    def test_only_the_step_summary_survives(self):
+        run = {"running": False, "cancel": False, "results": [
+            {"title": "系统广告", "rc": 0, "skipped": False, "stopped": False, "sec": 3,
+             "tail": ["机型脚本跑完：关了 12 个，34 秒"], "failed_steps": ["负一屏与搜索"],
+             "kind": "steps"}]}
+        payload = json.loads("".join(view.smoke_export(FakeApi(run=run), "ready")["chunks"]))
+        row = payload["run"]["results"][0]
+        self.assertEqual(row["summary"], "关了 12 个开关")
+        self.assertEqual(set(row), {"title", "rc", "skipped", "stopped", "sec", "summary"})
+        self.assertTrue(payload["finished"])
+
+    def test_finished_needs_results_or_a_cancel(self):
+        self.assertFalse(view.smoke_export(FakeApi(run={"running": False, "results": []}))["finished"])
+        self.assertFalse(view.smoke_export(FakeApi(run={"running": True, "results": [],
+                                                        "cancel": False}))["finished"])
+        self.assertTrue(view.smoke_export(FakeApi(run={"running": False, "cancel": True,
+                                                       "results": []}))["finished"])
+
+    def test_the_export_is_registered_for_the_client(self):
+        self.assertIn("smoke_export", view.EXPORTS)
+
+
 if __name__ == "__main__":
     unittest.main()
