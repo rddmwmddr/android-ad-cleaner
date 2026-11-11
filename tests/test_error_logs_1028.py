@@ -73,7 +73,7 @@ class KeyguardTests(unittest.TestCase):
 class WaitUnlockedTests(unittest.TestCase):
     def phone(self, states):
         p = phone_stub("test", d=Mock())
-        p.locked = Mock(side_effect=states)
+        p.conn.locked = Mock(side_effect=states)      # 锁屏判定归连接基座（ADR-0033）
         return p
 
     def test_waits_for_owner_to_unlock(self):
@@ -227,12 +227,12 @@ class ListRowTests(unittest.TestCase):
         p = phone_stub("test", d=Mock())
         p.W, p.H = 1080, 2340
         p.locked = Mock(return_value=False)
-        p.focus = Mock(return_value=self.focus)
+        p.screen.focus = Mock(return_value=self.focus)
         p.click = Mock()
-        p.settle = Mock(return_value=False)
-        p.sig = Mock(return_value="")
+        p.screen.settle = Mock(return_value=False)
+        p.screen.sig = Mock(return_value="")
         p.scroll_more = Mock(return_value=False)
-        p.tree = Mock(return_value=ET.fromstring(LISTVIEW_APP_PAGE))
+        p.screen.tree = Mock(return_value=ET.fromstring(LISTVIEW_APP_PAGE))
         return p
 
     def test_listview_rows_without_clickable_flag_are_found(self):

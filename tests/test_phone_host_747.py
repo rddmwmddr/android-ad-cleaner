@@ -19,7 +19,7 @@ from gui import app
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
-import fast
+from phone import screen as phone_screen
 import run
 import troubleshooting
 from fixtures import phone_stub
@@ -84,7 +84,7 @@ class BlockedMessageTests(unittest.TestCase):
         p.reader = SimpleNamespace(
             window_size=lambda: (1000, 2000),
             shell=lambda command, timeout=None: SimpleNamespace(output="INJECT_EVENTS"))
-        with patch.object(fast, "TAPPED", tapped), patch.object(fast, "XIAOMI_INPUT", ""):
+        with patch.object(phone_screen, "TAPPED", tapped), patch.object(phone_screen, "XIAOMI_INPUT", ""):
             with self.assertRaises(RuntimeError) as caught:
                 p.click(10, 20)
         return str(caught.exception)

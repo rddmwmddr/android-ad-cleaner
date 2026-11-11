@@ -62,8 +62,8 @@ class LaunchForegroundTests(unittest.TestCase):
         """持续被别的 App 占住照样停段，报错带上落点（#547）。"""
         p, _ = self.phone([(0.0, HOME)], focus=((0.0, APP), (0.2, OTHER)))
         reads = []
-        focus = p.focus
-        p.focus = lambda: (lambda v: (reads.append(v), v)[1])(focus())
+        focus = p.screen.focus      # 取基座原来那个：门面的 focus 已经转到基座上，取门面会绕回自己
+        p.screen.focus = lambda: (lambda v: (reads.append(v), v)[1])(focus())
         with self.assertRaisesRegex(RuntimeError, r"离开前台.*停在 com\.example\.other/\.Account"):
             p.start(PKG, settle=1.2)
         self.assertGreaterEqual(reads.count(OTHER), 3)      # 连续读到才算，不是一帧就停

@@ -18,6 +18,7 @@ from gui import app
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 import fast
+from phone import connection as phone_connection
 import run
 import ui_session as session
 
@@ -126,7 +127,7 @@ class LifecycleTests(unittest.TestCase):
 
     def test_phone_conflict_message_preserves_cause_and_recovery_steps(self):
         with patch.object(fast, "connect", side_effect=session.AccessibilityServiceAlreadyRegisteredError("first cause")), \
-             patch.object(fast, "accessibility_summary", return_value="只读检查：配置了 2 项服务"), \
+             patch.object(phone_connection, "accessibility_summary", return_value="只读检查：配置了 2 项服务"), \
              contextlib.redirect_stdout(io.StringIO()):
             with self.assertRaises(RuntimeError) as error:
                 fast.Phone("test")

@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 # 只在装得下这两套依赖时才检：手机版的 python 树在 android/ 下，不在这里
-SOURCES = sorted([*ROOT.glob("tool/*.py"), *ROOT.glob("gui/*.py")])
+SOURCES = sorted([*ROOT.glob("tool/**/*.py"), *ROOT.glob("gui/*.py")])
 ALIASES = {"u2": "uiautomator2", "uiautomator2": "uiautomator2", "adbutils": "adbutils"}
 
 

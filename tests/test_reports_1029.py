@@ -27,7 +27,7 @@ def phone(xml, w=1080, h=2340):
     p = phone_stub("test", d=Mock())
     p.W, p.H = w, h
     p.click = Mock()
-    p.tree = Mock(return_value=ET.fromstring(xml))
+    p.screen.tree = Mock(return_value=ET.fromstring(xml))
     return p
 
 
@@ -283,12 +283,12 @@ class VivoSlowTransitionTests(unittest.TestCase):
         p = phone_stub("test", d=Mock())
         p.W, p.H = 1080, 2340
         p.locked = Mock(return_value=False)
-        p.focus = Mock(return_value="com.vivo.systemuiplugin/com.vivo.systemui.statusbar.notification.settings.channels.NotificationSettingsActivity")
-        p.click, p.confirm, p.sig = Mock(), Mock(), Mock(return_value="")
-        p.settle = Mock(return_value=settled)
+        p.screen.focus = Mock(return_value="com.vivo.systemuiplugin/com.vivo.systemui.statusbar.notification.settings.channels.NotificationSettingsActivity")
+        p.click, p.confirm, p.screen.sig = Mock(), Mock(), Mock(return_value="")
+        p.screen.settle = Mock(return_value=settled)
         p.scroll_more = Mock(return_value=False)
         queue = [ET.fromstring(x) for x in pages]
-        p.tree = Mock(side_effect=lambda: queue.pop(0) if len(queue) > 1 else queue[0])
+        p.screen.tree = Mock(side_effect=lambda: queue.pop(0) if len(queue) > 1 else queue[0])
         return p
 
     def test_channel_page_after_slow_transition_is_used(self):

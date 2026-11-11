@@ -206,6 +206,13 @@ def own(node, parents, on_screen, max_depth=None):
     return container, boxes
 
 
+def switch_row(node, parents, depth=SWITCH_ROW_DEPTH):
+    """文字所在的那一行里有开关：这一行是开关，不是导航入口。
+    只看结构：调用方 find() 已经自己筛过可视区域，这里不重复筛。"""
+    _, boxes = own(node, parents, lambda _: True, depth)
+    return any("RadioButton" not in (n.get("class") or "") for n in boxes)
+
+
 def title_label(switch, parents, on_screen, screen_h, max_depth=SWITCH_ROW_DEPTH):
     """(标题, 标题文字的节点)：往上找到第一个带文字的祖先。容器矮（就是一行）时分不清标题和说明，
     取最上面那段；容器高（是一整张列表）时取竖直方向离开关最近的文字。

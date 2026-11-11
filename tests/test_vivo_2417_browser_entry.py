@@ -42,7 +42,7 @@ class Vivo2417BrowserEntryTests(unittest.TestCase):
         p.go = Mock(return_value=True)
         p.find = Mock(return_value=(540, 1200))
         p.back = Mock()
-        p.focus = Mock(return_value=SETTING_FOCUS)
+        p.screen.focus = Mock(return_value=SETTING_FOCUS)
         return p
 
     def browser_step(self, p):
@@ -81,7 +81,7 @@ class Vivo2417BrowserEntryTests(unittest.TestCase):
     def test_the_mine_page_settings_icon_is_found_by_its_content_desc(self):
         """「设置」只写在 content-desc 上：`find` 要能按文字命中它，`tap_icon` 反而不该命中。"""
         p = phone_stub("test", d=Mock(), W=1080, H=2400)
-        p.tree = Mock(return_value=ET.fromstring(MINE_PAGE))
+        p.screen.tree = Mock(return_value=ET.fromstring(MINE_PAGE))
         self.assertEqual(p.find("设置", exact=True, edge_ok="tab", nav=True), (1003, 187))
         self.assertEqual(p.icon_candidates(), [])
 

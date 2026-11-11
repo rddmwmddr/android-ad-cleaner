@@ -70,8 +70,9 @@ class WordingTests(unittest.TestCase):
         self.assertIn("请拔插数据线", t.UI_INSTALL_FAILED)
 
     def test_engine_click_message_follows_the_host(self):
-        # fast.py 在导入时取整句常量；手机版每次执行前清掉 tool/ 模块再导入，用新进程模拟
-        code = "import sys; sys.path.insert(0, 'tool'); import fast; print(fast.TAPPED)"
+        # 点击原语在观测基座里取整句常量（ADR-0033）；手机版每次执行前清掉 tool/ 模块再导入，用新进程模拟
+        code = ("import sys; sys.path.insert(0, 'tool'); "
+                "from phone import screen; print(screen.TAPPED)")
         env = dict(os.environ, AAC_HOST="phone", PYTHONIOENCODING="utf-8")
         out = subprocess.run([sys.executable, "-c", code], cwd=ROOT, env=env, capture_output=True,
                              text=True, encoding="utf-8", errors="replace", timeout=60)

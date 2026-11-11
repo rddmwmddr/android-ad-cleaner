@@ -57,7 +57,7 @@ class ThemeUnreachableTests(unittest.TestCase):
 
         p.d.shell.side_effect = shell
         # 落点只认 `Phone.start` 报错里带着的那份；抛错之后再读前台有窗口期，故意让它读成别的。
-        p.focus = lambda: "com.example.stale/.Main"
+        p.screen.focus = lambda: "com.example.stale/.Main"
         p.start.side_effect = RuntimeError(
             f"{THEME} 没有进入前台，跳过本段（停在 {landing}；标题 5 个、开关 0 个）")
         out = io.StringIO()
@@ -114,7 +114,7 @@ class ThemeUnreachableTests(unittest.TestCase):
         """「无法打开 / 没装」不是落点不对：那时前台可能只是桌面，不能当成入口不可达的证据。"""
         p = phone_mock()
         p.locked = lambda: False
-        p.focus = lambda: LAUNCHER
+        p.screen.focus = lambda: LAUNCHER
         p.d.shell.side_effect = self.manager_only()
         p.start.side_effect = RuntimeError(f"无法打开 {THEME}：** No activities found to run")
         out = io.StringIO()
@@ -127,7 +127,7 @@ class ThemeUnreachableTests(unittest.TestCase):
         """断线交还引擎整轮停下，不能被当成「入口不可达」收成跳过。"""
         p = phone_mock()
         p.locked = lambda: False
-        p.focus = lambda: LAUNCHER
+        p.screen.focus = lambda: LAUNCHER
         p.d.shell.side_effect = self.manager_only()
         p.start.side_effect = adb_link.DeviceLost("device offline")
         with self.assertRaises(adb_link.DeviceLost):

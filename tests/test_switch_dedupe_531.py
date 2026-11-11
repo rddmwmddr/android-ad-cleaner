@@ -39,7 +39,7 @@ def page(*rows):
 def phone(xml):
     p = phone_stub("test")
     p.W, p.H = 1260, 2800
-    p.tree = lambda: ET.fromstring(xml)
+    p.screen.tree = lambda: ET.fromstring(xml)
     return p
 
 

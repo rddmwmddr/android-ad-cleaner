@@ -25,18 +25,18 @@ class SettingSearchExitTests(unittest.TestCase):
     def make_phone(self, *, page="search", results=(), focus="com.android.settings/.SearchActivity"):
         p = phone_stub("S")
         p.W, p.H = 1168, 1712
-        p.focus = Mock(return_value=focus)
+        p.screen.focus = Mock(return_value=focus)
         p.say = Mock()
         p.click = Mock()
         p.type_text = Mock(return_value=True)
         p.reader = Mock()
         p.reader.shell.return_value = types.SimpleNamespace(exit_code=0, output="Starting: Intent")
         state = {"page": page}
-        p.tree = Mock(side_effect=lambda: ET.fromstring(
+        p.screen.tree = Mock(side_effect=lambda: ET.fromstring(
             SEARCH_PAGE if state["page"] == "search" else SETTINGS_HOME))
         p.back = Mock(side_effect=lambda *a, **k: state.update(page="home"))
         row = ET.fromstring('<node class="android.widget.TextView"/>')
-        p.texts = Mock(return_value=[(t, (50, y, 1000, y + 100), row)
+        p.screen.texts = Mock(return_value=[(t, (50, y, 1000, y + 100), row)
                                      for t, y in results])
         p.state = state
         return p

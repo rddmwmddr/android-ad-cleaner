@@ -83,8 +83,8 @@ class BrowserEntryTests(unittest.TestCase):
         """入口确实不存在时，日志要带 Activity 与结构摘要，且不打印页面文字。"""
         p, _ = self.phone([(0.0, SETTINGS_PAGE)])
         lines = []
-        p.say = lambda *a, **k: lines.append(" ".join(str(x) for x in a))
-        p.focus = lambda: "com.android.browser/.BrowserSettingsActivity"
+        p.say = p.conn.say = lambda *a, **k: lines.append(" ".join(str(x) for x in a))
+        p.screen.focus = lambda: "com.android.browser/.BrowserSettingsActivity"
         self.assertFalse(p.entry("不存在的入口"))
         log = "\n".join(lines)
         self.assertIn("BrowserSettingsActivity", log)
@@ -96,21 +96,21 @@ class BrowserEntryTests(unittest.TestCase):
     def test_note_miss_lets_a_dropped_connection_through(self):
         """诊断读不到页面时只该少一段摘要；断线是 RuntimeError，不能被当成「页面没认出来」吞掉。"""
         p, _ = self.phone([(0.0, SETTINGS_PAGE)])
-        p.focus = lambda: "com.android.browser/.BrowserSettingsActivity"
+        p.screen.focus = lambda: "com.android.browser/.BrowserSettingsActivity"
 
         def gone():
             raise RuntimeError("设备已断开")
 
-        p.tree = gone
+        p.screen.tree = gone
         with self.assertRaisesRegex(RuntimeError, "设备已断开"):
             p.note_miss("不存在的入口")
 
     def test_note_miss_survives_an_unparsable_page(self):
         p, _ = self.phone([(0.0, SETTINGS_PAGE)])
-        p.focus = lambda: "com.android.browser/.BrowserSettingsActivity"
+        p.screen.focus = lambda: "com.android.browser/.BrowserSettingsActivity"
         lines = []
-        p.say = lambda *a, **k: lines.append(" ".join(str(x) for x in a))
-        p.tree = lambda: (_ for _ in ()).throw(fast.ET.ParseError("bad"))
+        p.say = p.conn.say = lambda *a, **k: lines.append(" ".join(str(x) for x in a))
+        p.screen.tree = lambda: (_ for _ in ()).throw(fast.ET.ParseError("bad"))
         p.note_miss("不存在的入口")
         self.assertIn("页面结构读不到", "\n".join(lines))
 
@@ -118,20 +118,21 @@ class BrowserEntryTests(unittest.TestCase):
         p, _ = self.phone([(0.0, SETTINGS_PAGE)],
                           focus=((0.0, "com.android.browser/.BrowserSettingsActivity"),))
         self.assertTrue(p.in_settings_page())
-        p.focus = lambda: "com.android.browser/.MainActivity"
+        p.screen.focus = lambda: "com.android.browser/.MainActivity"
         self.assertFalse(p.in_settings_page())
 
     def test_browser_settings_rejects_a_gear_click_that_did_not_open_settings(self):
         """点完齿轮页面没换（点击被吞）：不能当成进了设置页，否则后面入口全打在旧页上。"""
         from unittest.mock import Mock
         p = Mock(W=1080, H=2340)
-        p.tree.return_value = fast.ET.fromstring(
+        p.screen = p      # 机型脚本直接写 p.tree()，与观测基座用同一处桩
+        p.screen.tree.return_value = fast.ET.fromstring(
             '<hierarchy><node text="设置" class="android.widget.ImageView" clickable="false" '
             'bounds="[900,100][1020,220]"/></hierarchy>')
-        p.on_screen.return_value = True
-        p.focus.return_value = "com.android.browser/.MainActivity"
+        p.screen.on_screen.return_value = True
+        p.screen.focus.return_value = "com.android.browser/.MainActivity"
         p.in_settings_page.return_value = False
-        p.texts.return_value = []
+        p.screen.texts.return_value = []
         scope, _ = load_recipe(p, ROOT / "recipes/xiaomi-M154FF/recipe.py")
         self.assertFalse(scope["browser_settings"]())
         p.back.assert_not_called()

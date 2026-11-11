@@ -83,8 +83,8 @@ class SwitchTests(unittest.TestCase):
         xml_off = xml_on.replace("，开启", "，关闭").replace('checked="true"', 'checked="false"')
         p = phone()
         # wait / plan / shift 探测都看到 ON 页；点击后的回读才看到 OFF
-        p.tree = Mock(side_effect=[ET.fromstring(xml_on)] * 3 + [ET.fromstring(xml_off)] * 12)
-        p.focus = Mock(return_value="app/settings")
+        p.screen.tree = Mock(side_effect=[ET.fromstring(xml_on)] * 3 + [ET.fromstring(xml_off)] * 12)
+        p.screen.focus = Mock(return_value="app/settings")
         p.click, p.confirm = Mock(), Mock(return_value=None)
         p.scroll_more = Mock(return_value=False)
         self.assertEqual(p.off(only=["个性化"], page="商店·个性化推荐"), 2)
@@ -136,16 +136,16 @@ class SwitchTests(unittest.TestCase):
         p = phone()
         switches = [[("广告推荐", True, (1000, 500))]] * 2 + [[]] * 8
         p.switches = Mock(side_effect=switches)
-        p.tree = Mock(return_value=ET.fromstring('<hierarchy/>'))
-        p.focus = Mock(return_value="app/settings")
+        p.screen.tree = Mock(return_value=ET.fromstring('<hierarchy/>'))
+        p.screen.focus = Mock(return_value="app/settings")
         p.click, p.confirm = Mock(), Mock(return_value=None)
         p.scroll_more = Mock(return_value=False)
         self.assertEqual(p.off(only=["广告推荐"]), 0)
         self.assertEqual(p.changed, [])
         p.click.assert_called_once_with(1000, 500)
         p.confirm.assert_called()
-        p.focus.assert_called()
-        p.tree.assert_called()          # 回读时取灰态也要 dump；switches 被 mock 了，tree 的次数不说明读屏次数
+        p.screen.focus.assert_called()
+        p.screen.tree.assert_called()          # 回读时取灰态也要 dump；switches 被 mock 了，tree 的次数不说明读屏次数
         p.scroll_more.assert_called_once_with()
 
 
@@ -201,11 +201,11 @@ class InputTests(unittest.TestCase):
         p.click = Mock(side_effect=click)
         p.type_text = Mock(side_effect=lambda text: typed.append(text) or True)
         p.edit_ready = Mock(return_value=True)
-        p.focus = lambda: "settings/result" if selected else "settings/search"
-        def texts():
+        p.screen.focus = lambda: "settings/result" if selected else "settings/search"
+        def texts(root=None):
             nodes = (results or ([edit, result] if with_result else [edit])) if typed else [home]
             return [(n.get("text"), fast.bounds(n), n) for n in nodes]
-        p.texts = texts
+        p.screen.texts = texts
         return p
 
     def test_direct_search_page_skips_the_settings_home(self):
@@ -263,7 +263,7 @@ class LaunchTests(unittest.TestCase):
 
     def test_settings_panel_cancel_is_not_dismissed_as_popup(self):
         p = phone()
-        p.tree = Mock(return_value=ET.fromstring('''<hierarchy>
+        p.screen.tree = Mock(return_value=ET.fromstring('''<hierarchy>
           <node text="取消" class="android.widget.Button" clickable="true" bounds="[900,100][1100,200]"/>
           <node class="android.widget.Switch" checkable="true" bounds="[900,400][1100,500]"/>
         </hierarchy>'''))
@@ -273,7 +273,7 @@ class LaunchTests(unittest.TestCase):
 
     def test_single_screen_panel_is_not_swiped_away(self):
         p = phone()
-        p.tree = Mock(return_value=ET.fromstring('<hierarchy><node bounds="[0,0][1168,1712]" scrollable="false"/></hierarchy>'))
+        p.screen.tree = Mock(return_value=ET.fromstring('<hierarchy><node bounds="[0,0][1168,1712]" scrollable="false"/></hierarchy>'))
         p.scroll = Mock()
         self.assertFalse(p.scroll_more())
         p.top()
@@ -281,33 +281,33 @@ class LaunchTests(unittest.TestCase):
 
     def test_scrolling_cannot_continue_in_another_app(self):
         p = phone()
-        p.tree = Mock(return_value=ET.fromstring('<hierarchy><node bounds="[0,0][1168,1712]" scrollable="true"/></hierarchy>'))
-        p.focus = Mock(side_effect=["settings/page", "another/app"])
+        p.screen.tree = Mock(return_value=ET.fromstring('<hierarchy><node bounds="[0,0][1168,1712]" scrollable="true"/></hierarchy>'))
+        p.screen.focus = Mock(side_effect=["settings/page", "another/app"])
         p.texts, p.scroll = Mock(return_value=[]), Mock()
         with self.assertRaisesRegex(RuntimeError, "离开了"):
             p.scroll_more()
 
     def test_transition_empty_tree_is_not_ready(self):
         p = phone()
-        p.sig = Mock(return_value="")
+        p.screen.sig = Mock(return_value="")
         with patch.object(fast.time, "time", side_effect=itertools.count(0, 0.1)), patch.object(fast.time, "sleep"):
             self.assertFalse(p.settle("old page", maxwait=1))
 
     def test_transition_waits_for_stable_nonempty_page(self):
         p = phone()
-        p.sig = Mock(side_effect=["", "new page", "new page", "new page", "new page"])
+        p.screen.sig = Mock(side_effect=["", "new page", "new page", "new page", "new page"])
         with patch.object(fast.time, "time", side_effect=itertools.count(0, 0.1)), patch.object(fast.time, "sleep"):
             self.assertTrue(p.settle("old page", maxwait=2))
-        self.assertGreaterEqual(p.sig.call_count, 3)
+        self.assertGreaterEqual(p.screen.sig.call_count, 3)
 
     def test_missing_launcher_stops_before_reading_other_app(self):
         p = phone()
         p.d.shell.side_effect = [types.SimpleNamespace(exit_code=0, output="No activities found to run, monkey aborted."),
                                  types.SimpleNamespace(exit_code=0, output="package:/data/app/base.apk")]
-        p.texts = Mock()
+        p.screen.texts = Mock()
         with self.assertRaisesRegex(RuntimeError, "无法打开"):
             p.start("com.example.no_launcher")
-        p.texts.assert_not_called()
+        p.screen.texts.assert_not_called()
 
     def test_reference_recipe_app_not_installed_is_named(self):
         # #87 / #165：参考脚本里的 App 本机没装，说「没有安装」，不报成打开失败。
@@ -320,8 +320,8 @@ class LaunchTests(unittest.TestCase):
                 p.start("com.honor.browser")
 
     def test_runtime_permission_only_clicks_explicit_deny_button(self):
-        p = phone(); p.focus = Mock(return_value="com.android.permissioncontroller/.permission.ui.GrantPermissionsActivity")
-        p.tree = Mock(return_value=ET.fromstring('''<hierarchy>
+        p = phone(); p.screen.focus = Mock(return_value="com.android.permissioncontroller/.permission.ui.GrantPermissionsActivity")
+        p.screen.tree = Mock(return_value=ET.fromstring('''<hierarchy>
           <node package="com.android.permissioncontroller" class="android.widget.Button" text="允许" bounds="[10,100][200,200]"/>
           <node package="com.android.permissioncontroller" class="android.widget.Button" text="拒绝" bounds="[10,300][200,400]"/>
         </hierarchy>'''))
@@ -331,8 +331,8 @@ class LaunchTests(unittest.TestCase):
         p.click.assert_called_once_with(105, 350)
 
     def test_permission_page_without_deny_does_not_grant_permission(self):
-        p = phone(); p.focus = Mock(return_value="com.android.permissioncontroller/.permission.ui.GrantPermissionsActivity")
-        p.tree = Mock(return_value=ET.fromstring('''<hierarchy><node package="com.android.permissioncontroller"
+        p = phone(); p.screen.focus = Mock(return_value="com.android.permissioncontroller/.permission.ui.GrantPermissionsActivity")
+        p.screen.tree = Mock(return_value=ET.fromstring('''<hierarchy><node package="com.android.permissioncontroller"
           class="android.widget.Button" text="允许" bounds="[10,100][200,200]"/></hierarchy>'''))
         p.click = Mock()
         self.assertIsNone(p.dismiss())
@@ -341,8 +341,8 @@ class LaunchTests(unittest.TestCase):
     def test_launch_handles_permission_gate_before_checking_target_foreground(self):
         p = phone()
         p.d.shell.return_value = types.SimpleNamespace(exit_code=0, output="Starting")
-        p.focus = Mock(side_effect=["com.android.permissioncontroller/.GrantPermissionsActivity"] * 2 + ["com.example/.Main"] * 3)
-        p.texts = Mock(return_value=[("首页", (), None)]); p.dismiss = Mock(return_value="拒绝权限")
+        p.screen.focus = Mock(side_effect=["com.android.permissioncontroller/.GrantPermissionsActivity"] * 2 + ["com.example/.Main"] * 3)
+        p.screen.texts = Mock(return_value=[("首页", (), None)]); p.dismiss = Mock(return_value="拒绝权限")
         with patch.object(fast.time, "sleep"):
             p.start("com.example", settle=0)
         p.dismiss.assert_called_once()
@@ -350,8 +350,8 @@ class LaunchTests(unittest.TestCase):
     def test_sparse_homepage_is_not_dismissed_as_an_ad(self):
         p = phone()
         p.d.shell.return_value = types.SimpleNamespace(exit_code=0, output="Events injected: 1")
-        p.focus = Mock(return_value="com.example/.Main")
-        p.texts = Mock(return_value=[("首页", (), None), ("我的", (), None)])
+        p.screen.focus = Mock(return_value="com.example/.Main")
+        p.screen.texts = Mock(return_value=[("首页", (), None), ("我的", (), None)])
         with patch.object(fast.time, "sleep"):
             p.start("com.example", settle=0)
         self.assertNotIn("input keyevent BACK", [c.args[0] for c in p.d.shell.call_args_list])
@@ -359,8 +359,8 @@ class LaunchTests(unittest.TestCase):
     def test_late_permission_gate_is_denied_before_accepting_launch(self):
         p = phone()
         p.d.shell.return_value = types.SimpleNamespace(exit_code=0, output="Starting")
-        p.focus = Mock(side_effect=["com.example/.Main", "com.android.permissioncontroller/.GrantPermissionsActivity"] + ["com.example/.Main"] * 2)
-        p.texts = Mock(return_value=[("首页", (), None)])
+        p.screen.focus = Mock(side_effect=["com.example/.Main", "com.android.permissioncontroller/.GrantPermissionsActivity"] + ["com.example/.Main"] * 2)
+        p.screen.texts = Mock(return_value=[("首页", (), None)])
         p.dismiss = Mock(return_value="拒绝权限")
         with patch.object(fast.time, "sleep"):
             p.start("com.example", settle=0)
@@ -370,10 +370,10 @@ class LaunchTests(unittest.TestCase):
         p = phone()
         p.d.shell.return_value = types.SimpleNamespace(exit_code=0, output="Starting")
         # 失败消息现在带落点（#547）
-        p.focus = Mock(side_effect=["com.example/.Main", "com.android.permissioncontroller/.GrantPermissionsActivity",
+        p.screen.focus = Mock(side_effect=["com.example/.Main", "com.android.permissioncontroller/.GrantPermissionsActivity",
                                     "com.android.permissioncontroller/.GrantPermissionsActivity"])
-        p.texts = Mock(return_value=[("首页", (), None)])
-        p.tree = Mock(return_value=ET.fromstring('<hierarchy rotation="0"></hierarchy>'))
+        p.screen.texts = Mock(return_value=[("首页", (), None)])
+        p.screen.tree = Mock(return_value=ET.fromstring('<hierarchy rotation="0"></hierarchy>'))
         p.dismiss = Mock(return_value=None)
         with self.assertRaisesRegex(RuntimeError, "离开前台"):
             p.start("com.example", settle=0)
@@ -384,9 +384,9 @@ class LaunchTests(unittest.TestCase):
         p.d.shell.return_value = types.SimpleNamespace(exit_code=0, output="Events injected: 1")
         # 失败消息现在带落点（#547）：多读一次前台，页面结构也要读得到。
         # 连续 3 帧读到别的 App 才判离开（#581），落点那一次再多读一次。
-        p.focus = Mock(side_effect=["com.example/.Main"] + ["com.other/.Account"] * 4)
-        p.texts = Mock(return_value=[])
-        p.tree = Mock(return_value=ET.fromstring('<hierarchy rotation="0"></hierarchy>'))
+        p.screen.focus = Mock(side_effect=["com.example/.Main"] + ["com.other/.Account"] * 4)
+        p.screen.texts = Mock(return_value=[])
+        p.screen.tree = Mock(return_value=ET.fromstring('<hierarchy rotation="0"></hierarchy>'))
         p.dismiss = Mock()
         with patch.object(fast.time, "time", side_effect=itertools.count()), patch.object(fast.time, "sleep"):
             with self.assertRaisesRegex(RuntimeError, "离开前台"):
@@ -397,9 +397,9 @@ class LaunchTests(unittest.TestCase):
         # #547：「启动后离开前台」命中 79 份上报、51 个型号，缺的都是「是谁盖住了」。
         p = phone()
         p.d.shell.return_value = types.SimpleNamespace(exit_code=0, output="Events injected: 1")
-        p.focus = Mock(side_effect=["com.example/.Main", "com.other/.Account"] + ["com.other/.Account"] * 4)
-        p.texts = Mock(return_value=[])
-        p.tree = Mock(return_value=ET.fromstring('<hierarchy rotation="0"></hierarchy>'))
+        p.screen.focus = Mock(side_effect=["com.example/.Main", "com.other/.Account"] + ["com.other/.Account"] * 4)
+        p.screen.texts = Mock(return_value=[])
+        p.screen.tree = Mock(return_value=ET.fromstring('<hierarchy rotation="0"></hierarchy>'))
         p.dismiss = Mock()
         with patch.object(fast.time, "time", side_effect=itertools.count()), patch.object(fast.time, "sleep"):
             with self.assertRaisesRegex(RuntimeError, r"离开前台.*停在 com\.other/\.Account"):
@@ -410,9 +410,9 @@ class LaunchTests(unittest.TestCase):
         # #547：另一条短路（deadline 到了还没到目标包）同样带上落点。
         p = phone()
         p.d.shell.return_value = types.SimpleNamespace(exit_code=0, output="Starting")
-        p.focus = Mock(side_effect=["com.other/.Account"] * 20)
-        p.tree = Mock(return_value=ET.fromstring('<hierarchy rotation="0"></hierarchy>'))
-        p.texts = Mock(return_value=[])
+        p.screen.focus = Mock(side_effect=["com.other/.Account"] * 20)
+        p.screen.tree = Mock(return_value=ET.fromstring('<hierarchy rotation="0"></hierarchy>'))
+        p.screen.texts = Mock(return_value=[])
         p.dismiss = Mock()
         with patch.object(fast.time, "monotonic", side_effect=itertools.count()), patch.object(fast.time, "sleep"):
             with self.assertRaisesRegex(RuntimeError, r"没有进入前台.*停在 com\.other/\.Account"):
@@ -422,9 +422,9 @@ class LaunchTests(unittest.TestCase):
         p = phone()
         p.d.shell.return_value = types.SimpleNamespace(exit_code=0, output="Events injected: 1")
         # 失败消息现在带落点（#547）；连续 3 帧读到别的 App 才算离开（#581）
-        p.focus = Mock(side_effect=["com.example/.Main"] * 3 + ["com.other/.Main"] * 4)
-        p.texts = Mock(return_value=[("首页", (), None)])
-        p.tree = Mock(return_value=ET.fromstring('<hierarchy rotation="0"></hierarchy>'))
+        p.screen.focus = Mock(side_effect=["com.example/.Main"] * 3 + ["com.other/.Main"] * 4)
+        p.screen.texts = Mock(return_value=[("首页", (), None)])
+        p.screen.tree = Mock(return_value=ET.fromstring('<hierarchy rotation="0"></hierarchy>'))
         p.dismiss = Mock()
         with patch.object(fast.time, "time", side_effect=itertools.count(0, .1)), patch.object(fast.time, "sleep"):
             with self.assertRaisesRegex(RuntimeError, "离开前台"):
@@ -433,8 +433,8 @@ class LaunchTests(unittest.TestCase):
     def test_slow_blank_start_waits_for_page_without_pressing_back(self):
         p = phone()
         p.d.shell.return_value = types.SimpleNamespace(exit_code=0, output="Starting")
-        p.focus = Mock(return_value="com.example/.Main")
-        p.texts = Mock(side_effect=[[], [], [("首页", (), None)]])
+        p.screen.focus = Mock(return_value="com.example/.Main")
+        p.screen.texts = Mock(side_effect=[[], [], [("首页", (), None)]])
         p.dismiss = Mock(return_value=None)
         with patch.object(fast.time, "time", side_effect=itertools.count(0, .5)), patch.object(fast.time, "sleep"):
             p.start("com.example", settle=0)
@@ -443,8 +443,8 @@ class LaunchTests(unittest.TestCase):
     def test_unreadable_start_is_bounded_and_does_not_press_back(self):
         p = phone()
         p.d.shell.return_value = types.SimpleNamespace(exit_code=0, output="Starting")
-        p.focus = Mock(return_value="com.example/.Main")
-        p.texts = Mock(return_value=[]); p.dismiss = Mock(return_value=None)
+        p.screen.focus = Mock(return_value="com.example/.Main")
+        p.screen.texts = Mock(return_value=[]); p.dismiss = Mock(return_value=None)
         with patch.object(fast.time, "time", side_effect=itertools.count()), patch.object(fast.time, "sleep"):
             with self.assertRaisesRegex(RuntimeError, "仍读不到页面"):
                 p.start("com.example")
@@ -538,9 +538,9 @@ class TapIconTests(unittest.TestCase):
 
     def page_phone(self):
         p = phone()
-        p.tree = Mock(return_value=ET.fromstring(self.PAGE))
-        p.focus = Mock(return_value="com.nearme.gamecenter/.Home")
-        p.sig = Mock(return_value="我的游戏")
+        p.screen.tree = Mock(return_value=ET.fromstring(self.PAGE))
+        p.screen.focus = Mock(return_value="com.nearme.gamecenter/.Home")
+        p.screen.sig = Mock(return_value="我的游戏")
         p.click = Mock()
         p.back = Mock()
         return p
@@ -573,7 +573,7 @@ class TapIconTests(unittest.TestCase):
     def test_tap_icon_goes_back_and_tries_the_next_icon_when_the_page_changes(self):
         p = self.page_phone()
         Clock = self.clock()
-        p.focus = Mock(side_effect=["home", "message", "message"])
+        p.screen.focus = Mock(side_effect=["home", "message", "message"])
         p.find = Mock(side_effect=lambda *a, **k: (5, 5) if Clock.t > 2.5 else None)
         with patch.object(fast.time, "monotonic", Clock.monotonic), patch.object(fast.time, "sleep", Clock.sleep):
             self.assertTrue(p.tap_icon("隐私开关设置"))
@@ -593,7 +593,7 @@ class TapIconTests(unittest.TestCase):
         p = self.page_phone()
         Clock = self.clock()
         p.log, p.find = True, Mock(return_value=None)
-        p.texts = Mock(return_value=[("我的游戏", (0, 0, 1, 1), None)])
+        p.screen.texts = Mock(return_value=[("我的游戏", (0, 0, 1, 1), None)])
         out = io.StringIO()
         with patch.object(fast.time, "monotonic", Clock.monotonic), patch.object(fast.time, "sleep", Clock.sleep), \
              contextlib.redirect_stdout(out):

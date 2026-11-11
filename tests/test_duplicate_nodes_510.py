@@ -34,8 +34,8 @@ def page(*nodes):
 def phone(xml):
     p = phone_stub("test", d=Mock())
     p.W, p.H = 1080, 2340
-    p.focus = Mock(return_value=APP_FOCUS)
-    p.tree = Mock(return_value=ET.fromstring(xml))
+    p.screen.focus = Mock(return_value=APP_FOCUS)
+    p.screen.tree = Mock(return_value=ET.fromstring(xml))
     return p
 
 

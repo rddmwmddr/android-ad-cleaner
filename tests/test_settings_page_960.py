@@ -84,7 +84,7 @@ class GearLandingTests(unittest.TestCase):
 
     def gear_phone(self):
         p = focus_phone(focus=lambda: THEME_MINE)
-        p.tree = Mock(return_value=ET.fromstring(GEAR_PAGE))
+        p.screen.tree = Mock(return_value=ET.fromstring(GEAR_PAGE))
         p.click = Mock(side_effect=lambda x, y: setattr(p, "focus", lambda: THEME_SETTINGS))
         p.back = Mock()
         p.find = Mock(return_value=None)

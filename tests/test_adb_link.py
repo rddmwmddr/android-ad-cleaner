@@ -332,7 +332,8 @@ class ParityTests(unittest.TestCase):
             return fast.u2.exceptions.AdbShellError("shell output invalid", "cmd", b"")
 
         def phone(script):
-            p = fast.Phone.__new__(fast.Phone)
+            # 断线重试归连接基座（ADR-0033）：这里造的是 `Connection`，不是门面。
+            p = fast.Connection.__new__(fast.Connection)
             pending = list(script)
             p.calls = []
             p._shell = lambda *a, **k: self.answer(p, pending)

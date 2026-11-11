@@ -156,8 +156,8 @@ class PromotedClickTests(unittest.TestCase):
     def phone(self, focus, app="com.heytap.market"):
         p = phone_stub("test", d=Mock())
         p.W, p.H = 1272, 2772
-        p.tree = Mock(return_value=ET.fromstring(POPUP))
-        p.focus = Mock(side_effect=list(focus))
+        p.screen.tree = Mock(return_value=ET.fromstring(POPUP))
+        p.screen.focus = Mock(side_effect=list(focus))
         p.click = Mock()
         p.back = Mock()
         p.say = Mock()
@@ -190,7 +190,7 @@ class PromotedClickTests(unittest.TestCase):
                         "com.heytap.market/.Main"])
         with patch.object(fast.time, "sleep"):
             self.assertIsNone(p.dismiss())
-        p.focus = Mock(return_value="com.heytap.themestore/.Main")
+        p.screen.focus = Mock(return_value="com.heytap.themestore/.Main")
         with patch.object(fast.time, "sleep"):
             self.assertEqual(p.dismiss(), "✕")
         self.assertEqual(p.click.call_count, 2)

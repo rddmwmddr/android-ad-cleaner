@@ -14,8 +14,8 @@ from fixtures import phone_stub
 def page(xml, focus):
     p = phone_stub("test", d=Mock())
     p.W, p.H = 1272, 2772
-    p.focus = Mock(return_value=focus)
-    p.tree = Mock(return_value=ET.fromstring(xml))
+    p.screen.focus = Mock(return_value=focus)
+    p.screen.tree = Mock(return_value=ET.fromstring(xml))
     p.click = Mock()
     return p
 

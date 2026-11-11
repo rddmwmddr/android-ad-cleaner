@@ -26,7 +26,7 @@ def phone():
     p = phone_mock(W=1080, H=2400)
     p.locked.return_value = False
     p.dismiss.return_value = None
-    p.sig.return_value = "page"
+    p.screen.sig.return_value = "page"
     return p
 
 
@@ -52,7 +52,7 @@ class HonorSettingsEntryTests(unittest.TestCase):
         p = phone()
         p.find.side_effect = lambda text, exact=False, **kw: (1, 1) if text == "设置" and exact else None
         p.tap.return_value = False
-        p.sig.return_value = "mine"
+        p.screen.sig.return_value = "mine"
         p.tap_icon.return_value = False
         scope = load(p)
         self.assertFalse(scope["open_settings"]())
@@ -85,7 +85,7 @@ class HonorSettingsEntryTests(unittest.TestCase):
         p = phone()
         p.find.side_effect = lambda text, exact=False, **kw: (1, 1) if text == "设置" and exact else None
         p.tap.return_value = True
-        p.sig.side_effect = ["mine", "other", "mine"]
+        p.screen.sig.side_effect = ["mine", "other", "mine"]
         p.tap_icon.return_value = True
         scope = load(p)
         self.assertTrue(scope["open_settings"]())
@@ -96,12 +96,12 @@ class HonorSettingsEntryTests(unittest.TestCase):
 def tab_phone(*nodes):
     """真 tab()，其余方法都换成替身：底栏匹配要按引擎的实际读法判定。"""
     p = phone_stub("test", W=1080, H=2400)
-    p.tree = Mock(return_value=fast.ET.fromstring(
+    p.screen.tree = Mock(return_value=fast.ET.fromstring(
         '<hierarchy rotation="0">' + "".join(nodes) + "</hierarchy>"))
     p.click, p.say = Mock(), Mock()
     p.dismiss = Mock(return_value=None)
-    p.sig = Mock(return_value="page")
-    p.settle = Mock(return_value=True)
+    p.screen.sig = Mock(return_value="page")
+    p.screen.settle = Mock(return_value=True)
     p.locked = Mock(return_value=False)
     p.start, p.enter, p.off, p.back = Mock(), Mock(), Mock(), Mock()
     p.tap = Mock(return_value=True)

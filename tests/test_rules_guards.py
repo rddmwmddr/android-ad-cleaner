@@ -590,8 +590,8 @@ class FixtureGuards(unittest.TestCase):
         ADR-0019），与 `fast.Phone` 的装配不是一件事。
 
         已知漏口：判据认类名，`getattr(fast, "Phone")("x")` 或别名 `P = fast.Phone; P("x")` 能绕过；
-        `fast.Phone.__new__(fast.Phone)` 同样看不见，而本仓有三处这么写（`fixtures.py` 的装配、
-        `test_adb_link.py` 与 `test_community_1027.py` 的假 Phone），照抄它等于绕过这条守卫。
+        `fast.Phone.__new__(fast.Phone)` 同样看不见，而 `fixtures.py` 的装配正是这么写的（它要绕开
+        构造期），照抄它等于绕过这条守卫。
         守卫也不看 `phone_stub()` 本身（把它换成返回 Mock 照样绿）：它守的是调用点在哪。
         真要做等价改写时评审看得见 diff，不为它加数据流分析。
         """

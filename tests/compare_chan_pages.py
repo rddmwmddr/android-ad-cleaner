@@ -135,12 +135,17 @@ def probe(tool):
     def stub(xml, size, focus):
         p = phone_stub("probe", d=Mock())
         p.W, p.H = size
-        p.focus = Mock(return_value=focus)
+
+        def observe(name, value):
+            # 观测与锁屏的桩落在基座上；拆分前那棵树里门面自己就是它（对拍要喂两种树）
+            setattr(getattr(p, "screen", p), name, value)
+
+        observe("focus", Mock(return_value=focus))
         root = ET.fromstring(xml)
-        p.tree = Mock(return_value=root)
-        p.locked = Mock(return_value=False)
-        p.sig = Mock(return_value="")
-        p.settle = Mock(return_value=True)
+        observe("tree", Mock(return_value=root))
+        observe("sig", Mock(return_value=""))
+        observe("settle", Mock(return_value=True))
+        getattr(p, "conn", p).locked = Mock(return_value=False)
         p.scroll, p.scroll_more = Mock(), Mock(return_value=False)
         p.click = Mock()
         return p
@@ -202,13 +207,14 @@ def probe(tool):
             p = phone_stub("probe", d=Mock())
             p.W, p.H = size
             p.vivo_seen = vivo
-            p.focus = Mock(return_value=focus)
-            p.tree = tree
+            screen, conn = getattr(p, "screen", p), getattr(p, "conn", p)   # 拆分后的基座；拆分前门面自己就是它们
+            screen.focus = Mock(return_value=focus)
+            screen.tree = tree
             p.click = Mock(side_effect=click)
-            p.locked = Mock(return_value=fault == "locked")
+            conn.locked = Mock(return_value=fault == "locked")
             ticks = iter(range(10 ** 6))
-            p.sig = Mock(side_effect=lambda: str(next(ticks)))  # noqa: B023 - 每轮新建 ticks，Mock 同步调用
-            p.settle = Mock(return_value=True)
+            screen.sig = Mock(side_effect=lambda: str(next(ticks)))  # noqa: B023 - 每轮新建 ticks，Mock 同步调用
+            screen.settle = Mock(return_value=True)
             p.scroll, p.scroll_more = Mock(), Mock(return_value=False)
             p.confirm = Mock()
             p.reader = Mock()
@@ -225,7 +231,7 @@ def probe(tool):
                 "shells": [str(a) for a in p.reader.shell.call_args_list],
                 "clicks": [list(c.args) for c in p.click.call_args_list],
                 "skips": [list(c.args) for c in p.scroll.call_args_list],
-                "focus": p.focus.call_count,      # 只打印：调用次数不是对外契约
+                "focus": screen.focus.call_count,        # 只打印：调用次数不是对外契约
             }
     return out
 

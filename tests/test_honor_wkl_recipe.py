@@ -23,14 +23,15 @@ class HonorWKLRecipeTests(unittest.TestCase):
         p = phone_stub("test", d=Mock())
         p.W, p.H = 1080, 2400
         p.d.window_size.return_value = (p.W, p.H)
-        p.tree = Mock(return_value=ET.fromstring(xml))
+        p.screen.tree = Mock(return_value=ET.fromstring(xml))
         p.locked = Mock(return_value=False)
         return p
 
     def closing_scope(self, before, after):
         p = Mock(changed=[])
-        p.focus.return_value = "com.example/.Settings"
-        p.tree.return_value = ET.fromstring("<hierarchy/>")
+        p.screen = p      # 机型脚本直接写 p.focus()，与观测基座用同一处桩
+        p.screen.focus.return_value = "com.example/.Settings"
+        p.screen.tree.return_value = ET.fromstring("<hierarchy/>")
         scope = self.load(p)
         scope["page"] = Mock()
         scope["labels"] = Mock(return_value={"设置"})
@@ -170,7 +171,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
         with patch.object(scope["time"], "sleep"), scope["safe_ui"]():
             self.assertIsNone(p.confirm())
         p.d.click.assert_not_called()
-        root = p.tree.return_value
+        root = p.screen.tree.return_value
         ET.SubElement(root, "node", text="关闭个性化广告推荐", bounds="[100,300][800,400]")
         ET.SubElement(root, "node", text="取消", bounds="[100,700][200,800]")
         with patch.object(scope["time"], "sleep"), scope["safe_ui"]():

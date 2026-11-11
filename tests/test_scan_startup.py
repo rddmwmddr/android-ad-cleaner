@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 import adb_link
 import chan_fast as chan
 import fast
+from phone import connection as phone_connection
 
 
 def dump(importance=3):
@@ -80,7 +81,7 @@ class ReadOnlyTests(unittest.TestCase):
             path = Path(directory, "channels.tsv")
             path.write_text("com.example\tpromo\t活动优惠\n", encoding="utf-8")
             with patch.object(chan.ShellPhone, "shell", return_value=SimpleNamespace(output=dump())), \
-                 patch.object(fast, "accessibility_summary", return_value="只读检查不可用"), \
+                 patch.object(phone_connection, "accessibility_summary", return_value="只读检查不可用"), \
                  patch.object(fast, "connect", side_effect=fast.u2.exceptions.LaunchUiAutomationError("java.lang.IllegalStateException: example")), \
                  patch.object(sys, "argv", ["chan_fast.py", "-s", "test", "off", str(path)]), \
                  contextlib.redirect_stdout(io.StringIO()):

@@ -20,9 +20,9 @@ def phone(focus):
     p = phone_stub("test", d=Mock())
     p.W, p.H = 1080, 2340
     p.locked = Mock(return_value=False)
-    p.focus = Mock(return_value=focus)
+    p.screen.focus = Mock(return_value=focus)
     p.confirm, p.click = Mock(), Mock()
-    p.tree = Mock(return_value=ET.fromstring(EMPTY))
+    p.screen.tree = Mock(return_value=ET.fromstring(EMPTY))
     p.scroll, p.scroll_more = Mock(), Mock(return_value=False)
     p.reader = Mock()
     p.reader.shell.return_value = Mock(output="")
@@ -85,7 +85,7 @@ class FocusReadTests(unittest.TestCase):
         page = chan.ChannelPage(p, NAME, PK, CID)
         page.raw_focus = "com.aliothmoon.maafw.man/com.aliothmoon.maafw.MainActivity"
         self.assertIn("前台是 com.aliothmoon.maafw.man", page._unopened_stage())
-        p.focus.assert_not_called()
+        p.screen.focus.assert_not_called()
 
 
 if __name__ == "__main__":

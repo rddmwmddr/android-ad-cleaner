@@ -51,8 +51,8 @@ NO_GEAR = """<hierarchy rotation="0">
 
 def gear_phone(page, focus=MINE):
     p = phone_stub("test", d=Mock(), W=1080, H=2400)
-    p.tree = Mock(return_value=ET.fromstring(page))
-    p.focus = Mock(return_value=focus)
+    p.screen.tree = Mock(return_value=ET.fromstring(page))
+    p.screen.focus = Mock(return_value=focus)
     p.click = Mock()
     p.back = Mock()
     p.find = Mock(return_value=None)
@@ -78,7 +78,7 @@ class GearLandingTests(unittest.TestCase):
         def click(x, y):
             if (x, y) == (810, 170):            # 前面那个：点了没反应
                 return
-            p.focus.return_value = SETTINGS    # 后面那个：真的进了设置页
+            p.screen.focus.return_value = SETTINGS    # 后面那个：真的进了设置页
 
         p.click.side_effect = click
         self.assertTrue(gear(p))
@@ -100,7 +100,7 @@ class GearLandingTests(unittest.TestCase):
     def test_a_working_gear_still_goes_in_on_the_first_tap(self):
         """点得动的齿轮仍按原路径进去，不多点一次。"""
         p = gear_phone(ONE_GEAR)
-        p.click.side_effect = lambda x, y: setattr(p.focus, "return_value", SETTINGS)
+        p.click.side_effect = lambda x, y: setattr(p.screen.focus, "return_value", SETTINGS)
         self.assertTrue(gear(p))
         self.assertEqual(p.click.call_count, 1)
         p.tap.assert_not_called()
@@ -109,7 +109,7 @@ class GearLandingTests(unittest.TestCase):
         """点到别的图标（换页但页上没有「设置」标题）：不算命中，先退回原页再试。"""
         p = gear_phone(ONE_GEAR)
         p.click.side_effect = lambda x, y: setattr(
-            p.focus, "return_value", "com.bbk.appstore/.ui.Message")
+            p.screen.focus, "return_value", "com.bbk.appstore/.ui.Message")
         self.assertFalse(gear(p))
         p.back.assert_called_once()
 
@@ -119,12 +119,12 @@ class GearLandingTests(unittest.TestCase):
 
         def click(x, y):
             if (x, y) == (810, 170):
-                p.focus.return_value = "com.bbk.appstore/.ui.Message"
+                p.screen.focus.return_value = "com.bbk.appstore/.ui.Message"
             else:
-                p.focus.return_value = SETTINGS
+                p.screen.focus.return_value = SETTINGS
 
         p.click.side_effect = click
-        p.back.side_effect = lambda *a: setattr(p.focus, "return_value", MINE)
+        p.back.side_effect = lambda *a: setattr(p.screen.focus, "return_value", MINE)
         self.assertTrue(gear(p))
         self.assertEqual(p.click.call_count, 2)
         p.back.assert_called_once()
@@ -134,7 +134,7 @@ class GearLandingTests(unittest.TestCase):
         p = gear_phone(ONE_GEAR)
 
         def click(x, y):
-            p.focus.return_value = "com.bbk.appstore/.ui.MinePrefs"
+            p.screen.focus.return_value = "com.bbk.appstore/.ui.MinePrefs"
             p.find.return_value = (100, 200)
 
         p.click.side_effect = click
@@ -145,7 +145,7 @@ class GearLandingTests(unittest.TestCase):
         p = gear_phone(ONE_GEAR)
 
         def click(x, y):
-            p.focus.return_value = "com.bbk.appstore/.ui.MinePrefs"
+            p.screen.focus.return_value = "com.bbk.appstore/.ui.MinePrefs"
             p.find.return_value = (500, 1800)
 
         p.click.side_effect = click
@@ -155,7 +155,7 @@ class GearLandingTests(unittest.TestCase):
         p = gear_phone(NO_GEAR)
 
         def tap(text, **kw):
-            p.focus.return_value = SETTINGS
+            p.screen.focus.return_value = SETTINGS
             return True
 
         p.tap.side_effect = tap
