@@ -33,7 +33,7 @@ LABEL = {"xiaomi": "小米", "oppo": "OPPO", "vivo": "vivo", "honor": "荣耀",
 # 或桌面。落在这里说明主题设置不可达，段体按跳过收尾（#902）。
 THEME_DEAD_ENDS = frozenset({"com.xiaomi.market", "com.miui.home"})
 
-# NEW_TASK | CLEAR_TASK，与 Phone._launch 同值：直达与公开 Intent 都带它。
+# NEW_TASK | CLEAR_TASK，与 Launcher._launch 同值：直达与公开 Intent 都带它。
 CLEAR_TASK = "0x10008000"
 
 
@@ -430,7 +430,7 @@ def open_direct(p, d, settle=1.2):
     Intent 档与带清栈参数就会自己退出的页面（`keep_task`）裸启动，失败时照样抛出。
     打不开由 reach() 记一笔换下一档。
 
-    页面名按字面量传下去：走 `Phone.start` 的那条由 `Phone._launch` 在 shell 边界引用一次，
+    页面名按字面量传下去：走 `Phone.start` 的那条由 `Launcher._launch` 在 shell 边界引用一次，
     这里再 quote 一层会让 used_by() 的源码扫描认不出机型（#667）；裸启动那两条不经
     `Phone.start`，引用由 `start_command()` 做。"""
     if not d.action and not d.keep_task:

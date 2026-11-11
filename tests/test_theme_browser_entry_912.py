@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import fast
-from fixtures import Clock, fake_phone, install_clock, load_recipe, phone_mock
+from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock
 
 RECIPE = ROOT / "recipes/xiaomi-24129PN74C/recipe.py"
 BROWSER_HOME = "com.android.browser/com.android.browser.BrowserActivity"
@@ -89,10 +89,8 @@ class ClockCase(unittest.TestCase):
     """假时钟装进 fast：Phone 里的等待都按假时间走。"""
 
     def install(self):
-        original = fast.time
         clock = Clock()
-        install_clock(fast, clock)
-        self.addCleanup(setattr, fast, "time", original)
+        clocked(self, fast, clock)
         self.clock = clock
         return clock
 

@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import fast
 import row
-from fixtures import EMPTY_PAGE, Clock, fake_phone, install_clock, load_recipe
+from fixtures import EMPTY_PAGE, Clock, clocked, fake_phone, load_recipe
 
 ENTRIES = ["隐私和安全", "主页设置", "搜索设置", "功能设置", "网页浏览设置"]
 
@@ -42,9 +42,7 @@ OTHER_PAGE = page(["别的页"])
 class BrowserEntryTests(unittest.TestCase):
     def phone(self, stages, **fields):
         clock = Clock()
-        original = fast.time
-        install_clock(fast, clock)
-        self.addCleanup(setattr, fast, "time", original)
+        clocked(self, fast, clock)
         return fake_phone(clock=clock, stages=stages, **fields), clock
 
     def test_entry_waits_for_settings_page_to_render(self):

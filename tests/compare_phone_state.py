@@ -29,6 +29,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))
 from stdio import use_utf8_console  # noqa: E402  出口取当前副本的，不对拍基线的那一份
 
@@ -41,6 +42,19 @@ SIZES = ((1080, 2340), (720, 1600))
 # 推广位样本的焦点轴：点击（0.05 秒）加 sleep(0.6) 之后前台已经换成商店，
 # back 一次（0.05 秒）加 sleep(0.4) 之后回到原 App —— `_promoted_click()` 的判据两段都走得到。
 PROMO_FOCUS = ((0.0, "com.promo/Main"), (0.06, "com.shop/Promo"), (0.72, "com.promo/Main"))
+
+# 启动样本的包与页面：底栏带判据词「我的」，推广页只有推荐卡片、没有它（#420 的两种落点）。
+LAUNCH_PKG = "com.example.target"
+LAUNCH_APP = LAUNCH_PKG + "/.MainActivity"
+LAUNCH_OTHER = "com.example.other/.Account"
+LAUNCH_HOME = f'''<hierarchy rotation="0"><node package="{LAUNCH_PKG}" bounds="[0,0][1080,2340]">
+  <node class="android.widget.TextView" text="首页" bounds="[60,300][600,380]"/>
+  <node class="android.widget.TextView" text="我的" clickable="true" bounds="[860,2180][1020,2260]"/>
+</node></hierarchy>'''
+LAUNCH_PROMO = f'''<hierarchy rotation="0"><node package="{LAUNCH_PKG}" bounds="[0,0][1080,2340]">
+  <node class="android.widget.TextView" text="推荐 1 款应用" bounds="[60,300][900,380]"/>
+  <node class="android.widget.TextView" text="推荐 2 款应用" bounds="[60,420][900,500]"/>
+</node></hierarchy>'''
 
 # 挂在屏上的确认框：没有「取消」这类 DISMISS 词，`dismiss()` 关不掉它，才叫「残留」。
 DIALOG_PAGE = '''<hierarchy rotation="0">
@@ -184,7 +198,7 @@ def dump(tool_dir):
             p = fixtures.fake_phone(clock=clock, fast_mod=fast, focus=PROMO_FOCUS, say=lines.append)
             p.app = "com.promo"
             p.promoted = set(promoted)
-            p.back = lambda *a, _c=clock, _b=backs, **k: (_c.click(), _b.append(round(_c.t, 3)))
+            fixtures.stub(p, "back", lambda *a, _c=clock, _b=backs, **k: (_c.click(), _b.append(round(_c.t, 3))))
             got = p._promoted_click(10, 20, "close icon")
             out.append({"id": f"promoted|{label}", "got": got, "backs": backs,
                         "promoted": sorted(p.promoted), "lines": lines})
@@ -213,8 +227,69 @@ def dump(tool_dir):
                 out.append({"id": f"note|{label}|{size}", "got": p.residual_note("；", root)})
         return out
 
+    def launch():
+        """启动与落点（#1041）：这段的对外可观察面是「启动后算不算还在目标 App」与「落点不对时报
+        什么」，所以样本按分支铺开——正常进入、空焦点顺延（8 秒硬停）、确知外占（5 秒预算）、
+        持续被外占、落点可恢复、落点不可恢复，以及启动命令失败的断线与缺包两支。
+        每条都记抛没抛、抛的原文、诊断行与耗时，两边逐字比。"""
+        out = []
+
+        def case(label, stages, focus, expect=("我的",), prepare=None):
+            clock = fixtures.Clock()
+            fixtures.install_clock(fast, clock)
+            lines = []
+            p = fixtures.fake_phone(clock=clock, stages=stages, focus=focus, fast_mod=fast,
+                                    say=lines.append)
+            if prepare:
+                prepare(p, clock)
+            err = None
+            try:
+                p.start(LAUNCH_PKG, settle=0, expect=expect)
+            except Exception as e:                   # noqa: BLE001 - 对拍要的是原文，不是分类
+                err = f"{type(e).__name__}: {e}"
+            out.append({"id": label, "err": err, "lines": lines, "t": round(clock.t, 2),
+                        "reads": clock.page_reads, "clicks": clock.clicks,
+                        "promoted": sorted(p.promoted)})
+
+        case("enter", [(0.0, fixtures.EMPTY_PAGE), (0.6, LAUNCH_HOME)],
+             focus=((0.0, ""), (0.6, LAUNCH_APP)))
+        case("empty-focus-6s", [(0.0, fixtures.EMPTY_PAGE), (6.0, LAUNCH_HOME)],
+             focus=((0.0, ""), (6.0, LAUNCH_APP)))
+        case("never-enters", [(0.0, fixtures.EMPTY_PAGE)], focus=((0.0, ""),), expect=None)
+        case("foreign-sustained", [(0.0, fixtures.EMPTY_PAGE), (1.0, LAUNCH_HOME)],
+             focus=((0.0, ""), (0.3, LAUNCH_APP), (0.6, LAUNCH_OTHER)))
+        case("landing-fail", [(0.0, LAUNCH_PROMO)], focus=((0.0, LAUNCH_APP),))
+        case("landing-recovered", [(0.0, LAUNCH_PROMO), (30.0, LAUNCH_HOME)],
+             focus=((0.0, LAUNCH_APP),),
+             prepare=lambda p, clock: fixtures.stub(p, "back", lambda *a, **k: clock.sleep(30)))
+        # 确知外占的 5 秒预算：与空焦点的 8 秒硬停是两条路径（#581），只有确知不是目标 App 才计数
+        case("stuck-in-other", [(0.0, LAUNCH_HOME)], focus=((0.0, LAUNCH_OTHER),), expect=None)
+
+        def shell_reply(output, rc, only=None):
+            """启动命令返回什么。`only` 给子串时只让命中的那条命令失败，其余照常成功
+            （缺包样本要让 `am start` 失败、`pm path` 返回空，而不是整条传输都坏）。"""
+            def shell(cmd, timeout=60):
+                failed = only is None or only in cmd
+                return SimpleNamespace(output=output if failed else "", exit_code=rc if failed else 0)
+            return shell
+
+        # 启动命令失败的两支（#293 / #908）：断线要报断线，包不在要按跳过收尾。
+        # `detached()` 会跑真 adb，样本里按「没有 adb」处理，否则假序列号一律被判成断线。
+        real_adb = fast.adb_link.detached
+        fast.adb_link.detached = lambda serial, adb=None: False
+        try:
+            case("link-lost", [(0.0, LAUNCH_HOME)], focus=((0.0, LAUNCH_APP),), expect=None,
+                 prepare=lambda p, clock: setattr(p.d, "shell",
+                                                  shell_reply("error: device 'x' not found", 1)))
+            case("missing-package", [(0.0, LAUNCH_HOME)], focus=((0.0, LAUNCH_APP),), expect=None,
+                 prepare=lambda p, clock: setattr(p.d, "shell",
+                                                  shell_reply("monkey aborted", 1, only="monkey")))
+        finally:
+            fast.adb_link.detached = real_adb
+        return out
+
     return {"texts": texts(), "entries": entries(), "off": off(), "sessions": sessions(),
-            "toggling": toggling()}
+            "toggling": toggling(), "launch": launch()}
 
 
 @contextmanager
@@ -311,6 +386,32 @@ def toggling_guards(records):
     return 0 if found and empty else 1
 
 
+def launch_guards(records):
+    """启动样本必须真的走到六支：进入、空焦点顺延、进不去、被外占、落点失败、落点可恢复。
+    任何一支退化（例如全都成功、或一条诊断行都没打）时「两边一样」是必然相等，不能当证据。"""
+    by_id = {rec["id"]: rec for rec in records}
+    entered = sum(1 for r in records if r["err"] is None)
+    never = by_id["never-enters"]
+    stuck = by_id["stuck-in-other"]
+    landing = by_id["landing-fail"]
+    lost = by_id["link-lost"]["err"] or ""
+    missing = by_id["missing-package"]["err"] or ""
+    notes = "".join(landing["lines"]).count("启动后没落在预期页面")
+    recovered = "退出非预期页面重进后" in "".join(by_id["landing-recovered"]["lines"])
+    ok = (entered == 3
+          # 空焦点顺延到 8 秒硬停；确知外占按 5 秒预算先到期 —— 两条路径各自成立才算证据
+          and "没有进入前台" in (never["err"] or "") and never["t"] > 7.0
+          and "没有进入前台" in (stuck["err"] or "") and 5.0 <= stuck["t"] < 6.0
+          and "离开前台" in (by_id["foreign-sustained"]["err"] or "")
+          and "DeviceLost" in lost and "本机没有安装" in missing
+          and "非预期页面" in (landing["err"] or "") and notes == 2
+          and recovered)
+    print(f"守卫：启动样本进入 {entered} 组，空焦点报在 {never['t']} 秒、确知外占报在 {stuck['t']} 秒，"
+          f"断线与缺包各{'到位' if lost and missing else '没走到'}，"
+          f"落点失败打了 {notes} 条诊断，落点恢复{'走通' if recovered else '没走到'}")
+    return 0 if ok else 1
+
+
 def compare(baseline_tool):
     before, after = collect(str(baseline_tool)), collect(str(TESTS.parent / "tool"))
     bad = 0
@@ -331,6 +432,7 @@ def compare(baseline_tool):
     bad += off_guards(after["off"])
     bad += session_guards(after["sessions"])
     bad += toggling_guards(after["toggling"])
+    bad += launch_guards(after["launch"])
     return 1 if bad else 0
 
 

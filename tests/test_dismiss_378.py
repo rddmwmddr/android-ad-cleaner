@@ -16,7 +16,7 @@ def page(xml, focus):
     p.W, p.H = 1272, 2772
     p.screen.focus = Mock(return_value=focus)
     p.screen.tree = Mock(return_value=ET.fromstring(xml))
-    p.click = Mock()
+    p.click = p.screen.click = Mock()
     return p
 
 
@@ -36,7 +36,7 @@ class DismissCloseRowTests(unittest.TestCase):
         p = page(AD_SERVICE_PAGE, "com.android.settings/.Settings$AdServiceSettings")
         switch = p.tree().find(".//node[@class='android.widget.Switch']")
         # 点击会真的翻开关：没被挡下时 checked 会变，断言才有意义
-        p.click = Mock(side_effect=lambda x, y: switch.set(
+        p.click = p.screen.click = Mock(side_effect=lambda x, y: switch.set(
             "checked", "false" if switch.get("checked") == "true" else "true"))
         with patch.object(fast.time, "sleep"):
             self.assertIsNone(p.dismiss())

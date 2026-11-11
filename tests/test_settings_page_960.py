@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import fast
-from fixtures import Clock, install_clock, load_recipe, phone_stub
+from fixtures import Clock, clocked, load_recipe, phone_stub
 
 # 仓库里已有的真机读数：设置页命名分「Setting」与「Preference」两族
 SETTINGS_PAGES = [
@@ -78,9 +78,7 @@ class GearLandingTests(unittest.TestCase):
     """
 
     def setUp(self):
-        original = fast.time
-        install_clock(fast, Clock())
-        self.addCleanup(setattr, fast, "time", original)
+        clocked(self, fast, Clock())
 
     def gear_phone(self):
         p = focus_phone(focus=lambda: THEME_MINE)

@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import fast
 import recipe_kit
-from fixtures import Clock, fake_phone, install_clock
+from fixtures import Clock, clocked, fake_phone
 
 PKG = "com.heytap.market"
 APP = PKG + "/com.heytap.market.activity.MainActivity"
@@ -37,9 +37,7 @@ def frames(*seq, tail=""):
 class LaunchSeizerTests(unittest.TestCase):
     def phone(self, focus=((0.0, ""),)):
         clock = Clock()
-        original = fast.time
-        install_clock(fast, clock)
-        self.addCleanup(setattr, fast, "time", original)
+        clocked(self, fast, clock)
         return fake_phone(clock=clock, stages=((0.0, HOME),), focus=focus)
 
     def test_transient_takeover_names_the_seizer_and_the_landing(self):

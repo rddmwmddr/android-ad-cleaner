@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import fast
-from fixtures import EMPTY_PAGE, Clock, fake_phone, install_clock
+from fixtures import EMPTY_PAGE, Clock, clocked, fake_phone
 
 PKG = "com.miui.themestore"
 APP = PKG + "/.MainActivity"
@@ -28,9 +28,7 @@ HOME = f'''<hierarchy rotation="0"><node package="{PKG}" bounds="[0,0][1080,2340
 class LaunchForegroundTests(unittest.TestCase):
     def phone(self, stages, focus, **fields):
         clock = Clock()
-        original = fast.time
-        install_clock(fast, clock)
-        self.addCleanup(setattr, fast, "time", original)
+        clocked(self, fast, clock)
         p = fake_phone(clock=clock, stages=stages, focus=focus, **fields)
         return p, clock
 

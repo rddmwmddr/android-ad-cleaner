@@ -9,7 +9,7 @@
 class LostNote:
     """丢失记录：导航、启动、设置搜索写，拨动读。
 
-    `miss` 是「本段已经没找到几次」——`entry`（导航）、`_launch`（启动）、`setting`（设置搜索）
+    `miss` 是「本段已经没找到几次」——`entry`（导航）、`Launcher._launch`（启动）、`setting`（设置搜索）
     进入新段落前清零，`tap` / `entry` 找不到时累加；`off()`（拨动）按 `miss > 0` 判「路径对不上，只看当前一屏」。
     `missed` 是本次没拨到目标态的 `(页面, 标题)`，由 `off()` 记，`off()` 与 `report_run()` 读；
     与 `changed` 同源、同生命周期（#788）。
@@ -23,10 +23,10 @@ class LostNote:
 class LaunchSession:
     """启动会话：由启动写、被弹窗读。
 
-    `app` 是最近一次 `start()` 拉起的目标 App，`start()` 写、`_promoted_click()`（弹窗一侧）读，
+    `app` 是最近一次 `start()` 拉起的目标 App，`start()` 写、`Launcher.promoted_click()`（弹窗一侧）读，
     用来判「点了 ✕ 之后跳走的是不是推广位」。
     `promoted` 是点过才发现是推广位的 ✕，同一处不再点第二次（#420）：`start()` 换 App 时清空，
-    `_promoted_click()` 记下。
+    `Launcher.promoted_click()` 记下。
     """
 
     def __init__(self):

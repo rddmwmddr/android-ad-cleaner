@@ -111,15 +111,36 @@ def clock_targets(module):
     """
     targets = [module]
     if getattr(module, "__name__", "") == "fast":
-        targets += [sys.modules[name] for name in ("phone.connection", "phone.screen", "phone.toggler")
+        targets += [sys.modules[name] for name in ("phone.connection", "phone.screen", "phone.toggler",
+                                                    "phone.launcher")
                     if name in sys.modules]
     return targets
 
 
 def install_clock(module, clock):
-    """把这个时钟装进 fast / chan_fast（以及它背后的基座与拨动会话），不还原。"""
+    """把这个时钟装进 fast / chan_fast（以及它背后的基座与阶段），不还原；返回 clock。"""
     for target in clock_targets(module):
         target.time = clock
+    return clock
+
+
+def clocked(case, module, clock):
+    """同 `install_clock()`，并登记到 `case.addCleanup` 还原；返回 clock。
+
+    用例里别只 `self.addCleanup(setattr, fast, "time", original)`：那只还门面那份，基座与阶段
+    留在假钟上，后面的用例 `patch.object(fast.time, …)` 打的是真模块、`_launch()` 读的却是残留
+    假钟，等待循环就脱管了（#1041 审查实测：`test_start_landing_420` 之后跑 `test_regressions`
+    会 StopIteration，全量回归只因文件顺序凑巧才没红）。
+    """
+    saved = [(target, target.time) for target in clock_targets(module)]
+    for target, _ in saved:
+        target.time = clock
+
+    def restore():
+        for target, value in saved:
+            target.time = value
+
+    case.addCleanup(restore)
     return clock
 
 
@@ -228,6 +249,8 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
             fast_mod.LostNote(), fast_mod.LaunchSession(), fast_mod.ChannelSession())
     if hasattr(fast_mod, "Toggler"):           # 拨动会话绑在假手机上：`off()` 内部走它，门面只转发
         p.toggler = bind_toggler(p, fast_mod)
+    if hasattr(fast_mod, "Launcher"):          # 启动阶段同理：`start()` 内部走它
+        p.launcher = bind_launcher(p, fast_mod)
     p.link = fast_mod.adb_link.Connection(serial, transport=shell or _silent_shell)
     p.log, p.pause_at_lock_check, p.systemui_text = False, False, False
     p.changed, p.safe_mode = [], False
@@ -255,6 +278,25 @@ def bind_toggler(phone, fast_mod):
     else:
         toggler.lost_note, toggler.safe_mode, toggler.changed = phone.lost_note, False, []
     return toggler
+
+
+def bind_launcher(phone, fast_mod):
+    """在一台门面或 Mock 替身上架一个启动阶段（#1041）：装配只此一处。
+
+    观测取 `phone.screen`、传输取它背后的 `conn`（`_launch()` 要发 `am start` / `pm path`）。
+    启动会话取门面的 `launch_session`，Mock 替身上门面与基座是同一个对象。
+    `dismiss` 是弹窗侧的窄接口（弹窗阶段搬走时才换成独立阶段），这里按调用时取门面的那一份：
+    用例随后把 `p.dismiss` 换成别的桩也必须生效，所以不能在这里捕获绑定方法。
+    """
+    launcher = fast_mod.Launcher.__new__(fast_mod.Launcher)
+    launcher.screen = _base(phone, "screen")
+    launcher.conn = _base(phone, "conn")
+    launcher.dismiss = lambda *a, **k: phone.dismiss(*a, **k)
+    if isinstance(phone, Mock):
+        launcher.lost_note = launcher.session = phone
+    else:
+        launcher.lost_note, launcher.session = phone.lost_note, phone.launch_session
+    return launcher
 
 
 def job_stub(**fields):
@@ -371,6 +413,20 @@ def _base(phone, name):
     return getattr(phone, name, phone)
 
 
+def stub(phone, name, value):
+    """把一处替身落到拥有它的基座上（ADR-0033）；基座不拥有的名字落到门面自己。
+
+    只写 `p.name = …` 挡不住引擎内部的调用：`start()` 走 `screen`，`say` / `check_alive` 走
+    `conn`，内部调用绕过门面。反过来，往门面上再放一份会挡住基座的换桩（门面属性优先），
+    所以基座拥有的名字只落基座——断言读 `p.screen.x` / `p.conn.x`，或者自己拿住这个替身。
+    """
+    owners = [base for base, names in _BASE_OWNED_.items() if name in names]
+    for base in owners:
+        setattr(_base(phone, base), name, value)
+    if not owners:
+        setattr(phone, name, value)
+
+
 def fake_phone(clock=None, size=SIZES[0], stages=((0.0, EMPTY_PAGE),),
                focus=((0.0, ""),), fast_mod=None, **fields):
     """造一个不连手机的 Phone：读屏走时间轴，点击 / 返回只推进假时钟。
@@ -405,11 +461,7 @@ def fake_phone(clock=None, size=SIZES[0], stages=((0.0, EMPTY_PAGE),),
              "locked": lambda *a, **k: False, "wait_unlocked": lambda *a, **k: True}
     stubs.update(fields)                       # 调用方给的桩压过默认值
     for name, value in stubs.items():
-        owners = [base for base, names in _BASE_OWNED_.items() if name in names]
-        for base in owners:
-            setattr(_base(p, base), name, value)    # 基座拥有的只落基座：门面上再放一份会挡住后来的换桩
-        if not owners:
-            setattr(p, name, value)
+        stub(p, name, value)                   # 基座拥有的只落基座：门面上再放一份会挡住后来的换桩
     return p
 
 

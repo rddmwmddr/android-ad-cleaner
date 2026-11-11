@@ -21,7 +21,7 @@
 
 几处等待没有收进来，因为它们的循环里夹着副作用，收进来就得给接口加钩子：
   fast.go、fast.tap(scrolls=0) 的 6 秒（每轮关弹窗）；
-  fast._launch() 的三处（等前台包：5 秒只计确知外占、空焦点顺延到 8 秒；等权限弹窗 3 秒；
+  phone/launcher.py 的 _launch() 三处（等前台包：5 秒只计确知外占、空焦点顺延到 8 秒；等权限弹窗 3 秒；
   等空白页出字 8 秒）；
   chan_fast.ChannelPage._enter_app_page 的翻页循环
   （是翻页不是等待）。
