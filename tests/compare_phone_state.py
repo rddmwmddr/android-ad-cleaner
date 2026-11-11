@@ -10,10 +10,11 @@ worktree、跑完删掉：
     git worktree add /tmp/aac-baseline <改动前的提交>
     python tests/compare_phone_state.py /tmp/aac-baseline/tool
 
-比五处：`Phone.texts()`（页面 × 两种屏尺寸 × 读屏策略开 / 关）、
+比七处：`Phone.texts()`（页面 × 两种屏尺寸 × 读屏策略开 / 关）、
 `explore.entries()`（页面 × 包名）、`Phone.off()`（两种屏尺寸 × 安全模式 × 三档 `only`）、
 `Phone.tap()` / `Phone._promoted_click()`（丢失记录与推广位已带前置状态的几条路径）、
-`Phone._confirm_target()` / `residual_confirm()` / `residual_note()`（确认框判定与残留提示）。
+`Phone._confirm_target()` / `residual_confirm()` / `residual_note()`（确认框判定与残留提示）、
+`Phone.start()`（启动与落点）、`Phone.setting()` / `Phone.type_text()`（设置搜索的往返与打字退化链）。
 两边必须各起一个子进程：模块名相同，同进程里 import 不了两份 `fast`。
 
 结论不只看「相等」——驱动同时打印守卫数字（策略 / 包名 / `off` 每个场景点到了哪些标题，
@@ -22,6 +23,7 @@ worktree、跑完删掉：
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -70,6 +72,39 @@ TWO_WINDOWS = '''<hierarchy rotation="0">
   <node package="com.example.overlay" text="别的窗口" bounds="[60,420][400,480]"/>
   <node package="com.android.settings" text="广告" bounds="[60,540][400,600]"/>
 </hierarchy>'''
+
+# 设置搜索的样本（#1042）：首页的搜索框、搜索页（输入框 + 结果行）、点开结果后的子页。
+SEARCH_HOME = '''<hierarchy rotation="0"><node package="com.android.settings" bounds="[0,0][1080,2340]">
+  <node class="android.widget.TextView" text="搜索设置项" clickable="true" bounds="[50,100][1030,200]"/>
+</node></hierarchy>'''
+# 首页的搜索框文案不匹配 BOX（「查找设置」而不是「搜索…设置」）：样本用 `box=` 显式指认它
+FIND_HOME = SEARCH_HOME.replace("搜索设置项", "查找设置")
+NO_BOX_HOME = '''<hierarchy rotation="0"><node package="com.android.settings" bounds="[0,0][1080,2340]">
+  <node class="android.widget.TextView" text="网络与互联网" bounds="[50,300][1030,400]"/>
+</node></hierarchy>'''
+RESULT_PAGE = '''<hierarchy rotation="0"><node package="com.android.settings" bounds="[0,0][1080,2340]">
+  <node class="android.widget.TextView" text="设备标识与广告" bounds="[50,300][1030,400]"/>
+</node></hierarchy>'''
+
+
+def fit(page, size):
+    """按比例把按 1080×2340 画的样本缩到目标屏尺寸（对拍标准：样本几何在每种尺寸下都要可达）。"""
+    width, height = size
+    base_w, base_h = SIZES[0]
+
+    def scale(match):
+        l, t, r, b = (int(v) for v in match.groups())
+        return f'bounds="[{l * width // base_w},{t * height // base_h}][{r * width // base_w},{b * height // base_h}]"'
+    return page if size == SIZES[0] else re.sub(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', scale, page)
+
+
+def search_page(text="广告", rows=(("广告服务", 400),)):
+    """搜索页：获得焦点的输入框（文字由 text 给）+ 结果行。"""
+    body = "".join(f'<node class="android.widget.TextView" text="{t}" bounds="[50,{y}][1000,{y + 100}]"/>'
+                   for t, y in rows)
+    return ('<hierarchy rotation="0"><node package="com.android.settings" bounds="[0,0][1080,2340]">'
+            f'<node class="android.widget.EditText" text="{text}" focused="true" bounds="[50,100][1000,200]"/>'
+            f'{body}</node></hierarchy>')
 
 def switch_page(w, h):
     """按屏宽高参数化的开关页：普通、保护、带外都有，两种尺寸下都可达。
@@ -288,8 +323,138 @@ def dump(tool_dir):
             fast.adb_link.detached = real_adb
         return out
 
+    def search():
+        """设置搜索的往返（#1042）：开搜索页（直达动作 / 回设置首页两条路）、打字的三级退化、
+        找结果、点开、退场。对外语义是「找不到就只返回假」——每个失败样本都记返回假、退场命令
+        与那句说明，两边逐字比。
+
+        每条样本在两种屏尺寸下各跑一遍：样本按 1080×2340 画，`fit()` 缩到另一档，
+        坐标与识别都不许只在一种宽度下成立。目标分支按标准各配一条：断线（读屏抛 `DeviceLost`）、
+        清空输入框抛错、输入失败后已不在搜索页、退场三次 BACK 仍不退。
+        """
+        out = []
+        ok = lambda cmd=None: SimpleNamespace(exit_code=0, output="Starting: Intent")           # noqa: E731
+        no_action = lambda: SimpleNamespace(exit_code=1, output="Error: Activity not started,"  # noqa: E731
+                                            " unable to resolve Intent")
+
+        def build(size, *, page, replies=None, after_box=None, after_result=None,
+                  fail_set=False, fail_paste=False, fail_clear=False, set_fail_page=None,
+                  paste_page=None, back_works=True, lost=False):
+            """一套假手机：页面按 `state` 切换，点击与返回只记账。两种树都吃同一份输入。"""
+            clock = fixtures.Clock()
+            fixtures.install_clock(fast, clock)
+            commands, posts, clicks, backs, lines = [], [], [], [], []
+            p = fixtures.phone_stub("search", fast_mod=fast)
+            p.W, p.H = size
+            p.d = fixtures.Device(fixtures.Timeline([(0.0, fixtures.EMPTY_PAGE)]), size, clock)
+            state = {"page": fit(page, size)}
+            p.d.shell = lambda cmd, timeout=60: (commands.append(cmd), (replies or ok)(cmd))[1]
+
+            def set_text(selector, text, http_timeout=None):
+                posts.append(["setText", text])
+                if fail_set:
+                    if set_fail_page:
+                        state["page"] = fit(set_fail_page, size)
+                    raise TimeoutError()
+
+            def clear_field(*a, **k):
+                posts.append(["clear"])
+                if fail_clear:
+                    raise RuntimeError("清不掉输入框")
+
+            def clipboard(label, text, http_timeout=None):
+                posts.append(["paste", text])
+                if fail_paste:
+                    raise TimeoutError()
+                if paste_page:
+                    state["page"] = fit(paste_page, size)
+
+            p.d.jsonrpc = SimpleNamespace(setText=set_text, clearTextField=clear_field,
+                                          setClipboard=clipboard)
+
+            def tree():
+                if lost:
+                    clock.read()
+                    raise fast.adb_link.DeviceLost("手机断线了")
+                clock.read()
+                return ET.fromstring(state["page"])
+            p.screen.tree = tree
+
+            def click(x, y):
+                searching = "android.widget.EditText" in state["page"]
+                clicks.append([x, y, "result" if searching else "box"])
+                clock.click()
+                if searching and after_result:
+                    state["page"] = fit(after_result, size)
+                elif not searching and after_box:
+                    state["page"] = fit(after_box, size)
+            p.screen.click = click
+
+            def back(*a, **k):
+                clock.click()
+                backs.append(round(clock.t, 2))
+                if back_works:
+                    state["page"] = fit(SEARCH_HOME, size)
+            p.screen.back = back
+            fixtures.stub(p, "say", lambda *a: lines.append(" ".join(str(x) for x in a)))
+            return p, clock, {"commands": commands, "posts": posts, "clicks": clicks,
+                              "backs": backs, "lines": lines}
+
+        def record(label, call, **kw):
+            recs = []
+            for size in SIZES:
+                p, clock, rec = build(size, **kw)
+                try:
+                    rec["got"] = call(p)
+                except Exception as e:                   # noqa: BLE001 - 对拍要的是原文，不是分类
+                    rec["err"] = f"{type(e).__name__}: {e}"
+                rec.update({"id": f"{label}|{size[0]}x{size[1]}", "t": round(clock.t, 2),
+                            "reads": clock.page_reads})
+                out.append(rec)
+                recs.append(rec)
+            return recs
+
+        record("setting|direct", lambda p: p.setting("广告", entry="广告服务"),
+               page=search_page(), after_result=RESULT_PAGE)
+        record("setting|fallback", lambda p: p.setting("广告", entry="广告服务"),
+               page=SEARCH_HOME, after_box=search_page(), after_result=RESULT_PAGE,
+               replies=lambda cmd: no_action() if "MAIN_SEARCH" in cmd else ok())
+        record("setting|no-box", lambda p: p.setting("广告", entry="广告服务"), page=NO_BOX_HOME,
+               replies=lambda cmd: no_action() if "MAIN_SEARCH" in cmd else ok())
+        record("setting|type-fail", lambda p: p.setting("广告", entry="广告服务"),
+               page=search_page(text=""), fail_set=True, fail_paste=True)
+        record("setting|no-result", lambda p: p.setting("广告", entry="广告服务"),
+               page=search_page(rows=()))
+        record("setting|not-opened", lambda p: p.setting("广告", entry="广告服务"), page=search_page())
+        record("setting|leave-stuck", lambda p: p.setting("广告", entry="广告服务"),
+               page=search_page(rows=()), back_works=False)
+        record("setting|link-lost", lambda p: p.setting("广告", entry="广告服务"),
+               page=search_page(), lost=True)
+        # 不带 path 会点第一行「广告」（400 起，中心 450）；带 path 要跳过它，点第三行（600 起，中心 650）
+        record("setting|path-picks-row", lambda p: p.setting("广告", entry="广告",
+                                                             path="隐私 > 广告"),
+               page=search_page(rows=(("广告", 400), ("其他 > 广告", 450),
+                                      ("广告", 600), ("隐私 > 广告", 650))),
+               after_result=RESULT_PAGE)
+        record("setting|box-hint", lambda p: p.setting("广告", entry="广告服务", box="查找设置"),
+               page=FIND_HOME, after_box=search_page(), after_result=RESULT_PAGE,
+               replies=lambda cmd: no_action() if "MAIN_SEARCH" in cmd else ok())
+
+        # 打字的三级退化：setText → 清掉 → 剪贴板粘贴 → 返回假
+        record("type|set-text", lambda p: p.type_text("广告", timeout=0.5), page=search_page())
+        record("type|clipboard", lambda p: p.type_text("广告", timeout=0.5),
+               page=search_page(text=""), fail_set=True, paste_page=search_page())
+        record("type|clear-raises", lambda p: p.type_text("广告", timeout=0.5),
+               page=search_page(text=""), fail_set=True, fail_clear=True, paste_page=search_page())
+        record("type|unverified", lambda p: p.type_text("广告", timeout=0.5),
+               page=search_page(text="%%"), fail_set=True, fail_paste=True)
+        record("type|left-search-after-fail", lambda p: p.type_text("广告", timeout=0.5),
+               page=search_page(), fail_set=True, set_fail_page=SEARCH_HOME)
+        record("type|not-ready", lambda p: p.type_text("广告", timeout=0.5), page=SEARCH_HOME)
+        return out
+
     return {"texts": texts(), "entries": entries(), "off": off(), "sessions": sessions(),
-            "toggling": toggling(), "launch": launch()}
+            "toggling": toggling(), "launch": launch(), "search": search()}
 
 
 @contextmanager
@@ -412,6 +577,72 @@ def launch_guards(records):
     return 0 if ok else 1
 
 
+def search_guards(records):
+    """设置搜索样本必须真的走完两条进场路、每种打字退化与每条失败出口，且两种屏尺寸下都成立。
+    任何一支退化（例如全都成功、或一句说明都没打）时「两边一样」是必然相等，不能当证据。"""
+    by = {(rec["id"].rsplit("|", 1)[0], rec["id"].rsplit("|", 1)[1]): rec for rec in records}
+    said = lambda rec, word: any(word in line for line in rec["lines"])      # noqa: E731
+    kinds = lambda rec: [kind for _, _, kind in rec["clicks"]]               # noqa: E731
+    problems = []
+    for size in SIZES:
+        tag = f"{size[0]}x{size[1]}"
+        get = lambda label, tag=tag: by[(label, tag)]                        # noqa: E731
+
+        direct, fallback = get("setting|direct"), get("setting|fallback")
+        if not (direct["got"] is True and any("MAIN_SEARCH" in c for c in direct["commands"])
+                and not any("android.settings.SETTINGS" in c for c in direct["commands"])):
+            problems.append(f"{tag} 直达搜索页没走通")
+        if not (fallback["got"] is True
+                and any("android.settings.SETTINGS" in c for c in fallback["commands"])
+                and kinds(fallback) == ["box", "result"]):
+            problems.append(f"{tag} 回设置首页那条路没走通")
+
+        no_box, type_fail = get("setting|no-box"), get("setting|type-fail")
+        no_result, not_opened = get("setting|no-result"), get("setting|not-opened")
+        stuck, lost = get("setting|leave-stuck"), get("setting|link-lost")
+        if not (no_box["got"] is False and said(no_box, "搜索框没打开") and not no_box["backs"]):
+            problems.append(f"{tag} 搜索框没打开那条没走对")
+        if not (type_fail["got"] is False and said(type_fail, "输入") and type_fail["backs"]):
+            problems.append(f"{tag} 输入失败那条没走对")
+        if not (no_result["got"] is False and said(no_result, "没搜到") and no_result["backs"]):
+            problems.append(f"{tag} 没搜到那条没走对")
+        if not (not_opened["got"] is False and said(not_opened, "没有打开") and not_opened["backs"]):
+            problems.append(f"{tag} 结果没打开那条没走对")
+        if not (stuck["got"] is False and said(stuck, "退不出去") and len(stuck["backs"]) == 3):
+            problems.append(f"{tag} 退场失败那条没走对")
+        if "DeviceLost" not in (lost.get("err") or ""):
+            problems.append(f"{tag} 断线没冒泡")
+
+        path, box_hint = get("setting|path-picks-row"), get("setting|box-hint")
+        picked = [y for _, y, kind in path["clicks"] if kind == "result"]
+        want_y = int(650 * size[1] // SIZES[0][1])      # 第三行（600~700）的中心才是带 path 的落点
+        if not (path["got"] is True and picked == [want_y]):
+            problems.append(f"{tag} 按 path 挑结果没走对")
+        if not (box_hint["got"] is True and kinds(box_hint) == ["box", "result"]):
+            problems.append(f"{tag} 显式搜索框文案没走对")
+
+        typed = {label: get(f"type|{label}") for label in
+                 ("set-text", "clipboard", "clear-raises", "unverified", "left-search-after-fail", "not-ready")}
+        posts = lambda rec: [item[0] for item in rec["posts"]]               # noqa: E731
+        if not (typed["set-text"]["got"] is True and posts(typed["set-text"]) == ["setText"]):
+            problems.append(f"{tag} 打字第一级没走对")
+        if not (typed["clipboard"]["got"] is True
+                and posts(typed["clipboard"]) == ["setText", "clear", "paste"]):
+            problems.append(f"{tag} 打字第二级没走对")
+        if not (typed["clear-raises"]["got"] is True and posts(typed["clear-raises"]) ==
+                ["setText", "clear", "paste"]):
+            problems.append(f"{tag} 清空抛错的收容没走对")
+        if typed["unverified"]["got"] is not False:
+            problems.append(f"{tag} 打字返回假没走对")
+        if not (typed["left-search-after-fail"]["got"] is False
+                and posts(typed["left-search-after-fail"]) == ["setText"]):
+            problems.append(f"{tag} 输入失败后离开搜索页那条没走对")
+        if not (typed["not-ready"]["got"] is False and not typed["not-ready"]["posts"]):
+            problems.append(f"{tag} 不在搜索页那条没走对")
+    print("守卫：设置搜索样本 " + ("两种屏尺寸下全部到位" if not problems else "；".join(problems)))
+    return 0 if not problems else 1
+
+
 def compare(baseline_tool):
     before, after = collect(str(baseline_tool)), collect(str(TESTS.parent / "tool"))
     bad = 0
@@ -433,6 +664,7 @@ def compare(baseline_tool):
     bad += session_guards(after["sessions"])
     bad += toggling_guards(after["toggling"])
     bad += launch_guards(after["launch"])
+    bad += search_guards(after["search"])
     return 1 if bad else 0
 
 
