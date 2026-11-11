@@ -44,3 +44,13 @@ jobs:
         run: echo "CHAQUOPY_PYTHON=$(command -v python3.12 || command -v python3)" >> "$GITHUB_ENV"
       - name: 编译 debug APK 并跑协议层 JVM 单测
         run: gradle --console=plain assembleDebug testDebugUnitTest
+      # 构建目录在 ~/Library/Caches（见 app/build.gradle.kts），先拷到 runner 的临时目录再上传
+      - name: 拿出 debug APK
+        run: cp "$HOME/Library/Caches/aac-android/app/outputs/apk/debug/"*.apk "$RUNNER_TEMP/"
+      # 冒烟脚本（android/smoke.py）按这个名字下载；改动时两处一起改
+      - name: 留存 debug APK
+        uses: actions/upload-artifact@v5
+        with:
+          name: debug-apk
+          path: ${{ runner.temp }}/*.apk
+          if-no-files-found: error

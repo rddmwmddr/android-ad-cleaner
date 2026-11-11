@@ -7,6 +7,7 @@
 ### 内部
 
 - `Phone` 的连接与观测抽成 `tool/phone/` 的两个基座，门面只剩转发（#1038，ADR-0033）
+- 新增 `android/smoke.py`：CI 出 debug 包、装开发机并判启动，`--screens` 逐屏判存活（#1071）
 
 ### 修复
 
