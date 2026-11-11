@@ -26,6 +26,7 @@ OFF_CALL_WIDE = [
     ("recipes/oppo-PKT110/recipe.py", "应用建议"),
     ("recipes/oppo-PLP120/recipe.py", "广告跟踪"),
     ("recipes/oneplus-PLR110/recipe.py", "广告跟踪"),
+    ("recipes/oneplus-PYB110/recipe.py", "广告跟踪"),
     ("recipes/oneplus-PHK110/recipe.py", "广告跟踪"),
     ("recipes/oneplus-PKX110/recipe.py", "广告跟踪"),
     ("recipes/oppo-PKH110/recipe.py", "广告跟踪"),

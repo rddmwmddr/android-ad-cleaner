@@ -85,6 +85,12 @@ date = "2026-11-08"
 by = "机主"
 tier = "部分验证"
 
+["oneplus-PYB110/recipe.py"]
+build = "PYB110_17.0.0.155"
+date = "2026-11-12"
+by = "机主"
+tier = "已验证"
+
 ["oppo-PKH110/recipe.py"]
 build = "PKH110_17.0.0.103"
 date = "2026-10-29"
