@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 import adb_link
 import chan_fast as chan
 import fast
+from phone import connection as phone_connection
 from fixtures import FakeProc, FakeRunner, job_stub, phone_stub
 import run
 
@@ -199,10 +200,10 @@ class DisconnectTests(unittest.TestCase):
 
     def test_failed_service_push_maps_to_disconnect_or_clear_message(self):
         push = fast.adbutils.AdbError("FAIL")
-        with patch.object(fast, "connect", side_effect=push), patch.object(adb_link, "present", return_value=False):
+        with patch.object(phone_connection, "connect", side_effect=push), patch.object(adb_link, "present", return_value=False):
             with self.assertRaises(adb_link.DeviceLost):
                 fast.Phone("test", log=False)
-        with patch.object(fast, "connect", side_effect=push), patch.object(adb_link, "present", return_value=True):
+        with patch.object(phone_connection, "connect", side_effect=push), patch.object(adb_link, "present", return_value=True):
             with self.assertRaisesRegex(RuntimeError, "读屏服务没能装到手机上"):
                 fast.Phone("test", log=False)
 

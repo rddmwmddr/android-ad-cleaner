@@ -188,8 +188,9 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
     两个基座（ADR-0033）在这里一起装配：`conn` 归连接与生命周期，`screen` 归观测与视口几何，
     门面只转发。它们只能用 `__new__` 造——`Connection.__init__` 要真连手机，`Screen.__init__`
     要真读屏，假手机两样都不能做。
-    要顶替观测与动作（`tree` / `focus` / `texts` / `sig` / `settle` / `switch_rows` / `on_screen`），
-    桩打在 `p.screen` 上：门面只是转发，内部调用走的是基座。
+    桩打在它所属的基座上，门面只是转发、内部调用绕过门面：观测与动作（`tree` / `focus` / `texts` /
+    `sig` / `settle` / `switch_rows` / `on_screen`）打 `p.screen`，连接与生命周期（`say` / `locked` /
+    `wait_unlocked`）打 `p.conn`。要同时拦住门面上的调用点（机型脚本直接写 `p.say(...)`）就两处一起桩。
     声明在 `Phone.__init__` 里的状态在这里补默认值，和构造处保持一致——只有一处例外：
     `pause_at_lock_check` 默认 False，因为假手机后面没有客户端在点「暂停」。
     屏尺寸 `W` / `H` 与读屏 adapter `d` 不设默认：它们是每条用例的前提，由调用方传。

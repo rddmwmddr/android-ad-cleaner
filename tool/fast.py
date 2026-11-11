@@ -25,7 +25,6 @@ from phone.connection import reader_failure as reader_failure
 from phone.connection import u2 as u2
 from phone.connection import _shell_transport as _shell_transport
 from phone.screen import Screen
-from ui_session import connect
 import adb_link
 import backups
 import events
@@ -266,7 +265,7 @@ class Phone:
     """
 
     def __init__(self, serial, log=True, reader: Reader | None = None):
-        self.conn = Connection(serial, log=log, reader=reader, connector=connect)
+        self.conn = Connection(serial, log=log, reader=reader)
         self.screen = Screen(self.conn)
         self.conn.check_input()
         self.safe_mode = False              # 安全模式（参考脚本 / 录制版本不符）：off() 只关点名的开关，不做整页全关

@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 import explore
 import fast
+from phone import connection as phone_connection
 from fixtures import Clock, Device, Timeline, fake_phone, install_clock, load_recipe, phone_stub
 from reader import Reader
 
@@ -745,7 +746,7 @@ class ScreenGoneTests(unittest.TestCase):
     def test_a_gone_background_screen_is_not_reported_as_a_reader_failure(self):
         """#674：屏已经没了不是读屏服务坏了，别把用户指去关别的客户端。"""
         gone = fast.u2.exceptions.UiAutomationError("后台屏意外关闭（建屏进程已退出），这一步无法继续")
-        with patch.object(fast, "connect", side_effect=gone):
+        with patch.object(phone_connection, "connect", side_effect=gone):
             with self.assertRaises(RuntimeError) as caught:
                 fast.Phone("S", log=False)
         self.assertIn("那块屏已经关了", str(caught.exception))

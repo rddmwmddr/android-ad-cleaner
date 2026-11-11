@@ -2,6 +2,7 @@
 
 门面 `Phone` 只持有它并转发；观测基座 `Screen` 构造时注入它。这里不做观测，也不认识 `Phone`。
 """
+import contextlib
 import os
 import time
 
@@ -58,17 +59,16 @@ def reader_failure(serial, error):
 class Connection:
     """一台手机：读屏 adapter、断线判定、锁屏等待与日志开关。
 
-    `connector` 是打开读屏 adapter 的入口（默认 `ui_session.connect`）。门面把同一个入口显式传下来，
-    构造签名里的注入点就只有 `reader=` 一个——「读屏替身从既有构造参数下传」说的就是它。
+    构造签名里的唯一注入点是 `reader=`：读屏替身从那里下传一层（ADR-0033）。
     """
 
-    def __init__(self, serial, log=True, reader: Reader | None = None, connector=None):
+    def __init__(self, serial, log=True, reader: Reader | None = None):
         self.log = log
         self.pause_at_lock_check = True     # 机型脚本每段开头都查锁屏：这里就是段与段之间，可以暂停
         if log:
             print("正在连接手机读屏服务……", flush=True)
         try:
-            self.reader = reader if reader is not None else (connector or connect)(serial)
+            self.reader = reader if reader is not None else connect(serial)
         except u2.exceptions.AccessibilityServiceAlreadyRegisteredError as e:
             events.emit("ui_busy")
             raise RuntimeError("UIAUTOMATION_BUSY：手机读屏服务已被占用，本次未点击开关。"
@@ -86,8 +86,18 @@ class Connection:
         self._shell = self.reader.shell
         self.link = adb_link.Connection(serial, transport=_shell_transport(self._shell), lost_on_retry=False)
         self.reader.shell = self._resilient_shell
-        try:
+        with self.guarded():
             self.reader.settings["operation_delay"] = (0, 0)
+
+    @contextlib.contextmanager
+    def guarded(self):
+        """连上之后的构造期读屏动作：坏了就按三种结局翻译，且一定把读屏关掉再抛。
+
+        断线 / 读屏慢一次 / 读屏服务起不来 —— 翻译只在 `failure()` 一份；
+        `Screen` 构造时读屏宽高也走这里，别在那里另抄一段 `except`。
+        """
+        try:
+            yield
         except u2.exceptions.UiAutomationError as e:
             raise self.failure(e) from e
         except BaseException:
@@ -107,14 +117,9 @@ class Connection:
 
     def check_input(self):
         """小米没开「USB 调试（安全设置）」时能读不能点：先探一下，别跑几分钟全是「没找到」。"""
-        try:
+        with self.guarded():
             if input_blocked(self.reader.shell("input keyevent 0").output):
                 raise RuntimeError(f"INPUT_BLOCKED：系统拒绝了{TAPPED}，本次未点击开关。\n" + XIAOMI_INPUT)
-        except u2.exceptions.UiAutomationError as e:
-            raise self.failure(e) from e
-        except BaseException:
-            self.reader.close()
-            raise
 
     @property
     def serial(self):

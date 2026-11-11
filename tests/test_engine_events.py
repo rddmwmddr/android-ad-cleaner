@@ -148,7 +148,7 @@ class UiBusyTests(unittest.TestCase):
             with self.assertRaises(RuntimeError) as caught:
                 fast.Phone("test", False)
             raised["message"] = str(caught.exception)
-        with patch.object(fast, "connect", side_effect=AccessibilityServiceAlreadyRegisteredError("first cause")), \
+        with patch.object(phone_connection, "connect", side_effect=AccessibilityServiceAlreadyRegisteredError("first cause")), \
              patch.object(phone_connection, "accessibility_summary", return_value="只读检查"):
             human, sent, _ = capture(call, on=on)
         return human, sent, raised["message"]

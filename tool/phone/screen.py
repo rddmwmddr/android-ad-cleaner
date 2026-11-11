@@ -8,8 +8,6 @@ import re
 import time
 import xml.etree.ElementTree as ET
 
-import uiautomator2 as u2
-
 import wait
 from row import bounds, control, dedupe, summary, switch_row, title_hit, unique
 from troubleshooting import TAPPED, XIAOMI_INPUT, input_blocked
@@ -24,13 +22,8 @@ class Screen:
     def __init__(self, conn):
         self.conn = conn
         self.systemui_text = False          # 读屏时是否算上 com.android.systemui 的文字（vivo OriginOS Ocean 的通知页就挂在那里）
-        try:
+        with conn.guarded():                # 读屏坏了：三种结局的翻译与收尾都在 Connection 那一份
             self.W, self.H = conn.reader.window_size()
-        except u2.exceptions.UiAutomationError as e:
-            raise conn.failure(e) from e
-        except BaseException:
-            conn.close()
-            raise
 
     # ---------- 采样：读屏、页面状态与签名 ----------
     def tree(self):
