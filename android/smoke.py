@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""真机冒烟 2/3：CI 出 debug 包 → 装到开发机 → 启动 → 跑一遍执行段 → 还原 → 报告。
+"""真机冒烟：CI 出 debug 包 → 装到开发机 → 启动 → 从首页点到底 → 还原 → 报告。
 
-  .venv/bin/python android/smoke.py [--serial 序列号] [--ref 分支或标签] [--commit 提交] [--screens]
+  .venv/bin/python android/smoke.py [--serial 序列号] [--ref 分支或标签] [--commit 提交] [--fast] [--screens]
 
 构建留在 CI：触发 android.yml、等它跑完、下载 debug APK，再用本机的 adb 装到开发机并启动。
-之后按手机状态现算一份计划，交给 App 的 debug 计划入口真跑一遍执行段，再自动还原三项
-（挂起的包、快应用组件、营销通知渠道），给出「构建」「安装 + 启动」「真流程 + 还原」三段的结论。
-产物（人读摘要、结果 JSON、原始结果、logcat）按 commit 落在临时目录，不入库。用法与首次配对
-步骤见 android/README.md。
+之后默认走完整主流程（检测 → 扫描 → 确认 → 开始 → 完成）：桌面侧读屏认文字、点按驱动，完全
+不改 App；`--fast` 换成只跑执行段的快速档（按手机状态现算一份计划交给 debug 计划入口）。两条路
+最后都自动还原三项（挂起的包、快应用组件、营销通知渠道），给出「构建」「安装 + 启动」
+「真流程 + 还原」三段的结论。产物（人读摘要、结果 JSON、原始结果、logcat）按 commit 落在临时
+目录，不入库。用法与首次配对步骤见 android/README.md。
 """
 import argparse
 import json
@@ -20,6 +21,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from xml.etree import ElementTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))
 from stdio import use_utf8_console  # noqa: E402
@@ -57,6 +59,20 @@ DEFAULT_SCREENS = (
 )
 
 PASS, FAIL, SKIP = "通过", "失败", "未执行"
+
+# 完整主流程的锚点文字（#1073）：App 界面上的文案，改文案会让这条路失效——`--fast` 是兜底。
+# 「再做一次」「重新开始」只出现在完成页，执行页与确认页都没有，比页面标题稳妥。
+HOME_CTA = "一键去广告"
+START_CTA = "开始"
+DONE_MARKS = ("再做一次", "重新开始")
+DONE_FAILED, DONE_STOPPED = "有步骤没成功", "已停止"
+NOTHING_CHOSEN = "已选 0 项"            # 这台机之前已经关过：确认页没有可勾的项，走不到执行
+PAGE_WAIT = 240                          # 点完一键去广告到确认页的预算：检测 + 通知扫描
+DONE_WAIT = 45                           # 认完成页的预算：跑完后 App 自己还占着 UiAutomation，
+                                         # 主屏读不到就按导出的结局算，别在这里耗满一整段
+PAGE_POLL = 5                            # 认页面的间隔
+SCREEN_TIMEOUT = 90                      # 一次读屏的预算：起服务要十几秒；被占时等这么久就够判死
+BOUNDS = re.compile(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]")
 
 
 class SmokeError(Exception):
@@ -166,6 +182,11 @@ def first_line(text):
         if line.strip():
             return line.strip()
     return "（没有输出）"
+
+
+def last_line(text):
+    lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
+    return lines[-1] if lines else ""
 
 
 def output_detail(text, limit=300):
@@ -532,8 +553,12 @@ def restore_all(runner, items, *, note=print, sleep=time.sleep, wait=RESTORE_WAI
     return steps
 
 
-def judge_run(blob, restore, error=""):
-    """第三段：执行段跑完没有 + 还原完成没有。关了几项只记录、不判定（#1072）。"""
+def judge_run(blob, restore, error="", flow="执行段", outcome="ok", how="完成页"):
+    """第三段：跑完没有 + 还原完成没有。关了几项只记录、不判定。
+
+    `flow` 只影响措辞。完整主流程的结局由完成页的标题给（`outcome`，`how` 说从哪儿认的）；
+    快速档没有完成页，按导出里的 `finished` 判（#1072）。
+    """
     run = (blob or {}).get("run") or {}
     results = run.get("results") or []
     done = [r for r in results if r.get("rc") == 0 and not r.get("skipped")]
@@ -541,20 +566,221 @@ def judge_run(blob, restore, error=""):
     bad = [step for step in restore if not step.ok]
     if bad:
         return False, "设备可能残留改动：%s %s" % (bad[0].name, bad[0].detail)
+    if outcome == "failed":
+        return False, "%s是「%s」，关了 %d 项（只记录）；还原完成" % (how, DONE_FAILED, len(done))
+    if outcome == "stopped":
+        return False, "%s是「%s」；还原完成" % (how, DONE_STOPPED)
+    if outcome != "ok":
+        return False, "%s认不出结局（%s）；还原完成" % (how, outcome)
     if not (blob or {}).get("finished"):
-        return False, "执行段没跑完：" + (error or run.get("error") or (blob or {}).get("error")
-                                         or "App 没给出这一轮的结局")
-    detail = "执行段跑完，关了 %d 项（只记录）" % len(done)
+        return False, "%s没跑完：" % flow + (error or run.get("error") or (blob or {}).get("error")
+                                            or "App 没给出这一轮的结局")
+    detail = "%s跑完，关了 %d 项（只记录）" % (flow, len(done))
     if unfinished:
         detail += "，%d 项没做成（只记录）" % len(unfinished)
+    if how and how != "完成页":
+        detail += "，结局取自" + how
     return True, detail + "；还原完成"
 
 
-def smoke(runner, *, ref=None, commit=None, serial=None, screens=(), root=None,
+# ---------- 完整主流程（#1073） ----------
+
+@dataclass(frozen=True)
+class Node:
+    """dump 里一个带文字的节点。点它的 bounds 中心，等于点这段文字。"""
+    text: str
+    bounds: tuple
+    package: str = ""
+    clickable: bool = False
+    enabled: bool = True
+
+    @property
+    def center(self):
+        x1, y1, x2, y2 = self.bounds
+        return (x1 + x2) // 2, (y1 + y2) // 2
+
+
+def screen_nodes(xml):
+    """uiautomator 格式的 dump → 带文字的节点。解析不了就抛，不当成「这一屏是空的」。
+
+    文字有两个落点：`text` 与 `content-desc`（Compose 的图标按钮把标签放后者）。
+    包名留着：认文字之前先确认这一屏是本 App，否则会点到别人身上。
+    """
+    start = xml.find("<hierarchy")
+    if start < 0:
+        raise SmokeError("读屏输出里没有 <hierarchy>：" + output_detail(xml, 160))
+    try:
+        root = ElementTree.fromstring(xml[start:].strip())
+    except ElementTree.ParseError as error:
+        raise SmokeError("读屏输出不是完整的 XML（%s）：%s" % (error, output_detail(xml, 160))) from None
+    nodes = []
+    for node in root.iter("node"):
+        text = (node.get("text") or "").strip() or (node.get("content-desc") or "").strip()
+        box = BOUNDS.search(node.get("bounds") or "")
+        if not text or not box:
+            continue
+        nodes.append(Node(text, tuple(int(value) for value in box.groups()), node.get("package") or "",
+                          node.get("clickable") == "true", node.get("enabled") != "false"))
+    return nodes
+
+
+def find_text(nodes, label):
+    """按文字找节点：先精确、再包含；都能命中时优先可点的那个。
+
+    包含匹配是为了「已选 12 项」这类带数的文案；精确优先是为了不把提示语里的「开始」当成按钮。
+    """
+    exact = [node for node in nodes if node.text == label]
+    if exact:
+        return next((node for node in exact if node.clickable), exact[0])
+    hits = [node for node in nodes if label in node.text]
+    if hits:
+        return next((node for node in hits if node.clickable), hits[0])
+    return None
+
+
+def screen_lines(nodes, limit=8):
+    """这一屏上看到的文字：找不到目标时给人看的现场。"""
+    seen = []
+    for node in nodes:
+        if node.text not in seen:
+            seen.append(node.text)
+    return "、".join(seen[:limit]) or "（这一屏没有文字）"
+
+
+def tap_cmd(serial, node):
+    """按坐标点按。不用 App 的自动化接口：这条路不改 App，界面怎么画就怎么点。"""
+    x, y = node.center
+    return ("adb", "-s", serial, "shell", "input", "tap", str(x), str(y))
+
+
+def screen_cmd(serial):
+    """一次读屏起一个子进程，走引擎同一个读屏 adapter（`ui_session.connect`）。
+
+    不直连 `uiautomator dump`：这台一加上它会被系统 kill（rc=137），引擎那条路才通得过。
+    """
+    return (sys.executable, str(Path(__file__).resolve()), "--read-screen", serial)
+
+
+def read_screen(runner, serial):
+    out, err, rc = runner.run(*screen_cmd(serial), timeout=SCREEN_TIMEOUT)
+    if rc != 0 or "<hierarchy" not in out:
+        # 子进程的 stderr 是整段栈，原因在最后一行：「另一个任务正占着读屏」就长这样
+        raise SmokeError("读屏失败：" + (last_line(err) or last_line(out) or "没有输出"))
+    return screen_nodes(out)
+
+
+def dump_screen(serial):
+    """`--read-screen` 的实现：起一次读屏会话、打一份 dump、退出前释放。
+
+    与引擎共用 `ui_session.connect`：同一台电脑同一时刻只有一个读屏使用者，另一处正在跑
+    （比如另一个会话在执行）就抛出来，等页面的那边会接着重试。
+    """
+    sys.path.insert(0, str(TOOL))
+    import ui_session                       # 只有这条路要 uiautomator2，与引擎共用一份
+    device = ui_session.connect(serial)
+    try:
+        sys.stdout.write(device.dump_hierarchy())
+        sys.stdout.flush()
+    finally:
+        device.close()
+    return 0
+
+
+def await_nodes(runner, serial, marks, *, sleep, poll=PAGE_POLL, timeout=PAGE_WAIT,
+                relaunch=None, relaunch_every=30):
+    """等本 App 的这一屏出现 marks 里的任意一个文字，返回 (命中的标记, 这一屏的节点)。
+
+    读屏被占（App 正在扫通知 / 正在跑引擎）不算失败，接着等：UiAutomation 同一时刻只给一个
+    使用者。前台是别的 App 时只认「不在本 App」这一条，不按坐标点——否则会点到别人身上；
+    `relaunch` 是把它拉回前台的命令，隔一阵发一次。超时把最后的原因和最后读到的文字一起
+    报出来，别只说「没等到」。
+    """
+    waited, reason, next_launch = 0, "", 0
+    while True:
+        try:
+            nodes = read_screen(runner, serial)
+        except SmokeError as failure:
+            reason = "最后一次读屏失败：" + str(failure)
+        else:
+            mine = [node for node in nodes if node.package == PACKAGE]
+            if mine:
+                for mark in marks:
+                    if find_text(mine, mark):
+                        return mark, mine
+                reason = "最后一次读到的这一屏上有：" + screen_lines(mine)
+            else:
+                reason = "前台不是这个 App：" + screen_lines(nodes)
+                if relaunch and waited >= next_launch:
+                    relaunch()
+                    next_launch = waited + relaunch_every
+        if waited >= timeout:
+            raise SmokeError("%d 秒内没等到「%s」。%s" % (timeout, "」「".join(marks), reason))
+        sleep(poll)
+        waited += poll
+
+
+def tap(runner, serial, node, label, *, note=print):
+    if not node.enabled:
+        raise SmokeError("「%s」是灰的（当前不能点）：先处理手机上的提示再跑" % label)
+    note("点「%s」@%d,%d" % ((label,) + node.center))
+    out, err, rc = runner.run(*tap_cmd(serial, node))
+    if rc != 0 or "Error" in (out + err):
+        raise SmokeError("点「%s」没点成：%s" % (label, first_line(out + err)))
+
+
+def walk_flow(runner, serial, *, sleep, note=print, poll=PAGE_POLL, page=PAGE_WAIT,
+              timeout=RUN_TIMEOUT, done_wait=DONE_WAIT):
+    """从首页点到底：一键去广告 → 确认页 → 开始 → 完成页。返回 (结局, 这一轮的导出, 结局出处)。
+
+    桌面侧只做两件事：读屏认文字、按坐标点按。认不出就带着这一屏上的文字停下，绝不猜。
+    点之前先确认这一屏是本 App 的：系统把 App 切到后台时，按坐标点会点到别人身上。
+
+    执行本身靠 App 的导出判结束（`await_run`）：那条路不占 UiAutomation，读屏才腾得出来。
+    后台屏模式下完成页不在主屏——这时结局取自导出里的 `outcome`，报告里说明出处。
+    """
+    def show_app():
+        out, err, rc = runner.run(*start_cmd(serial))
+        if rc != 0 or "Error" in (out + err):
+            raise SmokeError("把 App 拉回前台没成功：" + first_line(out + err))
+
+    note("等首页")
+    _, nodes = await_nodes(runner, serial, (HOME_CTA,), sleep=sleep, poll=poll, timeout=page,
+                           relaunch=show_app)
+    tap(runner, serial, find_text(nodes, HOME_CTA), HOME_CTA, note=note)
+
+    note("等确认页")
+    _, nodes = await_nodes(runner, serial, (START_CTA,), sleep=sleep, poll=poll, timeout=page,
+                           relaunch=show_app)
+    if find_text(nodes, NOTHING_CHOSEN):
+        raise SmokeError("确认页上没有可勾选的项（这台机之前已经关过）：点「开始」只会提示「还没选任何一项」，"
+                         "执行链路走不到。先把这一台的改动还原再跑")
+    tap(runner, serial, find_text(nodes, START_CTA), START_CTA, note=note)
+
+    note("等主流程跑完")
+    blob = await_run(runner, serial, sleep=sleep, timeout=timeout)
+    exported = str(((blob or {}).get("run") or {}).get("outcome") or "")
+    note("认完成页")
+    try:
+        _, nodes = await_nodes(runner, serial, DONE_MARKS, sleep=sleep, poll=poll,
+                               timeout=done_wait, relaunch=show_app)
+    except SmokeError:
+        if exported not in ("ok", "failed", "stopped"):
+            raise
+        note("完成页不在主屏（导出说这一轮是 %s），结局取自导出" % exported)
+        return exported, blob, "导出（完成页不在主屏）"
+    if find_text(nodes, DONE_FAILED):
+        return "failed", blob, "完成页"
+    if find_text(nodes, DONE_STOPPED):
+        return "stopped", blob, "完成页"
+    return "ok", blob, "完成页"
+
+
+def smoke(runner, *, ref=None, commit=None, serial=None, fast=False, screens=(), root=None,
           sleep=time.sleep, note=print, poll=POLL_SECONDS, land=LAND_SECONDS,
           build_timeout=BUILD_TIMEOUT, dispatch_timeout=DISPATCH_TIMEOUT):
-    """预检 → 触发 CI → 等 → 下载 → 装机 → 启动 → 跑执行段 → 还原 → 报告。
+    """预检 → 触发 CI → 等 → 下载 → 装机 → 启动 → 跑主流程 → 还原 → 报告。
 
+    默认跑完整主流程（从首页点到底）；`fast=True` 换成只跑执行段的快速档。
     跑不起来时抛 SmokeError；跑起来了但某一段失败，写进报告并返回。
     """
     serial = serial or pick_serial(runner)
@@ -618,19 +844,24 @@ def smoke(runner, *, ref=None, commit=None, serial=None, screens=(), root=None,
             steps.append(Step("真流程 + 还原", SKIP, "启动失败"))
             return finished(sha, ref, serial, directory, steps, (), "".join(dumps))
 
-        note("跑执行段")
-        blob, error = None, ""
+        # 两档判定的是同一件事：「这一轮真的跑完了」。完整主流程还要多一步认完成页的结局。
+        flow, outcome, how, blob, error = ("执行段（快速档）" if fast else "完整主流程"), "ok", "", None, ""
         try:
-            plan = plan_from_status(status_of(runner, serial))
-            note("计划：%s" % ("、".join(plan["steps"]) or "（这台机器型脚本段名为空）"))
-            cmd = plan_cmd(serial, plan)
-            launch_plan(runner, cmd, sleep=sleep, land=land)
-            blob = await_run(runner, serial, sleep=sleep, cmd=cmd)
+            if fast:
+                note("跑执行段（快速档）")
+                plan = plan_from_status(status_of(runner, serial))
+                note("计划：%s" % ("、".join(plan["steps"]) or "（这台机器型脚本段名为空）"))
+                cmd = plan_cmd(serial, plan)
+                launch_plan(runner, cmd, sleep=sleep, land=land)
+                blob = await_run(runner, serial, sleep=sleep, cmd=cmd)
+            else:
+                note("跑完整主流程")
+                outcome, blob, how = walk_flow(runner, serial, sleep=sleep, note=note)
         except SmokeError as failure:
             error = str(failure)
 
         dump, _, _ = runner.run("adb", "-s", serial, "logcat", "-d")
-        dumps.append("== 执行段 ==\n%s\n" % dump)
+        dumps.append("== %s ==\n%s\n" % (flow, dump))
 
         # 导出停住但引擎还在手机上跑：这时还原会和执行抢同一块屏，停手并如实说（沿用 #662 的互斥）
         running = blob is None and running_now(runner, serial, sleep=sleep)
@@ -644,7 +875,7 @@ def smoke(runner, *, ref=None, commit=None, serial=None, screens=(), root=None,
                 restore = restore_all(runner, items, note=note, sleep=sleep)
             except SmokeError as failure:
                 restore = [Step("还原", FAIL, "读不到手机状态，没能还原：%s" % failure)]
-        ok, detail = judge_run(blob, restore, error)
+        ok, detail = judge_run(blob, restore, error, flow, outcome, how or "完成页")
         steps.append(Step("真流程 + 还原", PASS if ok else FAIL, detail))
 
         walked = []
@@ -671,19 +902,26 @@ def finished(sha, ref, serial, directory, steps, screens=(), logcat="", restore=
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description="真机冒烟：CI 出 debug 包 → 装开发机 → 启动 → 跑执行段 → 还原 → 报告")
+        description="真机冒烟：CI 出 debug 包 → 装开发机 → 启动 → 从首页点到底 → 还原 → 报告")
     parser.add_argument("--serial", help="设备序列号；只连一台时可以省")
     parser.add_argument("--ref", help="分支，默认 %s；标签与提交用 --commit" % DEFAULT_REF)
     parser.add_argument("--commit", help="指定提交或标签（SHA / 短 SHA / 分支名 / tag），会推一个临时分支")
+    parser.add_argument("--fast", action="store_true",
+                        help="只跑执行段（快速档）：界面改动让全流程自动化失效时用")
     parser.add_argument("--screens", nargs="?", const=",".join(DEFAULT_SCREENS), metavar="页面",
                         help="把 demo 逐屏走一遍并逐页判存活；不给值就是全部页面，逗号分隔")
     parser.add_argument("--root", help="产物父目录，默认 %s" % DEFAULT_ROOT)
+    parser.add_argument("--read-screen", metavar="序列号", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     use_utf8_console()
+    if args.read_screen:                  # 完整主流程的读屏子进程，不对外
+        return dump_screen(args.read_screen)
     screens = tuple(name for name in (args.screens or "").split(",") if name)
     try:
         report = smoke(Runner(), ref=args.ref, commit=args.commit, serial=args.serial,
-                       screens=screens, root=Path(args.root) if args.root else None)
+                       fast=args.fast, screens=screens,
+                       root=Path(args.root) if args.root else None,
+                       note=lambda line: print(line, flush=True))   # 重定向到文件时也要能看进度
     except SmokeError as error:
         print("跑不了：%s" % error, file=sys.stderr)
         return 2

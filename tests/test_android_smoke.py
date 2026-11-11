@@ -6,12 +6,14 @@
 """
 import contextlib
 import importlib.util
+import inspect
 import io
 import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from xml.etree import ElementTree
 
 from fixtures import FakeRunner
 
@@ -60,10 +62,11 @@ def result(titles=("系统广告", "负一屏与搜索")):
             for title in titles]
 
 
-def export(shell="ready", finished=True, results=None, seq=1, running=None):
+def export(shell="ready", finished=True, results=None, seq=1, running=None, outcome="ok"):
     """App 打到 logcat 里的导出：`<组号> <块号>/<块数> <内容>`，一行装不下就分块。"""
     payload = {"shell": shell, "finished": finished,
                "run": {"running": (not finished) if running is None else running, "cancel": False,
+                       "outcome": outcome,
                        "results": [] if results is None and not finished
                        else (result() if results is None else results)}}
     text = json.dumps(payload, ensure_ascii=False)
@@ -214,6 +217,25 @@ class SmokeWorkflowTests(unittest.TestCase):
         self.assertIn("*.apk", text)
         self.assertIn("workflow_dispatch", text, "脚本靠 workflow_dispatch 触发，删了就触发不了")
 
+    def test_the_fast_path_is_opt_in(self):
+        with contextlib.redirect_stdout(io.StringIO()) as printed:
+            with self.assertRaises(SystemExit):
+                smoke.main(["--help"])
+        self.assertIn("--fast", printed.getvalue())
+        self.assertFalse(inspect.signature(smoke.smoke).parameters["fast"].default,
+                         "默认要跑完整主流程，只跑执行段是开关")
+
+    def test_the_walk_anchors_are_still_in_the_app(self):
+        """认文字靠的是界面文案：这几个字改了，完整主流程会认不出（#1073）。"""
+        ui = ROOT / "android/app/src/main/java/com/ahuamiao/adcleaner/ui"
+        home = (ui / "HomeScreens.kt").read_text(encoding="utf-8")
+        choose = (ui / "ChooseScreen.kt").read_text(encoding="utf-8")
+        run = (ui / "RunScreens.kt").read_text(encoding="utf-8")
+        self.assertIn('"%s"' % smoke.HOME_CTA, home)
+        self.assertIn('"%s"' % smoke.START_CTA, choose)
+        for mark in smoke.DONE_MARKS + (smoke.DONE_FAILED, smoke.DONE_STOPPED):
+            self.assertIn('"%s"' % mark, run)
+
     def test_screen_list_matches_the_demo_pages(self):
         text = (ROOT / "android/app/src/debug/java/com/ahuamiao/adcleaner/ui/Demo.kt").read_text(encoding="utf-8")
         pages = text[text.index("页面：") + len("页面："):text.index("面板：")].replace("*", " ").split()
@@ -296,15 +318,18 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("没返回", str(caught.exception))
 
 
-class SmokeTests(unittest.TestCase):
+class SmokeCase(unittest.TestCase):
+    """两条档共用的准备：临时产物目录、假执行器、发出去的命令序列。"""
+
     def workdir(self):
         root = Path(self.enterContext(tempfile.TemporaryDirectory()))
         return root, root / SHORT
 
-    def run_smoke(self, root, table, **kwargs):
+    def run_smoke(self, root, table, fast=True, **kwargs):
+        """默认用快速档：这一组断言的是计划下发与还原那条路；完整主流程另有一组用例。"""
         runner = FakeRunner(runs=Replies(table))
         notes = []
-        report = smoke.smoke(runner, serial=SERIAL, root=root,
+        report = smoke.smoke(runner, serial=SERIAL, root=root, fast=fast,
                              sleep=lambda seconds: None, note=notes.append, **kwargs)
         return report, runner, notes
 
@@ -317,6 +342,225 @@ class SmokeTests(unittest.TestCase):
         at = calls.index(dispatch_key("main")) if dispatch_key("main") in calls else -1
         self.assertFalse([call for call in calls[at + 1:] if call[0] == "adb"],
                          "触发 CI 之后不该再碰手机")
+
+
+DATA = ROOT / "tests" / "screens"
+HOMEPAGE, CHOOSEPAGE, DONEPAGE = "smoke-home.xml", "smoke-choose.xml", "smoke-done.xml"
+
+
+def screen(name):
+    """真机 dump 的夹具：冒烟在这台开发机上读到的原始输出，裁掉了状态栏与通知（开发机的私人内容）。"""
+    return (DATA / name).read_text(encoding="utf-8")
+
+
+def other_app(name):
+    """把一整屏说成别人的 App：系统把被测 App 切到后台时，读到的就是别人的界面。"""
+    root = ElementTree.fromstring(screen(name))
+    for node in root.iter("node"):
+        node.set("package", "com.heytap.market")
+    return ElementTree.tostring(root, encoding="unicode")
+
+
+def page_with(name, old, attr, value):
+    """真实夹具上改一处属性：模拟灰按钮、换完成页标题这类「这一屏的另一种样子」。"""
+    root = ElementTree.fromstring(screen(name))
+    for node in root.iter("node"):
+        if node.get("text") == old:
+            node.set(attr, value)
+            break
+    return ElementTree.tostring(root, encoding="unicode")
+
+
+def on_screen(name, label):
+    return smoke.find_text(smoke.screen_nodes(screen(name)), label)
+
+
+class ScreenTests(unittest.TestCase):
+    """dump → 目标文字的坐标（#1073）：认文字 + 按坐标点这一层要能离线验。"""
+
+    def test_the_home_button_coordinates_come_from_the_dump(self):
+        node = on_screen(HOMEPAGE, smoke.HOME_CTA)
+        self.assertIsNotNone(node, "夹具里没有首页的那个按钮")
+        x, y = node.center
+        self.assertGreater(x, 0)
+        self.assertGreater(y, 0)
+        self.assertEqual(smoke.tap_cmd(SERIAL, node),
+                         adb("shell", "input", "tap", str(x), str(y)))
+
+    def test_the_confirm_page_offers_the_start_button(self):
+        node = on_screen(CHOOSEPAGE, smoke.START_CTA)
+        self.assertIsNotNone(node, "确认页上找不到「开始」")
+        self.assertTrue(node.enabled)
+
+    def test_the_done_page_is_told_apart_from_the_running_page(self):
+        """「再做一次」「重新开始」只在完成页，执行页的结果行里没有它们。"""
+        done = smoke.screen_nodes(screen(DONEPAGE))
+        self.assertTrue([mark for mark in smoke.DONE_MARKS if smoke.find_text(done, mark)])
+        confirm = smoke.screen_nodes(screen(CHOOSEPAGE))
+        self.assertFalse([mark for mark in smoke.DONE_MARKS if smoke.find_text(confirm, mark)])
+
+    def test_a_label_that_is_not_on_the_screen_is_none(self):
+        self.assertIsNone(on_screen(HOMEPAGE, smoke.DONE_MARKS[0]))
+
+    def test_the_report_of_a_missed_label_lists_what_was_on_screen(self):
+        nodes = smoke.screen_nodes(screen(HOMEPAGE))
+        self.assertIn(smoke.HOME_CTA, smoke.screen_lines(nodes))
+
+    def test_the_label_in_a_content_description_is_used_too(self):
+        """Compose 的图标按钮把标签放 content-desc；只认 text 会漏掉「返回」这类节点。"""
+        nodes = smoke.screen_nodes(
+            '<hierarchy><node text="" content-desc="重新扫描" bounds="[10,20][30,40]" /></hierarchy>')
+        self.assertEqual(smoke.find_text(nodes, "重新扫描").center, (20, 30))
+
+    def test_a_dump_that_cannot_be_parsed_is_an_error_not_an_empty_screen(self):
+        with self.assertRaises(smoke.SmokeError) as caught:
+            smoke.screen_nodes("adb: device offline")
+        self.assertIn("读屏输出", str(caught.exception))
+        with self.assertRaises(smoke.SmokeError):
+            smoke.screen_nodes("<hierarchy><node text='半截")
+
+
+class WalkTests(SmokeCase):
+    """默认档：从首页点到底（#1073）。断言发出去的命令、点到的坐标与完成页的结局。"""
+
+    def walk_table(self, target, pages=(HOMEPAGE, CHOOSEPAGE, DONEPAGE), **kwargs):
+        table = happy_table(target, **kwargs)
+        table[smoke.screen_cmd(SERIAL)] = [(screen(name), "", 0) for name in pages]
+        for page, label in ((pages[0], smoke.HOME_CTA), (pages[1], smoke.START_CTA)):
+            node = on_screen(page, label)
+            if node is not None:
+                table[smoke.tap_cmd(SERIAL, node)] = [("", "", 0)]
+        return table
+
+    def test_the_full_flow_is_what_runs_by_default(self):
+        root, target = self.workdir()
+        report, runner, notes = self.run_smoke(root, self.walk_table(target), fast=False)
+        self.assertTrue(report.ok, report.text())
+        self.assertIn("完整主流程跑完", report.text())
+        calls = self.calls(runner)
+        self.assertIn(smoke.tap_cmd(SERIAL, on_screen(HOMEPAGE, smoke.HOME_CTA)), calls)
+        self.assertIn(smoke.tap_cmd(SERIAL, on_screen(CHOOSEPAGE, smoke.START_CTA)), calls)
+        prefix = smoke.start_cmd(SERIAL, "--es", "plan")
+        self.assertFalse([call for call in calls if call[:len(prefix)] == prefix],
+                         "默认档不经过检测与勾选，也就不该下发计划")
+
+    def test_the_walk_reads_the_screen_before_each_tap(self):
+        root, target = self.workdir()
+        report, runner, notes = self.run_smoke(root, self.walk_table(target), fast=False)
+        calls = self.calls(runner)
+        at = calls.index(smoke.screen_cmd(SERIAL))
+        self.assertEqual(calls[at:at + 4], [
+            smoke.screen_cmd(SERIAL),                                  # 认首页
+            smoke.tap_cmd(SERIAL, on_screen(HOMEPAGE, smoke.HOME_CTA)),
+            smoke.screen_cmd(SERIAL),                                  # 认确认页
+            smoke.tap_cmd(SERIAL, on_screen(CHOOSEPAGE, smoke.START_CTA)),
+        ])
+
+    def test_a_home_page_without_the_button_stops_with_what_was_on_screen(self):
+        """认不出就停：绝不猜坐标，也不把这一轮的结论记成通过。"""
+        root, target = self.workdir()
+        table = self.walk_table(target, pages=(CHOOSEPAGE, CHOOSEPAGE, DONEPAGE))
+        report, runner, notes = self.run_smoke(root, table, fast=False)
+        self.assertFalse(report.ok)
+        self.assertIn("一键去广告", report.text())
+        self.assertIn("这一屏上有", report.text())
+        self.assertFalse([call for call in self.calls(runner) if call[1:4] == ("-s", SERIAL, "shell")
+                          and "tap" in call], "认不出就不该点")
+
+    def test_a_confirm_page_with_nothing_to_choose_stops_with_a_next_step(self):
+        """这台机之前已经关过：确认页没有可勾的项，点「开始」只会弹「还没选任何一项」。"""
+        empty = page_with(CHOOSEPAGE, "已选 17 项", "text", smoke.NOTHING_CHOSEN)
+        root, target = self.workdir()
+        table = self.walk_table(target)
+        table[smoke.screen_cmd(SERIAL)] = [(screen(HOMEPAGE), "", 0), (empty, "", 0)]
+        report, runner, notes = self.run_smoke(root, table, fast=False)
+        self.assertFalse(report.ok)
+        self.assertIn("没有可勾选的项", report.text())
+        self.assertIn("还原", report.text(), "要给出下一步，别只说走不到")
+        self.assertNotIn(smoke.tap_cmd(SERIAL, on_screen(CHOOSEPAGE, smoke.START_CTA)),
+                         self.calls(runner))
+
+    def test_a_grey_start_button_is_not_tapped(self):
+        """锁屏 / 点按被拒 / 展开的折叠屏时按钮是灰的：点它等于空跑，要当场说出来。"""
+        grey = page_with(CHOOSEPAGE, smoke.START_CTA, "enabled", "false")
+        root, target = self.workdir()
+        table = self.walk_table(target)
+        table[smoke.screen_cmd(SERIAL)] = [(screen(HOMEPAGE), "", 0), (grey, "", 0)]
+        report, runner, notes = self.run_smoke(root, table, fast=False)
+        self.assertFalse(report.ok)
+        self.assertIn("灰的", report.text())
+        self.assertNotIn(smoke.tap_cmd(SERIAL, on_screen(CHOOSEPAGE, smoke.START_CTA)),
+                         self.calls(runner))
+
+    def test_a_failed_done_page_fails_the_segment(self):
+        root, target = self.workdir()
+        table = self.walk_table(target)
+        table[smoke.screen_cmd(SERIAL)] = [
+            (screen(HOMEPAGE), "", 0), (screen(CHOOSEPAGE), "", 0),
+            (page_with(DONEPAGE, "完成", "text", smoke.DONE_FAILED), "", 0)]
+        report, runner, notes = self.run_smoke(root, table, fast=False)
+        self.assertFalse(report.ok)
+        self.assertIn(smoke.DONE_FAILED, report.text())
+        self.assertIn("真流程 + 还原：失败", report.text())
+
+    def test_a_stopped_done_page_fails_the_segment(self):
+        root, target = self.workdir()
+        table = self.walk_table(target)
+        table[smoke.screen_cmd(SERIAL)] = [
+            (screen(HOMEPAGE), "", 0), (screen(CHOOSEPAGE), "", 0),
+            (page_with(DONEPAGE, "完成", "text", smoke.DONE_STOPPED), "", 0)]
+        report, runner, notes = self.run_smoke(root, table, fast=False)
+        self.assertFalse(report.ok)
+        self.assertIn(smoke.DONE_STOPPED, report.text())
+
+    def test_a_done_page_that_is_not_on_the_main_screen_falls_back_to_the_export(self):
+        """后台屏模式下完成页不在主屏：结局取自导出，报告里说明出处，不当成认不出。"""
+        home, start = smoke.HOME_CTA, smoke.START_CTA
+        table = {
+            smoke.screen_cmd(SERIAL): [(screen(HOMEPAGE), "", 0), (screen(CHOOSEPAGE), "", 0)],
+            smoke.tap_cmd(SERIAL, on_screen(HOMEPAGE, home)): [("", "", 0)],
+            smoke.tap_cmd(SERIAL, on_screen(CHOOSEPAGE, start)): [("", "", 0)],
+            smoke.export_cmd(SERIAL): [("Starting\n", "", 0)],
+            TAG_LOGCAT: [(export(outcome="ok"), "", 0)],
+        }
+        runner = FakeRunner(runs=Replies(table))
+        outcome, blob, how = smoke.walk_flow(runner, SERIAL, sleep=lambda seconds: None,
+                                             note=lambda line: None, done_wait=0)
+        self.assertEqual(outcome, "ok")
+        self.assertIn("导出", how)
+
+    def test_another_app_in_front_is_not_tapped_and_ours_is_pulled_back(self):
+        """系统把 App 切走时按坐标点会点到别人身上：只认本 App 的节点，并把它拉回前台。"""
+        other = other_app(HOMEPAGE)
+        table = {
+            smoke.screen_cmd(SERIAL): [(other, "", 0)],          # 一直停在别人的界面上
+            smoke.start_cmd(SERIAL): [("Starting: Intent { cmp=... }\n", "", 0)],
+        }
+        runner = FakeRunner(runs=Replies(table))
+        with self.assertRaises(smoke.SmokeError) as caught:
+            smoke.walk_flow(runner, SERIAL, sleep=lambda seconds: None, note=lambda line: None,
+                            page=10)
+        self.assertIn("前台不是这个 App", str(caught.exception))
+        calls = self.calls(runner)
+        self.assertIn(smoke.start_cmd(SERIAL), calls, "前台是别人时要把 App 拉回来")
+        self.assertFalse([call for call in calls if call[2:5] == ("shell", "input", "tap")],
+                         "别按坐标点到别人的界面上")
+
+    def test_the_busy_screen_is_waited_out(self):
+        """App 正在扫通知 / 正在跑引擎时读屏会失败：那不是错误，接着等（UiAutomation 只有一个使用者）。"""
+        root, target = self.workdir()
+        table = self.walk_table(target)
+        table[smoke.screen_cmd(SERIAL)] = [(screen(HOMEPAGE), "", 0),
+                                           ("", "另一个去广告任务正在使用这台手机的读屏服务", 2),
+                                           (screen(CHOOSEPAGE), "", 0), (screen(DONEPAGE), "", 0)]
+        report, runner, notes = self.run_smoke(root, table, fast=False)
+        self.assertTrue(report.ok, report.text())
+        screens = [call for call in self.calls(runner) if call == smoke.screen_cmd(SERIAL)]
+        self.assertEqual(len(screens), 4, "失败的那一次不算，之后照常往下走")
+
+
+class SmokeTests(SmokeCase):
+    """快速档（`--fast`）：按状态 JSON 下发计划、只跑执行段那条路（#1072）。"""
 
     # —— 三段判定 ——
 
@@ -601,7 +845,8 @@ class SmokeTests(unittest.TestCase):
         table = happy_table(target, installed=False)
         table[("adb", "devices")] = [("List of devices attached\n%s\tdevice\n" % SERIAL, "", 0)]
         runner = FakeRunner(runs=Replies(table))
-        report = smoke.smoke(runner, sleep=lambda seconds: None, note=lambda line: None, root=root)
+        report = smoke.smoke(runner, fast=True, sleep=lambda seconds: None,
+                             note=lambda line: None, root=root)
         self.assertTrue(report.ok, report.text())
         self.assertEqual(self.calls(runner)[0], ("adb", "devices"))
         self.assertIn(SERIAL, report.text())
