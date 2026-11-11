@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
-"""真机冒烟 1/3：CI 出 debug 包 → 装到开发机 → 启动 → 报告。
+"""真机冒烟 2/3：CI 出 debug 包 → 装到开发机 → 启动 → 跑一遍执行段 → 还原 → 报告。
 
   .venv/bin/python android/smoke.py [--serial 序列号] [--ref 分支或标签] [--commit 提交] [--screens]
 
-构建留在 CI：触发 android.yml、等它跑完、下载 debug APK，再用本机的 adb 装到开发机并启动，
-给出「构建」「安装 + 启动」两段的结论。产物（人读摘要、结果 JSON、logcat）按 commit 落在临时目录，
-不入库。用法与首次配对步骤见 android/README.md，执行段与还原见 #1072。
+构建留在 CI：触发 android.yml、等它跑完、下载 debug APK，再用本机的 adb 装到开发机并启动。
+之后按手机状态现算一份计划，交给 App 的 debug 计划入口真跑一遍执行段，再自动还原三项
+（挂起的包、快应用组件、营销通知渠道），给出「构建」「安装 + 启动」「真流程 + 还原」三段的结论。
+产物（人读摘要、结果 JSON、原始结果、logcat）按 commit 落在临时目录，不入库。用法与首次配对
+步骤见 android/README.md。
 """
 import argparse
 import json
+import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -25,12 +29,25 @@ WORKFLOW = "android.yml"
 ARTIFACT = "debug-apk"
 PACKAGE = "com.ahuamiao.adcleaner"
 ACTIVITY = PACKAGE + "/.MainActivity"
+TOOL = Path(__file__).resolve().parents[1] / "tool"
 DEFAULT_REF = "main"
 DEFAULT_ROOT = Path(tempfile.gettempdir()) / "aac-smoke"
 POLL_SECONDS = 15
 LAND_SECONDS = 5
 BUILD_TIMEOUT = 45 * 60
 DISPATCH_TIMEOUT = 120
+
+# App 那边的 debug 导出入口（android/app/src/debug/.../Demo.kt 的 `--es call smoke`）
+SMOKE_TAG = "AACSmoke"
+SHELL_READY = "ready"
+# 数据根是手机版 `AacApp` 给的 `files/data`（`ClientData` 的 root），备份目录名见 `tool/backups.py`
+APP_BACKUPS = "files/data/backups"      # debug 包可以用 run-as 读
+EXPORT_POLL = 3                         # 读导出的间隔
+EXPORT_WAIT = 60                        # 敲一次入口后等它打出第一份结果的预算
+RUN_TIMEOUT = 20 * 60                   # 执行段本身的预算
+RUN_QUIET = 60                          # 导出停了这么久就重敲一次入口，再停就判没跑起来
+RESTORE_TIMEOUT = 600
+RESTORE_WAIT = 5                        # 还原失败后重试之前的停顿
 
 # `--es demo` 认的页面名（android/app/src/debug/.../Demo.kt）：不连手机逐屏验收界面
 DEFAULT_SCREENS = (
@@ -86,6 +103,8 @@ class Report:
     screens: list
     logcat: str
     directory: Path
+    restore: list = ()
+    run: dict = None
 
     @property
     def ok(self):
@@ -94,6 +113,7 @@ class Report:
     def text(self):
         lines = [f"冒烟 {self.sha[:12]}（{self.ref}）@ {self.serial}"]
         lines += [f"{step.name}：{step.status}  {step.detail}" for step in self.steps]
+        lines += [f"{step.name}：{step.status}  {step.detail}" for step in self.restore]
         if self.screens:
             bad = [step.name for step in self.screens if not step.ok]
             lines.append(f"逐屏：{FAIL}  {'、'.join(bad)} 没起来" if bad
@@ -104,6 +124,7 @@ class Report:
     def as_dict(self):
         return {"sha": self.sha, "ref": self.ref, "serial": self.serial, "ok": self.ok,
                 "steps": [step.as_dict() for step in self.steps],
+                "restore": [step.as_dict() for step in self.restore],
                 "screens": [step.as_dict() for step in self.screens]}
 
     def write(self):
@@ -112,6 +133,9 @@ class Report:
         (self.directory / "result.json").write_text(
             json.dumps(self.as_dict(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         (self.directory / "logcat.txt").write_text(self.logcat, encoding="utf-8")
+        if self.run is not None:
+            (self.directory / "run.json").write_text(
+                json.dumps(self.run, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def pick_serial(runner):
@@ -237,11 +261,295 @@ def judge_launch(started, started_output, pid, logcat, land):
     return True, "启动后 %d 秒进程存活（pid %s），logcat 无 FATAL" % (land, pid)
 
 
+# ---------- 执行段与还原（#1072） ----------
+
+def tool(name):
+    """引擎脚本与冒烟用同一个解释器：本机 `.venv` 里才有 adbutils，系统 python 会缺。"""
+    return (sys.executable, str(TOOL / name))
+
+
+def start_cmd(serial, *extra):
+    return ("adb", "-s", serial, "shell", "am", "start", "-n", ACTIVITY, *extra)
+
+
+def export_cmd(serial):
+    """敲一下 App 的 debug 导出入口：shell 状态 + 这一轮执行结果（一次导出只走这一个入口）。"""
+    return start_cmd(serial, "--es", "call", "smoke")
+
+
+def plan_cmd(serial, plan):
+    # 计划 JSON 要过设备上的 sh 才到得了 am：单引号包住，空格与引号都不会被拆开
+    return start_cmd(serial, "--es", "plan", shlex.quote(json.dumps(plan, ensure_ascii=False)))
+
+
+def status_of(runner, serial):
+    """手机上现算的状态 JSON（与检测页同一份）。段名从这里取，绝不写死：脚本改名后写死的段名会静默空跑。"""
+    out, err, rc = runner.run(*tool("run.py"), "-s", serial, "status-json", timeout=120)
+    lines = [line for line in out.splitlines() if line.strip()]
+    if rc != 0 or not lines:
+        raise SmokeError("读不到手机状态：" + output_detail(err or out))
+    try:
+        return json.loads(lines[-1])
+    except ValueError:
+        raise SmokeError("手机状态不是 JSON：" + output_detail(lines[-1])) from None
+
+
+def plan_from_status(status):
+    """手机状态 JSON → 计划 JSON（纯函数，可离线测）。
+
+    字段与手机版确认页的 `Selection.plan()` 同形，取舍不同：冒烟是要把引擎真跑一遍，所以机型脚本的
+    段名全下发、这台机上还没挂起的广告包都挂上；快应用只在这台机真有可关的组件时才勾。已挂起的包
+    与已关闭的组件不进计划——再挂一次没有意义，还原也只会把本来就没动的东西报成已恢复。
+    """
+    ads = [a["pkg"] for a in status.get("ads") or [] if not a.get("suspended")]
+    quickapps = [q for q in status.get("quickapps") or [] if not q.get("closed") and not q.get("keep")]
+    return {"backup": True,
+            "model": (status.get("info") or {}).get("model", ""),
+            "steps": list(status.get("steps") or []),
+            "ref": bool(status.get("recipe_ref")),
+            "channels": [],                      # 快速档不扫描通知，渠道由「还原」一项单独处理
+            "quickapp": bool(quickapps),
+            "ads": ads}
+
+
+def parse_export(text):
+    """logcat 里的导出块拼回 JSON，返回 (组号, 内容)；一份完整的都没有就返回 None。
+
+    App 按块发：`<组号> <块号>/<块数> <内容>`，组号是当时的毫秒时间戳。一行 logcat 约 4 KB
+    就截断，整份结果装不进一行。最近一份可能还没打全（读的瞬间正在写），那就退到最近一份完整的。
+    """
+    groups = {}
+    for line in text.splitlines():
+        at = line.find(SMOKE_TAG + ": ")
+        if at < 0:
+            continue
+        head, _, body = line[at + len(SMOKE_TAG) + 2:].partition(" ")
+        part, _, chunk = body.partition(" ")
+        index, _, total = part.partition("/")
+        if not (head.isdigit() and index.isdigit() and total.isdigit()):
+            continue
+        groups.setdefault(int(head), {})[int(index)] = chunk
+    for seq in sorted(groups, reverse=True):
+        parts = groups[seq]
+        if len(parts) != max(parts):
+            continue                          # 这一份还没打全，往更早的找
+        try:
+            return seq, json.loads("".join(parts[i] for i in sorted(parts)))
+        except ValueError:
+            continue
+    return None
+
+
+def read_export(runner, serial):
+    out, err, rc = runner.run("adb", "-s", serial, "logcat", "-d", "-s", SMOKE_TAG + ":I")
+    return parse_export(out) if rc == 0 else None
+
+
+def await_export(runner, serial, *, sleep, poll=EXPORT_POLL, wait=EXPORT_WAIT, tries=2):
+    """敲入口，等 App 打出一份完整的结果；读不到返回 None（旧包没有这个入口、App 没起来都算读不到）。"""
+    for _ in range(tries):
+        runner.run(*export_cmd(serial))
+        waited = 0
+        while waited < wait:
+            sleep(poll)
+            waited += poll
+            got = read_export(runner, serial)
+            if got:
+                return got[1]
+    return None
+
+
+def installed(runner, serial):
+    out, err, rc = runner.run("adb", "-s", serial, "shell", "pm", "path", PACKAGE)
+    return rc == 0 and out.strip().startswith("package:")
+
+
+def check_shell(runner, serial, *, sleep, note=print):
+    """开跑前判 App 自己的 shell 通道是不是 ready；不是就停下，不触发 CI（#1072）。
+
+    没装 App 就没什么可判的：这一轮装完再按 README 首次配对一次。
+    """
+    if not installed(runner, serial):
+        note("手机上还没装这个 App，跳过配对检查（首次跑装好后要配对一次，见 android/README.md）")
+        return
+    blob = await_export(runner, serial, sleep=sleep)
+    if blob is None:
+        # 旧版调试包 / 正式包都没有这个入口；这一轮装完才有。不能因此拦下整轮。
+        note("读不到 App 的状态（可能还装着旧版）：跳过配对检查，执行段会照实报")
+        return
+    state = str(blob.get("shell") or "unknown")
+    if state != SHELL_READY:
+        raise SmokeError("App 现在不能以 shell 身份执行（状态 %s）。在手机上重新走一遍「开始授权」再跑；"
+                         "这一轮没有触发 CI。" % state)
+
+
+def launch_plan(runner, cmd, *, sleep, land):
+    """下发计划。冷启动时界面在 onCreate 里先处理 intent，那时设备还没就绪，第一份会被丢掉（#1072），
+    所以固定发两次；App 已经起来时第二次只是接上正在跑的那一轮。"""
+    for _ in range(2):
+        out, err, rc = runner.run(*cmd)
+        if rc != 0 or "Error" in (out + err):
+            raise SmokeError("计划没发出去：" + first_line(out + err))
+        sleep(land)
+
+
+def await_run(runner, serial, *, sleep, cmd=None, poll=EXPORT_POLL, timeout=RUN_TIMEOUT,
+              quiet=RUN_QUIET):
+    """等执行段跑完。App 在跑的时候会连着导出，导出停了就是这一轮没起来（或 App 卡死了）。
+
+    冷启动比两次下发之间的间隔还慢时，两份计划都可能被丢掉：导出停了就连计划一起重发（App 已经
+    在跑时再发只会接上那一轮），再停才判没跑起来。
+    """
+    runner.run(*export_cmd(serial))
+    seen, waited, still, resent = None, 0, 0, False
+    while waited <= timeout:
+        sleep(poll)
+        waited += poll
+        got = read_export(runner, serial)
+        if got and got[1].get("finished"):
+            return got[1]
+        if got and got[0] != seen:
+            seen, still = got[0], 0
+            continue
+        still += poll
+        if still < quiet:
+            continue
+        if resent:
+            raise SmokeError("执行段没有跑起来：App 的导出停在 %d 秒前，先看一眼手机上是不是停在首页" % still)
+        if cmd:
+            out, err, rc = runner.run(*cmd)
+            if rc != 0 or "Error" in (out + err):
+                raise SmokeError("计划没发出去：" + first_line(out + err))
+            sleep(poll)
+        runner.run(*export_cmd(serial))
+        still, resent = 0, True
+    raise SmokeError("执行段 %d 分钟没跑完" % (timeout // 60))
+
+
+def running_now(runner, serial, *, sleep):
+    """此刻引擎还在手机上没有。导出停住时用它区分「没跑起来」与「还在跑、只是脚本没等到」。"""
+    runner.run(*export_cmd(serial))
+    sleep(EXPORT_POLL)
+    got = read_export(runner, serial)
+    return bool(got and (got[1].get("run") or {}).get("running"))
+
+
+def app_channels(runner, serial, directory):
+    """从 App 私有目录取出历次关掉的营销渠道，合并去重写成一份清单。
+
+    返回 `(清单路径, 读不到的原因)`：两者都是 None 表示 App 里本来就没有清单（还没关过渠道）。
+    手机版跑出来的清单只在 App 里（`files/data/backups/*/channels.tsv`），电脑侧的 backups 是
+    空的（`Api._closed_channels` 读的是本机目录），所以这里用 debug 包的 `run-as` 逐份取、
+    按包名 + 渠道 ID 合并；不认型号目录名，也不依赖电脑侧备份（#1072）。
+    """
+    out, err, rc = runner.run("adb", "-s", serial, "exec-out", "run-as", PACKAGE,
+                              "ls", APP_BACKUPS, timeout=30)
+    if rc != 0:
+        reason = (err or out).strip()
+        if re.search(r"run-as:|not debuggable|unknown package|permission denied", reason, re.I):
+            return None, "读不到 App 私有目录：" + first_line(reason)
+        return None, None                     # 还没备份过：目录不存在，不是失败
+    names = sorted((name.strip() for name in out.splitlines() if name.strip()), reverse=True)
+    rows, seen = [], set()
+    for name in names:
+        found, err, code = runner.run("adb", "-s", serial, "exec-out", "run-as", PACKAGE,
+                                      "cat", APP_BACKUPS + "/" + name + "/channels.tsv", timeout=30)
+        if code != 0:
+            continue                          # 这一份没有清单（例如 `<型号>-gui` 临时目录）
+        for line in found.splitlines():
+            cells = [cell.strip() for cell in line.rstrip("\r").split("\t")]
+            pkg, cid = (cells + ["", ""])[:2]
+            if not re.fullmatch(r"[\w.]+", pkg) or not cid or (pkg, cid) in seen:
+                continue
+            seen.add((pkg, cid))
+            rows.append("\t".join(cells))
+    if not rows:
+        return None, None
+    path = directory / "channels-restore.tsv"
+    path.write_text("# 包名\t渠道id\t渠道名\t应用名（App 私有目录里历次关掉的合并）\n"
+                    + "\n".join(rows) + "\n", encoding="utf-8")
+    return path, None
+
+
+@dataclass(frozen=True)
+class Restore:
+    """一项还原：要么有命令，要么说明「没什么可还原的」，要么是读不到（problem 非空即失败）。"""
+    name: str
+    command: tuple = None
+    note: str = ""
+    problem: str = ""
+
+
+def restore_items(runner, serial, status, directory):
+    """三项还原各自的命令；命令在发出去之前就定好。"""
+    pkgs = [a["pkg"] for a in status.get("ads") or [] if a.get("suspended")]
+    channels, problem = app_channels(runner, serial, directory)
+    return [
+        Restore("挂起的包", tool("run.py") + ("-s", serial, "unsuspend", *pkgs) if pkgs else None,
+                note="没有挂起的广告包"),
+        Restore("快应用组件", tool("run.py") + ("-s", serial, "quickapp", "on")),
+        Restore("营销通知渠道",
+                tool("chan_fast.py") + ("-s", serial, "on", str(channels)) if channels else None,
+                note="App 里没有关过的渠道清单", problem=problem or ""),
+    ]
+
+
+def restore_all(runner, items, *, note=print, sleep=time.sleep, wait=RESTORE_WAIT):
+    """逐项还原；失败重试一次，仍失败就报「设备可能残留改动」并停手，不自动重跑（#1072）。"""
+    def attempt(cmd):
+        try:
+            return runner.run(*cmd, timeout=RESTORE_TIMEOUT)
+        except SmokeError as failure:         # 超时、找不到命令也只是一项没做成，不能吞掉别的结论
+            return "", str(failure), 1
+
+    steps = []
+    for index, item in enumerate(items):
+        if item.problem:
+            steps.append(Step("还原 " + item.name, FAIL, item.problem))
+            steps += [Step("还原 " + rest.name, SKIP, "已停手") for rest in items[index + 1:]]
+            return steps
+        if item.command is None:
+            steps.append(Step("还原 " + item.name, PASS, item.note or "没有要还原的"))
+            continue
+        out, err, rc = attempt(item.command)
+        if rc != 0:
+            note("还原 %s 没成功，重试一次" % item.name)
+            sleep(wait)
+            out, err, rc = attempt(item.command)
+            if rc != 0:
+                steps.append(Step("还原 " + item.name, FAIL, output_detail(out + err)))
+                steps += [Step("还原 " + rest.name, SKIP, "已停手") for rest in items[index + 1:]]
+                return steps
+        steps.append(Step("还原 " + item.name, PASS, first_line(out) or "已完成"))
+    return steps
+
+
+def judge_run(blob, restore, error=""):
+    """第三段：执行段跑完没有 + 还原完成没有。关了几项只记录、不判定（#1072）。"""
+    run = (blob or {}).get("run") or {}
+    results = run.get("results") or []
+    done = [r for r in results if r.get("rc") == 0 and not r.get("skipped")]
+    unfinished = [r for r in results if r.get("rc") != 0 and not r.get("skipped")]
+    bad = [step for step in restore if not step.ok]
+    if bad:
+        return False, "设备可能残留改动：%s %s" % (bad[0].name, bad[0].detail)
+    if not (blob or {}).get("finished"):
+        return False, "执行段没跑完：" + (error or run.get("error") or "App 没给出这一轮的结局")
+    detail = "执行段跑完，关了 %d 项（只记录）" % len(done)
+    if unfinished:
+        detail += "，%d 项没做成（只记录）" % len(unfinished)
+    return True, detail + "；还原三项完成"
+
+
 def smoke(runner, *, ref=None, commit=None, serial=None, screens=(), root=None,
           sleep=time.sleep, note=print, poll=POLL_SECONDS, land=LAND_SECONDS,
           build_timeout=BUILD_TIMEOUT, dispatch_timeout=DISPATCH_TIMEOUT):
-    """预检 → 触发 CI → 等 → 下载 → 装机 → 启动 → 报告。跑不起来时抛 SmokeError。"""
+    """预检 → 触发 CI → 等 → 下载 → 装机 → 启动 → 跑执行段 → 还原 → 报告。
+
+    跑不起来时抛 SmokeError；跑起来了但某一段失败，写进报告并返回。
+    """
     serial = serial or pick_serial(runner)
+    check_shell(runner, serial, sleep=sleep, note=note)
     temporary = None
     if commit:
         sha = resolve_commit(runner, commit)
@@ -267,11 +575,13 @@ def smoke(runner, *, ref=None, commit=None, serial=None, screens=(), root=None,
         if conclusion is None:
             return finished(sha, ref, serial, directory, [
                 Step("构建", FAIL, "%d 分钟内没跑完（run %s）" % (build_timeout // 60, run_id)),
-                Step("安装 + 启动", SKIP, "构建没跑完")])
+                Step("安装 + 启动", SKIP, "构建没跑完"),
+                Step("真流程 + 还原", SKIP, "构建没跑完")])
         if conclusion != "success":
             return finished(sha, ref, serial, directory, [
                 Step("构建", FAIL, "CI 结论 %s（run %s）" % (conclusion, run_id)),
-                Step("安装 + 启动", SKIP, "构建失败")])
+                Step("安装 + 启动", SKIP, "构建失败"),
+                Step("真流程 + 还原", SKIP, "构建失败")])
 
         note("下载 APK（run %s）" % run_id)
         shutil.rmtree(directory, ignore_errors=True)      # 同一个 commit 重跑时别拿上一次的包
@@ -281,25 +591,62 @@ def smoke(runner, *, ref=None, commit=None, serial=None, screens=(), root=None,
         apks = sorted(directory.glob("**/*.apk"))
         if rc != 0 or not apks:
             return finished(sha, ref, serial, directory, [
-                built, Step("安装 + 启动", FAIL, "下载 APK 失败：" + output_detail(err or out))])
+                built, Step("安装 + 启动", FAIL, "下载 APK 失败：" + output_detail(err or out)),
+                Step("真流程 + 还原", SKIP, "没装成")])
 
         note("装到 %s" % serial)
         out, err, rc = runner.run("adb", "-s", serial, "install", "-r", str(apks[0]))
         if rc != 0 or "Success" not in out:
             return finished(sha, ref, serial, directory, [
-                built, Step("安装 + 启动", FAIL, "安装失败：" + output_detail(out + err))])
+                built, Step("安装 + 启动", FAIL, "安装失败：" + output_detail(out + err)),
+                Step("真流程 + 还原", SKIP, "没装成")])
 
         note("启动")
         dumps = []
         ok, detail = judge_launch(*launch(runner, serial, land, sleep, dumps), land)
         steps = [built, Step("安装 + 启动", PASS if ok else FAIL, detail)]
+        if not ok:
+            steps.append(Step("真流程 + 还原", SKIP, "启动失败"))
+            return finished(sha, ref, serial, directory, steps, (), "".join(dumps))
+
+        note("跑执行段")
+        blob, error = None, ""
+        try:
+            plan = plan_from_status(status_of(runner, serial))
+            note("计划：%s" % ("、".join(plan["steps"]) or "（这台机器型脚本段名为空）"))
+            cmd = plan_cmd(serial, plan)
+            launch_plan(runner, cmd, sleep=sleep, land=land)
+            blob = await_run(runner, serial, sleep=sleep, cmd=cmd)
+        except SmokeError as failure:
+            error = str(failure)
+
+        dump, _, _ = runner.run("adb", "-s", serial, "logcat", "-d")
+        dumps.append("== 执行段 ==\n%s\n" % dump)
+
+        # 导出停住但引擎还在手机上跑：这时还原会和执行抢同一块屏，停手并如实说（沿用 #662 的互斥）
+        running = blob is None and running_now(runner, serial, sleep=sleep)
+        note("还原")
+        restore = []
+        if running:
+            restore = [Step("还原", SKIP, "执行还在跑，等它自己结束再还原")]
+        else:
+            try:
+                items = restore_items(runner, serial, status_of(runner, serial), directory)
+                restore = restore_all(runner, items, note=note, sleep=sleep)
+            except SmokeError as failure:
+                restore = [Step("还原", FAIL, "读不到手机状态，没能还原：%s" % failure)]
+        ok, detail = judge_run(blob, restore, error)
+        steps.append(Step("真流程 + 还原", PASS if ok else FAIL, detail))
+
         walked = []
-        for name in screens:
-            note("逐屏 %s" % name)
-            runner.run("adb", "-s", serial, "shell", "am", "force-stop", PACKAGE)
-            ok, detail = judge_launch(*launch(runner, serial, land, sleep, dumps, name), land)
-            walked.append(Step(name, PASS if ok else FAIL, detail))
-        return finished(sha, ref, serial, directory, steps, walked, "".join(dumps))
+        if not running:                       # 还在跑时强停进程会把执行杀在半截
+            for name in screens:
+                note("逐屏 %s" % name)
+                runner.run("adb", "-s", serial, "shell", "am", "force-stop", PACKAGE)
+                ok, detail = judge_launch(*launch(runner, serial, land, sleep, dumps, name), land)
+                walked.append(Step(name, PASS if ok else FAIL, detail))
+        return finished(sha, ref, serial, directory, steps, walked, "".join(dumps),
+                        restore, (blob or {}).get("run"))
     finally:
         if temporary:
             out, err, rc = runner.run("git", "push", "origin", "--delete", temporary)
@@ -307,14 +654,15 @@ def smoke(runner, *, ref=None, commit=None, serial=None, screens=(), root=None,
                 note("临时分支 %s 没删掉（%s），手动删一下" % (temporary, first_line(err or out)))
 
 
-def finished(sha, ref, serial, directory, steps, screens=(), logcat=""):
-    report = Report(sha, ref, serial, steps, list(screens), logcat, directory)
+def finished(sha, ref, serial, directory, steps, screens=(), logcat="", restore=(), run=None):
+    report = Report(sha, ref, serial, steps, list(screens), logcat, directory, list(restore), run)
     report.write()
     return report
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="真机冒烟：CI 出 debug 包 → 装开发机 → 启动 → 报告")
+    parser = argparse.ArgumentParser(
+        description="真机冒烟：CI 出 debug 包 → 装开发机 → 启动 → 跑执行段 → 还原 → 报告")
     parser.add_argument("--serial", help="设备序列号；只连一台时可以省")
     parser.add_argument("--ref", help="分支，默认 %s；标签与提交用 --commit" % DEFAULT_REF)
     parser.add_argument("--commit", help="指定提交或标签（SHA / 短 SHA / 分支名 / tag），会推一个临时分支")

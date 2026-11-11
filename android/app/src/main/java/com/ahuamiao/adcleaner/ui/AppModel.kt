@@ -1,5 +1,6 @@
 package com.ahuamiao.adcleaner.ui
 
+import android.util.Log
 import com.ahuamiao.adcleaner.Native
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -98,6 +99,7 @@ class AppModel(
         private set
     var updateSource by mutableStateOf("gitee")
     private var updateJob: Job? = null
+    private var smokeJob: Job? = null
 
     /** 首次设置的三步与「第几步」都来自 view.py，页面和通知栏读同一份（#646）。 */
     var setup by mutableStateOf(SetupGuide())
@@ -608,6 +610,47 @@ class AppModel(
         begin(serial, plan)
     }
 
+    /**
+     * debug 构建的冒烟导出：每一步的结果打到 logcat（`src/debug/.../Demo.kt`，发布包没有调用方）。
+     * 内容与分块都在 `view.py` 的 `smoke_export` 里，这里只管节奏。
+     *
+     * 执行还在跑时每两秒导一次，脚本据此知道它没卡住；跑完或这一轮没起来就停。
+     */
+    internal fun debugSmoke() {
+        smokeJob?.cancel()
+        smokeJob = scope.launch {
+            val shell = runCatching { backend.shellState() }.getOrDefault("need_pair")
+            val deadline = System.currentTimeMillis() + SMOKE_TIMEOUT
+            var idle = 0
+            while (true) {
+                val out = runCatching {
+                    backend.boot()          // 冷启动时 Python 还没起来，等它
+                    backend.call("view.smoke_export", shell) as JSONObject
+                }.getOrNull()
+                exportSmoke(out?.optJSONArray("chunks")?.strings() ?: emptyList())
+                if (out == null) {
+                    idle = 2                 // Python 侧出错：脚本按「没有新的导出」处理
+                } else if (out.optBoolean("finished")) {
+                    return@launch
+                } else {
+                    val running = out.optJSONObject("run")?.optBoolean("running") == true
+                    idle = if (running) 0 else idle + 1
+                }
+                // 没在跑、也没有结果：这一轮没起来，别在这里空转；脚本等不到新导出会自己重敲入口
+                if (idle >= 2 || System.currentTimeMillis() > deadline) return@launch
+                delay(2000)
+            }
+        }
+    }
+
+    /** `<组号> <块号>/<块数> <内容>`：组号取当下毫秒，脚本据此认出「这是新的一份」并按块拼回。 */
+    private fun exportSmoke(chunks: List<String>) {
+        val id = System.currentTimeMillis()
+        for ((index, chunk) in chunks.withIndex()) {
+            Log.i(SMOKE_TAG, "$id ${index + 1}/${chunks.size} $chunk")
+        }
+    }
+
     internal fun demoMode(mode: RunMode) {
         runMode = mode
     }
@@ -625,5 +668,10 @@ class AppModel(
     internal fun demoVersion(version: String, newer: NewVersion?) {
         this.version = version
         newVersion = newer
+    }
+
+    private companion object {
+        const val SMOKE_TAG = "AACSmoke"
+        const val SMOKE_TIMEOUT = 20 * 60 * 1000L
     }
 }
