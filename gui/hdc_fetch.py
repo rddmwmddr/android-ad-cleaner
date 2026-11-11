@@ -19,6 +19,7 @@ from pathlib import Path
 
 RELEASE = '7.0-Release'
 BASE_URL = 'https://repo.huaweicloud.com/openharmony/os/7.0-Release/'
+USER_AGENT = 'android-ad-cleaner-build'
 
 # 平台 → 官方 tarball、内层 toolchains zip、以及解出的两个文件。数值来自 #898，
 # 与官方 .sha256 和 7.0-Release 包内版本 26.0.0.38-Beta 一致；上游重发包时这里先红。
@@ -88,7 +89,9 @@ def _sha256(path):
 def _download(url, dest):
     dest = Path(dest)
     part = dest.with_name(dest.name + '.part')
-    with urllib.request.urlopen(url) as response, open(part, 'wb') as out:
+    # 华为云镜像对 Python 默认的 User-Agent（Python-urllib/x.y）回 403，换一个就放行（#1050）
+    request = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
+    with urllib.request.urlopen(request) as response, open(part, 'wb') as out:
         shutil.copyfileobj(response, out, 1 << 20)
         out.flush()
         os.fsync(out.fileno())

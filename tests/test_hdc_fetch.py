@@ -1,13 +1,17 @@
 """#898：HDC 只在构建期从 OpenHarmony SDK 下载、校验、解包；用例不联网。"""
 import hashlib
 import io
+import re
 import tarfile
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 from gui import hdc_fetch
+
+BUILD_MAC = Path(__file__).resolve().parents[1] / 'gui/build_mac.sh'
 
 MAC_X64_TARBALL = "391d76cb90d69b476ae0b65a9f311c572e1a9cdd77da71734af62ed63b108dcc"
 MAC_ARM64_TARBALL = "df46e398b391d3406d1eb05e7322c5874f6bf6821e93b1211b36cfcf7a0bbf6f"
@@ -148,6 +152,36 @@ class FetchTest(unittest.TestCase):
         self.assertEqual(sorted(Path(p).name for p in staged), ["hdc", "libusb_shared.dylib"])
         self.assertTrue((vendor / "hdc").is_file())
         self.assertTrue((vendor / "libusb_shared.dylib").is_file())
+
+
+class DownloadRequestTest(unittest.TestCase):
+    def test_download_does_not_use_the_python_default_user_agent(self):
+        """华为云镜像对 Python-urllib 回 403，0.4.2 两个平台的打包都死在这一步（#1050）。"""
+        seen = []
+
+        def fake_urlopen(request, *a, **k):
+            seen.append(request)
+            return io.BytesIO(b'payload')
+
+        with tempfile.TemporaryDirectory() as tmp, patch.object(hdc_fetch.urllib.request, 'urlopen', fake_urlopen):
+            hdc_fetch._download('https://example.test/x.tar.gz', Path(tmp) / 'x.tar.gz')
+            self.assertEqual((Path(tmp) / 'x.tar.gz').read_bytes(), b'payload')
+        self.assertEqual(len(seen), 1, '一次下载只应发一次请求')
+        self.assertEqual(seen[0].get_header('User-agent'), hdc_fetch.USER_AGENT)
+
+
+class MacBuildScriptTest(unittest.TestCase):
+    def test_build_mac_passes_each_arch_its_own_platform_key(self):
+        """stage 只认 PLATFORMS 的键，传机器架构名 arm64 / x86_64 会在第一步退出（#1050）。"""
+        src = BUILD_MAC.read_text(encoding='utf-8')
+        self.assertIn('hdc_fetch.py stage "$PWD" "$HDC_PLATFORM"', src)
+        self.assertEqual(src.count('HDC_PLATFORM='), 2, '平台键只在两个架构分支各写一处，多写一处会盖掉分支里的值')
+        branches = re.search(r'if \[ "\$ARCH" = "x86_64" \]; then\n(?P<x86>.+?)\nelse\n(?P<arm>.+?)\nfi', src, re.S)
+        self.assertIsNotNone(branches, 'build_mac.sh 的架构分支结构变了，用例要跟着改')
+        self.assertIn('HDC_PLATFORM=mac-x64', branches['x86'])
+        self.assertIn('HDC_PLATFORM=mac-arm64', branches['arm'])
+        for key in ('mac-x64', 'mac-arm64'):
+            self.assertIn(key, hdc_fetch.PLATFORMS)
 
 
 if __name__ == "__main__":

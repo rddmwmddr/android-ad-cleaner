@@ -9,9 +9,9 @@ cd "${0:A:h}/.."
 ARCH=${ARCH:-arm64}
 NAME="肉呆去广告"
 if [ "$ARCH" = "x86_64" ]; then
-  VENV=gui/.venv-x86; RUN=(arch -x86_64); TAG=intel; PYVER=cpython-3.12-macos-x86_64
+  VENV=gui/.venv-x86; RUN=(arch -x86_64); TAG=intel; PYVER=cpython-3.12-macos-x86_64; HDC_PLATFORM=mac-x64
 else
-  VENV=gui/.venv; RUN=(); TAG=arm64; PYVER=cpython-3.12-macos-aarch64
+  VENV=gui/.venv; RUN=(); TAG=arm64; PYVER=cpython-3.12-macos-aarch64; HDC_PLATFORM=mac-arm64
 fi
 if [ ! -x $VENV/bin/python ]; then
   # 只用 uv 自带的 Python（最低 macOS 11）。Homebrew 的 Python 按本机系统编译，0.2.0–0.2.3 的 Intel 包因此要求 macOS 26（#103）。
@@ -27,7 +27,8 @@ OUT=gui/dist/$ARCH
 rm -rf gui/build/$ARCH $OUT; mkdir -p gui/build
 DATA="$PWD/gui/build/$ARCH/data"
 # HDC 不入库：先按平台取到缓存并复制进 vendor，再让 bundle_data 收进打包资源（#898）
-$PY gui/hdc_fetch.py stage "$PWD" "$ARCH"
+# stage 要 hdc_fetch.PLATFORMS 的键（mac-arm64 / mac-x64），不是机器架构名（#1050）
+$PY gui/hdc_fetch.py stage "$PWD" "$HDC_PLATFORM"
 $PY gui/bundle_data.py "$DATA" "$ARCH"
 $RUN $PY -m PyInstaller --noconfirm --windowed --name "$NAME" \
   --distpath $OUT --workpath gui/build/$ARCH --specpath gui/build/$ARCH \
