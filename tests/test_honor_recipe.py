@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import adb_link
 import fast
-from fixtures import load_recipe, phone_mock, phone_stub
+from fixtures import load_recipe, phone_mock, phone_stub, stub
 
 RECIPE = ROOT / "recipes/honor-PNM-AN10/recipe.py"
 
@@ -98,15 +98,16 @@ def tab_phone(*nodes):
     p = phone_stub("test", W=1080, H=2400)
     p.screen.tree = Mock(return_value=fast.ET.fromstring(
         '<hierarchy rotation="0">' + "".join(nodes) + "</hierarchy>"))
-    p.click, p.say = Mock(), Mock()
+    stub(p, "click", Mock())              # 导航阶段经观测基座点击，桩要落到 `p.screen`
+    p.say = Mock()
     p.dismiss = Mock(return_value=None)
     p.screen.sig = Mock(return_value="page")
     p.screen.settle = Mock(return_value=True)
     p.locked = Mock(return_value=False)
     p.start, p.enter, p.off, p.back = Mock(), Mock(), Mock(), Mock()
-    p.tap = Mock(return_value=True)
-    p.tap_icon = Mock(return_value=True)
-    p.find = Mock(side_effect=has("设置", "个性化服务", "通知"))
+    stub(p, "tap", Mock(return_value=True))
+    stub(p, "tap_icon", Mock(return_value=True))
+    stub(p, "find", Mock(side_effect=has("设置", "个性化服务", "通知")))
     return p
 
 
@@ -125,11 +126,12 @@ class HonorThemeTests(unittest.TestCase):
         p = tab_phone(
             '<node class="android.widget.TextView" text="我的" bounds="[0,300][1080,360]"/>',
             '<node class="android.widget.TextView" content-desc="未选中,我的" bounds="[0,2200][216,2300]"/>')
-        p.find.side_effect = has("设置", "个性化服务", "通知")
-        p.tap.return_value = True
+        p.screen.find.side_effect = has("设置", "个性化服务", "通知")
+        p.navigator.tap.return_value = True
         load(p, ["主题"])
-        p.click.assert_called_once_with(108, 2250)          # 底栏那个标签，不是内容区的同名文字
-        p.tap.assert_called_once_with("设置", exact=True, scrolls=0)
+        p.screen.click.assert_called_once_with(108, 2250)   # 底栏那个标签，不是内容区的同名文字
+        p.navigator.tap.assert_called_once()               # 门面转发是位置参数：文字、exact、scrolls
+        self.assertEqual(p.navigator.tap.call_args.args[:3], ("设置", True, 0))
 
     def test_missing_bottom_tab_falls_back_to_the_plain_exact_tap(self):
         """底栏不在屏幕最下方 15% 的机型：tab() 找不到就退回原来的全屏精确点击（#238 补充）。"""

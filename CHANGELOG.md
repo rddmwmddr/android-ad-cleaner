@@ -14,6 +14,7 @@
 - `Phone` 的启动、前台归属与落点搬进 `tool/phone/launcher.py`（#1041，ADR-0033）
 - `Phone` 的设置搜索搬进 `tool/phone/settings_search.py`，开搜索页、打字与退场随它（#1042，ADR-0033）
 - `Phone` 的弹窗退化链与推广位退回搬进 `tool/phone/dismisser.py`（#1043，ADR-0033）
+- `Phone` 的导航搬进 `tool/phone/navigator.py`，门面只剩转发、阶段之间无环（#1044，ADR-0033）
 
 ## 0.4.3 · 2026-11-11
 

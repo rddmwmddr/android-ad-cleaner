@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from fixtures import load_recipe, phone_mock, phone_stub
+from fixtures import load_recipe, phone_mock, phone_stub, stub
 
 
 def phone(taps=1):
@@ -21,8 +21,8 @@ def phone(taps=1):
     p = phone_stub("test", W=1080, H=2400)
     p.say = Mock()
     p.screen.sig = Mock(return_value="点击前的页面")
-    p.page_text = Mock(return_value="主题 / 壁纸 / 字体")
-    p.find = Mock(return_value=(540, 2300))
+    stub(p, "page_text", Mock(return_value="主题 / 壁纸 / 字体"))
+    stub(p, "find", Mock(return_value=(540, 2300)))
     rounds = {"left": taps}
 
     def tap(text, **kw):
@@ -33,7 +33,7 @@ def phone(taps=1):
             kw["seen"].append("点击前的页面")
         return True
 
-    p.tap = Mock(side_effect=tap)
+    stub(p, "tap", Mock(side_effect=tap))
     return p
 
 
@@ -49,27 +49,27 @@ class EnterRetriesSwallowedTapTests(unittest.TestCase):
         p = phone(taps=2)
         p.screen.settle = Mock(side_effect=[False, True])
         p.enter("我的")
-        self.assertEqual([c.args[0] for c in p.tap.call_args_list], ["我的", "我的"])
+        self.assertEqual([c.args[0] for c in p.navigator.tap.call_args_list], ["我的", "我的"])
 
     def test_a_tap_that_lands_is_not_repeated(self):
         p = phone()
         p.screen.settle = Mock(return_value=True)
         p.enter("我的")
-        p.tap.assert_called_once()
-        self.assertEqual(p.tap.call_args.kwargs["scrolls"], 0)
+        p.navigator.tap.assert_called_once()
+        self.assertEqual(p.navigator.tap.call_args.kwargs["scrolls"], 0)
 
     def test_page_that_never_changes_reports_the_page_it_stayed_on(self):
         p = phone(taps=3)
         p.screen.settle = Mock(return_value=False)
         with self.assertRaisesRegex(RuntimeError, "页面没有变化.*主题 / 壁纸 / 字体"):
             p.enter("我的")
-        self.assertEqual(p.tap.call_count, 3)
+        self.assertEqual(p.navigator.tap.call_count, 3)
 
     def test_missing_entry_is_reported_with_the_page_text(self):
         p = phone(taps=0)
         with self.assertRaisesRegex(RuntimeError, "未找到入口「我的」.*主题 / 壁纸 / 字体"):
             p.enter("我的")
-        p.tap.assert_called_once()
+        p.navigator.tap.assert_called_once()
 
     def test_change_is_measured_from_the_click_not_from_before_the_scroll(self):
         """入口要翻页才找得到：翻页也会改页面，基准要取点击那一刻，否则点被吞也判成功。"""
@@ -83,7 +83,7 @@ class EnterRetriesSwallowedTapTests(unittest.TestCase):
             rounds["left"] -= 1
             return True
 
-        p.tap = Mock(side_effect=tap)
+        stub(p, "tap", Mock(side_effect=tap))
         p.screen.settle = Mock(return_value=True)
         p.enter("个性化管理", scrolls=6)
         p.screen.settle.assert_called_once_with("翻到入口那一屏", 2.0)
@@ -92,9 +92,9 @@ class EnterRetriesSwallowedTapTests(unittest.TestCase):
         """底栏常读作「我的，有新消息」：精确找不到时退回包含匹配，换页仍由页面变化判定。"""
         p = phone()
         p.screen.settle = Mock(return_value=True)
-        p.find = Mock(side_effect=lambda text, **kw: (540, 2300) if not kw.get("exact") else None)
+        stub(p, "find", Mock(side_effect=lambda text, **kw: (540, 2300) if not kw.get("exact") else None))
         p.enter("我的")
-        self.assertIs(p.tap.call_args.kwargs["exact"], False)
+        self.assertIs(p.navigator.tap.call_args.kwargs["exact"], False)
 
 
 class ThemeStoreStepTests(unittest.TestCase):

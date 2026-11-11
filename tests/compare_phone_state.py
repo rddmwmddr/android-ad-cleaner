@@ -10,12 +10,14 @@ worktree、跑完删掉：
     git worktree add /tmp/aac-baseline <改动前的提交>
     python tests/compare_phone_state.py /tmp/aac-baseline/tool
 
-比八处：`Phone.texts()`（页面 × 两种屏尺寸 × 读屏策略开 / 关）、
+比九处：`Phone.texts()`（页面 × 两种屏尺寸 × 读屏策略开 / 关）、
 `explore.entries()`（页面 × 包名）、`Phone.off()`（两种屏尺寸 × 安全模式 × 三档 `only`）、
 `Phone.tap()` / `Phone._promoted_click()`（丢失记录与推广位已带前置状态的几条路径）、
 `Phone._confirm_target()` / `residual_confirm()` / `residual_note()`（确认框判定与残留提示）、
 `Phone.start()`（启动与落点）、`Phone.setting()` / `Phone.type_text()`（设置搜索的往返与打字退化链）、
-`Phone.dismiss()`（四条弹窗退化链与推广位退回，另加全仓页面样本的扫描）。
+`Phone.dismiss()`（四条弹窗退化链与推广位退回，另加全仓页面样本的扫描）、
+`Phone.tap()` / `go()` / `enter()` / `entry()` / `tab()` / `tap_icon()` / `top()` /
+`await_page()` / `in_settings_page()`（导航的命中、失败语义、换页校验、底栏带与回顶）。
 两边必须各起一个子进程：模块名相同，同进程里 import 不了两份 `fast`。
 
 结论不只看「相等」——驱动同时打印守卫数字（策略 / 包名 / `off` 每个场景点到了哪些标题，
@@ -149,6 +151,65 @@ TWO_WINDOWS = '''<hierarchy rotation="0">
   <node package="com.example.overlay" text="别的窗口" bounds="[60,420][400,480]"/>
   <node package="com.android.settings" text="广告" bounds="[60,540][400,600]"/>
 </hierarchy>'''
+
+# 导航的样本（#1044）：内容区一行「设置」+ 底栏一个「我的」+ 一个可滚动列表。
+# 两种屏尺寸都按 `fit()` 缩放，底栏那行的上沿仍在 85% 屏高之下（2180/2340 = 0.93）。
+NAV_PAGE = '''<hierarchy rotation="0">
+  <node package="com.example.app" bounds="[0,0][1080,2340]">
+    <node class="android.widget.ListView" scrollable="true" bounds="[0,300][1080,2100]">
+      <node class="android.widget.TextView" text="设置" clickable="true" bounds="[60,400][900,500]"/>
+    </node>
+    <node class="android.widget.TextView" text="我的" clickable="true" bounds="[860,2180][1020,2260]"/>
+  </node>
+</hierarchy>'''
+# 内容区有同名的「我的」，底栏那个带角标：底栏带外的那一个不能被点
+NAV_DUP_TAB = NAV_PAGE.replace(
+    '<node class="android.widget.TextView" text="我的" clickable="true" bounds="[860,2180][1020,2260]"/>',
+    '<node class="android.widget.TextView" text="我的奇妙小镇" clickable="true" bounds="[60,900][900,1000]"/>\n'
+    '    <node class="android.widget.TextView" text="我的, 2个应用待更新, 共5个" clickable="true"'
+    ' bounds="[860,2180][1020,2260]"/>')
+# 底栏带边界：0.85 屏高处换一个像素就换结论（常量被搬动时边界样本才会变红）
+def nav_tab_at(top):
+    return NAV_PAGE.replace('bounds="[860,2180][1020,2260]"', f'bounds="[860,{top}][1020,{top + 80}]"')
+
+
+NAV_TAB_BELOW = nav_tab_at(1985)      # 1985/2340 = 0.848：带外，不点
+NAV_TAB_INSIDE = nav_tab_at(1995)     # 1995/2340 = 0.853：带内，要点
+# 没有底栏（开屏推荐页的样子）：`tab()` 找不到就返回假，`tap(scrolls=0)` 一直等到 6 秒
+NAV_NO_TAB = '''<hierarchy rotation="0">
+  <node package="com.example.app" bounds="[0,0][1080,2340]">
+    <node class="android.widget.TextView" text="推荐 1 款应用" bounds="[60,300][900,380]"/>
+    <node class="android.widget.TextView" text="推荐 2 款应用" bounds="[60,420][900,500]"/>
+  </node>
+</hierarchy>'''
+# 右上角两个没有文字的图标（#292）：点第一个就开出带「设置」的新页
+NAV_ICONS = '''<hierarchy rotation="0">
+  <node package="com.example.app" bounds="[0,0][1080,2340]">
+    <node class="android.widget.ImageView" clickable="true" bounds="[900,120][990,210]"/>
+    <node class="android.widget.ImageView" clickable="true" bounds="[1000,120][1070,210]"/>
+    <node class="android.widget.TextView" text="我的游戏" bounds="[60,600][900,700]"/>
+  </node>
+</hierarchy>'''
+# 换页后的页面：`enter()` 与 `go()` 拿它当落点
+NAV_NEXT = '''<hierarchy rotation="0">
+  <node package="com.example.app" bounds="[0,0][1080,2340]">
+    <node class="android.widget.TextView" text="隐私" clickable="true" bounds="[60,400][900,500]"/>
+    <node class="android.widget.TextView" text="我的" clickable="true" bounds="[860,2180][1020,2260]"/>
+  </node>
+</hierarchy>'''
+# 翻到底才找得到的一行：中心在 0.92H 之下，直接找落空，`edge_ok` 兜底才命中（#286 的兜底支）
+NAV_EDGE = '''<hierarchy rotation="0">
+  <node package="com.example.app" bounds="[0,0][1080,2340]">
+    <node class="android.widget.ListView" scrollable="true" bounds="[0,300][1080,2100]">
+      <node class="android.widget.TextView" text="第一条" clickable="true" bounds="[60,400][900,500]"/>
+    </node>
+    <node class="android.widget.TextView" text="底部条目" clickable="true" bounds="[60,2176][900,2280]"/>
+  </node>
+</hierarchy>'''
+# 单屏面板：没有可滚动节点，`top()` 一次也不滑
+NAV_FLAT = NAV_PAGE.replace('class="android.widget.ListView" scrollable="true"',
+                            'class="android.widget.FrameLayout"')
+NAV_FOCUS = ((0.0, "com.example.app/.SettingsActivity"),)
 
 # 设置搜索的样本（#1042）：首页的搜索框、搜索页（输入框 + 结果行）、点开结果后的子页。
 SEARCH_HOME = '''<hierarchy rotation="0"><node package="com.android.settings" bounds="[0,0][1080,2340]">
@@ -578,8 +639,97 @@ def dump(tool_dir):
             run(f"page|{label}", xml)
         return out
 
+    def navigation():
+        """导航（#1044）：命中、失败语义、换页校验、底栏带与回顶各走一遍。
+        每条样本记返回值 / 异常原文、点击坐标、返回次数、滑动次数、诊断行、丢失记录与耗时，
+        两边逐字比；走没走到目标分支由 `navigation_guards()` 核对。"""
+        out = []
+
+        def lost_tree(phone, after=0):
+            """读屏替身：读满 `after` 次之后抛断线（0 = 第一读就断）。"""
+            real, seen = phone.screen.tree, {"n": 0}
+
+            def tree():
+                seen["n"] += 1
+                if seen["n"] > after:
+                    raise fast.adb_link.DeviceLost("手机断线了")
+                return real()
+            return tree
+
+        def run(label, call, stages=((0.0, NAV_PAGE),), focus=NAV_FOCUS, miss=0, setup=None):
+            for size in SIZES:
+                clock = fixtures.Clock()
+                fixtures.install_clock(fast, clock)
+                lines, clicks, backs, scrolls = [], [], [], []
+                p = fixtures.fake_phone(clock=clock, size=size,
+                                        stages=[(t, fit(xml, size)) for t, xml in stages],
+                                        focus=focus, fast_mod=fast)
+                p.miss = miss
+                click = lambda x, y, _c=clock, _a=clicks: (_c.click(), _a.append([x, y]))  # noqa: E731
+                p.click = p.screen.click = click     # 改前导航走门面、改后走观测基座
+                back = lambda *a, _c=clock, _b=backs, **k: (_c.click(), _b.append(round(_c.t, 2)))  # noqa: E731
+                p.back = p.screen.back = back
+                p.screen.scroll = lambda *a, _s=scrolls, **k: _s.append(list(a))
+                fixtures.stub(p, "say", lambda *a, _l=lines: _l.append(" ".join(str(x) for x in a)))
+                if setup is not None:
+                    setup(p, clock)
+                try:
+                    got, err = call(p), None
+                except Exception as e:                   # noqa: BLE001 - 对拍要的是原文，不是分类
+                    got, err = None, f"{type(e).__name__}: {e}"
+                out.append({"id": f"{label}|{size[0]}x{size[1]}", "got": got, "err": err,
+                            "clicks": clicks, "backs": backs, "scrolls": len(scrolls),
+                            "miss": p.miss, "lines": lines,
+                            "t": round(clock.t, 2), "reads": clock.page_reads})
+
+        run("tab|hit", lambda p: p.tab("我的"))
+        run("tab|content-same-name", lambda p: p.tab("我的"), stages=((0.0, NAV_DUP_TAB),))
+        run("tab|missing", lambda p: p.tab("我的", maxwait=0), stages=((0.0, NAV_NO_TAB),))
+        run("tab|below-band", lambda p: p.tab("我的", maxwait=0), stages=((0.0, NAV_TAB_BELOW),))
+        run("tab|inside-band", lambda p: p.tab("我的"), stages=((0.0, NAV_TAB_INSIDE),))
+        run("tab|late", lambda p: p.tab("我的"),
+            stages=((0.0, fixtures.EMPTY_PAGE), (1.0, NAV_PAGE)))
+        run("tap|found", lambda p: p.tap("设置"))
+        run("tap|bottom-bar-late", lambda p: p.tap("我的", exact=True, scrolls=0),
+            stages=((0.0, NAV_NO_TAB), (4.4, NAV_PAGE)))
+        run("tap|bottom-bar-timeout", lambda p: p.tap("我的", exact=True, scrolls=0),
+            stages=((0.0, NAV_NO_TAB),))
+        run("tap|missing", lambda p: p.tap("没有的字", scrolls=2))
+        run("tap|after-miss", lambda p: p.tap("设置"), miss=1)
+        run("tap|miss-then-give-up", lambda p: p.tap("没有的字", scrolls=2), miss=1)
+        run("entry|found", lambda p: p.entry("设置"))
+        run("entry|missing", lambda p: p.entry("没有的字"))
+        run("enter|lands", lambda p: p.enter("设置"),
+            stages=((0.0, NAV_PAGE), (0.6, NAV_NEXT)))
+        run("enter|no-change", lambda p: p.enter("设置"))
+        run("enter|missing", lambda p: p.enter("没有的字"))
+        run("go|lands", lambda p: p.go("设置", "隐私"),
+            stages=((0.0, NAV_PAGE), (0.6, NAV_NEXT)))
+        run("go|misses", lambda p: p.go("设置", "不存在的字"))
+        run("tap_icon|first", lambda p: p.tap_icon("隐私"),
+            stages=((0.0, NAV_ICONS), (0.6, NAV_NEXT)))
+        run("tap_icon|none", lambda p: p.tap_icon("设置"), stages=((0.0, NAV_ICONS),))
+        run("tap|edge-fallback", lambda p: p.tap("底部条目", scrolls=1), stages=((0.0, NAV_EDGE),))
+        # 断线两种各一条：开跑前就断（tap 的第一读）与跑到一半断（entry 等完页、找入口时才掉）
+        run("tap|link-lost", lambda p: p.tap("设置"),
+            setup=lambda p, c: setattr(p.screen, "tree", lost_tree(p)))
+        run("entry|link-lost", lambda p: p.entry("设置"),
+            setup=lambda p, c: setattr(p.screen, "tree", lost_tree(p, after=4)))
+        run("top|leaves-page", lambda p: p.top(),
+            setup=lambda p, c: fixtures.stub(p, "focus", iter(["com.example.app/.Settings",
+                                                              "com.other/.Main"]).__next__))
+        run("top|stops-at-top", lambda p: p.top())
+        run("top|no-scrollable", lambda p: p.top(), stages=((0.0, NAV_FLAT),))
+        run("page|in-settings", lambda p: p.in_settings_page())
+        run("page|not-settings", lambda p: p.in_settings_page(),
+            focus=((0.0, "com.example.app/.MainActivity"),))
+        run("await|budget", lambda p: p.await_page(budget=1.2),
+            stages=((0.0, fixtures.EMPTY_PAGE),))
+        return out
+
     return {"texts": texts(), "entries": entries(), "off": off(), "sessions": sessions(),
-            "toggling": toggling(), "launch": launch(), "search": search(), "dismiss": dismiss()}
+            "toggling": toggling(), "launch": launch(), "search": search(), "dismiss": dismiss(),
+            "navigation": navigation()}
 
 
 @contextmanager
@@ -809,6 +959,104 @@ def dismiss_guards(records):
     return 0 if not problems else 1
 
 
+def navigation_guards(records):
+    """导航样本必须真的走到每一条分支：命中与失手、底栏带内外、换页成与没换、回顶滑与不滑。
+    任何一支退化（全都成功或全都失败）时「两边一样」是必然相等，不能当证据。"""
+    by = {rec["id"]: rec for rec in records}
+    problems = []
+    for size in SIZES:
+        tag = f"{size[0]}x{size[1]}"
+
+        def get(label, tag=tag):
+            rec = by.get(f"{label}|{tag}")
+            if rec is None:
+                problems.append(f"{tag} 缺样本 {label}")
+            return rec or {}
+
+        said = lambda rec, word: any(word in line for line in rec.get("lines", []))  # noqa: E731
+        band_y = size[1] * 0.85
+
+        for label in ("tab|hit", "tab|content-same-name", "tab|late"):
+            rec = get(label)
+            if not (rec.get("got") is True and len(rec.get("clicks", [])) == 1
+                    and rec["clicks"][0][1] > band_y):
+                problems.append(f"{tag} {label} 没点到底栏带内那一行：{rec.get('clicks')}")
+        missing = get("tab|missing")
+        if missing.get("got") is not False or missing.get("clicks"):
+            problems.append(f"{tag} 底栏没有时的收尾走成了 {missing.get('got')!r}／点击 {missing.get('clicks')}")
+        below, inside = get("tab|below-band"), get("tab|inside-band")
+        if below.get("got") is not False or below.get("clicks"):
+            problems.append(f"{tag} 85% 带下沿外那一行被点或没判假：{below.get('got')!r}／{below.get('clicks')}")
+        if inside.get("got") is not True or len(inside.get("clicks", [])) != 1:
+            problems.append(f"{tag} 85% 带内那一行没点：{inside.get('got')!r}／{inside.get('clicks')}")
+
+        if not (get("tap|found").get("got") is True and len(get("tap|found").get("clicks", [])) == 1):
+            problems.append(f"{tag} 按文字点没命中")
+        late, timeout = get("tap|bottom-bar-late"), get("tap|bottom-bar-timeout")
+        if late.get("got") is not True or late.get("t", 0) < 4.4:
+            problems.append(f"{tag} 底栏等晚到弹窗那一支没走对：{late.get('got')!r}，{late.get('t')} 秒")
+        if timeout.get("got") is not False or timeout.get("t", 0) < 6.0:
+            problems.append(f"{tag} 底栏 6 秒超时那一支没走对：{timeout.get('got')!r}，{timeout.get('t')} 秒")
+        miss, after, gave_up = get("tap|missing"), get("tap|after-miss"), get("tap|miss-then-give-up")
+        if not (miss.get("got") is False and miss.get("miss") == 1 and said(miss, "没找到")):
+            problems.append(f"{tag} 找不到时没记丢失：{miss.get('got')!r}／miss={miss.get('miss')}")
+        if not (after.get("got") is True and after.get("miss") == 0 and not after.get("lines")):
+            problems.append(f"{tag} 走丢之后找回那一支没走对：{after.get('got')!r}／miss={after.get('miss')}")
+        if not (gave_up.get("got") is False and gave_up.get("miss") == 2
+                and said(gave_up, "快速放弃")):
+            problems.append(f"{tag} 走丢之后只看这一屏那一支没走对：{gave_up.get('miss')}／{gave_up.get('lines')}")
+
+        if get("entry|found").get("got") is not True:
+            problems.append(f"{tag} 可选入口命中那一支没走对")
+        gone = get("entry|missing")
+        if not (gone.get("got") is False and said(gone, "没找到")):
+            problems.append(f"{tag} 可选入口失手时没留现场")
+
+        if get("enter|lands").get("err") is not None:
+            problems.append(f"{tag} 换页确认那一条走成了 {get('enter|lands').get('err')}")
+        if "页面没有变化" not in (get("enter|no-change").get("err") or ""):
+            problems.append(f"{tag} 页面没换时不抛：{get('enter|no-change').get('err')}")
+        if "未找到入口" not in (get("enter|missing").get("err") or ""):
+            problems.append(f"{tag} 入口没找到时不抛：{get('enter|missing').get('err')}")
+
+        if get("go|lands").get("got") is not True or get("go|misses").get("got") is not False:
+            problems.append(f"{tag} 前往的成功 / 失手两支没走对")
+
+        first, none = get("tap_icon|first"), get("tap_icon|none")
+        if first.get("got") is not True or len(first.get("clicks", [])) != 1:
+            problems.append(f"{tag} 图标入口命中那一支没走对")
+        if none.get("got") is not False or len(none.get("clicks", [])) != 2:
+            problems.append(f"{tag} 图标入口失手那一支没走对：{none.get('got')!r}／{none.get('clicks')}")
+
+        edge = get("tap|edge-fallback")
+        if not (edge.get("got") is True and len(edge.get("clicks", [])) == 1
+                and edge["clicks"][0][1] < size[1] * 0.94):
+            problems.append(f"{tag} 翻到底的兜底落点没走对：{edge.get('got')!r}／{edge.get('clicks')}")
+        for label in ("tap|link-lost", "entry|link-lost"):
+            if not (get(label).get("err") or "").startswith("DeviceLost"):
+                problems.append(f"{tag} {label} 断线没冒泡：{get(label).get('err')}")
+        if "回到页顶时离开了当前设置页" not in (get("top|leaves-page").get("err") or ""):
+            problems.append(f"{tag} 回顶时换了页却不报错：{get('top|leaves-page').get('err')}")
+
+        up, flat = get("top|stops-at-top"), get("top|no-scrollable")
+        if up.get("scrolls") != 1:
+            problems.append(f"{tag} 回顶没滑到页顶就停：滑了 {up.get('scrolls')} 次")
+        if flat.get("scrolls") != 0:
+            problems.append(f"{tag} 单屏面板上回顶不该滑：滑了 {flat.get('scrolls')} 次")
+
+        if get("page|in-settings").get("got") is not True:
+            problems.append(f"{tag} 设置页没认出来")
+        if get("page|not-settings").get("got") is not False:
+            problems.append(f"{tag} 普通页被认成设置页")
+
+        await_ = get("await|budget")
+        if not (await_.get("got") is None and 1.1 <= await_.get("t", 0) <= 1.6):
+            problems.append(f"{tag} 等页预算没走满：{await_.get('got')!r}，{await_.get('t')} 秒")
+    print("守卫：导航样本 " + ("两种屏尺寸下命中、失手、换页校验与回顶全部到位"
+                             if not problems else "；".join(problems)))
+    return 0 if not problems else 1
+
+
 def compare(baseline_tool):
     before, after = collect(str(baseline_tool)), collect(str(TESTS.parent / "tool"))
     bad = 0
@@ -832,6 +1080,7 @@ def compare(baseline_tool):
     bad += launch_guards(after["launch"])
     bad += search_guards(after["search"])
     bad += dismiss_guards(after["dismiss"])
+    bad += navigation_guards(after["navigation"])
     return 1 if bad else 0
 
 
