@@ -626,10 +626,13 @@ class AppModel(
             val deadline = System.currentTimeMillis() + SMOKE_TIMEOUT
             var idle = 0
             while (true) {
+                val started = System.currentTimeMillis()
                 val out = runCatching {
                     backend.boot()          // 冷启动时 Python 还没起来，等它
                     backend.call("view.smoke_export", smokeShell) as JSONObject
-                }.getOrNull()
+                }.onFailure { Log.i(SMOKE_ENTRY_TAG, "export failed: " + it.message) }.getOrNull()
+                Log.i(SMOKE_ENTRY_TAG, "export " + (if (out == null) "null" else "ok") +
+                    " in " + (System.currentTimeMillis() - started) + "ms")
                 if (out == null) {
                     // 导出自己出错要说出来：不然脚本只看到「没有导出」，分不清是没跑起来还是 Python 侧报错
                     exportSmoke(listOf("""{"finished": false, "error": "smoke_export 调用失败"}"""))
