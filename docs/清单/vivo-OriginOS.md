@@ -155,7 +155,7 @@ Failure [only root can delete system app for a particular user]
 - 系统设置搜索框：`com.android.settings:id/vigour_search_edit`。首页那个「搜索设置项」本身是个 EditText，
   输入关键词后它自己也含这几个字，按文字查找会先命中它，点上去页面根本不跳、也不报错。
 - 应用商店设置：`com.bbk.appstore/.ui.menu.AppstoreSettingsActivity`。V2547DA 的 Android 17 上商店（V10.5.20.0）「我的」页没有能读到的齿轮入口，只能按这个 Activity 直达（[#220](https://github.com/rddmwmddr/android-ad-cleaner/issues/220)）；直达失败时退回「我的 → 设置」。V2547A 的商店版本仍能按「我的 → 设置」文字进入。
-- 浏览器菜单按钮：`com.vivo.browser:id/menu_btn`，设置页 `...setting.common.activity.SettingActivity`
+- 浏览器菜单按钮：`com.vivo.browser:id/menu_btn`，设置页 `...setting.common.activity.SettingActivity`；菜单浮层自己的返回键是 `com.vivo.browser:id/iv_back_cancel`（`content-desc` 为「返回」），不是弹窗的 ✕，`dismiss()` 会跳过它（#753）
 - 负一屏设置面板：`com.vivo.hiboard/.settings.AppletSettingActivity`
 - 阅图锁屏：`com.vivo.magazine/.ui.MagazineSettings`
 - 天气：`com.vivo.weather:id/more_btn`，设置页 `com.vivo.weather/.WeatherSettings`
