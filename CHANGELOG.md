@@ -43,6 +43,7 @@
 - 新增 `tool/release_meta.py` 的 sums：从 Release 资产摘要生成校验清单，可传进草稿（#1134）
 - 新增 `page --write`：下载页的 REL 从 Release 事实回填，改前校验、写后回读（#1135）
 - 下载页对账带 `--sha`，名字、大小、sha 三类分行比，周检查默认开启（#1136）
+- 发版动作第 4/5 步改跑 `release_meta.py` 的 sums 与 page，回填后带 sha 对账（#1137）
 
 ## 0.4.3 · 2026-11-11
 
