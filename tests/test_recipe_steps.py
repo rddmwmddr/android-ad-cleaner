@@ -98,6 +98,16 @@ class WiringTests(unittest.TestCase):
             "store", "store_mode", "system_ads_security",
         }, set(scope))
 
+    def test_the_vivo_family_steps_are_installed(self):
+        """#1211 收的 7 簇都在注入面里；两簇「系统广告」各占一个名字，没并成一个。"""
+        phone, scope = phone_mock(), {}
+        recipe_kit.preamble(phone, scope)
+        self.assertLessEqual({
+            "browser_recommendations", "i_manager_ads", "lock_screen_magazine",
+            "system_ads_branch", "system_ads_chain",
+            "global_search_ads", "weather_service",
+        }, set(scope))
+
     def test_step_names_do_not_collide_with_navigation_names(self):
         """两张注册表写同一个执行作用域、`injected_sources()` 又按名字合并：同名会静默覆盖。"""
         self.assertEqual(set(recipe_steps.STEPS) & set(recipe_nav.NAV), set())
