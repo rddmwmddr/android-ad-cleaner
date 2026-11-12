@@ -11,7 +11,7 @@ from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))
 import fast
-from fixtures import Clock, fake_phone, install_clock, load_tool, phone_stub
+from fixtures import Clock, clocked, fake_phone, load_tool, phone_stub
 
 SIZE = (1080, 2340)
 ROWS = (("猜你喜欢", False), ("限制广告跟踪", True), ("应用推荐", False))
@@ -113,9 +113,7 @@ class ShrinkingDevice(TitleOnlyDevice):
 class TitleFallbackTests(unittest.TestCase):
     def setUp(self):
         load_tool()
-        self.addCleanup(setattr, fast, "time", fast.time)      # 假时钟装进模块后要还原
-        self.clock = Clock(read_cost=0.0)
-        install_clock(fast, self.clock)
+        self.clock = clocked(self, fast, Clock(read_cost=0.0))
         self.clicks, self.backs = [], []
 
     def phone(self, device):

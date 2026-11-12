@@ -4,7 +4,7 @@
 
 生产端比消费端还散：`tool/fast.py:51` 与 `:54`（暂停点的人话）、`:301` 锁屏等待、`tool/run.py:211`（同一句锁屏文案的第二个写处）、`tool/run.py:87` 把 `DeviceLost` 的 `HINT`（`tool/adb_link.py:20`）经 `sys.exit` 打到 stderr、`tool/fast.py:98` 的 `RuntimeError("UIAUTOMATION_BUSY：…")`、`tool/ui_session.py:48` 的 `DeviceBusyError`。同一个「读屏被占用」有三种写法，客户端只能三个串都试。
 
-后果已经出现：改一句文案会静默破坏暂停、提示音和跳过逻辑，编译期和测试都看不出来；词表渗进了测试面——`tests/test_reports_1029.py:213-215` 与 `tests/test_reports_026.py:443-446` 直接把中文串当输入喂给 `_log`。同一片里还有一处不靠文本的私人约定：`gui/app.py:630` 用 argv 形状猜「这一步要不要用读屏」（`len(args) > 2 and args[2] == "recipe"`），`:591` / `:638-646` 用 `@channels` 字符串当哨兵。
+后果已经出现：改一句文案会静默破坏暂停、提示音和跳过逻辑，编译期和测试都看不出来；词表渗进了测试面——`tests/test_tap_notice_regressions.py:213-215` 与 `tests/test_layout_and_verdict_regressions.py:443-446` 直接把中文串当输入喂给 `_log`。同一片里还有一处不靠文本的私人约定：`gui/app.py:630` 用 argv 形状猜「这一步要不要用读屏」（`len(args) > 2 and args[2] == "recipe"`），`:591` / `:638-646` 用 `@channels` 字符串当哨兵。
 
 硬约束有四条：CLI 与上报日志的人话文本逐字不变；打包版 `--cli`、Windows `_fix_stdio`、`bufsize=1` 下事件行必须可靠可解析；遵守 ADR-0003（客户端 import 无副作用、依赖注入）；本轮只覆盖已被嗅探的这一片，不顺手重写全部输出。
 

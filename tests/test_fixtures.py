@@ -68,13 +68,8 @@ class TimelineTests(unittest.TestCase):
 
 
 class FakePhoneTests(unittest.TestCase):
-    def setUp(self):
-        # 假时钟装在模块上，跑完必须换回真时钟，否则后面的测试全都停在假时间里
-        self.addCleanup(setattr, fast, "time", fast.time)
-
     def test_settle_sees_the_new_page_without_waiting_out_the_budget(self):
-        clock = fixtures.Clock()
-        fixtures.install_clock(fast, clock)
+        clock = fixtures.clocked(self, fast, fixtures.Clock())
         p = fixtures.fake_phone(clock=clock, stages=[(0.0, fixtures.EMPTY_PAGE), (0.2, PAGE)])
         self.assertTrue(p.settle(p.sig(), 1.0))
         self.assertLess(clock.time(), 1.0)
@@ -97,8 +92,10 @@ class FakePhoneTests(unittest.TestCase):
         self.assertTrue(p.vivo_seen)
 
     def test_drive_reports_result_and_cost(self):
-        out, elapsed, reads, clicks = fixtures.drive(lambda p: bool(p.sig()), modules=[fast],
-                                                     stages=[(0.0, PAGE)])
+        # drive() 自己造钟、装进模块且不还原，外面这层负责把全部门面 / 基座 / 阶段放回去
+        with fixtures.patched_clock(fixtures.Clock(), fast):
+            out, elapsed, reads, clicks = fixtures.drive(lambda p: bool(p.sig()), modules=[fast],
+                                                         stages=[(0.0, PAGE)])
         self.assertTrue(out)
         self.assertGreaterEqual(elapsed, 0.0)
         self.assertEqual((reads, clicks), (1, 0))

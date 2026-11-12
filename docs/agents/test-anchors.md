@@ -103,6 +103,9 @@
 | `test_api_structure.py` | 窗口桥契约与客户端三块的责任边界。 |
 | `test_gui_import.py` | import gui.app 不许有副作用：不建目录、不改 sys.path、不加载 tool/。 |
 | `test_job.py` | 一次执行的状态收成 Job，poll 只读锁内快照。 |
+| `test_job_races.py` | 一次执行的发布点竞态：停止落在启动与登记之间仍要杀进程、running=false 的快照已带收尾行、旧执行的收尾行不串进新 Job。 |
+| `test_dispatcher_exclusion.py` | 客户端调度器的互斥：还原、安装更新、执行与读屏检查谁在等谁，锁在别人手里时立刻回一句；停止与暂停必须等锁，判断落在临界区内。 |
+| `test_result_retry.py` | 结果页重试：哪一档步骤可重试、广告开关步只重跑引擎报的段、多轮结果按 kind 就地合并。 |
 | `test_harmony_bridge.py` | 鸿蒙窗口桥只转发，状态与构造逻辑不落在 Api 上。 |
 | `test_harmony_client.py` | 鸿蒙接入后的选机、互斥、持久化、停止与旧数据兼容。 |
 | `test_harmony_engine.py` | 桌面引擎的离线用例：合成的界面树与假手机。 |
@@ -123,8 +126,13 @@
 | `test_release_meta.py` | 发版校验清单从 Release 事实生成（tool/release_meta.py）：退出码、清单文本与写盘。 |
 | `test_followup.py` | 复测队列核对与写回：报出标签与队列的差异。 |
 | `test_download_page_gitee.py` | 国内下载走 Gitee：取包、核 SHA256、匿名下载回验。 |
+| `test_download_page_rows.py` | 下载页与网盘说明的行：手机版 APK 单独成行、说明里写「不用连电脑」并带校验值，页面 id 写错要在上传前停下。 |
 | `test_old_install_notice.py` | 免安装版启动时提示旧名安装还在：文案与「同一版本只说一次」。 |
 | `test_huawei_channels.py` | 华为渠道页的脱敏离线回归：已观察页面，不连手机。 |
+| `test_page_and_link_regressions.py` | 一期社区反馈引出的跨模块回归：渠道页归属与仿冒、内联开关、多用户解析、点击被拒、adb 掉线与 USB 诊断。 |
+| `test_lock_and_disconnect_regressions.py` | 上报日志归类的跨模块回归：锁屏判据与等机主解锁、灰态渠道、断线不带堆栈、脱敏与参考脚本。 |
+| `test_layout_and_verdict_regressions.py` | 发布当天上报的回归：卡片布局差异、vivo 旧页与直达、失败判定、停止不算失败、暂停与空报告。 |
+| `test_tap_notice_regressions.py` | 发布后一夜上报扫出的回归：点击与确认落点、焦点回退、通知页读取、adb 镜像与提示音、vivo 慢过渡。 |
 | `test_issue_regressions.py` | 社区反馈回归：模拟页面与系统回读，不以 UI 状态代替执行结果。 |
 | `test_regressions.py` | 设备无关的回归：输入、页面识别、开关保护与打包入口。 |
 | `test_release_regressions.py` | 发布回归：横屏、部分失败、通知默认选择与发布资源边界。 |
