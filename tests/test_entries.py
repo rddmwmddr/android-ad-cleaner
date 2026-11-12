@@ -14,7 +14,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, call
+from unittest.mock import Mock, call, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -38,6 +38,13 @@ RECIPES = str(ROOT / "recipes")
 
 def no_wait(_seconds):
     """等页面时不要真睡：until() 有轮数上限，换成 no-op 就立刻退出。"""
+
+
+def _store_factory(p, g):
+    """一份最小的段体工厂：入口写在实现里，包名住在调用脚本的模块常量里。"""
+    def store():
+        p.start(g["MARKET"], ".Main")
+    return store
 
 
 class SourceTest(unittest.TestCase):
@@ -141,6 +148,24 @@ class SourceTest(unittest.TestCase):
                 '    app_settings("com.hihonor.appmarket", "内容推荐服务")\n',
                 encoding="utf-8")
             self.assertEqual(entries.used_by(d), {})
+
+    def test_an_entry_inside_a_step_implementation_is_credited_to_the_caller(self):
+        """段体搬进注入面之后，实现里的拉起仍认得出属于哪个机型（#1209）。"""
+        import recipe_steps
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            model = Path(d) / "xiaomi-model"
+            model.mkdir()
+            (model / "recipe.py").write_text(
+                'MARKET = "com.example.market"\n\n\n'
+                '@step("商店")\n'
+                'def _():\n'
+                '    store()\n',
+                encoding="utf-8")
+            with patch.dict(recipe_steps.STEPS, {"store": _store_factory}):
+                used = entries.used_by(d)
+        self.assertEqual(used, {("direct", "com.example.market",
+                                 "com.example.market.Main"): {"model"}})
 
     def test_open_app_settings_needs_two_arguments(self):
         """只传了包名的 open_app_settings 不算出处：把包名当成页面会给这台机凭空挂一条 Intent。"""

@@ -11,7 +11,8 @@ r"""机型脚本的「事实」层：一份源码里发生了哪些调用。纯 
   这一条路，同一批串在源码正文里本来就看得见（`hot_news` 这种整条命令串是被正则直接捞到的）。
   收成一份事实后只剩一种读法，再卡会把这类机型的出处读丢；实测放开它，两份生成物一个字不变。
 - 形参回填只在同一份源码内做，且只从函数定义之后的调用处取：调用处不在本文件里（注入实现）时
-  返回空，由调用方按形参位置传 `bindings` 把两侧合起来（沿用 #1149 的口径）。
+  返回空，由调用方按形参位置传 `bindings` 把两侧合起来（沿用 #1149 的口径）。按名字取外部值同理：
+  `externals` 收调用脚本的模块级字符串常量，实现里 `g["HOT"]` 这类写法因此读得出（#1209）。
 - 语法错一律抛 `SyntaxError`，不做容错返回：静默少几台机型比崩掉更糟。
 - f-string 不解析：`f"am start … {activity}"` 现在算不上入口，这里也不让它算上；页面标签仍按
   `{变量}` 的写法渲染（那是标签的写法，不是值）。
@@ -20,7 +21,7 @@ import ast
 import glob
 import os
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 _Function = ast.FunctionDef | ast.AsyncFunctionDef
 _Position = tuple[int, int]
@@ -70,11 +71,14 @@ class DictEntry:
 
 @dataclass(frozen=True)
 class Facts:
-    """一份源码的事实：调用点清单、模块级定义的函数名（本地定义会盖住注入版的那份），
-    以及模块级字典里的常量键值对（词库拿它筛说明文字，判不判中文留给消费方）。"""
+    """一份源码的事实：调用点清单、模块级定义的函数名（本地定义会盖住注入版的那份）、
+    模块级字典里的常量键值对（词库拿它筛说明文字，判不判中文留给消费方），以及模块级字符串
+    常量（单串与列表）——扫注入实现时，调用方把 `constants` 交回 `scan_source(externals=…)`，
+    实现里按名字取的值才读得出。"""
     calls: tuple[Call, ...]
     defines: frozenset[str]
     dict_entries: tuple[DictEntry, ...] = ()
+    constants: Mapping[str, tuple[Item, ...]] = field(default_factory=dict)
 
 
 def _string_value(node: ast.AST) -> str | None:
@@ -162,6 +166,9 @@ def _values(source: "_Source", node: ast.expr, function: _Function | None,
         found = source.last_string(node.id, (node.lineno, node.col_offset))
         if found is not None:
             return (found,)
+        external = source.external(node.id)
+        if external is not None:
+            return external
         if function is None:
             return None
         params = _param_names(function)
@@ -176,7 +183,9 @@ def _values(source: "_Source", node: ast.expr, function: _Function | None,
     if (isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name)
             and isinstance(node.slice, ast.Constant)):
         value = source.dicts.get(node.value.id, {}).get(node.slice.value)
-        return _string_list(value) if value is not None else None
+        if value is not None:
+            return _string_list(value)
+        return source.external(node.slice.value)
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
         left = _values(source, node.left, function, backfill)
         right = _values(source, node.right, function, backfill)
@@ -213,11 +222,13 @@ def _formatted(source: "_Source", node: ast.Call, name: str, function: _Function
 class _Source:
     """一份源码的解析上下文：模块级常量、文件内的简单赋值、以及每个调用点所在的函数。"""
 
-    def __init__(self, tree: ast.Module, bindings: Mapping[int, Sequence[str]] | None = None) -> None:
+    def __init__(self, tree: ast.Module, bindings: Mapping[int, Sequence[str]] | None = None,
+                 externals: Mapping[str, Sequence[Item]] | None = None) -> None:
         self.constants: dict[str, tuple[Item, ...]] = {}
         self.dicts: dict[str, dict[object, ast.expr]] = {}
         self.assigns: dict[str, list[tuple[_Position, ast.expr]]] = {}
         self.bindings: Mapping[int, Sequence[str]] = bindings or {}
+        self.externals: Mapping[str, Sequence[Item]] = externals or {}
         self.calls: list[tuple[ast.Call, _Function | None]] = []
         for node in ast.walk(tree):
             if (isinstance(node, ast.Assign) and len(node.targets) == 1
@@ -256,6 +267,14 @@ class _Source:
         for child in ast.iter_child_nodes(node):
             self._visit(child, child if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
                         else function)
+
+    def external(self, name: object) -> tuple[Item, ...] | None:
+        """另一份源码（调用方脚本）给的模块级常量。注入实现里按名字现取的那些值走这一条：`g["HOT"]`
+        的 `HOT` 在实现里没有赋值，脚本里才有。没传 `externals` 时恒返回 None。"""
+        if not isinstance(name, str):
+            return None
+        values = self.externals.get(name)
+        return tuple(values) if values is not None else None
 
     def last_string(self, name: str, pos: _Position) -> Item | None:
         """这个名字在 `pos` 之前最后一次赋值；那次赋值不是字符串字面量时返回 None（不退回旧值）。"""
@@ -298,6 +317,32 @@ def _page(call: ast.Call) -> str:
     return _label(node)
 
 
+def _module_values(tree: ast.Module) -> dict[str, tuple[Item, ...]]:
+    """模块级字符串常量：单个字符串与纯字符串列表都收，后赋了别的值的不算。
+
+    给 `externals` 用：注入实现里按名字现取的值（`g["HOT"]`）住在调用脚本里，实现这一侧只看得见
+    名字。不直接用 `_Source.constants`：那份只管列表，行号取的是赋值行，两种口径混在一起会把
+    本文件内的取值与外部取值读成两种东西。"""
+    out: dict[str, tuple[Item, ...]] = {}
+    for node in tree.body:
+        if isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name):
+            out.pop(node.target.id, None)
+            continue
+        if not (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)):
+            continue
+        name = node.targets[0].id
+        literal = _string_value(node.value)
+        strings = _string_list(node.value)
+        if literal is not None:
+            out[name] = (Item(literal, node.value.lineno),)
+        elif strings is not None:
+            out[name] = strings
+        else:
+            out.pop(name, None)
+    return out
+
+
 def _dict_entries(tree: ast.Module) -> tuple[DictEntry, ...]:
     """模块级字典里的常量字符串键值对。词库拿它筛「写给人看的说明」；这里不判中文，也不认词条。"""
     out = []
@@ -313,14 +358,19 @@ def _dict_entries(tree: ast.Module) -> tuple[DictEntry, ...]:
     return tuple(out)
 
 
-def scan_source(src: str, bindings: Mapping[int, Sequence[str]] | None = None) -> Facts:
+def scan_source(src: str, bindings: Mapping[int, Sequence[str]] | None = None,
+                externals: Mapping[str, Sequence[Item]] | None = None) -> Facts:
     """一份机型脚本源码的事实：调用点清单 + 模块级定义的函数名。语法错抛 `SyntaxError`。
 
     `bindings` 是另一份源码（调用方）给的形参取值 `{形参位置: (字符串, …)}`：扫注入实现时，
     实参在脚本里、形参在实现里，本文件找不到调用处，由调用方按位置把两侧合起来传进来
-    （沿用 #1154 的做法）。"""
+    （沿用 #1154 的做法）。
+
+    `externals` 是另一份源码（调用方）的模块级常量 `{名字: (Item, …)}`：段体搬进注入面之后，
+    它依赖的字面量仍住在脚本里，实现里只有 `g["HOT"]` 这样的名字（#1149、#1209）。缺省不查，
+    行为与加这个参数之前逐字相同。"""
     tree = ast.parse(src)
-    source = _Source(tree, bindings)
+    source = _Source(tree, bindings, externals)
     calls = []
     for node, function in source.calls:
         name, injected = _call_name(node.func)
@@ -344,7 +394,7 @@ def scan_source(src: str, bindings: Mapping[int, Sequence[str]] | None = None) -
     calls.sort(key=lambda call: (call.line, call.name))
     return Facts(calls=tuple(calls), defines=frozenset(
         node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))),
-        dict_entries=_dict_entries(tree))
+        dict_entries=_dict_entries(tree), constants=_module_values(tree))
 
 
 def scan_dir(recipes_dir: str, families: Mapping[str, str] | None = None) -> dict[str, Facts]:
@@ -363,11 +413,25 @@ def scan_dir(recipes_dir: str, families: Mapping[str, str] | None = None) -> dic
 
 
 def injected_sources() -> dict[str, str]:
-    """注入面（`tool/recipe_nav.py`）里各助手的实现源码：{注入名: 源码}。
+    """注入面（`tool/recipe_nav.py` 与 `tool/recipe_steps.py`）里各实现的源码：{注入名: 源码}。
 
     注入实现里的入口写在实现里、脚本只剩一行调用；要事实就交给 `scan_source`，跨文件的形参
-    取值由调用方按位置传 `bindings`（沿用 #1153、#1154）。延迟 import：只有调用它时才加载
-    导航模块，事实层本身不连带它。"""
+    取值由调用方按位置传 `bindings`、模块常量按名字传 `externals`（沿用 #1153、#1154、#1209）。
+    两张注册表合并返回：入口速查不分「导航助手」与「段体」，脚本调了哪个名字就扫哪份实现。
+    延迟 import：只有调用它时才加载这两张表，事实层本身不连带它们。"""
     import inspect
     import recipe_nav
-    return {name: inspect.getsource(factory) for name, factory in recipe_nav.NAV.items()}
+    import recipe_steps
+    return {name: inspect.getsource(factory)
+            for table in (recipe_nav.NAV, recipe_steps.STEPS)
+            for name, factory in table.items()}
+
+
+def step_sources() -> dict[str, str]:
+    """段体注入面（`recipe_steps.STEPS`）的源码：{注入名: 源码}，词库只扫这一张表。
+
+    导航助手的开关名单写在调用点的实参里（`close_named(NAMES, page=…)`），扫它们的实现只会
+    读到形参、记成一串没读出来的未解析；词住在实现里的只有段体那张表（#1209）。"""
+    import inspect
+    import recipe_steps
+    return {name: inspect.getsource(factory) for name, factory in recipe_steps.STEPS.items()}

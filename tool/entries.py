@@ -391,7 +391,8 @@ def used_by(recipes_dir):
             calls = [call for call in facts.calls
                      if call.injected and call.name == name and name not in facts.defines]
             if calls:
-                _scan_entries(recipe_source.scan_source(impl, _bindings(calls)), model, found)
+                _scan_entries(recipe_source.scan_source(impl, _bindings(calls),
+                                                        externals=facts.constants), model, found)
     return found
 
 

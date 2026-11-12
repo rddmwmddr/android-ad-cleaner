@@ -206,6 +206,28 @@ class InjectedTest(unittest.TestCase):
         self.assertEqual(len(command), 1)
         self.assertTrue(command[0].endswith("-p com.heytap.market"), command[0])
 
+    def test_externals_fill_names_that_live_in_the_calling_script(self):
+        """段体的模块常量住在调用脚本里，实现里只有 `g["HOT"]` 这个名字（#1209）。"""
+        impl = textwrap.dedent('''
+            def _():
+                p.off(only=g["HOT"], page="负一屏·设置")
+        ''')
+        bare = only(recipe_source.scan_source(impl).calls[0], "only")
+        self.assertEqual((bare.values, bare.resolved), ((), False))
+        externals = scan("HOT = ['热点资讯', '热搜榜']").constants
+        filled = only(recipe_source.scan_source(impl, externals=externals).calls[0], "only")
+        self.assertEqual(texts(filled.values), ["热点资讯", "热搜榜"])
+
+    def test_externals_also_fill_a_bare_name(self):
+        """实现里可能直接写名字而不走 `g[...]`：同一份外部值，两种取法都要读得出。"""
+        impl = textwrap.dedent('''
+            def _():
+                p.off(only=HOT, page="负一屏·设置")
+        ''')
+        externals = scan("HOT = ['热点资讯']").constants
+        self.assertEqual(texts(only(recipe_source.scan_source(impl, externals=externals)
+                                    .calls[0], "only").values), ["热点资讯"])
+
 
 class DictEntryTest(unittest.TestCase):
     """模块级字典里的常量键值对：词库拿它筛说明文字，事实层只出结构、不判中文。"""

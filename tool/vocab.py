@@ -10,6 +10,8 @@
 
 机型脚本只解释一次：调用点与模块级常量由 `recipe_source` 的事实层给出（沿用 #1156 的分工），
 这里只做页面到分组的映射、方向判定与统计口径，不再自己 `ast.parse` 脚本。
+段体搬进注入面之后（#1209），脚本调了哪个段体就把那份实现也扫一遍：词条归调用它的每一个机型，
+出处写调用点。只扫段体那张表，导航助手的名单本来就在调用点的实参里。
 
   python3 tool/vocab.py > docs/清单/词库.md
   python3 tool/vocab.py gaps <目录名>            查漏：同家族别的机型关过、这份脚本没写的词条
@@ -132,6 +134,7 @@ class Word:
     page: str
     script: str                 # recipes/ 下的相对路径，比如 xiaomi-M154FF/recipe.py
     line: int
+    injected: bool = False      # 出处是调用点、词住在注入段体里（#1209）
 
     @property
     def model(self):
@@ -224,44 +227,73 @@ def _word_calls(facts):
     return calls
 
 
-def scan(recipes_dir):
-    """读所有机型脚本。认不出品牌的目录不进库（tests/test_entries.py 守着每个品牌都有家族）。"""
+def _absorb(out, family, script, facts, line=None):
+    """把一份事实里的词条、同页保留项与三类读不出来的收进 `out`；返回这份事实新收的词数。
+
+    `line` 给定时出处一律记这个行号：段体搬进注入面之后，词写在实现里、调用点留在脚本里，
+    出处要写成那份脚本的调用点（#1209）。"""
+    before = len(out.words)
+    for call in _word_calls(facts):
+        if call.name == "p.off":
+            names, keep = _keyword(call, "only"), _keyword(call, "keep")
+        else:
+            names, keep = _positional(call, 0) or _keyword(call, "names"), None
+        # 取最内层函数名：close_named 里再套助手、助手内调 p.off 时这里不算，会进未解析
+        inside = call.function == "close_named"
+        label = call.page
+        group = group_of(family, label)
+        where = call.line if line is None else line
+        injected = line is not None
+        here = []
+        if names is None or names.text == "None":     # 没写 only= 与写了 None 都是整页
+            if not inside:
+                out.whole_page += 1
+        else:
+            strings = _strings(names)
+            if strings is not None:
+                here += [Word(text, direction_of(text), family, group, label, script,
+                              at if line is None else line, injected)
+                         for text, at in strings]
+            elif not inside:
+                missed = out.unresolved_only if call.name == "p.off" else out.unresolved_close
+                missed.append(Call(family, script, where, names.text))
+        if keep is not None:
+            strings = _strings(keep)
+            if strings is not None:
+                here += [Word(text, KEEP, family, group, label, script,
+                              at if line is None else line, injected)
+                         for text, at in strings]
+            else:
+                out.unresolved_keep.append(Call(family, script, where, keep.text))
+        out.words += here
+        if not group and not inside:
+            out.unclassified.append(Call(family, script, where, label or "（没写页面）",
+                                         tuple(dict.fromkeys(w.text for w in here))))
+    return len(out.words) - before
+
+
+def scan(recipes_dir, injected=None):
+    """读所有机型脚本。认不出品牌的目录不进库（tests/test_entries.py 守着每个品牌都有家族）。
+
+    `injected` 是段体注入面的 {名字: 源码}，缺省取 `recipe_source.step_sources()`。脚本调了哪个
+    注入名，就把那份实现也扫一遍：词条归调用它的每一个机型，出处记调用点，未解析与整页同样算在
+    这份脚本头上（#1209）。空表时与加接线之前逐字相同。"""
     out = Scan()
+    injected = recipe_source.step_sources() if injected is None else injected
     for script, facts in recipe_source.scan_dir(recipes_dir, FAMILY).items():
         family = FAMILY[script.split("-", 1)[0].lower()]
         before = len(out.words)
         out.notes += _notes(facts, script)
-        for call in _word_calls(facts):
-            if call.name == "p.off":
-                names, keep = _keyword(call, "only"), _keyword(call, "keep")
-            else:
-                names, keep = _positional(call, 0) or _keyword(call, "names"), None
-            # 取最内层函数名：close_named 里再套助手、助手内调 p.off 时这里不算，会进未解析
-            inside = call.function == "close_named"
-            label = call.page
-            group = group_of(family, label)
-            here = []
-            if names is None or names.text == "None":     # 没写 only= 与写了 None 都是整页
-                if not inside:
-                    out.whole_page += 1
-            else:
-                strings = _strings(names)
-                if strings is not None:
-                    here += [Word(text, direction_of(text), family, group, label, script, line)
-                             for text, line in strings]
-                elif not inside:
-                    missed = out.unresolved_only if call.name == "p.off" else out.unresolved_close
-                    missed.append(Call(family, script, call.line, names.text))
-            if keep is not None:
-                strings = _strings(keep)
-                if strings is not None:
-                    here += [Word(text, KEEP, family, group, label, script, line) for text, line in strings]
-                else:
-                    out.unresolved_keep.append(Call(family, script, call.line, keep.text))
-            out.words += here
-            if not group and not inside:
-                out.unclassified.append(Call(family, script, call.line, label or "（没写页面）",
-                                             tuple(dict.fromkeys(w.text for w in here))))
+        _absorb(out, family, script, facts)
+        for name in sorted(injected):
+            calls = [call for call in facts.calls
+                     if call.injected and call.name == name and name not in facts.defines]
+            if not calls:
+                continue
+            # 段体无形参，实参不跨文件；只有模块常量住在脚本里，按名字交回去
+            impl = recipe_source.scan_source(injected[name], externals=facts.constants)
+            for call in calls:
+                _absorb(out, family, script, impl, line=call.line)
         if len(out.words) == before:
             out.silent.append(script)
     return out
