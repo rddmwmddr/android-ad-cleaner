@@ -20,9 +20,7 @@ MODELS = ["V2361A"]
 
 @step("系统广告")
 def _():
-    settings_home()
-    if maybe("安全") and maybe("更多安全设置") and maybe("广告与隐私"):
-        p.off(only=["个性化广告", "个性化推荐", "智能推荐服务"], page="系统·广告与隐私")
+    system_ads_chain()
 
 
 @step("全局搜索")
@@ -39,10 +37,8 @@ def _():
 
 @step("阅图锁屏")
 def _():
-    settings_home()
-    if maybe("桌面、锁屏与壁纸") and maybe("锁屏设置") and maybe("阅图锁屏"):
-        # 关掉总开关「阅图锁屏」后，「锁屏横滑进入阅图」会跟着关
-        p.off(only=["阅图锁屏", "锁屏横滑进入阅图"], page="阅图锁屏")
+    # 关掉总开关「阅图锁屏」后，「锁屏横滑进入阅图」会跟着关
+    lock_screen_magazine()
 
 
 @step("应用商店")

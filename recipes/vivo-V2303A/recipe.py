@@ -97,38 +97,14 @@ def _():
 
 @step("浏览器")
 def _():
-    p.start("com.vivo.browser")
-    if not browser_settings():
-        print("  ✗ 本机浏览器没有右上菜单按钮，跳过本段"); return
-    print(f"  · 浏览器设置页 {p.focus()}")
-    if maybe("首页设置"):
-        maybe("极简首页", scrolls=0)
-        p.off(only=["首页上滑展示资讯"], page="浏览器·首页设置"); p.back()
-    p.top()
-    if maybe("网页浏览设置"):
-        p.off(only=["网页下载相关推荐"], page="浏览器·网页浏览"); p.back()
-    p.top()
-    if maybe("更多设置"):
-        p.off(only=["WiFi连接跳转新闻资讯", "WiFi 连接跳转新闻资讯", "跳转新闻资讯",
-                    "下载管理页展示热门应用", "下载管理页展示下载热榜"], page="浏览器·更多设置"); p.back()
-    p.top()
-    if maybe("隐私权限设置"):
-        p.off(only=["个性化内容", "第三方应用来源个性化推荐", "个性化广告推荐"], page="浏览器·隐私"); p.back()
-    p.back(2)
+    browser_recommendations()
 
 
 @step("i管家")
 def _():
-    p.d.shell("am start -f 0x10008000 -n com.iqoo.secure/.MainSettings")
-    time.sleep(1.0)
-    if maybe("关于") and maybe("个性化设置"):
-        p.off(only=["应用个性化推荐", "清理个性化推荐"], page="i管家·个性化设置")
-    p.back(3)
+    i_manager_ads()
 
 
 @step("天气")
 def _():
-    p.d.shell("am start -f 0x10008000 -n com.vivo.weather/.WeatherSettings")
-    time.sleep(1.0)
-    p.off(only=["天气服务"], keep=["气象预警", "异常天气", "地震预警"], page="天气·设置")   # 只关「天气相关热点资讯通知」
-    p.back(1)
+    weather_service()

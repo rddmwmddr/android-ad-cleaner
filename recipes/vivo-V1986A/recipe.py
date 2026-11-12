@@ -59,10 +59,8 @@ def off_one(keyword, page):
 
 @step("系统广告")
 def _():
-    settings_home()
-    if maybe("安全") and maybe("更多安全设置") and maybe("广告与隐私"):
-        # 个性化广告、个性化推荐、智能推荐服务：本机实测三个都在这一页
-        p.off(only=["个性化广告", "个性化推荐", "智能推荐服务"], page="系统·广告与隐私")
+    # 个性化广告、个性化推荐、智能推荐服务：本机实测三个都在这一页
+    system_ads_chain()
 
 
 @step("阅图锁屏")
