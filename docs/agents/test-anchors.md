@@ -53,7 +53,7 @@
 | `test_phone_facade.py` | Phone 门面 + 两个基座 + 五个阶段的对外契约。 |
 | `test_phone_base.py` | 两个基座可以各自独立构造，不必造整台 Phone。 |
 | `test_phone_sessions.py` | 三个跨阶段会话对象，门面用显式属性转发过去。 |
-| `test_phone_toggler.py` | 拨动阶段的对外契约：计划、确认框、安全模式与回读。 |
+| `test_phone_toggler.py` | 拨动阶段：这一页该关的开关真的被关掉，含确认框判定与等待、页顶复位与残留提示。 |
 | `test_phone_navigator.py` | 导航阶段的对外契约：go / tab / 入口与落点确认。 |
 | `test_phone_settings_search.py` | 设置搜索阶段的两条对外契约。 |
 | `test_phone_dismisser.py` | 弹窗与推广位阶段：词表只有一份，推广位点了要退回。 |
@@ -65,7 +65,7 @@
 | `test_main_switch_bar.py` | 渠道页的 main_switch_bar：外层容器里包着真开关，不能按颜色当自绘开关。 |
 | `test_ui_session.py` | 读屏服务占用、失败清理、跨进程互斥与失败后的收尾。 |
 | `test_never_suspend.py` | NEVER 保护集：挂了会坏功能的包，整批拒绝、不落一条命令到手机。 |
-| `test_recipe_kit.py` | 引擎注入的脚本前导：段包装、跳过出口、失败台账与锁屏中止。 |
+| `test_recipe_kit.py` | 引擎注入的脚本前导：段包装、跳过出口、失败台账、锁屏中止与安全模式下的整页关闭。 |
 | `test_recipe_loader.py` | 机型脚本只有一个装载入口，测试不许自己 exec 一份脚本。 |
 | `test_recipe_meta_module.py` | 配方元数据住中立模块：非 CLI 代码 import 它不背 CLI 副作用。 |
 | `test_recipe_variants.py` | 同一型号按系统版本选脚本变体，变体要进安装包。 |

@@ -31,6 +31,7 @@
 - `Phone` 的导航搬进 `tool/phone/navigator.py`，门面只剩转发、阶段之间无环（#1044，ADR-0033）
 - `Phone` 拆分收口：架构总览列全七模块与三层，术语表补上三个会话对象（#1045，ADR-0033）
 - 测试文件改为锚点登记，三份启动与落点用例并成 `test_phone_launcher.py`，推广位那组并入 dismisser（#1140）
+- 拨动四组用例并入 `test_phone_toggler.py`，整页关闭一组并入 `test_recipe_kit.py`（#1142）
 - 停止后仍跑的收尾改由任务上的 `always_run` 声明，不再按标题认（#1104）
 - 执行计划的八键形状收进 `tool/plan.py` 的 `Plan` 规格，进 mypy 严格档（#1105）
 - 执行侧从 `Plan` 规格派生任务与重试轮，不再手工拼计划字典（#1106）
