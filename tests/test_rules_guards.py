@@ -259,6 +259,38 @@ class CiGuards(unittest.TestCase):
                       f"没有 windows × {WINDOWS_PYTHON} 的回归 job，读到的是 {sorted(runs)}")
 
 
+class ReleaseWorkflowGuards(unittest.TestCase):
+    """发版动作只认显式的 tag（#1115）：推 tag 不触发构建，main 与已打的 tag 之间没有关系。"""
+
+    def text(self):
+        path = ROOT / ".github/workflows/build-windows.yml"
+        self.assertTrue(path.is_file(), f"{path} 不在，这条守卫会空转")
+        return path.read_text(encoding="utf-8")
+
+    def test_build_windows_only_by_dispatch_with_tag(self):
+        """不再由 `push: tags` 触发：tag 一推就自动出包，等于又回到「发版绑 main 尖端」的老路。
+
+        只留 `workflow_dispatch`，owner 发版时显式填要打的那个 tag。
+        """
+        text = self.text()
+        self.assertNotRegex(text, r"(?m)^\s{2}push:", "build-windows 不该再由 push 触发")
+        self.assertIn("workflow_dispatch:", text, "build-windows 要保留手动触发入口")
+        self.assertIn("tag:", text, "workflow_dispatch 要收一个 tag 输入")
+
+    def test_build_windows_checks_out_the_tag(self):
+        """手动触发时 checkout 必须钉到 `refs/tags/<输入>`。
+
+        不写 `ref` 时它取默认分支，也就是 main 尖端——打包出来的产物与 tag 无关。
+        """
+        self.assertIn("ref: refs/tags/${{ inputs.tag }}", self.text(),
+                      "build-windows 的 checkout 必须显式 fetch 输入的 tag")
+
+    def test_missing_release_does_not_fail_the_build(self):
+        """Release 草稿还不存在时只跳过上传：owner 可能先跑构建、后建草稿。"""
+        self.assertNotIn("请先创建对应的 Release 草稿", self.text(),
+                         "Release 不存在不该让构建失败，产物留在 artifact 里即可")
+
+
 class DocGuards(unittest.TestCase):
     def test_doc_changelog_one_line_entry(self):
         """`## 未发布` 段每条挂一个编号、正文不超过 80 字（展开就成段落，把用户说明塞回 CHANGELOG）。
@@ -359,7 +391,7 @@ UNANCHORED_BOUND = {
     "docs/agents/domain.md": 2,
     "docs/agents/issue-tracker.md": 20,
     "docs/agents/release-followup.md": 0,
-    "docs/agents/release.md": 12,
+    "docs/agents/release.md": 13,
     "docs/agents/triage-labels.md": 0,
 }
 

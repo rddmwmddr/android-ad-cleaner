@@ -1,17 +1,22 @@
 # Windows 版：打包、冒烟测试、生成安装程序和便携版 zip。
-# 手动运行（Actions → build-windows → Run workflow），或推送 v* 标签时运行并上传到对应 Release。
+# 只由发版动作手动触发：维护者先打 tag（docs/agents/release.md 的「出包点」），
+# owner 发版时在 Actions → build-windows → Run workflow 里填这个 tag。
+# 推 tag 不触发构建——tag 与 main 解耦，构建必须显式指定要打哪一个 tag。
 name: build-windows
 on:
   workflow_dispatch:
-  push:
-    tags: ["v*"]
+    inputs:
+      tag:
+        description: 要打包的 tag（形如 v0.5.0，必须先推上去）
+        required: true
+        type: string
 permissions:
   contents: write
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  # 本 workflow 只由 tag push 与手动触发，条件恒为 false：同一 ref 重复触发时排队而非并发，
-  # 两个 run 不会同时往同一个 Release 上传附件；取消会打断发版产物构建
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ inputs.tag }}
+  # 同一个 tag 的两个 run 排队而非并发：两个 run 不会同时往同一个 Release 上传附件；
+  # 取消会打断发版产物构建
+  cancel-in-progress: false
 jobs:
   windows:
     runs-on: windows-latest
@@ -22,6 +27,10 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          # 校验 tag 在 main 历史里要能看到 origin/main
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -37,10 +46,19 @@ jobs:
         run: |
           $env:ADB = "$env:ANDROID_HOME\platform-tools\adb.exe"
           python -m unittest discover -s tests -v
-      - name: 读版本号
+      - name: 读版本号并校验 tag
         id: ver
         run: |
+          $tag = "${{ inputs.tag }}"
           $v = python gui/version.py
+          if ("v$v" -ne $tag) {
+            throw "tag $tag 与 gui/app.py 的 VERSION=$v 不一致：先按「出包点」收口，再打 tag"
+          }
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor HEAD origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw "tag $tag 指向的提交不在 main 历史里：tag 只能打在收口后合入 main 的提交上"
+          }
           "ver=$v" >> $env:GITHUB_OUTPUT
       # HDC 不入库，打包时按钉死的哈希下载校验（gui/hdc_fetch.py）。key 取三个平台 tarball 的
       # SHA-256 组合：上游重发 SDK 时缓存自然失效，冷构建只下载一次。
@@ -71,14 +89,17 @@ jobs:
           path: |
             gui/dist/*.zip
             gui/dist/*-setup.exe
-      - name: 上传到 Release
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: 上传到 Release（还没建草稿时只出 artifact）
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "${{ github.ref_name }}"
-          $release = gh release view $tag --json isDraft,assets | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0) { throw "请先创建对应的 Release 草稿" }
+          $tag = "${{ inputs.tag }}"
+          $json = gh release view $tag --json isDraft,assets 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "还没有 $tag 的 Release，跳过上传；产物在本次 run 的 artifact 里，建好草稿后重跑一次即可。"
+            exit 0
+          }
+          $release = $json | ConvertFrom-Json
           if (-not $release.isDraft) {
             Write-Host "Release 已公开，保留已验证文件及 SHA256，不用重建产物覆盖。"
             exit 0
