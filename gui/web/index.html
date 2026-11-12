@@ -618,16 +618,32 @@ function summarize(res){
   if (/插电常亮未改动/.test(t)) return "插电常亮未改动";
   return tail.filter(Boolean).slice(-1)[0] || "";
 }
+/* 机型脚本验到什么程度由引擎从台账现读、经 status-json 与任务快照原样带过来（沿用 #1124 的两个
+   字段），界面只负责说不说，不在前端再算一次：只在负面的两档说一句人话，「全部」与没有值都不占行。
+   说不说的判据是「这次真有脚本那一行的结果」——没勾脚本、停止在它之前、读屏占用让它跳过时都不说，
+   拿别的步的结论去说脚本的事会误导（#1129）。手机版同一件事在 aac_android/view.py 的 coverage_note()，
+   措辞按宿主分（那边不劝人「去 App 里核对」）。 */
+const COVERAGE_NOTES = new Map([
+  ["部分", "这套机型脚本只在一部分步骤上做过真机验证，其余步骤这次是照脚本直接跑的，建议在 App 里顺手核对一眼。"],
+  ["未记录", "这套机型脚本没有真机验证记录，改动结果建议在 App 里自己核对一遍。"],
+]);
+function coverageNote(r){
+  const run = r || {};
+  const ran = (run.results || []).some(x => x.kind === "recipe" && !x.skipped);
+  return (ran && COVERAGE_NOTES.get(run.recipe_coverage)) || "";
+}
 function showDone(r){
   setStep(5);
   const ok = r.results.every(x => x.rc === 0) && !r.cancel;
   const failed = r.results.some(x => x.rc !== 0 && !x.stopped);   // 点了停止不算出错，不提示上报
   const retry = r.retry || 0;      // 可重试的步数由后台按结果算好（gui/app.py 的 retryable，#638）
+  const note = coverageNote(r);
   if (!r.results.length){ r.results = []; }
   main().innerHTML = `<h1>${ok ? "完成" : failed ? "已结束（有步骤没成功）" : "已停止"}</h1><p class="lead">用时 ${r.sec} 秒。去下拉搜索、负一屏、应用商店、浏览器看一眼，确认功能正常。</p>
     ${retry ? `<div class="row" style="margin-bottom:14px"><button class="btn" onclick="retryRun(this)">重试没成功的步骤（${retry}）</button></div>` : ""}
     <div class="card ${r.results.length ? "" : "hide"}">${r.results.map(x => `<div class="res"><span class="tag ${x.skipped && x.rc === 0 ? "warn" : x.rc === 0 ? "ok" : x.stopped ? "warn" : "bad"}">${x.skipped ? "跳过" : x.stopped ? "已停止" : x.rc === 0 ? "成功" : "失败"}</span><span class="t">${esc(x.title)}</span><span class="d">${esc(summarize(x))} · ${x.sec} 秒</span></div>`).join("")}</div>
     ${r.recovery ? `<div class="card" id="ui-recovery"><h3>排查读屏连接</h3><p class="lead">${esc(r.recovery)}</p><div class="actions"><button class="btn plain" onclick="checkUi()">检查读屏连接</button><button class="btn plain" onclick="copyDiagnostics()">复制完整诊断</button></div></div>` : ""}
+    ${note ? `<div class="note info">${note}</div>` : ""}
     <div class="card"><h3>最后一步：关闭开发者模式</h3>
       <p class="lead" style="margin:0 0 12px">${failed ? "有步骤未成功；若还要排查或重试，请先保留 USB 调试。结束排查后再关闭。" : "核对结果后，若不再使用电脑调试，建议关闭开发者模式和 USB 调试。"}部分银行、支付、游戏 App 检测到它开着会提醒或拒绝运行。<br>关掉<b>不会撤销</b>已经成功的改动。</p>
       <div class="row"><button class="btn" onclick="askDevOff()">帮我关闭</button><button class="btn plain" onclick="selfOff()">我在手机上自己关</button></div></div>
