@@ -8,7 +8,7 @@ import org.json.JSONObject
  * 只在 debug 构建里：不连手机、不跑引擎，逐屏验收界面。
  * `adb shell am start -n com.ahuamiao.adcleaner/.MainActivity --es demo home [--es sheet more]`
  * 页面：setup1 setup2 setup3 setup3mi old stopped-sh ask denied nodev home prepare0 prepare1 choose
- * blocked norecipe scanfail run paused pausing stalled fgmode stopping done failed stopped failed2
+ * blocked norecipe scanfail run paused pausing stalled fgmode stopping done failed stopped failed2 coverage
  * 面板：more newer update update-downloading update-ready update-error restore restored feedback report log；对话框：devoff
  * 另有 `--es call smoke`：真机冒烟用，把 shell 状态与这一轮执行结果按块打到 logcat（#1072）。
  *
@@ -64,7 +64,7 @@ object Demo {
             "stalled" -> RunProgress(running = true, idx = 3, total = 8, title = "关闭各 App 里的广告开关", sec = 212, stalled = 95)
             "fgmode" -> RunProgress(running = true, idx = 2, total = 8, title = "存快照", sec = 12)
             "stopping" -> RunProgress(running = true, idx = 4, total = 8, title = "浏览器", sec = 201, cancel = true)
-            "done", "failed", "failed2", "stopped" -> finished(name)
+            "done", "failed", "failed2", "stopped", "coverage" -> finished(name)
             else -> RunProgress()
         }
         val target: Screen = when (name) {
@@ -76,7 +76,7 @@ object Demo {
             "prepare1" -> Screen.Prepare(1)
             "choose", "blocked", "norecipe", "scanfail" -> Screen.Choose
             "run", "paused", "pausing", "stalled", "fgmode", "stopping" -> Screen.Run
-            "done", "failed", "failed2", "stopped" -> Screen.Done(run)
+            "done", "failed", "failed2", "stopped", "coverage" -> Screen.Done(run)
             else -> Screen.Home
         }
         val lines = (1..40).map { "[$it] 关闭 com.example.app$it 的营销渠道" }
@@ -119,6 +119,9 @@ object Demo {
             "failed" -> RunProgress(sec = 266, outcome = Outcome.Failed, results = ok.take(2) + StepResult("负一屏与搜索", false, 30, "入口没找到", false, false))
             "failed2" -> RunProgress(sec = 266, outcome = Outcome.Failed, recovery = "读屏连接断开了。先检查读屏连接，再重新开始。", results = ok.take(1) + StepResult("系统广告", false, 3, "读屏连接断开", false, false))
             "stopped" -> RunProgress(sec = 100, cancel = true, outcome = Outcome.Stopped, results = ok.take(2) + StepResult("负一屏与搜索", false, 10, "", false, true))
+            // 脚本只验过一部分时的结果页（#1130）：多一行说明，别的都与 done 一样
+            "coverage" -> RunProgress(sec = 266, outcome = Outcome.Ok, results = ok,
+                recipeNote = "这套机型脚本只在一部分步骤上做过真机验证，其余步骤这次可能没改到，建议在手机上顺手核对一眼。")
             else -> RunProgress(sec = 266, outcome = Outcome.Ok, results = ok)
         }
     }

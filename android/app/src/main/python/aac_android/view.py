@@ -1,6 +1,7 @@
 """手机版界面要用的判断。放在 Python 是为了 CI 不连手机也测得到，Compose 那边只管画。
 
-桌面版同样的判断在 gui/web/index.html（summarize、showDetect、sendFeedback），改口径时两边都要看。
+桌面版同样的判断在 gui/web/index.html（summarize、showDetect、sendFeedback、COVERAGE_NOTES），
+改口径时两边都要看。
 """
 import json
 import os
@@ -125,12 +126,32 @@ class StallWatch:
 
 WATCH = StallWatch()
 
+# 这次跑的那份机型脚本验到什么程度（`status-json` 的 `recipe_coverage`，档位见 tool/verify_ledger.py 的
+# TIERS）只在负面的两档说一句人话；「全部」与认不出的值都不占一行。桌面版同一口径的那份在
+# gui/web/index.html 的 COVERAGE_NOTES（#1129），只有措辞按宿主分：手机版不劝人「去 App 里核对」。
+COVERAGE_NOTES = {
+    "部分": "这套机型脚本只在一部分步骤上做过真机验证，其余步骤这次可能没改到，建议在手机上顺手核对一眼。",
+    "未记录": "这套机型脚本还没有做过真机验证，改动结果建议自己核对一遍。",
+}
+
+
+def coverage_note(run, status):
+    """结果页要不要为脚本的验证档位多一行；要说时给整句，不说时给空串（#1130）。
+
+    只在这次真跑了机型脚本时才说：没勾脚本、或这台机没有专用脚本时结果里那一行是跳过，
+    拿别的步的结论去说脚本的事会误导。档位由引擎从台账现读（#1124），这里不重算、也不猜深浅。
+    """
+    if not any(r.get("kind") == "recipe" and not r.get("skipped") for r in run.get("results") or []):
+        return ""
+    return COVERAGE_NOTES.get((status or {}).get("recipe_coverage") or "", "")
+
 
 def _snapshot(api, since=0):
     """与 poll 同一份口径，但不碰卡住计时：冒烟的导出与界面的轮询可能同时发生（#1072）。"""
     run = dict(api.poll(since))
     run["results"] = [{**r, "summary": summarize(r)} for r in run.get("results") or []]
     run["outcome"] = outcome(run)
+    run["recipe_note"] = coverage_note(run, api.last_status)
     return run
 
 

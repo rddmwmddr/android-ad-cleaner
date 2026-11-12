@@ -58,6 +58,7 @@ DEFAULT_SCREENS = (
     "setup1", "setup2", "setup3", "setup3mi", "old", "stopped-sh", "ask", "denied", "nodev",
     "home", "prepare0", "prepare1", "choose", "blocked", "norecipe", "scanfail",
     "run", "paused", "pausing", "stalled", "fgmode", "stopping", "done", "failed", "failed2", "stopped",
+    "coverage",
 )
 
 PASS, FAIL, SKIP = "通过", "失败", "未执行"
