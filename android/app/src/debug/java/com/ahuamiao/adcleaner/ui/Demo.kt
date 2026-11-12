@@ -121,7 +121,7 @@ object Demo {
             "stopped" -> RunProgress(sec = 100, cancel = true, outcome = Outcome.Stopped, results = ok.take(2) + StepResult("负一屏与搜索", false, 10, "", false, true))
             // 脚本只验过一部分时的结果页（#1130）：多一行说明，别的都与 done 一样
             "coverage" -> RunProgress(sec = 266, outcome = Outcome.Ok, results = ok,
-                recipeNote = "这套机型脚本只在一部分步骤上做过真机验证，其余步骤这次可能没改到，建议在手机上顺手核对一眼。")
+                coverageNote = "这次用的机型脚本只在一部分步骤上做过真机验证，其余步骤这次可能没改到，建议顺手核对一眼。")
             else -> RunProgress(sec = 266, outcome = Outcome.Ok, results = ok)
         }
     }

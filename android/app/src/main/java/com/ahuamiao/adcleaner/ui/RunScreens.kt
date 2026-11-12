@@ -379,12 +379,12 @@ fun DoneScreen(model: AppModel, run: RunProgress) {
             }
             itemsIndexed(run.results) { i, r -> ResultRow(i, run.results.size, r) }
             // 脚本验得不够时的一句话，档位与措辞都由后台给（view.py 的 coverage_note，#1130）
-            if (run.recipeNote.isNotEmpty()) {
+            if (run.coverageNote.isNotEmpty()) {
                 item {
                     Spacer(Modifier.height(16.dp))
                     Segments {
                         SegmentedListItem(shapes = ListItemDefaults.segmentedShapes(0, 1)) {
-                            Text(run.recipeNote, color = colors.onSurfaceVariant)
+                            Text(run.coverageNote, color = colors.onSurfaceVariant)
                         }
                     }
                 }
