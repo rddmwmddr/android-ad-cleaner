@@ -1,8 +1,9 @@
 """真机冒烟 2/3（android/smoke.py）：CI 出包 → 装机 → 启动 → 跑执行段 → 还原 → 报告。
 
 外部命令全由 fixtures 的 FakeRunner 回答，这里不碰 git、gh 与 adb。断言落在脚本实际发出的
-命令序列（双次启动、还原三项各一条、只重试一次、未就绪不触发 CI）、三段判定、报告文本与
-两个纯函数（状态 JSON → 计划 JSON、logcat 分块 → 结果 JSON）上，不读内部结构。
+命令序列（双次启动、还原三项各一条、logcat 缓冲开跑前调大收尾交回、只重试一次、未就绪不触发 CI）、
+三段判定、报告文本与三个纯函数（状态 JSON → 计划 JSON、logcat 分块 → 结果 JSON、`logcat -g` → 档位）上，
+不读内部结构。
 """
 import contextlib
 import importlib.util
@@ -29,6 +30,11 @@ REPO = smoke.REPO
 WORKFLOW = smoke.WORKFLOW
 RUN_ID = 42948451788
 APK = "app-debug.apk"
+# 设备出厂的 logcat 缓冲：冒烟要在开跑前把它调大、收尾时交回这一档（#1116）
+BUFFER_NOW = ("main: ring buffer is 256 KiB (1 KiB consumed, 0 B readable)\n"
+              "system: ring buffer is 256 KiB (0 B consumed, 0 B readable)\n", "", 0)
+# 调大之后再读到的那一份：冒烟会复读一次确认真的生效了
+BUFFER_WIDENED = ("main: ring buffer is 16 MiB (1 KiB consumed, 0 B readable)\n", "", 0)
 
 RUN_PY = smoke.tool("run.py")
 CHAN_PY = smoke.tool("chan_fast.py")
@@ -116,6 +122,9 @@ def base_table(target, conclusion="success"):
         dispatch_key("main"): [("", "", 0)],
         view_key(): [(json.dumps({"status": "completed", "conclusion": conclusion}), "", 0)],
         download_key(target): [push_apk(target)],
+        adb("shell", "logcat", "-g"): [BUFFER_NOW, BUFFER_WIDENED],
+        adb("shell", "logcat", "-G", smoke.LOGCAT_SIZE): [("", "", 0)],
+        adb("shell", "logcat", "-G", "256K"): [("", "", 0)],
     }
 
 
@@ -563,6 +572,46 @@ class WalkTests(SmokeCase):
 class SmokeTests(SmokeCase):
     """快速档（`--fast`）：按状态 JSON 下发计划、只跑执行段那条路（#1072）。"""
 
+    # —— logcat 缓冲（#1116）——
+
+    def test_the_logcat_buffer_is_widened_before_the_run_and_handed_back(self):
+        root, target = self.workdir()
+        report, runner, notes = self.run_smoke(root, happy_table(target))
+        calls = self.calls(runner)
+        widen = adb("shell", "logcat", "-G", smoke.LOGCAT_SIZE)
+        back = adb("shell", "logcat", "-G", "256K")
+        self.assertLess(calls.index(widen), calls.index(adb("logcat", "-c")),
+                        "调大要在启动清日志之前，否则这一轮的日志仍会被滚掉")
+        self.assertEqual(calls[-1], back, "收尾要把缓冲交回原来那一档")
+        self.assertIn("logcat 缓冲 256K → 16M", notes)
+
+    def test_a_buffer_reading_that_cannot_be_parsed_still_widens(self):
+        root, target = self.workdir()
+        table = happy_table(target)
+        table[adb("shell", "logcat", "-g")] = [("", "", 1)]
+        report, runner, notes = self.run_smoke(root, table)
+        calls = self.calls(runner)
+        self.assertIn(adb("shell", "logcat", "-G", smoke.LOGCAT_SIZE), calls)
+        self.assertNotIn(adb("shell", "logcat", "-G", "256K"), calls,
+                         "读不到原来那一档就别去改它")
+        self.assertTrue([line for line in notes if "读不出" in line],
+                        "读不到原档位、跑完不改回去，这件事要说出来：%r" % (notes,))
+
+    def test_a_refused_buffer_change_is_said_out_loud(self):
+        root, target = self.workdir()
+        table = happy_table(target)
+        table[adb("shell", "logcat", "-G", smoke.LOGCAT_SIZE)] = [("", "logcat: invalid buffer size", 1)]
+        report, runner, notes = self.run_smoke(root, table)
+        self.assertTrue([line for line in notes if "没能调到" in line and "只剩系统日志" in line],
+                        "调不动不能静默：空产物会被当成回归：%r" % (notes,))
+        self.assertNotIn(adb("shell", "logcat", "-G", "256K"), self.calls(runner),
+                         "没调大就没有要交回的")
+
+    def test_the_buffer_size_is_read_back_in_a_form_logcat_accepts(self):
+        runner = FakeRunner(runs=lambda *cmd: BUFFER_NOW)
+        self.assertEqual(smoke.logcat_size(runner, SERIAL), "256K")
+        self.assertIsNone(smoke.logcat_size(FakeRunner(runs=("", "", 0)), SERIAL))
+
     # —— 三段判定 ——
 
     def test_happy_path_passes_three_segments(self):
@@ -660,6 +709,8 @@ class SmokeTests(SmokeCase):
         self.assertIn("安装 + 启动：失败", report.text())
         self.assertIn("进程不在", report.text())
         self.assertIn("真流程 + 还原：未执行", report.text())
+        self.assertEqual(self.calls(runner)[-1], adb("shell", "logcat", "-G", "256K"),
+                         "中途停下也要把缓冲交回去（还原在 finally 里）")
 
     def test_fatal_in_logcat_is_a_launch_failure_even_when_process_survived(self):
         logcat = ("01-01 00:00:03.000  4321  4321 E AndroidRuntime: FATAL EXCEPTION: main\n"
@@ -700,6 +751,9 @@ class SmokeTests(SmokeCase):
             view_key(),
             download_key(target),
             install_key(target),
+            adb("shell", "logcat", "-g"),                 # 先记下原来那一档，收尾要交回去
+            adb("shell", "logcat", "-G", smoke.LOGCAT_SIZE),
+            adb("shell", "logcat", "-g"),                 # 复读确认真的调大了
             adb("logcat", "-c"),
             start(),                                     # 装完先验证能起来
             adb("shell", "pidof", smoke.PACKAGE),
@@ -717,6 +771,7 @@ class SmokeTests(SmokeCase):
             RUN_PY + ("-s", SERIAL, "unsuspend", "com.opos.ads", "com.heytap.pictorial"),
             RUN_PY + ("-s", SERIAL, "quickapp", "on"),
             CHAN_PY + ("-s", SERIAL, "on", str(target / "channels-restore.tsv")),
+            adb("shell", "logcat", "-G", "256K"),         # 收尾把缓冲交回设备原来那一档
         ])
 
     def test_restore_runs_one_command_per_item_and_reports_each(self):

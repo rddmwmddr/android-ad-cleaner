@@ -6,7 +6,8 @@
 构建留在 CI：触发 android.yml、等它跑完、下载 debug APK，再用本机的 adb 装到开发机并启动。
 之后默认走完整主流程（检测 → 扫描 → 确认 → 开始 → 完成）：桌面侧读屏认文字、点按驱动，完全
 不改 App；`--fast` 换成只跑执行段的快速档（按手机状态现算一份计划交给 debug 计划入口）。两条路
-最后都自动还原三项（挂起的包、快应用组件、营销通知渠道），给出「构建」「安装 + 启动」
+最后都自动还原三项（挂起的包、快应用组件、营销通知渠道），并把 logcat 缓冲交回原来那一档，
+给出「构建」「安装 + 启动」
 「真流程 + 还原」三段的结论。产物（人读摘要、结果 JSON、原始结果、logcat）按 commit 落在临时
 目录，不入库。用法与首次配对步骤见 android/README.md。
 """
@@ -38,6 +39,7 @@ POLL_SECONDS = 15
 LAND_SECONDS = 5
 BUILD_TIMEOUT = 45 * 60
 DISPATCH_TIMEOUT = 120
+LOGCAT_SIZE = "16M"     # 默认 256 KiB 在 PYB110 上只留约 110 秒，一轮引擎 215 秒；调大后整轮都在（实测 #1116）
 
 # App 那边的 debug 导出入口（android/app/src/debug/.../Demo.kt 的 `--es call smoke`）
 SMOKE_TAG = "AACSmoke"
@@ -251,6 +253,37 @@ def crashes(logcat):
         if "FATAL EXCEPTION" in line and PACKAGE in "\n".join(lines[index:index + 6]):
             return line
     return None
+
+
+def logcat_size(runner, serial):
+    """main 缓冲当前那一档（`256 KiB` → `256K`，能原样交回 `logcat -G`）；读不到返回 None。"""
+    out, _, rc = runner.run("adb", "-s", serial, "shell", "logcat", "-g")
+    found = re.search(r"main: ring buffer is (\d+)\s*([KMGT])i?B", out or "")
+    return "%s%s" % (found.group(1), found.group(2)) if found else None
+
+
+def widen_logcat(runner, serial, note):
+    """把 logcat 环形缓冲调大，返回调之前那一档（收尾时交回去）。
+
+    默认的 256 KiB 在 PYB110 上只留约 110 秒，而引擎一轮 215 秒、产物取的是跑完那一份 dump：
+    引擎行与 `AACSmoke` 导出块都会被系统日志滚掉（#1116）。`-G` 同时作用于四个缓冲，交回时按
+    main 那一档下发——`logcat` 没有按缓冲设尺寸的入口。
+
+    调不动要在 note 里说出来：静默失败会让空的 `logcat.txt` 被当成回归。
+    """
+    before = logcat_size(runner, serial)
+    _, err, rc = runner.run("adb", "-s", serial, "shell", "logcat", "-G", LOGCAT_SIZE)
+    after = logcat_size(runner, serial)
+    if rc != 0 or (after is not None and after != LOGCAT_SIZE):
+        note("logcat 缓冲没能调到 %s（%s），产物可能只剩系统日志"
+             % (LOGCAT_SIZE, first_line(err) or "读数没变"))
+        return None
+    if after is None:
+        note("logcat 缓冲调到 %s 了（读不出当前档位，无法确认，跑完也不会改回去）" % LOGCAT_SIZE)
+        return None
+    note("logcat 缓冲 %s → %s%s" % (before or "读不到", LOGCAT_SIZE,
+                                    "" if before else "（读不到原档位，跑完不会改回去）"))
+    return before
 
 
 def launch(runner, serial, land, sleep, dumps, demo=None):
@@ -785,7 +818,7 @@ def smoke(runner, *, ref=None, commit=None, serial=None, fast=False, screens=(),
     """
     serial = serial or pick_serial(runner)
     check_shell(runner, serial, sleep=sleep, note=note)
-    temporary = None
+    temporary, saved_log = None, None
     if commit:
         sha = resolve_commit(runner, commit)
         ref = temporary = "smoke/" + sha[:12]
@@ -837,6 +870,7 @@ def smoke(runner, *, ref=None, commit=None, serial=None, fast=False, screens=(),
                 Step("真流程 + 还原", SKIP, "没装成")])
 
         note("启动")
+        saved_log = widen_logcat(runner, serial, note)
         dumps = []
         ok, detail = judge_launch(*launch(runner, serial, land, sleep, dumps), land)
         steps = [built, Step("安装 + 启动", PASS if ok else FAIL, detail)]
@@ -888,6 +922,8 @@ def smoke(runner, *, ref=None, commit=None, serial=None, fast=False, screens=(),
         return finished(sha, ref, serial, directory, steps, walked, "".join(dumps),
                         restore, (blob or {}).get("run"))
     finally:
+        if saved_log:
+            runner.run("adb", "-s", serial, "shell", "logcat", "-G", saved_log)
         if temporary:
             out, err, rc = runner.run("git", "push", "origin", "--delete", temporary)
             if rc != 0:
