@@ -38,6 +38,7 @@ POLL_SECONDS = 15
 LAND_SECONDS = 5
 BUILD_TIMEOUT = 45 * 60
 DISPATCH_TIMEOUT = 120
+LOGCAT_SIZE = "16M"     # 一轮完整主流程约 4 MiB 日志；设备默认的 256 KiB 会在两分钟内被系统日志滚掉（#1116）
 
 # App 那边的 debug 导出入口（android/app/src/debug/.../Demo.kt 的 `--es call smoke`）
 SMOKE_TAG = "AACSmoke"
@@ -251,6 +252,25 @@ def crashes(logcat):
         if "FATAL EXCEPTION" in line and PACKAGE in "\n".join(lines[index:index + 6]):
             return line
     return None
+
+
+def logcat_size(runner, serial):
+    """main 缓冲当前那一档（`256 KiB` → `256K`，能原样交回 `logcat -G`）；读不到返回 None。"""
+    out, _, rc = runner.run("adb", "-s", serial, "shell", "logcat", "-g")
+    found = re.search(r"main: ring buffer is (\d+)\s*([KMGT])i?B", out or "")
+    return "%s%s" % (found.group(1), found.group(2)) if found else None
+
+
+def widen_logcat(runner, serial, note):
+    """把 logcat 环形缓冲调大，返回调之前那一档（收尾时交回去）。
+
+    默认的 256 KiB 只装得下这台机器约两分钟的日志，而引擎一轮三分半、产物取的是跑完那一份 dump：
+    引擎行与 `AACSmoke` 导出块都会被系统日志滚掉（#1116）。调不动（某些机型不给改）就照常跑。
+    """
+    before = logcat_size(runner, serial)
+    runner.run("adb", "-s", serial, "shell", "logcat", "-G", LOGCAT_SIZE)
+    note("logcat 缓冲 %s → %s" % (before or "读不到", LOGCAT_SIZE))
+    return before
 
 
 def launch(runner, serial, land, sleep, dumps, demo=None):
@@ -785,7 +805,7 @@ def smoke(runner, *, ref=None, commit=None, serial=None, fast=False, screens=(),
     """
     serial = serial or pick_serial(runner)
     check_shell(runner, serial, sleep=sleep, note=note)
-    temporary = None
+    temporary, saved_log = None, None
     if commit:
         sha = resolve_commit(runner, commit)
         ref = temporary = "smoke/" + sha[:12]
@@ -837,6 +857,7 @@ def smoke(runner, *, ref=None, commit=None, serial=None, fast=False, screens=(),
                 Step("真流程 + 还原", SKIP, "没装成")])
 
         note("启动")
+        saved_log = widen_logcat(runner, serial, note)
         dumps = []
         ok, detail = judge_launch(*launch(runner, serial, land, sleep, dumps), land)
         steps = [built, Step("安装 + 启动", PASS if ok else FAIL, detail)]
@@ -888,6 +909,8 @@ def smoke(runner, *, ref=None, commit=None, serial=None, fast=False, screens=(),
         return finished(sha, ref, serial, directory, steps, walked, "".join(dumps),
                         restore, (blob or {}).get("run"))
     finally:
+        if saved_log:
+            runner.run("adb", "-s", serial, "shell", "logcat", "-G", saved_log)
         if temporary:
             out, err, rc = runner.run("git", "push", "origin", "--delete", temporary)
             if rc != 0:

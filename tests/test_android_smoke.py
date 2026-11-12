@@ -29,6 +29,9 @@ REPO = smoke.REPO
 WORKFLOW = smoke.WORKFLOW
 RUN_ID = 42948451788
 APK = "app-debug.apk"
+# 设备出厂的 logcat 缓冲：冒烟要在开跑前把它调大、收尾时交回这一档（#1116）
+BUFFER_NOW = ("main: ring buffer is 256 KiB (1 KiB consumed, 0 B readable)\n"
+              "system: ring buffer is 256 KiB (0 B consumed, 0 B readable)\n", "", 0)
 
 RUN_PY = smoke.tool("run.py")
 CHAN_PY = smoke.tool("chan_fast.py")
@@ -116,6 +119,9 @@ def base_table(target, conclusion="success"):
         dispatch_key("main"): [("", "", 0)],
         view_key(): [(json.dumps({"status": "completed", "conclusion": conclusion}), "", 0)],
         download_key(target): [push_apk(target)],
+        adb("shell", "logcat", "-g"): [BUFFER_NOW],
+        adb("shell", "logcat", "-G", smoke.LOGCAT_SIZE): [("", "", 0)],
+        adb("shell", "logcat", "-G", "256K"): [("", "", 0)],
     }
 
 
@@ -563,6 +569,34 @@ class WalkTests(SmokeCase):
 class SmokeTests(SmokeCase):
     """快速档（`--fast`）：按状态 JSON 下发计划、只跑执行段那条路（#1072）。"""
 
+    # —— logcat 缓冲（#1116）——
+
+    def test_the_logcat_buffer_is_widened_before_the_run_and_handed_back(self):
+        root, target = self.workdir()
+        report, runner, notes = self.run_smoke(root, happy_table(target))
+        calls = self.calls(runner)
+        widen = adb("shell", "logcat", "-G", smoke.LOGCAT_SIZE)
+        back = adb("shell", "logcat", "-G", "256K")
+        self.assertLess(calls.index(widen), calls.index(adb("logcat", "-c")),
+                        "调大要在启动清日志之前，否则这一轮的日志仍会被滚掉")
+        self.assertEqual(calls[-1], back, "收尾要把缓冲交回原来那一档")
+        self.assertIn("logcat 缓冲 256K → 16M", notes)
+
+    def test_a_buffer_reading_that_cannot_be_parsed_still_widens(self):
+        root, target = self.workdir()
+        table = happy_table(target)
+        table[adb("shell", "logcat", "-g")] = [("", "", 1)]
+        report, runner, notes = self.run_smoke(root, table)
+        calls = self.calls(runner)
+        self.assertIn(adb("shell", "logcat", "-G", smoke.LOGCAT_SIZE), calls)
+        self.assertNotIn(adb("shell", "logcat", "-G", "256K"), calls,
+                         "读不到原来那一档就别去改它")
+
+    def test_the_buffer_size_is_read_back_in_a_form_logcat_accepts(self):
+        runner = FakeRunner(runs=lambda *cmd: BUFFER_NOW)
+        self.assertEqual(smoke.logcat_size(runner, SERIAL), "256K")
+        self.assertIsNone(smoke.logcat_size(FakeRunner(runs=("", "", 0)), SERIAL))
+
     # —— 三段判定 ——
 
     def test_happy_path_passes_three_segments(self):
@@ -700,6 +734,8 @@ class SmokeTests(SmokeCase):
             view_key(),
             download_key(target),
             install_key(target),
+            adb("shell", "logcat", "-g"),                 # 先记下原来那一档，收尾要交回去
+            adb("shell", "logcat", "-G", smoke.LOGCAT_SIZE),
             adb("logcat", "-c"),
             start(),                                     # 装完先验证能起来
             adb("shell", "pidof", smoke.PACKAGE),
@@ -717,6 +753,7 @@ class SmokeTests(SmokeCase):
             RUN_PY + ("-s", SERIAL, "unsuspend", "com.opos.ads", "com.heytap.pictorial"),
             RUN_PY + ("-s", SERIAL, "quickapp", "on"),
             CHAN_PY + ("-s", SERIAL, "on", str(target / "channels-restore.tsv")),
+            adb("shell", "logcat", "-G", "256K"),         # 收尾把缓冲交回设备原来那一档
         ])
 
     def test_restore_runs_one_command_per_item_and_reports_each(self):
