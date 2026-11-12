@@ -452,10 +452,11 @@ class NamedNodesTests(unittest.TestCase):
 
 
 def real_candidates(method, xml, focus, **kwargs):
-    """跑一次真实认行，录下它交给 `own()` 的候选节点，再与 `named_nodes()` 的结果并排返回。
+    """跑一次真实认行，录下它交给 `own()` 的候选节点，再与 `named_nodes()` 在同一样本上的结果并排返回。
 
     `own()` 换成录音桩：真实方法把每个过筛的节点交过来，认行本身（行高上限、行内开关数、
-    同名取舍）这一段停止，正好只对比筛选步。"""
+    同名取舍）这一段停止。两处调用点自身已改成调 `named_nodes()`，这里比的是调用点有没有把
+    候选集与 `systemui_text` 原样转发下去；`named_nodes()` 自己的三条筛选由 `NamedNodesTests` 直接守。"""
     root = ET.fromstring(xml)
     parents = {c: n for n in root.iter() for c in n}
     p = phone_stub("test", d=Mock(), W=1080, H=2340)
@@ -481,7 +482,7 @@ VIVO_SYSTEMUI_FOCUS = ("com.android.systemui/com.vivo.systemui.statusbar.notific
 
 
 class FilterParityTests(unittest.TestCase):
-    """新函数的候选集与 `chan_fast` 两处认行现在写的那条前置过滤一致：期望值由真实方法交出。"""
+    """两处认行把 `named_nodes()` 的候选集原样交给 `own()`：比的是转发（名字、屏高、`systemui_text`）与顺序。"""
 
     def test_inline_rows_feed_the_same_candidates(self):
         for label, xml in (("app", APP_PAGE), ("title", TITLE_ONLY), ("same", TWO_ROWS),
