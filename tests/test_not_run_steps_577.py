@@ -90,7 +90,7 @@ class WorkTests(unittest.TestCase):
 
     def test_a_not_run_step_spawns_nothing_and_lands_as_skipped(self):
         api = self.make_api()
-        api._work([self.skip_task(), app.Task("收尾", "run.py", ["-s", "t", "finish"])])
+        api._work([self.skip_task(), app.Task("收尾", "run.py", ["-s", "t", "finish"], always_run=True)])
         self.assertEqual(len(api.runner.spawn_calls), 1, "没勾的项不该起子进程")
         first = api.job.results[0]
         self.assertEqual(first["rc"], 0, "没执行不算失败")
@@ -101,7 +101,7 @@ class WorkTests(unittest.TestCase):
         api = self.make_api()
         api.job.total = 1
         api._work([self.skip_task(),
-                   app.Task("收尾", "run.py", ["-s", "t", "finish"]),
+                   app.Task("收尾", "run.py", ["-s", "t", "finish"], always_run=True),
                    self.skip_task("挂起广告组件")])
         self.assertEqual(api.job.idx, 1)
         self.assertEqual(api.job.title, "收尾")
@@ -111,7 +111,7 @@ class WorkTests(unittest.TestCase):
         with patch.object(app, "adb_present", return_value=False):
             api._work([app.Task("广告开关", "run.py"),
                        self.skip_task("关闭快应用"),
-                       app.Task("收尾", "run.py")])
+                       app.Task("收尾", "run.py", always_run=True)])
         self.assertEqual(api.job.results[1]["tail"], ["未勾选，本次没有执行"])
 
 

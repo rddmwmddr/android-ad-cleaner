@@ -217,7 +217,7 @@ class GuiTests(unittest.TestCase):
             api._log('#aac:event {"kind": "paused"}')
             api._log("  关  营销通知")
             self.assertEqual(chime.call_count, 2)
-            api._work([self.app.Task("收尾", "run.py", ["-s", "t", "finish"])])
+            api._work([self.app.Task("收尾", "run.py", ["-s", "t", "finish"], always_run=True)])
             self.assertEqual(chime.call_count, 3)
 
     def test_chime_plays_once_for_close_events_and_never_in_tests(self):

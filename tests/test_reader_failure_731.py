@@ -281,7 +281,7 @@ class ClientKeepsGoingTests(unittest.TestCase):
             api.job = job_stub()
             with patch.object(app, "adb_present", return_value=True):
                 api._work([app.Task("关闭营销通知", "run.py", ["-s", "test", "chan-off", "x.tsv"]),
-                           app.Task("收尾", "run.py", ["-s", "test", "finish"])])
+                           app.Task("收尾", "run.py", ["-s", "test", "finish"], always_run=True)])
         self.assertEqual(len(api.runner.spawn_calls), 2)      # 后面那一步照常起
         self.assertEqual(api.job.results[0]["rc"], 1)         # 读屏超时的那一步仍算失败
         self.assertNotIn("skipped", api.job.results[1])

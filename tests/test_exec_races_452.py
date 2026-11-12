@@ -74,7 +74,7 @@ class StopRaceTests(Base):
             api.job.request_stop()
 
         api.runner = FakeRunner(on_spawn=stop_at_first_spawn)
-        api._work([app.Task("关闭营销通知", "chan_fast.py"), app.Task("收尾", "run.py")])
+        api._work([app.Task("关闭营销通知", "chan_fast.py"), app.Task("收尾", "run.py", always_run=True)])
         self.assertTrue(api.runner.procs[0].terminated, "停止后这次执行启动的引擎进程没有被终止")
         self.assertTrue(api.job.results[0].get("stopped"), api.job.results[0])
 
@@ -109,7 +109,7 @@ class FinalLineTests(Base):
 
         api.job.lock = ObservingLock(api.job.lock, take_over)
         with patch.object(app.threading, "Thread", RecordingThread):
-            api._work([app.Task("收尾", "run.py")])
+            api._work([app.Task("收尾", "run.py", always_run=True)])
         self.assertTrue(taken, "没有在发布点接管")
         self.assertEqual(len(threads), 1)
         threads[0].join(5)

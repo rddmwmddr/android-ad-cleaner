@@ -35,7 +35,7 @@ class SkipReasonReportTests(unittest.TestCase):
     def test_link_lost_skip_does_not_blame_the_screen_reader(self):
         text = self.report(
             [FakeProc(event("link_lost") + "\n手机和电脑的 adb 连接断开了\n", rc=1)],
-            [app.Task("广告开关", "run.py"), app.Task("收尾", "run.py")], adb=False)
+            [app.Task("广告开关", "run.py"), app.Task("收尾", "run.py", always_run=True)], adb=False)
         self.assertIn("- 收尾：跳过（手机和电脑已断开，这一步没有执行），0 秒", text)
         self.assertNotIn("读屏服务", text)
 

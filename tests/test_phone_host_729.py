@@ -158,7 +158,7 @@ class LinkLostTests(unittest.TestCase):
             api.job = job_stub()
             with patch.object(app, "adb_present", return_value=False), patch.object(app, "LINK_LOST", text):
                 api._work([app.Task("关闭营销通知", "run.py", ["-s", "test", "x"]),
-                           app.Task("收尾", "run.py", ["-s", "test", "finish"])])
+                           app.Task("收尾", "run.py", ["-s", "test", "finish"], always_run=True)])
             return [r["tail"] for r in api.job.results if r.get("skipped")], "\n".join(api.job.lines)
 
     def test_skipped_steps_use_the_host_wording(self):
