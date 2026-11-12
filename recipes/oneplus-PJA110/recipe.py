@@ -10,10 +10,6 @@ PROMOTIONS = ["首页：悬浮活动图标", "首页：活动弹窗", "首页：
 START_ACTIVITIES = {"com.heytap.browser": "com.android.browser.BrowserActivity"}
 
 
-def tap(name, scrolls=4):
-    require(p.tap(name, exact=True, scrolls=scrolls), f"未找到入口「{name}」")
-
-
 def app_settings(package, activity):
     if p.focus() == f"{package}/{activity}":
         return

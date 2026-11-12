@@ -7,15 +7,6 @@ BUILD = "PLR110_17.0.0.101"
 import time
 
 
-def settings_page(*path):
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
-    time.sleep(1.2)
-    for t in path:
-        if not p.tap(t, exact=True):
-            return False
-    return True
-
-
 @step("广告跟踪")
 def _():
     # ColorOS 17 设置首页是「隐私与安全」聚合入口；旧版本叫「隐私」，两个都试
@@ -198,18 +189,6 @@ def _():
 SEARCH_SETTING = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"
 # 设置页上的标题；搜索首页也有「搜索范围」这类文字，所以还要看前台 Activity（SearchSettingActivity）。
 SEARCH_TITLES = {"搜索范围", "首页卡片管理", "功能管理", "账号与隐私"}
-
-
-def wait_search_settings(tries=30):
-    from wait import until
-
-    def sample():
-        focus = p.focus()
-        if "com.heytap.quicksearchbox" not in focus or "Setting" not in focus:
-            return False
-        return bool(SEARCH_TITLES & {text for text, _, _ in p.texts()})
-
-    return bool(until(sample, tries=tries, same=2, now=time.monotonic, sleep=time.sleep))
 
 
 def search_settings():

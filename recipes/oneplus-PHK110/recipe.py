@@ -62,10 +62,6 @@ def open_app_settings(package, activity, title):
     return wait_page(activity, title)
 
 
-def tap_page(text, activity, title):
-    return p.tap(text, exact=True) and wait_page(activity, title)
-
-
 def off_exact(names, page, max_screens=16):
     """逐页传入当前可见的精确标题，不把“福利”之类子串扩展到未知服务。"""
     wanted, seen, failed = set(names), set(), set()

@@ -102,18 +102,6 @@ SEARCH_SETTING = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://
 SEARCH_TITLES = {"搜索范围", "功能管理", "搜索引擎", "消息管理", "账号与隐私"}
 
 
-def wait_search_settings(tries=30):
-    from wait import until
-
-    def sample():
-        focus = p.focus()
-        if "com.heytap.quicksearchbox" not in focus or "Setting" not in focus:
-            return False
-        return bool(SEARCH_TITLES & {text for text, _, _ in p.texts()})
-
-    return bool(until(sample, tries=tries, same=2, now=time.monotonic, sleep=time.sleep))
-
-
 def search_settings():
     """先走 scheme，打不开再退回桌面下滑进搜索页、点底部「设置」的旧入口（#165）。"""
     p.d.shell(SEARCH_SETTING)

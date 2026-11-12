@@ -7,10 +7,6 @@ from wait import until
 VERIFIED_SWITCHES = 0
 
 
-def tap(name, scrolls=4):
-    require(p.tap(name, exact=True, scrolls=scrolls), f"未找到入口「{name}」")
-
-
 def title_key(title):
     # vivo 将说明拼在点号后；「，开启/，关闭」状态尾缀已由引擎在标题产出处剥掉（#565）。
     return title.split(".", 1)[0].strip()

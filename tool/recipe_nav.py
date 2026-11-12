@@ -73,6 +73,65 @@ NAV["settings_home"] = _vivo_settings_home
 NAV["browser_settings"] = _vivo_browser_settings
 
 
+# ---------- OPPO 家族 ----------
+#
+# ColorOS 脚本共用的三个导航过程。`SEARCH_TITLES` 与 `wait_page` 是脚本侧的东西：PLP120 的
+# 搜索页标题名单比一加两台长，PHK110 与 PKH110 的 `wait_page` 各有一份写法不同的实现（同族
+# 同形但注释与折行不同），闭包从执行作用域现取、注入版不替它们判断。
+# `open_app_settings` 三份逐字不同（注释与 docstring 各写各的）、`browser_settings` 上文已被
+# vivo 的同名实现占用，两者按「同名多簇留在脚本里」不搬（#1153）。
+
+def _oppo_wait_search_settings(p, g):
+    def wait_search_settings(tries=30):
+        from wait import until
+
+        def sample():
+            focus = p.focus()
+            if "com.heytap.quicksearchbox" not in focus or "Setting" not in focus:
+                return False
+            return bool(g["SEARCH_TITLES"] & {text for text, _, _ in p.texts()})
+
+        clock = g["time"]
+        return bool(until(sample, tries=tries, same=2, now=clock.monotonic, sleep=clock.sleep))
+    return wait_search_settings
+
+
+def _oppo_settings_page(p, g):
+    def settings_page(*path):
+        p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
+        g["time"].sleep(1.2)
+        for t in path:
+            if not p.tap(t, exact=True):
+                return False
+        return True
+    return settings_page
+
+
+def _oppo_tap_page(p, g):
+    def tap_page(text, activity, title):
+        return p.tap(text, exact=True) and g["wait_page"](activity, title)
+    return tap_page
+
+
+NAV["wait_search_settings"] = _oppo_wait_search_settings
+NAV["settings_page"] = _oppo_settings_page
+NAV["tap_page"] = _oppo_tap_page
+
+
+# ---------- 跨家族 ----------
+#
+# `tap`：按名字点入口、找不到就 `require` 报错。一加 PJA110 与 vivo V2417A 各一份逐字相同。
+# 另外两份同名的（honor-WKL-AN20 的 `scrolls=6`、oppo-PKT110 的 `exact=`）签名不同，留本地覆盖。
+
+def _plain_tap(p, g):
+    def tap(name, scrolls=4):
+        g["require"](p.tap(name, exact=True, scrolls=scrolls), f"未找到入口「{name}」")
+    return tap
+
+
+NAV["tap"] = _plain_tap
+
+
 def install(p, g):
     """把公共导航助手写进执行作用域 `g`（原地写，调用方不需要返回值）。"""
     for name, factory in NAV.items():

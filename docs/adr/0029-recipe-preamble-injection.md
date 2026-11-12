@@ -209,3 +209,22 @@ PKT110 与 RMX3700 的应用建议，honor-PNM-AN10 的广告跟踪 / 桌面文�
   `tests/test_recipe_nav.py` 的逐字副本守卫在搬完后扫全仓无红。
 - **词库跟着重生成。** `tool/vocab.py` 的词条集合与方向不变，只有每条的脚本行号位移；
   `tool/entries.py` 的入口速查逐字不变——搬走的两簇都不含 `used_by()` 认的那四类入口。
+
+## #1153 之后：OPPO 家族的三个导航过程与跨家族的 `tap`
+
+一加 / OPPO 这批搬进四簇：`wait_search_settings`（一加 PLR110、PYB110 与 OPPO PLP120 共三份）、
+`settings_page`（PLR110 / PYB110 两份）、`tap_page`（一加 PHK110 与 OPPO PKH110 两份）、
+`tap`（一加 PJA110 与 vivo V2417A 两份）。九份脚本只删本地定义与随之空掉的辅助 import，
+调用点一字未动。
+
+- **`SEARCH_TITLES` 与 `wait_page` 仍是脚本侧的事实。** PLP120 的搜索页标题名单比一加两台长，
+  两份 OPPO 脚本的 `wait_page` 同形但注释与折行不同；闭包从执行作用域现取这两个名字，
+  注入版不替脚本判断这一页有哪几个标题，也不收纳各家的等待实现。
+- **`open_app_settings` 与 `browser_settings` 不搬。** 前者三份逐字不同——差异只在注释与文档串
+  （「两个 App 均实测支持」/「两个 App 均支持」/ docstring 三版）；后者是注入面已经装了 vivo 的
+  「右上菜单进设置」，而 NAV 以名字为键、同名只能有一份，注册 OPPO 那版会让三份 vivo 脚本拿到
+  在 vivo 上不成立的实现。两条都按「同名多簇留在脚本里」处理；要让同名不同实现共存，得先推翻
+  「注入面不按品牌选装」这条定案。
+- **对拍与守卫照 #1150 的口径。** `tests/compare_recipe_calls.py` 47 份 × 2 场景 13,484 条
+  调用零差异；`tests/test_recipe_nav.py` 的逐字副本守卫无红。词库重生成后只有行号位移，
+  入口速查逐字不变——四簇都不含 `used_by()` 认的那四类入口。

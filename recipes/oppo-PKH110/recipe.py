@@ -62,10 +62,6 @@ def open_app_settings(package, activity, title):
     return wait_page(activity, title)
 
 
-def tap_page(text, activity, title):
-    return p.tap(text, exact=True) and wait_page(activity, title)
-
-
 def close_titles(wanted, max_rounds=8):
     """逐页只点标题完全等于 wanted 里某项的开关，点完回读。
     ColorOS 17 有「应用建议」是「应用建议小卡」子串的情况，p.off 的子串匹配会误伤，所以用精确标题。"""
