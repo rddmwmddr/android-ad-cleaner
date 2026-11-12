@@ -1,4 +1,4 @@
-"""发版元数据从 Release 事实生成（`tool/release_meta.py`，#1134 / #1135）。
+"""发版元数据从 Release 事实生成（`tool/release_meta.py`，#1135，沿用 #1134）。
 
 只测外部行为：命令的退出码与输出、生成的清单与页面文本、写盘结果。不联网、不需要 `gh`，
 `fetch` / `upload` / `draft` / `published` 与写后自检的 `verify` 都由用例注入。
@@ -321,6 +321,25 @@ class PageTests(unittest.TestCase):
                          release_meta.EXIT_OK)
         self.assertIn('https://gitee.com/x/y/releases/download/v1.2.3/"', self.text())
 
+    def test_empty_gitee_prefix_is_named_instead_of_called_a_structure_change(self):
+        """Gitee 不可用时页面按流程留空：`--gitee` 撞上它要说清是空值，不是结构漂了。"""
+        self.page.write_text(old_page().replace(
+            'gitee: "https://gitee.com/x/y/releases/download/v0.4.3/"', 'gitee: ""'),
+            encoding="utf-8")
+        code, _, err = self.run_main(argv=("page", "v1.2.3", "--write", "--gitee"))
+        self.assertEqual(code, release_meta.EXIT_REFUSED)
+        self.assertIn("REL.gitee", err)
+        self.assertIn("空的", err)
+        self.assertNotIn("结构变了", err)
+
+    def test_download_prefix_with_a_deeper_path_is_refused(self):
+        """前缀里版本段之后还有别的路径时不截断：截掉就是悄悄改掉下载地址。"""
+        self.page.write_text(old_page().replace(
+            'releases/download/v0.4.3/"', 'releases/download/v0.4.3/extra/"'), encoding="utf-8")
+        code, _, err = self.run_main()
+        self.assertEqual(code, release_meta.EXIT_REFUSED)
+        self.assertIn("REL.github", err)
+
     def test_card_id_that_matches_no_asset_writes_nothing(self):
         self.page.write_text(old_page().replace('id: "win-zip"', 'id: "win-portable"'),
                              encoding="utf-8")
@@ -395,6 +414,11 @@ class PublishedTests(unittest.TestCase):
     def test_converts_an_offset_to_utc(self):
         """跨零点时按 UTC 取日期：页面上写的是 UTC 那一天，不是发布者本地时间。"""
         with mock.patch.object(release_meta, "run_gh", return_value="2026-11-12T03:00:00+08:00"):
+            self.assertEqual(release_meta.release_published("v1"), "2026-11-11")
+
+    def test_a_naive_timestamp_is_read_as_utc(self):
+        """不带时区的读数按 UTC 认：拿本机时区去换算会让日期在东八区差一天。"""
+        with mock.patch.object(release_meta, "run_gh", return_value="2026-11-11T20:30:00"):
             self.assertEqual(release_meta.release_published("v1"), "2026-11-11")
 
     def test_unpublished_release_refuses(self):

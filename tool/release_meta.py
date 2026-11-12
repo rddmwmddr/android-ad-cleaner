@@ -1,11 +1,11 @@
-"""发版元数据从 Release 事实生成（#1134 / #1135）。
+"""发版元数据从 Release 事实生成（#1135，沿用 #1134 的取数底座与清单）。
 
 用法：
 
     python3 tool/release_meta.py sums v0.4.4               # 在当刻目录写 SHA256SUMS.txt
     python3 tool/release_meta.py sums v0.4.4 --upload      # 再传进 Release 草稿并回读核对
     python3 tool/release_meta.py sums v0.4.4 --from-files <安装包所在目录>
-    python3 tool/release_meta.py page v0.4.4               # 只校验页面与 Release 对不对得上
+    python3 tool/release_meta.py page v0.4.4               # 只校验能不能回填（不写盘）
     python3 tool/release_meta.py page v0.4.4 --write       # 回填 index.html 的 REL
 
 清单条目是 `<sha256>  <文件名>`（两个空格），顺序与下载卡片的 id 顺序一致，不含清单文件自身。
@@ -114,11 +114,13 @@ def page_entries(assets, version):
     return entries
 
 
-def retag(url, version):
+def retag(url, version, what="下载前缀"):
     """把下载前缀里的版本段换成 `v<version>`；前缀不是这个形状时拒绝，不猜。"""
+    if not url:
+        raise Refused(f"{what} 是空的：先填上再回填，或这次别动它。")
     head, sep, rest = url.rpartition("/download/")
-    if not sep or not rest:
-        raise Refused(f"下载前缀 {url} 里没有 /download/ 版本段：结构变了，拒绝回填。")
+    if not sep or not re.fullmatch(r"v[^/]+/", rest):
+        raise Refused(f"{what} {url} 不是 /download/v<版本>/ 的形状：结构变了，拒绝回填。")
     return f"{head}{sep}v{version}/"
 
 
@@ -164,9 +166,9 @@ def plan_page(text, assets, version, released, gitee=False):
     if not sep:
         raise Refused("页面里 REL 没有 files 段：结构变了，拒绝回填。")
     head = replace_once(VERSION_LINE, head, lambda _: version, "REL.version")
-    head = replace_once(GITHUB_LINE, head, lambda url: retag(url, version), "REL.github")
+    head = replace_once(GITHUB_LINE, head, lambda url: retag(url, version, "REL.github"), "REL.github")
     if gitee:
-        head = replace_once(GITEE_LINE, head, lambda url: retag(url, version), "REL.gitee")
+        head = replace_once(GITEE_LINE, head, lambda url: retag(url, version, "REL.gitee"), "REL.gitee")
     tail = map_entries("files:" + tail, lambda entry_id, chunk: fill_entry(chunk, wanted[entry_id]))
     new_text = text[:match.start(1)] + head + tail + text[match.end(1):]
     return replace_once(RELEASED_LINE, new_text, lambda _: released, "RELEASED")
@@ -241,6 +243,8 @@ def release_published(tag):
         moment = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except ValueError:
         raise Refused(f"{tag} 还没发布（publishedAt 是空的）：页面先不写。") from None
+    if moment.tzinfo is None:          # 没有时区的读数按 UTC 认，不拿本机时区去猜
+        moment = moment.replace(tzinfo=timezone.utc)
     return moment.astimezone(timezone.utc).date().isoformat()
 
 
@@ -363,7 +367,7 @@ def run_page(opts, fetch, published, page, verify):
         print(f"取不到 {tag} 的发布信息：{error}", file=sys.stderr)
         return EXIT_UNREACHABLE
     if not opts.write:
-        print(f"{tag} 的五个附件与 {path.name} 对得上；加 --write 回填。")
+        print(f"{tag} 的五个附件能回填进 {path.name}；加 --write 就写盘。")
         return EXIT_OK
     try:
         write_checked(path, new_text, lambda read: verify(read, version, entries, released))

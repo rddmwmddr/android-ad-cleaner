@@ -74,8 +74,9 @@ def map_entries(block, fn):
 
 
 def _first(pattern, chunk):
-    found = pattern.search(chunk)
-    return found.group(1) if found else ""
+    """取唯一一次出现的值；一次都没有、或出现不止一次（卡片结构错位）都当读不出。"""
+    found = pattern.findall(chunk)
+    return found[0] if len(found) == 1 else ""
 
 
 def read_entries(text):

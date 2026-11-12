@@ -72,6 +72,15 @@ class ReadEntriesTests(unittest.TestCase):
         _, entries = release_assets.read_entries(broken)
         self.assertEqual(entries[0].size, "")
 
+    def test_duplicate_field_reads_as_missing(self):
+        """同一张卡片里出现两个 `file:`：分不清哪个是真的，按读不出处理，不挑第一个。"""
+        doubled = self.PAGE.replace(
+            'file: "App-1.2.3-mac-arm64.dmg"',
+            'file: "App-1.2.3-mac-arm64.dmg", file: "dup"')
+        _, entries = release_assets.read_entries(doubled)
+        self.assertEqual(entries[0].file, "")
+        self.assertEqual(release_assets.read_page(doubled), (None, []))
+
     def test_missing_block_reads_as_empty(self):
         self.assertEqual(release_assets.read_entries("<html></html>"), (None, []))
 
