@@ -128,6 +128,24 @@ class WiringTests(unittest.TestCase):
         self.assertIn("open_app_settings", recipe_source.injected_sources())
 
 
+class CallerScopeTests(unittest.TestCase):
+    """段体按名字取的东西来自调用脚本的作用域：同一份实现，谁调就取谁的（#1212）。"""
+
+    def test_the_list_and_the_helper_come_from_the_caller(self):
+        """`STORE_PROMOTIONS` 与 `off_exact` 都留在脚本里；内联进实现会把两族的清单并成一份。"""
+        def run(names):
+            got = []
+            scope = {"open_app_settings": lambda *args: True,
+                     "tap_page": lambda *args: True,
+                     "off_exact": lambda items, page: got.append((items, page)) or True,
+                     "STORE_PROMOTIONS": names}
+            recipe_steps.STEPS["store_promotions"](phone_mock(), scope)()
+            return got
+
+        self.assertEqual(run(["甲"]), [(["甲"], "商店·推广入口")])
+        self.assertEqual(run(["乙", "丙"]), [(["乙", "丙"], "商店·推广入口")])
+
+
 class CopyGuardTests(unittest.TestCase):
     def test_no_script_keeps_a_byte_identical_copy(self):
         scripts = [(path.relative_to(ROOT).as_posix(), path.read_text(encoding="utf-8"))

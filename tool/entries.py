@@ -394,22 +394,22 @@ def used_by(recipes_dir):
     return found
 
 
-def _scan_injected(injected, layer, script, model, found, seen):
-    """注入实现逐层往下扫：`layer` 是这一层的事实（脚本本身，或上一层实现），`script` 是调用脚本
-    的事实（模块常量与本地定义都在它那儿）。`seen` 按路径传，同一条链上只扫一次、防绕圈；
+def _scan_injected(injected, current, caller, model, found, seen):
+    """注入实现逐层往下扫：`current` 是这一层的事实（脚本本身，或上一层实现），`caller` 是调用
+    脚本的事实（模块常量与本地定义都在它那儿）。`seen` 按路径传，同一条链上只扫一次、防绕圈；
     换一条路再调到同一个注入名仍要扫，实参来自不同的调用点。
 
     判据仍是 `injected_calls()`：脚本本地定义了同名的走本地那份，深、浅两层都不算。"""
     for name in sorted(injected):
-        if name in seen or name in script.defines:
+        if name in seen or name in caller.defines:
             continue
-        calls = recipe_source.injected_calls(layer, name)
+        calls = recipe_source.injected_calls(current, name)
         if not calls:
             continue
         impl = recipe_source.scan_source(injected[name], _bindings(calls),
-                                         externals=script.constants)
+                                         externals=caller.constants)
         _scan_entries(impl, model, found)
-        _scan_injected(injected, impl, script, model, found, seen | {name})
+        _scan_injected(injected, impl, caller, model, found, seen | {name})
 
 
 def open_direct(p, d, settle=1.2):

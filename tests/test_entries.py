@@ -212,6 +212,26 @@ class SourceTest(unittest.TestCase):
         self.assertEqual(used, {("intent", "oppo.intent.action.APP_SETTINGS", "com.example.browser"):
                                 {"model"}})
 
+    def test_a_locally_defined_helper_two_hops_down_is_not_the_injected_one(self):
+        """脚本本地定义了段体要调的导航助手：注入版不在场上，第二层也不记出处（#1212）。"""
+        import recipe_nav
+        import recipe_steps
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            model = Path(d) / "oneplus-model"
+            model.mkdir()
+            (model / "recipe.py").write_text(
+                'def settings_direct():\n'
+                '    return False\n\n\n'
+                '@step("浏览器首页")\n'
+                'def _():\n'
+                '    browser_home()\n',
+                encoding="utf-8")
+            with patch.dict(recipe_steps.STEPS, {"browser_home": _browser_home_factory}), \
+                    patch.dict(recipe_nav.NAV, {"settings_direct": _settings_direct_factory}):
+                used = entries.used_by(d)
+        self.assertEqual(used, {})
+
     def test_open_app_settings_needs_two_arguments(self):
         """只传了包名的 open_app_settings 不算出处：把包名当成页面会给这台机凭空挂一条 Intent。"""
         import tempfile
