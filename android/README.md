@@ -60,7 +60,7 @@ adb shell am start -n com.ahuamiao.adcleaner/.MainActivity --es demo home [--es 
 - 退路：拒绝截屏、截到黑屏、15 秒认不出、等满 5 分钟没出现配对端口时，码填在通知栏输入框（`Pairing`）。vivo 会把通知里的「填写」按钮折起来，所以只当退路。
 - 命令与读屏：连上后只开一条常驻 `exec:` 流，跑 APK 里的 `ShellServerMain` → `ShellServer`（shell 身份），所有命令、读屏按编号经它收发（`ServerClient`；Shizuku 那条路起的是同一个服务）。读屏用 UiAutomation，不开网络端口——以前借用的 u2.jar 读屏服务在 9008 端口对局域网开放、无鉴权（#623）。不给每条命令单开 adb 流：libadb 在对端关流时有竞态，小命令会丢输出和退出码。
 - 首次连上后经 shell 给本 App 授 `WRITE_SECURE_SETTINGS`：之后无线调试被关（重启、换 Wi-Fi）时 App 自己打开、重连。第一次在某个网络上打开无线调试，系统会弹「允许在此网络上使用无线调试」，勾「始终允许」后才能免确认。
-- 选择：Shizuku 已授权就用 Shizuku，否则用内置无线调试（`Shell`）；Python 侧不感知。
+- 选择：Shizuku 已授权就用 Shizuku，否则用内置无线调试。判定与两句失败文案只在 `ShellBackend`（`pick()`），`Shell` 的 `connected()` / `ensure()` / `client()` 共用它；任何起命令服务的路径都先确认那条通道就绪再开流（`openWhenReady()`），不把 libadb 的 `connect() must be called first` 交给用户看（#1034）。Python 侧不感知。
 
 ## 读屏（#623）
 
@@ -148,6 +148,8 @@ AAC_BRIDGE_ADB=$(which adb) AAC_BRIDGE_SERIAL=emulator-5554 python -c "from aac_
 `tests/test_android_shim.py` 不连手机，验 adb 语义、进程内脚本与选择器。
 
 `app/src/test/java/com/ahuamiao/adcleaner/ShellServerTest.java` 用 JUnit 验命令服务的协议层：帧、stdout / stderr 分开、退出码、并发编号、取消。它只用 `java.io` 与 `ProcessBuilder`，不需要模拟器；开发机上把 sh 指到 `/bin/sh` 跑。
+
+`app/src/test/java/com/ahuamiao/adcleaner/ShellBackendTest.kt` 验后端选择、没就绪时的两句文案与开流前的闸，不碰 Android 运行时（#1034）。
 
 ## 应用内更新（未发布，#888）
 
