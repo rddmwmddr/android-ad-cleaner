@@ -620,6 +620,9 @@ class AppModel(
      */
     internal fun debugSmoke() {
         smokeJob?.cancel()
+        // 每轮重新判一次通道状态：配对可能在上一轮跑完之后才做完，缓存住的 need_pair 会一直拦下一轮（#1160）
+        smokeShell = ""
+        smokeShellJob?.cancel()
         Log.i(SMOKE_ENTRY_TAG, "call smoke")
         smokeJob = scope.launch {
             askShellOnce()
@@ -659,8 +662,8 @@ class AppModel(
     }
 
     /**
-     * shell 状态只在旁路算一次就存下来，导出循环一次都不等它：引擎跑着的时候那条通道被它占着，
-     * 问一次能等到整轮结束（`withTimeoutOrNull` 拦不住阻塞调用），导出就一条都发不出来（#1072 真机）。
+     * shell 状态每轮冒烟只在旁路算一次就存下来，导出循环一次都不等它：引擎跑着的时候那条通道被它
+     * 占着，问一次能等到整轮结束（`withTimeoutOrNull` 拦不住阻塞调用），导出就一条都发不出来（#1072 真机）。
      */
     private fun askShellOnce() {
         if (smokeShell.isNotEmpty() || smokeShellJob?.isActive == true) return
