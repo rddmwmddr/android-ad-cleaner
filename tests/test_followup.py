@@ -113,12 +113,12 @@ class DiffTests(unittest.TestCase):
         self.assertTrue(result.same)
 
     def test_a_blocked_on_device_row_is_parked_not_expired(self):
-        text = doc("| #7 | @s | 机型 | PR #2 | 输出 |")
-        result = followup.scan(text, [{"number": 7,
+        text = doc("| #1125 | @s | 机型 | 0.4.4 | 输出 |")
+        result = followup.scan(text, [{"number": 1125,
                                        "labels": [{"name": "blocked-on-device"}]}])
         self.assertEqual(result.expired, (), "行不是过期行：删掉会连机型与观察项一起丢掉")
         self.assertEqual((result.blocked, result.parked), (1, 1))
-        self.assertIn("| #7 | @s | 机型 | PR #2 | 输出 |", followup.apply(text, result))
+        self.assertIn("| #1125 | @s | 机型 | 0.4.4 | 输出 |", followup.apply(text, result))
 
 
 class RenderTests(unittest.TestCase):
@@ -331,11 +331,11 @@ class WriteTests(DocumentCase):
         self.assertIn("| #7 | @s | — | — | — |", stored)
 
     def test_write_keeps_a_blocked_on_device_row(self):
-        gh = FakeGh([{"number": 7, "labels": [{"name": "blocked-on-device"}]}])
-        code, _, _ = self.run_main(doc("| #7 | @s | 机型 | PR #2 | 输出 |"), gh,
+        gh = FakeGh([{"number": 1125, "labels": [{"name": "blocked-on-device"}]}])
+        code, _, _ = self.run_main(doc("| #1125 | @s | 机型 | 0.4.4 | 输出 |"), gh,
                                    argv=["--write"])
         self.assertEqual(code, 0)
-        self.assertIn("| #7 | @s | 机型 | PR #2 | 输出 |",
+        self.assertIn("| #1125 | @s | 机型 | 0.4.4 | 输出 |",
                       self.path.read_text(encoding="utf-8"),
                       "机型、版本与要观察的输出留原处；解阻后不必重填")
 
