@@ -104,7 +104,7 @@
 | `test_harmony_vocab.py` | 鸿蒙词库守卫。 |
 | `test_plan.py` | 一次执行跑哪些步骤：Plan 规格的八个键与往返，以及按规格排出的任务、未执行行与重试轮。 |
 | `test_run_commands.py` | run.py 的命令接口与它产出的诊断：退出码只在出口、多余往返的守卫、「只是搬家」的对拍，以及设备名与收尾快照。 |
-| `test_adapt_cli.py` | adapt.py 三条子命令对外的退出码与两路输出，survey 试入口的三种结局与 `-s S adapt` 的转发。 |
+| `test_adapt_cli.py` | adapt.py 三条子命令对外的退出码与两路输出，survey 试入口的三种结局与 `-s S adapt` 的转发，以及 TSV 解析、草稿生成、自检报告与探路导航。 |
 | `test_claim.py` | 开工认领：一条命令写认领评论并摘待办标签，仲裁只看票下评论。 |
 | `test_triage_audit.py` | triage 四条集合判据，登记表与脚本常量逐项对拍。 |
 | `test_stale_scan.py` | needs-info 停摆机制：判定与阈值、写入与幂等。 |
