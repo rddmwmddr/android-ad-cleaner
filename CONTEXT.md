@@ -8,7 +8,7 @@
 
 ## 命令
 
-**命令** — `tool/run.py -s <序列号> <命令>` 里的那个词：`check`、`backup`、`chan-off`……`quickapp` 后面的 `check` / `off` / `on` 是同一条命令的子动作，不算三条命令。`devices` 是唯一不需要序列号的命令。
+**命令** — `tool/run.py -s <序列号> <命令>` 里的那个词：`check`、`backup`、`chan-off`……`quickapp` 后面的 `check` / `off` / `on` 是同一条命令的子动作，不算三条命令。`devices` 与 `captures` 不需要序列号，在解析 `-s` 之前分派。
 
 **handler** — 一条命令在进程内的入口：给序列号和这条命令剩下的参数，回一个退出码。和「命令」的区别是：命令是用户敲的那个词，handler 是它在进程里的那一段；一条命令恰好一个 handler。它不解析命令行，也不退出进程——那两件事只发生在总入口。
 

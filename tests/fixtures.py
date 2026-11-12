@@ -246,6 +246,10 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
         p.conn = fast_mod.Connection.__new__(fast_mod.Connection)
         p.screen = fast_mod.Screen.__new__(fast_mod.Screen)
         p.screen.conn = p.conn
+        p.screen.dump = ""                     # 失败现场：没过 `__init__` 的基座由这里补（#1126）
+        p.screen.pending_capture = ""
+        if hasattr(fast_mod, "Captures"):
+            p.screen.captures = fast_mod.Captures("")
     if hasattr(fast_mod, "LostNote"):          # 同上：会话对象的默认值由它自己的类给，这里不抄第二份
         p.lost_note, p.launch_session, p.channel_session = (
             fast_mod.LostNote(), fast_mod.LaunchSession(), fast_mod.ChannelSession())
@@ -285,6 +289,9 @@ def screen_stub(page=EMPTY_PAGE, size=SIZES[0], conn=None, fast_mod=None):
     base.W, base.H = size
     base.tree = lambda: ET.fromstring(page)
     base.on_screen = lambda n: True
+    base.dump, base.pending_capture = page, ""
+    if hasattr(fast_mod, "Captures"):          # 喂拆分前的旧树时没有这个类
+        base.captures = fast_mod.Captures("")
     return base
 
 

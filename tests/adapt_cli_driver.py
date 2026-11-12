@@ -14,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-DROP = ("AAC_EVENTS", "AAC_GUI", "AAC_PAUSE_FILE", "ADB", "ADBUTILS_ADB_PATH")
+DROP = ("AAC_EVENTS", "AAC_GUI", "AAC_PAUSE_FILE", "AAC_CAPTURES", "ADB", "ADBUTILS_ADB_PATH")
 OSERR = re.compile(r"(\[Errno \d+\]) [^:\n]*:")
 
 

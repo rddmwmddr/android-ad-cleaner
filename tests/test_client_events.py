@@ -86,7 +86,7 @@ class StepPauseTests(Base):
 
     def test_only_the_job_path_turns_events_on(self):
         with patch.dict(os.environ, {"AAC_EVENTS": "1"}):
-            self.assertNotIn("AAC_EVENTS", app.child_env(None, "/tmp/backups"))
+            self.assertNotIn("AAC_EVENTS", app.child_env(None, "/tmp/backups", "/tmp/captures"))
         self.api = self.make_api(spawns=[FakeProc()])
         self.api._work([app.Task("收尾", "run.py", ["-s", "t", "finish"], always_run=True)])
         self.assertEqual(self.api.runner.spawn_calls[0].env_extra["AAC_EVENTS"], "1")
@@ -95,11 +95,11 @@ class StepPauseTests(Base):
         # 桌面用户 shell 里碰巧导出 AAC_HOST=phone，引擎会改用手机版文案、压掉插电常亮的告警（#747）。
         # 手机版由 aac_android.main.boot() 显式设回。
         with patch.dict(os.environ, {"AAC_HOST": "phone"}):
-            self.assertNotIn("AAC_HOST", app.child_env(None, "/tmp/backups"))
+            self.assertNotIn("AAC_HOST", app.child_env(None, "/tmp/backups", "/tmp/captures"))
 
     def test_child_env_passes_the_host_the_app_asked_for(self):
         with patch.object(app, "ENGINE_HOST", "phone"):
-            self.assertEqual(app.child_env(None, "/tmp/backups")["AAC_HOST"], "phone")
+            self.assertEqual(app.child_env(None, "/tmp/backups", "/tmp/captures")["AAC_HOST"], "phone")
 
 
 class RunnerTests(unittest.TestCase):

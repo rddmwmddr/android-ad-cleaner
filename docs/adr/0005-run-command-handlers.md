@@ -58,3 +58,4 @@
 - **未验证**：没有 Windows、没有打包环境、没有真机。`raise SystemExit(main())` 这条依据是 `run.py` 本来就直调 `main()`，打包壳只换入口路径；验证范围是本机单测与子进程对拍。
 - CHANGELOG 的「## 未发布」一条加在实现那一笔，本 ADR 只落决策。
 - **2026-11-07 增补（#708）**：`tool/adapt.py` 的三条子命令（`gen` / `check` / `explore`）随后也收成同一形状——`from run import fail` 复用这里的唯一渲染、命令入口返回退出码、`sys.exit` 只剩 `__main__` 一处；对外退出码与 stderr 文案由 `tests/baselines/adapt_cli.json` 对拍守着（19 组，基线 `294ff50`）。`fast.py` / `chan_fast.py` 不在其中：前者没有进程内调用者，后者的退出都在 `main()` 尾部与参数解析。
+- **2026-11-12 增补（#1126）**：`captures`（报失败现场占用的磁盘体积）也留在 `-s` 解析之前，与 `devices` 同一处专处分派。它不碰手机、不需要序列号，塞进 `handler(serial, rest)` 同样只能靠 `serial=None` 的魔法值；`adb()` 排在 `-s` 校验之前的先后不变。至此表外有三个名字（`devices` / `adapt` / `captures`），`run.py` 顶部那句「所有命令都要带 `-s`」指的是表里的那些。

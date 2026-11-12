@@ -2,6 +2,7 @@
 """肉呆去广告 · 总入口。所有命令都要带 -s <序列号>（adb devices 第一列）。
 
   python3 tool/run.py devices                      列出连着的手机、型号、系统版本、有没有现成机型脚本
+  python3 tool/run.py captures [目录]               只读：报失败现场（captures/）占了多少地方，由人手动清
   python3 tool/run.py -s 序列号 check              只读：锁屏、机型脚本匹配、广告包挂起状态
   python3 tool/run.py -s 序列号 ui-check           只读：检查手机读屏服务，不点击任何开关
   python3 tool/run.py -s 序列号 backup             改动前快照，存到 backups/<型号>-<时间>/
@@ -33,6 +34,8 @@ import adb_link
 import troubleshooting
 import wait
 from backups import Backups, root_from_env
+from captures import Captures, human_size
+from captures import root_from_env as capture_root
 from entries import FAMILY          # 品牌族只此一份；广告包、参考脚本与版本比较都按它归
 from host import ON_PHONE           # 手机版不写插电常亮（#731）
 from recipe_meta import recipe_meta
@@ -607,6 +610,21 @@ def cmd_devices(rest):
     return 0
 
 
+def cmd_captures(rest):
+    """只读：报失败现场占了多少地方，由人手动清（失败现场不自动清理）。"""
+    root = rest[0] if rest else capture_root()
+    if not root:
+        return fail("没有捕获目录。图形客户端跑任务时会自动给；直接指定就写 captures <目录>"
+                    "（客户端的数据目录下有个 captures/）")
+    count, total = Captures(root).usage()
+    if not count:
+        print(f"没有失败现场：{root}")
+        return 0
+    print(f"{count} 份失败现场，共 {human_size(total)}：{root}\n"
+          "确认不再需要后可以整个删掉，程序不会自己清。")
+    return 0
+
+
 def cmd_ui_check(serial, rest):
     return py("fast.py", "-s", serial, "check")
 
@@ -994,6 +1012,8 @@ def dispatch(a):
         print(__doc__); return 0
     if a[0] == "devices":
         return cmd_devices(a[1:])
+    if a[0] == "captures":
+        return cmd_captures(a[1:])
     if a[0] == "adapt":
         return py("adapt.py", *a[1:])
     # 以前 adb 在 import 期就解析，找不到时**任何**调用（含参数写错）都先报这一句；保留同样的先后。

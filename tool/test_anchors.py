@@ -56,6 +56,7 @@ ANCHORS = {
     "test_recipe_preamble_migration.py": "机型脚本不再自带前导：结构守卫与每份脚本的行为守卫。",
     # 客户端、打包、更新与平台
     "test_backups.py": "备份目录的命名、扫描与 <型号>-gui 兜底。",
+    "test_captures.py": "失败现场落盘：两处留现场写原文、没目录不写、归档名与体积报数。",
     "test_error_report.py": "错误上报：内容脱敏、预览与发送一致、限频、安装编号与服务器回应。",
     "test_updates.py": "应用内更新：真实字节下载与状态迁移，网络与安装由边界替身接管。",
     "test_update_install.py": "在临时目录里真正换文件：回滚、保留卸载器与新进程健康回执。",

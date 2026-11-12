@@ -17,7 +17,7 @@ HERE = Path(__file__).resolve().parent
 FAKE_ADB = HERE / "fake_adb.py"
 STAMP = re.compile(r"\d{8}-\d{4}")
 LEDGER_FIELD = re.compile(r'("recipe_(?:coverage|evidence|verified)": )"(?:[^"\\]|\\.)*"')
-DROP = ("AAC_EVENTS", "AAC_GUI", "AAC_PAUSE_FILE", "ADB", "ADBUTILS_ADB_PATH")
+DROP = ("AAC_EVENTS", "AAC_GUI", "AAC_PAUSE_FILE", "AAC_CAPTURES", "ADB", "ADBUTILS_ADB_PATH")
 
 
 def _adb_wrapper(directory):

@@ -259,6 +259,7 @@ def check_draft(p, recipe_path, only=()):
         src = f.read()
     # 手改过的草稿若写了不带 only= 的 p.off()，靠这个也只关点名的开关，不整页全关。
     p.safe_mode = True
+    p.screen.captures.task = "adapt"        # 失败现场按任务归档（#1126）
     g = {"p": p, "__name__": "__draft__", "ONLY": list(only)}
     # `adapt gen` 生成的草稿自带 DRAFT_HELPERS，会覆盖这层注入（#838 不迁移它）；
     # 手改草稿或以后剥掉草稿模板时，这一行才是它的前导来源。
