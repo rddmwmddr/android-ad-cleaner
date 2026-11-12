@@ -46,13 +46,16 @@ jobs:
   # 的公共缩进，异常 repr、argparse 帮助同理，同一份源码在两版下可能逐字不同。
   unittest:
     runs-on: ubuntu-latest
-    # 实测 40s；15m 既吞得下镜像缺 adb 时的 apt-get，又能把「挂住」从 6 小时压到一刻钟
+    # 实测约 90s（pip 缓存未命中时）；15m 既吞得下镜像缺 adb 时的 apt-get，又能把「挂住」从 6 小时压到一刻钟
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+      # cache 键只认 requirements.txt；下面单独装的 coverage 也走这份缓存，只是加速下载，命中与否不影响结果
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.txt
       - uses: actions/setup-node@v7
         with:
           node-version: "22.23.4"
@@ -95,13 +98,15 @@ jobs:
   # 以及这里跑 3.12（与打包同版）、Linux 跑 3.13。
   unittest-windows:
     runs-on: windows-latest
-    # 实测 98s；取值理由同 Linux job。ruff 不在这里跑：静态分析与平台无关，只留 Linux 一份副本
+    # 实测约 150s（pip 缓存未命中时）；取值理由同 Linux job。ruff 不在这里跑：静态分析与平台无关，只留 Linux 一份副本
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
       - uses: actions/setup-node@v7
         with:
           node-version: "22.23.4"
@@ -151,6 +156,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.txt
       - name: 安装覆盖率工具（与两个测试 job 同版本，数据格式必须一致）
         run: pip install coverage==7.17.2
       - name: 取两份数据（平铺到同一目录，文件名不同不会冲突）
