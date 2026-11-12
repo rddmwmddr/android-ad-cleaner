@@ -52,11 +52,6 @@ def opened(start):
         return False
 
 
-def tap_any(*names, scrolls=6):
-    """依次试几个入口名，点中一个就返回 True。"""
-    return any(maybe(n, scrolls) for n in names)
-
-
 @step("系统广告")
 def _():
     # 广告服务在「安全」分栏 →「更多安全设置」页底，直达 AdServiceSettings 从 50 秒降到 2 秒（#374）。

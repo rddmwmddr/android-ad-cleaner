@@ -8,11 +8,6 @@ BUILD = "OS2.0.208"
 MODELS = ["2410CRP4CC"]
 
 
-def tap_any(*names, scrolls=6):
-    """依次试几个入口名，点中一个就返回 True。"""
-    return any(maybe(n, scrolls) for n in names)
-
-
 @step("系统广告")
 def _():
     # 平板设置首页是左右分栏，左侧菜单需要单独滚动；直达广告服务页最稳

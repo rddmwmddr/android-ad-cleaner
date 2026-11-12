@@ -140,6 +140,14 @@ class StructureTests(unittest.TestCase):
                                    "PLP120", "PLP120_16.0.9", "探路.tsv")
         self.assertEqual(defined_names(draft, "草稿.py"), set())
 
+    def test_the_generated_draft_uses_the_injected_navigation_helpers(self):
+        """`read_switches` / `close_named` 同样只剩注入面一份，草稿不再自带（#1151）。"""
+        draft = adapt.render_draft([("com.example", "设置 > 隐私", ["个性化推荐"])],
+                                   "PLP120", "PLP120_16.0.9", "探路.tsv")
+        self.assertNotIn("def read_switches", draft)
+        self.assertNotIn("def close_named", draft)
+        self.assertIn('close_named(["个性化推荐"], "设置 > 隐私")', draft)
+
 
 class BehaviourTests(unittest.TestCase):
     """45 份 × 3 个场景：锁屏与段失败都要在失败台账里留下名字，退出码为 1。

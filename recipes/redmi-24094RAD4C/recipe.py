@@ -73,11 +73,6 @@ def wait_bottom_tab(name, tries=5):
     return False
 
 
-def tap_any(*names, scrolls=6):
-    """依次试几个入口名，点中一个就返回 True。"""
-    return any(maybe(n, scrolls) for n in names)
-
-
 def close_with_plain_tap(names, page):
     """下载管理和浏览器会吞掉短按；普通 tap 后确认，并核对其他开关未变。"""
     before = {title: on for title, on, _ in p.switches()}

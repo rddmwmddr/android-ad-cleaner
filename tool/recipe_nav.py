@@ -9,6 +9,9 @@
 
 实现体必须与被搬走的脚本副本逐字相同：守卫把工厂里返回的函数源码与脚本里还留着的本地定义
 按行比对，改一边不改另一边即红（tests/test_recipe_nav.py）。
+
+闭包对名字一律按 `g` 现取（包括 `g["time"]`）：脚本原来是在自己的全局里解析这些名字，换到
+这个模块后仍取当次执行作用域里的那一个，测试装的假时钟才照旧生效。
 """
 
 import time
@@ -73,3 +76,101 @@ def install(p, g):
     """把公共导航助手写进执行作用域 `g`（原地写，调用方不需要返回值）。"""
     for name, factory in NAV.items():
         g[name] = factory(p, g)
+
+
+# ---------- 小米系（xiaomi / redmi，#1151）----------
+#
+# 三兄弟（23113RKC6C / 23117RK66C / 24122RKC7C）的 `gear` / `tap_any` 是另外的簇，留在脚本里。
+
+def _xiaomi_tap_any(p, g):
+    def tap_any(*names, scrolls=6):
+        """依次试几个入口名，点中一个就返回 True。"""
+        return any(g["maybe"](n, scrolls) for n in names)
+
+    return tap_any
+
+
+def _xiaomi_gear(p, g):
+    def gear(toolbar_only=False):
+        """很多小米 App 的设置是右上角齿轮图标，没有文字。
+        匹配只认正好是「设置」的描述、正文或 setting 类 id：商店「我的」页有一行正文「去功能设置里
+        重新开启」，主题商店有「设置壁纸」，按包含匹配会先命中它们、点进别的子页，整段跑空（#305 / #374）。"""
+        from fast import bounds, icon_hit
+
+        for n in p.tree().iter("node"):
+            l, t, r, b = bounds(n)
+            icon = "ImageView" in n.get("class", "") and r-l < p.W * 0.25 and b-t < p.H * 0.15
+            if icon_hit(n) and (n.get("clickable") == "true" or icon) and p.on_screen(n) and (not toolbar_only or b < p.H * 0.23):
+                p.click((l + r) // 2, (t + b) // 2); g["time"].sleep(1)
+                return True
+        if not toolbar_only and p.find("设置", exact=True, edge_ok="tab"):
+            return p.tap("设置", exact=True, scrolls=0)
+        # 下载管理、天气和日历的齿轮藏在右上「更多」菜单里。
+        for n in p.tree().iter("node"):
+            key = (n.get("content-desc") or "") + " " + (n.get("resource-id") or "")
+            from fast import bounds
+            l, t, r, b = bounds(n)
+            if any(k in key.lower() for k in ("更多", "more", "menu")) and n.get("clickable") == "true" and p.on_screen(n) and b < p.H * 0.22:
+                p.click((l + r) // 2, (t + b) // 2); g["time"].sleep(0.5)
+                if p.tap("设置", exact=True, scrolls=0):
+                    return True
+                break
+        return False
+
+    return gear
+
+
+def _xiaomi_read_switches(p, g):
+    def read_switches(max_screens):
+        current = {}
+        for index in range(max_screens):
+            current.update({title: on for title, on, _ in p.switches()})
+            if index + 1 == max_screens or not p.scroll_more():
+                break
+        return current
+
+    return read_switches
+
+
+def _xiaomi_close_named(p, g):
+    def close_named(names, page, max_screens=2):
+        """只关闭点名的开关；操作前确认目标存在，操作后回读，并检查其他开关未被改动。
+        开关标题可能附带整段说明，所以按关键词匹配，不做完整标题相等判断。"""
+        p.top(max_screens)
+        before = g["read_switches"](max_screens)
+        targets = [title for title in before if any(name in title for name in names)]
+        g["require_switches"](before, names, page, contains=True)
+        p.top(max_screens)
+        p.off(only=names, page=page, max_screens=max_screens)
+        p.top(max_screens)
+        current = g["read_switches"](max_screens)
+        g["require"](all(current.get(title) is False for title in targets), f"{page}：回读未确认关闭")
+        g["require"](all(current.get(title) == state for title, state in before.items() if title not in targets),
+                     f"{page}：其他开关状态变化，请核对")
+        g["VERIFIED_SWITCHES"] += len(targets)
+
+    return close_named
+
+
+def _xiaomi_security_tab(p, g):
+    def security_tab():
+        """HyperOS 3 的「安全」是隐私页上方的标签，不是设置行。
+        按文字点会命中不可点击的标签文字；这里只点横跨半屏、位于顶部的可点击容器。"""
+        for text, (l, t, r, b), node in p.texts():
+            if (text == "安全" and node.get("clickable") == "true"
+                    and r - l > p.W * 0.3 and t < p.H * 0.25):
+                p.click((l + r) // 2, (t + b) // 2)
+                g["time"].sleep(0.8)
+                return True
+        return False
+
+    return security_tab
+
+
+NAV.update({
+    "tap_any": _xiaomi_tap_any,
+    "gear": _xiaomi_gear,
+    "read_switches": _xiaomi_read_switches,
+    "close_named": _xiaomi_close_named,
+    "security_tab": _xiaomi_security_tab,
+})

@@ -37,15 +37,6 @@ def enter_privacy():
     raise RuntimeError(f"没找到商店的隐私入口；{p.page_evidence()}")
 
 
-def read_switches(max_screens):
-    current = {}
-    for index in range(max_screens):
-        current.update({title: on for title, on, _ in p.switches()})
-        if index + 1 == max_screens or not p.scroll_more():
-            break
-    return current
-
-
 def close_named(names, page, max_screens=1, snapshot=None):
     """关掉点名的开关，并核对其他开关未变。`snapshot` 是调用方已经读过的那一页，免得再翻一遍。"""
     global VERIFIED_SWITCHES

@@ -29,15 +29,6 @@ def app_settings(package, activity):
     require(p.focus() == f"{package}/{activity}", "设置页未打开，停止本段")
 
 
-def read_switches(max_screens):
-    current = {}
-    for index in range(max_screens):
-        current.update({title: on for title, on, _ in p.switches()})
-        if index + 1 == max_screens or not p.scroll_more():
-            break
-    return current
-
-
 def close_named(names, page, max_screens=1):
     global VERIFIED_SWITCHES
     p.top(max_screens)

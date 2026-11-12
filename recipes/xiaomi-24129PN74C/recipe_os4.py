@@ -55,11 +55,6 @@ def gear(toolbar_only=False):
     return False
 
 
-def tap_any(*names, scrolls=6):
-    """依次试几个入口名，点中一个就返回 True。"""
-    return any(maybe(n, scrolls) for n in names)
-
-
 def popup_row(text, timeout=3.0):
     """屏幕下半段里文字正好是 text 的那一行：菜单弹窗从底部升起，工具栏上的同名图标在上半屏。"""
     def row():

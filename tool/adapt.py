@@ -93,44 +93,10 @@ def step_name(pkg, page):
     return name
 
 
+# 草稿只留台账变量：`read_switches` / `close_named` 用注入面那一份（#1151），否则新写出的
+# 脚本又把本地副本带走，两代实现的坑重挖一遍。
 DRAFT_HELPERS = '''
 VERIFIED_SWITCHES = 0        # 回读确认关闭的开关数
-MISSING_SWITCHES = []        # 没找到的开关（待人工确认）
-PENDING_SWITCHES = []        # 找到了但回读没确认关闭（待人工确认）
-
-
-def read_switches(max_screens):
-    current = {}
-    for index in range(max_screens):
-        current.update({title: on for title, on, _ in p.switches()})
-        if index + 1 == max_screens or not p.scroll_more():
-            break
-    return current
-
-
-def close_named(names, page, max_screens=1):
-    """待验证壳：只关 only= 点名的开关；没找齐不操作；关完回读确认。
-    与正式机型脚本的 close_named 不同：找不到/没确认时记进报告，不中断其余步骤。
-    开关在第二屏以后找不到时，把 max_screens 改大再自检。"""
-    global VERIFIED_SWITCHES
-    p.top(max_screens)
-    before = read_switches(max_screens)
-    missing = [name for name in names if name not in before]
-    if missing:
-        MISSING_SWITCHES.extend(missing)
-        print(f"  ✗ {page}：未找到 {missing}，未操作", flush=True)
-        return
-    p.top(max_screens)
-    p.off(only=names, page=page, max_screens=max_screens)
-    p.top(max_screens)
-    current = read_switches(max_screens)
-    still = [name for name in names if current.get(name) is not False]
-    PENDING_SWITCHES.extend(still)
-    if still:
-        print(f"  ✗ {page}：回读未确认关闭 {still}", flush=True)
-        return
-    VERIFIED_SWITCHES += len(names)
-    print(f"  ✓ {page}：回读确认关闭 {len(names)} 项", flush=True)
 '''
 
 
@@ -169,8 +135,8 @@ def render_draft(groups, model, build, source):
     lines += [
         "",
         "",
-        'print(f"\\n草稿自检：回读确认 {VERIFIED_SWITCHES} 项，未找到 {len(MISSING_SWITCHES)} 项，"',
-        '      f"待人工确认 {len(PENDING_SWITCHES)} 项，未完成步骤 {len(FAILED_STEPS)} 个", flush=True)',
+        'print(f"\\n草稿自检：回读确认 {VERIFIED_SWITCHES} 项，"',
+        '      f"未完成步骤 {len(FAILED_STEPS)} 个", flush=True)',
         "",
     ]
     return "\n".join(lines)
@@ -261,8 +227,8 @@ def check_draft(p, recipe_path, only=()):
     p.safe_mode = True
     p.screen.captures.task = "adapt"        # 失败现场按任务归档（#1126）
     g = {"p": p, "__name__": "__draft__", "ONLY": list(only)}
-    # `adapt gen` 生成的草稿自带 DRAFT_HELPERS，会覆盖这层注入（#838 不迁移它）；
-    # 手改草稿或以后剥掉草稿模板时，这一行才是它的前导来源。
+    # 草稿的 `close_named` / `read_switches` 也来自这层注入（#1151）：点名开关缺一个就整段
+    # 报错、这一步记成失败，没找到的项因此落在 failed_steps 里，不再有 missing / pending 两份台账。
     recipe_kit.preamble(p, g)
     build = p.d.shell("getprop ro.build.display.id").output.strip()
     osv = p.d.shell("getprop ro.mi.os.version.incremental").output.strip()
