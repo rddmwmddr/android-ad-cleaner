@@ -64,6 +64,7 @@
 | `test_recipe_variants.py` | 同一型号按系统版本选脚本变体、变体要进安装包，以及没有本型号脚本时参考脚本按录制版本在同族里挑。 |
 | `test_recipe_setting_checked.py` | 机型脚本必须消费 p.setting() 的返回值，不能空跑还记成功。 |
 | `test_recipe_preamble_migration.py` | 机型脚本不再自带前导：结构守卫与每份脚本的行为守卫。 |
+| `test_recipe_nav.py` | 公共导航的注入面：前导调用它、实现从执行作用域取前导名字、脚本不留逐字副本，以及调用序列对拍驱动自己管基线 worktree。 |
 | `test_backups.py` | 备份目录的命名、扫描与 <型号>-gui 兜底。 |
 | `test_captures.py` | 失败现场落盘：两处留现场写原文、没目录不写、归档名与体积报数。 |
 | `test_error_report.py` | 错误上报：内容脱敏、预览与发送一致、限频、安装编号与服务器回应。 |

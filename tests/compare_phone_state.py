@@ -27,10 +27,8 @@ worktree、跑完删掉：
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
-import tempfile
 import xml.etree.ElementTree as ET
 from contextlib import contextmanager
 from pathlib import Path
@@ -735,23 +733,9 @@ def dump(tool_dir):
 @contextmanager
 def baseline_tool_dir(sha):
     """把 <sha> 解到临时 worktree，交出它的 tool/；退出时删掉 worktree 与临时目录。"""
-    root = TESTS.parent
-    tmp = Path(tempfile.mkdtemp(prefix="aac-baseline-"))
-    tree = tmp / "tree"
-    added = False
-    try:
-        try:
-            subprocess.run(["git", "worktree", "add", "--detach", str(tree), sha],
-                           cwd=root, check=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
-        except subprocess.CalledProcessError as e:
-            sys.exit(f"找不到提交 {sha}：先 git fetch origin {sha}\n{e.stderr.strip()}")
-        added = True
+    import fixtures
+    with fixtures.baseline_worktree(sha, TESTS.parent) as tree:
         yield tree / "tool"
-    finally:
-        if added:
-            subprocess.run(["git", "worktree", "remove", "--force", str(tree)],
-                           cwd=root, check=False, capture_output=True)
-        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def collect(tool_dir):

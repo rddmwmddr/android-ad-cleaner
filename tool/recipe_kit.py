@@ -3,6 +3,9 @@
 三个执行点注入同一份：`fast.execute` 的 run 分支、`adapt.check_draft`、`tests/fixtures.load_recipe`。
 不做成可 import 的函数：段包装要绑定当次的 Phone 与执行作用域，import 来的模块级函数拿不到这两个。
 脚本自己的同名定义后执行、覆盖注入的名字，所以在迁移之前跑任何现有脚本，用户看到的东西一个字节都不变。
+
+公共导航助手另住 `recipe_nav`：`preamble()` 写完生命周期与台账后调它的 `install()`，
+本模块只管生命周期与台账（#1150）。
 """
 
 import re
@@ -10,6 +13,7 @@ import time
 from contextlib import nullcontext
 
 import adb_link
+import recipe_nav
 
 # 脚本自带 `RESULTS` 时，每个段的结局用这四个词记一条（机型脚本的分段结果台账）
 DONE, SKIPPED, FAILED, NOT_RUN = "完成", "跳过", "未完成", "未执行"
@@ -193,4 +197,5 @@ def preamble(p, g):
     g.update({"SkipStep": SkipStep, "skip": skip, "require": require,
               "maybe": maybe, "start_or_skip": start_or_skip, "step": step, "page": page,
               "require_switches": require_switches, "skip_in_safe_mode": skip_in_safe_mode})
+    recipe_nav.install(p, g)
     return g

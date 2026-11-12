@@ -16,6 +16,7 @@ import contextlib
 import io
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -70,6 +71,33 @@ def all_pages(folder=None):
                 continue
             pages.append((f"{path.name}:{i}", found.group(0)))
     return pages
+
+
+@contextlib.contextmanager
+def baseline_worktree(sha, root=None):
+    """把 <sha> 解到临时 worktree，交出它的根目录；退出时删掉 worktree 与临时目录。
+
+    对拍驱动的「改动前」从这里取：基线要钉提交 SHA，不入库快照文件。找不到提交时按出口惯例
+    报一句并退出（`sys.exit` 的字符串走 stderr），临时目录与 worktree 一条都不留。
+    """
+    repo = Path(root) if root is not None else ROOT
+    tmp = Path(tempfile.mkdtemp(prefix="aac-baseline-"))
+    tree = tmp / "tree"
+    added = False
+    try:
+        try:
+            subprocess.run(["git", "worktree", "add", "--detach", str(tree), sha], cwd=repo,
+                           check=True, capture_output=True, text=True, encoding="utf-8",
+                           errors="replace")
+        except subprocess.CalledProcessError as e:
+            sys.exit(f"找不到提交 {sha}：先 git fetch origin {sha}\n{e.stderr.strip()}")
+        added = True
+        yield tree
+    finally:
+        if added:
+            subprocess.run(["git", "worktree", "remove", "--force", str(tree)], cwd=repo,
+                           check=False, capture_output=True)
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 class Clock:
@@ -505,18 +533,21 @@ def stub(phone, name, value):
 
 
 def fake_phone(clock=None, size=SIZES[0], stages=((0.0, EMPTY_PAGE),),
-               focus=((0.0, ""),), fast_mod=None, **fields):
+               focus=((0.0, ""),), fast_mod=None, shell=None, **fields):
     """造一个不连手机的 Phone：读屏走时间轴，点击 / 返回只推进假时钟。
 
     只替掉会碰手机的部分；tree / sig / settle 等仍是真的，走 Device.dump_hierarchy。
-    要换掉别的属性（想断言点击的坐标、想固定 locked）用关键字传进来，形如
-    fake_phone(locked=lambda: True)——这些桩会同时落到它所属的基座上：门面只转发，
+    `shell` 一起换掉两条传输：脚本里的 `p.d.shell`（读屏 adapter）与 `Phone.start` 走的
+    `p.link`（连接基座）。要换掉别的属性（想断言点击的坐标、想固定 locked）用关键字传进来，
+    形如 fake_phone(locked=lambda: True)——这些桩会同时落到它所属的基座上：门面只转发，
     内部调用走的是基座（ADR-0033）。
     """
     clock = clock or Clock()
     timeline = Timeline(stages, focus)
     device = Device(timeline, size, clock)
-    p = phone_stub("fake", shell=device.shell, fast_mod=fast_mod)
+    if shell is not None:
+        device.shell = shell
+    p = phone_stub("fake", shell=shell or device.shell, fast_mod=fast_mod)
     p.W, p.H = size
     p.d = device
 
