@@ -227,12 +227,11 @@ def _word_calls(facts):
     return calls
 
 
-def _absorb(out, family, script, facts, line=None):
-    """把一份事实里的词条、同页保留项与三类读不出来的收进 `out`；返回这份事实新收的词数。
+def _absorb(out, family, script, facts, call_site=None):
+    """把一份事实里的词条、同页保留项与三类读不出来的收进 `out`。
 
-    `line` 给定时出处一律记这个行号：段体搬进注入面之后，词写在实现里、调用点留在脚本里，
+    `call_site` 给定时出处一律记这个行号：段体搬进注入面之后，词写在实现里、调用点留在脚本里，
     出处要写成那份脚本的调用点（#1209）。"""
-    before = len(out.words)
     for call in _word_calls(facts):
         if call.name == "p.off":
             names, keep = _keyword(call, "only"), _keyword(call, "keep")
@@ -242,8 +241,8 @@ def _absorb(out, family, script, facts, line=None):
         inside = call.function == "close_named"
         label = call.page
         group = group_of(family, label)
-        where = call.line if line is None else line
-        injected = line is not None
+        where = call.line if call_site is None else call_site
+        injected = call_site is not None
         here = []
         if names is None or names.text == "None":     # 没写 only= 与写了 None 都是整页
             if not inside:
@@ -252,7 +251,7 @@ def _absorb(out, family, script, facts, line=None):
             strings = _strings(names)
             if strings is not None:
                 here += [Word(text, direction_of(text), family, group, label, script,
-                              at if line is None else line, injected)
+                              at if call_site is None else call_site, injected)
                          for text, at in strings]
             elif not inside:
                 missed = out.unresolved_only if call.name == "p.off" else out.unresolved_close
@@ -261,7 +260,7 @@ def _absorb(out, family, script, facts, line=None):
             strings = _strings(keep)
             if strings is not None:
                 here += [Word(text, KEEP, family, group, label, script,
-                              at if line is None else line, injected)
+                              at if call_site is None else call_site, injected)
                          for text, at in strings]
             else:
                 out.unresolved_keep.append(Call(family, script, where, keep.text))
@@ -269,7 +268,6 @@ def _absorb(out, family, script, facts, line=None):
         if not group and not inside:
             out.unclassified.append(Call(family, script, where, label or "（没写页面）",
                                          tuple(dict.fromkeys(w.text for w in here))))
-    return len(out.words) - before
 
 
 def scan(recipes_dir, injected=None):
@@ -286,14 +284,13 @@ def scan(recipes_dir, injected=None):
         out.notes += _notes(facts, script)
         _absorb(out, family, script, facts)
         for name in sorted(injected):
-            calls = [call for call in facts.calls
-                     if call.injected and call.name == name and name not in facts.defines]
+            calls = recipe_source.injected_calls(facts, name)
             if not calls:
                 continue
             # 段体无形参，实参不跨文件；只有模块常量住在脚本里，按名字交回去
             impl = recipe_source.scan_source(injected[name], externals=facts.constants)
             for call in calls:
-                _absorb(out, family, script, impl, line=call.line)
+                _absorb(out, family, script, impl, call_site=call.line)
         if len(out.words) == before:
             out.silent.append(script)
     return out

@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import recipe_kit  # noqa: E402
+import recipe_nav  # noqa: E402
 import recipe_steps  # noqa: E402
 from fixtures import normalize, phone_mock  # noqa: E402
 
@@ -82,6 +83,10 @@ class WiringTests(unittest.TestCase):
             p, skip = scope["downloads"]()
         self.assertIs(p, phone)
         self.assertIs(skip, scope["skip"])
+
+    def test_step_names_do_not_collide_with_navigation_names(self):
+        """两张注册表写同一个执行作用域、`injected_sources()` 又按名字合并：同名会静默覆盖。"""
+        self.assertEqual(set(recipe_steps.STEPS) & set(recipe_nav.NAV), set())
 
     def test_the_steps_module_does_not_import_the_preamble(self):
         tree = ast.parse((ROOT / "tool" / "recipe_steps.py").read_text(encoding="utf-8"))

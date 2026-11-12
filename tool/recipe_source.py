@@ -166,14 +166,9 @@ def _values(source: "_Source", node: ast.expr, function: _Function | None,
         found = source.last_string(node.id, (node.lineno, node.col_offset))
         if found is not None:
             return (found,)
-        external = source.external(node.id)
-        if external is not None:
-            return external
-        if function is None:
-            return None
         params = _param_names(function)
-        if node.id not in params:
-            return None
+        if function is None or node.id not in params:
+            return source.external(node.id)
         if backfill:
             filled = source.param_items(node.id, function)
             if filled:
@@ -321,8 +316,8 @@ def _module_values(tree: ast.Module) -> dict[str, tuple[Item, ...]]:
     """模块级字符串常量：单个字符串与纯字符串列表都收，后赋了别的值的不算。
 
     给 `externals` 用：注入实现里按名字现取的值（`g["HOT"]`）住在调用脚本里，实现这一侧只看得见
-    名字。不直接用 `_Source.constants`：那份只管列表，行号取的是赋值行，两种口径混在一起会把
-    本文件内的取值与外部取值读成两种东西。"""
+    名字。与 `_Source.constants` 的区别只有一条：那份只收列表，包名、页面名这类单个字符串常量
+    不在里面，而段体按名字取的两种都要。"""
     out: dict[str, tuple[Item, ...]] = {}
     for node in tree.body:
         if isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name):
@@ -367,7 +362,7 @@ def scan_source(src: str, bindings: Mapping[int, Sequence[str]] | None = None,
     （沿用 #1154 的做法）。
 
     `externals` 是另一份源码（调用方）的模块级常量 `{名字: (Item, …)}`：段体搬进注入面之后，
-    它依赖的字面量仍住在脚本里，实现里只有 `g["HOT"]` 这样的名字（#1149、#1209）。缺省不查，
+    它依赖的字面量仍住在脚本里，实现里只有 `g["HOT"]` 这样的名字（沿用 #1149 的段体口径，#1209）。缺省不查，
     行为与加这个参数之前逐字相同。"""
     tree = ast.parse(src)
     source = _Source(tree, bindings, externals)
@@ -410,6 +405,14 @@ def scan_dir(recipes_dir: str, families: Mapping[str, str] | None = None) -> dic
         with open(path, encoding="utf-8") as handle:
             out[rel] = scan_source(handle.read())
     return dict(sorted(out.items()))
+
+
+def injected_calls(facts: Facts, name: str) -> tuple[Call, ...]:
+    """脚本里调用到某个注入名的调用点。脚本本地定义了同名实现的走本地那份，注入版不算（#1153）。
+
+    两个消费方（入口速查、词库）都按这一条筛，判据不再各写一份。"""
+    return tuple(call for call in facts.calls
+                 if call.injected and call.name == name and name not in facts.defines)
 
 
 def injected_sources() -> dict[str, str]:

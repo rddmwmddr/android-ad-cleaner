@@ -149,6 +149,18 @@ class SourceTest(unittest.TestCase):
                 encoding="utf-8")
             self.assertEqual(entries.used_by(d), {})
 
+    def test_navigation_implementations_ignore_caller_constants(self):
+        """`used_by()` 把调用脚本的常量一并传给每份注入实现：今天没有导航助手按名字取外部值，
+        所以传与不传必须逐字相同，否则这条接线会悄悄改变「用过的机型」（#1209）。"""
+        import recipe_source
+        import recipe_steps
+        constants = {"MARKET": ("com.example.market",), "HOT": ("热点资讯",)}
+        for name, impl in recipe_source.injected_sources().items():
+            if name in recipe_steps.STEPS:
+                continue
+            self.assertEqual(recipe_source.scan_source(impl, externals=constants).calls,
+                             recipe_source.scan_source(impl).calls, name)
+
     def test_an_entry_inside_a_step_implementation_is_credited_to_the_caller(self):
         """段体搬进注入面之后，实现里的拉起仍认得出属于哪个机型（#1209）。"""
         import recipe_steps

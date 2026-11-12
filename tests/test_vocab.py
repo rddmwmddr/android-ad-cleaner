@@ -451,7 +451,7 @@ def downloads(p, g):
         self.assertEqual({(w.group, w.page) for w in found.words}, {("下载管理", "下载管理·设置")})
 
     def test_a_module_constant_reaches_the_implementation(self):
-        """段体的名单住在调用脚本里：实现里只有 `g["HOT"]`，值要从脚本那份常量取（#1149）。"""
+        """段体的名单住在调用脚本里：实现里只有 `g["HOT"]`，值要从脚本那份常量取（沿用 #1149 的段体口径）。"""
         found = self.scan('''\
 HOT = ["热点资讯", "热搜榜"]
 
