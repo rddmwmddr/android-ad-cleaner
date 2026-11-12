@@ -237,7 +237,7 @@ V2547DA 的 Android 17 变体（`recipes/vivo-V2547DA/recipe_android17.py`）202
 | 位置 | 本机实际路径 | 备注 |
 |---|---|---|
 | 广告与隐私 | 设置 → 安全 → 更多安全设置 → 广告与隐私（`AdAndPrivacyActivityForOsTwo`） | 与清单一致；个性化广告、个性化推荐、智能推荐服务三个开关都在这一页 |
-| 锁屏设置 | `com.android.systemui/com.vivo.keyguard.views.KeyguardSettings` | **整页在 systemui 里**。引擎默认过滤 systemui 文字（那是状态栏），脚本读/点「阅图锁屏」前要 `p.sysui = True` |
+| 锁屏设置 | `com.android.systemui/com.vivo.keyguard.views.KeyguardSettings` | **整页在 systemui 里**。引擎默认过滤 systemui 文字（那是状态栏），脚本读/点「阅图锁屏」前要 `p.systemui_text = True` |
 | 阅图锁屏 | `com.vivo.magazine/.ui.MagazineSettings` | 本机「阅图锁屏」「轮播壁纸」「锁屏横滑进入阅图」实测都已关 |
 | 应用商店 | 我的（**底部导航栏**）→ 设置 → 关于 → 服务管理 / 个性化推荐 | 底部标签 y 在 92% 以下，`p.find()` 默认不点导航栏，脚本按坐标点最后一个标签 |
 | 商店·关于入口 | 点标题文字「关于」不跳转 | 要点**副标题**「包括禁用服务设置…」所在行的中间（`x≈0.4W`） |
