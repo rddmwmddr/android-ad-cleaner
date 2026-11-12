@@ -131,7 +131,9 @@ JavaScript、手机版在 `aac_android/view.py` 里写一份 Python，靠 `tests
 - **手机版的时序约束**：`view` 不能在模块顶层 import `tool/`——界面层先于工具目录进入模块搜索路径被
   加载，且执行前会清掉 `tool/` 下已加载的模块（`inproc._purge`）。它用模块级缓存的懒加载取这一份；
   已知代价是执行中第一次 poll 会在清理后重新加载一次，之后走缓存。改回顶层 import 会让摘要整段消失。
-- **边界**：进来的只是「一步结果的一句话」。`coverage_note`（验证档位提示）判据相同、措辞按宿主分叉
-  （手机版不劝人「去 App 里核对」），仍留在两边。
+- **边界**：进来的只是「一步结果的一句话」。`coverage_note`（验证档位提示）当时留在两边；
+  #1188 起收成 `tool/coverage_note.py`：判据一份、措辞按宿主（手机版不劝人「去 App 里核对」），
+  由 `host.coverage_notes(on_phone)` 给出（宿主由调用方显式传，不读环境变量），桌面随
+  `Dispatcher.poll()`（`False`）、手机版随 `view.poll()`（`True`）下发。
 - **失效条件**：摘要若不再解析 `tail` 末行（引擎直接给结构化结局），这一层的分支判据要重写，而不是在
   `summarize()` 外面再加一层判断。

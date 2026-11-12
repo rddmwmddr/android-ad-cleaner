@@ -378,7 +378,7 @@ fun DoneScreen(model: AppModel, run: RunProgress) {
                 }
             }
             itemsIndexed(run.results) { i, r -> ResultRow(i, run.results.size, r) }
-            // 脚本验得不够时的一句话，档位与措辞都由后台给（view.py 的 coverage_note，#1130）
+            // 脚本验得不够时的一句话，判据与措辞都在后端（tool/coverage_note.py，#1188）
             if (run.coverageNote.isNotEmpty()) {
                 item {
                     Spacer(Modifier.height(16.dp))

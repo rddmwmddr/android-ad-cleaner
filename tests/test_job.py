@@ -85,10 +85,27 @@ class RecipeCoverageTests(unittest.TestCase):
         self.assertEqual(self.api.poll()["recipe_coverage"], "部分")
 
     def test_the_value_is_passed_through_even_when_no_script_runs(self):
-        # 取舍在前端：没勾脚本时结果里只有一行「跳过」，界面据此不说；后端不做这个判断。
+        # 档位一律照带；说不说由后端按「结果里有没有脚本那一行」决定（tool/coverage_note.py，#1188）。
         self.api.last_status = {"recipe_coverage": "部分"}
         self.api.start("S", {"backup": False, "finish": False})
         self.assertEqual(self.api.poll()["recipe_coverage"], "部分")
+
+    def test_the_coverage_note_is_computed_with_the_results(self):
+        # 桌面侧也在后端算这一行（#1188）：结果里真有脚本那一行、档位是负面时才给
+        self.api.job = app.Job(serial="S", t0=0, recipe_coverage="部分",
+                               plan={"backup": False, "steps": [], "finish": False})
+        self.api.job.running = False
+        self.api.job.results.append({"title": "关闭各 App 里的广告开关", "kind": "recipe", "rc": 0})
+        note = self.api.poll()["coverage_note"]
+        self.assertIn("只在一部分步骤上做过真机验证", note)
+        self.assertIn("在 App 里", note, "桌面版措辞引导回 App 里核对")
+
+    def test_a_run_without_the_script_gets_no_coverage_note(self):
+        self.api.job = app.Job(serial="S", t0=0, recipe_coverage="部分",
+                               plan={"backup": False, "steps": [], "finish": False})
+        self.api.job.running = False
+        self.api.job.results.append({"title": "关闭营销通知", "kind": "channels", "rc": 0})
+        self.assertEqual(self.api.poll()["coverage_note"], "")
 
     def test_a_retry_round_that_reruns_no_script_keeps_the_previous_value(self):
         # 上一轮的脚本结果行按 kind 合并后还在结果页上，那条提示要跟着它（沿用 #638 的合并口径）。

@@ -11,7 +11,6 @@ sys.path.insert(0, str(ROOT / "android" / "app" / "src" / "main" / "python"))
 sys.path.insert(0, str(ROOT / "tool"))
 
 from aac_android import view  # noqa: E402
-import verify_ledger  # noqa: E402
 
 
 class FakeApi:
@@ -83,7 +82,8 @@ class RecipeCoverageTest(unittest.TestCase):
     """机型脚本验到什么程度：只在负面的两档给结果页多一行（沿用 #1124 的档位，#1130）。
 
     档位是引擎从台账现读、随 `status-json` 到客户端；说不说、怎么说都在 Python 这边，
-    Compose 只把这一行画出来。"""
+    Compose 只把这一行画出来。这里验手机版这条通路接上了 `tool/coverage_note.py`；判据本身与
+    按宿主分叉的措辞都在 tests/test_coverage_note.py（#1188）。"""
 
     def snap(self, coverage="部分", **row):
         """一次跑过机型脚本的结果页快照：默认这一行是成功的那一步。
@@ -125,11 +125,6 @@ class RecipeCoverageTest(unittest.TestCase):
         # 旧载荷 / 没勾脚本时快照里就没有这个字段：结果页照常显示，不炸、也不猜深浅
         run = {"results": [{"title": "关闭各 App 里的广告开关", "kind": "recipe", "rc": 0}], "cancel": False}
         self.assertEqual(view.poll(FakeApi(run=run))["coverage_note"], "")
-
-    def test_every_tier_but_full_has_its_own_line(self):
-        """档位词表两处：`verify_ledger.TIERS` 是单一来源，这里只做映射。台账加一档时这条会红，
-        提醒「新档在手机结果页说不说」要想一遍，而不是静默不显示（#1130）。"""
-        self.assertEqual(set(view.COVERAGE_NOTES) | {"全部"}, set(verify_ledger.TIERS))
 
 
 class StallWatchTest(unittest.TestCase):

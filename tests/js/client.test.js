@@ -266,53 +266,28 @@ test("没标录制版本的机型脚本不说「版本一致」（#942）", asyn
   } finally { page.close(); }
 });
 
-/* #1129：结果页只在机型脚本验得不够时多一行。档位是引擎从台账现读、经 status-json 与任务快照
-   原样带来的，界面不自己算；「全部」（以及根本没有这个值时）不占行。说不说还要求这次真有脚本那一
-   行的结果，与手机版 aac_android/view.py 的 coverage_note() 同一条判据。 */
+/* #1188：验证档位提示的判据与措辞都在后端（tool/coverage_note.py，两个宿主同一份），
+   网页只剩「字段有值就画一行、没值不画」这一层。判据本身由 tests/test_coverage_note.py 覆盖。 */
 const coverageNotes = page => [...page.document.querySelectorAll("#main .note.info")]
   .map(n => n.textContent);
-const recipeStep = extra => ({ ...stepDone, title: "关闭各 App 里的广告开关", kind: "recipe", ...extra });
 
-test("机型脚本只验过一部分时，结果页多一行说明（#1129）", async () => {
+test("后端给了验证档位提示时，结果页画出来（#1188）", async () => {
   const page = await openPage();
   try {
-    page.window.showDone(pollResult({ results: [recipeStep()], recipe_coverage: "部分" }));
-    const notes = coverageNotes(page);
-    assert.equal(notes.length, 1, "负面档位要出现这一行");
-    assert.match(notes[0], /只在一部分步骤上做过真机验证/);
-    assert.doesNotMatch(notes[0], /tier|evidence|部分验证/, "文案不能露出取值名");
+    const note = "这套机型脚本只在一部分步骤上做过真机验证，其余步骤这次是照脚本直接跑的，建议在 App 里顺手核对一眼。";
+    page.window.showDone(pollResult({ results: [stepDone], coverage_note: note }));
+    assert.deepEqual(coverageNotes(page), [note]);
   } finally { page.close(); }
 });
 
-test("机型脚本整份验过时，结果页不添任何行（#1129）", async () => {
+test("后端没给验证档位提示时，结果页不添任何行（#1188）", async () => {
   const page = await openPage();
   try {
-    page.window.showDone(pollResult({ results: [recipeStep()], recipe_coverage: "全部" }));
+    page.window.showDone(pollResult({ results: [stepDone] }));
     assert.deepEqual(coverageNotes(page), []);
-  } finally { page.close(); }
-});
-
-test("台账里没有这份脚本、或压根没检测过时，结果页照常显示（#1129）", async () => {
-  const page = await openPage();
-  try {
-    page.window.showDone(pollResult({ results: [recipeStep()], recipe_coverage: "未记录" }));
-    assert.equal(coverageNotes(page).length, 1);
-    // 没有 recipe_coverage（旧引擎 / 还没检测）时不猜深浅，也不崩
-    page.window.showDone(pollResult({ results: [recipeStep()] }));
+    page.window.showDone(pollResult({ results: [stepDone], coverage_note: "" }));
     assert.deepEqual(coverageNotes(page), []);
     assert.equal(heading(page), "完成");
-  } finally { page.close(); }
-});
-
-test("这次没跑机型脚本时不说脚本的事（#1129）", async () => {
-  const page = await openPage();
-  try {
-    // 没勾脚本 / 停止在它之前 / 读屏被占用让它跳过：结果里只有那行「跳过」，或压根没有这一行
-    const skipped = recipeStep({ skipped: true, rc: 0, tail: ["没有勾选"] });
-    page.window.showDone(pollResult({ results: [skipped], recipe_coverage: "部分" }));
-    assert.deepEqual(coverageNotes(page), []);
-    page.window.showDone(pollResult({ results: [stepDone], recipe_coverage: "部分" }));
-    assert.deepEqual(coverageNotes(page), []);
   } finally { page.close(); }
 });
 

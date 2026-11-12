@@ -926,8 +926,9 @@ class Dispatcher:
         self.data = data
         self.adb_of = adb_of
         self.on_error = on_error
-        # 结果摘要的纯函数（#1189）：构造时取一次，别在 poll 的轮询热路径上现取
+        # 结果摘要与验证档位提示（#1189 #1188）：构造时取一次，别在 poll 的轮询热路径上现取
         self.summary = _tool("summary")
+        self.coverage_note = _tool("coverage_note")
         self.job = None
         self.lock = threading.Lock()
         self.side = ""                  # 正在跑的旁路操作（还原），与执行互斥（#662）
@@ -1137,9 +1138,13 @@ class Dispatcher:
         snap = j.snapshot(since)
         if snap["running"]:
             snap["results"] = []        # 执行中不显示结果（前端契约）；诊断与上报仍读快照里的全量
+            snap["coverage_note"] = ""  # 结果页还没出来，这一行也没意义
         else:
             # 每条结果附一句话（#1189）：前端只显示这个字段，不再自己认日志模式
             snap["results"] = [{**r, "summary": self.summary.summarize(r)} for r in snap["results"]]
+            # 验证档位提示也在这里算（#1188）：判据吃拍平后的结果，两个宿主同一个口径。
+            # 宿主显式传 False，不读环境——用户 shell 里导出 AAC_HOST=phone 不该改桌面措辞（#747）。
+            snap["coverage_note"] = self.coverage_note.note(snap, on_phone=False)
         return snap
 
     def stop(self):
@@ -1476,7 +1481,7 @@ class Api:
         """前端发来的计划字典在这里收成规格对象，之后的内部一路传 `Plan`（#1106）。"""
         plan = _tool("plan").Plan.from_json(plan)
         # 机型脚本验到什么程度由引擎从台账现读（沿用 #1124 的 status-json 字段），这里只随这次执行
-        # 带给结果页（#1129）。要不要显示由前端按结果里有没有脚本那一行决定，这里不做取舍。
+        # 带给结果页（#1129）。说不说由 Dispatcher.poll 按结果里有没有脚本那一行决定（#1188）。
         coverage = (self.last_status or {}).get("recipe_coverage", "")
         return self.dispatcher.start(serial, plan, self._offered(), recipe_coverage=coverage)
 

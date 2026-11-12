@@ -13,7 +13,7 @@
 
 鸿蒙桌面路径另由 `gui/harmony_client.py` 工作线程调用 `gui/harmony_engine.py`，通过随包 HDC 操作手机；窗口桥仍由 `Api` 提供。原状态、旧版记录迁移与统一互斥见 [ADR-0031](adr/0031-harmony-desktop-integration.md)。
 
-两个执行宿主（桌面 / 手机）跑同一份引擎与机型脚本。替换只有三处：**命令怎么执行、每一步怎么起、屏幕怎么读**，都在 Python 层（[ADR-0019](adr/0019-phone-second-execution-host.md)）。另有一处**措辞分叉**：手机版没有电脑和数据线，引擎的排查提示按宿主取词（`tool/host.py` 的 `ON_PHONE` / `CLICKER` / `CLICK` / `TAPPED`），客户端的诊断行同理（`gui/app.py` 的 `TAP_REFUSED`）；判定、控制流与机型脚本不分叉（ADR-0019 增补段）。
+两个执行宿主（桌面 / 手机）跑同一份引擎与机型脚本。替换只有三处：**命令怎么执行、每一步怎么起、屏幕怎么读**，都在 Python 层（[ADR-0019](adr/0019-phone-second-execution-host.md)）。另有一处**措辞分叉**：手机版没有电脑和数据线，引擎的排查提示按宿主取词（`tool/host.py` 的 `ON_PHONE` / `CLICKER` / `CLICK` / `TAPPED`，以及结果页验证档位提示的 `coverage_notes()`），客户端的诊断行同理（`gui/app.py` 的 `TAP_REFUSED`）；判定、控制流与机型脚本不分叉（ADR-0019 增补段）。
 
 ## 二、四条跨边界契约
 
@@ -42,6 +42,7 @@
 | `wait.py` | 「等到页面认得出」与「等机主解锁」的唯一实现 |
 | `events.py` | 事件行与载荷行的格式与判定 |
 | `summary.py` | 一步结果怎么说成一句话：两个宿主共用这一份，界面只显示 `summary` 字段（[ADR-0019](adr/0019-phone-second-execution-host.md) 的增补段） |
+| `coverage_note.py` | 结果页要不要为脚本的验证档位多一行：判据一份，措辞按宿主从 `host.py` 取，快照带 `coverage_note` 字段（[ADR-0010](adr/0010-execution-state.md) 的增补段） |
 | `plan.py` | 一次执行跑哪些步骤的规格：八个键、默认值、宽容收与 JSON 往返；排任务与重试轮都从它取值 |
 | `reader.py` | 读屏 adapter 的接口（`Reader`） |
 | `adb_link.py` | 连接中断的判定与「等手机回来」 |

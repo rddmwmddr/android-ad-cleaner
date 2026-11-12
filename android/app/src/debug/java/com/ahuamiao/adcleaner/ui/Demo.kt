@@ -119,7 +119,8 @@ object Demo {
             "failed" -> RunProgress(sec = 266, outcome = Outcome.Failed, results = ok.take(2) + StepResult("负一屏与搜索", false, 30, "入口没找到", false, false))
             "failed2" -> RunProgress(sec = 266, outcome = Outcome.Failed, recovery = "读屏连接断开了。先检查读屏连接，再重新开始。", results = ok.take(1) + StepResult("系统广告", false, 3, "读屏连接断开", false, false))
             "stopped" -> RunProgress(sec = 100, cancel = true, outcome = Outcome.Stopped, results = ok.take(2) + StepResult("负一屏与搜索", false, 10, "", false, true))
-            // 脚本只验过一部分时的结果页（#1130）：多一行说明，别的都与 done 一样
+            // 脚本只验过一部分时的结果页（#1130）：多一行说明，别的都与 done 一样。
+            // 这句是预览用的样例文案（照手机版那份抄的），真文案由 tool/host.py 按宿主给（#1188）
             "coverage" -> RunProgress(sec = 266, outcome = Outcome.Ok, results = ok,
                 coverageNote = "这套机型脚本只在一部分步骤上做过真机验证，其余步骤这次是照脚本直接跑的，建议顺手核对一眼。")
             else -> RunProgress(sec = 266, outcome = Outcome.Ok, results = ok)

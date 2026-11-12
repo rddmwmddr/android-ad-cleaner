@@ -105,7 +105,7 @@ data class RunProgress(
     val stalled: Int = 0,
     /** 还能重试几步；0 表示结果页不出重试按钮（判断在 gui/app.py 的 retryable，#638）。 */
     val retry: Int = 0,
-    /** 这次用的机型脚本验得不够时的那句话；空串表示不占一行（判断在 view.py 的 coverage_note，#1130）。 */
+    /** 这次用的机型脚本验得不够时的那句话；空串表示不占一行（判据在 tool/coverage_note.py、措辞在 tool/host.py，#1188）。 */
     val coverageNote: String = "",
 ) {
     /** 执行结束了吗。停在第一步时还没有结果，也算结束（#632）。 */

@@ -41,6 +41,7 @@
 | `test_engine_events.py` | 引擎侧在语义发生地发事件，人话逐字不变。 |
 | `test_client_events.py` | 客户端只认引擎事件：事件行不进日志、人话本身不改状态。 |
 | `test_summary.py` | 结果摘要的唯一定义：一段 tail 怎么说成一句话，两个宿主与两条链路说同一句。 |
+| `test_coverage_note.py` | 结果页验证档位提示的唯一定义：说不说的判据、按宿主分叉的措辞，与档位词表的对应。 |
 | `test_channel_classification.py` | 渠道判定：哪些渠道算营销、受保护、默认不勾，扫描因此列出谁、排除谁。 |
 | `test_channel_outcomes.py` | 渠道批处理的结局记账与上报：一项的结局是值，怎么记、怎么报由几张表定。 |
 | `test_channel_page.py` | 渠道页：从哪条路走进去、认出的是不是渠道页、从哪一行拿开关。 |
