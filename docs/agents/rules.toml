@@ -191,7 +191,7 @@ id = "dev.row.single-definition"
 source = "CLAUDE.md#开发"
 check = "code:tool/row.py:line"
 status = "code"
-why = "「哪一行是开关、哪一个才是它的本体」曾散在 off()、fast.switches()、chan_fast 与机型脚本各一份，灰开关与双列布局被点错（#480、#486、#530）；icon_hit 的本地副本已有 test_icon_hit_530 守着，其余只认这一份。"
+why = "「哪一行是开关、哪一个才是它的本体」曾散在 off()、fast.switches()、chan_fast 与机型脚本各一份，灰开关与双列布局被点错（#480、#486、#530）；按名字筛候选行的前置过滤也曾在 _recognise_inline 与 _enter_app_page 各写一份（#1120）；icon_hit 的本地副本已有 test_icon_hit_530 守着，其余只认这一份。"
 expires_if = "读屏直接返回结构化的控件归属、不再从 bounds 推行的结构时删。"
 
 [[rule]]

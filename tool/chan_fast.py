@@ -16,7 +16,7 @@ from stdio import use_utf8_console
 use_utf8_console()
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fast import Phone, ScreenLocked, pause_point
-from row import PATH_DEPTH, SAME_LINE, bounds, disabled_at as row_disabled_at, link, own, skeleton
+from row import PATH_DEPTH, SAME_LINE, bounds, disabled_at as row_disabled_at, link, named_nodes, own, skeleton
 from channel_policy import classify, protected_channel
 from troubleshooting import ON_PHONE, XIAOMI_INPUT
 from backups import root_from_env
@@ -519,12 +519,11 @@ class ChannelPage:
             return None
         root = p.tree()
         parents = {c: n for n in root.iter() for c in n}
-        # 开关自己的无障碍标签、整行的标签可能也是渠道名：开关本身不算，同一行只算一次
+        # 整行的标签可能也是渠道名：同一行只算一次
         rows, missing, notes = set(), False, []
         good = []
-        for t, b, n in p.texts(root):
-            if t != name or b[1] < p.H * 0.22 or n.get("checkable") == "true":
-                continue
+        for _text, b, n in named_nodes(root, parents, p.on_screen, name, p.H,
+                                       systemui_text=p.systemui_text):
             row, boxes = own(n, parents, p.on_screen)
             if row is None:
                 missing = True
@@ -675,9 +674,8 @@ class ChannelPage:
             if vivo and self.vivo_app is None and floor is not None:
                 # 这一屏有「类别」分组，说明是应用通知页：先记下 App 名。往下翻页后顶栏可能收起来（#336）
                 self.vivo_app = top_title(p, root)
-            for text, b, n in texts:
-                if text != name or b[1] < p.H * 0.22 or n.get("checkable") == "true":
-                    continue
+            for _text, b, n in named_nodes(root, parents, p.on_screen, name, p.H,
+                                           systemui_text=p.systemui_text):
                 if floor is not None and b[1] < floor:
                     continue                      # 「类别」以上是应用名和总开关，同名文字不算渠道行
                 row, boxes = own(n, parents, p.on_screen)
