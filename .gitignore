@@ -35,6 +35,9 @@ android/local.properties
 android/.gradle/
 android/app/build/
 
+# 发版校验清单由 tool/release_meta.py 在仓库根就地生成，不入库
+SHA256SUMS.txt
+
 # 覆盖率产物与 CI 测试日志：本地一份、CI 两个平台各一份中间数据，合并 job 产 coverage.xml
 .coverage
 coverage-*.data

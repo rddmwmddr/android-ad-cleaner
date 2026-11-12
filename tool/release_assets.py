@@ -10,12 +10,17 @@
 `REL.version`）在 `tests/test_rules_guards.py` 的 `ReleaseGuards` 里，不需要 GitHub 凭据；
 这里只比名字集合，不比 sha——sha 每次发版都变，比对会天天误报。
 
+`fetch_release()` 是取数底座：一次 `gh release view` 给全部附件的 `Asset`（名字、大小、
+摘要），`fetch_assets()` 只是它的名字投影。生成校验清单的 `tool/release_meta.py` 也消费它。
+
 退出码：0 一致；1 两侧文件名不一致；2 取数失败（读不到 REL、网络、API 限额、tag 不存在）。
 """
+import json
 import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))   # 直接跑脚本与作为 tool.<模块> import 两种都认
 from stdio import use_utf8_console                         # noqa: E402
@@ -60,18 +65,39 @@ def compare(page_files, release_files):
     return sorted(page - release), sorted(release - page)
 
 
-def fetch_assets(tag):
-    """`gh release view <tag>` 的附件名清单；取不到时抛 RuntimeError。"""
+class Asset(NamedTuple):
+    """Release 上的一个附件：`digest` 是 `gh` 原文，形如 `sha256:<64 位十六进制>`。"""
+    name: str
+    size: int
+    digest: str
+
+
+def run_gh(*args):
+    """跑 `gh <args>` 并返回 stdout；跑不起或退出码非 0 时抛 RuntimeError（取数失败的统一形状）。"""
     try:
-        done = subprocess.run(
-            ["gh", "release", "view", tag, "--json", "assets", "--jq", ".assets[].name"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        done = subprocess.run(["gh", *args], capture_output=True, text=True,
+                              encoding="utf-8", errors="replace")
     except OSError as error:
         raise RuntimeError(f"跑不起 gh：{error}") from error
     if done.returncode != 0:
         detail = (done.stderr or done.stdout).strip()
         raise RuntimeError(detail or f"gh 退出码 {done.returncode}")
-    return [name for name in done.stdout.splitlines() if name.strip()]
+    return done.stdout
+
+
+def fetch_release(tag):
+    """`gh release view <tag>` 的全量附件；取不到时抛 RuntimeError。"""
+    try:
+        rows = json.loads(run_gh("release", "view", tag, "--json", "assets"))["assets"]
+        return [Asset(name=str(row.get("name") or ""), size=int(row.get("size") or 0),
+                      digest=str(row.get("digest") or "")) for row in rows]
+    except (AttributeError, ValueError, KeyError, TypeError) as error:
+        raise RuntimeError(f"读不出 {tag} 的附件：{error}") from error
+
+
+def fetch_assets(tag):
+    """`fetch_release` 的名字投影：附件名清单；取不到时抛 RuntimeError。"""
+    return [asset.name for asset in fetch_release(tag)]
 
 
 def main(argv, fetch=fetch_assets, page=PAGE):
