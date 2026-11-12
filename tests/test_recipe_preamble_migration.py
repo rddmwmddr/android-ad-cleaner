@@ -43,8 +43,6 @@ LOCAL_PREAMBLE = {
 
 # 记录在案的例外：脚本相对路径 → 允许保留的名字。迁移完成后为空。
 ALLOWED = {
-    # 荣耀轮询等标题出现，失败是「没等到」而不是「到了但标题不对」（#939 票面留待再议）
-    "recipes/honor-WKL-AN20/recipe.py": {"page"},
     # 一加旧的 `page(activity, title, timeout=6)`：同样的轮询形状，不在 #939 的改动面
     "recipes/oneplus-PHK110/recipe_android15.py": {"page"},
 }
