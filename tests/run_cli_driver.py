@@ -4,7 +4,7 @@
 「同一批输入」的定义只有这一处。规范化只动三类东西：临时目录的绝对路径、
 备份目录名里的时间戳（`Backups.create` 用 `%Y%m%d-%H%M`），以及 `status-json` 里从台账现读的
 覆盖度 / 证据来源 / 验证日期——那三样跟着 `recipes/verified.toml` 的日常维护变，不是命令行为，
-`tests/test_recipe_verification_1124.py` 单独验它们的真实取值。
+`tests/test_verify_ledger.py` 单独验它们的真实取值。
 """
 import json
 import os

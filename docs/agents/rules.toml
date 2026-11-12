@@ -44,7 +44,7 @@ id = "dev.tests.anchor-registry"
 source = "CLAUDE.md#开发"
 check = "test:test_test_collection::AnchorTests.test_the_real_tree_has_no_violation"
 status = "enforced"
-why = "三周里每来一张票就新建一个测试文件，`tests/` 长到 197 个，`fast` 被 62 个文件引用却没有一处能回答「这门面的行为契约是什么」，新票也没有落点于是继续新建（#1139）。守卫要求每个测试文件必须是已声明的锚点、待归并名单里的一条、或点名了某份机型脚本——三者之外即红，报红文案给出相近的锚点；锚点清单与 docs/agents/test-anchors.md 的表逐项对拍，待归并名单冻结在 `PENDING_CAP` 只许降。"
+why = "三周里每来一张票就新建一个测试文件，`tests/` 长到 197 个，`fast` 被 62 个文件引用却没有一处能回答「这门面的行为契约是什么」，新票也没有落点于是继续新建（#1139）。守卫要求每个测试文件必须是已声明的锚点、或点名了某份机型脚本——两者之外即红，报红文案给出相近的锚点；锚点清单与 docs/agents/test-anchors.md 的表逐项对拍。"
 expires_if = "测试文件收成一个「行为 → 用例」的目录结构、新文件的位置由架构自动决定时删；`tests/` 不再是唯一收集起点时也删。"
 
 [[rule]]

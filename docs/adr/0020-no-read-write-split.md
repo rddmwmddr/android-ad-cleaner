@@ -26,7 +26,7 @@
   后者就是 ADR-0002 说的「只是换个名字」，不减少任何一处的复杂度。
 - **只做窄版：新增一个只读子集协议，`Phone` 的只读方法只依赖它**（否决）：`p.d` 与 `Reader` 原样保留，
   改动面小，但唯一的硬收益是「测试能断言这条路径只读」，而现有行为级用例已经覆盖了这个意图
-  （`tests/test_feedback_safety.py`、`tests/test_dismiss_378.py`、`tests/test_bottom_tab_386.py`）；
+  （`tests/test_feedback_safety.py`、`tests/test_phone_dismisser.py`、`tests/test_phone_navigator.py`）；
   而严格意义的「只读」在这个产品里做不到——打开 App、点入口、翻页本身就是写操作。
 - **不动，并在架构总览里写明**（采纳）。
 

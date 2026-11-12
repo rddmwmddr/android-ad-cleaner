@@ -1,14 +1,12 @@
 # 测试文件的锚点登记
 
-`tests/` 下的每个 `test_*.py` 只有三种合法归属：一个已声明的**锚点**、**待归并**名单里的一条、或某份机型脚本的**专用测试**。三者之外的新文件即红。
+`tests/` 下的每个 `test_*.py` 只有两种合法归属：一个已声明的**锚点**，或某份机型脚本的**专用测试**。两者之外的新文件即红。
 
 守卫是 [tool/test_anchors.py](../../tool/test_anchors.py) 的 `violations(root)`：对给定根目录求值的纯函数，反例用临时目录构造，不依赖真实仓库状态。[tests/test_test_collection.py](../../tests/test_test_collection.py) 在回归里代跑它，本地也可以 `python3 tool/test_anchors.py` 直接跑一遍（退出码 0 全绿、1 有违规）。
 
-## 三种归属
+## 两种归属
 
 **锚点**：登记在下面的 `## 锚点登记` 表与 `tool/test_anchors.py` 的 `ANCHORS` 里，两边逐字对拍——改一处漏掉另一处即红。每个锚点带一句 why，说的是这个文件在守什么；半年后判断「这个文件该不该留」靠的就是它。
-
-**待归并**：存量票号文件，逐条记着要并到哪个文件（`PENDING`）。条数冻结在 `PENDING_CAP`——一个**字面量**，不是 `len(PENDING)`，否则上限会跟着名单一起涨，「新增即红」就是空转。新增条目超过上限即红，逼你先回答「这条用例属于哪个锚点」，而不是再开一个票号文件。
 
 **机型脚本的专用测试**：文件名点名了 `recipes/` 下的某份脚本就自动合规，不逐个登记。点名的形式有三种：目录名的品牌段（`test_honor_recipe.py`）、型号段（`test_rmx3888_recipe.py`）、或脚本头注里的市场名（`test_k70_recipe.py`，对应 `recipes/redmi-23113RKC6C`）。给新机型写脚本时，按脚本目录给测试文件命名即可。
 
@@ -16,21 +14,15 @@
 
 先找被测的对象：某个 `tool/` 模块、`Phone` 的门面或某个阶段、一条已经登记的行为域——落进它对应的锚点文件。没有对应的，再问「这是不是一份机型脚本的专用测试」，是就按脚本命名。两者都不是时才新开锚点，两处同时登记并写 why。
 
+票号不消失：并进锚点时，把票号写进用例 docstring 的首行，仍然可以 `grep`；关票时把用例位置写进票，两条合起来就是从票到用例、从用例到票的完整引用。
+
 报红文案会按文件名给出最近的两个锚点作为候选，但那只是提示，不是建议——「这条用例属于门面还是某个阶段」仍是人的判断。
-
-## 存量票号文件
-
-被**任何改动**碰到时，那个 PR 顺带把它并进目标锚点。不用「改动是否触及它守的行为」这种需要判断的条件——它最容易被合理化。
-
-票号不消失：从文件名挪进用例 docstring 的首行，仍然可以 `grep`；关票时把用例位置写进票，两条合起来就是从票到用例、从用例到票的完整引用。
 
 ## 已知漏口
 
-豁免判据看的是文件名：一个票号文件如果名字里恰好带着机型词（`test_k70_1234.py`），会被当成机型测试放过去。那种文件本来多半也确实是该机型的专用测试，代价可以接受。
+豁免判据看的是文件名：一个文件名如果恰好带着机型词（`test_k70_1234.py`），会被当成机型测试放过去。那种文件本来多半也确实是该机型的专用测试，代价可以接受。
 
 反过来，改名去掉了机型词、又没登记的文件会红——这是对的，它此时已经说不出自己守的是哪份脚本了。
-
-待归并的目标是人工选的，守卫只核「目标存在」；选得对不对靠评审，不靠机器。
 
 豁免只看文件名与 `recipes/` 的名字和正文，不读那个测试文件的内容：名字里只有品牌（`test_vivo_chan_page.py`）不算点名任何一份脚本，仍要落到锚点；品牌加型号片段（`test_honor_wkl_recipe.py` 的 `wkl`）才算。
 
@@ -44,7 +36,7 @@
 | `test_row.py` | 「开关所属的那一行」的唯一定义：结构定界、几何分带、同名去重与自绘开关去重。 |
 | `test_wait.py` | 「等到认得出」：超时、稳定、变化、受阻四个判据，外加等机主解锁。 |
 | `test_entries.py` | 入口速查表与它怎么被用：每条入口有出处、文档同源、reach() 按直达与搜索回退，以及各品牌脚本进具体入口（齿轮、直达、浏览器 / 主题 / 商店 / 负一屏）。 |
-| `test_vocab.py` | 品牌词库：词条有出处、键与入口速查相同、同页保留项只在那一页成立。 |
+| `test_vocab.py` | 品牌词库：词条有出处、键与入口速查相同、同页保留项只在那一页成立，以及 gaps 查漏。 |
 | `test_events.py` | 引擎事件的词表与解析：六个 kind、固定前缀、坏行当没有。 |
 | `test_engine_events.py` | 引擎侧在语义发生地发事件，人话逐字不变。 |
 | `test_client_events.py` | 客户端只认引擎事件：事件行不进日志、人话本身不改状态。 |
@@ -55,9 +47,9 @@
 | `test_phone_base.py` | 两个基座可以各自独立构造，不必造整台 Phone。 |
 | `test_phone_sessions.py` | 三个跨阶段会话对象，门面用显式属性转发过去。 |
 | `test_phone_toggler.py` | 拨动阶段：这一页该关的开关真的被关掉，含确认框判定与等待、页顶复位与残留提示。 |
-| `test_phone_navigator.py` | 导航阶段的对外契约：go / tab / 入口与落点确认。 |
-| `test_phone_settings_search.py` | 设置搜索阶段的两条对外契约。 |
-| `test_phone_dismisser.py` | 弹窗与推广位阶段：词表只有一份，推广位点了要退回。 |
+| `test_phone_navigator.py` | 导航阶段的对外契约：go / tab / 入口与落点确认，含底部标签带内三层匹配与齿轮点完的落点校验。 |
+| `test_phone_settings_search.py` | 设置搜索阶段：对外契约、搜索失败后的退场，以及设置页签名认 Setting 与 Preference 两族。 |
+| `test_phone_dismisser.py` | 弹窗与推广位阶段：词表只有一份，推广位点了要退回；菜单的返回键与设置页里的说明行都不算弹窗 ✕。 |
 | `test_phone_launcher.py` | 启动与落点阶段：前台归属、抢夺者现场与落点校验。 |
 | `test_phone_interface.py` | Phone 的接口面：读屏策略、探路包名过滤、安全模式与 adapter 名字。 |
 | `test_switch_plan.py` | plan_switches() 的策略面：这一页该拨哪些开关，与点击循环无关。 |
@@ -69,7 +61,7 @@
 | `test_recipe_kit.py` | 引擎注入的脚本前导：段包装、跳过出口、失败台账、锁屏中止、安全模式整页关闭与失败现场。 |
 | `test_recipe_loader.py` | 机型脚本只有一个装载入口，测试不许自己 exec 一份脚本。 |
 | `test_recipe_meta_module.py` | 配方元数据住中立模块：非 CLI 代码 import 它不背 CLI 副作用。 |
-| `test_recipe_variants.py` | 同一型号按系统版本选脚本变体，变体要进安装包。 |
+| `test_recipe_variants.py` | 同一型号按系统版本选脚本变体、变体要进安装包，以及没有本型号脚本时参考脚本按录制版本在同族里挑。 |
 | `test_recipe_setting_checked.py` | 机型脚本必须消费 p.setting() 的返回值，不能空跑还记成功。 |
 | `test_recipe_preamble_migration.py` | 机型脚本不再自带前导：结构守卫与每份脚本的行为守卫。 |
 | `test_backups.py` | 备份目录的命名、扫描与 <型号>-gui 兜底。 |
@@ -112,7 +104,7 @@
 | `test_harmony_vocab.py` | 鸿蒙词库守卫。 |
 | `test_plan.py` | 一次执行跑哪些步骤：Plan 规格的八个键与往返，以及按规格排出的任务、未执行行与重试轮。 |
 | `test_run_commands.py` | run.py 的命令接口与它产出的诊断：退出码只在出口、多余往返的守卫、「只是搬家」的对拍，以及设备名与收尾快照。 |
-| `test_adapt_cli.py` | adapt.py 三条子命令对外的退出码与两路输出。 |
+| `test_adapt_cli.py` | adapt.py 三条子命令对外的退出码与两路输出，survey 试入口的三种结局与 `-s S adapt` 的转发，以及 TSV 解析、草稿生成、自检报告与探路导航。 |
 | `test_claim.py` | 开工认领：一条命令写认领评论并摘待办标签，仲裁只看票下评论。 |
 | `test_triage_audit.py` | triage 四条集合判据，登记表与脚本常量逐项对拍。 |
 | `test_stale_scan.py` | needs-info 停摆机制：判定与阈值、写入与幂等。 |
@@ -120,7 +112,7 @@
 | `test_dco.py` | 每个非 merge 提交都带与作者邮箱一致的 signoff。 |
 | `test_ticket_ref.py` | 分支名与 PR 正文指到同一张票。 |
 | `test_comment_tickets.py` | 新写的行里挂的票号要与这次 PR 有关。 |
-| `test_verify_ledger.py` | 配方验证台账：每个配方文件一行、缺记录显示未记录。 |
+| `test_verify_ledger.py` | 配方验证台账：每个配方文件一行、缺记录显示未记录，以及 status-json 带出的覆盖度、证据来源与验证日期。 |
 | `test_unittest_summary.py` | CI 的测试结果表格：列取错或漏算跳过数即红。 |
 | `test_release_assets.py` | 下载页 REL 与 Release 附件的对账。 |
 | `test_release_meta.py` | 发版校验清单从 Release 事实生成（tool/release_meta.py）：退出码、清单文本与写盘。 |
@@ -137,4 +129,4 @@
 | `test_regressions.py` | 设备无关的回归：输入、页面识别、开关保护与打包入口。 |
 | `test_release_regressions.py` | 发布回归：横屏、部分失败、通知默认选择与发布资源边界。 |
 | `test_feedback_safety.py` | 用户反馈里的安全项：无障碍排查只读、通知保护与旧清单还原。 |
-| `test_phone_host.py` | 手机版宿主的说法：没有电脑和数据线时该怎么说，以及唯一的控制流例外（不写插电常亮）。 |
+| `test_phone_host.py` | 手机版宿主的说法：没有电脑和数据线时该怎么说、界面与诊断里残留的桌面说法，以及唯一的控制流例外（不写插电常亮）。 |

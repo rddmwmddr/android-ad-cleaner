@@ -29,5 +29,5 @@
 - `OS4.0.5.0.*` 的设备（Xiaomi 17 Pro Max 等无专用脚本机型）从 `xiaomi-M154FF` 换到 `xiaomi-2512BPNDAC`；`OS4.0.4.0.XHPCNXM` 从 `xiaomi-M154FF` 换到 `xiaomi-M332BF`。两者段数都是 9，过得了 #319 的门槛。
 - 按现行脚本树，oppo / honor / meizu 的选型在样本设备版本上不变；vivo 与固定参考核心等长的脚本（`16`）仍保固定参考。`vivo-V2417A`（`16.2.14.1.W10`）是严格更贴的候选，报出这个版本核心的 vivo 会换到它——这是本规则想要的结果，只是上报库里抽不出 `_A_` 版本核心，有多少台会换未确认。
 - `recipe_for()` 从此只有一套排序；`same_version_family_recipe()` 不再是「固定参考对不上」的补丁，而是两条路径共用的挑选（名字沿用票面，语义已从「同版本」放宽到「更贴」）。
-- 用例在 `tests/test_reference_by_version.py`：`test_a_finer_recording_beats_a_matching_pinned_reference` 覆盖这条以前走不到的路径（固定参考命中后仍换到更贴的同族脚本），`test_the_suffix_comes_from_the_real_pick` 端到端验证 `check` 的后缀来自真实选型。等长保固定参考、同长度按段数、三星 / 华为不标后缀这三条在旧树上也绿，docstring 已按守卫用例说明。
+- 用例在 `tests/test_recipe_variants.py`：`test_a_finer_recording_beats_a_matching_pinned_reference` 覆盖这条以前走不到的路径（固定参考命中后仍换到更贴的同族脚本），`test_the_suffix_comes_from_the_real_pick` 端到端验证 `check` 的后缀来自真实选型。等长保固定参考、同长度按段数、三星 / 华为不标后缀这三条在旧树上也绿，docstring 已按守卫用例说明。
 - **没有真机可验。** 验收是单元回归加新旧实现的影响面对拍，真机复测进下一版 `waiting-for-verify` 清单。

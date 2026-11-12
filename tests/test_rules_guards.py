@@ -778,7 +778,7 @@ class StubGuards(unittest.TestCase):
         #1022 票面按一个只认四条断言形态的正则量到「2 处」；那个正则漏了多参数 `patch.object`、
         单引号与「收集后统一断言」的写法。按本条判据重算（每个函数自身作用域里的 `as NAME`
         绑定）：`tests/` 全库 14 处、13 个函数、6 份文件，全部有后续使用，没有真哑桩。
-        票面设想的豁免（`test_adapt_survey_690.py` 的 `run_cmd <- factory`、`forward <- shell`）
+        票面设想的豁免（`test_adapt_cli.py` 的 `run_cmd <- factory`、`forward <- shell`）
         都是 `self.factory = factory` 形态，按本条判据本来就绿，所以 `STUB_ALLOW` 今天为空。
 
         已知漏口：只认裸名 `patch(...)` / `patch.object(...)`，`unittest.mock.patch(...)` 这类

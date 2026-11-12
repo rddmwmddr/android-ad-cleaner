@@ -4,8 +4,8 @@
 tests/ 之外的 .py 里出现 `def test_` 即红，逐文件列出命中数；隐藏目录与 node_modules /
 build 不扫。
 
-`AnchorTests`（rule:dev.tests.anchor-registry）：每个测试文件要么是已声明的锚点、要么在
-待归并名单里、要么是机型脚本的专用测试。判据正文在 docs/agents/test-anchors.md。
+`AnchorTests`（rule:dev.tests.anchor-registry）：每个测试文件要么是已声明的锚点、要么是
+机型脚本的专用测试。判据正文在 docs/agents/test-anchors.md。
 """
 import os
 import re
@@ -90,20 +90,15 @@ def fake_root(tmp, *names, recipes=()):
 
 
 class AnchorTests(unittest.TestCase):
-    def violations(self, anchors, pending, *names, recipes=(), cap=None):
+    def violations(self, anchors, *names, recipes=()):
         """在一棵只有这些文件的临时树上求值；反例不必碰真实仓库。"""
         with tempfile.TemporaryDirectory() as tmp:
             root = fake_root(tmp, *names, recipes=recipes)
-            return test_anchors.violations(root, anchors, pending, cap)
+            return test_anchors.violations(root, anchors)
 
     def test_the_real_tree_has_no_violation(self):
         self.assertEqual(test_anchors.violations(ROOT), [],
                          "有测试文件没落到锚点，或者登记与文件树对不上")
-
-    def test_the_pending_cap_matches_the_frozen_count(self):
-        """上限是字面量：往名单加一条而忘了改这个数，这里就红。"""
-        self.assertEqual(test_anchors.PENDING_CAP, len(test_anchors.PENDING),
-                         "待归并条数与 PENDING_CAP 不一致；只许降，加了条目就要说明为什么")
 
     def test_the_anchor_table_matches_the_code(self):
         registered = anchor_table(DOC.read_text(encoding="utf-8"))
@@ -113,70 +108,53 @@ class AnchorTests(unittest.TestCase):
 
     def test_a_ticket_named_file_is_reported_with_a_suggestion(self):
         """新开一个票号命名的文件即红，且文案指出它可能属于哪个锚点。"""
-        found = self.violations({"test_row.py": "行定界"}, {}, "test_row.py", "test_row_1234.py")
+        found = self.violations({"test_row.py": "行定界"}, "test_row.py", "test_row_1234.py")
         self.assertTrue(found)
         self.assertIn("test_row_1234.py 没有登记锚点", "\n".join(found))
         self.assertIn("test_row.py", "\n".join(found))
 
     def test_an_anchor_without_its_file_is_reported(self):
         """清单里有的文件必须存在——双向一致真的双向。"""
-        found = self.violations({"test_row.py": "行定界"}, {})
+        found = self.violations({"test_row.py": "行定界"})
         self.assertEqual(len(found), 1)
         self.assertIn("锚点 test_row.py 在文件树里不存在", found[0])
 
-    def test_a_pending_entry_without_its_file_is_reported(self):
-        found = self.violations({}, {"test_row_1234.py": "test_row.py"})
-        self.assertIn("已经并掉", "\n".join(found))
-
-    def test_a_pending_target_must_exist(self):
-        found = self.violations({}, {"test_row_1234.py": "test_row.py"}, "test_row_1234.py")
-        self.assertEqual(len(found), 1)
-        self.assertIn("归并目标 test_row.py 不存在", found[0])
-
-    def test_one_more_pending_entry_breaks_the_frozen_cap(self):
-        """名单只能缩不能长：多一条就超过冻结上限。"""
-        anchors = {"test_row.py": "行定界"}
-        pending = {"test_a_1.py": "test_row.py", "test_b_2.py": "test_row.py"}
-        names = ("test_row.py", "test_a_1.py", "test_b_2.py")
-        self.assertEqual(self.violations(anchors, pending, *names, cap=2), [])
-        self.assertIn("超过冻结上限", "\n".join(self.violations(anchors, pending, *names, cap=1)))
-
-    def test_the_same_file_cannot_be_anchor_and_pending(self):
-        found = self.violations({"test_row.py": "行定界"}, {"test_row.py": "test_row.py"},
-                                "test_row.py")
-        self.assertIn("既登记为锚点又在待归并名单里", "\n".join(found))
+    def test_there_is_no_third_way_to_own_a_test_file(self):
+        """合法的只有锚点与机型脚本测试两种来源：登记表里不许再有别的逃生口。"""
+        self.assertFalse(hasattr(test_anchors, "PENDING"))
+        self.assertFalse(hasattr(test_anchors, "PENDING_CAP"))
 
     def test_a_recipe_named_test_is_exempt(self):
         """机型脚本的专用测试不登记也不红：目录名的型号段与脚本里的市场名都算点名。"""
         found = self.violations(
-            {}, {}, "test_rmx3888_recipe.py", "test_k70_recipe.py", "test_honor_wkl_recipe.py",
+            {}, "test_rmx3888_recipe.py", "test_k70_recipe.py", "test_honor_wkl_recipe.py",
             recipes=[("realme-RMX3888", "BUILD = ''\n"),
                      ("redmi-23113RKC6C", "# Redmi K70（23113RKC6C），HyperOS。\n"),
                      ("honor-WKL-AN20", "BUILD = ''\n")])
         self.assertEqual(found, [])
 
     def test_a_brand_level_test_is_exempt(self):
-        found = self.violations({}, {}, "test_honor_recipe.py",
+        found = self.violations({}, "test_honor_recipe.py",
                                 recipes=[("honor-CLE-AN00", "BUILD = ''\n")])
         self.assertEqual(found, [])
 
     def test_a_brand_word_alone_does_not_buy_an_exemption(self):
         """名字里只有品牌（`vivo`）却没有点名任何一份脚本：仍要落到锚点。"""
-        found = self.violations({}, {}, "test_vivo_chan_page.py",
+        found = self.violations({}, "test_vivo_chan_page.py",
                                 recipes=[("vivo-V1986A", "BUILD = 'Funtouch 13'\n")])
         self.assertEqual(len(found), 1)
         self.assertIn("test_vivo_chan_page.py 没有登记锚点", found[0])
 
     def test_a_plain_english_word_in_a_recipe_does_not_buy_an_exemption(self):
         """正文里出现过 `row` 不算点名：豁免只认型号形态（带数字的市场名或目录段）。"""
-        found = self.violations({}, {}, "test_row.py",
+        found = self.violations({}, "test_row.py",
                                 recipes=[("honor-CLE-AN00", "# 这一行 row 是普通单词\n")])
         self.assertEqual(len(found), 1)
         self.assertIn("test_row.py 没有登记锚点", found[0])
 
     def test_a_file_outside_the_test_pattern_is_not_examined(self):
         """共享资产（夹具、驱动器、js 用例）不是测试文件，不受锚点规则约束。"""
-        self.assertEqual(self.violations({}, {}, "fixtures.py", "compare_api.py"), [])
+        self.assertEqual(self.violations({}, "fixtures.py", "compare_api.py"), [])
 
 
 if __name__ == "__main__":
