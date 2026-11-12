@@ -554,7 +554,7 @@ def restore_all(runner, items, *, note=print, sleep=time.sleep, wait=RESTORE_WAI
 
 
 def judge_run(blob, restore, error="", flow="执行段", outcome="ok", how="完成页"):
-    """第三段：跑完没有 + 还原完成没有。关了几项只记录、不判定。
+    """第三段：跑完没有 + 还原完成没有。走了几步只记录、不判定。
 
     `flow` 只影响措辞。完整主流程的结局由完成页的标题给（`outcome`，`how` 说从哪儿认的）；
     快速档没有完成页，按导出里的 `finished` 判（#1072）。
@@ -567,7 +567,7 @@ def judge_run(blob, restore, error="", flow="执行段", outcome="ok", how="完�
     if bad:
         return False, "设备可能残留改动：%s %s" % (bad[0].name, bad[0].detail)
     if outcome == "failed":
-        return False, "%s是「%s」，关了 %d 项（只记录）；还原完成" % (how, DONE_FAILED, len(done))
+        return False, "%s是「%s」，完成 %d 步（只记录）；还原完成" % (how, DONE_FAILED, len(done))
     if outcome == "stopped":
         return False, "%s是「%s」；还原完成" % (how, DONE_STOPPED)
     if outcome != "ok":
@@ -575,9 +575,9 @@ def judge_run(blob, restore, error="", flow="执行段", outcome="ok", how="完�
     if not (blob or {}).get("finished"):
         return False, "%s没跑完：" % flow + (error or run.get("error") or (blob or {}).get("error")
                                             or "App 没给出这一轮的结局")
-    detail = "%s跑完，关了 %d 项（只记录）" % (flow, len(done))
+    detail = "%s跑完，完成 %d 步（只记录）" % (flow, len(done))
     if unfinished:
-        detail += "，%d 项没做成（只记录）" % len(unfinished)
+        detail += "，%d 步没做成（只记录）" % len(unfinished)
     if how and how != "完成页":
         detail += "，结局取自" + how
     return True, detail + "；还原完成"

@@ -502,6 +502,7 @@ class WalkTests(SmokeCase):
         self.assertFalse(report.ok)
         self.assertIn(smoke.DONE_FAILED, report.text())
         self.assertIn("真流程 + 还原：失败", report.text())
+        self.assertIn("完成 2 步（只记录）", report.text())
 
     def test_a_stopped_done_page_fails_the_segment(self):
         root, target = self.workdir()
@@ -572,7 +573,8 @@ class SmokeTests(SmokeCase):
         self.assertIn("构建：通过", report.text())
         self.assertIn("安装 + 启动：通过", report.text())
         self.assertIn("真流程 + 还原：通过", report.text())
-        self.assertIn("关了 2 项（只记录）", report.text())
+        self.assertIn("完成 2 步（只记录）", report.text())
+        self.assertNotIn("关了", report.text(), "它数的是结果行，不是开关数")
         self.assertTrue(report.text().strip().endswith(str(target)), "摘要末尾要给出产物目录")
 
     def test_the_run_is_driven_by_the_status_json_not_hard_coded_segments(self):
@@ -594,8 +596,8 @@ class SmokeTests(SmokeCase):
         results = result() + [{"title": "负一屏与搜索", "rc": 1, "skipped": False, "summary": "入口没找到"}]
         table = happy_table(target, export_replies=[(export(results=results), "", 0)])
         report, runner, notes = self.run_smoke(root, table)
-        self.assertTrue(report.ok, "「没做成几项」只记录、不判定：" + report.text())
-        self.assertIn("1 项没做成（只记录）", report.text())
+        self.assertTrue(report.ok, "「没做成几步」只记录、不判定：" + report.text())
+        self.assertIn("1 步没做成（只记录）", report.text())
 
     def test_build_failure_stops_before_install(self):
         root, target = self.workdir()
