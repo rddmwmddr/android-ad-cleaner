@@ -7,11 +7,14 @@ import sys
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
+import chan_fast
 import fast
 import row
+from fixtures import phone_stub
 
 
 def page(xml):
@@ -353,6 +356,151 @@ class PathTests(unittest.TestCase):
                          [("node", "", 0),
                           ("android.widget.LinearLayout", "", 2),
                           ("android.widget.ListView", "s", 2)])
+
+
+# ---------- 按名字筛候选行 ----------
+# 认行的前置筛选：名字完全相等、不在顶部标题带内、不是开关本体
+
+NAME = "营销通知"
+APP_PAGE = '''<hierarchy><node package="com.android.settings" bounds="[0,0][1080,2340]">
+  <node text="示例应用" bounds="[60,80][600,140]"/>
+  <node text="营销通知" bounds="[60,900][600,960]"/>
+  <node class="android.widget.Switch" checkable="true" content-desc="营销通知" checked="true" bounds="[990,900][1080,960]"/>
+</node></hierarchy>'''
+
+# 应用名和渠道名相同：顶部那一个是标题，不是列表行
+TITLE_ONLY = '''<hierarchy><node package="com.android.settings" bounds="[0,0][1080,2340]">
+  <node class="android.widget.TextView" text="营销通知" bounds="[60,80][600,140]"/>
+</node></hierarchy>'''
+
+# 顶部带边界两侧各放一个：0.22 × 2340 = 514.8
+BAND_EDGE = '''<hierarchy><node bounds="[0,0][1080,2340]">
+  <node text="营销通知" bounds="[60,514][600,560]"/>
+  <node text="营销通知" bounds="[60,515][600,561]"/>
+</node></hierarchy>'''
+
+# 分组名和渠道名相同，各带一个开关：两条都得算候选，交给调用方取舍
+TWO_ROWS = '''<hierarchy><node bounds="[0,0][1080,2340]">
+  <node text="营销通知" bounds="[60,900][600,960]"/>
+  <node class="android.widget.Switch" checkable="true" checked="true" bounds="[990,900][1080,960]"/>
+  <node text="营销通知" bounds="[60,1300][600,1360]"/>
+  <node class="android.widget.Switch" checkable="true" checked="true" bounds="[990,1300][1080,1360]"/>
+</node></hierarchy>'''
+
+
+# 同一个控件在 dump 里吐出两次（华为 HarmonyOS 4）：只算一个候选
+DUPLICATE = '''<hierarchy><node bounds="[0,0][1080,2340]">
+  <node text="营销通知" bounds="[60,900][600,960]"/>
+  <node text="营销通知" bounds="[60,900][600,960]"/>
+</node></hierarchy>'''
+
+# 同名文字挂在 com.android.systemui 上：默认不算（vivo 的通知页由 systemui_text 放行）
+SYSTEMUI_NAME = '''<hierarchy><node package="com.android.settings" bounds="[0,0][1080,2340]">
+  <node package="com.android.systemui" text="营销通知" bounds="[60,900][600,960]"/>
+  <node text="营销通知" bounds="[60,1300][600,1360]"/>
+</node></hierarchy>'''
+
+
+class NamedNodesTests(unittest.TestCase):
+    """`row.named_nodes()`：按名字筛候选行，只出结构、不认识渠道。"""
+
+    def test_a_name_only_in_the_top_band_is_the_page_title(self):
+        root, parents = page(TITLE_ONLY)
+        self.assertEqual(row.named_nodes(root, parents, on_screen(), NAME, 2340), [])
+
+    def test_the_band_edge_is_the_top_22_percent_of_the_screen(self):
+        root, parents = page(BAND_EDGE)
+        found = row.named_nodes(root, parents, on_screen(), NAME, 2340)
+        self.assertEqual([b for _, b, _ in found], [(60, 515, 600, 561)])
+
+    def test_a_name_in_the_list_area_is_the_only_candidate_on_that_row(self):
+        # 开关的 content-desc 常常也是渠道名：checkable 的那一个不算，只剩标题节点
+        root, parents = page(APP_PAGE)
+        found = row.named_nodes(root, parents, on_screen(), NAME, 2340)
+        self.assertEqual(found, [(NAME, (60, 900, 600, 960), text_node(root, NAME))])
+
+    def test_two_rows_with_the_same_name_stay_two_candidates(self):
+        root, parents = page(TWO_ROWS)
+        found = row.named_nodes(root, parents, on_screen(), NAME, 2340)
+        self.assertEqual([b[1] for _, b, _ in found], [900, 1300])
+
+    def test_the_same_control_twice_in_the_dump_is_one_candidate(self):
+        root, parents = page(DUPLICATE)
+        self.assertEqual(len(row.named_nodes(root, parents, on_screen(), NAME, 2340)), 1)
+
+    def test_whitespace_around_the_page_text_still_matches(self):
+        root, parents = page('''<hierarchy><node bounds="[0,0][1080,2340]">
+          <node text="  营销通知  " bounds="[60,900][600,960]"/>
+        </node></hierarchy>''')
+        found = row.named_nodes(root, parents, on_screen(), NAME, 2340)
+        self.assertEqual([t for t, _, _ in found], [NAME])
+
+    def test_a_copy_on_the_other_screen_is_not_a_candidate(self):
+        # 折叠屏合上时 dump 里留着内屏那份：标了不可见的、坐标落在屏外的都不算
+        root, parents = page('''<hierarchy><node bounds="[0,0][1080,2340]">
+          <node text="营销通知" visible-to-user="false" bounds="[60,900][600,960]"/>
+          <node text="营销通知" bounds="[60,2500][600,2560]"/>
+        </node></hierarchy>''')
+        self.assertEqual(row.named_nodes(root, parents, on_screen(), NAME, 2340), [])
+
+    def test_systemui_text_is_off_unless_the_page_asks_for_it(self):
+        root, parents = page(SYSTEMUI_NAME)
+        self.assertEqual([b[1] for _, b, _ in row.named_nodes(root, parents, on_screen(), NAME, 2340)],
+                         [1300])
+        both = row.named_nodes(root, parents, on_screen(), NAME, 2340, systemui_text=True)
+        self.assertEqual([b[1] for _, b, _ in both], [900, 1300])
+
+
+def real_candidates(method, xml, focus, **kwargs):
+    """跑一次真实认行，录下它交给 `own()` 的候选节点，再与 `named_nodes()` 的结果并排返回。
+
+    `own()` 换成录音桩：真实方法把每个过筛的节点交过来，认行本身（行高上限、行内开关数、
+    同名取舍）这一段停止，正好只对比筛选步。"""
+    root = ET.fromstring(xml)
+    parents = {c: n for n in root.iter() for c in n}
+    p = phone_stub("test", d=Mock(), W=1080, H=2340)
+    p.screen.focus = Mock(return_value=focus)
+    p.screen.tree = Mock(return_value=root)
+    p.screen.scroll_more = Mock(return_value=False)
+    p.locked = Mock(return_value=False)
+    seen = []
+
+    def recording(node, *_args, **_kwargs):
+        seen.append(node)
+        return None, []
+
+    with patch.object(chan_fast, "own", recording):
+        method(chan_fast.ChannelPage(p, NAME, pk="com.example.app"))
+    want = [n for _, _, n in row.named_nodes(root, parents, p.on_screen, NAME, p.H, **kwargs)]
+    return seen, want
+
+
+APP_FOCUS = "com.android.settings/com.android.settings.Settings$AppNotificationSettingsActivity"
+VIVO_SYSTEMUI_FOCUS = ("com.android.systemui/com.vivo.systemui.statusbar.notification.settings."
+                       "channels.NotificationSettingsActivity")
+
+
+class FilterParityTests(unittest.TestCase):
+    """新函数的候选集与 `chan_fast` 两处认行现在写的那条前置过滤一致：期望值由真实方法交出。"""
+
+    def test_inline_rows_feed_the_same_candidates(self):
+        for label, xml in (("app", APP_PAGE), ("title", TITLE_ONLY), ("same", TWO_ROWS),
+                           ("band", BAND_EDGE), ("dup", DUPLICATE), ("systemui", SYSTEMUI_NAME)):
+            with self.subTest(page=label):
+                seen, want = real_candidates(chan_fast.ChannelPage._recognise_inline, xml, APP_FOCUS)
+                self.assertEqual(seen, want)
+
+    def test_navigation_rows_feed_the_same_candidates(self):
+        seen, want = real_candidates(chan_fast.ChannelPage._enter_app_page, APP_PAGE, APP_FOCUS)
+        self.assertEqual(seen, want)
+        self.assertEqual([row.bounds(n) for n in seen], [(60, 900, 600, 960)])
+
+    def test_the_vivo_systemui_page_keeps_its_own_text_on_both_sides(self):
+        # 宿主是 com.android.systemui 时 _focus() 把 systemui_text 置真：两边都把那段文字算进来
+        seen, want = real_candidates(chan_fast.ChannelPage._enter_app_page, SYSTEMUI_NAME,
+                                     VIVO_SYSTEMUI_FOCUS, systemui_text=True)
+        self.assertEqual(seen, want)
+        self.assertEqual([row.bounds(n)[1] for n in seen], [900, 1300])
 
 
 if __name__ == "__main__":
