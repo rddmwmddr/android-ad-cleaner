@@ -39,6 +39,11 @@ class VariantTests(unittest.TestCase):
         for variant in ROOT.glob("recipes/*/recipe_*.py"):
             self.assertIn(variant.relative_to(ROOT).as_posix(), shipped)
 
+    def test_verification_ledger_is_packaged(self):
+        """status-json 从这份台账现读验证档位（#1124）：不随包发出去，客户端就跑不出那三个值。"""
+        shipped = {Path(src).relative_to(ROOT).as_posix() for src, _ in bundle_data(ROOT)}
+        self.assertIn("recipes/verified.toml", shipped)
+
 
 if __name__ == "__main__":
     unittest.main()

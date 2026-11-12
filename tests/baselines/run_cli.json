@@ -1,9 +1,9 @@
 {
   "provenance": {
-    "baseline": "296fc59",
+    "baseline": "d65fb25",
     "how": "git archive <sha> | tar -x -C /tmp/aac-base && .venv/bin/python tests/make_run_cli_baseline.py /tmp/aac-base <sha>",
     "cases": 29,
-    "note": "#973: status-json 的 ads 项新增 default_on（有意行为改变；其余各条与 e319126 基线逐字相同）"
+    "note": "#1124: status-json 新增 recipe_coverage / recipe_evidence / recipe_verified（值随台账维护而变，已规范化成 <LEDGER>）"
   },
   "cases": {
     "devices-有设备": {
@@ -123,7 +123,7 @@
     },
     "status-json-成功": {
       "rc": 0,
-      "stdout": "{\"info\": {\"brand\": \"Xiaomi\", \"model\": \"M154FF\", \"name\": \"Xiaomi 13\", \"build\": \"OS1.0.1.0\", \"os\": \"OS1.0.1.0\", \"android\": \"13\"}, \"locked\": false, \"recipe\": \"recipes/xiaomi-M154FF/recipe.py\", \"recipe_ref\": false, \"recipe_build\": \"OS4.0\", \"recipe_ok\": false, \"steps\": [\"系统广告\", \"应用商店\", \"手机管家\", \"下载管理\", \"主题\", \"浏览器\", \"全局搜索\", \"负一屏\", \"天气和日历\"], \"ads\": [{\"pkg\": \"com.miui.systemAdSolution\", \"suspended\": false, \"default_on\": true}], \"quickapps\": [], \"stay_on\": \"0\", \"dev\": false, \"backup\": null, \"fold_open\": false, \"input_blocked\": false}\n",
+      "stdout": "{\"info\": {\"brand\": \"Xiaomi\", \"model\": \"M154FF\", \"name\": \"Xiaomi 13\", \"build\": \"OS1.0.1.0\", \"os\": \"OS1.0.1.0\", \"android\": \"13\"}, \"locked\": false, \"recipe\": \"recipes/xiaomi-M154FF/recipe.py\", \"recipe_ref\": false, \"recipe_build\": \"OS4.0\", \"recipe_ok\": false, \"steps\": [\"系统广告\", \"应用商店\", \"手机管家\", \"下载管理\", \"主题\", \"浏览器\", \"全局搜索\", \"负一屏\", \"天气和日历\"], \"recipe_coverage\": \"<LEDGER>\", \"recipe_evidence\": \"<LEDGER>\", \"recipe_verified\": \"<LEDGER>\", \"ads\": [{\"pkg\": \"com.miui.systemAdSolution\", \"suspended\": false, \"default_on\": true}], \"quickapps\": [], \"stay_on\": \"0\", \"dev\": false, \"backup\": null, \"fold_open\": false, \"input_blocked\": false}\n",
       "stderr": ""
     },
     "status-json-断线": {

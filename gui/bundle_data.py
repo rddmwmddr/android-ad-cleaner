@@ -12,7 +12,8 @@ except ImportError:
 
 def bundle_data(root, platform_name=None, machine=None):
     root = Path(root).resolve()
-    patterns = ("tool/**/*.py", "tool/*.dex", "recipes/*/recipe.py", "recipes/*/recipe_*.py", "images/*.png",
+    patterns = ("tool/**/*.py", "tool/*.dex", "recipes/*/recipe.py", "recipes/*/recipe_*.py",
+                "recipes/verified.toml", "images/*.png",
                 "gui/web/index.html", "gui/web/chime.wav", "gui/web/img/*.png",
                 "harmony/recipes.json", "harmony/desktop/vendor/NOTICE-hdc.txt")
     system = platform_name or sys.platform

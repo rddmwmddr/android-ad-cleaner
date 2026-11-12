@@ -15,20 +15,28 @@ ROOT = Path(__file__).resolve().parents[1]
 GRADLE = ROOT / "android" / "app" / "build.gradle.kts"
 
 
-def gui_bundle_files():
-    """按构建脚本原样取出拷进 assets/aac/gui 的文件清单（include 减去 exclude）。"""
+def bundle_line(folder):
+    """构建脚本里拷某个目录的那一行（`folder` 是 `resolve("...")` 里的目录名）。"""
     lines = [line for line in GRADLE.read_text(encoding="utf-8").splitlines()
-             if 'resolve("gui")' in line]
+             if f'resolve("{folder}")' in line]
     if len(lines) != 1:
-        raise AssertionError(f"构建脚本里应只有一处 gui 拷贝清单，实际 {len(lines)} 处")
-    line = lines[0]
+        raise AssertionError(f"构建脚本里应只有一处 {folder} 拷贝清单，实际 {len(lines)} 处")
+    return lines[0]
+
+
+def include_names(line):
     match = re.search(r"include\(([^)]*)\)", line)
     if match is None:
-        raise AssertionError(f"gui 拷贝清单里没有 include(...)：{line}")
-    names = [part.strip().strip('"') for part in match.group(1).split(",") if part.strip()]
+        raise AssertionError(f"拷贝清单里没有 include(...)：{line}")
+    return [part.strip().strip('"') for part in match.group(1).split(",") if part.strip()]
+
+
+def gui_bundle_files():
+    """按构建脚本原样取出拷进 assets/aac/gui 的文件清单（include 减去 exclude）。"""
+    line = bundle_line("gui")
     excluded = re.search(r"exclude\(([^)]*)\)", line)
     patterns = [part.strip().strip('"') for part in excluded.group(1).split(",") if part.strip()] if excluded else []
-    return [name for name in names if not any(fnmatch.fnmatch(name, pattern) for pattern in patterns)]
+    return [name for name in include_names(line) if not any(fnmatch.fnmatch(name, pattern) for pattern in patterns)]
 
 
 class AndroidGuiBundleTests(unittest.TestCase):
@@ -61,6 +69,13 @@ class AndroidGuiBundleTests(unittest.TestCase):
             self.assertEqual(len(files), len(modules), proc.stdout)
             outside = [path for path in files if not path.startswith(str(gui))]
             self.assertEqual(outside, [], "这些模块不是从 APK 会带的那份目录里加载的")
+
+
+class AndroidRecipeBundleTests(unittest.TestCase):
+    def test_recipes_copy_carries_the_verification_ledger(self):
+        """手机宿主也读 `recipes/verified.toml`（status-json 的验证档位，#1124）：漏了这一行，
+        手机上跟桌面版就差一个值，而且要到真机跑 status-json 才发现。"""
+        self.assertIn("verified.toml", include_names(bundle_line("recipes")))
 
 
 if __name__ == "__main__":

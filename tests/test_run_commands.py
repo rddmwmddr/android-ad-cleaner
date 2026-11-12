@@ -7,6 +7,7 @@
   `tests/baselines/run_cli.json` 由 `tests/make_run_cli_baseline.py` 在 `git archive e319126`
   的干净副本上生成，喂的是同一份假 adb（`tests/run_cli_cases.py`）。有意改变某条输出时在改动后
   的树上重生成，并在 provenance 的 `note` 里写明原因（#973 加的 `default_on` 就是这样）。
+  重生成时 `baseline` 记当次的基点；`status-json` 里随台账变的三值由 driver 规范化成 `<LEDGER>`。
 
 `ui-check` / `chan-scan` / `chan-off` / `chan-on` / `recipe` 会真的起子进程（fast.py /
 chan_fast.py），输出取决于本机 adb 服务，所以不做逐字节对拍，改在这里替身化后断言返回值。
