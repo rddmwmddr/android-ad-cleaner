@@ -43,16 +43,6 @@ STORE_KEEP = ["帮助与客服", "应用安全", "我的专区：应用工具", 
               "应用使用记录", "首页：AI搜索"]
 
 
-def settings_page(*path):
-    """打开系统设置并逐级点进 path 里的每一级。任一级点不到就返回 False。"""
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
-    time.sleep(1.2)
-    for name in path:
-        if not p.tap(name, exact=True):
-            return False
-    return True
-
-
 def has_row(name, screens=4):
     """这一页（含下面几屏）有没有这行：只找不点。
 

@@ -1,14 +1,15 @@
 """公共导航的注入面（#1150）：`preamble()` 调 `recipe_nav.install()`，实现从执行作用域取前导
 名字；脚本本地不许再留与注入面逐字相同的副本；调用序列对拍驱动自己管基线 worktree。
 
-副本守卫的判据是 AST 加文本：搬进一个簇而脚本没删副本即红。同名多簇照旧合法 —— 只有逐字
-相同才算副本，写得不一样的是机型知识。
+副本守卫的判据是代码逐字（AST 归一后再比）：注入面为空时全绿，搬进一个簇而脚本没删副本即红。
+注释与文档串不算差异；同名多簇照旧合法 —— 代码写得不一样的是机型知识。
 """
 import ast
 import inspect
 import re
 import subprocess
 import sys
+import textwrap
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -24,23 +25,22 @@ from fixtures import phone_mock  # noqa: E402
 
 RECIPES = tuple(sorted((ROOT / "recipes").rglob("recipe*.py")))
 DRIVER = ROOT / "tests" / "compare_recipe_calls.py"
-SCOPE_LOOKUP = re.compile(r'g\["(\w+)"\]')
-GLOBAL_DECL = re.compile(r"^global\s+\w+$")
-
-
 def normalize(source):
-    """去掉行首缩进与空行，再折算搬动本身造成的两种改写（#1151）。
+    """折成「代码逐字」：注释、docstring、空行与折行都不影响判等，`g["X"]` 折回 `X`。
 
-    注入版拿不到脚本的全局，实现改成 `g["X"]` 现取，原来那句 `global X` 随之消失。不折算
-    这两种差异的话，搬过来的簇与被删的旧副本不再逐字相同 —— 回滚或合并冲突把旧副本带回来
-    时守卫会漏。去掉缩进的理由是注入的实现住在工厂里、脚本副本在顶层。"""
-    lines = []
-    for line in source.splitlines():
-        line = line.strip()
-        if not line or GLOBAL_DECL.match(line):
-            continue
-        lines.append(SCOPE_LOOKUP.sub(r"\1", line))
-    return "\n".join(lines)
+    注入面的实现住在工厂里、脚本副本在顶层，缩进不同；注释与文档串各写各的，但都不改行为，
+    逐字判据只认代码本身。`global X` 是本地定义留下的产物，改走注入之后不再需要，一起丢掉。
+    """
+    tree = ast.parse(textwrap.dedent(source))
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module)) \
+                and node.body and isinstance(node.body[0], ast.Expr) \
+                and isinstance(node.body[0].value, ast.Constant) \
+                and isinstance(node.body[0].value.value, str):
+            node.body = node.body[1:] or [ast.Pass()]
+    text = re.sub(r"""g\[['"]([A-Za-z_]\w*)['"]\]""", r"\1", ast.unparse(tree))
+    return "\n".join(line for line in text.splitlines()
+                     if not line.strip().startswith("global "))
 
 
 def surface():
@@ -153,6 +153,24 @@ def tap_any(*names, scrolls=6):
 ''')}
         self.assertEqual(kept_copies([("sample.py", script)], injected),
                          {"sample.py": ["tap_any"]})
+
+    def test_the_guard_ignores_comments_docstrings_and_wrapping(self):
+        """代码相同、注释与折行不同也算副本（#1153）：V2309A 那份就是被文本判据漏掉的。"""
+        injected = {"gear": normalize('''\
+def gear(toolbar_only=False):
+    """很多小米 App 的设置是右上角齿轮图标。"""
+    return p.find("设置", exact=True)
+''')}
+        script = '''\
+
+
+def gear(toolbar_only=False):
+    # 注释与文档串各写各的
+    return p.find(
+        "设置", exact=True)
+'''
+        self.assertEqual(kept_copies([("sample.py", script)], injected),
+                         {"sample.py": ["gear"]})
 
 
 class DriverTests(unittest.TestCase):

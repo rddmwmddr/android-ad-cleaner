@@ -51,21 +51,6 @@ def wait_page(activity, title, timeout=6):
     return False
 
 
-def open_app_settings(package, activity, title):
-    """公开设置 Intent 直达，绕开含账号信息的「我的」页。"""
-    result = p.d.shell(
-        "am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + package
-    ).output
-    if "Permission Denial" in result or "SecurityException" in result:
-        print("  ! 系统不允许直达设置，跳过，不提升权限")
-        return False
-    return wait_page(activity, title)
-
-
-def tap_page(text, activity, title):
-    return p.tap(text, exact=True) and wait_page(activity, title)
-
-
 def close_titles(wanted, max_rounds=8):
     """逐页只点标题完全等于 wanted 里某项的开关，点完回读。
     ColorOS 17 有「应用建议」是「应用建议小卡」子串的情况，p.off 的子串匹配会误伤，所以用精确标题。"""
@@ -177,14 +162,9 @@ def _():
     return off_exact(STORE_PROMOTIONS, "商店·推广入口")
 
 
-def browser_settings():
-    return open_app_settings("com.heytap.browser",
-                             "com.heytap.browser.settings.component.BrowserPreferencesPage", "浏览器")
-
-
 @step("浏览器首页")
 def _():
-    if not browser_settings():
+    if not browser_settings_direct():
         return False
     activity = "com.heytap.browser.settings.component.BrowserPreferenceActivity"
     if not tap_page("主页设置", activity, "主页设置"):
@@ -205,7 +185,7 @@ def _():
 
 @step("浏览器广告")
 def _():
-    if not browser_settings():
+    if not browser_settings_direct():
         return False
     activity = "com.heytap.browser.settings.component.BrowserPreferenceActivity"
     if not tap_page("隐私", activity, "隐私") or not tap_page("广告管理", activity, "广告管理"):
@@ -218,7 +198,7 @@ def _():
 @step("浏览器个性化")
 def _():
     # 该页只有「个性化内容推荐」「个性化广告推荐」两项；两项都开时只读到后者的 Switch。
-    if not browser_settings():
+    if not browser_settings_direct():
         return False
     activity = "com.heytap.browser.settings.component.BrowserPreferenceActivity"
     if not tap_page("隐私", activity, "隐私") or not tap_page("个性化管理", activity, "个性化管理"):

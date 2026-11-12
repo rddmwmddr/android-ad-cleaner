@@ -209,3 +209,30 @@ PKT110 与 RMX3700 的应用建议，honor-PNM-AN10 的广告跟踪 / 桌面文�
   `tests/test_recipe_nav.py` 的逐字副本守卫在搬完后扫全仓无红。
 - **词库跟着重生成。** `tool/vocab.py` 的词条集合与方向不变，只有每条的脚本行号位移；
   `tool/entries.py` 的入口速查逐字不变——搬走的两簇都不含 `used_by()` 认的那四类入口。
+
+## #1153 之后：OPPO 家族的导航过程与跨家族的 `tap`
+
+一加 / OPPO 这批搬进六簇：`wait_search_settings`（一加 PLR110、PYB110 与 OPPO PLP120 三份）、
+`settings_page`（PLR110、PYB110、PLP120 三份）、`tap_page`（一加 PHK110 与 OPPO PKH110 两份）、
+`open_app_settings`（PHK110、PKX110、PKH110 三份）、`browser_settings_direct`（同三份）、
+`tap`（一加 PJA110 与 vivo V2417A 两份）。
+
+- **判据从「文本逐字」改成「代码逐字」。** 副本守卫的 `normalize()` 现在先剥掉注释、docstring
+  与折行再做 AST 归一（`g["X"]` 折回 `X`、丢掉本地定义留下的 `global` 行），只比代码。注释与
+  文档串各写各的不算差异——同一段代码在两份脚本里被写下两次，就是该收的那种重复。
+- **同名不同实现分名字，不改「注入面不按品牌选装」这条定案。** `browser_settings` 已被 vivo 的
+  「右上菜单进设置」占用，OPPO 这一版是公开 Intent 直达，另起 `browser_settings_direct`；
+  三份脚本的调用点跟着改名（这是本批唯一改到的调用点，对拍仍证明调用序列零漂移）。
+- **新判据连带出两份此前判为「写法不同」的副本。** `vivo-V2309A` 的 `browser_settings`（#1152
+  当时按文本判为不同，实际只差注释）与 `oppo-PLP120` 的 `settings_page`（行内合并的那一版）
+  一起删掉，改走注入版。
+- **`entries.used_by()` 要认注入面。** 入口速查从脚本源码扫入口，定义搬走后
+  `open_app_settings` 里的 APP_SETTINGS Intent 与 `browser_settings_direct` 里的包名就不再出现在
+  脚本里，PHK110 与 PKX110 的「软件商店 / 浏览器」两条直达档会静默消失（各丢一台）。扫法改成：
+  脚本真调用了哪个注入名（按 AST 取裸名字，`p.tap(` 这类方法与注释里的同名都不算），就把那份
+  实现也扫一遍；另外 `open_app_settings(包名, 页面, …)` 与 `am start … -a <action> -p <包名>`
+  同记一档。
+- **`SEARCH_TITLES` 与 `wait_page` 仍是脚本侧的事实。** PLP120 的搜索页标题名单比一加两台长，
+  `wait_page` 各份代码同形但留在脚本里（它不在本票范围）；闭包从执行作用域现取这两个名字。
+- **对拍与守卫照 #1150 的口径。** `tests/compare_recipe_calls.py` 47 份 × 2 场景 13,484 条
+  调用零差异；词库重生成后只有行号位移，入口速查逐字不变。

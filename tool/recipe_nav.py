@@ -1,15 +1,15 @@
-"""机型脚本的公共导航助手（#1150）：跨文件逐字相同的那些导航过程收在这里。
+"""机型脚本的公共导航助手（#1150）：跨文件代码逐字相同的那些导航过程收在这里。
 
 `recipe_kit.preamble()` 写完生命周期与台账之后调用 `install(p, g)`，把公共导航补进同一个
 执行作用域。脚本本地定义的同名名字后执行、覆盖注入版，所以同名多簇的机型差异继续留在各自
-脚本里，搬过来的只有逐字相同的副本（迁移后脚本侧只删定义、不改调用点）。
+脚本里，搬过来的只有代码逐字相同的副本（迁移后脚本侧只删定义、不改调用点）。
 
 实现不 import `recipe_kit`：`skip` / `require` 这类前导名字由工厂从 `g` 取、包进闭包，
 两个模块因此没有依赖关系（方向只有 `preamble()` → `install()` 这一条）。
 
-实现体必须与被搬走的脚本副本逐字相同：守卫把工厂里返回的函数源码与脚本里还留着的本地定义
-按行比对，改一边不改另一边即红（tests/test_recipe_nav.py）。`g["X"]` 现取与随之消失的
-`global X` 是搬动本身带来的改写，比对前由守卫折算掉。
+实现体必须与被搬走的脚本副本代码逐字相同：守卫把工厂里返回的函数源码与脚本里还留着的本地定义
+都折成 AST（剥注释、docstring、折行）后比对，改一边不改另一边即红（tests/test_recipe_nav.py）。
+`g["X"]` 现取与随之消失的 `global X` 是搬动本身带来的改写，比对前由守卫折算掉。
 
 闭包对名字一律按 `g` 现取（包括 `g["time"]`）：脚本原来是在自己的全局里解析这些名字，换到
 这个模块后仍取当次执行作用域里的那一个，测试装的假时钟才照旧生效。
@@ -29,7 +29,8 @@ NAV = {}
 # `browser_settings` 收的是「不含拉起 App」那一簇：vivo 浏览器没有底部「我的」，入口在右上菜单。
 # 含 `p.start` 的另一簇不在范围里：`entries.used_by` 从脚本源码扫 `p.start` / `start_or_skip` /
 # `am start -n` / `p.setting` 四类入口，搬走后入口速查会静默漏机型（沿用 #1148 定案 3）。
-# V2309A 与 V2547A 各有一份写法不同的同名实现，按「同名多簇一律留脚本原样」不搬。
+# V2547A 有一份代码不同的同名实现，按「同名多簇一律留脚本原样」不搬；V2309A 那份代码与这里
+# 相同（当时按文本判成「写法不同」），#1153 起走注入版。
 
 def _vivo_settings_home(p, g):
     def settings_home():
@@ -73,6 +74,88 @@ NAV["settings_home"] = _vivo_settings_home
 NAV["browser_settings"] = _vivo_browser_settings
 
 
+# ---------- OPPO 家族 ----------
+#
+# ColorOS 脚本共用的导航过程。`SEARCH_TITLES` 与 `wait_page` 是脚本侧的东西：PLP120 的
+# 搜索页标题名单比一加两台长，PHK110 / PKX110 / PKH110 的 `wait_page` 各有本地实现
+# （代码同形、注释与折行不同），闭包从执行作用域现取、注入版不替它们判断。
+# `browser_settings` 上文已被 vivo 的菜单版占用，OPPO 这一版是公开 Intent 直达，
+# 另起名字 `browser_settings_direct`，三份脚本的调用点跟着改名（#1153）。
+
+def _oppo_wait_search_settings(p, g):
+    def wait_search_settings(tries=30):
+        from wait import until
+
+        def sample():
+            focus = p.focus()
+            if "com.heytap.quicksearchbox" not in focus or "Setting" not in focus:
+                return False
+            return bool(g["SEARCH_TITLES"] & {text for text, _, _ in p.texts()})
+
+        return bool(until(sample, tries=tries, same=2,
+                          now=g["time"].monotonic, sleep=g["time"].sleep))
+    return wait_search_settings
+
+
+def _oppo_settings_page(p, g):
+    def settings_page(*path):
+        p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
+        g["time"].sleep(1.2)
+        for t in path:
+            if not p.tap(t, exact=True):
+                return False
+        return True
+    return settings_page
+
+
+def _oppo_tap_page(p, g):
+    def tap_page(text, activity, title):
+        return p.tap(text, exact=True) and g["wait_page"](activity, title)
+    return tap_page
+
+
+def _oppo_open_app_settings(p, g):
+    def open_app_settings(package, activity, title):
+        # 两个 App 均实测支持此公开设置 Intent，绕开含账号信息的“我的”页。
+        result = p.d.shell(
+            "am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + package
+        ).output
+        if "Permission Denial" in result or "SecurityException" in result:
+            print("  ! 系统不允许直达设置，跳过，不提升权限")
+            return False
+        return g["wait_page"](activity, title)
+    return open_app_settings
+
+
+def _oppo_browser_settings_direct(p, g):
+    def browser_settings_direct():
+        return g["open_app_settings"]("com.heytap.browser",
+                                      "com.heytap.browser.settings.component.BrowserPreferencesPage",
+                                      "浏览器")
+    return browser_settings_direct
+
+
+NAV["wait_search_settings"] = _oppo_wait_search_settings
+NAV["settings_page"] = _oppo_settings_page
+NAV["tap_page"] = _oppo_tap_page
+NAV["open_app_settings"] = _oppo_open_app_settings
+NAV["browser_settings_direct"] = _oppo_browser_settings_direct
+
+
+# ---------- 跨家族 ----------
+#
+# `tap`：按名字点入口、找不到就 `require` 报错。一加 PJA110 与 vivo V2417A 各一份逐字相同。
+# 另外两份同名的（honor-WKL-AN20 的 `scrolls=6`、oppo-PKT110 的 `exact=`）签名不同，留本地覆盖。
+
+def _plain_tap(p, g):
+    def tap(name, scrolls=4):
+        g["require"](p.tap(name, exact=True, scrolls=scrolls), f"未找到入口「{name}」")
+    return tap
+
+
+NAV["tap"] = _plain_tap
+
+
 def install(p, g):
     """把公共导航助手写进执行作用域 `g`（原地写，调用方不需要返回值）。"""
     for name, factory in NAV.items():
@@ -81,9 +164,9 @@ def install(p, g):
 
 # ---------- 小米系（xiaomi / redmi，#1151）----------
 #
-# 三兄弟（23113RKC6C / 23117RK66C / 24122RKC7C）的 `gear`，与 23113RKC6C / 24122RKC7C /
-# 24129PN74C 那份不带 docstring 的 `tap_any`，与这里的实现不是逐字相同（排版、循环变量名有别），
-# 按本票判据不收，留在脚本里覆盖注入版。
+# 23113RKC6C / 24122RKC7C / 24129PN74C 那份 `tap_any` 与本实现循环变量名不同，按「同名多簇」
+# 留在脚本里覆盖注入版。三兄弟（23113RKC6C / 23117RK66C / 24122RKC7C）与 24094RAD4C 的 `gear`
+# 只差排版，按代码逐字判据在 #1153 一并删掉、改走注入版。
 
 def _xiaomi_tap_any(p, g):
     def tap_any(*names, scrolls=6):

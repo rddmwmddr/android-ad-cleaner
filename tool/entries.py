@@ -13,6 +13,7 @@
 没有出处的不写进来：猜的包名、页面名会让引擎跳到别处。快应用不在这里——它按包名与设置项处理，
 见 run.py 的 `QUICKAPP` 与 vivo 的 `switch_quick_app_service`，不走界面。
 """
+import ast
 import shlex
 import re
 from dataclasses import dataclass
@@ -35,6 +36,10 @@ THEME_DEAD_ENDS = frozenset({"com.xiaomi.market", "com.miui.home"})
 
 # NEW_TASK | CLEAR_TASK，与 Launcher._launch 同值：直达与公开 Intent 都带它。
 CLEAR_TASK = "0x10008000"
+
+# ColorOS 商店 / 浏览器共用的公开设置 Intent。条目表与 used_by() 的源码扫描都取这一份，
+# 改动作名时两边不会脱节（那边认不出就会静默少几台机）。
+APP_SETTINGS_ACTION = "oppo.intent.action.APP_SETTINGS"
 
 
 @dataclass(frozen=True)
@@ -123,14 +128,14 @@ ENTRIES = {
             menu="软件商店 → 我的 → 右上齿轮",
             direct=(Direct("com.heytap.market",
                            "com.heytap.market.mine.cn.setting.ui.SettingActivity",
-                           action="oppo.intent.action.APP_SETTINGS"),),
+                           action=APP_SETTINGS_ACTION),),
             app="com.heytap.market",
             note="公开设置 Intent 直接落到设置页，绕开含账号信息的「我的」页；PJA110 旧版商店的落点是 "
                  "`com.heytap.market.mine.ui.SettingActivity`（没有 `.cn.`），与本档不同，那条照菜单走"),
         "浏览器": Entry(
             menu="浏览器 → 底部 ☰ 或「我的」→ 设置",
             direct=(Direct("com.heytap.browser", ".settings.component.BrowserPreferencesPage",
-                           action="oppo.intent.action.APP_SETTINGS"),
+                           action=APP_SETTINGS_ACTION),
                     Direct("com.heytap.browser", ".settings.component.BrowserPreferencesPage",
                            keep_task=True)),
             note="带清栈参数用 `-n` 启动会立刻退出，这一档只能裸 am start；首页切成「简洁」后没有「我的」和菜单（#165）"),
@@ -320,6 +325,10 @@ _FORMAT = re.compile(r"\b(\w+)\.format\(\s*([\w.]+)\s*\)")
 # 拼接的变量（`-p " + package`）、模板常量的 `{}` 在别处 `.format(…)` 传进来。
 _INTENT = re.compile(
     r"am start[^\"']*?-a\s+([\w.]+)[^\"']*?-p\s+(?:([\w.$]+)|\{\}|[\"']\s*\+\s*(\w+))")
+# 包着 APP_SETTINGS 的入口助手：`open_app_settings(包名, 页面, 标题)`，注入版写成
+# `g["open_app_settings"](...)`。两个参数都是字面量时才认，与其余几档同一口径。
+_APP_SETTINGS = re.compile(
+    r"""(?:g\[['"]open_app_settings['"]\]|open_app_settings)\(\s*['"]([\w.]+)['"]\s*,\s*['"]([\w.$]+)['"]""")
 
 
 def _enclosing_def(src, pos):
@@ -388,6 +397,36 @@ def _intent_packages(src, m):
     return out
 
 
+def _scan_entries(src, model, found):
+    """从一段源码里认出这台机用过的入口：脚本自己的源码，或它调用到的注入面实现。"""
+    for call in re.finditer(r"(?:p\.start|start_or_skip)\(([^)]*)\)", src):
+        parts = call.group(1).split(",")
+        pkg = _arg_at(parts[0], src, call.start())
+        act = _arg_at(parts[1], src, call.start()) if len(parts) > 1 else None
+        if pkg and act:
+            found.setdefault(("direct", pkg, full(pkg, act)), set()).add(model)
+    for m in re.finditer(r'am start[^"\']*?-n\s+([\w.]+)/([\w.$]+)', src):
+        found.setdefault(("direct", m.group(1), full(m.group(1), m.group(2))), set()).add(model)
+    for m in _INTENT.finditer(src):
+        for pkg in _intent_packages(src, m):
+            found.setdefault(("intent", m.group(1), pkg), set()).add(model)
+    for m in _APP_SETTINGS.finditer(src):
+        found.setdefault(("intent", APP_SETTINGS_ACTION, m.group(1)), set()).add(model)
+    for call in re.finditer(r"p\.setting\(([^)]*)\)", src):
+        parts = call.group(1).split(",")
+        kw = _arg_at(parts[0], src, call.start())
+        result = _arg_at(parts[1], src, call.start()) if len(parts) > 1 else kw
+        if kw:
+            found.setdefault(("search", kw, result or kw), set()).add(model)
+
+
+def _injected_sources():
+    """注入面里各助手的实现源码：{注入名: 源码}。搬走的入口写在这里，脚本只剩一行调用。"""
+    import inspect
+    import recipe_nav
+    return {name: inspect.getsource(factory) for name, factory in recipe_nav.NAV.items()}
+
+
 def used_by(recipes_dir):
     """{("direct", 包名, 完整页面名) 或 ("intent", 动作, 包名) 或 ("search", 关键词, 结果): {机型型号}}，
     从机型脚本源码现算。
@@ -395,34 +434,37 @@ def used_by(recipes_dir):
     `p.start(package, ".X")` 这种先赋值再传变量的写法也要认出来：honor-WKL-AN20 就是这么写的，
     只认字面量会把它的机型漏掉（生成表里「用过的机型」少一台）。经共享入口助手
     `start_or_skip(package, ".X", …)` 拉起的那几条同样是这台机用过的直达（#902）。
-    `am start -a <action> -p <包名>` 这类公开 Intent 入口单记一档（#956）。
+    `am start -a <action> -p <包名>` 这类公开 Intent 入口单记一档（#956）；
+    经 `open_app_settings(包名, 页面, …)` 打开的那一类同样是直达（它包着 APP_SETTINGS 的 Intent）。
+
+    搬进注入面（`tool/recipe_nav.py`）的助手，入口写在实现里、脚本只剩一行调用：脚本调用了哪个
+    注入名，就把那份实现也扫一遍，否则「用过的机型」会静默漏掉（#1153）。
 
     只认字面量：经 `reach(p, ENTRIES[...])` 消费的那几条（浏览器段，#912）看不出来，
     这张表会把用得上的机型算成没用过。"""
     import glob, os
+    injected = _injected_sources()
     found = {}
     for f in glob.glob(os.path.join(recipes_dir, "*", "recipe*.py")):
         model = os.path.basename(os.path.dirname(f)).split("-", 1)[-1]
         with open(f, encoding="utf-8") as fh:
             src = fh.read()
-        for call in re.finditer(r"(?:p\.start|start_or_skip)\(([^)]*)\)", src):
-            parts = call.group(1).split(",")
-            pkg = _arg_at(parts[0], src, call.start())
-            act = _arg_at(parts[1], src, call.start()) if len(parts) > 1 else None
-            if pkg and act:
-                found.setdefault(("direct", pkg, full(pkg, act)), set()).add(model)
-        for m in re.finditer(r'am start[^"\']*?-n\s+([\w.]+)/([\w.$]+)', src):
-            found.setdefault(("direct", m.group(1), full(m.group(1), m.group(2))), set()).add(model)
-        for m in _INTENT.finditer(src):
-            for pkg in _intent_packages(src, m):
-                found.setdefault(("intent", m.group(1), pkg), set()).add(model)
-        for call in re.finditer(r"p\.setting\(([^)]*)\)", src):
-            parts = call.group(1).split(",")
-            kw = _arg_at(parts[0], src, call.start())
-            result = _arg_at(parts[1], src, call.start()) if len(parts) > 1 else kw
-            if kw:
-                found.setdefault(("search", kw, result or kw), set()).add(model)
+        _scan_entries(src, model, found)
+        called = _called_names(src)
+        for name, impl in injected.items():
+            if name in called:
+                _scan_entries(impl, model, found)
     return found
+
+
+def _called_names(src):
+    """脚本里真正被调用的裸名字集合（AST）：`p.tap(` 与方法不算，注释与字符串里的同名也不算。"""
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return set()
+    return {node.func.id for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
 
 
 def open_direct(p, d, settle=1.2):
