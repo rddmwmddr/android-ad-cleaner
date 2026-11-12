@@ -12,6 +12,7 @@ from pathlib import Path
 from string import Template
 from unittest import mock
 
+from fixtures import FakeRunner
 from tool import release_assets, release_meta
 
 VERSION = "1.2.3"
@@ -425,6 +426,36 @@ class PublishedTests(unittest.TestCase):
         with mock.patch.object(release_meta, "run_gh", return_value="null\n"):
             with self.assertRaises(release_meta.Refused):
                 release_meta.release_published("v1")
+
+
+class RunGhTests(unittest.TestCase):
+    """搬过来的文本取数壳：成功交回 strip 后的 stdout，三种失败都抛 GhError（#1218）。"""
+
+    def with_runner(self, reply):
+        runner = FakeRunner(runs=reply)
+        patched = mock.patch.object(release_meta, "runner_for", return_value=runner.run)
+        patched.start()
+        self.addCleanup(patched.stop)
+        return runner
+
+    def test_returns_the_stripped_stdout_and_keeps_the_arguments(self):
+        runner = self.with_runner(("  v1.2.3 \n", "", 0))
+        self.assertEqual(release_meta.run_gh("release", "view", "v1"), "v1.2.3")
+        self.assertEqual((runner.run_calls[0].script, runner.run_calls[0].args),
+                         ("gh", ("release", "view", "v1")))
+
+    def test_non_zero_exit_raises_gh_error_carrying_the_code(self):
+        """stderr 与 stdout 都空时退出码是唯一线索，不能退成一句「返回非零」。"""
+        self.with_runner(("", "", 3))
+        with self.assertRaises(release_meta.GhError) as caught:
+            release_meta.run_gh("release", "upload", "v1", "SHA256SUMS.txt")
+        self.assertIn("gh 退出码 3", str(caught.exception))
+
+    def test_missing_gh_is_a_gh_error(self):
+        self.with_runner(OSError("no gh"))
+        with self.assertRaises(release_meta.GhError) as caught:
+            release_meta.run_gh("release", "view", "v1")
+        self.assertIn("跑不了 gh", str(caught.exception))
 
 
 if __name__ == "__main__":

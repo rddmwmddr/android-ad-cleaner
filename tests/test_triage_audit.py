@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 
 import triage_audit  # noqa: E402
+from fixtures import FakeRunner  # noqa: E402
 
 LABEL_FILE = ROOT / "docs/agents/triage-labels.md"
 REGISTRY_SECTION = "## 标签登记"
@@ -97,10 +98,17 @@ class AuditTests(unittest.TestCase):
 
 
 class MainTests(unittest.TestCase):
-    def run_main(self, argv, fetch=None):
+    def runner_with(self, payload=None, error=None):
+        """假执行器：联网路径交回这份 payload，给了 error 就抛出。"""
+        reply = error if error is not None else (
+            json.dumps(payload if payload is not None else []), "", 0)
+        return FakeRunner(runs=reply)
+
+    def run_main(self, argv, runner=None):
+        runner = runner or self.runner_with()
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
-            code = triage_audit.main(argv, fetch=fetch or (lambda: []))
+            code = triage_audit.main(argv, runner=runner.run)
         return code, out.getvalue(), err.getvalue()
 
     def write_dump(self, payload):
@@ -123,12 +131,33 @@ class MainTests(unittest.TestCase):
         self.assertIn(f"#{5}  doc.triage.one-category-label", out)
 
     def test_fetch_failure_is_not_a_finding(self):
-        def boom():
-            raise triage_audit.Unreachable("gh 挂了")
-
-        code, _, err = self.run_main([], fetch=boom)
+        code, _, err = self.run_main([], runner=self.runner_with(error=OSError("gh 没装")))
         self.assertEqual(code, triage_audit.EXIT_UNREACHABLE)
-        self.assertIn("gh 挂了", err)
+        self.assertIn("跑不了 gh", err)
+
+    def test_network_path_reaches_the_same_verdict(self):
+        """联网路径真的走通了：同一份票，结论与 `--input` 那条一致。"""
+        payload = [ticket(5, "bug", "enhancement")]
+        code, out, _ = self.run_main([], runner=self.runner_with(payload))
+        self.assertEqual(code, triage_audit.EXIT_FINDINGS)
+        self.assertIn(f"#{5}  doc.triage.one-category-label", out)
+
+    def test_network_path_asks_for_the_labels_of_open_tickets(self):
+        runner = self.runner_with()
+        self.run_main([], runner=runner)
+        self.assertEqual([(call.script, call.args) for call in runner.run_calls],
+                         [("gh", ("issue", "list", "--state", "open", "--limit",
+                                  str(triage_audit.LIMIT), "--json", triage_audit.FIELDS))])
+
+    def test_both_input_sources_share_one_shape_check(self):
+        """同一份坏形状，两条来源报同一句判据，只是出处不同（#1218）。"""
+        payload = [{"labels": []}]
+        _, _, offline = self.run_main(["--input", self.write_dump(payload)])
+        _, _, online = self.run_main([], runner=self.runner_with(payload))
+        self.assertIn("缺 number", offline)
+        self.assertIn("缺 number", online)
+        self.assertIn("issues.json", offline)
+        self.assertIn("`gh issue list`", online)
 
     def test_dump_that_is_not_the_expected_shape_is_unreachable(self):
         cases = {

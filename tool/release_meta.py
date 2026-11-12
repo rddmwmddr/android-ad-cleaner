@@ -30,8 +30,9 @@ from pathlib import Path
 from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))   # 直接跑脚本与作为 tool.<模块> import 两种都认
+from gh import GhError, call, runner_for                   # noqa: E402
 from release_assets import (BLOCK, Entry, fetch_release, human_size, map_entries,  # noqa: E402
-                            read_entries, run_gh)
+                            read_entries)
 from stdio import use_utf8_console                         # noqa: E402
 
 use_utf8_console()
@@ -231,8 +232,16 @@ def write_checked(path, text, check):
         raise
 
 
+def run_gh(*args):
+    """跑 `gh <args>` 并返回标准输出；跑不起或退出码非 0 时抛 GhError。"""
+    text, rc = call(runner_for(), *args)
+    if rc != 0:
+        raise GhError(text or f"gh 退出码 {rc}")
+    return text
+
+
 def release_is_draft(tag):
-    """`gh release view <tag>` 的 isDraft；取不到时抛 RuntimeError。"""
+    """`gh release view <tag>` 的 isDraft；取不到时抛 GhError。"""
     return run_gh("release", "view", tag, "--json", "isDraft", "--jq", ".isDraft").strip() == "true"
 
 

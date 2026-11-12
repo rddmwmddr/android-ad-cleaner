@@ -11,6 +11,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from fixtures import FakeRunner
 from tool import release_assets
 
 PAGE = """const REL = {{
@@ -97,20 +98,40 @@ class HumanSizeTests(unittest.TestCase):
 
 
 class FetchTests(unittest.TestCase):
+    """取数层：一次 `gh release view --json assets`，执行器由调用方注入，用例不联网（#1218）。"""
+
     def test_fetch_release_keeps_name_size_and_digest(self):
         rows = {"assets": [{"name": "a.bin", "size": 12, "digest": "sha256:abcd"},
                            {"name": "b.bin", "size": 7}]}
-        with mock.patch.object(release_assets, "run_gh", return_value=json.dumps(rows)):
-            self.assertEqual(
-                release_assets.fetch_release("v1"),
-                [release_assets.Asset("a.bin", 12, "sha256:abcd"),
-                 release_assets.Asset("b.bin", 7, "")])
+        runner = FakeRunner(runs=(json.dumps(rows), "", 0))
+        self.assertEqual(
+            release_assets.fetch_release("v1", runner.run),
+            [release_assets.Asset("a.bin", 12, "sha256:abcd"),
+             release_assets.Asset("b.bin", 7, "")])
+        self.assertEqual((runner.run_calls[0].script, runner.run_calls[0].args),
+                         ("gh", ("release", "view", "v1", "--json", "assets")))
 
-    def test_fetch_assets_is_the_name_projection(self):
-        """名字清单降成 `fetch_release` 的一行投影：调用方与用例都不用改。"""
+    def test_fetch_release_failure_raises_gh_error(self):
+        """取不到附件：非零退出与输出不是 JSON 都归 GhError，main 只处理一种失败。"""
+        for reply in (("boom", "API rate limit exceeded", 1), ("not json", "", 0)):
+            with self.subTest(reply=reply):
+                runner = FakeRunner(runs=reply)
+                with self.assertRaises(release_assets.GhError):
+                    release_assets.fetch_release("v1", runner.run)
+
+    def test_unreachable_gh_is_a_gh_error(self):
+        """`gh` 不在 PATH 上：OSError 也变成 GhError，调用方不必分辨三种失败。"""
+        runner = FakeRunner(runs=OSError("no gh"))
+        with self.assertRaises(release_assets.GhError):
+            release_assets.fetch_release("v1", runner.run)
+
+    def test_fetch_assets_is_the_name_projection_and_forwards_the_runner(self):
+        """名字清单降成 `fetch_release` 的一行投影，注入的执行器要一路传下去。"""
+        runner = FakeRunner(runs=("{}", "", 0))
         assets = [release_assets.Asset("a.bin", 1, ""), release_assets.Asset("b.bin", 2, "")]
-        with mock.patch.object(release_assets, "fetch_release", return_value=assets):
-            self.assertEqual(release_assets.fetch_assets("v1"), ["a.bin", "b.bin"])
+        with mock.patch.object(release_assets, "fetch_release", return_value=assets) as fetch:
+            self.assertEqual(release_assets.fetch_assets("v1", runner.run), ["a.bin", "b.bin"])
+        fetch.assert_called_once_with("v1", runner.run)
 
 
 class CompareTests(unittest.TestCase):
