@@ -53,7 +53,9 @@
 - 进程内跑脚本意味着脚本把进程弄崩会带走整个 App，桌面版只死一个子进程。卡在 Java 调用里的脚本，
   「停止」要等它返回才生效，`bridge.py` 自己按超时掐。
 - 看门狗（`inproc.py` 的 `_watchdog`）只把卡住的位置写进 logcat，不进界面、不进错误上报；查「卡住」看
-  `adb logcat`，不是看结果页。
+  `adb logcat`，不是看结果页。引擎行本身也在进界面的同时镜像一份到 logcat（`inproc.py` 的 `_Mirror`，
+  tag `AacEngine`）：这条通道只有手机宿主有，桌面版的引擎输出本来就重定向到文件；机器行
+  （`view.MACHINE_PREFIX`）不镜像，它们只改状态、只进上报（ADR-0009）。
 - 失效条件：Shizuku / libadb 的接口与 `exec:` 流变了要跟（ADR-0014）；Chaquopy 升级会改 `callAttr`、
   线程附着与解释器锁的语义，`bridge.py` 「不放解释器锁」的做法依赖它；HyperOS 冻结退到后台 App 的策略
   收紧时，胶囊与前台服务这套绕法要重新验（`aac_android/main.py` 的 `visible()`）；`uiautomator2` 若改选择器

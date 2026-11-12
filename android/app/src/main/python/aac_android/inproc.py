@@ -7,7 +7,8 @@
 - stdout / stderr 按线程分流（引擎不起线程），别的线程照旧写到原来的 stdout；
 - 环境变量在脚本运行期间换成调用方给的那一份，结束后换回；
 - SystemExit 的 code 就是退出码，未捕获的异常打印堆栈后记 1；
-- 停止：向脚本线程投递 KeyboardInterrupt（下一条 Python 字节码生效，阻塞中的命令自带超时）。
+- 停止：向脚本线程投递 KeyboardInterrupt（下一条 Python 字节码生效，阻塞中的命令自带超时）；
+- 引擎行在进界面的同时按行镜像一份到 logcat（`LOGCAT_TAG`），界面上看到的仍是原文。
 """
 import ctypes
 import io
@@ -19,13 +20,31 @@ import sys
 import threading
 import traceback
 
+from .view import MACHINE_PREFIX
+
 EXECUTABLE = sys.executable or "python"     # 引擎拼 [sys.executable, 脚本, …]，adb.py 按它认出脚本调用
 TOOL = ""                                    # setup() 时定下
+LOGCAT_TAG = "AacEngine"                     # 引擎原文在 logcat 里的 tag，冒烟产物按它 grep（#1116）
 
 _lock = threading.RLock()
 _sinks = {}                                  # 线程 id → [(out, err)]（嵌套捕获时压栈）
 _fallback = (sys.stdout, sys.stderr)         # setup() 时换成当时的输出（Chaquopy 接到 logcat 的那一对）
 after_run = []                               # 每个顶层脚本结束后调用（机型脚本 / 客户端卸载资源用）
+
+_UNSET = object()
+_engine_log = _UNSET                         # 写一行 logcat 的函数；用时才取 Java 接口，电脑上没有
+
+
+def _logger():
+    """`android.util.Log.i`；电脑上没有 Chaquopy，返回 None（镜像随之关掉）。"""
+    global _engine_log
+    if _engine_log is _UNSET:
+        try:
+            from java import jclass
+            _engine_log = jclass("android.util.Log").i
+        except Exception:                    # 没有 java 模块，或取不到 android.util.Log
+            _engine_log = None
+    return _engine_log
 
 
 class _Router(io.TextIOBase):
@@ -158,7 +177,10 @@ def _top(argv, env, out, err):
         saved = dict(os.environ)
         os.environ.clear()
         os.environ.update(env)
-        _push(out, err)
+        # Proc 把同一个 sink 当 out 与 err：共用一个镜像，logcat 的行边界才与界面队列一致
+        same = _Mirror(out)
+        mirror = (same, same) if err is out else (same, _Mirror(err))
+        _push(*mirror)
         try:
             return _exec(list(argv))
         finally:
@@ -170,6 +192,53 @@ def _top(argv, env, out, err):
                     traceback.print_exc(file=_fallback[1])
             os.environ.clear()
             os.environ.update(saved)
+            for m in mirror:                 # 收尾都做完了才碰镜像：它抛什么都不能挡住还原
+                m.close()
+
+
+class _Mirror:
+    """把引擎行按行镜像一份到 logcat，原文照旧交给内层 sink。
+
+    旁路：写 logcat 失败只是这一行没镜像，不影响内层 sink 的内容与顺序，也不改任何判定。
+    先转交内层再切行：停止时 `interrupt()` 投的那一下可能落在写 logcat 的那次调用里，已经交出去的
+    这一块不能因为镜像而丢。机器行（`view.MACHINE_PREFIX`）不镜像——它们本来就不进界面。
+
+    不设行数上限：这里不攒整轮输出，只留没有换行的半行，所以只影响 logcat 环形缓冲里更早的行。
+    `android/smoke.py` 的 `crashes()` 读的是启动前后那份新建的 dump（`launch()` 先 `logcat -c`），
+    执行段的镜像碰不到它判 FATAL 要看的行。
+    """
+
+    def __init__(self, inner):
+        self.inner, self.buf, self.off = inner, "", False
+
+    def write(self, s):
+        rc = self.inner.write(s)
+        self.buf += s
+        while "\n" in self.buf:
+            line, self.buf = self.buf.split("\n", 1)
+            self._emit(line)
+        return rc
+
+    def flush(self):
+        return self.inner.flush()
+
+    def close(self):
+        """内层 sink 收尾前把最后一段没有换行的字也镜像出去。"""
+        if self.buf:
+            self._emit(self.buf)
+            self.buf = ""
+
+    def _emit(self, text):
+        if self.off or text.startswith(MACHINE_PREFIX):
+            return
+        log = _logger()
+        if log is None:
+            self.off = True                  # 电脑上没有 logcat：不必每行再试一次
+            return
+        try:
+            log(LOGCAT_TAG, text)
+        except Exception:                    # 镜像只是旁路，写不进去就算了
+            pass
 
 
 class _LineSink:
