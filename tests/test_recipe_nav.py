@@ -1,11 +1,12 @@
 """公共导航的注入面（#1150）：`preamble()` 调 `recipe_nav.install()`，实现从执行作用域取前导
 名字；脚本本地不许再留与注入面逐字相同的副本；调用序列对拍驱动自己管基线 worktree。
 
-副本守卫的判据是 AST 加文本：注入面为空时全绿，搬进一个簇而脚本没删副本即红。同名多簇照旧
-合法 —— 只有逐字相同才算副本，写得不一样的是机型知识。
+副本守卫的判据是 AST 加文本：搬进一个簇而脚本没删副本即红。同名多簇照旧合法 —— 只有逐字
+相同才算副本，写得不一样的是机型知识。
 """
 import ast
 import inspect
+import re
 import subprocess
 import sys
 import unittest
@@ -23,11 +24,23 @@ from fixtures import phone_mock  # noqa: E402
 
 RECIPES = tuple(sorted((ROOT / "recipes").rglob("recipe*.py")))
 DRIVER = ROOT / "tests" / "compare_recipe_calls.py"
+SCOPE_LOOKUP = re.compile(r'g\["(\w+)"\]')
+GLOBAL_DECL = re.compile(r"^global\s+\w+$")
 
 
 def normalize(source):
-    """去掉行首缩进与空行：注入的实现住在工厂里、脚本副本在顶层，缩进不同不影响逐字判等。"""
-    return "\n".join(line.strip() for line in source.splitlines() if line.strip())
+    """去掉行首缩进与空行，再折算搬动本身造成的两种改写（#1151）。
+
+    注入版拿不到脚本的全局，实现改成 `g["X"]` 现取，原来那句 `global X` 随之消失。不折算
+    这两种差异的话，搬过来的簇与被删的旧副本不再逐字相同 —— 回滚或合并冲突把旧副本带回来
+    时守卫会漏。去掉缩进的理由是注入的实现住在工厂里、脚本副本在顶层。"""
+    lines = []
+    for line in source.splitlines():
+        line = line.strip()
+        if not line or GLOBAL_DECL.match(line):
+            continue
+        lines.append(SCOPE_LOOKUP.sub(r"\1", line))
+    return "\n".join(lines)
 
 
 def surface():
@@ -60,6 +73,13 @@ class WiringTests(unittest.TestCase):
             recipe_kit.preamble(phone, scope)
         self.assertEqual(install.call_count, 1)
         self.assertEqual(install.call_args.args, (phone, scope))
+
+    def test_the_xiaomi_family_helpers_are_installed(self):
+        """#1151 收的五个簇都在注入面里：脚本删了本地定义，靠的就是这几个名字。"""
+        phone, scope = phone_mock(), {}
+        recipe_kit.preamble(phone, scope)
+        self.assertLessEqual({"tap_any", "gear", "close_named", "read_switches", "security_tab"},
+                             set(scope))
 
     def test_injected_helpers_read_the_preamble_names_from_the_scope(self):
         """实现从执行作用域取 `skip` / `require`，所以 `recipe_nav` 不用 import `recipe_kit`。"""
@@ -118,6 +138,21 @@ def close_named(names, page):
         }
         self.assertEqual(kept_copies([("sample.py", script)], injected),
                          {"sample.py": ["gear"]})
+
+    def test_the_guard_sees_through_the_scope_rewrite(self):
+        """注入版把脚本全局改成 `g["X"]` 现取：旧写法搬回来也要认出来（#1151）。"""
+        script = '''\
+def tap_any(*names, scrolls=6):
+    """依次试几个入口名，点中一个就返回 True。"""
+    return any(maybe(n, scrolls) for n in names)
+'''
+        injected = {"tap_any": normalize('''\
+def tap_any(*names, scrolls=6):
+    """依次试几个入口名，点中一个就返回 True。"""
+    return any(g["maybe"](n, scrolls) for n in names)
+''')}
+        self.assertEqual(kept_copies([("sample.py", script)], injected),
+                         {"sample.py": ["tap_any"]})
 
 
 class DriverTests(unittest.TestCase):

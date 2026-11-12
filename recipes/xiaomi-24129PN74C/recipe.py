@@ -148,15 +148,6 @@ def gear(toolbar_only=False):
     return False
 
 
-def read_switches(max_screens):
-    current = {}
-    for index in range(max_screens):
-        current.update({title: on for title, on, _ in p.switches()})
-        if index + 1 == max_screens or not p.scroll_more():
-            break
-    return current
-
-
 def close_named(names, page, max_screens=2):
     """只关闭点名的开关；操作前确认目标存在，操作后回读，并检查其他开关未被改动。
     开关标题可能附带整段说明，所以按关键词匹配，不做完整标题相等判断。

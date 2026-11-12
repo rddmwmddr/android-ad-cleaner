@@ -183,8 +183,9 @@ class DraftGenTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             src = self.gen(d)
         self.assertIn('close_named(["个性化推荐"], "设置 > 隐私")', src)
-        self.assertIn('p.off(only=names, page=page, max_screens=max_screens)', src)
         self.assertNotIn("keep=", src)                               # 草稿不做整页全关
+        self.assertNotIn("def close_named", src)                     # 用注入面那一份（#1151）
+        self.assertNotIn("def read_switches", src)
 
     def test_navigation_paths_come_from_explore(self):
         with tempfile.TemporaryDirectory() as d:
@@ -231,29 +232,31 @@ class CheckReportTests(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()):
                 report = adapt.check_draft(p, str(out))
                 self.assertIs(p.safe_mode, True)   # 自检必须把手机切进安全模式
-        self.assertEqual(report, {"verified": 2, "missing": [], "pending": [], "failed_steps": []})
+        self.assertEqual(report, {"verified": 2, "failed_steps": []})
         self.assertTrue(adapt.print_report(report))
         self.assertEqual(p.off.call_count, 2)
 
-    def test_missing_switch_is_reported_not_clicked(self):
+    def test_missing_switch_fails_the_step_without_clicking(self):
         with tempfile.TemporaryDirectory() as d:
             out = self.draft(d)
             p = draft_phone([[("别的开关", True, (1, 2))]] * 10)
             with contextlib.redirect_stdout(io.StringIO()):
                 report = adapt.check_draft(p, str(out))
         self.assertEqual(report["verified"], 0)
-        self.assertEqual(report["missing"], ["个性化推荐", "个性化推荐"])
+        self.assertEqual(report["failed_steps"],
+                         ["com.heytap.market · 设置 > 隐私", "com.heytap.browser · 设置 > 隐私"])
         p.off.assert_not_called()
         self.assertFalse(adapt.print_report(report))
 
-    def test_unconfirmed_readback_is_pending_not_success(self):
+    def test_unconfirmed_readback_is_a_failed_step_not_success(self):
         with tempfile.TemporaryDirectory() as d:
             out = self.draft(d)
             p = draft_phone([[("个性化推荐", True, (1, 2))]] * 10)
             with contextlib.redirect_stdout(io.StringIO()):
                 report = adapt.check_draft(p, str(out))
         self.assertEqual(report["verified"], 0)
-        self.assertEqual(report["pending"], ["个性化推荐", "个性化推荐"])
+        self.assertEqual(report["failed_steps"],
+                         ["com.heytap.market · 设置 > 隐私", "com.heytap.browser · 设置 > 隐私"])
         self.assertEqual(p.off.call_count, 2)                       # 点了但回读没确认
         self.assertFalse(adapt.print_report(report))
 
@@ -270,7 +273,7 @@ class CheckReportTests(unittest.TestCase):
     def test_partial_completion_is_never_worded_as_success(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            ok = adapt.print_report({"verified": 1, "missing": [], "pending": ["活动弹窗"], "failed_steps": []})
+            ok = adapt.print_report({"verified": 1, "failed_steps": ["com.example · 设置 > 隐私"]})
         self.assertFalse(ok)
         self.assertIn("部分完成", out.getvalue())
         self.assertIn("不能把部分完成当成适配成功", out.getvalue())

@@ -26,6 +26,7 @@
 
 - vivo 家族的 `settings_home` / `browser_settings` 收进 `recipe_nav`，脚本只删定义（#1152）
 - 公共导航助手立了单独模块与调用序列对拍，脚本里的逐字副本由守卫盯住（#1150，ADR-0029）
+- 小米 / 红米脚本的五个公共导航助手收进 `recipe_nav`，`adapt gen` 草稿改用注入版（#1151，ADR-0029）
 - CI 三个测试 job 加 pip 缓存，npm 侧此前已有同类配置（#1182）
 - `waiting-for-verify` 的票凭证据关：会红的用例、现场、口头确认三档（#1127）
 - 新增 `blocked-on-device` 标签，复测队列与停摆扫描都不再收这类票（#1125）

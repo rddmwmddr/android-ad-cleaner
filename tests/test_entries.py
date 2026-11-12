@@ -1435,11 +1435,11 @@ GEAR_CENTER_305 = (995, 165)
 
 
 def hyperos_recipes_305():
-    """定义了 gear() 的小米 / 红米机型脚本。"""
+    """用了 gear() 的小米 / 红米机型脚本 —— 本地定义与引擎注入的那一份都算（#1151）。"""
     for path in sorted(ROOT.glob("recipes/*/recipe*.py")):
         if not path.parent.name.startswith(("xiaomi-", "redmi-")):
             continue
-        if "def gear(" in path.read_text(encoding="utf-8"):
+        if "gear(" in path.read_text(encoding="utf-8"):
             yield path
 
 
@@ -1463,6 +1463,13 @@ class GearMatcherTests(unittest.TestCase):
 
     def label(self, path):
         return f"{path.parent.name}/{path.stem}"
+
+    def test_the_sample_set_still_covers_the_shared_gear(self):
+        """样本按「用到 gear()」选，不按「本地定义」选（#1151）。
+
+        搬进 `recipe_nav` 的六份脚本不再有本地 `def gear(`，按定义选样本时它们会静默掉出去，
+        这一族用例照旧全绿 —— 引擎那份实现就再没有一条 #305 样本打到它。"""
+        self.assertGreaterEqual(len(list(hyperos_recipes_305())), 15)
 
     def test_store_row_is_not_mistaken_for_settings(self):
         for path, phone in self.each(STORE_ROW_305 + GEAR_ICON_305):

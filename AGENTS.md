@@ -79,7 +79,7 @@ python3 tool/run.py devices
 | 2 | `run.py -s S adapt explore [包名 …]` | 只读探路，输出 `探路-<型号>.tsv`（末列「人工勾选」留给人工） |
 | 3 | 编辑 TSV | 在末列写「关」挑出要关的开关；拿不准的问用户 |
 | 4 | `run.py adapt gen 探路-<型号>.tsv` | 生成 recipe 草稿（不碰手机）。草稿是待验证的，不是适配成果 |
-| 5 | `run.py -s S adapt check 草稿.py` | 安全模式自检，输出适配报告：关成几个/没找到几个/待人工确认几个 |
+| 5 | `run.py -s S adapt check 草稿.py` | 安全模式自检，输出适配报告：关成几个、哪几步没做成（缺哪个开关在那一行的报错里） |
 
 写完脚本用 `python3 tool/vocab.py gaps <目录名>` 查漏：列出同家族别的机型关过、这份脚本没写的词条。
 
