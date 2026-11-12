@@ -92,8 +92,10 @@ class FakePhoneTests(unittest.TestCase):
         self.assertTrue(p.vivo_seen)
 
     def test_drive_reports_result_and_cost(self):
-        out, elapsed, reads, clicks = fixtures.drive(lambda p: bool(p.sig()), modules=[fast],
-                                                     stages=[(0.0, PAGE)])
+        # drive() 自己造钟、装进模块且不还原，外面这层负责把全部门面 / 基座 / 阶段放回去
+        with fixtures.patched_clock(fixtures.Clock(), fast):
+            out, elapsed, reads, clicks = fixtures.drive(lambda p: bool(p.sig()), modules=[fast],
+                                                         stages=[(0.0, PAGE)])
         self.assertTrue(out)
         self.assertGreaterEqual(elapsed, 0.0)
         self.assertEqual((reads, clicks), (1, 0))
