@@ -260,3 +260,219 @@ NAV.update({
     "close_named": _xiaomi_close_named,
     "security_tab": _xiaomi_security_tab,
 })
+
+
+# ---------- OPPO 两大对：PLZ110 / PMX110 与 PLG110 / PMA110（#1154）----------
+#
+# 一对里代码逐字相同的导航过程收在这里，两份脚本各删本地定义、调用点一字不改。
+# `app_settings` 与 `system_settings` 在两对里各自成簇（同一对里逐字相同、跨对代码不同），
+# 一个名字只能放一簇：这里放 PLZ110 / PMX110 那份，PLG110 / PMA110 的同名实现留在脚本里覆盖。
+#
+# `close_named` 不在这一簇：注入面的这个名字已被小米系（#1151）占用，PLZ110 / PMX110 那份带
+# `snapshot` / `optional`、代码不同，按「同名多簇一律留脚本原样」继续留在两份脚本里。
+#
+# `assistant_settings` 与 `at_assistant` / `assistant_icon` 的常量与下一步由脚本侧给出：
+# PLG110 与 PMA110 各有一份同名的本地 `tap_page`，闭包从执行作用域现取。`row` 与
+# `carousel_choices` 的 `bounds` 同样按执行作用域取，两份 PLG/PMA 脚本的 `from fast import …`
+# 因此要留着（那条 import 唯一的读者是注入版）。
+
+def _plz_open_page(p, g):
+    def open_page(command, title, package, activity=None):
+        result = p.d.shell(command)
+        g["require"](not result.exit_code and not any(word in result.output for word in
+                      ("Error", "Exception", "Permission Denial", "unable to resolve")),
+                     "系统未允许打开设置页")
+        g["page"](title, package, activity)
+    return open_page
+
+
+def _plz_app_settings(p, g):
+    def app_settings(package):
+        g["open_page"]("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + package,
+                       "返回" if package == g["THEME"] else "软件商店", package, "SettingActivity")
+    return app_settings
+
+
+def _plz_row(p, g):
+    def row(text, title=None, package=None, activity=None, scrolls=8, tries=1):
+        """只点具名导航行，避免点隐私页的过度授权横幅；坐标来自当前节点。
+
+        `text` 可以给一组等价文案，按顺序试：软件商店的隐私入口随商店 App 版本叫「隐私」或
+        「隐私授权管理」（#907）。认不到时留下停在哪个页面与结构摘要，与 note_miss 同形。
+        `tries` 是点击被弹窗淡出动画吞掉时的重试次数（#286）；页面没换才重点，坐标仍然有效。"""
+        names = (text,) if isinstance(text, str) else tuple(text)
+        p.await_page()
+        where = p.focus()
+        for index in range(scrolls + 2):
+            root = p.tree()
+            parents = {child: node for node in root.iter() for child in node}
+            for name in names:
+                matches = [n for n in root.iter("node")
+                           if (n.get("text") or n.get("content-desc") or "").strip() == name
+                           and p.on_screen(n)]
+                g["require"](len(matches) <= 1, f"「{name}」入口不唯一，未点击")
+                if not matches:
+                    continue
+                node = matches[0]
+                target = node
+                while target is not None and target.get("clickable") != "true":
+                    target = parents.get(target)
+                target = target if target is not None else node
+                l, t, r, b = g["bounds"](target)
+                g["require"](r > l and b > t and p.on_screen(target), "入口坐标无效")
+                g["require"](p.focus() == where, "找入口期间页面变了，未点击")
+                for _ in range(tries):
+                    before = p.sig()
+                    p.click((l + r) // 2, (t + b) // 2)
+                    if p.settle(before, 2.4):
+                        break
+                else:
+                    raise RuntimeError(f"点击「{name}」后页面没有变化")
+                g["page"](title or (name if len(names) == 1 else names), package, activity)
+                return
+            if index == 0:
+                p.top(scrolls)
+            elif index == scrolls + 1 or not p.scroll_more():
+                break
+        p.note_miss(" / ".join(names))
+        raise RuntimeError(f"没找到入口「{names[0]}」，未继续本段")
+    return row
+
+
+def _plz_switch_signature(p, g):
+    def switch_signature():
+        return tuple(p.switches())
+    return switch_signature
+
+
+def _plz_switch_top(p, g):
+    def switch_top(max_screens):
+        """按开关行判顶部，不让访问时间等动态文字延长整页翻动。"""
+        before = g["switch_signature"]()
+        for _ in range(max_screens):
+            p.top(1)
+            current = g["switch_signature"]()
+            if current == before:
+                return
+            before = current
+        raise RuntimeError("未确认开关列表顶部，未执行关闭")
+    return switch_top
+
+
+def _plz_system_settings(p, g):
+    def system_settings():
+        g["open_page"]("am start -f 0x10008000 -a android.settings.SETTINGS", "设置",
+                       "com.android.settings")
+    return system_settings
+
+
+def _plz_at_assistant(p, g):
+    def at_assistant():
+        """当前页是不是负一屏首页：先要求前台是桌面，再看头像入口或首页的两条已知文案。
+
+        负一屏内嵌在桌面进程里，焦点窗口不再是它自己的包名（PLR110 实测）；反过来，
+        它自己的包名对应的是负一屏设置页，那页不能当成「已经到了」。别的 App 上的同名
+        头像 / 文案同样不算，否则这一段会在错的应用里点下去（#901）。"""
+        if not p.focus().startswith(g["LAUNCHER"]):
+            return False
+        root = p.tree()
+        if any(n.get("resource-id", "").endswith("head_icon") for n in root.iter("node")):
+            return True
+        return g["ASSISTANT_HOME"] <= {t for t, _, _ in p.texts(root)}
+    return at_assistant
+
+
+def _plz_assistant_icon(p, g):
+    def assistant_icon():
+        """回默认桌面、从左侧内侧右滑进负一屏，返回唯一的头像入口。
+
+        ColorOS 最左一条是返回 / 侧边栏手势区，起点从 W//7 起、滑动 250 ms（同族 PLG110 实测）。
+        两次 HOME 回默认桌面：多主页时一次可能停在别的页；HOME 也可能正好落在负一屏，那就不再滑，
+        再滑一次会把自己划走（#901）。"""
+        if g["at_assistant"]():
+            p.await_page()                  # 已到也可能是刚划进来的过渡帧：等这一页画完再取坐标
+        else:
+            reached = False
+            for _ in range(2):
+                p.d.shell("input keyevent HOME")
+                p.await_page()
+                reached = g["at_assistant"]()
+                if reached:
+                    break
+            if not reached:
+                for _ in range(4):
+                    g["require"](p.focus().startswith(g["LAUNCHER"]), "未停在系统桌面，请勿同时操作手机")
+                    p.d.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250")
+                    p.await_page()
+                    if g["at_assistant"]():
+                        break
+        icons = [n for n in p.tree().iter("node") if n.get("resource-id", "").endswith("head_icon")
+                 and p.on_screen(n)]
+        if len(icons) != 1:
+            p.note_miss(f"唯一的负一屏头像入口（读到 {len(icons)} 个）")
+        g["require"](len(icons) == 1, "未确认负一屏头像入口")
+        return icons[0]
+    return assistant_icon
+
+
+def _plg_assistant_settings(p, g):
+    def assistant_settings():
+        """PMA110 录制时负一屏子页没导出：走桌面入口，不尝试绕过权限，也不截图「我的」页。"""
+        p.d.shell("input keyevent HOME")
+        g["time"].sleep(.8)
+        for _ in range(4):
+            texts = {text for text, _, _ in p.texts()}
+            if {"我的服务", "添加卡片"} <= texts:
+                break
+            g["require"](p.focus().startswith("com.android.launcher/"), "未停在系统桌面，请勿同时操作手机")
+            p.d.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250")
+            g["time"].sleep(.8)
+        else:
+            raise RuntimeError("未进入负一屏，未继续操作")
+        g["require"](p.tap("我的", exact=True, scrolls=0), "未找到负一屏「我的」入口")
+        g["tap_page"]("设置", g["ASSISTANT"] + "setting.AssistantScreenSettingActivity", scrolls=0)
+    return assistant_settings
+
+
+def _plg_carousel_choices(p, g):
+    def carousel_choices(root):
+        """只识别有明确 checked 状态的单选控件；预览图的同名文字不能作为点击目标。"""
+        parents = {child: node for node in root.iter() for child in node}
+        choices = {}
+        labels = {"显示轮播推荐", "不显示轮播推荐"}
+        for node in root.iter("node"):
+            if node.get("checkable") != "true" or "RadioButton" not in node.get("class", ""):
+                continue
+            row = node
+            for _ in range(5):
+                captions = {x.get("text", "") for x in row.iter("node")} | {
+                    x.get("content-desc", "") for x in row.iter("node")}
+                matched = captions & labels
+                if len(matched) == 1:
+                    name = matched.pop()
+                    g["require"](name not in choices, "轮播单选项不唯一，未点击")
+                    g["require"](p.on_screen(node) and node.get("enabled") == "true", "轮播单选项不可操作")
+                    g["require"](node.get("checked") in ("true", "false"), "轮播单选状态未知，未点击")
+                    choices[name] = (node.get("checked") == "true", g["bounds"](node))
+                    break
+                row = parents.get(row)
+                if row is None or len(matched) > 1:
+                    break
+        g["require"](set(choices) == labels and sum(on for on, _ in choices.values()) == 1,
+                     "无法确认轮播单选状态，未使用固定坐标")
+        return choices
+    return carousel_choices
+
+
+NAV.update({
+    "app_settings": _plz_app_settings,
+    "assistant_icon": _plz_assistant_icon,
+    "at_assistant": _plz_at_assistant,
+    "open_page": _plz_open_page,
+    "row": _plz_row,
+    "switch_signature": _plz_switch_signature,
+    "switch_top": _plz_switch_top,
+    "system_settings": _plz_system_settings,
+    "assistant_settings": _plg_assistant_settings,
+    "carousel_choices": _plg_carousel_choices,
+})

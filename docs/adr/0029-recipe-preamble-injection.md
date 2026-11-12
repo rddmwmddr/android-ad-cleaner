@@ -236,3 +236,26 @@ PKT110 与 RMX3700 的应用建议，honor-PNM-AN10 的广告跟踪 / 桌面文�
   `wait_page` 各份代码同形但留在脚本里（它不在本票范围）；闭包从执行作用域现取这两个名字。
 - **对拍与守卫照 #1150 的口径。** `tests/compare_recipe_calls.py` 47 份 × 2 场景 13,484 条
   调用零差异；词库重生成后只有行号位移，入口速查逐字不变。
+
+## #1154 之后：OPPO 两大对的成对簇
+
+PLZ110 / PMX110 与 PLG110 / PMA110 这两对各有一批代码逐字相同的导航过程，本批收进注入面
+十簇：前者八个（`open_page` / `app_settings` / `row` / `switch_signature` / `switch_top` /
+`system_settings` / `at_assistant` / `assistant_icon`），后者两个（`assistant_settings` /
+`carousel_choices`）。脚本侧只删本地定义，调用点一字未动。
+
+- **`app_settings` 与 `system_settings` 的第二簇留脚本。** 两个名字在两对里各自成簇：同一对里
+  逐字相同，跨对代码不同（PLZ110 那版是 `package` 推断标题、PLG110 那版把 `activity` / `title`
+  一起传进来）。注入面一个名字只能放一簇，收 PLZ110 / PMX110 那份，另一簇按「同名多簇一律留
+  脚本原样」继续覆盖注入版。
+- **`close_named` 没有搬，票面把它列进了范围。** 这个名字在注入面已经被小米系（#1151）占用，
+  PLZ110 / PMX110 那份带 `snapshot` / `optional`、代码不同——两条并列的结果只能是顶替：注入面
+  换成这份，四份已经把本地定义删掉的小米脚本会走错实现。按同一条「同名多簇」规则留在两份脚本
+  里，守卫本来也不会为代码不同的同名副本报红。
+- **`entries.used_by()` 要按调用方解析形参。** `app_settings(package)` 搬走后，`-p " + package`
+  的实参写在脚本里（`app_settings(MARKET)`）、形参在实现里，只扫实现一侧就还原不出包名，
+  PLZ110 / PMX110 会从「软件商店」那一档的「用过的机型」里静默消失、转进「可提速提示」。
+  扫法补一条：扫注入实现时把调用它的脚本源码一起带上，本文件里认不出的形参去调用方找实参；
+  脚本自己定义了同名实现的，注入版根本不被调用，那几份不再扫实现。
+- **对拍与守卫照 #1150 的口径。** `tests/compare_recipe_calls.py` 13,484 条调用零差异；
+  `tests/test_recipe_nav.py` 的副本守卫扫全仓无红；词库重生成后只有行号位移，入口速查逐字不变。

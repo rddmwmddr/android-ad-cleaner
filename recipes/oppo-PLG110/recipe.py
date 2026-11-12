@@ -7,6 +7,7 @@ MODELS = ["PLG110"]
 import re
 import time
 
+# bounds 只给注入面的 carousel_choices 取（它按执行作用域解析这个名字）
 from fast import ScreenLocked, bounds
 RESULTS = []
 VERIFIED_SWITCHES = 0
@@ -128,34 +129,6 @@ def app_settings(package, activity, title=None):
               activity, title)
 
 
-def carousel_choices(root):
-    """只识别有明确 checked 状态的单选控件；预览图的同名文字不能作为点击目标。"""
-    parents = {child: node for node in root.iter() for child in node}
-    choices = {}
-    labels = {"显示轮播推荐", "不显示轮播推荐"}
-    for node in root.iter("node"):
-        if node.get("checkable") != "true" or "RadioButton" not in node.get("class", ""):
-            continue
-        row = node
-        for _ in range(5):
-            captions = {x.get("text", "") for x in row.iter("node")} | {
-                x.get("content-desc", "") for x in row.iter("node")}
-            matched = captions & labels
-            if len(matched) == 1:
-                name = matched.pop()
-                require(name not in choices, "轮播单选项不唯一，未点击")
-                require(p.on_screen(node) and node.get("enabled") == "true", "轮播单选项不可操作")
-                require(node.get("checked") in ("true", "false"), "轮播单选状态未知，未点击")
-                choices[name] = (node.get("checked") == "true", bounds(node))
-                break
-            row = parents.get(row)
-            if row is None or len(matched) > 1:
-                break
-    require(set(choices) == labels and sum(on for on, _ in choices.values()) == 1,
-            "无法确认轮播单选状态，未使用固定坐标")
-    return choices
-
-
 def hide_carousel():
     global VERIFIED_SWITCHES
     activity = ASSISTANT + "setting.recommendservice.RecommendServiceSettingActivity"
@@ -174,22 +147,6 @@ def hide_carousel():
     require(read_switches(activity, "推荐服务", 1) == before, "推荐服务总开关变化，请核对")
     VERIFIED_SWITCHES += 1
     print("  · 轮播推荐：已确认不显示，推荐服务总开关保持原值", flush=True)
-
-
-def assistant_settings():
-    p.d.shell("input keyevent HOME")
-    time.sleep(.8)
-    for _ in range(4):
-        texts = {text for text, _, _ in p.texts()}
-        if {"我的服务", "添加卡片"} <= texts:
-            break
-        require(p.focus().startswith("com.android.launcher/"), "未停在系统桌面，请勿同时操作手机")
-        p.d.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250")
-        time.sleep(.8)
-    else:
-        raise RuntimeError("未进入负一屏，未继续操作")
-    require(p.tap("我的", exact=True, scrolls=0), "未找到负一屏「我的」入口")
-    tap_page("设置", ASSISTANT + "setting.AssistantScreenSettingActivity", scrolls=0)
 
 
 # ==================== 各段具体实现 ====================

@@ -37,77 +37,6 @@ STORE_PROMOS = [
 ]
 
 
-def open_page(command, title, package, activity=None):
-    result = p.d.shell(command)
-    require(not result.exit_code and not any(word in result.output for word in
-            ("Error", "Exception", "Permission Denial", "unable to resolve")), "系统未允许打开设置页")
-    page(title, package, activity)
-
-
-def app_settings(package):
-    open_page("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + package,
-              "返回" if package == THEME else "软件商店", package, "SettingActivity")
-
-
-def row(text, title=None, package=None, activity=None, scrolls=8, tries=1):
-    """只点具名导航行，避免点隐私页的过度授权横幅；坐标来自当前节点。
-
-    `text` 可以给一组等价文案，按顺序试：软件商店的隐私入口随商店 App 版本叫「隐私」或
-    「隐私授权管理」（#907）。认不到时留下停在哪个页面与结构摘要，与 note_miss 同形。
-    `tries` 是点击被弹窗淡出动画吞掉时的重试次数（#286）；页面没换才重点，坐标仍然有效。"""
-    names = (text,) if isinstance(text, str) else tuple(text)
-    p.await_page()
-    where = p.focus()
-    for index in range(scrolls + 2):
-        root = p.tree()
-        parents = {child: node for node in root.iter() for child in node}
-        for name in names:
-            matches = [n for n in root.iter("node")
-                       if (n.get("text") or n.get("content-desc") or "").strip() == name and p.on_screen(n)]
-            require(len(matches) <= 1, f"「{name}」入口不唯一，未点击")
-            if not matches:
-                continue
-            node = matches[0]
-            target = node
-            while target is not None and target.get("clickable") != "true":
-                target = parents.get(target)
-            target = target if target is not None else node
-            l, t, r, b = bounds(target)
-            require(r > l and b > t and p.on_screen(target), "入口坐标无效")
-            require(p.focus() == where, "找入口期间页面变了，未点击")
-            for _ in range(tries):
-                before = p.sig()
-                p.click((l + r) // 2, (t + b) // 2)
-                if p.settle(before, 2.4):
-                    break
-            else:
-                raise RuntimeError(f"点击「{name}」后页面没有变化")
-            page(title or (name if len(names) == 1 else names), package, activity)
-            return
-        if index == 0:
-            p.top(scrolls)
-        elif index == scrolls + 1 or not p.scroll_more():
-            break
-    p.note_miss(" / ".join(names))
-    raise RuntimeError(f"没找到入口「{names[0]}」，未继续本段")
-
-
-def switch_signature():
-    return tuple(p.switches())
-
-
-def switch_top(max_screens):
-    """按开关行判顶部，不让访问时间等动态文字延长整页翻动。"""
-    before = switch_signature()
-    for _ in range(max_screens):
-        p.top(1)
-        current = switch_signature()
-        if current == before:
-            return
-        before = current
-    raise RuntimeError("未确认开关列表顶部，未执行关闭")
-
-
 def read_switches(title, max_screens=12):
     page(title)
     where = p.focus()
@@ -177,10 +106,6 @@ def require_installed(package, label):
         return
     require(result.exit_code in (0, 1) and not result.output.strip(), f"无法读取{label}安装状态")
     raise SkipStep(f"本机未安装{label}")
-
-
-def system_settings():
-    open_page("am start -f 0x10008000 -a android.settings.SETTINGS", "设置", "com.android.settings")
 
 
 @step("软件商店")
@@ -269,54 +194,10 @@ def hide_carousel():
     VERIFIED_SWITCHES += 1
 
 
+# 下面两个名字给注入面的负一屏助手取（at_assistant / assistant_icon 跑在 recipe_nav 里）
 LAUNCHER = "com.android.launcher/"
 # 负一屏首页的两条已知文案（PLG110 / PMA110 实测）：头像入口万一改名，两条都在也算到了（#901）
 ASSISTANT_HOME = {"我的服务", "添加卡片"}
-
-
-def at_assistant():
-    """当前页是不是负一屏首页：先要求前台是桌面，再看头像入口或首页的两条已知文案。
-
-    负一屏内嵌在桌面进程里，焦点窗口不再是它自己的包名（PLR110 实测）；反过来，
-    它自己的包名对应的是负一屏设置页，那页不能当成「已经到了」。别的 App 上的同名
-    头像 / 文案同样不算，否则这一段会在错的应用里点下去（#901）。"""
-    if not p.focus().startswith(LAUNCHER):
-        return False
-    root = p.tree()
-    if any(n.get("resource-id", "").endswith("head_icon") for n in root.iter("node")):
-        return True
-    return ASSISTANT_HOME <= {t for t, _, _ in p.texts(root)}
-
-
-def assistant_icon():
-    """回默认桌面、从左侧内侧右滑进负一屏，返回唯一的头像入口。
-
-    ColorOS 最左一条是返回 / 侧边栏手势区，起点从 W//7 起、滑动 250 ms（同族 PLG110 实测）。
-    两次 HOME 回默认桌面：多主页时一次可能停在别的页；HOME 也可能正好落在负一屏，那就不再滑，
-    再滑一次会把自己划走（#901）。"""
-    if at_assistant():
-        p.await_page()                  # 已到也可能是刚划进来的过渡帧：等这一页画完再取坐标
-    else:
-        reached = False
-        for _ in range(2):
-            p.d.shell("input keyevent HOME")
-            p.await_page()
-            reached = at_assistant()
-            if reached:
-                break
-        if not reached:
-            for _ in range(4):
-                require(p.focus().startswith(LAUNCHER), "未停在系统桌面，请勿同时操作手机")
-                p.d.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250")
-                p.await_page()
-                if at_assistant():
-                    break
-    icons = [n for n in p.tree().iter("node") if n.get("resource-id", "").endswith("head_icon")
-             and p.on_screen(n)]
-    if len(icons) != 1:
-        p.note_miss(f"唯一的负一屏头像入口（读到 {len(icons)} 个）")
-    require(len(icons) == 1, "未确认负一屏头像入口")
-    return icons[0]
 
 
 @step("负一屏")

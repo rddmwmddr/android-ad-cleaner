@@ -342,8 +342,10 @@ def _enclosing_def(src, pos):
     return found
 
 
-def _param_values(name, src, pos):
-    """变量是外层函数的形参时，从调用它的地方取对应实参：机型脚本常把包名往助手函数里传一层。"""
+def _param_values(name, src, pos, caller=""):
+    """变量是外层函数的形参时，从调用它的地方取对应实参：机型脚本常把包名往助手函数里传一层。
+
+    `caller` 是调用方源码：搬到注入面的助手，实参写在脚本里、形参在实现里，两侧各看一份。"""
     m = _enclosing_def(src, pos)
     if not m:
         return []
@@ -352,22 +354,34 @@ def _param_values(name, src, pos):
         return []
     index = params.index(name)
     values = []
-    for call in re.finditer(rf"\b{re.escape(m.group(2))}\s*\(([^)]*)\)", src):
+    for call in _calls_of(m.group(2), src):
         if call.start() < m.end():
             continue
         parts = call.group(1).split(",")
         value = _arg_at(parts[index], src, call.start()) if index < len(parts) else None
         if value:
             values.append(value)
+    if values or not caller:
+        return values
+    for call in _calls_of(m.group(2), caller):
+        parts = call.group(1).split(",")
+        value = _arg_at(parts[index], caller, call.start()) if index < len(parts) else None
+        if value:
+            values.append(value)
     return values
 
 
-def _named(src, name, pos):
+def _calls_of(name, src):
+    """这个函数名在这份源码里的调用（按实参切分好的匹配对象）。"""
+    return re.finditer(rf"\b{re.escape(name)}\s*\(([^)]*)\)", src)
+
+
+def _named(src, name, pos, caller=""):
     """一个变量在这个位置的值：同文件里最后一次字面量赋值，或它是外层形参时调用处传的实参。"""
     if not name.isidentifier():
         return []
     value = _arg_at(name, src, pos)
-    return [value] if value else _param_values(name, src, pos)
+    return [value] if value else _param_values(name, src, pos, caller)
 
 
 def _template_owner(src, pos, action):
@@ -379,26 +393,28 @@ def _template_owner(src, pos, action):
     return owner
 
 
-def _intent_packages(src, m):
+def _intent_packages(src, m, caller=""):
     """一条 Intent 拉起命令里 `-p` 的包名；认不出来返回空。"""
     if m.group(2):
         token = m.group(2)
         # 包名一定带点；没有点的是变量名（`-p package`），照变量还原
-        return [token] if "." in token else _named(src, token, m.start())
+        return [token] if "." in token else _named(src, token, m.start(), caller)
     if m.group(3):
-        return _named(src, m.group(3), m.start())
+        return _named(src, m.group(3), m.start(), caller)
     owner = _template_owner(src, m.start(), m.group(1))
     if not owner:
         return []
     out = []
     for call in _FORMAT.finditer(src):
         if call.group(1) == owner:
-            out += _named(src, call.group(2), call.start())
+            out += _named(src, call.group(2), call.start(), caller)
     return out
 
 
-def _scan_entries(src, model, found):
-    """从一段源码里认出这台机用过的入口：脚本自己的源码，或它调用到的注入面实现。"""
+def _scan_entries(src, model, found, caller=""):
+    """从一段源码里认出这台机用过的入口：脚本自己的源码，或它调用到的注入面实现。
+
+    `caller` 是调用这份实现的脚本源码：实参在脚本里、形参在实现里，包名要两侧合起来才认得出来。"""
     for call in re.finditer(r"(?:p\.start|start_or_skip)\(([^)]*)\)", src):
         parts = call.group(1).split(",")
         pkg = _arg_at(parts[0], src, call.start())
@@ -408,7 +424,7 @@ def _scan_entries(src, model, found):
     for m in re.finditer(r'am start[^"\']*?-n\s+([\w.]+)/([\w.$]+)', src):
         found.setdefault(("direct", m.group(1), full(m.group(1), m.group(2))), set()).add(model)
     for m in _INTENT.finditer(src):
-        for pkg in _intent_packages(src, m):
+        for pkg in _intent_packages(src, m, caller):
             found.setdefault(("intent", m.group(1), pkg), set()).add(model)
     for m in _APP_SETTINGS.finditer(src):
         found.setdefault(("intent", APP_SETTINGS_ACTION, m.group(1)), set()).add(model)
@@ -438,7 +454,9 @@ def used_by(recipes_dir):
     经 `open_app_settings(包名, 页面, …)` 打开的那一类同样是直达（它包着 APP_SETTINGS 的 Intent）。
 
     搬进注入面（`tool/recipe_nav.py`）的助手，入口写在实现里、脚本只剩一行调用：脚本调用了哪个
-    注入名，就把那份实现也扫一遍，否则「用过的机型」会静默漏掉（#1153）。
+    注入名，就把那份实现也扫一遍，否则「用过的机型」会静默漏掉（#1153）。包名这类实参仍在脚本里
+    （`app_settings(MARKET)`），形参在实现里，两侧合起来才还原得出包名（#1154）。定义了本地同名
+    实现的脚本走本地那份，不扫注入版。
 
     只认字面量：经 `reach(p, ENTRIES[...])` 消费的那几条（浏览器段，#912）看不出来，
     这张表会把用得上的机型算成没用过。"""
@@ -450,10 +468,10 @@ def used_by(recipes_dir):
         with open(f, encoding="utf-8") as fh:
             src = fh.read()
         _scan_entries(src, model, found)
-        called = _called_names(src)
+        called = _called_names(src) - _defined_names(src)
         for name, impl in injected.items():
             if name in called:
-                _scan_entries(impl, model, found)
+                _scan_entries(impl, model, found, caller=src)
     return found
 
 
@@ -465,6 +483,11 @@ def _called_names(src):
         return set()
     return {node.func.id for node in ast.walk(tree)
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
+
+
+def _defined_names(src):
+    """脚本自己定义的函数名：本地定义后执行、覆盖注入版，那种名字不该再扫注入面那份。"""
+    return {m.group(1) for m in re.finditer(r"^def[ \t]+(\w+)", src, re.M)}
 
 
 def open_direct(p, d, settle=1.2):

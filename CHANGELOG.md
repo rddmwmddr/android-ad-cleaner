@@ -24,6 +24,7 @@
 
 ### 内部
 
+- OPPO 两大对（PLZ110/PMX110 与 PLG110/PMA110）的成对导航簇收进 `recipe_nav`（#1154）
 - OPPO 家族的导航簇收进 `recipe_nav`，浏览器段调用点跟着改名（#1153）
 - vivo 家族的 `settings_home` / `browser_settings` 收进 `recipe_nav`，脚本只删定义（#1152）
 - 公共导航助手立了单独模块与调用序列对拍，脚本里的逐字副本由守卫盯住（#1150，ADR-0029）
