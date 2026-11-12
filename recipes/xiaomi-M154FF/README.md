@@ -46,8 +46,8 @@ python3 tool/run.py -s <序列号> finish
 
 - 18 Fold 没有真机验证：共用这份脚本，`2608BPX34C` 的路径只有 Issue #2 的社区记录。
 - REDMI K90（`2510DRK44C`）没有本仓库的真机验证：登记依据是 Issue #929 的社区实测，维护方没有这台机器。
-- 「直达打不开时走老路」只有单测（`tests/test_direct_entries_667.py`）：真机上这几段都能直达，回退分支没有被触发过。
-- 浏览器「基本模式」（拒绝协议后落到 basicmode 页）只有单测（`tests/test_browser_basic_mode_414.py`），假设直达会被转到这一页。
+- 「直达打不开时走老路」只有单测（`tests/test_entries.py`）：真机上这几段都能直达，回退分支没有被触发过。
+- 浏览器「基本模式」（拒绝协议后落到 basicmode 页）只有单测（`tests/test_entries.py`），假设直达会被转到这一页。
 - 18 Fold 这类没有 `.BrowserSettingsActivity` 的版本，「主页设置 / 搜索设置 / 功能设置」三个子项会跳过，这条路同样只有单测。
 
 ## 脚本结构

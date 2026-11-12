@@ -59,7 +59,7 @@ AD_PKGS = {
 # 选择页上默认勾上「挂起」的包（#973）。小米族的 msa 就是去广告目标本身，未挂起时
 # 默认勾上，省掉「首轮主题段被开屏窗抢前台 → 再跑一轮」；其他品牌的这一项要改锁屏 /
 # 服务，维持不勾。显式列包名而不是取 AD_PKGS 整族：给小米族加新包时先想清楚它该不该
-# 跟着默认勾上（tests/test_msa_default_973.py 守着）。
+# 跟着默认勾上（tests/test_plan.py 的 DefaultOnTableTests 守着）。
 DEFAULT_ON = frozenset({"com.miui.systemAdSolution", "com.miui.msa.global"})
 
 # 快应用组件：免安装的「轻 App」，广告常用 hap:// 链接把人跳进去。

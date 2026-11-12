@@ -20,10 +20,10 @@ use_utf8_console()
 # tests/test_test_collection.py 守着。理由里不要出现竖线，表会散架。
 ANCHORS = {
     # 引擎与读屏
-    "test_adb_link.py": "手机连接：命令服务断开、读屏超时、后台屏没了三种结局与重试都在这里判。",
-    "test_row.py": "「开关所属的那一行」的唯一定义：结构定界、几何分带与同名去重。",
+    "test_adb_link.py": "手机连接：adb 在哪、命令服务断开 / 读屏超时 / 后台屏没了三种结局怎么判、读屏探测在哪找。",
+    "test_row.py": "「开关所属的那一行」的唯一定义：结构定界、几何分带、同名去重与自绘开关去重。",
     "test_wait.py": "「等到认得出」：超时、稳定、变化、受阻四个判据，外加等机主解锁。",
-    "test_entries.py": "入口速查表：每条入口有出处、文档与表同源、reach() 按直达与搜索回退。",
+    "test_entries.py": "入口速查表与它怎么被用：每条入口有出处、文档同源、reach() 按直达与搜索回退，以及各品牌脚本进具体入口（齿轮、直达、浏览器 / 主题 / 商店 / 负一屏）。",
     "test_vocab.py": "品牌词库：词条有出处、键与入口速查相同、同页保留项只在那一页成立。",
     "test_events.py": "引擎事件的词表与解析：六个 kind、固定前缀、坏行当没有。",
     "test_engine_events.py": "引擎侧在语义发生地发事件，人话逐字不变。",
@@ -49,7 +49,7 @@ ANCHORS = {
     "test_ui_session.py": "读屏服务占用、失败清理、跨进程互斥与失败后的收尾。",
     "test_never_suspend.py": "NEVER 保护集：挂了会坏功能的包，整批拒绝、不落一条命令到手机。",
     # 机型脚本的基础设施
-    "test_recipe_kit.py": "引擎注入的脚本前导：段包装、跳过出口、失败台账、锁屏中止与安全模式下的整页关闭。",
+    "test_recipe_kit.py": "引擎注入的脚本前导：段包装、跳过出口、失败台账、锁屏中止、安全模式整页关闭与失败现场。",
     "test_recipe_loader.py": "机型脚本只有一个装载入口，测试不许自己 exec 一份脚本。",
     "test_recipe_meta_module.py": "配方元数据住中立模块：非 CLI 代码 import 它不背 CLI 副作用。",
     "test_recipe_variants.py": "同一型号按系统版本选脚本变体，变体要进安装包。",
@@ -94,8 +94,8 @@ ANCHORS = {
     "test_harmony_engine.py": "桌面引擎的离线用例：合成的界面树与假手机。",
     "test_harmony_vocab.py": "鸿蒙词库守卫。",
     # 计划与命令
-    "test_plan.py": "一次执行跑哪些步骤的规格（tool/plan.py）：八个键、默认值与 JSON 往返。",
-    "test_run_commands.py": "run.py 的命令接口、多余往返的守卫与「只是搬家」的对拍。",
+    "test_plan.py": "一次执行跑哪些步骤：Plan 规格的八个键与往返，以及按规格排出的任务、未执行行与重试轮。",
+    "test_run_commands.py": "run.py 的命令接口与它产出的诊断：退出码只在出口、多余往返的守卫、「只是搬家」的对拍，以及设备名与收尾快照。",
     "test_adapt_cli.py": "adapt.py 三条子命令对外的退出码与两路输出。",
     # 适配工具与仓库流程
     "test_claim.py": "开工认领：一条命令写认领评论并摘待办标签，仲裁只看票下评论。",
@@ -118,7 +118,7 @@ ANCHORS = {
     "test_regressions.py": "设备无关的回归：输入、页面识别、开关保护与打包入口。",
     "test_release_regressions.py": "发布回归：横屏、部分失败、通知默认选择与发布资源边界。",
     "test_feedback_safety.py": "用户反馈里的安全项：无障碍排查只读、通知保护与旧清单还原。",
-    "test_phone_host.py": "手机版宿主的说法：没有电脑和数据线时该怎么说。",
+    "test_phone_host.py": "手机版宿主的说法：没有电脑和数据线时该怎么说，以及唯一的控制流例外（不写插电常亮）。",
 }
 
 # 存量票号文件，逐条记着并到哪个文件。只许降：`PENDING_CAP` 冻在当前条数，新增一条即超线。
@@ -126,64 +126,30 @@ ANCHORS = {
 PENDING = {
     "test_adapt_assistant.py": "test_adapt_cli.py",
     "test_adapt_survey_690.py": "test_adapt_cli.py",
-    "test_adb_guid_702.py": "test_adb_link.py",
-    "test_adb_settings.py": "test_adb_link.py",
-    "test_always_run_1104.py": "test_plan.py",
     "test_app_state_races_662.py": "test_job.py",
-    "test_assistant_entry_901.py": "test_entries.py",
     "test_baidu_rows_android.py": "test_download_page_gitee.py",
     "test_bottom_tab_305.py": "test_phone_navigator.py",
     "test_bottom_tab_386.py": "test_phone_navigator.py",
-    "test_browser_basic_mode_414.py": "test_entries.py",
-    "test_browser_basic_mode_460.py": "test_entries.py",
-    "test_browser_entry_331.py": "test_entries.py",
     "test_browser_menu_753.py": "test_phone_dismisser.py",
-    "test_browser_settings_586.py": "test_entries.py",
     "test_community_1027.py": "test_issue_regressions.py",
-    "test_device_name_710.py": "test_run_commands.py",
-    "test_diagnostics_recipe_778.py": "test_run_commands.py",
-    "test_direct_entries_667.py": "test_entries.py",
     "test_dismiss_378.py": "test_phone_dismisser.py",
-    "test_entry_hops_286.py": "test_entries.py",
     "test_error_logs_1028.py": "test_issue_regressions.py",
     "test_exec_races_452.py": "test_job.py",
-    "test_finish_stay_on_632.py": "test_run_commands.py",
     "test_gear_landing_575.py": "test_phone_navigator.py",
-    "test_gear_match_305.py": "test_entries.py",
-    "test_icon_hit_530.py": "test_entries.py",
-    "test_missing_package_908.py": "test_recipe_kit.py",
-    "test_missing_switch_evidence_903.py": "test_recipe_kit.py",
-    "test_msa_default_973.py": "test_plan.py",
-    "test_not_run_steps_577.py": "test_plan.py",
-    "test_page_evidence_939.py": "test_recipe_kit.py",
     "test_phone_host_747.py": "test_phone_host.py",
-    "test_plan_exec_1106.py": "test_plan.py",
-    "test_recipe_fast_entries_796.py": "test_entries.py",
     "test_recipe_verification_1124.py": "test_verify_ledger.py",
     "test_reference_by_version.py": "test_recipe_variants.py",
     "test_reports_026.py": "test_issue_regressions.py",
     "test_reports_1029.py": "test_issue_regressions.py",
-    "test_require_installed_899.py": "test_recipe_kit.py",
     "test_retry_638.py": "test_job.py",
-    "test_screen_gone_928.py": "test_adb_link.py",
     "test_setting_search_exit_639.py": "test_phone_settings_search.py",
     "test_settings_page_960.py": "test_phone_settings_search.py",
-    "test_shell_backend_1034.py": "test_adb_link.py",
-    "test_skip_reason_report_603.py": "test_run_commands.py",
-    "test_store_privacy_933.py": "test_entries.py",
-    "test_switch_dedupe_531.py": "test_row.py",
-    "test_theme_browser_entry_912.py": "test_entries.py",
-    "test_theme_entry_730.py": "test_entries.py",
-    "test_theme_settings_landing_906.py": "test_entries.py",
-    "test_theme_unreachable_902.py": "test_entries.py",
-    "test_two_column_403.py": "test_row.py",
     "test_vocab_gaps_690.py": "test_vocab.py",
-    "test_reader_failure_731.py": "test_adb_link.py",
 }
 
 # 字面量，不用 `len(PENDING)`：那样上限会跟着名单一起涨，「新增一条即红」就成了空转。
 # 每并掉一条就把这个数减一；要加必须说明为什么（评审看得见）。
-PENDING_CAP = 55
+PENDING_CAP = 21
 
 TEST_FILE = re.compile(r"^test_[A-Za-z0-9_]+\.py$")
 # 文件名尾部的票号 / 日期：`test_xxx_1234`、`test_xxx_2026_11_12`、`test_xxx_2026-11-12`

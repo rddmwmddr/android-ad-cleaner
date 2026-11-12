@@ -40,10 +40,10 @@
 
 | 文件 | 为什么 |
 |---|---|
-| `test_adb_link.py` | 手机连接：命令服务断开、读屏超时、后台屏没了三种结局与重试都在这里判。 |
-| `test_row.py` | 「开关所属的那一行」的唯一定义：结构定界、几何分带与同名去重。 |
+| `test_adb_link.py` | 手机连接：adb 在哪、命令服务断开 / 读屏超时 / 后台屏没了三种结局怎么判、读屏探测在哪找。 |
+| `test_row.py` | 「开关所属的那一行」的唯一定义：结构定界、几何分带、同名去重与自绘开关去重。 |
 | `test_wait.py` | 「等到认得出」：超时、稳定、变化、受阻四个判据，外加等机主解锁。 |
-| `test_entries.py` | 入口速查表：每条入口有出处、文档与表同源、reach() 按直达与搜索回退。 |
+| `test_entries.py` | 入口速查表与它怎么被用：每条入口有出处、文档同源、reach() 按直达与搜索回退，以及各品牌脚本进具体入口（齿轮、直达、浏览器 / 主题 / 商店 / 负一屏）。 |
 | `test_vocab.py` | 品牌词库：词条有出处、键与入口速查相同、同页保留项只在那一页成立。 |
 | `test_events.py` | 引擎事件的词表与解析：六个 kind、固定前缀、坏行当没有。 |
 | `test_engine_events.py` | 引擎侧在语义发生地发事件，人话逐字不变。 |
@@ -66,7 +66,7 @@
 | `test_main_switch_bar.py` | 渠道页的 main_switch_bar：外层容器里包着真开关，不能按颜色当自绘开关。 |
 | `test_ui_session.py` | 读屏服务占用、失败清理、跨进程互斥与失败后的收尾。 |
 | `test_never_suspend.py` | NEVER 保护集：挂了会坏功能的包，整批拒绝、不落一条命令到手机。 |
-| `test_recipe_kit.py` | 引擎注入的脚本前导：段包装、跳过出口、失败台账、锁屏中止与安全模式下的整页关闭。 |
+| `test_recipe_kit.py` | 引擎注入的脚本前导：段包装、跳过出口、失败台账、锁屏中止、安全模式整页关闭与失败现场。 |
 | `test_recipe_loader.py` | 机型脚本只有一个装载入口，测试不许自己 exec 一份脚本。 |
 | `test_recipe_meta_module.py` | 配方元数据住中立模块：非 CLI 代码 import 它不背 CLI 副作用。 |
 | `test_recipe_variants.py` | 同一型号按系统版本选脚本变体，变体要进安装包。 |
@@ -107,8 +107,8 @@
 | `test_harmony_client.py` | 鸿蒙接入后的选机、互斥、持久化、停止与旧数据兼容。 |
 | `test_harmony_engine.py` | 桌面引擎的离线用例：合成的界面树与假手机。 |
 | `test_harmony_vocab.py` | 鸿蒙词库守卫。 |
-| `test_plan.py` | 一次执行跑哪些步骤的规格（tool/plan.py）：八个键、默认值与 JSON 往返。 |
-| `test_run_commands.py` | run.py 的命令接口、多余往返的守卫与「只是搬家」的对拍。 |
+| `test_plan.py` | 一次执行跑哪些步骤：Plan 规格的八个键与往返，以及按规格排出的任务、未执行行与重试轮。 |
+| `test_run_commands.py` | run.py 的命令接口与它产出的诊断：退出码只在出口、多余往返的守卫、「只是搬家」的对拍，以及设备名与收尾快照。 |
 | `test_adapt_cli.py` | adapt.py 三条子命令对外的退出码与两路输出。 |
 | `test_claim.py` | 开工认领：一条命令写认领评论并摘待办标签，仲裁只看票下评论。 |
 | `test_triage_audit.py` | triage 四条集合判据，登记表与脚本常量逐项对拍。 |
@@ -129,4 +129,4 @@
 | `test_regressions.py` | 设备无关的回归：输入、页面识别、开关保护与打包入口。 |
 | `test_release_regressions.py` | 发布回归：横屏、部分失败、通知默认选择与发布资源边界。 |
 | `test_feedback_safety.py` | 用户反馈里的安全项：无障碍排查只读、通知保护与旧清单还原。 |
-| `test_phone_host.py` | 手机版宿主的说法：没有电脑和数据线时该怎么说。 |
+| `test_phone_host.py` | 手机版宿主的说法：没有电脑和数据线时该怎么说，以及唯一的控制流例外（不写插电常亮）。 |
