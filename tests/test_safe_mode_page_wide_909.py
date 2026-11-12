@@ -32,6 +32,7 @@ OFF_CALL_WIDE = [
     ("recipes/oppo-PKH110/recipe.py", "广告跟踪"),
     ("recipes/realme-RMX3700/recipe.py", "广告跟踪"),
     ("recipes/realme-RMX3700/recipe.py", "应用建议"),
+    ("recipes/realme-RMX3888/recipe.py", "广告跟踪"),
     ("recipes/honor-PNM-AN10/recipe.py", "广告跟踪"),
     ("recipes/honor-PNM-AN10/recipe.py", "桌面文件夹"),
     ("recipes/honor-PNM-AN10/recipe.py", "主题"),

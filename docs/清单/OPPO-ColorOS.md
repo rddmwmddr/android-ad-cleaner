@@ -202,6 +202,26 @@ PMX110 / ColorOS 17 上逐个单独挂起实测（Issue #335，2026-10-30）。
 
 另外：`ro.build.version.opporom` 在 realme 上是空的，桌面客户端里「系统版本」一栏空白，不是 bug。
 
+### realme 真我 GT5 Pro（RMX3888 / ColorOS 15.0.0.420(CN01) / Android 15）
+
+社区实测（[#1083](https://github.com/rddmwmddr/android-ad-cleaner/issues/1083)，2026-11-11），维护者没有这台手机。机型脚本：`recipes/realme-RMX3888/`，按报告者的落点写成、未在真机复跑。
+
+同一型号还有一台 ColorOS 16.0.10.500 的（上面 [#271](https://github.com/rddmwmddr/android-ad-cleaner/issues/271) 那段），两台的商店与入口不一样：这台的软件商店**有**「服务管理」（46 项），16.0.10.500 那台没有。
+
+| 位置 | 路径与处理 |
+|---|---|
+| 广告跟踪 | 设置 → 隐私 → 更多 → 设备标识与广告 → 广告跟踪（`com.oplus.settings.feature.notification.oaid.OAIDActivity`）。页内 219 个开关，开着 68 个；没有总开关，整页关掉即可 |
+| 负一屏 | 这一层没有「推荐服务 → 轮播推荐」，也没有「搜索框提示词」，推荐服务与热点资讯默认已关。设置页是 `com.oplus.assistantscreen.setting.AssistantScreenSettingActivity` |
+| 下拉搜索 | 参考脚本的安全模式这一页关成 4 项（搜索范围的个性化推荐 / 精选资讯、功能管理的搜索框提示词、隐私里的个性化推荐），是这台唯一跑通的段 |
+| 软件商店 | 设置页 `com.heytap.market.mine.ui.SettingActivity`（没有 `.cn.`，与 PJA110 旧版商店同形）；「服务管理」46 项；个性化推荐是**子页** `com.heytap.market.mine.PersonalRecommendActivity`，不是就地开关。参考脚本跑「隐私」页核对 0 项，就是因为它是入口行 |
+| 浏览器 | 40.9.14.1 的「隐私」页已经没有「广告管理」入口；主页布局默认已经是「简洁」。设置页可以直达 `am start -n com.heytap.browser/.settings.component.BrowserPreferencesPage` |
+| 主题商店 | 包名是 `com.oplus.themestore`（参考脚本探的是 `com.heytap.themestore`，这台没有这个包），而且 `resolve-activity` 返回 No activity found——没有启动界面，拉起会报「无法打开」。这段在本机做不了 |
+| 视频 | `com.heytap.yoli` 只有 `LocalVideosListActivity`（本地视频播放器），没有在线内容与「我的」页，没有可关的广告位 |
+| 游戏中心 | 确实未安装 `com.nearme.gamecenter` |
+| 小布建议 | 设置里的入口叫「AI」（`com.coloros.sceneservice` 的设置页），不叫「OPPO AI」；「小布建议」总开关默认已关。参考脚本因此停在设置首页 |
+| 营销通知 | 按 §5 判据从 14 条候选剔到 12 条，`chan-off` 全部关闭，复查「仍开着 0 个」 |
+| 广告包与快应用 | 经机主同意挂起 `com.opos.ads`、`com.heytap.pictorial` 成功；`quickapp off` 关闭本地服务并保留平台 |
+
 ### OPPO Pad Mini（OPD2515 / ColorOS 16.1.0）
 
 以下来自 [Issue #9 的社区实测](https://github.com/rddmwmddr/android-ad-cleaner/issues/9)，尚无本机型整段自动脚本：
