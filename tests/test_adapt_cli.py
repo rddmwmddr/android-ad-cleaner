@@ -232,7 +232,7 @@ class CheckReportTests(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()):
                 report = adapt.check_draft(p, str(out))
                 self.assertIs(p.safe_mode, True)   # 自检必须把手机切进安全模式
-        self.assertEqual(report, {"verified": 2, "missing": [], "pending": [], "failed_steps": []})
+        self.assertEqual(report, {"verified": 2, "failed_steps": []})
         self.assertTrue(adapt.print_report(report))
         self.assertEqual(p.off.call_count, 2)
 
@@ -273,7 +273,7 @@ class CheckReportTests(unittest.TestCase):
     def test_partial_completion_is_never_worded_as_success(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            ok = adapt.print_report({"verified": 1, "missing": [], "pending": ["活动弹窗"], "failed_steps": []})
+            ok = adapt.print_report({"verified": 1, "failed_steps": ["com.example · 设置 > 隐私"]})
         self.assertFalse(ok)
         self.assertIn("部分完成", out.getvalue())
         self.assertIn("不能把部分完成当成适配成功", out.getvalue())

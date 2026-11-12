@@ -6,6 +6,7 @@
 """
 import ast
 import inspect
+import re
 import subprocess
 import sys
 import unittest
@@ -23,11 +24,23 @@ from fixtures import phone_mock  # noqa: E402
 
 RECIPES = tuple(sorted((ROOT / "recipes").rglob("recipe*.py")))
 DRIVER = ROOT / "tests" / "compare_recipe_calls.py"
+SCOPE_LOOKUP = re.compile(r'g\["(\w+)"\]')
+GLOBAL_DECL = re.compile(r"^global\s+\w+$")
 
 
 def normalize(source):
-    """去掉行首缩进与空行：注入的实现住在工厂里、脚本副本在顶层，缩进不同不影响逐字判等。"""
-    return "\n".join(line.strip() for line in source.splitlines() if line.strip())
+    """去掉行首缩进与空行，再折算搬动本身造成的两种改写（#1151）。
+
+    注入版拿不到脚本的全局，实现改成 `g["X"]` 现取，原来那句 `global X` 随之消失。不折算
+    这两种差异的话，搬过来的簇与被删的旧副本不再逐字相同 —— 回滚或合并冲突把旧副本带回来
+    时守卫会漏。去掉缩进的理由是注入的实现住在工厂里、脚本副本在顶层。"""
+    lines = []
+    for line in source.splitlines():
+        line = line.strip()
+        if not line or GLOBAL_DECL.match(line):
+            continue
+        lines.append(SCOPE_LOOKUP.sub(r"\1", line))
+    return "\n".join(lines)
 
 
 def surface():
@@ -125,6 +138,21 @@ def close_named(names, page):
         }
         self.assertEqual(kept_copies([("sample.py", script)], injected),
                          {"sample.py": ["gear"]})
+
+    def test_the_guard_sees_through_the_scope_rewrite(self):
+        """注入版把脚本全局改成 `g["X"]` 现取：旧写法搬回来也要认出来（#1151）。"""
+        script = '''\
+def tap_any(*names, scrolls=6):
+    """依次试几个入口名，点中一个就返回 True。"""
+    return any(maybe(n, scrolls) for n in names)
+'''
+        injected = {"tap_any": normalize('''\
+def tap_any(*names, scrolls=6):
+    """依次试几个入口名，点中一个就返回 True。"""
+    return any(g["maybe"](n, scrolls) for n in names)
+''')}
+        self.assertEqual(kept_copies([("sample.py", script)], injected),
+                         {"sample.py": ["tap_any"]})
 
 
 class DriverTests(unittest.TestCase):

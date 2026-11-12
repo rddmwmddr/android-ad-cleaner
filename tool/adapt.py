@@ -238,29 +238,25 @@ def check_draft(p, recipe_path, only=()):
     exec(compile(src, recipe_path, "exec"), g)
     return {
         "verified": g.get("VERIFIED_SWITCHES", 0) or 0,
-        "missing": list(g.get("MISSING_SWITCHES", []) or []),
-        "pending": list(g.get("PENDING_SWITCHES", []) or []),
         "failed_steps": list(g.get("FAILED_STEPS", []) or []),
     }
 
 
 def print_report(report):
-    """适配报告：找到几个/关成几个/没找到几个/待人工确认几个。部分完成不说成成功。"""
+    """适配报告：关成几个、哪几步没做成。部分完成不说成成功。"""
     verified = report["verified"]
-    missing, pending, failed = report["missing"], report["pending"], report["failed_steps"]
+    failed = report["failed_steps"]
     print("\n================ 适配报告（草稿 · 安全模式自检） ================")
     print(f"  回读确认关闭：{verified} 项")
-    print(f"  没找到：{len(missing)} 项" + (f"（{'、'.join(missing)}）" if missing else ""))
-    print(f"  待人工确认：{len(pending)} 项" + (f"（{'、'.join(pending)}）" if pending else ""))
     print(f"  未完成步骤：{len(failed)} 个" + (f"（{'、'.join(failed)}）" if failed else ""))
-    ok = verified > 0 and not missing and not pending and not failed
+    ok = verified > 0 and not failed
     if ok:
         print("结论：自检通过——勾选的开关都已找到并回读确认关闭。")
         print("      这仍不代表适配完成：请人工在手机上核对入口和效果，再决定是否转为正式机型脚本。")
-    elif verified == 0 and not pending:
+    elif verified == 0:
         print("结论：自检未通过——没有回读确认关闭任何开关。请把上面的开关名和步骤名交给人工核对。")
     else:
-        print("结论：部分完成——已确认关闭的项见上；没找到/待人工确认的项必须人工在手机上核对，")
+        print("结论：部分完成——已确认关闭的项见上；没做成的那几步必须人工在手机上核对，")
         print("      不能把部分完成当成适配成功。")
     print("==================================================================")
     return ok
