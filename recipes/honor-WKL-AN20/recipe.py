@@ -32,7 +32,8 @@ def labels(root=None):
     return {text for text, _, _ in p.texts(root)}
 
 
-def page(package, *markers, timeout=5):
+# 这一页等标题出现，超时只说明「没等到」；注入 page() 判的是「到了但标题不对」，两者不能互换（#939 留待再议）。
+def settle_page(package, *markers, timeout=5):
     """包名、可见标题和节点位置连续稳定后才使用坐标；不输出账号内容。"""
     deadline, previous = time.monotonic() + timeout, None
     while time.monotonic() < deadline:
@@ -138,7 +139,7 @@ def scan(max_screens):
 def close_named(names, title, package, marker, max_screens=6, drawn=False):
     """精确标题白名单；操作前完整扫描，操作后核对目标及其他开关。"""
     global VERIFIED_SWITCHES
-    page(package, marker)
+    settle_page(package, marker)
     native = p.switches
 
     def read(root=None):
@@ -179,7 +180,7 @@ def app_settings(package, *markers):
     p.start(package)
     require(p.go("我的", "设置"), "未找到应用设置入口")
     tap("设置", scrolls=0)
-    page(package, *markers)
+    settle_page(package, *markers)
 
 
 def browser_settings():
@@ -190,7 +191,7 @@ def browser_settings():
     # 本机已验证「更多 → 设置」；经典首页的未知图标位置不猜。
     tap("更多", scrolls=0)
     tap("设置", scrolls=0)
-    page(package, "模式选择", "隐私管理")
+    settle_page(package, "模式选择", "隐私管理")
     return package
 
 
@@ -222,7 +223,7 @@ def radio(root, text):
 def _():
     skip_in_safe_mode()
     require(p.setting("广告", "广告与隐私"), "未进入广告与隐私")
-    page("com.hihonor.id", "广告与隐私")
+    settle_page("com.hihonor.id", "广告与隐私")
     tap("更多选项", scrolls=0)
     if p.find("显示系统程序", exact=True):
         tap("显示系统程序", scrolls=0)
@@ -268,14 +269,14 @@ def _():
 def _():
     package = browser_settings()
     tap("模式选择")
-    root = page(package, "模式选择", "简洁首页")
+    root = settle_page(package, "模式选择", "简洁首页")
     choice = radio(root, "简洁首页")
     if choice.get("checked") != "true":
         require(choice.get("enabled") != "false", "简洁首页选项不可用")
         left, top, right, bottom = bounds(choice)
         p.click((left + right) // 2, (top + bottom) // 2)
         time.sleep(.5)
-        require(radio(page(package, "简洁首页"), "简洁首页").get("checked") == "true",
+        require(radio(settle_page(package, "简洁首页"), "简洁首页").get("checked") == "true",
                 "回读未确认简洁首页")
         p.changed.append(("浏览器·模式选择", "简洁首页"))
 
@@ -311,7 +312,7 @@ def _():
     p.d.swipe(p.W // 2, p.H * 3 // 10, p.W // 2, p.H * 7 // 10, duration=.3)
     time.sleep(1)
     p.d.press("back")  # 仅收起搜索键盘，不改搜索功能。
-    page("com.hihonor.search", "更多")
+    settle_page("com.hihonor.search", "更多")
     tap("更多", scrolls=0)
     tap("设置", scrolls=0)
     tap("首页显示")
@@ -329,7 +330,7 @@ def _():
         p.tree()
         p.d.swipe(p.W // 7, p.H // 2, p.W * 6 // 7, p.H // 2, duration=.3)
         time.sleep(.7)
-    page(package, "头像")
+    settle_page(package, "头像")
     tap("头像", scrolls=0)
     tap("设置", scrolls=0)
     close_named(["智能推荐", "个性化广告", "个性化消息"], "负一屏·设置", package, "设置")
@@ -344,7 +345,7 @@ def _():
     p.start(package)
     require(p.go("我的", "更多设置"), "未找到阅读设置入口")
     tap("更多设置")
-    page(package, "广告推荐服务")
+    settle_page(package, "广告推荐服务")
     tap("广告推荐服务", scrolls=0)
     close_named(["个性化广告"], "阅读·广告推荐服务", package, "广告推荐服务", drawn=True)
     # 不操作「接收新通知」，不把通知总开关作为营销渠道的替代方案。
@@ -377,7 +378,7 @@ def _():
     if ONLY != ["音乐"]:
         skip("请手动打开荣耀音乐 → 我的 → 设置 → 更多设置，再单段运行「音乐」")
     package = "com.hihonor.cloudmusic"
-    page(package, "消息和隐私设置")
+    settle_page(package, "消息和隐私设置")
     tap("消息和隐私设置")
     close_named(["朋友页显示推荐动态", "展示“摇一摇”类开屏广告"], "音乐·消息和隐私设置", package, "消息和隐私设置")
     tap("广告推荐设置")
