@@ -6,10 +6,8 @@
 """
 import ast
 import inspect
-import re
 import subprocess
 import sys
-import textwrap
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -21,26 +19,10 @@ sys.path.insert(0, str(ROOT / "tests"))
 import fixtures  # noqa: E402
 import recipe_kit  # noqa: E402
 import recipe_nav  # noqa: E402
-from fixtures import phone_mock  # noqa: E402
+from fixtures import normalize, phone_mock  # noqa: E402
 
 RECIPES = tuple(sorted((ROOT / "recipes").rglob("recipe*.py")))
 DRIVER = ROOT / "tests" / "compare_recipe_calls.py"
-def normalize(source):
-    """折成「代码逐字」：注释、docstring、空行与折行都不影响判等，`g["X"]` 折回 `X`。
-
-    注入面的实现住在工厂里、脚本副本在顶层，缩进不同；注释与文档串各写各的，但都不改行为，
-    逐字判据只认代码本身。`global X` 是本地定义留下的产物，改走注入之后不再需要，一起丢掉。
-    """
-    tree = ast.parse(textwrap.dedent(source))
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module)) \
-                and node.body and isinstance(node.body[0], ast.Expr) \
-                and isinstance(node.body[0].value, ast.Constant) \
-                and isinstance(node.body[0].value.value, str):
-            node.body = node.body[1:] or [ast.Pass()]
-    text = re.sub(r"""g\[['"]([A-Za-z_]\w*)['"]\]""", r"\1", ast.unparse(tree))
-    return "\n".join(line for line in text.splitlines()
-                     if not line.strip().startswith("global "))
 
 
 def surface():

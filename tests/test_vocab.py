@@ -104,6 +104,8 @@ class RealRecipesTest(unittest.TestCase):
         self.assertGreater(len(self.scan.words), 500)
         cache = {}
         for word in self.scan.words:
+            if word.injected:
+                continue            # 词在注入段体里，出处是调用点；下面一条用例守它（#1209）
             lines = cache.setdefault(word.script, (ROOT / "recipes" / word.script).read_text(encoding="utf-8").splitlines())
             self.assertIn(word.text, lines[word.line - 1], word.source)
 
@@ -421,6 +423,86 @@ class ParseTest(unittest.TestCase):
         found = self.scan('p.off(only=["词"], page=page)')
         self.assertEqual(found.words[0].page, "<page>")
         self.assertEqual(vocab.reverse_rows(found.words), [])
+
+
+class InjectedStepTest(unittest.TestCase):
+    """段体搬进注入面之后，词条仍归调用它的每一个机型，出处写调用点（#1209）。"""
+
+    def scan(self, src, impl, folder="xiaomi-A1"):
+        tmp = recipes(**{folder: src})
+        self.addCleanup(tmp.cleanup)
+        return vocab.scan(tmp.name, injected={"downloads": impl})
+
+    def test_words_keep_and_direction_come_from_the_implementation(self):
+        found = self.scan('''\
+@step("下载管理")
+def _():
+    downloads()
+''', '''\
+def downloads(p, g):
+    def _():
+        p.off(only=["广告推荐", "开屏广告"], keep=["仅 Wi-Fi 下载"], page="下载管理·设置")
+    return _
+''')
+        self.assertEqual([(w.text, w.kind, w.source, w.injected) for w in found.words],
+                         [("广告推荐", vocab.OFF, "xiaomi-A1:3", True),
+                          ("开屏广告", vocab.OFF, "xiaomi-A1:3", True),
+                          ("仅 Wi-Fi 下载", vocab.KEEP, "xiaomi-A1:3", True)])
+        self.assertEqual({(w.group, w.page) for w in found.words}, {("下载管理", "下载管理·设置")})
+
+    def test_a_module_constant_reaches_the_implementation(self):
+        """段体的名单住在调用脚本里：实现里只有 `g["HOT"]`，值要从脚本那份常量取（沿用 #1149 的段体口径）。"""
+        found = self.scan('''\
+HOT = ["热点资讯", "热搜榜"]
+
+@step("负一屏")
+def _():
+    downloads()
+''', '''\
+def downloads(p, g):
+    def _():
+        p.off(only=g["HOT"], page="负一屏·设置")
+    return _
+''')
+        self.assertEqual([(w.text, w.source) for w in found.words],
+                         [("热点资讯", "xiaomi-A1:5"), ("热搜榜", "xiaomi-A1:5")])
+
+    def test_unresolved_and_page_wide_are_charged_to_the_caller(self):
+        found = self.scan('''\
+@step("下载管理")
+def _():
+    downloads()
+''', '''\
+def downloads(p, g):
+    def _():
+        p.off(only=list(targets), page="下载管理·设置")
+        p.off(page="下载管理·设置")
+    return _
+''')
+        self.assertEqual([(c.script, c.line) for c in found.unresolved_only],
+                         [("xiaomi-A1/recipe.py", 3)])
+        self.assertEqual(found.whole_page, 1)
+
+    def test_every_caller_is_credited(self):
+        src = '@step("下载管理")\ndef _():\n    downloads()\n'
+        impl = ('def downloads(p, g):\n    def _():\n'
+                '        p.off(only=["广告推荐"], page="下载管理·设置")\n    return _\n')
+        tmp = recipes(**{"xiaomi-A1": src, "redmi-B2": src})
+        self.addCleanup(tmp.cleanup)
+        found = vocab.scan(tmp.name, injected={"downloads": impl})
+        self.assertEqual({(w.model, w.source) for w in found.words},
+                         {("A1", "xiaomi-A1:3"), ("B2", "redmi-B2:3")})
+
+    def test_an_empty_surface_reads_like_no_surface_at_all(self):
+        """`STEPS` 为空时词库与加接线之前逐字相同：家族票逐批往里加，加之前谁也不许动。"""
+        empty, default = vocab.scan(RECIPES, injected={}), vocab.scan(RECIPES)
+        self.assertEqual([(w.text, w.kind, w.source) for w in empty.words],
+                         [(w.text, w.kind, w.source) for w in default.words])
+        self.assertEqual((empty.whole_page, len(empty.unresolved_only), len(empty.unresolved_close),
+                          len(empty.unresolved_keep), len(empty.unclassified)),
+                         (default.whole_page, len(default.unresolved_only),
+                          len(default.unresolved_close), len(default.unresolved_keep),
+                          len(default.unclassified)))
 
 
 class RenderTest(unittest.TestCase):

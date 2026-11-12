@@ -12,6 +12,7 @@ CODING_STANDARDS.md 要求纯重构给出对拍证据，页面样本取 tests/ �
 对拍用的页面样本别拿来断言新行为 —— 测试要照实现之外的事实断言，夹具是为了让两份实现吃同一份输入；
 假 Phone / 假 Runner 不在此列，单元测试直接用它们装配。
 """
+import ast
 import contextlib
 import io
 import os
@@ -20,6 +21,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import time as _time
 from collections import namedtuple
 import xml.etree.ElementTree as ET
@@ -439,6 +441,24 @@ def phone_mock(fast_mod=None, **fields):
     for name, value in fields.items():
         setattr(p, name, value)
     return p
+
+
+def normalize(source):
+    """折成「代码逐字」：注释、docstring、空行与折行都不影响判等，`g["X"]` 折回 `X`。
+
+    注入面（`recipe_nav` / `recipe_steps`）的实现住在工厂里、脚本副本在顶层，缩进不同；注释与
+    文档串各写各的，但都不改行为，逐字判据只认代码本身。`global X` 是本地定义留下的产物，
+    改走注入之后不再需要，一起丢掉。两个注入面的副本守卫共用这一份判据。"""
+    tree = ast.parse(textwrap.dedent(source))
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module)) \
+                and node.body and isinstance(node.body[0], ast.Expr) \
+                and isinstance(node.body[0].value, ast.Constant) \
+                and isinstance(node.body[0].value.value, str):
+            node.body = node.body[1:] or [ast.Pass()]
+    text = re.sub(r"""g\[['"]([A-Za-z_]\w*)['"]\]""", r"\1", ast.unparse(tree))
+    return "\n".join(line for line in text.splitlines()
+                     if not line.strip().startswith("global "))
 
 
 def _silent_shell(command, timeout=None):

@@ -275,6 +275,14 @@ why = "点名开关没出现时只报一句「未识别全部目标开关，未�
 expires_if = "开关名单断言并入引擎、机型脚本不再各自核对页面上有哪些标题时删。"
 
 [[rule]]
+id = "dev.steps.injection-surface"
+source = "CLAUDE.md#开发"
+check = "test:test_recipe_steps::CopyGuardTests.test_no_script_keeps_a_byte_identical_copy"
+status = "enforced"
+why = "34 簇段体被逐字复制了 80 份，改一处判据要改十几遍、漏一份就分叉（沿用 #1149 的簇账）；搬进注入面之后还要挡住一种半拉子状态：搬了代码没删副本，两边各跑一份。段体的模块常量必须留在脚本里按名字取——同名段体在不同脚本里取值不同，内联等于把两份数据并成一份错的（ADR-0035），这一条没有机械守卫，靠审查。"
+expires_if = "43 份脚本的段体全部搬完、仓库里不再有 `@step` 段体副本时，删这条反向守卫；`STEPS` 与这个注入面长期保留。"
+
+[[rule]]
 id = "dev.launch.foreground-ownership"
 source = "CLAUDE.md#开发"
 check = "test:test_phone_launcher::LaunchForegroundTests.test_one_frame_in_another_app_is_not_leaving"

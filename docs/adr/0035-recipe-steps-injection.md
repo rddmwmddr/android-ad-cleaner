@@ -1,0 +1,51 @@
+# 机型脚本的段体由引擎注入
+
+基线 `87bbc2d`。父票 #1149，本票 #1209。
+
+43 份机型脚本里，同一段 `@step` 段体被逐字复制了 80 次（34 簇，`ast.unparse` 折叠注释与折行后按代码逐字比）：负一屏 14 份、全局搜索 12 份、手机管家 11 份、下载管理 8 份。改一处判据要改十几遍，漏一份就分叉。公共导航那一半已在 [ADR-0029](0029-recipe-preamble-injection.md) 收进 `recipe_nav`；本票收另一半：**段体**。
+
+本票只立机制，不动任何机型脚本——`STEPS` 为空时跑起来与现在逐字相同。搬段体在四张家族票（#1210–#1213），按家族分批串行。
+
+## Decision
+
+**段体收进与 `recipe_nav` 并列的注入面 `tool/recipe_steps.py`，脚本只留一行调用。**
+
+- **两张注册表同一形状。** `NAV`（导航过程）与 `STEPS`（段体）都是「名字 → 工厂」，工厂收 `(p, g)`、只造闭包、不碰手机；`recipe_kit.preamble()` 写完生命周期与台账后依次调两个 `install()`，三个执行点（引擎执行、`adapt check`、测试装载）仍只写一行前导调用。两张表写进同一个执行作用域、`injected_sources()` 又按名字合并，所以同名会静默覆盖——段体名不得与导航助手重名，`tests/test_recipe_steps.py` 守着。
+- **实现不 import `recipe_kit`。** 前导名字与模块常量都从执行作用域现取（`g["skip"]`、`g["HOT"]`），方向与 ADR-0029 相同，依赖只有 `preamble()` → `install()` 一条。
+- **段体的模块常量不内联。** 逐字相同的段体不等于相同的数据：`HOT` 在 14 份脚本里有两种取值（`xiaomi-2304FPN6DC` 多「千问」），`STORE_PROMOTIONS` 两份 27 vs 34 条。常量留在脚本里、段体按名字取，否则派生一份实现就得派生一份数据，等于把簇的边界画错。
+- **脚本本地定义仍然覆盖注入版。** 搬代码不改行为：先搬、后删副本，中间任何时刻跑现有脚本都是一个字节不变。
+- **事实层加一条按名字取外部值的路。** `scan_source(externals=…)` 收调用脚本的模块级字符串常量，扫注入实现时把 `g["HOT"]` 读回原来的取值。缺省不传，行为与加它之前逐字相同。
+
+## 事实层与词库的接线
+
+- **`injected_sources()` 返回两张表的合并**，形状不变（`{注入名: 源码}`）。入口速查（`entries.used_by()`）不分「导航助手」与「段体」：脚本调了哪个注入名就扫哪份实现，段体里的 `p.start` / `start_or_skip` / `am start` 因此自动算在调用机上。
+- **词库只看段体那一张表**（`recipe_source.step_sources()`）。导航助手的开关名单写在调用点的实参里（`close_named(NAMES, page=…)`），词住在实现里的只有段体。今天扫导航那张表恰好零新增——`close_named` 内部的 `p.off` 因为在助手自己的函数里（`inside`）、形参又读不出而被排除——但那条路会把将来写进导航助手的字面量悄悄算成所有调用机的词条，而导航助手不该成为词条来源。这一条是词库接线与入口速查接线唯一的分叉。
+- **词条的出处写调用点。** 段体搬走之后，词在实现里、调用点在脚本里；`Word.line` 记调用那一行（`目录:行号`），归属仍是调用它的每一个机型，分组取实现里的 `page=` 标签。生成物格式一字不改，只允许出处从「词写在哪一行」变成「哪一行调用了它」。
+- **`STEPS` 为空时词库与入口速查逐字不变。** `tests/test_vocab.py` 的 `InjectedStepTest` 拿空表与不传参数对拍，家族票每批落地都要它继续绿。
+
+## 反向守卫
+
+脚本里若出现与任一注入段体 AST 归一（`ast.unparse`，剥注释、docstring、装饰器与折行）相同的 `@step` 段体即红。判据与 `tests/test_recipe_nav.py` 的副本守卫同形，函数名与段名不算差异——搬回来的副本多半会换个名字。
+
+守卫在 `tests/test_recipe_steps.py`；归一化函数 `fixtures.normalize()` 两个守卫共用，`g["X"]` 折回 `X`，本地定义留下的 `global X` 一起丢掉。
+
+## 验收口径（供四张家族票引用）
+
+- **调用序列对拍**：`python tests/compare_recipe_calls.py --baseline <本分支基点的固定 SHA>`，43 份脚本在两个场景下的调用序列零漂移。基点的取法见 [docs/agents/code-review.md](../agents/code-review.md) 的「基线钉 SHA」。
+- **生成物按基点现算再 diff**：`git worktree add` 出基点的那份，两边各跑 `python3 tool/vocab.py > <落点>` 与 `python3 tool/entries.py > <落点>`，`diff` 逐条解释。可接受的变化只有出处行号；词条总数、方向、未解析与整页三类计数、入口的机型集合都不许变。
+- **合成提交挂 `waiting-for-verify`，不写 `Closes`**：搬动只改了代码位置，真机行为要等复测（[docs/agents/triage-labels.md](../agents/triage-labels.md)）。
+
+## Considered Options
+
+- **把段体做成数据（名单 + 页面 + 选项）**（否）。34 簇里剩下的差异是机型知识：导航写法、探路分支、同名多簇各留一份。压成数据要么把分支塞进 schema，要么丢掉这些差异。
+- **段体里内联模块常量**（否）。同一段文字在不同脚本里挂着不同取值，内联就把两份数据并成一份错的。
+- **词库也扫全体注入面**（否）。导航助手的名单在调用点实参里，词不在实现里；把导航实现纳进来，将来谁在助手体内写一个 `p.off(only=[…])`，那几个词就会被算成所有调用机的词条，出处却指不到真正的调用点。
+- **本票顺带搬一批段体**（否）。机制回归与机型行为回归混在一票里，红了分不清是哪一类；家族票各自带真机复核。
+
+## Consequences
+
+- `tool/recipe_steps.py` 是段体的唯一落点；`tool/recipe_nav.py` 只管导航过程。两个模块互不 import，也不 import `recipe_kit`。
+- `recipe_source.Facts` 多一个 `constants` 字段（模块级字符串与纯字符串列表），只给 `externals` 用；`_Source.constants` 仍是本文件内取值的那一份，两者行号口径不同，不合并。
+- `recipe_steps` 进 mypy 严格档：纯逻辑、不碰设备、不依赖假对象，注解能一路追到调用方。
+- 段体名是注入面的新名字，不存在 ADR-0029 里「脚本本地同名定义会覆盖注入版」的那条约束；同族同段名的 7 组各给一个能看出差异的注入名（`downloads` / `downloads_probe` / `downloads_tap`）。
+- `docs/ARCHITECTURE.md` 的模块清单加入 `recipe_steps.py`；`CLAUDE.md` 的规则 `dev.steps.injection-surface` 与 `docs/agents/rules.toml` 的登记同时写。

@@ -372,10 +372,11 @@ def used_by(recipes_dir):
     `am start -a <action> -p <包名>` 这类公开 Intent 入口单记一档（#956）；
     经 `open_app_settings(包名, 页面, …)` 打开的那一类同样是直达（它包着 APP_SETTINGS 的 Intent）。
 
-    搬进注入面（`tool/recipe_nav.py`）的助手，入口写在实现里、脚本只剩一行调用：脚本调用了哪个
-    注入名，就把那份实现也扫一遍，否则「用过的机型」会静默漏掉（#1153）。包名这类实参仍在脚本里
-    （`app_settings(MARKET)`），形参在实现里，按位置把两侧合起来才还原得出包名（沿用 #1154 的做法）。定义了
-    本地同名实现的脚本走本地那份，不扫注入版。
+    搬进注入面（`tool/recipe_nav.py` 与 `tool/recipe_steps.py`）的实现，入口写在实现里、脚本只剩
+    一行调用：脚本调用了哪个注入名，就把那份实现也扫一遍，否则「用过的机型」会静默漏掉（沿用 #1153 的做法）。
+    包名这类实参仍在脚本里（`app_settings(MARKET)`），形参在实现里，按位置把两侧合起来才还原得出
+    包名（沿用 #1154 的做法）；段体按名字取的模块常量以 `externals` 交回去（#1209）。定义了本地
+    同名实现的脚本走本地那份，不扫注入版（`injected_calls()` 判这一条）。
 
     命令串只从调用的实参里取：变量、拼接与模板常量都还原得到，没被任何调用引用的字符串常量不算
     出处；语法错的脚本经事实层直接抛 `SyntaxError`，不再静默少算（沿用 #1195 的口径）。
@@ -388,10 +389,10 @@ def used_by(recipes_dir):
         model = rel.split("/", 1)[0].split("-", 1)[-1]
         _scan_entries(facts, model, found)
         for name, impl in injected.items():
-            calls = [call for call in facts.calls
-                     if call.injected and call.name == name and name not in facts.defines]
+            calls = recipe_source.injected_calls(facts, name)
             if calls:
-                _scan_entries(recipe_source.scan_source(impl, _bindings(calls)), model, found)
+                _scan_entries(recipe_source.scan_source(impl, _bindings(calls),
+                                                        externals=facts.constants), model, found)
     return found
 
 
