@@ -1,17 +1,34 @@
-"""渠道判定：新 classify() 与基线实现逐条等价。
+"""渠道判定：哪些渠道算营销、受保护、默认不勾，扫描因此列出谁、排除谁。不用手机。
 
-旧实现（69cfc4d 的 chan_fast.KW/SKIP/VIVO_MARKETING 与 gui.SERVICE）逐字冻结在这里
-作为对拍基线；改前改后判定必须逐条相同。判定是值，判据是纯函数，不用手机。
-繁体词条不在冻结基线里，另由 test_traditional_chinese_498.py 按单词样例与繁简成对验证（#498）。
+`classify()` 的七组判定与只读扫描的清单都收在这一份。旧实现（69cfc4d 的 chan_fast.KW/SKIP/
+VIVO_MARKETING 与 gui.SERVICE）逐字冻结在这里作为对拍基线；改前改后判定必须逐条相同。
+引导词表之外的判定另按单词样例覆盖：广告网络 ID、发送进度名（#459 前台的渠道与服务词条）、
+繁体词条（#498，本文件的繁体一组按繁简成对验证）。
+扫完之后怎么记、怎么报不在这一份，见 test_channel_outcomes.py。
 """
+import contextlib
+import io
+import os
 import re
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
+os.environ.setdefault("AAC_NO_SOUND", "1")
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
+sys.path.insert(0, str(ROOT / "tests"))
+import adb_link
 import channel_policy as policy
+import chan_fast as chan
+import fast
+from fixtures import fake_adb
+from phone import connection as phone_connection
 
 
 # ---------- 基线：69cfc4d 的旧实现，逐字冻结 ----------
@@ -133,7 +150,7 @@ TERM_CASES = (
 CORPUS = CURATED + TERM_CASES
 
 
-class EquivalenceTests(unittest.TestCase):
+class BaselineEquivalenceTests(unittest.TestCase):
     def test_every_baseline_term_has_a_case(self):
         self.assertEqual(len(TERM_CASES),
                          len(BASE_KW_TERMS) + len(BASE_SKIP_TERMS) + len(BASE_SERVICE_TERMS))
@@ -225,6 +242,304 @@ class InterfaceTests(unittest.TestCase):
 
     def test_protected_uses_list_label_like_before(self):
         self.assertTrue(policy.classify("活动", "promo", list_label="找机位").protected)
+
+
+# ---- channel_send_progress ----
+# 发送进度类渠道（WhatsApp「发送影音内容」）不进营销候选：名字带「内容」曾被默认勾选。
+
+
+class SendProgressTest(unittest.TestCase):
+    def test_send_progress_is_excluded(self):
+        for name in ("发送影音内容", "發送影音內容"):
+            self.assertTrue(policy.classify(name).scan_excluded, name)
+
+    def test_marketing_content_still_listed(self):
+        self.assertFalse(policy.classify("内容资讯").scan_excluded)
+
+
+# ---- service_channel_459 ----
+# #459 前台服务的常驻通知渠道：dump 行带 mFgServiceShown=true 时不进扫描清单。
+#
+# 字段属于 NotificationChannel，不属于 NotificationRecord：AOSP 由
+# getFieldsString() 打在 PackagePreferences: 段那行 NotificationChannel{...} 上，
+# 也就是 parse() 已经在逐行解析的行。粘性——渠道发过一次前台服务通知就永久为
+# true，之后转成纯营销仍会被排除，这条代价已确认接受（见 ADR-0006 增补）。
+
+
+PACKAGE = "com.freeme.cloud.launcher.recommendationservice"
+CHANNEL_ID = "necessary_splash_start_channel"
+
+
+def channel_line(cid, name, importance=3, deleted="false", fg=None, field="mFgServiceShown"):
+    # 真机行的字段顺序：mImportance → … → 前台服务标记 → … → mDeleted。
+    mark = "" if fg is None else f", {field}={fg}"
+    return (f"NotificationChannel{{mId='{cid}', mName={name}, mDescription=null,"
+            f" mImportance={importance}{mark}, mBypassDnd=false, mDeleted={deleted}}}")
+
+
+def dump(*lines):
+    return ("PackagePreferences:\n"
+            f"      AppSettings: {PACKAGE} importance=DEFAULT\n"
+            + "".join(f"        {line}\n" for line in lines))
+
+
+class ForegroundServiceScanTests(unittest.TestCase):
+    def setUp(self):
+        fake_adb(self)
+
+    def scan(self, output):
+        result = SimpleNamespace(returncode=0, stdout=output, stderr="")
+        with patch.object(subprocess, "run", return_value=result), \
+             patch.object(chan, "app_labels", return_value={}) as labels, \
+             patch.object(sys, "argv", ["chan_fast.py", "-s", "test", "scan"]), \
+             contextlib.redirect_stdout(io.StringIO()) as out, \
+             contextlib.redirect_stderr(io.StringIO()) as err:
+            chan.main()
+        labels.assert_called_once()
+        return out.getvalue(), err.getvalue()
+
+    def test_foreground_service_channel_is_not_listed(self):
+        out, err = self.scan(dump(channel_line(CHANNEL_ID, "应用推荐服务", fg="true")))
+        self.assertEqual(out, "")
+        self.assertIn("另有 1 个前台服务渠道未列入清单", err)
+        self.assertNotIn(CHANNEL_ID, err)
+
+    def test_line_without_the_field_keeps_current_behavior(self):
+        # OEM 剥掉字段时退回现状：照常列入清单，stderr 不多行
+        out, err = self.scan(dump(channel_line(CHANNEL_ID, "应用推荐服务")))
+        self.assertEqual(out, f"{PACKAGE}\t{CHANNEL_ID}\t应用推荐服务\n")
+        self.assertEqual(err, "")
+
+    def test_field_false_does_not_exclude(self):
+        out, err = self.scan(dump(channel_line(CHANNEL_ID, "应用推荐服务", fg="false")))
+        self.assertEqual(out, f"{PACKAGE}\t{CHANNEL_ID}\t应用推荐服务\n")
+        self.assertEqual(err, "")
+
+    def test_foreground_service_outranks_ad_network_hit(self):
+        # 同一渠道同时命中广告网络：按前台服务排除，只计一次
+        out, err = self.scan(dump(channel_line("TencentAdNetCH1", "频道", fg="true")))
+        self.assertEqual(out, "")
+        self.assertIn("另有 1 个前台服务渠道未列入清单", err)
+        self.assertIn("另有 1 个", err)
+        self.assertEqual(err.count("另有"), 1)
+
+    def test_android14_renamed_field_is_recognised(self):
+        # Android 14 起框架把字段改名，语义与粘性不变；只认老名字会让这条排除在新系统上静默失效
+        out, err = self.scan(dump(channel_line(CHANNEL_ID, "应用推荐服务", fg="true",
+                                               field="mUserVisibleTaskShown")))
+        self.assertEqual(out, "")
+        self.assertIn("另有 1 个前台服务渠道未列入清单", err)
+
+    def test_foreground_service_is_counted_before_truncated_id(self):
+        out, err = self.scan(dump(channel_line("com.se...", "活动优惠", fg="true")))
+        self.assertEqual(out, "")
+        self.assertIn("另有 1 个前台服务渠道未列入清单", err)
+        self.assertNotIn("缩略", err)
+
+    def test_foreground_service_is_counted_before_system_locked(self):
+        locked = ("PackagePreferences:\n"
+                  f"      AppSettings: {PACKAGE} importance=DEFAULT fixedImportance=true\n"
+                  "        " + channel_line(CHANNEL_ID, "活动优惠", fg="true")
+                  .replace("mBypassDnd=false", "mBypassDnd=false, mBlockableSystem=false") + "\n")
+        out, err = self.scan(locked)
+        self.assertEqual(out, "")
+        self.assertIn("另有 1 个前台服务渠道未列入清单", err)
+        self.assertNotIn("系统锁定", err)
+
+    def test_channel_that_would_not_be_listed_is_not_counted(self):
+        # 服务类渠道本来就不进清单，不该算进「前台服务渠道」的数字
+        out, err = self.scan(dump(channel_line(CHANNEL_ID, "应用推荐服务", fg="true"),
+                                  channel_line("system_channel", "系统消息", fg="true")))
+        self.assertEqual(out, "")
+        self.assertIn("另有 1 个前台服务渠道未列入清单", err)
+
+
+class ForegroundServiceClassifyTests(unittest.TestCase):
+    def test_default_judgement_is_unchanged(self):
+        default = chan.classify("活动优惠", "promo")
+        self.assertFalse(default.foreground_service)
+        self.assertTrue(default.marketing_candidate)
+
+    def test_foreground_service_keeps_the_marketing_signal(self):
+        # 排除由调用方合成（同 scan_excluded / truncated 的写法），判定本身不抹掉营销信号
+        judgement = chan.classify("活动优惠", "promo", foreground_service=True)
+        self.assertTrue(judgement.foreground_service)
+        self.assertTrue(judgement.marketing_candidate)
+
+
+# ---- traditional_chinese_498（词表部分） ----
+# #498 繁体中文界面：渠道页认页与营销/服务词表只认简体、英文。
+#
+# 报告者 vivo V2436A（PD2436E_A_17.2.13.5.W10 / Android 17 / 繁体台湾）的 chan-off 日志：
+# 「标题顶部，允许通知开关 0 个，开关 6 个」——页面已认出来，只差「允許通知」不在 ALLOW。
+# 渠道页样本沿用 #336 的真机结构（顶栏无 resource-id、向上导航、允许通知行），按界面语言换掉全部文字。
+
+# 繁体写法：每个词条一条单词样例，删掉任何一个词条都会让对应用例红（CODING_STANDARDS:38）。
+TRAD_KW = (
+    "營銷", "活動", "推薦", "推廣", "熱點", "熱門", "資訊", "新聞", "優惠", "精選",
+    "營運", "運營", "促銷", "紅包", "種草", "內容", "頭條", "權益", "會員", "簽到", "廣告",
+)
+TRAD_SKIP = (
+    "下載", "安裝", "上傳", "訂單", "快遞", "帳號", "驗證", "通話", "來電", "訊息",
+    "評論", "互動", "鬧鐘", "天氣預警", "系統", "後台", "服務運行", "媒體",
+    "熱點和網路共享", "熱點和網絡共享", "智慧熱點", "智能熱點", "紅包助手", "竊盜", "盜竊",
+    "駕駛狀態", "權限建議", "電信業者", "營運商", "運營商",
+    "即時活動", "實時活動", "賽事", "護眼", "上層顯示", "傳輸", "正在進行",
+    "發送",
+)
+TRAD_SERVICE = ("熱點", "紅包", "竊盜", "盜竊", "駕駛", "權限建議", "即時活動", "實時活動", "賽事", "護眼", "個人化提示")
+
+
+def trad_judgement(name):
+    j = policy.classify(name, "x")
+    return j.marketing_candidate, j.scan_excluded, j.default_unchecked
+
+
+class TraditionalTermTests(unittest.TestCase):
+    def test_every_traditional_marketing_term_is_a_candidate(self):
+        for term in TRAD_KW:
+            with self.subTest(term=term):
+                self.assertTrue(policy.classify(term, "x").marketing_candidate)
+
+    def test_every_traditional_service_term_is_excluded_from_scan(self):
+        for term in TRAD_SKIP:
+            with self.subTest(term=term):
+                self.assertTrue(policy.classify(term, "x").scan_excluded)
+
+    def test_every_traditional_service_term_is_default_unchecked(self):
+        for term in TRAD_SERVICE:
+            with self.subTest(term=term):
+                self.assertTrue(policy.classify(term, "x").default_unchecked)
+
+
+# 繁简成对：同一语义在两种界面下必须得到同一组判定。台湾 / 香港两种繁体译法各对一次。
+PAIRS = (
+    ("推薦", "推荐"), ("廣告", "广告"), ("精選", "精选"), ("活動優惠", "活动优惠"),
+    ("熱門資訊", "热门资讯"), ("新聞", "新闻"), ("推廣", "推广"), ("促銷", "促销"),
+    ("種草", "种草"), ("內容", "内容"), ("頭條", "头条"), ("權益", "权益"),
+    ("會員", "会员"), ("簽到", "签到"), ("營運", "运营"), ("運營", "运营"),
+    ("熱點", "热点"), ("紅包", "红包"), ("駕駛", "驾驶"), ("個人化提示", "个性化提示"),
+    ("系統", "系统"), ("訂單", "订单"), ("帳號", "账号"), ("訊息", "消息"),
+    ("驗證", "验证"), ("通話", "通话"), ("快遞", "快递"), ("下載", "下载"),
+    ("安裝", "安装"), ("上傳", "上传"), ("來電", "来电"), ("評論", "评论"),
+    ("互動", "互动"), ("鬧鐘", "闹钟"), ("天氣預警", "天气预警"), ("後台", "后台"),
+    ("服務運行", "服务运行"), ("媒體", "媒体"), ("熱點和網路共享", "热点和网络共享"),
+    ("智慧熱點", "智能热点"), ("紅包助手", "红包助手"), ("竊盜", "盗窃"), ("盜竊", "盗窃"),
+    ("駕駛狀態", "驾驶状态"), ("權限建議", "权限建议"), ("營運商", "运营商"),
+    ("即時活動", "实时活动"), ("實時活動", "实时活动"),
+    ("賽事", "赛事"), ("護眼", "护眼"), ("上層顯示", "上层显示"), ("傳輸", "传输"),
+    ("正在進行", "正在进行"), ("發送", "发送"),
+)
+
+
+class TraditionalEquivalenceTests(unittest.TestCase):
+    def test_traditional_and_simplified_terms_judge_alike(self):
+        for trad, simp in PAIRS:
+            with self.subTest(trad=trad, simp=simp):
+                self.assertEqual(trad_judgement(trad), trad_judgement(simp))
+
+
+class TraditionalSafetyTests(unittest.TestCase):
+    def test_traditional_service_terms_do_not_leak_into_default_checked_candidates(self):
+        # scan 只列 marketing_candidate 且未 scan_excluded 的渠道：繁体服务渠道不能同时满足两条
+        for term in TRAD_SKIP:
+            with self.subTest(term=term):
+                j = policy.classify(term, "x")
+                self.assertFalse(j.marketing_candidate and not j.scan_excluded)
+
+    def test_vivo_marketing_id_still_requires_a_marketing_keyword(self):
+        # #337：厂商分类号越过 SKIP，但不越过营销词；繁体渠道名同样要命中
+        j = policy.classify("服務訊息", "VPushChannel_0")
+        self.assertTrue(j.vivo_marketing_id)
+        self.assertFalse(j.marketing_candidate)
+
+
+# ---- scan_startup ----
+# 0.2.2：只读扫描不依赖 UiAutomation，初始化失败保留完整原因。
+
+
+def scan_dump(importance=3):
+    return f"""PackagePreferences:
+      AppSettings: com.example importance=DEFAULT
+        NotificationChannel{{mId='promo', mName=活动优惠, mDescription=null, mImportance={importance}, mDeleted=false}}
+    """
+
+
+class ReadOnlyScanTests(unittest.TestCase):
+    def invoke(self, args, output):
+        fake_adb(self)
+        result = SimpleNamespace(returncode=0, stdout=output, stderr="")
+        with patch.object(phone_connection, "connect", side_effect=AssertionError("只读操作不应启动 UiAutomation")) as connect, \
+             patch.object(subprocess, "run", return_value=result) as shell, \
+             patch.object(chan, "app_labels", return_value={}), \
+             patch.object(sys, "argv", ["chan_fast.py", "-s", "test-device", *args]), \
+             contextlib.redirect_stdout(io.StringIO()) as log:
+            chan.main()
+        connect.assert_not_called()
+        self.assertTrue(all(c.args[0][1:3] == ["-s", "test-device"] for c in shell.call_args_list))
+        # 只读扫描只发这两条读命令：dumpsys 读渠道，getprop 读型号（「本机 UI 未暴露」名单按型号分文件，#576）
+        self.assertTrue(all(c.args[0][-1] in ("dumpsys notification --noredact", "getprop ro.product.model")
+                            for c in shell.call_args_list))
+        return log.getvalue()
+
+    def test_scan_survives_unavailable_automation(self):
+        self.assertEqual(self.invoke(["scan"], scan_dump()), "com.example\tpromo\t活动优惠\n")
+
+    def test_mixed_payment_and_deals_channel_is_not_marketing_candidate(self):
+        # 一加 Ace 2 Pro 实机 Google Play 渠道同时承载付款和推荐，不能因推荐字样关闭。
+        for name in ("付款事宜、特惠信息和推荐内容", "Payments, deals and recommendations"):
+            with self.subTest(name=name):
+                self.assertEqual(self.invoke(["scan"], scan_dump().replace("活动优惠", name)), "")
+
+    def test_ad_network_channel_is_listed(self):
+        body = (scan_dump().replace("com.example", "com.freeme.launcher")
+                .replace("'promo', mName=活动优惠", "'TencentAdNetCH1', mName=频道"))
+        self.assertEqual(self.invoke(["scan"], body), "com.freeme.launcher\tTencentAdNetCH1\t频道\n")
+
+    def test_verify_and_noop_close_never_initialize_or_navigate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "channels.tsv")
+            path.write_text("com.example\tpromo\t活动优惠\n", encoding="utf-8")
+            self.assertIn("仍开着: 1", self.invoke(["verify", str(path)], scan_dump()))
+            self.assertIn("拨了 0 个", self.invoke(["off", str(path)], scan_dump(0)))
+
+    def test_missing_list_fails_before_device_access(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(phone_connection, "connect") as connect, \
+             patch.object(subprocess, "run") as shell, \
+             patch.object(sys, "argv", ["chan_fast.py", "-s", "test", "off", str(Path(directory, "missing.tsv"))]):
+            with self.assertRaises(FileNotFoundError):
+                chan.main()
+        shell.assert_not_called()
+        connect.assert_not_called()
+
+    def test_close_still_requires_working_automation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "channels.tsv")
+            path.write_text("com.example\tpromo\t活动优惠\n", encoding="utf-8")
+            with patch.object(chan.ShellPhone, "shell", return_value=SimpleNamespace(output=scan_dump())), \
+                 patch.object(phone_connection, "accessibility_summary", return_value="只读检查不可用"), \
+                 patch.object(phone_connection, "connect", side_effect=fast.u2.exceptions.LaunchUiAutomationError("java.lang.IllegalStateException: example")), \
+                 patch.object(sys, "argv", ["chan_fast.py", "-s", "test", "off", str(path)]), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaises(SystemExit) as stop:
+                    chan.main()
+            # 不打印 Python 报错堆栈，原因和客户端识别用的标记（LaunchUiAutomationError）仍在
+            self.assertRegex(str(stop.exception.code), r"读屏服务.*启动失败[\s\S]*LaunchUiAutomationError")
+
+    def test_adb_failure_is_not_empty_success(self):
+        result = SimpleNamespace(returncode=1, stdout="", stderr="device unauthorized")
+        with patch.object(adb_link, "adb_path", return_value="/fake/adb"), \
+             patch.object(subprocess, "run", return_value=result):
+            with self.assertRaisesRegex(RuntimeError, "unauthorized"):
+                chan.parse(chan.ShellPhone("test"))
+
+    def test_shell_call_has_serial_utf8_and_timeout(self):
+        with patch.object(adb_link, "adb_path", return_value="/fake/adb"), \
+             patch.object(subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout=scan_dump(), stderr="")) as shell:
+            chan.parse(chan.ShellPhone("test"))
+        self.assertEqual(shell.call_args.args[0], ["/fake/adb", "-s", "test", "shell", "dumpsys notification --noredact"])
+        self.assertEqual(shell.call_args.kwargs["timeout"], 60)
+        self.assertEqual(shell.call_args.kwargs["encoding"], "utf-8")
 
 
 if __name__ == "__main__":

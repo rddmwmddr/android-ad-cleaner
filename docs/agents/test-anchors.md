@@ -32,7 +32,7 @@
 
 待归并的目标是人工选的，守卫只核「目标存在」；选得对不对靠评审，不靠机器。
 
-豁免只看文件名与 `recipes/` 的名字和正文，不读那个测试文件的内容：名字里只有品牌（`test_vivo_336_chan_page.py`）不算点名任何一份脚本，仍要落到锚点；品牌加型号片段（`test_honor_wkl_recipe.py` 的 `wkl`）才算。
+豁免只看文件名与 `recipes/` 的名字和正文，不读那个测试文件的内容：名字里只有品牌（`test_vivo_chan_page.py`）不算点名任何一份脚本，仍要落到锚点；品牌加型号片段（`test_honor_wkl_recipe.py` 的 `wkl`）才算。
 
 守卫只扫 `tests/` 顶层。`tests/` 下将来若出现子目录，里面的 `test_*.py` 会被 `discover` 收到却不受这条规则约束——目前没有，出现时要先把守卫改成递归再放进去。
 
@@ -48,8 +48,9 @@
 | `test_events.py` | 引擎事件的词表与解析：六个 kind、固定前缀、坏行当没有。 |
 | `test_engine_events.py` | 引擎侧在语义发生地发事件，人话逐字不变。 |
 | `test_client_events.py` | 客户端只认引擎事件：事件行不进日志、人话本身不改状态。 |
-| `test_channel_classification.py` | 渠道七组判定只在一处定义，扫描分支与客户端都消费它。 |
-| `test_channel_outcomes.py` | 渠道批处理的结局记账：一项的结局是值，怎么记由一张表定。 |
+| `test_channel_classification.py` | 渠道判定：哪些渠道算营销、受保护、默认不勾，扫描因此列出谁、排除谁。 |
+| `test_channel_outcomes.py` | 渠道批处理的结局记账与上报：一项的结局是值，怎么记、怎么报由几张表定。 |
+| `test_channel_page.py` | 渠道页：从哪条路走进去、认出的是不是渠道页、从哪一行拿开关。 |
 | `test_phone_facade.py` | Phone 门面 + 两个基座 + 五个阶段的对外契约。 |
 | `test_phone_base.py` | 两个基座可以各自独立构造，不必造整台 Phone。 |
 | `test_phone_sessions.py` | 三个跨阶段会话对象，门面用显式属性转发过去。 |
