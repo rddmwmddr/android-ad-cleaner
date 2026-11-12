@@ -20,10 +20,7 @@ def gear():
 
 @step("系统广告")
 def _():
-    settings_home()
-    if maybe("安全") or maybe("安全与隐私"):
-        if maybe("更多安全设置") and maybe("广告与隐私"):
-            p.off(only=["个性化广告", "个性化推荐", "智能推荐服务"], page="系统·广告与隐私")
+    system_ads_branch()
 
 
 @step("全局搜索")
@@ -41,9 +38,7 @@ def _():
 
 @step("阅图锁屏")
 def _():
-    settings_home()
-    if maybe("桌面、锁屏与壁纸") and maybe("锁屏设置") and maybe("阅图锁屏"):
-        p.off(only=["阅图锁屏", "锁屏横滑进入阅图"], page="阅图锁屏")
+    lock_screen_magazine()
 
 
 @step("应用商店")

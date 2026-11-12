@@ -14,11 +14,15 @@
 字段：名字 → 工厂。工厂收 `(p, g)`，只造闭包、不碰手机，返回写进执行作用域的那个函数。
 守卫比对脚本里还留着的 `@step` 段体与注入实现，AST 归一（剥注释、docstring、装饰器与折行）后
 相同即红，见 `tests/test_recipe_steps.py`。
+
+文件内按家族分节，`install()` 落在最后。
 """
 
 from collections.abc import Callable
 from typing import Any
 
+# 名字 → 工厂。工厂收 (p, g)，只造闭包、不碰手机，返回写进执行作用域的那个函数。
+# 守卫按这张表取注入面的实现源码，比对脚本里还留着的逐字副本（tests/test_recipe_steps.py）。
 STEPS: dict[str, Callable[[Any, Any], Callable[..., Any]]] = {}
 
 
@@ -585,6 +589,110 @@ STEPS.update({
     "theme_shop_settings": _plr_theme_shop_settings,
     "theme_store_settings": _plz_theme_store_settings,
     "video_direct": _plz_video_direct,
+})
+
+
+# ---------- vivo（#1211）----------
+#
+# `settings_home` / `browser_settings` / `maybe` 都住在执行作用域里，按 `g` 现取；`time` 同理——
+# 测试装载时它是假钟，内联 `import time` 会让等待变回真实睡眠。段体无形参，机型差异只能是
+# 另一份实现：「系统广告」两簇一个用 `or` 认「安全 / 安全与隐私」两种叫法、一个直接串联，各占一个名字。
+
+def _vivo_browser_recommendations(p: Any, g: dict[str, Any]) -> Callable[[], None]:
+    def browser_recommendations() -> None:
+        """浏览器设置页几处推荐开关。没有右上菜单按钮的机型整段跳过。"""
+        p.start("com.vivo.browser")
+        if not g["browser_settings"]():
+            print("  ✗ 本机浏览器没有右上菜单按钮，跳过本段"); return
+        print(f"  · 浏览器设置页 {p.focus()}")
+        if g["maybe"]("首页设置"):
+            g["maybe"]("极简首页", scrolls=0)
+            p.off(only=["首页上滑展示资讯"], page="浏览器·首页设置"); p.back()
+        p.top()
+        if g["maybe"]("网页浏览设置"):
+            p.off(only=["网页下载相关推荐"], page="浏览器·网页浏览"); p.back()
+        p.top()
+        if g["maybe"]("更多设置"):
+            p.off(only=["WiFi连接跳转新闻资讯", "WiFi 连接跳转新闻资讯", "跳转新闻资讯",
+                        "下载管理页展示热门应用", "下载管理页展示下载热榜"], page="浏览器·更多设置"); p.back()
+        p.top()
+        if g["maybe"]("隐私权限设置"):
+            p.off(only=["个性化内容", "第三方应用来源个性化推荐", "个性化广告推荐"], page="浏览器·隐私"); p.back()
+        p.back(2)
+    return browser_recommendations
+
+
+def _vivo_i_manager_ads(p: Any, g: dict[str, Any]) -> Callable[[], None]:
+    def i_manager_ads() -> None:
+        """i管家「关于 → 个性化设置」，直达 MainSettings 页。"""
+        p.d.shell("am start -f 0x10008000 -n com.iqoo.secure/.MainSettings")
+        g["time"].sleep(1.0)
+        if g["maybe"]("关于") and g["maybe"]("个性化设置"):
+            p.off(only=["应用个性化推荐", "清理个性化推荐"], page="i管家·个性化设置")
+        p.back(3)
+    return i_manager_ads
+
+
+def _vivo_lock_screen_magazine(p: Any, g: dict[str, Any]) -> Callable[[], None]:
+    def lock_screen_magazine() -> None:
+        """桌面、锁屏与壁纸 → 锁屏设置 → 阅图锁屏。"""
+        g["settings_home"]()
+        if g["maybe"]("桌面、锁屏与壁纸") and g["maybe"]("锁屏设置") and g["maybe"]("阅图锁屏"):
+            p.off(only=["阅图锁屏", "锁屏横滑进入阅图"], page="阅图锁屏")
+    return lock_screen_magazine
+
+
+def _vivo_system_ads_branch(p: Any, g: dict[str, Any]) -> Callable[[], None]:
+    def system_ads_branch() -> None:
+        """系统设置里的「广告与隐私」：首屏入口读作「安全」或「安全与隐私」两种都认。"""
+        g["settings_home"]()
+        if g["maybe"]("安全") or g["maybe"]("安全与隐私"):
+            if g["maybe"]("更多安全设置") and g["maybe"]("广告与隐私"):
+                p.off(only=["个性化广告", "个性化推荐", "智能推荐服务"], page="系统·广告与隐私")
+    return system_ads_branch
+
+
+def _vivo_system_ads_chain(p: Any, g: dict[str, Any]) -> Callable[[], None]:
+    def system_ads_chain() -> None:
+        """系统设置里的「广告与隐私」：一路串联认「安全 → 更多安全设置 → 广告与隐私」。"""
+        g["settings_home"]()
+        if g["maybe"]("安全") and g["maybe"]("更多安全设置") and g["maybe"]("广告与隐私"):
+            p.off(only=["个性化广告", "个性化推荐", "智能推荐服务"], page="系统·广告与隐私")
+    return system_ads_chain
+
+
+def _vivo_global_search_ads(p: Any, g: dict[str, Any]) -> Callable[[], None]:
+    def global_search_ads() -> None:
+        """系统管理与升级 → 全局搜索 的三个子页；历史记录与应用建议保留。"""
+        g["settings_home"]()
+        if g["maybe"]("系统管理与升级") and g["maybe"]("全局搜索"):
+            if g["maybe"]("首页展示内容"):
+                p.off(only=["搜索框推荐词", "推荐卡片"], page="全局搜索·首页展示内容"); p.back()
+            if g["maybe"]("推荐热搜榜单", scrolls=2):
+                p.off(only=["热门搜索"], page="全局搜索·热搜榜单"); p.back()
+            if g["maybe"]("个性化内容"):
+                p.off(only=["广告个性化"], page="全局搜索·个性化内容"); p.back()
+    return global_search_ads
+
+
+def _vivo_weather_service(p: Any, g: dict[str, Any]) -> Callable[[], None]:
+    def weather_service() -> None:
+        """天气设置页只关「天气服务」（天气相关热点资讯通知），预警类三个开关同页保留。"""
+        p.d.shell("am start -f 0x10008000 -n com.vivo.weather/.WeatherSettings")
+        g["time"].sleep(1.0)
+        p.off(only=["天气服务"], keep=["气象预警", "异常天气", "地震预警"], page="天气·设置")
+        p.back(1)
+    return weather_service
+
+
+STEPS.update({
+    "browser_recommendations": _vivo_browser_recommendations,
+    "i_manager_ads": _vivo_i_manager_ads,
+    "lock_screen_magazine": _vivo_lock_screen_magazine,
+    "system_ads_branch": _vivo_system_ads_branch,
+    "system_ads_chain": _vivo_system_ads_chain,
+    "global_search_ads": _vivo_global_search_ads,
+    "weather_service": _vivo_weather_service,
 })
 
 

@@ -43,29 +43,17 @@ def gear():
 
 @step("系统广告")
 def _():
-    settings_home()
-    if maybe("安全") or maybe("安全与隐私"):
-        if maybe("更多安全设置") and maybe("广告与隐私"):
-            p.off(only=["个性化广告", "个性化推荐", "智能推荐服务"], page="系统·广告与隐私")
+    system_ads_branch()
 
 
 @step("全局搜索")
 def _():
-    settings_home()
-    if maybe("系统管理与升级") and maybe("全局搜索"):
-        if maybe("首页展示内容"):
-            p.off(only=["搜索框推荐词", "推荐卡片"], page="全局搜索·首页展示内容"); p.back()
-        if maybe("推荐热搜榜单", scrolls=2):
-            p.off(only=["热门搜索"], page="全局搜索·热搜榜单"); p.back()
-        if maybe("个性化内容"):
-            p.off(only=["广告个性化"], page="全局搜索·个性化内容"); p.back()   # 历史记录、应用建议保留
+    global_search_ads()
 
 
 @step("阅图锁屏")
 def _():
-    settings_home()
-    if maybe("桌面、锁屏与壁纸") and maybe("锁屏设置") and maybe("阅图锁屏"):
-        p.off(only=["阅图锁屏", "锁屏横滑进入阅图"], page="阅图锁屏")
+    lock_screen_magazine()
 
 
 @step("应用商店")
@@ -91,38 +79,14 @@ def _():
 
 @step("浏览器")
 def _():
-    p.start("com.vivo.browser")
-    if not browser_settings():
-        print("  ✗ 本机浏览器没有右上菜单按钮，跳过本段"); return
-    print(f"  · 浏览器设置页 {p.focus()}")
-    if maybe("首页设置"):
-        maybe("极简首页", scrolls=0)
-        p.off(only=["首页上滑展示资讯"], page="浏览器·首页设置"); p.back()
-    p.top()
-    if maybe("网页浏览设置"):
-        p.off(only=["网页下载相关推荐"], page="浏览器·网页浏览"); p.back()
-    p.top()
-    if maybe("更多设置"):
-        p.off(only=["WiFi连接跳转新闻资讯", "WiFi 连接跳转新闻资讯", "跳转新闻资讯",
-                    "下载管理页展示热门应用", "下载管理页展示下载热榜"], page="浏览器·更多设置"); p.back()
-    p.top()
-    if maybe("隐私权限设置"):
-        p.off(only=["个性化内容", "第三方应用来源个性化推荐", "个性化广告推荐"], page="浏览器·隐私"); p.back()
-    p.back(2)
+    browser_recommendations()
 
 
 @step("i管家")
 def _():
-    p.d.shell("am start -f 0x10008000 -n com.iqoo.secure/.MainSettings")
-    time.sleep(1.0)
-    if maybe("关于") and maybe("个性化设置"):
-        p.off(only=["应用个性化推荐", "清理个性化推荐"], page="i管家·个性化设置")
-    p.back(3)
+    i_manager_ads()
 
 
 @step("天气")
 def _():
-    p.d.shell("am start -f 0x10008000 -n com.vivo.weather/.WeatherSettings")
-    time.sleep(1.0)
-    p.off(only=["天气服务"], keep=["气象预警", "异常天气", "地震预警"], page="天气·设置")   # 只关「天气相关热点资讯通知」
-    p.back(1)
+    weather_service()
