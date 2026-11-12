@@ -24,6 +24,8 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from gh import GhError, call, json_of, runner_for
+
 from stale import STALE_LABEL     # 停摆标记只此一份；认领时要摘掉（#978）
 
 from stdio import use_utf8_console
@@ -58,10 +60,6 @@ FIELD = re.compile(r"^(?P<name>session|host|branch|worktree) `(?P<value>[^`]*)`$
 TIME = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$")
 COMMENT_URL = re.compile(r"(?:/issues/comments/|#issuecomment-)(\d+)")
 ISSUE_URL = re.compile(r"github\.com/([^/]+/[^/]+)/issues/\d+")
-
-
-class GhError(RuntimeError):
-    """`gh` 调用失败：读不到票时整条命令给不出结局。"""
 
 
 class Unreadable(RuntimeError):
@@ -115,27 +113,10 @@ def session_context(cwd=None, host=None):
     return Session(session_id(host, worktree), branch)
 
 
-def runner_for(cwd=None):
-    """默认的 `gh` 执行器：签名 `(script, *args) -> (标准输出, 错误输出, 返回码)`，与 FakeRunner 相同。"""
-    def run(script, *args):
-        done = subprocess.run([script, *args], cwd=cwd, capture_output=True,
-                              text=True, encoding="utf-8", errors="replace")
-        return done.stdout, done.stderr, done.returncode
-    return run
-
-
-def gh(runner, *args):
-    """一次 `gh` 调用 -> (标准输出或错误文本, 返回码)。"""
-    out, err, rc = runner("gh", *args)
-    return (out if rc == 0 else (err or out)).strip(), rc
-
-
 def read_issue(number, runner):
-    text, rc = gh(runner, "issue", "view", str(number),
-                  "--json", "number,state,labels,comments,url")
-    if rc != 0:
-        raise GhError(f"读不到 #{number}：{text}")
-    return json.loads(text)
+    return json_of(runner, "issue", "view", str(number),
+                   "--json", "number,state,labels,comments,url",
+                   source=f"`gh issue view {number}`")
 
 
 def label_names(issue):
@@ -275,7 +256,7 @@ def age_days(created, now):
 
 def open_pr(branch, runner):
     """持有者分支上有没有开着的 PR；`gh` 失败时返回 None（只是旁证，不影响结局）。"""
-    text, rc = gh(runner, "pr", "list", "--head", branch, "--state", "open", "--json", "number")
+    text, rc = call(runner, "pr", "list", "--head", branch, "--state", "open", "--json", "number")
     if rc != 0:
         return None
     try:
@@ -304,7 +285,7 @@ def taken_message(number, owner, runner, now):
 
 def post_comment(number, body, runner):
     """写一条评论 -> (评论 URL, None)；失败 -> (None, 原因)。"""
-    text, rc = gh(runner, "issue", "comment", str(number), "--body", body)
+    text, rc = call(runner, "issue", "comment", str(number), "--body", body)
     if rc != 0:
         return None, f"写认领评论失败：{text}"
     return text, None
@@ -320,7 +301,7 @@ def set_labels(number, runner, add, remove):
         args += ["--add-label", name]
     for name in remove:
         args += ["--remove-label", name]
-    text, rc = gh(runner, *args)
+    text, rc = call(runner, *args)
     if rc != 0:
         return f"；标签没写成功（{text or 'gh 返回非零'}），认领记录以评论为准"
     return ""
@@ -353,7 +334,7 @@ def withdraw(url, issue, runner):
     ident, repo = comment_id(url), repo_name(issue)
     if not ident or not repo:
         return f"；请手工删除刚写的认领评论 {url or '（无链接）'}"
-    text, rc = gh(runner, "api", "--method", "DELETE", f"repos/{repo}/issues/comments/{ident}")
+    text, rc = call(runner, "api", "--method", "DELETE", f"repos/{repo}/issues/comments/{ident}")
     if rc != 0:
         return f"；撤回失败（{text or 'gh 返回非零'}），请手工删除 {url}"
     return ""

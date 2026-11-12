@@ -19,11 +19,11 @@
 退出码：0 算出结论且写入都成功；1 参数不合规；2 `gh` 读失败（读不到票时给不出结论）；
 3 有票写失败（其余票照常写，失败逐张列出）。
 """
-import json
-import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
+
+from gh import GhError, call, json_of, runner_for
 
 from stdio import use_utf8_console
 
@@ -49,10 +49,6 @@ USAGE = """用法：python3 tool/stale.py [--dry-run] [--days N]
 
   --dry-run   只打印，不产生任何写操作
   --days N    阈值天数，默认 14；历史回放时用 12"""
-
-
-class GhError(RuntimeError):
-    """`gh` 调用失败：读不到票时整条命令给不出结局。"""
 
 
 class Unreadable(RuntimeError):
@@ -196,41 +192,20 @@ def read_open(runner):
     `gh issue list` 的 comments 字段只带前 100 条（GraphQL `first: 100`），翻得完的只有
     `gh issue view`：到顶的票补读一次，否则末评会停在旧的那条，把还在等回应的票判成该标。
     """
-    out, err, rc = runner("gh", "issue", "list", "--state", "open", "--label", STATE_LABEL,
-                          "--limit", str(LIMIT), "--json", FIELDS)
-    if rc != 0:
-        raise GhError(f"读不到 open 的 {STATE_LABEL} 票：{(err or out).strip() or 'gh 返回非零'}")
-    issues = payload(out, "`gh issue list`")
+    issues = json_of(runner, "issue", "list", "--state", "open", "--label", STATE_LABEL,
+                     "--limit", str(LIMIT), "--json", FIELDS, source="`gh issue list`")
     if not isinstance(issues, list):
         raise GhError("`gh issue list` 的输出不是票的列表")
     return [top_up(issue, runner) if len(issue.get("comments") or []) >= COMMENT_CAP else issue
             for issue in issues]
 
 
-def payload(text, source):
-    try:
-        return json.loads(text)
-    except ValueError as error:
-        raise GhError(f"{source} 的输出不是 JSON：{error}") from error
-
-
 def top_up(issue, runner):
     """评论到顶的票：用 `gh issue view` 把评论补全再判定。"""
     number = issue.get("number")
-    out, err, rc = runner("gh", "issue", "view", str(number), "--json", "comments")
-    if rc != 0:
-        raise GhError(f"补读 #{number} 的评论不全：{(err or out).strip() or 'gh 返回非零'}")
-    comments = payload(out, f"`gh issue view {number}`").get("comments") or []
-    return dict(issue, comments=comments)
-
-
-def runner_for(cwd=None):
-    """默认的 `gh` 执行器：签名 `(script, *args) -> (标准输出, 错误输出, 返回码)`。"""
-    def run(script, *args):
-        done = subprocess.run([script, *args], cwd=cwd, capture_output=True,
-                              text=True, encoding="utf-8", errors="replace")
-        return done.stdout, done.stderr, done.returncode
-    return run
+    data = json_of(runner, "issue", "view", str(number), "--json", "comments",
+                   source=f"`gh issue view {number}`")
+    return dict(issue, comments=data.get("comments") or [])
 
 
 def render(report, now, days):
@@ -257,15 +232,6 @@ def comment_body(decision):
     return "\n\n".join([lead, REPLY_HINT])
 
 
-def gh(runner, *args):
-    """一次 `gh` 调用 -> (标准输出或错误文本, 返回码)；与 tool/claim.py 里那组同名 helper 同形。
-
-    两份而不共用一份：claim 已经 import 本模块的 `STALE_LABEL`，反过来 import 就成环。
-    """
-    out, err, rc = runner("gh", *args)
-    return (out if rc == 0 else (err or out)).strip(), rc
-
-
 def set_labels(number, runner, add, remove):
     """加 / 摘标签 -> 失败原因或 None。"""
     if not add and not remove:
@@ -275,13 +241,13 @@ def set_labels(number, runner, add, remove):
         args += ["--add-label", name]
     for name in remove:
         args += ["--remove-label", name]
-    text, rc = gh(runner, *args)
+    text, rc = call(runner, *args)
     return None if rc == 0 else f"改标签失败：{text or 'gh 返回非零'}"
 
 
 def post_comment(number, body, runner):
     """写一条评论 -> 失败原因或 None。"""
-    text, rc = gh(runner, "issue", "comment", str(number), "--body", body)
+    text, rc = call(runner, "issue", "comment", str(number), "--body", body)
     return None if rc == 0 else f"写评论失败：{text or 'gh 返回非零'}"
 
 
@@ -354,9 +320,6 @@ def main(argv, runner=None, now=None):
         issues = read_open(runner)
     except GhError as error:
         print(error, file=sys.stderr)
-        return EXIT_GH
-    except OSError as error:      # 没装 gh 或不在 PATH 上
-        print(f"跑不了 gh：{error}", file=sys.stderr)
         return EXIT_GH
     now = now or datetime.now(timezone.utc)
     report = scan(issues, now, options.days)

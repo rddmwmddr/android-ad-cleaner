@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -285,7 +286,8 @@ class CommandTests(DocumentCase):
         text = doc("| #11 | @b | 机型 | PR #2 | 输出 |")
         code, out, err = self.run_main(text, FakeGh(rc=1))
         self.assertEqual(code, 2)
-        self.assertIn("读不到", err)
+        self.assertIn("gh issue list", err)
+        self.assertIn("退出码非零", err)
         self.assertEqual(out, "")
         self.assertEqual(self.path.read_text(encoding="utf-8"), text)
         self.assertEqual(list(Path(self.tmp.name).iterdir()), [self.path], "没有写出别的文件")
@@ -308,6 +310,20 @@ class CommandTests(DocumentCase):
             code = followup.main([], runner=hung, doc=self.path)
         self.assertEqual(code, 2)
         self.assertIn("没有返回", err.getvalue())
+
+    def test_the_default_runner_keeps_the_timeout(self):
+        """时限从模块常量搬成了调用点参数，漏传不会以别的形式变红——只在这里守着。"""
+        seen = {}
+
+        def fake_runner_for(cwd=None, timeout=None):
+            seen["timeout"] = timeout
+            return lambda script, *args: (json.dumps([]), "", 0)
+
+        self.path.write_text(doc(), encoding="utf-8")
+        with patch.object(followup, "runner_for", fake_runner_for), \
+                contextlib.redirect_stdout(io.StringIO()):
+            followup.main([], doc=self.path)
+        self.assertEqual(seen["timeout"], followup.TIMEOUT)
 
     def test_arguments_are_refused_rather_than_ignored(self):
         gh = FakeGh()
