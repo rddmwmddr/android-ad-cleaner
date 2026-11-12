@@ -493,16 +493,15 @@ def downloads(p, g):
         self.assertEqual({(w.model, w.source) for w in found.words},
                          {("A1", "xiaomi-A1:3"), ("B2", "redmi-B2:3")})
 
-    def test_an_empty_surface_reads_like_no_surface_at_all(self):
-        """`STEPS` 为空时词库与加接线之前逐字相同：家族票逐批往里加，加之前谁也不许动。"""
-        empty, default = vocab.scan(RECIPES, injected={}), vocab.scan(RECIPES)
-        self.assertEqual([(w.text, w.kind, w.source) for w in empty.words],
-                         [(w.text, w.kind, w.source) for w in default.words])
-        self.assertEqual((empty.whole_page, len(empty.unresolved_only), len(empty.unresolved_close),
-                          len(empty.unresolved_keep), len(empty.unclassified)),
-                         (default.whole_page, len(default.unresolved_only),
-                          len(default.unresolved_close), len(default.unresolved_keep),
-                          len(default.unclassified)))
+    def test_the_surface_only_adds_words_at_its_call_sites(self):
+        """注入面只添「词住在段体里」的那一份，脚本自己那份一个字不变（#1210）。
+
+        关掉注入面读到的就是加接线之前的样子：两边词数相加必须等于全量，多算与漏算都在这里红。"""
+        without, default = vocab.scan(RECIPES, injected={}), vocab.scan(RECIPES)
+        self.assertFalse(any(w.injected for w in without.words))
+        added = [w for w in default.words if w.injected]
+        self.assertTrue(added, "注入面一条词都没读到：接线断了")
+        self.assertEqual(len(without.words) + len(added), len(default.words))
 
 
 class RenderTest(unittest.TestCase):

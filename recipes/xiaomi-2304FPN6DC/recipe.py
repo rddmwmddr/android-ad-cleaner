@@ -63,12 +63,7 @@ def _():
 
 @step("下载管理")
 def _():
-    p.start("com.android.providers.downloads.ui")   # p.start 会顺手点掉「以后再说」更新弹窗
-    if not gear():
-        raise RuntimeError("下载管理设置入口未找到")
-    if maybe("信息流设置"):
-        p.off(only=["资源推荐", "热榜推荐"], page="下载管理·信息流")
-    p.back(3)
+    downloads()
 
 
 @step("主题")
@@ -138,11 +133,7 @@ def _():
 
 @step("负一屏")
 def _():
-    p.start("com.miui.personalassistant", ".settings.PASettingActivity")
-    p.off(only=["推荐卡片", "热门活动"], page="负一屏·设置")    # 搜索框、出行助手保留
-    if maybe("隐私设置"):
-        p.off(only=["个性化推荐"], page="负一屏·隐私"); p.back()
-    p.back()
+    negative_screen()
 
 
 @step("天气和日历")

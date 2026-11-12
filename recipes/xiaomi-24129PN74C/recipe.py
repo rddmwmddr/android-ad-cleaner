@@ -183,28 +183,12 @@ def _():
 
 @step("手机管家")
 def _():
-    p.start("com.miui.securitycenter", "com.miui.securityscan.ui.settings.SettingsActivity")
-    if maybe("隐私设置"):
-        p.off(only=["个性化推荐"], page="管家·隐私")
-        p.back()
-    if maybe("垃圾清理"):
-        p.off(only=["推荐内容"], page="管家·垃圾清理")
-        p.back()
-    p.back(2)
+    security_center()
 
 
 @step("下载管理")
 def _():
-    # 2026-10-29 实测：设置入口在右上「更多」按钮的弹窗里，页面上没有齿轮。
-    p.start("com.android.providers.downloads.ui")
-    time.sleep(1.5)
-    require(p.tap("更多", exact=True, scrolls=0), "下载管理「更多」按钮没找到")
-    time.sleep(1.0)
-    require(p.tap("设置", exact=True, scrolls=0), "下载管理弹窗里的「设置」没找到")
-    time.sleep(1.2)
-    if maybe("信息流设置"):
-        p.off(only=["资源推荐", "热榜推荐"], page="下载管理·信息流")
-    p.back(3)
+    downloads_tap()
 
 
 def settings_icon_visible():
@@ -290,36 +274,12 @@ def _():
 
 @step("全局搜索")
 def _():
-    p.start("com.android.quicksearchbox", ".preferences.SearchSettingsPreferenceActivity")
-    if maybe("首页展示模块"):
-        p.off(only=["搜索提示词"], page="搜索·首页模块")
-        if maybe("应用推荐"):
-            p.off(only=["推荐未安装应用"], keep=["展示常用应用"], page="搜索·应用推荐")
-            p.back()
-        if maybe("热搜榜单"):
-            subs = [x for x in ("热搜", "生活", "话题", "娱乐") if p.find(x, exact=True)]
-            if p.switches():
-                p.off(only=HOT, page="搜索·热搜榜单")
-            if subs:
-                p.top()
-                for x in subs:
-                    if maybe(x):
-                        p.off(only=HOT, page=f"搜索·热榜·{x}")
-                        p.back()
-            p.back()
-        p.back()
-    p.back(2)
+    global_search()
 
 
 @step("负一屏")
 def _():
-    # 只动卡片推荐；搜索框、出行助手保留；包本身不挂起（AGENTS 硬规则）。
-    p.start("com.miui.personalassistant", ".settings.PASettingActivity")
-    p.off(only=["推荐卡片", "热门活动"], page="负一屏·设置")
-    if maybe("隐私设置"):
-        p.off(only=["个性化推荐"], page="负一屏·隐私")
-        p.back()
-    p.back()
+    negative_screen()
 
 
 @step("天气和日历")

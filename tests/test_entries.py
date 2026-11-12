@@ -25,6 +25,7 @@ import chan_fast  # noqa: E402
 import entries  # noqa: E402
 import fast  # noqa: E402
 import fixtures  # noqa: E402
+import recipe_source  # noqa: E402
 import row  # noqa: E402
 from fast import ScreenLocked  # noqa: E402
 from row import icon_hit  # noqa: E402
@@ -1500,11 +1501,17 @@ GEAR_CENTER_305 = (995, 165)
 
 
 def hyperos_recipes_305():
-    """用了 gear() 的小米 / 红米机型脚本 —— 本地定义与引擎注入的那一份都算（#1151）。"""
+    """用了 gear() 的小米 / 红米机型脚本 —— 本地定义、注入助手与调用注入段体的都算（#1151、#1210）。
+
+    段体搬进注入面之后脚本正文里只剩 `theme()` 这类一行调用，按正文找 `gear(` 会把它们漏掉：
+    这一族用例照旧全绿，引擎那份实现却再没有一条 #305 样本打到它。"""
+    gear_users = {name for name, source in recipe_source.injected_sources().items()
+                  if re.search(r"\bgear\b", source)}
     for path in sorted(ROOT.glob("recipes/*/recipe*.py")):
         if not path.parent.name.startswith(("xiaomi-", "redmi-")):
             continue
-        if "gear(" in path.read_text(encoding="utf-8"):
+        text = path.read_text(encoding="utf-8")
+        if "gear(" in text or any(f"{name}(" in text for name in gear_users):
             yield path
 
 
@@ -2498,20 +2505,45 @@ EMPTY_906 = """<hierarchy rotation="0">
 </hierarchy>"""
 
 
+def injected_step_1210(name):
+    """注入面里 `name` 的实现函数节点；没有这个名字返回 None（#1210）。
+
+    源码先过 `fixtures.normalize()`：`g["X"]` 折回 `X`，下面按裸名找 go / gear / require_switches 的守卫
+    才认得出注入实现里那几个调用。"""
+    source = recipe_source.injected_sources().get(name)
+    if source is None:
+        return None
+    factory = ast.parse(fixtures.normalize(source)).body[0]
+    return next((node for node in factory.body if isinstance(node, ast.FunctionDef)), None)
+
+
+def effective_step_body(node, defines=frozenset()):
+    """段体的有效 AST：脚本本地写的那份，或它转调的注入实现（#1210 起段体只留一行调用）。
+
+    `defines` 是这份脚本的模块级函数名：本地定义覆盖注入版，那种情况拿到的仍是脚本自己那份。"""
+    body = node.body
+    if len(body) == 1 and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Call):
+        func = body[0].value.func
+        if isinstance(func, ast.Name) and func.id not in defines:
+            return injected_step_1210(func.id) or node
+    return node
+
+
 def theme_steps_906():
-    """[(路径, 段函数)]：所有带 `@step("主题")` 的小米 / 红米脚本段。"""
+    """[(路径, 段函数)]：所有带 `@step("主题")` 的小米 / 红米脚本段；段体搬进注入面的给实现本身。"""
     found = []
     for path in sorted((ROOT / "recipes").glob("*/recipe*.py")):
         if entries.family(path.parent.name.split("-", 1)[0]) != "xiaomi":
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        defines = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
         for node in tree.body:
             if not isinstance(node, ast.FunctionDef):
                 continue
             for dec in node.decorator_list:
                 if (isinstance(dec, ast.Call) and getattr(dec.func, "id", "") == "step"
                         and dec.args and getattr(dec.args[0], "value", None) == "主题"):
-                    found.append((path, node))
+                    found.append((path, effective_step_body(node, defines)))
     return found
 
 

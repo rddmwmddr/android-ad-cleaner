@@ -72,56 +72,17 @@ def _():
 
 @step("手机管家")
 def _():
-    # 新版手机管家（13.6.5）隐私设置里没有「个性化推荐」、垃圾清理里没有「推荐内容」；有就关，没有跳过
-    p.start("com.miui.securitycenter", "com.miui.securityscan.ui.settings.SettingsActivity")
-    if maybe("隐私设置"):
-        p.off(only=["个性化推荐"], page="管家·隐私"); p.back()
-    if maybe("垃圾清理"):
-        p.off(only=["推荐内容"], page="管家·垃圾清理"); p.back()
-    p.back(2)
+    security_center()
 
 
 @step("下载管理")
 def _():
-    if opened(lambda: p.start("com.android.providers.downloads.ui", ".activity.InfoFlowSettingActivity", expect="资源推荐", budget=2)):
-        p.off(only=["资源推荐", "热榜推荐"], page="下载管理·信息流")
-        p.back()
-        return
-    p.start("com.android.providers.downloads.ui")
-    if not gear():
-        raise RuntimeError("下载管理设置入口未找到")
-    if maybe("信息流设置"):
-        p.off(only=["资源推荐", "热榜推荐"], page="下载管理·信息流")
-    p.back(3)
+    downloads_probe()
 
 
 @step("主题")
 def _():
-    # 直达主题管理包的代理页（沿用 #730 的做法：它没有 LAUNCHER，monkey 拉不起来）；经主题商店冷启动
-    # 要过一道重定向过渡窗，前台校验容易误判，也可能续在上次留下的子页上（#906）。
-    # 落点被系统转去商店详情页或桌面时仍按跳过收尾。
-    if "package:" not in p.d.shell("pm path com.android.thememanager").output:
-        print("  · 本机没有主题管理包，跳过"); return
-    start_or_skip("com.android.thememanager", ".ThemeResourceProxyTabActivity",
-                  dead_ends=THEME_DEAD_ENDS, reason="主题页打不开")
-    # 导航失败以前与「本页没有目标开关」同形：进「我的」、进设置页、点名开关三步都校验，
-    # 0 个开关按失败报并带页面现场（#906）。
-    if not p.go("我的", "设置"):
-        raise RuntimeError("未进入主题「我的」；" + p.page_evidence())
-    if not gear():
-        raise RuntimeError("主题设置入口没找到；" + p.page_evidence())
-    p.await_page()                              # 齿轮点完这一页可能还没画完
-    before = {}
-    for _ in range(2):                          # 行也可能在首屏之下，off() 自己会翻页找
-        before.update({title: on for title, on, _ in p.switches()})
-        if not p.scroll_more():
-            break
-    p.top(2)
-    require_switches(before, ["每次联网时通知"], "主题·设置", contains=True)
-    p.off(only=["每次联网时通知"], keep=["自动更新"], page="主题·设置")
-    if maybe("隐私设置"):
-        p.off(only=["个性化推荐"], page="主题·隐私"); p.back()
-    p.back(2)
+    theme()
 
 
 @step("浏览器")
@@ -153,48 +114,14 @@ HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "�
 
 @step("全局搜索")
 def _():
-    p.start("com.android.quicksearchbox", ".preferences.SearchSettingsPreferenceActivity")
-    if maybe("首页展示模块"):
-        p.off(only=["搜索提示词"], page="搜索·首页模块")
-        if maybe("应用推荐"):
-            p.off(only=["推荐未安装应用"], keep=["展示常用应用"], page="搜索·应用推荐"); p.back()
-        if maybe("热搜榜单"):
-            # Mi 10 同页既有「推荐」开关又有热搜/娱乐/话题子页，二者都要处理（Issue #21）。
-            subs = [x for x in ("热搜", "生活", "话题", "娱乐") if p.find(x, exact=True)]
-            if p.switches():
-                p.off(only=HOT, page="搜索·热搜榜单")
-            if subs:
-                p.top()
-                for x in subs:
-                    if maybe(x):
-                        p.off(only=HOT, page=f"搜索·热榜·{x}"); p.back()
-            p.back()
-        p.back()
-    p.back(2)
+    global_search()
 
 
 @step("负一屏")
 def _():
-    p.start("com.miui.personalassistant", ".settings.PASettingActivity")
-    p.off(only=["推荐卡片", "热门活动"], page="负一屏·设置")    # 搜索框、出行助手保留
-    if maybe("隐私设置"):
-        p.off(only=["个性化推荐"], page="负一屏·隐私"); p.back()
-    p.back()
+    negative_screen()
 
 
 @step("天气和日历")
 def _():
-    # Issue #1 提供入口线索；2026-10-25 已在 M154FF 验证天气、日历的「内容推广」。
-    for pkg in ("com.miui.weather2", "com.android.calendar"):
-        if pkg == "com.android.calendar" and opened(lambda: p.start("com.android.calendar", ".settings.UserExperienceActionBarActivity", expect="内容推广", budget=2)):
-            p.off(only=["推荐", "广告", "个性化", "内容推广", "天气视频卡片"], page=f"{pkg}·用户体验计划"); p.back()
-            continue
-        p.start(pkg)
-        if pkg == "com.miui.weather2" and p.find("城市管理", exact=True, edge_ok="tab"):
-            # 新版天气：底部城市管理 → 右上更多设置 → 设置。
-            p.tap("城市管理", exact=True, scrolls=0)
-        if not gear():
-            print("  · 本版本没有可识别的设置菜单，跳过"); continue
-        if maybe("用户体验计划"):
-            p.off(only=["推荐", "广告", "个性化", "内容推广", "天气视频卡片"], page=f"{pkg}·用户体验计划"); p.back()
-        p.back(3)
+    weather_calendar_probe()
