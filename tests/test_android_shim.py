@@ -932,6 +932,66 @@ class InprocTest(unittest.TestCase):
         self.assertEqual(run("bump.py")[0], "1\n")
         self.assertEqual(run("bump.py")[0], "1\n")
 
+    def logcat(self):
+        """替掉写 logcat 的那一路，返回收到的 (tag, 行) 清单。"""
+        lines = []
+        saved = inproc._engine_log
+        self.addCleanup(setattr, inproc, "_engine_log", saved)
+        inproc._engine_log = lambda tag, text: lines.append((tag, text))
+        return lines
+
+    def test_engine_lines_mirror_into_logcat_line_by_line(self):
+        # 镜像按行切：半行写两次要拼齐，最后一段没有换行的字也要出去；界面那边（队列）看到的不受影响
+        self.script("say.py", """
+            import sys
+            print("核对 3 项")
+            sys.stderr.write("半")
+            sys.stderr.write("行\\n尾")
+        """)
+        lines = self.logcat()
+        proc = inproc.Runner(lambda: dict(os.environ)).spawn("say.py")
+        queue = list(proc.stdout)
+        self.assertEqual(proc.wait(5), 0)
+        self.assertEqual(queue, ["核对 3 项\n", "半行\n", "尾"])
+        self.assertEqual(lines, [(inproc.LOGCAT_TAG, "核对 3 项"), (inproc.LOGCAT_TAG, "半行"),
+                                 (inproc.LOGCAT_TAG, "尾")])
+
+    def test_shared_sink_mirrors_exactly_what_the_queue_shows(self):
+        # Proc 把同一个 _LineSink 当 out 与 err：两个流共用一份缓冲，镜像的行边界要与队列一致
+        self.script("mix.py", """
+            import sys
+            sys.stdout.write("abc")
+            sys.stderr.write("def\\n")
+        """)
+        lines = self.logcat()
+        proc = inproc.Runner(lambda: dict(os.environ)).spawn("mix.py")
+        queue = list(proc.stdout)
+        self.assertEqual(proc.wait(5), 0)
+        self.assertEqual(queue, ["abcdef\n"])
+        self.assertEqual(lines, [(inproc.LOGCAT_TAG, "abcdef")])
+
+    def test_machine_lines_reach_the_ui_but_not_logcat(self):
+        self.script("two.py", """
+            print('#aac:event {"kind": "ui_busy"}')
+            print("核对 3 项")
+        """)
+        lines = self.logcat()
+        out, err, rc = inproc.Runner(lambda: dict(os.environ)).run("two.py")
+        self.assertEqual((out, rc), ('#aac:event {"kind": "ui_busy"}\n核对 3 项\n', 0))
+        self.assertEqual(lines, [(inproc.LOGCAT_TAG, "核对 3 项")])
+
+    def test_a_broken_logcat_leaves_the_output_alone(self):
+        self.script("say.py", "print('一')\nprint('二')\n")
+
+        def boom(tag, text):
+            raise RuntimeError("logcat 写不进去")
+
+        saved = inproc._engine_log
+        self.addCleanup(setattr, inproc, "_engine_log", saved)
+        inproc._engine_log = boom
+        out, err, rc = inproc.Runner(lambda: dict(os.environ)).run("say.py")
+        self.assertEqual((out, err, rc), ("一\n二\n", "", 0))
+
 
 class WaitTest(unittest.TestCase):
     """读超时只 warn 并回落，不穿透：机型脚本的 click_exists 只捕 UiObjectNotFoundError。"""
