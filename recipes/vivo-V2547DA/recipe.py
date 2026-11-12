@@ -7,7 +7,6 @@
 BUILD = "PD2547D_A_16"
 MODELS = ["V2547DA"]
 import time
-from wait import until
 
 
 def gear():
@@ -40,10 +39,6 @@ def gear():
                 p.back(); time.sleep(0.6)
     focus0 = p.focus()
     return p.tap("设置", exact=True, scrolls=0) and landed(focus0)
-
-
-def settings_home():
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
 
 
 @step("系统广告")
@@ -92,36 +87,6 @@ def _():
             p.back()
         p.back()
     p.back(2)
-
-
-def browser_settings(tries=2):
-    """右上「菜单 → 设置」，点完要认出设置页（#753）。
-
-    冷启动首页没有底部「我的」，入口是右上菜单。菜单浮层右上角有一个 desc 读作「返回」的 ✕
-    （id 里带 cancel），等入口时按弹窗去关会把它点掉，刚打开的菜单就收起来了，「设置」再也找不到。
-    所以这里只等那一行画出来、直接点，不在等待里关弹窗；点完没进设置页就退回、重开菜单再试一次。
-    别的 vivo 型号可能没有这个按钮，最多等 3 秒就放弃本段。"""
-    def landed():
-        if p.in_settings_page():
-            return True
-        at = p.find("设置", exact=True)         # Activity 名不含 Setting 的 App：只认顶上那处「设置」标题
-        return bool(at) and at[1] < p.H * 0.25
-
-    for _ in range(tries):
-        if not p.d(resourceId="com.vivo.browser:id/menu_btn").click_exists(timeout=3):
-            return False                        # 本机没有这个按钮：交给调用方跳过本段
-        p.await_page(1.6)                       # 菜单是弹层，画出来的那一帧才有「设置」
-        xy = until(lambda: p.find("设置", exact=True, edge_ok="tab"), timeout=3.0, poll=0.3,
-                   now=time.time, sleep=time.sleep)
-        if xy:
-            before = p.sig()
-            p.click(*xy)
-            if p.settle(before, 1.5):
-                p.await_page(1.5)               # Activity 换了、内容可能还在画：等这一页画完再认落点
-                if landed():
-                    return True
-        p.back()                                # 收起浮层 / 退出点错的页，下一轮重开菜单
-    raise RuntimeError(f"浏览器设置页没有打开；停在 {p.focus()}")
 
 
 @step("浏览器")

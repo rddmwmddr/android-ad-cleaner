@@ -5,11 +5,6 @@
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 BUILD = "PD2361B_A_16"
 MODELS = ["V2361A"]
-import time
-
-
-def settings_home():
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
 
 
 # ── 本机型实测要点 ────────────────────────────────────────────────

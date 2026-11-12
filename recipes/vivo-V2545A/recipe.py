@@ -15,9 +15,6 @@ def gear():
             return True
     return p.tap("设置", exact=True, scrolls=0)
 
-def settings_home():
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
-
 def by_desc(kw, wait=1.2):
     """底部 tab、右上齿轮这类入口只有 content-desc，没有文字。"""
     from fast import bounds
