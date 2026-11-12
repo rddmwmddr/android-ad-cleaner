@@ -535,7 +535,7 @@ def _plr_game_center_taps(p: Any, g: dict[str, Any]) -> Callable[..., Any]:
             raise RuntimeError("没找到底部「我的」")
         g["time"].sleep(1.2)
         p.dismiss()
-        # 「设置」是「我的」页里带新通知标记的文字行（非右上角齿轮）
+        # 14.43.3：「设置」是「我的」页里带新通知标记的文字行（非右上角齿轮）
         if not p.tap("设置", exact=False, scrolls=0) and not p.tap_icon(["隐私开关设置", "隐私"]):
             raise RuntimeError("没找到设置入口")
         if p.tap("隐私开关设置", exact=True) and p.tap("个性化推荐管理", exact=True):

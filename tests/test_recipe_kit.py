@@ -494,13 +494,16 @@ OFF_CALL_WIDE = [
 # PLR110 / PYB110 的「广告跟踪」在这一档：两份脚本的段体逐字相同，只剩注入版这一份。
 INJECTED_WIDE = ["ad_tracking_close_all"]
 
-# AST 认不出的整页关闭：UI 里点「全部关闭」、名单在运行时按整页读出来再点名关（#947）。
+# AST 认不出的整页关闭：UI 里点「全部关闭」、名单在运行时按整页读出来再点名关（沿用 #947 的判据），
+# 或者段体已经搬进注入面、脚本里只剩一行调用（#1213，形状由 `INJECTED_WIDE` 那条结构断言守）。
 # 它们与上面那份同样是整页关闭，行为用例一条都不能少；期望集不含它们，结构断言才不会因此变红。
 OTHER_WIDE = [
     ("recipes/honor-CLE-AN00/recipe.py", "广告跟踪"),
     ("recipes/oppo-PMA110/recipe.py", "广告跟踪"),
     ("recipes/oppo-PLG110/recipe.py", "广告跟踪"),
     ("recipes/honor-WKL-AN20/recipe.py", "广告跟踪"),
+    ("recipes/oneplus-PLR110/recipe.py", "广告跟踪"),
+    ("recipes/oneplus-PYB110/recipe.py", "广告跟踪"),
 ]
 
 # 整段只做整页关闭的段：安全模式下必须走跳过出口

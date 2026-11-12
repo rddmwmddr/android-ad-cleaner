@@ -59,7 +59,8 @@ DATA = frozenset({
 # 脚本访问面的快照：`recipes/` 里出现过 `p.<名字>` 的 41 个唯一名字。新增或去掉一个名字都要
 # 在这里显式改一行——这正是「脚本访问面变了」。每个名字还必须是门面真实成员，见下面那条守卫。
 # `lost` 已不在快照里：读它的是注入面的 `opened()`（#1148），脚本源码不再出现 `p.lost`；
-# `say` 同理，随广告跟踪段搬进 `recipe_steps`（#1213）。门面是否还提供它们由上面的 `DATA` 守卫盯。
+# `say` 同理，随广告跟踪段搬进 `recipe_steps`（#1213）。门面是否还提供它们由成员守卫盯：
+# `lost` 在 `DATA`，`say` 在 `METHODS`。
 SCRIPT_NAMES = frozenset({
     "app", "await_page", "back", "changed", "click", "confirm", "d", "dismiss", "enter",
     "entry", "expect_page", "find", "focus", "go", "H", "has_text", "in_settings_page",
