@@ -36,7 +36,7 @@
 - 别的 App 与空焦点交替出现时，连续帧数被反复清零，最终退化成「启动后 8 秒仍读不到页面」而不是「离开前台」——这是票面「读空即清零」的直接后果；判定与操作仍正确（段照停、不点别的 App），只是归因偏保守。
 - 不据此扩大权限弹窗白名单，也不动 `Phone.start(expect=…)` 的落点校验与 `_landing_note()`。
 - 机型脚本不改。脚本已经用 `p.start(pkg, foreground=…)` 声明「拉起后会落到哪个包」（如 `recipes/xiaomi-24129PN74C/recipe_os4.py` 的主题段）；跳包超过 3 帧属于脚本缺口，按 `foreground=` 或 activity 直达绕开，不是这条判据要兜的。
-- 无真机：验收是 `tests/test_launch_foreground_581.py` 的假时间轴用例加既有前台用例；真机归 #581 的复测（报告者 @skysstst 用 OS4 变体重跑主题段）。
+- 无真机：验收是 `tests/test_phone_launcher.py` 的 `LaunchForegroundTests` 假时间轴用例加既有前台用例；真机归 #581 的复测（报告者 @skysstst 用 OS4 变体重跑主题段）。
 
 ## 增补：报错带上抢夺者（#940）
 

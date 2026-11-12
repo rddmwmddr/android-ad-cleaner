@@ -130,7 +130,7 @@ def clocked(case, module, clock):
 
     用例里别只 `self.addCleanup(setattr, fast, "time", original)`：那只还门面那份，基座与阶段
     留在假钟上，后面的用例 `patch.object(fast.time, …)` 打的是真模块、`_launch()` 读的却是残留
-    假钟，等待循环就脱管了（#1041 审查实测：`test_start_landing_420` 之后跑 `test_regressions`
+    假钟，等待循环就脱管了（#1041 审查实测：`test_phone_launcher` 之后跑 `test_regressions`
     会 StopIteration，全量回归只因文件顺序凑巧才没红）。
     """
     saved = [(target, target.time) for target in clock_targets(module)]

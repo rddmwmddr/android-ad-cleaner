@@ -9,8 +9,9 @@
 import re
 import sys
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -18,7 +19,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import fast  # noqa: E402
 from phone import dismisser  # noqa: E402
-from fixtures import SIZES, Clock, clocked, phone_stub, screen_stub  # noqa: E402
+from fixtures import SIZES, Clock, clocked, phone_stub, screen_stub, stub  # noqa: E402
 
 # ---------- 基线：3e7d47f 的旧实现，逐字冻结 ----------
 # 词表搬进新模块时抄错或漏一个词，`fast.DISMISS is dismisser.DISMISS` 这种断言照样绿：
@@ -54,6 +55,12 @@ PERMISSION_PAGE = '''<hierarchy rotation="0">
 </hierarchy>'''
 
 SETTINGS = "com.android.settings/.Settings"
+
+# 浮层里的 ✕（不在滚动列表里，dismiss 会点它），列表里是正常内容
+POPUP = '''<hierarchy><node class="androidx.recyclerview.widget.RecyclerView" scrollable="true" bounds="[0,0][1272,2772]">
+  <node text="首页" bounds="[100,300][600,400]"/></node>
+  <node class="android.widget.FrameLayout" bounds="[100,600][1172,2000]">
+    <node content-desc="关闭" clickable="true" bounds="[1050,620][1150,720]"/></node></hierarchy>'''
 
 
 def bare_dismisser(page, focus=SETTINGS, session=None, size=SIZES[0]):
@@ -139,6 +146,87 @@ class SingleWordListTests(unittest.TestCase):
         弹窗阶段不许另认一份确认框。"""
         self.assertTrue(hasattr(fast.Screen, "confirm_target"))
         self.assertFalse(hasattr(dismisser.Dismisser, "confirm_target"))
+
+
+class PromotedClickTests(unittest.TestCase):
+    """#420：`dismiss()` 的 ✕ 分支点完跳到了别的 App 就退回来，这一次不算关掉了弹窗。"""
+
+    def phone(self, focus, app="com.heytap.market"):
+        p = phone_stub("test", d=Mock())
+        p.W, p.H = 1272, 2772
+        p.screen.tree = Mock(return_value=ET.fromstring(POPUP))
+        p.screen.focus = Mock(side_effect=list(focus))
+        self.click, self.back, self.say = Mock(), Mock(), Mock()
+        stub(p, "click", self.click)
+        stub(p, "back", self.back)
+        stub(p, "say", self.say)
+        p.app = app
+        return p
+
+    def test_close_icon_that_leads_to_another_app_is_undone(self):
+        """#420 点完跳到快手开屏：退回来并说明「疑似推广位」，这次不算关掉了弹窗。"""
+        p = self.phone(["com.heytap.market/.Main", "com.kuaishou.nebula/.Splash",
+                        "com.heytap.market/.Main"])
+        with patch.object(fast.time, "sleep"):
+            self.assertIsNone(p.dismiss())            # 不算关掉了弹窗
+        self.back.assert_called_once()
+        self.click.assert_called_once_with(1100, 670)
+        said = " ".join(" ".join(map(str, c.args)) for c in self.say.call_args_list)
+        self.assertIn("疑似推广位", said)
+        self.assertIn("com.kuaishou.nebula", said)
+
+    def test_promoted_close_icon_is_not_clicked_again(self):
+        """#420 同一个 App 的同一处只点一次：退回来以后不再接着点它。"""
+        p = self.phone(["com.heytap.market/.Main", "com.kuaishou.nebula/.Splash",
+                        "com.heytap.market/.Main"] * 2)
+        with patch.object(fast.time, "sleep"):
+            self.assertIsNone(p.dismiss())
+            self.assertIsNone(p.dismiss())
+        self.assertEqual(self.click.call_count, 1)
+
+    def test_the_same_close_label_in_another_app_is_still_clicked(self):
+        """#420「关闭」是常见标签：在别的 App 里不能因为这一处点过就跳过。"""
+        p = self.phone(["com.heytap.market/.Main", "com.kuaishou.nebula/.Splash",
+                        "com.heytap.market/.Main"])
+        with patch.object(fast.time, "sleep"):
+            self.assertIsNone(p.dismiss())
+        p.screen.focus = Mock(return_value="com.heytap.themestore/.Main")
+        with patch.object(fast.time, "sleep"):
+            self.assertEqual(p.dismiss(), "✕")
+        self.assertEqual(self.click.call_count, 2)
+
+    def test_close_icon_without_leaving_the_app_keeps_the_output(self):
+        """#420 前台没变：返回值、点击坐标与日志逐字不变。"""
+        p = self.phone(["com.heytap.market/.Main"] * 2)
+        with patch.object(fast.time, "sleep"):
+            self.assertEqual(p.dismiss(), "✕")
+        self.click.assert_called_once_with(1100, 670)
+        self.back.assert_not_called()
+        self.assertEqual([c.args[0] for c in self.say.call_args_list], ["  · 弹窗点了 ✕（关闭）"])
+
+    def test_unreadable_foreground_after_click_is_not_a_promotion(self):
+        """#420 点击后读不到前台：不知道去了哪，不当作推广位，也不回退。"""
+        p = self.phone(["com.heytap.market/.Main", ""])
+        with patch.object(fast.time, "sleep"):
+            self.assertEqual(p.dismiss(), "✕")
+        self.back.assert_not_called()
+
+    def test_close_icon_of_a_foreign_overlay_is_not_a_promotion(self):
+        """#420 点前前台是抢焦点的广告浮层、点后回到目标 App：这是正常关弹窗。"""
+        p = self.phone(["com.miui.systemAdSolution/.Ad", "com.example.target/.Main"],
+                       app="com.example.target")
+        with patch.object(fast.time, "sleep"):
+            self.assertEqual(p.dismiss(), "✕")
+        self.back.assert_not_called()
+
+    def test_return_that_cannot_get_back_stops_the_step(self):
+        """#420 两次返回仍在别的 App：停下，不继续在陌生页面上操作。"""
+        p = self.phone(["com.heytap.market/.Main", "com.kuaishou.nebula/.Splash",
+                        "com.kuaishou.nebula/.Main", "com.kuaishou.nebula/.Main"])
+        with patch.object(fast.time, "sleep"):
+            with self.assertRaisesRegex(RuntimeError, "仍停在"):
+                p.dismiss()
+        self.assertEqual(self.back.call_count, 2)
 
 
 if __name__ == "__main__":
