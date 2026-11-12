@@ -134,6 +134,13 @@ date = "2026-11-02"
 by = "机主"
 tier = "部分验证"
 
+# 按报告者（#1083）的实测落点写成，本仓库没有这台手机、未复跑，所以不记验证人与日期。
+["realme-RMX3888/recipe.py"]
+build = ""
+date = ""
+by = ""
+tier = "未记录"
+
 ["redmi-23049RAD8C/recipe.py"]
 build = "OS3.0.5.0.VMRCNXM"
 date = "2026-10-25"
