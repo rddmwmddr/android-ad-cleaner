@@ -8,8 +8,10 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "android" / "app" / "src" / "main" / "python"))
+sys.path.insert(0, str(ROOT / "tool"))
 
 from aac_android import view  # noqa: E402
+import verify_ledger  # noqa: E402
 
 
 class FakeApi:
@@ -89,6 +91,59 @@ class OutcomeTest(unittest.TestCase):
         self.assertEqual(run["retry"], 1)
         # 没有这个字段的载荷不炸：Compose 侧 optInt 取到 0，结果页不出按钮
         self.assertIsNone(view.poll(FakeApi(run={"results": [], "cancel": True})).get("retry"))
+
+
+class RecipeCoverageTest(unittest.TestCase):
+    """机型脚本验到什么程度：只在负面的两档给结果页多一行（沿用 #1124 的档位，#1130）。
+
+    档位是引擎从台账现读、随 `status-json` 到客户端；说不说、怎么说都在 Python 这边，
+    Compose 只把这一行画出来。"""
+
+    def snap(self, coverage="部分", **row):
+        """一次跑过机型脚本的结果页快照：默认这一行是成功的那一步。
+
+        成功行照引擎的原样不写 `skipped`（`step_result()` 只在跳过时才带它）：拿显式 False 去喂，
+        `not r.get("skipped")` 被改成 `is False` 也照样绿。档位照 job 快照原样放在 `recipe_coverage`。"""
+        done = {"title": "关闭各 App 里的广告开关", "kind": "recipe", "rc": 0, **row}
+        api = FakeApi(run={"results": [done], "cancel": False, "recipe_coverage": coverage})
+        return view.poll(api)
+
+    def test_partial_coverage_adds_a_line(self):
+        note = self.snap("部分")["coverage_note"]
+        self.assertIn("只在一部分步骤上做过真机验证", note)
+        self.assertNotIn("App", note, "手机版措辞不说「去 App 里核对」——用户本来就在 App 里")
+        for word in ("tier", "evidence", "部分验证"):
+            self.assertNotIn(word, note, "文案不能露出内部取值名")
+
+    def test_full_coverage_adds_nothing(self):
+        self.assertEqual(self.snap("全部")["coverage_note"], "")
+
+    def test_a_script_with_no_ledger_entry_says_so(self):
+        self.assertIn("没有真机验证记录", self.snap("未记录")["coverage_note"])
+
+    def test_an_unknown_or_missing_tier_says_nothing(self):
+        for value in ("", "以后的第四档", None):
+            with self.subTest(coverage=value):
+                self.assertEqual(self.snap(value)["coverage_note"], "")
+
+    def test_a_skipped_recipe_step_means_no_line(self):
+        # 没勾脚本 / 这台机没有专用脚本：那一行是「跳过」，拿别的步的结论说脚本的事会误导
+        self.assertEqual(self.snap("部分", skipped=True)["coverage_note"], "")
+
+    def test_a_run_that_never_touched_the_script_has_no_line(self):
+        run = {"results": [{"title": "关闭营销通知", "kind": "channels", "rc": 0}], "cancel": False,
+               "recipe_coverage": "未记录"}
+        self.assertEqual(view.poll(FakeApi(run=run))["coverage_note"], "")
+
+    def test_a_snapshot_without_the_tier_says_nothing(self):
+        # 旧载荷 / 没勾脚本时快照里就没有这个字段：结果页照常显示，不炸、也不猜深浅
+        run = {"results": [{"title": "关闭各 App 里的广告开关", "kind": "recipe", "rc": 0}], "cancel": False}
+        self.assertEqual(view.poll(FakeApi(run=run))["coverage_note"], "")
+
+    def test_every_tier_but_full_has_its_own_line(self):
+        """档位词表两处：`verify_ledger.TIERS` 是单一来源，这里只做映射。台账加一档时这条会红，
+        提醒「新档在手机结果页说不说」要想一遍，而不是静默不显示（#1130）。"""
+        self.assertEqual(set(view.COVERAGE_NOTES) | {"全部"}, set(verify_ledger.TIERS))
 
 
 class StallWatchTest(unittest.TestCase):

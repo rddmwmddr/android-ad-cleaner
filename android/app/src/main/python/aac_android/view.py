@@ -125,12 +125,33 @@ class StallWatch:
 
 WATCH = StallWatch()
 
+# 这次跑的机型脚本验到什么程度：档位由引擎从台账现读，经 status-json 与任务快照原样带到
+# `recipe_coverage`（沿用 #1124 的两个字段），这里只把负面档位翻成一句人话，「全部」与没有值都不占行。
+# 桌面版同一件事在 gui/web/index.html 的 coverageNote：判据相同，分叉的只有措辞（手机版不劝人
+# 「去 App 里核对」）。
+COVERAGE_NOTES = {
+    "部分": "这套机型脚本只在一部分步骤上做过真机验证，其余步骤这次是照脚本直接跑的，建议顺手核对一眼。",
+    "未记录": "这套机型脚本没有真机验证记录，改动结果建议自己核对一遍。",
+}
+
+
+def coverage_note(run):
+    """结果页要不要为脚本的验证档位多一行；要说时给整句，不说时给空串（#1130）。
+
+    说不说的判据是「这次真有脚本那一行的结果」：没勾脚本、停止在它之前、读屏占用让它跳过时都不说，
+    拿别的步的结论去说脚本的事会误导。与桌面版同一条判据（gui/web/index.html 的 coverageNote）。
+    """
+    if not any(r.get("kind") == "recipe" and not r.get("skipped") for r in run.get("results") or []):
+        return ""
+    return COVERAGE_NOTES.get(run.get("recipe_coverage") or "", "")
+
 
 def _snapshot(api, since=0):
     """与 poll 同一份口径，但不碰卡住计时：冒烟的导出与界面的轮询可能同时发生（#1072）。"""
     run = dict(api.poll(since))
     run["results"] = [{**r, "summary": summarize(r)} for r in run.get("results") or []]
     run["outcome"] = outcome(run)
+    run["coverage_note"] = coverage_note(run)
     return run
 
 
