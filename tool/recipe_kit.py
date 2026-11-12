@@ -5,7 +5,7 @@
 脚本自己的同名定义后执行、覆盖注入的名字，所以在迁移之前跑任何现有脚本，用户看到的东西一个字节都不变。
 
 公共导航助手另住 `recipe_nav`：`preamble()` 写完生命周期与台账后调它的 `install()`，
-本模块只管生命周期与台账（#1148）。
+本模块只管生命周期与台账（#1150）。
 """
 
 import re
@@ -197,5 +197,5 @@ def preamble(p, g):
     g.update({"SkipStep": SkipStep, "skip": skip, "require": require,
               "maybe": maybe, "start_or_skip": start_or_skip, "step": step, "page": page,
               "require_switches": require_switches, "skip_in_safe_mode": skip_in_safe_mode})
-    recipe_nav.install(p, g)          # 公共导航：注入面为空时一行也不写（#1148）
+    recipe_nav.install(p, g)
     return g

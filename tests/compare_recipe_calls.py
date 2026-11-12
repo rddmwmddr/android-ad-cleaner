@@ -1,5 +1,5 @@
-"""公共导航搬动前后的调用序列对拍（#1148 / #1150）：同一份机型脚本分别用基点与工作区装载一次，
-比较脚本在 `p.*` 上发出的调用（方法名 + 参数 + 顺序）。零差异才算搬动没改行为。
+"""公共导航搬动前后的调用序列对拍（#1150）：同一份机型脚本分别用基点与工作区装载一次，
+比较脚本发出的调用（方法名 + 参数 + 顺序）。零差异才算搬动没改行为。
 
 基线取本分支的基点，不入库快照文件。驱动自己拉临时 worktree、跑完删掉：
 
@@ -11,36 +11,38 @@
     git worktree add /tmp/aac-baseline <基点 SHA>
     python tests/compare_recipe_calls.py /tmp/aac-baseline
 
-两边各起一个子进程：模块名相同，同进程里 import 不了两份 `fast`。脚本用 `fixtures.fake_phone()`
-装载（空页面 + 假钟），型号守卫读到的 shell 输出一律算「对得上」；入口、拉起与落点这几处
-门面观察再换成都成功（`rehearsal()`），脚本才会沿自己的分支走到底、真的调到它本地的助手 ——
-否则 `p.start` 一失败整段就停，被搬动的助手一次也不会被调用，对拍等于空转。
-记录的是脚本调用门面的动作；`p.d.shell(...)` 这类不经门面的命令不在内。空页面上「要点名开关」
-的深支也走不到（名单读不到就按失败结束），所以开关拨动本身不在对拍范围内 —— 它盯的是脚本与
-公共导航在门面上的调用序列。
+两边各起一个子进程：模块名相同，同进程里 import 不了两份 `fast`。每份脚本按两个场景各跑一遍：
 
-守卫：每份脚本都要记到至少一条调用，全部脚本加起来不到 MIN_CALLS 条就算没测到 —— 只报「两边
+- `present`：入口、拉起、落点与读屏观察一律算「在」，脚本沿主路径走到底；
+- `absent`：同一批观察一律算「不在」，脚本退到备用分支（菜单、翻页、重试那几圈循环）。
+
+两个场景都记，备用分支才不是空的。型号守卫读到的 shell 输出一律算「对得上」。记录的是脚本
+发出的动作：门面方法，以及不经门面的 `p.d.shell(...)` 命令 —— 有几份被收口的助手整段只有一条
+`p.d.shell`，只记门面的话它们搬动前后都是零调用。空页面上「要点名开关」的深支与只认特定控件
+的助手（单选按钮之类）走不到，那部分不在对拍范围内。
+
+守卫：每份脚本的每个场景都要记到调用，全部加起来不到 MIN_CALLS 条就算没测到 —— 只报「两边
 一样」而没有调用量，说明对拍是空转的。
 """
 import json
-import shutil
 import subprocess
 import sys
-import tempfile
 import xml.etree.ElementTree as ET
-from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
 TESTS = Path(__file__).resolve().parent
 ROOT = TESTS.parent
+sys.path.insert(0, str(TESTS))
 sys.path.insert(0, str(ROOT / "tool"))
+import fixtures  # noqa: E402
 from stdio import use_utf8_console  # noqa: E402  出口取当前副本的，不对拍基线那一份
 
 use_utf8_console()
 
-# 43 份 `recipe.py` 加 4 份变体实测约 7000 条调用；低于这个数说明记录或装载退化了
-MIN_CALLS = 1000
+# 43 份 `recipe.py` 加 4 份变体、两个场景实测约 1.3 万条调用；低于这个数说明记录或装载退化了
+MIN_CALLS = 4000
+SCENARIOS = ("present", "absent")
 
 
 class AnyText(str):
@@ -65,32 +67,37 @@ def probe_shell(command, timeout=None):
     return SimpleNamespace(output=AnyText("package: probe"), exit_code=0)
 
 
-def rehearsal(phone):
-    """把挡住段首的几处观察换成「都成功」，脚本才会走到它自己的助手。
+def rehearsal(phone, scenario):
+    """把挡住段首的几处观察换成一律成功或一律失败，脚本才会走到它自己的助手。
 
     `p.start`、按文字找入口与点按在空页面上都会失败，段体随即 return；对拍要比的是脚本自身
-    调用门面的顺序，不是引擎在这台空手机上做得对不对，所以这几处一律算成功（落点跟着
-    `start()` 的包名走，脚本里 `p.focus().split("/")[0] == package` 那类判据才过得了）。
+    调用的顺序，不是引擎在这台空手机上做得对不对。落点跟着 `start()` 的包名走，脚本里
+    `p.focus().split("/")[0] == package` 那类判据才过得了。两个场景各写一遍：`present` 走主路径，
+    `absent` 让备用分支（「更多」菜单、翻页重试）真的跑起来。
     观察类的 `tree` / `texts` / `switches` 不换 —— 它们给出真实但空的一页，循环照样会停。
     """
+    hit = scenario == "present"
     state = {"focus": "com.example.app/.MainActivity"}
 
     def start(pkg, activity=None, *args, **kwargs):
         state["focus"] = f"{pkg}/{activity or '.MainActivity'}"
 
+    def answer(*args, **kwargs):
+        return hit
+
     for name, value in {
             "start": start,
             "focus": lambda *a, **k: state["focus"],
-            "entry": lambda *a, **k: True,
-            "tap": lambda *a, **k: True,
-            "go": lambda *a, **k: True,
-            "enter": lambda *a, **k: True,
-            "tab": lambda *a, **k: True,
-            "tap_icon": lambda *a, **k: True,
-            "find": lambda *a, **k: True,
-            "settle": lambda *a, **k: True,
-            "has_text": lambda *a, **k: True,
-            "expect_page": lambda *a, **k: True,
+            "find": answer,
+            "entry": answer,
+            "tap": answer,
+            "go": answer,
+            "enter": answer,
+            "tab": answer,
+            "tap_icon": answer,
+            "settle": answer,
+            "has_text": answer,
+            "expect_page": answer,
     }.items():
         setattr(phone, name, value)
 
@@ -111,7 +118,7 @@ def norm(value):
 
 
 def recording(phone):
-    """包住门面上的公开方法，记下 (名字, 参数, 关键字参数) 的调用顺序。"""
+    """包住门面上的公开方法与 `p.d.shell`，记下 (名字, 参数, 关键字参数) 的调用顺序。"""
     log = []
 
     def wrap(name, call):
@@ -126,25 +133,22 @@ def recording(phone):
         call = getattr(phone, name)
         if callable(call):
             setattr(phone, name, wrap(name, call))
+    phone.d.shell = wrap("d.shell", phone.d.shell)
     return log
 
 
-def run_script(fast, recipe_kit, fixtures, path):
-    """装载一份脚本（全部段都跑），返回它在门面上留下的调用序列。"""
-    phone = fixtures.fake_phone(clock=fixtures.Clock(), fast_mod=fast)
-    phone.d.shell = probe_shell
-    phone.link = fast.adb_link.Connection("fake", transport=probe_shell)
-    rehearsal(phone)
+def run_script(fast, recipe_kit, fixtures, path, scenario):
+    """装载一份脚本（全部段都跑），返回这个场景下它发出的调用序列。"""
+    phone = fixtures.fake_phone(clock=fixtures.Clock(), fast_mod=fast, shell=probe_shell)
+    rehearsal(phone, scenario)
     log = recording(phone)
     fixtures.load_recipe(phone, path, only=[])
     return log
 
 
 def dump(root):
-    """给定仓库根，装载它自己的 `recipes/` 与 `tool/`，交出 {脚本相对路径: 调用序列}。"""
+    """给定仓库根，装载它自己的 `recipes/` 与 `tool/`，交出 {脚本: {场景: 调用序列}}。"""
     root = Path(root).resolve()
-    sys.path.insert(0, str(TESTS))
-    import fixtures
     fixtures.load_tool()                    # 先让当前树的 tool 就位，load_recipe 不再把它插到最前
     sys.path.insert(0, str(root / "tool"))  # 目标树压过它：脚本与引擎都取这一份
     import fast
@@ -152,30 +156,10 @@ def dump(root):
     for module in (fast, recipe_kit):
         if not Path(module.__file__).resolve().is_relative_to(root):
             sys.exit(f"{module.__name__} 取到的不是 {root} 那份：sys.path 上有别的 tool/")
-    return {path.relative_to(root).as_posix(): run_script(fast, recipe_kit, fixtures, path)
+    return {path.relative_to(root).as_posix():
+            {scenario: run_script(fast, recipe_kit, fixtures, path, scenario)
+             for scenario in SCENARIOS}
             for path in sorted((root / "recipes").rglob("recipe*.py"))}
-
-
-@contextmanager
-def baseline_root(sha):
-    """把 <sha> 解到临时 worktree，交出它的根目录；退出时删掉 worktree 与临时目录。"""
-    tmp = Path(tempfile.mkdtemp(prefix="aac-baseline-"))
-    tree = tmp / "tree"
-    added = False
-    try:
-        try:
-            subprocess.run(["git", "worktree", "add", "--detach", str(tree), sha],
-                           cwd=ROOT, check=True, capture_output=True, text=True,
-                           encoding="utf-8", errors="replace")
-        except subprocess.CalledProcessError as e:
-            sys.exit(f"找不到提交 {sha}：先 git fetch origin {sha}\n{e.stderr.strip()}")
-        added = True
-        yield tree
-    finally:
-        if added:
-            subprocess.run(["git", "worktree", "remove", "--force", str(tree)],
-                           cwd=ROOT, check=False, capture_output=True)
-        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def collect(root):
@@ -186,35 +170,45 @@ def collect(root):
     return json.loads(proc.stdout)
 
 
-def compare(baseline):
-    before, after = collect(baseline), collect(ROOT)
-    bad = 0
+def problems(before, after):
+    """差异与「没测到」的守卫：返回 (问题列表, 改后调用总数)，空列表表示零差异且有量。"""
+    found = []
     if before.keys() != after.keys():
-        print(f"脚本清单不同：只在基线 {sorted(before.keys() - after.keys())}，"
-              f"只在工作区 {sorted(after.keys() - before.keys())}")
-        bad += 1
+        found.append(("脚本清单不同",
+                      f"只在基线 {sorted(before.keys() - after.keys())}，"
+                      f"只在工作区 {sorted(after.keys() - before.keys())}"))
     total, silent = 0, []
     for name in sorted(before.keys() & after.keys()):
-        b, a = before[name], after[name]
-        total += len(a)
-        if not a:
-            silent.append(name)
-        if b != a:
-            bad += 1
-            # 一边比另一边长本身就是差异，所以不要求等长
-            here = next((i for i, (x, y) in enumerate(zip(b, a, strict=False)) if x != y),
-                        min(len(b), len(a)))
-            print(f"{name}: 改前 {len(b)} 条，改后 {len(a)} 条，第 {here + 1} 条起不同")
-            for item in (b[here:here + 3], a[here:here + 3]):
-                print(f"    {json.dumps(item, ensure_ascii=False)}")
-    print(f"{len(before)} 份脚本，改后共 {total} 条调用，不一致 {bad} 份")
+        for scenario in SCENARIOS:
+            b, a = before[name].get(scenario, []), after[name].get(scenario, [])
+            total += len(a)
+            if not a:
+                silent.append(f"{name}[{scenario}]")
+            if b != a:
+                # 一边比另一边长本身就是差异，所以不要求等长
+                here = next((i for i, (x, y) in enumerate(zip(b, a, strict=False)) if x != y),
+                            min(len(b), len(a)))
+                found.append((f"{name}[{scenario}] 改前 {len(b)} 条、改后 {len(a)} 条",
+                              "第 {} 条起不同：基线 {}\n{} 工作区 {}".format(
+                                  here + 1,
+                                  json.dumps(b[here:here + 1], ensure_ascii=False),
+                                  " " * 10,
+                                  json.dumps(a[here:here + 1], ensure_ascii=False))))
     if silent:
-        print(f"守卫：这 {len(silent)} 份脚本一条调用都没记到：{'、'.join(silent)}")
-        bad += len(silent)
+        found.append(("一条调用都没记到", "、".join(silent)))
     if total < MIN_CALLS:
-        print(f"守卫：总共只有 {total} 条调用，低于 {MIN_CALLS}，对拍没测到东西")
-        bad += 1
-    return 1 if bad else 0
+        found.append(("对拍没测到东西", f"总共只有 {total} 条调用，低于 {MIN_CALLS}"))
+    return found, total
+
+
+def compare(baseline):
+    before, after = collect(baseline), collect(ROOT)
+    found, total = problems(before, after)
+    for summary, detail in found:
+        print(f"{summary}\n    {detail}")
+    print(f"{len(before)} 份脚本 × {len(SCENARIOS)} 个场景，改后共 {total} 条调用，"
+          f"问题 {len(found)} 处")
+    return 1 if found else 0
 
 
 def main():
@@ -222,7 +216,7 @@ def main():
         print(json.dumps(dump(sys.argv[2]), ensure_ascii=False, sort_keys=True))
         return 0
     if len(sys.argv) == 3 and sys.argv[1] == "--baseline":
-        with baseline_root(sys.argv[2]) as root:
+        with fixtures.baseline_worktree(sys.argv[2], ROOT) as root:
             return compare(root)
     if len(sys.argv) != 2:
         print(__doc__)

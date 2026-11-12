@@ -93,7 +93,7 @@ class CopyGuardTests(unittest.TestCase):
     def test_no_script_keeps_a_byte_identical_copy(self):
         scripts = [(path.relative_to(ROOT).as_posix(), path.read_text(encoding="utf-8"))
                    for path in RECIPES]
-        self.assertGreaterEqual(len(scripts), 40, "脚本没扫到：路径或通配写错了")
+        self.assertGreaterEqual(len(scripts), 43, "脚本没扫到：路径或通配写错了")
         self.assertEqual(kept_copies(scripts, surface()), {},
                          "脚本还留着注入面的逐字副本：删掉本地定义，让脚本走注入版")
 
@@ -142,15 +142,33 @@ class DriverTests(unittest.TestCase):
         self.assertEqual(self.worktrees(), before)
 
     def test_the_recorder_catches_a_script_calling_the_phone(self):
-        """记录器真的记到了门面方法：一份脚本装载后既有段首的拉起，也能走到它自己的助手。"""
+        """记录器真的记到了门面方法与 `p.d.shell`：一份脚本装载后既有段首的拉起，也有直发命令。"""
         import compare_recipe_calls as driver
         import fast
         calls = driver.run_script(fast, recipe_kit, fixtures,
-                                  ROOT / "recipes" / "xiaomi-24090RA29C" / "recipe.py")
+                                  ROOT / "recipes" / "xiaomi-24090RA29C" / "recipe.py", "present")
         names = [call[0] for call in calls]
         self.assertIn("start", names)
         self.assertIn("entry", names)
+        self.assertIn("d.shell", names)
         self.assertGreater(len(calls), 40)
+
+    def test_the_comparison_reports_drift_and_the_empty_comparison(self):
+        """驱动自己的三条结论：序列不同、某个场景一条都没记到、总量低于下限 —— 都要报出来。"""
+        import compare_recipe_calls as driver
+        calls = [["start", ["com.example.app"], {}]]
+        base = {"a.py": {"present": calls, "absent": calls}}
+        drifted = {"a.py": {"present": calls + [["click", [1, 2], {}]], "absent": calls}}
+        found, _ = driver.problems(base, drifted)
+        self.assertTrue(any(summary.startswith("a.py[present]") for summary, _ in found), found)
+
+        silent = {"a.py": {"present": calls, "absent": []}}
+        found, _ = driver.problems(silent, silent)
+        self.assertIn("一条调用都没记到", [summary for summary, _ in found])
+
+        found, total = driver.problems(base, base)
+        self.assertIn("对拍没测到东西", [summary for summary, _ in found])
+        self.assertLess(total, driver.MIN_CALLS)
 
 
 if __name__ == "__main__":
