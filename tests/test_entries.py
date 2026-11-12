@@ -1500,13 +1500,22 @@ ID_SECURITY_305 = ('<node class="android.widget.TextView"'
 GEAR_CENTER_305 = (995, 165)
 
 
+def gear_users_1210():
+    """注入面里真的用上齿轮的实现名（沿用 #1151 的「注入那份也算」口径）。
+
+    判据走 `fixtures.normalize()`：`g["gear"]` 折回裸名、docstring 与注释都不剩，实现里提一句不算。"""
+    return {name for name, source in recipe_source.injected_sources().items()
+            if any((isinstance(node, ast.Name) and node.id == "gear")
+                   or (isinstance(node, ast.FunctionDef) and node.name == "gear")
+                   for node in ast.walk(ast.parse(fixtures.normalize(source))))}
+
+
 def hyperos_recipes_305():
-    """用了 gear() 的小米 / 红米机型脚本 —— 本地定义、注入助手与调用注入段体的都算（#1151、#1210）。
+    """用了 gear() 的小米 / 红米机型脚本 —— 本地定义、注入助手与调用注入段体的都算（沿用 #1151 的口径）。
 
     段体搬进注入面之后脚本正文里只剩 `theme()` 这类一行调用，按正文找 `gear(` 会把它们漏掉：
-    这一族用例照旧全绿，引擎那份实现却再没有一条 #305 样本打到它。"""
-    gear_users = {name for name, source in recipe_source.injected_sources().items()
-                  if re.search(r"\bgear\b", source)}
+    这一族用例照旧全绿，沿用 #305 的那批样本却再没有一条打到引擎那份实现。"""
+    gear_users = gear_users_1210()
     for path in sorted(ROOT.glob("recipes/*/recipe*.py")):
         if not path.parent.name.startswith(("xiaomi-", "redmi-")):
             continue
@@ -2513,7 +2522,10 @@ def injected_step_1210(name):
     source = recipe_source.injected_sources().get(name)
     if source is None:
         return None
-    factory = ast.parse(fixtures.normalize(source)).body[0]
+    factory = next((node for node in ast.parse(fixtures.normalize(source)).body
+                    if isinstance(node, ast.FunctionDef)), None)
+    if factory is None:
+        return None
     return next((node for node in factory.body if isinstance(node, ast.FunctionDef)), None)
 
 
