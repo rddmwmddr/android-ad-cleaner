@@ -142,6 +142,20 @@ class SourceTest(unittest.TestCase):
                 encoding="utf-8")
             self.assertEqual(entries.used_by(d), {})
 
+    def test_open_app_settings_needs_two_arguments(self):
+        """只传了包名的 open_app_settings 不算出处：把包名当成页面会给这台机凭空挂一条 Intent。"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            model = Path(d) / "brand-model"
+            model.mkdir()
+            (model / "recipe.py").write_text(
+                'def open_app_settings(package):\n'
+                '    p.start(package, ".SettingsActivity")\n\n\n'
+                'def _():\n'
+                '    open_app_settings("com.heytap.market")\n',
+                encoding="utf-8")
+            self.assertEqual(entries.used_by(d), {})
+
     def test_honor_minus_one_screen_direct_entry_is_registered(self):
         """CLE-AN00 用 hiboard 直达负一屏首页，ENTRIES 要跟着登记（#671）。"""
         e = entries.ENTRIES["honor"]["负一屏"]
