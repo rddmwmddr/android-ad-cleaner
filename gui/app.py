@@ -444,10 +444,11 @@ class Job:
     `results` / `lines` / `payloads` 从上一轮接管过来，每一步按 kind 覆盖同一步的旧结果，日志与上报
     仍是整场的（#638）。"""
 
-    def __init__(self, serial="", model="", total=0, t0=None, plan=None,
+    def __init__(self, serial="", model="", total=0, t0=None, plan=None, recipe_coverage="",
                  base_results=(), base_lines=(), base_payloads=()):
         self.lock = threading.RLock()
         self.running = True
+        self.recipe_coverage = recipe_coverage   # 这次所用机型脚本的验证档位，两个来源见 Dispatcher.start
         self.lines = list(base_lines)
         self.idx = 0
         self.total = total
@@ -499,6 +500,7 @@ class Job:
     def snapshot(self, since=0):
         """某一时刻的一致只读视图。lines 只给 since 之后的新行，next 是下一次的偏移。
 
+        这一份另带 `recipe_coverage`：这次所用机型脚本的验证档位，原样透传引擎给的值（#1129）。
         `retry` 是此刻还能重试的步数，结果页的按钮按它取 N（#638）。"""
         with self.lock:
             lines = self.lines[since:]
@@ -506,6 +508,7 @@ class Job:
                     "idx": self.idx, "total": self.total, "title": self.title,
                     "results": list(self.results), "sec": round(time.time() - self.t0),
                     "cancel": self.cancel, "recovery": self.recovery,
+                    "recipe_coverage": self.recipe_coverage,
                     "pause": self.pause, "paused": self.paused,
                     "retry": sum(1 for r in self.results if retryable(r))}
 
@@ -957,9 +960,12 @@ class Dispatcher:
         with self.lock:
             self.side = ""
 
-    def start(self, serial, plan, offered=None, base_results=(), base_lines=(), base_payloads=()):
+    def start(self, serial, plan, offered=None, base_results=(), base_lines=(), base_payloads=(),
+              recipe_coverage=""):
         """plan: 这一轮的规格对象（`tool/plan.py` 的 `Plan`）；直接传字典也收，第一行用 `from_json` 收拢。
         offered: 选择页上摆出来的项，给没勾的项定「没执行」的原因（#577）；None 表示不知道。
+        recipe_coverage: 这份机型脚本的验证档位，两个调用点各给各的：`Api.start()` 从 status-json 取，
+        `Api.retry()` 沿用上一轮快照的值；都不在这里算（#1129）。
         三个 base_*: 重试轮从上一轮接管的快照（#638）；首次执行都是空的。"""
         plan = _tool("plan").Plan.from_json(plan)
         with self.lock:
@@ -970,6 +976,7 @@ class Dispatcher:
             tasks = plan_tasks(serial, plan, offered)
             total = sum(1 for t in tasks if not t.skip_reason)
             self.job = Job(serial=serial, model=plan.model, total=total, plan=plan,
+                           recipe_coverage=recipe_coverage,
                            base_results=base_results, base_lines=base_lines,
                            base_payloads=base_payloads)
         threading.Thread(target=self._work, args=(tasks,), daemon=True).start()
@@ -1462,7 +1469,11 @@ class Api:
     # ----- 任务 -----
     def start(self, serial, plan):
         """前端发来的计划字典在这里收成规格对象，之后的内部一路传 `Plan`（#1106）。"""
-        return self.dispatcher.start(serial, _tool("plan").Plan.from_json(plan), self._offered())
+        plan = _tool("plan").Plan.from_json(plan)
+        # 机型脚本验到什么程度由引擎从台账现读（沿用 #1124 的 status-json 字段），这里只随这次执行
+        # 带给结果页（#1129）。要不要显示由前端按结果里有没有脚本那一行决定，这里不做取舍。
+        coverage = (self.last_status or {}).get("recipe_coverage", "")
+        return self.dispatcher.start(serial, plan, self._offered(), recipe_coverage=coverage)
 
     def retry(self):
         """把上一轮没做成的步骤再跑一遍（#638）。结果按步骤合并，快照成功过就绝不再存。
@@ -1477,8 +1488,11 @@ class Api:
         plan = retry_plan(j.plan, view["results"])
         if plan is None:
             return {"error": "没有需要重试的步骤"}
+        # 档位无条件沿用上一轮：这一轮可能只重跑别的步，但上一轮的脚本结果行仍按 kind 合并留在
+        # 结果页上（沿用 #638 的合并口径），那条提示跟着它走，不能因为这一轮没跑脚本就消失（#1129）。
         return self.dispatcher.start(j.serial, plan, base_results=view["results"],
-                                     base_lines=view["lines"], base_payloads=list(j.payloads))
+                                     base_lines=view["lines"], base_payloads=list(j.payloads),
+                                     recipe_coverage=view["recipe_coverage"])
 
     def _offered(self):
         """选择页上摆出来的项：判断「没执行」是用户没勾还是这台机本来就没有（#577）。
