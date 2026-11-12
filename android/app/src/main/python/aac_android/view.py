@@ -125,25 +125,25 @@ class StallWatch:
 
 WATCH = StallWatch()
 
-# 这次用的机型脚本验到什么程度：档位由引擎从台账现读、随 status-json 带过来（沿用 #1124 的做法，
-# 取值见 tool/verify_ledger.py 的 TIERS），只在负面的两档说一句人话，「全部」与认不出的值都不占一行。
-# 桌面版结果页另有一份同规则的实现（票 #1129），分叉的只有措辞：手机版不劝人「去 App 里核对」。
+# 这次跑的机型脚本验到什么程度：档位由引擎从台账现读，经 status-json 与任务快照原样带到
+# `recipe_coverage`（沿用 #1124 的两个字段），这里只把负面档位翻成一句人话，「全部」与没有值都不占行。
+# 桌面版同一件事在 gui/web/index.html 的 coverageNote：判据相同，分叉的只有措辞（手机版不劝人
+# 「去 App 里核对」）。
 COVERAGE_NOTES = {
-    "部分": "这次用的机型脚本只在一部分步骤上做过真机验证，其余步骤这次可能没改到，建议顺手核对一眼。",
-    "未记录": "这次用的机型脚本还没有做过真机验证，改动结果建议自己核对一遍。",
+    "部分": "这套机型脚本只在一部分步骤上做过真机验证，其余步骤这次是照脚本直接跑的，建议顺手核对一眼。",
+    "未记录": "这套机型脚本没有真机验证记录，改动结果建议自己核对一遍。",
 }
 
 
-def coverage_note(run, status):
+def coverage_note(run):
     """结果页要不要为脚本的验证档位多一行；要说时给整句，不说时给空串（#1130）。
 
-    只在这次真跑了机型脚本时才说：没勾脚本、或这台机没有专用脚本时结果里那一行是跳过，
-    拿别的步的结论去说脚本的事会误导。桌面版按「这一轮的计划里有没有脚本步」判，手机拿不到
-    计划，改看结果里那一行有没有真跑——只在脚本段被跳过、或在脚本步之前就停止时与桌面不同。
+    说不说的判据是「这次真有脚本那一行的结果」：没勾脚本、停止在它之前、读屏占用让它跳过时都不说，
+    拿别的步的结论去说脚本的事会误导。与桌面版同一条判据（gui/web/index.html 的 coverageNote）。
     """
     if not any(r.get("kind") == "recipe" and not r.get("skipped") for r in run.get("results") or []):
         return ""
-    return COVERAGE_NOTES.get((status or {}).get("recipe_coverage") or "", "")
+    return COVERAGE_NOTES.get(run.get("recipe_coverage") or "", "")
 
 
 def _snapshot(api, since=0):
@@ -151,7 +151,7 @@ def _snapshot(api, since=0):
     run = dict(api.poll(since))
     run["results"] = [{**r, "summary": summarize(r)} for r in run.get("results") or []]
     run["outcome"] = outcome(run)
-    run["coverage_note"] = coverage_note(run, api.last_status)
+    run["coverage_note"] = coverage_note(run)
     return run
 
 

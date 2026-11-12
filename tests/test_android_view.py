@@ -17,8 +17,6 @@ import verify_ledger  # noqa: E402
 class FakeApi:
     def __init__(self, status=None, run=None):
         self._status, self._run = status or {}, run or {}
-        # 真实 Api 的初值是 None、只在 status() 解析成功时整体赋值（gui/app.py）：没传就是「还没检测过」
-        self.last_status = status
         self.opened, self.copied = [], []
 
     def status(self, serial):
@@ -105,9 +103,9 @@ class RecipeCoverageTest(unittest.TestCase):
         """一次跑过机型脚本的结果页快照：默认这一行是成功的那一步。
 
         成功行照引擎的原样不写 `skipped`（`step_result()` 只在跳过时才带它）：拿显式 False 去喂，
-        `not r.get("skipped")` 被改成 `is False` 也照样绿。"""
+        `not r.get("skipped")` 被改成 `is False` 也照样绿。档位照 job 快照原样放在 `recipe_coverage`。"""
         done = {"title": "关闭各 App 里的广告开关", "kind": "recipe", "rc": 0, **row}
-        api = FakeApi(status(recipe_coverage=coverage), run={"results": [done], "cancel": False})
+        api = FakeApi(run={"results": [done], "cancel": False, "recipe_coverage": coverage})
         return view.poll(api)
 
     def test_partial_coverage_adds_a_line(self):
@@ -121,7 +119,7 @@ class RecipeCoverageTest(unittest.TestCase):
         self.assertEqual(self.snap("全部")["coverage_note"], "")
 
     def test_a_script_with_no_ledger_entry_says_so(self):
-        self.assertIn("还没有做过真机验证", self.snap("未记录")["coverage_note"])
+        self.assertIn("没有真机验证记录", self.snap("未记录")["coverage_note"])
 
     def test_an_unknown_or_missing_tier_says_nothing(self):
         for value in ("", "以后的第四档", None):
@@ -133,11 +131,12 @@ class RecipeCoverageTest(unittest.TestCase):
         self.assertEqual(self.snap("部分", skipped=True)["coverage_note"], "")
 
     def test_a_run_that_never_touched_the_script_has_no_line(self):
-        run = {"results": [{"title": "关闭营销通知", "kind": "channels", "rc": 0}], "cancel": False}
-        self.assertEqual(view.poll(FakeApi(status(recipe_coverage="未记录"), run=run))["coverage_note"], "")
+        run = {"results": [{"title": "关闭营销通知", "kind": "channels", "rc": 0}], "cancel": False,
+               "recipe_coverage": "未记录"}
+        self.assertEqual(view.poll(FakeApi(run=run))["coverage_note"], "")
 
-    def test_never_detected_means_no_line_instead_of_crashing(self):
-        # 还没检测过（真实 Api 的 last_status 此时是 None）：结果页照常显示，不炸
+    def test_a_snapshot_without_the_tier_says_nothing(self):
+        # 旧载荷 / 没勾脚本时快照里就没有这个字段：结果页照常显示，不炸、也不猜深浅
         run = {"results": [{"title": "关闭各 App 里的广告开关", "kind": "recipe", "rc": 0}], "cancel": False}
         self.assertEqual(view.poll(FakeApi(run=run))["coverage_note"], "")
 
