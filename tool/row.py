@@ -221,6 +221,37 @@ def switch_row(node, parents, depth=SWITCH_ROW_DEPTH):
     return any("RadioButton" not in (n.get("class") or "") for n in boxes)
 
 
+# 页面顶部这一段里的同名文字是页眉 / 顶栏标题，不是列表里的候选行
+TOP_BAND = 0.22
+
+
+def named_nodes(root, parents, on_screen, name, screen_h, top_band=TOP_BAND, systemui_text=False):
+    """按名字筛「可能是这一行」的文字节点：[(文字, bounds, 节点)]。
+
+    与 `Screen.texts()` 同一套取值，再叠三条认行的前置筛选：名字完全相等、顶边不在顶部带
+    （`screen_h * top_band`）内、不是开关本体（checkable="true" 的节点，它的无障碍标签
+    常常也是这个名字）。文字取 text 或 content-desc 去掉首尾空白；同一个控件在 dump 里
+    吐出两次只算一次；`on_screen` 为假的不算（折叠屏合上时留下的另一块屏）；`systemui_text`
+    为假时不算 com.android.systemui 的文字，与 `Screen` 上那个同名读屏开关同义——vivo 的
+    通知页整页挂在那里，`_focus()` 会把它置真。
+
+    纯函数：不读屏、不点击、不认识渠道语义。行高上限、行内开关数、同名行取舍由调用方按
+    `own()` 的结果判定；`parents` 与 `on_screen` 照 `own()` 的入参顺序一并给出，筛选用到
+    后者的可视判定。"""
+    out = []
+    for n in unique(root.iter("node")):
+        if n.get("package") == "com.android.systemui" and not systemui_text:
+            continue
+        text = (n.get("text") or n.get("content-desc") or "").strip()
+        if not text or text != name:
+            continue
+        box = bounds(n)
+        if box[1] < screen_h * top_band or n.get("checkable") == "true" or not on_screen(n):
+            continue
+        out.append((text, box, n))
+    return out
+
+
 def title_label(switch, parents, on_screen, screen_h, max_depth=SWITCH_ROW_DEPTH):
     """(标题, 标题文字的节点)：往上找到第一个带文字的祖先。容器矮（就是一行）时分不清标题和说明，
     取最上面那段；容器高（是一整张列表）时取竖直方向离开关最近的文字。
@@ -330,7 +361,7 @@ def summary(root, screen_w, screen_h):
 
     titles = sum(1 for n in nodes if shown(n) and not in_list(n)
                  and (n.get("text") or n.get("content-desc") or "").strip()
-                 and bounds(n)[1] < screen_h * 0.22)
+                 and bounds(n)[1] < screen_h * TOP_BAND)
     switches = sum(1 for n in nodes if shown(n) and is_switch(n))
     anchor = next((n for n in nodes if shown(n) and is_switch(n)), None)
     if anchor is None:
