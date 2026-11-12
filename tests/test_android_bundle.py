@@ -63,5 +63,18 @@ class AndroidGuiBundleTests(unittest.TestCase):
             self.assertEqual(outside, [], "这些模块不是从 APK 会带的那份目录里加载的")
 
 
+class AndroidRecipeBundleTests(unittest.TestCase):
+    def test_recipes_copy_carries_the_verification_ledger(self):
+        """手机宿主也读 `recipes/verified.toml`（status-json 的验证档位，#1124）：漏了这一行，
+        手机上跟桌面版就差一个值，而且要到真机跑 status-json 才发现。"""
+        lines = [line for line in GRADLE.read_text(encoding="utf-8").splitlines()
+                 if 'resolve("recipes")' in line]
+        self.assertEqual(len(lines), 1, f"构建脚本里应只有一处 recipes 拷贝清单，实际 {len(lines)} 处")
+        match = re.search(r"include\(([^)]*)\)", lines[0])
+        self.assertIsNotNone(match, f"recipes 拷贝清单里没有 include(...)：{lines[0]}")
+        names = [part.strip().strip('"') for part in match.group(1).split(",") if part.strip()]
+        self.assertIn("verified.toml", names)
+
+
 if __name__ == "__main__":
     unittest.main()

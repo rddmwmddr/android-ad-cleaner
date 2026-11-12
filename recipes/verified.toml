@@ -5,60 +5,82 @@
 # build = "24129PN74C_OS4.0.1.0.WNDCNXM"   # 真机上的系统 build 串，能认出完整串就写全
 # date = "2026-11-05"                      # 验证日期，YYYY-MM-DD
 # by = "@login"                            # 验证人：@login（带 @）或 机主，与复测队列同格式
-# tier = "部分验证"                        # 已验证 / 部分验证 / 未记录
+# tier = "部分"                            # 覆盖度：全部 / 部分 / 未记录
+# evidence = "报告者自述"                  # 证据来源：用例 / 现场 / 报告者自述 / 机主自测 / 未知
+#
+# 覆盖度与证据来源是两个正交维度（#1124 之前是同一个 tier）：一个是「跑到什么程度」，一个是
+# 「凭什么算跑过」，别用一个字段同时表达。
+#   - 覆盖度：「全部」= 整份脚本整跑过，结局只有「完成」或 `SkipStep` 的「跳过」（跳过是引擎的
+#     正式语义，不扣覆盖度）；「部分」= 只跑了几段，或只手动把入口走通；「未记录」= 没有可信记录，
+#     日期、验证人、build 一并留空。
+#   - 证据来源：「用例」= 有去掉改动就会红的回归用例；「现场」= 有 dump / 日志 / 输出；「报告者
+#     自述」= 报告者口头确认，不要求交 dump；「机主自测」= 维护者自己的机器；「未知」= 说不上来。
+# 新增条目照实填两格：覆盖度按实际跑到的段数，证据来源按手里最硬的那一样，两者互不代替。
 #
 # build 必须以脚本自己声明的 BUILD 打头；认不出更细的版本时才写 BUILD 本身。对不上时命令行标
-# 「build 不符」，数据契约测试报红。档位是「未记录」的条目不做这项校验，build 可以留空。
+# 「build 不符」，数据契约测试报红。覆盖度是「未记录」的条目不做这项校验，build 可以留空。
 #
 # 2026-11-09 初始化（#918）：44 份的日期与档位取自配方头注，不按措辞分档，一律「部分验证」。
 # 头注里的日期混着「改动日期」，只取最后一次真机验证那一条（如 vivo-V2547DA/recipe.py 记 10-28，
 # 11-03 与 11-07 两行头注都写着「未复测」）。by 取头注能认出的验证人：写了 @login 的按 @login 记，
 # 只写「社区实测」没留 ID 的留空，其余按机主。头注没写日期、但同目录 README 或 docs/ 有更近一次
 # 真机记录的，按那份记并在条目上方注明出处。唯一没有日期的 vivo-V2545A 记「未记录」。
+#
+# 2026-11-12 拆档（#1124）：tier 收窄为覆盖度、新增 evidence。覆盖度按当时实际覆盖面机械换算：
+# 「已验证」只有一加 16（PYB110，本机九段整跑）记「全部」，其余「部分验证」记「部分」，「未记录」照旧。
+# evidence 只由 by 推导：机主 → 机主自测，@login → 报告者自述，留空 → 未知。没有重读脚本头注，也
+# 没有重新判断覆盖度以外的任何东西；「用例」与「现场」两档留给之后新增的条目。
 
 # README 机型表写的 MagicOS 版本是 10.0.0.175；脚本只声明到 10.0.0。
 ["honor-CLE-AN00/recipe.py"]
 build = "CLE-AN00 10.0.0.175"
 date = "2026-11-07"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 # 头注只写「2026-10-23 实测通过」，没有更细的版本；脚本 BUILD 也是空串。
 ["honor-PNM-AN10/recipe.py"]
 build = ""
 date = "2026-10-23"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["honor-WKL-AN20/recipe.py"]
 build = "WKL-AN20 11.0.0.111(SP7C00E110R101P7)"
 date = "2026-10-28"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["meizu-MEIZU 21 Pro/recipe.py"]
 build = "Flyme 12.6.0.0A"
 date = "2026-10-30"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["oneplus-PHK110/recipe.py"]
 build = "PHK110_16.0.5.1201"
 date = "2026-10-25"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["oneplus-PHK110/recipe_android15.py"]
 build = "PHK110_15.0.0.601(CN01)"
 date = "2026-10-29"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["oneplus-PJA110/recipe.py"]
 build = "PJA110_14.0.0.812"
 date = "2026-10-25"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 # 路径照同平台 PHK110_16.0.5.1201 已实测的公开入口改写，未在 PJA110 上跑过（#911）。
 ["oneplus-PJA110/recipe_android16.py"]
@@ -66,73 +88,85 @@ build = "PJA110_16.0.5.1201"
 date = ""
 by = ""
 tier = "未记录"
+evidence = "未知"
 
 ["oneplus-PKX110/recipe.py"]
 build = "PKX110_16.0.10.500"
 date = "2026-10-28"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["oneplus-PLR110/recipe.py"]
 build = "PLR110_17.0.0.101"
 date = "2026-10-31"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["oneplus-PLZ110/recipe.py"]
 build = "PLZ110_17.0.0.107(CN01)"
 date = "2026-11-08"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["oneplus-PYB110/recipe.py"]
 build = "PYB110_17.0.0.157(CN01)"
 date = "2026-11-12"
 by = "机主"
-tier = "已验证"
+tier = "全部"
+evidence = "机主自测"
 
 ["oppo-PKH110/recipe.py"]
 build = "PKH110_17.0.0.103"
 date = "2026-10-29"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["oppo-PKT110/recipe.py"]
 build = "PKT110_17.0.0.102(CN01)"
 date = "2026-10-28"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["oppo-PLG110/recipe.py"]
 build = "PLG110_16.0.10.501(CN01)"
 date = "2026-11-01"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["oppo-PLP120/recipe.py"]
 build = "PLP120_16.0.9"
 date = "2026-10-22"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["oppo-PMA110/recipe.py"]
 build = "PMA110_17.0.0.106(CN01)"
 date = "2026-10-29"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 # 头注只写到 11-05 的逐页核对；同目录 README 记到 11-07「从开启状态」整轮补验，贡献者实测、维护方未复跑。
 ["oppo-PMX110/recipe.py"]
 build = "PMX110_17.0.0.116(CN01)"
 date = "2026-11-07"
 by = ""
-tier = "部分验证"
+tier = "部分"
+evidence = "未知"
 
 ["realme-RMX3700/recipe.py"]
 build = "RMX3700_16.0.5.1300(CN01)"
 date = "2026-11-02"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 # 按报告者（#1083）的实测落点写成，本仓库没有这台手机、未复跑，所以不记验证人与日期。
 ["realme-RMX3888/recipe.py"]
@@ -140,85 +174,99 @@ build = ""
 date = ""
 by = ""
 tier = "未记录"
+evidence = "未知"
 
 ["redmi-23049RAD8C/recipe.py"]
 build = "OS3.0.5.0.VMRCNXM"
 date = "2026-10-25"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["redmi-23113RKC6C/recipe.py"]
 build = "OS3.0.307.0.WNKCNXM"
 date = "2026-10-26"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 # 头注没写日期：整轮记录在 docs/14-红米K70Pro实测.md（10-30 九段 235 秒、退出码 0）。
 ["redmi-23117RK66C/recipe.py"]
 build = "OS3.0.306.0.WNMCNXM"
 date = "2026-10-30"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["redmi-24094RAD4C/recipe.py"]
 build = "OS3.0.306.0.WOQCNXM"
 date = "2026-10-30"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["redmi-24122RKC7C/recipe.py"]
 build = "OS3.0.304.0.WOMCNXM"
 date = "2026-10-29"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["redmi-25060RK16C/recipe.py"]
 build = "BP2A.250605.031.A3"
 date = "2026-10-27"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["samsung-SM-N9760/recipe.py"]
 build = "SP1A.210812.016.N9760ZCU6HZE1"
 date = "2026-11-05"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["vivo-V1986A/recipe.py"]
 build = "PD1986_A_8.21.29"
 date = "2026-10-30"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["vivo-V2303A/recipe.py"]
 build = "CP2A.260605.016"
 date = "2026-11-04"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["vivo-V2309A/recipe.py"]
 build = "PD2309E_A_16.2.15.0.W10"
 date = "2026-11-03"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["vivo-V2324HA/recipe.py"]
 build = "PD2324J_A_16.2.13.1.W10"
 date = "2026-10-27"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["vivo-V2361A/recipe.py"]
 build = "PD2361B_A_16.2.12.2.W10"
 date = "2026-10-26"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["vivo-V2417A/recipe.py"]
 build = "PD2417D_A_16.2.14.1.W10"
 date = "2026-10-30"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 # 头注没有日期，也没有同目录 README：这份只有入口约定，真机整段验证没有记录。
 ["vivo-V2545A/recipe.py"]
@@ -226,85 +274,99 @@ build = "PD2545B_A_16.0.16.0.W10"
 date = ""
 by = ""
 tier = "未记录"
+evidence = "未知"
 
 ["vivo-V2547A/recipe.py"]
 build = "PD2547B_A_17.1.10.2"
 date = "2026-10-25"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 # 头注 11-03 与 11-07 两行写的都是改动后「未复测」，日期取最后一次真机验证的 10-28。
 ["vivo-V2547DA/recipe.py"]
 build = "PD2547D_A_16.0.21.21.W10"
 date = "2026-10-28"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["vivo-V2547DA/recipe_android17.py"]
 build = "PD2547D_A_17.1.10.2.W10"
 date = "2026-11-07"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 # 10-29 那次是 14 Pro 社区实测（Issue #317），头注没留验证人 ID。
 ["xiaomi-2304FPN6DC/recipe.py"]
 build = "OS3.0.308.0.WNBCNXM"
 date = "2026-10-29"
 by = ""
-tier = "部分验证"
+tier = "部分"
+evidence = "未知"
 
 ["xiaomi-24090RA29C/recipe.py"]
 build = "OS3.0.309.0.WOOCNXM"
 date = "2026-10-26"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["xiaomi-2410CRP4CC/recipe.py"]
 build = "OS2.0.208.0.VOZCNXM"
 date = "2026-10-28"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["xiaomi-24129PN74C/recipe.py"]
 build = "OS3.0.307.0.WOCCNXM"
 date = "2026-10-29"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["xiaomi-24129PN74C/recipe_os4.py"]
 build = "OS4.0.0.22.XOCCNXM"
 date = "2026-10-29"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 # 社区实测，头注没留验证人 ID。
 ["xiaomi-2505APX7BC/recipe.py"]
 build = "BP2A.250605.031.A3"
 date = "2026-11-05"
 by = ""
-tier = "部分验证"
+tier = "部分"
+evidence = "未知"
 
 ["xiaomi-25102RKBEC/recipe.py"]
 build = "OS4.0.2.0.XPMCNXM"
 date = "2026-10-27"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["xiaomi-2512BPNDAC/recipe.py"]
 build = "OS4.0.5.0.XPACNXM"
 date = "2026-10-28"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 # 头注还停在 10-22 录制与 10-24 的 18 Fold 社区记录；同目录 README 与机型表记 11-07 本机整轮复测。
 ["xiaomi-M154FF/recipe.py"]
 build = "OS4.0.24"
 date = "2026-11-07"
 by = "机主"
-tier = "部分验证"
+tier = "部分"
+evidence = "机主自测"
 
 ["xiaomi-M332BF/recipe.py"]
 build = "OS4.0.4.0.XHPCNXM"
 date = "2026-10-31"
 by = "@Sin1ery"
-tier = "部分验证"
+tier = "部分"
+evidence = "报告者自述"

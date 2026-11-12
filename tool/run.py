@@ -36,9 +36,11 @@ from backups import Backups, root_from_env
 from entries import FAMILY          # 品牌族只此一份；广告包、参考脚本与版本比较都按它归
 from host import ON_PHONE           # 手机版不写插电常亮（#731）
 from recipe_meta import recipe_meta
+import verify_ledger
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOL = os.path.join(ROOT, "tool")
+RECIPES = os.path.join(ROOT, "recipes")
 BACKUPS = root_from_env() or os.path.join(ROOT, "backups")
 
 # 各品牌常见的系统广告包（快应用另列在 QUICKAPP）。只在机主同意后挂起；挂起可一条命令还原。
@@ -935,9 +937,15 @@ def cmd_status_json(serial, rest):
         sus = suspended(serial, p)
         ads.append({"pkg": p, "suspended": sus, "default_on": (not sus) and p in DEFAULT_ON})
     backup = Backups(BACKUPS).latest(i["model"])
+    # 覆盖度（台账的 tier）、证据来源与验证日期由引擎从台账现读，客户端只透传（#1124）。台账里没有
+    # 这份脚本时 entry() 给「未记录 / 未知 / 空」，同样是可显示的结论，不是错误。
+    ledger = verify_ledger.load(os.path.join(RECIPES, "verified.toml")) if r else {}
+    coverage, evidence, verified = verify_ledger.entry(
+        ledger, os.path.relpath(r, RECIPES).replace(os.sep, "/") if r else "")
     print(json.dumps({
         "info": i, "locked": locked(serial),
         "recipe": os.path.relpath(r, ROOT) if r else None, "recipe_ref": ref, "recipe_build": rb, "recipe_ok": ok, "steps": steps,
+        "recipe_coverage": coverage, "recipe_evidence": evidence, "recipe_verified": verified,
         "ads": ads, "quickapps": quickapps(serial),
         "stay_on": sh(serial, "settings get global stay_on_while_plugged_in"),
         "dev": sh(serial, "settings get global development_settings_enabled") == "1",
