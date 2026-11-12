@@ -35,6 +35,7 @@
 | `recipe_kit.py` | 机型脚本的前导：段包装、入口断言、跳过出口、两个台账（[ADR-0029](adr/0029-recipe-preamble-injection.md)） |
 | `recipe_nav.py` | 机型脚本的公共导航助手：跨文件代码逐字相同的导航过程收在这里，由 `preamble()` 调 `install()` 注入；按家族分节（小米系 / vivo / OPPO / 其余·跨家族），同名但代码不同的是机型知识、留在脚本里覆盖（[ADR-0029](adr/0029-recipe-preamble-injection.md)） |
 | `recipe_meta.py` | 机型脚本头部的元数据：录制版本、机型列表、段名；只有正则，不背 CLI 入口的副作用 |
+| `recipe_source.py` | 机型脚本的事实层：一份源码里的调用点与模块级常量，纯 AST，入口速查与词库共用（[ADR-0034](adr/0034-recipe-source-facts.md)） |
 | `chan_fast.py` | 营销通知渠道：`ChannelPage`（到页 + 认行）、批处理循环 |
 | `channel_policy.py` | 渠道判定：营销候选、扫描排除、默认不勾、受保护、前台服务 |
 | `row.py` | 「开关所属的那一行」的唯一定义 |
@@ -81,7 +82,6 @@
 | `huawei_channels.py` | 华为 ALN-AL00 的清单式渠道处理，需人工审核清单，客户端不自动跑 |
 | `gen_brand_taps.py` | 从 `docs/手机版教程/brand-taps.json` 渲染连点表 |
 | `gen_site_css.py` | 把仓库根 `site.css` 渲染进官网两页的共享样式块 |
-| `recipe_source.py` | 机型脚本的事实层：一份源码里的调用点与模块级常量，纯 AST，入口速查与词库共用（[ADR-0034](adr/0034-recipe-source-facts.md)） |
 | `verify_ledger.py` | 配方验证台账：读 `recipes/verified.toml`，每个配方文件一行、按距今天数降序，覆盖度与证据来源是两个维度（`entry()` 也供 `run.py` 的 `status-json` 取这三样），缺记录的条目 `entry()` 给「未记录 / 未知」、CLI 行只打「未记录」，验后改过标「待复核」，记录 build 对不上脚本 `BUILD` 的打「build 不符」（沿用 #916、#917、#918 的台账口径，#1124 拆出证据来源） |
 | `check_dco.py` | PR 的 DCO 校验：逐个非 merge 提交比对 `Signed-off-by` 与作者邮箱（#848） |
 | `check_conventional.py` | PR 的提交主题校验：`type(scope): subject`，类型清单 `TYPES` 也在这里（#849） |
