@@ -81,6 +81,13 @@ class WiringTests(unittest.TestCase):
         self.assertLessEqual({"tap_any", "gear", "close_named", "read_switches", "security_tab"},
                              set(scope))
 
+    def test_the_remaining_navigation_clusters_are_installed(self):
+        """按代码逐字判据翻出来的六个簇（#1148）：脚本侧同名定义已删，靠的就是这几个名字。"""
+        phone, scope = phone_mock(), {}
+        recipe_kit.preamble(phone, scope)
+        self.assertLessEqual({"wait_page", "off_unnamed", "opened", "popup_row", "tap_tab",
+                              "hide_carousel"}, set(scope))
+
     def test_injected_helpers_read_the_preamble_names_from_the_scope(self):
         """实现从执行作用域取 `skip` / `require`，所以 `recipe_nav` 不用 import `recipe_kit`。"""
         phone = phone_mock()

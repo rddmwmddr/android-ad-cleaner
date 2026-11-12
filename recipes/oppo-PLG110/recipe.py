@@ -129,26 +129,6 @@ def app_settings(package, activity, title=None):
               activity, title)
 
 
-def hide_carousel():
-    global VERIFIED_SWITCHES
-    activity = ASSISTANT + "setting.recommendservice.RecommendServiceSettingActivity"
-    wait_page(activity, "推荐服务")
-    before = read_switches(activity, "推荐服务", max_screens=1)
-    require("推荐服务" in before, "未读到推荐服务总开关，未操作")
-    choices = carousel_choices(p.tree())
-    if not choices["不显示轮播推荐"][0]:
-        l, t, r, b = choices["不显示轮播推荐"][1]
-        require(p.focus() == activity, "点击前页面变化，未操作")
-        p.click((l + r) // 2, (t + b) // 2)
-        time.sleep(.4)
-        current = carousel_choices(p.tree())
-        require(current["不显示轮播推荐"][0], "轮播推荐回读未确认不显示")
-        p.changed.append(("负一屏·推荐服务", "轮播推荐：不显示"))
-    require(read_switches(activity, "推荐服务", 1) == before, "推荐服务总开关变化，请核对")
-    VERIFIED_SWITCHES += 1
-    print("  · 轮播推荐：已确认不显示，推荐服务总开关保持原值", flush=True)
-
-
 # ==================== 各段具体实现 ====================
 
 @step("广告跟踪")

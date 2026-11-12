@@ -259,3 +259,30 @@ PLZ110 / PMX110 与 PLG110 / PMA110 这两对各有一批代码逐字相同的�
   脚本自己定义了同名实现的，注入版根本不被调用，那几份不再扫实现。
 - **对拍与守卫照 #1150 的口径。** `tests/compare_recipe_calls.py` 13,484 条调用零差异；
   `tests/test_recipe_nav.py` 的副本守卫扫全仓无红；词库重生成后只有行号位移，入口速查逐字不变。
+
+## #1148 收尾：判据改到代码逐字之后剩下的簇
+
+#1148 的 30 簇是**文本逐字**口径下的账。判据在 #1153 改成代码逐字（剥注释、docstring 与折行）
+之后，有几段代码本来就在两份脚本里各写了一遍、只因注释不同而没进那 30 簇的重复露了出来，
+一直没人认领。这一轮把其中六个簇收进注入面：`wait_page`（一加 PHK110 与 OPPO PKH110）、
+`off_unnamed`（vivo V2303A 与 V2547DA 的 Android 17 变体）、`opened`（V2547DA 变体与小米
+M154FF / M332BF，跨家族）、`popup_row`（24129PN74C 的两份）、`tap_tab`（红米 24094RAD4C 与
+小米 24090RA29C）、`hide_carousel`（PLG110 / PMA110）。12 份脚本里删掉 13 处本地定义（V2547DA
+的 Android 17 变体一份里删了两处），调用点一字未动，注入实现与被删副本的 AST 归一结果逐字相同。
+
+- **`off_exact` 不收。** PHK110 / PKX110 那两份确实逐字相同，但函数体里的
+  `p.off(only=list(targets), …)` 是 `vocab.py` 的「未解析」台账要列的现场，搬走后
+  `docs/清单/词库.md` 会少两行。让词库去扫注入面不在 #1148 的范围里，所以这两份留在脚本里。
+- **第二簇照旧留脚本。** `hide_carousel` 的 PLZ110 / PMX110 那簇把单选控件读法写在函数体内、
+  与 PLG110 / PMA110 那份代码不同；`wait_page` 在 PKX110 与 PLG110 / PMA110 上也各成簇。
+  一个名字只放一簇，其余按「同名多簇是机型知识」继续覆盖注入版。
+- **闭包要靠脚本侧的名字就把那行留着。** `opened` 从执行作用域取 `adb_link`，M154FF / M332BF
+  的 `import adb_link` 因此必须留着（两条 import 上方各加一句指向注入版的注释），与 PLG/PMA
+  的 `from fast import bounds` 同形。24129PN74C 的 OS4 变体反过来：`until` 只被那份
+  `popup_row` 用，删定义时一起删掉 import。
+- **文件按家族分节、`install()` 落最后。** 五个节头：小米系 → vivo → OPPO 家族 → OPPO 两大对 →
+  其余·跨家族，`install()` 收尾；注入顺序变了但脚本按名字取，`NAV` 的插入顺序不构成行为。
+- **对拍与守卫照 #1150 的口径。** `tests/compare_recipe_calls.py` 47 份 × 2 场景 13,484 条调用
+  零差异；`tests/test_recipe_nav.py` 的副本守卫扫全仓无红；词库重生成后只有行号位移，入口速查
+  逐字不变。`hide_carousel` 与 `carousel_choices` 的单选按钮深支在空页面对拍里走不到，这一层
+  的证据是 AST 逐字相同，不是调用序列（同 #1154 的口径）。

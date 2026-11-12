@@ -13,7 +13,6 @@ BUILD = "OS4.0"
 MODELS = ["24129PN74C"]
 import time
 from entries import THEME_DEAD_ENDS
-from wait import until
 
 from fast import bounds
 
@@ -53,16 +52,6 @@ def gear(toolbar_only=False):
     if p.focus() != before:
         p.back()          # 点开的是弹窗或别的页：关掉，别留给下一段（#331 / #407）
     return False
-
-
-def popup_row(text, timeout=3.0):
-    """屏幕下半段里文字正好是 text 的那一行：菜单弹窗从底部升起，工具栏上的同名图标在上半屏。"""
-    def row():
-        for t, (l, top, r, b), _n in p.texts():
-            if t == text and top > p.H * 0.3:
-                return (l + r) // 2, (top + b) // 2
-        return None
-    return until(row, timeout=timeout, poll=0.3, now=time.time, sleep=time.sleep)
 
 
 def menu_settings(tries=2):

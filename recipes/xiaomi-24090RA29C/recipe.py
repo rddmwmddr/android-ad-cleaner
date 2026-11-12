@@ -27,20 +27,6 @@ def browser_settings():
     return False
 
 
-def tap_tab(name):
-    """点顶部标签页（隐私/安全）：标签是可点容器，内层文字节点不可点。"""
-    for n in p.tree().iter("node"):
-        if n.get("clickable") != "true":
-            continue
-        label = (n.get("text") or "") + (n.get("content-desc") or "")
-        from fast import bounds
-        l, t, r, b = bounds(n)
-        if name in label and t < p.H * 0.3 and p.on_screen(n):
-            p.click((l + r) // 2, (t + b) // 2); time.sleep(1)
-            return True
-    return p.tap(name, exact=True, scrolls=0)
-
-
 @step("系统广告")
 def _():
     # 不用设置搜索：HyperOS 搜索框用 setText 输入中文会卡住、一直打「%」。按菜单路径点进去
