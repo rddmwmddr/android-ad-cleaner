@@ -213,15 +213,7 @@ class Navigator:
                     return (l + r) // 2, (top + b) // 2
         return None
 
-    def top(self, n=4):
-        screen = self.screen
-        for _ in range(n):
-            if not any(x.get("scrollable") == "true" and screen.on_screen(x) for x in screen.tree().iter("node")):
-                break
-            focus = screen.focus()
-            before = {t for t, _, _ in screen.texts()}
-            screen.scroll(0.58, up=True)
-            if screen.focus() != focus:
-                raise RuntimeError("回到页顶时离开了当前设置页，停止本段")
-            if {t for t, _, _ in screen.texts()} <= before:
-                break
+    def top(self, n=None):
+        """回到页顶（翻页回路在 `Screen.scroll_top()`：拨动也要从页顶开始，见 #1094）。
+        `n` 是次数上限，不给就一直翻到没有新文字为止。"""
+        self.screen.scroll_top(n)

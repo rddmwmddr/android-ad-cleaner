@@ -412,7 +412,7 @@ class Phone:
     def tab(self, name, maxwait=6.0):
         return self.navigator.tab(name, maxwait)
 
-    def top(self, n=4):
+    def top(self, n=None):
         self.navigator.top(n)
 
     # ---------- 拨动（Toggler） ----------

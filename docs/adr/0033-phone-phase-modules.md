@@ -30,7 +30,7 @@
 | 模块 | 拥有什么 |
 |---|---|
 | `Connection` | 连接与生命周期：设备、串号、断线判定、锁屏等待、日志开关 |
-| `Screen` | 基座第二、三层：读屏与认行、页面诊断、视口几何（`W` / `H`）、动作原语（含翻页 `scroll` / `scroll_more`），以及确认框的认法（`confirm_target()` / `residual_confirm()` / `residual_note()`） |
+| `Screen` | 基座第二、三层：读屏与认行、页面诊断、视口几何（`W` / `H`）、动作原语（含翻页 `scroll` / `scroll_more` 与回顶 `scroll_top`），以及确认框的认法（`confirm_target()` / `residual_confirm()` / `residual_note()`） |
 | `Navigator` | 导航：`tap` / `go` / `enter` / `entry` / `tab` / `back` |
 | `Toggler` | 拨动会话：`off()`、`confirm()` 与它的计划、回读、补点、结局 |
 | `Launcher` | 启动与落点：`start()`、前台归属、落点证据 |

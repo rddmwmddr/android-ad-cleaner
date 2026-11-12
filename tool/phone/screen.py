@@ -23,6 +23,11 @@ CONFIRM = ("确定", "確定", "关闭", "關閉", "仍要关闭", "仍要關閉
 # 运行时权限页所在的包：启动侧靠它判「这一帧是不是权限页占着前台」，弹窗侧只在这类页上点拒绝。
 PERMISSION_CONTROLLERS = {"com.android.permissioncontroller", "com.google.android.permissioncontroller"}
 
+# 回顶的次数天花板（`scroll_top()`）。判据是「这一屏没有新文字」，这里只是防跑飞的兜底：
+# 页面顶部有倒计时、轮播推广位这类会自己变的内容时那条判据永不成立，而没有上限就是一路滑下去
+# （旧实现固定 4 次，不会挂住；#1094）。
+TOP_SCREENS = 60
+
 
 class Screen:
     """当前这一屏：文字、开关行、前台窗口、屏宽高。
@@ -314,6 +319,29 @@ class Screen:
             raise RuntimeError("翻页离开了当前设置页，停止本段以免操作其他 App")
         after = {t for t, _, _ in self.texts()}
         return not after <= before
+
+    def scroll_top(self, n=None):
+        """回到页顶：一直上滑到这一屏不再出现新文字为止，与 `scroll_more()` 的终止条件对称。
+
+        次数不按固定值定：219 个开关的页面要翻十几屏才回得去，写死几次只到半路（#1094）。
+        `n` 是调用方给的次数上限（「翻着找入口」那种有余量的兜底）；不给时仍有 `TOP_SCREENS`
+        那道天花板，它只是防跑飞、不是判据。判据与 `scroll_more()` 同一份：同名行占满整屏的
+        页面里它也判不出列表还在不在动，会提前收手——`scroll_more()` 在那里同样停手。
+        单屏 / 不滚动的页面零动作：`scroll_more()` 的早退判据在这里先问一遍，
+        上滑手势在单屏面板上可能直接关掉页面。中途离开当前页照旧抛，不静默继续。"""
+        limit = TOP_SCREENS if n is None else n
+        scrolled = 0
+        while scrolled < limit:
+            if not any(m.get("scrollable") == "true" and self.on_screen(m) for m in self.tree().iter("node")):
+                break
+            focus = self.focus()
+            before = {t for t, _, _ in self.texts()}
+            self.scroll(0.58, up=True)
+            scrolled += 1
+            if self.focus() != focus:
+                raise RuntimeError("回到页顶时离开了当前设置页，停止本段")
+            if {t for t, _, _ in self.texts()} <= before:
+                break
 
     def find(self, text, exact=False, root=None, edge_ok=False, nav=False):
         """先找文字完全相同的，再找包含的。nav=True（tap 导航用）：包含匹配不点开关所在行里的文字——

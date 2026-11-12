@@ -1,6 +1,6 @@
 """拨动会话：整页开关的关与开、确认框、回读、补点、结局（ADR-0033、#1040）。
 
-`off()` 只做点击 → 回读 → 重试 → 报告；拨动计划、回读、补点落点是同名的纯函数，与编排一起留在
+`off()` 先回页顶，再点击 → 回读 → 重试 → 报告；拨动计划、回读、补点落点是同名的纯函数，与编排一起留在
 这里。动作与观测只经 `Screen`——确认框的认法也在基座（`Screen.confirm_target`），所以导航侧
 失败时那句残留提示直接问基座，不再回指拨动。
 """
@@ -218,7 +218,7 @@ class Toggler:
         return label
 
     def off(self, keep=(), only=None, page="", max_screens=40):
-        """当前列表：关掉开着的开关。keep=标题含这些词的不动；only=只关含这些词的。
+        """当前列表：从页顶开始，关掉开着的开关。keep=标题含这些词的不动；only=只关含这些词的。
         only 精确点名、keep 只是子串命中同一行时按 only（#861）。
         每屏第一下单独点、看有没有弹窗/跳页；没有就把这一屏剩下的连着点完，最后统一核对。
         关掉一项这一行就消失的页面（下面的行整体上移）：从下往上点，上移的只可能是已经点过的行；
@@ -232,6 +232,10 @@ class Toggler:
         # 页面刚打开还没画完：等开关出现，最多试 10 次（本段已走丢就不等）
         wait.until(screen.switches, tries=2 if self.lost_note.miss else 10, poll=0.2,
                    now=time.time, sleep=time.sleep)
+        # 页顶是这一步自己的前提，不该由调用方保证：调用方可能先把页面滚到了别处
+        # （`scan` 翻到底、机型脚本连着跑两段）。不复位的话，上面的行进不了 targets，
+        # 也不进 missed，只打一行「关了 N 个」就按成功收场（#1094）。
+        screen.scroll_top()
         start = screen.focus()
         done, slow, checked, kept, greyed = 0, False, set(), set(), set()
 
