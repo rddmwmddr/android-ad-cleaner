@@ -374,9 +374,11 @@ def used_by(recipes_dir):
 
     搬进注入面（`tool/recipe_nav.py` 与 `tool/recipe_steps.py`）的实现，入口写在实现里、脚本只剩
     一行调用：脚本调用了哪个注入名，就把那份实现也扫一遍，否则「用过的机型」会静默漏掉（沿用 #1153 的做法）。
+    实现里再调别的注入名也照着往下扫：段体调 `browser_settings_direct`，入口写在第二层，只看脚本
+    那一层会把调段体的机型漏掉（#1212）。
     包名这类实参仍在脚本里（`app_settings(MARKET)`），形参在实现里，按位置把两侧合起来才还原得出
     包名（沿用 #1154 的做法）；段体按名字取的模块常量以 `externals` 交回去（#1209）。定义了本地
-    同名实现的脚本走本地那份，不扫注入版（`injected_calls()` 判这一条）。
+    同名实现的脚本走本地那份，不扫注入版（`injected_calls()` 判这一条，深浅两层同判）。
 
     命令串只从调用的实参里取：变量、拼接与模板常量都还原得到，没被任何调用引用的字符串常量不算
     出处；语法错的脚本经事实层直接抛 `SyntaxError`，不再静默少算（沿用 #1195 的口径）。
@@ -388,12 +390,26 @@ def used_by(recipes_dir):
     for rel, facts in recipe_source.scan_dir(recipes_dir).items():
         model = rel.split("/", 1)[0].split("-", 1)[-1]
         _scan_entries(facts, model, found)
-        for name, impl in injected.items():
-            calls = recipe_source.injected_calls(facts, name)
-            if calls:
-                _scan_entries(recipe_source.scan_source(impl, _bindings(calls),
-                                                        externals=facts.constants), model, found)
+        _scan_injected(injected, facts, facts, model, found, set())
     return found
+
+
+def _scan_injected(injected, current, caller, model, found, seen):
+    """注入实现逐层往下扫：`current` 是这一层的事实（脚本本身，或上一层实现），`caller` 是调用
+    脚本的事实（模块常量与本地定义都在它那儿）。`seen` 按路径传，同一条链上只扫一次、防绕圈；
+    换一条路再调到同一个注入名仍要扫，实参来自不同的调用点。
+
+    判据仍是 `injected_calls()`：脚本本地定义了同名的走本地那份，深、浅两层都不算。"""
+    for name in sorted(injected):
+        if name in seen or name in caller.defines:
+            continue
+        calls = recipe_source.injected_calls(current, name)
+        if not calls:
+            continue
+        impl = recipe_source.scan_source(injected[name], _bindings(calls),
+                                         externals=caller.constants)
+        _scan_entries(impl, model, found)
+        _scan_injected(injected, impl, caller, model, found, seen | {name})
 
 
 def open_direct(p, d, settle=1.2):

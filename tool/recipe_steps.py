@@ -282,6 +282,83 @@ STEPS.update({
 })
 
 
+# ---------- OPPO 家族：oneplus-PHK110 / PKX110、oppo-PKH110（#1212）----------
+#
+# 三台的浏览器首页与商店段逐字相同，浏览器的广告 / 个性化两段只有一加两台相同（PKH110 的
+# 广告段换了一句打印、个性化段改走 `close_titles`，按机型差异留在脚本里）。
+#
+# `off_exact` 同理留在脚本里：它是词库「未解析」现场（沿用 #1148 的做法），而且 PKH110 那份的
+# 打印与返回判据与一加两台不同，搬走就等于把两族并成一份。`STORE_PROMOTIONS` 在 PHK110 /
+# PKH110 是 26 条、PKX110 是 36 条，一律按名字现取。
+
+def _oppo_browser_home(p: Any, g: dict[str, Any]) -> Callable[..., Any]:
+    def browser_home() -> bool:
+        if not g["browser_settings_direct"]():
+            return False
+        activity = "com.heytap.browser.settings.component.BrowserPreferenceActivity"
+        if not g["tap_page"]("主页设置", activity, "主页设置"):
+            return False
+        if p.find("简洁", exact=True):
+            print("  · 首页已为简洁，保持不变")
+            return True
+        if not g["tap_page"]("页面布局", activity, "页面布局"):
+            return False
+        if not p.tap("简洁", exact=True, scrolls=0):
+            return False
+        p.back()
+        if not g["wait_page"](activity, "主页设置") or not p.find("简洁", exact=True):
+            return False
+        p.changed.append(("浏览器主页", "默认 → 简洁"))
+        return True
+    return browser_home
+
+
+def _oppo_store_promotions(p: Any, g: dict[str, Any]) -> Callable[..., Any]:
+    def store_promotions() -> Any:
+        if not g["open_app_settings"]("com.heytap.market",
+                                     "com.heytap.market.mine.cn.setting.ui.SettingActivity",
+                                     "应用与服务"):
+            return False
+        if not g["tap_page"]("服务管理",
+                             "com.heytap.market.mine.cn.setting.ui.ServeManagerActivity", "服务管理"):
+            return False
+        p.top(n=12)
+        return g["off_exact"](g["STORE_PROMOTIONS"], "商店·推广入口")
+    return store_promotions
+
+
+def _oppo_browser_ads(p: Any, g: dict[str, Any]) -> Callable[..., Any]:
+    def browser_ads() -> Any:
+        if not g["browser_settings_direct"]():
+            return False
+        activity = "com.heytap.browser.settings.component.BrowserPreferenceActivity"
+        if not g["tap_page"]("隐私", activity, "隐私") or not g["tap_page"]("广告管理", activity, "广告管理"):
+            return False
+        completed = g["off_exact"](["开屏广告", "资讯列表广告"], "浏览器·广告管理", max_screens=2)
+        print("  · 摇一摇广告可能随上级开关灰置；不将 checked=true 的灰置项计作独立关闭")
+        return completed
+    return browser_ads
+
+
+def _oppo_browser_personalized(p: Any, g: dict[str, Any]) -> Callable[..., Any]:
+    def browser_personalized() -> Any:
+        if not g["browser_settings_direct"]():
+            return False
+        activity = "com.heytap.browser.settings.component.BrowserPreferenceActivity"
+        if not g["tap_page"]("隐私", activity, "隐私") or not g["tap_page"]("个性化管理", activity, "个性化管理"):
+            return False
+        return g["off_exact"](["个性化优惠推荐", "个性化广告推荐"], "浏览器·个性化管理", max_screens=2)
+    return browser_personalized
+
+
+STEPS.update({
+    "browser_home": _oppo_browser_home,
+    "store_promotions": _oppo_store_promotions,
+    "browser_ads": _oppo_browser_ads,
+    "browser_personalized": _oppo_browser_personalized,
+})
+
+
 def install(p: Any, g: dict[str, Any]) -> None:
     """把段体写进执行作用域 `g`（原地写，调用方不需要返回值）。"""
     for name, factory in STEPS.items():

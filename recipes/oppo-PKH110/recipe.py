@@ -121,34 +121,12 @@ def _():
 
 @step("软件商店")
 def _():
-    if not open_app_settings("com.heytap.market",
-                             "com.heytap.market.mine.cn.setting.ui.SettingActivity", "应用与服务"):
-        return False
-    if not tap_page("服务管理", "com.heytap.market.mine.cn.setting.ui.ServeManagerActivity", "服务管理"):
-        return False
-    p.top(n=12)
-    return off_exact(STORE_PROMOTIONS, "商店·推广入口")
+    store_promotions()
 
 
 @step("浏览器首页")
 def _():
-    if not browser_settings_direct():
-        return False
-    activity = "com.heytap.browser.settings.component.BrowserPreferenceActivity"
-    if not tap_page("主页设置", activity, "主页设置"):
-        return False
-    if p.find("简洁", exact=True):
-        print("  · 首页已为简洁，保持不变")
-        return True
-    if not tap_page("页面布局", activity, "页面布局"):
-        return False
-    if not p.tap("简洁", exact=True, scrolls=0):
-        return False
-    p.back()
-    if not wait_page(activity, "主页设置") or not p.find("简洁", exact=True):
-        return False
-    p.changed.append(("浏览器主页", "默认 → 简洁"))
-    return True
+    browser_home()
 
 
 @step("浏览器广告")

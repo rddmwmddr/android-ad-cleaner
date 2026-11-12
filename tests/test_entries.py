@@ -48,6 +48,19 @@ def _store_factory(p, g):
     return store
 
 
+def _browser_home_factory(p, g):
+    """段体只调导航助手：包名与页面名两层都在注入面里。"""
+    def browser_home():
+        return g["settings_direct"]()
+    return browser_home
+
+
+def _settings_direct_factory(p, g):
+    def settings_direct():
+        return g["open_app_settings"]("com.example.browser", "com.example.browser.Settings", "设置")
+    return settings_direct
+
+
 class SourceTest(unittest.TestCase):
     """没有出处的入口会让引擎跳到别处：每条都要在机型脚本里用过，或在手动清单里写着。"""
 
@@ -179,6 +192,45 @@ class SourceTest(unittest.TestCase):
                 used = entries.used_by(d)
         self.assertEqual(used, {("direct", "com.example.market",
                                  "com.example.market.Main"): {"model"}})
+
+    def test_an_entry_two_hops_down_is_credited_to_the_caller(self):
+        """段体调导航助手、入口写在助手实现里（#1212）：只看脚本那一层会把调段体的机型漏掉。"""
+        import recipe_nav
+        import recipe_steps
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            model = Path(d) / "oneplus-model"
+            model.mkdir()
+            (model / "recipe.py").write_text(
+                '@step("浏览器首页")\n'
+                'def _():\n'
+                '    browser_home()\n',
+                encoding="utf-8")
+            with patch.dict(recipe_steps.STEPS, {"browser_home": _browser_home_factory}), \
+                    patch.dict(recipe_nav.NAV, {"settings_direct": _settings_direct_factory}):
+                used = entries.used_by(d)
+        self.assertEqual(used, {("intent", "oppo.intent.action.APP_SETTINGS", "com.example.browser"):
+                                {"model"}})
+
+    def test_a_locally_defined_helper_two_hops_down_is_not_the_injected_one(self):
+        """脚本本地定义了段体要调的导航助手：注入版不在场上，第二层也不记出处（#1212）。"""
+        import recipe_nav
+        import recipe_steps
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            model = Path(d) / "oneplus-model"
+            model.mkdir()
+            (model / "recipe.py").write_text(
+                'def settings_direct():\n'
+                '    return False\n\n\n'
+                '@step("浏览器首页")\n'
+                'def _():\n'
+                '    browser_home()\n',
+                encoding="utf-8")
+            with patch.dict(recipe_steps.STEPS, {"browser_home": _browser_home_factory}), \
+                    patch.dict(recipe_nav.NAV, {"settings_direct": _settings_direct_factory}):
+                used = entries.used_by(d)
+        self.assertEqual(used, {})
 
     def test_open_app_settings_needs_two_arguments(self):
         """只传了包名的 open_app_settings 不算出处：把包名当成页面会给这台机凭空挂一条 Intent。"""
