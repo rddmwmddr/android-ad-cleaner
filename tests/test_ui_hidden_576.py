@@ -154,8 +154,19 @@ class ToggleDecisionTests(unittest.TestCase):
         p = phone([MASTER_ONLY])
         p.reader.shell.side_effect = broken
         got = close(p)
-        self.assertEqual(got.kind, chan.NOT_CONFIRMED)
-        self.assertIn("总开关读不出来", got.detail)
+        self.assertEqual(got.kind, chan.APP_STATE_UNKNOWN)
+        self.assertIn("总开关状态读不到，无法判断是否整体关闭", chan.render(got, NAME, False))
+
+    def test_page_with_other_switches_and_unreadable_master_state_is_the_same_unknown(self):
+        # 另一条来源：翻到底都没读到这个渠道名（hidden），页面却另有开关（不是「只列总开关」，no_row 为假）。
+        # 两条来源同一条判据，只改 no_row 那一边时这里会静默退回「未确认…跳过」（#1064）
+        def broken(command, *a, **k):
+            if "appops" in command:
+                raise RuntimeError("shell output invalid")
+            return Mock(output="")
+        p = phone([OTHER_SWITCHES])
+        p.reader.shell.side_effect = broken
+        self.assertEqual(close(p).kind, chan.APP_STATE_UNKNOWN)
 
     def test_restore_direction_keeps_the_old_answer(self):
         p = phone([MASTER_ONLY])
@@ -215,11 +226,12 @@ class BatchTests(unittest.TestCase):
             self.assertEqual(store.load(), {(PK, CID)})
 
     def test_failures_are_not_remembered(self):
-        with Store():
-            code, _ = run_chan("off", [read(True)] * 3,
-                               [chan.Outcome(chan.NOT_CONFIRMED, "未确认")] * 2)
-            self.assertEqual(code, 1)
-            self.assertEqual(chan.UiHidden(chan.BACKUPS, MODEL).load(), set())
+        # 总开关读不出来也照这条走：报失败、不进名单（#1064）
+        for kind in (chan.NOT_CONFIRMED, chan.APP_STATE_UNKNOWN):
+            with self.subTest(kind=kind), Store():
+                code, _ = run_chan("off", [read(True)] * 3, [chan.Outcome(kind, "未确认")] * 2)
+                self.assertEqual(code, 1)
+                self.assertEqual(chan.UiHidden(chan.BACKUPS, MODEL).load(), set())
 
     def test_app_notifications_off_is_not_remembered(self):
         # 渠道本来就不该出现，按现有的 APP_DENIED 处理，不进「UI 未暴露」名单

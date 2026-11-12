@@ -55,6 +55,16 @@ MASTER_ONLY = page(
     ' clickable="true" bounds="[900,720][1040,800]"/></node>',
 )
 
+# 应用通知页：只有一个总开关，渠道名也还在页面上（这轮没认出它的行）：不能断言「页面上没有这一行」
+MASTER_WITH_NAME = page(
+    '<node class="android.widget.TextView" text="示例应用" bounds="[0,111][1080,360]"/>',
+    f'<node class="android.widget.TextView" text="{NAME}" bounds="[60,700][700,800]"/>',
+    '<node clickable="true" bounds="[0,1100][1080,1260]">'
+    '<node class="android.widget.TextView" text="允许通知" bounds="[60,1120][500,1200]"/>'
+    '<node class="android.widget.Switch" text="开启" content-desc="开启" checkable="true" checked="true"'
+    ' clickable="true" bounds="[900,1120][1040,1200]"/></node>',
+)
+
 # 应用通知页：渠道行在，只是行内开关没认出（这时不许套用「应用通知整体关闭」）
 ROW_UNREADABLE = page(
     '<node class="android.widget.TextView" text="示例应用" bounds="[0,111][1080,360]"/>',
@@ -108,9 +118,10 @@ class AppLevelOffTests(unittest.TestCase):
         p.reader.shell.side_effect = shell("allow")
         self.assertEqual(outcome(p).kind, chan.UI_HIDDEN)
 
-    def test_unreadable_appops_is_still_a_failure(self):
+    def test_unreadable_appops_is_its_own_failure(self):
         # 命令报错 / 输出不认识时既不算「关着」，也不算「明确没关」：
-        # 名单是持久的，读不出来就继续报失败，不把渠道记成「本机 UI 未暴露」（#576）
+        # 名单是持久的，读不出来就继续报失败，不把渠道记成「本机 UI 未暴露」，沿用 #576 的取舍；
+        # 但它与「页面没打开 / 认不出」不是同一件事，单独一个结局、单独一句（#1064）
         def broken(command, *a, **k):
             if "appops" in command:
                 raise RuntimeError("shell output invalid")
@@ -118,8 +129,20 @@ class AppLevelOffTests(unittest.TestCase):
         p = phone([MASTER_ONLY])
         p.reader.shell.side_effect = broken
         got = outcome(p)
-        self.assertEqual(got.kind, chan.NOT_CONFIRMED)
-        self.assertIn("总开关读不出来", got.detail)
+        self.assertEqual(got.kind, chan.APP_STATE_UNKNOWN)
+        self.assertTrue(chan.failed(got, False))
+        self.assertIn("总开关状态读不到，无法判断是否整体关闭", chan.render(got, NAME, False))
+
+    def test_master_only_page_with_the_name_on_screen_is_the_same_unknown(self):
+        # 同一个出口的另一条来源（reached.no_row）：页面上只有总开关，但渠道名还在 ——
+        # 两条来源必须同一条判据，只改「确实没有这一行」那一边会漏掉这里（#1064）
+        def broken(command, *a, **k):
+            if "appops" in command:
+                raise RuntimeError("shell output invalid")
+            return Mock(output="")
+        p = phone([MASTER_WITH_NAME])
+        p.reader.shell.side_effect = broken
+        self.assertEqual(outcome(p).kind, chan.APP_STATE_UNKNOWN)
 
     def test_no_operations_means_not_denied(self):
         # 这个应用没有 POST_NOTIFICATION 这条 appops 记录：读不出=没关
