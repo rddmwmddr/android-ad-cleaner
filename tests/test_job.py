@@ -1,9 +1,11 @@
 """一次执行的状态收成 Job、poll 只读锁内快照（ADR-0010）。"""
 import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import Mock
 
+from fixtures import FakeRunner
 from gui import app
 
 
@@ -53,6 +55,52 @@ class PollTests(unittest.TestCase):
             api.job.add_result({"title": "备份", "rc": 0, "sec": 1})
             self.assertEqual(api.poll()["results"], [])
             self.assertIn("备份", api.diagnostics())
+
+
+class RecipeCoverageTests(unittest.TestCase):
+    """机型脚本的验证档位由 status-json 现读、随任务快照带给结果页（沿用 #1124 的字段，#1129）。
+
+    值本身不在客户端算：`Api.start()` 从 `last_status` 取、`Job` 存着、`poll()` 原样交出。
+    说不说由前端按结果里有没有脚本那一行决定，所以这里不管这次勾没勾脚本都照带。"""
+
+    def setUp(self):
+        self._dir = tempfile.TemporaryDirectory()
+        self.api = app.Api(self._dir.name, runner=FakeRunner())
+
+    def tearDown(self):
+        # 重试那一轮在后台线程里跑：等它收尾再删临时目录，否则会和它写 channels.tsv 抢同一个目录。
+        job = self.api.job
+        for _ in range(200):
+            if not job or not job.running:
+                break
+            time.sleep(0.005)
+        self._dir.cleanup()
+
+    def test_the_coverage_of_the_script_that_runs_reaches_the_snapshot(self):
+        self.api.last_status = {"recipe_coverage": "部分"}
+        self.api.start("S", {"backup": False, "steps": ["系统广告"], "finish": False})
+        self.assertEqual(self.api.job.recipe_coverage, "部分")
+        self.assertEqual(self.api.poll()["recipe_coverage"], "部分")
+
+    def test_the_value_is_passed_through_even_when_no_script_runs(self):
+        # 取舍在前端：没勾脚本时结果里只有一行「跳过」，界面据此不说；后端不做这个判断。
+        self.api.last_status = {"recipe_coverage": "部分"}
+        self.api.start("S", {"backup": False, "finish": False})
+        self.assertEqual(self.api.poll()["recipe_coverage"], "部分")
+
+    def test_a_retry_round_that_reruns_no_script_keeps_the_previous_value(self):
+        # 上一轮的脚本结果行按 kind 合并后还在结果页上，那条提示要跟着它（沿用 #638 的合并口径）。
+        self.api.job = app.Job(serial="S", t0=0, recipe_coverage="部分",
+                               plan={"backup": False, "steps": ["系统广告"], "finish": False,
+                                     "channels": [{"pkg": "p", "id": "1", "name": "活动"}]})
+        self.api.job.running = False
+        self.api.job.results.append({"title": "关闭各 App 里的广告开关", "kind": "recipe", "rc": 0})
+        self.api.job.results.append({"title": "关闭营销通知", "kind": "channels", "rc": 1})
+        first = self.api.job
+        self.assertEqual(self.api.retry(), {"ok": True, "total": 1})
+        self.assertIsNot(self.api.job, first, "重试要起新一轮，别在原 Job 上原地不动")
+        self.assertEqual(self.api.job.plan.steps, [], "这一轮只重跑营销通知")
+        self.assertEqual(self.api.poll()["recipe_coverage"], "部分")
 
 
 class StopTests(unittest.TestCase):
