@@ -479,8 +479,6 @@ OFF_CALL_WIDE = [
     ("recipes/oppo-PKT110/recipe.py", "广告跟踪"),
     ("recipes/oppo-PKT110/recipe.py", "应用建议"),
     ("recipes/oppo-PLP120/recipe.py", "广告跟踪"),
-    ("recipes/oneplus-PLR110/recipe.py", "广告跟踪"),
-    ("recipes/oneplus-PYB110/recipe.py", "广告跟踪"),
     ("recipes/oneplus-PHK110/recipe.py", "广告跟踪"),
     ("recipes/oneplus-PKX110/recipe.py", "广告跟踪"),
     ("recipes/oppo-PKH110/recipe.py", "广告跟踪"),
@@ -492,13 +490,20 @@ OFF_CALL_WIDE = [
     ("recipes/honor-PNM-AN10/recipe.py", "主题"),
 ]
 
-# AST 认不出的整页关闭：UI 里点「全部关闭」、名单在运行时按整页读出来再点名关（#947）。
+# 搬进注入面的整页关闭段（#1213）：脚本侧只剩一行调用，形状改从 `recipe_steps` 的实现里看。
+# PLR110 / PYB110 的「广告跟踪」在这一档：两份脚本的段体逐字相同，只剩注入版这一份。
+INJECTED_WIDE = ["ad_tracking_close_all"]
+
+# AST 认不出的整页关闭：UI 里点「全部关闭」、名单在运行时按整页读出来再点名关（沿用 #947 的判据），
+# 或者段体已经搬进注入面、脚本里只剩一行调用（#1213，形状由 `INJECTED_WIDE` 那条结构断言守）。
 # 它们与上面那份同样是整页关闭，行为用例一条都不能少；期望集不含它们，结构断言才不会因此变红。
 OTHER_WIDE = [
     ("recipes/honor-CLE-AN00/recipe.py", "广告跟踪"),
     ("recipes/oppo-PMA110/recipe.py", "广告跟踪"),
     ("recipes/oppo-PLG110/recipe.py", "广告跟踪"),
     ("recipes/honor-WKL-AN20/recipe.py", "广告跟踪"),
+    ("recipes/oneplus-PLR110/recipe.py", "广告跟踪"),
+    ("recipes/oneplus-PYB110/recipe.py", "广告跟踪"),
 ]
 
 # 整段只做整页关闭的段：安全模式下必须走跳过出口
@@ -755,18 +760,14 @@ class BehaviourUnchangedTests(unittest.TestCase):
         self.assertEqual(scope["VERIFIED_SWITCHES"], 1)
 
 
-def whole_page_steps(source):
-    """段名 → 是否「整段只做整页关闭」。
+def wide_flags(nodes):
+    """(wide, narrow)：整页关闭 / 点名关闭 的函数节点集合。
 
-    整页关闭 = 不带 `only` 的 `p.off(...)`。段体直接调它、或经脚本自己的助手调它都算；
+    整页关闭 = 不带 `only` 的 `p.off(...)`。段体直接调它、或经同文件里的助手调它都算；
     段里只要还出现带 `only` 的 `p.off`（点名的开关），这一段就不整段都是整页关闭。
     """
-    tree = ast.parse(source)
-    # 段函数全都叫 `_`，认人只能按节点本身，不能按函数名
     calls, wide, narrow = {}, set(), set()
-    for node in tree.body:
-        if not isinstance(node, ast.FunctionDef):
-            continue
+    for node in nodes:
         here = set()
         for sub in ast.walk(node):
             if not isinstance(sub, ast.Call):
@@ -791,6 +792,14 @@ def whole_page_steps(source):
                     target.add(node)
                     names.add(node.name)
                     growing = True
+    return wide, narrow
+
+
+def whole_page_steps(source):
+    """段名 → 是否「整段只做整页关闭」，判据见 `wide_flags()`。"""
+    tree = ast.parse(source)
+    # 段函数全都叫 `_`，认人只能按节点本身，不能按函数名
+    wide, narrow = wide_flags([node for node in tree.body if isinstance(node, ast.FunctionDef)])
     steps = {}
     for node in tree.body:
         if not isinstance(node, ast.FunctionDef) or not node.decorator_list:
@@ -805,12 +814,38 @@ def whole_page_steps(source):
 
 
 def first_call_name(node):
+    """段体第一句调的名字；注入实现里的 `g["X"]()` 与裸名 `X()` 同算（按作用域现取）。"""
     body = node.body[1:] if ast.get_docstring(node) is not None else node.body
     first = body[0] if body else None
     if isinstance(first, ast.Expr) and isinstance(first.value, ast.Call):
         fn = first.value.func
-        return fn.id if isinstance(fn, ast.Name) else None
+        if isinstance(fn, ast.Name):
+            return fn.id
+        if (isinstance(fn, ast.Subscript) and isinstance(fn.value, ast.Name)
+                and isinstance(fn.slice, ast.Constant) and isinstance(fn.slice.value, str)):
+            return fn.slice.value
     return None
+
+
+def injected_wide_steps():
+    """注入段体里的整页关闭段：{注入名: 段函数节点}。
+
+    脚本侧从 #1213 起只剩一行调用，这类段的形状只能从注入实现里看：工厂造出的闭包
+    就是被搬走的那一段，判据与 `whole_page_steps()` 同一条。"""
+    import inspect
+    import textwrap
+
+    import recipe_steps
+
+    phone, scope = phone_mock(), {}
+    recipe_kit.preamble(phone, scope)
+    out = {}
+    for name in recipe_steps.STEPS:
+        node = ast.parse(textwrap.dedent(inspect.getsource(scope[name]))).body[0]
+        wide, narrow = wide_flags([node])
+        if node in wide and node not in narrow:
+            out[name] = node
+    return out
 
 
 class WholePageStepGuardTests(unittest.TestCase):
@@ -846,9 +881,15 @@ def _():
                 checked.append((str(path), name))
                 self.assertEqual(first_call_name(node), "skip_in_safe_mode",
                                  f"{path} 的「{name}」整页关闭，安全模式下要整段跳过")
-        self.assertTrue(checked, "一个整页关闭的段都没认出来：判据本身坏了")
+        injected = injected_wide_steps()
+        for name, node in injected.items():
+            self.assertEqual(first_call_name(node), "skip_in_safe_mode",
+                             f"注入段体「{name}」整页关闭，安全模式下要整段跳过")
+        self.assertTrue(checked or injected, "一个整页关闭的段都没认出来：判据本身坏了")
         self.assertEqual(sorted(checked), sorted((str(ROOT / p), n) for p, n in OFF_CALL_WIDE),
                          "检测器认得出的整页关闭段变了：期望集要一起更新")
+        self.assertEqual(sorted(injected), sorted(INJECTED_WIDE),
+                         "注入段体里的整页关闭段变了：期望集要一起更新")
 
 
 # ---------- 后并入的票号文件：没装、没找到与失败现场 ----------

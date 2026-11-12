@@ -444,11 +444,13 @@ def phone_mock(fast_mod=None, **fields):
 
 
 def normalize(source):
-    """折成「代码逐字」：注释、docstring、空行与折行都不影响判等，`g["X"]` 折回 `X`。
+    """折成「代码逐字」：注释、docstring、空行、折行与函数签名上的注解都不影响判等，`g["X"]` 折回 `X`。
 
     注入面（`recipe_nav` / `recipe_steps`）的实现住在工厂里、脚本副本在顶层，缩进不同；注释与
     文档串各写各的，但都不改行为，逐字判据只认代码本身。`global X` 是本地定义留下的产物，
-    改走注入之后不再需要，一起丢掉。两个注入面的副本守卫共用这一份判据。"""
+    改走注入之后不再需要，一起丢掉。`recipe_steps` 在 mypy 严格档的名单里，实现上的签名注解
+    是那份要求的产物，脚本副本不写，同样不改行为。函数体里的变量注解（`AnnAssign`）不剥：
+    出现时两边都会写，不写的那一边本来就该红。两个注入面的副本守卫共用这一份判据。"""
     tree = ast.parse(textwrap.dedent(source))
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module)) \
@@ -456,6 +458,13 @@ def normalize(source):
                 and isinstance(node.body[0].value, ast.Constant) \
                 and isinstance(node.body[0].value.value, str):
             node.body = node.body[1:] or [ast.Pass()]
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            node.returns = None
+            arguments = node.args
+            for argument in (*arguments.posonlyargs, *arguments.args,
+                             *arguments.kwonlyargs, arguments.vararg, arguments.kwarg):
+                if argument is not None:
+                    argument.annotation = None
     text = re.sub(r"""g\[['"]([A-Za-z_]\w*)['"]\]""", r"\1", ast.unparse(tree))
     return "\n".join(line for line in text.splitlines()
                      if not line.strip().startswith("global "))

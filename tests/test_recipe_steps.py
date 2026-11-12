@@ -203,6 +203,46 @@ def hot():
         self.assertEqual(offenders([("sample.py", script)], injected),
                          {"sample.py": ["hot"]})
 
+    def test_the_guard_reads_every_segment_not_just_the_last_one(self):
+        """段函数全都叫 `_`：按函数名收键会把整份脚本压成一个段体，非最后一个副本就漏了（#1213）。"""
+        injected = {"downloads": '''\
+def _():
+    p.off(only=["广告推荐"], page="下载管理·设置")
+'''}
+        script = '''\
+@step("下载管理")
+def _():
+    p.off(only=["广告推荐"], page="下载管理·设置")
+
+
+@step("手机管家")
+def _():
+    p.off(only=["安全推荐"], page="手机管家·设置")
+'''
+        self.assertEqual(offenders([("sample.py", script)], injected),
+                         {"sample.py": ["_"]})
+
+    def test_the_guard_ignores_type_annotations(self):
+        """实现上的注解是 mypy 严格档的产物，脚本副本不写：两者仍算同一段代码。
+
+        注解落在段体内的嵌套函数上（`theme_store_settings` 的 `reopen` 就是这一处）：
+        外层签名本来就不参与比对，只有这一条才证明归一确实剥了注解。"""
+        injected = {"downloads": '''\
+def downloads() -> None:
+    def reopen() -> None:
+        p.off(only=["广告推荐"], page="下载管理·设置")
+    reopen()
+'''}
+        script = '''\
+@step("下载管理")
+def _():
+    def reopen():
+        p.off(only=["广告推荐"], page="下载管理·设置")
+    reopen()
+'''
+        self.assertEqual(offenders([("sample.py", script)], injected),
+                         {"sample.py": ["_"]})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -56,15 +56,16 @@ DATA = frozenset({
     "systemui_text", "vivo_seen",
 })
 
-# 脚本访问面的快照：`recipes/` 里出现过 `p.<名字>` 的 42 个唯一名字。新增或去掉一个名字都要
+# 脚本访问面的快照：`recipes/` 里出现过 `p.<名字>` 的 41 个唯一名字。新增或去掉一个名字都要
 # 在这里显式改一行——这正是「脚本访问面变了」。每个名字还必须是门面真实成员，见下面那条守卫。
 # `lost` 已不在快照里：读它的是注入面的 `opened()`（#1148），脚本源码不再出现 `p.lost`；
-# 门面是否还提供它由上面的 `DATA` 守卫盯。
+# `say` 同理，随广告跟踪段搬进 `recipe_steps`（#1213）。门面是否还提供它们由成员守卫盯：
+# `lost` 在 `DATA`，`say` 在 `METHODS`。
 SCRIPT_NAMES = frozenset({
     "app", "await_page", "back", "changed", "click", "confirm", "d", "dismiss", "enter",
     "entry", "expect_page", "find", "focus", "go", "H", "has_text", "in_settings_page",
     "locked", "miss", "note_miss", "off", "on_screen", "page_evidence", "page_text",
-    "promoted", "safe_mode", "say", "scroll", "scroll_more", "setting", "settle", "sig",
+    "promoted", "safe_mode", "scroll", "scroll_more", "setting", "settle", "sig",
     "start", "switches", "systemui_text", "tab", "tap", "tap_icon", "texts", "top", "tree", "W",
 })
 
@@ -172,7 +173,7 @@ class RecipeAccessTests(unittest.TestCase):
     """旧树也绿，守的是不回退：`recipes/` 现在怎么用门面，搬迁期间必须照旧。"""
 
     def test_the_surface_matches_the_snapshot(self):
-        """42 个名字的快照：脚本侧少用一个、多用一个新名字，都要回来显式改这一行。"""
+        """41 个名字的快照：脚本侧少用一个、多用一个新名字，都要回来显式改这一行。"""
         reads, writes = recipe_accesses()
         self.assertEqual(set(reads) | set(writes), set(SCRIPT_NAMES))
 
