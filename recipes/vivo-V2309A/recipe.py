@@ -10,10 +10,6 @@ import time
 from wait import until
 
 
-def settings_home():
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
-
-
 def gear_top():
     """「我的」页右上角齿轮。
 

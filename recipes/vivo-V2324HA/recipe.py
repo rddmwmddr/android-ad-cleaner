@@ -18,10 +18,6 @@ def gear():
     return p.tap("设置", exact=True, scrolls=0)
 
 
-def settings_home():
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
-
-
 @step("系统广告")
 def _():
     settings_home()

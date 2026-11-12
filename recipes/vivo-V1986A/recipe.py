@@ -18,10 +18,6 @@ MODELS = ["V1986A"]
 import time
 
 
-def settings_home():
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
-
-
 def tap_row(subtitle):
     """点「副标题」所在那一行的中间：本机有些行点左侧标题文字不跳转。"""
     for t, (l, tp, r, b), n in p.texts():
