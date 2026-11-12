@@ -118,6 +118,7 @@
 | `test_verify_ledger.py` | 配方验证台账：每个配方文件一行、缺记录显示未记录。 |
 | `test_unittest_summary.py` | CI 的测试结果表格：列取错或漏算跳过数即红。 |
 | `test_release_assets.py` | 下载页 REL 与 Release 附件的对账。 |
+| `test_release_meta.py` | 发版校验清单从 Release 事实生成（tool/release_meta.py）：退出码、清单文本与写盘。 |
 | `test_followup.py` | 复测队列核对与写回：报出标签与队列的差异。 |
 | `test_download_page_gitee.py` | 国内下载走 Gitee：取包、核 SHA256、匿名下载回验。 |
 | `test_old_install_notice.py` | 免安装版启动时提示旧名安装还在：文案与「同一版本只说一次」。 |
