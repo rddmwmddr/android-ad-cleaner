@@ -6,7 +6,7 @@ import unittest
 from dataclasses import fields
 from pathlib import Path
 
-from gui import app
+from gui import app, standalone
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -205,6 +205,41 @@ class SiteCssTests(unittest.TestCase):
                              .replace("@@", site_css.END), "结束标记在前")):
             with self.subTest(why=why), self.assertRaises(ValueError):
                 site_css.check_markers(broken, "home")
+
+
+class SiteAssetTests(unittest.TestCase):
+    """官网两页的图片引用：能内联进单文件，缓存键两页同步（#1086）。"""
+
+    def test_every_page_image_can_be_inlined(self):
+        """图标地址带 ?v= 版本参数后，旧正则要求 .png 紧贴引号，单文件导出会一张都不内联。"""
+        text = site_css.TARGETS["home"].read_text(encoding="utf-8")
+        refs = re.findall(r'(?:src|href)="((?:images|gui)/[^"]+)"', text)
+        self.assertTrue(refs, "index.html 里没读到图片引用，守卫会空转")
+        for ref in refs:
+            with self.subTest(ref=ref):
+                self.assertIsNotNone(standalone.INLINE.fullmatch(f'src="{ref}"'),
+                                     f"{ref} 不会被 gui/standalone.py 内联：单文件导出会丢这张图")
+
+    def test_version_query_is_not_part_of_the_inlined_path(self):
+        """版本参数只是缓存键，交出去的文件名必须还是磁盘上的那一个。"""
+        seen = []
+
+        def uri(path):
+            seen.append(path)
+            return "DATA"
+
+        out = standalone.inline('<link rel="icon" href="images/roudai-icon.png?v=0.4.3">', uri)
+        self.assertEqual(seen, ["images/roudai-icon.png"], "查询串被当成文件名，导出时会去找不存在的文件")
+        self.assertEqual(out, '<link rel="icon" href="DATA">')
+
+    def test_both_pages_share_one_cache_key(self):
+        """?v= 是缓存键，两页各写一份：只改一页时，另一页的旧 404 照旧生效。"""
+        versions = {name: set(re.findall(r'\?v=([^"&\s]+)', path.read_text(encoding="utf-8")))
+                    for name, path in site_css.TARGETS.items()}
+        home = versions["home"]
+        self.assertEqual(len(home), 1, f"首页的版本参数不止一个：{versions}")
+        self.assertEqual({name: found for name, found in versions.items() if found != home}, {},
+                         f"两页的版本参数不同步：{versions}")
 
 
 IMG_TAG = re.compile(r"<img\b[^>]*>")
