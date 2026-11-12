@@ -408,7 +408,7 @@ def scan_dir(recipes_dir: str, families: Mapping[str, str] | None = None) -> dic
 
 
 def injected_calls(facts: Facts, name: str) -> tuple[Call, ...]:
-    """脚本里调用到某个注入名的调用点。脚本本地定义了同名实现的走本地那份，注入版不算（#1153）。
+    """脚本里调用到某个注入名的调用点。脚本本地定义了同名实现的走本地那份，注入版不算（沿用 #1153 的做法）。
 
     两个消费方（入口速查、词库）都按这一条筛，判据不再各写一份。"""
     return tuple(call for call in facts.calls
