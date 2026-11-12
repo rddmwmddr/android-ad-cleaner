@@ -119,7 +119,7 @@ id = "dev.types.strict-on-pure-modules"
 source = "CLAUDE.md#开发"
 check = "none"
 status = "manual"
-why = "宽松档只查函数体内的表达式：一个没写返回类型的函数被调用方按返回值用时不会红，把 `str | None` 传给只收 `str` 的正则 `search()` 也要等真机走到那条分支。这六个模块不碰设备、不碰手机界面、不依赖假对象，注解补完能让调用方一起被查；其余引擎目录带假对象与注入作用域，全仓开严格档会撞上它们赖以灵活的形状（#997）。mypy 在 overrides 里把 `strict = true` 当全局设置，所以名单里是逐项 flag；整块删掉这些 override 时 mypy 仍绿（宽松档不要求注解），没有能返红的守卫，所以只记 manual。"
+why = "宽松档只查函数体内的表达式：一个没写返回类型的函数被调用方按返回值用时不会红，把 `str | None` 传给只收 `str` 的正则 `search()` 也要等真机走到那条分支。这七个模块不碰设备、不碰手机界面、不依赖假对象，注解补完能让调用方一起被查；其余引擎目录带假对象与注入作用域，全仓开严格档会撞上它们赖以灵活的形状（#997）。mypy 在 overrides 里把 `strict = true` 当全局设置，所以名单里是逐项 flag；整块删掉这些 override 时 mypy 仍绿（宽松档不要求注解），没有能返红的守卫，所以只记 manual。"
 expires_if = "这几类模块开始依赖假对象或注入作用域、严格档保持不住绿时删；或全仓改成严格档时并进 dev.types.narrow-scope-in-config。"
 
 [[rule]]
