@@ -39,7 +39,8 @@ def normalize(source):
                 and isinstance(node.body[0].value.value, str):
             node.body = node.body[1:] or [ast.Pass()]
     text = re.sub(r"""g\[['"]([A-Za-z_]\w*)['"]\]""", r"\1", ast.unparse(tree))
-    return "\n".join(line for line in text.splitlines() if not line.startswith("global "))
+    return "\n".join(line for line in text.splitlines()
+                     if not line.strip().startswith("global "))
 
 
 def surface():
@@ -152,6 +153,24 @@ def tap_any(*names, scrolls=6):
 ''')}
         self.assertEqual(kept_copies([("sample.py", script)], injected),
                          {"sample.py": ["tap_any"]})
+
+    def test_the_guard_ignores_comments_docstrings_and_wrapping(self):
+        """代码相同、注释与折行不同也算副本（#1153）：V2309A 那份就是被文本判据漏掉的。"""
+        injected = {"gear": normalize('''\
+def gear(toolbar_only=False):
+    """很多小米 App 的设置是右上角齿轮图标。"""
+    return p.find("设置", exact=True)
+''')}
+        script = '''\
+
+
+def gear(toolbar_only=False):
+    # 注释与文档串各写各的
+    return p.find(
+        "设置", exact=True)
+'''
+        self.assertEqual(kept_copies([("sample.py", script)], injected),
+                         {"sample.py": ["gear"]})
 
 
 class DriverTests(unittest.TestCase):

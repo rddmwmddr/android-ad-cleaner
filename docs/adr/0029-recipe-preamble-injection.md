@@ -228,8 +228,10 @@ PKT110 与 RMX3700 的应用建议，honor-PNM-AN10 的广告跟踪 / 桌面文�
   一起删掉，改走注入版。
 - **`entries.used_by()` 要认注入面。** 入口速查从脚本源码扫入口，定义搬走后
   `open_app_settings` 里的 APP_SETTINGS Intent 与 `browser_settings_direct` 里的包名就不再出现在
-  脚本里，四台机的直达档会静默消失。扫法改成：脚本调用了哪个注入名，就把那份实现也扫一遍；
-  另外 `open_app_settings(包名, 页面, …)` 与 `am start … -a <action> -p <包名>` 同记一档。
+  脚本里，PHK110 与 PKX110 的「软件商店 / 浏览器」两条直达档会静默消失（各丢一台）。扫法改成：
+  脚本真调用了哪个注入名（按 AST 取裸名字，`p.tap(` 这类方法与注释里的同名都不算），就把那份
+  实现也扫一遍；另外 `open_app_settings(包名, 页面, …)` 与 `am start … -a <action> -p <包名>`
+  同记一档。
 - **`SEARCH_TITLES` 与 `wait_page` 仍是脚本侧的事实。** PLP120 的搜索页标题名单比一加两台长，
   `wait_page` 各份代码同形但留在脚本里（它不在本票范围）；闭包从执行作用域现取这两个名字。
 - **对拍与守卫照 #1150 的口径。** `tests/compare_recipe_calls.py` 47 份 × 2 场景 13,484 条

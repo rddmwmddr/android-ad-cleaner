@@ -13,6 +13,7 @@
 没有出处的不写进来：猜的包名、页面名会让引擎跳到别处。快应用不在这里——它按包名与设置项处理，
 见 run.py 的 `QUICKAPP` 与 vivo 的 `switch_quick_app_service`，不走界面。
 """
+import ast
 import shlex
 import re
 from dataclasses import dataclass
@@ -35,6 +36,10 @@ THEME_DEAD_ENDS = frozenset({"com.xiaomi.market", "com.miui.home"})
 
 # NEW_TASK | CLEAR_TASK，与 Launcher._launch 同值：直达与公开 Intent 都带它。
 CLEAR_TASK = "0x10008000"
+
+# ColorOS 商店 / 浏览器共用的公开设置 Intent。条目表与 used_by() 的源码扫描都取这一份，
+# 改动作名时两边不会脱节（那边认不出就会静默少几台机）。
+APP_SETTINGS_ACTION = "oppo.intent.action.APP_SETTINGS"
 
 
 @dataclass(frozen=True)
@@ -123,14 +128,14 @@ ENTRIES = {
             menu="软件商店 → 我的 → 右上齿轮",
             direct=(Direct("com.heytap.market",
                            "com.heytap.market.mine.cn.setting.ui.SettingActivity",
-                           action="oppo.intent.action.APP_SETTINGS"),),
+                           action=APP_SETTINGS_ACTION),),
             app="com.heytap.market",
             note="公开设置 Intent 直接落到设置页，绕开含账号信息的「我的」页；PJA110 旧版商店的落点是 "
                  "`com.heytap.market.mine.ui.SettingActivity`（没有 `.cn.`），与本档不同，那条照菜单走"),
         "浏览器": Entry(
             menu="浏览器 → 底部 ☰ 或「我的」→ 设置",
             direct=(Direct("com.heytap.browser", ".settings.component.BrowserPreferencesPage",
-                           action="oppo.intent.action.APP_SETTINGS"),
+                           action=APP_SETTINGS_ACTION),
                     Direct("com.heytap.browser", ".settings.component.BrowserPreferencesPage",
                            keep_task=True)),
             note="带清栈参数用 `-n` 启动会立刻退出，这一档只能裸 am start；首页切成「简洁」后没有「我的」和菜单（#165）"),
@@ -406,7 +411,7 @@ def _scan_entries(src, model, found):
         for pkg in _intent_packages(src, m):
             found.setdefault(("intent", m.group(1), pkg), set()).add(model)
     for m in _APP_SETTINGS.finditer(src):
-        found.setdefault(("intent", "oppo.intent.action.APP_SETTINGS", m.group(1)), set()).add(model)
+        found.setdefault(("intent", APP_SETTINGS_ACTION, m.group(1)), set()).add(model)
     for call in re.finditer(r"p\.setting\(([^)]*)\)", src):
         parts = call.group(1).split(",")
         kw = _arg_at(parts[0], src, call.start())
@@ -445,10 +450,21 @@ def used_by(recipes_dir):
         with open(f, encoding="utf-8") as fh:
             src = fh.read()
         _scan_entries(src, model, found)
+        called = _called_names(src)
         for name, impl in injected.items():
-            if re.search(rf"\b{re.escape(name)}\(", src):
+            if name in called:
                 _scan_entries(impl, model, found)
     return found
+
+
+def _called_names(src):
+    """脚本里真正被调用的裸名字集合（AST）：`p.tap(` 与方法不算，注释与字符串里的同名也不算。"""
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return set()
+    return {node.func.id for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
 
 
 def open_direct(p, d, settle=1.2):

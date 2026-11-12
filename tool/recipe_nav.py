@@ -1,15 +1,15 @@
-"""机型脚本的公共导航助手（#1150）：跨文件逐字相同的那些导航过程收在这里。
+"""机型脚本的公共导航助手（#1150）：跨文件代码逐字相同的那些导航过程收在这里。
 
 `recipe_kit.preamble()` 写完生命周期与台账之后调用 `install(p, g)`，把公共导航补进同一个
 执行作用域。脚本本地定义的同名名字后执行、覆盖注入版，所以同名多簇的机型差异继续留在各自
-脚本里，搬过来的只有逐字相同的副本（迁移后脚本侧只删定义、不改调用点）。
+脚本里，搬过来的只有代码逐字相同的副本（迁移后脚本侧只删定义、不改调用点）。
 
 实现不 import `recipe_kit`：`skip` / `require` 这类前导名字由工厂从 `g` 取、包进闭包，
 两个模块因此没有依赖关系（方向只有 `preamble()` → `install()` 这一条）。
 
-实现体必须与被搬走的脚本副本逐字相同：守卫把工厂里返回的函数源码与脚本里还留着的本地定义
-按行比对，改一边不改另一边即红（tests/test_recipe_nav.py）。`g["X"]` 现取与随之消失的
-`global X` 是搬动本身带来的改写，比对前由守卫折算掉。
+实现体必须与被搬走的脚本副本代码逐字相同：守卫把工厂里返回的函数源码与脚本里还留着的本地定义
+都折成 AST（剥注释、docstring、折行）后比对，改一边不改另一边即红（tests/test_recipe_nav.py）。
+`g["X"]` 现取与随之消失的 `global X` 是搬动本身带来的改写，比对前由守卫折算掉。
 
 闭包对名字一律按 `g` 现取（包括 `g["time"]`）：脚本原来是在自己的全局里解析这些名字，换到
 这个模块后仍取当次执行作用域里的那一个，测试装的假时钟才照旧生效。
@@ -29,7 +29,8 @@ NAV = {}
 # `browser_settings` 收的是「不含拉起 App」那一簇：vivo 浏览器没有底部「我的」，入口在右上菜单。
 # 含 `p.start` 的另一簇不在范围里：`entries.used_by` 从脚本源码扫 `p.start` / `start_or_skip` /
 # `am start -n` / `p.setting` 四类入口，搬走后入口速查会静默漏机型（沿用 #1148 定案 3）。
-# V2309A 与 V2547A 各有一份写法不同的同名实现，按「同名多簇一律留脚本原样」不搬。
+# V2547A 有一份代码不同的同名实现，按「同名多簇一律留脚本原样」不搬；V2309A 那份代码与这里
+# 相同（当时按文本判成「写法不同」），#1153 起走注入版。
 
 def _vivo_settings_home(p, g):
     def settings_home():
@@ -91,8 +92,8 @@ def _oppo_wait_search_settings(p, g):
                 return False
             return bool(g["SEARCH_TITLES"] & {text for text, _, _ in p.texts()})
 
-        clock = g["time"]
-        return bool(until(sample, tries=tries, same=2, now=clock.monotonic, sleep=clock.sleep))
+        return bool(until(sample, tries=tries, same=2,
+                          now=g["time"].monotonic, sleep=g["time"].sleep))
     return wait_search_settings
 
 
@@ -163,9 +164,9 @@ def install(p, g):
 
 # ---------- 小米系（xiaomi / redmi，#1151）----------
 #
-# 三兄弟（23113RKC6C / 23117RK66C / 24122RKC7C）的 `gear`，与 23113RKC6C / 24122RKC7C /
-# 24129PN74C 那份不带 docstring 的 `tap_any`，与这里的实现不是逐字相同（排版、循环变量名有别），
-# 按本票判据不收，留在脚本里覆盖注入版。
+# 23113RKC6C / 24122RKC7C / 24129PN74C 那份 `tap_any` 与本实现循环变量名不同，按「同名多簇」
+# 留在脚本里覆盖注入版。三兄弟（23113RKC6C / 23117RK66C / 24122RKC7C）与 24094RAD4C 的 `gear`
+# 只差排版，按代码逐字判据在 #1153 一并删掉、改走注入版。
 
 def _xiaomi_tap_any(p, g):
     def tap_any(*names, scrolls=6):
