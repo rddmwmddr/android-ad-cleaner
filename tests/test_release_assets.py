@@ -43,6 +43,50 @@ class ReadPageTests(unittest.TestCase):
         self.assertEqual(release_assets.read_page(broken), (None, []))
 
 
+class ReadEntriesTests(unittest.TestCase):
+    """回填页面要的是四个字段，`read_entries` 是这一层的唯一入口（#1135）。"""
+
+    PAGE = """const REL = {
+  version: "1.2.3",
+  github: "https://example.invalid/v1.2.3/",
+  files: [
+    { id: "mac-arm64", title: "Mac", file: "App-1.2.3-mac-arm64.dmg", size: "40.4 MB",
+      note: "公证", sha: "aa" },
+    { id: "android", title: "安卓", file: "App-1.2.3-android-arm64.apk", size: "52.8 MB",
+      note: "不用连电脑", sha: "bb" },
+  ],
+};
+"""
+
+    def test_reads_every_data_field_of_a_card(self):
+        version, entries = release_assets.read_entries(self.PAGE)
+        self.assertEqual(version, "1.2.3")
+        self.assertEqual(entries, [
+            release_assets.Entry("mac-arm64", "App-1.2.3-mac-arm64.dmg", "40.4 MB", "aa"),
+            release_assets.Entry("android", "App-1.2.3-android-arm64.apk", "52.8 MB", "bb"),
+        ])
+
+    def test_missing_field_comes_back_empty(self):
+        """字段缺失不在这里拒绝，由回填那一层判完整性：解析只负责如实报出读到什么。"""
+        broken = self.PAGE.replace(' size: "40.4 MB",', "")
+        _, entries = release_assets.read_entries(broken)
+        self.assertEqual(entries[0].size, "")
+
+    def test_missing_block_reads_as_empty(self):
+        self.assertEqual(release_assets.read_entries("<html></html>"), (None, []))
+
+
+class HumanSizeTests(unittest.TestCase):
+    def test_keeps_the_historical_page_wording(self):
+        """历史页面两个真实值：40.4 与 46.0，格式漂了人眼比对就对不上了。"""
+        self.assertEqual(release_assets.human_size(40404808), "40.4 MB")
+        self.assertEqual(release_assets.human_size(45995322), "46.0 MB")
+
+    def test_rounds_half_up_not_to_even(self):
+        self.assertEqual(release_assets.human_size(1_050_000), "1.1 MB")
+        self.assertEqual(release_assets.human_size(2), "0.0 MB")
+
+
 class FetchTests(unittest.TestCase):
     def test_fetch_release_keeps_name_size_and_digest(self):
         rows = {"assets": [{"name": "a.bin", "size": 12, "digest": "sha256:abcd"},
