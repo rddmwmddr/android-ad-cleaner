@@ -97,12 +97,19 @@ class DecideTests(unittest.TestCase):
                        comments=[said(None, ago(days=40))])
         self.assertEqual(action(issue), stale.KEEP)
 
-    def test_skips_in_progress_and_waiting_for_verify(self):
-        for label in ("in-progress", "waiting-for-verify"):
+    def test_skips_claim_verify_and_device_blocked(self):
+        for label in ("in-progress", "waiting-for-verify", "blocked-on-device"):
             with self.subTest(label=label):
                 issue = ticket(labels=("needs-info", label),
                                comments=[said("maintainer", ago(days=40))])
                 self.assertEqual(action(issue), stale.SKIP)
+
+    def test_device_blocked_ticket_names_itself_in_the_reason(self):
+        issue = ticket(labels=("needs-info", "blocked-on-device"),
+                       comments=[said("maintainer", ago(days=40))])
+        decision = stale.decide(issue, NOW)
+        self.assertEqual(decision.action, stale.SKIP)
+        self.assertIn("blocked-on-device", decision.reason)
 
     def test_skips_without_needs_info(self):
         issue = ticket(labels=("bug",), comments=[said("maintainer", ago(days=40))])

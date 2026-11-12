@@ -10,19 +10,22 @@ The skills speak in terms of five canonical triage roles. This file maps those r
 | `ready-for-human`          | `ready-for-human`    | Requires human implementation            |
 | `wontfix`                  | `wontfix`            | Will not be actioned                     |
 
-The repo adds three labels the five roles do not cover:
+The repo adds four labels the five roles do not cover:
 
 | Label in our tracker  | Meaning                                                                  |
 | --------------------- | ------------------------------------------------------------------------ |
 | `waiting-for-verify`  | Fix is merged to main but not in any released build yet, or merged and released but not yet confirmed on the reporter's hardware. Not ready to be implemented again. |
 | `in-progress`         | Claimed: someone is implementing this now. Avoid starting the same fix.   |
 | `stale`               | Modifier on a `needs-info` ticket: the last comment is not the reporter's and the threshold has passed. Not a role, and not a reason to close. |
+| `blocked-on-device`   | Modifier: the evidence still needed cannot be produced on the maintainers' side — it has to wait for a machine we do not have. Rides along with `waiting-for-verify` (or `needs-info`); it does not replace either. Skipped by the re-test queue and the daily `stale` scan. |
 
 `waiting-for-verify` outranks the five roles above — an issue carrying it must not also carry `ready-for-agent`, `ready-for-human`, or `needs-info`. It moves to a closed state only after the reporter confirms on a real device; the checks owed at each release are listed in [release-followup.md](release-followup.md). <!-- rule:doc.triage.waiting-for-verify-outranks -->
 
 `in-progress` is a claim, not a role: it stays out of the five-role set and must not coexist with `waiting-for-verify`. The claim itself is recorded as a comment on the issue — `python3 tool/claim.py <N>` writes it — and the label is only the visible signal. When to add it, when it ends, and what to restore when a claim is abandoned are in [issue-tracker.md](issue-tracker.md) 的「票的生命周期」. <!-- rule:doc.triage.in-progress-is-a-claim -->
 
 `stale` 是修饰符，不是第六个角色：它和角色标签并存，不改变票属于哪个角色，也不构成关票依据——关不关仍由维护者按现有信息判断。加标与摘标的时机、认领时的处置只在 [issue-tracker.md](issue-tracker.md) 的「票的生命周期」里定义。 <!-- rule:doc.triage.stale-is-a-modifier -->
+
+`blocked-on-device` 同样是修饰符，靠人工判断：triage 或复查时判一次，票上出现新证据（有人贴 dump、报告者回话、用例落地）就摘掉，不做自动判定。它记的是「这张票卡在一台我们没有的机器上」这一 GitHub 上可见的状态；[docs/09](../09-社区问题处理.md) 的「待真机确认」表记的是 GitHub 上看不到的判据与缺口，两层不重复。复测队列（`tool/followup.py`）不列带这个标签的票，每日停摆扫描（`tool/stale.py`）也不把它判成停摆。
 
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table. <!-- rule:doc.triage.five-roles-map -->
 
@@ -46,6 +49,7 @@ When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the 
 | `waiting-for-verify`  | 状态（压过五角色）                          |
 | `in-progress`         | 状态（认领）                                |
 | `stale`               | 修饰符（只挂在 `needs-info` 上）            |
+| `blocked-on-device`   | 修饰符（卡在一台我们没有的机器上）          |
 | `bug`                 | 分类                                        |
 | `enhancement`         | 分类                                        |
 | `新机型`              | 主题                                        |

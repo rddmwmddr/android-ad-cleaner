@@ -103,6 +103,22 @@ class DiffTests(unittest.TestCase):
         result = followup.scan(doc(), [{"number": 7}])
         self.assertEqual(result.missing, ((7, ""),))
 
+    def test_a_blocked_on_device_ticket_never_joins_the_queue(self):
+        blocked = {"number": 7, "author": {"login": "s"},
+                   "labels": [{"name": "waiting-for-verify"}, {"name": "blocked-on-device"}]}
+        result = followup.scan(doc(), [blocked])
+        self.assertEqual(result.missing, (), "催不动的票不补进队列")
+        self.assertEqual(result.labeled, 0)
+        self.assertEqual(result.blocked, 1)
+        self.assertTrue(result.same)
+
+    def test_a_blocked_on_device_row_counts_as_expired(self):
+        result = followup.scan(doc("| #7 | @s | 机型 | PR #2 | 输出 |"),
+                               [{"number": 7,
+                                 "labels": [{"name": "blocked-on-device"}]}])
+        self.assertEqual(result.expired, (7,), "队列里已有的行不再属于队列，按过期行处理")
+        self.assertEqual(result.blocked, 1)
+
 
 class RenderTests(unittest.TestCase):
     def test_the_report_gives_each_difference_with_its_count(self):
@@ -227,7 +243,15 @@ class CommandTests(DocumentCase):
         self.run_main(doc("| #11 | @b | 机型 | PR #2 | 输出 |"), gh)
         self.assertEqual(gh.runner.run_calls[0].args,
                          ("issue", "list", "--label", "waiting-for-verify", "--state", "open",
-                          "--limit", "1000", "--json", "number,author"))
+                          "--limit", "1000", "--json", "number,author,labels"))
+
+    def test_a_blocked_on_device_ticket_exits_zero_and_says_why(self):
+        blocked = {"number": 7, "author": {"login": "s"},
+                   "labels": [{"name": "waiting-for-verify"}, {"name": "blocked-on-device"}]}
+        code, out, _ = self.run_main(doc(), FakeGh([blocked]))
+        self.assertEqual(code, 0, "不进队列的票不算差异")
+        self.assertIn("blocked-on-device 1 张，不进队列", out)
+        self.assertNotIn("#7", out)
 
     def test_a_consistent_queue_exits_zero(self):
         code, out, _ = self.run_main(doc("| #11 | @b | 机型 | PR #2 | 输出 |"),
@@ -297,6 +321,14 @@ class WriteTests(DocumentCase):
         self.assertIn("一致", out)
         stored = self.path.read_text(encoding="utf-8")
         self.assertIn("| #7 | @s | — | — | — |", stored)
+
+    def test_write_drops_a_blocked_on_device_row(self):
+        gh = FakeGh([{"number": 7, "labels": [{"name": "blocked-on-device"}]}])
+        code, out, _ = self.run_main(doc("| #7 | @s | 机型 | PR #2 | 输出 |"), gh,
+                                     argv=["--write"])
+        self.assertEqual(code, 0)
+        self.assertNotIn("#7", self.path.read_text(encoding="utf-8"),
+                         "催不动的票不再留在队列里")
 
     def test_write_drops_an_expired_row_from_the_batch_table(self):
         text = doc("| #11 | @b | 机型 | PR #2 | 输出 |",

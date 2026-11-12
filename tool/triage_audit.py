@@ -35,7 +35,7 @@ CLAIM = "in-progress"
 # 与 docs/agents/triage-labels.md 的 `## 标签登记` 表逐项相同，tests/test_triage_audit.py 守着。
 KNOWN = frozenset({
     "needs-triage", "needs-info", "ready-for-agent", "ready-for-human", "wontfix",
-    VERIFY, CLAIM, "stale", "bug", "enhancement", "新机型",
+    VERIFY, CLAIM, "stale", "blocked-on-device", "bug", "enhancement", "新机型",
     "documentation", "accessibility", "duplicate", "good first issue", "help wanted",
     "invalid", "question",
 })

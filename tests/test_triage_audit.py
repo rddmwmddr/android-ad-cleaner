@@ -74,6 +74,10 @@ class AuditTests(unittest.TestCase):
         lines = triage_audit.audit([ticket(14, "bug", "in-progress", "waiting-for-verify")])
         self.assertEqual(rules_hit(lines), {"doc.triage.in-progress-is-a-claim"})
 
+    def test_blocked_on_device_rides_with_waiting_for_verify(self):
+        lines = triage_audit.audit([ticket(17, "bug", "waiting-for-verify", "blocked-on-device")])
+        self.assertEqual(lines, [], "blocked-on-device 是修饰标签，不压过也不冲突")
+
     def test_unregistered_label_is_reported(self):
         lines = triage_audit.audit([ticket(15, "bug", "wont-do")])
         self.assertEqual(rules_hit(lines), {"doc.triage.five-roles-map"})
