@@ -5,7 +5,7 @@
 # ── 本机型实测要点（和 OriginOS 的 vivo 脚本差别很大，不要照抄那边）────────────
 # 1. 系统广告仍在 设置 → 安全 → 更多安全设置 → 广告与隐私（AdAndPrivacyActivityForOsTwo）。
 # 2. 锁屏设置页在 **com.android.systemui**（com.vivo.keyguard.views.KeyguardSettings），
-#    引擎默认过滤 systemui 文字（那是状态栏），所以点「阅图锁屏」前要把 p.sysui 打开。
+#    引擎默认过滤 systemui 文字（那是状态栏），所以点「阅图锁屏」前要把 p.systemui_text 打开。
 # 3. 应用商店「我的」是**底部导航栏**，y 在 92% 以下，引擎的 find() 默认不点（防误触），
 #    这一段用坐标点最后一个标签。
 # 4. 应用商店「设置 → 关于」那行：点标题文字「关于」不跳转，要点**副标题所在行的中间**
@@ -73,13 +73,13 @@ def _():
 def _():
     settings_home()
     if maybe("桌面、锁屏与壁纸") and maybe("锁屏设置"):
-        p.sysui = True                       # 锁屏设置页在 com.android.systemui 里
+        p.systemui_text = True               # 锁屏设置页在 com.android.systemui 里
         try:
             if maybe("阅图锁屏"):
                 # 总开关「阅图锁屏」在子页里；关掉后「锁屏横滑进入阅图」跟着关
                 p.off(only=["阅图锁屏", "锁屏横滑进入阅图"], page="阅图锁屏")
         finally:
-            p.sysui = False
+            p.systemui_text = False
 
 
 @step("应用商店")

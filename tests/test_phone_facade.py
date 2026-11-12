@@ -9,8 +9,8 @@
 
 两条都只钉对外契约，钉不到七个模块之间的内部分工——那由代码结构与评审保证。
 
-这些用例在拆分前的旧树上也全绿：守的是不回退（七步搬迁期间门面公开面与脚本访问面零变化），
-不是新增行为。
+门面与脚本访问面这两组用例在拆分前的旧树上也全绿：守的是不回退（七步搬迁期间门面公开面与
+脚本访问面零变化），不是新增行为。`RecipeWriteTests` 是唯一的例外，它在旧树上红（#1047）。
 """
 import ast
 import inspect
@@ -56,15 +56,14 @@ DATA = frozenset({
     "systemui_text", "vivo_seen",
 })
 
-# 脚本访问面的快照：`recipes/` 里出现过 `p.<名字>` 的 43 个唯一名字（`sysui` 是 `vivo-V1986A`
-# 那三行从未生效的写，票面另开，仍算在访问面里）。今天共 3210 次访问（AST 口径；把正文与注释里
-# 提到的写法也算上是 3261）。新增或去掉一个名字都要在这里显式改一行——这正是「脚本访问面变了」。
+# 脚本访问面的快照：`recipes/` 里出现过 `p.<名字>` 的 43 个唯一名字。新增或去掉一个名字都要
+# 在这里显式改一行——这正是「脚本访问面变了」。每个名字还必须是门面真实成员，见下面那条守卫。
 SCRIPT_NAMES = frozenset({
     "app", "await_page", "back", "changed", "click", "confirm", "d", "dismiss", "enter",
     "entry", "expect_page", "find", "focus", "go", "H", "has_text", "in_settings_page",
     "locked", "lost", "miss", "note_miss", "off", "on_screen", "page_evidence", "page_text",
     "promoted", "safe_mode", "say", "scroll", "scroll_more", "setting", "settle", "sig",
-    "start", "switches", "sysui", "tab", "tap", "tap_icon", "texts", "top", "tree", "W",
+    "start", "switches", "systemui_text", "tab", "tap", "tap_icon", "texts", "top", "tree", "W",
 })
 
 # 今天每一条公开成员都可写。脚本确实这样用的有 6 个：`p.miss = 0`、`p.app = pkg`，
@@ -87,7 +86,8 @@ def public_functions(cls):
 def assign(phone, name):
     """把当前值写回去再读回来：挡住只读属性，以及写完读回不是同一值（存进拷贝、写了又规范化）。
 
-    值本来就相同的「吞掉写入」这条测不出来，所以 `p.sysui` 那种死属性仍算通过。
+    值本来就相同的「吞掉写入」这条测不出来；写到门面上不存在的名字同样会通过，那条由
+    `RecipeWriteTests` 挡。
     """
     value = getattr(phone, name, None)
     setattr(phone, name, value)
@@ -220,6 +220,22 @@ class RecipeAccessTests(unittest.TestCase):
         self.assertTrue(names, "脚本里没扫到 `from fast import …`，守卫会空转")
         missing = sorted(name for name in names if not hasattr(fast, name))
         self.assertEqual(missing, [], "脚本 import 的模块级名字没了：" + "、".join(missing))
+
+
+class RecipeWriteTests(unittest.TestCase):
+    """#1047：脚本写一个门面上不存在的名字不会报错，只在实例上挂个没人读的死属性。
+
+    这不是回退守卫——`vivo-V1986A` 的 `p.sysui` 就写在旧树里，所以本类在旧树上红，
+    是条新增行为。
+    """
+
+    def test_writes_target_real_members(self):
+        _, writes = recipe_accesses()
+        self.assertTrue(writes, "脚本里没扫到 `p.<名字>` 的写，守卫会空转")
+        phone = facade()
+        missing = sorted(name for name in writes if not hasattr(phone, name))
+        self.assertEqual(missing, [], "脚本写了门面上不存在的名字，写了也不会报错："
+                                     + "、".join(missing))
 
 
 if __name__ == "__main__":
