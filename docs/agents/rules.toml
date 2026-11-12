@@ -1041,7 +1041,7 @@ id = "doc.release.apk-link-sync"
 source = "docs/agents/release.md#手机版 APK"
 check = "ci:assets"
 status = "enforced"
-why = "Release 里有 APK 而下载区还写「随下一版发布」，用户就找不到包；上传脚本按 Release 现有文件现算清单，链接不同步会让 Gitee 那一版多传的对象没人指向。`release-assets.yml` 的 `assets` job 每周取一次 Release 附件名与 `REL.files[].file` 比对，不一致就红并列出两边差集；取数失败走退出码 2，网络抖动不当成不一致。job 只盖 `index.html` 这一处：正文里的 README 下载区与 `docs/手机版教程/README.md` 的「下载」节它看不见，那两处仍靠人工（#1003）。"
+why = "Release 里有 APK 而下载区还写「随下一版发布」，用户就找不到包；上传脚本按 Release 现有文件现算清单，链接不同步会让 Gitee 那一版多传的对象没人指向。`release-assets.yml` 的 `assets` job 每周取一次 Release 资产与 `REL.files` 比对，文件名、大小与 sha 三类都查，不一致就红并分行列出两侧的值；取数失败走退出码 2，网络抖动不当成不一致。job 只盖 `index.html` 这一处：正文里的 README 下载区与 `docs/手机版教程/README.md` 的「下载」节它看不见，那两处仍靠人工（沿用 #1003）。"
 expires_if = "下载页改由 Release 资产自动渲染时删。"
 
 [[rule]]
