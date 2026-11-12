@@ -2,7 +2,7 @@
 
 [triage-labels.md](triage-labels.md) owns what `waiting-for-verify` means and what closes it; this file is the queue of what each release owes those issues.
 
-发版本身——跑验证、打 tag、写 Release 正文、同步 README / `index.html` / `latest.json` / Gitee——见 [release.md](release.md)。这份文件只管发版**之后**。
+发版本身——出包点（跑验证、打 tag）与发版动作（写 Release 正文、同步 README / `index.html` / `latest.json` / Gitee）——见 [release.md](release.md)。这份文件只管发版**之后**。
 
 ## 每次发版后照做
 

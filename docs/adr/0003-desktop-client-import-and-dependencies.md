@@ -41,3 +41,10 @@
 - 写进剪贴板的内容就是弹窗里那一句，逐字一致：复制说明在 `startup_advice()` 里追加，别在弹窗处另拼一份，否则改文案时容易只改一处。
 - 写剪贴板失败**不能挡住弹窗**：`startup_failed()` 的收容集合是 `Exception`（与 `Api.copy_text` 一致），退回到文案末尾的「按 Ctrl+C」提示。窗口版没有控制台，弹窗是用户唯一看得到的东西，`except OSError` 会让 `UnicodeEncodeError` 之类的失败连弹窗一起吞掉。
 - 剪贴板写入是可注入协作者，默认 `win_clipboard`，与 `notify` / `open_url` 同一形状，用例于是在非 Windows 上也能验「先复制、后弹窗」的顺序。
+
+## 增补：打包验证改为按 tag 手动触发（#1115）
+
+2026-11-12 起 `build-windows.yml` 不再由 `v*` 标签推送触发，只留 `workflow_dispatch`，必填 `tag` 并 checkout `refs/tags/<tag>`——发版与 main 解耦，见 `docs/agents/release.md` 的「两个阶段」。
+
+- **验打包改动只能在带版本号的 tag 上做**（接受）：上面那条 `--ref <分支>` 的跑法不再决定打包哪份代码，`--ref` 只挑 workflow 定义所在的提交。入口与打包配置的改动仍由 PR 上的 `tests/test_packaging_entry.py` 静态挡住，真打包留到发版动作。
+- **不另开一条「按分支打包」的旁路**（否）：两条触发意味着两套上传判定（Release 存不存在、传不传），收益只有「发版前提前看见产物」。

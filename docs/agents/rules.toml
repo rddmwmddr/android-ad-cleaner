@@ -941,6 +941,14 @@ expires_if = "仓库不再使用 /wayfinder、或它自带这份协议时删。"
 # ---- docs/agents/release.md ----
 
 [[rule]]
+id = "doc.release.outpack-then-release"
+source = "docs/agents/release.md#两个阶段"
+check = "none"
+status = "manual"
+why = "tag 是发版与 main 之间唯一的锚点。tag 若在发版那一刻打、必然指向当时的 main 尖端，main 就不能独立演进，发出去的也永远是最新代码而不是验证过的那一份；两段分开后，没进 tag 的改动不算这一版，进了 tag 的提交不能再改写（#1115）。"
+expires_if = "发版改由流水线按内容哈希出包、不再依赖 tag 时删。"
+
+[[rule]]
 id = "doc.release.two-readers"
 source = "docs/agents/release.md#两个落点，两个读者"
 check = "none"
@@ -1022,7 +1030,7 @@ expires_if = "下载页改由 Release 资产自动渲染时删。"
 
 [[rule]]
 id = "doc.release.product-contract-check"
-source = "docs/agents/release.md#一轮发版的产物顺序"
+source = "docs/agents/release.md#出包点（维护者）"
 check = "none"
 status = "manual"
 why = "动了 `AGENTS.md` §1 的契约或实现侧对应的名单（`run.py` 的 NEVER、`polarity.NEG_PREFIX`、`off()` 的走向），用户侧 agent 的行为就变了；正文不提这一句，用户会在下一版发现步骤对不上。"
@@ -1030,7 +1038,7 @@ expires_if = "`AGENTS.md` 随实现自动生成、契约变化不再需要人工
 
 [[rule]]
 id = "doc.release.sha-and-credits-before-publish"
-source = "docs/agents/release.md#一轮发版的产物顺序"
+source = "docs/agents/release.md#发版动作（owner）"
 check = "none"
 status = "manual"
 why = "发布前不核对每个包（含 APK）与 `SHA256SUMS.txt` 一致，装不上的包会直接发出去；致谢名单同一刻核对，发布后再改只能编辑已公开的正文。"
@@ -1038,7 +1046,7 @@ expires_if = "校验清单改由流水线生成并比对时删。"
 
 [[rule]]
 id = "doc.release.apk-id-android"
-source = "docs/agents/release.md#一轮发版的产物顺序"
+source = "docs/agents/release.md#发版动作（owner）"
 check = "test:test_rules_guards::ReleaseGuards.test_doc_release_apk_id_android"
 status = "enforced"
 why = "APK 条目的 `id` 逐字写 `android`：卡片角标、手机端高亮与 `baidu_rows.py` 生成的安装说明都按它匹配，换一个 id 线上就看不到手机版。`ReleaseGuards.test_doc_release_apk_id_android` 冻结整个 id 集合，并顺带核对每条 `file` 的文件名里那段版本号等于 `REL.version`（#1003）。"
@@ -1046,18 +1054,18 @@ expires_if = "下载页不再用 id 区分平台时删。"
 
 [[rule]]
 id = "doc.release.gitee-portable-wording"
-source = "docs/agents/release.md#一轮发版的产物顺序"
+source = "docs/agents/release.md#发版动作（owner）"
 check = "none"
 status = "manual"
 why = "国内走 Gitee 时 Windows 访客只拿得到免安装版，它不替换也不卸载旧版；正文、下载页、README、docs/08 与 Gitee 发行版正文各覆盖自己那一处，页面写了不代表正文可以省；程序启动时的那条提示（#872）只在两个程序已经并存时出现，也不替代正文。"
 expires_if = "Gitee 也收 Windows 安装版、免安装版不再独占国内渠道时删。"
 
 [[rule]]
-id = "doc.release.changelog-close-last"
-source = "docs/agents/release.md#一轮发版的产物顺序"
+id = "doc.release.changelog-close-before-tag"
+source = "docs/agents/release.md#出包点（维护者）"
 check = "none"
 status = "manual"
-why = "验证行里是发版那一刻跑出来的数；提前写，rebase 之后正文与 CHANGELOG 会对不上同一个版本的两次读数。CHANGELOG 收口因此放在最后一步。"
+why = "验证行里是打 tag 那一刻跑出来的数；tag 之后再改这个提交（rebase、force-push），产物与源码就对不上了。收口因此放在出包点、打 tag 之前，而不是发版时（#1115）。"
 expires_if = "验证行由工件生成、不再手写时删。"
 
 # ---- docs/agents/release-followup.md ----

@@ -13,7 +13,7 @@
 - 改动面与审查对比用分支基点的固定 SHA：取法、worktree 路径与重取时机见 [docs/agents/code-review.md](docs/agents/code-review.md) 的「基线钉 SHA」。
 - 主副本的当前分支随时被别的会话切走（`main` 只是其中一种状态），所以切分支、丢弃改动（`git checkout --`、`restore`、`reset`、`stash`）都在 `git worktree add` 出来的目录里做；主副本只做合并与只读操作。 <!-- rule:dev.workspace.worktree-only -->
 - 推送前再 `git fetch origin main` 并 rebase：并行会话会在开工到推送之间推进 main，基于旧 SHA 推送会让 PR 直接 `CONFLICTING`，CI 也不触发。 <!-- rule:dev.git.rebase-before-push -->
-- CI：`.github/workflows/test.yml` 在 PR 和 main 推送时自动跑同一套，回归 job 在 Linux 与 Windows 各一个、两版解释器各跑一次；两边 skip 的用例不一样（Windows 侧 skip 掉 POSIX-only 那批，含 CLI 逐字节对拍），判断覆盖时看 `-v` 输出里的 skipped 行，别假设两边跑的是同一批。`build-windows.yml` 只在 `v*` 标签或手动触发时打包，不守 PR。 <!-- rule:dev.ci.two-interpreters -->
+- CI：`.github/workflows/test.yml` 在 PR 和 main 推送时自动跑同一套，回归 job 在 Linux 与 Windows 各一个、两版解释器各跑一次；两边 skip 的用例不一样（Windows 侧 skip 掉 POSIX-only 那批，含 CLI 逐字节对拍），判断覆盖时看 `-v` 输出里的 skipped 行，别假设两边跑的是同一批。`build-windows.yml` 只在手动触发时按指定 tag 打包（不守 PR，也不由推 tag 自动跑）。 <!-- rule:dev.ci.two-interpreters -->
 - 提交必须带 DCO signoff：`git commit -s`，签署邮箱与作者邮箱一致。CI 的 `dco` job 用 `tool/check_dco.py` 查 PR 上 `base..head` 里的非 merge 提交（merge 提交是网页 / API 合并的已知例外），本地跑同一条命令可复现；它只让问题可见，要拦在合并前须分支保护 + required status checks。 <!-- rule:dev.git.dco-signoff -->
 - 提交信息主题用 Conventional Commits：`type(scope): subject`，`type` 只取 `feat`、`fix`、`docs`、`refactor`、`test`、`chore`、`ci`、`perf`、`build`、`style`、`revert` 之一（单一来源是 `tool/check_conventional.py` 的 `TYPES`），`scope` 只允许 `[a-z0-9_-]`，破坏性改动在冒号前加 `!`。CI 的 `conventional` job 在 PR 上查 `base..head` 里的非 merge 提交，本地跑 `python3 tool/check_conventional.py origin/main..HEAD` 可复现；同 `dco` 一样只让问题可见，不阻断合并。 <!-- rule:dev.git.conventional-commits -->
 - 票号也进 CI：`ticket-checks.yml` 的 `ticket-ref` 核分支名以 `-<票号>` 结尾、PR 正文有 `Refs #N` / `Closes #N` 且是同一张，`comment-tickets` 核新增行里的票号在 PR 引用的范围内（`docs/adr/` 与含「沿用」的行豁免）；同 `dco` / `conventional`，只让问题可见，要拦在合并前须分支保护 + required status checks。两条规则本身见 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md) 与 [CODING_STANDARDS.md](CODING_STANDARDS.md)。
@@ -69,10 +69,10 @@
 
 ## 发版
 
-- 完整流程与 Release 正文的写法见 [docs/agents/release.md](docs/agents/release.md)：正文是用户看的唯一权威，repo 里不留副本，`README.md` 的首段从它复制。 <!-- rule:doc.release.note-is-the-only-authority -->
+- 发版分两段，中间隔着不确定的时间：维护者在收口并合入 main 的提交上打 `v*` tag 后退出，owner 只按这个 tag 做发版动作（构建、上传、正文、页面同步）。tag 之后 main 照常合入新的 PR，谁也不按 main 尖端出包。完整流程与 Release 正文的写法见 [docs/agents/release.md](docs/agents/release.md)：正文是用户看的唯一权威，repo 里不留副本，`README.md` 的首段从它复制。 <!-- rule:doc.release.note-is-the-only-authority -->
 - 新版本提示读官网的 `android-ad-cleaner-latest.json`，发版后要更新它（步骤记在本机 `CLAUDE.local.md`）。 <!-- rule:doc.release.latest-json-after-release -->
 - 官网另有一份放在机主的服务器上，发版后同步，方法记在本机 `CLAUDE.local.md`。 <!-- rule:doc.release.site-mirror-sync -->
-- 国内下载走 Gitee：`python3 gui/upload_gitee.py <版本>` 从公开的 GitHub Release 下载安装包并核对 SHA256，推代码和标签，建发行版传附件，再匿名下载回来核对。令牌在本机 `~/.config/gitee/token`，不进仓库和对话。百度网盘暂停使用；Gitee 不可用时把 `index.html` 的 `REL.gitee` 留空，改跑 `gui/upload_baidu.sh [版本]`，`#dl-lead` 的改法与必须原样保留的后半句见 [docs/agents/release.md](docs/agents/release.md) 第 8 步。 <!-- rule:doc.release.gitee-upload -->
+- 国内下载走 Gitee：`python3 gui/upload_gitee.py <版本>` 从公开的 GitHub Release 下载安装包并核对 SHA256，推代码和标签，建发行版传附件，再匿名下载回来核对。令牌在本机 `~/.config/gitee/token`，不进仓库和对话。百度网盘暂停使用；Gitee 不可用时把 `index.html` 的 `REL.gitee` 留空，改跑 `gui/upload_baidu.sh [版本]`，`#dl-lead` 的改法与必须原样保留的后半句见 [docs/agents/release.md](docs/agents/release.md) 的「发版动作」第 7 步。 <!-- rule:doc.release.gitee-upload -->
 - 发完版按 [docs/agents/release-followup.md](docs/agents/release-followup.md) 的清单催复测：新版不送到报告者手上，`waiting-for-verify` 的 issue 不催就永远关不掉。
 
 ## Agent skills
