@@ -13,14 +13,6 @@ GAME = "com.nearme.gamecenter"
 SETTINGS = "com.android.settings"
 
 
-def settings_page(*path):
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
-    for t in path:
-        if not p.tap(t, exact=True):
-            return False
-    return True
-
-
 def enter_settings(*path):
     """设置 → path 逐跳点开，每一跳都要真的换页：点击被弹窗淡出动画吞掉时重试（#286）。"""
     p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)

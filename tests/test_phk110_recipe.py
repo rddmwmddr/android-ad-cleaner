@@ -68,11 +68,12 @@ class RecipeSafetyTests(unittest.TestCase):
             self.assertNotIn(name, targets)
 
     def test_permission_denial_does_not_retry_with_privileges(self):
-        namespace = load()
+        """`open_app_settings` 走的是注入版（#1153）：闭包拿的是装载时的 Phone，
+        所以改装要在装载前把同一个对象传进去，不能再走 `__globals__["p"]`。"""
         phone = make_phone()
+        namespace = load(phone)
         phone.d.shell = lambda command: SimpleNamespace(output="Permission Denial: not exported")
         function = namespace["open_app_settings"]
-        function.__globals__["p"] = phone
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertFalse(function("example.app", "ExampleActivity", "设置"))
 

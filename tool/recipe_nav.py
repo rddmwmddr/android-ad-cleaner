@@ -75,11 +75,11 @@ NAV["browser_settings"] = _vivo_browser_settings
 
 # ---------- OPPO 家族 ----------
 #
-# ColorOS 脚本共用的三个导航过程。`SEARCH_TITLES` 与 `wait_page` 是脚本侧的东西：PLP120 的
-# 搜索页标题名单比一加两台长，PHK110 与 PKH110 的 `wait_page` 各有一份写法不同的实现（同族
-# 同形但注释与折行不同），闭包从执行作用域现取、注入版不替它们判断。
-# `open_app_settings` 三份逐字不同（注释与 docstring 各写各的）、`browser_settings` 上文已被
-# vivo 的同名实现占用，两者按「同名多簇留在脚本里」不搬（#1153）。
+# ColorOS 脚本共用的导航过程。`SEARCH_TITLES` 与 `wait_page` 是脚本侧的东西：PLP120 的
+# 搜索页标题名单比一加两台长，PHK110 / PKX110 / PKH110 的 `wait_page` 各有本地实现
+# （代码同形、注释与折行不同），闭包从执行作用域现取、注入版不替它们判断。
+# `browser_settings` 上文已被 vivo 的菜单版占用，OPPO 这一版是公开 Intent 直达，
+# 另起名字 `browser_settings_direct`，三份脚本的调用点跟着改名（#1153）。
 
 def _oppo_wait_search_settings(p, g):
     def wait_search_settings(tries=30):
@@ -113,9 +113,32 @@ def _oppo_tap_page(p, g):
     return tap_page
 
 
+def _oppo_open_app_settings(p, g):
+    def open_app_settings(package, activity, title):
+        # 两个 App 均实测支持此公开设置 Intent，绕开含账号信息的“我的”页。
+        result = p.d.shell(
+            "am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + package
+        ).output
+        if "Permission Denial" in result or "SecurityException" in result:
+            print("  ! 系统不允许直达设置，跳过，不提升权限")
+            return False
+        return g["wait_page"](activity, title)
+    return open_app_settings
+
+
+def _oppo_browser_settings_direct(p, g):
+    def browser_settings_direct():
+        return g["open_app_settings"]("com.heytap.browser",
+                                      "com.heytap.browser.settings.component.BrowserPreferencesPage",
+                                      "浏览器")
+    return browser_settings_direct
+
+
 NAV["wait_search_settings"] = _oppo_wait_search_settings
 NAV["settings_page"] = _oppo_settings_page
 NAV["tap_page"] = _oppo_tap_page
+NAV["open_app_settings"] = _oppo_open_app_settings
+NAV["browser_settings_direct"] = _oppo_browser_settings_direct
 
 
 # ---------- 跨家族 ----------

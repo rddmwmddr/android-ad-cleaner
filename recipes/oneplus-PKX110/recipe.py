@@ -62,17 +62,6 @@ def wait_page(activity, title, timeout=6):
     return False
 
 
-def open_app_settings(package, activity, title):
-    # 两个 App 均支持此公开设置 Intent，绕开含账号信息的“我的”页。
-    result = p.d.shell(
-        "am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + package
-    ).output
-    if "Permission Denial" in result or "SecurityException" in result:
-        print("  ! 系统不允许直达设置，跳过，不提升权限")
-        return False
-    return wait_page(activity, title)
-
-
 def tap_page(text, activity, title):
     """`text` 可以给一组等价文案，按顺序试；点到第一个就按落点页面判，不退回改写另一支。
 
@@ -174,13 +163,9 @@ def _():
     return off_exact(["个性化推荐"], "商店·个性化推荐", max_screens=2)
 
 
-def browser_settings():
-    return open_app_settings("com.heytap.browser", "com.heytap.browser.settings.component.BrowserPreferencesPage", "浏览器")
-
-
 @step("浏览器首页")
 def _():
-    if not browser_settings():
+    if not browser_settings_direct():
         return False
     activity = "com.heytap.browser.settings.component.BrowserPreferenceActivity"
     if not tap_page("主页设置", activity, "主页设置"):
@@ -201,7 +186,7 @@ def _():
 
 @step("浏览器广告")
 def _():
-    if not browser_settings():
+    if not browser_settings_direct():
         return False
     activity = "com.heytap.browser.settings.component.BrowserPreferenceActivity"
     if not tap_page("隐私", activity, "隐私") or not tap_page("广告管理", activity, "广告管理"):
@@ -213,7 +198,7 @@ def _():
 
 @step("浏览器个性化")
 def _():
-    if not browser_settings():
+    if not browser_settings_direct():
         return False
     activity = "com.heytap.browser.settings.component.BrowserPreferenceActivity"
     if not tap_page("隐私", activity, "隐私") or not tap_page("个性化管理", activity, "个性化管理"):
