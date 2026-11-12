@@ -1,7 +1,7 @@
 """手机版界面上残留的桌面说法（#747，跟进 #729）。
 
 诊断里的「点击被拒」与点击被拒的整句都按宿主取词；桌面版逐字不变。
-boot() 对这些模块常量的覆盖在 tests/test_phone_host_729.py 的 PhoneBootTests 里（解析 boot() 只此一处）。
+boot() 对这些模块常量的覆盖在 tests/test_phone_host.py 的 PhoneBootTests 里（解析 boot() 只此一处）。
 """
 import os
 os.environ.setdefault("AAC_NO_SOUND", "1")     # 客户端提示音：测试里不出声

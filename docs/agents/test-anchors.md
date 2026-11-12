@@ -8,7 +8,7 @@
 
 **锚点**：登记在下面的 `## 锚点登记` 表与 `tool/test_anchors.py` 的 `ANCHORS` 里，两边逐字对拍——改一处漏掉另一处即红。每个锚点带一句 why，说的是这个文件在守什么；半年后判断「这个文件该不该留」靠的就是它。
 
-**待归并**：存量票号文件，逐条记着要并到哪个文件（`PENDING`）。条数冻结在 `PENDING_CAP`，只许降：新增条目超过上限即红，逼你先回答「这条用例属于哪个锚点」，而不是再开一个票号文件。
+**待归并**：存量票号文件，逐条记着要并到哪个文件（`PENDING`）。条数冻结在 `PENDING_CAP`——一个**字面量**，不是 `len(PENDING)`，否则上限会跟着名单一起涨，「新增即红」就是空转。新增条目超过上限即红，逼你先回答「这条用例属于哪个锚点」，而不是再开一个票号文件。
 
 **机型脚本的专用测试**：文件名点名了 `recipes/` 下的某份脚本就自动合规，不逐个登记。点名的形式有三种：目录名的品牌段（`test_honor_recipe.py`）、型号段（`test_rmx3888_recipe.py`）、或脚本头注里的市场名（`test_k70_recipe.py`，对应 `recipes/redmi-23113RKC6C`）。给新机型写脚本时，按脚本目录给测试文件命名即可。
 
@@ -32,6 +32,10 @@
 
 待归并的目标是人工选的，守卫只核「目标存在」；选得对不对靠评审，不靠机器。
 
+豁免只看文件名与 `recipes/` 的名字和正文，不读那个测试文件的内容：名字里只有品牌（`test_vivo_336_chan_page.py`）不算点名任何一份脚本，仍要落到锚点；品牌加型号片段（`test_honor_wkl_recipe.py` 的 `wkl`）才算。
+
+守卫只扫 `tests/` 顶层。`tests/` 下将来若出现子目录，里面的 `test_*.py` 会被 `discover` 收到却不受这条规则约束——目前没有，出现时要先把守卫改成递归再放进去。
+
 ## 锚点登记
 
 | 文件 | 为什么 |
@@ -46,7 +50,6 @@
 | `test_client_events.py` | 客户端只认引擎事件：事件行不进日志、人话本身不改状态。 |
 | `test_channel_classification.py` | 渠道七组判定只在一处定义，扫描分支与客户端都消费它。 |
 | `test_channel_outcomes.py` | 渠道批处理的结局记账：一项的结局是值，怎么记由一张表定。 |
-| `test_reader_failure_731.py` | 读屏失败分三种结局，各走各的收场，不混成一句没有上下文的话。 |
 | `test_phone_facade.py` | Phone 门面 + 两个基座 + 五个阶段的对外契约。 |
 | `test_phone_base.py` | 两个基座可以各自独立构造，不必造整台 Phone。 |
 | `test_phone_sessions.py` | 三个跨阶段会话对象，门面用显式属性转发过去。 |
@@ -102,7 +105,7 @@
 | `test_harmony_client.py` | 鸿蒙接入后的选机、互斥、持久化、停止与旧数据兼容。 |
 | `test_harmony_engine.py` | 桌面引擎的离线用例：合成的界面树与假手机。 |
 | `test_harmony_vocab.py` | 鸿蒙词库守卫。 |
-| `test_plan_1105.py` | 一次执行跑哪些步骤的规格（tool/plan.py）：八个键、默认值与 JSON 往返。 |
+| `test_plan.py` | 一次执行跑哪些步骤的规格（tool/plan.py）：八个键、默认值与 JSON 往返。 |
 | `test_run_commands.py` | run.py 的命令接口、多余往返的守卫与「只是搬家」的对拍。 |
 | `test_adapt_cli.py` | adapt.py 三条子命令对外的退出码与两路输出。 |
 | `test_claim.py` | 开工认领：一条命令写认领评论并摘待办标签，仲裁只看票下评论。 |
@@ -123,4 +126,4 @@
 | `test_regressions.py` | 设备无关的回归：输入、页面识别、开关保护与打包入口。 |
 | `test_release_regressions.py` | 发布回归：横屏、部分失败、通知默认选择与发布资源边界。 |
 | `test_feedback_safety.py` | 用户反馈里的安全项：无障碍排查只读、通知保护与旧清单还原。 |
-| `test_phone_host_729.py` | 手机版宿主的说法：没有电脑和数据线时该怎么说。 |
+| `test_phone_host.py` | 手机版宿主的说法：没有电脑和数据线时该怎么说。 |

@@ -30,7 +30,6 @@ ANCHORS = {
     "test_client_events.py": "客户端只认引擎事件：事件行不进日志、人话本身不改状态。",
     "test_channel_classification.py": "渠道七组判定只在一处定义，扫描分支与客户端都消费它。",
     "test_channel_outcomes.py": "渠道批处理的结局记账：一项的结局是值，怎么记由一张表定。",
-    "test_reader_failure_731.py": "读屏失败分三种结局，各走各的收场，不混成一句没有上下文的话。",
     # Phone 门面、两个基座与七个阶段
     "test_phone_facade.py": "Phone 门面 + 两个基座 + 五个阶段的对外契约。",
     "test_phone_base.py": "两个基座可以各自独立构造，不必造整台 Phone。",
@@ -93,7 +92,7 @@ ANCHORS = {
     "test_harmony_engine.py": "桌面引擎的离线用例：合成的界面树与假手机。",
     "test_harmony_vocab.py": "鸿蒙词库守卫。",
     # 计划与命令
-    "test_plan_1105.py": "一次执行跑哪些步骤的规格（tool/plan.py）：八个键、默认值与 JSON 往返。",
+    "test_plan.py": "一次执行跑哪些步骤的规格（tool/plan.py）：八个键、默认值与 JSON 往返。",
     "test_run_commands.py": "run.py 的命令接口、多余往返的守卫与「只是搬家」的对拍。",
     "test_adapt_cli.py": "adapt.py 三条子命令对外的退出码与两路输出。",
     # 适配工具与仓库流程
@@ -116,7 +115,7 @@ ANCHORS = {
     "test_regressions.py": "设备无关的回归：输入、页面识别、开关保护与打包入口。",
     "test_release_regressions.py": "发布回归：横屏、部分失败、通知默认选择与发布资源边界。",
     "test_feedback_safety.py": "用户反馈里的安全项：无障碍排查只读、通知保护与旧清单还原。",
-    "test_phone_host_729.py": "手机版宿主的说法：没有电脑和数据线时该怎么说。",
+    "test_phone_host.py": "手机版宿主的说法：没有电脑和数据线时该怎么说。",
 }
 
 # 存量票号文件，逐条记着并到哪个文件。只许降：`PENDING_CAP` 冻在当前条数，新增一条即超线。
@@ -126,7 +125,7 @@ PENDING = {
     "test_adapt_survey_690.py": "test_adapt_cli.py",
     "test_adb_guid_702.py": "test_adb_link.py",
     "test_adb_settings.py": "test_adb_link.py",
-    "test_always_run_1104.py": "test_plan_1105.py",
+    "test_always_run_1104.py": "test_plan.py",
     "test_app_denied_426.py": "test_channel_outcomes.py",
     "test_app_state_races_662.py": "test_job.py",
     "test_assistant_entry_901.py": "test_entries.py",
@@ -160,14 +159,15 @@ PENDING = {
     "test_icon_hit_530.py": "test_entries.py",
     "test_missing_package_908.py": "test_recipe_kit.py",
     "test_missing_switch_evidence_903.py": "test_recipe_kit.py",
-    "test_msa_default_973.py": "test_plan_1105.py",
-    "test_not_run_steps_577.py": "test_plan_1105.py",
+    "test_msa_default_973.py": "test_plan.py",
+    "test_not_run_steps_577.py": "test_plan.py",
     "test_off_page_top_1094.py": "test_phone_toggler.py",
     "test_page_evidence_939.py": "test_recipe_kit.py",
-    "test_phone_host_747.py": "test_phone_host_729.py",
-    "test_plan_exec_1106.py": "test_plan_1105.py",
+    "test_phone_host_747.py": "test_phone_host.py",
+    "test_plan_exec_1106.py": "test_plan.py",
     "test_recheck_package_751.py": "test_channel_outcomes.py",
     "test_recipe_fast_entries_796.py": "test_entries.py",
+    "test_recipe_verification_1124.py": "test_verify_ledger.py",
     "test_reference_by_version.py": "test_recipe_variants.py",
     "test_reports_026.py": "test_issue_regressions.py",
     "test_reports_1029.py": "test_issue_regressions.py",
@@ -196,10 +196,14 @@ PENDING = {
     "test_two_column_403.py": "test_row.py",
     "test_ui_hidden_576.py": "test_channel_outcomes.py",
     "test_undo_appops_330.py": "test_channel_outcomes.py",
+    "test_vivo_336_chan_page.py": "test_channel_outcomes.py",
     "test_vocab_gaps_690.py": "test_vocab.py",
+    "test_reader_failure_731.py": "test_adb_link.py",
 }
 
-PENDING_CAP = len(PENDING)
+# 字面量，不用 `len(PENDING)`：那样上限会跟着名单一起涨，「新增一条即红」就成了空转。
+# 每并掉一条就把这个数减一；要加必须说明为什么（评审看得见）。
+PENDING_CAP = 78
 
 TEST_FILE = re.compile(r"^test_[A-Za-z0-9_]+\.py$")
 # 文件名尾部的票号 / 日期：`test_xxx_1234`、`test_xxx_2026_11_12`、`test_xxx_2026-11-12`
@@ -211,23 +215,23 @@ def _normalize(text):
 
 
 def recipe_tokens(root):
-    """机型标识：(品牌段与型号段的归一化集合, 所有脚本正文的归一化串)。
+    """机型标识：(品牌段集合, 型号段集合, 所有脚本正文的归一化串)。
 
-    目录名的品牌段（`honor` / `vivo`）让家族级测试合规；型号段（`rmx3700` / `v2547da`）与
-    正文里的市场名（`Redmi K70`）让专属测试合规——后者是脚本注释里写着的别名，没有别名表。
+    品牌段只够家族级测试用（`test_honor_recipe.py`）；型号段（`rmx3700` / `v2547da`）与正文里
+    的市场名（`Redmi K70`）才让专属测试合规——后者是脚本注释里写着的别名，没有别名表。
     """
     recipes = root / "recipes"
     if not recipes.is_dir():
-        return frozenset(), ""
-    tokens, texts = set(), []
+        return frozenset(), frozenset(), ""
+    brands, models, texts = set(), set(), []
     for folder in sorted(p for p in recipes.iterdir() if p.is_dir()):
         brand, _, model = folder.name.partition("-")
-        tokens.add(_normalize(brand))
+        brands.add(_normalize(brand))
         if model:
-            tokens.add(_normalize(model))
+            models.add(_normalize(model))
         for script in sorted(folder.glob("recipe*.py")):
             texts.append(script.read_text(encoding="utf-8", errors="replace"))
-    return frozenset(tokens), _normalize(" ".join(texts))
+    return frozenset(brands), frozenset(models), _normalize(" ".join(texts))
 
 
 def base_of(name):
@@ -240,17 +244,30 @@ def base_of(name):
     return _normalize(stem)
 
 
-def recipe_owned(name, tokens, recipe_text):
+def recipe_owned(name, brands, models, recipe_text):
     """这个文件名点名了一份真实的机型脚本？是则不必登记（按脚本目录命名即自动合规）。
 
-    先比目录名的品牌 / 型号段；再要求文件名带数字且整串出现在某份脚本正文里——后者只认
-    「Redmi K70」这类市场名，普通英文单词（`row`、`wait`）不会因为出现在注释里就拿到豁免。
+    四档，从严到松：整串等于品牌段（家族级测试）；整串与某型号段互为子串（`oppoplp120search`
+    含 `plp120`）；带三位以上数字串且该串是某型号段的一部分（`phk110android15` 的 `110`）；
+    带数字且整串出现在某份脚本正文里（`test_k70_recipe` 对 `Redmi K70`）。
+
+    光有品牌段不够：`test_vivo_336_chan_page` 只是用 vivo 的页面样本测渠道页，它没有点名任何
+    一份脚本，所以仍要落到锚点。普通英文单词（`row`、`wait`）也因为「必须带数字」而被挡住。
     """
     base = base_of(name)
     if len(base) < 3:
         return False
-    if any(len(token) >= 4 and token in base for token in tokens):
+    if base in brands:
         return True
+    if any(model in base or base in model for model in models):
+        return True
+    if any(digit in model for digit in re.findall(r"\d{3,}", base) for model in models):
+        return True
+    for brand in brands:
+        if base.startswith(brand):
+            tail = base[len(brand):]
+            if len(tail) >= 3 and any(tail in model for model in models):
+                return True
     return any(ch.isdigit() for ch in base) and base in recipe_text
 
 
@@ -271,7 +288,7 @@ def violations(root, anchors=None, pending=None, cap=None):
     tests = root / "tests"
     present = ({p.name for p in tests.iterdir() if p.is_file() and TEST_FILE.match(p.name)}
                if tests.is_dir() else set())
-    tokens, recipe_text = recipe_tokens(root)
+    brands, models, recipe_text = recipe_tokens(root)
     found = []
 
     if len(pending) > cap:
@@ -290,7 +307,7 @@ def violations(root, anchors=None, pending=None, cap=None):
             found.append(f"{name} 的归并目标 {target} 不存在")
     registered = set(anchors) | set(pending)
     for name in sorted(present - registered):
-        if recipe_owned(name, tokens, recipe_text):
+        if recipe_owned(name, brands, models, recipe_text):
             continue
         found.append(f"{name} 没有登记锚点。新增用例要落进已声明的锚点（相近的："
                      f"{suggest(name, anchors)}）；确实要新开一个的话，在 ANCHORS 与 "
