@@ -56,7 +56,7 @@
 - **行为变化一**：`adb_link.REPEAT`（「手机和电脑的 adb 连接已断开，本段跳过…」）也会发 `link_lost`。今天它不含「断开了」，不触发抑制；改成事件后，同一任务里后续步骤会被跳过。REPEAT 本就代表「已确认断线」，今天漏判是文案差异造成的 bug。
 - **行为变化二**：`UIAUTOMATION_BUSY` 这类串出现在与读屏占用无关的报错里时，不再误判为占用——事件只在真正抛出的地方发。
 - **行为变化三**：在步骤边界暂停期间点「停止」，客户端把 `paused` 复位；旧实现要等下一行「▶ 继续执行」才复位，停止后 `poll()` 会一直报「已暂停」。
-- 事件不进 `lines`，所以上报日志、诊断文本、`last-error.txt` 的人话逐字不变。它也不进步骤摘要用的 `tail`：前端 `summarize()` 在认不出模式时会直接显示 tail 最后一行。
+- 事件不进 `lines`，所以上报日志、诊断文本、`last-error.txt` 的人话逐字不变。它也不进步骤摘要用的 `tail`：摘要函数（`tool/summary.py`，两个宿主共用，#1189）在认不出模式时会直接显示 tail 最后一行。
 - `tool/events.py` 是词表唯一定义（纯 stdlib，import 期不读环境、不建目录）：`emit(kind)` / `is_event(line)` / `parse(line)`。引擎侧裸 `import events`，客户端用既有的 `_tool("events")` 惰性取。`bundle_data` 按 `tool/*.py` 收，打包清单不用改。
 - 测试面：两处喂中文串的用例改为喂事件行；「人话不变」用两个守卫——五个发送点各设 / 不设 `AAC_EVENTS` 跑一遍，去掉事件行后逐字对拍（`DeviceLost` 与两处占用比的是异常文案）；三条打印行（暂停、继续、锁屏）另写字面量断言，两条异常文案由既有用例盯着短语。
 - 没有 Windows、没有打包环境、没有真机：`--cli` 与 `_fix_stdio` 这条依据是「`print(flush=True)` 一行一次」加上已有的 `line_buffering` / `write_through` / `PYTHONUNBUFFERED=1`，**未在打包件上验证**；验证范围是本机单测。

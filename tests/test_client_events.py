@@ -129,7 +129,7 @@ class SkipTests(Base):
         self.assertEqual(self.api.job.results[2]["rc"], 0)
 
     def test_event_lines_stay_out_of_the_step_tail(self):
-        # 前端 summarize() 在认不出模式时直接显示 tail 最后一行
+        # 摘要函数（tool/summary.py）认不出模式时直接显示 tail 最后一行，机器行不能混进去
         self.api = self.make_api(spawns=[FakeProc("人话\n" + event("ui_busy") + "\n", rc=1)])
         self.api._work([app.Task("广告开关", "run.py", [], uses_ui=True)])
         self.assertEqual(self.api.job.results[0]["tail"], ["人话"])

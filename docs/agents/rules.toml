@@ -127,7 +127,7 @@ id = "dev.types.strict-on-pure-modules"
 source = "CLAUDE.md#开发"
 check = "none"
 status = "manual"
-why = "宽松档只查函数体内的表达式：一个没写返回类型的函数被调用方按返回值用时不会红，把 `str | None` 传给只收 `str` 的正则 `search()` 也要等真机走到那条分支。这七个模块不碰设备、不碰手机界面、不依赖假对象，注解补完能让调用方一起被查；其余引擎目录带假对象与注入作用域，全仓开严格档会撞上它们赖以灵活的形状（#997）。mypy 在 overrides 里把 `strict = true` 当全局设置，所以名单里是逐项 flag；整块删掉这些 override 时 mypy 仍绿（宽松档不要求注解），没有能返红的守卫，所以只记 manual。"
+why = "宽松档只查函数体内的表达式：一个没写返回类型的函数被调用方按返回值用时不会红，把 `str | None` 传给只收 `str` 的正则 `search()` 也要等真机走到那条分支。这八个模块不碰设备、不碰手机界面、不依赖假对象，注解补完能让调用方一起被查；其余引擎目录带假对象与注入作用域，全仓开严格档会撞上它们赖以灵活的形状（沿用 #997）。mypy 在 overrides 里把 `strict = true` 当全局设置，所以名单里是逐项 flag；整块删掉这些 override 时 mypy 仍绿（宽松档不要求注解），没有能返红的守卫，所以只记 manual。"
 expires_if = "这几类模块开始依赖假对象或注入作用域、严格档保持不住绿时删；或全仓改成严格档时并进 dev.types.narrow-scope-in-config。"
 
 [[rule]]
@@ -335,8 +335,8 @@ id = "dev.ui.result-line-routing"
 source = "CLAUDE.md#开发"
 check = "test:test_rules_guards::EngineGuards.test_ui_result_line_routing"
 status = "enforced"
-why = "机器行进 results[].tail 会被当成结果摘要显示给用户；手机版的同一批摘要口径由 tests/summary_cases.json 钉住两边，_log() 的取舍与 tail 的边界没有守卫。守卫（#1002）拿同一份样例带机器行喂手机版 summarize()，摘要里出现 `#aac:` 就红；网页版那条同口径用例在 tests/js/client.test.js，注册表的 check 语法只能指一条。上游 `_log()` 漏不漏它看不见，只证明结果页自己剥得掉。"
-expires_if = "结果页改由结构化字段渲染、不再解析 tail 末行时删。"
+why = "机器行进 results[].tail 会被当成结果摘要显示给用户；摘要口径由 tests/summary_cases.json 钉住，_log() 的取舍与 tail 的边界没有守卫。守卫（沿用 #1002）拿同一份样例带机器行喂 tool/summary.py 的 summarize()——两个宿主调的就是这一份（#1189）——摘要里出现 `#aac:` 就红；网页版只剩「按后端字段渲染」的断言，不再有自己的摘要实现。上游 `_log()` 漏不漏它看不见，只证明摘要函数自己剥得掉。"
+expires_if = "摘要不再解析 tail 末行（引擎直接给结构化结局）时删。"
 
 [[rule]]
 id = "dev.ui.not-run-rows"

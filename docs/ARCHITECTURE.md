@@ -40,6 +40,7 @@
 | `row.py` | 「开关所属的那一行」的唯一定义 |
 | `wait.py` | 「等到页面认得出」与「等机主解锁」的唯一实现 |
 | `events.py` | 事件行与载荷行的格式与判定 |
+| `summary.py` | 一步结果怎么说成一句话：两个宿主共用这一份，界面只显示 `summary` 字段（[ADR-0019](adr/0019-phone-second-execution-host.md) 的增补段） |
 | `plan.py` | 一次执行跑哪些步骤的规格：八个键、默认值、宽容收与 JSON 往返；排任务与重试轮都从它取值 |
 | `reader.py` | 读屏 adapter 的接口（`Reader`） |
 | `adb_link.py` | 连接中断的判定与「等手机回来」 |
