@@ -79,7 +79,7 @@
 | `huawei_channels.py` | 华为 ALN-AL00 的清单式渠道处理，需人工审核清单，客户端不自动跑 |
 | `gen_brand_taps.py` | 从 `docs/手机版教程/brand-taps.json` 渲染连点表 |
 | `gen_site_css.py` | 把仓库根 `site.css` 渲染进官网两页的共享样式块 |
-| `verify_ledger.py` | 配方验证台账：读 `recipes/verified.toml`，每个配方文件一行、按距今天数降序，覆盖度与证据来源是两个维度（`entry()` 也供 `run.py` 的 `status-json` 取这三样），缺记录记「未记录 / 未知」，验后改过标「待复核」，记录 build 对不上脚本 `BUILD` 的打「build 不符」（#916、#917、#918、#1124） |
+| `verify_ledger.py` | 配方验证台账：读 `recipes/verified.toml`，每个配方文件一行、按距今天数降序，覆盖度与证据来源是两个维度（`entry()` 也供 `run.py` 的 `status-json` 取这三样），缺记录的条目 `entry()` 给「未记录 / 未知」、CLI 行只打「未记录」，验后改过标「待复核」，记录 build 对不上脚本 `BUILD` 的打「build 不符」（沿用 #916、#917、#918 的台账口径，#1124 拆出证据来源） |
 | `check_dco.py` | PR 的 DCO 校验：逐个非 merge 提交比对 `Signed-off-by` 与作者邮箱（#848） |
 | `check_conventional.py` | PR 的提交主题校验：`type(scope): subject`，类型清单 `TYPES` 也在这里（#849） |
 | `check_ticket_ref.py` | PR 的票号校验：分支名以 `-<票号>` 结尾、正文有 `Refs #N` / `Closes #N` 且是同一张（#1001） |

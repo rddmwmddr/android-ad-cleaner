@@ -1,5 +1,6 @@
-"""配方验证台账（tool/verify_ledger.py，#916、#917、#918、#1124）：每个配方文件一行、缺记录显示「未记录」、
+"""配方验证台账（tool/verify_ledger.py，#916、#917、#918）：每个配方文件一行、缺记录显示「未记录」、
 按距今天数降序、末行三档分布、验证之后改过的标「待复核」、记录的 build 对不上脚本 BUILD 的标「build 不符」。
+
 覆盖度（`tier`）与证据来源（`evidence`）是两个维度：前两类用例里 `entry()` 单独验「台账里没有这份脚本
 时退回未记录 / 未知」，`rows()` 验两个值都被带到行上。
 
@@ -305,8 +306,8 @@ class ChangedDatesTest(unittest.TestCase):
 
 class RealRecipesContractTest(unittest.TestCase):
     """真实仓库的数据契约，无注入点：每份配方都有条目、记录的 build 对得上脚本 BUILD、
-    覆盖度与证据来源都是已知取值、证据来源与 by 对得上、日期格式合法。台账真正的失效方式是
-    「新配方悄悄不在里面」，这一类就是拦它。"""
+    覆盖度与证据来源都是已知取值、日期格式合法。台账真正的失效方式是「新配方悄悄不在里面」，
+    这一类就是拦它。"""
 
     @classmethod
     def setUpClass(cls):

@@ -938,7 +938,9 @@ def cmd_status_json(serial, rest):
         ads.append({"pkg": p, "suspended": sus, "default_on": (not sus) and p in DEFAULT_ON})
     backup = Backups(BACKUPS).latest(i["model"])
     # 覆盖度（台账的 tier）、证据来源与验证日期由引擎从台账现读，客户端只透传（#1124）。台账里没有
-    # 这份脚本时 entry() 给「未记录 / 未知 / 空」，同样是可显示的结论，不是错误。
+    # 这份脚本时 entry() 给「未记录 / 未知 / 空」，那是一个结论；台账文件本身读不出来是打包坏了，
+    # 照常报错。三样记的是将要跑的那份脚本：借同品牌参考脚本时就是被借那份的情况。日期之后脚本若
+    # 又改过，由 `tool/verify_ledger.py` 的「待复核」提示，不在这里体现。
     ledger = verify_ledger.load(os.path.join(RECIPES, "verified.toml")) if r else {}
     coverage, evidence, verified = verify_ledger.entry(
         ledger, os.path.relpath(r, RECIPES).replace(os.sep, "/") if r else "")
