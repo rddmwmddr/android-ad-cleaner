@@ -107,7 +107,7 @@ def close_all(page, max_screens):
     require(first, f"{page}：没读到开关，未操作")
     before = read_switches(max_screens, first=first)
     require(before, f"{page}：没读到开关，未操作")
-    p.top(max_screens)                   # 读完整页会翻到底，p.off 只往下翻，得先回到顶部
+    p.top(max_screens)                   # 读完整页会翻到底；p.off 自己也回顶，这一下是让前后两段都从页顶读
     p.off(page=page, max_screens=max_screens)
     p.top(max_screens)
     current = read_switches(max_screens)
