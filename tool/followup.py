@@ -22,12 +22,13 @@
 退出码：0 一致；1 有差异（清单已打印）；2 给不出结论——`gh` 读失败或超时、表格结构不可识别、
 命令行给了不认识的参数。读不到标签或结构认不出时不写任何文件。
 """
-import json
 import re
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+from gh import GhError, json_of, runner_for
 
 from stdio import use_utf8_console
 
@@ -53,10 +54,6 @@ SPLIT = re.compile(r"(?<!\\)\|")
 
 class Unreadable(RuntimeError):
     """表格结构认不出：不猜，整条命令给不出结论。"""
-
-
-class GhError(RuntimeError):
-    """`gh` 调用失败：读不到标签时整条命令给不出结论。"""
 
 
 @dataclass(frozen=True)
@@ -221,14 +218,9 @@ def read_open(runner):
     `--limit` 不能省：`gh issue list` 默认只给 30 条，128 张票会有一大片被当成「过期行」。
     标签一起读回来，`scan` 才能把 `blocked-on-device` 的票排除出去。
     """
-    out, err, rc = runner("gh", "issue", "list", "--label", LABEL, "--state", "open",
-                          "--limit", str(LIMIT), "--json", "number,author,labels")
-    if rc != 0:
-        raise GhError(f"读不到 open 的 {LABEL} 票：{(err or out).strip() or 'gh 返回非零'}")
-    try:
-        issues = json.loads(out)
-    except ValueError as error:
-        raise GhError(f"`gh issue list` 的输出不是 JSON：{error}") from error
+    issues = json_of(runner, "issue", "list", "--label", LABEL, "--state", "open",
+                     "--limit", str(LIMIT), "--json", "number,author,labels",
+                     source="`gh issue list`")
     if not isinstance(issues, list):
         raise GhError("`gh issue list` 的输出不是票的列表")
     for issue in issues:
@@ -237,18 +229,6 @@ def read_open(runner):
                                    or any(not isinstance(item, dict) for item in labels)):
             raise GhError(f"#{issue.get('number')} 的 labels 不是对象数组，判不了它带哪些标签")
     return issues
-
-
-def runner_for(cwd=None):
-    """默认的 `gh` 执行器：签名 `(script, *args) -> (标准输出, 错误输出, 返回码)`。
-
-    带超时：`gh` 卡在网络请求上时进程不能一直挂着，发版前这一步是有时限的。
-    """
-    def run(script, *args):
-        done = subprocess.run([script, *args], cwd=cwd, capture_output=True,
-                              text=True, encoding="utf-8", errors="replace", timeout=TIMEOUT)
-        return done.stdout, done.stderr, done.returncode
-    return run
 
 
 def render(result):
@@ -319,7 +299,7 @@ def main(argv, runner=None, doc=None):
     if args and not write:
         print(f"不认识的参数：{' '.join(args)}\n{USAGE}", file=sys.stderr)
         return EXIT_UNREADABLE
-    runner = runner or runner_for()
+    runner = runner or runner_for(timeout=TIMEOUT)
     try:
         issues = read_open(runner)
     except GhError as error:
@@ -327,9 +307,6 @@ def main(argv, runner=None, doc=None):
         return EXIT_UNREADABLE
     except subprocess.TimeoutExpired:
         print(f"`gh issue list` 超过 {TIMEOUT} 秒没有返回，这一次给不出结论", file=sys.stderr)
-        return EXIT_UNREADABLE
-    except OSError as error:      # 没装 gh 或不在 PATH 上
-        print(f"跑不了 gh：{error}", file=sys.stderr)
         return EXIT_UNREADABLE
     path = Path(doc or DOC)
     try:

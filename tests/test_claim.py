@@ -235,7 +235,8 @@ class ClaimTests(unittest.TestCase):
         gh = FakeGh(None)
         code, message = self.go(gh)
         self.assertEqual(code, 3)
-        self.assertIn("读不到", message)
+        self.assertIn("gh issue view 932", message)
+        self.assertIn("退出码非零", message)
         self.assertEqual(gh.comments + gh.edits, [])
 
     def test_closed_ticket_is_refused(self):
