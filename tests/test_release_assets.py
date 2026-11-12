@@ -5,9 +5,11 @@
 """
 import contextlib
 import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tool import release_assets
 
@@ -39,6 +41,23 @@ class ReadPageTests(unittest.TestCase):
         broken = 'const REL = {\n  version: "1.2.3",\n  files: [\n    { id: "a" },\n' \
                  '    { id: "b", file: "B" },\n  ],\n};\n'
         self.assertEqual(release_assets.read_page(broken), (None, []))
+
+
+class FetchTests(unittest.TestCase):
+    def test_fetch_release_keeps_name_size_and_digest(self):
+        rows = {"assets": [{"name": "a.bin", "size": 12, "digest": "sha256:abcd"},
+                           {"name": "b.bin", "size": 7}]}
+        with mock.patch.object(release_assets, "run_gh", return_value=json.dumps(rows)):
+            self.assertEqual(
+                release_assets.fetch_release("v1"),
+                [release_assets.Asset("a.bin", 12, "sha256:abcd"),
+                 release_assets.Asset("b.bin", 7, "")])
+
+    def test_fetch_assets_is_the_name_projection(self):
+        """名字清单降成 `fetch_release` 的一行投影：调用方与用例都不用改。"""
+        assets = [release_assets.Asset("a.bin", 1, ""), release_assets.Asset("b.bin", 2, "")]
+        with mock.patch.object(release_assets, "fetch_release", return_value=assets):
+            self.assertEqual(release_assets.fetch_assets("v1"), ["a.bin", "b.bin"])
 
 
 class CompareTests(unittest.TestCase):

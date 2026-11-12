@@ -116,7 +116,7 @@ APK 由 owner 在 tag 的源码上构建并传到同一个 Release（发版动�
 1. **建 Release 草稿**：tag 已经存在，在 GitHub 上基于它建草稿。
 2. **触发 Windows 构建**：Actions → build-windows → Run workflow，tag 填 `v<x.y.z>`。它先校验 `gui/app.py` 的版本号与 tag 一致、tag 在 main 历史里，然后在 tag 上打包两个 Windows 安装包、跑冒烟测试、把产物传进草稿。草稿还没建时它只出 artifact、不报错；草稿已公开时保留已验证的文件、不重建。
 3. **上传 macOS 安装包与 APK** 到同一个草稿。DMG 在本机打包与公证（步骤在 `CLAUDE.local.md`）；APK 用 `android/build.sh assembleRelease` 在 tag 的源码上构建。两者都必须从 tag 出包。
-4. **写正文并发布**。正文可以在草稿阶段写好；发布前核对这一版发出去的每个安装包（含 APK）的 SHA256 与 `SHA256SUMS.txt` 一致，并按「致谢谁」核对待致谢名单。那份校验清单是手写的，漏掉哪个包，`baidu_rows.py --legacy` 生成安装说明时会直接报错，不会写出空校验值。 <!-- rule:doc.release.sha-and-credits-before-publish -->
+4. **写正文并发布**。正文可以在草稿阶段写好。校验清单不手抄，从 Release 的资产摘要生成：`python3 tool/release_meta.py sums v<x.y.z> --upload` 写好 `SHA256SUMS.txt` 并传进草稿，草稿阶段可反复覆盖；Release 已公开后工具拒绝上传；某个资产缺摘要时在命令里加 `--from-files <安装包所在目录>`，摘要就从本地文件重算。发布前核对这一版发出去的每个安装包（含 APK）的 SHA256 与清单一致（漏掉哪个包，`baidu_rows.py --legacy` 生成安装说明时会直接报错，不会写出空校验值），并按「致谢谁」核对待致谢名单。 <!-- rule:doc.release.sha-and-credits-before-publish -->
 5. **同步用户侧文本**：
    - `README.md` 的版本摘要：首段从 Release 正文首段复制，后面接旧版升级方法（0.4.1 及以前仍需先手动覆盖安装）；下载表格换版本号与链接。
    - `index.html` 的 `REL`（`version` / `github` / `gitee` / `files[].file` / `size` / `sha`）与 `RELEASED` 日期。APK 条目的 `id` 逐字写 `android`：卡片角标、手机端高亮和 `baidu_rows.py` 生成的安装说明都靠它，没有这一条，线上就看不到手机版。 <!-- rule:doc.release.apk-id-android -->
