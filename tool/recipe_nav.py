@@ -13,6 +13,8 @@
 
 闭包对名字一律按 `g` 现取（包括 `g["time"]`）：脚本原来是在自己的全局里解析这些名字，换到
 这个模块后仍取当次执行作用域里的那一个，测试装的假时钟才照旧生效。
+
+文件内按家族分节：小米系 / vivo / OPPO（公用与两大对各一节）/ 其余·跨家族，`install()` 落在最后。
 """
 
 import time
@@ -22,144 +24,6 @@ from wait import until
 # 名字 → 工厂。工厂收 (p, g)，只造闭包、不碰手机，返回写进执行作用域的那个函数。
 # 守卫按这张表取注入面的实现源码，比对脚本里还留着的逐字副本（tests/test_recipe_nav.py）。
 NAV = {}
-
-
-# ---------- vivo ----------
-#
-# `browser_settings` 收的是「不含拉起 App」那一簇：vivo 浏览器没有底部「我的」，入口在右上菜单。
-# 含 `p.start` 的另一簇不在范围里：`entries.used_by` 从脚本源码扫 `p.start` / `start_or_skip` /
-# `am start -n` / `p.setting` 四类入口，搬走后入口速查会静默漏机型（沿用 #1148 定案 3）。
-# V2547A 有一份代码不同的同名实现，按「同名多簇一律留脚本原样」不搬；V2309A 那份代码与这里
-# 相同（当时按文本判成「写法不同」），#1153 起走注入版。
-
-def _vivo_settings_home(p, g):
-    def settings_home():
-        p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
-    return settings_home
-
-
-def _vivo_browser_settings(p, g):
-    def browser_settings(tries=2):
-        """右上「菜单 → 设置」，点完要认出设置页（沿用 #753 的做法）。
-
-        冷启动首页没有底部「我的」，入口是右上菜单。菜单浮层右上角有一个 desc 读作「返回」的 ✕
-        （id 里带 cancel），等入口时按弹窗去关会把它点掉，刚打开的菜单就收起来了，「设置」再也找不到。
-        所以这里只等那一行画出来、直接点，不在等待里关弹窗；点完没进设置页就退回、重开菜单再试一次。
-        别的 vivo 型号可能没有这个按钮，最多等 3 秒就放弃本段。"""
-        def landed():
-            if p.in_settings_page():
-                return True
-            at = p.find("设置", exact=True)         # Activity 名不含 Setting 的 App：只认顶上那处「设置」标题
-            return bool(at) and at[1] < p.H * 0.25
-
-        for _ in range(tries):
-            if not p.d(resourceId="com.vivo.browser:id/menu_btn").click_exists(timeout=3):
-                return False                        # 本机没有这个按钮：交给调用方跳过本段
-            p.await_page(1.6)                       # 菜单是弹层，画出来的那一帧才有「设置」
-            xy = until(lambda: p.find("设置", exact=True, edge_ok="tab"), timeout=3.0, poll=0.3,
-                       now=time.time, sleep=time.sleep)
-            if xy:
-                before = p.sig()
-                p.click(*xy)
-                if p.settle(before, 1.5):
-                    p.await_page(1.5)               # Activity 换了、内容可能还在画：等这一页画完再认落点
-                    if landed():
-                        return True
-            p.back()                                # 收起浮层 / 退出点错的页，下一轮重开菜单
-        raise RuntimeError(f"浏览器设置页没有打开；停在 {p.focus()}")
-    return browser_settings
-
-
-NAV["settings_home"] = _vivo_settings_home
-NAV["browser_settings"] = _vivo_browser_settings
-
-
-# ---------- OPPO 家族 ----------
-#
-# ColorOS 脚本共用的导航过程。`SEARCH_TITLES` 与 `wait_page` 是脚本侧的东西：PLP120 的
-# 搜索页标题名单比一加两台长，PHK110 / PKX110 / PKH110 的 `wait_page` 各有本地实现
-# （代码同形、注释与折行不同），闭包从执行作用域现取、注入版不替它们判断。
-# `browser_settings` 上文已被 vivo 的菜单版占用，OPPO 这一版是公开 Intent 直达，
-# 另起名字 `browser_settings_direct`，三份脚本的调用点跟着改名（#1153）。
-
-def _oppo_wait_search_settings(p, g):
-    def wait_search_settings(tries=30):
-        from wait import until
-
-        def sample():
-            focus = p.focus()
-            if "com.heytap.quicksearchbox" not in focus or "Setting" not in focus:
-                return False
-            return bool(g["SEARCH_TITLES"] & {text for text, _, _ in p.texts()})
-
-        return bool(until(sample, tries=tries, same=2,
-                          now=g["time"].monotonic, sleep=g["time"].sleep))
-    return wait_search_settings
-
-
-def _oppo_settings_page(p, g):
-    def settings_page(*path):
-        p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
-        g["time"].sleep(1.2)
-        for t in path:
-            if not p.tap(t, exact=True):
-                return False
-        return True
-    return settings_page
-
-
-def _oppo_tap_page(p, g):
-    def tap_page(text, activity, title):
-        return p.tap(text, exact=True) and g["wait_page"](activity, title)
-    return tap_page
-
-
-def _oppo_open_app_settings(p, g):
-    def open_app_settings(package, activity, title):
-        # 两个 App 均实测支持此公开设置 Intent，绕开含账号信息的“我的”页。
-        result = p.d.shell(
-            "am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + package
-        ).output
-        if "Permission Denial" in result or "SecurityException" in result:
-            print("  ! 系统不允许直达设置，跳过，不提升权限")
-            return False
-        return g["wait_page"](activity, title)
-    return open_app_settings
-
-
-def _oppo_browser_settings_direct(p, g):
-    def browser_settings_direct():
-        return g["open_app_settings"]("com.heytap.browser",
-                                      "com.heytap.browser.settings.component.BrowserPreferencesPage",
-                                      "浏览器")
-    return browser_settings_direct
-
-
-NAV["wait_search_settings"] = _oppo_wait_search_settings
-NAV["settings_page"] = _oppo_settings_page
-NAV["tap_page"] = _oppo_tap_page
-NAV["open_app_settings"] = _oppo_open_app_settings
-NAV["browser_settings_direct"] = _oppo_browser_settings_direct
-
-
-# ---------- 跨家族 ----------
-#
-# `tap`：按名字点入口、找不到就 `require` 报错。一加 PJA110 与 vivo V2417A 各一份逐字相同。
-# 另外两份同名的（honor-WKL-AN20 的 `scrolls=6`、oppo-PKT110 的 `exact=`）签名不同，留本地覆盖。
-
-def _plain_tap(p, g):
-    def tap(name, scrolls=4):
-        g["require"](p.tap(name, exact=True, scrolls=scrolls), f"未找到入口「{name}」")
-    return tap
-
-
-NAV["tap"] = _plain_tap
-
-
-def install(p, g):
-    """把公共导航助手写进执行作用域 `g`（原地写，调用方不需要返回值）。"""
-    for name, factory in NAV.items():
-        g[name] = factory(p, g)
 
 
 # ---------- 小米系（xiaomi / redmi，#1151）----------
@@ -253,13 +117,247 @@ def _xiaomi_security_tab(p, g):
     return security_tab
 
 
+def _xiaomi_popup_row(p, g):
+    def popup_row(text, timeout=3.0):
+        """屏幕下半段里文字正好是 text 的那一行：菜单弹窗从底部升起，工具栏上的同名图标在上半屏。"""
+        def row():
+            for t, (l, top, r, b), _n in p.texts():
+                if t == text and top > p.H * 0.3:
+                    return (l + r) // 2, (top + b) // 2
+            return None
+        return until(row, timeout=timeout, poll=0.3, now=g["time"].time, sleep=g["time"].sleep)
+    return popup_row
+
+
+def _xiaomi_tap_tab(p, g):
+    def tap_tab(name):
+        """点顶部标签页：内层文字节点不可点，点外层的可点容器。"""
+        for n in p.tree().iter("node"):
+            if n.get("clickable") != "true":
+                continue
+            label = (n.get("text") or "") + (n.get("content-desc") or "")
+            from fast import bounds
+            l, t, r, b = bounds(n)
+            if name in label and t < p.H * 0.3 and p.on_screen(n):
+                p.click((l + r) // 2, (t + b) // 2); g["time"].sleep(1)
+                return True
+        return p.tap(name, exact=True, scrolls=0)
+    return tap_tab
+
+
 NAV.update({
     "tap_any": _xiaomi_tap_any,
     "gear": _xiaomi_gear,
     "read_switches": _xiaomi_read_switches,
     "close_named": _xiaomi_close_named,
     "security_tab": _xiaomi_security_tab,
+    "popup_row": _xiaomi_popup_row,
+    "tap_tab": _xiaomi_tap_tab,
 })
+
+
+
+
+# ---------- vivo ----------
+#
+# `browser_settings` 收的是「不含拉起 App」那一簇：vivo 浏览器没有底部「我的」，入口在右上菜单。
+# 含 `p.start` 的另一簇不在范围里：`entries.used_by` 从脚本源码扫 `p.start` / `start_or_skip` /
+# `am start -n` / `p.setting` 四类入口，搬走后入口速查会静默漏机型（沿用 #1148 定案 3）。
+# V2547A 有一份代码不同的同名实现，按「同名多簇一律留脚本原样」不搬；V2309A 那份代码与这里
+# 相同（当时按文本判成「写法不同」），#1153 起走注入版。
+
+def _vivo_settings_home(p, g):
+    def settings_home():
+        p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
+    return settings_home
+
+
+def _vivo_browser_settings(p, g):
+    def browser_settings(tries=2):
+        """右上「菜单 → 设置」，点完要认出设置页（沿用 #753 的做法）。
+
+        冷启动首页没有底部「我的」，入口是右上菜单。菜单浮层右上角有一个 desc 读作「返回」的 ✕
+        （id 里带 cancel），等入口时按弹窗去关会把它点掉，刚打开的菜单就收起来了，「设置」再也找不到。
+        所以这里只等那一行画出来、直接点，不在等待里关弹窗；点完没进设置页就退回、重开菜单再试一次。
+        别的 vivo 型号可能没有这个按钮，最多等 3 秒就放弃本段。"""
+        def landed():
+            if p.in_settings_page():
+                return True
+            at = p.find("设置", exact=True)         # Activity 名不含 Setting 的 App：只认顶上那处「设置」标题
+            return bool(at) and at[1] < p.H * 0.25
+
+        for _ in range(tries):
+            if not p.d(resourceId="com.vivo.browser:id/menu_btn").click_exists(timeout=3):
+                return False                        # 本机没有这个按钮：交给调用方跳过本段
+            p.await_page(1.6)                       # 菜单是弹层，画出来的那一帧才有「设置」
+            xy = until(lambda: p.find("设置", exact=True, edge_ok="tab"), timeout=3.0, poll=0.3,
+                       now=time.time, sleep=time.sleep)
+            if xy:
+                before = p.sig()
+                p.click(*xy)
+                if p.settle(before, 1.5):
+                    p.await_page(1.5)               # Activity 换了、内容可能还在画：等这一页画完再认落点
+                    if landed():
+                        return True
+            p.back()                                # 收起浮层 / 退出点错的页，下一轮重开菜单
+        raise RuntimeError(f"浏览器设置页没有打开；停在 {p.focus()}")
+    return browser_settings
+
+
+def _vivo_off_unnamed(p, g):
+    def off_unnamed(page):
+        """这一页上没有标题的开关：按位置一个个关，点一次回读一次。
+        商店「个性化推荐」页的两个开关 content-desc 只有「开启，开关」（沿用 #220 的做法）：p.off() 按标题匹配，
+        空标题的行整行跳过——既关不到，也不会报「关不掉」，所以只有这一页自己点。
+        灰的行不点（沿用 #333 的做法）；点完读不到开关（被确认框挡住）不算关掉（沿用 #486 的教训：读空不等于成功）。
+        安全模式下不点：无标题的行不在脚本点名的范围内（沿用 #909 的做法）。"""
+        from row import disabled_at
+        if p.safe_mode:
+            print(f"  · {page}：安全模式不做整页全关，无标题开关未改动", flush=True)
+            return 0
+        root = p.tree()
+        targets = [xy for title, on, xy in p.switches(root) if not title and on]
+        if not targets:
+            print(f"  · {page}：没有开着且无标题的开关")
+            return 0
+        done = 0
+        for i, xy in enumerate(targets, 1):
+            if disabled_at(root, xy):
+                print(f"  · 被上级开关禁用（开关是灰的），未改动 无标题开关 {i}")
+                continue
+            was = sum(1 for title, on, _ in p.switches() if not title and on)
+            p.click(*xy)
+            p.confirm()
+            g["time"].sleep(0.3)
+            rows = p.switches()
+            if not rows or sum(1 for title, on, _ in rows if not title and on) >= was:
+                print(f"  ✗ 关不掉 无标题开关 {i}")
+                continue
+            print(f"  关 无标题开关 {i}")
+            p.changed.append((page, f"无标题开关 {i}"))
+            done += 1
+        print(f"  · {page}：核对 {len(targets)} 项，调整 {done} 项")
+        return done
+    return off_unnamed
+
+
+NAV["settings_home"] = _vivo_settings_home
+NAV["browser_settings"] = _vivo_browser_settings
+NAV["off_unnamed"] = _vivo_off_unnamed
+
+
+
+
+# ---------- OPPO 家族 ----------
+#
+# ColorOS 脚本共用的导航过程。`SEARCH_TITLES` 仍是脚本侧的东西：PLP120 的搜索页标题名单比
+# 一加两台长，闭包从执行作用域现取、注入版不替它判断。
+#
+# `wait_page` 收的是一加 PHK110 与 OPPO PKH110 那份（代码逐字相同、只有注释与折行不同）；
+# PKX110 与 PLG110 / PMA110 的同名实现代码不同，按「同名多簇一律留脚本原样」继续覆盖注入版。
+#
+# `browser_settings` 上文已被 vivo 的菜单版占用，OPPO 这一版是公开 Intent 直达，
+# 另起名字 `browser_settings_direct`，三份脚本的调用点跟着改名（#1153）。
+#
+# PHK110 / PKX110 的 `off_exact` 也逐字相同，但函数体里的 `p.off(only=list(targets), …)` 是
+# `vocab.py` 的「未解析」台账要列的现场：搬走后词库少两行，而扫描注入面不在 #1148 的范围里，
+# 所以留在脚本里。
+
+def _oppo_wait_search_settings(p, g):
+    def wait_search_settings(tries=30):
+        from wait import until
+
+        def sample():
+            focus = p.focus()
+            if "com.heytap.quicksearchbox" not in focus or "Setting" not in focus:
+                return False
+            return bool(g["SEARCH_TITLES"] & {text for text, _, _ in p.texts()})
+
+        return bool(until(sample, tries=tries, same=2,
+                          now=g["time"].monotonic, sleep=g["time"].sleep))
+    return wait_search_settings
+
+
+def _oppo_settings_page(p, g):
+    def settings_page(*path):
+        p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
+        g["time"].sleep(1.2)
+        for t in path:
+            if not p.tap(t, exact=True):
+                return False
+        return True
+    return settings_page
+
+
+def _oppo_tap_page(p, g):
+    def tap_page(text, activity, title):
+        return p.tap(text, exact=True) and g["wait_page"](activity, title)
+    return tap_page
+
+
+def _oppo_open_app_settings(p, g):
+    def open_app_settings(package, activity, title):
+        # 两个 App 均实测支持此公开设置 Intent，绕开含账号信息的“我的”页。
+        result = p.d.shell(
+            "am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + package
+        ).output
+        if "Permission Denial" in result or "SecurityException" in result:
+            print("  ! 系统不允许直达设置，跳过，不提升权限")
+            return False
+        return g["wait_page"](activity, title)
+    return open_app_settings
+
+
+def _oppo_browser_settings_direct(p, g):
+    def browser_settings_direct():
+        return g["open_app_settings"]("com.heytap.browser",
+                                      "com.heytap.browser.settings.component.BrowserPreferencesPage",
+                                      "浏览器")
+    return browser_settings_direct
+
+
+def _oppo_wait_page(p, g):
+    def wait_page(activity, title, timeout=6):
+        """等到活动、页标题以及可点击区域连续稳定，避免横向动画期间的越界坐标。"""
+        deadline, previous = g["time"].monotonic() + timeout, None
+        while g["time"].monotonic() < deadline:
+            if p.locked():
+                return False
+            if not p.focus().endswith(activity):
+                g["time"].sleep(0.2)
+                continue
+            root = p.tree()
+            texts = p.texts(root)
+            # 只识别真正的同意按钮，不把设置页里的「隐私政策」链接当作协议弹窗。
+            if any(t in ("同意", "同意并继续", "同意并使用", "允许")
+                   and "Button" in n.get("class", "") for t, _, n in texts):
+                print("  ! 出现协议/权限按钮，本段跳过，不代为同意")
+                return False
+            if not any(t == title for t, _, _ in texts):
+                g["time"].sleep(0.2)
+                continue
+            switches = p.switches(root)
+            if any(not (0 < xy[0] < p.W and 0 < xy[1] < p.H) for _, _, xy in switches):
+                g["time"].sleep(0.2)
+                continue
+            signature = tuple(t for t, _, _ in texts), tuple(switches)
+            if signature == previous:
+                return True
+            previous = signature
+            g["time"].sleep(0.25)
+        print(f"  ✗ 未确认目标页面「{title}」，不操作开关")
+        return False
+    return wait_page
+
+
+NAV["wait_search_settings"] = _oppo_wait_search_settings
+NAV["settings_page"] = _oppo_settings_page
+NAV["tap_page"] = _oppo_tap_page
+NAV["open_app_settings"] = _oppo_open_app_settings
+NAV["browser_settings_direct"] = _oppo_browser_settings_direct
+NAV["wait_page"] = _oppo_wait_page
+
+
 
 
 # ---------- OPPO 两大对：PLZ110 / PMX110 与 PLG110 / PMA110（#1154）----------
@@ -270,11 +368,13 @@ NAV.update({
 #
 # `close_named` 不在这一簇：注入面的这个名字已被小米系（#1151）占用，PLZ110 / PMX110 那份带
 # `snapshot` / `optional`、代码不同，按「同名多簇一律留脚本原样」继续留在两份脚本里。
+# `hide_carousel` 同理只收 PLG110 / PMA110 这一簇，PLZ110 / PMX110 那份把单选控件读法写在函数
+# 体内、代码不同，留在脚本里覆盖注入版。
 #
 # `assistant_settings` 与 `at_assistant` / `assistant_icon` 的常量与下一步由脚本侧给出：
 # PLG110 与 PMA110 各有一份同名的本地 `tap_page`，闭包从执行作用域现取。`row` 与
 # `carousel_choices` 的 `bounds` 同样按执行作用域取，两份 PLG/PMA 脚本的 `from fast import …`
-# 因此要留着（那条 import 唯一的读者是注入版）。
+# 因此要留着（其中 `bounds` 唯一的读者是注入版，`ScreenLocked` 仍由脚本自己抛）。
 
 def _plz_open_page(p, g):
     def open_page(command, title, package, activity=None):
@@ -434,6 +534,27 @@ def _plg_assistant_settings(p, g):
     return assistant_settings
 
 
+def _plg_hide_carousel(p, g):
+    def hide_carousel():
+        activity = g["ASSISTANT"] + "setting.recommendservice.RecommendServiceSettingActivity"
+        g["wait_page"](activity, "推荐服务")
+        before = g["read_switches"](activity, "推荐服务", max_screens=1)
+        g["require"]("推荐服务" in before, "未读到推荐服务总开关，未操作")
+        choices = g["carousel_choices"](p.tree())
+        if not choices["不显示轮播推荐"][0]:
+            l, t, r, b = choices["不显示轮播推荐"][1]
+            g["require"](p.focus() == activity, "点击前页面变化，未操作")
+            p.click((l + r) // 2, (t + b) // 2)
+            g["time"].sleep(.4)
+            current = g["carousel_choices"](p.tree())
+            g["require"](current["不显示轮播推荐"][0], "轮播推荐回读未确认不显示")
+            p.changed.append(("负一屏·推荐服务", "轮播推荐：不显示"))
+        g["require"](g["read_switches"](activity, "推荐服务", 1) == before, "推荐服务总开关变化，请核对")
+        g["VERIFIED_SWITCHES"] += 1
+        print("  · 轮播推荐：已确认不显示，推荐服务总开关保持原值", flush=True)
+    return hide_carousel
+
+
 def _plg_carousel_choices(p, g):
     def carousel_choices(root):
         """只识别有明确 checked 状态的单选控件；预览图的同名文字不能作为点击目标。"""
@@ -475,4 +596,51 @@ NAV.update({
     "system_settings": _plz_system_settings,
     "assistant_settings": _plg_assistant_settings,
     "carousel_choices": _plg_carousel_choices,
+    "hide_carousel": _plg_hide_carousel,
 })
+
+
+# ---------- 跨家族 ----------
+#
+# `tap`：按名字点入口、找不到就 `require` 报错。一加 PJA110 与 vivo V2417A 各一份逐字相同。
+# 另外两份同名的（honor-WKL-AN20 的 `scrolls=6`、oppo-PKT110 的 `exact=`）签名不同，留本地覆盖。
+#
+# `opened`：试一条直达页面、不通就走菜单。vivo V2547DA 的 Android 17 变体与小米 M154FF /
+# M332BF 三份逐字相同，意图也一致，所以共用一个注入名。脚本侧的 `import adb_link` 要留着：
+# 闭包从执行作用域取它，删掉这行 import 就是 AttributeError。
+
+def _plain_tap(p, g):
+    def tap(name, scrolls=4):
+        g["require"](p.tap(name, exact=True, scrolls=scrolls), f"未找到入口「{name}」")
+    return tap
+
+
+def _plain_opened(p, g):
+    def opened(start):
+        """试一条直达页面：到了返回真。别的系统版本可能没有这一页，返回假走菜单；
+        断线照常上抛——跑到一半掉线时 Phone 只置 lost、抛的是普通 RuntimeError（沿用 #293 的做法）。"""
+        try:
+            start()
+            return True
+        except (g["adb_link"].DeviceLost, g["SkipStep"]):
+            # 跳过（App 本机没装 / 按约定不跑）不是「这条路不通」：放行，由段包装记跳过（沿用 #908 的做法）
+            raise
+        except RuntimeError as e:
+            if p.lost:
+                raise
+            print(f"  · 直达不通（{e}），走菜单")
+            return False
+    return opened
+
+
+NAV.update({"tap": _plain_tap, "opened": _plain_opened})
+
+
+
+
+
+
+def install(p, g):
+    """把公共导航助手写进执行作用域 `g`（原地写，调用方不需要返回值）。"""
+    for name, factory in NAV.items():
+        g[name] = factory(p, g)

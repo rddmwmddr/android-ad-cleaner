@@ -46,57 +46,6 @@ def gear():
     return p.tap("设置", exact=True, scrolls=0) and landed(focus0)
 
 
-def off_unnamed(page):
-    """这一页上没有标题的开关：按位置一个个关，点一次回读一次。
-    商店「个性化推荐」页的两个开关 content-desc 只有「开启，开关」（#220）：p.off() 按标题匹配，
-    空标题的行整行跳过——既关不到，也不会报「关不掉」，所以只有这一页自己点。
-    灰的行不点（#333）；点完读不到开关（被确认框挡住）不算关掉（#486 的教训：读空不等于成功）。
-    安全模式下不点：无标题的行不在脚本点名的范围内（#909）。"""
-    from row import disabled_at
-    if p.safe_mode:
-        print(f"  · {page}：安全模式不做整页全关，无标题开关未改动", flush=True)
-        return 0
-    root = p.tree()
-    targets = [xy for title, on, xy in p.switches(root) if not title and on]
-    if not targets:
-        print(f"  · {page}：没有开着且无标题的开关")
-        return 0
-    done = 0
-    for i, xy in enumerate(targets, 1):
-        if disabled_at(root, xy):
-            print(f"  · 被上级开关禁用（开关是灰的），未改动 无标题开关 {i}")
-            continue
-        was = sum(1 for title, on, _ in p.switches() if not title and on)
-        p.click(*xy)
-        p.confirm()
-        time.sleep(0.3)
-        rows = p.switches()
-        if not rows or sum(1 for title, on, _ in rows if not title and on) >= was:
-            print(f"  ✗ 关不掉 无标题开关 {i}")
-            continue
-        print(f"  关 无标题开关 {i}")
-        p.changed.append((page, f"无标题开关 {i}"))
-        done += 1
-    print(f"  · {page}：核对 {len(targets)} 项，调整 {done} 项")
-    return done
-
-
-def opened(start):
-    """试一条直达页面：到了返回真。别的系统版本可能没有这一页，返回假走菜单；
-    断线照常上抛——跑到一半掉线时 Phone 只置 lost、抛的是普通 RuntimeError（#293）。"""
-    try:
-        start()
-        return True
-    except (adb_link.DeviceLost, SkipStep):
-        # 跳过（App 本机没装 / 按约定不跑）不是「这条路不通」：放行，由段包装记跳过（#908）
-        raise
-    except RuntimeError as e:
-        if p.lost:
-            raise
-        print(f"  · 直达不通（{e}），走菜单")
-        return False
-
-
 @step("系统广告")
 def _():
     only = ["个性化广告", "个性化推荐", "智能推荐服务"]

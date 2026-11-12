@@ -9,20 +9,6 @@ import time
 from entries import THEME_DEAD_ENDS
 
 
-def tap_tab(name):
-    """点顶部标签页；内层文字节点不可点，点外层的可点容器。"""
-    for n in p.tree().iter("node"):
-        if n.get("clickable") != "true":
-            continue
-        label = (n.get("text") or "") + (n.get("content-desc") or "")
-        from fast import bounds
-        l, t, r, b = bounds(n)
-        if name in label and t < p.H * 0.3 and p.on_screen(n):
-            p.click((l + r) // 2, (t + b) // 2); time.sleep(1)
-            return True
-    return p.tap(name, exact=True, scrolls=0)
-
-
 def tap_bottom_tab(name):
     """按屏幕底部标签栏找入口，避开内容区里同名的普通文字。"""
     from fast import bounds

@@ -42,16 +42,6 @@ def tap_any(*names, scrolls=6):
     return any(maybe(name, scrolls) for name in names)
 
 
-def popup_row(text, timeout=3.0):
-    """屏幕下半段里文字正好是 text 的那一行：菜单弹窗从底部升起，工具栏上的同名图标在上半屏。"""
-    def row():
-        for t, (l, top, r, b), _n in p.texts():
-            if t == text and top > p.H * 0.3:
-                return (l + r) // 2, (top + b) // 2
-        return None
-    return until(row, timeout=timeout, poll=0.3, now=time.time, sleep=time.sleep)
-
-
 def menu_settings(tries=2):
     """底栏「菜单」→ 弹窗里的「设置」，点完必须认出设置页（#586）。
 

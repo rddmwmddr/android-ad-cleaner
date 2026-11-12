@@ -18,39 +18,6 @@ STORE_PROMOTIONS = [
 ]
 
 
-def wait_page(activity, title, timeout=6):
-    """等到活动、页标题以及可点击区域连续稳定，避免横向动画期间的越界坐标。"""
-    deadline, previous = time.monotonic() + timeout, None
-    while time.monotonic() < deadline:
-        if p.locked():
-            return False
-        if not p.focus().endswith(activity):
-            time.sleep(0.2)
-            continue
-        root = p.tree()
-        texts = p.texts(root)
-        # 只识别真正的同意按钮，不把设置页里的“隐私政策”链接当作协议弹窗。
-        if any(t in ("同意", "同意并继续", "同意并使用", "允许")
-               and "Button" in n.get("class", "") for t, _, n in texts):
-            print("  ! 出现协议/权限按钮，本段跳过，不代为同意")
-            return False
-        if not any(t == title for t, _, _ in texts):
-            time.sleep(0.2)
-            continue
-        switches = p.switches(root)
-        if any(not (0 < xy[0] < p.W and 0 < xy[1] < p.H)
-               for _, _, xy in switches):
-            time.sleep(0.2)
-            continue
-        signature = tuple(t for t, _, _ in texts), tuple(switches)
-        if signature == previous:
-            return True
-        previous = signature
-        time.sleep(0.25)
-    print(f"  ✗ 未确认目标页面「{title}」，不操作开关")
-    return False
-
-
 def off_exact(names, page, max_screens=16):
     """逐页传入当前可见的精确标题，不把“福利”之类子串扩展到未知服务。"""
     wanted, seen, failed = set(names), set(), set()

@@ -10,6 +10,7 @@ MODELS = ["M154FF", "2608BPX34C", "2510DRK44C"]
 import time
 from entries import THEME_DEAD_ENDS
 
+# 注入面的 opened() 从这里取 adb_link.DeviceLost
 import adb_link
 
 
@@ -28,22 +29,6 @@ def browser_settings():
             p.settle(before, 1.5)
             return gear()
     return False
-
-
-def opened(start):
-    """试一条直达页面：到了返回真。18 Fold 这类版本不同的机器可能没有这一页，返回假走菜单；
-    断线照常上抛——跑到一半掉线时 Phone 只置 lost、抛的是普通 RuntimeError（#293）。"""
-    try:
-        start()
-        return True
-    except (adb_link.DeviceLost, SkipStep):
-        # 跳过（App 本机没装 / 按约定不跑）不是「这条路不通」：放行，由段包装记跳过（#908）
-        raise
-    except RuntimeError as e:
-        if p.lost:
-            raise
-        print(f"  · 直达不通（{e}），走菜单")
-        return False
 
 
 @step("系统广告")

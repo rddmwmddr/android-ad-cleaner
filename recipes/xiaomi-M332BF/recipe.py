@@ -7,6 +7,7 @@ MODELS = ["M332BF"]
 import time
 from entries import THEME_DEAD_ENDS
 
+# 注入面的 opened() 从这里取 adb_link.DeviceLost
 import adb_link
 
 
@@ -34,22 +35,6 @@ def gear(toolbar_only=False):
                 return True
             break
     return False
-
-
-def opened(start):
-    """试一条直达页面：到了返回真。这台机器上版本不同的页面可能没有，返回假走菜单；
-    断线照常上抛——跑到一半掉线时 Phone 只置 lost、抛的是普通 RuntimeError（沿用 #293 的做法）。"""
-    try:
-        start()
-        return True
-    except (adb_link.DeviceLost, SkipStep):
-        # 跳过（App 本机没装 / 按约定不跑）不是「这条路不通」：放行，由段包装记跳过（#908）
-        raise
-    except RuntimeError as e:
-        if p.lost:
-            raise
-        print(f"  · 直达不通（{e}），走菜单")
-        return False
 
 
 @step("系统广告")
