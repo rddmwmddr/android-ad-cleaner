@@ -13,10 +13,11 @@
 没有出处的不写进来：猜的包名、页面名会让引擎跳到别处。快应用不在这里——它按包名与设置项处理，
 见 run.py 的 `QUICKAPP` 与 vivo 的 `switch_quick_app_service`，不走界面。
 """
-import ast
-import shlex
 import re
+import shlex
 from dataclasses import dataclass
+
+import recipe_source
 
 # 品牌（ro.product.brand 小写）→ 家族。run.py 的广告包、参考脚本与版本比较都用这一份，别再另建。
 FAMILY = {
@@ -291,156 +292,74 @@ def source_key(d):
     return ("direct", d.pkg, full(d.pkg, d.activity))
 
 
-# 脚本里的赋值，用来把 `p.start(package, …)` 还原成包名。
-_ASSIGN = re.compile(r'^[ \t]*(\w+)[ \t]*=(?!=)[ \t]*(.*?)[ \t]*$', re.M)
-_LITERAL = re.compile(r'^"([\w.$]*)"$|^\'([\w.$]*)\'$')
+# 一条拉起命令里的页面与公开 Intent：脚本里的几种写法（字面量、拼接变量、模板常量的
+# `.format(…)`）由事实层先把字符串还原出来，这里只认还原后的整条命令。
+_AM_PAGE = re.compile(r"am start\b[^\n]*?-n\s+([\w.]+)/([\w.$]+)")
+_AM_INTENT = re.compile(r"am start\b[^\n]*?-a\s+([\w.]+)[^\n]*?-p\s+([\w.]+)")
+# 拉起入口的调用名：Phone.start 与共享的 start_or_skip 助手（沿用 #902）。
+_START_CALLS = frozenset({"p.start", "start_or_skip"})
 
 
-def _arg_at(token, src, pos):
-    """一个实参：字面量，或在这个位置之前最后一次赋值的名字——那次赋值必须也是字面量。认不出来返回 None。
-
-    按位置取最后一次赋值：同一个脚本里 `package` 每段都会重新赋值，取全文件的最后一份会张冠李戴。
-    最后一次赋值不是字面量（`package = helper()`）时返回 None，不退回更早的旧值：那样会记成别的包。
-    """
-    token = token.strip()
-    if token.startswith("activity="):
-        token = token[len("activity="):].strip()
-    if len(token) >= 2 and token[0] == token[-1] and token[0] in "\"'":
-        return token[1:-1]
-    if not token.isidentifier():
+def _value(arg):
+    """一个实参解析出的单个取值。入口这一侧不复刻旧的形参回填：形参实参算未解析（#1197 接线口径）。"""
+    if arg is None or arg.param is not None or not arg.values:
         return None
-    value = None
-    for m in _ASSIGN.finditer(src, 0, pos):
-        if m.group(1) != token:
-            continue
-        lit = _LITERAL.match(m.group(2))
-        value = (lit.group(1) if lit.group(1) is not None else lit.group(2)) if lit else None
-    return value
+    return arg.values[0].text
 
 
-_DEF = re.compile(r"^([ \t]*)def[ \t]+(\w+)[ \t]*\(([^)]*)\)", re.M)
-_TEMPLATE = re.compile(r"^[ \t]*(\w+)[ \t]*=[ \t]+([\"'])((?:(?!\2).)*)\2", re.M)
-_FORMAT = re.compile(r"\b(\w+)\.format\(\s*([\w.]+)\s*\)")
-# 公开 Intent 入口：`am start … -a <action> … -p <包名>`。包名有三种写法：字面量、
-# 拼接的变量（`-p " + package`）、模板常量的 `{}` 在别处 `.format(…)` 传进来。
-_INTENT = re.compile(
-    r"am start[^\"']*?-a\s+([\w.]+)[^\"']*?-p\s+(?:([\w.$]+)|\{\}|[\"']\s*\+\s*(\w+))")
-# 包着 APP_SETTINGS 的入口助手：`open_app_settings(包名, 页面, 标题)`，注入版写成
-# `g["open_app_settings"](...)`。两个参数都是字面量时才认，与其余几档同一口径。
-_APP_SETTINGS = re.compile(
-    r"""(?:g\[['"]open_app_settings['"]\]|open_app_settings)\(\s*['"]([\w.]+)['"]\s*,\s*['"]([\w.$]+)['"]""")
+def _arg_of(call, index, keyword=None):
+    """第 index 个位置实参；不够时退回同名关键字实参（`p.start(pkg, activity=…)`）。
+
+    `keyword is None` 时不做关键字回退：位置实参的 `keyword` 也是 None，回退会把它自己
+    当成第二个实参，单实参的调用就凭空多出一档入口。"""
+    positional = [arg for arg in call.args if arg.keyword is None]
+    if index < len(positional):
+        return positional[index]
+    if keyword is None:
+        return None
+    for arg in call.args:
+        if arg.keyword == keyword:
+            return arg
+    return None
 
 
-def _enclosing_def(src, pos):
-    """包住这一行的函数定义：位置之前、缩进比这一行列浅的最近一个。"""
-    line_start = src.rfind("\n", 0, pos) + 1
-    column = len(src[line_start:pos].expandtabs())
-    found = None
-    for m in _DEF.finditer(src, 0, pos):
-        if len(m.group(1).expandtabs()) < column:
-            found = m
-    return found
-
-
-def _param_values(name, src, pos, caller=""):
-    """变量是外层函数的形参时，从调用它的地方取对应实参：机型脚本常把包名往助手函数里传一层。
-
-    `caller` 是调用方源码：搬到注入面的助手，实参写在脚本里、形参在实现里，两侧各看一份。"""
-    m = _enclosing_def(src, pos)
-    if not m:
-        return []
-    params = [p.split("=")[0].strip() for p in m.group(3).split(",")]
-    if name not in params:
-        return []
-    index = params.index(name)
-    values = []
-    for call in _calls_of(m.group(2), src):
-        if call.start() < m.end():
-            continue
-        parts = call.group(1).split(",")
-        value = _arg_at(parts[index], src, call.start()) if index < len(parts) else None
-        if value:
-            values.append(value)
-    if values or not caller:
-        return values
-    for call in _calls_of(m.group(2), caller):
-        parts = call.group(1).split(",")
-        value = _arg_at(parts[index], caller, call.start()) if index < len(parts) else None
-        if value:
-            values.append(value)
-    return values
-
-
-def _calls_of(name, src):
-    """这个函数名在这份源码里的调用（按实参切分好的匹配对象）。"""
-    return re.finditer(rf"\b{re.escape(name)}\s*\(([^)]*)\)", src)
-
-
-def _named(src, name, pos, caller=""):
-    """一个变量在这个位置的值：同文件里最后一次字面量赋值，或它是外层形参时调用处传的实参。"""
-    if not name.isidentifier():
-        return []
-    value = _arg_at(name, src, pos)
-    return [value] if value else _param_values(name, src, pos, caller)
-
-
-def _template_owner(src, pos, action):
-    """`-p {}` 这种模板的常量名：它的包名在别处用 `.format(…)` 补上。赋值行包住 pos，不能拿 pos 截断。"""
-    owner = None
-    for m in _TEMPLATE.finditer(src):
-        if m.start() < pos and action in m.group(3) and "-p {}" in m.group(3):
-            owner = m.group(1)
-    return owner
-
-
-def _intent_packages(src, m, caller=""):
-    """一条 Intent 拉起命令里 `-p` 的包名；认不出来返回空。"""
-    if m.group(2):
-        token = m.group(2)
-        # 包名一定带点；没有点的是变量名（`-p package`），照变量还原
-        return [token] if "." in token else _named(src, token, m.start(), caller)
-    if m.group(3):
-        return _named(src, m.group(3), m.start(), caller)
-    owner = _template_owner(src, m.start(), m.group(1))
-    if not owner:
-        return []
-    out = []
-    for call in _FORMAT.finditer(src):
-        if call.group(1) == owner:
-            out += _named(src, call.group(2), call.start(), caller)
-    return out
-
-
-def _scan_entries(src, model, found, caller=""):
-    """从一段源码里认出这台机用过的入口：脚本自己的源码，或它调用到的注入面实现。
-
-    `caller` 是调用这份实现的脚本源码：实参在脚本里、形参在实现里，包名要两侧合起来才认得出来。"""
-    for call in re.finditer(r"(?:p\.start|start_or_skip)\(([^)]*)\)", src):
-        parts = call.group(1).split(",")
-        pkg = _arg_at(parts[0], src, call.start())
-        act = _arg_at(parts[1], src, call.start()) if len(parts) > 1 else None
-        if pkg and act:
-            found.setdefault(("direct", pkg, full(pkg, act)), set()).add(model)
-    for m in re.finditer(r'am start[^"\']*?-n\s+([\w.]+)/([\w.$]+)', src):
+def _scan_command(text, model, found):
+    """一条已还原的拉起命令里的入口：`-n 包名/页面` 记直达，`-a 动作 … -p 包名` 记公开 Intent。"""
+    for m in _AM_PAGE.finditer(text):
         found.setdefault(("direct", m.group(1), full(m.group(1), m.group(2))), set()).add(model)
-    for m in _INTENT.finditer(src):
-        for pkg in _intent_packages(src, m, caller):
-            found.setdefault(("intent", m.group(1), pkg), set()).add(model)
-    for m in _APP_SETTINGS.finditer(src):
-        found.setdefault(("intent", APP_SETTINGS_ACTION, m.group(1)), set()).add(model)
-    for call in re.finditer(r"p\.setting\(([^)]*)\)", src):
-        parts = call.group(1).split(",")
-        kw = _arg_at(parts[0], src, call.start())
-        result = _arg_at(parts[1], src, call.start()) if len(parts) > 1 else kw
-        if kw:
-            found.setdefault(("search", kw, result or kw), set()).add(model)
+    for m in _AM_INTENT.finditer(text):
+        found.setdefault(("intent", m.group(1), m.group(2)), set()).add(model)
 
 
-def _injected_sources():
-    """注入面里各助手的实现源码：{注入名: 源码}。搬走的入口写在这里，脚本只剩一行调用。"""
-    import inspect
-    import recipe_nav
-    return {name: inspect.getsource(factory) for name, factory in recipe_nav.NAV.items()}
+def _scan_entries(facts, model, found):
+    """从一份事实里认出这台机用过的入口：脚本自身的源码，或它调用到的注入面实现。"""
+    for call in facts.calls:
+        if call.name in _START_CALLS:
+            pkg, act = _value(_arg_of(call, 0)), _value(_arg_of(call, 1, "activity"))
+            if pkg and act:
+                found.setdefault(("direct", pkg, full(pkg, act)), set()).add(model)
+        elif call.name == "p.setting":
+            keyword = _value(_arg_of(call, 0))
+            if keyword:
+                found.setdefault(("search", keyword, _value(_arg_of(call, 1)) or keyword),
+                                 set()).add(model)
+        elif call.name == "open_app_settings":
+            pkg, page = _value(_arg_of(call, 0)), _value(_arg_of(call, 1))
+            if pkg and page:
+                found.setdefault(("intent", APP_SETTINGS_ACTION, pkg), set()).add(model)
+        for arg in call.args:
+            for item in arg.values:
+                _scan_command(item.text, model, found)
+
+
+def _bindings(calls):
+    """脚本调注入助手时按位置传的实参：实参在脚本里、形参在实现里，事实层按位置把两侧合起来。"""
+    out = {}
+    for call in calls:
+        for index, arg in enumerate(arg for arg in call.args if arg.keyword is None):
+            if arg.param is None and arg.values:
+                out.setdefault(index, []).extend(item.text for item in arg.values)
+    return {index: tuple(texts) for index, texts in out.items()}
 
 
 def used_by(recipes_dir):
@@ -455,39 +374,25 @@ def used_by(recipes_dir):
 
     搬进注入面（`tool/recipe_nav.py`）的助手，入口写在实现里、脚本只剩一行调用：脚本调用了哪个
     注入名，就把那份实现也扫一遍，否则「用过的机型」会静默漏掉（#1153）。包名这类实参仍在脚本里
-    （`app_settings(MARKET)`），形参在实现里，两侧合起来才还原得出包名（#1154）。定义了本地同名
-    实现的脚本走本地那份，不扫注入版。
+    （`app_settings(MARKET)`），形参在实现里，按位置把两侧合起来才还原得出包名（沿用 #1154 的做法）。定义了
+    本地同名实现的脚本走本地那份，不扫注入版。
+
+    命令串只从调用的实参里取：变量、拼接与模板常量都还原得到，没被任何调用引用的字符串常量不算
+    出处；语法错的脚本经事实层直接抛 `SyntaxError`，不再静默少算（沿用 #1195 的口径）。
 
     只认字面量：经 `reach(p, ENTRIES[...])` 消费的那几条（浏览器段，#912）看不出来，
     这张表会把用得上的机型算成没用过。"""
-    import glob, os
-    injected = _injected_sources()
+    injected = recipe_source.injected_sources()
     found = {}
-    for f in glob.glob(os.path.join(recipes_dir, "*", "recipe*.py")):
-        model = os.path.basename(os.path.dirname(f)).split("-", 1)[-1]
-        with open(f, encoding="utf-8") as fh:
-            src = fh.read()
-        _scan_entries(src, model, found)
-        called = _called_names(src) - _defined_names(src)
+    for rel, facts in recipe_source.scan_dir(recipes_dir).items():
+        model = rel.split("/", 1)[0].split("-", 1)[-1]
+        _scan_entries(facts, model, found)
         for name, impl in injected.items():
-            if name in called:
-                _scan_entries(impl, model, found, caller=src)
+            calls = [call for call in facts.calls
+                     if call.injected and call.name == name and name not in facts.defines]
+            if calls:
+                _scan_entries(recipe_source.scan_source(impl, _bindings(calls)), model, found)
     return found
-
-
-def _called_names(src):
-    """脚本里真正被调用的裸名字集合（AST）：`p.tap(` 与方法不算，注释与字符串里的同名也不算。"""
-    try:
-        tree = ast.parse(src)
-    except SyntaxError:
-        return set()
-    return {node.func.id for node in ast.walk(tree)
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
-
-
-def _defined_names(src):
-    """脚本自己定义的函数名：本地定义后执行、覆盖注入版，那种名字不该再扫注入面那份。"""
-    return {m.group(1) for m in re.finditer(r"^def[ \t]+(\w+)", src, re.M)}
 
 
 def open_direct(p, d, settle=1.2):
