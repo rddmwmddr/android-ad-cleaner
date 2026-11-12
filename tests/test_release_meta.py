@@ -6,6 +6,7 @@
 import contextlib
 import hashlib
 import io
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -23,8 +24,10 @@ DIGESTS = {entry_id: hashlib.sha256(entry_id.encode()).hexdigest()
 SIZES = {"mac-arm64": 40_404_808, "mac-intel": 45_995_322, "win-setup": 1_000_050,
          "win-zip": 2, "android": 52_800_000}
 
-# 与 index.html 同形：卡片跨两行、`baidu` 里套着花括号、win-setup 带 `gitee: false`。
-PAGE = Template("""const REL = {
+# 与 index.html 同形：卡片跨两行、`baidu` 里套着花括号、win-setup 带 `gitee: false`，
+# 图标地址带 `?v=` 缓存键（两处：favicon 与品牌区 logo）。
+PAGE = Template("""<link rel="icon" href="images/roudai-icon.png?v=0.4.3">
+const REL = {
   version: "0.4.3",
   github: "https://github.com/x/y/releases/download/v0.4.3/",
   gitee: "https://gitee.com/x/y/releases/download/v0.4.3/",
@@ -43,7 +46,13 @@ PAGE = Template("""const REL = {
   ],
 };
 const RELEASED = "2026-01-01";
+<a class="brand" href="#"><img class="logo" src="images/roudai-icon.png?v=0.4.3" alt="">App</a>
 """)
+
+# 教程页没有 REL，只有两处同样的图标地址：缓存的旧 404 要靠同一个键绕开。
+TUTORIAL = """<link rel="icon" href="images/roudai-icon.png?v=0.4.3">
+<a class="brand" href="index.html"><img class="logo" src="images/roudai-icon.png?v=0.4.3" alt="">App</a>
+"""
 
 
 def old_page():
@@ -256,6 +265,8 @@ class PageTests(unittest.TestCase):
         self.addCleanup(self.dir.cleanup)
         self.page = Path(self.dir.name) / "index.html"
         self.page.write_text(old_page(), encoding="utf-8")
+        self.tutorial = Path(self.dir.name) / "android-tutorial.html"
+        self.tutorial.write_text(TUTORIAL, encoding="utf-8")
 
     def run_main(self, argv=("page", "v1.2.3", "--write"), assets=None, fetch_error=None,
                  published=RELEASED, published_error=None, verify=None):
@@ -273,12 +284,16 @@ class PageTests(unittest.TestCase):
 
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = release_meta.main(argv, fetch=fetch, published=stamp, page=self.page,
+            code = release_meta.main(argv, fetch=fetch, published=stamp,
+                                     pages={"home": self.page, "tutorial": self.tutorial},
                                      verify=verify or release_meta.page_ok)
         return code, out.getvalue(), err.getvalue()
 
     def text(self):
         return self.page.read_text(encoding="utf-8")
+
+    def tutorial_text(self):
+        return self.tutorial.read_text(encoding="utf-8")
 
     def test_backfills_every_data_field_and_the_release_date(self):
         code, out, err = self.run_main()
@@ -291,6 +306,23 @@ class PageTests(unittest.TestCase):
         self.assertIn('releases/download/v1.2.3/"', self.text())
         self.assertIn(f'const RELEASED = "{RELEASED}";', self.text())
         self.assertIn("回填", out)
+
+    def test_backfills_the_icon_cache_key_on_both_pages(self):
+        """?v= 是图标的缓存键：两页一起换成本版，否则同一份源码里出现两个版本号。"""
+        code, _, err = self.run_main()
+        self.assertEqual(code, release_meta.EXIT_OK, err)
+        for page, text in (("home", self.text()), ("tutorial", self.tutorial_text())):
+            with self.subTest(page=page):
+                self.assertEqual(set(re.findall(r'\?v=([^"&\s]+)', text)), {"1.2.3"})
+
+    def test_page_without_an_icon_cache_key_writes_neither_page(self):
+        """一页读不到 ?v= 就是结构变了：读不出就不动盘，两页都保持原样。"""
+        self.tutorial.write_text(TUTORIAL.replace("?v=0.4.3", ""), encoding="utf-8")
+        before = self.text(), self.tutorial_text()
+        code, _, err = self.run_main()
+        self.assertEqual(code, release_meta.EXIT_REFUSED)
+        self.assertIn("?v=", err)
+        self.assertEqual((self.text(), self.tutorial_text()), before)
 
     def test_copy_fields_and_structure_are_untouched(self):
         """回填只替换值：卡片上的 folder / title / sub / note 与整段结构逐字留给页面。
@@ -309,7 +341,7 @@ class PageTests(unittest.TestCase):
                         release_meta.SIZE_LINE, release_meta.SHA_LINE,
                         release_meta.RELEASED_LINE):
             text = pattern.sub(lambda m: m.group(1) + "@" + m.group(3), text)
-        return text
+        return release_meta.CACHE_KEY.sub(lambda m: m.group(1) + "@", text)
 
     def test_gitee_is_left_alone_unless_asked(self):
         code, out, err = self.run_main()
@@ -371,7 +403,9 @@ class PageTests(unittest.TestCase):
         self.assertEqual(code, release_meta.EXIT_REFUSED)
         self.assertIn("回读", err)
         self.assertEqual(self.text(), before)
-        self.assertEqual(sorted(p.name for p in Path(self.dir.name).iterdir()), ["index.html"])
+        self.assertEqual(self.tutorial_text(), TUTORIAL)
+        self.assertEqual(sorted(p.name for p in Path(self.dir.name).iterdir()),
+                         ["android-tutorial.html", "index.html"])
 
     def test_version_that_does_not_match_the_assets_writes_nothing(self):
         code, _, err = self.run_main(argv=("page", "v2.0.0", "--write"))

@@ -6,7 +6,7 @@
     python3 tool/release_meta.py sums v0.4.4 --upload      # 再传进 Release 草稿并回读核对
     python3 tool/release_meta.py sums v0.4.4 --from-files <安装包所在目录>
     python3 tool/release_meta.py page v0.4.4               # 只校验能不能回填（不写盘）
-    python3 tool/release_meta.py page v0.4.4 --write       # 回填 index.html 的 REL
+    python3 tool/release_meta.py page v0.4.4 --write       # 回填 index.html 的 REL 与两页图标地址
 
 清单条目是 `<sha256>  <文件名>`（两个空格），顺序与下载卡片的 id 顺序一致，不含清单文件自身。
 摘要取自 Release 的资产；缺摘要、或某个卡片 id 匹配不到附件时整份拒绝，不留下半份文件。
@@ -14,8 +14,9 @@
 `--upload` 只在 Release 还是草稿时允许：公开之后换文件，用户手里的校验值就对不上了。
 
 `page --write` 只动数据字段：版本号、下载前缀里的版本段、五条卡片的文件名 / 大小 / sha、
-发布日期；卡片的 `folder` / `title` / `sub` / `note` 逐字不动。先校验再用——卡片 id 对不上、
-资产缺失、页面读不全时整份不写；写盘走临时文件，回读自检一致才替换。`REL.gitee` 默认不动
+发布日期，以及两页图标地址的 `?v=` 缓存键（它得等于 `REL.version`，否则同一份源码里两个
+版本号打架）；卡片的 `folder` / `title` / `sub` / `note` 逐字不动。先校验再用——卡片 id 对不上、
+资产缺失、任一页读不全时整份不写；写盘走临时文件，回读自检一致才替换。`REL.gitee` 默认不动
 （Gitee 上传晚于页面更新），要一起回填时加 `--gitee`。
 
 退出码：0 写出（上传则含回读一致）；1 拒绝生成 / 拒绝上传 / 拒绝回填；2 取数失败（网络、
@@ -31,6 +32,8 @@ from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))   # 直接跑脚本与作为 tool.<模块> import 两种都认
 from gh import GhError, call, runner_for                   # noqa: E402
+# 两页的清单只认 gen_site_css.TARGETS：图标缓存键跟 REL.version 走，页面集合不另列一份。
+from gen_site_css import TARGETS as SITE_PAGES             # noqa: E402
 from release_assets import (BLOCK, Entry, fetch_release, human_size, map_entries,  # noqa: E402
                             read_entries)
 from stdio import use_utf8_console                         # noqa: E402
@@ -49,7 +52,8 @@ SUFFIXES = (
 )
 
 MANIFEST = "SHA256SUMS.txt"
-PAGE = Path(__file__).resolve().parents[1] / "index.html"
+# REL 块只在首页；其余页面只拿图标缓存键。
+REL_PAGE = "home"
 USAGE = ("用法：python3 tool/release_meta.py sums <tag> [--upload] [--from-files <目录>]\n"
          "      python3 tool/release_meta.py page <tag> [--write] [--gitee]")
 
@@ -65,6 +69,8 @@ FILE_LINE = re.compile(r'(\bfile:\s*")([^"]*)(")')
 SIZE_LINE = re.compile(r'(\bsize:\s*")([^"]*)(")')
 SHA_LINE = re.compile(r'(\bsha:\s*")([^"]*)(")')
 RELEASED_LINE = re.compile(r'(const RELEASED = ")([^"]*)(")')
+# 图标地址的缓存键（#1221）：`?v=<版本>` 只出现在 icons 引用里，两页各两处。
+CACHE_KEY = re.compile(r'(\?v=)([^"&\s]+)')
 
 
 class Refused(Exception):
@@ -184,6 +190,19 @@ def page_ok(text, version, entries, released):
     want = {entry.id: (entry.file, entry.size, entry.sha) for entry in entries}
     found = RELEASED_LINE.search(text)
     return got == want and found is not None and found.group(2) == released
+
+
+def stamp_cache_key(text, version):
+    """把这一页图标地址的 `?v=` 换成新版本；一处都读不到就是结构变了，拒绝回填。"""
+    new, count = CACHE_KEY.subn(lambda m: m.group(1) + version, text)
+    if count == 0:
+        raise Refused("页面里读不到图标地址的 ?v= 缓存键：结构变了，拒绝回填。")
+    return new
+
+
+def cache_key_ok(text, version):
+    """写后回读：这一页的 `?v=` 全是新版本。"""
+    return {m.group(2) for m in CACHE_KEY.finditer(text)} == {version}
 
 
 def file_digest(path):
@@ -356,51 +375,69 @@ def run_sums(opts, fetch, upload, draft, out):
     return EXIT_OK
 
 
-def run_page(opts, fetch, published, page, verify):
-    tag, path = opts.tag, Path(page)
+def run_page(opts, fetch, published, pages, verify):
+    tag = opts.tag
     version = tag.removeprefix("v")
-    try:
-        page_text = path.read_text(encoding="utf-8")
-    except OSError as error:
-        print(f"读不到 {path}：{error}", file=sys.stderr)
-        return EXIT_UNREACHABLE
+    paths = {key: Path(path) for key, path in pages.items()}
+    if REL_PAGE not in paths:
+        print(f"页面注册表里没有 {REL_PAGE}：不知道 REL 块在哪一页，拒绝回填。", file=sys.stderr)
+        return EXIT_REFUSED
+    texts = {}
+    for key, path in paths.items():
+        try:
+            texts[key] = path.read_text(encoding="utf-8")
+        except OSError as error:
+            print(f"读不到 {path}：{error}", file=sys.stderr)
+            return EXIT_UNREACHABLE
     try:
         assets = fetch(tag)
         entries = page_entries(assets, version)
         released = published(tag)
-        new_text = plan_page(page_text, assets, version, released, gitee=opts.gitee)
+        texts[REL_PAGE] = plan_page(texts[REL_PAGE], assets, version, released,
+                                    gitee=opts.gitee)
+        texts = {key: stamp_cache_key(text, version) for key, text in texts.items()}
     except Refused as error:
         print(error, file=sys.stderr)
         return EXIT_REFUSED
     except RuntimeError as error:
         print(f"取不到 {tag} 的发布信息：{error}", file=sys.stderr)
         return EXIT_UNREACHABLE
+    names = "、".join(path.name for path in paths.values())
     if not opts.write:
-        print(f"{tag} 的五个附件能回填进 {path.name}；加 --write 就写盘。")
+        print(f"{tag} 的五个附件与图标地址能回填进 {names}；加 --write 就写盘。")
         return EXIT_OK
+    def check_page(key):
+        """写后回读：首页连 REL 数据一起核，其余页面只核图标缓存键。"""
+        if key == REL_PAGE:
+            return lambda read: (verify(read, version, entries, released)
+                                 and cache_key_ok(read, version))
+        return lambda read: cache_key_ok(read, version)
+
     try:
-        write_checked(path, new_text, lambda read: verify(read, version, entries, released))
+        for key, path in paths.items():
+            write_checked(path, texts[key], check_page(key))
     except Refused as error:
         print(error, file=sys.stderr)
         return EXIT_REFUSED
     except OSError as error:
         print(f"写不进 {path}：{error}", file=sys.stderr)
         return EXIT_UNREACHABLE
-    print(f"{path.name} 已回填到 {tag}：五个文件名、大小、sha 与发布日期 {released}。")
+    print(f"{names} 已回填到 {tag}：五个文件名、大小、sha、发布日期 {released}，"
+          "图标地址的 ?v= 同版本。")
     if not opts.gitee:
         print("REL.gitee 没动（Gitee 上传晚于页面更新）；发完国内下载再跑一次并加 --gitee。")
     return EXIT_OK
 
 
 def main(argv, fetch=fetch_release, upload=upload_asset, draft=release_is_draft,
-         published=release_published, page=PAGE, verify=page_ok, out=None):
+         published=release_published, pages=SITE_PAGES, verify=page_ok, out=None):
     try:
         opts = parse(argv)
     except ValueError as error:
         print(f"{error}\n{USAGE}", file=sys.stderr)
         return EXIT_UNREACHABLE
     if opts.command == "page":
-        return run_page(opts, fetch=fetch, published=published, page=page, verify=verify)
+        return run_page(opts, fetch=fetch, published=published, pages=pages, verify=verify)
     return run_sums(opts, fetch=fetch, upload=upload, draft=draft, out=out)
 
 

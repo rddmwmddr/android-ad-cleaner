@@ -13,6 +13,8 @@ sys.path.insert(0, str(ROOT / "tool"))
 import channel_policy as policy
 import gen_brand_taps as gen
 import gen_site_css as site_css
+import release_assets
+import release_meta
 import run
 
 ADR = ROOT / "docs/adr/0006-channel-classification.md"
@@ -231,6 +233,18 @@ class SiteAssetTests(unittest.TestCase):
         out = standalone.inline('<link rel="icon" href="images/roudai-icon.png?v=0.4.3">', uri)
         self.assertEqual(seen, ["images/roudai-icon.png"], "查询串被当成文件名，导出时会去找不存在的文件")
         self.assertEqual(out, '<link rel="icon" href="DATA">')
+
+    def test_cache_key_follows_the_release_version(self):
+        """?v= 与 REL.version 同源：发版回填只改一处时，页面自己会自相矛盾（#1221）。旧树也绿，守的是不回退。"""
+        version, _ = release_assets.read_page(
+            site_css.TARGETS["home"].read_text(encoding="utf-8"))
+        self.assertIsNotNone(version, "index.html 里读不出 REL.version，守卫会空转")
+        for name, path in site_css.TARGETS.items():
+            keys = {m.group(2) for m in release_meta.CACHE_KEY.finditer(
+                path.read_text(encoding="utf-8"))}
+            with self.subTest(page=name):
+                self.assertEqual(keys, {version},
+                                 f"{name} 的图标 ?v= 与 REL.version 不是同一个版本")
 
     def test_both_pages_share_one_cache_key(self):
         """?v= 是缓存键，两页各写一份：只改一页时，另一页的旧 404 照旧生效。"""
