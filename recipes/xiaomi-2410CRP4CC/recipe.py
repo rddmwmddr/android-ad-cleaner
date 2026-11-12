@@ -54,8 +54,4 @@ def _():
 
 @step("负一屏")
 def _():
-    p.start("com.miui.personalassistant", ".settings.PASettingActivity")
-    p.off(only=["推荐卡片", "热门活动"], page="负一屏·设置")    # 搜索框保留
-    if maybe("隐私设置"):
-        p.off(only=["个性化推荐"], page="负一屏·隐私"); p.back()
-    p.back()
+    negative_screen()

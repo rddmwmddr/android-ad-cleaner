@@ -74,26 +74,12 @@ def _():
 
 @step("手机管家")
 def _():
-    p.start("com.miui.securitycenter", "com.miui.securityscan.ui.settings.SettingsActivity")
-    if maybe("隐私设置"):
-        p.off(only=["个性化推荐"], page="管家·隐私"); p.back()
-    if maybe("垃圾清理"):
-        p.off(only=["推荐内容"], page="管家·垃圾清理"); p.back()
-    p.back(2)
+    security_center()
 
 
 @step("下载管理")
 def _():
-    if opened(lambda: p.start("com.android.providers.downloads.ui", ".activity.InfoFlowSettingActivity", expect="资源推荐", budget=2)):
-        p.off(only=["资源推荐", "热榜推荐"], page="下载管理·信息流")
-        p.back()
-        return
-    p.start("com.android.providers.downloads.ui")
-    if not gear():
-        raise RuntimeError("下载管理设置入口未找到")
-    if maybe("信息流设置"):
-        p.off(only=["资源推荐", "热榜推荐"], page="下载管理·信息流")
-    p.back(3)
+    downloads_probe()
 
 
 @step("主题")
@@ -144,46 +130,14 @@ HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "�
 
 @step("全局搜索")
 def _():
-    p.start("com.android.quicksearchbox", ".preferences.SearchSettingsPreferenceActivity")
-    if maybe("首页展示模块"):
-        p.off(only=["搜索提示词"], page="搜索·首页模块")
-        if maybe("应用推荐"):
-            p.off(only=["推荐未安装应用"], keep=["展示常用应用"], page="搜索·应用推荐"); p.back()
-        if maybe("热搜榜单"):
-            subs = [x for x in ("热搜", "生活", "话题", "娱乐") if p.find(x, exact=True)]
-            if p.switches():
-                p.off(only=HOT, page="搜索·热搜榜单")
-            if subs:
-                p.top()
-                for x in subs:
-                    if maybe(x):
-                        p.off(only=HOT, page=f"搜索·热榜·{x}"); p.back()
-            p.back()
-        p.back()
-    p.back(2)
+    global_search()
 
 
 @step("负一屏")
 def _():
-    p.start("com.miui.personalassistant", ".settings.PASettingActivity")
-    p.off(only=["推荐卡片", "热门活动"], page="负一屏·设置")    # 搜索框、出行助手保留
-    if maybe("隐私设置"):
-        p.off(only=["个性化推荐"], page="负一屏·隐私"); p.back()
-    p.back()
+    negative_screen()
 
 
 @step("天气和日历")
 def _():
-    for pkg in ("com.miui.weather2", "com.android.calendar"):
-        if pkg == "com.android.calendar" and opened(lambda: p.start("com.android.calendar", ".settings.UserExperienceActionBarActivity", expect="内容推广", budget=2)):
-            p.off(only=["推荐", "广告", "个性化", "内容推广", "天气视频卡片"], page=f"{pkg}·用户体验计划"); p.back()
-            continue
-        p.start(pkg)
-        if pkg == "com.miui.weather2" and p.find("城市管理", exact=True, edge_ok="tab"):
-            # 新版天气：底部城市管理 → 右上更多设置 → 设置。
-            p.tap("城市管理", exact=True, scrolls=0)
-        if not gear():
-            print("  · 本版本没有可识别的设置菜单，跳过"); continue
-        if maybe("用户体验计划"):
-            p.off(only=["推荐", "广告", "个性化", "内容推广", "天气视频卡片"], page=f"{pkg}·用户体验计划"); p.back()
-        p.back(3)
+    weather_calendar_probe()

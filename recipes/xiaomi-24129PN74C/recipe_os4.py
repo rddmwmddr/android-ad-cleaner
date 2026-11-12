@@ -162,51 +162,17 @@ def _():
 
 @step("手机管家")
 def _():
-    p.start("com.miui.securitycenter", "com.miui.securityscan.ui.settings.SettingsActivity")
-    if maybe("隐私设置"):
-        p.off(only=["个性化推荐"], page="管家·隐私"); p.back()
-    if maybe("垃圾清理"):
-        p.off(only=["推荐内容"], page="管家·垃圾清理"); p.back()
-    p.back(2)
+    security_center()
 
 
 @step("下载管理")
 def _():
-    p.start("com.android.providers.downloads.ui")
-    if not gear():
-        raise RuntimeError("下载管理设置入口未找到")
-    if maybe("信息流设置"):
-        p.off(only=["资源推荐", "热榜推荐"], page="下载管理·信息流")
-    p.back(3)
+    downloads()
 
 
 @step("主题")
 def _():
-    # 直达主题管理包的代理页（沿用 #730 的做法：它没有 LAUNCHER，monkey 拉不起来）；经主题商店冷启动
-    # 要过一道重定向过渡窗，前台校验容易误判，也可能续在上次留下的子页上（#906）。
-    # 落点被系统转去商店详情页或桌面时仍按跳过收尾。
-    if "package:" not in p.d.shell("pm path com.android.thememanager").output:
-        print("  · 本机没有主题管理包，跳过"); return
-    start_or_skip("com.android.thememanager", ".ThemeResourceProxyTabActivity",
-                  dead_ends=THEME_DEAD_ENDS, reason="主题页打不开")
-    # 导航失败以前与「本页没有目标开关」同形：进「我的」、进设置页、点名开关三步都校验，
-    # 0 个开关按失败报并带页面现场（#906）。
-    if not p.go("我的", "设置"):
-        raise RuntimeError("未进入主题「我的」；" + p.page_evidence())
-    if not gear():
-        raise RuntimeError("主题设置入口没找到；" + p.page_evidence())
-    p.await_page()                              # 齿轮点完这一页可能还没画完
-    before = {}
-    for _ in range(2):                          # 行也可能在首屏之下，off() 自己会翻页找
-        before.update({title: on for title, on, _ in p.switches()})
-        if not p.scroll_more():
-            break
-    p.top(2)
-    require_switches(before, ["每次联网时通知"], "主题·设置", contains=True)
-    p.off(only=["每次联网时通知"], keep=["自动更新"], page="主题·设置")
-    if maybe("隐私设置"):
-        p.off(only=["个性化推荐"], page="主题·隐私"); p.back()
-    p.back(2)
+    theme()
 
 
 @step("浏览器")
@@ -254,11 +220,7 @@ def _():
 
 @step("负一屏")
 def _():
-    p.start("com.miui.personalassistant", ".settings.PASettingActivity")
-    p.off(only=["推荐卡片", "热门活动"], page="负一屏·设置")    # 搜索框、出行助手保留
-    if maybe("隐私设置"):
-        p.off(only=["个性化推荐"], page="负一屏·隐私"); p.back()
-    p.back()
+    negative_screen()
 
 
 @step("天气和日历")
