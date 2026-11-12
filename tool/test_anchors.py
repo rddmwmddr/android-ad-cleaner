@@ -34,7 +34,7 @@ ANCHORS = {
     "test_phone_facade.py": "Phone 门面 + 两个基座 + 五个阶段的对外契约。",
     "test_phone_base.py": "两个基座可以各自独立构造，不必造整台 Phone。",
     "test_phone_sessions.py": "三个跨阶段会话对象，门面用显式属性转发过去。",
-    "test_phone_toggler.py": "拨动阶段的对外契约：计划、确认框、安全模式与回读。",
+    "test_phone_toggler.py": "拨动阶段：这一页该关的开关真的被关掉，含确认框判定与等待、页顶复位与残留提示。",
     "test_phone_navigator.py": "导航阶段的对外契约：go / tab / 入口与落点确认。",
     "test_phone_settings_search.py": "设置搜索阶段的两条对外契约。",
     "test_phone_dismisser.py": "弹窗与推广位阶段：词表只有一份，推广位点了要退回。",
@@ -48,7 +48,7 @@ ANCHORS = {
     "test_ui_session.py": "读屏服务占用、失败清理、跨进程互斥与失败后的收尾。",
     "test_never_suspend.py": "NEVER 保护集：挂了会坏功能的包，整批拒绝、不落一条命令到手机。",
     # 机型脚本的基础设施
-    "test_recipe_kit.py": "引擎注入的脚本前导：段包装、跳过出口、失败台账与锁屏中止。",
+    "test_recipe_kit.py": "引擎注入的脚本前导：段包装、跳过出口、失败台账、锁屏中止与安全模式下的整页关闭。",
     "test_recipe_loader.py": "机型脚本只有一个装载入口，测试不许自己 exec 一份脚本。",
     "test_recipe_meta_module.py": "配方元数据住中立模块：非 CLI 代码 import 它不背 CLI 副作用。",
     "test_recipe_variants.py": "同一型号按系统版本选脚本变体，变体要进安装包。",
@@ -143,8 +143,6 @@ PENDING = {
     "test_channel_send_progress.py": "test_channel_classification.py",
     "test_coloros_notify_host_415.py": "test_channel_outcomes.py",
     "test_community_1027.py": "test_issue_regressions.py",
-    "test_confirm_button.py": "test_phone_toggler.py",
-    "test_confirm_wait_555.py": "test_phone_toggler.py",
     "test_device_name_710.py": "test_run_commands.py",
     "test_diagnostics_recipe_778.py": "test_run_commands.py",
     "test_direct_entries_667.py": "test_entries.py",
@@ -162,7 +160,6 @@ PENDING = {
     "test_missing_switch_evidence_903.py": "test_recipe_kit.py",
     "test_msa_default_973.py": "test_plan.py",
     "test_not_run_steps_577.py": "test_plan.py",
-    "test_off_page_top_1094.py": "test_phone_toggler.py",
     "test_page_evidence_939.py": "test_recipe_kit.py",
     "test_phone_host_747.py": "test_phone_host.py",
     "test_plan_exec_1106.py": "test_plan.py",
@@ -173,11 +170,9 @@ PENDING = {
     "test_reports_026.py": "test_issue_regressions.py",
     "test_reports_1029.py": "test_issue_regressions.py",
     "test_require_installed_899.py": "test_recipe_kit.py",
-    "test_residual_confirm_557.py": "test_phone_toggler.py",
     "test_restore_channels_628.py": "test_channel_outcomes.py",
     "test_restore_channels_651.py": "test_channel_outcomes.py",
     "test_retry_638.py": "test_job.py",
-    "test_safe_mode_page_wide_909.py": "test_phone_toggler.py",
     "test_scan_notes_521.py": "test_channel_outcomes.py",
     "test_scan_startup.py": "test_channel_outcomes.py",
     "test_screen_gone_928.py": "test_adb_link.py",
@@ -204,7 +199,7 @@ PENDING = {
 
 # 字面量，不用 `len(PENDING)`：那样上限会跟着名单一起涨，「新增一条即红」就成了空转。
 # 每并掉一条就把这个数减一；要加必须说明为什么（评审看得见）。
-PENDING_CAP = 78
+PENDING_CAP = 73
 
 TEST_FILE = re.compile(r"^test_[A-Za-z0-9_]+\.py$")
 # 文件名尾部的票号 / 日期：`test_xxx_1234`、`test_xxx_2026_11_12`、`test_xxx_2026-11-12`

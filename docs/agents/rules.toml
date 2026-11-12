@@ -1133,7 +1133,7 @@ id = "domain.confirm.residual-note-only"
 source = "CONTEXT.md#执行"
 check = "code:tool/phone/screen.py:Screen"
 status = "code"
-why = "残留确认框把整页盖成遮罩，查找失败只剩「没找到」、渠道页只剩「开关 0 个」，读者会当成这一版没适配（#557）；顺手点掉它等于替脚本做了「要不要停」的决定，而这个决定属于脚本里的 require。residual_confirm() 只读、弹窗留着不动，Screen.confirm_target() 返回坐标而不是动作；tests/test_residual_confirm_557.py 守的是那句说明挂得上去，不守「没点」。"
+why = "残留确认框把整页盖成遮罩，查找失败只剩「没找到」、渠道页只剩「开关 0 个」，读者会当成这一版没适配（#557）；顺手点掉它等于替脚本做了「要不要停」的决定，而这个决定属于脚本里的 require。residual_confirm() 只读、弹窗留着不动，Screen.confirm_target() 返回坐标而不是动作；tests/test_phone_toggler.py 的残留确认框一组守的是那句说明挂得上去，不守「没点」。"
 expires_if = "失败说明改由结构化诊断字段给出、脚本自己就能判断要不要点掉残留弹窗时删。"
 
 [[rule]]
@@ -1163,7 +1163,7 @@ expires_if = "不再按 exec 跑脚本（改成 import 一个自带前导的模�
 [[rule]]
 id = "dev.recipes.safe-mode-page-wide-skip"
 source = "docs/04-给新机型写脚本.md#一段机型脚本长什么样"
-check = "test:test_safe_mode_page_wide_909::GuardTests.test_page_wide_segments_start_with_the_safe_mode_exit"
+check = "test:test_recipe_kit::WholePageStepGuardTests.test_page_wide_segments_start_with_the_safe_mode_exit"
 status = "enforced"
 why = "安全模式下 `off()` 只关点名的开关，整页关闭的段落一个都点不到；段落再回读「必须全关」就稳定记成失败，用户看到的是「没关掉」而不是「这段没做」（#909 的 PKT110 上报）。出口写成段体第一句，是因为写在后面等于先翻页、再判没关掉，失败现场与结论都指向错的环节。"
 expires_if = "安全模式不再限制整页关闭（能安全地按页面结构判断该关哪些）时删。"
