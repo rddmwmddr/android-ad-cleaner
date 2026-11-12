@@ -2,11 +2,11 @@
 
 基线 `0f1f0fe`。父票 #1216，本组 #1217 / #1218 / #1219。
 
-五个维护脚本各自起 `gh` 进程、各自判 JSON、各自报错：`claim` 与 `stale` 的默认执行器和 `gh()` 逐字相同（`stale` 那份多一个 `timeout`），`triage_audit` 自己 `subprocess.run` 并抛 `Unreachable`，`release_assets` 的 `run_gh()` 起进程、`json.loads` 解析却抛裸 `RuntimeError`。改一处措辞要改五遍，写第六个脚本时再抄一遍。
+五个维护脚本各自起 `gh` 进程、各自判 JSON、各自报错：`claim` 与 `stale` 的默认执行器和 `gh()` 逐字相同（`followup` 的默认执行器只多传一个 `timeout`），`triage_audit` 自己 `subprocess.run` 并抛 `Unreachable`，`release_assets` 的 `run_gh()` 起进程、`json.loads` 解析却抛裸 `RuntimeError`。改一处措辞要改五遍，写第六个脚本时再抄一遍。
 
 ## Decision
 
-**`tool/gh.py` 是工具层起 `gh` 进程的唯一一处。** 只导出三样：`runner_for(cwd=None, timeout=None)` 给默认执行器（签名 `(script, *args) -> (标准输出, 错误输出, 返回码)`，与用例里的 `FakeRunner` 同形）、`call(runner, *args)` 跑一次取 `(文本, 返回码)`、`json_of(runner, *args, source=…)` 判 JSON；失败一律抛唯一的 `GhError`。改报错方式时只改这里。
+**`tool/gh.py` 是工具层起 `gh` 进程的唯一一处。** 导出三个函数与一个错误类：`runner_for(cwd=None, timeout=None)` 给默认执行器（签名 `(script, *args) -> (标准输出, 错误输出, 返回码)`，与用例里的 `FakeRunner` 同形）、`call(runner, *args)` 跑一次取 `(文本, 返回码)`、`json_of(runner, *args, source=…)` 判 JSON，失败一律抛唯一的 `GhError`。改报错方式时只改这里。 <!-- rule:dev.gh.single-session -->
 
 - **共用面到「跑命令 + 判 JSON」为止，写操作不收。** `claim` 的 `post_comment` 要评论 URL 做重读校验与撤回，`stale` 的只要失败原因，`apply_one` 还有「先加标签再评论、失败退标签」的顺序逻辑——三者形状不同，硬收成一份只会把各自的判定搬进共享模块。
 - **两份同形包装搬进第三方模块，是为了断 import 环。** `claim` 已经 `from stale import STALE_LABEL`（停摆标记只此一份），所以 `stale` 不能再从 `claim` 取 `gh()`；共享会话住在两者之外，环就不存在了。
@@ -20,7 +20,7 @@
 - **验证台账（`tool/verify_ledger.py`）不纳入。** 它一个外部命令都不跑，只读仓库里的文件。
 - **`gui/upload_gitee.py` 不在范围。** 它在客户端目录下、跑 `gh release download` 取安装包，属于发版动作而不是工具层脚本；它不 import `tool/`，也进不了同一个注入面。
 
-## 守卫 <!-- rule:dev.gh.single-session -->
+## 守卫
 
 `tests/test_rules_guards.py` 的 `GhGuards` 扫 `tool/` 下全部 `.py`：除 `tool/gh.py` 外出现 `"gh"` / `'gh'` 字面量，或又定义一份 `def runner_for`，即红并指出文件与行号。带「`tool/gh.py` 存在」与「扫到的文件数大于零」两条空转断言。可证伪：把任意一处已迁移的脚本改回自带执行器（例如在 `stale.py` 里补一行 `subprocess.run(["gh", …])`），守卫当场报出那一行。
 

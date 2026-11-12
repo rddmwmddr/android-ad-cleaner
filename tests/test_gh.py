@@ -1,7 +1,11 @@
 """工具层共用的 `gh` 会话（tool/gh.py，ADR-0036）：跑命令那一行取哪一路文本，判 JSON 的三档报错。
 
 调用方的用例注入假 runner，只看得到「取到了 / 抛 GhError」；这个文件直接对着 `call` 与
-`json_of` 的边界跑，失败一档一档分开验。
+`json_of` 的边界跑，失败一档一档分开验。`tool/gh.py` 在基线 `0f1f0fe` 就已在（#1217、#1218），
+所以每条用例在旧树上也绿——守的是不回退，不是那次迁移本身。
+
+这里的假件不复用 `fixtures.FakeRunner`：那是带 `.run()` 的客户端对象，而 `tool/gh.py` 的注入面
+是一个裸可调用体 `(script, *args) -> (标准输出, 错误输出, 返回码)`，两者形状不同。
 """
 import sys
 import unittest
@@ -14,7 +18,7 @@ import gh  # noqa: E402
 
 
 def runner(output="", error="", code=0):
-    """只说结局的 runner：每次调用都回同一组 (标准输出, 错误输出, 返回码)。"""
+    """一个只说结局的 runner：每次调用都回同一组 (标准输出, 错误输出, 返回码)。"""
     return lambda script, *args: (output, error, code)
 
 
@@ -36,7 +40,7 @@ class CallTests(unittest.TestCase):
         text, code = gh.call(runner("no such label\n", "", 1), "issue", "list")
         self.assertEqual((text, code), ("no such label", 1))
 
-    def test_gh_missing_is_a_gh_error(self):
+    def test_missing_gh_is_a_gh_error(self):
         with self.assertRaises(gh.GhError) as caught:
             gh.call(missing, "issue", "list")
         self.assertIn("跑不了 gh", str(caught.exception))
@@ -48,7 +52,7 @@ class JsonTests(unittest.TestCase):
             gh.json_of(runner('[{"number": 7}]'), "issue", "list", source="票"),
             [{"number": 7}])
 
-    def test_gh_missing_is_a_gh_error(self):
+    def test_missing_gh_is_a_gh_error(self):
         with self.assertRaises(gh.GhError) as caught:
             gh.json_of(missing, "issue", "list", source="停摆扫描")
         self.assertIn("跑不了 gh", str(caught.exception))
