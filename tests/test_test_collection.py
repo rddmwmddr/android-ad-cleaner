@@ -154,7 +154,7 @@ class AnchorTests(unittest.TestCase):
 
     def test_a_file_outside_the_test_pattern_is_not_examined(self):
         """共享资产（夹具、驱动器、js 用例）不是测试文件，不受锚点规则约束。"""
-        self.assertEqual(self.violations({}, "fixtures.py", "compare_api.py"), [])
+        self.assertEqual(self.violations({}, "fixtures.py", "compare_chan_pages.py"), [])
 
 
 if __name__ == "__main__":

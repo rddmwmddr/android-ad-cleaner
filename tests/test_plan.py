@@ -360,7 +360,7 @@ class StartTests(unittest.TestCase):
         self.assertEqual([t.title for t in tasks], ["收尾"])
 
     def test_a_status_without_steps_is_not_a_full_detection(self):
-        # 对拍驱动只塞了 info（tests/compare_api.py）：不能凭空多出四行，否则基线对不上
+        # 对拍驱动只塞了 info：不能凭空多出四行，否则基线对不上
         api = app.Api(self._dir.name, runner=FakeRunner())
         api.last_status = {"info": {"brand": "Xiaomi"}}
         tasks = self.started_tasks(api, {"backup": False})
