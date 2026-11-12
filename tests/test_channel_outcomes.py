@@ -35,12 +35,13 @@ class OutcomeTableTests(unittest.TestCase):
             self.assertFalse(chan.failed(outcome(kind), False))
 
     def test_outcomes_that_need_a_human_are_failures(self):
-        for kind in (chan.NOT_CONFIRMED, chan.MISMATCH, chan.UNCHANGED, chan.ERROR):
+        for kind in (chan.NOT_CONFIRMED, chan.APP_STATE_UNKNOWN, chan.MISMATCH, chan.UNCHANGED,
+                     chan.ERROR):
             self.assertTrue(chan.failed(outcome(kind), False))
 
-    def test_only_not_confirmed_and_unchanged_are_retried(self):
+    def test_only_not_confirmed_app_state_unknown_and_unchanged_are_retried(self):
         self.assertEqual({k for k in chan.KINDS if chan.retryable(outcome(k))},
-                         {chan.NOT_CONFIRMED, chan.UNCHANGED})
+                         {chan.NOT_CONFIRMED, chan.APP_STATE_UNKNOWN, chan.UNCHANGED})
 
     def test_only_done_and_confirmed_later_count_as_toggled(self):
         self.assertEqual({k for k in chan.KINDS if chan.toggled(outcome(k))},
@@ -78,6 +79,14 @@ class RenderTests(unittest.TestCase):
         for kind in (chan.NO_CHANNEL, chan.DELETED, chan.APP_OFF):
             self.assertEqual(chan.render(outcome(kind), "营销通知", False),
                              "  · 未操作 营销通知（渠道不存在、已删除或应用通知已关闭）")
+
+    def test_unreadable_master_switch_says_what_could_not_be_judged(self):
+        # #1064：这一页的结构已经认出来了，只差总开关状态 —— 不能再套「未确认…跳过」那句
+        line = chan.render(outcome(chan.APP_STATE_UNKNOWN, "停在 x；标题无，允许通知开关 1 个"),
+                           "营销通知", False, "com.x")
+        self.assertIn("总开关状态读不到，无法判断是否整体关闭", line)
+        self.assertNotIn("未确认", line)
+        self.assertIn("营销通知（com.x）", line)
 
     def test_failures_print_the_detail_after_a_cross(self):
         line = chan.render(outcome(chan.MISMATCH, "界面状态与渠道实际状态不一致，未继续点击"), "营销通知", False)
