@@ -165,7 +165,7 @@ class TaskTests(unittest.TestCase):
             api.job = job_stub()
             api._work([app.Task("广告开关", "run.py", ["-s", "test", "recipe"], uses_ui=True),
                        app.Task("通知", "chan_fast.py", uses_ui=True, channels=[]),
-                       app.Task("收尾", "run.py", ["-s", "test", "finish"])])
+                       app.Task("收尾", "run.py", ["-s", "test", "finish"], always_run=True)])
             self.assertEqual(len(api.runner.spawn_calls), 2)
             self.assertTrue(api.job.results[1]["skipped"])
             self.assertEqual(api.job.results[2]["rc"], 0)

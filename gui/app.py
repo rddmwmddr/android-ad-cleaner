@@ -305,17 +305,20 @@ class Task:
     args 由 `_work()` 换成 `-s <序列号> off <清单>`。
     skip_reason 非空表示这一步这次不跑：照样占结果里的一行，说明为什么（#577）。
     kind 是这一步的固定身份（backup / recipe / channels / quickapp / ads / finish），
-    重试与多轮结果合并都按它对齐，不认标题（#638；标题里的「（3 / 9 段）」会变）。"""
+    重试与多轮结果合并都按它对齐，不认标题（#638；标题里的「（3 / 9 段）」会变）。
+    always_run 表示用户点「停止」之后这一步仍要跑完（收尾把手机改回不持续亮屏）。"""
 
-    def __init__(self, title, script, args=(), uses_ui=False, channels=None, skip_reason="", kind=""):
+    def __init__(self, title, script, args=(), uses_ui=False, channels=None, skip_reason="", kind="",
+                 always_run=False):
         self.title, self.script, self.args = title, script, args
         self.uses_ui, self.channels = uses_ui, channels
         self.skip_reason, self.kind = skip_reason, kind
+        self.always_run = always_run
 
 
 def runs_after_stop(task):
-    """停止后仍要跑的一步：收尾（把手机改回插电常亮，以前停止会让手机一直亮着）。"""
-    return task.title == "收尾"
+    """停止后仍要跑的一步。由构造处声明（#1104）：改标题文案不再影响它跑不跑。"""
+    return task.always_run
 
 
 UNCHECKED = "未勾选，本次没有执行"
@@ -389,7 +392,7 @@ def plan_tasks(serial, plan, offered=None):
                              kind="quickapp"))
     # 重试轮只在收尾上一轮没做成时才跑它（#638）；首次执行没有这个键，照旧收尾
     if plan.get("finish", True):
-        tasks.append(Task("收尾", "run.py", ["-s", serial, "finish"], kind="finish"))
+        tasks.append(Task("收尾", "run.py", ["-s", serial, "finish"], kind="finish", always_run=True))
     return tasks
 
 

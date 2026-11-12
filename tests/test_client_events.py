@@ -81,14 +81,14 @@ class StepPauseTests(Base):
         with patch.object(app, "chime") as chime, \
              patch.object(app.time, "sleep", side_effect=lambda _s: self.api.resume()):
             self.api._work([app.Task("存改动前的快照", "run.py", ["-s", "t", "backup"]),
-                            app.Task("收尾", "run.py", ["-s", "t", "finish"])])
+                            app.Task("收尾", "run.py", ["-s", "t", "finish"], always_run=True)])
         self.assertEqual(chime.call_count, 2)      # 暂停生效一次，执行结束一次
 
     def test_only_the_job_path_turns_events_on(self):
         with patch.dict(os.environ, {"AAC_EVENTS": "1"}):
             self.assertNotIn("AAC_EVENTS", app.child_env(None, "/tmp/backups"))
         self.api = self.make_api(spawns=[FakeProc()])
-        self.api._work([app.Task("收尾", "run.py", ["-s", "t", "finish"])])
+        self.api._work([app.Task("收尾", "run.py", ["-s", "t", "finish"], always_run=True)])
         self.assertEqual(self.api.runner.spawn_calls[0].env_extra["AAC_EVENTS"], "1")
 
     def test_child_env_never_inherits_the_phone_host(self):
@@ -123,7 +123,7 @@ class SkipTests(Base):
                                          FakeProc()])
         self.api._work([app.Task("广告开关", "run.py", [], uses_ui=True),
                         app.Task("通知", "chan_fast.py", uses_ui=True),
-                        app.Task("收尾", "run.py")])
+                        app.Task("收尾", "run.py", always_run=True)])
         self.assertEqual(len(self.api.runner.spawn_calls), 2)
         self.assertTrue(self.api.job.results[1]["skipped"])
         self.assertEqual(self.api.job.results[2]["rc"], 0)
@@ -137,7 +137,7 @@ class SkipTests(Base):
     def test_confirmed_disconnect_skips_the_rest_when_the_phone_is_really_gone(self):
         self.api = self.make_api(spawns=[FakeProc(event("link_lost") + "\n手机和电脑的 adb 连接断开了\n", rc=1)])
         with patch.object(app, "adb_present", return_value=False):
-            self.api._work([app.Task("广告开关", "run.py"), app.Task("收尾", "run.py")])
+            self.api._work([app.Task("广告开关", "run.py"), app.Task("收尾", "run.py", always_run=True)])
         self.assertEqual(len(self.api.runner.spawn_calls), 1)
         self.assertTrue(self.api.job.results[1]["skipped"])
         self.assertEqual(self.api.last_error["operation"], "广告开关")
@@ -156,14 +156,14 @@ class SkipTests(Base):
         self.api = self.make_api(spawns=[FakeProc("手机和电脑的 adb 连接断开了，本步骤没有完成。\n", rc=1),
                                          FakeProc()])
         with patch.object(app, "adb_present", return_value=False):
-            self.api._work([app.Task("广告开关", "run.py"), app.Task("收尾", "run.py")])
+            self.api._work([app.Task("广告开关", "run.py"), app.Task("收尾", "run.py", always_run=True)])
         self.assertEqual(len(self.api.runner.spawn_calls), 2)
         self.assertNotIn("skipped", self.api.job.results[1])
 
     def test_phone_back_on_the_bus_means_no_suppression(self):
         self.api = self.make_api(spawns=[FakeProc(event("link_lost"), rc=1), FakeProc()])
         with patch.object(app, "adb_present", return_value=True):
-            self.api._work([app.Task("广告开关", "run.py"), app.Task("收尾", "run.py")])
+            self.api._work([app.Task("广告开关", "run.py"), app.Task("收尾", "run.py", always_run=True)])
         self.assertEqual(len(self.api.runner.spawn_calls), 2)
         self.assertEqual(self.api.job.results[1]["rc"], 0)
 

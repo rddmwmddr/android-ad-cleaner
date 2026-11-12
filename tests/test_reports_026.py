@@ -356,7 +356,7 @@ class GuiTests(unittest.TestCase):
             api.runner.spawns = [stopped, finish]
             api._work([self.app.Task("关闭营销通知", "run.py", ["-s", "test", "x"]),
                        self.app.Task("关闭快应用", "run.py", ["-s", "test", "quickapp", "off"]),
-                       self.app.Task("收尾", "run.py", ["-s", "test", "finish"])])
+                       self.app.Task("收尾", "run.py", ["-s", "test", "finish"], always_run=True)])
             self.assertEqual(len(api.runner.spawn_calls), 2)
             self.assertEqual([(r["title"], r.get("stopped", False)) for r in api.job.results], [("关闭营销通知", True), ("收尾", False)])
             self.assertIsNone(api.last_error)
@@ -465,7 +465,7 @@ class PauseTests(unittest.TestCase):
             api = app.Api(directory, runner=FakeRunner(spawns=[FakeProc(), FakeProc()], on_spawn=on_spawn))
             api.job = job_stub(serial="t")
             api._work([app.Task("存改动前的快照", "run.py", ["-s", "t", "backup"]),
-                       app.Task("收尾", "run.py", ["-s", "t", "finish"])])
+                       app.Task("收尾", "run.py", ["-s", "t", "finish"], always_run=True)])
             self.assertEqual([s.env_extra["AAC_PAUSE_FILE"] for s in api.runner.spawn_calls], [str(Path(directory, "pause"))] * 2)
             log = "\n".join(api.job.lines)
             self.assertLess(log.index("⏸ 已暂停"), log.index("▶ 收尾"))
