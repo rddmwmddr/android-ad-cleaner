@@ -28,8 +28,9 @@ ANCHORS = {
     "test_events.py": "引擎事件的词表与解析：六个 kind、固定前缀、坏行当没有。",
     "test_engine_events.py": "引擎侧在语义发生地发事件，人话逐字不变。",
     "test_client_events.py": "客户端只认引擎事件：事件行不进日志、人话本身不改状态。",
-    "test_channel_classification.py": "渠道七组判定只在一处定义，扫描分支与客户端都消费它。",
-    "test_channel_outcomes.py": "渠道批处理的结局记账：一项的结局是值，怎么记由一张表定。",
+    "test_channel_classification.py": "渠道判定：哪些渠道算营销、受保护、默认不勾，扫描因此列出谁、排除谁。",
+    "test_channel_outcomes.py": "渠道批处理的结局记账与上报：一项的结局是值，怎么记、怎么报由几张表定。",
+    "test_channel_page.py": "渠道页：从哪条路走进去、认出的是不是渠道页、从哪一行拿开关。",
     # Phone 门面、两个基座与七个阶段
     "test_phone_facade.py": "Phone 门面 + 两个基座 + 五个阶段的对外契约。",
     "test_phone_base.py": "两个基座可以各自独立构造，不必造整台 Phone。",
@@ -127,7 +128,6 @@ PENDING = {
     "test_adb_guid_702.py": "test_adb_link.py",
     "test_adb_settings.py": "test_adb_link.py",
     "test_always_run_1104.py": "test_plan.py",
-    "test_app_denied_426.py": "test_channel_outcomes.py",
     "test_app_state_races_662.py": "test_job.py",
     "test_assistant_entry_901.py": "test_entries.py",
     "test_baidu_rows_android.py": "test_download_page_gitee.py",
@@ -138,20 +138,14 @@ PENDING = {
     "test_browser_entry_331.py": "test_entries.py",
     "test_browser_menu_753.py": "test_phone_dismisser.py",
     "test_browser_settings_586.py": "test_entries.py",
-    "test_chan_focus_hint_422.py": "test_channel_outcomes.py",
-    "test_channel_page_399.py": "test_channel_outcomes.py",
-    "test_channel_send_progress.py": "test_channel_classification.py",
-    "test_coloros_notify_host_415.py": "test_channel_outcomes.py",
     "test_community_1027.py": "test_issue_regressions.py",
     "test_device_name_710.py": "test_run_commands.py",
     "test_diagnostics_recipe_778.py": "test_run_commands.py",
     "test_direct_entries_667.py": "test_entries.py",
     "test_dismiss_378.py": "test_phone_dismisser.py",
-    "test_duplicate_nodes_510.py": "test_channel_outcomes.py",
     "test_entry_hops_286.py": "test_entries.py",
     "test_error_logs_1028.py": "test_issue_regressions.py",
     "test_exec_races_452.py": "test_job.py",
-    "test_failure_context_582.py": "test_channel_outcomes.py",
     "test_finish_stay_on_632.py": "test_run_commands.py",
     "test_gear_landing_575.py": "test_phone_navigator.py",
     "test_gear_match_305.py": "test_entries.py",
@@ -163,24 +157,17 @@ PENDING = {
     "test_page_evidence_939.py": "test_recipe_kit.py",
     "test_phone_host_747.py": "test_phone_host.py",
     "test_plan_exec_1106.py": "test_plan.py",
-    "test_recheck_package_751.py": "test_channel_outcomes.py",
     "test_recipe_fast_entries_796.py": "test_entries.py",
     "test_recipe_verification_1124.py": "test_verify_ledger.py",
     "test_reference_by_version.py": "test_recipe_variants.py",
     "test_reports_026.py": "test_issue_regressions.py",
     "test_reports_1029.py": "test_issue_regressions.py",
     "test_require_installed_899.py": "test_recipe_kit.py",
-    "test_restore_channels_628.py": "test_channel_outcomes.py",
-    "test_restore_channels_651.py": "test_channel_outcomes.py",
     "test_retry_638.py": "test_job.py",
-    "test_scan_notes_521.py": "test_channel_outcomes.py",
-    "test_scan_startup.py": "test_channel_outcomes.py",
     "test_screen_gone_928.py": "test_adb_link.py",
-    "test_service_channel_459.py": "test_channel_classification.py",
     "test_setting_search_exit_639.py": "test_phone_settings_search.py",
     "test_settings_page_960.py": "test_phone_settings_search.py",
     "test_shell_backend_1034.py": "test_adb_link.py",
-    "test_skeleton_428.py": "test_channel_outcomes.py",
     "test_skip_reason_report_603.py": "test_run_commands.py",
     "test_store_privacy_933.py": "test_entries.py",
     "test_switch_dedupe_531.py": "test_row.py",
@@ -188,18 +175,14 @@ PENDING = {
     "test_theme_entry_730.py": "test_entries.py",
     "test_theme_settings_landing_906.py": "test_entries.py",
     "test_theme_unreachable_902.py": "test_entries.py",
-    "test_traditional_chinese_498.py": "test_channel_classification.py",
     "test_two_column_403.py": "test_row.py",
-    "test_ui_hidden_576.py": "test_channel_outcomes.py",
-    "test_undo_appops_330.py": "test_channel_outcomes.py",
-    "test_vivo_336_chan_page.py": "test_channel_outcomes.py",
     "test_vocab_gaps_690.py": "test_vocab.py",
     "test_reader_failure_731.py": "test_adb_link.py",
 }
 
 # 字面量，不用 `len(PENDING)`：那样上限会跟着名单一起涨，「新增一条即红」就成了空转。
 # 每并掉一条就把这个数减一；要加必须说明为什么（评审看得见）。
-PENDING_CAP = 73
+PENDING_CAP = 55
 
 TEST_FILE = re.compile(r"^test_[A-Za-z0-9_]+\.py$")
 # 文件名尾部的票号 / 日期：`test_xxx_1234`、`test_xxx_2026_11_12`、`test_xxx_2026-11-12`
@@ -247,7 +230,7 @@ def recipe_owned(name, brands, models, recipe_text):
     含 `plp120`）；带三位以上数字串且该串是某型号段的一部分（`phk110android15` 的 `110`）；
     带数字且整串出现在某份脚本正文里（`test_k70_recipe` 对 `Redmi K70`）。
 
-    光有品牌段不够：`test_vivo_336_chan_page` 只是用 vivo 的页面样本测渠道页，它没有点名任何
+    光有品牌段不够：`test_vivo_chan_page` 只是用 vivo 的页面样本测渠道页，它没有点名任何
     一份脚本，所以仍要落到锚点。普通英文单词（`row`、`wait`）也因为「必须带数字」而被挡住。
     """
     base = base_of(name)

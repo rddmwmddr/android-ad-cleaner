@@ -162,10 +162,10 @@ class AnchorTests(unittest.TestCase):
 
     def test_a_brand_word_alone_does_not_buy_an_exemption(self):
         """名字里只有品牌（`vivo`）却没有点名任何一份脚本：仍要落到锚点。"""
-        found = self.violations({}, {}, "test_vivo_336_chan_page.py",
+        found = self.violations({}, {}, "test_vivo_chan_page.py",
                                 recipes=[("vivo-V1986A", "BUILD = 'Funtouch 13'\n")])
         self.assertEqual(len(found), 1)
-        self.assertIn("test_vivo_336_chan_page.py 没有登记锚点", found[0])
+        self.assertIn("test_vivo_chan_page.py 没有登记锚点", found[0])
 
     def test_a_plain_english_word_in_a_recipe_does_not_buy_an_exemption(self):
         """正文里出现过 `row` 不算点名：豁免只认型号形态（带数字的市场名或目录段）。"""
