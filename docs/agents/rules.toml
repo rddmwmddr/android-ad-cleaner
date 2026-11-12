@@ -40,6 +40,14 @@ why = "`recipes/` 下两份社区配方的 `test_recipe.py` 定义了 21 个用�
 expires_if = "收集起点不再是 `-s tests`、或 CI 改成全仓发现用例时删。"
 
 [[rule]]
+id = "dev.tests.anchor-registry"
+source = "CLAUDE.md#开发"
+check = "test:test_test_collection::AnchorTests.test_the_real_tree_has_no_violation"
+status = "enforced"
+why = "三周里每来一张票就新建一个测试文件，`tests/` 长到 197 个，`fast` 被 62 个文件引用却没有一处能回答「这门面的行为契约是什么」，新票也没有落点于是继续新建（#1139）。守卫要求每个测试文件必须是已声明的锚点、待归并名单里的一条、或点名了某份机型脚本——三者之外即红，报红文案给出相近的锚点；锚点清单与 docs/agents/test-anchors.md 的表逐项对拍，待归并名单冻结在 `PENDING_CAP` 只许降。"
+expires_if = "测试文件收成一个「行为 → 用例」的目录结构、新文件的位置由架构自动决定时删；`tests/` 不再是唯一收集起点时也删。"
+
+[[rule]]
 id = "dev.tests.interpreter-version"
 source = "CLAUDE.md#开发"
 check = "test:test_rules_guards::CiGuards.test_dev_tests_interpreter_version"
@@ -269,7 +277,7 @@ expires_if = "开关名单断言并入引擎、机型脚本不再各自核对页
 [[rule]]
 id = "dev.launch.foreground-ownership"
 source = "CLAUDE.md#开发"
-check = "test:test_launch_foreground_581::LaunchForegroundTests.test_one_frame_in_another_app_is_not_leaving"
+check = "test:test_phone_launcher::LaunchForegroundTests.test_one_frame_in_another_app_is_not_leaving"
 status = "enforced"
 why = "空焦点曾被判成「离开了目标 App」，启动段直接停段（#581、#193）；只有确认落在目标 App 时才读页面文字、关弹窗（ADR-0022）。"
 expires_if = "启动归属改由系统事件而不是逐帧焦点判定时删。"
