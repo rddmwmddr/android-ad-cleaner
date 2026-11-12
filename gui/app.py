@@ -343,13 +343,15 @@ def not_run_result(job, task):
 def plan_tasks(serial, plan, offered=None):
     """这次排哪些任务。勾了的照旧起脚本；没勾的留一行「跳过」并说明原因（#577）。
 
+    `plan` 是前端发来的计划字典，或已经收好的 `Plan`（#1106；键与默认值在 `tool/plan.py`）。
     `offered` 是选择页上摆出来的项（调用方从检测结果与上一次通知扫描里取），用来区分
     「用户没勾」和「这台机本来就没有」；给 None 时不知道摆过什么，就不留这些行。"""
+    plan = _tool("plan").Plan.from_json(plan)
     tasks = []
-    if plan.get("backup", True):
+    if plan.backup:
         tasks.append(Task("存改动前的快照", "run.py", ["-s", serial, "backup"], kind="backup"))
     # msa 没挂起时它的开屏窗会抢走主题段的前台，所以挂起排在广告段之前（#968）
-    ads = list(plan.get("ads") or [])
+    ads = list(plan.ads)
     if ads:
         tasks.append(Task("挂起广告组件", "run.py", ["-s", serial, "suspend", *ads], kind="ads"))
     elif offered is not None:
@@ -359,20 +361,20 @@ def plan_tasks(serial, plan, offered=None):
                              else "广告组件已经挂起" if all(a.get("suspended") for a in seen)
                              else UNCHECKED,
                              kind="ads"))
-    steps = list(plan.get("steps") or [])
+    steps = list(plan.steps)
     if steps:
         title = "关闭各 App 里的广告开关"
         total = len(offered.get("steps") or []) if offered else 0
         if total > len(steps):
             title += f"（{len(steps)} / {total} 段）"
         tasks.append(Task(title, "run.py",
-                          ["-s", serial, "recipe", *steps, *(["--ref"] if plan.get("ref") else [])],
+                          ["-s", serial, "recipe", *steps, *(["--ref"] if plan.ref else [])],
                           uses_ui=True, kind="recipe"))
     elif offered is not None:
         tasks.append(not_run("关闭各 App 里的广告开关",
                              UNCHECKED if offered.get("steps") else "没有专用脚本，这一步要照清单手动做",
                              kind="recipe"))
-    channels = list(plan.get("channels") or [])
+    channels = list(plan.channels)
     if channels:
         tasks.append(Task("关闭营销通知", "chan_fast.py", uses_ui=True, channels=channels, kind="channels"))
     elif offered is not None:
@@ -381,7 +383,7 @@ def plan_tasks(serial, plan, offered=None):
                              "通知扫描没有完成，本次没有关闭营销通知" if seen is None
                              else "没有扫描到可关闭的营销渠道" if not seen else UNCHECKED,
                              kind="channels"))
-    if plan.get("quickapp"):
+    if plan.quickapp:
         tasks.append(Task("关闭快应用", "run.py", ["-s", serial, "quickapp", "off"], kind="quickapp"))
     elif offered is not None:
         apps = offered.get("quickapps") or []
@@ -390,8 +392,8 @@ def plan_tasks(serial, plan, offered=None):
                              else "可关闭的快应用组件都已关闭" if all(q.get("closed") or q.get("keep") for q in apps)
                              else UNCHECKED,
                              kind="quickapp"))
-    # 重试轮只在收尾上一轮没做成时才跑它（#638）；首次执行没有这个键，照旧收尾
-    if plan.get("finish", True):
+    # 重试轮只在收尾上一轮没做成时才跑它（#638）；首次执行取默认，照旧收尾
+    if plan.finish:
         tasks.append(Task("收尾", "run.py", ["-s", serial, "finish"], kind="finish", always_run=True))
     return tasks
 
@@ -414,17 +416,17 @@ def retry_plan(plan, results):
     「通知没扫成」那一行不算可重试：扫描在选择页上就失败了，重跑这一步时的渠道清单本来就是空的，
     要重扫只能回选择页（#577 的第三档）。
     """
-    plan = plan or {}
+    plan = _tool("plan").Plan.from_json(plan or {})
     again = {r.get("kind"): retryable(r) for r in results if r.get("kind")}
     recipe = next((r for r in results if r.get("kind") == "recipe"), {})
-    steps = list(recipe.get("failed_steps") or plan.get("steps") or []) if again.get("recipe") else []
-    out = {"backup": again.get("backup", False),
-           "steps": steps, "ref": plan.get("ref"), "model": plan.get("model"),
-           "channels": list(plan.get("channels") or []) if again.get("channels") else [],
-           "quickapp": bool(plan.get("quickapp")) and again.get("quickapp", False),
-           "ads": list(plan.get("ads") or []) if again.get("ads") else [],
-           "finish": again.get("finish", False)}
-    if not any(out[k] for k in ("backup", "steps", "channels", "quickapp", "ads", "finish")):
+    steps = list(recipe.get("failed_steps") or plan.steps) if again.get("recipe") else []
+    out = _tool("plan").Plan(backup=again.get("backup", False),
+                             steps=steps, ref=plan.ref, model=plan.model,
+                             channels=list(plan.channels) if again.get("channels") else [],
+                             quickapp=plan.quickapp and again.get("quickapp", False),
+                             ads=list(plan.ads) if again.get("ads") else [],
+                             finish=again.get("finish", False))
+    if not any((out.backup, out.steps, out.channels, out.quickapp, out.ads, out.finish)):
         return None
     return out
 
@@ -432,8 +434,9 @@ def retry_plan(plan, results):
 class Job:
     """一次执行的状态（ADR-0010）。工作线程写，HTTP 线程经 snapshot() 读一致视图。
 
-    `plan` 是这一轮跑的原始计划，`retry_plan()` 拿它重建下一轮；重试轮的 `results` / `lines` /
-    `payloads` 从上一轮接管过来，每一步按 kind 覆盖同一步的旧结果，日志与上报仍是整场的（#638）。"""
+    `plan` 是这一轮跑的规格对象（`tool/plan.py` 的 `Plan`），`retry_plan()` 拿它重建下一轮；重试轮的
+    `results` / `lines` / `payloads` 从上一轮接管过来，每一步按 kind 覆盖同一步的旧结果，日志与上报
+    仍是整场的（#638）。"""
 
     def __init__(self, serial="", model="", total=0, t0=None, plan=None,
                  base_results=(), base_lines=(), base_payloads=()):
@@ -444,7 +447,7 @@ class Job:
         self.total = total
         self.title = ""
         self.results = list(base_results)
-        self.plan = dict(plan) if plan else None
+        self.plan = _tool("plan").Plan.from_json(plan) if plan else None
         self.failed_steps = []          # 本步骤里引擎报的未完成段名
         self.proc = None
         self.cancel = False
@@ -949,9 +952,10 @@ class Dispatcher:
             self.side = ""
 
     def start(self, serial, plan, offered=None, base_results=(), base_lines=(), base_payloads=()):
-        """plan: {backup, steps:[段名]|None, channels:[{pkg,id,name}], quickapp:bool, ads:[包名], model, finish}
+        """plan: 这一轮的规格对象（`tool/plan.py` 的 `Plan`）；直接传字典也收，第一行用 `from_json` 收拢。
         offered: 选择页上摆出来的项，给没勾的项定「没执行」的原因（#577）；None 表示不知道。
         三个 base_*: 重试轮从上一轮接管的快照（#638）；首次执行都是空的。"""
+        plan = _tool("plan").Plan.from_json(plan)
         with self.lock:
             if self.job and self.job.running:
                 return {"error": "已有任务在运行"}
@@ -959,7 +963,7 @@ class Dispatcher:
                 return {"error": f"「{self.side}」还没做完，请稍后再开始"}
             tasks = plan_tasks(serial, plan, offered)
             total = sum(1 for t in tasks if not t.skip_reason)
-            self.job = Job(serial=serial, model=plan.get("model", ""), total=total, plan=plan,
+            self.job = Job(serial=serial, model=plan.model, total=total, plan=plan,
                            base_results=base_results, base_lines=base_lines,
                            base_payloads=base_payloads)
         threading.Thread(target=self._work, args=(tasks,), daemon=True).start()
@@ -1451,7 +1455,8 @@ class Api:
 
     # ----- 任务 -----
     def start(self, serial, plan):
-        return self.dispatcher.start(serial, plan, self._offered())
+        """前端发来的计划字典在这里收成规格对象，之后的内部一路传 `Plan`（#1106）。"""
+        return self.dispatcher.start(serial, _tool("plan").Plan.from_json(plan), self._offered())
 
     def retry(self):
         """把上一轮没做成的步骤再跑一遍（#638）。结果按步骤合并，快照成功过就绝不再存。

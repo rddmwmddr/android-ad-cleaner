@@ -1,8 +1,9 @@
 """一次执行要跑哪些步骤：八个键、各自的默认值、结构不变量，以及与 JSON 的双向转换。
 
 这份形状以前只活在 `Dispatcher.start` 的参数说明与 `plan_tasks` 的取值里，加一个键要靠两处手写
-碰巧一致。沿用 #1102 的做法，现在它在这里定义一次；执行侧接上来之前这个模块还没有消费者，
-两个前端发来的 JSON 形状也不变。
+碰巧一致。沿用 #1102 的做法，现在它在这里定义一次。消费方是客户端的执行侧（`gui/app.py`）：
+前端 JSON 在 `Api.start()` 收成它，之后排任务、重试轮与一次执行的状态都传对象（#1106）；
+两个前端发来的 JSON 形状不变。
 """
 import dataclasses
 from typing import Any, get_origin, get_type_hints
@@ -46,6 +47,17 @@ class Plan:
     def to_json(self) -> dict[str, Any]:
         """与 `from_json` 往返相等：`from_json(p.to_json()) == p`。"""
         return dataclasses.asdict(self)
+
+    def __getitem__(self, name: str) -> Any:
+        """按字段名读：`p["steps"]` 与 `p.steps` 同义。
+
+        生产代码一律用属性；留着下标读法是为了既有用例——`retry_plan()` 的返回从字典换成对象时，
+        照旧拿 `plan["steps"]` 断言的用例不用改写（#1106）。它只实现按名字读这一半，`in` 与迭代
+        不跟着变成字典语义。
+        """
+        if name not in {f.name for f in dataclasses.fields(self)}:
+            raise KeyError(name)
+        return getattr(self, name)
 
 
 def _coerce(value: Any, shape: Any) -> Any:
