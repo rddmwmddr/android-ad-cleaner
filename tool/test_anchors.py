@@ -56,6 +56,7 @@ ANCHORS = {
     "test_recipe_setting_checked.py": "机型脚本必须消费 p.setting() 的返回值，不能空跑还记成功。",
     "test_recipe_preamble_migration.py": "机型脚本不再自带前导：结构守卫与每份脚本的行为守卫。",
     "test_recipe_nav.py": "公共导航的注入面：前导调用它、实现从执行作用域取前导名字、脚本不留逐字副本，以及调用序列对拍驱动自己管基线 worktree。",
+    "test_recipe_source.py": "脚本事实层：实参按语法切分、形参回填与读不出态、Intent 三种包名写法，以及语法错直接抛。",
     # 客户端、打包、更新与平台
     "test_backups.py": "备份目录的命名、扫描与 <型号>-gui 兜底。",
     "test_captures.py": "失败现场落盘：两处留现场写原文、没目录不写、归档名与体积报数。",
