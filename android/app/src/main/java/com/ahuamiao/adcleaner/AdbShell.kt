@@ -138,8 +138,10 @@ object AdbShell {
     @Synchronized
     fun client(): ServerClient {
         client?.let { if (!it.closed) return it }
-        val stream: AdbStream = AdbManager.get(app)
-            .openStream("exec:" + ServerClient.command(app.applicationInfo.sourceDir))
+        // 也可以从 Shell 之外直接调到这里（grantSelf / PairingService）：不对未连接的 adbd 开流（#1034）。
+        val stream: AdbStream = openWhenReady(ready(), { connect(4000) }) {
+            AdbManager.get(app).openStream("exec:" + ServerClient.command(app.applicationInfo.sourceDir))
+        }
         val c = ServerClient(stream.openInputStream(), stream.openOutputStream()) {
             synchronized(this) { if (client?.closed == true) client = null }
         }
