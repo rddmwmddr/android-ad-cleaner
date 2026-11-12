@@ -126,29 +126,7 @@ def _():
 
 @step("下拉搜索")
 def _():
-    # 设置页 SearchSettingActivity 没导出，am start -n 会被拒绝；走应用自己的 scheme。
-    # 榜单 / 小说 / 购物是搜索数据源，消息管理是服务通知，两类都不动。
-    open_page(SEARCH_SETTINGS, "搜索范围", SEARCH, "SearchSettingActivity")
-    row("搜索范围")
-    close_named(["个性化推荐", "精选资讯"], "搜索范围", dependent=["全部"])
-    p.back()
-    row("首页卡片管理")
-    cards = read_switches("首页卡片管理")
-    names = [name for name in SEARCH_CARDS if name in cards]
-    if names:
-        close_named(names, "首页卡片管理", snapshot=cards)
-    missing = len(SEARCH_CARDS) - len(names)
-    if missing:
-        note = f"首页卡片管理：本次未显示 {missing} 个录制推广项，未操作、不计为已关闭"
-        SKIPPED_ITEMS.append(note)
-        print("  · " + note, flush=True)
-    p.back()
-    row("功能管理")
-    close_named(["搜索框提示词"], "功能管理")
-    p.back()
-    # 「账号与隐私」只是设置页上的分组标题，没有二级页面；直接点它下面的隐私行。
-    row("隐私")
-    close_named(["个性化推荐"], "隐私")
+    search_settings_direct()
 
 
 def hide_carousel():
@@ -202,77 +180,27 @@ ASSISTANT_HOME = {"我的服务", "添加卡片"}
 
 @step("负一屏")
 def _():
-    l, t, r, b = bounds(assistant_icon())
-    before = p.sig()
-    p.click((l + r) // 2, (t + b) // 2)
-    p.settle(before, 2.4)
-    row("设置", title="推荐服务")
-    row("推荐服务")
-    where = p.focus()
-    carousel_error = None
-    try:
-        hide_carousel()
-    except (adb_link.DeviceLost, ScreenLocked):
-        raise
-    except RuntimeError as error:
-        require(p.focus() == where, "轮播识别失败且已离开原页，停止本段")
-        carousel_error = error
-        print(f"  ✗ 轮播推荐未确认：{error}；继续核对独立的热点资讯", flush=True)
-    # 热点资讯页有导出，直达（沿用 #650 的做法），不用回设置页再滚动找
-    hot_news = "am start -f 0x10008000 -n com.coloros.assistantscreen/com.oplus.assistantscreen.card.infoflow.setting.activity.InfoFlowSettingActivity"
-    open_page(hot_news, "热点资讯", "com.coloros.assistantscreen", "InfoFlowSettingActivity")
-    close_named(["热点资讯"], "热点资讯")
-    if carousel_error:
-        raise RuntimeError(f"热点资讯已核对；轮播推荐未完成：{carousel_error}")
+    assistant_screen()
 
 
 @step("主题")
 def _():
-    # 消息与广告只关开屏广告：消息通知是服务通知，保留。
-    app_settings(THEME)
-    row("服务管理")
-    row("消息与广告")
-    close_named(["开屏广告"], "消息与广告")
-    app_settings(THEME)
-    row("隐私")
-
-    def reopen():
-        app_settings(THEME)
-        row("隐私")
-
-    close_named(["个性化推荐设置"], "隐私", reopen=reopen)
+    theme_store_settings()
 
 
 @step("视频")
 def _():
-    require_installed(VIDEO, "视频")
-    # 设置页没导出，用 App 自己的深链直达（沿用 #650 的做法），不经开屏页和「我的」；带 -p 限定到视频，
-    # 免得别的 App 也注册了这个 scheme 时弹选择器
-    open_page("am start -f 0x10008000 -a android.intent.action.VIEW -p " + VIDEO
-              + " -d yoli://yoli.com/mine_act_lib_yoli/settings", "设置", VIDEO, "SettingActivity")
-    row("个性化管理")
-    close_named(["个性化广告推荐", "个性化内容推荐"], "个性化管理")
+    video_direct()
 
 
 @step("游戏中心")
 def _():
-    # 设置页认 APP_SETTINGS 动作，直达（沿用 #650 的做法），不用关首进引导、找「我的」和齿轮。
-    # 设置页上的「隐私」只是分组标题、点不动；入口是它下面的「隐私开关设置」（PMX110 11-06 实测）。
-    require_installed(GAME, "游戏中心")
-    open_page("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + GAME, "游戏中心", GAME, "SettingActivity")
-    row("隐私开关设置", scrolls=6)
-    row("个性化推荐管理", scrolls=4)
-    close_named(["个性化推荐"], "个性化推荐管理")
-    p.confirm()
+    game_center_direct()
 
 
 @step("小布建议")
 def _():
-    system_settings()
-    row("OPPO AI")
-    row("小布建议")
-    row("资讯服务")
-    close_named(["资讯服务"], "资讯服务")
+    assistant_advice_rows()
 
 
 print(f"\n逐项回读确认 {VERIFIED_SWITCHES} 项；完成 {sum(state == '完成' for _, state in RESULTS)} 段，"

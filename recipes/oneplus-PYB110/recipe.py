@@ -12,28 +12,7 @@ import time
 
 @step("广告跟踪")
 def _():
-    # ColorOS 17 设置首页是「隐私与安全」聚合入口；旧版本叫「隐私」，两个都试
-    skip_in_safe_mode()
-    found = settings_page("隐私与安全", "设备标识与广告", "广告跟踪")
-    if not found:
-        p.miss = 0
-        found = settings_page("隐私", "设备标识与广告", "广告跟踪")
-    if not found:
-        return
-    # 右上角三个点（更多选项）菜单里有「全部关闭」，一键关完，比逐个点稳
-    if p.tap("更多选项", exact=True, scrolls=0):
-        if p.tap("全部关闭", exact=True, scrolls=0):
-            p.confirm()                       # 有的版本会弹确认框
-            time.sleep(0.5)
-            still = [t for t, c, _ in p.switches() if c]
-            if not still:
-                p.changed.append(("广告跟踪", "全部关闭（更多选项菜单）"))
-                return
-            p.say(f"  ! 「全部关闭」后这一屏仍有 {len(still)} 个开关开着，退回逐项关")
-        else:
-            p.back()                          # 菜单开了但没点成：收起后退回逐个关
-    p.miss = 0
-    p.off(page="广告跟踪", max_screens=40)
+    ad_tracking_close_all()
 
 
 # 服务管理里只保留功能项，其余推广入口全关（本机 2026-11-12 实测共 46 项开关）
@@ -99,19 +78,7 @@ def _():
 
 @step("主题商店")
 def _():
-    p.start("com.heytap.themestore")
-    p.go("我的", "设置")
-    p.tap("设置", exact=True, scrolls=0)
-    if p.tap("服务管理", exact=True):
-        # 「全部服务/基础服务」保持全部服务；锁屏开关是功能项
-        if maybe("消息与广告"):
-            p.off(only=["消息通知", "开屏广告"], page="主题·消息与广告")
-            p.back()
-        p.back()
-    if p.tap("隐私", exact=True):
-        p.off(only=["个性化推荐"], page="主题·个性化推荐")
-        p.back()
-    p.back(2)
+    theme_shop_settings()
 
 
 @step("视频")
@@ -133,27 +100,12 @@ def _():
 
 @step("游戏中心")
 def _():
-    p.start("com.nearme.gamecenter")
-    if not p.tap("我的", exact=True, scrolls=0):
-        raise RuntimeError("没找到底部「我的」")
-    time.sleep(1.2)
-    p.dismiss()
-    # 「设置」是「我的」页里带新通知标记的文字行（非右上角齿轮）
-    if not p.tap("设置", exact=False, scrolls=0) and not p.tap_icon(["隐私开关设置", "隐私"]):
-        raise RuntimeError("没找到设置入口")
-    if p.tap("隐私开关设置", exact=True) and p.tap("个性化推荐管理", exact=True):
-        p.off(only=["个性化推荐"], page="游戏中心·个性化推荐管理")
-    p.back(4)
+    game_center_taps()
 
 
 @step("小布建议")
 def _():
-    if settings_page("OPPO AI", "小布建议"):
-        # 「内容资讯」是分组标题；「资讯服务」是子入口，进去关开关
-        if p.tap("资讯服务", exact=True):
-            p.off(only=["资讯服务"], page="小布建议·内容资讯")
-            p.back()
-    p.back(2)
+    assistant_advice_search()
 
 
 @step("负一屏")
@@ -221,19 +173,4 @@ def search_settings():
 
 @step("下拉搜索")
 def _():
-    if not search_settings():
-        raise RuntimeError("没进全局搜索设置页")
-    if p.tap("搜索范围", exact=True):
-        # APP内搜索、搜索建议、小程序、AI搜索、便捷服务保留
-        p.off(only=["榜单", "小说", "购物", "个性化推荐", "精选资讯"], page="下拉搜索·搜索范围")
-        p.back()
-    if p.tap("首页卡片管理", exact=True):
-        p.off(only=["未下载应用推荐", "应用建议小卡", "热搜应用", "精选推荐", "热搜榜单", "活动皮肤", "推荐卡片"], page="下拉搜索·首页卡片管理")
-        p.back()
-    if p.tap("功能管理", exact=True):
-        p.off(only=["搜索框提示词"], page="下拉搜索·功能管理")
-        p.back()
-    if p.tap("账号与隐私", exact=True) and p.tap("隐私", exact=True):
-        p.off(only=["个性化推荐"], page="下拉搜索·隐私")
-        p.back(2)
-    p.back(2)
+    search_settings_swipe()

@@ -203,6 +203,20 @@ def hot():
         self.assertEqual(offenders([("sample.py", script)], injected),
                          {"sample.py": ["hot"]})
 
+    def test_the_guard_ignores_type_annotations(self):
+        """实现上的注解是 mypy 严格档的产物，脚本副本不写：两者仍算同一段代码。"""
+        injected = {"downloads": '''\
+def downloads() -> None:
+    p.off(only=["广告推荐"], page="下载管理·设置")
+'''}
+        script = '''\
+@step("下载管理")
+def downloads():
+    p.off(only=["广告推荐"], page="下载管理·设置")
+'''
+        self.assertEqual(offenders([("sample.py", script)], injected),
+                         {"sample.py": ["downloads"]})
+
 
 if __name__ == "__main__":
     unittest.main()
