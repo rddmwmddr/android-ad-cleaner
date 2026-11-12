@@ -84,55 +84,22 @@ def _():
 
 @step("软件商店")
 def _():
-    if not open_app_settings("com.heytap.market", "com.heytap.market.mine.cn.setting.ui.SettingActivity", "应用与服务"):
-        return False
-    if not tap_page("服务管理", "com.heytap.market.mine.cn.setting.ui.ServeManagerActivity", "服务管理"):
-        return False
-    p.top(n=12)
-    return off_exact(STORE_PROMOTIONS, "商店·推广入口")
+    store_promotions()
 
 
 @step("浏览器首页")
 def _():
-    if not browser_settings_direct():
-        return False
-    activity = "com.heytap.browser.settings.component.BrowserPreferenceActivity"
-    if not tap_page("主页设置", activity, "主页设置"):
-        return False
-    if p.find("简洁", exact=True):
-        print("  · 首页已为简洁，保持不变")
-        return True
-    if not tap_page("页面布局", activity, "页面布局"):
-        return False
-    if not p.tap("简洁", exact=True, scrolls=0):
-        return False
-    p.back()
-    if not wait_page(activity, "主页设置") or not p.find("简洁", exact=True):
-        return False
-    p.changed.append(("浏览器主页", "默认 → 简洁"))
-    return True
+    browser_home()
 
 
 @step("浏览器广告")
 def _():
-    if not browser_settings_direct():
-        return False
-    activity = "com.heytap.browser.settings.component.BrowserPreferenceActivity"
-    if not tap_page("隐私", activity, "隐私") or not tap_page("广告管理", activity, "广告管理"):
-        return False
-    completed = off_exact(["开屏广告", "资讯列表广告"], "浏览器·广告管理", max_screens=2)
-    print("  · 摇一摇广告可能随上级开关灰置；不将 checked=true 的灰置项计作独立关闭")
-    return completed
+    browser_ads()
 
 
 @step("浏览器个性化")
 def _():
-    if not browser_settings_direct():
-        return False
-    activity = "com.heytap.browser.settings.component.BrowserPreferenceActivity"
-    if not tap_page("隐私", activity, "隐私") or not tap_page("个性化管理", activity, "个性化管理"):
-        return False
-    return off_exact(["个性化优惠推荐", "个性化广告推荐"], "浏览器·个性化管理", max_screens=2)
+    browser_personalized()
 
 
 print("\n本机型脚本不处理：下拉搜索、负一屏、主题服务模式、视频和游戏中心。")
