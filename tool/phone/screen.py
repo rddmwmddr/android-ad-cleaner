@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 
 import adb_link
 import wait
-from captures import Captures, root_from_env
+from captures import Captures
 from row import bounds, control, dedupe, summary, switch_row, title_hit, unique
 from row import residual_note as confirm_note
 from troubleshooting import TAPPED, XIAOMI_INPUT, input_blocked
@@ -36,11 +36,12 @@ class Screen:
     `systemui_text` 由它持有：`texts()` 是读屏最热路径，读的正是这个开关（ADR-0033）。
     """
 
-    def __init__(self, conn):
+    def __init__(self, conn, captures=None):
         self.conn = conn
         self.systemui_text = False          # 读屏时是否算上 com.android.systemui 的文字（vivo OriginOS Ocean 的通知页就挂在那里）
-        self.dump = ""                      # 最近一次读屏原文：两处失败现场把它落盘（#1126）
-        self.captures = Captures(root_from_env())
+        self.dump = ""                      # 最近一次读屏原文（#1126）
+        self.pending_capture = ""           # 两处留现场记下的这一屏，段失败时才落盘（#1126）
+        self.captures = captures if captures is not None else Captures("")
         with conn.guarded():                # 读屏坏了：三种结局的翻译与收尾都在 Connection 那一份
             self.W, self.H = conn.reader.window_size()
 
@@ -186,16 +187,20 @@ class Screen:
         return where, detail
 
     def save_capture(self):
-        """这一屏原文落盘（`note_miss()` / `page_evidence()` 两处失败现场共用）。
+        """这一段的失败现场落盘：由段包装在段真的失败时调，取走 `note_miss()` / `page_evidence()`
+        记下的那一屏。入口探路也会走 `note_miss()`（`entry()` 找不到可选入口只返回假，不是失败），
+        那时一个字节都不写，也不会盖掉上一轮真正失败留下的现场。
 
         内容不进日志、不随上报发送：只写客户端的数据目录，路径也不打印（上报的日志会带上用户目录）。
-        没给捕获目录时一个字节都不写；写不进去同样不算失败，现场丢了不能盖掉原来那句报错。"""
-        self.captures.save(self.dump, (self.W, self.H))
+        没给捕获目录时同样不写；写不进去不算失败，现场丢了不能盖掉原来那句报错。"""
+        page, self.pending_capture = self.pending_capture, ""
+        if page:
+            self.captures.save(page, (self.W, self.H))
 
     def note_miss(self, text):
         """入口没找到时留下能定位的页面骨架，与渠道「未确认」日志同一风格。"""
         where, detail = self._page_diagnosis()
-        self.save_capture()
+        self.pending_capture = self.dump
         self.conn.say(f"  · 「{text}」没找到；停在 {where}；{detail}")
 
     def page_evidence(self, titles=()):
@@ -205,7 +210,7 @@ class Screen:
         `titles` 由调用方给（该翻的几屏已经读过了），这里不重读开关：
         自绘开关的页面每读一次开关就要截一次图。"""
         where, detail = self._page_diagnosis()
-        self.save_capture()
+        self.pending_capture = self.dump
         names = list(titles)
         return f"停在 {where}；{detail}；当次读到 {len(names)} 个开关：{'、'.join(names) or '无'}"
 

@@ -4,7 +4,7 @@ root 由调用方给 —— 客户端走 `AAC_CAPTURES`，与备份目录、暂�
 一个字节都不写：源码态直接跑 `tool/run.py` 不产生任何文件。
 
 一个段只留最新一份现场，目录名 `<任务>-<段>`，同一段重跑会覆盖。`meta.json` 记当时的宽高：
-回放时 `Screen.on_screen` 按它过滤屏外节点，缺了会把折叠屏内屏那份节点也算进来（Issue #2）。
+回放时 `Screen.on_screen` 按它过滤屏外节点，缺了会把折叠屏内屏那份节点也算进来（沿用 #2）。
 产物不进日志、不随上报发送，也不自动清理 —— 体积由 `run.py captures` 报给人，手动清。
 """
 import datetime
@@ -70,7 +70,7 @@ class Captures:
                 f.write(page)
             with open(os.path.join(folder, META), "w", encoding="utf-8") as f:
                 json.dump(meta, f, ensure_ascii=False, indent=1)
-        except OSError:
+        except (OSError, ValueError):       # 写中文路径时的编码错也是 ValueError
             return None
         return folder
 

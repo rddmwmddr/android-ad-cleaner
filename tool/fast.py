@@ -25,6 +25,7 @@ from phone.connection import pause_point as pause_point
 from phone.connection import reader_failure as reader_failure
 from phone.connection import u2 as u2
 from phone.connection import _shell_transport as _shell_transport
+from captures import root_from_env as _captures_root_from_env
 from phone.screen import CONFIRM as CONFIRM
 from phone.screen import PERMISSION_CONTROLLERS as PERMISSION_CONTROLLERS
 from phone.screen import Captures as Captures
@@ -108,7 +109,8 @@ class Phone:
 
     def __init__(self, serial, log=True, reader: Reader | None = None):
         self.conn = Connection(serial, log=log, reader=reader)
-        self.screen = Screen(self.conn)
+        # 失败现场的根只在入口读一次环境变量，观测基座不认识客户端（同 `backups`：#1126）
+        self.screen = Screen(self.conn, Captures(_captures_root_from_env()))
         # 三个跨阶段会话各有对象；门面只转发，写者与读者写在对象接口上（#1039）
         self.lost_note = LostNote()
         self.launch_session = LaunchSession()

@@ -175,6 +175,7 @@ def preamble(p, g):
             except Exception as error:
                 g["FAILED_STEPS"].append(name)
                 state = FAILED
+                p.screen.save_capture()  # 这一段的失败现场（#1126）；探路留下的那张不算失败
                 if isinstance(error, ScreenLocked):
                     g["HALTED"] = True
                 print(f"  ✗ 未完成：{error}", flush=True)

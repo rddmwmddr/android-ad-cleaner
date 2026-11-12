@@ -81,10 +81,16 @@ class HandlerInterfaceTests(unittest.TestCase):
             self.assertEqual(out.getvalue(), run.__doc__ + "\n")
 
     def test_devices_stays_outside_the_table(self):
-        """唯一不带序列号的命令，留在 -s 解析之前，不进 handler 表。"""
+        """不带序列号的命令留在 -s 解析之前，不进 handler 表。"""
         self.assertNotIn("devices", run.COMMANDS)
         with patch.object(run.subprocess, "run", return_value=SimpleNamespace(stdout="")):
             self.assertEqual(run.main(["devices"]), 0)
+
+    def test_captures_stays_outside_the_table(self):
+        """`captures` 只读本机目录，与 `devices` 同一处：`-s` 解析之前分派，没有 adb 也能跑。"""
+        self.assertNotIn("captures", run.COMMANDS)
+        with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(run.main(["captures", tmp]), 0)
 
     def test_failure_returns_one_and_writes_the_reason_to_stderr(self):
         err = io.StringIO()
