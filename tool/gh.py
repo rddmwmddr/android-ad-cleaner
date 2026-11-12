@@ -10,7 +10,11 @@ import subprocess
 
 
 class GhError(RuntimeError):
-    """`gh` 调用失败：跑不了、退出码非零，或输出不是 JSON——三种都给不出结局。"""
+    """取不到数据：跑不了 `gh`、退出码非零、输出不是 JSON——三种都给不出结局。
+
+    喂进来的输入（如标签审计的 `--input` 落盘）读不了也算这一族：调用方只看「取到没取到」，
+    不分辨数据是从网线来的还是从磁盘来的。
+    """
 
 
 def runner_for(cwd=None, timeout=None):

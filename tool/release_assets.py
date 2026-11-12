@@ -25,15 +25,14 @@
 tag 不存在、Release 没给出摘要、参数不认识）。同一轮既有对不上又有附件缺摘要时按 1 报：
 差异已经确证，缺摘要那几句照样打在差异后面。
 """
-import json
 import re
-import subprocess
 import sys
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))   # 直接跑脚本与作为 tool.<模块> import 两种都认
+from gh import GhError, json_of, runner_for                # noqa: E402
 from stdio import use_utf8_console                         # noqa: E402
 
 use_utf8_console()
@@ -187,32 +186,20 @@ class Asset(NamedTuple):
     digest: str
 
 
-def run_gh(*args):
-    """跑 `gh <args>` 并返回 stdout；跑不起或退出码非 0 时抛 RuntimeError（取数失败的统一形状）。"""
+def fetch_release(tag, runner=None):
+    """`gh release view <tag>` 的全量附件；取不到时抛 GhError。"""
     try:
-        done = subprocess.run(["gh", *args], capture_output=True, text=True,
-                              encoding="utf-8", errors="replace")
-    except OSError as error:
-        raise RuntimeError(f"跑不起 gh：{error}") from error
-    if done.returncode != 0:
-        detail = (done.stderr or done.stdout).strip()
-        raise RuntimeError(detail or f"gh 退出码 {done.returncode}")
-    return done.stdout
-
-
-def fetch_release(tag):
-    """`gh release view <tag>` 的全量附件；取不到时抛 RuntimeError。"""
-    try:
-        rows = json.loads(run_gh("release", "view", tag, "--json", "assets"))["assets"]
+        rows = json_of(runner or runner_for(), "release", "view", tag, "--json", "assets",
+                       source=f"`gh release view {tag}`")["assets"]
         return [Asset(name=str(row.get("name") or ""), size=int(row.get("size") or 0),
                       digest=str(row.get("digest") or "")) for row in rows]
     except (AttributeError, ValueError, KeyError, TypeError) as error:
-        raise RuntimeError(f"读不出 {tag} 的附件：{error}") from error
+        raise GhError(f"读不出 {tag} 的附件：{error}") from error
 
 
-def fetch_assets(tag):
-    """`fetch_release` 的名字投影：附件名清单；取不到时抛 RuntimeError。"""
-    return [asset.name for asset in fetch_release(tag)]
+def fetch_assets(tag, runner=None):
+    """`fetch_release` 的名字投影：附件名清单；取不到时抛 GhError。"""
+    return [asset.name for asset in fetch_release(tag, runner)]
 
 
 def parse(argv):

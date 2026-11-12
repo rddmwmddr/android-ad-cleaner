@@ -16,9 +16,10 @@
 中途改坏又改回不留痕迹；第四条只查「标签集 ⊆ 登记集」，查不出这张票该不该带这个标签。
 """
 import json
-import subprocess
 import sys
 from pathlib import Path
+
+from gh import GhError, json_of, runner_for
 
 from stdio import use_utf8_console
 
@@ -50,10 +51,6 @@ EXIT_OK, EXIT_FINDINGS, EXIT_UNREACHABLE = 0, 1, 2
 USAGE = """用法：python3 tool/triage_audit.py [--input <path>]
 
   --input <path>  读一份 `gh issue list --state open --json number,labels` 的落盘，不联网"""
-
-
-class Unreachable(RuntimeError):
-    """取不到票（gh 失败、输出不是 JSON、注入文件读不了）：给不出结论。"""
 
 
 class Usage(RuntimeError):
@@ -111,54 +108,48 @@ def parse_args(argv):
     return path
 
 
-def gh_json(args):
-    try:
-        done = subprocess.run(["gh", *args], capture_output=True, text=True,
-                              encoding="utf-8", errors="replace")
-    except OSError as error:
-        raise Unreachable(f"跑不起 gh：{error}") from error
-    if done.returncode != 0:
-        detail = (done.stderr or done.stdout).strip()
-        raise Unreachable(detail or f"gh 退出码 {done.returncode}")
-    try:
-        return json.loads(done.stdout)
-    except ValueError as error:
-        raise Unreachable(f"gh 输出不是 JSON：{error}") from error
+def checked(issues, source):
+    """一份 `gh issue list --json number,labels` 的形状校验；不符时抛 GhError。
 
-
-def fetch_issues():
-    """全量 open 票的 number 与 labels；取不到时抛 Unreachable。"""
-    return gh_json(["issue", "list", "--state", "open",
-                    "--limit", str(LIMIT), "--json", FIELDS])
-
-
-def read_dump(path):
-    """读一份 `gh issue list --json number,labels` 的落盘；形状不符时也抛 Unreachable。"""
-    try:
-        issues = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError) as error:
-        raise Unreachable(f"读不了 {path}：{error}") from error
+    联网与 `--input` 两条输入来源都走这一份：形状不合就是给不出结论，不分工。
+    """
     if not isinstance(issues, list):
-        raise Unreachable(f"{path} 的顶层不是数组，不是 `gh issue list --json` 的输出")
+        raise GhError(f"{source} 的顶层不是数组，不是 `gh issue list --json` 的输出")
     for issue in issues:
         if not isinstance(issue, dict) or "number" not in issue:
-            raise Unreachable(f"{path} 里有条目缺 number，不是 `gh issue list --json` 的输出")
+            raise GhError(f"{source} 里有条目缺 number，不是 `gh issue list --json` 的输出")
         labels = issue.get("labels")
         if labels is not None and (not isinstance(labels, list)
                                    or any(not isinstance(label, dict) for label in labels)):
-            raise Unreachable(f"{path} 里的 labels 不是对象数组，像是被 --jq 压平过")
+            raise GhError(f"{source} 里的 labels 不是对象数组，像是被 --jq 压平过")
     return issues
 
 
-def main(argv, fetch=fetch_issues):
+def fetch_issues(runner):
+    """全量 open 票的 number 与 labels；取不到时抛 GhError。"""
+    issues = json_of(runner, "issue", "list", "--state", "open",
+                     "--limit", str(LIMIT), "--json", FIELDS, source="`gh issue list`")
+    return checked(issues, "`gh issue list`")
+
+
+def read_dump(path):
+    """读一份 `gh issue list --json number,labels` 的落盘；读不了或形状不符都抛 GhError。"""
+    try:
+        issues = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise GhError(f"读不了 {path}：{error}") from error
+    return checked(issues, str(path))
+
+
+def main(argv, runner=None):
     try:
         path = parse_args(argv)
     except Usage as error:
         print(f"{error}\n\n{USAGE}", file=sys.stderr)
         return EXIT_UNREACHABLE
     try:
-        issues = read_dump(path) if path else fetch()
-    except Unreachable as error:
+        issues = read_dump(path) if path else fetch_issues(runner or runner_for())
+    except GhError as error:
         print(f"取不到 open 票的标签集，这条审计给不出结论：{error}", file=sys.stderr)
         return EXIT_UNREACHABLE
     lines = audit(issues)
