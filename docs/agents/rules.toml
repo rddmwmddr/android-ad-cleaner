@@ -1001,7 +1001,7 @@ id = "doc.release.never-omit-unverified"
 source = "docs/agents/release.md#正文的格式"
 check = "none"
 status = "manual"
-why = "把「没有真机复测」写成「已验证」或「应该没问题」，报告者会跳过复测，问题留到下一版才被发现。"
+why = "把「没有真机复测」写成「已验证」或「应该没问题」，报告者会跳过复测，问题留到下一版才被发现；而笼统一句「没有真机复测」又分不出「有用例覆盖」与「只在模拟器上看过」，读者判断不了这一版的风险缺在哪一层。用计数或百分比描述这几层会变成过期的复合数（用例数那条见 doc.release.count-regression-once）。"
 expires_if = "每版都有真机复测、这句不再需要时删。"
 
 [[rule]]
