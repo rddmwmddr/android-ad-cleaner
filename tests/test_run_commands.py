@@ -4,10 +4,10 @@
 - 每条命令是一个 handler，进程内调用拿退出码；退出码与错误渲染只在 main() 的出口（ADR-0005）。
 - 多余往返与冗余写入不许回来（usagestats 白拉、逐包 pm path、wm size 双读、suspended.txt 重复行、hap:// 只报第一个应答组件）。
 - 对外可观察的行为（退出码 / stdout / stderr）与改动前逐字节相同：基线
-  `tests/baselines/run_cli.json` 最初由 `tests/make_run_cli_baseline.py` 在 `git archive e319126`
+  `tests/baselines/run_cli.json` 由 `tests/make_run_cli_baseline.py` 在 `git archive e319126`
   的干净副本上生成，喂的是同一份假 adb（`tests/run_cli_cases.py`）。有意改变某条输出时在改动后
-  的树上重生成，并在 provenance 的 `note` 里写明原因，那里的 `baseline` 记着当次的基点
-  （#973 加的 `default_on`、#1124 加的三个台账值都是这样）。
+  的树上重生成，并在 provenance 的 `note` 里写明原因（#973 加的 `default_on` 就是这样）。
+  重生成时 `baseline` 记当次的基点；`status-json` 里随台账变的三值由 driver 规范化成 `<LEDGER>`。
 
 `ui-check` / `chan-scan` / `chan-off` / `chan-on` / `recipe` 会真的起子进程（fast.py /
 chan_fast.py），输出取决于本机 adb 服务，所以不做逐字节对拍，改在这里替身化后断言返回值。
