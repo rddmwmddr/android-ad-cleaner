@@ -50,6 +50,11 @@ class ClientData:
         return os.path.join(self.root, "backups")
 
     @property
+    def captures(self):
+        """失败现场（#1126）：引擎按任务与段名在里面建子目录，不自动清理。"""
+        return os.path.join(self.root, "captures")
+
+    @property
     def updates(self):
         return os.path.join(self.root, "updates")
 
@@ -257,7 +262,7 @@ def chime():
         pass
 
 
-def child_env(adb, backups):
+def child_env(adb, backups, captures):
     e = dict(os.environ)
     # 事件开关只由本客户端在跑任务时打开。用户 shell 里碰巧导出了它也不能生效：
     # `_run()` 那些一次性命令会把输出直接解析（`status()` 取末行当 JSON）。
@@ -267,6 +272,7 @@ def child_env(adb, backups):
     if ENGINE_HOST:
         e["AAC_HOST"] = ENGINE_HOST
     e.update({"ADB": adb or "", "ADBUTILS_ADB_PATH": adb or "", "AAC_BACKUPS": backups,
+              "AAC_CAPTURES": captures,
               "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1", "AAC_GUI": "1"})
     if adb:
         e["PATH"] = os.path.dirname(adb) + os.pathsep + e.get("PATH", "")
@@ -1226,7 +1232,7 @@ class Api:
         return self.dispatcher.lock
 
     def _child_env(self):
-        return child_env(self.adb, self.data.backups)
+        return child_env(self.adb, self.data.backups, self.data.captures)
 
     # ----- 基础 -----
     def env(self):

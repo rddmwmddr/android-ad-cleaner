@@ -152,6 +152,7 @@ def preamble(p, g):
                 print("  · 未执行：前一段中止了整批", flush=True)
                 return action
             print(f"\n== {name}", flush=True)
+            p.screen.captures.step = name    # 失败现场按段归档（#1126）
             p.miss = 0
             started = time.monotonic()
             state = DONE

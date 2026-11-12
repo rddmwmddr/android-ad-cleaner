@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 
 import adb_link
 import wait
+from captures import Captures, root_from_env
 from row import bounds, control, dedupe, summary, switch_row, title_hit, unique
 from row import residual_note as confirm_note
 from troubleshooting import TAPPED, XIAOMI_INPUT, input_blocked
@@ -38,6 +39,8 @@ class Screen:
     def __init__(self, conn):
         self.conn = conn
         self.systemui_text = False          # 读屏时是否算上 com.android.systemui 的文字（vivo OriginOS Ocean 的通知页就挂在那里）
+        self.dump = ""                      # 最近一次读屏原文：两处失败现场把它落盘（#1126）
+        self.captures = Captures(root_from_env())
         with conn.guarded():                # 读屏坏了：三种结局的翻译与收尾都在 Connection 那一份
             self.W, self.H = conn.reader.window_size()
 
@@ -47,7 +50,8 @@ class Screen:
 
     # ---------- 采样：读屏、页面状态与签名 ----------
     def tree(self):
-        root = ET.fromstring(self.conn._u2(self.conn.reader.dump_hierarchy))
+        self.dump = self.conn._u2(self.conn.reader.dump_hierarchy)
+        root = ET.fromstring(self.dump)
         # Mi 10 的热榜子页会横屏；不能一直用连接时的竖屏尺寸过滤节点。
         self.W, self.H = self.conn._u2(self.conn.reader.window_size)
         return root
@@ -181,9 +185,17 @@ class Screen:
             detail = "页面结构读不到"
         return where, detail
 
+    def save_capture(self):
+        """这一屏原文落盘（`note_miss()` / `page_evidence()` 两处失败现场共用）。
+
+        内容不进日志、不随上报发送：只写客户端的数据目录，路径也不打印（上报的日志会带上用户目录）。
+        没给捕获目录时一个字节都不写；写不进去同样不算失败，现场丢了不能盖掉原来那句报错。"""
+        self.captures.save(self.dump, (self.W, self.H))
+
     def note_miss(self, text):
         """入口没找到时留下能定位的页面骨架，与渠道「未确认」日志同一风格。"""
         where, detail = self._page_diagnosis()
+        self.save_capture()
         self.conn.say(f"  · 「{text}」没找到；停在 {where}；{detail}")
 
     def page_evidence(self, titles=()):
@@ -193,6 +205,7 @@ class Screen:
         `titles` 由调用方给（该翻的几屏已经读过了），这里不重读开关：
         自绘开关的页面每读一次开关就要截一次图。"""
         where, detail = self._page_diagnosis()
+        self.save_capture()
         names = list(titles)
         return f"停在 {where}；{detail}；当次读到 {len(names)} 个开关：{'、'.join(names) or '无'}"
 

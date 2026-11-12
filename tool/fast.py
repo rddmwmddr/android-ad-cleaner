@@ -27,6 +27,7 @@ from phone.connection import u2 as u2
 from phone.connection import _shell_transport as _shell_transport
 from phone.screen import CONFIRM as CONFIRM
 from phone.screen import PERMISSION_CONTROLLERS as PERMISSION_CONTROLLERS
+from phone.screen import Captures as Captures
 from phone.screen import Screen
 from phone.session import ChannelSession, LaunchSession, LostNote
 import adb_link
@@ -542,6 +543,8 @@ def main():
 
 
 def execute(p, cmd, rest):
+    # 失败现场的归档名：run 在客户端是「关闭各 App 里的广告开关」这一步（`Task.kind` = recipe）
+    p.screen.captures.task = "recipe" if cmd == "run" else cmd
     if cmd == "check":
         if p.locked():
             sys.exit("手机锁屏了，请机主解锁后重试")
