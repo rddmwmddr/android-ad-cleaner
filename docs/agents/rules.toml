@@ -599,7 +599,7 @@ id = "doc.release.followup-queue"
 source = "docs/agents/release-followup.md#每次发版后照做"
 check = "none"
 status = "manual"
-why = "新版不送到报告者手上，不催复测就只能一直开着（#544、#560）：队列只有发版时过一次，漏一次就多一张没人处理的票。凭用例或现场能关的票在发版前就按 issue-tracker 的判据关掉，队列里剩下的正是真等真机的那批。"
+why = "新版不送到报告者手上，不催复测就只能一直开着：队列只有发版时过一次，漏一次就多一张没人处理的票（沿用 #544、#560 的教训）。凭用例或现场能关的票在发版前就按 issue-tracker 的判据关掉，队列里剩下的正是真等真机的那批。"
 expires_if = "发版流程自动给报告者发复测通知时删。"
 
 [[rule]]
