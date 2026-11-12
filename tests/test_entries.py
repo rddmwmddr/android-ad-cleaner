@@ -128,6 +128,20 @@ class SourceTest(unittest.TestCase):
                 encoding="utf-8")
             self.assertEqual(entries.used_by(d), {})
 
+    def test_a_locally_defined_helper_is_not_the_injected_one(self):
+        """脚本定义了同名助手，注入面那份就不在场上：不扣减会把它记成用过别家的 Intent。"""
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            model = Path(d) / "brand-model"
+            model.mkdir()
+            (model / "recipe.py").write_text(
+                'def app_settings(package, *markers):\n'
+                '    return package\n\n\n'
+                'def _():\n'
+                '    app_settings("com.hihonor.appmarket", "内容推荐服务")\n',
+                encoding="utf-8")
+            self.assertEqual(entries.used_by(d), {})
+
     def test_honor_minus_one_screen_direct_entry_is_registered(self):
         """CLE-AN00 用 hiboard 直达负一屏首页，ENTRIES 要跟着登记（#671）。"""
         e = entries.ENTRIES["honor"]["负一屏"]
