@@ -41,7 +41,9 @@ class PollTests(unittest.TestCase):
             api.job.results.append({"title": "备份", "rc": 0, "sec": 1})
             self.assertEqual(api.poll()["results"], [])
             api.job.running = False
-            self.assertEqual(api.poll()["results"], [{"title": "备份", "rc": 0, "sec": 1}])
+            # poll 给每条结果附一句摘要（#1189）；这一行没有 tail，那句就是空串
+            self.assertEqual(api.poll()["results"],
+                             [{"title": "备份", "rc": 0, "sec": 1, "summary": ""}])
 
     def test_poll_before_any_run_is_idle(self):
         with tempfile.TemporaryDirectory() as directory:

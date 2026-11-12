@@ -926,6 +926,8 @@ class Dispatcher:
         self.data = data
         self.adb_of = adb_of
         self.on_error = on_error
+        # 结果摘要的纯函数（#1189）：构造时取一次，别在 poll 的轮询热路径上现取
+        self.summary = _tool("summary")
         self.job = None
         self.lock = threading.Lock()
         self.side = ""                  # 正在跑的旁路操作（还原），与执行互斥（#662）
@@ -1135,6 +1137,9 @@ class Dispatcher:
         snap = j.snapshot(since)
         if snap["running"]:
             snap["results"] = []        # 执行中不显示结果（前端契约）；诊断与上报仍读快照里的全量
+        else:
+            # 每条结果附一句话（#1189）：前端只显示这个字段，不再自己认日志模式
+            snap["results"] = [{**r, "summary": self.summary.summarize(r)} for r in snap["results"]]
         return snap
 
     def stop(self):

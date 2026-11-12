@@ -43,7 +43,7 @@
 - `_offered()` 只在拿到带 `steps` 的检测结果时才给原因；`tests/compare_api.py` 这类只塞 `info` 的驱动
   因此与改动前逐字一致。
 - 手机版不需要改 Kotlin：`Selection.plan()` 照旧只交勾选，结果行由共用的 `Dispatcher` 拼出，
-  `view.summarize()` 认不出模式时直接显示原因。
+  `summarize()`（现在住在 `tool/summary.py`，两个宿主共用，#1189）认不出模式时直接显示原因。
 - 新用例 `tests/test_plan.py` 覆盖结果集构造与 `_work()` 的计数、断线时各行保留自己的原因；
   `tests/js/client.test.js` 覆盖完成页渲染与「真出错的跳过仍算失败」。
 - 不改变参考脚本「默认不勾」的安全策略，也不改各步骤的实质行为。

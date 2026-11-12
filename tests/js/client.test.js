@@ -2,10 +2,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { openPage, pollResult, stepDone } = require("./page.js");
-/* 与手机版 aac_android/view.py 的 summarize() 同一批 tail、同一批期望串（#758）：
-   tests/test_android_view.py 读的是同一份文件，两处产出必须逐字相同。 */
-const SUMMARY_CASES = require("../summary_cases.json");
-
 function spyClearInterval(window) {
   const cleared = [];
   const original = window.clearInterval;
@@ -88,42 +84,25 @@ test("引擎还没收尾时不进完成页", async () => {
   } finally { page.close(); }
 });
 
-test("机型脚本摘要说清三类结局，与手机版逐字一致（#758）", async () => {
+/* 摘要由后端算（tool/summary.py，两个宿主共用，#1189）：结果页只渲染 results[].summary，
+   口径本身在 tests/test_summary.py 里跑共享样例集。这里只管字段原样画出来、缺字段时不留旧逻辑。 */
+test("完成页结果行只渲染后端给的摘要字段（#1189）", async () => {
   const page = await openPage();
   try {
-    for (const c of SUMMARY_CASES){
-      assert.equal(page.window.summarize({ tail: c.tail }), c.want, c.name);
-    }
-  } finally { page.close(); }
-});
-
-/* 机器行（tool/events.py 的 `#aac:event ` / `#aac:payload `）只在客户端设了 AAC_EVENTS 时出现，
-   正常走不到 results[].tail；但只要有一处漏进来，兜底那句就会把它原样显示给用户（#1002）。
-   与 tests/test_rules_guards.py 的 EngineGuards 读同一份样例。 */
-test("完成页摘要把机器行挡在外面（#1002）", async () => {
-  const page = await openPage();
-  try {
-    for (const c of SUMMARY_CASES){
-      const tail = [...c.tail, ...(c.machine || [])];
-      const got = page.window.summarize({ tail });
-      assert.equal(got, c.want, c.name);
-      assert.ok(!got.split("\n").some(line => line.startsWith("#aac:")), `${c.name}：摘要里漏出了机器行`);
-    }
-    const machine = ["#aac:event {\"kind\": \"ui_busy\"}", "#aac:payload {\"skeleton\": \"<node>\"}"];
-    assert.equal(page.window.summarize({ tail: ["开始执行", ...machine] }), "开始执行");
-  } finally { page.close(); }
-});
-
-test("完成页摘要认不出模式时显示最后一条非空行", async () => {
-  const page = await openPage();
-  try {
-    assert.equal(page.window.summarize({ tail: ["开始执行", "人话：最后一句", ""] }), "人话：最后一句");
+    page.window.showDone(pollResult({ results: [
+      { title: "关闭各 App 里的广告开关", rc: 0, sec: 7, summary: "关了 26 个开关",
+        tail: ["机型脚本跑完：关了 26 个，210 秒"] },
+      { title: "收尾", rc: 0, sec: 1, tail: ["插电常亮已改回 1"] },
+    ]}));
+    const cells = [...page.document.querySelectorAll(".res .d")].map(n => n.textContent);
+    assert.equal(cells[0], "关了 26 个开关 · 7 秒");
+    assert.equal(cells[1], " · 1 秒", "没有 summary 就显示空串，不回退去读 tail");
   } finally { page.close(); }
 });
 
 test("没勾的项在完成页是一行「跳过」，不算失败（#577）", async () => {
   const notRun = { title: "关闭各 App 里的广告开关", rc: 0, sec: 0, skipped: true, stopped: false,
-                   tail: ["未勾选，本次没有执行"] };
+                   summary: "未勾选，本次没有执行", tail: ["未勾选，本次没有执行"] };
   const page = await openPage({ api: { poll: () => pollResult({ results: [stepDone, notRun] }) } });
   try {
     page.window.showRun();
@@ -154,19 +133,6 @@ test("真出错的跳过行仍然算失败（#577 不能掩盖它）", async () 
   } finally { page.close(); }
 });
 
-test("完成页摘要遇到空 tail 返回空串而不是 undefined", async () => {
-  const page = await openPage();
-  try {
-    assert.equal(page.window.summarize({ tail: ["", ""] }), "");
-  } finally { page.close(); }
-});
-
-test("完成页摘要认得快照已存", async () => {
-  const page = await openPage();
-  try {
-    assert.equal(page.window.summarize({ tail: ["快照已存：3 项"] }), "已保存");
-  } finally { page.close(); }
-});
 
 // 守卫用例：旧树也绿——单飞行自 #662 起就在，这里守的是它不回退（#698）
 test("上一次 poll 没回来时不发第二次（#698）", async () => {

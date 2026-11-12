@@ -30,8 +30,8 @@
 
 ## Consequences
 
-- 手机版和桌面版不再共用页面。改流程、文案要看两边；`summarize()` 现在有两份
-  （`gui/web/index.html`、`view.py`），靠 `tests/test_android_view.py` 守手机这一份。
+- 手机版和桌面版不再共用页面。改流程、文案要看两边；结果摘要不在这里分叉——两个宿主共用
+  `tool/summary.py`，由 `tests/test_summary.py` 守那一份口径（#1189）。
 - 工具链升级：AGP 9.5（内置 Kotlin 2.3，不再单独用 `kotlin-android` 插件）、Gradle 9.8、compileSdk 37。
   `targetSdk` 仍是 35，系统行为不变。
 - APK 从 43.9 MB 变成 50.0 MB，多出来的是 Compose 库；少打进去的是网页和教程图。

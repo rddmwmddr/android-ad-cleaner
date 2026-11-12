@@ -17,8 +17,9 @@
 `FixtureGuards` 落地时把那两个机型用例的本地假类换成了 `phone_stub()`，三条在旧树上是红的。
 
 引擎那两条：替换层只读 AST（不 import 手机版的模块，它们依赖只在手机上装得下的库），
-结果页喂 `tests/summary_cases.json` 的同一批样例给手机版的 `summarize()`；网页版那条在
-`tests/js/client.test.js`，跑的是真实的 `gui/web/index.html`（ADR-0017）。不需要 Android 设备或 JDK。
+结果页喂 `tests/summary_cases.json` 的同一批样例给 `tool/summary.py` 的 `summarize()`——两个宿主
+调的就是这一份（#1189）。网页版只剩「按后端字段渲染」的断言，跑真实的 `gui/web/index.html`
+（ADR-0017）。不需要 Android 设备或 JDK。
 
 发版产物那一条读 `index.html` 的源码：解析只走 `tool/release_assets.py`（定时 job 用同一份），
 不联网、不需要 GitHub 凭据；与真实 Release 的名字、大小、sha 比对在 `.github/workflows/release-assets.yml`。
@@ -31,13 +32,14 @@ import sys
 import unittest
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "android" / "app" / "src" / "main" / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from aac_android import view  # noqa: E402
 from test_rules_registry import ANCHOR as RULE_ANCHOR  # noqa: E402  同一份锚点口径，别再抄一份
 from test_rules_registry import read_rows, top_level_names  # noqa: E402
-from tool import events, release_assets  # noqa: E402
+from tool import events, release_assets, summary  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -473,9 +475,9 @@ REPLACEMENT_LAYER = {
               "connect", "display", "install", "matches", "read_failed", "select_all", "text_of"),
 }
 
-# 结果页要挡住的机器行记号：唯一来源是 tool/events.py 的两个前缀，它们的公共前缀就是两处
-# summarize() 该剥掉的那一段。手机版与网页版都只能写死这个字面量（屏幕上没有 tool/ 可 import），
-# 由本文件把它和 events.py 拴住：改前缀而不同步，这条与样例的漂移检查都会红。
+# 结果页要挡住的机器行记号：唯一来源是 tool/events.py 的两个前缀，它们的公共前缀就是摘要函数
+# （tool/summary.py）该剥掉的那一段。两个宿主调同一份实现，由本文件把它和 events.py 拴住：
+# 改前缀而不同步，这条与样例的漂移检查都会红。
 MACHINE_TOKEN = os.path.commonprefix([events.PREFIX, events.PAYLOAD_PREFIX])
 
 
@@ -483,31 +485,31 @@ class EngineGuards(unittest.TestCase):
     def test_ui_result_line_routing(self):
         """结果页的摘要不许出现引擎的机器行（`tool/events.py` 的 PREFIX / PAYLOAD_PREFIX）。
 
-        两条同口径用例：本条（`EngineGuards.test_ui_result_line_routing`）喂 `aac_android/view.py`
-        的 `summarize()`，`tests/js/client.test.js` 的「完成页摘要把机器行挡在外面（#1002）」
-        真跑 jsdom 里 `gui/web/index.html` 的同名函数；两端读同一份 `tests/summary_cases.json`。
-        `gui/app.py` 的 `_log()` 今天已经把两类行挡在外面，但只要有一处漏进 `tail`，用户看到的
-        就是 `#aac:payload {"…"}`——两处 summarize 各自再剥一次。期望串本身由
-        `tests/test_android_view.py::SummarizeTest.test_shared_cases_with_web_client` 守，这里只管漏没漏。
+        喂 `tool/summary.py` 的 `summarize()`（两个宿主共用，ADR-0019 的增补段）。`gui/app.py` 的
+        `_log()` 今天已经把两类行挡在外面，但只要有一处漏进 `tail`，用户看到的就是
+        `#aac:payload {"…"}`——摘要函数自己再剥一次。期望串本身由 `tests/test_summary.py` 的
+        共享样例集守，这里只管漏没漏。
         """
         cases = json.loads((ROOT / "tests" / "summary_cases.json").read_text(encoding="utf-8"))
         self.assertTrue(cases, "一份样例都没有，这条守卫会空转")
         fixtures = [line for case in cases for line in case.get("machine", [])]
         self.assertTrue(fixtures, "样例里一条机器行都没有，这条守卫吵不到任何人")
-        self.assertEqual(view.MACHINE_PREFIX, MACHINE_TOKEN,
-                         "手机版剥掉的记号要和 tool/events.py 的前缀对得上")
+        self.assertEqual(summary.MACHINE_PREFIX, MACHINE_TOKEN,
+                         "摘要函数剥掉的记号要和 tool/events.py 的前缀对得上")
+        self.assertEqual(view.FALLBACK_MACHINE_PREFIX, MACHINE_TOKEN,
+                         "工具目录不可用时手机版的兜底记号也要和事件前缀对得上")
         stray = [line for line in fixtures if not line.startswith(MACHINE_TOKEN)]
         self.assertEqual(stray, [],
                          f"样例里的机器行要以 {MACHINE_TOKEN!r} 开头"
                          "（前缀的唯一来源是 tool/events.py）：\n" + "\n".join(stray))
         for case in cases:
             with self.subTest(case=case["name"]):
-                got = view.summarize({"tail": list(case["tail"]) + list(case.get("machine", []))})
+                got = summary.summarize({"tail": list(case["tail"]) + list(case.get("machine", []))})
                 leaked = [line for line in got.splitlines() if line.startswith(MACHINE_TOKEN)]
                 self.assertEqual(leaked, [], "结果页不能显示引擎的机器行")
         for line in (events.PREFIX + '{"kind": "ui_busy"}',
                      events.PAYLOAD_PREFIX + '{"skeleton": "<node text=…>"}'):
-            self.assertEqual(view.summarize({"tail": ["开始执行", line]}), "开始执行",
+            self.assertEqual(summary.summarize({"tail": ["开始执行", line]}), "开始执行",
                              "按 events.py 的两个前缀现造的机器行也要挡住")
 
     def test_android_replacement_layer(self):

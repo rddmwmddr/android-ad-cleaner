@@ -41,30 +41,16 @@ def status(**over):
 
 
 class SummarizeTest(unittest.TestCase):
-    def test_shared_cases_with_web_client(self):
-        """tests/summary_cases.json 是两处 summarize() 的共同口径：网页版用例断言同一批串，
-        `machine` 里的机器行接在 tail 末尾一起喂（#1002）。"""
-        cases = json.loads((ROOT / "tests" / "summary_cases.json").read_text(encoding="utf-8"))
-        for case in cases:
-            with self.subTest(case=case["name"]):
-                tail = list(case["tail"]) + list(case.get("machine", []))
-                self.assertEqual(view.summarize({"tail": tail}), case["want"])
+    """手机版结果页那一句由 tool/summary.py 给（#1189）：view 只把它贴到每一行，不再自己算。
 
-    def test_known_lines(self):
-        cases = [(["机型脚本跑完：关了 12 个，34 秒"], "关了 12 个开关"),
-                 (["拨了 5 个", "仍开着: 1 个"], "关了 5 个渠道，复查仍开着 1 个"),
-                 (["拨了 5 个"], "关了 5 个渠道"),
-                 (["快照已存"], "已保存")]
-        for tail, want in cases:
-            self.assertEqual(view.summarize({"tail": tail}), want)
+    口径本身（共享样例集、扣减、机器行）在 `tests/test_summary.py` 跑，这里只验链路。旧树也绿：
+    旧的本地实现在同一段 tail 上给出同一句，这条守的是「别把共享实现换回本地一份」。
+    """
 
-    def test_quickapp_counts_lines(self):
-        tail = ["  快应用 com.a 已关闭", "  快应用 com.b 已关闭", "快应用组件已关闭（保留项除外）。请按常用入口核对效果；恢复：quickapp on"]
-        self.assertEqual(view.summarize({"tail": tail}), "2 个组件已关闭")
-
-    def test_falls_back_to_last_line(self):
-        self.assertEqual(view.summarize({"tail": ["甲", "乙", ""]}), "乙")
-        self.assertEqual(view.summarize({"tail": []}), "")
+    def test_poll_rows_carry_the_shared_summary(self):
+        run = view.poll(FakeApi(run={"results": [{"rc": 0, "tail": ["拨了 5 个", "仍开着: 1 个"]}],
+                                   "cancel": False}))
+        self.assertEqual(run["results"][0]["summary"], "关了 5 个渠道，复查仍开着 1 个")
 
 
 class OutcomeTest(unittest.TestCase):

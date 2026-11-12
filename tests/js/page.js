@@ -18,7 +18,8 @@ function pollResult(over = {}) {
   };
 }
 
-const stepDone = { title: "关闭营销通知", rc: 0, sec: 3, tail: ["拨了 2 个"], skipped: false, stopped: false };
+const stepDone = { title: "关闭营销通知", rc: 0, sec: 3, summary: "关了 2 个渠道",
+                   tail: ["拨了 2 个"], skipped: false, stopped: false };
 
 async function openPage({ api = {} } = {}) {
   const errors = [];

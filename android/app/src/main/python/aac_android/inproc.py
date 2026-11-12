@@ -20,7 +20,7 @@ import sys
 import threading
 import traceback
 
-from .view import MACHINE_PREFIX
+from . import view
 
 EXECUTABLE = sys.executable or "python"     # 引擎拼 [sys.executable, 脚本, …]，adb.py 按它认出脚本调用
 TOOL = ""                                    # setup() 时定下
@@ -201,7 +201,8 @@ class _Mirror:
 
     旁路：写 logcat 失败只是这一行没镜像，不影响内层 sink 的内容与顺序，也不改任何判定。
     先转交内层再切行：停止时 `interrupt()` 投的那一下可能落在写 logcat 的那次调用里，已经交出去的
-    这一块不能因为镜像而丢。机器行（`view.MACHINE_PREFIX`）不镜像——它们本来就不进界面。
+    这一块不能因为镜像而丢。机器行（`view.machine_prefix()`，定义在 `tool/summary.py`）不镜像——
+    它们本来就不进界面。
 
     不设行数上限：这里不攒整轮输出，只留没有换行的半行，所以只影响 logcat 环形缓冲里更早的行。
     `android/smoke.py` 的 `crashes()` 读的是启动前后那份新建的 dump（`launch()` 先 `logcat -c`），
@@ -210,6 +211,7 @@ class _Mirror:
 
     def __init__(self, inner):
         self.inner, self.buf, self.off = inner, "", False
+        self.machine = view.machine_prefix()   # 前缀只在构造时取一次（#1189）
 
     def write(self, s):
         rc = self.inner.write(s)
@@ -229,7 +231,7 @@ class _Mirror:
             self.buf = ""
 
     def _emit(self, text):
-        if self.off or text.startswith(MACHINE_PREFIX):
+        if self.off or text.startswith(self.machine):
             return
         log = _logger()
         if log is None:
