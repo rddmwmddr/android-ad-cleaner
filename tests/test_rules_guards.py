@@ -21,7 +21,7 @@
 `tests/js/client.test.js`，跑的是真实的 `gui/web/index.html`（ADR-0017）。不需要 Android 设备或 JDK。
 
 发版产物那一条读 `index.html` 的源码：解析只走 `tool/release_assets.py`（定时 job 用同一份），
-不联网、不需要 GitHub 凭据；附件名集合与真实 Release 的比对在 `.github/workflows/release-assets.yml`。
+不联网、不需要 GitHub 凭据；与真实 Release 的名字、大小、sha 比对在 `.github/workflows/release-assets.yml`。
 """
 import ast
 import json
