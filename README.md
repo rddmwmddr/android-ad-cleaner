@@ -109,7 +109,7 @@ https://t.me/+A5X3Mxzs-Cg3NjYx
 | 一加 | Ace 2 Pro（PJA110） | ColorOS 16.0.5.1201<br>Android 16 | ⚠️ | 部分 | — |
 | 一加 | 13T（PKX110） | ColorOS 16.0.10.500<br>Android 16 | ✅ 10-28 | ✅ | ✅ 17 |
 | 一加 | Ace 6T（PLR110） | ColorOS 17.0.0.101<br>Android 17 | ✅ 10-31 | ✅ | — |
-| 一加 | 一加 16（PYB110） | ColorOS 17.0.0.155<br>Android 17 | ✅ 11-12 | ✅ | — |
+| 一加 | 一加 16（PYB110） | ColorOS 17.0.0.157<br>Android 17 | ✅ 11-12 | ✅ | — |
 | OPPO | Find N6（PLP120） | ColorOS 16.0.9 | ⚠️ | ✅ | ✅ 30 |
 | OPPO | Find X8s（PKT110） | ColorOS 17.0.0.102<br>Android 17 | ✅ 10-28 | ✅ | ✅ 26 |
 | OPPO | Find X9 Ultra（PMA110） | ColorOS 17.0.0.106<br>Android 17 | ✅ 10-29 | ✅ | ✅ 6 |
