@@ -112,12 +112,13 @@ class DiffTests(unittest.TestCase):
         self.assertEqual(result.blocked, 1)
         self.assertTrue(result.same)
 
-    def test_a_blocked_on_device_row_counts_as_expired(self):
-        result = followup.scan(doc("| #7 | @s | 机型 | PR #2 | 输出 |"),
-                               [{"number": 7,
-                                 "labels": [{"name": "blocked-on-device"}]}])
-        self.assertEqual(result.expired, (7,), "队列里已有的行不再属于队列，按过期行处理")
-        self.assertEqual(result.blocked, 1)
+    def test_a_blocked_on_device_row_is_parked_not_expired(self):
+        text = doc("| #7 | @s | 机型 | PR #2 | 输出 |")
+        result = followup.scan(text, [{"number": 7,
+                                       "labels": [{"name": "blocked-on-device"}]}])
+        self.assertEqual(result.expired, (), "行不是过期行：删掉会连机型与观察项一起丢掉")
+        self.assertEqual((result.blocked, result.parked), (1, 1))
+        self.assertIn("| #7 | @s | 机型 | PR #2 | 输出 |", followup.apply(text, result))
 
 
 class RenderTests(unittest.TestCase):
@@ -250,8 +251,15 @@ class CommandTests(DocumentCase):
                    "labels": [{"name": "waiting-for-verify"}, {"name": "blocked-on-device"}]}
         code, out, _ = self.run_main(doc(), FakeGh([blocked]))
         self.assertEqual(code, 0, "不进队列的票不算差异")
-        self.assertIn("blocked-on-device 1 张，不进队列", out)
+        self.assertIn("blocked-on-device 1 张不进队列", out)
         self.assertNotIn("#7", out)
+
+    def test_malformed_labels_are_unreadable_not_a_crash(self):
+        banned = {"number": 7, "labels": ["blocked-on-device"]}   # 被 --jq 压平过的形状
+        code, out, err = self.run_main(doc(), FakeGh(out=json.dumps([banned])))
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "")
+        self.assertIn("labels 不是对象数组", err)
 
     def test_a_consistent_queue_exits_zero(self):
         code, out, _ = self.run_main(doc("| #11 | @b | 机型 | PR #2 | 输出 |"),
@@ -322,13 +330,14 @@ class WriteTests(DocumentCase):
         stored = self.path.read_text(encoding="utf-8")
         self.assertIn("| #7 | @s | — | — | — |", stored)
 
-    def test_write_drops_a_blocked_on_device_row(self):
+    def test_write_keeps_a_blocked_on_device_row(self):
         gh = FakeGh([{"number": 7, "labels": [{"name": "blocked-on-device"}]}])
-        code, out, _ = self.run_main(doc("| #7 | @s | 机型 | PR #2 | 输出 |"), gh,
-                                     argv=["--write"])
+        code, _, _ = self.run_main(doc("| #7 | @s | 机型 | PR #2 | 输出 |"), gh,
+                                   argv=["--write"])
         self.assertEqual(code, 0)
-        self.assertNotIn("#7", self.path.read_text(encoding="utf-8"),
-                         "催不动的票不再留在队列里")
+        self.assertIn("| #7 | @s | 机型 | PR #2 | 输出 |",
+                      self.path.read_text(encoding="utf-8"),
+                      "机型、版本与要观察的输出留原处；解阻后不必重填")
 
     def test_write_drops_an_expired_row_from_the_batch_table(self):
         text = doc("| #11 | @b | 机型 | PR #2 | 输出 |",

@@ -25,7 +25,7 @@ The repo adds four labels the five roles do not cover:
 
 `stale` 是修饰符，不是第六个角色：它和角色标签并存，不改变票属于哪个角色，也不构成关票依据——关不关仍由维护者按现有信息判断。加标与摘标的时机、认领时的处置只在 [issue-tracker.md](issue-tracker.md) 的「票的生命周期」里定义。 <!-- rule:doc.triage.stale-is-a-modifier -->
 
-`blocked-on-device` 同样是修饰符，靠人工判断：triage 或复查时判一次，票上出现新证据（有人贴 dump、报告者回话、用例落地）就摘掉，不做自动判定。它记的是「这张票卡在一台我们没有的机器上」这一 GitHub 上可见的状态；[docs/09](../09-社区问题处理.md) 的「待真机确认」表记的是 GitHub 上看不到的判据与缺口，两层不重复。复测队列（`tool/followup.py`）不列带这个标签的票，每日停摆扫描（`tool/stale.py`）也不把它判成停摆。
+`blocked-on-device` 同样是修饰符，靠人工判断：triage 或复查时判一次，票上出现新证据（有人贴 dump、报告者回话、用例落地）就摘掉，不做自动判定。它记的是「这张票卡在一台我们没有的机器上」这一 GitHub 上可见的状态；[docs/09](../09-社区问题处理.md) 的「待真机确认」表记的是 GitHub 上看不到的判据与缺口，两层不重复。复测队列（`tool/followup.py`）不把带这个标签的票当成交付项——不补缺行、不催，已有行留着不删；每日停摆扫描（`tool/stale.py`）也不把它判成停摆。 <!-- rule:doc.triage.blocked-on-device -->
 
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table. <!-- rule:doc.triage.five-roles-map -->
 
