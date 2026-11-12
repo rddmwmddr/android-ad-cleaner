@@ -13,12 +13,17 @@
 `fetch_release()` 是取数底座：一次 `gh release view` 给全部附件的 `Asset`（名字、大小、
 摘要），`fetch_assets()` 只是它的名字投影。生成校验清单的 `tool/release_meta.py` 也消费它。
 
+`read_entries()` 给页面条目的完整字段（版本、id、文件名、大小、sha），`read_page()` 是它的
+`(id, file)` 投影；`human_size()` 是页面上的大小写法（十进制 MB、一位小数、四舍五入），
+回填页面与将来的对账共用这一份，两边各写一份会漂。
+
 退出码：0 一致；1 两侧文件名不一致；2 取数失败（读不到 REL、网络、API 限额、tag 不存在）。
 """
 import json
 import re
 import subprocess
 import sys
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import NamedTuple
 
@@ -34,6 +39,8 @@ BLOCK = re.compile(r"const REL = \{(.*?)\n\};", re.S)
 VERSION = re.compile(r'\bversion:\s*"([^"]+)"')
 ENTRY_ID = re.compile(r'\bid:\s*"([^"]+)"')
 ENTRY_FILE = re.compile(r'\bfile:\s*"([^"]+)"')
+ENTRY_SIZE = re.compile(r'\bsize:\s*"([^"]+)"')
+ENTRY_SHA = re.compile(r'\bsha:\s*"([^"]+)"')
 
 # Release 里不属于下载卡片的附件：校验清单随版本走，页面上没有它的入口。
 EXTRA_ASSETS = frozenset({"SHA256SUMS.txt"})
@@ -41,21 +48,76 @@ EXTRA_ASSETS = frozenset({"SHA256SUMS.txt"})
 EXIT_OK, EXIT_MISMATCH, EXIT_UNREACHABLE = 0, 1, 2
 
 
-def read_page(text):
-    """从 index.html 的源码里读出 (REL.version, [(id, file)])；读不出返回 (None, [])。
+class Entry(NamedTuple):
+    """下载卡片上的一行：`id` 是卡片身份，其余是随版本变的三个数据字段。"""
+    id: str
+    file: str
+    size: str
+    sha: str
 
-    id 与 file 的条数对不上时也按「读不出」处理：配对关系是这个模块唯一要保证的东西，
-    给不出配对比给出一份空清单更安全。
+
+def map_entries(block, fn):
+    """把 REL 块里每张卡片的原文交给 `fn(id, 原文)`，按原位置拼回。
+
+    卡片的边界是 `id:`：条目里有嵌套的 `baidu: { ... }`，按括号切会切错。原文从 `id:`
+    之后到下一张卡片之前，位置与顺序都取自页面，回填只动 `fn` 返回的那一段。
+    """
+    hits = list(ENTRY_ID.finditer(block))
+    pieces, cursor = [], 0
+    for index, hit in enumerate(hits):
+        end = hits[index + 1].start() if index + 1 < len(hits) else len(block)
+        pieces.append(block[cursor:hit.end()])
+        pieces.append(fn(hit.group(1), block[hit.end():end]))
+        cursor = end
+    pieces.append(block[cursor:])
+    return "".join(pieces)
+
+
+def _first(pattern, chunk):
+    """取唯一一次出现的值；一次都没有、或出现不止一次（卡片结构错位）都当读不出。"""
+    found = pattern.findall(chunk)
+    return found[0] if len(found) == 1 else ""
+
+
+def read_entries(text):
+    """从 index.html 的源码里读出 (REL.version, [Entry])；读不出返回 (None, [])。
+
+    缺某个字段的卡片留空串，整页缺到没有条目时按「读不出」处理：调用方自己判完整性，
+    回填页面时缺一条就不写。
     """
     match = BLOCK.search(text)
     if not match:
         return None, []
     block = match.group(1)
     found = VERSION.search(block)
-    ids, files = ENTRY_ID.findall(block), ENTRY_FILE.findall(block)
-    if not found or not ids or len(ids) != len(files):
+    entries = []
+
+    def collect(entry_id, chunk):
+        entries.append(Entry(entry_id, _first(ENTRY_FILE, chunk), _first(ENTRY_SIZE, chunk),
+                             _first(ENTRY_SHA, chunk)))
+        return chunk
+
+    map_entries(block, collect)
+    if not found or not entries:
         return None, []
-    return found.group(1), list(zip(ids, files, strict=True))    # 上面已判过 len(ids) == len(files)
+    return found.group(1), entries
+
+
+def read_page(text):
+    """`read_entries` 的 (id, file) 投影；任一卡片读不出文件名就返回 (None, [])。
+
+    配对关系是这个模块唯一要保证的东西：给不出配对比给出一份空清单更安全。
+    """
+    version, entries = read_entries(text)
+    if version is None or any(not entry.file for entry in entries):
+        return None, []
+    return version, [(entry.id, entry.file) for entry in entries]
+
+
+def human_size(size):
+    """页面上的大小写法：十进制 MB、一位小数、四舍五入（历史页面用的就是这个口径）。"""
+    megabytes = Decimal(int(size)) / Decimal(1_000_000)
+    return f"{megabytes.quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)} MB"
 
 
 def compare(page_files, release_files):
