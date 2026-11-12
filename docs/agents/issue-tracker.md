@@ -23,8 +23,9 @@ Infer the repo from `git remote -v` — `gh` does this automatically when run in
 - **`in-progress` 留到合入 main 才摘**：收尾只有两个时机——合入 main 且不需要真机复测就 `python3 tool/claim.py <N> --release`；合入 main 但等真机复测就 `--release` 再挂 `waiting-for-verify`（`in-progress` 与它不并存）。`--release` 不恢复 `ready-*`。 <!-- rule:doc.issue.in-progress-until-merge -->
 - **弃单要恢复原状**：放弃或改派时跑 `python3 tool/claim.py <N> --abandon`：它写放弃评论、摘掉 `in-progress`，并把认领评论里记下的 `ready-*` / `needs-triage` 加回（`--restore <标签>` 可覆盖），票面再补一句为什么停——否则标签烂在票上，下一个会话不敢碰。 <!-- rule:doc.issue.abandon-restores-labels -->
 - **票号从返回值取**：并行会话会占用按顺序推出来的编号。开票后照 `gh issue create` 打印的 URL 取号，互链等内容建完再回填。 <!-- rule:doc.issue.number-from-output -->
-- **关票判据**：实现合入 main 就关，不等发版、不等真机（需要真机复测的修复例外，判据见 [triage-labels.md](triage-labels.md) 的 `waiting-for-verify`）。票里没做的 Follow-up 不拖着这张票：转进对应的跟踪票（例：候选项进 #334），并在关闭说明里写清转到哪里。 <!-- rule:doc.issue.close-on-merge -->
-- **`stale` 是可见信号，不是处置**：`needs-info` 的票末评不是报告者、且已满 14 天（一条评论都没有时从开票起算）时，`python3 tool/stale.py` 每日扫描给它打上 `stale` 并留一条说明，报告者回话后摘掉；带 `in-progress` / `waiting-for-verify` / `blocked-on-device` 的票不参与。它不改变票的角色，也不构成关票依据——关不关仍按上一条判断。认领时一并摘掉它，`--abandon` 不把它加回来。
+- **关票判据**：实现合入 main 就关，不等发版；挂着 `waiting-for-verify` 的那种凭证据关，见下一条。票里没做的 Follow-up 不拖着这张票：转进对应的跟踪票（例：候选项进 #334），并在关闭说明里写清转到哪里。 <!-- rule:doc.issue.close-on-merge -->
+- **凭证据关**：挂着 `waiting-for-verify` 的票，证据够了就关，不必等报告者回话。三种证据都采信，但档位不同：**有用例** —— 一条去掉这次改动就会红的用例（旧树红、新树绿，维护者自己就能复核；判据复用 [CODING_STANDARDS.md](../../CODING_STANDARDS.md) 的「行为变化要有测试直接守住」）；**有现场** —— 报告者贴的 dump / 日志 / 输出里症状已经不再出现，能在 issue 里核对，比口头确认硬一档；**报告者口头确认** —— 只有一句「好了」，一样据此关票，但记录时写成报告者自述，不写成「已确认」。关票评论要能让人复核：有用例就写出用例位置（`tests/<文件>::<用例>`），有现场就贴出那条输出，口头确认就写明是报告者自述。带 `blocked-on-device` 的票先摘标再谈关：缺的是那台机器上的行为，维护者这边的用例证明不了它。 <!-- rule:doc.issue.close-on-evidence -->
+- **`stale` 是可见信号，不是处置**：`needs-info` 的票末评不是报告者、且已满 14 天（一条评论都没有时从开票起算）时，`python3 tool/stale.py` 每日扫描给它打上 `stale` 并留一条说明，报告者回话后摘掉；带 `in-progress` / `waiting-for-verify` / `blocked-on-device` 的票不参与。它不改变票的角色，也不构成关票依据——关不关仍按「关票判据」那条判断。认领时一并摘掉它，`--abandon` 不把它加回来。
 - **票即 spec**：开票时把 grilling 定下的**全部**交付物写进「方案」段——代码、文档、ADR、术语——Spec 审查只认票面。漏写会让审查把已批准的东西报成 scope creep。 <!-- rule:doc.issue.ticket-is-spec -->
 
 ## Pull requests as a triage surface

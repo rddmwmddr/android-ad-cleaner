@@ -191,7 +191,7 @@
 
 除 GitHub 标准标签和 `docs/agents/triage-labels.md` 里的五个角色外，本仓库还有三个自有状态，以及两个不是状态的修饰符。
 
-**`waiting-for-verify`** — 修复已合进 `main`，但**没有任何已发布版本包含它**，或已发布但没在报告者真机上确认。它的互斥标签与关票条件只在 [docs/agents/triage-labels.md](docs/agents/triage-labels.md) 里定义，每版欠的复测在 [release-followup.md](docs/agents/release-followup.md)。
+**`waiting-for-verify`** — 修复已合进 `main`，但**没有任何已发布版本包含它**，或已发布但没在报告者真机上确认。它的互斥标签在 [docs/agents/triage-labels.md](docs/agents/triage-labels.md) 里定义，凭证据关票的判据在 [issue-tracker.md](docs/agents/issue-tracker.md) 的「票的生命周期」，每版欠的复测在 [release-followup.md](docs/agents/release-followup.md)。
 
 **`in-progress`** — 已认领，有人正在改。认领记录是票下的一条评论（`python3 tool/claim.py` 写），标签只是可见信号；认领、摘标与弃单的时机只在 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md) 的「票的生命周期」里定义。
 

@@ -599,7 +599,7 @@ id = "doc.release.followup-queue"
 source = "docs/agents/release-followup.md#每次发版后照做"
 check = "none"
 status = "manual"
-why = "新版不送到报告者手上，不复测催就永远关不掉 waiting-for-verify（#544、#560）：队列只有发版时过一次，漏一次就多一张永远开着的票。"
+why = "新版不送到报告者手上，不催复测就只能一直开着（#544、#560）：队列只有发版时过一次，漏一次就多一张没人处理的票。凭用例或现场能关的票在发版前就按 issue-tracker 的判据关掉，队列里剩下的正是真等真机的那批。"
 expires_if = "发版流程自动给报告者发复测通知时删。"
 
 [[rule]]
@@ -773,7 +773,7 @@ id = "doc.triage.waiting-for-verify-outranks"
 source = "docs/agents/triage-labels.md#Triage Labels"
 check = "ci:triage-audit"
 status = "enforced"
-why = "它和 ready-for-agent 的票外观一模一样：已修完的 #293 在 2026-10-29 还挂在 `ready-for-agent` 下，下一个会话随时可以拿它再实现一遍。定义、互斥与关票条件只在这里写，其余文档指过来。"
+why = "它和 ready-for-agent 的票外观一模一样：已修完的 #293 在 2026-10-29 还挂在 `ready-for-agent` 下，下一个会话随时可以拿它再实现一遍。定义与互斥只在这里写，关票判据在 issue-tracker 的「票的生命周期」，其余文档指过来。"
 expires_if = "issue 状态改由平台的原生状态机表达、标签不再承担这个语义时删。"
 
 [[rule]]
@@ -897,6 +897,14 @@ check = "none"
 status = "manual"
 why = "合入即关（需真机复测的例外，见 waiting-for-verify），否则已修的票会一直留在待办池里；票里没做的 Follow-up 要转进跟踪票，拖着这张票会让它永远关不掉。"
 expires_if = "issue 与 PR 按平台原生关联自动关闭时删。"
+
+[[rule]]
+id = "doc.issue.close-on-evidence"
+source = "docs/agents/issue-tracker.md#票的生命周期"
+check = "none"
+status = "manual"
+why = "大量挂着 waiting-for-verify 的票其实用假页面或单测就能证明，却没有一条判据允许维护者凭它们关票，于是无限期挂着，积压不可度量；关票不写清凭哪种证据，后来的人分不清这次关闭是凭证据还是凭印象，口头确认还会被记成「已确认」。判据复用 dev.tests.behaviour-change-needs-red-test，不新造标准（#1123、#1127）。"
+expires_if = "关票由平台按关联证据自动判定、或 waiting-for-verify 不再靠人工关时删。"
 
 [[rule]]
 id = "doc.issue.ticket-is-spec"
