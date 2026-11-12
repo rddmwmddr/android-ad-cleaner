@@ -589,26 +589,14 @@ async function togglePause(){
 /* ---------- 5 完成 ---------- */
 /* 一步的摘要由后端给（tool/summary.py，#1189）：每条结果只读 x.summary，
    前端不再自己认日志模式；机器行在算摘要时已经剥掉。 */
-/* 机型脚本验到什么程度由引擎从台账现读、经 status-json 与任务快照原样带过来（沿用 #1124 的两个
-   字段），界面只负责说不说，不在前端再算一次：只在负面的两档说一句人话，「全部」与没有值都不占行。
-   说不说的判据是「这次真有脚本那一行的结果」——没勾脚本、停止在它之前、读屏占用让它跳过时都不说，
-   拿别的步的结论去说脚本的事会误导（#1129）。手机版同一件事在 aac_android/view.py 的 coverage_note()，
-   措辞按宿主分（那边不劝人「去 App 里核对」）。 */
-const COVERAGE_NOTES = new Map([
-  ["部分", "这套机型脚本只在一部分步骤上做过真机验证，其余步骤这次是照脚本直接跑的，建议在 App 里顺手核对一眼。"],
-  ["未记录", "这套机型脚本没有真机验证记录，改动结果建议在 App 里自己核对一遍。"],
-]);
-function coverageNote(r){
-  const run = r || {};
-  const ran = (run.results || []).some(x => x.kind === "recipe" && !x.skipped);
-  return (ran && COVERAGE_NOTES.get(run.recipe_coverage)) || "";
-}
+/* 机型脚本验到什么程度：说不说、怎么说都由后端算好（tool/coverage_note.py，两个宿主同一份判据，
+   措辞按宿主分）。界面只按 `coverage_note` 有没有值决定说不说（#1188）。 */
 function showDone(r){
   setStep(5);
   const ok = r.results.every(x => x.rc === 0) && !r.cancel;
   const failed = r.results.some(x => x.rc !== 0 && !x.stopped);   // 点了停止不算出错，不提示上报
   const retry = r.retry || 0;      // 可重试的步数由后台按结果算好（gui/app.py 的 retryable，#638）
-  const note = coverageNote(r);
+  const note = r.coverage_note || "";
   if (!r.results.length){ r.results = []; }
   main().innerHTML = `<h1>${ok ? "完成" : failed ? "已结束（有步骤没成功）" : "已停止"}</h1><p class="lead">用时 ${r.sec} 秒。去下拉搜索、负一屏、应用商店、浏览器看一眼，确认功能正常。</p>
     ${retry ? `<div class="row" style="margin-bottom:14px"><button class="btn" onclick="retryRun(this)">重试没成功的步骤（${retry}）</button></div>` : ""}

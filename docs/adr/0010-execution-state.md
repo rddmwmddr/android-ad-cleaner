@@ -54,5 +54,23 @@
   `tool/verify_ledger.py` 的 `TIERS`）。上面那份字段清单同样不再完整。值由引擎从台账现读、经
   `status-json` 交给 `Api.start()`；重试轮原样沿用上一轮的值——#638 的结果合并会把上一轮的脚本
   结果行留在页上，那条提示得跟着它走。客户端不重算这个值。
-- 「说不说」归前端：结果里真有脚本那一行（`kind == "recipe"` 且未跳过）、且档位是负面两档时才
-  显示一句。所以后端一律照带，没勾脚本、停在脚本之前、读屏占用让它跳过这几种都由那一行决定。
+- 「说不说」的判据是「结果里真有脚本那一行」（`kind == "recipe"` 且未跳过）且档位是负面两档；
+  #1129 时这一步在前端，#1188 起改由后端算一条 `coverage_note` 随快照下发（见下一条补充）。
+  后端仍一律照带 `recipe_coverage`，没勾脚本、停在脚本之前、读屏占用让它跳过这几种都由那一行决定。
+
+## 补充（#1188）：结果快照多一个 `coverage_note`
+
+- `snapshot()` 本身不多字段；`Dispatcher.poll()` 在拍平 `results`（附 `summary`，见 ADR-0019）时
+  同一处算出 `coverage_note`：判据吃这一次的 `results` 与 `recipe_coverage`，措辞按宿主分。
+  单一来源是 `tool/coverage_note.py`，手机版 `view.poll()` 调同一个函数（手机版的后台也是这份
+  `Api`，所以两处都贴了一次、同源同值；界面读的是 `view.poll()` 那一份）；网页只按字段有没有值
+  决定说不说，不再自己算（`gui/web/index.html` 的 `coverageNote()` 与 `COVERAGE_NOTES` 已删）。
+- 执行中（`snapshot()["running"]`）结果页还没出来，`Dispatcher.poll()` 给空串。
+- 宿主由调用方显式指定（`note(run, on_phone=…)`：桌面 `False`、手机版 `True`），不读
+  `host.ON_PHONE`。那个标记读的是继承来的环境变量：桌面用户 shell 里碰巧导出 `AAC_HOST=phone`
+  时结果页会说成手机版措辞，而 #747 只把这份标记从引擎的环境里清掉；客户端进程的环境不该为这句话再改一次。
+  手机版恒为手机宿主（`aac_android` 只在 App 里跑），写死 `True` 不算猜。
+- 为什么单独一个模块而不并进 `tool/summary.py`：各管一件事——那一份说「这一步结果怎么样」，
+  这一份说「这次用的机型脚本验到什么程度」。两个模块都在 mypy 严格档名单里（判据是不碰设备、
+  不碰手机界面、不依赖假对象，宿主参数不影响这一点）。措辞表落在 `tool/host.py` 的
+  `coverage_notes(on_phone)`（必填参数，同样不留 `ON_PHONE` 默认值）。

@@ -1,7 +1,7 @@
 """手机版界面要用的判断。放在 Python 是为了 CI 不连手机也测得到，Compose 那边只管画。
 
 桌面版同样的判断在 gui/web/index.html（showDetect、sendFeedback），改口径时两边都要看；
-结果摘要不在这里分叉，两个宿主共用 tool/summary.py 那一份（#1189）。
+结果摘要与验证档位提示都不在这里分叉，两个宿主共用 tool/summary.py 与 tool/coverage_note.py（#1189 #1188）。
 """
 import json
 import os
@@ -12,6 +12,7 @@ from urllib.parse import quote
 BASE = ""       # 解出来的 aac/ 目录，boot() 填
 
 _summary = None
+_coverage_note = None
 
 # 机器行记号的主来源是 tool/summary.py 的 MACHINE_PREFIX（从 tool/events.py 的两个前缀现算）；
 # 这一份是「工具目录不在搜索路径」时的兜底：电脑上的替换层用例会 setup 一个只有脚本的假工具目录
@@ -28,6 +29,15 @@ def _summary_module():
         import summary
         _summary = summary
     return _summary
+
+
+def _coverage_note_module():
+    """`tool/coverage_note.py` 的懒加载 + 缓存（#1188）：理由同 `_summary_module()`。"""
+    global _coverage_note
+    if _coverage_note is None:
+        import coverage_note
+        _coverage_note = coverage_note
+    return _coverage_note
 
 
 def machine_prefix():
@@ -110,25 +120,14 @@ class StallWatch:
 
 WATCH = StallWatch()
 
-# 这次跑的机型脚本验到什么程度：档位由引擎从台账现读，经 status-json 与任务快照原样带到
-# `recipe_coverage`（沿用 #1124 的两个字段），这里只把负面档位翻成一句人话，「全部」与没有值都不占行。
-# 桌面版同一件事在 gui/web/index.html 的 coverageNote：判据相同，分叉的只有措辞（手机版不劝人
-# 「去 App 里核对」）。
-COVERAGE_NOTES = {
-    "部分": "这套机型脚本只在一部分步骤上做过真机验证，其余步骤这次是照脚本直接跑的，建议顺手核对一眼。",
-    "未记录": "这套机型脚本没有真机验证记录，改动结果建议自己核对一遍。",
-}
-
 
 def coverage_note(run):
     """结果页要不要为脚本的验证档位多一行；要说时给整句，不说时给空串（#1130）。
 
-    说不说的判据是「这次真有脚本那一行的结果」：没勾脚本、停止在它之前、读屏占用让它跳过时都不说，
-    拿别的步的结论去说脚本的事会误导。与桌面版同一条判据（gui/web/index.html 的 coverageNote）。
+    判据与措辞都只有一份，在 `tool/coverage_note.py`（#1188，两个宿主共用；措辞按宿主分叉）。
+    这里恒为手机宿主：`aac_android` 只在手机 App 里跑，不需要读 `AAC_HOST`。
     """
-    if not any(r.get("kind") == "recipe" and not r.get("skipped") for r in run.get("results") or []):
-        return ""
-    return COVERAGE_NOTES.get(run.get("recipe_coverage") or "", "")
+    return _coverage_note_module().note(run, on_phone=True)
 
 
 def _snapshot(api, since=0):
