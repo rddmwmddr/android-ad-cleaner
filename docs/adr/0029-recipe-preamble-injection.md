@@ -46,7 +46,7 @@
 
 迁移顺带带来的两处行为变化，记在这里，不归「锁屏」那一类：
 
-- **断线不再逐段记账。** 大多数本地副本把 `adb_link.DeviceLost` 当普通异常收进 `FAILED_STEPS` 后继续往下跑；注入的段包装在 #838 就定了「交还引擎、整轮停下」。迁移后全族统一为后者：退出码仍是 1，结果页看到整轮断线，而不是后面必然全灭的一串段名。守着旧行为的两条用例（`test_direct_entries_667`、`test_recipe_fast_entries_796`）改成断言异常上抛，它们原本要守的「断线不许当成入口改名去走菜单」不变。
+- **断线不再逐段记账。** 大多数本地副本把 `adb_link.DeviceLost` 当普通异常收进 `FAILED_STEPS` 后继续往下跑；注入的段包装在 #838 就定了「交还引擎、整轮停下」。迁移后全族统一为后者：退出码仍是 1，结果页看到整轮断线，而不是后面必然全灭的一串段名。守着旧行为的两条用例（`tests/test_entries.py` 的 `XiaomiTest.test_system_ads_falls_back_to_the_menu` 与 `PnmAdTrackingEntryTests.test_ad_tracking_falls_back_to_the_settings_search`）改成断言异常上抛，它们原本要守的「断线不许当成入口改名去走菜单」不变。
 - **`adapt gen` 的草稿不再带前导。** 草稿由 `adapt check` 自检时同样注入；留着本地副本，新写的脚本会把两代实现的坑重新挖一遍。
 
 守卫分两层，都在 `tests/test_recipe_preamble_migration.py`：结构层用 AST 禁止 43 份脚本再定义那六个名字（并检查 `adapt gen` 的草稿），行为层给每份脚本四个场景——跑前锁屏、首段失败、中途失败、中途锁屏——断言失败台账非空且退出码 1。跑在 `debd435` 的干净副本上，两个锁屏场景各 32 份红：26 份是票面说的那句「后面的都不跑」然后返回，5 份（PHK110 两个变体、PKX110、PKH110、RMX3700）把 lock 记进本地 `RESULTS` 后返回、退出码同样是 0，再加上 `honor-WKL-AN20`（本地段包装拿段名去查自己的 `CHANGES` 表，探针段名查不到、直接 `KeyError`）。`meizu-MEIZU 21 Pro` 迁移前就记了失败台账，是绿的。迁移后 43 份 × 4 场景全绿。
@@ -63,7 +63,7 @@
 「段体区分跳过与失败」的既有分工一致。落点从报错原文里取，不重新读前台：抛出之后再读有一小段
 窗口期，前台已经切走会判错。
 
-`tests/test_recipe_preamble_migration.py` 的禁定义名单随之加上这个名字。`tests/test_theme_unreachable_902.py`
+`tests/test_recipe_preamble_migration.py` 的禁定义名单随之加上这个名字。`tests/test_entries.py`
 守着三种落点与两个反例（别的 App 顶掉、断线），并逐份跑 15 份小米 / 红米主题脚本。
 
 ## #903 之后：注入面多一个 `require_switches`
@@ -80,7 +80,7 @@
 
 收成一处要守的是判据等价：小米系的 `contains=True`（标题可能附带整段说明）、
 PMX110 / PLZ110 的 `optional`（部分安装版本没有那一行）、honor 的「整页所有开关且空页算失败」
-都要原样保留；`tests/test_missing_switch_evidence_903.py` 守着三种输出（缺项 / 空页 / 通过）
+都要原样保留；`tests/test_recipe_kit.py` 守着三种输出（缺项 / 空页 / 通过）
 与「文案只在 `recipe_kit` 一处」，`tests/test_recipe_preamble_migration.py` 的禁定义名单随之加上这个名字。
 
 ## #909 之后：注入面多一个 `skip_in_safe_mode`
@@ -130,7 +130,7 @@ PKT110 与 RMX3700 的应用建议，honor-PNM-AN10 的广告跟踪 / 桌面文�
 脚本侧要一起改的是「先试直达、失败再走菜单」的助手：它们按 `except RuntimeError` 收下
 「这条路不通」，跳过若被吞下，这一段会退化成走菜单后的空跑或假失败。判据只认类型
 （`except SkipStep: raise` 写在宽捕获之前），不按中文文案判。`start_or_skip()` 的说明同步改成
-「没装也上抛，由段包装记跳过」。`tests/test_missing_package_908.py` 守着三种结局、段级台账与
+「没装也上抛，由段包装记跳过」。`tests/test_recipe_kit.py` 守着三种结局、段级台账与
 整轮退出码，并逐段跑一份带该助手的参考脚本，确认它不再退到菜单那条路。
 
 ## #939 之后：注入面多一个 `page`
@@ -153,4 +153,4 @@ PKT110 与 RMX3700 的应用建议，honor-PNM-AN10 的广告跟踪 / 桌面文�
 失败是「没等到」而不是「到了但标题不对」，要不要一起改等这次形状定下来再议（#939 票面）。
 `tests/test_recipe_preamble_migration.py` 的禁定义名单加上这个名字，`ALLOWED` 只登记这两处例外——
 哪一份把本地 `page()` 迁到注入版，就把它的例外一起删掉，白名单回到空。
-`tests/test_page_evidence_939.py` 守三句文案只在 `recipe_kit` 一处，以及两份脚本报错与现场逐字同形。
+`tests/test_recipe_kit.py` 守三句文案只在 `recipe_kit` 一处，以及两份脚本报错与现场逐字同形。

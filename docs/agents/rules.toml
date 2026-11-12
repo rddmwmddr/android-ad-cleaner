@@ -199,7 +199,7 @@ id = "dev.row.single-definition"
 source = "CLAUDE.md#开发"
 check = "code:tool/row.py:line"
 status = "code"
-why = "「哪一行是开关、哪一个才是它的本体」曾散在 off()、fast.switches()、chan_fast 与机型脚本各一份，灰开关与双列布局被点错（#480、#486、#530）；按名字筛候选行的前置过滤也曾在 _recognise_inline 与 _enter_app_page 各写一份（#1120）；icon_hit 的本地副本已有 test_icon_hit_530 守着，其余只认这一份。"
+why = "「哪一行是开关、哪一个才是它的本体」曾散在 off()、fast.switches()、chan_fast 与机型脚本各一份，灰开关与双列布局被点错（#480、#486、#530）；按名字筛候选行的前置过滤也曾在 _recognise_inline 与 _enter_app_page 各写一份（#1120）；icon_hit 的本地副本已有 tests/test_entries.py 的 IconHitTests 守着，其余只认这一份。"
 expires_if = "读屏直接返回结构化的控件归属、不再从 bounds 推行的结构时删。"
 
 [[rule]]
@@ -341,7 +341,7 @@ expires_if = "结果页改由结构化字段渲染、不再解析 tail 末行时
 [[rule]]
 id = "dev.ui.not-run-rows"
 source = "CLAUDE.md#开发"
-check = "test:test_not_run_steps_577::PlanTasksTests.test_channels_are_told_apart_unchecked_from_none_found"
+check = "test:test_plan::PlanTasksTests.test_channels_are_told_apart_unchecked_from_none_found"
 status = "enforced"
 why = "没勾的项曾从结果里整行消失，用户以为跑漏了（#577、ADR-0023）；三档原因取自 Api 的检测与扫描结果，不从 plan 的空字段反推。"
 expires_if = "结果页改由 plan 直接带 skip_reason 渲染时删。"

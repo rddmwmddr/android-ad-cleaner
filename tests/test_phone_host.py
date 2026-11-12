@@ -1,4 +1,7 @@
-"""手机版宿主的说法（#729）：没有电脑和数据线，插电常亮也不是手机版的防锁屏办法（#728）。"""
+"""手机版宿主的说法（#729）：没有电脑和数据线，插电常亮也不是手机版的防锁屏办法（#728）。
+
+说法按宿主分叉，控制流只有一个例外（手机版不写插电常亮，ADR-0019）；两组用例都在这里。
+"""
 import os
 os.environ.setdefault("AAC_NO_SOUND", "1")     # 客户端提示音：测试里不出声
 import ast
@@ -11,7 +14,7 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from gui import app
 
@@ -19,8 +22,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 import adb_link
 import chan_fast as chan
+import run
 import troubleshooting
-from fixtures import FakeProc, FakeRunner, job_stub
+from backups import Backups
+from fixtures import FakeProc, FakeRunner, job_stub, phone_mock
 
 PHONE_LINK_LOST = "和手机的调试连接断开了，这一步没有执行。回到本 App 点「重新开始」。"
 
@@ -205,6 +210,140 @@ class PhoneBootTests(unittest.TestCase):
         self.assertNotIn("再做一次", link_lost)
         self.assertEqual(tap_refused, "；本 App 的点击被拒（未开 USB 调试安全设置）")
         self.assertEqual(engine_host, "phone")
+
+
+# ---------- 来源 tests/test_reader_failure_731.py ----------
+#   #731：手机版中途读屏失败要有人话收场，且不再改「插电常亮」（#728 之后亮屏由 App 自己保证）。
+
+
+ITEMS_731 = [("com.a", "promo", "营销通知"), ("com.b", "news", "资讯推送"), ("com.c", "deal", "优惠活动")]
+DATA_731 = {(pk, cid): (label, 3, False) for pk, cid, label in ITEMS_731}
+
+
+def reader_731(value="0", commands=None):
+    """只回答 `settings get` 的假读屏：记下每条命令，验证有没有人偷偷写设置。"""
+    def shell(cmd, timeout=None):
+        if commands is not None:
+            commands.append(cmd)
+        return types.SimpleNamespace(output=value + "\n")
+    return types.SimpleNamespace(shell=shell)
+
+
+class StayOnWriteTests(unittest.TestCase):
+    def call(self, on_phone, value="0"):
+        commands = []
+        with patch.object(chan, "ON_PHONE", on_phone), contextlib.redirect_stdout(io.StringIO()) as out:
+            old = chan.keep_awake(reader_731(value, commands))
+        return old, commands, out.getvalue()
+
+    def test_phone_never_writes_the_setting(self):
+        old, commands, printed = self.call(True)
+        self.assertEqual(commands, ["settings get global stay_on_while_plugged_in"])
+        self.assertEqual(old, "0")
+        self.assertEqual(printed, "")
+
+    def test_phone_returns_the_old_value_like_the_desktop(self):
+        """手机版照桌面版的口径给原值：调用方拿到的还是那个数字字符串。"""
+        old, _, _ = self.call(True, "15")
+        self.assertEqual(old, "15")
+
+    def test_desktop_still_turns_it_on(self):
+        """旧树也绿，守的是不回退：桌面版照旧写 7。"""
+        _, commands, _ = self.call(False)
+        self.assertIn("settings put global stay_on_while_plugged_in 7", commands)
+
+
+class BatchRestoreTests(unittest.TestCase):
+    """批尾的「改回原值」同样不能在手机版写出去：手机版根本没改过。"""
+
+    def run_off(self, on_phone):
+        commands = []
+        phone = phone_mock(wait_unlocked=Mock(return_value=True))
+        with patch.object(chan, "load", return_value=ITEMS_731), \
+                patch.object(chan, "parse", return_value=(DATA_731, {})) as parse, \
+                patch.object(chan, "ShellPhone", return_value=reader_731("0", commands)), \
+                patch.object(chan, "Phone", return_value=phone) as make_phone, \
+                patch.object(chan, "toggle", return_value=chan.Outcome(chan.DONE)) as toggle, \
+                patch.object(chan, "ON_PHONE", on_phone), \
+                contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaises(SystemExit):      # 复查时仍是 ON：这一步本来就算失败
+                chan.run(["-s", "test", "off", "x.tsv"])
+        parse.assert_called()
+        make_phone.assert_called_once()
+        self.assertEqual(toggle.call_count, len(ITEMS_731))
+        return commands
+
+    def test_phone_batch_leaves_the_setting_alone(self):
+        commands = self.run_off(True)
+        self.assertEqual([c for c in commands if "stay_on" in c],
+                         ["settings get global stay_on_while_plugged_in"])
+
+    def test_desktop_batch_turns_it_on_and_back(self):
+        """旧树也绿，守的是不回退：桌面版照旧「批开头打开 → 批尾改回」。"""
+        commands = self.run_off(False)
+        self.assertEqual([c for c in commands if "stay_on" in c],
+                         ["settings get global stay_on_while_plugged_in",
+                          "settings put global stay_on_while_plugged_in 7",
+                          "settings get global stay_on_while_plugged_in",
+                          "settings put global stay_on_while_plugged_in 0"])
+
+
+class RecipeStayOnTests(unittest.TestCase):
+    """机型脚本这一路（run.py recipe）原来也是开头写 7、finally 改回。"""
+
+    def recipe(self, on_phone):
+        commands = []
+        with patch.object(sys, "argv", ["run.py", "-s", "test", "recipe"]), \
+                patch.object(run, "info", return_value={"brand": "Xiaomi", "model": "M", "build": "OS4.0"}), \
+                patch.object(run, "recipe_for", return_value=("recipe.py", None)), \
+                patch.object(run, "recipe_meta", return_value={"build": "OS4.0"}), \
+                patch.object(run, "build_ok", return_value=True), \
+                patch.object(run, "wait_unlocked", return_value=True), \
+                patch.object(run, "sh", side_effect=lambda s, c, *a, **k: commands.append(c) or "15"), \
+                patch.object(run, "py", return_value=0), \
+                patch.object(run, "ON_PHONE", on_phone):
+            self.assertEqual(run.main(), 0)
+        return [c for c in commands if "stay_on" in c]
+
+    def test_phone_recipe_leaves_the_setting_alone(self):
+        self.assertEqual(self.recipe(True), [])
+
+    def test_desktop_recipe_turns_it_on_and_back(self):
+        """旧树也绿，守的是不回退：桌面版照旧开头写 7、finally 改回原值。"""
+        self.assertEqual(self.recipe(False), ["settings get global stay_on_while_plugged_in",
+                                              "settings put global stay_on_while_plugged_in 7",
+                                              "settings put global stay_on_while_plugged_in 15"])
+
+
+class FinishStayOnTests(unittest.TestCase):
+    """收尾这一步在手机版也没有「改回插电常亮」这回事。"""
+
+    def finish(self, on_phone):
+        commands = []
+        out = io.StringIO()
+        with tempfile.TemporaryDirectory() as root:
+            snap = Backups(root).create("M")
+            Path(snap, "stay_on.txt").write_text("15", encoding="utf-8")
+            with patch.object(run, "BACKUPS", root), \
+                    patch.object(run, "info", return_value={"model": "M"}), \
+                    patch.object(run, "sh", side_effect=lambda s, c, *a, **k: commands.append(c) or "0"), \
+                    patch.object(run, "ON_PHONE", on_phone), \
+                    contextlib.redirect_stdout(out):
+                run.cmd_finish("test", [])
+        return commands, out.getvalue()
+
+    def test_phone_finish_says_nothing_about_it(self):
+        commands, printed = self.finish(True)
+        self.assertEqual([c for c in commands if "stay_on" in c], [])
+        self.assertNotIn("插电常亮", printed)
+        self.assertIn("input keyevent HOME", commands)      # 收尾其余动作照旧
+
+    def test_desktop_finish_still_puts_the_snapshot_value_back(self):
+        """旧树也绿，守的是不回退：桌面版照旧按快照改回并说一句。"""
+        commands, printed = self.finish(False)
+        self.assertEqual([c for c in commands if "stay_on" in c],
+                         ["settings put global stay_on_while_plugged_in 15"])
+        self.assertIn("插电常亮已改回 15", printed)
 
 
 if __name__ == "__main__":

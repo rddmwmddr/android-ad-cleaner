@@ -31,7 +31,9 @@ import adb_link
 import run
 import run_cli_cases
 import run_cli_driver
-from fixtures import fake_adb
+from backups import Backups
+from fixtures import FakeProc, FakeRunner, fake_adb, job_stub
+from gui import app
 
 BASELINE = ROOT / "tests" / "baselines" / "run_cli.json"
 
@@ -428,6 +430,231 @@ class RoundTripTests(unittest.TestCase):
             run.record("test", ["com.b", "com.c"])
             lines = Path(directory, "suspended.txt").read_text(encoding="utf-8").splitlines()
         self.assertEqual(lines, ["com.a", "com.b", "com.c"])
+
+
+# ---------- 后并入的票号文件：命令之外的诊断与收尾 ----------
+# ---------- 来源 tests/test_device_name_710.py ----------
+#   #710：设备名的候选属性只定义一处，设备列表与 status-json 给出同一个名字。
+
+BRAND, MODEL, VENDOR_NAME = "OPPO", "PJD110", "OPPO Find X8"
+
+# 改动前 info() 的 or 链逐字冻结：NAME_PROPS 删词、挪位都要让下面那条断言返红。
+# 不遍历实现自己的元组——否则删词会连期望一起消失（CODING_STANDARDS.md）。
+BASE_NAME_PROPS_710 = ("ro.vendor.oplus.market.name", "ro.product.marketname", "ro.product.vendor.marketname")
+
+
+def adb_reply_710(props, calls):
+    """假 adb：`devices -l` 报一台设备，`shell` 按 getprop 串逐条回值。"""
+    def _adb(*args, timeout=20):
+        calls.append(args)
+        if args[0] == "devices":
+            return "List of devices attached\nS\tdevice\n"
+        keys = [part.split("getprop ", 1)[1] for part in args[3].split(";") if "getprop " in part]
+        return "\n".join(props.get(key, "") for key in keys) + "\n"
+    return _adb
+
+
+class DeviceNameTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.api = app.Api(self.tmp.name)
+        self.api.adb = "/opt/tools/adb"
+        self.calls = []
+
+    def device_listed(self, props):
+        """GUI 设备列表里那一行；props 是「属性 → 值」表。"""
+        with patch.object(self.api, "_adb", adb_reply_710(props, self.calls)):
+            return self.api.devices()["list"][0]
+
+    def status_name(self, props):
+        """status-json 那条路上的名字，走 info() 自己的 getprop 顺序。"""
+        with patch.object(run, "prop", side_effect=lambda serial, key: props.get(key, "")):
+            return run.info("S")["name"]
+
+    def test_vendor_marketname_is_shared_by_both_sides(self):
+        # 只暴露 ro.product.vendor.marketname 的手机：设备列表以前落到 brand + model，检测页给市场名
+        props = {"ro.product.brand": BRAND, "ro.product.model": MODEL,
+                 "ro.product.vendor.marketname": VENDOR_NAME}
+        listed = self.device_listed(props)
+        self.assertEqual(listed["name"], VENDOR_NAME)
+        self.assertEqual(self.status_name(props), VENDOR_NAME)
+
+    def test_both_sides_fall_back_to_brand_and_model(self):
+        """旧树也绿，守的是都空时两边回退成同一个 brand + model，不被塞进假名字。"""
+        props = {"ro.product.brand": BRAND, "ro.product.model": MODEL}
+        listed = self.device_listed(props)
+        self.assertEqual(listed["name"], "")
+        self.assertEqual(self.status_name(props), "")
+        # 前端两处的回退表达式都是 name || brand + " " + model
+        self.assertEqual(listed["name"] or listed["brand"] + " " + listed["model"], f"{BRAND} {MODEL}")
+
+    def test_marketname_precedes_vendor_marketname(self):
+        """旧树也绿，守的是两个候选都有值时仍取靠前的那个，顺序不被 vendor 属性顶掉。"""
+        props = {"ro.product.marketname": "Find X8", "ro.product.vendor.marketname": VENDOR_NAME}
+        self.assertEqual(self.device_listed(props)["name"], "Find X8")
+        self.assertEqual(self.status_name(props), "Find X8")
+
+    def test_candidate_props_are_frozen(self):
+        self.assertEqual(run.NAME_PROPS, BASE_NAME_PROPS_710)
+
+    def test_device_list_reads_every_candidate_in_one_shell_call(self):
+        self.device_listed({"ro.product.brand": BRAND, "ro.product.model": MODEL})
+        shells = [call for call in self.calls if call[0] == "-s"]
+        self.assertEqual(len(shells), 1)
+        command = shells[0][3]
+        self.assertEqual(command.count("getprop"), 2 + len(BASE_NAME_PROPS_710))
+        for key in BASE_NAME_PROPS_710:
+            self.assertIn(f"getprop {key}", command)
+
+
+# ---------- 来源 tests/test_diagnostics_recipe_778.py ----------
+#   #778：诊断里的「机型脚本」一行要分清「借用同品牌参考脚本」和「系统版本不同」。
+#   
+#   `recipe_ok` 由 `(not ref) and build_ok(...)` 得出，借用参考脚本时恒为假——那是给检测页与手机版
+#   切安全模式用的。诊断直接拿它说「不一致」，于是每台没有专用脚本的机型都被报成版本对不上。
+
+
+INFO_778 = {"brand": "meizu", "model": "MEIZU 21 Note", "name": "MEIZU 21 Note",
+        "build": "Flyme 12.6.0.0A", "os": "", "android": "15"}
+
+
+def status_778(**fields):
+    st = {"info": INFO_778, "recipe": None, "recipe_ref": False, "recipe_build": "", "recipe_ok": True,
+          "fold_open": False, "locked": False, "input_blocked": False}
+    st.update(fields)
+    return st
+
+
+class RecipeLineTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory(); self.addCleanup(self.directory.cleanup)
+
+    def diagnostics(self, st):
+        api = app.Api(self.directory.name, runner=FakeRunner(runs=(json.dumps(st), "", 0)))
+        # 认成连着这台机：省掉没设备时才走的 USB 枚举（真去问系统）
+        api.last_devices = "List of devices attached\ntest\tdevice\n"
+        self.assertEqual(api.status("test"), st)
+        return api.diagnostics()
+
+    def test_borrowed_reference_script_is_not_reported_as_a_version_mismatch(self):
+        # 版本与实机完全一致（build_ok 为真），只是因为借了同品牌的脚本
+        st = status_778(recipe="recipes/meizu-MEIZU 21 Pro/recipe.py", recipe_ref=True,
+                    recipe_build="Flyme 12.6.0.0A", recipe_ok=False)
+        self.assertTrue(run.build_ok(INFO_778, st["recipe_build"]))
+        line = self.diagnostics(st)
+        self.assertIn("- 机型脚本：recipes/meizu-MEIZU 21 Pro/recipe.py"
+                      "（同品牌参考脚本，录制版本 Flyme 12.6.0.0A）", line)
+        self.assertNotIn("不一致", line)
+
+    def test_borrowed_reference_script_without_a_recorded_version(self):
+        line = self.diagnostics(status_778(recipe="recipes/meizu-MEIZU 21 Pro/recipe.py", recipe_ref=True))
+        self.assertIn("（同品牌参考脚本，录制版本 未标）", line)
+        self.assertNotIn("不一致", line)
+
+    def test_own_script_keeps_the_version_comparison(self):
+        line = self.diagnostics(status_778(recipe="recipes/meizu-MEIZU 21 Note/recipe.py",
+                                       recipe_build="Flyme 12.6.0.0A"))
+        self.assertIn("- 机型脚本：recipes/meizu-MEIZU 21 Note/recipe.py（录制版本 Flyme 12.6.0.0A，一致）", line)
+        self.assertNotIn("参考", line)
+
+    def test_own_script_with_a_different_version_still_says_so(self):
+        line = self.diagnostics(status_778(recipe="recipes/meizu-MEIZU 21 Note/recipe.py",
+                                       recipe_build="Flyme 12.5.0.0A", recipe_ok=False))
+        self.assertIn("（录制版本 Flyme 12.5.0.0A，不一致）", line)
+
+    def test_no_script_stays_no_script(self):
+        self.assertIn("- 机型脚本：无", self.diagnostics(status_778()))
+
+
+# ---------- 来源 tests/test_finish_stay_on_632.py ----------
+#   #632：收尾按 `<型号>-gui` 目录里不存在的 stay_on.txt 把「插电常亮」写成 0。
+
+
+class FinishStayOnTest(unittest.TestCase):
+    def finish(self, root):
+        calls = []
+        out = io.StringIO()
+        with patch.object(run, "BACKUPS", root), patch.object(run, "info", return_value={"model": "M"}), \
+                patch.object(run, "sh", side_effect=lambda s, c, *a, **k: calls.append(c) or "0"), \
+                contextlib.redirect_stdout(out):
+            run.cmd_finish("test", [])
+        return [c for c in calls if "stay_on" in c], out.getvalue()
+
+    def test_gui_dir_after_snapshot_does_not_hide_saved_value(self):
+        with tempfile.TemporaryDirectory() as root:
+            snap = Backups(root).create("M")
+            Path(snap, "stay_on.txt").write_text("15", encoding="utf-8")
+            Path(Backups(root).gui("M"), "channels-restore.tsv").write_text("", encoding="utf-8")
+            puts, out = self.finish(root)
+            self.assertEqual(puts, ["settings put global stay_on_while_plugged_in 15"])
+            self.assertIn("插电常亮已改回 15", out)
+
+    def test_no_snapshot_leaves_setting_alone(self):
+        with tempfile.TemporaryDirectory() as root:
+            os.makedirs(os.path.join(root, "M-20261106-1218"))     # 快照刚建目录就被停止
+            puts, out = self.finish(root)
+            self.assertEqual(puts, [])
+            self.assertIn("插电常亮未改动", out)
+
+    def test_snapshot_holding_null_says_the_value_was_not_recorded(self):
+        with tempfile.TemporaryDirectory() as root:
+            snap = Backups(root).create("M")
+            Path(snap, "stay_on.txt").write_text("null", encoding="utf-8")     # 从来没设过，settings get 回 null
+            puts, out = self.finish(root)
+            self.assertEqual(puts, [])
+            self.assertIn("插电常亮未改动", out)
+            self.assertNotIn("没有找到改动前的快照", out)
+
+    def test_newest_snapshot_with_the_file_wins(self):
+        with tempfile.TemporaryDirectory() as root:
+            for name, v in (("M-20261105-0900", "7"), ("M-20261106-0900", "15")):
+                os.makedirs(os.path.join(root, name))
+                Path(root, name, "stay_on.txt").write_text(v, encoding="utf-8")
+            os.makedirs(os.path.join(root, "M-20261106-1218"))
+            self.assertEqual(Path(Backups(root).newest_with("M", "stay_on.txt")).read_text(encoding="utf-8"), "15")
+
+
+# ---------- 来源 tests/test_skip_reason_report_603.py ----------
+#   诊断报告的「执行结果」栏要写实际记下的跳过原因，不是一律「读屏服务被占用」（#603）。
+#   
+#   跳过有两源：读屏服务仍被占用、手机中途从 adb 上消失。两种都在跳过时把原因随结果记了下来
+#   （`results[].tail`），这里守的是报告取的是那一行，而不是按 `skipped` 猜。
+def event_603(kind):
+    return '#aac:event ' + json.dumps({"kind": kind})
+
+
+class SkipReasonReportTests(unittest.TestCase):
+    def report(self, procs, tasks, adb=True):
+        with tempfile.TemporaryDirectory() as directory:
+            api = app.Api(directory, runner=FakeRunner(spawns=procs))
+            api.job = job_stub(serial="TESTSERIAL01")
+            with patch.object(app, "adb_present", return_value=adb):
+                api._work(tasks)
+            return api.diagnostics()
+
+    def test_busy_skip_names_the_screen_reader(self):
+        text = self.report(
+            [FakeProc(event_603("ui_busy") + "\nUIAUTOMATION_BUSY：已占用\n", rc=1), FakeProc()],
+            [app.Task("广告开关", "run.py", uses_ui=True),
+             app.Task("通知", "chan_fast.py", uses_ui=True)])
+        self.assertIn("- 通知：跳过（读屏服务仍被占用，跳过本步骤），0 秒", text)
+
+    def test_link_lost_skip_does_not_blame_the_screen_reader(self):
+        text = self.report(
+            [FakeProc(event_603("link_lost") + "\n手机和电脑的 adb 连接断开了\n", rc=1)],
+            [app.Task("广告开关", "run.py"), app.Task("收尾", "run.py", always_run=True)], adb=False)
+        self.assertIn("- 收尾：跳过（手机和电脑已断开，这一步没有执行），0 秒", text)
+        self.assertNotIn("读屏服务", text)
+
+    def test_skip_without_a_recorded_reason_stays_neutral(self):
+        with tempfile.TemporaryDirectory() as directory:
+            api = app.Api(directory, runner=FakeRunner())
+            api.job = job_stub(serial="TESTSERIAL01", results=[
+                {"title": "关闭营销通知", "rc": 3, "sec": 0, "skipped": True}])
+            text = api.diagnostics()
+        self.assertIn("- 关闭营销通知：跳过，0 秒", text)
+        self.assertNotIn("跳过（", text)
 
 
 if __name__ == "__main__":

@@ -34,7 +34,7 @@ setting 的其它入口当成齿轮先点掉。
 ## Consequences
 
 - 13 份小米 / 红米脚本的 `gear()` 删掉内嵌副本，改 `from fast import bounds, icon_hit`。行为逐字不变：
-  `tests/test_gear_match_305.py` 不改预期通过。
+  `tests/test_entries.py` 不改预期通过。
 - vivo 参考脚本（`recipes/vivo-V2547DA/` 两份）的 `gear()` 改用引擎判据。这是**行为变化，不是搬家**：
   从子串匹配收窄到精确匹配，并按小米的形态补上「不可点的小尺寸 `ImageView` 也算」这条。
   齿轮的 content-desc 若不是恰好「设置」，新实现会漏；**没有真机，这一点未验**（#530）。
