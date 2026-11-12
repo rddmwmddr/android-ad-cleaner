@@ -1,9 +1,8 @@
 """tests/ 的锚点登记（rule:dev.tests.anchor-registry）：每个测试文件要么是已声明的锚点，
-要么在「待归并」名单里，要么是某份机型脚本的专用测试（文件名点名了它）。
+要么是某份机型脚本的专用测试（文件名点名了它）。两者之外的新文件即红。
 
 判据正文在 docs/agents/test-anchors.md，本文件是它的机械镜像：`ANCHORS` 与文档的
-`## 锚点登记` 表由 tests/test_test_collection.py 逐项对拍。`PENDING` 是临时逃生口，只收
-存量票号文件，每条记着并到哪个已登记的文件；条数冻结在 `PENDING_CAP`，只许降。
+`## 锚点登记` 表由 tests/test_test_collection.py 逐项对拍。
 
 `violations(root)` 对给定根目录求值，不依赖真实仓库状态——反例用临时目录构造。
 """
@@ -24,7 +23,7 @@ ANCHORS = {
     "test_row.py": "「开关所属的那一行」的唯一定义：结构定界、几何分带、同名去重与自绘开关去重。",
     "test_wait.py": "「等到认得出」：超时、稳定、变化、受阻四个判据，外加等机主解锁。",
     "test_entries.py": "入口速查表与它怎么被用：每条入口有出处、文档同源、reach() 按直达与搜索回退，以及各品牌脚本进具体入口（齿轮、直达、浏览器 / 主题 / 商店 / 负一屏）。",
-    "test_vocab.py": "品牌词库：词条有出处、键与入口速查相同、同页保留项只在那一页成立。",
+    "test_vocab.py": "品牌词库：词条有出处、键与入口速查相同、同页保留项只在那一页成立，以及 gaps 查漏。",
     "test_events.py": "引擎事件的词表与解析：六个 kind、固定前缀、坏行当没有。",
     "test_engine_events.py": "引擎侧在语义发生地发事件，人话逐字不变。",
     "test_client_events.py": "客户端只认引擎事件：事件行不进日志、人话本身不改状态。",
@@ -36,9 +35,9 @@ ANCHORS = {
     "test_phone_base.py": "两个基座可以各自独立构造，不必造整台 Phone。",
     "test_phone_sessions.py": "三个跨阶段会话对象，门面用显式属性转发过去。",
     "test_phone_toggler.py": "拨动阶段：这一页该关的开关真的被关掉，含确认框判定与等待、页顶复位与残留提示。",
-    "test_phone_navigator.py": "导航阶段的对外契约：go / tab / 入口与落点确认。",
-    "test_phone_settings_search.py": "设置搜索阶段的两条对外契约。",
-    "test_phone_dismisser.py": "弹窗与推广位阶段：词表只有一份，推广位点了要退回。",
+    "test_phone_navigator.py": "导航阶段的对外契约：go / tab / 入口与落点确认，含底部标签带内三层匹配与齿轮点完的落点校验。",
+    "test_phone_settings_search.py": "设置搜索阶段：对外契约、搜索失败后的退场，以及设置页签名认 Setting 与 Preference 两族。",
+    "test_phone_dismisser.py": "弹窗与推广位阶段：词表只有一份，推广位点了要退回；菜单的返回键与设置页里的说明行都不算弹窗 ✕。",
     "test_phone_launcher.py": "启动与落点阶段：前台归属、抢夺者现场与落点校验。",
     "test_phone_interface.py": "Phone 的接口面：读屏策略、探路包名过滤、安全模式与 adapter 名字。",
     # 拨动与导航的策略面
@@ -52,7 +51,7 @@ ANCHORS = {
     "test_recipe_kit.py": "引擎注入的脚本前导：段包装、跳过出口、失败台账、锁屏中止、安全模式整页关闭与失败现场。",
     "test_recipe_loader.py": "机型脚本只有一个装载入口，测试不许自己 exec 一份脚本。",
     "test_recipe_meta_module.py": "配方元数据住中立模块：非 CLI 代码 import 它不背 CLI 副作用。",
-    "test_recipe_variants.py": "同一型号按系统版本选脚本变体，变体要进安装包。",
+    "test_recipe_variants.py": "同一型号按系统版本选脚本变体、变体要进安装包，以及没有本型号脚本时参考脚本按录制版本在同族里挑。",
     "test_recipe_setting_checked.py": "机型脚本必须消费 p.setting() 的返回值，不能空跑还记成功。",
     "test_recipe_preamble_migration.py": "机型脚本不再自带前导：结构守卫与每份脚本的行为守卫。",
     # 客户端、打包、更新与平台
@@ -99,7 +98,7 @@ ANCHORS = {
     # 计划与命令
     "test_plan.py": "一次执行跑哪些步骤：Plan 规格的八个键与往返，以及按规格排出的任务、未执行行与重试轮。",
     "test_run_commands.py": "run.py 的命令接口与它产出的诊断：退出码只在出口、多余往返的守卫、「只是搬家」的对拍，以及设备名与收尾快照。",
-    "test_adapt_cli.py": "adapt.py 三条子命令对外的退出码与两路输出。",
+    "test_adapt_cli.py": "adapt.py 三条子命令对外的退出码与两路输出，survey 试入口的三种结局与 `-s S adapt` 的转发。",
     # 适配工具与仓库流程
     "test_claim.py": "开工认领：一条命令写认领评论并摘待办标签，仲裁只看票下评论。",
     "test_triage_audit.py": "triage 四条集合判据，登记表与脚本常量逐项对拍。",
@@ -108,7 +107,7 @@ ANCHORS = {
     "test_dco.py": "每个非 merge 提交都带与作者邮箱一致的 signoff。",
     "test_ticket_ref.py": "分支名与 PR 正文指到同一张票。",
     "test_comment_tickets.py": "新写的行里挂的票号要与这次 PR 有关。",
-    "test_verify_ledger.py": "配方验证台账：每个配方文件一行、缺记录显示未记录。",
+    "test_verify_ledger.py": "配方验证台账：每个配方文件一行、缺记录显示未记录，以及 status-json 带出的覆盖度、证据来源与验证日期。",
     "test_unittest_summary.py": "CI 的测试结果表格：列取错或漏算跳过数即红。",
     "test_release_assets.py": "下载页 REL 与 Release 附件的对账。",
     "test_release_meta.py": "发版校验清单从 Release 事实生成（tool/release_meta.py）：退出码、清单文本与写盘。",
@@ -126,30 +125,8 @@ ANCHORS = {
     "test_regressions.py": "设备无关的回归：输入、页面识别、开关保护与打包入口。",
     "test_release_regressions.py": "发布回归：横屏、部分失败、通知默认选择与发布资源边界。",
     "test_feedback_safety.py": "用户反馈里的安全项：无障碍排查只读、通知保护与旧清单还原。",
-    "test_phone_host.py": "手机版宿主的说法：没有电脑和数据线时该怎么说，以及唯一的控制流例外（不写插电常亮）。",
+    "test_phone_host.py": "手机版宿主的说法：没有电脑和数据线时该怎么说、界面与诊断里残留的桌面说法，以及唯一的控制流例外（不写插电常亮）。",
 }
-
-# 存量票号文件，逐条记着并到哪个文件。只许降：`PENDING_CAP` 冻在当前条数，新增一条即超线。
-# 目标可以是已登记的锚点，也可以是一份按机型规则豁免的脚本测试。
-PENDING = {
-    "test_adapt_assistant.py": "test_adapt_cli.py",
-    "test_adapt_survey_690.py": "test_adapt_cli.py",
-    "test_bottom_tab_305.py": "test_phone_navigator.py",
-    "test_bottom_tab_386.py": "test_phone_navigator.py",
-    "test_browser_menu_753.py": "test_phone_dismisser.py",
-    "test_dismiss_378.py": "test_phone_dismisser.py",
-    "test_gear_landing_575.py": "test_phone_navigator.py",
-    "test_phone_host_747.py": "test_phone_host.py",
-    "test_recipe_verification_1124.py": "test_verify_ledger.py",
-    "test_reference_by_version.py": "test_recipe_variants.py",
-    "test_setting_search_exit_639.py": "test_phone_settings_search.py",
-    "test_settings_page_960.py": "test_phone_settings_search.py",
-    "test_vocab_gaps_690.py": "test_vocab.py",
-}
-
-# 字面量，不用 `len(PENDING)`：那样上限会跟着名单一起涨，「新增一条即红」就成了空转。
-# 每并掉一条就把这个数减一；要加必须说明为什么（评审看得见）。
-PENDING_CAP = 13
 
 TEST_FILE = re.compile(r"^test_[A-Za-z0-9_]+\.py$")
 # 文件名尾部的票号 / 日期：`test_xxx_1234`、`test_xxx_2026_11_12`、`test_xxx_2026-11-12`
@@ -223,36 +200,22 @@ def suggest(name, anchors):
     return "、".join(close) if close else "锚点清单里没有相近的名字"
 
 
-def violations(root, anchors=None, pending=None, cap=None):
+def violations(root, anchors=None):
     """对给定根目录求值，返回违规描述；每条说清哪里不对、下一步该做什么。
 
-    `anchors` / `pending` / `cap` 只为构造反例而可注入，默认取本文件的登记。
+    `anchors` 只为构造反例而可注入，默认取本文件的登记。
     """
     anchors = ANCHORS if anchors is None else anchors
-    pending = PENDING if pending is None else pending
-    cap = PENDING_CAP if cap is None else cap
     tests = root / "tests"
     present = ({p.name for p in tests.iterdir() if p.is_file() and TEST_FILE.match(p.name)}
                if tests.is_dir() else set())
     brands, models, recipe_text = recipe_tokens(root)
     found = []
 
-    if len(pending) > cap:
-        found.append(f"「待归并」名单 {len(pending)} 条，超过冻结上限 {cap}；只能缩不能长"
-                     "（先把一条并进锚点，别往名单里塞新的）")
-    both = sorted(set(anchors) & set(pending))
-    if both:
-        found.append("同一个文件既登记为锚点又在待归并名单里：" + "、".join(both))
     for name in sorted(anchors):
         if name not in present:
             found.append(f"锚点 {name} 在文件树里不存在；删掉登记或恢复文件")
-    for name, target in sorted(pending.items()):
-        if name not in present:
-            found.append(f"待归并的 {name} 在文件树里不存在；它多半已经并掉了，从名单里删掉")
-        if target not in present:
-            found.append(f"{name} 的归并目标 {target} 不存在")
-    registered = set(anchors) | set(pending)
-    for name in sorted(present - registered):
+    for name in sorted(present - set(anchors)):
         if recipe_owned(name, brands, models, recipe_text):
             continue
         found.append(f"{name} 没有登记锚点。新增用例要落进已声明的锚点（相近的："
@@ -271,7 +234,7 @@ def main(argv=()):
         return 2
     found = violations(Path(__file__).resolve().parents[1])
     if not found:
-        print(f"{len(ANCHORS)} 个锚点、{len(PENDING)} 条待归并，全部合规。")
+        print(f"{len(ANCHORS)} 个锚点，全部合规。")
         return 0
     print("\n".join(found))
     print(f"{len(found)} 处违规。", file=sys.stderr)
