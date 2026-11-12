@@ -50,6 +50,16 @@ class ArgumentTest(unittest.TestCase):
         self.assertEqual(setting.args[0].values, ())
         self.assertEqual(texts(setting.args[1].values), ["广告服务"])
 
+    def test_empty_list_is_resolved_with_no_values(self):
+        """`only=[]` 解析成功、零个值；它与读不出靠 `resolved` 分开（词库靠这一位决定记不记未解析）。"""
+        argument = only(calls(scan('p.off(only=[], page="广告管理")'), "p.off")[0], "only")
+        self.assertTrue(argument.resolved)
+        self.assertEqual(argument.values, ())
+
+    def test_unreadable_expression_is_not_resolved(self):
+        argument = only(calls(scan('p.off(only=load(), page="广告管理")'), "p.off")[0], "only")
+        self.assertFalse(argument.resolved)
+
     def test_setting_restores_both_positional_arguments(self):
         facts = scan('''
             def _():
@@ -195,6 +205,27 @@ class InjectedTest(unittest.TestCase):
         command = texts(filled.calls[0].args[0].values)
         self.assertEqual(len(command), 1)
         self.assertTrue(command[0].endswith("-p com.heytap.market"), command[0])
+
+
+class DictEntryTest(unittest.TestCase):
+    """模块级字典里的常量键值对：词库拿它筛说明文字，事实层只出结构、不判中文。"""
+
+    def test_constant_pairs_carry_the_line_of_their_value(self):
+        facts = scan('''
+            CHANGES = {
+                "音乐": "朋友页显示推荐动态",
+                "浏览器":
+                    "模式选择 → 简洁首页",
+            }
+            OTHER = {"com.a": ".Main"}
+        ''')
+        self.assertEqual([(entry.key, entry.value, entry.line) for entry in facts.dict_entries],
+                         [("音乐", "朋友页显示推荐动态", 3), ("浏览器", "模式选择 → 简洁首页", 5),
+                          ("com.a", ".Main", 7)])
+
+    def test_non_constant_pairs_are_skipped(self):
+        facts = scan('D = {**base, "a": ["不是字符串"], 1: "数字键"}')
+        self.assertEqual(facts.dict_entries, ())
 
 
 class DirectoryTest(unittest.TestCase):

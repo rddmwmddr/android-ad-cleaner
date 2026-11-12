@@ -8,11 +8,12 @@
 循环变量、运行时算的记为未解析，逐条列名，不静默丢弃。模块级字典里的说明文字单列，不算词条。
 同页保留项只在那一页、那一次 off() 里成立，这里不产出跨页的禁词表。
 
+机型脚本只解释一次：调用点与模块级常量由 `recipe_source` 的事实层给出（沿用 #1156 的分工），
+这里只做页面到分组的映射、方向判定与统计口径，不再自己 `ast.parse` 脚本。
+
   python3 tool/vocab.py > docs/清单/词库.md
   python3 tool/vocab.py gaps <目录名>            查漏：同家族别的机型关过、这份脚本没写的词条
 """
-import ast
-import glob
 import os
 import re
 import sys
@@ -21,6 +22,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import recipe_source
 from entries import ENTRIES, FAMILY, LABEL
 from polarity import want_state       # 只取极性与词表；不 import fast，那条链会连带 adbutils（#693）
 from stdio import use_utf8_console
@@ -173,89 +175,14 @@ class Scan:
     whole_page: int = 0         # 没有点名的：不带 only= 的 p.off()，close_named(None, …)
 
 
-def _constants(tree):
-    """模块级的字符串列表常量：{名字: [字符串节点]}。后面又赋了别的值的不算，已经不是这份词了。"""
-    found = {}
-    for node in tree.body:
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    literal = _literal(node.value)
-                    if literal is None:
-                        found.pop(target.id, None)
-                    else:
-                        found[target.id] = literal
-        elif isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name):
-            found.pop(node.target.id, None)
-    return found
-
-
-def _literal(node):
-    if not isinstance(node, (ast.List, ast.Tuple)):
-        return None
-    if not all(isinstance(e, ast.Constant) and isinstance(e.value, str) for e in node.elts):
-        return None
-    return list(node.elts)
-
-
-def _dicts(tree):
-    """模块级字典常量：{名字: {键: 值节点}}。后面又赋了别的值的不算。"""
-    found = {}
-    for node in tree.body:
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    found.pop(target.id, None)
-                    if isinstance(node.value, ast.Dict):
-                        # ast.Dict 的 keys 与 values 恒等长
-                        found[target.id] = {k.value: v for k, v in zip(node.value.keys, node.value.values, strict=True)
-                                            if isinstance(k, ast.Constant)}
-    return found
-
-
-def _resolve(node, constants, dicts):
-    """only= / keep= / close_named 名单的字符串节点；解析不出返回 None。字典要按字面量的键取值才算。"""
-    literal = _literal(node)
-    if literal is not None:
-        return literal
-    if isinstance(node, ast.Name):
-        return constants.get(node.id)
-    if (isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name)
-            and isinstance(node.slice, ast.Constant)):
-        value = dicts.get(node.value.id, {}).get(node.slice.value)
-        return _literal(value) if value is not None else None
-    return None
-
-
-def _notes(tree, script):
-    """模块级字典里写中文的字符串：比如 WKL-AN20 的 CHANGES，按「、」拆开。键值对里没有中文的（包名、页面名）不收。"""
+def _notes(facts, script):
+    """模块级字典里写中文的字符串：比如 WKL-AN20 的 CHANGES，按「、」拆开。没有中文的（包名、页面名）不收。"""
     out = []
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict):
-            for key, value in zip(node.value.keys, node.value.values, strict=True):    # ast.Dict 的 keys 与 values 恒等长
-                if (isinstance(key, ast.Constant) and isinstance(value, ast.Constant)
-                        and isinstance(value.value, str) and CJK.search(value.value)):
-                    out += [Note(part.strip(), str(key.value), script, value.lineno)
-                            for part in value.value.split("、") if part.strip()]
+    for entry in facts.dict_entries:
+        if CJK.search(entry.value):
+            out += [Note(part.strip(), entry.key, script, entry.line)
+                    for part in entry.value.split("、") if part.strip()]
     return out
-
-
-def _page_label(node):
-    """page= 的标签。f-string 的变量部分写成 {变量}；不是字面量的写成 <表达式>；没写 page= 是空串。"""
-    if node is None:
-        return ""
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
-    if isinstance(node, ast.JoinedStr):
-        parts = []
-        # JoinedStr 的成员只有两类：常量与 FormattedValue（后者取它包着的那个表达式）
-        for value in node.values:
-            if isinstance(value, ast.Constant):
-                parts.append(str(value.value))            # f-string 的字面量段恒是 str
-            elif isinstance(value, ast.FormattedValue):
-                parts.append("{" + ast.unparse(value.value) + "}")
-        return "".join(parts)
-    return f"<{ast.unparse(node)}>"
 
 
 def has_page(label):
@@ -268,74 +195,72 @@ def group_of(family, label):
     return PAGES.get((family, prefix)) or FALLBACK.get((family, prefix))
 
 
-def _off_calls(tree):
-    for node in ast.walk(tree):
-        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "off"
-                and isinstance(node.func.value, ast.Name) and node.func.value.id == "p"):
-            yield node
+def _keyword(call, name):
+    """调用里带这个关键字名的实参；没写是 None。"""
+    return next((arg for arg in call.args if arg.keyword == name), None)
 
 
-def _close_calls(tree):
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "close_named":
-            yield node
+def _positional(call, index):
+    """第几个位置实参（`close_named` 的名单与标签）；没写是 None。"""
+    found = [arg for arg in call.args if arg.keyword is None]
+    return found[index] if index < len(found) else None
 
 
-def _inside_helper(tree):
-    """close_named 函数体里的 p.off()：名单是它的参数，词已经在调用处读到了，这里不算未解析。"""
-    return {id(call) for node in ast.walk(tree)
-            if isinstance(node, ast.FunctionDef) and node.name == "close_named"
-            for call in _off_calls(node)}
+def _strings(arg):
+    """名单实参解析出的 (词, 行号)；读不出或形参返回 None。
+
+    形参一律算未解析：旧口径只认字面量和模块级常量，事实层回填出来的值不算数（回填对入口
+    速查有用，词库这边不是同一件事）。其余用事实层解出的值，它比旧词法宽——单个字符串、
+    `+` 拼接、`.format()` 也算，空名单 `[]` 算解析成零词。现有脚本里没有这几类写法。"""
+    if arg.param is not None or not arg.resolved:
+        return None
+    return [(item.text, item.line) for item in arg.values]
+
+
+def _word_calls(facts):
+    """读词的两类调用，按行号排；同一行先 `p.off()` 再 `close_named()`（沿用旧口径）。"""
+    calls = [call for call in facts.calls if call.name in ("p.off", "close_named")]
+    calls.sort(key=lambda call: (call.line, call.name != "p.off"))
+    return calls
 
 
 def scan(recipes_dir):
     """读所有机型脚本。认不出品牌的目录不进库（tests/test_entries.py 守着每个品牌都有家族）。"""
     out = Scan()
-    paths = [os.path.relpath(p, recipes_dir).replace(os.sep, "/")
-             for p in glob.glob(os.path.join(recipes_dir, "*", "recipe*.py"))]
-    for script in sorted(paths):
-        family = FAMILY.get(script.split("-", 1)[0].lower())
-        if not family:
-            continue
-        with open(os.path.join(recipes_dir, script), encoding="utf-8") as f:
-            tree = ast.parse(f.read())
+    for script, facts in recipe_source.scan_dir(recipes_dir, FAMILY).items():
+        family = FAMILY[script.split("-", 1)[0].lower()]
         before = len(out.words)
-        constants, dicts = _constants(tree), _dicts(tree)
-        helper = _inside_helper(tree)
-        out.notes += _notes(tree, script)
-        calls = [("off", c) for c in _off_calls(tree)] + [("close", c) for c in _close_calls(tree)]
-        for how, call in sorted(calls, key=lambda item: item[1].lineno):
-            kwargs = {k.arg: k.value for k in call.keywords if k.arg}
-            if how == "off":
-                label_node, names, keep = kwargs.get("page"), kwargs.get("only"), kwargs.get("keep")
+        out.notes += _notes(facts, script)
+        for call in _word_calls(facts):
+            if call.name == "p.off":
+                names, keep = _keyword(call, "only"), _keyword(call, "keep")
             else:
-                args = list(call.args) + [None, None]
-                label_node = args[1] or kwargs.get("page") or kwargs.get("title")
-                names, keep = args[0] or kwargs.get("names"), None
-            inside = id(call) in helper
-            label = _page_label(label_node)
+                names, keep = _positional(call, 0) or _keyword(call, "names"), None
+            # 取最内层函数名：close_named 里再套助手、助手内调 p.off 时这里不算，会进未解析
+            inside = call.function == "close_named"
+            label = call.page
             group = group_of(family, label)
             here = []
-            if names is None or (isinstance(names, ast.Constant) and names.value is None):
+            if names is None or names.text == "None":     # 没写 only= 与写了 None 都是整页
                 if not inside:
                     out.whole_page += 1
             else:
-                strings = _resolve(names, constants, dicts)
+                strings = _strings(names)
                 if strings is not None:
-                    here += [Word(s.value, direction_of(s.value), family, group, label, script, s.lineno)
-                             for s in strings]
+                    here += [Word(text, direction_of(text), family, group, label, script, line)
+                             for text, line in strings]
                 elif not inside:
-                    missed = out.unresolved_only if how == "off" else out.unresolved_close
-                    missed.append(Call(family, script, call.lineno, ast.unparse(names)))
+                    missed = out.unresolved_only if call.name == "p.off" else out.unresolved_close
+                    missed.append(Call(family, script, call.line, names.text))
             if keep is not None:
-                strings = _resolve(keep, constants, dicts)
+                strings = _strings(keep)
                 if strings is not None:
-                    here += [Word(s.value, KEEP, family, group, label, script, s.lineno) for s in strings]
+                    here += [Word(text, KEEP, family, group, label, script, line) for text, line in strings]
                 else:
-                    out.unresolved_keep.append(Call(family, script, call.lineno, ast.unparse(keep)))
+                    out.unresolved_keep.append(Call(family, script, call.line, keep.text))
             out.words += here
             if not group and not inside:
-                out.unclassified.append(Call(family, script, call.lineno, label or "（没写页面）",
+                out.unclassified.append(Call(family, script, call.line, label or "（没写页面）",
                                              tuple(dict.fromkeys(w.text for w in here))))
         if len(out.words) == before:
             out.silent.append(script)

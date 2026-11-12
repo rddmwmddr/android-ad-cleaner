@@ -386,6 +386,18 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(found.unresolved_only, [])
         self.assertEqual(found.whole_page, 1)
 
+    def test_empty_only_list_parses_to_zero_words(self):
+        """#1196：`only=[]` 是解析成零词，不进未解析（事实层用 `resolved` 区分空列表与读不出）。"""
+        found = self.scan('p.off(only=[], page="搜索·首页")')
+        self.assertEqual(found.words, [])
+        self.assertEqual(found.unresolved_only, [])
+
+    def test_single_string_is_a_word_now_that_facts_resolve_it(self):
+        """#1196：事实层比旧词法宽，`only="甲"` 也算词条；现有脚本没有这种写法。"""
+        found = self.scan('p.off(only="甲", page="搜索·首页")')
+        self.assertEqual([w.text for w in found.words], ["甲"])
+        self.assertEqual(found.unresolved_only, [])
+
     def test_off_on_something_else_is_not_read(self):
         found = self.scan('other.off(only=["别的"], page="搜索·首页")\nfast_close(["也不读"], "搜索·首页")')
         self.assertEqual(found.words, [])
@@ -488,6 +500,12 @@ class SourceShapeTest(unittest.TestCase):
         assigned = {t.id for n in tree.body if isinstance(n, ast.Assign) for t in n.targets if isinstance(t, ast.Name)}
         self.assertFalse(assigned & {"FAMILY", "LABEL", "ENTRIES"})
         self.assertFalse(re.search(r"^(BRANDS?|KEEP_WORDS|NEVER)\s*=", src, re.M))
+
+    def test_vocab_does_not_parse_recipes_itself(self):
+        """#1196：机型脚本只解释一次，调用点与模块级常量归 recipe_source 的事实层。"""
+        src = (ROOT / "tool" / "vocab.py").read_text(encoding="utf-8")
+        self.assertNotIn("import ast", src)
+        self.assertNotIn("from ast import", src)
 
     def test_polarity_word_lists_are_defined_in_one_module(self):
         """极性词表只定义一处（#693）：别的 tool/ 模块只能取用或转发，不能各留副本。"""

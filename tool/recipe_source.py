@@ -37,12 +37,14 @@ class Item:
 class Arg:
     """一处调用里的一个实参。
 
-    `values` 是解析出的字符串：单个数、一列（`only=[…]` 或模块级常量）、空（读不出，原文在 `text`）。
+    `values` 是解析出的字符串：单个、一列（`only=[…]` 或模块级常量）、空。`text` 是原文，读不出时看它。
+    `resolved` 指这个表达式解析成功了——空列表 `[]` 解析成功但 `values` 也是空，与读不出靠它区分。
     `param` 是这个实参是外层函数的第几个形参（从 0 起）；不是形参时是 None。"""
     text: str
     keyword: str | None
     values: tuple[Item, ...]
     param: int | None = None
+    resolved: bool = False
 
 
 @dataclass(frozen=True)
@@ -59,10 +61,20 @@ class Call:
 
 
 @dataclass(frozen=True)
+class DictEntry:
+    """模块级字典里的一对常量字符串键值。键或值不是字符串时（含 `{**other}` 的 None 键）不收。"""
+    key: str
+    value: str
+    line: int
+
+
+@dataclass(frozen=True)
 class Facts:
-    """一份源码的事实：调用点清单，与模块级定义的函数名（本地定义会盖住注入版的那份）。"""
+    """一份源码的事实：调用点清单、模块级定义的函数名（本地定义会盖住注入版的那份），
+    以及模块级字典里的常量键值对（词库拿它筛说明文字，判不判中文留给消费方）。"""
     calls: tuple[Call, ...]
     defines: frozenset[str]
+    dict_entries: tuple[DictEntry, ...] = ()
 
 
 def _string_value(node: ast.AST) -> str | None:
@@ -135,8 +147,8 @@ def _product(parts: Sequence[Sequence[Item]]) -> list[str]:
 
 
 def _values(source: "_Source", node: ast.expr, function: _Function | None,
-            backfill: bool = True) -> tuple[Item, ...]:
-    """一个表达式解析出的字符串。读不出返回空元组，原文留给调用方。"""
+            backfill: bool = True) -> tuple[Item, ...] | None:
+    """一个表达式解析出的字符串。读不出返回 None，原文留给调用方；解析成空（`[]`）返回空元组。"""
     literal = _string_value(node)
     if literal is not None:
         return (Item(literal, node.lineno),)
@@ -151,10 +163,10 @@ def _values(source: "_Source", node: ast.expr, function: _Function | None,
         if found is not None:
             return (found,)
         if function is None:
-            return ()
+            return None
         params = _param_names(function)
         if node.id not in params:
-            return ()
+            return None
         if backfill:
             filled = source.param_items(node.id, function)
             if filled:
@@ -164,37 +176,36 @@ def _values(source: "_Source", node: ast.expr, function: _Function | None,
     if (isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name)
             and isinstance(node.slice, ast.Constant)):
         value = source.dicts.get(node.value.id, {}).get(node.slice.value)
-        strings = _string_list(value) if value is not None else None
-        return strings or ()
+        return _string_list(value) if value is not None else None
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
         left = _values(source, node.left, function, backfill)
         right = _values(source, node.right, function, backfill)
-        if not left or not right:
-            return ()
+        if left is None or right is None:
+            return None
         return tuple(Item(text, node.lineno) for text in _product((left, right)))
     if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
             and node.func.attr == "format" and isinstance(node.func.value, ast.Name)):
         return _formatted(source, node, node.func.value.id, function, backfill)
-    return ()
+    return None
 
 
 def _formatted(source: "_Source", node: ast.Call, name: str, function: _Function | None,
-               backfill: bool) -> tuple[Item, ...]:
+               backfill: bool) -> tuple[Item, ...] | None:
     """`模板常量.format(包名)`：模板是模块级字符串常量、`{}` 按位置填进去才还原得出（沿用 #956 的写法）。"""
     template = source.last_string(name, (node.lineno, node.col_offset))
     if template is None or "{}" not in template.text:
-        return ()
+        return None
     rest, parts = template.text, []
     for argument in node.args:
         values = _values(source, argument, function, backfill)
-        if not values:
-            return ()
+        if values is None:
+            return None
         head, slot, rest = rest.partition("{}")
         if not slot:
-            return ()
+            return None
         parts += [(Item(head, node.lineno),), values]
     if "{}" in rest:
-        return ()
+        return None
     parts.append((Item(rest, node.lineno),))
     return tuple(Item(text, node.lineno) for text in _product(parts))
 
@@ -270,7 +281,7 @@ class _Source:
             if not (isinstance(call.func, ast.Name) and call.func.id == function.name):
                 continue
             if index < len(call.args):
-                out += _values(self, call.args[index], None, backfill=False)
+                out += _values(self, call.args[index], None, backfill=False) or ()
         return tuple(out)
 
 
@@ -287,6 +298,21 @@ def _page(call: ast.Call) -> str:
     return _label(node)
 
 
+def _dict_entries(tree: ast.Module) -> tuple[DictEntry, ...]:
+    """模块级字典里的常量字符串键值对。词库拿它筛「写给人看的说明」；这里不判中文，也不认词条。"""
+    out = []
+    for node in tree.body:
+        if not (isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict)):
+            continue
+        # ast.Dict 的 keys 与 values 恒等长；`{**other}` 的键是 None
+        for key, value in zip(node.value.keys, node.value.values, strict=True):
+            key_text = _string_value(key) if key is not None else None
+            value_text = _string_value(value)
+            if key_text is not None and value_text is not None:
+                out.append(DictEntry(key_text, value_text, value.lineno))
+    return tuple(out)
+
+
 def scan_source(src: str, bindings: Mapping[int, Sequence[str]] | None = None) -> Facts:
     """一份机型脚本源码的事实：调用点清单 + 模块级定义的函数名。语法错抛 `SyntaxError`。
 
@@ -301,21 +327,24 @@ def scan_source(src: str, bindings: Mapping[int, Sequence[str]] | None = None) -
         params = _param_names(function)
         args = []
         for index, argument in enumerate(node.args):
-            args.append(Arg(text=ast.unparse(argument), keyword=None,
-                            values=_values(source, argument, function),
-                            param=index if isinstance(argument, ast.Name) and argument.id in params else None))
+            values = _values(source, argument, function)
+            args.append(Arg(text=ast.unparse(argument), keyword=None, values=values or (),
+                            param=index if isinstance(argument, ast.Name) and argument.id in params else None,
+                            resolved=values is not None))
         for keyword in node.keywords:
             if keyword.arg is None:
                 continue                    # **kwargs：没有名字，也不是形参
-            args.append(Arg(text=ast.unparse(keyword.value), keyword=keyword.arg,
-                            values=_values(source, keyword.value, function),
+            values = _values(source, keyword.value, function)
+            args.append(Arg(text=ast.unparse(keyword.value), keyword=keyword.arg, values=values or (),
                             param=params.index(keyword.value.id)
-                            if isinstance(keyword.value, ast.Name) and keyword.value.id in params else None))
+                            if isinstance(keyword.value, ast.Name) and keyword.value.id in params else None,
+                            resolved=values is not None))
         calls.append(Call(name=name, line=node.lineno, function=function.name if function else "",
                           page=_page(node), injected=injected, args=tuple(args)))
     calls.sort(key=lambda call: (call.line, call.name))
     return Facts(calls=tuple(calls), defines=frozenset(
-        node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))))
+        node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))),
+        dict_entries=_dict_entries(tree))
 
 
 def scan_dir(recipes_dir: str, families: Mapping[str, str] | None = None) -> dict[str, Facts]:
