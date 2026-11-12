@@ -1,6 +1,6 @@
 # 发版后复测清单
 
-[triage-labels.md](triage-labels.md) owns what `waiting-for-verify` means and what closes it; this file is the queue of what each release owes those issues.
+[triage-labels.md](triage-labels.md) owns what `waiting-for-verify` means, and [issue-tracker.md](issue-tracker.md) 的「票的生命周期」 owns what closes it; this file is the queue of what each release owes those issues.
 
 发版本身——出包点（跑验证、打 tag）与发版动作（写 Release 正文、同步 README / `index.html` / `latest.json` / Gitee）——见 [release.md](release.md)。这份文件只管发版**之后**。
 
@@ -25,7 +25,7 @@
 
 3. 在每条 issue 上留一条复测请求，`@` 报告者，写清装了哪个版本、要观察哪一句输出。模板见下。 <!-- rule:doc.release.followup-request-template -->
 
-4. 报告者确认后关闭 issue 并摘掉 `waiting-for-verify`；报告失败就摘标、改回 `needs-triage`，把日志当新证据重新归类。 <!-- rule:doc.release.followup-close-or-reopen -->
+4. 报告者确认后关闭 issue 并摘掉 `waiting-for-verify`；报告失败就摘标、改回 `needs-triage`，把日志当新证据重新归类。已经凭用例或有现场关掉的票按 [issue-tracker.md](issue-tracker.md) 的「凭证据关」处理，不必等到这一轮。 <!-- rule:doc.release.followup-close-or-reopen -->
 
 ## 复测请求模板
 
