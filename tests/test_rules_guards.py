@@ -537,7 +537,7 @@ PHONE_CONSTRUCTED = ("Phone", "FakePhone")
 PHONE_CONSTRUCTION_FROZEN = {
     "fixtures.py",              # 装配的唯一定义处：今天走 Phone.__new__，命中不到，留给改用构造器之后
     "test_engine_events.py",    # 刻意构造真 Phone 触发构造期失败（以下三份同）
-    "test_error_logs_1028.py",
+    "test_lock_and_disconnect_regressions.py",
     "test_ui_session.py",
     "test_harmony_client.py",   # 鸿蒙引擎自己的 Phone 类（hdc 传输，ADR-0019）
     "test_harmony_engine.py",
@@ -616,7 +616,7 @@ class FixtureGuards(unittest.TestCase):
         低于多出一个绕开装配的文件。清单只许减——修好一处就从这里删掉文件名，不会因此在红。
 
         豁免四类：`fixtures.py` 是装配的唯一定义处；`test_phone_interface.py` 测的就是 `Phone` 本体；
-        `test_engine_events.py` / `test_error_logs_1028.py` / `test_ui_session.py` 刻意构造真 `Phone`
+        `test_engine_events.py` / `test_lock_and_disconnect_regressions.py` / `test_ui_session.py` 刻意构造真 `Phone`
         去触发 `connect` / `__init__` 的失败路径，`phone_stub()` 绕开构造期，用不了；
         `test_harmony_engine.py` / `test_harmony_client.py` 是鸿蒙引擎自己的 `Phone` 类（hdc 传输，
         ADR-0019），与 `fast.Phone` 的装配不是一件事。

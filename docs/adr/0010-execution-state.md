@@ -2,7 +2,7 @@
 
 基线 `7032e46`。
 
-`gui/app.py` 的 `Api` 把一次执行的全部状态摊在一个裸 dict 里：`start()` 建 11 个键（`running / lines / idx / total / title / results / proc / cancel / t0 / serial / model`），`_event()` 与 `_work()` 运行中再加 `paused / step_events / recovery / pause`。写者只有工作线程 `_work`（`_log()` 经 `_event()` 也算在内），读者是 HTTP 线程上的 `poll()`；`stop()` / `pause()` / `resume()` 又是 HTTP 线程直接改字段。`Api.lock` 只用在「有没有任务在跑」的互斥里，job 的读写没有锁。7 个测试直接构造或读写这个 dict，`test_reports_026.py` 还用 `__setitem__` 改 `cancel`。
+`gui/app.py` 的 `Api` 把一次执行的全部状态摊在一个裸 dict 里：`start()` 建 11 个键（`running / lines / idx / total / title / results / proc / cancel / t0 / serial / model`），`_event()` 与 `_work()` 运行中再加 `paused / step_events / recovery / pause`。写者只有工作线程 `_work`（`_log()` 经 `_event()` 也算在内），读者是 HTTP 线程上的 `poll()`；`stop()` / `pause()` / `resume()` 又是 HTTP 线程直接改字段。`Api.lock` 只用在「有没有任务在跑」的互斥里，job 的读写没有锁。7 个测试直接构造或读写这个 dict，`test_layout_and_verdict_regressions.py` 还用 `__setitem__` 改 `cancel`。
 
 ## Decision
 
@@ -27,7 +27,7 @@
 ## Consequences
 
 - `tests/fixtures.py` 的 `job_stub()` 成为「一次执行」测试状态的唯一装配点，与 `phone_stub()` 并列；7 个测试的 dict 样板迁过去，`api.job` 不留 dict 兼容面。
-- `test_reports_026.py` 用 `__setitem__("cancel", True)` 模拟点停止的地方改成 `job.request_stop()`。
+- `test_layout_and_verdict_regressions.py` 用 `__setitem__("cancel", True)` 模拟点停止的地方改成 `job.request_stop()`。
 - 新增用例覆盖：`snapshot()` 的增量 `lines` / `next` 自洽、执行中 `results` 门控与 `diagnostics` 全量的差异、`request_stop()` 在并发下被 `snapshot()` 看到。
 - `CONTEXT.md` 的「执行」段补「一次执行 / Job」「任务步骤 / Task」「快照」；「段落」的描述从「九个步骤」改成「九段」，避免与「任务步骤」混。
 - 本票不做：`Api` 拆类（#390）、四个自由属性归拢、前端契约与退出码。
