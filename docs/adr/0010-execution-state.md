@@ -2,7 +2,7 @@
 
 基线 `7032e46`。
 
-`gui/app.py` 的 `Api` 把一次执行的全部状态摊在一个裸 dict 里：`start()` 建 11 个键（`running / lines / idx / total / title / results / proc / cancel / t0 / serial / model`），`_event()` 与 `_work()` 运行中再加 `paused / step_events / recovery / pause`。写者只有工作线程 `_work`（`_log()` 经 `_event()` 也算在内），读者是 HTTP 线程上的 `poll()`；`stop()` / `pause()` / `resume()` 又是 HTTP 线程直接改字段。`Api.lock` 只用在「有没有任务在跑」的互斥里，job 的读写没有锁。7 个测试直接构造或读写这个 dict，`test_layout_and_verdict_regressions.py` 还用 `__setitem__` 改 `cancel`。
+`gui/app.py` 的 `Api` 把一次执行的全部状态摊在一个裸 dict 里：`start()` 建 11 个键（`running / lines / idx / total / title / results / proc / cancel / t0 / serial / model`），`_event()` 与 `_work()` 运行中再加 `paused / step_events / recovery / pause`。写者只有工作线程 `_work`（`_log()` 经 `_event()` 也算在内），读者是 HTTP 线程上的 `poll()`；`stop()` / `pause()` / `resume()` 又是 HTTP 线程直接改字段。`Api.lock` 只用在「有没有任务在跑」的互斥里，job 的读写没有锁。7 个测试直接构造或读写这个 dict，`test_reports_026.py`（现 `test_layout_and_verdict_regressions.py`）还用 `__setitem__` 改 `cancel`。
 
 ## Decision
 
