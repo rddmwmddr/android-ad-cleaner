@@ -147,6 +147,14 @@ why = "同一段四行重配置在 16 个文件里各抄一份、另有一份写
 expires_if = "标准流重配置不再需要（打包环境默认就是 UTF-8 模式），或该助手被并入别的基础模块时删。"
 
 [[rule]]
+id = "dev.gh.single-session"
+source = "docs/adr/0036-tool-gh-session.md#Decision"
+check = "test:test_rules_guards::GhGuards.test_gh_process_spawned_in_one_place"
+status = "enforced"
+why = "五个维护脚本各起一份 `gh` 进程、各判各的 JSON、各报各的错：`claim` 与 `stale` 的执行器与包装逐字相同，`triage_audit` 自己 `subprocess.run`，`release_assets` 解析 JSON 却抛裸 `RuntimeError`。收进 `tool/gh.py` 之后，新写第六个脚本时照抄一份默认执行器没有任何别的东西会红，所以加了扫 `tool/` 源码的守卫（#1219）。`claim` 已 import `stale` 的 `STALE_LABEL`，共享模块必须住在两者之外——这正是当初包装不得不复制两份的原因（ADR-0036）。"
+expires_if = "工具脚本层不再有跨脚本共用的外部命令约束（比如只剩一个脚本调 gh）时删。"
+
+[[rule]]
 id = "dev.coverage.two-platform-merge"
 source = "CLAUDE.md#开发"
 check = "ci:coverage"

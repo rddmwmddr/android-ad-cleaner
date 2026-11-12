@@ -1,7 +1,7 @@
 """规则守卫：文档内容类四条（`DocGuards`）、注册表类一条（`RegistryGuards`）、引擎结构类两条（`EngineGuards`）、
 手机版界面一条（`AndroidGuards`）、流程 / CI 类三条（`CiGuards`）、夹具装配类两条（`FixtureGuards`）、
-桩与断言两条（`StubGuards`）、发版产物一条（`ReleaseGuards`）与标准流一条（`StdioGuards`），
-沿用 #1000、#1002 的做法。
+桩与断言两条（`StubGuards`）、发版产物一条（`ReleaseGuards`）、标准流一条（`StdioGuards`）与
+`gh` 会话一条（`GhGuards`），沿用 #1000、#1002 的做法。
 
 `DocGuards`：CHANGELOG 条目一行一个票号、文档里的代码位置用符号名、指到的 `.py` 路径要存在、
 上报服务地址与凭据不写进仓库。`RegistryGuards`：无锚点的顶层列表项按文档冻结上限。
@@ -395,6 +395,10 @@ UNANCHORED_BOUND = {
     "docs/agents/release-followup.md": 0,
     "docs/agents/release.md": 13,
     "docs/agents/triage-labels.md": 0,
+    # ADR 是设计记录的落点：里面的条目是当时的决定，不是要追的规则，所以余量按落地时的实数
+    # 冻结。#1219 起 ADR 第一次成为注册表 source（`dev.gh.single-session` 的出处），这一条
+    # 就是那次落地时它有的 15 条；再往这份 ADR 里加决定时这一行要跟着改，评审才看得见。
+    "docs/adr/0036-tool-gh-session.md": 15,
 }
 
 
@@ -943,6 +947,36 @@ class StdioGuards(unittest.TestCase):
         self.assertGreater(scanned, 0, "一个文件都没扫到，这条守卫会空转")
         self.assertEqual(hits, [], "标准流只经 tool/stdio.py 的 use_utf8_console() 重配，"
                          "别再各写一份：「改一处漏十二处」就是从那里来的：\n" + "\n".join(hits))
+
+
+# 工具层起 `gh` 进程只许在会话模块里（#1219，ADR-0036）。守卫只扫 `tool/`，两种引号都认：
+# 只认双引号的话，写 `subprocess.run(['gh', ...])` 就绕过去了。
+GH_NEEDLES = ('"gh"', "'gh'")
+GH_RUNNER_DEF = "def runner_for"
+GH_HOME = "tool/gh.py"
+
+
+class GhGuards(unittest.TestCase):
+    def test_gh_process_spawned_in_one_place(self):
+        """除 `tool/gh.py` 外，工具层不许自己起 `gh` 进程，也不许再定义一份默认执行器。
+
+        守的是不回退：把任意一处已迁移的脚本改回自带执行器（`subprocess.run(["gh", …])`
+        或一份本地 `runner_for`）即红。语义由 `tests/test_gh.py` 守，这里只看调用点有没有
+        绕过那唯一一处会话。
+        """
+        self.assertTrue((ROOT / GH_HOME).is_file(), f"{GH_HOME} 不在，这条守卫会空转")
+        hits, scanned = [], 0
+        for path in sorted((ROOT / "tool").rglob("*.py")):
+            scanned += 1
+            if rel(path) == GH_HOME:
+                continue
+            for lineno, line in enumerate(
+                    path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+                if any(needle in line for needle in GH_NEEDLES) or GH_RUNNER_DEF in line:
+                    hits.append(f"{rel(path)}:{lineno}")
+        self.assertGreater(scanned, 0, "tool/ 下一个 .py 都没扫到，这条守卫会空转")
+        self.assertEqual(hits, [], "`gh` 只经 tool/gh.py 起进程（runner_for / call / json_of），"
+                         "别再各写一份执行器：\n" + "\n".join(hits))
 
 
 if __name__ == "__main__":
