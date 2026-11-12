@@ -247,15 +247,15 @@ class CommandTests(DocumentCase):
                           "--limit", "1000", "--json", "number,author,labels"))
 
     def test_a_blocked_on_device_ticket_exits_zero_and_says_why(self):
-        blocked = {"number": 7, "author": {"login": "s"},
+        blocked = {"number": 1125, "author": {"login": "s"},
                    "labels": [{"name": "waiting-for-verify"}, {"name": "blocked-on-device"}]}
         code, out, _ = self.run_main(doc(), FakeGh([blocked]))
         self.assertEqual(code, 0, "不进队列的票不算差异")
         self.assertIn("blocked-on-device 1 张不进队列", out)
-        self.assertNotIn("#7", out)
+        self.assertNotIn("#1125", out)
 
     def test_malformed_labels_are_unreadable_not_a_crash(self):
-        banned = {"number": 7, "labels": ["blocked-on-device"]}   # 被 --jq 压平过的形状
+        banned = {"number": 1125, "labels": ["blocked-on-device"]}   # 被 --jq 压平过的形状
         code, out, err = self.run_main(doc(), FakeGh(out=json.dumps([banned])))
         self.assertEqual(code, 2)
         self.assertEqual(out, "")
