@@ -6,6 +6,10 @@
     python3 tool/followup.py --write    # 把表补到与标签一致，写完再核对一遍
 
 两类差异：**缺行**（标签里有、主表里没有）与**过期行**（主表里有、标签里没有，已关闭或已摘标）。
+
+带 `blocked-on-device` 的票不进队列：它们在等一台维护者没有的机器，催不动。它们既不补缺行，
+也不催；已有行原样留着不删——删掉会连机型、修复版本与要观察的输出一起丢掉，与「一半过期的
+合列行不删」同一条取舍（#989）。
 `--write` 只补缺行（追加到 `## 当前队列` 的第一张表末尾，其余几列留 `—` 等发版时现场填）、
 只删过期行（从它实际所在的那张表删），既有行与其他小节逐字不动。两次 `--write` 的结果相同。
 
@@ -30,6 +34,7 @@ from stdio import use_utf8_console
 use_utf8_console()
 
 LABEL = "waiting-for-verify"
+BLOCKED = "blocked-on-device"
 HEADING = "当前队列"
 ISSUE_COLUMN = "Issue"
 LIMIT = 1000
@@ -62,11 +67,17 @@ class Table:
 
 @dataclass(frozen=True)
 class Result:
-    """一轮核对：两类差异按票号升序，`missing` 带作者（催复测时要 @ 的人）。"""
+    """一轮核对：两类差异按票号升序，`missing` 带作者（催复测时要 @ 的人）。
+
+    `labeled` 与两类差异都只算进队列的票；`blocked` 是被 `blocked-on-device` 排除的张数，
+    其中 `parked` 张在队列里已有行、原样留着不催。
+    """
     rows: int
     labeled: int
     missing: tuple
     expired: tuple
+    blocked: int = 0
+    parked: int = 0
 
     @property
     def same(self):
@@ -174,17 +185,33 @@ def login(author):
     return str((author or {}).get("login") or "").strip()
 
 
+def names(issue):
+    """一张票的标签名集合；`labels` 缺省时是空集。"""
+    return {item.get("name") for item in issue.get("labels") or []}
+
+
 def scan(text, issues):
-    """一份 Markdown 文本 + 一份 issue 列表 -> Result。纯函数：不碰文件系统与网络。"""
+    """一份 Markdown 文本 + 一份 issue 列表 -> Result。纯函数：不碰文件系统与网络。
+
+    带 `blocked-on-device` 的票整张排除：不补缺行、不催；已有行不算过期，原样留着。
+    """
     table = table_of(text)
-    labeled = {int(issue["number"]): login(issue.get("author")) for issue in issues}
+    waiting, blocked = {}, set()
+    for issue in issues:
+        number = int(issue["number"])
+        if BLOCKED in names(issue):
+            blocked.add(number)
+            continue
+        waiting[number] = login(issue.get("author"))
     known = set(table.issues)
     return Result(
         rows=len(table.issues),
-        labeled=len(labeled),
-        missing=tuple((number, who) for number, who in sorted(labeled.items())
+        labeled=len(waiting),
+        missing=tuple((number, who) for number, who in sorted(waiting.items())
                       if number not in known),
-        expired=tuple(sorted(known - set(labeled))),
+        expired=tuple(sorted(known - set(waiting) - blocked)),
+        blocked=len(blocked),
+        parked=len(blocked & known),
     )
 
 
@@ -192,9 +219,10 @@ def read_open(runner):
     """读 open 的 `waiting-for-verify` 票 -> gh 的 JSON 列表。
 
     `--limit` 不能省：`gh issue list` 默认只给 30 条，128 张票会有一大片被当成「过期行」。
+    标签一起读回来，`scan` 才能把 `blocked-on-device` 的票排除出去。
     """
     out, err, rc = runner("gh", "issue", "list", "--label", LABEL, "--state", "open",
-                          "--limit", str(LIMIT), "--json", "number,author")
+                          "--limit", str(LIMIT), "--json", "number,author,labels")
     if rc != 0:
         raise GhError(f"读不到 open 的 {LABEL} 票：{(err or out).strip() or 'gh 返回非零'}")
     try:
@@ -203,6 +231,11 @@ def read_open(runner):
         raise GhError(f"`gh issue list` 的输出不是 JSON：{error}") from error
     if not isinstance(issues, list):
         raise GhError("`gh issue list` 的输出不是票的列表")
+    for issue in issues:
+        labels = issue.get("labels")
+        if labels is not None and (not isinstance(labels, list)
+                                   or any(not isinstance(item, dict) for item in labels)):
+            raise GhError(f"#{issue.get('number')} 的 labels 不是对象数组，判不了它带哪些标签")
     return issues
 
 
@@ -219,7 +252,12 @@ def runner_for(cwd=None):
 
 
 def render(result):
-    lines = [f"{LABEL} {result.labeled} 张，队列里登记 {result.rows} 张"]
+    lines = [f"{LABEL} {result.labeled} 张进队列，队列里登记 {result.rows} 张"]
+    if result.blocked:
+        note = f"{BLOCKED} {result.blocked} 张不进队列"
+        if result.parked:
+            note += f"，已有行的 {result.parked} 张原样留着、不再催"
+        lines.append(note + "。")
     if result.same:
         lines.append("一致：没有缺行，也没有过期行。")
         return "\n".join(lines)

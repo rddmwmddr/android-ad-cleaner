@@ -189,7 +189,7 @@
 
 ## Issue 状态
 
-除 GitHub 标准标签和 `docs/agents/triage-labels.md` 里的五个角色外，本仓库还有三个自有状态，以及一个不是状态的修饰符。
+除 GitHub 标准标签和 `docs/agents/triage-labels.md` 里的五个角色外，本仓库还有三个自有状态，以及两个不是状态的修饰符。
 
 **`waiting-for-verify`** — 修复已合进 `main`，但**没有任何已发布版本包含它**，或已发布但没在报告者真机上确认。它的互斥标签与关票条件只在 [docs/agents/triage-labels.md](docs/agents/triage-labels.md) 里定义，每版欠的复测在 [release-followup.md](docs/agents/release-followup.md)。
 
@@ -200,6 +200,8 @@
 文件都在 `.out-of-scope/` 目录下，一份概念一份，文件名即概念名；该目录就是清单，新增时不必改这里。
 
 **`stale`** — 修饰符，不是状态：`needs-info` 的票在报告者那边停摆时由 `python3 tool/stale.py` 每日扫描打上，报告者回话后摘掉。它不改变票的角色，也不构成关票依据。加标条件与认领时的处置只在 [issue-tracker.md](docs/agents/issue-tracker.md) 的「票的生命周期」里定义，标签语义见 [docs/agents/triage-labels.md](docs/agents/triage-labels.md)。
+
+**`blocked-on-device`** — 修饰符，不是状态：证据要一台维护者没有的机器，只能等。人工打标、有新证据就摘；复测队列不把它当交付项，停摆扫描也不判它停摆。语义与判定只在 [docs/agents/triage-labels.md](docs/agents/triage-labels.md)。
 
 ## 规则
 

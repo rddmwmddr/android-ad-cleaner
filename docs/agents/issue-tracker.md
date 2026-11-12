@@ -24,7 +24,7 @@ Infer the repo from `git remote -v` — `gh` does this automatically when run in
 - **弃单要恢复原状**：放弃或改派时跑 `python3 tool/claim.py <N> --abandon`：它写放弃评论、摘掉 `in-progress`，并把认领评论里记下的 `ready-*` / `needs-triage` 加回（`--restore <标签>` 可覆盖），票面再补一句为什么停——否则标签烂在票上，下一个会话不敢碰。 <!-- rule:doc.issue.abandon-restores-labels -->
 - **票号从返回值取**：并行会话会占用按顺序推出来的编号。开票后照 `gh issue create` 打印的 URL 取号，互链等内容建完再回填。 <!-- rule:doc.issue.number-from-output -->
 - **关票判据**：实现合入 main 就关，不等发版、不等真机（需要真机复测的修复例外，判据见 [triage-labels.md](triage-labels.md) 的 `waiting-for-verify`）。票里没做的 Follow-up 不拖着这张票：转进对应的跟踪票（例：候选项进 #334），并在关闭说明里写清转到哪里。 <!-- rule:doc.issue.close-on-merge -->
-- **`stale` 是可见信号，不是处置**：`needs-info` 的票末评不是报告者、且已满 14 天（一条评论都没有时从开票起算）时，`python3 tool/stale.py` 每日扫描给它打上 `stale` 并留一条说明，报告者回话后摘掉；带 `in-progress` / `waiting-for-verify` 的票不参与。它不改变票的角色，也不构成关票依据——关不关仍按上一条判断。认领时一并摘掉它，`--abandon` 不把它加回来。
+- **`stale` 是可见信号，不是处置**：`needs-info` 的票末评不是报告者、且已满 14 天（一条评论都没有时从开票起算）时，`python3 tool/stale.py` 每日扫描给它打上 `stale` 并留一条说明，报告者回话后摘掉；带 `in-progress` / `waiting-for-verify` / `blocked-on-device` 的票不参与。它不改变票的角色，也不构成关票依据——关不关仍按上一条判断。认领时一并摘掉它，`--abandon` 不把它加回来。
 - **票即 spec**：开票时把 grilling 定下的**全部**交付物写进「方案」段——代码、文档、ADR、术语——Spec 审查只认票面。漏写会让审查把已批准的东西报成 scope creep。 <!-- rule:doc.issue.ticket-is-spec -->
 
 ## Pull requests as a triage surface

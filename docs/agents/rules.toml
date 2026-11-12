@@ -793,6 +793,14 @@ why = "`stale` 只在票没有前进时才该出现，而 GitHub 的 `updatedAt`
 expires_if = "GitHub 原生 stale 规则接管加标与摘标、标签不再代表维护者的判断时删。"
 
 [[rule]]
+id = "doc.triage.blocked-on-device"
+source = "docs/agents/triage-labels.md#Triage Labels"
+check = "test:test_followup::DiffTests.test_a_blocked_on_device_ticket_never_joins_the_queue"
+status = "enforced"
+why = "把「等一台我们没有的机器」混进复测队列，发版时就变成催不动的票：报告者验不了，队列也说不清为什么催了没反应；混进停摆扫描则把设备缺口误判成报告者不回话。人工打标、有新证据就摘，是因为「这台机器我们有没有」没有台账，自动判定只会猜错。已有行留着不删：删掉会连机型与要观察的输出一起丢，与「一半过期的合列行不删」同一条取舍（#989）。"
+expires_if = "本机设备台账稳定到能自动判定哪张票卡在缺的机器上时删。"
+
+[[rule]]
 id = "doc.triage.one-category-label"
 source = "docs/agents/triage-labels.md#分类标签"
 check = "ci:triage-audit"

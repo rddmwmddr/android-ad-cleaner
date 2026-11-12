@@ -7,7 +7,8 @@
     python3 tool/stale.py --dry-run --days 12
 
 判据（父票 #976）：最后一条评论不是报告者发的、且距今已满 N 天 → 加标；报告者回话后 → 摘标；
-一条评论都没有时从票的 `createdAt` 起算。带 `in-progress` / `waiting-for-verify` 的票不参与。
+一条评论都没有时从票的 `createdAt` 起算。带 `in-progress` / `waiting-for-verify` /
+`blocked-on-device` 的票不参与——卡在一台维护者没有的机器上的票，等不到报告者回话不是停摆。
 已带 `stale` 的票不再进加标名单，所以同一张票重复扫描不会多出一条评论。
 
 动作只在状态跃迁时发生：加标新打上的那一次才写评论，摘标只摘标签不写评论。加标写入顺序是
@@ -30,7 +31,8 @@ use_utf8_console()
 
 STATE_LABEL = "needs-info"
 STALE_LABEL = "stale"
-SKIP_LABELS = ("in-progress", "waiting-for-verify")
+BLOCKED_LABEL = "blocked-on-device"
+SKIP_LABELS = ("in-progress", "waiting-for-verify", BLOCKED_LABEL)
 DEFAULT_DAYS = 14
 LIMIT = 1000
 COMMENT_CAP = 100     # `gh issue list` 的 comments 字段只带前 100 条；到顶要另读一次

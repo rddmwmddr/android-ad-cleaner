@@ -86,7 +86,7 @@ GitHub Issues（`gh` CLI）：开工第一条命令是 `python3 tool/claim.py <�
 
 ### Triage labels
 
-标签名即角色名；另加 `waiting-for-verify`（已修、等真机复测）与 `in-progress`（已认领、正在改）两个状态标签，以及修饰符 `stale`（`needs-info` 票停摆，不是角色、也不构成关票依据）。见 `docs/agents/triage-labels.md`。
+标签名即角色名；另加 `waiting-for-verify`（已修、等真机复测）与 `in-progress`（已认领、正在改）两个状态标签，以及两个修饰符：`stale`（`needs-info` 票停摆，不是角色、也不构成关票依据）与 `blocked-on-device`（卡在一台维护者没有的机器上，复测队列与停摆扫描都不把它当交付项）。见 `docs/agents/triage-labels.md`。
 
 ### Code review
 
