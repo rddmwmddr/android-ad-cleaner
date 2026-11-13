@@ -60,6 +60,7 @@ ANCHORS = {
     "test_recipe_steps.py": "段体的注入面：前导调用它、实现从执行作用域取前导名字与模块常量、脚本不留逐字副本，以及事实层两张表的合并。",
     "test_recipe_source.py": "脚本事实层：实参按语法切分、形参回填与读不出态、Intent 三种包名写法，以及语法错直接抛。",
     "test_catalog.py": "catalog 内核：页面树数据经唯一装载入口跑出与旧脚本逐条相同的调用序列、校验器在装载期拒绝非法数据、only 两态与 page-wide 全关。",
+    "test_catalog_migrate.py": "迁移转换器的三列分类（converted / missing-key / unrepresentable）与覆盖率口径，转换产物过 schema 校验，真实仓库覆盖率守 80% 采纳线。",
     # 客户端、打包、更新与平台
     "test_backups.py": "备份目录的命名、扫描与 <型号>-gui 兜底。",
     "test_captures.py": "失败现场落盘：两处留现场写原文、没目录不写、归档名与体积报数。",
