@@ -38,7 +38,7 @@ from captures import Captures, human_size
 from captures import root_from_env as capture_root
 from entries import FAMILY          # 品牌族只此一份；广告包、参考脚本与版本比较都按它归
 from host import ON_PHONE           # 手机版不写插电常亮（#731）
-from recipe_meta import recipe_meta
+from recipe_meta import recipe_id, recipe_meta
 import recipe_audit
 import verify_ledger
 
@@ -606,7 +606,7 @@ def cmd_devices(rest):
         if st != "device":
             print(f"{ser}\t{st}\t（unauthorized=手机上点「允许 USB 调试」；offline=重插或重开无线调试）"); continue
         i = info(ser); r, ref = recipe_for(i["model"], i["brand"], i)
-        tag = (os.path.relpath(r, ROOT) + ("（同品牌参考）" if ref else "")) if r else "无（只能跑通用部分）"
+        tag = (recipe_id(r) + ("（同品牌参考）" if ref else "")) if r else "无（只能跑通用部分）"
         print(f"{ser}\t{i['name'] or i['brand']+' '+i['model']}\t{i['model']}\t{i['build']}\t机型脚本：{tag}")
     return 0
 
@@ -665,15 +665,15 @@ def cmd_check(serial, rest):
         # 换到同族更贴的那份时要说清楚：报告者据此判断要不要手动补入口再报障（#969）。
         # 没有固定参考的品牌（三星、华为）走的是「取同品牌第一份」，没比过版本，不能这么说。
         pinned = REFERENCE.get(fam)
-        note = "（同族同版本，非固定参考）" if pinned and os.path.basename(os.path.dirname(r)) != pinned else ""
-        print(f"机型脚本：本型号没有；同品牌参考 {os.path.relpath(r, ROOT)}{note}，{ver}。"
+        note = "（同族同版本，非固定参考）" if pinned and recipe_id(r) != pinned else ""
+        print(f"机型脚本：本型号没有；同品牌参考 {recipe_id(r)}{note}，{ver}。"
               f"要用：recipe --ref（安全模式：只关脚本里点名的开关，找不到就跳过）")
     elif r:
         rb = recipe_meta(r)["build"]
         # 没标录制版本就无从比对，不能说成「一致」：置空是「只录到底包」这类脚本的常态（#942）。
         ver = f"录制版本 {rb}，{'版本一致' if build_ok(i, rb) else '版本不同：用安全模式跑，部分步骤可能找不到入口'}" if rb \
             else "录制版本 未标，不比对版本"
-        print(f"机型脚本：{os.path.relpath(r, ROOT)}；{ver}")
+        print(f"机型脚本：{recipe_id(r)}；{ver}")
     else:
         print("机型脚本：没有。可跑：通知渠道 chan-scan/chan-off、广告包挂起；其余照 docs/清单 手动做，或用 tool/explore.py 探路")
     # 这份脚本自带几个本机函数：数字由 recipe_audit 现算，明细用 `python3 tool/recipe_audit.py`（#1240）。
@@ -985,7 +985,8 @@ def cmd_status_json(serial, rest):
         ledger, os.path.relpath(r, RECIPES).replace(os.sep, "/") if r else "")
     print(json.dumps({
         "info": i, "locked": locked(serial),
-        "recipe": os.path.relpath(r, ROOT) if r else None, "recipe_ref": ref, "recipe_build": rb, "recipe_ok": ok, "steps": steps,
+        "recipe": recipe_id(r) if r else None, "recipe_path": os.path.relpath(r, ROOT) if r else None,
+        "recipe_ref": ref, "recipe_build": rb, "recipe_ok": ok, "steps": steps,
         "recipe_coverage": coverage, "recipe_evidence": evidence, "recipe_verified": verified,
         # 这份脚本自带几个本机函数：数字与 `check` 那行同一个来源（#1240）。没有脚本或脚本坏了读不出时是 None。
         "recipe_local": local_counts(r) if r else None,

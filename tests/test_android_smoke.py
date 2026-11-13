@@ -47,7 +47,7 @@ def status_json(**over):
     """手机状态 JSON：段名、广告包、快应用都从这台手机现在的情况来（#1072）。"""
     data = {
         "info": {"model": "PJD110", "brand": "OnePlus"},
-        "locked": False, "recipe": "recipes/OPPO-ColorOS/PJD110.py", "recipe_ref": False,
+        "locked": False, "recipe": "OPPO-ColorOS-PJD110", "recipe_ref": False,
         "steps": ["系统广告", "负一屏与搜索"],
         "ads": [{"pkg": "com.opos.ads", "suspended": False},
                 {"pkg": "com.heytap.pictorial", "suspended": False}],
