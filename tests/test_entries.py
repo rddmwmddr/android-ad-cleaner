@@ -1559,7 +1559,7 @@ GEAR_CENTER_305 = (995, 165)
 
 
 def surface_sources():
-    """注入面两张注册表的源码摊平成一个 {名字: 源码}。两张表不同名，摊平只为按名字查（#1243）。"""
+    """注入面三张注册表的源码摊平成一个 {名字: 源码}。三张表不同名，摊平只为按名字查（#1243）。"""
     return {name: source for table in recipe_source.surface_sources().values()
             for name, source in table.items()}
 

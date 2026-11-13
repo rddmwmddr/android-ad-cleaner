@@ -501,7 +501,8 @@ def imported_sources(facts: Facts,
     """这份源码导入的注入实现：`{名字: (归属模块, 源码)}`。
 
     归属只看源码自己的 import（`from X import n` 与 `X.n(…)` 两种写法，含 `if TYPE_CHECKING:` 块）：
-    `recipe_nav` 只查 `NAV`、`recipe_steps` 只查 `STEPS`，两张表不按名字合并。脚本本地同名 `def`
+    `recipe_nav` 只查 `NAV`、`recipe_strategies` 只查 `STRATEGIES`、`recipe_steps` 只查 `STEPS`，
+    三张表不按名字合并。脚本本地同名 `def`
     覆盖导入版，那种名字不在里面；没有 import 的裸名字也不是注入实现。`X.n(…)` 那种只有调用点
     能看出用了哪个名字，所以按调用点补一遍（`Call.module` 记着 `X`）。
     `surface` 是 `surface_sources()`（词库只交段体那一张，见 `step_sources()`）。"""

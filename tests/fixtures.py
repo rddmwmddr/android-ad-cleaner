@@ -450,7 +450,7 @@ def normalize(source):
     文档串各写各的，但都不改行为，逐字判据只认代码本身。`global X` 是本地定义留下的产物，
     改走注入之后不再需要，一起丢掉。`recipe_steps` 在 mypy 严格档的名单里，实现上的签名注解
     是那份要求的产物，脚本副本不写，同样不改行为。函数体里的变量注解（`AnnAssign`）不剥：
-    出现时两边都会写，不写的那一边本来就该红。两个注入面的副本守卫共用这一份判据。"""
+    出现时两边都会写，不写的那一边本来就该红。三个注入面的副本守卫共用这一份判据。"""
     tree = ast.parse(textwrap.dedent(source))
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module)) \
