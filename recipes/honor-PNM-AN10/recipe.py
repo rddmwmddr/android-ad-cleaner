@@ -54,7 +54,7 @@ def _():
             p.miss = 0
             if not (p.tap("隐私和安全", exact=True) and p.tap("其他隐私和安全功能", exact=True)
                     and p.tap("广告与隐私", exact=True)):
-                raise RuntimeError("没找到「广告与隐私」入口") from None    # 兜底也不通要记成未完成（#819）
+                raise RuntimeError("没找到「广告与隐私」入口") from None    # 兜底也不通要记成未完成（沿用 #819）
     p.tap("更多选项", scrolls=0)
     if p.find("显示系统程序", exact=True):
         p.tap("显示系统程序", exact=True, scrolls=0)

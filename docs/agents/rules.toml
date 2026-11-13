@@ -102,7 +102,7 @@ id = "dev.ruff.pinned-and-scoped"
 source = "CLAUDE.md#开发"
 check = "test:test_doc_consistency::LintCommandTests.test_ruff_targets_match_everywhere"
 status = "enforced"
-why = "CLAUDE.md 曾只写「同一份 CI 里跑 ruff」，本地没有可执行命令，agent 各自猜版本；现在版本钉 0.17.3、目标清单在 CLAUDE.md、release.md、CONTRIBUTING.md 与 CI 逐字一致（b17d420、#624；CONTRIBUTING.md 由 #851 补入），ruff 平台无关，只在 Linux job 跑一次（#856）。守卫比的是目标清单，版本号多处一致仍靠人。`recipes/` 从 #1247 起也在清单里：脚本除 `p` / `rt` 外的裸名字都走顶部 import，未定义名看得见；剩下的 61 条 F401 是注入面按名字取用的假阳性，按文件整类关在 `pyproject.toml` 的 per-file-ignores 里，不在脚本里撒 noqa。"
+why = "CLAUDE.md 曾只写「同一份 CI 里跑 ruff」，本地没有可执行命令，agent 各自猜版本；现在版本钉 0.17.3、目标清单在 CLAUDE.md、release.md、CONTRIBUTING.md 与 CI 逐字一致（沿用 b17d420、#624；CONTRIBUTING.md 由 #851 补入），ruff 平台无关，只在 Linux job 跑一次（#856）。守卫比的是目标清单，版本号多处一致仍靠人。`recipes/` 从 #1247 起也在清单里：脚本除 `p` / `rt` 外的裸名字都走顶部 import，未定义名看得见；剩下的 61 条 F401 是注入面按名字取用的假阳性，按文件整类关在 `pyproject.toml` 的 per-file-ignores 里，不在脚本里撒 noqa。"
 expires_if = "CI 与本地共用一个命令来源、目标清单不再需要多处对照时，连同 LintCommandTests 一起删。"
 since = "b17d420"
 
@@ -119,7 +119,7 @@ id = "dev.types.narrow-scope-in-config"
 source = "CLAUDE.md#开发"
 check = "ci:types"
 status = "enforced"
-why = "类型错误此前只能靠人读：`None` 上取属性、传错参数类型都要等真机走到那条分支才炸，审查 agent 每轮在用 token 替代机器本该做的事。扫描范围与宽松档参数收进 pyproject.toml，命令不带参数，没有第二份口径；类型检查拆成独立 types job，红了不与用例失败混在一起（#993、#996）。`recipes/` 从 #1247 起也查：脚本除 `p` / `rt` 外的裸名字走顶部 import，注入面在类型层面用模块级 `__getattr__` 认得出；43 份脚本都叫 `recipe.py`，一次扫会撞模块名，所以由 `tool/typecheck_recipes.py` 逐份喂给同一个宽松档（`python -m mypy`，`MYPYPATH=tool`），范围与参数仍只来自 pyproject。不做全量注解：这个仓库的 bug 主要是「静默成功 / 静默跳过」，全量注解的收益不确定，代价是撞上它赖以灵活的假对象与注入作用域。"
+why = "类型错误此前只能靠人读：`None` 上取属性、传错参数类型都要等真机走到那条分支才炸，审查 agent 每轮在用 token 替代机器本该做的事。扫描范围与宽松档参数收进 pyproject.toml，命令不带参数，没有第二份口径；类型检查拆成独立 types job，红了不与用例失败混在一起（沿用 #993、#996）。`recipes/` 从 #1247 起也查：脚本除 `p` / `rt` 外的裸名字走顶部 import，注入面在类型层面用模块级 `__getattr__` 认得出；43 份脚本都叫 `recipe.py`，一次扫会撞模块名，所以由 `tool/typecheck_recipes.py` 逐份喂给同一个宽松档（`python -m mypy`，`MYPYPATH=tool`），范围与参数仍只来自 pyproject。不做全量注解：这个仓库的 bug 主要是「静默成功 / 静默跳过」，全量注解的收益不确定，代价是撞上它赖以灵活的假对象与注入作用域。"
 expires_if = "类型检查不再跑 mypy，或扫描范围重新回到命令行参数里时删。"
 
 [[rule]]
@@ -1221,7 +1221,7 @@ id = "dev.recipes.shared-sections"
 source = "CLAUDE.md#开发"
 check = "test:test_recipe_nav::SharedSectionTests.test_every_shared_implementation_serves_two_families"
 status = "enforced"
-why = "新机型的第一份脚本最容易顺手把自己的走法塞进共享库：只有这一台机在用，下一台要改它时得先猜它在服务谁，家族分节也因此长不出自己的形状（#1244–#1246 的归属规则、#1247 的守卫）。判据按**节**算：`recipe_nav.SHARED` / `recipe_strategies.SHARED` 列出的注入名必须被 ≥2 个家族使用（家族取自 `entries.FAMILY`，脚本侧的使用取自事实层的 import）；家族分节不受这条限制，它是新机型并入的入口，允许单脚本变体。清单只在库里写一份，用例不另抄名单。"
+why = "新机型的第一份脚本最容易顺手把自己的走法塞进共享库：只有这一台机在用，下一台要改它时得先猜它在服务谁，家族分节也因此长不出自己的形状（归属规则沿用 #1244–#1246，#1247 落成守卫）。判据按**节**算：`recipe_nav.SHARED` / `recipe_strategies.SHARED` 列出的注入名必须被 ≥2 个家族使用（家族取自 `entries.FAMILY`，脚本侧的使用取自事实层的 import）；家族分节不受这条限制，它是新机型并入的入口，允许单脚本变体。清单只在库里写一份，用例不另抄名单。"
 expires_if = "脚本改由数据树 + 解释器驱动、共享助手不再是手写实现时删。"
 
 [[rule]]
