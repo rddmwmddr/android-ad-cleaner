@@ -400,7 +400,7 @@ class MarketPrivacyEntryTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "未进入目标设置页"):
             action(self.scope, "软件商店")()
         self.scope["row"].assert_called_once_with(
-            ("隐私", "隐私授权管理"), package="com.heytap.market", activity="PrivacyActivity")
+            ["隐私", "隐私授权管理"], package="com.heytap.market", activity="PrivacyActivity")
         self.scope["app_settings"].assert_called_once_with("com.heytap.market")
         self.scope["close_named"].assert_not_called()
         self.scope["read_switches"].assert_not_called()
@@ -424,7 +424,8 @@ class StoreThemeVideoTests(unittest.TestCase):
         self.assertEqual(self.scope["app_settings"].call_args_list,
                          [call("com.heytap.market"), call("com.heytap.market")])
         self.assertEqual(self.scope["row"].call_args_list,
-                         [call(("隐私", "隐私授权管理"), package="com.heytap.market",
+                         # 页面树里的等价文案是 TOML 数组（转成 list）：按内容与顺序比，容器类型不是判据。
+                         [call(["隐私", "隐私授权管理"], package="com.heytap.market",
                                activity="PrivacyActivity"),
                           call("个性化推荐"), call("服务管理")])
         self.assertEqual([c.args[0] for c in self.scope["close_named"].call_args_list],

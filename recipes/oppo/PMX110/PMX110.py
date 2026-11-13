@@ -1,6 +1,5 @@
 # OPPO Find X10 Pro Max（PMX110，ColorOS 17）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
-# 剩广告跟踪（菜单「全部关闭」整表关 + 恢复显示方式）与软件商店（读回名单再整表关）两段在这里；
-# 其余七段是线性数据（浏览器也已落数据）。
+# 只剩广告跟踪：要用菜单「全部关闭」整表关并恢复「显示系统应用」偏好，是状态机。其余八段是数据。
 from collections import namedtuple
 
 import adb_link
@@ -31,18 +30,6 @@ SEARCH_CARDS = ["未下载应用推荐", "应用建议小卡", "热搜应用", "
 # 轮播单选只有这两个选项，「不显示」是我们要的那一档（#280）。
 CAROUSEL_LABELS = {"显示轮播推荐", "不显示轮播推荐"}
 CAROUSEL_OFF = "不显示轮播推荐"
-# 来自本机服务管理页；普通游戏分类、AI 搜索、资产、客服、工具与安全功能不在清单里。
-STORE_PROMOS = [
-    "首页：悬浮活动图标", "首页：活动弹窗", "首页：顶部轮播卡片", "底部活动专区",
-    "应用安全安全内容推荐", "游戏专区：重磅更新卡片", "游戏详情页：游戏活动卡片",
-    "通过游戏助手打开领取游戏福利", "软件专区：福利", "软件专区：购物", "软件专区：快应用",
-    "我的专区：签到按钮", "我的专区：账号会员徽章", "我的专区：应用时刻", "我的专区：积分商城",
-    "我的专区：休闲一刻", "我的专区：安装有礼", "我的专区：福利中心", "我的专区：游戏VIP",
-    "我的专区：金豆乐园", "更新&下载专区：底部弹窗推荐", "活动式详情页", "详情页：活动",
-    "游戏详情页：游戏礼包", "手机管家：应用推荐", "文件管理：应用推荐", "游戏专区：活动集合",
-    "详情页：限时活动", "小游戏二楼和专区", "福利专区",
-]
-
 # 负一屏首页的两条已知文案（PLG110 / PMA110 实测）：头像入口万一改名，两条都在也算到了（#901）
 LAUNCHER = "com.android.launcher/"
 ASSISTANT_HOME = {"我的服务", "添加卡片"}
@@ -88,19 +75,6 @@ def step_ad_tracking(p, rt):
                 p.back()
                 print("  · 没找到「隐藏系统应用」，列表保持显示系统应用", flush=True)
             p.await_page()
-
-
-def step_store(p, rt):
-    app_settings(MARKET)
-    row(("隐私", "隐私授权管理"), package=MARKET, activity="PrivacyActivity")
-    row("个性化推荐")
-    close_named(["个性化推荐"], "个性化推荐")
-    app_settings(MARKET)
-    row("服务管理")
-    available = read_switches("服务管理")
-    names = [name for name in STORE_PROMOS if name in available]
-    require(names, "服务管理未识别到已录制推广位")
-    close_named(names, "服务管理", snapshot=available)
 
 
 def tail():
