@@ -39,6 +39,7 @@ def __getattr__(name: str) -> Any:
     类型检查靠这一条认得出名字；运行时照旧抛 AttributeError，不在这里造一份代理对象。"""
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
+
 # `Phone.start` 里「落点不对」的两句。只有这两类才按落点判入口不可达：
 # 「本机没有安装 / 无法打开」时前台可能只是桌面，不能当成证据（#902）。
 WRONG_LANDING = ("没有进入前台", "启动后离开前台")
