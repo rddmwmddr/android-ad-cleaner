@@ -32,8 +32,8 @@ UNRESOLVED_ONLY = {
     "oppo/PMA110/recipe.py": 1,
     "xiaomi/23049RAD8C/recipe.py": 1,
     "xiaomi/25060RK16C/recipe.py": 1,
-    "vivo/V2303A/recipe.py": 1,
-    "vivo/V2547DA/recipe_android17.py": 4,
+    "vivo/V2303A/V2303A.toml": 1,
+    "vivo/V2547DA/V2547DA-android17.toml": 4,
     "xiaomi/2304FPN6DC/recipe.py": 1,
     "xiaomi/24090RA29C/recipe.py": 1,
     "xiaomi/2410CRP4CC/recipe.py": 1,
@@ -50,7 +50,6 @@ UNRESOLVED_CLOSE = {
     "oppo/PKT110/recipe.py": 3,
     "oppo/PMX110/recipe.py": 2,
     "xiaomi/23117RK66C/recipe.py": 1,
-    "vivo/V2417A/recipe.py": 1,
 }
 # 解析不出的 keep=，同样按脚本冻结：它只影响同页保留项，读不出时那页的约束就整段丢了。
 UNRESOLVED_KEEP = {
@@ -61,7 +60,6 @@ UNRESOLVED_KEEP = {
     "oppo/PLG110/recipe.py": 2,
     "oppo/PMA110/recipe.py": 1,
     "oppo/PMX110/recipe.py": 1,
-    "vivo/V2417A/recipe.py": 1,
 }
 # 模块级字典里的说明文字，按脚本冻结。
 DICT_NOTES = {
@@ -73,7 +71,7 @@ SILENT = (
     "oppo/PHK110/recipe.py",
     "oppo/PHK110/recipe_android15.py",
     "samsung/SM-N9760/SM-N9760.toml",
-    "vivo/V2547A/recipe.py",
+    "vivo/V2547A/V2547A.toml",
 )
 # 页面标签归不到分组的调用。多出来的先看能不能加进 vocab.PAGES。
 UNCLASSIFIED = {

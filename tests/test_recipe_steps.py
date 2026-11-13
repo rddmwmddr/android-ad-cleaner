@@ -24,6 +24,16 @@ from fixtures import normalize, phone_mock  # noqa: E402
 RECIPES = tuple(sorted((ROOT / "recipes").rglob("*.py")))
 
 
+def families_missing_scripts(rel_paths, recipes_dir):
+    """`recipes/` 下每个「含 .py」的家族目录，至少要在 rel_paths 里出现一份（#1263 的发现口径判据）。"""
+    on_disk = {d.name for d in recipes_dir.iterdir() if d.is_dir() and any(d.rglob("*.py"))}
+    seen = set()
+    for rel in rel_paths:
+        parts = Path(rel).parts
+        seen.add(parts[1] if parts and parts[0] == "recipes" else parts[0])
+    return on_disk - seen
+
+
 def step_surface():
     """注入面此刻写进执行作用域的 {名字: 实现源码}。"""
     phone, scope = phone_mock(), {}
@@ -166,9 +176,16 @@ class CopyGuardTests(unittest.TestCase):
     def test_no_script_keeps_a_byte_identical_copy(self):
         scripts = [(path.relative_to(ROOT).as_posix(), path.read_text(encoding="utf-8"))
                    for path in RECIPES]
-        self.assertGreaterEqual(len(scripts), 43, "脚本没扫到：路径或通配写错了")
+        self.assertEqual(families_missing_scripts([rel for rel, _ in scripts], ROOT / "recipes"), set(),
+                         "有家族一份 .py 都没扫到：发现口径坏了")
         self.assertEqual(offenders(scripts, step_surface()), {},
                          "脚本还留着注入段体的逐字副本：删掉本地那份，让脚本走注入版")
+
+    def test_family_coverage_predicate_catches_a_whole_missing_family(self):
+        """反例：只给一个家族的路径，磁盘上别的家族整块没被扫到时要报出来。"""
+        missing = families_missing_scripts(["vivo/V1/recipe.py"], ROOT / "recipes")
+        self.assertIn("oppo", missing)
+        self.assertNotIn("vivo", missing)
 
     def test_the_guard_reports_a_copy_and_spares_a_differing_sibling(self):
         injected = {"downloads": '''\

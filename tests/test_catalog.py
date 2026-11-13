@@ -22,7 +22,7 @@ import catalog  # noqa: E402
 import fast  # noqa: E402
 import recipe_kit  # noqa: E402
 
-SCRIPT = "recipes/vivo/V1986A/recipe.py"
+SCRIPT = "tests/fixtures/vivo_v1986a/recipe.py"
 DATA = "recipes/vivo/V1986A/V1986A.toml"
 
 
