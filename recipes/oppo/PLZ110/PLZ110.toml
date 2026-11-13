@@ -1,0 +1,53 @@
+# 一加 15T（PLZ110），2026-11-08 真机核对；系统 PLZ110_17.0.0.107(CN01) / Android 17，仅记录本机走通的路径。
+# 浏览器原已停用，跳过且不启用；系统广告跟踪未验证，不纳入。通知渠道、广告组件及快应用仍由 run.py 独立确认。
+# 2026-11-10 负一屏入口改从内侧右滑、已在负一屏不再滑走、认不到入口时留页面现场（#901），未复测。
+# 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，按落在商店隐私页判，未复测（#907）。
+model = "PLZ110"
+models = ["PLZ110"]
+build = "PLZ110_17.0.0.107(CN01)"
+tail = "tail"
+
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+[const]
+READ_SWITCHES_STYLE = "title"
+HIDE_CAROUSEL_STYLE = "labels"
+
+[[segment]]
+name = "软件商店"
+code = "step_store"
+
+[[segment]]
+name = "下拉搜索"
+ops = [
+  { kind = "lib", name = "search_settings_direct" },
+]
+
+[[segment]]
+name = "负一屏"
+ops = [
+  { kind = "lib", name = "assistant_screen" },
+]
+
+[[segment]]
+name = "主题"
+ops = [
+  { kind = "lib", name = "theme_store_settings" },
+]
+
+[[segment]]
+name = "视频"
+ops = [
+  { kind = "lib", name = "video_direct" },
+]
+
+[[segment]]
+name = "游戏中心"
+ops = [
+  { kind = "lib", name = "game_center_direct" },
+]
+
+[[segment]]
+name = "小布建议"
+ops = [
+  { kind = "lib", name = "assistant_advice_rows" },
+]

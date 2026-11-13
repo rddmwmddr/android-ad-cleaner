@@ -1,17 +1,16 @@
-# 一加 15T（PLZ110），2026-11-08 真机核对。系统 PLZ110_17.0.0.107(CN01) / Android 17；仅记录本机走通的路径。
-from recipe_kit import step
-# 浏览器原已停用，跳过且不启用；系统广告跟踪未验证，不纳入本脚本。
-# 通知渠道、广告组件及快应用仍由 run.py 独立确认。
-# 2026-11-10 负一屏入口改从内侧右滑、已在负一屏不再滑走、认不到入口时留页面现场（#901），未复测。
-# 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，按落在商店隐私页判，未复测（#907）。
-BUILD = "PLZ110_17.0.0.107(CN01)"
-# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
-READ_SWITCHES_STYLE = "title"
-HIDE_CAROUSEL_STYLE = "labels"
-# 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
+# 一加 15T（PLZ110，ColorOS 17）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
+# 共享库的 app_settings / row / read_switches / close_named 与 require / skip 由装载器注入执行作用域。
+# 只有软件商店留在这里：隐私入口两种叫法 + 服务管理按读到的开关筛名单。其余六段是线性数据。
 import adb_link
 from fast import ScreenLocked, bounds
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import SkipStep, p, require, rt
+    from recipe_nav import app_settings, read_switches, row
+    from recipe_strategies import close_named_optional
+
+BUILD = "PLZ110_17.0.0.107(CN01)"
 
 # 分段结果由引擎经 rt 记录
 SKIPPED_ITEMS = []
@@ -39,6 +38,10 @@ STORE_PROMOS = [
     "详情页：限时活动", "小游戏二楼和专区", "福利专区",
 ]
 
+# 负一屏首页的两条已知文案（PLG110 / PMA110 实测）：头像入口万一改名，两条都在也算到了（#901）
+LAUNCHER = "com.android.launcher/"
+ASSISTANT_HOME = {"我的服务", "添加卡片"}
+
 
 def require_installed(package, label):
     """没装的包 `pm path` 输出为空，退出码是 1（adb shell v2 带回）或 0（不带回退出码的通道）：
@@ -50,8 +53,7 @@ def require_installed(package, label):
     raise SkipStep(f"本机未安装{label}")
 
 
-@step("软件商店")
-def _():
+def step_store(p, rt):
     app_settings(MARKET)
     # 本版商店叫「隐私授权管理」，同族另有叫「隐私」的（#907）。tries 保住原来 p.enter 的
     # 「点击被弹窗动画吞掉就再点」：这一行必须点开，后面的行都指着它（#286）。
@@ -66,52 +68,10 @@ def _():
     close_named(names, "服务管理", snapshot=available)
 
 
-@step("下拉搜索")
-def _():
-    search_settings_direct()
-
-
-# 下面两个名字给注入面的负一屏助手取（at_assistant / assistant_icon 跑在 recipe_nav 里）
-LAUNCHER = "com.android.launcher/"
-# 负一屏首页的两条已知文案（PLG110 / PMA110 实测）：头像入口万一改名，两条都在也算到了（#901）
-ASSISTANT_HOME = {"我的服务", "添加卡片"}
-
-
-@step("负一屏")
-def _():
-    assistant_screen()
-
-
-@step("主题")
-def _():
-    theme_store_settings()
-
-
-@step("视频")
-def _():
-    video_direct()
-
-
-@step("游戏中心")
-def _():
-    game_center_direct()
-
-
-@step("小布建议")
-def _():
-    assistant_advice_rows()
-
-
 def tail():
     print(f"\n逐项回读确认 {rt.verified} 项；完成 {sum(state == '完成' for _, state in rt.results)} 段，"
           f"跳过 {sum(state == '跳过' for _, state in rt.results)} 段，未显示项 {len(SKIPPED_ITEMS)} 组", flush=True)
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import SkipStep, p, page, require, require_switches, rt
-    from recipe_nav import app_settings, hide_carousel, read_switches, row, switch_signature, switch_top
-    from recipe_strategies import close_named_optional
-    from recipe_steps import assistant_advice_rows, assistant_screen, game_center_direct, search_settings_direct, theme_store_settings, video_direct
 
 # 负一屏 / 主题 / 视频 / 游戏中心的段体按 `g["close_named"]` 取这个钩子，实现住在
 # recipe_strategies 的 `close_named_optional`，这里绑回旧名字（#1253）。

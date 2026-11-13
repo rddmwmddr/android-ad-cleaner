@@ -1,5 +1,5 @@
 {
- "script": "recipes/oppo/PLZ110/recipe.py",
+ "script": "recipes/oppo/PLZ110/PLZ110.toml",
  "scenarios": {
   "present": [
    ["软件商店", "locked", [], {}],
