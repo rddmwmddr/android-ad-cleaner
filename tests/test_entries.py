@@ -1331,7 +1331,7 @@ class RecipeQuotingTest(unittest.TestCase):
 
     def test_no_recipe_quotes_the_page_name_before_start(self):
         offenders = []
-        for path in sorted((ROOT / "recipes").glob("*/*/recipe*.py")):
+        for path in fixtures.recipe_sources():
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Call):

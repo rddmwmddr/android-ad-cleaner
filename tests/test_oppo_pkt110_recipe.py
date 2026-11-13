@@ -108,10 +108,13 @@ class OppoPkt110RecipeTests(unittest.TestCase):
         self.assertEqual(scope["VERIFIED_SWITCHES"], 2)
 
     def test_recipe_never_suspends_disables_or_uninstalls_packages(self):
-        """挂起、停用、卸载和整包关通知都不该出现在机型脚本里（归档记录 0.2.6 记过问题写法）。"""
-        source = (ROOT / "recipes/oppo/PKT110/PKT110.toml").read_text(encoding="utf-8")
-        for forbidden in ("pm suspend", "pm uninstall", "pm disable-user", "pm revoke", "notif-off"):
-            self.assertNotIn(forbidden, source)
+        """挂起、停用、卸载和整包关通知都不该出现在机型脚本里（归档记录 0.2.6 记过问题写法）。
+
+        页面树把过程化的段搬进了同名例外 `.py`（#1264）：两处都要扫，判据才没被搬家绕过去。"""
+        for name in ("PKT110.toml", "PKT110.py"):
+            source = (ROOT / "recipes/oppo/PKT110" / name).read_text(encoding="utf-8")
+            for forbidden in ("pm suspend", "pm uninstall", "pm disable-user", "pm revoke", "notif-off"):
+                self.assertNotIn(forbidden, source, name)
 
 
 class OppoPkt110ParentChildTests(unittest.TestCase):

@@ -28,7 +28,7 @@ import adb_link
 import fast
 import recipe_kit
 from fixtures import (EMPTY_PAGE, Clock, fake_phone, install_clock, load_recipe,
-                      phone_mock, phone_stub)
+                      phone_mock, phone_stub, recipe_sources)
 
 # 三段的骨架：甲跑完、乙按脚本怎么写怎么跑、丙永远不该被执行（锁屏场景）
 SECTIONS = '''
@@ -1164,7 +1164,8 @@ def phone_903(*rows):
 
 
 def recipes_903():
-    return sorted((ROOT / "recipes").glob("*/*/recipe*.py"))
+    """`recipe*.py` 与已转页面树的同名例外 `.py`（#1264）：只扫前者会让转过的机型静默消失。"""
+    return recipe_sources()
 
 
 class MissingSwitchEvidenceTests(unittest.TestCase):
@@ -1356,7 +1357,7 @@ class PageEvidenceTests(unittest.TestCase):
 class PageEvidenceSingleSourceTests(unittest.TestCase):
     def test_the_wording_lives_only_in_recipe_kit(self):
         """三句判据各自复制一份就会再分叉成两种输出形状（#939）。"""
-        sources = sorted((ROOT / "recipes").glob("*/*/recipe*.py"))
+        sources = recipe_sources()
         sources += [path for name in ("tool", "gui") for path in sorted((ROOT / name).rglob("*.py"))]
         offenders = [path.relative_to(ROOT).as_posix() for path in sources
                      if path != ROOT / "tool" / "recipe_kit.py"

@@ -23,7 +23,7 @@ import recipe_nav  # noqa: E402
 import recipe_strategies  # noqa: E402
 from fixtures import normalize, phone_mock  # noqa: E402
 
-RECIPES = tuple(sorted((ROOT / "recipes").rglob("recipe*.py")))
+RECIPES = tuple(fixtures.recipe_sources())   # `recipe*.py` + 已转页面树的同名例外 `.py`（#1264）
 
 GEAR_NODE = ('<hierarchy rotation="0"><node class="android.widget.ImageView" text="设置"'
              ' clickable="true" bounds="[900,100][1020,220]"/></hierarchy>')
