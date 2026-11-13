@@ -1,5 +1,5 @@
-# 小米 HyperOS 4 机型脚本：REDMI K90 Pro Max（25102RKBEC / myron）
-# 路径来源：2026-10-27 实机实测（OS4.0.2.0.XPMCNXM / Android 17）。
+# 小米 HyperOS 4 机型脚本：REDMI K90 Pro Max（25102RKBEC / myron）；路径来源：2026-10-27 实机实测（OS4.0.2.0.XPMCNXM / Android 17）。
+from recipe_kit import step
 #
 # 与 xiaomi-M154FF 的关键差异（照 M154FF 跑会跳过「系统广告」这一步）：
 #   1. 设置首页要往下滑一段才看得到「隐私与安全」；
@@ -16,36 +16,8 @@ MODELS = ["25102RKBEC"]
 import time
 from entries import THEME_DEAD_ENDS
 
-
-def browser_settings():
-    """先看工具栏，再点底部「我的」；不把资讯正文里的「我的」当导航标签。"""
-    before = p.focus()
-    if gear(toolbar_only=True):
-        if p.in_settings_page():          # 点完要认出设置页，点击被吞时别在旧页上找入口（#331）
-            return True
-        if p.focus() != before:
-            p.back()
-    for text, (l, t, r, b), node in p.texts():
-        if text == "我的" and t >= p.H * 0.65:
-            before = p.sig()
-            p.click((l + r) // 2, (t + b) // 2)
-            p.settle(before, 1.5)
-            return gear()
-    return False
-
-
-def tab(name):
-    """点顶部分栏标签（隐私 / 安全）。
-    页面里同名文字常有两个（分栏标签 + 下面分组标题），取屏幕最上面那个。"""
-    cand = []
-    for text, (l, t, r, b), node in p.texts():
-        if text == name and t < p.H * 0.40:
-            cand.append((t, (l + r) // 2, (t + b) // 2))
-    if not cand:
-        return False
-    cand.sort()
-    p.click(cand[0][1], cand[0][2]); time.sleep(1.2)
-    return True
+# 浏览器设置入口：先看工具栏齿轮，再点底部「我的」找齿轮。
+BROWSER_FLOW = "toolbar"
 
 
 @step("系统广告")
@@ -143,3 +115,9 @@ def _():
         if maybe("用户体验计划"):
             p.off(only=["推荐", "广告", "个性化", "内容推广", "天气视频卡片"], page=f"{pkg}·用户体验计划"); p.back()
         p.back(3)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p
+    from recipe_nav import browser_settings, gear, tab
+    from recipe_steps import downloads, global_search, negative_screen, store_mode, theme

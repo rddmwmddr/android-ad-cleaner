@@ -1,5 +1,5 @@
-# 荣耀 WKL-AN20，MagicOS 11 / Android 17。路径逐项实测：2026-10-28。
-# 新脚本整轮待真机复测；音乐须先由机主打开「更多设置」，再单段运行。
+# 荣耀 WKL-AN20，MagicOS 11 / Android 17。路径逐项实测：2026-10-28。新脚本整轮待真机复测；音乐须先由机主打开「更多设置」，再单段运行。
+from recipe_kit import step
 # 由 tool/fast.py 注入 p 和 ONLY；不包含通知渠道、挂包或 Scene 激活操作。
 BUILD = "WKL-AN20 11.0.0.111(SP7C00E110R101P7)"
 MODELS = ["WKL-AN20"]
@@ -9,8 +9,12 @@ from contextlib import contextmanager
 import time
 
 from fast import CONFIRM, Phone, bounds, want_state
-RESULTS = []
-VERIFIED_SWITCHES = 0
+# 家族库按这些常量选走法（#1246），缺省档与实现见 tool/recipe_nav.py。
+TAP_STYLE = "honor"
+APP_SETTINGS_STYLE = "honor"
+BROWSER_FLOW = "honor_plain"
+# 分段结果由引擎经 rt 记录
+# 回读确认数由引擎经 rt 记录
 CHANGES = {
     "广告跟踪": "应用的 OAID 读取权限",
     "智能推荐服务": "智能推荐服务",
@@ -52,10 +56,6 @@ def settle_page(package, *markers, timeout=5):
         previous = signature
         time.sleep(.25)
     raise RuntimeError("未确认目标设置页：" + "、".join(markers))
-
-
-def tap(text, scrolls=6):
-    require(p.tap(text, exact=True, scrolls=scrolls), "未找到入口「" + text + "」")
 
 
 @contextmanager
@@ -138,7 +138,7 @@ def scan(max_screens):
 
 def close_named(names, title, package, marker, max_screens=6, drawn=False):
     """精确标题白名单；操作前完整扫描，操作后核对目标及其他开关。"""
-    global VERIFIED_SWITCHES
+    # 回读确认数由引擎经 rt 记录
     settle_page(package, marker)
     native = p.switches
 
@@ -170,29 +170,10 @@ def close_named(names, title, package, marker, max_screens=6, drawn=False):
                 title + "：回读未确认目标状态")
         require(all(after.get(name) == state for name, state in before.items() if name not in wanted),
                 title + "：其他开关状态变化，请机主核对")
-        VERIFIED_SWITCHES += len(wanted)
+        rt.confirm(len(wanted))
         print(f"  · {title}：已回读 {len(wanted)} 项", flush=True)
     finally:
         p.switches = native
-
-
-def app_settings(package, *markers):
-    p.start(package)
-    require(p.go("我的", "设置"), "未找到应用设置入口")
-    tap("设置", scrolls=0)
-    settle_page(package, *markers)
-
-
-def browser_settings():
-    package = "com.honor.browser"
-    if p.focus().split("/", 1)[0] == package and {"模式选择", "隐私管理"} <= labels():
-        return package
-    p.start(package)
-    # 本机已验证「更多 → 设置」；经典首页的未知图标位置不猜。
-    tap("更多", scrolls=0)
-    tap("设置", scrolls=0)
-    settle_page(package, "模式选择", "隐私管理")
-    return package
 
 
 def radio(root, text):
@@ -375,7 +356,7 @@ def _():
 def _():
     # 此机之前由机主手动打开，未验证从首页可靠自动进入；不复制其他机型的图标位置。
     # 全跑时跳过此段；手动进入「更多设置」后用 recipe 音乐 单独执行。
-    if ONLY != ["音乐"]:
+    if rt.only != ["音乐"]:
         skip("请手动打开荣耀音乐 → 我的 → 设置 → 更多设置，再单段运行「音乐」")
     package = "com.hihonor.cloudmusic"
     settle_page(package, "消息和隐私设置")
@@ -386,5 +367,11 @@ def _():
     # 个性化服务保留；第三方推送含评论提醒，不整项关闭。
 
 
-print(f"\n已回读 {VERIFIED_SWITCHES} 项；分段结果：{RESULTS}", flush=True)
-print("YOYO 新闻资讯、旧版文件夹管理入口未适配；通知渠道、快应用请走 run.py 独立流程。", flush=True)
+def tail():
+    print(f"\n已回读 {rt.verified} 项；分段结果：{rt.results}", flush=True)
+    print("YOYO 新闻资讯、旧版文件夹管理入口未适配；通知渠道、快应用请走 run.py 独立流程。", flush=True)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, require, require_switches, rt, skip, skip_in_safe_mode
+    from recipe_nav import app_settings, browser_settings, tap

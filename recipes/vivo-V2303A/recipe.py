@@ -1,5 +1,5 @@
-# vivo V2303A（Android 17 / OriginOS 7，build CP2A.260605.016）机型脚本。
-# 由同品牌参考脚本 recipes/vivo-V2547DA/recipe_android17.py 改写而来，针对本机实测调整：
+# vivo V2303A（Android 17 / OriginOS 7，build CP2A.260605.016）机型脚本。由同品牌参考脚本 recipes/vivo-V2547DA/recipe_android17.py 改写而来，针对本机实测调整：
+from recipe_kit import step
 #   - BUILD / MODELS 改为本机；
 #   - 「系统广告 / 全局搜索 / 阅图锁屏」三段改用 p.setting("关键词") 在设置内搜关键词直达，
 #     避开逐层翻页找入口时滑出设置页的问题（Android 17 上原 maybe() 链式导航在本机不稳）。
@@ -7,22 +7,9 @@
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 BUILD = "CP2A.260605.016"
 MODELS = ["V2303A"]
+# 家族库按这个常量选走法（#1246），缺省档与实现见 tool/recipe_nav.py。
+GEAR_STYLE = "vivo"
 import time
-
-
-def gear():
-    """vivo App 的设置多是右上角齿轮图标，没有文字。
-
-    判据用引擎的 icon_hit：旧实现按 content-desc / resource-id 子串匹配，id 里带 setting 的
-    其它入口（商店的 securitySettingSwitchLayout 之类）会被当成齿轮先点掉（#530）。"""
-    from fast import bounds, icon_hit
-    for n in p.tree().iter("node"):
-        l, t, r, b = bounds(n)
-        icon = "ImageView" in n.get("class", "") and r - l < p.W * 0.25 and b - t < p.H * 0.15
-        if icon_hit(n) and (n.get("clickable") == "true" or icon) and p.on_screen(n):
-            p.click((l + r) // 2, (t + b) // 2); time.sleep(1)
-            return True
-    return p.tap("设置", exact=True, scrolls=0)
 
 
 @step("系统广告")
@@ -108,3 +95,9 @@ def _():
 @step("天气")
 def _():
     weather_service()
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import SkipStep, maybe, p
+    from recipe_nav import gear, off_unnamed
+    from recipe_steps import browser_recommendations, i_manager_ads, weather_service

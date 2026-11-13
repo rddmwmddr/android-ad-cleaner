@@ -373,9 +373,12 @@ def used_by(recipes_dir):
     经 `open_app_settings(包名, 页面, …)` 打开的那一类同样是直达（它包着 APP_SETTINGS 的 Intent）。
 
     搬进注入面（`tool/recipe_nav.py` 与 `tool/recipe_steps.py`）的实现，入口写在实现里、脚本只剩
-    一行调用：脚本调用了哪个注入名，就把那份实现也扫一遍，否则「用过的机型」会静默漏掉（沿用 #1153 的做法）。
+    一行调用：脚本导入了哪个注入名，就把那份实现也扫一遍，否则「用过的机型」会静默漏掉（沿用 #1153 的做法）。
+    归属跟脚本的 import 走（#1243）：`from recipe_nav import gear` 只解析 `NAV` 里那份、
+    `from recipe_steps import store` 只解析 `STEPS` 里那份，三张表不按名字合并。
     实现里再调别的注入名也照着往下扫：段体调 `browser_settings_direct`，入口写在第二层，只看脚本
-    那一层会把调段体的机型漏掉（#1212）。
+    那一层会把调段体的机型漏掉（沿用 #1212）。实现自己没有导入头、共享名从执行作用域按名字现取，
+    所以那一层按名字在三张表里找。
     包名这类实参仍在脚本里（`app_settings(MARKET)`），形参在实现里，按位置把两侧合起来才还原得出
     包名（沿用 #1154 的做法）；段体按名字取的模块常量以 `externals` 交回去（#1209）。定义了本地
     同名实现的脚本走本地那份，不扫注入版（`injected_calls()` 判这一条，深浅两层同判）。
@@ -385,31 +388,40 @@ def used_by(recipes_dir):
 
     只认字面量：经 `reach(p, ENTRIES[...])` 消费的那几条（浏览器段，#912）看不出来，
     这张表会把用得上的机型算成没用过。"""
-    injected = recipe_source.injected_sources()
+    surface = recipe_source.surface_sources()
     found = {}
     for rel, facts in recipe_source.scan_dir(recipes_dir).items():
         model = rel.split("/", 1)[0].split("-", 1)[-1]
         _scan_entries(facts, model, found)
-        _scan_injected(injected, facts, facts, model, found, set())
+        layer = recipe_source.imported_sources(facts, surface)
+        _scan_injected(surface, layer, facts, facts, model, found, set())
     return found
 
 
-def _scan_injected(injected, current, caller, model, found, seen):
-    """注入实现逐层往下扫：`current` 是这一层的事实（脚本本身，或上一层实现），`caller` 是调用
-    脚本的事实（模块常量与本地定义都在它那儿）。`seen` 按路径传，同一条链上只扫一次、防绕圈；
-    换一条路再调到同一个注入名仍要扫，实参来自不同的调用点。
+def _scan_injected(surface, layer, current, caller, model, found, seen):
+    """注入实现逐层往下扫：`layer` 是这一层能调到的 {名字: (归属模块, 源码)}，`current` 是这一层的事实
+    （脚本本身，或上一层实现），`caller` 是调用脚本的事实（模块常量与本地定义都在它那儿）。
+    `seen` 按路径传，同一条链上只扫一次、防绕圈；换一条路再调到同一个注入名仍要扫，实参来自不同的调用点。
 
+    脚本层的 `layer` 由 `imported_sources()` 给出：只含它 import 的名字、按归属模块解析；
+    实现层没有导入头，`layer` 是 `_surface_layer()` 摊开的全部实现，`injected_calls()` 按名字认。
     判据仍是 `injected_calls()`：脚本本地定义了同名的走本地那份，深、浅两层都不算。"""
-    for name in sorted(injected):
+    for name, (module, source) in sorted(layer.items()):
         if name in seen or name in caller.defines:
             continue
-        calls = recipe_source.injected_calls(current, name)
+        calls = recipe_source.injected_calls(current, name, module)
         if not calls:
             continue
-        impl = recipe_source.scan_source(injected[name], _bindings(calls),
+        impl = recipe_source.scan_source(source, _bindings(calls),
                                          externals=caller.constants)
         _scan_entries(impl, model, found)
-        _scan_injected(injected, impl, caller, model, found, seen | {name})
+        _scan_injected(surface, _surface_layer(surface), impl, caller, model, found, seen | {name})
+
+
+def _surface_layer(surface):
+    """实现层能调到的全部注入实现：{名字: (None, 源码)}。归属未知——实现里按名字现取（`g["…"]`），
+    没有 import 头；`injected_calls()` 收到 `module=None` 时按名字认。"""
+    return {name: (None, source) for table in surface.values() for name, source in table.items()}
 
 
 def open_direct(p, d, settle=1.2):

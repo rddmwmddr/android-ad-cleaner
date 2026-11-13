@@ -2,9 +2,10 @@
 
 基线生成器（tests/make_run_cli_baseline.py）与对拍测试都用它，
 「同一批输入」的定义只有这一处。规范化只动三类东西：临时目录的绝对路径、
-备份目录名里的时间戳（`Backups.create` 用 `%Y%m%d-%H%M`），以及 `status-json` 里从台账现读的
-覆盖度 / 证据来源 / 验证日期——那三样跟着 `recipes/verified.toml` 的日常维护变，不是命令行为，
-`tests/test_verify_ledger.py` 单独验它们的真实取值。
+备份目录名里的时间戳（`Backups.create` 用 `%Y%m%d-%H%M`），以及两类**跟着 `recipes/` 源码变**
+的数：`status-json` 里从台账现读的覆盖度 / 证据来源 / 验证日期，与本机函数计数（`recipe_local`
+与 `check` 的那一行）。它们不是命令行为：`tests/test_verify_ledger.py` 与
+`tests/test_recipe_audit.py` 单独验真实取值。
 """
 import json
 import os
@@ -17,6 +18,12 @@ HERE = Path(__file__).resolve().parent
 FAKE_ADB = HERE / "fake_adb.py"
 STAMP = re.compile(r"\d{8}-\d{4}")
 LEDGER_FIELD = re.compile(r'("recipe_(?:coverage|evidence|verified)": )"(?:[^"\\]|\\.)*"')
+# 本机函数计数：五个整数的扁平对象（没有嵌套），`check` 那一行按同一批数字换掉。
+# 声明式钩子是单独一档（#1244），它在 `check` 那一行只在非零时出现。
+LOCAL_FIELD = re.compile(r'("recipe_local": )\{"total": \d+, "strategy": \d+, "vocabulary": \d+, '
+                         r'"knowledge": \d+, "hook": \d+\}')
+LOCAL_LINE = re.compile(r"本机策略：\d+ 个；本机函数 \d+ 个"
+                        r"（引擎词汇 \d+、真机知识 \d+(?:、声明式钩子 \d+)?）")
 DROP = ("AAC_EVENTS", "AAC_GUI", "AAC_PAUSE_FILE", "AAC_CAPTURES", "ADB", "ADBUTILS_ADB_PATH")
 
 
@@ -30,6 +37,8 @@ def _adb_wrapper(directory):
 
 def normalize(text, work):
     text = LEDGER_FIELD.sub(r'\1"<LEDGER>"', text)
+    text = LOCAL_FIELD.sub(r'\1"<LOCAL>"', text)
+    text = LOCAL_LINE.sub("本机策略：<N> 个；本机函数 <N> 个（引擎词汇 <N>、真机知识 <N>）", text)
     return STAMP.sub("<TS>", text.replace(os.fspath(work), "<TMP>"))
 
 

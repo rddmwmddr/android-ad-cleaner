@@ -55,9 +55,11 @@ class VariantTests(unittest.TestCase):
 
 # ---------- #319 / #969 / #942：参考脚本按录制版本在同族里挑 ----------
 def write_recipe(root, name, build, steps, filename="recipe.py"):
+    """一份能装载的最小脚本：段体写成真的 `def`，因为除了按正则读元数据的，还有按 AST 读源码的
+    （`tool/recipe_audit.py` 的本机函数审计）。`pass` 体不碰手机。"""
     d = Path(root, "recipes", name)
     d.mkdir(parents=True, exist_ok=True)
-    body = "".join(f'@step("步骤{i}")\n' for i in range(steps))
+    body = "".join(f'@step("步骤{i}")\ndef _():\n    pass\n\n' for i in range(steps))
     Path(d, filename).write_text(f'BUILD = "{build}"\n{body}', encoding="utf-8")
 
 

@@ -16,6 +16,12 @@ r"""机型脚本的「事实」层：一份源码里发生了哪些调用。纯 
 - 语法错一律抛 `SyntaxError`，不做容错返回：静默少几台机型比崩掉更糟。
 - f-string 不解析：`f"am start … {activity}"` 现在算不上入口，这里也不让它算上；页面标签仍按
   `{变量}` 的写法渲染（那是标签的写法，不是值）。
+
+共享实现的归属跟脚本的 import 走（#1243）：`from recipe_nav import gear` 与
+`import recipe_steps` + `recipe_steps.downloads(…)` 两种写法都解析到 X 里那一份实现，
+`recipe_nav` 只查 `NAV`、`recipe_strategies` 只查 `STRATEGIES`、`recipe_steps` 只查 `STEPS`，
+三张表不按名字合并（同名实现会静默互相覆盖）。脚本本地同名 `def` 覆盖导入版；没有 import 的
+裸名字不算注入实现。
 """
 import ast
 import glob
@@ -25,6 +31,12 @@ from dataclasses import dataclass, field
 
 _Function = ast.FunctionDef | ast.AsyncFunctionDef
 _Position = tuple[int, int]
+
+# 注入面的三个归属模块（#1243、#1244）：脚本从哪个模块导入，实现就解析到那个模块的注册表里。
+NAV_MODULE = "recipe_nav"
+STRATEGIES_MODULE = "recipe_strategies"
+STEPS_MODULE = "recipe_steps"
+SURFACE = (NAV_MODULE, STRATEGIES_MODULE, STEPS_MODULE)
 
 
 @dataclass(frozen=True)
@@ -52,6 +64,9 @@ class Arg:
 class Call:
     """一个调用点。`injected` 指它调的是执行作用域里的名字（裸名或 `g["X"]`），不是 `p.…` 这类属性。
 
+    `module` 是这个名字的归属模块：脚本 `from X import n` 与 `X.n(…)` 两种写法都记成 `X`；
+    裸名字没有 import、或实现里 `g["X"]` 现取的那种没有归属，记空串（#1243）。
+
     实参先按位置排，再排关键字实参；`keyword` 为 None 的才是位置实参。"""
     name: str
     line: int
@@ -59,6 +74,7 @@ class Call:
     page: str
     injected: bool
     args: tuple[Arg, ...]
+    module: str = ""
 
 
 @dataclass(frozen=True)
@@ -72,13 +88,15 @@ class DictEntry:
 @dataclass(frozen=True)
 class Facts:
     """一份源码的事实：调用点清单、模块级定义的函数名（本地定义会盖住注入版的那份）、
-    模块级字典里的常量键值对（词库拿它筛说明文字，判不判中文留给消费方），以及模块级字符串
+    模块级字典里的常量键值对（词库拿它筛说明文字，判不判中文留给消费方），模块级字符串
     常量（单串与列表）——扫注入实现时，调用方把 `constants` 交回 `scan_source(externals=…)`，
-    实现里按名字取的值才读得出。"""
+    实现里按名字取的值才读得出——以及导入的名字与归属模块（`{名字: 模块}`，含 `if TYPE_CHECKING:`
+    块；`import X` 记成 `{X: X}`，`import X as Y` 记成 `{Y: X}`，消费方按它解析共享实现的归属）。"""
     calls: tuple[Call, ...]
     defines: frozenset[str]
     dict_entries: tuple[DictEntry, ...] = ()
     constants: Mapping[str, tuple[Item, ...]] = field(default_factory=dict)
+    imports: Mapping[str, str] = field(default_factory=dict)
 
 
 def _string_value(node: ast.AST) -> str | None:
@@ -128,12 +146,48 @@ def _plain_name(func: ast.expr) -> str | None:
     return None
 
 
-def _call_name(func: ast.expr) -> tuple[str, bool]:
-    """（归一后的调用名, 是不是执行作用域里的名字）。`g["X"](…)` 与裸名 `X(…)` 归一成 `X`。"""
+def _call_name(func: ast.expr, modules: Mapping[str, str],
+               names: Mapping[str, str]) -> tuple[str, bool, str]:
+    """（归一后的调用名, 是不是执行作用域里的名字, 归属模块）。
+
+    `g["X"](…)` 与裸名 `X(…)` 归一成 `X`；`M.X(…)`（`M` 是注入面模块的导入别名）同样归一成 `X`，
+    归属记 `M`，这样 `import recipe_nav` + `recipe_nav.gear(…)` 与 `from recipe_nav import gear`
+    两种写法走到同一份实现（#1243）。其余属性调用（`p.start`、`time.sleep`）原样留全名。"""
+    if (isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name)
+            and modules.get(func.value.id) in SURFACE):
+        return func.attr, True, modules[func.value.id]
     name = _plain_name(func)
     if name is not None:
-        return name, True
-    return ast.unparse(func), False
+        return name, True, names.get(name, "")
+    return ast.unparse(func), False, ""
+
+
+def _imports(tree: ast.Module) -> tuple[dict[str, str], dict[str, str]]:
+    """（名字 → 归属模块, 模块别名 → 模块）。
+
+    只收模块级语句与 `if TYPE_CHECKING:` / `try:` 块里的导入：`if TYPE_CHECKING:` 里的那些在运行时
+    不执行、静态检查才看得见，正是脚本声明「谁提供这个实现」的地方。函数体里的局部导入不收，
+    它只在那一个函数里可见。`from . import x` 这类没有模块名，记空串。"""
+    names: dict[str, str] = {}
+    modules: dict[str, str] = {}
+
+    def walk(body: Sequence[ast.stmt]) -> None:
+        for node in body:
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    modules[alias.asname or alias.name.split(".")[0]] = alias.name
+            elif isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                for alias in node.names:
+                    names[alias.asname or alias.name] = module
+            elif isinstance(node, (ast.If, ast.Try)):
+                walk(node.body)
+                walk(node.orelse)
+                for handler in getattr(node, "handlers", ()):
+                    walk(handler.body)
+
+    walk(tree.body)
+    return names, modules
 
 
 def _param_names(function: _Function | None) -> tuple[str, ...]:
@@ -224,6 +278,7 @@ class _Source:
         self.assigns: dict[str, list[tuple[_Position, ast.expr]]] = {}
         self.bindings: Mapping[int, Sequence[str]] = bindings or {}
         self.externals: Mapping[str, Sequence[Item]] = externals or {}
+        self.imports, self.modules = _imports(tree)
         self.calls: list[tuple[ast.Call, _Function | None]] = []
         for node in ast.walk(tree):
             if (isinstance(node, ast.Assign) and len(node.targets) == 1
@@ -368,7 +423,7 @@ def scan_source(src: str, bindings: Mapping[int, Sequence[str]] | None = None,
     source = _Source(tree, bindings, externals)
     calls = []
     for node, function in source.calls:
-        name, injected = _call_name(node.func)
+        name, injected, module = _call_name(node.func, source.modules, source.imports)
         params = _param_names(function)
         args = []
         for index, argument in enumerate(node.args):
@@ -385,11 +440,12 @@ def scan_source(src: str, bindings: Mapping[int, Sequence[str]] | None = None,
                             if isinstance(keyword.value, ast.Name) and keyword.value.id in params else None,
                             resolved=values is not None))
         calls.append(Call(name=name, line=node.lineno, function=function.name if function else "",
-                          page=_page(node), injected=injected, args=tuple(args)))
+                          page=_page(node), injected=injected, args=tuple(args), module=module))
     calls.sort(key=lambda call: (call.line, call.name))
     return Facts(calls=tuple(calls), defines=frozenset(
         node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))),
-        dict_entries=_dict_entries(tree), constants=_module_values(tree))
+        dict_entries=_dict_entries(tree), constants=_module_values(tree),
+        imports={**source.modules, **source.imports})
 
 
 def scan_dir(recipes_dir: str, families: Mapping[str, str] | None = None) -> dict[str, Facts]:
@@ -407,27 +463,63 @@ def scan_dir(recipes_dir: str, families: Mapping[str, str] | None = None) -> dic
     return dict(sorted(out.items()))
 
 
-def injected_calls(facts: Facts, name: str) -> tuple[Call, ...]:
-    """脚本里调用到某个注入名的调用点。脚本本地定义了同名实现的走本地那份，注入版不算（沿用 #1153 的做法）。
+def injected_calls(facts: Facts, name: str, module: str | None = None) -> tuple[Call, ...]:
+    """源码里调用到某个注入名的调用点。脚本本地定义了同名实现的走本地那份，注入版不算（沿用 #1153 的做法）。
 
+    `module` 给定时只认归属那个模块的调用——脚本 `from X import n` / `X.n(…)` 两种写法都记成 X，
+    没 import 的裸名字归属是空串，因此不再算注入实现（#1243）。不给时按名字认：注入实现没有
+    导入头，共享名从执行作用域按名字现取（`g["…"]`），那一层没有归属可跟。
     两个消费方（入口速查、词库）都按这一条筛，判据不再各写一份。"""
+    if name in facts.defines:
+        return ()
     return tuple(call for call in facts.calls
-                 if call.injected and call.name == name and name not in facts.defines)
+                 if call.injected and call.name == name
+                 and (module is None or call.module == module))
 
 
-def injected_sources() -> dict[str, str]:
-    """注入面（`tool/recipe_nav.py` 与 `tool/recipe_steps.py`）里各实现的源码：{注入名: 源码}。
+def surface_sources() -> dict[str, dict[str, str]]:
+    """注入面（`tool/recipe_nav.py` / `tool/recipe_strategies.py` / `tool/recipe_steps.py`）的源码，
+    按归属模块分开：`{"recipe_nav": {名字: 源码}, "recipe_strategies": {名字: 源码},
+    "recipe_steps": {名字: 源码}}`。
 
-    注入实现里的入口写在实现里、脚本只剩一行调用；要事实就交给 `scan_source`，跨文件的形参
-    取值由调用方按位置传 `bindings`、模块常量按名字传 `externals`（沿用 #1153、#1154、#1209）。
-    两张注册表合并返回：入口速查不分「导航助手」与「段体」，脚本调了哪个名字就扫哪份实现。
-    延迟 import：只有调用它时才加载这两张表，事实层本身不连带它们。"""
+    不按名字合并：同名实现各按脚本导入的那个模块解析，静默互相覆盖的那条路不再走（#1243）。
+    实现里的入口写在实现里、脚本只剩一行调用；要事实就交给 `scan_source`，跨文件的形参取值由
+    调用方按位置传 `bindings`、模块常量按名字传 `externals`（沿用 #1153、#1154、#1209）。
+    延迟 import：只有调用它时才加载这三张表，事实层本身不连带它们。"""
     import inspect
     import recipe_nav
+    import recipe_strategies
     import recipe_steps
-    return {name: inspect.getsource(factory)
-            for table in (recipe_nav.NAV, recipe_steps.STEPS)
-            for name, factory in table.items()}
+    registries = {NAV_MODULE: recipe_nav.NAV, STRATEGIES_MODULE: recipe_strategies.STRATEGIES,
+                  STEPS_MODULE: recipe_steps.STEPS}
+    return {module: {name: inspect.getsource(factory) for name, factory in registries[module].items()}
+            for module in SURFACE}
+
+
+def imported_sources(facts: Facts,
+                     surface: Mapping[str, Mapping[str, str]]) -> dict[str, tuple[str, str]]:
+    """这份源码导入的注入实现：`{名字: (归属模块, 源码)}`。
+
+    归属只看源码自己的 import（`from X import n` 与 `X.n(…)` 两种写法，含 `if TYPE_CHECKING:` 块）：
+    `recipe_nav` 只查 `NAV`、`recipe_strategies` 只查 `STRATEGIES`、`recipe_steps` 只查 `STEPS`，
+    三张表不按名字合并。脚本本地同名 `def`
+    覆盖导入版，那种名字不在里面；没有 import 的裸名字也不是注入实现。`X.n(…)` 那种只有调用点
+    能看出用了哪个名字，所以按调用点补一遍（`Call.module` 记着 `X`）。
+    `surface` 是 `surface_sources()`（词库只交段体那一张，见 `step_sources()`）。"""
+    out: dict[str, tuple[str, str]] = {}
+    for name, module in facts.imports.items():
+        if name in facts.defines:
+            continue
+        source = surface.get(module, {}).get(name)
+        if source is not None:
+            out[name] = (module, source)
+    for call in facts.calls:
+        if not call.injected or call.name in facts.defines or call.name in out:
+            continue
+        source = surface.get(call.module, {}).get(call.name)
+        if source is not None:
+            out[call.name] = (call.module, source)
+    return out
 
 
 def step_sources() -> dict[str, str]:

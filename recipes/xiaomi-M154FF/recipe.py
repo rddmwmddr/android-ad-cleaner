@@ -1,5 +1,5 @@
-# 小米 HyperOS 4 机型脚本：Xiaomi 18 Pro Max（M154FF）、Xiaomi 18 Fold（2608BPX34C）、REDMI K90（2510DRK44C）
-# 路径来源：18 Pro Max 2026-10-22 实测（OS4.0.24）；18 Fold 2026-10-24 社区实测（Issue #2，CP2A.260605.016）。
+# 小米 HyperOS 4 机型脚本：Xiaomi 18 Pro Max（M154FF）、Xiaomi 18 Fold（2608BPX34C）、REDMI K90（2510DRK44C）；路径来源：18 Pro Max 2026-10-22 实测（OS4.0.24）；18 Fold 2026-10-24 社区实测（沿用 Issue #2，CP2A.260605.016）。
+from recipe_kit import step
 # 三台系统底包相同（CP2A.260605.016），App 版本不同时页面不同：每一步都兼容新旧两种入口，找不到就跳过。
 # K90（OS4.0.5.0.XPKCNXM）按 2026-11-10 社区实测登记（Issue #929）：借这份脚本跑通九段中的八段，
 # 主题段要先挂起 com.miui.systemAdSolution；本仓库未在该机复跑。
@@ -10,25 +10,11 @@ MODELS = ["M154FF", "2608BPX34C", "2510DRK44C"]
 import time
 from entries import THEME_DEAD_ENDS
 
+# 浏览器设置入口：先看工具栏齿轮，再点底部「我的」找齿轮。
+BROWSER_FLOW = "toolbar"
+
 # 注入面的 opened() 从这里取 adb_link.DeviceLost
 import adb_link
-
-
-def browser_settings():
-    """先看工具栏，再点底部「我的」；不把资讯正文里的「我的」当导航标签。"""
-    before = p.focus()
-    if gear(toolbar_only=True):
-        if p.in_settings_page():          # 点完要认出设置页，点击被吞时别在旧页上找入口（#331）
-            return True
-        if p.focus() != before:
-            p.back()
-    for text, (l, t, r, b), node in p.texts():
-        if text == "我的" and t >= p.H * 0.65:
-            before = p.sig()
-            p.click((l + r) // 2, (t + b) // 2)
-            p.settle(before, 1.5)
-            return gear()
-    return False
 
 
 @step("系统广告")
@@ -125,3 +111,9 @@ def _():
 @step("天气和日历")
 def _():
     weather_calendar_probe()
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p
+    from recipe_nav import browser_settings, gear, opened, tap_any
+    from recipe_steps import downloads_probe, global_search, negative_screen, security_center, theme, weather_calendar_probe

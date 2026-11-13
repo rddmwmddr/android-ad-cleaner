@@ -1,5 +1,5 @@
-# 小米 HyperOS 4 机型脚本：Xiaomi 17 Ultra（2512BPNDAC，标准版，非徕卡版）
-# 2026-10-28 真机实测：HyperOS OS4.0.5.0.XPACNXM / Android 17（SDK 37）/ 系统底包 CP2A.260605.016
+# 小米 HyperOS 4 机型脚本：Xiaomi 17 Ultra（2512BPNDAC，标准版，非徕卡版）；2026-10-28 真机实测：HyperOS OS4.0.5.0.XPACNXM / Android 17（SDK 37）/ 系统底包 CP2A.260605.016
+from recipe_kit import step
 # 与 Xiaomi 18 Pro Max、18 Fold 同一个系统底包，但这台的入口有四处不同，都写在本脚本里：
 #   ① 系统广告：「广告服务」页只有「个性化广告推荐」；「系统工具广告」是另一个独立页面，
 #      只能靠设置搜索命中「系统广告」进去。两条都用 p.setting 直达。
@@ -16,89 +16,9 @@ MODELS = ["2512BPNDAC"]
 import time
 from entries import THEME_DEAD_ENDS
 
-
-def gear(toolbar_only=False):
-    """很多小米 App 的设置是右上角齿轮图标，没有文字。
-    匹配只认正好是「设置」的描述、正文或 setting 类 id：商店「我的」页有一行正文「去功能设置里
-    重新开启」，主题商店有「设置壁纸」，按包含匹配会先命中它们、点进别的子页，整段跑空（#305 / #374）。"""
-    from fast import bounds, icon_hit
-
-    for n in p.tree().iter("node"):
-        l, t, r, b = bounds(n)
-        if icon_hit(n) and (n.get("clickable") == "true" or "ImageView" in n.get("class", "")) and p.on_screen(n) and (not toolbar_only or b < p.H * 0.23):
-            p.click((l + r) // 2, (t + b) // 2); time.sleep(1)
-            return True
-    # 兜底：正文正好是「设置」两个字的一行（有些 App 是文字入口），只在屏幕上半部分找，
-    # 免得点到正文中间的「…设置…」长句。
-    for n in p.tree().iter("node"):
-        l, t, r, b = bounds(n)
-        if (n.get("text") or "").strip() == "设置" and n.get("clickable") == "true" and b < p.H * 0.45 and p.on_screen(n):
-            p.click((l + r) // 2, (t + b) // 2); time.sleep(1)
-            return True
-    # 下载管理、天气的齿轮藏在右上「更多」菜单里。
-    for n in p.tree().iter("node"):
-        key = (n.get("content-desc") or "") + " " + (n.get("resource-id") or "")
-        l, t, r, b = bounds(n)
-        if any(k in key.lower() for k in ("更多", "more", "menu")) and n.get("clickable") == "true" and p.on_screen(n) and b < p.H * 0.22:
-            p.click((l + r) // 2, (t + b) // 2); time.sleep(0.5)
-            if p.tap("设置", exact=True, scrolls=0):
-                return True
-            break
-    return False
-
-
-def by_id(rid, wait=1.5):
-    """按 resource-id 点控件：这台浏览器工具栏和弹窗里各有一个叫「设置」的图标，按文字会点错。"""
-    from fast import bounds
-    t0 = time.time()
-    while time.time() - t0 < wait:
-        for n in p.tree().iter("node"):
-            if n.get("resource-id") == rid:
-                l, t, r, b = bounds(n)
-                p.click((l + r) // 2, (t + b) // 2)
-                return True
-        time.sleep(0.2)
-    return False
-
-
-def menu_settings(tries=2):
-    """底部「菜单」→ 弹窗里的「设置」，点完必须认出设置页（#586）。
-
-    两个按钮都按 resource-id 定位，不会点到工具栏那个同名图标；但点击被吞或弹窗还没画出来时
-    仍会停在原页，后面几页入口全部找不到、整段 0 项又不报错。没落进设置页就退回来重开一次，
-    两次都不成就报当前页。"""
-    stopped = ""
-    for _ in range(tries):
-        if not by_id("com.android.browser:id/action_more"):
-            raise RuntimeError("浏览器底部「菜单」未找到")
-        if not by_id("com.android.browser:id/action_menu_setting"):
-            raise RuntimeError("菜单弹窗里的「设置」未找到")
-        time.sleep(2)
-        if p.in_settings_page():
-            return
-        stopped = p.focus()
-        p.back()
-    raise RuntimeError(f"浏览器设置页没有打开；停在 {stopped}")
-
-
-def bottom_tab(name="我的"):
-    """点底部标签。这些 App 的标签文字能找到，但点进去后没有带文字的「设置」，
-    所以不能写 p.go("我的", "设置")。"""
-    for t, (l, top, r, b), n in p.texts():
-        if t.strip() == name and top > p.H * 0.85:
-            p.click((l + r) // 2, (top + b) // 2); time.sleep(2.5)
-            return True
-    return False
-
-
-def tap_low(name, tries=3):
-    """页底最后那一项（商店的「隐私设置」）：读屏读得到，但坐标超过引擎的点击安全线，
-    要轻滑一小段再点。别用 tap(scrolls=N)：它翻页会直接翻过这一项，翻进「功能设置」子页。"""
-    for _ in range(tries):
-        if p.tap(name, exact=True, scrolls=0):
-            return True
-        p.d.shell("input swipe 600 2000 600 1700 150"); time.sleep(0.7)
-    return False
+# 这台的齿轮是纯图标，另有正文「设置」兜底；浏览器两个按钮都按 resource-id 点。
+GEAR_STYLE = "text"
+MENU_STYLE = "ids"
 
 
 @step("系统广告")
@@ -236,3 +156,9 @@ def _():
     if maybe("用户体验计划", scrolls=2):
         p.off(only=["推荐", "广告", "个性化", "内容推广"], page="日历·用户体验计划")
     p.back(3)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p, require_switches, start_or_skip
+    from recipe_nav import bottom_tab, gear, menu_settings, tap_low
+    from recipe_steps import downloads, global_search, negative_screen, security_center

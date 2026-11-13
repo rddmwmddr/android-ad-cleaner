@@ -1,5 +1,5 @@
-# Redmi Note 14 5G（24094RAD4C，代号 beryl），HyperOS OS3.0.306.0.WOQCNXM / Android 16。
-# 2026-10-30 真机逐段核对：入口与 Redmi Note 14 Pro 的 OS3 脚本基本一致。
+# Redmi Note 14 5G（24094RAD4C，代号 beryl），HyperOS OS3.0.306.0.WOQCNXM / Android 16。2026-10-30 真机逐段核对：入口与 Redmi Note 14 Pro 的 OS3 脚本基本一致。
+from recipe_kit import step
 # 本脚本只处理点名的广告/推荐开关；应用商店保持标准模式，自动更新和删除安装包保留，
 # 浏览器「小说」「我的网盘」等功能项保留，天气预警等安全通知也不在范围内。
 # 用法：python tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
@@ -7,56 +7,6 @@ BUILD = "OS3.0.306.0"
 MODELS = ["24094RAD4C"]
 import time
 from entries import THEME_DEAD_ENDS
-
-
-def tap_bottom_tab(name):
-    """按屏幕底部标签栏找入口，避开内容区里同名的普通文字。"""
-    from fast import bounds
-    for n in p.tree().iter("node"):
-        d = (n.get("content-desc") or "") + (n.get("text") or "")
-        if not d or name not in d:
-            continue
-        l, t, r, b = bounds(n)
-        if b > p.H * 0.85 and p.on_screen(n):
-            p.click((l + r) // 2, (t + b) // 2); time.sleep(1.5)
-            return True
-    return False
-
-
-def wait_bottom_tab(name, tries=5):
-    """主题商店冷启动先出开屏或更新层，底部栏可能晚几秒才稳定。"""
-    for _ in range(tries):
-        p.dismiss()
-        if tap_bottom_tab(name):
-            return True
-        time.sleep(0.8)
-    return False
-
-
-def close_with_plain_tap(names, page):
-    """下载管理和浏览器会吞掉短按；普通 tap 后确认，并核对其他开关未变。"""
-    before = {title: on for title, on, _ in p.switches()}
-    targets = [title for title in before if any(name in title for name in names)]
-    require_switches(before, names, page, contains=True)
-    for title in targets:
-        if not before[title]:
-            continue
-        xy = next((xy for t, on, xy in p.switches() if t == title and on), None)
-        if not xy:
-            raise RuntimeError(f"{page}：目标开关位置未识别，停止本页")
-        p.d.shell(f"input tap {xy[0]} {xy[1]}")
-        time.sleep(0.5)
-        p.confirm()
-    after = {title: on for title, on, _ in p.switches()}
-    if any(after.get(title) is not False for title in targets):
-        raise RuntimeError(f"{page}：回读未确认关闭")
-    if any(after.get(title) != state for title, state in before.items() if title not in targets):
-        raise RuntimeError(f"{page}：其他开关状态变化，请核对")
-    turned = [title for title in targets if before[title] and after.get(title) is False]
-    for title in turned:
-        print(f"  关 {title}")
-        p.changed.append((page, title))
-    print(f"  · {page}：核对 {len(targets)} 项，调整 {len(turned)} 项")
 
 
 @step("系统广告")
@@ -172,3 +122,10 @@ def _():
 @step("负一屏")
 def _():
     negative_screen()
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p, require_switches, start_or_skip
+    from recipe_nav import gear, tap_any, tap_bottom_tab, tap_tab, wait_bottom_tab
+    from recipe_strategies import close_with_plain_tap
+    from recipe_steps import global_search, negative_screen, security_center

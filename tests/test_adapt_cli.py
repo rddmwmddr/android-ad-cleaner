@@ -30,6 +30,7 @@ import adapt_cli_driver  # noqa: E402
 import adapt  # noqa: E402
 import entries  # noqa: E402
 import explore  # noqa: E402
+import recipe_loader  # noqa: E402
 import run  # noqa: E402
 import vocab  # noqa: E402
 from fixtures import Clock, fake_adb, phone_mock  # noqa: E402
@@ -199,6 +200,46 @@ class DraftGenTests(unittest.TestCase):
         self.assertIn('BUILD = "PLP120_16.0.9"', src)
         self.assertIn('MODELS = ["PLP120"]', src)
 
+    def test_skeleton_declares_step_and_the_injected_names(self):
+        """草稿要能直接装载：`step` 是真的 import，其余注入名在文件末尾的 `if TYPE_CHECKING:`
+        块里声明归属（与正式脚本同形，ADR-0037）。少一段，`adapt check` 跑不动或静态检查认不出。"""
+        with tempfile.TemporaryDirectory() as d:
+            src = self.gen(d)
+        self.assertIn("\nfrom recipe_kit import step\n", src)
+        self.assertTrue(src.rstrip().endswith(
+            "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n"
+            "    from recipe_kit import close_named, p, require, rt"), src[-300:])
+
+    def test_generated_draft_loads_through_the_only_loader(self):
+        """`adapt check` 与正式脚本走同一个装载器：草稿能在 `recipe_loader.load()` 里装满段，
+        且导入不产生任何设备动作（`adapt gen` 的草稿带 import 头；旧草稿没有 import 头也照样能装，
+        `step` 由装载器注入）。"""
+        with tempfile.TemporaryDirectory() as d:
+            out = self.draft_path(d)
+            phone = phone_mock()
+            with contextlib.redirect_stdout(io.StringIO()):
+                recipe = recipe_loader.load(str(out), phone)
+        self.assertEqual([step.name for step in recipe.steps],
+                         ["com.heytap.market · 设置 > 隐私", "com.heytap.browser · 设置 > 隐私"])
+        self.assertEqual(phone.mock_calls, [], "装载草稿不该碰手机")
+
+    def draft_path(self, directory):
+        out = Path(directory) / "草稿.py"
+        with contextlib.redirect_stdout(io.StringIO()):
+            adapt.cmd_gen([str(write_tsv(directory)), "-o", str(out)])
+        return out
+
+    def test_docs_04_shows_the_same_skeleton(self):
+        """文档与生成器同步（#1247 的第四查）：docs/04 贴出的骨架行必须在 `render_draft()` 里原样存在，
+        反过来也成立——改一边漏一边即红。"""
+        doc = (ROOT / "docs" / "04-给新机型写脚本.md").read_text(encoding="utf-8")
+        draft = adapt.render_draft([("com.example", "设置", ["示例开关"])],
+                                   model="EXAMPLE", build="", source="探路-EXAMPLE.tsv")
+        for line in ("from recipe_kit import step", "from typing import TYPE_CHECKING",
+                     "if TYPE_CHECKING:", "    from recipe_kit import close_named, p, require, rt"):
+            self.assertIn(line, doc, f"docs/04 的骨架缺这一行：{line}")
+            self.assertIn(line, draft, f"adapt gen 的骨架缺这一行：{line}")
+
     def test_no_selection_refuses_to_generate(self):
         err = io.StringIO()
         with tempfile.TemporaryDirectory() as d:
@@ -235,6 +276,60 @@ class CheckReportTests(unittest.TestCase):
         self.assertEqual(report, {"verified": 2, "failed_steps": []})
         self.assertTrue(adapt.print_report(report))
         self.assertEqual(p.off.call_count, 2)
+
+    def test_check_draft_runs_through_the_only_loader(self):
+        """`adapt check` 与正式脚本共用一处装载：草稿交给 `recipe_loader.run()`，不自带 exec（ADR-0037）。"""
+        with tempfile.TemporaryDirectory() as d:
+            out = self.draft(d)
+            p = draft_phone([[("个性化推荐", True, (1, 2))]] * 10)
+            with patch.object(adapt.recipe_loader, "run", wraps=adapt.recipe_loader.run) as run:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    adapt.check_draft(p, str(out))
+        run.assert_called_once_with(str(out), p, only=[])
+        self.assertIs(p.safe_mode, True)        # 装载前就切进安全模式，草稿不会整页全关
+
+    def test_pre_1247_draft_keeps_its_own_verified_count(self):
+        """旧格式草稿（#1247 之前）在模块体里 `VERIFIED_SWITCHES = 0`，把装载器注入的计数器覆盖成
+        普通 int，自己的助手再 `+=` 记在那一份上；自检取回读数时两份都要认，否则这类草稿恒报
+        「回读确认关闭：0 项 / 自检未通过」。
+
+        尾部那行 `print(...)` 仍是模块体语句，装载时就执行（旧格式的既有行为，不为它加特例）：
+        那一刻段还没跑，所以打出来的是执行前的 0。
+        """
+        legacy = (
+            "# -*- coding: utf-8 -*-\n"
+            'BUILD = "PJA110_14.0.0.812"\n'
+            'MODELS = ["PJA110"]\n'
+            "\n"
+            "VERIFIED_SWITCHES = 0        # 回读确认关闭的开关数\n"
+            "\n"
+            "\n"
+            "def close_named(names, page):\n"
+            "    global VERIFIED_SWITCHES\n"
+            "    VERIFIED_SWITCHES += p.off(only=names, page=page)\n"
+            "\n"
+            "\n"
+            '@step("com.heytap.market · 设置 > 隐私")\n'
+            "def _():\n"
+            '    p.start("com.heytap.market")\n'
+            '    p.tap("设置", exact=True)\n'
+            '    close_named(["个性化推荐"], "设置 > 隐私")\n'
+            "\n"
+            "\n"
+            'print(f"\\n草稿自检：回读确认 {VERIFIED_SWITCHES} 项，",\n'
+            '      f"未完成步骤 {len(FAILED_STEPS)} 个", flush=True)\n'
+        )
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "旧草稿.py"
+            out.write_text(legacy, encoding="utf-8")
+            p = draft_phone([[("个性化推荐", True, (1, 2))]] * 4)
+            p.off.return_value = 1
+            printed = io.StringIO()
+            with contextlib.redirect_stdout(printed):
+                report = adapt.check_draft(p, str(out))
+        self.assertIn("草稿自检：回读确认 0 项", printed.getvalue())    # 装载期那行确实跑了
+        self.assertEqual(report, {"verified": 1, "failed_steps": []})
+        self.assertTrue(adapt.print_report(report))
 
     def test_missing_switch_fails_the_step_without_clicking(self):
         with tempfile.TemporaryDirectory() as d:

@@ -1,5 +1,5 @@
-# Redmi K80 Pro（24122RKC7C，代号 miro），HyperOS OS3.0.304.0.WOMCNXM / Android 16 / Build BP2A.250605.031.A3。
-# 2026-10-29 真机实测：USB 有线，1080×2400、密度 450、ROTATION_0。
+# Redmi K80 Pro（24122RKC7C，代号 miro），HyperOS OS3.0.304.0.WOMCNXM / Android 16 / Build BP2A.250605.031.A3。2026-10-29 真机实测：USB 有线，1080×2400、密度 450、ROTATION_0。
+from recipe_kit import step
 # 入口来源：先按同品牌 Redmi K70 脚本（OS3.0.307.0）安全模式跑通 9 段、关 20 项，
 #   再按本机入口补两处差异，专用脚本复跑 9 段（0 调整、0 步骤异常）。
 # 与 K70 的两处差异：
@@ -13,41 +13,7 @@ BUILD = "OS3.0.304.0"
 MODELS = ["24122RKC7C"]
 import time
 from entries import THEME_DEAD_ENDS
-VERIFIED_SWITCHES = 0
-
-
-def tap_any(*names, scrolls=6):
-    return any(maybe(name, scrolls) for name in names)
-def gear_tap(pkg, activity):
-    """齿轮用引擎短按点不动时的兜底：同一次读屏里找到齿轮，改用 input tap（80 毫秒短按有的 App 会吞）。"""
-    from fast import bounds
-    for n in p.tree().iter("node"):
-        text = (n.get("text") or "").strip()
-        desc = (n.get("content-desc") or "").strip()
-        if text == "设置" or desc == "设置":
-            l, t, r, b = bounds(n)
-            if not p.on_screen(n):
-                continue
-            p.d.shell(f"input tap {(l + r) // 2} {(t + b) // 2}")
-            time.sleep(1.2)
-            return p.focus().split("/", 1)[0] == pkg and activity in p.focus()
-    return False
-
-
-def browser_start():
-    """冷启动偶发被启动过渡窗判断成「离开前台」：先强停再直达 BrowserActivity，重试一次。"""
-    for attempt in range(2):
-        try:
-            p.start("com.android.browser", ".BrowserActivity")
-            return True
-        except SkipStep:
-            raise                 # App 本机没装：放行，不走下面那句按文案判的重试分支（#908）
-        except RuntimeError as e:
-            if attempt or "离开前台" not in str(e):
-                raise
-            p.d.shell("am force-stop com.android.browser")
-            time.sleep(1.5)
-    return False
+# 回读确认数由引擎经 rt 记录
 
 
 HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "知乎", "精选"]
@@ -139,4 +105,12 @@ def _():
     weather_calendar_tap()
 
 
-print(f"\n系统广告段回读确认 {VERIFIED_SWITCHES} 项；步骤异常 {len(FAILED_STEPS)} 个", flush=True)
+def tail():
+    print(f"\n系统广告段回读确认 {rt.verified} 项；步骤异常 {len(rt.failed_steps)} 个", flush=True)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p, require, require_switches, rt, start_or_skip
+    from recipe_nav import browser_start, gear
+    from recipe_strategies import gear_tap
+    from recipe_steps import downloads, global_search, negative_screen, security_center, store, system_ads_security, weather_calendar_tap

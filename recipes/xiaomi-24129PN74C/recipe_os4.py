@@ -1,5 +1,5 @@
-# HyperOS 4 变体（PR #298）：同型号的 HyperOS 3 路径在 recipe.py（PR #312）。系统版本对上 OS4.0 时由 run.recipe_for 选这份。
-# 小米 HyperOS 4 机型脚本：Xiaomi 15（24129PN74C）
+# HyperOS 4 变体（沿用 PR #298）：同型号的 HyperOS 3 路径在 recipe.py（沿用 PR #312）。系统版本对上 OS4.0 时由 run.recipe_for 选这份。小米 HyperOS 4 机型脚本：Xiaomi 15（24129PN74C）
+from recipe_kit import step
 # 录制：2026-10-29，系统 OS4.0.0.22.XOCCNXM（CP2A.260605.016），九段实测
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 #
@@ -14,107 +14,11 @@ MODELS = ["24129PN74C"]
 import time
 from entries import THEME_DEAD_ENDS
 
-from fast import bounds
-
-
-def gear(toolbar_only=False):
-    """很多小米 App 的设置是右上角齿轮图标，没有文字。
-    匹配只认正好是「设置」的描述、正文或 setting 类 id：商店「我的」页有一行正文「去功能设置里
-    重新开启」，主题商店有「设置壁纸」，按包含匹配会先命中它们、点进别的子页，整段跑空（#305 / #374）。
-    点击后要认出设置页：日历的齿轮会打开一个 PopupWindow，不校验就会在弹窗里找入口（#407）。"""
-    from fast import bounds, icon_hit
-
-    def open_settings():
-        for n in p.tree().iter("node"):
-            l, t, r, b = bounds(n)
-            icon = "ImageView" in n.get("class", "") and r-l < p.W * 0.25 and b-t < p.H * 0.15
-            if icon_hit(n) and (n.get("clickable") == "true" or icon) and p.on_screen(n) and (not toolbar_only or b < p.H * 0.23):
-                p.click((l + r) // 2, (t + b) // 2); time.sleep(1)
-                return True
-        if not toolbar_only and p.find("设置", exact=True, edge_ok="tab"):
-            return p.tap("设置", exact=True, scrolls=0)
-        # 下载管理、天气和日历的齿轮藏在右上「更多」菜单里。
-        for n in p.tree().iter("node"):
-            key = (n.get("content-desc") or "") + " " + (n.get("resource-id") or "")
-            l, t, r, b = bounds(n)
-            if any(k in key.lower() for k in ("更多", "more", "menu")) and n.get("clickable") == "true" and p.on_screen(n) and b < p.H * 0.22:
-                p.click((l + r) // 2, (t + b) // 2); time.sleep(0.5)
-                if p.tap("设置", exact=True, scrolls=0):
-                    return True
-                break
-        return False
-
-    before = p.focus()
-    if not open_settings():
-        return False
-    if p.in_settings_page():
-        return True
-    if p.focus() != before:
-        p.back()          # 点开的是弹窗或别的页：关掉，别留给下一段（#331 / #407）
-    return False
-
-
-def menu_settings(tries=2):
-    """底栏「菜单」→ 弹窗里的「设置」，点完必须认出设置页（#586）。
-
-    工具栏右上角也有一个叫「设置」的图标，弹窗还没画出来时按文字点会落到它上面、进首页编辑面板，
-    后面几页入口全部找不到，整段 0 项又不报错。所以只点下半屏那一行，且没落进设置页就退回来
-    重开菜单再试；两次都不成就报当前页，不在工具栏面板上继续找。
-    底栏没有「菜单」的机型（MIX Flip 2）返回 False，交给 browser_settings() 的「我的」入口（#833）。"""
-    stopped = None
-    for _ in range(tries):
-        if not p.tap("菜单", exact=True, scrolls=0, quiet=True):
-            if stopped is None:
-                return False
-            raise RuntimeError(f"浏览器设置页没有打开；停在 {stopped}")
-        xy = popup_row("设置")
-        if not xy:
-            raise RuntimeError(f"浏览器菜单里没有「设置」；停在 {p.focus()}")
-        before = p.sig()
-        p.click(*xy)
-        p.settle(before, 1.5)
-        if p.in_settings_page():
-            return True
-        # 弹窗这一行在屏上才走到这里，所以按返回是收起弹窗或退出面板，不会离开浏览器首页
-        # focus 读不出前台时是空串，别让它被当成「还没进过弹窗」
-        stopped = p.focus() or "读不出前台"
-        p.back()
-    raise RuntimeError(f"浏览器设置页没有打开；停在 {stopped}")
-
-
-def browser_settings():
-    """底栏「菜单」→ 弹窗「设置」；底栏没有「菜单」的机型在「我的」页里找设置（#833）。
-
-    Xiaomi 15 一般是 主页/视频/AI搜索/菜单/我的，但 HyperOS 4 的新版本可能没有「菜单」（#900）；
-    MIX Flip 2 是 主页/视频/AI搜索/免费小说/我的。两条入口点完都要认出设置页；「我的」那条没
-    进去时报出停在哪一页，不在旧页上继续找「隐私和安全」等子项（#586）。"""
-    if menu_settings():
-        return
-    print("  · 底栏没有「菜单」，改走「我的」→ 设置", flush=True)
-    if not p.tab("我的"):
-        raise RuntimeError(f"浏览器底部没有「菜单」，也没有「我的」标签；停在 {p.focus()}")
-    p.dismiss()                       # 「我的」页可能先弹一键登录框，盖住齿轮
-    if not gear():
-        raise RuntimeError(f"浏览器设置页没有打开；停在 {p.focus()}")
-
-
-def gear_top():
-    """只认右上角那个文字就是「设置」的齿轮。
-
-    应用商店「我的」页有一条「去功能设置里重新开启」，含「设置」二字且可点，通用 gear() 会先命中它，
-    点开的是手机清理的功能页——这就是 #193 里商店四个入口全部找不到的真正原因。
-    """
-    for n in p.tree().iter("node"):
-        t = (n.get("text") or n.get("content-desc") or "").strip()
-        if t != "设置" or n.get("clickable") != "true" or not p.on_screen(n):
-            continue
-        l, top, r, b = bounds(n)
-        if b < p.H * 0.25 and (l + r) // 2 > p.W * 0.7:
-            p.click((l + r) // 2, (top + b) // 2)
-            time.sleep(1)
-            return True
-    return False
-
+# 齿轮点完要认出设置页（日历的齿轮开的是 PopupWindow，沿用 #407）；浏览器入口是底栏「菜单」，
+# 报错只写停在哪一页（这份变体沿用 OS4 录制时的写法）；商店认右上角那个文字就是「设置」的齿轮。
+GEAR_STYLE = "checked"
+BROWSER_FLOW = "menu"
+MENU_STYLE = "focus"
 
 @step("系统广告")
 def _():
@@ -235,3 +139,9 @@ def _():
         if maybe("用户体验计划"):
             p.off(only=["推荐", "广告", "个性化", "内容推广", "天气视频卡片"], page=f"{pkg}·用户体验计划"); p.back()
         p.back(3)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p
+    from recipe_nav import browser_settings, gear, gear_top
+    from recipe_steps import downloads, negative_screen, security_center, theme

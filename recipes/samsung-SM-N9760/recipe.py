@@ -1,5 +1,5 @@
-# 三星 One UI 4 机型脚本：Galaxy Note10+ 5G（SM-N9760，国行）
-# 录制：2026-11-05，SP1A.210812.016.N9760ZCU6HZE1 / Android 12，1440×3040，简体中文。
+# 三星 One UI 4 机型脚本：Galaxy Note10+ 5G（SM-N9760，国行）；录制：2026-11-05，SP1A.210812.016.N9760ZCU6HZE1 / Android 12，1440×3040，简体中文。
+from recipe_kit import step
 #
 # 状态：只有一个段「广告」，2026-11-05 在真机上逐步核对并回读确认，单段执行 5 秒。
 #
@@ -31,7 +31,7 @@ def protect(title_part):
     再查 settings get global advertising_id 返回 null。
     """
     p.await_page()
-    for t, checked, xy in p.switches():
+    for t, checked, _ in p.switches():
         if title_part not in t:
             continue
         if checked:
@@ -59,3 +59,7 @@ def _():
     p.start("com.google.android.gms", ".adid.settings.AdsSettingsActivity", expect=("广告",))
     protect("停用广告个性化")
     p.back()
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p

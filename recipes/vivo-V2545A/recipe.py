@@ -1,71 +1,11 @@
-# vivo X Fold6 机型脚本：V2545A（OriginOS 6 Fold，Android 16，PD2545B_A_16.0.16.0.W10）
-# 入口沿用同代 OriginOS 6 路径，逐步在真机核对；整段只用 only=[] 点名关闭，找不到就跳过。
+# vivo X Fold6 机型脚本：V2545A（OriginOS 6 Fold，Android 16，PD2545B_A_16.0.16.0.W10）；入口沿用同代 OriginOS 6 路径，逐步在真机核对；整段只用 only=[] 点名关闭，找不到就跳过。
+from recipe_kit import step
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]
 BUILD = "PD2545B_A_16"
 MODELS = ["V2545A"]
+# 家族库按这个常量选走法（#1246），缺省档与实现见 tool/recipe_nav.py。
+GEAR_STYLE = "vivo_desc"
 import time
-
-def gear():
-    """vivo App 设置多是右上角齿轮，没有文字。"""
-    for n in p.tree().iter("node"):
-        d = (n.get("content-desc") or "") + (n.get("resource-id") or "")
-        if any(k in d.lower() for k in ("设置", "setting")) and n.get("clickable") == "true" and p.on_screen(n):
-            from fast import bounds
-            l, t, r, b = bounds(n); p.click((l + r) // 2, (t + b) // 2); time.sleep(1)
-            return True
-    return p.tap("设置", exact=True, scrolls=0)
-
-def by_desc(kw, wait=1.2):
-    """底部 tab、右上齿轮这类入口只有 content-desc，没有文字。"""
-    from fast import bounds
-    for n in p.tree().iter("node"):
-        if kw in (n.get("content-desc") or "") and n.get("clickable") == "true" and p.on_screen(n):
-            l, t, r, b = bounds(n)
-            p.click((l + r) // 2, (t + b) // 2); time.sleep(wait)
-            return True
-    return False
-
-def row_switch(title):
-    """商店的开关标题在开关行外，只能按同一行的 Switch 节点配对；找不到返回 None。
-    整行容器和真开关都会被算进来，取树里最后一个（内层真开关）。"""
-    from fast import bounds
-    root = p.tree()
-    rows = [bounds(n) for n in root.iter("node") if (n.get("text") or "").strip() == title]
-    hit = None
-    for n in root.iter("node"):
-        if "Switch" in (n.get("class") or ""):
-            l, t, r, b = bounds(n)
-            if any(t <= (t2 + b2) // 2 <= b and t2 >= t and b2 <= b for l2, t2, r2, b2 in rows):
-                hit = (n.get("checked") == "true", ((l + r) // 2, (t + b) // 2))
-    return hit
-
-def switch_off(title, page, tries=2):
-    """p.off() 的开关标题取自同一行，商店这页标题在行外会配错，所以单独回读。
-    关掉的项与 p.off() 一样记进 p.changed，并区分「本来就是关」和「这次关掉」。"""
-    for _ in range(tries):
-        state = row_switch(title)
-        if state is None:
-            print(f"  ? {title}：没找到")
-            return False
-        if not state[0]:
-            print(f"  · {title}：本来就是关")
-            return True
-        p.click(*state[1]); time.sleep(0.9); p.confirm(); time.sleep(0.9)
-        now = row_switch(title)
-        if now is not None and not now[0]:
-            p.changed.append((page, title))
-            print(f"  关 {title}")
-            return True
-    print(f"  ✗ 关不掉 {title}")
-    return False
-
-def setting_search(keyword, result):
-    """设置页层级变了就用搜索兜底。"""
-    try:
-        return bool(p.setting(keyword, result))
-    except Exception as e:
-        print(f"  设置搜索「{keyword}」没走通：{e}")
-        return False
 
 @step("系统广告")
 def _():
@@ -142,3 +82,9 @@ def _():
     maybe("设置", scrolls=0)
     p.off(only=["天气服务"], page="天气·设置")
     p.back(2)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p
+    from recipe_nav import by_desc, gear, settings_home
+    from recipe_strategies import row_switch, setting_search, switch_off

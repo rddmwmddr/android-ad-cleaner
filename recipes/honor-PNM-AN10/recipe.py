@@ -1,6 +1,9 @@
-# 荣耀 PNM-AN10（MagicOS 10）机型脚本。2026-10-23 实测通过
-# 变量 p 由 tool/fast.py 注入；ONLY 是要跑的段名列表（空=全跑）
+# 荣耀 PNM-AN10（MagicOS 10）机型脚本。2026-10-23 实测通过；变量 p 由 tool/fast.py 注入；ONLY 是要跑的段名列表（空=全跑）
+from recipe_kit import step
 BUILD = ""
+# 家族库按这些常量选走法（#1246），缺省档与实现见 tool/recipe_nav.py。
+BROWSER_FLOW = "honor_mounted"
+OPEN_SETTINGS_STYLE = "honor"
 import re
 import time
 
@@ -19,21 +22,6 @@ def dismiss(*words):
 
 
 NO = ("取消", "以后再说", "禁止", "暂不", "跳过", "我知道了")
-
-
-def open_settings(expect=("个性化服务", "通知")):
-    """进「设置」入口，落地页出现 expect 之一才算成功。
-    MagicOS 10 把入口放在「我的」页内部，位置与读法各版本不同：文字精确 → 文字包含
-    （「设置,有1条新通知」）→ 右上角图标，点错页先退回来再换下一级（#286 / #238）。"""
-    for exact in (True, False):
-        if not p.find("设置", exact=exact):
-            continue
-        before = p.sig()
-        if p.tap("设置", exact=exact, scrolls=0) and any(p.find(w, exact=True) for w in expect):
-            return True
-        if p.sig() != before:
-            p.back()
-    return p.tap_icon(list(expect))
 
 
 def open_entry(text, scrolls=0):
@@ -66,7 +54,7 @@ def _():
             p.miss = 0
             if not (p.tap("隐私和安全", exact=True) and p.tap("其他隐私和安全功能", exact=True)
                     and p.tap("广告与隐私", exact=True)):
-                raise RuntimeError("没找到「广告与隐私」入口")    # 兜底也不通要记成未完成（#819）
+                raise RuntimeError("没找到「广告与隐私」入口") from None    # 兜底也不通要记成未完成（沿用 #819）
     p.tap("更多选项", scrolls=0)
     if p.find("显示系统程序", exact=True):
         p.tap("显示系统程序", exact=True, scrolls=0)
@@ -167,20 +155,6 @@ def _():
     if p.tap("基本服务", exact=True, scrolls=0):
         p.confirm()
     p.back()
-
-
-def browser_settings():
-    if "package:" not in p.d.shell("pm path com.honor.browser").output:
-        return baidu_browser()
-    p.start("com.honor.browser")
-    p.dismiss()
-    if p.find("我的", exact=True):                       # 经典首页：我的 → 右上第三个图标
-        p.tap("我的", exact=True, scrolls=0)
-        p.d(resourceId="com.honor.browser:id/top_local_icon")[2].click()
-        time.sleep(1)
-    else:                                                # 简洁首页：更多 → 设置
-        p.tap("更多", exact=True, scrolls=0)
-        p.tap("设置", exact=True, scrolls=0)
 
 
 def baidu_browser():
@@ -312,3 +286,8 @@ def _():
             l, t, r, b = xy[-1]; p.click((l + r) // 2, (t + b) // 2); time.sleep(1.2)
     p.off(only=["锁屏画报轮播", "锁屏进入魔法画报"], page="魔法画报")
     p.back()
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import SkipStep, p, skip_in_safe_mode
+    from recipe_nav import browser_settings, open_settings

@@ -450,7 +450,7 @@ def normalize(source):
     文档串各写各的，但都不改行为，逐字判据只认代码本身。`global X` 是本地定义留下的产物，
     改走注入之后不再需要，一起丢掉。`recipe_steps` 在 mypy 严格档的名单里，实现上的签名注解
     是那份要求的产物，脚本副本不写，同样不改行为。函数体里的变量注解（`AnnAssign`）不剥：
-    出现时两边都会写，不写的那一边本来就该红。两个注入面的副本守卫共用这一份判据。"""
+    出现时两边都会写，不写的那一边本来就该红。三个注入面的副本守卫共用这一份判据。"""
     tree = ast.parse(textwrap.dedent(source))
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module)) \
@@ -500,26 +500,24 @@ class RecipeClock:
 
 
 def load_recipe(phone, path, only=None, out=None, **extra):
-    """装载机型脚本：注入 p / ONLY / 假 time，返回 (scope, 输出流)。
+    """装载并跑完机型脚本：返回 (scope, 输出流)。装载本身走 `tool/recipe_loader.py`，与引擎同一份。
 
-    ONLY 命中的段在 exec 当时就跑，而脚本自己的 `import time` 会盖掉注入的同名全局，
-    所以执行期换的是模块上的 sleep / time / monotonic；跑完再把 scope["time"] 换成
-    RecipeClock，用例之后调脚本里的函数也不真睡。
+    脚本自己的 `import time` 会盖掉注入的同名全局，所以执行期换的是模块上的 sleep / time /
+    monotonic；跑完再把 scope["time"] 换成 RecipeClock，用例之后调脚本里的函数也不真睡。
 
-    `only` 照机型脚本自己的约定：不给（None）表示一段都不跑，给空集合表示跑全部段
-    （脚本里是 `ONLY = globals().get("ONLY") or []` 配 `if not ONLY or name in ONLY`）。
+    `only`：不给（None）表示一段都不跑，给空集合表示跑全部段。`scope["ONLY"]` 与
+    `scope["VERIFIED_SWITCHES"]` 代理到这次的 `rt`，装载之后改名单、读回读确认数都照旧生效。
     """
     clock = RecipeClock()
-    scope = {"p": phone, "ONLY": _only_list(only), **extra}
     load_tool()
-    import recipe_kit                      # 与引擎注入同一份；tool/ 只在 load_tool() 之后才在 sys.path 上
-    recipe_kit.preamble(phone, scope)
+    import recipe_loader                   # 与引擎同一份；tool/ 只在 load_tool() 之后才在 sys.path 上
     out = out if out is not None else io.StringIO()
     with patch.object(_time, "sleep", clock.sleep), patch.object(_time, "time", clock.time), \
             patch.object(_time, "monotonic", clock.monotonic), contextlib.redirect_stdout(out):
-        exec(compile(Path(path).read_text(encoding="utf-8"), str(path), "exec"), scope)
-    scope["time"] = clock
-    return scope, out
+        recipe = recipe_loader.load(path, phone, only=_only_list(only), clock=clock, namespace=extra)
+        recipe.run()
+    recipe.namespace["time"] = clock
+    return recipe.namespace, out
 
 
 def _only_list(only):

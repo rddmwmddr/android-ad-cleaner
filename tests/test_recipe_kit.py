@@ -107,11 +107,11 @@ class RunTests(unittest.TestCase):
         with patch("builtins.print"):
             self.assertEqual(fast.report_run(scope, p), 1)
 
-    def test_the_script_defining_its_own_preamble_still_wins(self):
-        """迁移之前 40 份脚本都本地定义：注入的名字被覆盖，行为一个字节都不变。
+    def test_the_script_defining_its_own_step_still_wins(self):
+        """注入的名字仍可被脚本本地定义覆盖：本地这一份是执行式装饰器，装载当场就跑。
 
-        旧树也绿，守的是不回退：这条用例证明的是「本地定义优先」，注入前它同样成立。
-        本地这一份不接异常，所以装载当场就抛出来——注入的那份会接住并记台账。"""
+        新模型不再支持本地前导（`dev.recipes.no-local-preamble`），但「后定义者覆盖注入」这条
+        仍然成立；本地这一份不接异常，所以装载当场就抛出来——注入的那份会登记段、由 `run()` 执行。"""
         local = '''
 FAILED_STEPS = []
 
@@ -201,7 +201,7 @@ class LockedScreenTests(unittest.TestCase):
 
 class OnlyListTests(unittest.TestCase):
     def test_the_only_list_is_read_when_a_step_is_wrapped(self):
-        """装载之后再改名单：段包装被调用时读执行作用域，拿得到新值。"""
+        """装载之后再改名单：段包装被调用时读这次执行（rt），拿得到新值。"""
         p = phone()
         with tempfile.TemporaryDirectory() as directory:
             path = write_recipe(directory)
@@ -209,16 +209,16 @@ class OnlyListTests(unittest.TestCase):
         self.assertEqual(scope["CALLS"], [])
         with contextlib.redirect_stdout(io.StringIO()):
             scope["ONLY"] = ["甲"]
-            scope["step"]("甲")(scope["_a"])
+            scope["rt"].run_step("甲", scope["_a"])
         self.assertEqual(scope["CALLS"], ["甲"])
         with contextlib.redirect_stdout(io.StringIO()):
             scope["ONLY"] = []
-            scope["step"]("丙")(scope["_c"])
+            scope["rt"].run_step("丙", scope["_c"])
         self.assertEqual(scope["CALLS"], ["甲", "丙"])
 
     def test_a_step_gated_by_the_only_list_inside_its_body_sees_the_live_value(self):
-        """WKL-AN20 那种在段内读 ONLY 自门控的脚本，迁移后仍要读到当前名单。"""
-        body = 'CALLS.append("乙" if ONLY == ["乙"] else "门控外")'
+        """WKL-AN20 那种在段内读名单自门控的脚本，迁移后仍要读到当前名单。"""
+        body = 'CALLS.append("乙" if rt.only == ["乙"] else "门控外")'
         p = phone()
         with tempfile.TemporaryDirectory() as directory:
             path = write_recipe(directory, body)
@@ -372,11 +372,10 @@ def _a():
 
 
 class ResultsLedgerTests(unittest.TestCase):
-    """脚本自带 `RESULTS` 时，前导按同一个结局给它记一条 —— 分段结果台账不该只活在本地副本里。"""
+    """分段结果台账由引擎写：每个段按同一个结局记一条，脚本不再自带 `RESULTS`。"""
 
     WITH_RESULTS = '''
 CALLS = []
-RESULTS = []
 
 @step("甲")
 def _a():
@@ -1149,10 +1148,12 @@ class MissingSwitchEvidenceTests(unittest.TestCase):
         scope, _ = load_recipe(p, ROOT / "recipes" / "xiaomi-24129PN74C" / "recipe.py")
         scope["ONLY"] = []                  # 装载时一段没跑，这里手动跑一个伪造段
         printed = io.StringIO()
+
+        def _():
+            scope["close_named"](["个性化广告推荐"], "系统·广告服务")
+
         with contextlib.redirect_stdout(printed):
-            @scope["step"]("伪造段")
-            def _():
-                scope["close_named"](["个性化广告推荐"], "系统·广告服务")
+            scope["rt"].run_step("伪造段", _)
             code = fast.report_run(scope, p)
         self.assertEqual(scope["FAILED_STEPS"], ["伪造段"])
         self.assertEqual(code, 1)

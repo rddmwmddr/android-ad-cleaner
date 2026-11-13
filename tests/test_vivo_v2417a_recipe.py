@@ -122,11 +122,11 @@ class VivoV2417ARecipeTests(unittest.TestCase):
         scope = self.load(p)
         scope["ONLY"].clear()
         action = Mock(side_effect=RuntimeError("入口不符"))
-        scope["step"]("应用商店")(action)
+        scope["rt"].run_step("应用商店", action)
         self.assertEqual(scope["FAILED_STEPS"], ["应用商店"])
         lost = Mock(side_effect=adb_link.DeviceLost("断开"))
         with self.assertRaises(adb_link.DeviceLost):
-            scope["step"]("天气")(lost)
+            scope["rt"].run_step("天气", lost)
 
     def test_home_restoring_hiboard_opens_settings_without_swiping_again(self):
         p = phone_mock()

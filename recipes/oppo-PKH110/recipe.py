@@ -1,11 +1,11 @@
-# OPPO Find N5（PKH110，ColorOS 17.0.0.103）机型脚本。
-# 路径实测：2026-10-29。只收录已走通的系统广告跟踪、商店、浏览器、主题、下拉搜索。
+# OPPO Find N5（PKH110，ColorOS 17.0.0.103）机型脚本。路径实测：2026-10-29。只收录已走通的系统广告跟踪、商店、浏览器、主题、下拉搜索。
+from recipe_kit import step
 # 不挂包、不动通知渠道；这些操作仍走 run.py 的独立、需确认流程。
 BUILD = "PKH110_17.0.0.103"
 MODELS = ["PKH110"]
 
 import time
-RESULTS = []
+# 分段结果由引擎经 rt 记录
 
 # 仅关闭明确列名的推广入口。没有列出的入口（包括未来新增项）不主动处理。
 STORE_PROMOTIONS = [
@@ -17,46 +17,6 @@ STORE_PROMOTIONS = [
     "更新&下载专区：底部弹窗推荐", "活动式详情页", "详情页：活动", "游戏详情页：游戏礼包",
     "手机管家：应用推荐", "文件管理：应用推荐", "游戏专区：活动集合", "详情页：限时活动", "福利专区",
 ]
-
-
-def close_titles(wanted, max_rounds=8):
-    """逐页只点标题完全等于 wanted 里某项的开关，点完回读。
-    ColorOS 17 有「应用建议」是「应用建议小卡」子串的情况，p.off 的子串匹配会误伤，所以用精确标题。"""
-    remaining, failed = list(wanted), []
-    for _ in range(max_rounds):
-        cur = {t: (c, xy) for t, c, xy in p.switches()}
-        hit = [t for t in remaining if t in cur]
-        for t in hit:
-            cur = {t2: (c, xy) for t2, c, xy in p.switches()}
-            was_on = bool(cur.get(t, (False, None))[0])
-            for _ in range(3):
-                cur = {t2: (c, xy) for t2, c, xy in p.switches()}
-                if t not in cur:
-                    break
-                c, xy = cur[t]
-                if not c:
-                    break
-                if not (0 < xy[0] < p.W and 0 < xy[1] < p.H):
-                    print(f"  ! 「{t}」坐标越界，跳过不做")
-                    break
-                p.click(*xy)
-                time.sleep(0.5)
-                p.confirm()
-                time.sleep(0.5)
-            final = {t2: c for t2, c, _ in p.switches()}
-            remaining.remove(t)
-            if final.get(t) is False:
-                print(f"  {'关' if was_on else '· 已是关闭状态'} {t}")
-            elif t in final:
-                print(f"  ✗ 关不掉 {t}")
-                failed.append(t)
-        if not remaining:
-            break
-        if not p.scroll_more():
-            break
-    if remaining:
-        print(f"  ! 未找到 {remaining}")
-    return not failed and not remaining
 
 
 def off_exact(names, page, max_screens=16):
@@ -171,22 +131,6 @@ def _():
     return True
 
 
-def open_search_settings():
-    """ColorOS 17 的下拉搜索设置挂在 quicksearchbox 里；桌面下滑手势在 adb 下不稳定，直接拉 Activity。"""
-    p.d.shell("am start -f 0x10008000 -n com.heytap.quicksearchbox/.ui.activity.SearchHomeActivity")
-    time.sleep(2.2)
-    p.d.shell("input keyevent BACK")          # 收键盘
-    time.sleep(0.8)
-    cands = sorted((tp, l, tp, r, b) for t, (l, tp, r, b), _ in p.texts() if t == "设置")
-    if not cands:
-        print("  ✗ 搜索页没有「设置」入口")
-        return False
-    _, l, tp, r, b = cands[-1]                # 底部那个才是搜索设置
-    p.click((l + r) // 2, (tp + b) // 2)
-    time.sleep(2)
-    return p.focus().endswith("SearchSettingActivity")
-
-
 @step("下拉搜索")
 def _():
     if not open_search_settings():
@@ -211,6 +155,14 @@ def _():
     return True
 
 
-print("\n本机型脚本不处理：负一屏（设置页受 oppo.permission.OPPO_COMPONENT_SAFE 保护，"
-      "adb 边缘手势进不去，需机主手动在负一屏内关「热点资讯」「轮播推荐」）、OPPO 视频、游戏中心。")
-print("分段结果：", RESULTS)
+def tail():
+    print("\n本机型脚本不处理：负一屏（设置页受 oppo.permission.OPPO_COMPONENT_SAFE 保护，"
+          "adb 边缘手势进不去，需机主手动在负一屏内关「热点资讯」「轮播推荐」）、OPPO 视频、游戏中心。")
+    print("分段结果：", rt.results)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, rt, skip, skip_in_safe_mode
+    from recipe_nav import browser_settings_direct, open_search_settings, tap_page
+    from recipe_strategies import close_titles
+    from recipe_steps import browser_home, store_promotions

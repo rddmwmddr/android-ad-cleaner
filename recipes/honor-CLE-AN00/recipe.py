@@ -1,20 +1,17 @@
-# 荣耀 Magic V Flip2（CLE-AN00，MagicOS 10 / Android 16）机型脚本。路径 2026-11-07 在本机逐段实测（#671）。
-# 和 PNM-AN10 同代，差别：预装百度版浏览器；桌面文件夹的设置页没导出，热门推荐管理并进了市场「内容推荐服务」。
+# 荣耀 Magic V Flip2（CLE-AN00，MagicOS 10 / Android 16）机型脚本。路径 2026-11-07 在本机逐段实测（沿用 #671）。和 PNM-AN10 同代，差别：预装百度版浏览器；桌面文件夹的设置页没导出，热门推荐管理并进了市场「内容推荐服务」。
+from recipe_kit import step
 # 能直达的都直达：手机版在后台屏上跑，桌面手势在那块屏上不生效。
 # 不切市场的「基本服务」：切回完整服务要重新同意协议。不代为同意任何协议或权限。
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 BUILD = "CLE-AN00 10.0.0"
 MODELS = ["CLE-AN00"]
+# 家族库按这些常量选走法（#1246），缺省档与实现见 tool/recipe_nav.py。
+ENTER_STYLE = "honor"
+MY_TAB_STYLE = "honor"
 import re
 import time
 
 from fast import bounds
-
-
-def enter(text, scrolls=4):
-    """必需入口：没有就是这一段没跑成，不能报成功。"""
-    if not p.entry(text, scrolls=scrolls):
-        raise RuntimeError(f"入口「{text}」没找到")
 
 
 def no_agreement(app):
@@ -53,19 +50,6 @@ def wait_home(app):
     for _ in range(4):
         time.sleep(0.5)
         no_agreement(app)
-
-
-def my_tab(app):
-    """底栏可能被晚到的弹窗盖住（阅读开屏广告之后才弹「发现新版本」）：关掉再找。协议框不关，只跳过。"""
-    for _ in range(4):
-        no_agreement(app)
-        if p.find("我的", edge_ok="tab"):
-            break
-        p.dismiss()
-        time.sleep(1.5)
-    if not p.tab("我的"):
-        raise RuntimeError(f"{app}底部「我的」没找到")
-    time.sleep(1)
 
 
 @step("广告跟踪")
@@ -319,3 +303,8 @@ def _():
             l, t, r, b = spots[-1]; p.click((l + r) // 2, (t + b) // 2); time.sleep(1.2)
     p.off(only=["锁屏壁纸轮播", "锁屏进入魔法画报", "数据流量自动更新"], page="魔法画报")
     p.back()
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, skip, skip_in_safe_mode
+    from recipe_nav import enter, my_tab

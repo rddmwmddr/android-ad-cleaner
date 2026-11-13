@@ -1,13 +1,15 @@
-# 一加 13T（PKX110，ColorOS 16.0.10.500 / Android 16）机型脚本。
-# 路径实测：2026-10-28 现场探路（应用与服务、服务管理两页与 PHK110 同 Activity）。
+# 一加 13T（PKX110，ColorOS 16.0.10.500 / Android 16）机型脚本。路径实测：2026-10-28 现场探路（应用与服务、服务管理两页与 PHK110 同 Activity）。
+from recipe_kit import step
 # 骨架取自 oneplus-PHK110（ColorOS 16）；入口差异参考 docs/清单/OPPO-ColorOS.md 的一加 Ace 5（PKG110）记录。
 # 2026-11-10 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，未复测（#933）。
 # 不挂包、不动通知渠道；这些操作仍走 run.py 的独立、需确认流程。
 BUILD = "PKX110_16.0.10"
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+TAP_PAGE_STYLE = "tuple"
 MODELS = ["PKX110"]
 
 import time
-RESULTS = []
+# 分段结果由引擎经 rt 记录
 
 # 服务管理里明确的推广入口（PHK110 清单 + 本机实测新增项）。未列出的入口不主动处理。
 STORE_PROMOTIONS = [
@@ -24,55 +26,6 @@ STORE_PROMOTIONS = [
     "更新&下载专区：底部弹窗推荐", "活动式详情页", "详情页：活动", "详情页：限时活动",
     "手机管家：应用推荐", "文件管理：应用推荐", "福利专区",
 ]
-
-
-def wait_page(activity, title, timeout=6):
-    """等到活动、页标题以及可点击区域连续稳定，避免横向动画期间的越界坐标。
-
-    `title` 可以给一组等价标题：软件商店的隐私页随商店 App 版本叫「隐私」或「隐私授权管理」（#933）。"""
-    titles = (title,) if isinstance(title, str) else tuple(title)
-    deadline, previous = time.monotonic() + timeout, None
-    while time.monotonic() < deadline:
-        if p.locked():
-            return False
-        if not p.focus().endswith(activity):
-            time.sleep(0.2)
-            continue
-        root = p.tree()
-        texts = p.texts(root)
-        # 只识别真正的同意按钮，不把设置页里的“隐私政策”链接当作协议弹窗。
-        if any(t in ("同意", "同意并继续", "同意并使用", "允许")
-               and "Button" in n.get("class", "") for t, _, n in texts):
-            print("  ! 出现协议/权限按钮，本段跳过，不代为同意")
-            return False
-        if not any(t in titles for t, _, _ in texts):
-            time.sleep(0.2)
-            continue
-        switches = p.switches(root)
-        if any(not (0 < xy[0] < p.W and 0 < xy[1] < p.H)
-               for _, _, xy in switches):
-            time.sleep(0.2)
-            continue
-        signature = tuple(t for t, _, _ in texts), tuple(switches)
-        if signature == previous:
-            return True
-        previous = signature
-        time.sleep(0.25)
-    print(f"  ✗ 未确认目标页面「{'、'.join(titles)}」，不操作开关")
-    return False
-
-
-def tap_page(text, activity, title):
-    """`text` 可以给一组等价文案，按顺序试；点到第一个就按落点页面判，不退回改写另一支。
-
-    软件商店的隐私入口随商店 App 版本叫「隐私」或「隐私授权管理」（#933）。认不到时留下停在哪个
-    页面与结构摘要。"""
-    names = (text,) if isinstance(text, str) else tuple(text)
-    for name in names:
-        if p.tap(name, exact=True, quiet=len(names) > 1):
-            return wait_page(activity, title)
-    p.note_miss(" / ".join(names))
-    return False
 
 
 def off_exact(names, page, max_screens=16):
@@ -184,7 +137,8 @@ def _():
     if not tap_page("小布建议", "com.oplus.advice.settings.ui.AdviceSettingActivity", "小布建议"):
         return False
     texts = [t for t, _, _ in p.texts()]
-    if any("资讯服务" in t and "已卸载" in x for t, x in zip(texts, texts[1:])):
+    # 相邻两行配对，长度必然差一：strict=False 是有意的
+    if any("资讯服务" in t and "已卸载" in x for t, x in zip(texts, texts[1:], strict=False)):
         print("  · 资讯服务已是「已卸载」，无需处理")
         return True
     for _ in range(8):
@@ -200,7 +154,14 @@ def _():
     return False
 
 
-print("\n本机型脚本说明：浏览器段按「入口检测不到就跳过」处理（com.heytap.browser 预装但无桌面入口、")
-print("设置组件不存在时）；下拉搜索、负一屏属于原厂桌面，换用第三方桌面后不在使用面，未收录。")
-print("广告包、乐划锁屏、快应用和通知渠道请按 run.py 标准流程另行确认。")
-print("分段结果：", RESULTS)
+def tail():
+    print("\n本机型脚本说明：浏览器段按「入口检测不到就跳过」处理（com.heytap.browser 预装但无桌面入口、")
+    print("设置组件不存在时）；下拉搜索、负一屏属于原厂桌面，换用第三方桌面后不在使用面，未收录。")
+    print("广告包、乐划锁屏、快应用和通知渠道请按 run.py 标准流程另行确认。")
+    print("分段结果：", rt.results)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, rt, skip, skip_in_safe_mode
+    from recipe_nav import open_app_settings, tap_page, wait_page
+    from recipe_steps import browser_ads, browser_home, browser_personalized, store_promotions

@@ -1,5 +1,5 @@
-# vivo V1986A（iQOO Neo 系）机型脚本：Funtouch OS 13.0 / Android 12
-# 路径来源：V1986A，构建 PD1986_A_8.21.29，2026-10-30 真机逐页实测、整段跑通。
+# vivo V1986A（iQOO Neo 系）机型脚本：Funtouch OS 13.0 / Android 12；路径来源：V1986A，构建 PD1986_A_8.21.29，2026-10-30 真机逐页实测、整段跑通。
+from recipe_kit import step
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 #
 # ── 本机型实测要点（和 OriginOS 的 vivo 脚本差别很大，不要照抄那边）────────────
@@ -15,46 +15,10 @@
 # ────────────────────────────────────────────────────────────────────────────
 BUILD = "PD1986_A_8"
 MODELS = ["V1986A"]
+# 家族库按这些常量选走法（#1246），缺省档与实现见 tool/recipe_nav.py。
+TAP_ROW_STYLE = "subtitle"
+MY_TAB_STYLE = "vivo"
 import time
-
-
-def tap_row(subtitle):
-    """点「副标题」所在那一行的中间：本机有些行点左侧标题文字不跳转。"""
-    for t, (l, tp, r, b), n in p.texts():
-        if t.startswith(subtitle):
-            p.click(int(p.W * 0.4), (tp + b) // 2); time.sleep(1.0)
-            return True
-    return False
-
-
-def my_tab():
-    """应用商店底部「我的」标签：在 y>92% 处，find() 默认不点，直接按坐标点最后一个标签。"""
-    xy = p.find("我的", edge_ok="tab")
-    if xy:
-        p.click(*xy)
-    else:
-        p.click(int(p.W * 0.9), int(p.H * 0.96))
-    time.sleep(1.2)
-
-
-def off_one(keyword, page):
-    """按开关自身状态关一个开关并回读。返回 None=本来关着，True=关掉，False=没关掉。
-    （旧注释说的「标题随状态变化致引擎误报」已由引擎在标题产出处剥掉尾缀修复，#565；
-    本页的独立回读保留——没有真机，不敢顺手改脚本行为。）"""
-    hits = [(t, c, xy) for t, c, xy in p.switches() if keyword in t]
-    if not hits:
-        print(f"  ✗ 没找到「{keyword}」开关"); return False
-    if not hits[0][1]:
-        print(f"  · {keyword} 本来就是关的")
-        return None
-    p.click(*hits[0][2]); p.confirm(); time.sleep(0.5)
-    for t, c, _ in p.switches():
-        if keyword in t and not c:
-            print(f"  关 {keyword}")
-            p.changed.append((page, keyword))
-            return True
-    print(f"  ✗ 关不掉 {keyword}")
-    return False
 
 
 @step("系统广告")
@@ -103,3 +67,10 @@ def _():
 # 浏览器：本机没有 com.vivo.browser。
 # 营销通知渠道：这台的通知页在 com.android.systemui，chan-off 认不出来，见 issue #336。
 # ────────────────────────────────────────────────────────────────────────────
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p
+    from recipe_nav import my_tab, settings_home, tap_row
+    from recipe_steps import system_ads_chain
+    from recipe_strategies import off_one

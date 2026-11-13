@@ -167,11 +167,8 @@ class SourceTest(unittest.TestCase):
         """`used_by()` 把调用脚本的常量一并传给每份注入实现：今天没有导航助手按名字取外部值，
         所以传与不传必须逐字相同，否则这条接线会悄悄改变「用过的机型」（#1209）。"""
         import recipe_source
-        import recipe_steps
         constants = {"MARKET": ("com.example.market",), "HOT": ("热点资讯",)}
-        for name, impl in recipe_source.injected_sources().items():
-            if name in recipe_steps.STEPS:
-                continue
+        for name, impl in recipe_source.surface_sources()[recipe_source.NAV_MODULE].items():
             self.assertEqual(recipe_source.scan_source(impl, externals=constants).calls,
                              recipe_source.scan_source(impl).calls, name)
 
@@ -186,7 +183,10 @@ class SourceTest(unittest.TestCase):
                 'MARKET = "com.example.market"\n\n\n'
                 '@step("商店")\n'
                 'def _():\n'
-                '    store()\n',
+                '    store()\n\n\n'
+                'from typing import TYPE_CHECKING\n\n'
+                'if TYPE_CHECKING:\n'
+                '    from recipe_steps import store\n',
                 encoding="utf-8")
             with patch.dict(recipe_steps.STEPS, {"store": _store_factory}):
                 used = entries.used_by(d)
@@ -204,7 +204,10 @@ class SourceTest(unittest.TestCase):
             (model / "recipe.py").write_text(
                 '@step("浏览器首页")\n'
                 'def _():\n'
-                '    browser_home()\n',
+                '    browser_home()\n\n\n'
+                'from typing import TYPE_CHECKING\n\n'
+                'if TYPE_CHECKING:\n'
+                '    from recipe_steps import browser_home\n',
                 encoding="utf-8")
             with patch.dict(recipe_steps.STEPS, {"browser_home": _browser_home_factory}), \
                     patch.dict(recipe_nav.NAV, {"settings_direct": _settings_direct_factory}):
@@ -225,7 +228,10 @@ class SourceTest(unittest.TestCase):
                 '    return False\n\n\n'
                 '@step("浏览器首页")\n'
                 'def _():\n'
-                '    browser_home()\n',
+                '    browser_home()\n\n\n'
+                'from typing import TYPE_CHECKING\n\n'
+                'if TYPE_CHECKING:\n'
+                '    from recipe_steps import browser_home\n',
                 encoding="utf-8")
             with patch.dict(recipe_steps.STEPS, {"browser_home": _browser_home_factory}), \
                     patch.dict(recipe_nav.NAV, {"settings_direct": _settings_direct_factory}):
@@ -1552,14 +1558,34 @@ ID_SECURITY_305 = ('<node class="android.widget.TextView"'
 GEAR_CENTER_305 = (995, 165)
 
 
-def gear_users_1210():
-    """注入面里真的用上齿轮的实现名（沿用 #1151 的「注入那份也算」口径）。
+def surface_sources():
+    """注入面三张注册表的源码摊平成一个 {名字: 源码}。三张表不同名，摊平只为按名字查（#1243）。"""
+    return {name: source for table in recipe_source.surface_sources().values()
+            for name, source in table.items()}
 
-    判据走 `fixtures.normalize()`：`g["gear"]` 折回裸名、docstring 与注释都不剩，实现里提一句不算。"""
-    return {name for name, source in recipe_source.injected_sources().items()
-            if any((isinstance(node, ast.Name) and node.id == "gear")
-                   or (isinstance(node, ast.FunctionDef) and node.name == "gear")
-                   for node in ast.walk(ast.parse(fixtures.normalize(source))))}
+
+def gear_users_1210():
+    """注入面里真的用上齿轮的实现名（沿用 #1151 的「注入那份也算」口径），顺着调用收传递闭包。
+
+    判据走 `fixtures.normalize()`：`g["gear"]` 折回裸名、docstring 与注释都不剩，实现里提一句不算。
+    实现再调别的注入名也照算：`browser_settings` 只是分派，真正碰 `g["gear"]` 的是家族那一份（#1244），
+    不收传递闭包的话「用齿轮的脚本」会静默漏掉走浏览器入口的那几台。"""
+    calls, found = {}, set()
+    for name, source in surface_sources().items():
+        tree = ast.parse(fixtures.normalize(source))
+        calls[name] = {node.func.id for node in ast.walk(tree)
+                       if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
+        if "gear" in calls[name] or any(isinstance(node, ast.FunctionDef) and node.name == "gear"
+                                        for node in ast.walk(tree)):
+            found.add(name)
+    changed = True
+    while changed:
+        changed = False
+        for name, named in calls.items():
+            if name not in found and named & found:
+                found.add(name)
+                changed = True
+    return found
 
 
 def hyperos_recipes_305():
@@ -2571,7 +2597,7 @@ def injected_step_1210(name):
 
     源码先过 `fixtures.normalize()`：`g["X"]` 折回 `X`，下面按裸名找 go / gear / require_switches 的守卫
     才认得出注入实现里那几个调用。"""
-    source = recipe_source.injected_sources().get(name)
+    source = surface_sources().get(name)
     if source is None:
         return None
     factory = next((node for node in ast.parse(fixtures.normalize(source)).body

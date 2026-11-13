@@ -136,3 +136,6 @@
 | `test_release_regressions.py` | 发布回归：横屏、部分失败、通知默认选择与发布资源边界。 |
 | `test_feedback_safety.py` | 用户反馈里的安全项：无障碍排查只读、通知保护与旧清单还原。 |
 | `test_phone_host.py` | 手机版宿主的说法：没有电脑和数据线时该怎么说、界面与诊断里残留的桌面说法，以及唯一的控制流例外（不写插电常亮）。 |
+| `test_recipe_call_snapshots.py` | 机型脚本的调用序列快照：47 份 × present / absent 两场景与入库数据逐条比对，段名归属与空转守卫。更新规则见 docs/agents/recipe-snapshots.md。 |
+| `test_recipe_audit.py` | 本机函数审计：段体不算本机函数、四档归属（含声明式钩子）的优先级与判据信号，以及 check 与 status-json 报的「本机策略：N 个」。 |
+| `test_recipe_strategies.py` | 拨动策略的注入面：前导调用它、脚本不留逐字副本，以及家族库按脚本常量选走法（齿轮 / 浏览器设置 / OPPO 系的页面等待、开关名单与整页点击）与认不出即报错。 |

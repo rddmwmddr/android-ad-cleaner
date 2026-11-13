@@ -288,15 +288,19 @@ class ApiRetryTests(unittest.TestCase):
 
 
 def emits_failed_steps(tree):
-    """`if g.get("FAILED_STEPS"):` 那一支里有 events.emit("failed_steps", …)。"""
+    """收尾的失败段分支里有 events.emit("failed_steps", …)。"""
     for node in ast.walk(tree):
         if not isinstance(node, ast.If):
             continue
         test = node.test
-        if not (isinstance(test, ast.Call) and isinstance(test.func, ast.Attribute)
-                and test.func.attr == "get" and isinstance(test.func.value, ast.Name)
-                and test.func.value.id == "g" and test.args
-                and getattr(test.args[0], "value", None) == "FAILED_STEPS"):
+        # 台账从脚本作用域搬到这次的 `rt` 之后，条件从 `g.get("FAILED_STEPS")` 变成 `if failed:`；
+        # 判据只看「非空的失败段会发事件」，不钉住条件表达式的写法。
+        gated = (isinstance(test, ast.Name) and test.id == "failed") or (
+            isinstance(test, ast.Call) and isinstance(test.func, ast.Attribute)
+            and test.func.attr == "get" and isinstance(test.func.value, ast.Name)
+            and test.func.value.id == "g" and test.args
+            and getattr(test.args[0], "value", None) == "FAILED_STEPS")
+        if not gated:
             continue
         for inner in ast.walk(node):
             if (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute)

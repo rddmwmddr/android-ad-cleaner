@@ -1,5 +1,5 @@
-# OPPO Find N6（PLP120，ColorOS 16.0.9）机型脚本。路径 2026-10-22 实测，机型脚本整段跑待验证
-# 2026-11-10 补 ColorOS 17（PLP120_17.0.0.109 / Android 17）的两段路径，未复测（#905）：
+# OPPO Find N6（PLP120，ColorOS 16.0.9）机型脚本。路径 2026-10-22 实测，机型脚本整段跑待验证；2026-11-10 补 ColorOS 17（PLP120_17.0.0.109 / Android 17）的两段路径，未复测（沿用 #905）：
+from recipe_kit import step
 # 小布建议改成点「资讯服务」进二级页再关（旧「内容资讯」列表页兜底），游戏中心先试
 # APP_SETTINGS 直达设置页（「我的 → 设置」兜底）。两条路径都取自同族真机实测（PMX110 / PKT110）。
 BUILD = "PLP120_16.0.9"
@@ -11,47 +11,6 @@ from fast import ScreenLocked
 
 GAME = "com.nearme.gamecenter"
 SETTINGS = "com.android.settings"
-
-
-def enter_settings(*path):
-    """设置 → path 逐跳点开，每一跳都要真的换页：点击被弹窗淡出动画吞掉时重试（#286）。"""
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
-    for name in path:
-        p.enter(name, scrolls=6)
-
-
-def read_on_page(titles, package):
-    """确认落在目标页并读出这一页的开关：读不到目标时整段不动，报错带上停在哪个页与当次
-    读到的标题（#903），不再「核对 0 项」静默收尾。"""
-    page(titles, package)
-    from wait import until
-    until(p.switches, tries=10, poll=0.2, now=time.time, sleep=time.sleep)
-    return {text: on for text, on, _ in p.switches()}
-
-
-def open_switch_page(name, titles, package):
-    """点开入口 → 确认落在目标页 → 读出开关；任一步不通就退回原页并返回空，把兜底留给调用方。
-    `p.enter` 只认「页面变了」，点进别的页也算换页，所以落点必须再校验一次（#286）。
-    断线、锁屏与按约定跳过照常上抛，交给段包装收场。"""
-    where = p.focus()
-    try:
-        p.enter(name, scrolls=8)
-    except (adb_link.DeviceLost, ScreenLocked, SkipStep):
-        raise
-    except RuntimeError as error:
-        print(f"  · 入口「{name}」没进去：{error}", flush=True)
-        p.note_miss(name)
-        return None
-    try:
-        return read_on_page(titles, package)
-    except (adb_link.DeviceLost, ScreenLocked, SkipStep):
-        raise
-    except RuntimeError as error:
-        print(f"  · 落点不对：{error}", flush=True)
-        if p.focus() != where:
-            p.back()
-            time.sleep(0.6)
-        return None
 
 
 @step("广告跟踪")
@@ -92,18 +51,6 @@ def _():
 SEARCH_SETTING = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"
 # 设置页上的标题；搜索首页也有「搜索范围」这类文字，所以还要看前台 Activity（SearchSettingActivity）。
 SEARCH_TITLES = {"搜索范围", "功能管理", "搜索引擎", "消息管理", "账号与隐私"}
-
-
-def search_settings():
-    """先走 scheme，打不开再退回桌面下滑进搜索页、点底部「设置」的旧入口（#165）。"""
-    p.d.shell(SEARCH_SETTING)
-    if wait_search_settings():
-        return True
-    # ColorOS 16 及更早版本：桌面下滑进搜索页，底部「设置」。别往下拉，会退出。
-    p.d.shell("input keyevent HOME"); time.sleep(0.6)
-    p.d.shell(f"input swipe {p.W//2} {p.H*3//10} {p.W//2} {p.H*7//10} 300"); time.sleep(1.5)
-    p.d.shell("input keyevent BACK"); time.sleep(0.4)      # 收键盘
-    return p.tap("设置", exact=True) and wait_search_settings()
 
 
 def search_sources():
@@ -198,54 +145,6 @@ def _():
     p.back(3)
 
 
-def game_settings_direct():
-    """ColorOS 17 的游戏中心设置页认 APP_SETTINGS 动作，直达（PMX110，#650）。
-    旧版本不认这个动作时落不到设置页，返回假交给「我的 → 设置」兜底。"""
-    result = p.d.shell("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + GAME)
-    if result.exit_code or any(word in result.output for word in
-                               ("Error", "Exception", "Permission Denial", "unable to resolve")):
-        return False
-    try:
-        page("游戏中心", GAME, "SettingActivity")
-    except (adb_link.DeviceLost, ScreenLocked, SkipStep):
-        raise
-    except RuntimeError:
-        print("  · 直达没落在设置页，转「我的 → 设置」", flush=True)
-        return False
-    return True
-
-
-def game_settings_entry():
-    """「我的」页的「设置」：旧版是文字行（可能读作「设置,有1条新通知」），新版是右上角没有
-    文字的齿轮（#292）。文字行点进了别的页就退回来改用齿轮，不把落点押在包含匹配上。"""
-    where = p.focus()
-    try:
-        p.enter("设置", scrolls=0)
-        page("隐私开关设置", GAME)
-        return
-    except (adb_link.DeviceLost, ScreenLocked, SkipStep):
-        raise
-    except RuntimeError:
-        if p.focus() != where:
-            p.back()
-            time.sleep(0.6)
-    if not p.tap_icon(["隐私开关设置", "隐私"]):
-        raise RuntimeError("没找到设置入口：文字与右上角图标都试过")
-
-
-def game_settings_via_mine():
-    """我的 → 设置；首次进入的「页面升级」弹窗盖住这一页，先关掉。"""
-    p.start(GAME)
-    p.enter("我的")
-    time.sleep(1.2)
-    # 「页面升级」弹窗里带滚动列表，dismiss() 不点文字按钮，只能点名点（PKT110）。
-    if p.find("我知道了", exact=True):
-        p.tap("我知道了", exact=True, scrolls=0); time.sleep(1.2)
-    else:
-        p.dismiss()
-    game_settings_entry()
-
-
 @step("游戏中心")
 def _():
     direct = game_settings_direct()
@@ -277,3 +176,9 @@ def _():
         p.off(only=["资讯服务"], page="小布建议·内容资讯")
         return
     raise RuntimeError("小布建议：「资讯服务」与「内容资讯」两条入口都没进去")
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import SkipStep, p, page, require_switches, skip_in_safe_mode
+    from recipe_nav import enter_settings, game_settings_direct, game_settings_entry, game_settings_via_mine, open_switch_page, search_settings, settings_page, wait_search_settings
+    from recipe_strategies import read_on_page

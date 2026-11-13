@@ -1,10 +1,11 @@
-# vivo V2417A，Android 16，PD2417D_A_16.2.14.1.W10。
-# 路径来自 2026-10-30 真机逐页操作；验证范围及复跑记录见同目录 README.md。
+# vivo V2417A，Android 16，PD2417D_A_16.2.14.1.W10。路径来自 2026-10-30 真机逐页操作；验证范围及复跑记录见同目录 README.md。
+from recipe_kit import step
 BUILD = "PD2417D_A_16.2.14.1.W10"
 MODELS = ["V2417A"]
+# 家族库按这个常量选走法（#1246），缺省档与实现见 tool/recipe_nav.py。
+READ_SWITCHES_STYLE = "vivo"
 
-from wait import until
-VERIFIED_SWITCHES = 0
+# 回读确认数由引擎经 rt 记录
 
 
 def title_key(title):
@@ -12,28 +13,12 @@ def title_key(title):
     return title.split(".", 1)[0].strip()
 
 
-def read_switches(max_screens=1):
-    result = {}
-    for screen in range(max_screens):
-        items = until(p.switches, timeout=3, poll=0.2)
-        require(items, "页面里没有读到开关，停止本段")
-        current = {}
-        for title, state, _ in items:
-            key = title_key(title)
-            require(key not in current, f"开关标题不唯一：{key}")
-            current[key] = state
-        result.update(current)
-        if screen + 1 < max_screens and not p.scroll_more():
-            break
-    return result
-
-
 def verify(before, current, names, page):
-    global VERIFIED_SWITCHES
+    # 回读确认数由引擎经 rt 记录
     require(all(current.get(name) is False for name in names), f"{page}：回读未确认关闭")
     require(all(current.get(name) == state for name, state in before.items() if name not in names),
             f"{page}：其他开关状态变化，请核对")
-    VERIFIED_SWITCHES += len(names)
+    rt.confirm(len(names))
     print(f"  ✓ {page}：回读确认 {len(names)} 项关闭，其他开关未变", flush=True)
 
 
@@ -47,52 +32,6 @@ def close_named(names, page, max_screens=1):
           page=page, max_screens=max_screens)
     p.top(max_screens)
     verify(before, read_switches(max_screens), names, page)
-
-
-def store_personalization():
-    """两行标题会随状态变化；逐行点，处理确认框后用稳定标题回读。"""
-    page = "商店·个性化推荐"
-    names = ["个性化推荐", "个性化广告推荐"]
-    before = read_switches()
-    require_switches(before, names, page)
-    for name in names:
-        rows = [(state, xy) for title, state, xy in p.switches() if title_key(title) == name]
-        require(len(rows) == 1, f"{page}：无法唯一识别「{name}」，未操作")
-        if not rows[0][0]:
-            continue
-        signature = p.sig()
-        p.click(*rows[0][1])
-        p.settle(signature, 1.5)
-        # 本机按钮未被通用 confirm() 识别；只点明确的“确认关闭”，不点状态文字。
-        if p.find("确认关闭", exact=True):
-            tap("确认关闭", scrolls=0)
-        else:
-            p.confirm()
-        require(read_switches().get(name) is False, f"{page}：「{name}」回读未确认关闭")
-        p.changed.append((page, name))
-        print(f"  关 {name}", flush=True)
-    verify(before, read_switches(), names, page)
-
-
-def hiboard_panel():
-    if "com.vivo.hiboard.settings.AppletSettingActivity" in p.focus():
-        return
-    # 此页面未导出，不能 am start；两次 HOME 回默认桌面，再按真机路径滑入。
-    for _ in range(2):
-        signature = p.sig()
-        p.d.shell("input keyevent HOME")
-        p.settle(signature, 1.0)
-    # HOME 会恢复上次停留的负一屏；已在 HiBoard 时不必再当普通桌面横滑。
-    home = p.focus()
-    if home != "HiBoard":
-        require(home.startswith("com.bbk.launcher2/"), "未回到系统桌面，停止负一屏段")
-        signature = p.sig()
-        p.d.shell(f"input swipe {p.W // 10} {p.H // 2} {p.W * 9 // 10} {p.H // 2} 300")
-        p.settle(signature, 1.5)
-    require(p.focus() == "HiBoard" and p.find("添加组件", exact=True),
-            "未进入负一屏（可能未启用），停止本段")
-    require(p.go("设置", "更多设置"), "未进入负一屏设置")
-    require("com.vivo.hiboard.settings.AppletSettingActivity" in p.focus(), "负一屏设置页面不符")
 
 
 @step("系统广告")
@@ -201,4 +140,11 @@ def _():
     # 便捷生活里的“推荐服务”、小V建议和常驻服务卡片全部保留。
 
 
-print(f"\n回读确认 {VERIFIED_SWITCHES} 项关闭；未完成 {len(FAILED_STEPS)} 段", flush=True)
+def tail():
+    print(f"\n回读确认 {rt.verified} 项关闭；未完成 {len(rt.failed_steps)} 段", flush=True)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, require, require_switches, rt
+    from recipe_nav import hiboard_panel, read_switches, tap
+    from recipe_strategies import store_personalization

@@ -1,7 +1,14 @@
-# OPPO Find X9 Pro（PLG110），ColorOS 16.0.10.501(CN01) / Android 16。
-# 2026-11-01 真机逐页记录；仅收录本机已识别的开关，不包含包操作和通知渠道。
+# OPPO Find X9 Pro（PLG110），ColorOS 16.0.10.501(CN01) / Android 16。2026-11-01 真机逐页记录；仅收录本机已识别的开关，不包含包操作和通知渠道。
+from recipe_kit import step
 # 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，未复测（#933）。
 BUILD = "PLG110_16.0.10"
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+WAIT_PAGE_STYLE = "raise"
+TAP_PAGE_STYLE = "raise"
+READ_SWITCHES_STYLE = "expect"
+OPEN_PAGE_STYLE = "shell"
+APP_SETTINGS_STYLE = "shell"
+SYSTEM_SETTINGS_STYLE = "shell"
 MODELS = ["PLG110"]
 
 import re
@@ -9,8 +16,8 @@ import time
 
 # bounds 只给注入面的 carousel_choices 取（它按执行作用域解析这个名字）
 from fast import ScreenLocked, bounds
-RESULTS = []
-VERIFIED_SWITCHES = 0
+# 分段结果由引擎经 rt 记录
+# 回读确认数由引擎经 rt 记录
 
 SETTINGS = "com.android.settings/com.oplus.settings.feature.homepage.OplusSettingsHomepageActivity"
 OAID = "com.android.settings/com.oplus.settings.feature.notification.oaid.OAIDActivity"
@@ -41,69 +48,9 @@ STORE_PROMOTIONS = [
 ]
 
 
-def wait_page(activity, title=None, timeout=6):
-    """只在实际 Activity、标题及可见文字稳定后继续；不在账号页读开关或截图。"""
-    end, previous = time.monotonic() + timeout, None
-    while time.monotonic() < end:
-        if p.locked():
-            raise ScreenLocked("手机锁屏，请机主解锁")
-        if p.focus() == activity:
-            root = p.tree()
-            texts = p.texts(root)
-            consent = {"同意", "同意并继续", "同意并使用", "允许"}
-            require(not any(t in consent and "Button" in n.get("class", "")
-                            for t, _, n in texts), "出现协议或权限申请，本段停止，不代为同意")
-            signature = tuple((t, xy) for t, xy, _ in texts)
-            if (not title or any(t == title for t, _, _ in texts)) and signature == previous:
-                return
-            previous = signature
-        time.sleep(.15)
-    target = f"「{title}」" if title else ""
-    raise RuntimeError(f"未确认页面{target}（当前：{p.focus()}），不操作开关")
-
-
-def open_page(command, activity, title=None):
-    result = p.d.shell(command)
-    require(not result.exit_code and not re.search(
-        r"Error|Exception|Permission Denial|unable to resolve", result.output, re.I),
-        f"系统未允许打开「{title or activity}」，未继续操作")
-    wait_page(activity, title)
-
-
-def tap_page(text, activity, title=None, scrolls=4, exact=True):
-    """`text` 可以给一组等价文案，按顺序试，先命中的点进去。
-
-    软件商店的隐私入口随商店 App 版本叫「隐私」或「隐私授权管理」（#933），单写一支就一定有一段
-    0 项。认不到时留下停在哪个页面与结构摘要，与 note_miss 同形。"""
-    names = (text,) if isinstance(text, str) else tuple(text)
-    for name in names:
-        if p.tap(name, exact=exact, scrolls=scrolls, quiet=len(names) > 1):
-            wait_page(activity, title or name)
-            return True
-    p.note_miss(" / ".join(names))
-    raise RuntimeError(f"未找到入口「{names[0]}」")
-
-
-def read_switches(activity, title=None, max_screens=8, expect=None):
-    """完整读取有界列表；未读完不改，空标题不作为可操作目标。"""
-    wait_page(activity, title)
-    p.top(max_screens)
-    states = {}
-    for _ in range(max_screens):
-        require(p.focus() == activity, "读取时离开目标页面，停止本段")
-        states.update({name: on for name, on, _ in p.switches() if name})
-        if expect and all(name in states for name in expect):
-            return states
-        if not p.scroll_more():
-            return states
-    if expect and all(name in states for name in expect):
-        return states
-    raise RuntimeError("列表超过读取上限，未执行关闭")
-
-
 def close_named(names, page, activity, title=None, max_screens=8, reopen=None, dependent=()):
     """精确核对标题再调用引擎；回读关闭状态，同时保留其他功能开关。"""
-    global VERIFIED_SWITCHES
+    # 回读确认数由引擎经 rt 记录
     before = read_switches(activity, title, max_screens, expect=names)
     require_switches(before, names, page)
     if any(before[name] for name in names):
@@ -116,17 +63,8 @@ def close_named(names, page, activity, title=None, max_screens=8, reopen=None, d
         require(all(current.get(name) is False for name in names), f"{page}：回读未确认关闭")
         require(all(current.get(name) == state for name, state in before.items()
                     if name not in names and name not in dependent), f"{page}：其他开关状态变化，请核对")
-    VERIFIED_SWITCHES += len(names)
+    rt.confirm(len(names))
     print(f"  · {page}：回读确认 {len(names)} 项关闭", flush=True)
-
-
-def system_settings():
-    open_page("am start -f 0x10008000 -a android.settings.SETTINGS", SETTINGS, "设置")
-
-
-def app_settings(package, activity, title=None):
-    open_page("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + package,
-              activity, title)
 
 
 # ==================== 各段具体实现 ====================
@@ -176,7 +114,7 @@ def _():
         current = read_switches(activity_serve, "服务管理", 8)
         require(all(current.get(name) is False for name in to_close), "服务管理回读未确认关闭")
         VERIFIED_SWITCHES += len(to_close)
-    print(f"  · 软件商店·服务管理：处理完成，核心服务已保留", flush=True)
+    print("  · 软件商店·服务管理：处理完成，核心服务已保留", flush=True)
 
 
 @step("浏览器")
@@ -281,7 +219,8 @@ def _():
         if not p.scroll_more():
             break
     texts = [t for t, _, _ in p.texts()]
-    if any("资讯服务" in t and "未开启" in x for t, x in zip(texts, texts[1:])):
+    # 相邻两行配对，长度必然差一：strict=False 是有意的
+    if any("资讯服务" in t and "未开启" in x for t, x in zip(texts, texts[1:], strict=False)):
         print("  · 资讯服务已是「未开启」，保持不变", flush=True)
         return
     if p.tap("资讯服务", exact=True, scrolls=0):
@@ -292,7 +231,7 @@ def _():
 @step("主题商店")
 def _():
     print("  检查主题商店服务模式；基础服务模式无广告，不代为同意完整模式协议。", flush=True)
-    result = p.d.shell("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.oplus.themestore").output
+    p.d.shell("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.oplus.themestore")
     time.sleep(1)
     if "BasicEntranceActivity" in p.focus():
         print("  · 主题商店处于「基础服务」模式，本身不含广告，保持不变", flush=True)
@@ -300,5 +239,11 @@ def _():
     print("  · 当前未处于基础服务模式，跳过自动处理以避免误点协议", flush=True)
 
 
-print(f"\n已回读确认 {VERIFIED_SWITCHES} 项；分段结果：{RESULTS}", flush=True)
-print("通知渠道与组件挂起仍走 run.py 的独立流程。", flush=True)
+def tail():
+    print(f"\n已回读确认 {rt.verified} 项；分段结果：{rt.results}", flush=True)
+    print("通知渠道与组件挂起仍走 run.py 的独立流程。", flush=True)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import VERIFIED_SWITCHES, p, require, require_switches, rt, skip, skip_in_safe_mode
+    from recipe_nav import app_settings, assistant_settings, hide_carousel, open_page, read_switches, system_settings, tap_page, wait_page

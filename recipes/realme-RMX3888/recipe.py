@@ -1,5 +1,5 @@
-# realme 真我 GT5 Pro（RMX3888，ColorOS 15.0.0.420(CN01) / Android 15）机型脚本。
-# 按报告者（#1083）逐段实测的落点写成，本仓库没有这台手机，未在真机复跑，待复测。
+# realme 真我 GT5 Pro（RMX3888，ColorOS 15.0.0.420(CN01) / Android 15）机型脚本。按报告者（沿用 #1083）逐段实测的落点写成，本仓库没有这台手机，未在真机复跑，待复测。
+from recipe_kit import step
 # 只关点名的广告与推荐；营销通知、组件挂起与快应用仍走 run.py 的独立确认流程。
 #
 # 本机实测与同族 OPPO 脚本的差别（别照抄别家脚本的路径）：
@@ -41,31 +41,6 @@ SEARCH_SOURCES = ["个性化推荐", "精选资讯"]
 STORE_KEEP = ["帮助与客服", "应用安全", "我的专区：应用工具", "我的专区：存储空间清理",
               "我的专区：我的资产", "我的专区：安全守护", "我的专区：小i客服",
               "应用使用记录", "首页：AI搜索"]
-
-
-def has_row(name, screens=4):
-    """这一页（含下面几屏）有没有这行：只找不点。
-
-    存在性探测不能用 `maybe()` / `p.entry`：它们找到就真的点一下，点在开关行上等于把开关拨了。
-    """
-    for _ in range(screens):
-        if p.find(name, exact=True):
-            return True
-        if not p.scroll_more():
-            return False
-    return False
-
-
-def store_privacy():
-    """走进商店的隐私页：有的版本设置首页直接有「隐私」，有的挂在「账号与隐私」下面。"""
-    if p.tap("隐私", exact=True):
-        return True
-    if not p.tap("账号与隐私", exact=True):
-        return False
-    for name in ("隐私", "隐私授权管理"):
-        if p.tap(name, exact=True):
-            return True
-    return False
 
 
 @step("广告跟踪")
@@ -265,3 +240,8 @@ def _():
     else:
         print("  · 没有「资讯服务」入口（本机小布建议总开关默认已关）", flush=True)
     p.back(2)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import SkipStep, maybe, p, page, skip, skip_in_safe_mode
+    from recipe_nav import has_row, settings_page, store_privacy

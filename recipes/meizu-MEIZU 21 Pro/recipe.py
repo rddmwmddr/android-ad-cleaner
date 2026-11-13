@@ -1,5 +1,5 @@
-# 魅族 21 Pro（MEIZU 21 Pro，Flyme 12.6.0.0A / Android 16）。
-# 2026-10-30 真机分段验证：除下列两段外，其余目标已读到关闭；手机管家入口修复后单独复测通过。
+# 魅族 21 Pro（MEIZU 21 Pro，Flyme 12.6.0.0A / Android 16）。2026-10-30 真机分段验证：除下列两段外，其余目标已读到关闭；手机管家入口修复后单独复测通过。
+from recipe_kit import step
 # 浏览器、应用商店两段的启动落点与中间跳转在 #523 改过，尚未真机复测。
 # 不处理通知渠道、快应用或广告包；不修改服务类通知和负一屏卡片。
 BUILD = "Flyme 12.6.0.0A"
@@ -7,6 +7,11 @@ MODELS = ["MEIZU 21 Pro"]
 
 import time
 TARGET_PACKAGE = ""
+# 共享库按这些常量选走法（#1246），缺省档与实现见 tool/recipe_nav.py。
+WAIT_PAGE_STYLE = "meizu"
+TAP_TEXT_STYLE = "meizu"
+GOTO_STYLE = "meizu"
+CLOSE_NAMED_STYLE = "meizu"
 
 
 def page_summary():
@@ -39,56 +44,6 @@ def guard():
     require(model in MODELS and build == BUILD, "型号或系统版本不符，未操作；请逐页核对")
 
 
-def wait_page(activity, title, timeout=8):
-    global TARGET_PACKAGE
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        require(not p.locked(), "手机锁屏，请机主解锁")
-        if p.focus() == activity:
-            texts = p.texts(p.tree())
-            require(not any(t in ("同意", "同意并继续", "同意并使用", "允许")
-                            and "Button" in (n.get("class") or "") for t, _, n in texts),
-                    "出现协议或权限申请，未同意，停止本段")
-            if any(t == title and n.get("package") == activity.split("/", 1)[0] for t, _, n in texts):
-                TARGET_PACKAGE = activity.split("/", 1)[0]
-                return
-        time.sleep(.2)
-    raise RuntimeError(f"未确认目标页「{title}」：{activity}")
-
-
-def tap_text(text, scrolls=0):
-    """只点击可见的准确文字；找不到时只滚动当前页面，不自动处理弹窗。"""
-    initial = p.focus()
-    for index in range(scrolls + 1):
-        require(not p.locked(), "手机锁屏，请机主解锁")
-        require(p.focus() == initial, "页面已变化，停止点击")
-        root = p.tree()
-        assert_no_other_window(root, TARGET_PACKAGE)
-        hits = [(b, n) for t, b, n in p.texts(root)
-                if t == text and n.get("package") == TARGET_PACKAGE]
-        # 同一按钮可同时有容器和子文字；不同区域的同名项不猜。
-        centers = {((b[0] + b[2]) // 2, (b[1] + b[3]) // 2) for b, _ in hits}
-        if centers:
-            if len(centers) > 1:
-                # 父子节点的中心可有微小偏移，但不能指向不同位置。
-                xs, ys = zip(*centers)
-                require(max(xs) - min(xs) < p.W * .15 and max(ys) - min(ys) < p.H * .08,
-                        f"「{text}」有多个位置，未点击")
-            x, y = min(centers, key=lambda xy: xy[1])
-            require(0 <= x < p.W and 0 <= y < p.H, "坐标不在屏幕内")
-            # 底部可能被系统导航区域覆盖，即使文字节点中心仍在屏幕内。
-            if y >= p.H * .95:
-                if index < scrolls and p.scroll_more():
-                    continue
-                raise RuntimeError(f"「{text}」位于屏幕底部导航区域附近，未点击")
-            p.click(x, y)
-            time.sleep(.7)
-            return
-        if index == scrolls or not p.scroll_more():
-            break
-    raise RuntimeError(f"未找到「{text}」")
-
-
 def tap_id(resource_id):
     from fast import bounds
     require(not p.locked(), "手机锁屏，请机主解锁")
@@ -116,11 +71,6 @@ def open_app(package, expect):
     require(p.focus().split("/", 1)[0] == package, "目标应用不在前台")
 
 
-def goto(text, activity, title, scrolls=0):
-    tap_text(text, scrolls)
-    wait_page(activity, title)
-
-
 def assert_no_other_window(root, package):
     """不在小窗混合其他应用或权限页时点击。"""
     foreign = {n.get("package") for n in root.iter("node") if p.on_screen(n)
@@ -133,57 +83,6 @@ def safe_switches(activity):
     root = p.tree()
     assert_no_other_window(root, activity.split("/", 1)[0])
     return p.switches(root)
-
-
-def close_named(names, page, activity):
-    """精确标题、逐项点击、识别关闭确认框并回读；有变化或不确定立即停止。"""
-    global p
-    require(p.focus() == activity, f"{page}：页面不符")
-    before_list = safe_switches(activity)
-    require(all(sum(1 for t, _, _ in before_list if t == name) == 1 for name in names),
-            f"{page}：目标开关未全部唯一识别，未操作")
-    baseline = {t: on for t, on, _ in before_list}
-    print(f"  准备关闭 {page}：{'、'.join(names)}；已关闭的保持不变", flush=True)
-    for name in names:
-        require(not p.locked(), "手机锁屏，请机主解锁")
-        require(p.focus() == activity, "页面已变化，停止本段")
-        switches = [(on, xy) for t, on, xy in safe_switches(activity) if t == name]
-        require(len(switches) == 1, f"{name}：开关不唯一")
-        on, (x, y) = switches[0]
-        if not on:
-            print(f"  · {name} 已关闭", flush=True)
-            continue
-        require(not any(n.get("checkable") == "true" and n.get("enabled") == "false"
-                        and p.on_screen(n) and (lambda b: b[0] <= x <= b[2] and b[1] <= y <= b[3])
-                        (__import__("fast").bounds(n)) for n in p.tree().iter("node")),
-                f"{name}：开关不可操作")
-        p.click(x, y)
-        time.sleep(.8)
-        require(not p.locked(), "手机锁屏，请机主解锁")
-        require(p.focus() == activity, "点击后页面变化，停止本段")
-        root = p.tree()
-        assert_no_other_window(root, activity.split("/", 1)[0])
-        texts = p.texts(root)
-        titles = [t for t, _, _ in texts if "确定关闭" in t and name in t]
-        confirmations = [(b, n) for t, b, n in texts if t == "确定" and "Button" in (n.get("class") or "")]
-        if titles:
-            require(len(confirmations) == 1, f"{name}：关闭确认框无法识别")
-            b, _ = confirmations[0]
-            require(0 <= (b[0] + b[2]) // 2 < p.W and 0 <= (b[1] + b[3]) // 2 < p.H,
-                    "确认按钮不在屏幕内，停止")
-            p.click((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)
-            time.sleep(.8)
-        else:
-            require(not confirmations, "出现无法识别的确认框，停止")
-        require(p.focus() == activity, "确认后页面变化，停止")
-        after_list = safe_switches(activity)
-        after = {t: on for t, on, _ in after_list}
-        require(sum(1 for t, _, _ in after_list if t == name) == 1 and after.get(name) is False,
-                f"{name}：回读未确认关闭")
-        require(all(after.get(t) == state for t, state in baseline.items() if t not in names),
-                f"{page}：其他开关状态变化，请手动核对")
-        p.changed.append((page, name))
-        print(f"  关 {name}（已回读）", flush=True)
 
 
 @step("系统跟踪")
@@ -311,5 +210,11 @@ def _():
     close_named(["个性化内容推荐", "个性化广告推荐"], "锁屏画报·推荐", recommend)
 
 
-print(f"\n已调整 {len(p.changed)} 项；未完成步骤 {len(FAILED_STEPS)} 个。", flush=True)
-print("通知渠道、广告包、快应用按标准流程另行处理。", flush=True)
+def tail():
+    print(f"\n已调整 {len(p.changed)} 项；未完成步骤 {len(rt.failed_steps)} 个。", flush=True)
+    print("通知渠道、广告包、快应用按标准流程另行处理。", flush=True)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, require, rt
+    from recipe_nav import close_named, goto, tap_text, wait_page
