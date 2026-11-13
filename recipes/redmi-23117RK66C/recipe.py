@@ -7,10 +7,6 @@ from entries import THEME_DEAD_ENDS
 # 回读确认数由引擎经 rt 记录
 
 
-def enter(name, scrolls=6):
-    require(p.entry(name, scrolls=scrolls), f"未找到「{name}」")
-
-
 @step("系统广告")
 def _():
     p.start("com.android.settings", ".ad.AdServiceSettings")
@@ -129,4 +125,4 @@ def tail():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import p, require, rt, start_or_skip
-    from recipe_nav import close_named, gear
+    from recipe_nav import close_named, enter, gear

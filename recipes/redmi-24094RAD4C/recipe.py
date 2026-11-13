@@ -9,56 +9,6 @@ import time
 from entries import THEME_DEAD_ENDS
 
 
-def tap_bottom_tab(name):
-    """按屏幕底部标签栏找入口，避开内容区里同名的普通文字。"""
-    from fast import bounds
-    for n in p.tree().iter("node"):
-        d = (n.get("content-desc") or "") + (n.get("text") or "")
-        if not d or name not in d:
-            continue
-        l, t, r, b = bounds(n)
-        if b > p.H * 0.85 and p.on_screen(n):
-            p.click((l + r) // 2, (t + b) // 2); time.sleep(1.5)
-            return True
-    return False
-
-
-def wait_bottom_tab(name, tries=5):
-    """主题商店冷启动先出开屏或更新层，底部栏可能晚几秒才稳定。"""
-    for _ in range(tries):
-        p.dismiss()
-        if tap_bottom_tab(name):
-            return True
-        time.sleep(0.8)
-    return False
-
-
-def close_with_plain_tap(names, page):
-    """下载管理和浏览器会吞掉短按；普通 tap 后确认，并核对其他开关未变。"""
-    before = {title: on for title, on, _ in p.switches()}
-    targets = [title for title in before if any(name in title for name in names)]
-    require_switches(before, names, page, contains=True)
-    for title in targets:
-        if not before[title]:
-            continue
-        xy = next((xy for t, on, xy in p.switches() if t == title and on), None)
-        if not xy:
-            raise RuntimeError(f"{page}：目标开关位置未识别，停止本页")
-        p.d.shell(f"input tap {xy[0]} {xy[1]}")
-        time.sleep(0.5)
-        p.confirm()
-    after = {title: on for title, on, _ in p.switches()}
-    if any(after.get(title) is not False for title in targets):
-        raise RuntimeError(f"{page}：回读未确认关闭")
-    if any(after.get(title) != state for title, state in before.items() if title not in targets):
-        raise RuntimeError(f"{page}：其他开关状态变化，请核对")
-    turned = [title for title in targets if before[title] and after.get(title) is False]
-    for title in turned:
-        print(f"  关 {title}")
-        p.changed.append((page, title))
-    print(f"  · {page}：核对 {len(targets)} 项，调整 {len(turned)} 项")
-
-
 @step("系统广告")
 def _():
     # HyperOS 3：隐私页首屏没有「更多安全设置」，它在「安全」标签页下。
@@ -176,5 +126,6 @@ def _():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import maybe, p, require_switches, start_or_skip
-    from recipe_nav import gear, tap_any, tap_tab
+    from recipe_nav import gear, tap_any, tap_bottom_tab, tap_tab, wait_bottom_tab
+    from recipe_strategies import close_with_plain_tap
     from recipe_steps import global_search, negative_screen, security_center

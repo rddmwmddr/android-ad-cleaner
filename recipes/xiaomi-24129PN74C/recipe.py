@@ -28,114 +28,18 @@ MODELS = ["24129PN74C"]
 import time
 from dataclasses import replace
 from entries import ENTRIES, THEME_DEAD_ENDS, reach
-from wait import until
 # 回读确认数由引擎经 rt 记录
+
+# 本机的齿轮入口点完要认出设置页（日历的齿轮开的是 PopupWindow，沿用 #407）；
+# 浏览器入口是底栏「菜单」→ 弹窗「设置」，回退到「我的」+齿轮（#833）。两处走法由家族库按这两个常量选。
+GEAR_STYLE = "checked"
+BROWSER_FLOW = "menu"
 
 # 浏览器段的入口页是设置页本身。分组里的另一条直达是「个性化推荐设置」子页：直接落过去时
 # 后面几个设置页入口都找不到、整段 0 项空跑，所以回退链只取设置页那一条（#912）。
 _BROWSER = ENTRIES["xiaomi"]["浏览器"]
 BROWSER_SETTINGS_ENTRY = replace(
     _BROWSER, direct=tuple(d for d in _BROWSER.direct if d.activity == ".BrowserSettingsActivity"))
-
-
-def tap_any(*names, scrolls=6):
-    return any(maybe(name, scrolls) for name in names)
-
-
-def menu_settings(tries=2):
-    """底栏「菜单」→ 弹窗里的「设置」，点完必须认出设置页（#586）。
-
-    工具栏右上角也有一个叫「设置」的图标，弹窗还没画出来时按文字点会落到它上面、进首页编辑面板，
-    后面几页入口全部找不到，整段 0 项又不报错。所以只点下半屏那一行，且没落进设置页就退回来
-    重开菜单再试；两次都不成就报当前页，不在工具栏面板上继续找。
-    底栏没有「菜单」的机型（MIX Flip 2）返回 False，交给 browser_settings() 的「我的」入口（#833）。"""
-    stopped = None
-    for _ in range(tries):
-        if not p.tap("菜单", exact=True, scrolls=0, quiet=True):
-            if stopped is None:
-                return False
-            raise RuntimeError("浏览器设置页没有打开；" + p.page_evidence())
-        xy = popup_row("设置")
-        if not xy:
-            raise RuntimeError("浏览器菜单里没有「设置」；" + p.page_evidence())
-        before = p.sig()
-        p.click(*xy)
-        p.settle(before, 1.5)
-        if p.in_settings_page():
-            return True
-        # 弹窗这一行在屏上才走到这里，所以按返回是收起弹窗或退出面板，不会离开浏览器首页
-        # focus 读不出前台时是空串，别让它被当成「还没进过弹窗」
-        stopped = p.focus()
-        p.back()
-    raise RuntimeError("浏览器设置页没有打开；" + p.page_evidence())
-
-
-def browser_settings():
-    """底栏「菜单」→ 弹窗「设置」；底栏没有「菜单」的机型在「我的」页里找设置（#833）。
-
-    借这份脚本的机型底栏布局不同：Xiaomi 15 是 主页/视频/AI搜索/菜单/我的，MIX Flip 2 是
-    主页/视频/AI搜索/免费小说/我的。两条入口点完都要认出设置页；「我的」那条没进去时报出
-    停在哪一页，不在旧页上继续找「隐私和安全」等子项（#586）。"""
-    if menu_settings():
-        return
-    print("  · 底栏没有「菜单」，改走「我的」→ 设置", flush=True)
-    if not p.tab("我的"):
-        raise RuntimeError("浏览器底部没有「菜单」，也没有「我的」标签；" + p.page_evidence())
-    p.dismiss()                       # 「我的」页可能先弹一键登录框，盖住齿轮
-    if not gear():
-        raise RuntimeError("浏览器设置页没有打开；" + p.page_evidence())
-
-
-def direct_settings():
-    """浏览器设置页能直达就直达（#912）。
-
-    直达档取自 entries 的浏览器分组，只试直达不试设置搜索：设置搜索会离开浏览器、落到
-    系统设置里，拿到的不是这一页。直达不通返回 False，由调用方按「菜单」→「我的」回退。
-    报告者实测那两条回退对时序敏感：点完底栏「我的」立刻点「设置」会点空，隔 0.2 秒才稳。"""
-    if reach(p, BROWSER_SETTINGS_ENTRY, allow_search=False) != "direct":
-        return False
-    print("  · 直达浏览器设置页", flush=True)
-    return True
-
-
-def gear(toolbar_only=False):
-    """很多小米 App 的设置是右上角齿轮图标，没有文字。
-    匹配只认正好是「设置」的描述、正文或 setting 类 id：商店「我的」页有一行正文「去功能设置里
-    重新开启」，主题商店有「设置壁纸」，按包含匹配会先命中它们、点进别的子页，整段跑空（#305 / #374）。
-    点击后要认出设置页：日历的齿轮会打开一个 PopupWindow，不校验就会在弹窗里找入口（#407）。"""
-    from fast import bounds, icon_hit
-
-    def open_settings():
-        for n in p.tree().iter("node"):
-            l, t, r, b = bounds(n)
-            icon = "ImageView" in n.get("class", "") and r - l < p.W * 0.25 and b - t < p.H * 0.15
-            if (icon_hit(n) and (n.get("clickable") == "true" or icon) and p.on_screen(n)
-                    and (not toolbar_only or b < p.H * 0.23)):
-                p.click((l + r) // 2, (t + b) // 2)
-                time.sleep(1)
-                return True
-        if not toolbar_only and p.find("设置", exact=True, edge_ok="tab"):
-            return p.tap("设置", exact=True, scrolls=0)
-        for n in p.tree().iter("node"):
-            key = (n.get("content-desc") or "") + " " + (n.get("resource-id") or "")
-            l, t, r, b = bounds(n)
-            if (any(k in key.lower() for k in ("更多", "more", "menu"))
-                    and n.get("clickable") == "true" and p.on_screen(n) and b < p.H * 0.22):
-                p.click((l + r) // 2, (t + b) // 2)
-                time.sleep(0.5)
-                if p.tap("设置", exact=True, scrolls=0):
-                    return True
-                break
-        return False
-
-    before = p.focus()
-    if not open_settings():
-        return False
-    if p.in_settings_page():
-        return True
-    if p.focus() != before:
-        p.back()          # 点开的是弹窗或别的页：关掉，别留给下一段（#331 / #407）
-    return False
 
 
 HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "知乎", "精选"]
@@ -189,30 +93,6 @@ def _():
 @step("下载管理")
 def _():
     downloads_tap()
-
-
-def settings_icon_visible():
-    """「设置」入口进了界面树且可见：只等它出现，点不点得中由 gear() 再判。
-
-    判据是 icon_hit()（与 gear() 同一份），但不管可点性与位置——这两条留给 gear()。"""
-    from fast import icon_hit
-    return any(icon_hit(n) and p.on_screen(n) for n in p.tree().iter("node"))
-
-
-def theme_settings(tries=2):
-    """主题「我的」→ 顶部「设置」图标，两次都不成才报错（#912）。
-
-    底栏「我的」只有 content-desc（读作「未选中,我的」），内容区另有「我的点赞 / 我的收藏 /
-    我的订单」——`go("我的")` 走包含匹配，会先点内容区那一行；`tab()` 只认屏底带，命中的是底栏。
-    点进「我的」后图标要晚一帧才进树，gear() 只读一次树，所以先等图标出现再交给它。"""
-    for _ in range(tries):
-        if not p.tab("我的"):
-            raise RuntimeError("未进入主题「我的」；" + p.page_evidence())
-        p.dismiss()                   # 「我的」页可能先弹登录 / 引导弹窗，盖住图标
-        until(settings_icon_visible, timeout=3, poll=0.3, now=time.time, sleep=time.sleep)
-        if gear():
-            return
-    raise RuntimeError("主题设置入口没找到；" + p.page_evidence())
 
 
 @step("主题")
@@ -312,5 +192,5 @@ def tail():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import maybe, p, require, require_switches, rt, start_or_skip
-    from recipe_nav import close_named, popup_row
+    from recipe_nav import browser_settings, close_named, direct_settings, gear, theme_settings
     from recipe_steps import downloads_tap, global_search, negative_screen, security_center

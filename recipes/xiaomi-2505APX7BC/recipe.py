@@ -18,69 +18,11 @@ BUILD = ""
 MODELS = ["2505APX7BC"]
 import time
 from entries import THEME_DEAD_ENDS
-from wait import until
 
-
-def gear(toolbar_only=False):
-    """很多小米 App 的设置是右上角齿轮图标，没有文字。
-    匹配只认正好是「设置」的描述、正文或 setting 类 id：商店「我的」页有一行正文「去功能设置里
-    重新开启」，主题商店有「设置壁纸」，按包含匹配会先命中它们、点进别的子页，整段跑空（#305 / #374）。
-    点击后要认出设置页：点开的是弹窗或别的页就退回来（#331 / #407）。"""
-    from fast import bounds, icon_hit
-
-    def open_settings():
-        for n in p.tree().iter("node"):
-            l, t, r, b = bounds(n)
-            icon = "ImageView" in n.get("class", "") and r - l < p.W * 0.25 and b - t < p.H * 0.15
-            if (icon_hit(n) and (n.get("clickable") == "true" or icon) and p.on_screen(n)
-                    and (not toolbar_only or b < p.H * 0.23)):
-                p.click((l + r) // 2, (t + b) // 2)
-                time.sleep(1)
-                return True
-        # 主题商店的「设置」是「我的」页上的文字按钮，不在这条图标分支里
-        if not toolbar_only and p.find("设置", exact=True, edge_ok="tab"):
-            return p.tap("设置", exact=True, scrolls=0)
-        # 有的版本把齿轮藏在右上「更多」菜单里
-        for n in p.tree().iter("node"):
-            key = (n.get("content-desc") or "") + " " + (n.get("resource-id") or "")
-            l, t, r, b = bounds(n)
-            if (any(k in key.lower() for k in ("更多", "more", "menu"))
-                    and n.get("clickable") == "true" and p.on_screen(n) and b < p.H * 0.22):
-                p.click((l + r) // 2, (t + b) // 2)
-                time.sleep(0.5)
-                if p.tap("设置", exact=True, scrolls=0):
-                    return True
-                break
-        return False
-
-    before = p.focus()
-    if not open_settings():
-        return False
-    if p.in_settings_page():
-        return True
-    if p.focus() != before:
-        p.back()          # 点开的是弹窗或别的页：关掉，别留给下一段
-    return False
-
-
-def popup_row(text, timeout=3.0, below=0.0):
-    """浮层里文字正好是 text 的那一行；below 是它必须落在屏高多少比例以下。
-    天气的「更多设置」浮层从右上锚点往下展开，位置不固定在屏底，所以默认不设下限。
-    刚打开的浮层里等入口不要用 scrolls=0 的 p.tap()（它等待期间会 dismiss 掉浮层，docs/04）。"""
-    def row():
-        for t, (l, top, r, b), _n in p.texts():
-            if t == text and top > p.H * below:
-                return (l + r) // 2, (top + b) // 2
-        return None
-    return until(row, timeout=timeout, poll=0.3, now=time.time, sleep=time.sleep)
-
-
-def browser_settings():
-    """底部「我的」→ 设置。底栏没有「我的」、或那一页认不出设置页时返回 False。"""
-    if not p.tab("我的"):
-        return False
-    time.sleep(1)
-    return gear()
+# 这台机的齿轮点完要认出设置页（点开的是弹窗或别的页就退回来，沿用 #331 / #407）；
+# 浏览器底栏没有「菜单」，设置入口在「我的」页里。
+GEAR_STYLE = "checked"
+BROWSER_FLOW = "mine"
 
 
 HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "知乎", "精选"]
@@ -246,4 +188,5 @@ def _():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import maybe, p, require, require_switches, start_or_skip
+    from recipe_nav import browser_settings, popup_row
     from recipe_steps import downloads_tap, global_search, negative_screen, security_center

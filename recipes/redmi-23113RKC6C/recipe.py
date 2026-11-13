@@ -11,26 +11,6 @@ from entries import THEME_DEAD_ENDS
 # 回读确认数由引擎经 rt 记录
 
 
-def tap_any(*names, scrolls=6):
-    return any(maybe(name, scrolls) for name in names)
-def mine_settings(tries=2):
-    """底栏「我的」→ 「设置」，点完必须认出设置页（#586）。
-
-    不校验的话，点击被吞、或点在了别的面板上，都会当成已经进了设置页：后面几页入口全部
-    找不到，整段 0 项又不报错。没落进设置页就退回来重开「我的」再点一次，两次都不成就报当前页。"""
-    stopped = ""
-    for _ in range(tries):
-        if not p.tap("我的", exact=True, scrolls=0):
-            raise RuntimeError("未找到浏览器「我的」")
-        if not p.tap("设置", exact=True, scrolls=0):
-            raise RuntimeError("未找到浏览器「设置」")
-        if p.in_settings_page():
-            return
-        stopped = p.focus()
-        p.back()
-    raise RuntimeError(f"浏览器设置页没有打开；停在 {stopped}")
-
-
 HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "知乎", "精选"]
 
 
@@ -97,4 +77,5 @@ def tail():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import maybe, p, rt
+    from recipe_nav import mine_settings
     from recipe_steps import downloads, global_search, negative_screen, security_center, store, system_ads_security, theme, weather_calendar_tap

@@ -10,25 +10,11 @@ MODELS = ["M154FF", "2608BPX34C", "2510DRK44C"]
 import time
 from entries import THEME_DEAD_ENDS
 
+# 浏览器设置入口：先看工具栏齿轮，再点底部「我的」找齿轮。
+BROWSER_FLOW = "toolbar"
+
 # 注入面的 opened() 从这里取 adb_link.DeviceLost
 import adb_link
-
-
-def browser_settings():
-    """先看工具栏，再点底部「我的」；不把资讯正文里的「我的」当导航标签。"""
-    before = p.focus()
-    if gear(toolbar_only=True):
-        if p.in_settings_page():          # 点完要认出设置页，点击被吞时别在旧页上找入口（#331）
-            return True
-        if p.focus() != before:
-            p.back()
-    for text, (l, t, r, b), node in p.texts():
-        if text == "我的" and t >= p.H * 0.65:
-            before = p.sig()
-            p.click((l + r) // 2, (t + b) // 2)
-            p.settle(before, 1.5)
-            return gear()
-    return False
 
 
 @step("系统广告")
@@ -129,5 +115,5 @@ def _():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import maybe, p
-    from recipe_nav import gear, opened, tap_any
+    from recipe_nav import browser_settings, gear, opened, tap_any
     from recipe_steps import downloads_probe, global_search, negative_screen, security_center, theme, weather_calendar_probe

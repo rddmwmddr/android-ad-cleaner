@@ -16,40 +16,6 @@ from entries import THEME_DEAD_ENDS
 # 回读确认数由引擎经 rt 记录
 
 
-def tap_any(*names, scrolls=6):
-    return any(maybe(name, scrolls) for name in names)
-def gear_tap(pkg, activity):
-    """齿轮用引擎短按点不动时的兜底：同一次读屏里找到齿轮，改用 input tap（80 毫秒短按有的 App 会吞）。"""
-    from fast import bounds
-    for n in p.tree().iter("node"):
-        text = (n.get("text") or "").strip()
-        desc = (n.get("content-desc") or "").strip()
-        if text == "设置" or desc == "设置":
-            l, t, r, b = bounds(n)
-            if not p.on_screen(n):
-                continue
-            p.d.shell(f"input tap {(l + r) // 2} {(t + b) // 2}")
-            time.sleep(1.2)
-            return p.focus().split("/", 1)[0] == pkg and activity in p.focus()
-    return False
-
-
-def browser_start():
-    """冷启动偶发被启动过渡窗判断成「离开前台」：先强停再直达 BrowserActivity，重试一次。"""
-    for attempt in range(2):
-        try:
-            p.start("com.android.browser", ".BrowserActivity")
-            return True
-        except SkipStep:
-            raise                 # App 本机没装：放行，不走下面那句按文案判的重试分支（#908）
-        except RuntimeError as e:
-            if attempt or "离开前台" not in str(e):
-                raise
-            p.d.shell("am force-stop com.android.browser")
-            time.sleep(1.5)
-    return False
-
-
 HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "知乎", "精选"]
 
 
@@ -144,6 +110,7 @@ def tail():
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from recipe_kit import SkipStep, maybe, p, require, require_switches, rt, start_or_skip
-    from recipe_nav import gear
+    from recipe_kit import maybe, p, require, require_switches, rt, start_or_skip
+    from recipe_nav import browser_start, gear
+    from recipe_strategies import gear_tap
     from recipe_steps import downloads, global_search, negative_screen, security_center, store, system_ads_security, weather_calendar_tap
