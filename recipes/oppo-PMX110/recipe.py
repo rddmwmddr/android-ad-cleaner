@@ -46,39 +46,6 @@ STORE_PROMOS = [
 ]
 
 
-def close_named(names, title, max_screens=12, dependent=(), reopen=None, snapshot=None, optional=()):
-    """关掉点名的开关，并核对目标已关、非目标未变。
-
-    optional 里的名字允许这次页面上没有：记成「未显示」并继续；名单其余项缺一个就整段不动。
-    """
-    # 回读确认数由引擎经 rt 记录
-    before = read_switches(title, max_screens) if snapshot is None else snapshot
-    require_switches(before, names, title, optional=optional)
-    present = [name for name in names if name in before]
-    absent = [name for name in names if name not in before]
-    if absent:
-        note = f"{title}：本次未显示 {'、'.join(absent)}，未操作、不计为已关闭"
-        SKIPPED_ITEMS.append(note)
-        print("  · " + note, flush=True)
-    if not present:
-        return
-    if not any(before[name] for name in present):
-        rt.confirm(len(present))
-        print(f"  · {title}：读取确认 {len(present)} 项原已关闭，未点击", flush=True)
-        return
-    p.top(max_screens)
-    p.off(only=list(present), keep=[name for name in before if name not in names],
-          page=title, max_screens=max_screens)
-    if reopen:
-        reopen()
-    after = read_switches(title, max_screens)
-    require(all(after.get(name) is False for name in present), f"{title}：回读未确认关闭")
-    require(all(after.get(name) == state for name, state in before.items()
-                if name not in names and name not in dependent), f"{title}：其他功能开关状态变化")
-    rt.confirm(len(present))
-    print(f"  · {title}：回读确认 {len(present)} 项关闭", flush=True)
-
-
 def require_installed(package, label):
     """没装的包 `pm path` 输出为空，退出码是 1（adb shell v2 带回）或 0（不带回退出码的通道）：
     那是「没装」，跳过本段，不算读不出（#899）。有报错文字或别的退出码才算读不出。"""
@@ -193,5 +160,9 @@ if TYPE_CHECKING:
     from recipe_kit import p, page, require, require_switches, rt, skip
     from recipe_nav import ad_id_page, app_settings, browser_settings, hide_carousel, menu_state
     from recipe_nav import more_menu, read_switches, row, switch_signature, switch_top, system_settings
-    from recipe_strategies import close_all_listed
+    from recipe_strategies import close_all_listed, close_named_optional
     from recipe_steps import assistant_advice_rows, assistant_screen, game_center_direct, search_settings_direct, theme_store_settings, video_direct
+
+# 负一屏 / 主题 / 视频 / 游戏中心的段体按 `g["close_named"]` 取这个钩子，实现住在
+# recipe_strategies 的 `close_named_optional`，这里绑回旧名字（#1253）。
+close_named = close_named_optional

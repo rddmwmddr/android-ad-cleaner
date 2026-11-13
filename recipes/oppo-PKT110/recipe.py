@@ -22,36 +22,6 @@ HOME_CARD_PARENT = "应用建议"
 SEARCH_SOURCES = ["个性化推荐", "精选资讯", "搜索建议"]
 
 
-def close_group(children, parent, page, max_screens=1):
-    """有的开关是父项的子项：父开关一关，子项那两行就从页面上消失了（点不到、也回读不到）。
-    父项还开着时先关子项再关父项；父项本来就是关的，子项压根不在页面上，只关父项。"""
-    p.top(max_screens)
-    first = wait_switches()
-    require(first, f"{page}：页面里没读到开关，未操作")
-    if read_switches(max_screens, first=first).get(parent):
-        close_named(children, page, max_screens=max_screens)
-        close_named([parent], page, max_screens=max_screens, gone=children)
-    else:
-        close_named([parent], page, max_screens=max_screens)
-
-
-def close_all(page, max_screens):
-    """整页关掉所有开关（逐 App 的广告跟踪列表用），关完回读确认。"""
-    # 回读确认数由引擎经 rt 记录
-    p.top(max_screens)
-    first = wait_switches()
-    require(first, f"{page}：没读到开关，未操作")
-    before = read_switches(max_screens, first=first)
-    require(before, f"{page}：没读到开关，未操作")
-    p.top(max_screens)                   # 读完整页会翻到底；p.off 自己也回顶，这一下是让前后两段都从页顶读
-    p.off(page=page, max_screens=max_screens)
-    p.top(max_screens)
-    current = read_switches(max_screens)
-    still = sorted(name for name, on in current.items() if on)
-    require(not still, f"{page}：回读未确认关闭（仍有 {len(still)} 项开着）")
-    rt.confirm(len(before))
-
-
 @step("广告跟踪")
 def _():
     """设置 → 隐私与安全 → 设备标识与广告 → 广告跟踪。
@@ -209,4 +179,4 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import p, require, require_switches, rt, skip_in_safe_mode
     from recipe_nav import close_named, open_settings, read_switches, tap
-    from recipe_strategies import wait_switches
+    from recipe_strategies import close_all, close_group, wait_switches

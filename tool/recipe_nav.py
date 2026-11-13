@@ -1025,11 +1025,10 @@ NAV.update({
 # 走设置页的方式结构不同，按跨家族分派表的新 flow 注册（`BROWSER_FLOW`，见文件末尾）。
 #
 # PHK110 / PKX110 / PKH110 的 `off_exact` 与 PLZ110 / PMX110 / PLG110 / PMA110 的 `close_named`
-# 继续留在脚本里：函数体里的 `p.off(only=list(targets), …)` / `keep=…` 是 `vocab.py` 的
-# 「未解析」台账与整页关闭数要列的现场（#1237 的判据要求这几个数逐字不变），搬走就把这些证据
-# 一起搬没了（沿用 #1148 的口径）。PKT110 的 `close_group` / `close_all` 同理。
-# `close_named` / `read_switches` 的注入名两边都占：小米系那两份住在这一节，OPPO 各档紧挨着
-# 放同一张表——一张表一个名字，跨模块分派会把两张注入面绕在一起。
+# 在 #1253 搬进了 `recipe_strategies`：词库现在也扫策略库那一张表，那几个「未解析 / keep=」的
+# 现场跟着实现走、读数不变。`close_named` / `read_switches` 的注入名两边都占——小米系那两份
+# 住在这一节，OPPO 各档紧挨着放同一张表，一张表一个名字，跨模块分派会把两张注入面绕在一起；
+# 策略库那几套走法因此各用带后缀的注入名，脚本把注入实现绑回旧名字。
 
 def _oppo_wait_search_settings(p, g):
     def wait_search_settings(tries=30):
@@ -2269,8 +2268,9 @@ def _honor_app_settings(p, g):
 #
 # 只有一份脚本，家族分节不成立：只收注入名已经住在共享库、别家也在用的那几个
 # （`wait_page` / `tap_text` / `goto` / `close_named`），各占一档。其余本机助手
-# （`page_summary` / `tap_id` / `open_app` / `assert_no_other_window` / `safe_switches`）
-# 服务的是这台机的页面与 `TARGET_PACKAGE` 约定，留在脚本里。
+# （`page_summary` / `tap_id` / `open_app` / `assert_no_other_window`）
+# 服务的是这台机的页面与 `TARGET_PACKAGE` 约定，留在脚本里；`safe_switches` 在 #1253 搬进了
+# `recipe_strategies`，它按 `g["assert_no_other_window"]` 取这里留下的那个助手。
 
 def _meizu_wait_page(p, g):
     def wait_page(activity, title, timeout=8):

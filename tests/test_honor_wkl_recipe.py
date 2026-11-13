@@ -35,7 +35,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
         scope = self.load(p)
         scope["settle_page"] = Mock()
         scope["labels"] = Mock(return_value={"设置"})
-        scope["scan"] = Mock(side_effect=[before, after])
+        scope["scan_switches"] = Mock(side_effect=[before, after])
         return p, scope
 
     def test_model_build_and_steps_are_discoverable_by_runner(self):

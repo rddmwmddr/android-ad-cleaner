@@ -19,31 +19,6 @@ STORE_PROMOTIONS = [
 ]
 
 
-def off_exact(names, page, max_screens=16):
-    """逐页传入当前可见的精确标题，不把子串扩展到未知服务（用于需要翻多屏的页面）。"""
-    wanted, seen, failed = set(names), set(), set()
-    for _ in range(max_screens):
-        root = p.tree()
-        visible = {title for title, _, _ in p.switches(root)}
-        targets = wanted & visible
-        seen.update(targets)
-        if targets:
-            before = len(p.changed)
-            expected = {title for title, on, _ in p.switches(root) if on and title in targets}
-            p.off(only=list(targets), keep=list(visible - targets), page=page, max_screens=1)
-            changed = {title for _, title in p.changed[before:]}
-            failed.update(expected - changed)
-        elif not p.scroll_more():
-            break
-        current = {title for title, _, _ in p.switches()}
-        if current == visible:
-            break
-    if failed or wanted - seen:
-        print(f"  ! 未关闭 {sorted(failed)}；本机型无此项 {sorted(wanted - seen)}")
-        return not failed
-    return True
-
-
 def guard():
     model = p.d.shell("getprop ro.product.model").output.strip()
     build = p.d.shell("getprop ro.build.display.id").output.strip()
@@ -164,5 +139,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import p, rt, skip, skip_in_safe_mode
     from recipe_nav import browser_settings_direct, open_search_settings, tap_page
-    from recipe_strategies import close_titles
+    from recipe_strategies import close_titles, off_exact_paged_optional
     from recipe_steps import browser_home, store_promotions
+
+# 段体（store_promotions）按 `g["off_exact"]` 取这个钩子，实现住在 recipe_strategies 的
+# `off_exact_paged_optional`（本机「未找到」不算失败），这里绑回旧名字（#1253）。
+off_exact = off_exact_paged_optional

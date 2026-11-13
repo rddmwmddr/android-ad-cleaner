@@ -297,9 +297,10 @@ STEPS.update({
 # 三台的浏览器首页与商店段逐字相同，浏览器的广告 / 个性化两段只有一加两台相同（PKH110 的
 # 广告段换了一句打印、个性化段改走 `close_titles`，按机型差异留在脚本里）。
 #
-# `off_exact` 同理留在脚本里：它是词库「未解析」现场（沿用 #1148 的做法），而且 PKH110 那份的
-# 打印与返回判据与一加两台不同，搬走就等于把两族并成一份。`STORE_PROMOTIONS` 在 PHK110 /
-# PKH110 是 26 条、PKX110 是 36 条，一律按名字现取。
+# 这三段的 `g["off_exact"]` 钩子在 #1253 搬进了 `recipe_strategies`（一加两台一档、PKH110 一档，
+# 后者的打印与返回判据不同）；词库现在也扫策略库，未解析现场跟着实现走、读数不变。脚本把注入
+# 实现绑回旧名字，段体不必改。`STORE_PROMOTIONS` 在 PHK110 / PKH110 是 26 条、PKX110 是 36 条，
+# 一律按名字现取。
 
 def _oppo_browser_home(p: Any, g: dict[str, Any]) -> Callable[..., Any]:
     def browser_home() -> bool:
