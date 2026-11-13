@@ -125,7 +125,7 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "343182a115909141"
 
-["oppo/PLR110/recipe.py"]
+["oppo/PLR110/PLR110.toml"]
 build = "PLR110_17.0.0.101"
 date = "2026-10-31"
 by = "机主"
@@ -133,7 +133,7 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "eb6195ac0df28e18"
 
-["oppo/PLZ110/recipe.py"]
+["oppo/PLZ110/PLZ110.toml"]
 build = "PLZ110_17.0.0.107(CN01)"
 date = "2026-11-08"
 by = "机主"
@@ -141,7 +141,7 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "9b756ea72e042af8"
 
-["oppo/PYB110/recipe.py"]
+["oppo/PYB110/PYB110.toml"]
 build = "PYB110_17.0.0.157(CN01)"
 date = "2026-11-12"
 by = "机主"
@@ -173,7 +173,7 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "a759f3405b22582b"
 
-["oppo/PLP120/recipe.py"]
+["oppo/PLP120/PLP120.toml"]
 build = "PLP120_16.0.9"
 date = "2026-10-22"
 by = "机主"
@@ -181,7 +181,7 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "f8247f2acd80dece"
 
-["oppo/PMA110/recipe.py"]
+["oppo/PMA110/PMA110.toml"]
 build = "PMA110_17.0.0.106(CN01)"
 date = "2026-10-29"
 by = "机主"
@@ -190,7 +190,7 @@ evidence = "机主自测"
 body_hash = "ccc6f6301b1c79ef"
 
 # 头注只写到 11-05 的逐页核对；同目录 README 记到 11-07「从开启状态」整轮补验，贡献者实测、维护方未复跑。
-["oppo/PMX110/recipe.py"]
+["oppo/PMX110/PMX110.toml"]
 build = "PMX110_17.0.0.116(CN01)"
 date = "2026-11-07"
 by = ""
@@ -198,7 +198,7 @@ tier = "部分"
 evidence = "未知"
 body_hash = "b97b06f1e0635edf"
 
-["oppo/RMX3700/recipe.py"]
+["oppo/RMX3700/RMX3700.toml"]
 build = "RMX3700_16.0.5.1300(CN01)"
 date = "2026-11-02"
 by = "机主"
@@ -207,7 +207,7 @@ evidence = "机主自测"
 body_hash = "e02ae196cdeafc9d"
 
 # 按报告者（#1083）的实测落点写成，本仓库没有这台手机、未复跑，所以不记验证人与日期。
-["oppo/RMX3888/recipe.py"]
+["oppo/RMX3888/RMX3888.toml"]
 build = ""
 date = ""
 by = ""
