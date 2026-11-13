@@ -1,5 +1,11 @@
 # 一加 Ace 2，Android 15；2026-10-29 手动路径实测，自动脚本尚未在真机整段验证。不修改通知、挂起包、快应用、系统广告跟踪或服务类开关。
 from recipe_kit import step
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, rt, skip
+    from recipe_nav import navigate, open_settings, page_activity, search_settings
+    from recipe_nav import tap_page, wait_page
+    from recipe_strategies import off_exact
 # 2026-11-10 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，未复测（#933）。
 BUILD = "PHK110_15.0.0.601(CN01)"
 
@@ -10,7 +16,7 @@ import time
 OPEN_SETTINGS_STYLE = "intent"
 SEARCH_SETTINGS_STYLE = "page"
 # 家族库的 `page_activity` 与 recipe_kit 注入的 `page()` 同名不同签名，绑回旧名字给段体用。
-page = page_activity  # noqa: F821 — 装载器执行模块体前已把注入名写进作用域
+page = page_activity
 
 
 def guard():
@@ -98,9 +104,3 @@ def tail():
     print("通知渠道、广告包和快应用按独立流程处理，挂起须机主同意。")
     print("分段结果：", rt.results)
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import p, rt, skip
-    from recipe_nav import navigate, open_settings, page_activity, search_settings
-    from recipe_nav import tap_page, wait_page
-    from recipe_strategies import off_exact
