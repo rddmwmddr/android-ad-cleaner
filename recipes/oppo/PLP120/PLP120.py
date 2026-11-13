@@ -1,8 +1,8 @@
 # OPPO Find N6（PLP120，ColorOS 16 / 17）的本机例外函数（catalog 的 `code=`，影随同名 `.toml`）。
-# 共享库的 settings_page / search_settings / enter_settings / game_settings_direct / game_settings_via_mine /
-# open_switch_page / page / read_on_page 与 require_switches / skip_in_safe_mode 由装载器注入执行作用域。
-# 九段都留在这里：小布建议改成点「资讯服务」进二级页再关（旧「内容资讯」列表页兜底），游戏中心先试
-# APP_SETTINGS 直达设置页（「我的 → 设置」兜底）。两条路径都取自同族真机实测（PMX110 / PKT110）。
+# 共享库的 search_settings / enter_settings / game_settings_direct / game_settings_via_mine /
+# open_switch_page / page / read_on_page 与 require_switches 由装载器注入执行作用域。
+# 只剩五段在这里：负一屏（手势循环）、下拉搜索（运行期名单）、浏览器（多分支状态机）、
+# 游戏中心（运行期 direct 分支）、小布建议（两次入口状态机）。其余四段已落数据（见 `.toml`）。
 import time
 
 import adb_link
@@ -10,26 +10,15 @@ from fast import ScreenLocked
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from recipe_kit import SkipStep, p, page, require_switches, skip_in_safe_mode
+    from recipe_kit import p, page, require_switches
     from recipe_nav import enter_settings, game_settings_direct, game_settings_entry, game_settings_via_mine
-    from recipe_nav import open_switch_page, search_settings, settings_page, wait_search_settings
+    from recipe_nav import open_switch_page, search_settings
     from recipe_strategies import read_on_page
 
 BUILD = "PLP120_16.0.9"
 
 GAME = "com.nearme.gamecenter"
 SETTINGS = "com.android.settings"
-
-
-def step_ad_tracking(p, rt):
-    # 每个 App 一个开关、没有总开关；新装的 App 默认开。ColorOS 17 首页改叫「隐私与安全」（#165 社区实测）
-    skip_in_safe_mode()
-    found = settings_page("隐私", "设备标识与广告", "广告跟踪")
-    if not found:
-        p.miss = 0
-        found = settings_page("隐私与安全", "设备标识与广告", "广告跟踪")
-    if found:
-        p.off(page="广告跟踪")
 
 
 def step_negative_screen(p, rt):
@@ -85,23 +74,6 @@ def step_search(p, rt):
     p.back(2)
 
 
-STORE_KEEP = ["帮助与客服", "应用安全", "应用工具", "存储空间清理", "我的资产", "安全守护",
-              "小i客服", "应用使用记录", "首页 AI 搜索", "自动检测风险应用"]
-
-
-def step_store(p, rt):
-    p.start("com.heytap.market")
-    p.go("我的", "设置")
-    p.tap("设置", exact=True, scrolls=0)
-    if p.tap("隐私", exact=True):
-        p.off(only=["个性化推荐"], page="商店·隐私")
-        p.back()
-    if p.tap("服务管理", exact=True):
-        p.off(keep=STORE_KEEP, page="商店·服务管理")
-        p.back()
-    p.back(2)
-
-
 def step_browser(p, rt):
     p.start("com.heytap.browser")
     if p.find("我的", exact=True, edge_ok="tab"):          # X9 Ultra：底部「我的」→ 设置
@@ -122,28 +94,6 @@ def step_browser(p, rt):
         p.off(only=["开屏广告", "资讯列表广告", "摇一摇"], page="浏览器·广告管理")
         p.back(2)
     p.back(2)
-
-
-def step_theme(p, rt):
-    p.start("com.heytap.themestore")
-    p.go("我的", "设置")
-    p.tap("设置", exact=True, scrolls=0)
-    if p.tap("服务管理", exact=True) and p.tap("消息与广告", exact=True):
-        p.off(only=["消息通知", "开屏广告"], page="主题·消息与广告")
-        p.back(2)
-    if p.tap("隐私", exact=True) and p.tap("个性化推荐设置", exact=True):
-        p.off(only=["个性化推荐"], page="主题·个性化推荐")
-        p.back(2)
-    p.back(2)
-
-
-def step_video(p, rt):
-    p.start("com.heytap.yoli")
-    p.go("我的", "设置")
-    p.tap("设置", exact=True)
-    if p.tap("个性化内容管理", exact=True):
-        p.off(only=["个性化推荐"], page="视频·个性化")
-    p.back(3)
 
 
 def step_game_center(p, rt):
