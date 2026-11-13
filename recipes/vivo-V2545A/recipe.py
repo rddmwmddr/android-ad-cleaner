@@ -1,5 +1,5 @@
-# vivo X Fold6 机型脚本：V2545A（OriginOS 6 Fold，Android 16，PD2545B_A_16.0.16.0.W10）
-# 入口沿用同代 OriginOS 6 路径，逐步在真机核对；整段只用 only=[] 点名关闭，找不到就跳过。
+# vivo X Fold6 机型脚本：V2545A（OriginOS 6 Fold，Android 16，PD2545B_A_16.0.16.0.W10）；入口沿用同代 OriginOS 6 路径，逐步在真机核对；整段只用 only=[] 点名关闭，找不到就跳过。
+from recipe_kit import step
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]
 BUILD = "PD2545B_A_16"
 MODELS = ["V2545A"]
@@ -142,3 +142,8 @@ def _():
     maybe("设置", scrolls=0)
     p.off(only=["天气服务"], page="天气·设置")
     p.back(2)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p
+    from recipe_nav import settings_home

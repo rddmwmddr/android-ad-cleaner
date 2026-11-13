@@ -1,5 +1,5 @@
-# OPPO Find X9 Ultra（PMA110），ColorOS 17.0.0.106(CN01) / Android 17。
-# 2026-10-29 真机逐页记录；仅收录本机已识别的开关，不包含包操作和通知渠道。
+# OPPO Find X9 Ultra（PMA110），ColorOS 17.0.0.106(CN01) / Android 17。2026-10-29 真机逐页记录；仅收录本机已识别的开关，不包含包操作和通知渠道。
+from recipe_kit import step
 # 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，未复测（#933）。
 BUILD = "PMA110_17.0.0.106(CN01)"
 
@@ -8,8 +8,8 @@ import time
 
 # bounds 只给注入面的 carousel_choices 取（它按执行作用域解析这个名字）
 from fast import ScreenLocked, bounds
-RESULTS = []
-VERIFIED_SWITCHES = 0
+# 分段结果由引擎经 rt 记录
+# 回读确认数由引擎经 rt 记录
 
 SETTINGS = "com.android.settings/com.oplus.settings.feature.homepage.OplusSettingsHomepageActivity"
 OAID = "com.android.settings/com.oplus.settings.feature.notification.oaid.OAIDActivity"
@@ -80,7 +80,7 @@ def read_switches(activity, title, max_screens=8):
 
 def close_named(names, page, activity, title, max_screens=8, reopen=None, dependent=()):
     """精确核对标题再调用引擎；回读关闭状态，同时保留其他功能开关。"""
-    global VERIFIED_SWITCHES
+    # 回读确认数由引擎经 rt 记录
     before = read_switches(activity, title, max_screens)
     require_switches(before, names, page)
     if any(before[name] for name in names):
@@ -94,7 +94,7 @@ def close_named(names, page, activity, title, max_screens=8, reopen=None, depend
         require(all(current.get(name) is False for name in names), f"{page}：回读未确认关闭")
         require(all(current.get(name) == state for name, state in before.items()
                     if name not in names and name not in dependent), f"{page}：其他开关状态变化，请核对")
-    VERIFIED_SWITCHES += len(names)
+    rt.confirm(len(names))
     print(f"  · {page}：回读确认 {len(names)} 项关闭", flush=True)
 
 
@@ -252,6 +252,12 @@ def _():
     close_named(["热点资讯"], "负一屏·个性化推荐", activity, "个性化推荐", 2)
 
 
-print(f"\n已回读确认 {VERIFIED_SWITCHES} 项；分段结果：{RESULTS}", flush=True)
-print("录制时本机未安装游戏中心，未录入；通知渠道与组件挂起仍走 run.py 的独立流程。", flush=True)
-print("乐划须先由机主在应用内关闭锁屏功能，再按本人意愿挂起；本脚本不动乐划。", flush=True)
+def tail():
+    print(f"\n已回读确认 {rt.verified} 项；分段结果：{rt.results}", flush=True)
+    print("录制时本机未安装游戏中心，未录入；通知渠道与组件挂起仍走 run.py 的独立流程。", flush=True)
+    print("乐划须先由机主在应用内关闭锁屏功能，再按本人意愿挂起；本脚本不动乐划。", flush=True)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, require, require_switches, rt, skip, skip_in_safe_mode
+    from recipe_nav import assistant_settings, hide_carousel

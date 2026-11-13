@@ -1,10 +1,10 @@
-# vivo V2417A，Android 16，PD2417D_A_16.2.14.1.W10。
-# 路径来自 2026-10-30 真机逐页操作；验证范围及复跑记录见同目录 README.md。
+# vivo V2417A，Android 16，PD2417D_A_16.2.14.1.W10。路径来自 2026-10-30 真机逐页操作；验证范围及复跑记录见同目录 README.md。
+from recipe_kit import step
 BUILD = "PD2417D_A_16.2.14.1.W10"
 MODELS = ["V2417A"]
 
 from wait import until
-VERIFIED_SWITCHES = 0
+# 回读确认数由引擎经 rt 记录
 
 
 def title_key(title):
@@ -29,11 +29,11 @@ def read_switches(max_screens=1):
 
 
 def verify(before, current, names, page):
-    global VERIFIED_SWITCHES
+    # 回读确认数由引擎经 rt 记录
     require(all(current.get(name) is False for name in names), f"{page}：回读未确认关闭")
     require(all(current.get(name) == state for name, state in before.items() if name not in names),
             f"{page}：其他开关状态变化，请核对")
-    VERIFIED_SWITCHES += len(names)
+    rt.confirm(len(names))
     print(f"  ✓ {page}：回读确认 {len(names)} 项关闭，其他开关未变", flush=True)
 
 
@@ -201,4 +201,10 @@ def _():
     # 便捷生活里的“推荐服务”、小V建议和常驻服务卡片全部保留。
 
 
-print(f"\n回读确认 {VERIFIED_SWITCHES} 项关闭；未完成 {len(FAILED_STEPS)} 段", flush=True)
+def tail():
+    print(f"\n回读确认 {rt.verified} 项关闭；未完成 {len(rt.failed_steps)} 段", flush=True)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, require, require_switches, rt
+    from recipe_nav import tap

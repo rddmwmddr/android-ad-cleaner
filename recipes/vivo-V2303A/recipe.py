@@ -1,5 +1,5 @@
-# vivo V2303A（Android 17 / OriginOS 7，build CP2A.260605.016）机型脚本。
-# 由同品牌参考脚本 recipes/vivo-V2547DA/recipe_android17.py 改写而来，针对本机实测调整：
+# vivo V2303A（Android 17 / OriginOS 7，build CP2A.260605.016）机型脚本。由同品牌参考脚本 recipes/vivo-V2547DA/recipe_android17.py 改写而来，针对本机实测调整：
+from recipe_kit import step
 #   - BUILD / MODELS 改为本机；
 #   - 「系统广告 / 全局搜索 / 阅图锁屏」三段改用 p.setting("关键词") 在设置内搜关键词直达，
 #     避开逐层翻页找入口时滑出设置页的问题（Android 17 上原 maybe() 链式导航在本机不稳）。
@@ -108,3 +108,9 @@ def _():
 @step("天气")
 def _():
     weather_service()
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import SkipStep, maybe, p
+    from recipe_nav import off_unnamed
+    from recipe_steps import browser_recommendations, i_manager_ads, weather_service

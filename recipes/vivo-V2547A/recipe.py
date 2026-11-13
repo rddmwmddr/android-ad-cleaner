@@ -1,5 +1,5 @@
-# vivo X300 Ultra（V2547A，OriginOS 7，Android 17）机型脚本
-# 2026-10-25 在真机逐页实测，8 段整段跑通，重跑 126 秒。
+# vivo X300 Ultra（V2547A，OriginOS 7，Android 17）机型脚本；2026-10-25 在真机逐页实测，8 段整段跑通，重跑 126 秒。
+from recipe_kit import step
 BUILD = "PD2547B_A_17.1.10.2"          # ro.build.display.id 的开头；对不上引擎只提示，不阻断
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 #
@@ -442,3 +442,7 @@ def _():
     off(only=["天气服务"], keep=["气象预警", "异常天气", "地震预警"], page="天气·设置")
     # 气象预警、异常天气、地震预警、提醒城市都保留
     p.back(2)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p

@@ -1,5 +1,5 @@
-# 荣耀 Magic V Flip2（CLE-AN00，MagicOS 10 / Android 16）机型脚本。路径 2026-11-07 在本机逐段实测（#671）。
-# 和 PNM-AN10 同代，差别：预装百度版浏览器；桌面文件夹的设置页没导出，热门推荐管理并进了市场「内容推荐服务」。
+# 荣耀 Magic V Flip2（CLE-AN00，MagicOS 10 / Android 16）机型脚本。路径 2026-11-07 在本机逐段实测（#671）。和 PNM-AN10 同代，差别：预装百度版浏览器；桌面文件夹的设置页没导出，热门推荐管理并进了市场「内容推荐服务」。
+from recipe_kit import step
 # 能直达的都直达：手机版在后台屏上跑，桌面手势在那块屏上不生效。
 # 不切市场的「基本服务」：切回完整服务要重新同意协议。不代为同意任何协议或权限。
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
@@ -319,3 +319,7 @@ def _():
             l, t, r, b = spots[-1]; p.click((l + r) // 2, (t + b) // 2); time.sleep(1.2)
     p.off(only=["锁屏壁纸轮播", "锁屏进入魔法画报", "数据流量自动更新"], page="魔法画报")
     p.back()
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, skip, skip_in_safe_mode

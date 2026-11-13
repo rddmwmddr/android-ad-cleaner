@@ -1,10 +1,10 @@
-# 一加 Ace 2（PHK110，ColorOS 16 / Android 16）机型脚本。
-# 路径实测：2026-10-25。只收录已走通的系统广告跟踪、商店、浏览器设置。
+# 一加 Ace 2（PHK110，ColorOS 16 / Android 16）机型脚本。路径实测：2026-10-25。只收录已走通的系统广告跟踪、商店、浏览器设置。
+from recipe_kit import step
 # 不挂包、不动通知渠道；这些操作仍走 run.py 的独立、需确认流程。
 BUILD = "PHK110_16.0.5.1201"
 
 import time
-RESULTS = []
+# 分段结果由引擎经 rt 记录
 
 # 仅关闭明确的推广入口。没有列出的入口（包括未来新增项）不主动处理。
 STORE_PROMOTIONS = [
@@ -102,6 +102,13 @@ def _():
     browser_personalized()
 
 
-print("\n本机型脚本不处理：下拉搜索、负一屏、主题服务模式、视频和游戏中心。")
-print("广告包、乐划锁屏、快应用和通知渠道请按 run.py 标准流程另行确认。")
-print("分段结果：", RESULTS)
+def tail():
+    print("\n本机型脚本不处理：下拉搜索、负一屏、主题服务模式、视频和游戏中心。")
+    print("广告包、乐划锁屏、快应用和通知渠道请按 run.py 标准流程另行确认。")
+    print("分段结果：", rt.results)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, rt, skip, skip_in_safe_mode
+    from recipe_nav import tap_page, wait_page
+    from recipe_steps import browser_ads, browser_home, browser_personalized, store_promotions

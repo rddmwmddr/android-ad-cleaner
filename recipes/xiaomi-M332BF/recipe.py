@@ -1,5 +1,5 @@
-# 小米 HyperOS 4 机型脚本：REDMI K90 Ultra（M332BF）
-# 路径来源：社区报告者 @Sin1ery 2026-10-31 实测（HyperOS OS4.0.4.0.XHPCNXM，Android 17，Issue #374）。
+# 小米 HyperOS 4 机型脚本：REDMI K90 Ultra（M332BF）；路径来源：社区报告者 @Sin1ery 2026-10-31 实测（HyperOS OS4.0.4.0.XHPCNXM，Android 17，Issue #374）。
+from recipe_kit import step
 # 脚本按那份报告里的四处差异重写，本仓库尚未在这台机器上复跑，合并后等报告者复测。
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 BUILD = "OS4.0.4"
@@ -141,3 +141,9 @@ def _():
 @step("天气和日历")
 def _():
     weather_calendar_probe()
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p, require_switches, start_or_skip
+    from recipe_nav import opened, tap_any
+    from recipe_steps import downloads_probe, global_search, negative_screen, security_center, weather_calendar_probe

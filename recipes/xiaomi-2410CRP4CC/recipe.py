@@ -1,5 +1,5 @@
-# 小米 HyperOS 2 平板机型脚本：Xiaomi Pad 7（2410CRP4CC）
-# 路径来源：2026-10-28 实机录制（OS2.0.208.0.VOZCNXM / Android 15，3200×2136 横屏）。
+# 小米 HyperOS 2 平板机型脚本：Xiaomi Pad 7（2410CRP4CC）；路径来源：2026-10-28 实机录制（OS2.0.208.0.VOZCNXM / Android 15，3200×2136 横屏）。
+from recipe_kit import step
 # 平板设置是左右分栏，左侧菜单要单独滚动；脚本改用直达 Activity，避免滚错栏位。
 # 本版本已实测没有可关项的入口：手机管家、下载管理、主题、全局搜索、天气。
 # 日历首次启动要求本人同意隐私协议，脚本不代为同意，因此未纳入。
@@ -55,3 +55,9 @@ def _():
 @step("负一屏")
 def _():
     negative_screen()
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p
+    from recipe_nav import tap_any
+    from recipe_steps import negative_screen

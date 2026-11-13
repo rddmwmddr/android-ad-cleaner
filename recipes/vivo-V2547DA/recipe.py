@@ -1,5 +1,5 @@
-# vivo X300 Ultra 机型脚本：V2547DA（卫星通信版）。V2547A（OriginOS 7）另有社区实测脚本 recipes/vivo-V2547A/
-# 路径来源：V2547DA，OriginOS 6 / Android 16（PD2547D_A_16.0.21.21.W10），2026-10-28 真机整段跑通验证。
+# vivo X300 Ultra 机型脚本：V2547DA（卫星通信版）。V2547A（OriginOS 7）另有社区实测脚本 recipes/vivo-V2547A/；路径来源：V2547DA，OriginOS 6 / Android 16（PD2547D_A_16.0.21.21.W10），2026-10-28 真机整段跑通验证。
+from recipe_kit import step
 # 2026-11-03 商店段改用 Phone.tab()、gear() 改用引擎 icon_hit（#530），这两处未复测。
 # 2026-11-07 gear() 补落地校验：点不动的齿轮继续找、最后回退按文字点（#575），未复测。
 # 别的系统版本会用安全模式跑：只关点名的开关，找不到入口就跳过。
@@ -90,3 +90,8 @@ def _():
 @step("天气")
 def _():
     weather_service()
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p
+    from recipe_steps import browser_recommendations, global_search_ads, i_manager_ads, lock_screen_magazine, system_ads_branch, weather_service

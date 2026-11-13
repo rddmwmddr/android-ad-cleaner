@@ -1,5 +1,5 @@
-# realme GT Neo5 SE（RMX3700，ColorOS 16.0.5.1300(CN01)）机型脚本。
-# 路径实测：2026-10-30，下拉搜索 2026-11-02 补测。软件商店隐私入口接受「隐私」与
+# realme GT Neo5 SE（RMX3700，ColorOS 16.0.5.1300(CN01)）机型脚本。路径实测：2026-10-30，下拉搜索 2026-11-02 补测。软件商店隐私入口接受「隐私」与
+from recipe_kit import step
 # 「隐私授权管理」两种叫法（#933，未复测）。只收录已走通的：
 # 广告跟踪、软件商店、浏览器、下拉搜索、小布建议、应用建议。
 # 不挂包、不动通知渠道；这些操作仍走 run.py 的独立、需确认流程。
@@ -25,7 +25,7 @@
 BUILD = "RMX3700_16.0.5.1300"
 
 import time
-RESULTS = []
+# 分段结果由引擎经 rt 记录
 
 # 商店「服务管理」是「关掉后隐藏对应服务入口」的开关。服务类入口要留，推广入口才关。
 STORE_KEEP = [
@@ -306,6 +306,11 @@ def _():
     return True
 
 
-print("\n== 结果", flush=True)
-for name, state in RESULTS:
-    print(f"  {name}: {state}")
+def tail():
+    print("\n== 结果", flush=True)
+    for name, state in rt.results:
+        print(f"  {name}: {state}")
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, rt, skip, skip_in_safe_mode

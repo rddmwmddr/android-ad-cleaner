@@ -1,5 +1,5 @@
-# 一加 13T（PKX110，ColorOS 16.0.10.500 / Android 16）机型脚本。
-# 路径实测：2026-10-28 现场探路（应用与服务、服务管理两页与 PHK110 同 Activity）。
+# 一加 13T（PKX110，ColorOS 16.0.10.500 / Android 16）机型脚本。路径实测：2026-10-28 现场探路（应用与服务、服务管理两页与 PHK110 同 Activity）。
+from recipe_kit import step
 # 骨架取自 oneplus-PHK110（ColorOS 16）；入口差异参考 docs/清单/OPPO-ColorOS.md 的一加 Ace 5（PKG110）记录。
 # 2026-11-10 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，未复测（#933）。
 # 不挂包、不动通知渠道；这些操作仍走 run.py 的独立、需确认流程。
@@ -7,7 +7,7 @@ BUILD = "PKX110_16.0.10"
 MODELS = ["PKX110"]
 
 import time
-RESULTS = []
+# 分段结果由引擎经 rt 记录
 
 # 服务管理里明确的推广入口（PHK110 清单 + 本机实测新增项）。未列出的入口不主动处理。
 STORE_PROMOTIONS = [
@@ -200,7 +200,14 @@ def _():
     return False
 
 
-print("\n本机型脚本说明：浏览器段按「入口检测不到就跳过」处理（com.heytap.browser 预装但无桌面入口、")
-print("设置组件不存在时）；下拉搜索、负一屏属于原厂桌面，换用第三方桌面后不在使用面，未收录。")
-print("广告包、乐划锁屏、快应用和通知渠道请按 run.py 标准流程另行确认。")
-print("分段结果：", RESULTS)
+def tail():
+    print("\n本机型脚本说明：浏览器段按「入口检测不到就跳过」处理（com.heytap.browser 预装但无桌面入口、")
+    print("设置组件不存在时）；下拉搜索、负一屏属于原厂桌面，换用第三方桌面后不在使用面，未收录。")
+    print("广告包、乐划锁屏、快应用和通知渠道请按 run.py 标准流程另行确认。")
+    print("分段结果：", rt.results)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, rt, skip, skip_in_safe_mode
+    from recipe_nav import open_app_settings
+    from recipe_steps import browser_ads, browser_home, browser_personalized, store_promotions

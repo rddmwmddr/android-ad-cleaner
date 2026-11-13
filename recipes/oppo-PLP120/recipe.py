@@ -1,5 +1,5 @@
-# OPPO Find N6（PLP120，ColorOS 16.0.9）机型脚本。路径 2026-10-22 实测，机型脚本整段跑待验证
-# 2026-11-10 补 ColorOS 17（PLP120_17.0.0.109 / Android 17）的两段路径，未复测（#905）：
+# OPPO Find N6（PLP120，ColorOS 16.0.9）机型脚本。路径 2026-10-22 实测，机型脚本整段跑待验证；2026-11-10 补 ColorOS 17（PLP120_17.0.0.109 / Android 17）的两段路径，未复测（#905）：
+from recipe_kit import step
 # 小布建议改成点「资讯服务」进二级页再关（旧「内容资讯」列表页兜底），游戏中心先试
 # APP_SETTINGS 直达设置页（「我的 → 设置」兜底）。两条路径都取自同族真机实测（PMX110 / PKT110）。
 BUILD = "PLP120_16.0.9"
@@ -277,3 +277,8 @@ def _():
         p.off(only=["资讯服务"], page="小布建议·内容资讯")
         return
     raise RuntimeError("小布建议：「资讯服务」与「内容资讯」两条入口都没进去")
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import SkipStep, p, page, require_switches, skip_in_safe_mode
+    from recipe_nav import settings_page, wait_search_settings

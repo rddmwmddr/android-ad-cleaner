@@ -1,5 +1,5 @@
-# 小米 HyperOS 4 机型脚本：REDMI K90 Pro Max（25102RKBEC / myron）
-# 路径来源：2026-10-27 实机实测（OS4.0.2.0.XPMCNXM / Android 17）。
+# 小米 HyperOS 4 机型脚本：REDMI K90 Pro Max（25102RKBEC / myron）；路径来源：2026-10-27 实机实测（OS4.0.2.0.XPMCNXM / Android 17）。
+from recipe_kit import step
 #
 # 与 xiaomi-M154FF 的关键差异（照 M154FF 跑会跳过「系统广告」这一步）：
 #   1. 设置首页要往下滑一段才看得到「隐私与安全」；
@@ -143,3 +143,9 @@ def _():
         if maybe("用户体验计划"):
             p.off(only=["推荐", "广告", "个性化", "内容推广", "天气视频卡片"], page=f"{pkg}·用户体验计划"); p.back()
         p.back(3)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p
+    from recipe_nav import gear
+    from recipe_steps import downloads, global_search, negative_screen, store_mode, theme

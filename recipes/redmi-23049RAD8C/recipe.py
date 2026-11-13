@@ -1,5 +1,5 @@
-# Redmi Note 12 Turbo（23049RAD8C，HyperOS 1 / OS3.0.5.0）机型脚本
-# 适配机型：Redmi Note 12 Turbo（23049RAD8C）
+# Redmi Note 12 Turbo（23049RAD8C，HyperOS 1 / OS3.0.5.0）机型脚本；适配机型：Redmi Note 12 Turbo（23049RAD8C）
+from recipe_kit import step
 # 路径来源：2026-10-25 实测（OS3.0.5.0.VMRCNXM，Android 15）
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 BUILD = "OS3.0.5.0"
@@ -111,3 +111,9 @@ def _():
         if maybe("用户体验计划"):
             p.off(only=["推荐", "广告", "个性化", "内容推广"], page="日历·用户体验计划"); p.back()
         p.back(2)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import SkipStep, maybe, p
+    from recipe_nav import gear, tap_any
+    from recipe_steps import downloads, global_search, negative_screen, security_center, theme

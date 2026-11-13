@@ -1,5 +1,5 @@
-# Redmi Note 14 5G（24094RAD4C，代号 beryl），HyperOS OS3.0.306.0.WOQCNXM / Android 16。
-# 2026-10-30 真机逐段核对：入口与 Redmi Note 14 Pro 的 OS3 脚本基本一致。
+# Redmi Note 14 5G（24094RAD4C，代号 beryl），HyperOS OS3.0.306.0.WOQCNXM / Android 16。2026-10-30 真机逐段核对：入口与 Redmi Note 14 Pro 的 OS3 脚本基本一致。
+from recipe_kit import step
 # 本脚本只处理点名的广告/推荐开关；应用商店保持标准模式，自动更新和删除安装包保留，
 # 浏览器「小说」「我的网盘」等功能项保留，天气预警等安全通知也不在范围内。
 # 用法：python tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
@@ -172,3 +172,9 @@ def _():
 @step("负一屏")
 def _():
     negative_screen()
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p, require_switches, start_or_skip
+    from recipe_nav import gear, tap_any, tap_tab
+    from recipe_steps import global_search, negative_screen, security_center
