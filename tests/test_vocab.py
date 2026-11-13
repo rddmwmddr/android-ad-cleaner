@@ -47,7 +47,9 @@ UNRESOLVED_ONLY = {
 UNRESOLVED_CLOSE = {
     "oppo/PJA110/PJA110-android16.toml": 1,
     # 软件商店里「读回名单→过滤→整表关」那一处从运行期变量 `names` 收进了 `close_listed` op（#1265），
-    # 不再是读不出的表达式，未解析各减 1；词条多重集与总数不变。
+    # 候选名单按字面量投影进词库（每台 +30 个词，见 `test_close_listed_names_reach_the_scan`），
+    # 这一处不再是未解析，未解析各减 1；剩下的 1 是 `search_settings_direct` 首页卡片名单的运行期
+    # `names`，属另一页，与本段无关。
     "oppo/PLZ110/PLZ110.toml": 1,
     "oppo/PKT110/PKT110.toml": 3,
     "oppo/PMX110/PMX110.toml": 1,
@@ -134,6 +136,17 @@ class RealRecipesTest(unittest.TestCase):
             self.assertIn(group, entries.ENTRIES[family], f"{family} {prefix}")
         placed = {(w.family, w.group) for w in self.scan.words if w.group}
         self.assertLessEqual(placed, {(f, g) for f, groups in entries.ENTRIES.items() for g in groups})
+
+    def test_close_listed_names_reach_the_scan(self):
+        """`close_listed` 的候选名单是「这一页要关的这些名字」，必须当字面量进词库（#1265）。
+
+        先证红：`_catalog_src` 不投影 `close_listed` 时，这 30 个名字既不进词条也不进未解析清单
+        （旧脚本里 `close_named(names, …)` 的 `names` 是运行期变量，词库读不出；改成数据后名字明明
+        是字面量，投影一断就两头落空）。这里按型号点名一个词，投影在就该读得到。"""
+        found = {(word.model, word.text) for word in self.scan.words}
+        for model in ("PLZ110", "PMX110"):
+            self.assertIn((model, "应用安全安全内容推荐"), found)
+            self.assertIn((model, "小游戏二楼和专区"), found)
 
     def test_unresolved_only_is_frozen_per_script(self):
         self.assertEqual(dict(Counter(c.script for c in self.scan.unresolved_only)), UNRESOLVED_ONLY)

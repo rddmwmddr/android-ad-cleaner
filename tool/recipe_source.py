@@ -556,10 +556,14 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 # 用数据里写得出的真实名字（不折回 close_named），归属才查得准（#1263）。
                 args = ", ".join(_s(a) for a in op.get("args", []))
                 lines.append(f"{op['name']}({args})")
-            elif kind in ("page", "skip", "fail", "require_tap", "close_listed"):
+            elif kind == "close_listed":
+                # 候选名单是「这一页要关掉这些名字」，按 `close_named(名单, 页)` 投影进事实层：
+                # 词库按 close 那一类读得出这些字面量（旧脚本里 `names` 是运行期变量，读不出，#1265）。
+                names = ", ".join(_s(name) for name in op.get("names", []))
+                lines.append(f"close_named([{names}], {_s(op['page'])})")
+            elif kind in ("page", "skip", "fail", "require_tap"):
                 # 落点断言 / 跳过 / 失败出口 / 必需点按不带词条与入口事实：入口本来自 `p.start` / shell /
-                # `open_app_settings`，`page` 只是核对。`close_listed` 的候选名单是运行时按页上实有的行
-                # 过滤后才关的（旧脚本里 `names` 是变量，词库记成未解析），这里与 `back` / `top` 同档（#1265）。
+                # `open_app_settings`，`page` 只是核对。与 `back` / `top` / `print` 同档（#1265）。
                 pass
 
     for segment in data.get("segment", []):

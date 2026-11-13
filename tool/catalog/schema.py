@@ -232,13 +232,16 @@ def words(data: Mapping) -> list[tuple[str, str]]:
     found: list[tuple[str, str]] = []
     for segment in data.get("segment", []):
         for op in _walk(segment.get("ops", [])):
-            if op.get("kind") != "off":
-                continue
-            if "only" in op:
-                found += [(text, "literal") for text in op["only"]]
-            elif "only_code" in op:
-                found.append((op["only_code"], "strategy"))
-            found += [(text, "literal") for text in op.get("keep", [])]
+            kind = op.get("kind")
+            if kind == "off":
+                if "only" in op:
+                    found += [(text, "literal") for text in op["only"]]
+                elif "only_code" in op:
+                    found.append((op["only_code"], "strategy"))
+                found += [(text, "literal") for text in op.get("keep", [])]
+            elif kind == "close_listed":
+                # 「读回名单→过滤→整表关」的候选名单也是「这一页要关的名字」，与 `close_named` 同档（#1265）。
+                found += [(text, "literal") for text in op.get("names", [])]
     return found
 
 
