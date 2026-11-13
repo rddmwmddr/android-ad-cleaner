@@ -19,7 +19,7 @@ use_utf8_console()
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import entries
 import fast                                    # 只读 want_state / 驱动 Phone；不改引擎
-import recipe_kit
+import recipe_loader
 import vocab
 from fast import Phone
 from run import fail, script_cmd             # 错误渲染与打包版的 --cli 规矩都只在 run.py 写一份
@@ -93,11 +93,9 @@ def step_name(pkg, page):
     return name
 
 
-# 草稿只留台账变量：`read_switches` / `close_named` 用注入面那一份（#1151），否则新写出的
-# 脚本又把本地副本带走，两代实现的坑重挖一遍。
-DRAFT_HELPERS = '''
-VERIFIED_SWITCHES = 0        # 回读确认关闭的开关数
-'''
+# 草稿不再自带台账变量：回读确认数与分段结果都在这层注入的 `rt` 上（ADR-0037），
+# `read_switches` / `close_named` 同样用注入面那一份（沿用 #1151），否则新写出的脚本又把
+# 本地副本带走，两代实现的坑重挖一遍。
 
 
 def render_draft(groups, model, build, source):
@@ -116,7 +114,6 @@ def render_draft(groups, model, build, source):
         f"BUILD = {json.dumps(build)}",
         f"MODELS = {json.dumps([model] if model else [], ensure_ascii=False)}",
     ]
-    lines += DRAFT_HELPERS.strip("\n").split("\n")
     for pkg, page, names in groups:
         lines += [
             "",
@@ -135,8 +132,9 @@ def render_draft(groups, model, build, source):
     lines += [
         "",
         "",
-        'print(f"\\n草稿自检：回读确认 {VERIFIED_SWITCHES} 项，"',
-        '      f"未完成步骤 {len(FAILED_STEPS)} 个", flush=True)',
+        "def tail():",
+        '    print(f"\\n草稿自检：回读确认 {rt.verified} 项，"',
+        '          f"未完成步骤 {len(rt.failed_steps)} 个", flush=True)',
         "",
     ]
     return "\n".join(lines)
@@ -219,26 +217,24 @@ def cmd_gen(rest):
 # ---------- 安全模式自检 ----------
 
 def check_draft(p, recipe_path, only=()):
-    """安全模式跑草稿并统计回读结果。驱动方式与 fast.py 的 `run` 分支一致：
-    exec 注入 p/ONLY 到 globals，引擎逻辑本身不改。"""
+    """安全模式跑草稿并统计回读结果。装载与 fast.py 的 `run` 分支同一份（ADR-0037）：
+    草稿没有 import 头也照旧可装载，`step` 由装载器注入。"""
     with open(recipe_path, encoding="utf-8") as f:
         src = f.read()
     # 手改过的草稿若写了不带 only= 的 p.off()，靠这个也只关点名的开关，不整页全关。
     p.safe_mode = True
     p.screen.captures.task = "adapt"        # 失败现场按任务归档（#1126）
-    g = {"p": p, "__name__": "__draft__", "ONLY": list(only)}
-    # 草稿的 `close_named` / `read_switches` 也来自这层注入（#1151）：点名开关缺一个就整段
-    # 报错、这一步记成失败，没找到的项因此落在 failed_steps 里，不再有 missing / pending 两份台账。
-    recipe_kit.preamble(p, g)
     build = p.d.shell("getprop ro.build.display.id").output.strip()
     osv = p.d.shell("getprop ro.mi.os.version.incremental").output.strip()
     m = re.search(r'^BUILD\s*=\s*"([^"]+)"', src, re.M)
     if m and not (build.startswith(m.group(1)) or osv.startswith(m.group(1))):
         print(f"⚠ 草稿标注 BUILD {m.group(1)}，这台是 {osv or build}：按安全模式跑（只关点名的开关）")
-    exec(compile(src, recipe_path, "exec"), g)
+    # 草稿的 `close_named` / `read_switches` 也来自这层注入（沿用 #1151）：点名开关缺一个就整段
+    # 报错、这一步记成失败，没找到的项因此落在 failed_steps 里，不再有 missing / pending 两份台账。
+    recipe = recipe_loader.run(recipe_path, p, only=list(only))
     return {
-        "verified": g.get("VERIFIED_SWITCHES", 0) or 0,
-        "failed_steps": list(g.get("FAILED_STEPS", []) or []),
+        "verified": recipe.rt.verified,
+        "failed_steps": list(recipe.rt.failed_steps),
     }
 
 

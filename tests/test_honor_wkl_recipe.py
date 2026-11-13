@@ -55,7 +55,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
         scope["ONLY"] = ["系统管家"]
         action = Mock()
         with contextlib.redirect_stdout(io.StringIO()):
-            scope["step"]("系统管家")(action)
+            scope["rt"].run_step("系统管家", action)
         action.assert_not_called()
         p.start.assert_not_called()
         self.assertEqual(scope["FAILED_STEPS"], [])
@@ -68,7 +68,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
         scope["ONLY"] = ["系统管家"]
         action = Mock()
         with contextlib.redirect_stdout(io.StringIO()):
-            scope["step"]("系统管家")(action)
+            scope["rt"].run_step("系统管家", action)
         action.assert_not_called()
         self.assertEqual(scope["FAILED_STEPS"], [])
 
@@ -83,7 +83,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
         scope = self.load(p)
         scope["ONLY"] = []
         with contextlib.redirect_stdout(io.StringIO()):
-            scope["step"]("音乐")(scope["_"])
+            scope["rt"].run_step("音乐", scope["_"])
         self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertEqual(scope["RESULTS"], [("音乐", "跳过")])
 
@@ -94,7 +94,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
         scope = self.load(p)
         scope["ONLY"] = ["系统管家"]
         with contextlib.redirect_stdout(io.StringIO()):
-            scope["step"]("系统管家")(Mock(side_effect=scope["SkipStep"]("按约定跳过")))
+            scope["rt"].run_step("系统管家", Mock(side_effect=scope["SkipStep"]("按约定跳过")))
         self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertEqual(scope["RESULTS"], [("系统管家", "跳过")])
 
@@ -104,7 +104,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
         scope = self.load(p)
         scope["ONLY"] = ["系统管家"]
         with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(adb_link.DeviceLost):
-            scope["step"]("系统管家")(Mock())
+            scope["rt"].run_step("系统管家", Mock())
 
     def test_missing_switch_stops_before_any_changes(self):
         p, scope = self.closing_scope({"应用更新": True}, {})

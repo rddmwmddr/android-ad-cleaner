@@ -117,8 +117,8 @@ class Pma110RecipeTests(unittest.TestCase):
         self.p.locked.return_value = True
         action = Mock()
         with contextlib.redirect_stdout(io.StringIO()):
-            self.scope["step"]("第一段")(action)
-            self.scope["step"]("第二段")(action)
+            self.scope["rt"].run_step("第一段", action)
+            self.scope["rt"].run_step("第二段", action)
         action.assert_not_called()
         self.assertEqual(self.p.locked.call_count, 1)
         self.assertEqual(self.scope["FAILED_STEPS"], ["第一段", "第二段"])

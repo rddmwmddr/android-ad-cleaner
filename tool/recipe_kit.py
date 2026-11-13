@@ -1,23 +1,31 @@
-"""机型脚本的前导：段包装、必需入口断言、开关名单断言、可选入口助手、跳过出口与两个台账（#838）。
+"""机型脚本的执行作用域：`p`、`rt` 与共享助手由装载器写进来，脚本不再自己定义这些名字（沿用 #838）。
 
-三个执行点注入同一份：`fast.execute` 的 run 分支、`adapt.check_draft`、`tests/fixtures.load_recipe`。
-不做成可 import 的函数：段包装要绑定当次的 Phone 与执行作用域，import 来的模块级函数拿不到这两个。
-脚本自己的同名定义后执行、覆盖注入的名字，所以在迁移之前跑任何现有脚本，用户看到的东西一个字节都不变。
+唯一的装载点是 `tool/recipe_loader.py`（ADR-0037）：它建出这次的 `rt`（`recipe_runtime.Runtime`），
+调 `preamble(p, g, rt)` 把两个协作者、声明式段装饰器、跳过 / 断言 / 台账出口与两张注入面写进执行
+作用域，再 `exec` 模块体。`@step` 只登记段名，真正执行由 `rt.run()` 负责——导入一份脚本不产生任何
+设备动作。
+
+脚本顶部那句 `from recipe_kit import step`（静态检查与编辑器用）落到本模块的 `step()`：它按「当前
+这次执行」解析，同一时刻只允许一个活动执行（`Runtime.activate()`）。
 
 公共导航助手另住 `recipe_nav`、公共段体另住 `recipe_steps`：`preamble()` 写完生命周期与台账后
-依次调它们的 `install()`，本模块只管生命周期与台账（沿用 #1150 的注入面，#1209）。
+依次调它们的 `install()`，本模块只管生命周期与台账（沿用 #1150、#1209 的注入面）。
 """
 
 import re
-import time
-from contextlib import nullcontext
 
 import adb_link
 import recipe_nav
 import recipe_steps
+from recipe_runtime import DONE as DONE, FAILED as FAILED, NOT_RUN as NOT_RUN, SKIPPED as SKIPPED
+from recipe_runtime import DuplicateStep as DuplicateStep, MissingPackage as MissingPackage
+from recipe_runtime import Runtime, SkipStep
 
-# 脚本自带 `RESULTS` 时，每个段的结局用这四个词记一条（机型脚本的分段结果台账）
-DONE, SKIPPED, FAILED, NOT_RUN = "完成", "跳过", "未完成", "未执行"
+# 静态导入 `from recipe_kit import p, rt, step` 的落点：前两个只给编辑器与类型检查看，真正的对象
+# 每次装载由 `preamble()` 换掉；`step()` 按当前执行解析。
+p = None
+rt = None
+_runtime = None
 
 # `Phone.start` 里「落点不对」的两句。只有这两类才按落点判入口不可达：
 # 「本机没有安装 / 无法打开」时前台可能只是桌面，不能当成证据（#902）。
@@ -29,39 +37,43 @@ LANDING = re.compile(r"停在 ([^\s/；]+)")
 SAFE_MODE_PAGE_WIDE = "安全模式不做整页全关：本段没有可点名的开关，请按清单手动关"
 
 
-class SkipStep(RuntimeError):
-    """这一条按约定不跑（型号 / 版本不符、必须机主手动进入），不算失败。"""
+def preamble(p, g, rt=None):
+    """把这次的执行写进 `g` 并原样返回它：`p` / `rt` / 声明式 `step`、出口与两个台账、两张注入面。
 
+    `rt` 由装载器建好传进来（`tool/recipe_loader.py`）；测试直接调用时不传，按 `g` 里现有的
+    `ONLY` 建一个新的。台账是 rt 上的同一批列表对象，`g["FAILED_STEPS"]` 等只是给既有调用点与
+    测试读的别名——写台账的只有 `Runtime.run_step()`。
 
-class MissingPackage(SkipStep):
-    """这一段要用的 App 本机没装（#908）：结局与「按约定不跑」同一档，来源在引擎的 `Phone.start`。"""
-
-
-def preamble(p, g):
-    """前导写进 `g` 后原样返回它，调用点写成 `recipe_kit.preamble(p, g)`。
-
-    段包装与助手读 `g` 而不捕获初值：脚本重绑 ONLY / FAILED_STEPS 后立刻生效，
-    测试装载之后再改名单驱动单段也生效。`SkipStep` 同样按 `g` 里的当前值取——
-    脚本只换跳过异常类、仍用注入的段包装时，抛的和接的仍是同一个类。
-
-    `guard()` / `wrap()` / `detail()` / `RESULTS` 是四个可选的脚本侧钩子：段入口的型号守卫、
-    段内包装（等价于以前 `with safe_ui():`）、失败时的页面摘要、分段结果台账。脚本定义了就按它走，
+    `guard()` / `wrap()` / `detail()` / `tail()` 是四个可选的脚本侧钩子：段入口的型号守卫、
+    段内包装（等价于以前 `with safe_ui():`）、失败时的页面摘要、收尾打印。脚本定义了就按它走，
     没定义就什么都不做 —— 大多数脚本不需要，前导也不替它们造一个。
     """
+    global _runtime
     from fast import ScreenLocked     # fast 在顶部 import 本模块，取在调用时才不绕进循环
 
-    g.setdefault("ONLY", [])
-    g.setdefault("FAILED_STEPS", [])
-    g.setdefault("SKIPPED_STEPS", [])
-    g.setdefault("HALTED_STEPS", [])
-    g.setdefault("HALTED", False)
+    if rt is None:
+        rt = Runtime(p, list(g.get("ONLY") or []))
+    elif "ONLY" in g and g.get("ONLY") is not None:
+        rt.only = g["ONLY"]           # 测试传进来的名单对象要保留：装载后改它仍然生效
+    rt.namespace = g
+    _runtime = rt
+    globals()["p"] = p
+    globals()["rt"] = rt
+
+    g["p"] = p
+    g["rt"] = rt
+    g["ONLY"] = rt.only
+    g["FAILED_STEPS"] = rt.failed_steps
+    g["SKIPPED_STEPS"] = rt.skipped_steps
+    g["HALTED_STEPS"] = rt.halted_steps
+    g["RESULTS"] = rt.results
+    g["step"] = rt.step
 
     def require(ok, reason):
-        if not ok:
-            raise RuntimeError(reason)
+        rt.require(ok, reason)
 
     def skip(reason):
-        raise g.get("SkipStep", SkipStep)(reason)
+        rt.skip(reason)
 
     def maybe(name, scrolls=6):
         return p.entry(name, scrolls=scrolls)
@@ -140,64 +152,21 @@ def preamble(p, g):
                 skip(f"{reason}（停在 {landed.group(1)}）")
             raise
 
-    def step(name):
-        def decorate(action):
-            if g["ONLY"] and name not in g["ONLY"]:
-                return action
-            # 段体在装饰那一刻就跑（`@step` 是执行式装饰器），所以这里读到的都是脚本自己
-            # 已经赋值过的：钩子要写在第一个 `@step` 之前，见 docs/04。
-            results = g.get("RESULTS")
-            if g["HALTED"]:
-                # 中止之后不再碰手机：不读锁屏、不碰页面，只把这一条记成「未执行」。
-                g["FAILED_STEPS"].append(name)
-                g["HALTED_STEPS"].append(name)
-                if results is not None:
-                    results.append((name, NOT_RUN))
-                print(f"\n== {name}", flush=True)
-                print("  · 未执行：前一段中止了整批", flush=True)
-                return action
-            print(f"\n== {name}", flush=True)
-            p.screen.captures.step = name    # 失败现场按段归档（#1126）
-            p.miss = 0
-            started = time.monotonic()
-            state = DONE
-            outcome = None
-            try:
-                guard = g.get("guard")
-                if guard is not None:
-                    guard()                 # 型号 / 版本守卫：抛什么就按什么结局记
-                if p.locked():
-                    raise ScreenLocked("手机锁屏了，请机主解锁后重跑")
-                wrap = g.get("wrap")
-                with (wrap() if wrap is not None else nullcontext()):
-                    outcome = action()      # 脚本可选的段内包装（等价于以前 `with safe_ui():`）
-            except adb_link.DeviceLost:
-                raise                  # 断线交还引擎：整轮停下，不逐段报
-            except (g.get("SkipStep", SkipStep), MissingPackage) as reason:
-                g["SKIPPED_STEPS"].append(name)
-                state = SKIPPED
-                print(f"  · 跳过：{reason}", flush=True)
-            except Exception as error:
-                g["FAILED_STEPS"].append(name)
-                state = FAILED
-                p.screen.save_capture()  # 这一段的失败现场（#1126）；探路留下的那张不算失败
-                if isinstance(error, ScreenLocked):
-                    g["HALTED"] = True
-                print(f"  ✗ 未完成：{error}", flush=True)
-                detail = g.get("detail")
-                if detail is not None:
-                    print(f"  · {detail()}", flush=True)
-            if outcome is False:
-                state = FAILED             # 段体自己说没做成：只影响分段结果，与迁移前一致
-            if results is not None:
-                results.append((name, state))
-            print(f"  ({time.monotonic() - started:.0f} 秒)", flush=True)
-            return action
-        return decorate
-
     g.update({"SkipStep": SkipStep, "skip": skip, "require": require,
-              "maybe": maybe, "start_or_skip": start_or_skip, "step": step, "page": page,
-              "require_switches": require_switches, "skip_in_safe_mode": skip_in_safe_mode})
+              "maybe": maybe, "start_or_skip": start_or_skip, "page": page,
+              "require_switches": require_switches, "skip_in_safe_mode": skip_in_safe_mode,
+              "VERIFIED_SWITCHES": rt.counter})
     recipe_nav.install(p, g)
     recipe_steps.install(p, g)
     return g
+
+
+def step(name):
+    """脚本顶部 `from recipe_kit import step` 的落点：按当前这次执行登记段名。
+
+    装载器先往执行作用域里写一份绑定当次执行的 `step`，脚本的静态导入随后把名字换成这一份；
+    两者都只登记、不执行（ADR-0037）。没有活动执行时抛错，而不是把段悄悄丢掉。
+    """
+    if _runtime is None:
+        raise RuntimeError("机型脚本必须在 recipe_loader 装载的执行里运行：当前没有活动执行（rt）")
+    return _runtime.step(name)

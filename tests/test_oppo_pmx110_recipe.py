@@ -816,8 +816,8 @@ class StepDecoratorTests(unittest.TestCase):
         self.p.locked.return_value = True
         work = Mock()
         with contextlib.redirect_stdout(io.StringIO()):
-            self.scope["step"]("第一段")(work)
-            self.scope["step"]("第二段")(work)
+            self.scope["rt"].run_step("第一段", work)
+            self.scope["rt"].run_step("第二段", work)
         work.assert_not_called()
         self.p.locked.assert_called_once_with()
         self.assertEqual(self.scope["FAILED_STEPS"], ["第一段", "第二段"])
@@ -827,7 +827,7 @@ class StepDecoratorTests(unittest.TestCase):
         work = Mock(side_effect=self.scope["adb_link"].DeviceLost("test disconnect"))
         with contextlib.redirect_stdout(io.StringIO()), \
                 self.assertRaises(self.scope["adb_link"].DeviceLost):
-            self.scope["step"]("断连")(work)
+            self.scope["rt"].run_step("断连", work)
         work.assert_called_once_with()
         self.assertEqual(self.scope["RESULTS"], [])
 
