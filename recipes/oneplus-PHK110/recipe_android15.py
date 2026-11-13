@@ -1,11 +1,11 @@
-# 一加 Ace 2，Android 15；2026-10-29 手动路径实测，自动脚本尚未在真机整段验证。
-# 不修改通知、挂起包、快应用、系统广告跟踪或服务类开关。
+# 一加 Ace 2，Android 15；2026-10-29 手动路径实测，自动脚本尚未在真机整段验证。不修改通知、挂起包、快应用、系统广告跟踪或服务类开关。
+from recipe_kit import step
 # 2026-11-10 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，未复测（#933）。
 BUILD = "PHK110_15.0.0.601(CN01)"
 
 import time
 from wait import GiveUp, until
-RESULTS = []
+# 分段结果由引擎经 rt 记录
 
 
 def page(activity, title, timeout=6):
@@ -178,6 +178,11 @@ def _():
     return True
 
 
-print("\n负一屏、主题、系统广告跟踪：请按本机实测记录手动核对。视频和小游戏未自动处理。")
-print("通知渠道、广告包和快应用按独立流程处理，挂起须机主同意。")
-print("分段结果：", RESULTS)
+def tail():
+    print("\n负一屏、主题、系统广告跟踪：请按本机实测记录手动核对。视频和小游戏未自动处理。")
+    print("通知渠道、广告包和快应用按独立流程处理，挂起须机主同意。")
+    print("分段结果：", rt.results)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, rt, skip

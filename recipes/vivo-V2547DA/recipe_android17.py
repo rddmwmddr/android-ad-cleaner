@@ -1,5 +1,5 @@
-# vivo X300 Ultra（V2547DA，卫星通信版）Android 17 变体：同型号的 OriginOS 6 路径在 recipe.py，
-# 系统版本对上 17.1.10.2 时由 run.recipe_for 选这份。
+# vivo X300 Ultra（V2547DA，卫星通信版）Android 17 变体：同型号的 OriginOS 6 路径在 recipe.py，；系统版本对上 17.1.10.2 时由 run.recipe_for 选这份。
+from recipe_kit import step
 # 路径来源：Issue #220 报告者真机实测（V2547DA，PD2547D_A_17.1.10.2.W10，商店 V10.5.20.0，2026-10-28）。
 # 2026-11-03 商店段改用 Phone.tab()、gear() 改用引擎 icon_hit（#530）。
 # 2026-11-07 整段在 V2547DA 真机复测；系统广告、全局搜索、阅图锁屏改为直达，打不开再走菜单（#667）。
@@ -130,3 +130,9 @@ def _():
 @step("天气")
 def _():
     weather_service()
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import SkipStep, maybe, p
+    from recipe_nav import off_unnamed, opened, settings_home
+    from recipe_steps import browser_recommendations, i_manager_ads, weather_service

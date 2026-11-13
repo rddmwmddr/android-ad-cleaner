@@ -1,5 +1,5 @@
-# vivo V2361A 机型脚本（OriginOS 16 / Android 16）
-# 路径来源：V2361A，OriginOS 16（PD2361B_A_16.2.12.2.W10），2026-10-26 真机逐页实测。
+# vivo V2361A 机型脚本（OriginOS 16 / Android 16）；路径来源：V2361A，OriginOS 16（PD2361B_A_16.2.12.2.W10），2026-10-26 真机逐页实测。
+from recipe_kit import step
 # 说明：本脚本的**页面路径和开关标题已逐页实测确认**；整段由引擎自动执行尚未验证
 #       （录制时本机 uiautomator2 读屏服务不稳定，改用原生 dump 逐页走通）。
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
@@ -80,3 +80,9 @@ def _():
 #   按规范不代用户同意协议，需用户自己打开一次并同意后再录制。
 # 负一屏：桌面左边缘右滑未进入（本机可能未开启或入口不同），待确认。
 # ────────────────────────────────────────────────────────────────
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p
+    from recipe_nav import settings_home
+    from recipe_steps import lock_screen_magazine, system_ads_chain

@@ -97,7 +97,7 @@ def _xiaomi_close_named(p, g):
         g["require"](all(current.get(title) is False for title in targets), f"{page}：回读未确认关闭")
         g["require"](all(current.get(title) == state for title, state in before.items() if title not in targets),
                      f"{page}：其他开关状态变化，请核对")
-        g["VERIFIED_SWITCHES"] += len(targets)
+        g["rt"].confirm(len(targets))
 
     return close_named
 
@@ -551,7 +551,7 @@ def _plg_hide_carousel(p, g):
             g["require"](current["不显示轮播推荐"][0], "轮播推荐回读未确认不显示")
             p.changed.append(("负一屏·推荐服务", "轮播推荐：不显示"))
         g["require"](g["read_switches"](activity, "推荐服务", 1) == before, "推荐服务总开关变化，请核对")
-        g["VERIFIED_SWITCHES"] += 1
+        g["rt"].confirm(1)
         print("  · 轮播推荐：已确认不显示，推荐服务总开关保持原值", flush=True)
     return hide_carousel
 

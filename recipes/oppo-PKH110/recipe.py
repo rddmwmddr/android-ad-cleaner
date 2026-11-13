@@ -1,11 +1,11 @@
-# OPPO Find N5（PKH110，ColorOS 17.0.0.103）机型脚本。
-# 路径实测：2026-10-29。只收录已走通的系统广告跟踪、商店、浏览器、主题、下拉搜索。
+# OPPO Find N5（PKH110，ColorOS 17.0.0.103）机型脚本。路径实测：2026-10-29。只收录已走通的系统广告跟踪、商店、浏览器、主题、下拉搜索。
+from recipe_kit import step
 # 不挂包、不动通知渠道；这些操作仍走 run.py 的独立、需确认流程。
 BUILD = "PKH110_17.0.0.103"
 MODELS = ["PKH110"]
 
 import time
-RESULTS = []
+# 分段结果由引擎经 rt 记录
 
 # 仅关闭明确列名的推广入口。没有列出的入口（包括未来新增项）不主动处理。
 STORE_PROMOTIONS = [
@@ -211,6 +211,13 @@ def _():
     return True
 
 
-print("\n本机型脚本不处理：负一屏（设置页受 oppo.permission.OPPO_COMPONENT_SAFE 保护，"
-      "adb 边缘手势进不去，需机主手动在负一屏内关「热点资讯」「轮播推荐」）、OPPO 视频、游戏中心。")
-print("分段结果：", RESULTS)
+def tail():
+    print("\n本机型脚本不处理：负一屏（设置页受 oppo.permission.OPPO_COMPONENT_SAFE 保护，"
+          "adb 边缘手势进不去，需机主手动在负一屏内关「热点资讯」「轮播推荐」）、OPPO 视频、游戏中心。")
+    print("分段结果：", rt.results)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, rt, skip, skip_in_safe_mode
+    from recipe_nav import browser_settings_direct, tap_page
+    from recipe_steps import browser_home, store_promotions

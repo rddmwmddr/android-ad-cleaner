@@ -1,5 +1,5 @@
-# 小米 HyperOS / Android 16 机型脚本：Xiaomi MIX Flip 2（2505APX7BC）
-# 路径来源：2026-11-05 社区实测，HyperOS / Android 16，底包 BP2A.250605.031.A3，全程合盖用外屏（1224×2912）。
+# 小米 HyperOS / Android 16 机型脚本：Xiaomi MIX Flip 2（2505APX7BC）；路径来源：2026-11-05 社区实测，HyperOS / Android 16，底包 BP2A.250605.031.A3，全程合盖用外屏（1224×2912）。
+from recipe_kit import step
 # 同底包的 xiaomi-24129PN74C 在这台上跑通了六个段（系统广告、应用商店、手机管家、下载管理、
 # 全局搜索、负一屏），主题 / 浏览器 / 天气 / 日历的入口不同，本脚本按这台实测重写：
 #  · 主题：「设置」在「我的」页是文字按钮，不是图标；入口是 ThemePreferenceActivity。
@@ -242,3 +242,8 @@ def _():
     else:
         print("  · 日历：本版无此类开关（7 项全是功能开关），跳过")
     p.back()
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p, require, require_switches, start_or_skip
+    from recipe_steps import downloads_tap, global_search, negative_screen, security_center

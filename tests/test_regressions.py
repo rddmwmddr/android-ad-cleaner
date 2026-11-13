@@ -457,7 +457,8 @@ class LaunchTests(unittest.TestCase):
         p.changed = [("已成功的页面", "个性化推荐")]
         with tempfile.TemporaryDirectory() as directory:
             recipe = Path(directory) / "recipe.py"
-            recipe.write_text('FAILED_STEPS = ["服务管理"]\n', encoding="utf-8")
+            recipe.write_text('@step("服务管理")\ndef _():\n    require(False, "未找到入口")\n',
+                              encoding="utf-8")
             with patch.dict(os.environ, {"AAC_BACKUPS": directory}), contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaises(SystemExit) as result:
                     fast.execute(p, "run", [str(recipe)])

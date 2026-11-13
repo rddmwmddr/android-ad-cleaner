@@ -1,5 +1,5 @@
-# 红米 HyperOS 机型脚本：REDMI K80 Ultra（25060RK16C，BP2A.250605.031.A3 / Android 16）
-# 路径来源：2026-10-27 本机 explore.py 探路（探路-25060RK16C.tsv，17 个 App / 121 个开关）+ 同品牌 xiaomi-M154FF 适配。
+# 红米 HyperOS 机型脚本：REDMI K80 Ultra（25060RK16C，BP2A.250605.031.A3 / Android 16）；路径来源：2026-10-27 本机 explore.py 探路（探路-25060RK16C.tsv，17 个 App / 121 个开关）+ 同品牌 xiaomi-M154FF 适配。
+from recipe_kit import step
 # 机主拍板（2026-10-27）：关「宫格位推送 / 猜你想搜 / 我的视频 / 小说 / 我的网盘 / 自动开启畅读 / 新手帮助 / 秒装」；
 #   保留「扫一扫、搜索历史、快捷功能模块、翻译提示、密码保存、自动填充、删除安装包、计算器语音播报」；商店保持标准模式（不切极简）。
 # 浏览器「隐私防护」页的广告过滤 / 防跟踪 / 下载防护是保护类（开着才对），本脚本不碰。
@@ -179,3 +179,9 @@ def _():
         else:
             print(f"  · {pkg} 没有用户体验计划，跳过")
         p.back(3)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p, require_switches, start_or_skip
+    from recipe_nav import gear
+    from recipe_steps import downloads, global_search, negative_screen, security_center

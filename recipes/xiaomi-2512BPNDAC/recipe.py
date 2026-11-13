@@ -1,5 +1,5 @@
-# 小米 HyperOS 4 机型脚本：Xiaomi 17 Ultra（2512BPNDAC，标准版，非徕卡版）
-# 2026-10-28 真机实测：HyperOS OS4.0.5.0.XPACNXM / Android 17（SDK 37）/ 系统底包 CP2A.260605.016
+# 小米 HyperOS 4 机型脚本：Xiaomi 17 Ultra（2512BPNDAC，标准版，非徕卡版）；2026-10-28 真机实测：HyperOS OS4.0.5.0.XPACNXM / Android 17（SDK 37）/ 系统底包 CP2A.260605.016
+from recipe_kit import step
 # 与 Xiaomi 18 Pro Max、18 Fold 同一个系统底包，但这台的入口有四处不同，都写在本脚本里：
 #   ① 系统广告：「广告服务」页只有「个性化广告推荐」；「系统工具广告」是另一个独立页面，
 #      只能靠设置搜索命中「系统广告」进去。两条都用 p.setting 直达。
@@ -236,3 +236,8 @@ def _():
     if maybe("用户体验计划", scrolls=2):
         p.off(only=["推荐", "广告", "个性化", "内容推广"], page="日历·用户体验计划")
     p.back(3)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p, require_switches, start_or_skip
+    from recipe_steps import downloads, global_search, negative_screen, security_center

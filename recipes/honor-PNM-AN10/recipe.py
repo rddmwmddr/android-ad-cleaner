@@ -1,5 +1,5 @@
-# 荣耀 PNM-AN10（MagicOS 10）机型脚本。2026-10-23 实测通过
-# 变量 p 由 tool/fast.py 注入；ONLY 是要跑的段名列表（空=全跑）
+# 荣耀 PNM-AN10（MagicOS 10）机型脚本。2026-10-23 实测通过；变量 p 由 tool/fast.py 注入；ONLY 是要跑的段名列表（空=全跑）
+from recipe_kit import step
 BUILD = ""
 import re
 import time
@@ -312,3 +312,7 @@ def _():
             l, t, r, b = xy[-1]; p.click((l + r) // 2, (t + b) // 2); time.sleep(1.2)
     p.off(only=["锁屏画报轮播", "锁屏进入魔法画报"], page="魔法画报")
     p.back()
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import SkipStep, p, skip_in_safe_mode

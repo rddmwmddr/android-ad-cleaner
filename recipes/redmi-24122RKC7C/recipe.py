@@ -1,5 +1,5 @@
-# Redmi K80 Pro（24122RKC7C，代号 miro），HyperOS OS3.0.304.0.WOMCNXM / Android 16 / Build BP2A.250605.031.A3。
-# 2026-10-29 真机实测：USB 有线，1080×2400、密度 450、ROTATION_0。
+# Redmi K80 Pro（24122RKC7C，代号 miro），HyperOS OS3.0.304.0.WOMCNXM / Android 16 / Build BP2A.250605.031.A3。2026-10-29 真机实测：USB 有线，1080×2400、密度 450、ROTATION_0。
+from recipe_kit import step
 # 入口来源：先按同品牌 Redmi K70 脚本（OS3.0.307.0）安全模式跑通 9 段、关 20 项，
 #   再按本机入口补两处差异，专用脚本复跑 9 段（0 调整、0 步骤异常）。
 # 与 K70 的两处差异：
@@ -13,7 +13,7 @@ BUILD = "OS3.0.304.0"
 MODELS = ["24122RKC7C"]
 import time
 from entries import THEME_DEAD_ENDS
-VERIFIED_SWITCHES = 0
+# 回读确认数由引擎经 rt 记录
 
 
 def tap_any(*names, scrolls=6):
@@ -139,4 +139,11 @@ def _():
     weather_calendar_tap()
 
 
-print(f"\n系统广告段回读确认 {VERIFIED_SWITCHES} 项；步骤异常 {len(FAILED_STEPS)} 个", flush=True)
+def tail():
+    print(f"\n系统广告段回读确认 {rt.verified} 项；步骤异常 {len(rt.failed_steps)} 个", flush=True)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import SkipStep, maybe, p, require, require_switches, rt, start_or_skip
+    from recipe_nav import gear
+    from recipe_steps import downloads, global_search, negative_screen, security_center, store, system_ads_security, weather_calendar_tap

@@ -1,5 +1,5 @@
-# vivo（iQOO）V2324HA 机型脚本
-# 路径来源：V2324HA，OriginOS / Android 16（PD2324J_A_16.2.13.1.W10），2026-10-27 手动实测。
+# vivo（iQOO）V2324HA 机型脚本；路径来源：V2324HA，OriginOS / Android 16（PD2324J_A_16.2.13.1.W10），2026-10-27 手动实测。
+from recipe_kit import step
 # 这台没有「推荐热搜榜单」「应用商店服务管理」两个入口，脚本里保留为「有就点、没有跳过」。
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 BUILD = "PD2324J_A_16"
@@ -100,3 +100,9 @@ def _():
     p.start("com.vivo.weather", ".WeatherSettings")
     p.off(only=["天气服务"], keep=["气象预警", "异常天气", "地震预警"], page="天气·设置")   # 只关「天气相关热点资讯通知」
     p.back(2)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p
+    from recipe_nav import settings_home
+    from recipe_steps import lock_screen_magazine, system_ads_branch

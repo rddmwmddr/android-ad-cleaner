@@ -1,9 +1,9 @@
-# 一加 Ace 2 Pro（PJA110），ColorOS 16 / Android 16。
-# 路径取自同代系统在 Ace 2 与 OPPO 机型上已实测的公开入口，PJA110_16.0.5.1201 上尚未整段验证。
+# 一加 Ace 2 Pro（PJA110），ColorOS 16 / Android 16。路径取自同代系统在 Ace 2 与 OPPO 机型上已实测的公开入口，PJA110_16.0.5.1201 上尚未整段验证。
+from recipe_kit import step
 # 仅覆盖下拉搜索、商店、浏览器；广告跟踪、负一屏、主题、视频、游戏中心不在本脚本内。
 BUILD = "PJA110_16.0.5.1201"
 import time
-VERIFIED_SWITCHES = 0
+# 回读确认数由引擎经 rt 记录
 # 录自 ColorOS 14 的商店服务管理，不扩成 PHK110 的 26 项：改名或下架的项跳过，一项都不认识算段失败。
 PROMOTIONS = ["首页：悬浮活动图标", "首页：活动弹窗", "首页：顶部轮播卡片", "底部活动专区",
               "游戏详情页：游戏活动卡片", "软件专区：福利"]
@@ -39,7 +39,7 @@ def enter_privacy():
 
 def close_named(names, page, max_screens=1, snapshot=None):
     """关掉点名的开关，并核对其他开关未变。`snapshot` 是调用方已经读过的那一页，免得再翻一遍。"""
-    global VERIFIED_SWITCHES
+    # 回读确认数由引擎经 rt 记录
     if snapshot is None:
         p.top(max_screens)
         snapshot = read_switches(max_screens)
@@ -59,7 +59,7 @@ def close_named(names, page, max_screens=1, snapshot=None):
                 f"{page}：回读未确认关闭「{name}」")
     require(all(after.get(name) == state for name, state in snapshot.items() if name in others),
             f"{page}：其他开关状态变化，请核对")
-    VERIFIED_SWITCHES += len(names)
+    rt.confirm(len(names))
 
 
 def search_settings_ready(timeout=6):
@@ -118,4 +118,10 @@ def _():
     p.enter("个性化管理", scrolls=4)
     close_named(["个性化优惠推荐", "个性化广告推荐"], "浏览器·个性化管理")
 
-print(f"\n已回读确认 {VERIFIED_SWITCHES} 项；未完成步骤 {len(FAILED_STEPS)} 个", flush=True)
+def tail():
+    print(f"\n已回读确认 {rt.verified} 项；未完成步骤 {len(rt.failed_steps)} 个", flush=True)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, require, require_switches, rt
+    from recipe_nav import read_switches

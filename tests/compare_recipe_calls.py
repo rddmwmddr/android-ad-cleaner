@@ -152,31 +152,25 @@ def recording(phone, state):
 
 
 @contextmanager
-def segment_names():
+def segment_names(recipe_kit):
     """把每条调用归属到当时正在跑的段。
 
-    `@step` 是执行式装饰器：段名只在段体跑的那一刻存在。这里把前导写进执行作用域的 `step`
-    换成先记名字、再照原样跑的版本。没跑任何段时（模块体里的收尾代码）记空串。
+    `@step` 现在是声明式：段名只在 `rt.run_step()` 进入那一刻存在。执行上下文暴露一个
+    `OBSERVER`，段包装在跑段体前把名字递给它；没跑任何段时（模块体里的收尾代码）记空串。
     """
-    import recipe_kit
+    import recipe_runtime
     state = {"step": ""}
-    real = recipe_kit.preamble
+    runtime = recipe_runtime
 
-    def preamble(phone, scope):
-        scope = real(phone, scope)
-        inner = scope["step"]
+    def observe(name):
+        state["step"] = name
 
-        def step(name):
-            def decorate(action):
-                state["step"] = name
-                return inner(name)(action)
-            return decorate
-
-        scope["step"] = step
-        return scope
-
-    with patch.object(recipe_kit, "preamble", preamble):
+    old = runtime.OBSERVER
+    runtime.OBSERVER = observe
+    try:
         yield state
+    finally:
+        runtime.OBSERVER = old
 
 
 @contextmanager
@@ -197,7 +191,7 @@ def run_script(fast, recipe_kit, fixtures, path, scenario):
     """装载一份脚本（全部段都跑），返回这个场景下它发出的调用序列。"""
     phone = fixtures.fake_phone(clock=fixtures.Clock(), fast_mod=fast, shell=probe_shell)
     rehearsal(phone, scenario)
-    with segment_names() as state, fake_until(fixtures.RecipeClock()):
+    with segment_names(recipe_kit) as state, fake_until(fixtures.RecipeClock()):
         log = recording(phone, state)
         fixtures.load_recipe(phone, path, only=[])
     return log

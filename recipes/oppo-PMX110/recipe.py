@@ -1,5 +1,5 @@
-# OPPO Find X10 Pro Max（PMX110）：2026-11-05 逐页核对，ColorOS 17 / Android 17，实测版本
-# PMX110_17.0.0.116(CN01)。BUILD 只写到 17.0.0：同代的 17.0.0.x 共用这份路径，其他 ColorOS 17
+# OPPO Find X10 Pro Max（PMX110）：2026-11-05 逐页核对，ColorOS 17 / Android 17，实测版本；PMX110_17.0.0.116(CN01)。BUILD 只写到 17.0.0：同代的 17.0.0.x 共用这份路径，其他 ColorOS 17
+from recipe_kit import step
 # 机型也靠这个前缀把这份脚本当同族参考（#319 / #483）。
 # 只关点名的广告与推荐；搜索数据源、服务通知与消息总开关保留，营销由 chan-scan / chan-off
 # 在渠道级处理。通知渠道、组件挂起和快应用继续走 run.py 的独立确认流程。
@@ -13,9 +13,9 @@ import adb_link
 from fast import ScreenLocked, bounds
 
 MenuState = namedtuple("MenuState", "close_all_disabled system_apps_shown")
-RESULTS = []
+# 分段结果由引擎经 rt 记录
 SKIPPED_ITEMS = []
-VERIFIED_SWITCHES = 0
+# 回读确认数由引擎经 rt 记录
 
 SEARCH = "com.heytap.quicksearchbox"
 MARKET = "com.heytap.market"
@@ -73,7 +73,7 @@ def close_named(names, title, max_screens=12, dependent=(), reopen=None, snapsho
 
     optional 里的名字允许这次页面上没有：记成「未显示」并继续；名单其余项缺一个就整段不动。
     """
-    global VERIFIED_SWITCHES
+    # 回读确认数由引擎经 rt 记录
     before = read_switches(title, max_screens) if snapshot is None else snapshot
     require_switches(before, names, title, optional=optional)
     present = [name for name in names if name in before]
@@ -85,7 +85,7 @@ def close_named(names, title, max_screens=12, dependent=(), reopen=None, snapsho
     if not present:
         return
     if not any(before[name] for name in present):
-        VERIFIED_SWITCHES += len(present)
+        rt.confirm(len(present))
         print(f"  · {title}：读取确认 {len(present)} 项原已关闭，未点击", flush=True)
         return
     p.top(max_screens)
@@ -97,7 +97,7 @@ def close_named(names, title, max_screens=12, dependent=(), reopen=None, snapsho
     require(all(after.get(name) is False for name in present), f"{title}：回读未确认关闭")
     require(all(after.get(name) == state for name, state in before.items()
                 if name not in names and name not in dependent), f"{title}：其他功能开关状态变化")
-    VERIFIED_SWITCHES += len(present)
+    rt.confirm(len(present))
     print(f"  · {title}：回读确认 {len(present)} 项关闭", flush=True)
 
 
@@ -238,7 +238,7 @@ def _():
 
 def hide_carousel():
     """只认单选控件自己的标签；不合并祖先子树的文字，也不点预览图里的同名文字（#280）。"""
-    global VERIFIED_SWITCHES
+    # 回读确认数由引擎经 rt 记录
     before = read_switches("推荐服务")
     require("推荐服务" in before, "未读到推荐服务总开关")
 
@@ -276,7 +276,7 @@ def hide_carousel():
         require(choices()[CAROUSEL_OFF][0], "轮播推荐回读未选中不显示")
         p.changed.append(("推荐服务", "轮播推荐：不显示"))
     require(read_switches("推荐服务") == before, "推荐服务总开关发生变化")
-    VERIFIED_SWITCHES += 1
+    rt.confirm(1)
 
 
 # 下面两个名字给注入面的负一屏助手取（at_assistant / assistant_icon 跑在 recipe_nav 里）
@@ -310,5 +310,12 @@ def _():
     assistant_advice_rows()
 
 
-print(f"\n逐项回读确认 {VERIFIED_SWITCHES} 项；完成 {sum(state == '完成' for _, state in RESULTS)} 段，"
-      f"跳过 {sum(state == '跳过' for _, state in RESULTS)} 段，未显示项 {len(SKIPPED_ITEMS)} 组", flush=True)
+def tail():
+    print(f"\n逐项回读确认 {rt.verified} 项；完成 {sum(state == '完成' for _, state in rt.results)} 段，"
+          f"跳过 {sum(state == '跳过' for _, state in rt.results)} 段，未显示项 {len(SKIPPED_ITEMS)} 组", flush=True)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, page, require, require_switches, rt, skip
+    from recipe_nav import app_settings, row, switch_signature, switch_top, system_settings
+    from recipe_steps import assistant_advice_rows, assistant_screen, game_center_direct, search_settings_direct, theme_store_settings, video_direct

@@ -61,9 +61,9 @@ class MeizuRecipeTests(unittest.TestCase):
         scope = self.load(p, ["探针"])
         ran = []
 
-        @scope["step"]("探针")
         def probe():
             ran.append(1)
+        scope["rt"].run_step("探针", probe)
 
         self.assertEqual(ran, [1])
         self.assertEqual(scope["FAILED_STEPS"], [])
@@ -75,9 +75,9 @@ class MeizuRecipeTests(unittest.TestCase):
         scope = self.load(p, ["探针"])
         ran = []
 
-        @scope["step"]("探针")
         def probe():
             ran.append(1)
+        scope["rt"].run_step("探针", probe)
 
         self.assertEqual(ran, [])
         self.assertEqual(scope["FAILED_STEPS"], ["探针"])
@@ -172,9 +172,9 @@ class MeizuRecipeTests(unittest.TestCase):
         scope = self.load(p, ["探针"])
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            @scope["step"]("探针")
             def probe():
                 raise RuntimeError("未找到「设置」")
+            scope["rt"].run_step("探针", probe)
         printed = out.getvalue()
         self.assertIn("未找到「设置」", printed)
         self.assertIn("app/Settings", printed)

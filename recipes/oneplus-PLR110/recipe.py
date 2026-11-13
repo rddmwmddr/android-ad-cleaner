@@ -1,5 +1,5 @@
-# 一加 Ace 6T（PLR110，ColorOS 17.0.0.101 / Android 17）机型脚本。
-# 路径实测：2026-10-31。覆盖：广告跟踪、软件商店、浏览器、主题商店、视频、游戏中心、
+# 一加 Ace 6T（PLR110，ColorOS 17.0.0.101 / Android 17）机型脚本。路径实测：2026-10-31。覆盖：广告跟踪、软件商店、浏览器、主题商店、视频、游戏中心、
+from recipe_kit import step
 # 小布建议、负一屏、下拉搜索，共九段。视频段用 ColorOS 17 的「个性化管理」入口。
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 BUILD = "PLR110_17.0.0.101"
@@ -178,3 +178,9 @@ def search_settings():
 @step("下拉搜索")
 def _():
     search_settings_swipe()
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p
+    from recipe_nav import wait_search_settings
+    from recipe_steps import ad_tracking_close_all, assistant_advice_search, game_center_taps, search_settings_swipe, theme_shop_settings

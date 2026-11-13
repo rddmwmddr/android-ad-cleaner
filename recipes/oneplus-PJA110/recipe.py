@@ -1,9 +1,9 @@
-# 一加 Ace 2 Pro，ColorOS 14.0.0.812 / Android 14，路径来自 2026-10-25 实测。
-# 仅覆盖下拉搜索、商店、浏览器；本机联网后验证 9 项，失败会回读并返回非零。
+# 一加 Ace 2 Pro，ColorOS 14.0.0.812 / Android 14，路径来自 2026-10-25 实测。仅覆盖下拉搜索、商店、浏览器；本机联网后验证 9 项，失败会回读并返回非零。
+from recipe_kit import step
 # 不代表系统广告跟踪、负一屏、主题、视频等均已适配。
 BUILD = "PJA110_14.0.0.812"
 import time
-VERIFIED_SWITCHES = 0
+# 回读确认数由引擎经 rt 记录
 PROMOTIONS = ["首页：悬浮活动图标", "首页：活动弹窗", "首页：顶部轮播卡片", "底部活动专区",
               "游戏详情页：游戏活动卡片", "软件专区：福利"]
 # 浏览器使用实机解析出的公开入口；商店沿用先停止、再从桌面启动，避免复用旧子页。
@@ -26,7 +26,7 @@ def app_settings(package, activity):
 
 
 def close_named(names, page, max_screens=1):
-    global VERIFIED_SWITCHES
+    # 回读确认数由引擎经 rt 记录
     p.top(max_screens)
     before = read_switches(max_screens)
     require_switches(before, names, page)
@@ -37,7 +37,7 @@ def close_named(names, page, max_screens=1):
     require(all(current.get(name) is False for name in names), f"{page}：回读未确认关闭")
     require(all(current.get(name) == state for name, state in before.items() if name not in names),
             f"{page}：其他开关状态变化，请核对")
-    VERIFIED_SWITCHES += len(names)
+    rt.confirm(len(names))
 
 
 @step("下拉搜索")
@@ -76,4 +76,10 @@ def _():
     tap("隐私")
     close_named(["个性化推荐"], "浏览器·隐私")
 
-print(f"\n已回读确认 {VERIFIED_SWITCHES} 项；未完成步骤 {len(FAILED_STEPS)} 个", flush=True)
+def tail():
+    print(f"\n已回读确认 {rt.verified} 项；未完成步骤 {len(rt.failed_steps)} 个", flush=True)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, require, require_switches, rt
+    from recipe_nav import read_switches, tap

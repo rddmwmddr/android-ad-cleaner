@@ -1,10 +1,10 @@
-# OPPO Find X8s（PKT110），ColorOS 17.0.0.102(CN01) / Android 17。
-# 路径与开关来自 2026-10-28 在 PKT110 真机上逐段实测。
+# OPPO Find X8s（PKT110），ColorOS 17.0.0.102(CN01) / Android 17。路径与开关来自 2026-10-28 在 PKT110 真机上逐段实测。
+from recipe_kit import step
 # 不覆盖软件商店（ColorOS 17 的设置页里没有「隐私」「服务管理」，商店首页的推广位也关不掉），
 # 也不覆盖负一屏（速览）——那边没有「推荐服务」分组。详见 docs/清单/OPPO-ColorOS.md。
 BUILD = "PKT110_17.0.0.102(CN01)"
 import time
-VERIFIED_SWITCHES = 0
+# 回读确认数由引擎经 rt 记录
 # 全局搜索的设置页没有导出：adb am start 会被系统拒绝（SecurityException: not exported），
 # 只能用它自己的 gs:// scheme 打开。
 SEARCH_SETTING = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"
@@ -67,7 +67,7 @@ def close_named(names, page, max_screens=1, reopen=None, gone=()):
     """关掉点名的开关并回读确认；其他开关的状态不能变。
     reopen：有的页点完开关会弹确认框、确认后退回上一级，回读前用这个回调重新进一次。
     gone：父开关一关就会从页面上消失的那几行，回读时不再要求它们还在。"""
-    global VERIFIED_SWITCHES
+    # 回读确认数由引擎经 rt 记录
     p.top(max_screens)
     first = wait_switches()
     require(first, f"{page}：页面里没读到开关，未操作")
@@ -83,7 +83,7 @@ def close_named(names, page, max_screens=1, reopen=None, gone=()):
     require(all(current.get(name) == state for name, state in before.items()
                 if name not in names and name not in gone),
             f"{page}：其他开关状态变化，请核对")
-    VERIFIED_SWITCHES += len(names)
+    rt.confirm(len(names))
 
 
 def close_group(children, parent, page, max_screens=1):
@@ -101,7 +101,7 @@ def close_group(children, parent, page, max_screens=1):
 
 def close_all(page, max_screens):
     """整页关掉所有开关（逐 App 的广告跟踪列表用），关完回读确认。"""
-    global VERIFIED_SWITCHES
+    # 回读确认数由引擎经 rt 记录
     p.top(max_screens)
     first = wait_switches()
     require(first, f"{page}：没读到开关，未操作")
@@ -113,7 +113,7 @@ def close_all(page, max_screens):
     current = read_switches(max_screens)
     still = sorted(name for name, on in current.items() if on)
     require(not still, f"{page}：回读未确认关闭（仍有 {len(still)} 项开着）")
-    VERIFIED_SWITCHES += len(before)
+    rt.confirm(len(before))
 
 
 @step("广告跟踪")
@@ -266,4 +266,9 @@ def _():
     close_all("应用建议", max_screens=40)
 
 
-print(f"\n已回读确认 {VERIFIED_SWITCHES} 项；未完成步骤 {len(FAILED_STEPS)} 个", flush=True)
+def tail():
+    print(f"\n已回读确认 {rt.verified} 项；未完成步骤 {len(rt.failed_steps)} 个", flush=True)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, require, require_switches, rt, skip_in_safe_mode

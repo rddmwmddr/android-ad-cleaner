@@ -1,5 +1,5 @@
-# 小米 HyperOS 3 机型脚本：Xiaomi 13 Ultra（2304FPN6DC）、Xiaomi 14 Pro（23116PN5BC）
-# 路径来源：2026-10-27 实机录制（OS3.0.308.0.WMACNXM / Android 16）。
+# 小米 HyperOS 3 机型脚本：Xiaomi 13 Ultra（2304FPN6DC）、Xiaomi 14 Pro（23116PN5BC）；路径来源：2026-10-27 实机录制（OS3.0.308.0.WMACNXM / Android 16）。
+from recipe_kit import step
 # 14 Pro 2026-10-29 社区实测（OS3.0.308.0.WNBCNXM / Android 16，Issue #317）：九段跑通、每步回读，
 # 只有浏览器「搜索设置」一页没命中目标开关。
 # 与 18 系列（OS4）的差异：系统广告的「更多安全设置」在「隐私与安全 → 安全」页里；
@@ -151,3 +151,9 @@ def _():
     if maybe("用户体验计划"):
         p.off(only=["推荐", "广告", "个性化", "内容推广"], page="日历·用户体验计划"); p.back()
     p.back(3)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p, require_switches, start_or_skip
+    from recipe_nav import gear, tap_any
+    from recipe_steps import downloads, negative_screen

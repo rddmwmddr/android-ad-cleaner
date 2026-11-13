@@ -62,10 +62,11 @@ def run_step(fast_mod, store, body, name="主题"):
     scope = {"p": phone, "ONLY": []}
     fast_mod.recipe_kit.preamble(phone, scope)
 
+    def 段体():
+        body(phone)
+
     with contextlib.redirect_stdout(io.StringIO()):
-        @scope["step"](name)
-        def 段体():
-            body(phone)
+        scope["rt"].run_step(name, 段体)
     return phone
 
 
@@ -173,10 +174,11 @@ class CaptureLabelTests(unittest.TestCase):
         phone.locked = lambda: False
         scope = {"p": phone, "ONLY": []}
         self.fast.recipe_kit.preamble(phone, scope)
+        def body():
+            return None
+
         with contextlib.redirect_stdout(io.StringIO()):
-            @scope["step"]("主题")
-            def body():
-                return None
+            scope["rt"].run_step("主题", body)
         self.assertEqual(phone.screen.captures.step, "主题")
 
     def test_folder_name_drops_path_separators(self):

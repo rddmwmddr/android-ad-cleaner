@@ -1,5 +1,5 @@
-# vivo V1986A（iQOO Neo 系）机型脚本：Funtouch OS 13.0 / Android 12
-# 路径来源：V1986A，构建 PD1986_A_8.21.29，2026-10-30 真机逐页实测、整段跑通。
+# vivo V1986A（iQOO Neo 系）机型脚本：Funtouch OS 13.0 / Android 12；路径来源：V1986A，构建 PD1986_A_8.21.29，2026-10-30 真机逐页实测、整段跑通。
+from recipe_kit import step
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 #
 # ── 本机型实测要点（和 OriginOS 的 vivo 脚本差别很大，不要照抄那边）────────────
@@ -103,3 +103,9 @@ def _():
 # 浏览器：本机没有 com.vivo.browser。
 # 营销通知渠道：这台的通知页在 com.android.systemui，chan-off 认不出来，见 issue #336。
 # ────────────────────────────────────────────────────────────────────────────
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p
+    from recipe_nav import settings_home
+    from recipe_steps import system_ads_chain

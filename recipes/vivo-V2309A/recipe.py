@@ -1,5 +1,5 @@
-# vivo V2309A，OriginOS 6 / Android 16，PD2309E_A_16.2.15.0.W10。
-# 路径来自 2026-11-02 真机逐段操作：七段整轮 149 秒，每段回读确认（#530）。
+# vivo V2309A，OriginOS 6 / Android 16，PD2309E_A_16.2.15.0.W10。路径来自 2026-11-02 真机逐段操作：七段整轮 149 秒，每段回读确认（#530）。
+from recipe_kit import step
 # 2026-11-03 从开启状态复跑：26 个点名开关逐个关闭、每页回读核对，213 秒；复跑轮 165 秒。
 # 底子是同品牌参考脚本 vivo-V2547DA；本机差异集中在「应用商店」一段，见该段注释。
 # 别的系统版本会用安全模式跑：只关点名的开关，找不到入口就跳过。
@@ -116,3 +116,8 @@ def _():
     p.d.shell("am start -f 0x10008000 -n com.vivo.weather/.WeatherSettings")
     time.sleep(1.0)
     p.off(only=["天气服务"], keep=["气象预警", "异常天气", "地震预警"], page="天气·设置")   # 只关「天气相关热点资讯通知」
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p, require
+    from recipe_steps import browser_recommendations, global_search_ads, i_manager_ads, lock_screen_magazine, system_ads_branch

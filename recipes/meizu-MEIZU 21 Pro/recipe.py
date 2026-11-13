@@ -1,5 +1,5 @@
-# 魅族 21 Pro（MEIZU 21 Pro，Flyme 12.6.0.0A / Android 16）。
-# 2026-10-30 真机分段验证：除下列两段外，其余目标已读到关闭；手机管家入口修复后单独复测通过。
+# 魅族 21 Pro（MEIZU 21 Pro，Flyme 12.6.0.0A / Android 16）。2026-10-30 真机分段验证：除下列两段外，其余目标已读到关闭；手机管家入口修复后单独复测通过。
+from recipe_kit import step
 # 浏览器、应用商店两段的启动落点与中间跳转在 #523 改过，尚未真机复测。
 # 不处理通知渠道、快应用或广告包；不修改服务类通知和负一屏卡片。
 BUILD = "Flyme 12.6.0.0A"
@@ -311,5 +311,10 @@ def _():
     close_named(["个性化内容推荐", "个性化广告推荐"], "锁屏画报·推荐", recommend)
 
 
-print(f"\n已调整 {len(p.changed)} 项；未完成步骤 {len(FAILED_STEPS)} 个。", flush=True)
-print("通知渠道、广告包、快应用按标准流程另行处理。", flush=True)
+def tail():
+    print(f"\n已调整 {len(p.changed)} 项；未完成步骤 {len(rt.failed_steps)} 个。", flush=True)
+    print("通知渠道、广告包、快应用按标准流程另行处理。", flush=True)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import require, rt

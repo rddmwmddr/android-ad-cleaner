@@ -109,7 +109,7 @@ def probe(path, locked):
 def drive(scope, p, bodies):
     with contextlib.redirect_stdout(io.StringIO()):
         for name, body in bodies:
-            scope["step"](name)(body)
+            scope["rt"].run_step(name, body)
         code = fast.report_run(scope, p)
     return code
 

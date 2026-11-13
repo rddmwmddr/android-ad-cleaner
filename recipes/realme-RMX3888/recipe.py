@@ -1,5 +1,5 @@
-# realme 真我 GT5 Pro（RMX3888，ColorOS 15.0.0.420(CN01) / Android 15）机型脚本。
-# 按报告者（#1083）逐段实测的落点写成，本仓库没有这台手机，未在真机复跑，待复测。
+# realme 真我 GT5 Pro（RMX3888，ColorOS 15.0.0.420(CN01) / Android 15）机型脚本。按报告者（#1083）逐段实测的落点写成，本仓库没有这台手机，未在真机复跑，待复测。
+from recipe_kit import step
 # 只关点名的广告与推荐；营销通知、组件挂起与快应用仍走 run.py 的独立确认流程。
 #
 # 本机实测与同族 OPPO 脚本的差别（别照抄别家脚本的路径）：
@@ -265,3 +265,8 @@ def _():
     else:
         print("  · 没有「资讯服务」入口（本机小布建议总开关默认已关）", flush=True)
     p.back(2)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import SkipStep, maybe, p, page, skip, skip_in_safe_mode
+    from recipe_nav import settings_page

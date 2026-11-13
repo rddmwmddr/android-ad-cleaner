@@ -1,10 +1,10 @@
-# Redmi K70 Pro（23117RK66C），HyperOS OS3.0.306.0.WNMCNXM / Android 16。
-# 入口与核对范围见 docs/14-红米K70Pro实测.md；包安装状态和联网规则不由机型脚本改动。
+# Redmi K70 Pro（23117RK66C），HyperOS OS3.0.306.0.WNMCNXM / Android 16。入口与核对范围见 docs/14-红米K70Pro实测.md；包安装状态和联网规则不由机型脚本改动。
+from recipe_kit import step
 BUILD = "OS3.0.306.0.WNMCNXM"
 MODELS = ["23117RK66C"]
 import time
 from entries import THEME_DEAD_ENDS
-VERIFIED_SWITCHES = 0
+# 回读确认数由引擎经 rt 记录
 
 
 def enter(name, scrolls=6):
@@ -123,4 +123,10 @@ def _():
     close_named(["内容推广"], "日历·用户体验计划")
 
 
-print(f"\n逐页回读确认 {VERIFIED_SWITCHES} 项；步骤异常 {len(FAILED_STEPS)} 个", flush=True)
+def tail():
+    print(f"\n逐页回读确认 {rt.verified} 项；步骤异常 {len(rt.failed_steps)} 个", flush=True)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, require, rt, start_or_skip
+    from recipe_nav import close_named, gear

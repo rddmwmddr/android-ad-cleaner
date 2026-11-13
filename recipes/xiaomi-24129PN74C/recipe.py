@@ -1,5 +1,5 @@
-# Xiaomi 15（24129PN74C），HyperOS OS3.0.307.0.WOCCNXM / Android 16，底包 BP2A.250605.031.A3。
-# 2026-10-29 无线调试（192.168.2.147:5555）实测：底包与 recipes/redmi-25060RK16C 完全一致，
+# Xiaomi 15（24129PN74C），HyperOS OS3.0.307.0.WOCCNXM / Android 16，底包 BP2A.250605.031.A3。2026-10-29 无线调试（192.168.2.147:5555）实测：底包与 recipes/redmi-25060RK16C 完全一致，
+from recipe_kit import step
 # 但浏览器和商店的入口结构不同，按本机实测路径写。
 #
 # 本机实测到的入口（与 M154FF / K80 脚本的差异）：
@@ -29,7 +29,7 @@ import time
 from dataclasses import replace
 from entries import ENTRIES, THEME_DEAD_ENDS, reach
 from wait import until
-VERIFIED_SWITCHES = 0
+# 回读确认数由引擎经 rt 记录
 
 # 浏览器段的入口页是设置页本身。分组里的另一条直达是「个性化推荐设置」子页：直接落过去时
 # 后面几个设置页入口都找不到、整段 0 项空跑，所以回退链只取设置页那一条（#912）。
@@ -306,4 +306,11 @@ def _():
         p.back(3)
 
 
-print(f"\n回读确认 {VERIFIED_SWITCHES} 项；步骤异常 {len(FAILED_STEPS)} 个", flush=True)
+def tail():
+    print(f"\n回读确认 {rt.verified} 项；步骤异常 {len(rt.failed_steps)} 个", flush=True)
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p, require, require_switches, rt, start_or_skip
+    from recipe_nav import close_named, popup_row
+    from recipe_steps import downloads_tap, global_search, negative_screen, security_center
