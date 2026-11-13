@@ -8,7 +8,7 @@ import unittest
 from fixtures import load_recipe, phone_stub
 
 ROOT = Path(__file__).resolve().parents[1]
-RECIPE = ROOT / "recipes/oneplus-PHK110/recipe.py"
+RECIPE = ROOT / "recipes/oppo/PHK110/recipe.py"
 
 
 def fake_shell(model, build, commands):

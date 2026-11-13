@@ -283,8 +283,9 @@ def ad_packages(brand):
 
 # 没有本型号脚本时用的同品牌参考脚本。以前取目录名排第一的那份，社区每加一个机型，
 # 别的手机用的参考脚本就可能跟着变（10-28 合并社区机型脚本时发现）；固定成一份经过真机验证的最全的。
-REFERENCE = {"oppo": "oppo-PLP120", "honor": "honor-PNM-AN10", "xiaomi": "xiaomi-M154FF", "vivo": "vivo-V2547DA",
-             "meizu": "meizu-MEIZU 21 Pro"}
+# 家族 → 固定参考脚本的型号目录名（`recipes/<家族>/<型号>/recipe.py`）。
+REFERENCE = {"oppo": "PLP120", "honor": "PNM-AN10", "xiaomi": "M154FF", "vivo": "V2547DA",
+             "meizu": "MEIZU 21 Pro"}
 
 # 把脚本 BUILD 或设备版本抽成版本核心时要先切掉的机型名标记（#319）。
 VERSION_MARKER = {"oppo": "_", "vivo": "_A_", "honor": " ", "meizu": "Flyme"}
@@ -333,7 +334,9 @@ def version_match(device_info, recorded, fam):
 
 
 def _dir_family(path):
-    return FAMILY.get(os.path.basename(os.path.dirname(path)).split("-", 1)[0].lower(), "")
+    """脚本所属家族：路径是 `recipes/<家族>/<型号>/recipe*.py`，家族是型号目录的上一级目录名。"""
+    family = os.path.basename(os.path.dirname(os.path.dirname(path)))
+    return FAMILY.get(family.lower(), "")
 
 
 def same_version_family_recipe(allr, fam, preferred, device_info):
@@ -366,11 +369,11 @@ def same_version_family_recipe(allr, fam, preferred, device_info):
 
 
 def recipe_for(model, brand="", device_info=None):
-    """返回 (路径, 是否参考)。先找本型号（目录名或脚本里的 MODELS）；没有就找同品牌别的机型，作参考。"""
-    allr = sorted(glob.glob(os.path.join(ROOT, "recipes", "*", "recipe.py")))
+    """返回 (路径, 是否参考)。先找本型号（目录名或脚本里的 MODELS）；没有就找同家族别的机型，作参考。"""
+    allr = sorted(glob.glob(os.path.join(ROOT, "recipes", "*", "*", "recipe.py")))
     for r in allr:
         d = os.path.basename(os.path.dirname(r))
-        if d.endswith("-" + model) or model in recipe_meta(r)["models"]:
+        if d == model or model in recipe_meta(r)["models"]:
             # 一个型号可能有不同系统版本的实测路径。仅在版本明确匹配时选择变体。
             if device_info:
                 variants = sorted(glob.glob(os.path.join(os.path.dirname(r), "recipe_*.py")))
@@ -380,7 +383,7 @@ def recipe_for(model, brand="", device_info=None):
                         return variant, False
             return r, False
     fam = FAMILY.get((brand or "").lower(), "")
-    preferred = os.path.join(ROOT, "recipes", REFERENCE.get(fam, ""), "recipe.py")
+    preferred = os.path.join(ROOT, "recipes", fam, REFERENCE.get(fam, ""), "recipe.py")
     if fam in REFERENCE and os.path.exists(preferred):
         # 固定参考的 BUILD 常写得粗（OS4.0、16），前缀一命中就到它为止，同族里录在同版本上的
         # 脚本永远进不了候选。两条路径同池排（#969）；固定参考的 BUILD 写粗只是让它自己不够贴。
@@ -390,7 +393,7 @@ def recipe_for(model, brand="", device_info=None):
                 return picked, True
         return preferred, True
     for r in allr:
-        if fam and os.path.basename(os.path.dirname(r)).startswith(fam + "-"):
+        if fam and _dir_family(r) == fam:
             return r, True
     return None, False
 

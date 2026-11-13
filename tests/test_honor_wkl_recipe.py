@@ -16,7 +16,7 @@ from fixtures import load_recipe, phone_stub
 
 class HonorWKLRecipeTests(unittest.TestCase):
     def load(self, phone):
-        scope, _ = load_recipe(phone, ROOT / "recipes/honor-WKL-AN20/recipe.py")
+        scope, _ = load_recipe(phone, ROOT / "recipes/honor/WKL-AN20/recipe.py")
         return scope
 
     def phone(self, xml="<hierarchy/>"):
@@ -42,7 +42,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
         path, reference = run.recipe_for("WKL-AN20", "HONOR")
         self.assertFalse(reference)
         meta = run.recipe_meta(path)
-        self.assertEqual(Path(path).parent.name, "honor-WKL-AN20")
+        self.assertEqual(Path(path).parent.name, "WKL-AN20")
         self.assertEqual(meta["build"], "WKL-AN20 11.0.0.111(SP7C00E110R101P7)")
         self.assertEqual(len(meta["steps"]), 13)
         self.assertIn("音乐", meta["steps"])

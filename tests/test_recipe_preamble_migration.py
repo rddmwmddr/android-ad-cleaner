@@ -46,7 +46,7 @@ ALLOWED = {
     # 一加旧版的 `page(activity, title, timeout=6)` 与 recipe_kit 注入的 `page()` 同名不同签名，
     # #1245 把实现收进 `recipe_nav.page_activity`，脚本里只剩一行绑定：段体（含 recipe_steps
     # 里按名字取的）仍按旧名字调用，所以这个名字仍在模块体里出现。
-    "recipes/oneplus-PHK110/recipe_android15.py": {"page"},
+    "recipes/oppo/PHK110/recipe_android15.py": {"page"},
 }
 
 

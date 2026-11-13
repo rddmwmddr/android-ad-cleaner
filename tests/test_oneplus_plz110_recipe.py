@@ -15,7 +15,7 @@ from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock
 import fast
 import run
 
-RECIPE = ROOT / 'recipes/oneplus-PLZ110/recipe.py'
+RECIPE = ROOT / 'recipes/oppo/PLZ110/recipe.py'
 
 class Plz110RecipeTests(unittest.TestCase):
     def test_exact_model_has_its_own_seven_verified_segments(self):

@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 import run
 from fixtures import load_recipe, phone_mock
 
-RECIPE = ROOT / "recipes/meizu-MEIZU 21 Pro/recipe.py"
+RECIPE = ROOT / "recipes/meizu/MEIZU 21 Pro/recipe.py"
 
 
 class MeizuRecipeTests(unittest.TestCase):
@@ -242,18 +242,18 @@ class MeizuFamilyTests(unittest.TestCase):
     def test_reference_is_pinned_not_the_first_directory(self):
         # REFERENCE 必须显式指定：社区再提一份魅族脚本，别的魅族机型用的参考不能跟着变
         with tempfile.TemporaryDirectory() as root:
-            for name in ("meizu-MEIZU 20", "meizu-MEIZU 21 Pro"):
-                Path(root, "recipes", name).mkdir(parents=True)
-                Path(root, "recipes", name, "recipe.py").write_text('BUILD = "Flyme 12.6.0.0A"\n', encoding="utf-8")
+            for name in ("MEIZU 20", "MEIZU 21 Pro"):
+                Path(root, "recipes", "meizu", name).mkdir(parents=True)
+                Path(root, "recipes", "meizu", name, "recipe.py").write_text('BUILD = "Flyme 12.6.0.0A"\n', encoding="utf-8")
             with patch.object(run, "ROOT", root):
                 path, reference = run.recipe_for("MEIZU 22", "MEIZU")
                 self.assertTrue(reference)
-                self.assertEqual(Path(path).parent.name, "meizu-MEIZU 21 Pro")
+                self.assertEqual(Path(path).parent.name, "MEIZU 21 Pro")
 
     def test_other_families_still_resolve_to_their_reference(self):
-        cases = [("POCO", "xiaomi-M154FF"), ("Redmi", "xiaomi-M154FF"),
-                 ("OnePlus", "oppo-PLP120"), ("realme", "oppo-PLP120"),
-                 ("iQOO", "vivo-V2547DA"), ("HONOR", "honor-PNM-AN10")]
+        cases = [("POCO", "M154FF"), ("Redmi", "M154FF"),
+                 ("OnePlus", "PLP120"), ("realme", "PLP120"),
+                 ("iQOO", "V2547DA"), ("HONOR", "PNM-AN10")]
         for brand, expected in cases:
             with self.subTest(brand=brand):
                 path, reference = run.recipe_for("ZZZ0000", brand)

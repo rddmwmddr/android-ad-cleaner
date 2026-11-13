@@ -22,7 +22,7 @@ CHECKING_CALLS = ("bool", "require")
 
 
 def recipes():
-    return sorted((ROOT / "recipes").glob("*/recipe*.py"))
+    return sorted((ROOT / "recipes").glob("*/*/recipe*.py"))
 
 
 def tree_of(path):
@@ -96,7 +96,10 @@ BUILD_GATED = {"oneplus-PHK110": ("PHK110", "PHK110_16.0.5.1201")}
 
 
 def recipe_of(name):
-    return ROOT / "recipes" / name / "recipe.py"
+    """`"oppo-PMX110"` → `recipes/oppo/PMX110/recipe.py`（目录按家族/型号两层，#1261）。"""
+    brand, _, model = name.partition("-")
+    import entries
+    return ROOT / "recipes" / entries.FAMILY.get(brand.lower(), brand) / (model or name) / "recipe.py"
 
 
 class TheGuardItself(unittest.TestCase):

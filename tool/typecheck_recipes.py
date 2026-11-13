@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""跑一遍机型脚本的类型检查（#1247）：`recipes/*/recipe*.py` 逐份交给 mypy 的宽松档。
+"""跑一遍机型脚本的类型检查（#1247）：`recipes/*/*/recipe*.py` 逐份交给 mypy 的宽松档。
 
 为什么不是一条 `mypy recipes`：43 份脚本都叫 `recipe.py`（另有 4 份版本变体），mypy 按
 basename 取模块名，一次扫多份会报 `Duplicate module named 'recipe'`；目录名
@@ -23,8 +23,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def recipes():
-    """机型脚本清单：与事实层、对拍驱动同一口径（`recipes/*/recipe*.py`，按路径排序）。"""
-    return sorted(glob.glob(os.path.join(ROOT, "recipes", "*", "recipe*.py")))
+    """机型脚本清单：与事实层、对拍驱动同一口径（`recipes/<家族>/<型号>/recipe*.py`，按路径排序）。"""
+    return sorted(glob.glob(os.path.join(ROOT, "recipes", "*", "*", "recipe*.py")))
 
 
 def main(argv):

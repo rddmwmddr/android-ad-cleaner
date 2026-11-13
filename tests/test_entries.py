@@ -142,8 +142,8 @@ class SourceTest(unittest.TestCase):
         """最后一次赋值不是字面量时不记出处：退回更早的旧值会把机型挂到别的包上。"""
         import tempfile
         with tempfile.TemporaryDirectory() as d:
-            model = Path(d) / "brand-model"
-            model.mkdir()
+            model = Path(d) / "brand" / "model"
+            model.mkdir(parents=True)
             (model / "recipe.py").write_text(
                 'package = "com.old"\npackage = helper()\ndef _():\n    p.start(package, ".B")\n',
                 encoding="utf-8")
@@ -153,8 +153,8 @@ class SourceTest(unittest.TestCase):
         """脚本定义了同名助手，注入面那份就不在场上：不扣减会把它记成用过别家的 Intent。"""
         import tempfile
         with tempfile.TemporaryDirectory() as d:
-            model = Path(d) / "brand-model"
-            model.mkdir()
+            model = Path(d) / "brand" / "model"
+            model.mkdir(parents=True)
             (model / "recipe.py").write_text(
                 'def app_settings(package, *markers):\n'
                 '    return package\n\n\n'
@@ -177,8 +177,8 @@ class SourceTest(unittest.TestCase):
         import recipe_steps
         import tempfile
         with tempfile.TemporaryDirectory() as d:
-            model = Path(d) / "xiaomi-model"
-            model.mkdir()
+            model = Path(d) / "xiaomi" / "model"
+            model.mkdir(parents=True)
             (model / "recipe.py").write_text(
                 'MARKET = "com.example.market"\n\n\n'
                 '@step("商店")\n'
@@ -199,8 +199,8 @@ class SourceTest(unittest.TestCase):
         import recipe_steps
         import tempfile
         with tempfile.TemporaryDirectory() as d:
-            model = Path(d) / "oneplus-model"
-            model.mkdir()
+            model = Path(d) / "oppo" / "model"
+            model.mkdir(parents=True)
             (model / "recipe.py").write_text(
                 '@step("浏览器首页")\n'
                 'def _():\n'
@@ -221,8 +221,8 @@ class SourceTest(unittest.TestCase):
         import recipe_steps
         import tempfile
         with tempfile.TemporaryDirectory() as d:
-            model = Path(d) / "oneplus-model"
-            model.mkdir()
+            model = Path(d) / "oppo" / "model"
+            model.mkdir(parents=True)
             (model / "recipe.py").write_text(
                 'def settings_direct():\n'
                 '    return False\n\n\n'
@@ -242,8 +242,8 @@ class SourceTest(unittest.TestCase):
         """只传了包名的 open_app_settings 不算出处：把包名当成页面会给这台机凭空挂一条 Intent。"""
         import tempfile
         with tempfile.TemporaryDirectory() as d:
-            model = Path(d) / "brand-model"
-            model.mkdir()
+            model = Path(d) / "brand" / "model"
+            model.mkdir(parents=True)
             (model / "recipe.py").write_text(
                 'def open_app_settings(package):\n'
                 '    p.start(package, ".SettingsActivity")\n\n\n'
@@ -498,8 +498,8 @@ class ReachTest(unittest.TestCase):
 
 
 RECIPES_901 = {
-    "PMX110": ROOT / "recipes" / "oppo-PMX110" / "recipe.py",
-    "PLZ110": ROOT / "recipes" / "oneplus-PLZ110" / "recipe.py",
+    "PMX110": ROOT / "recipes" / "oppo/PMX110" / "recipe.py",
+    "PLZ110": ROOT / "recipes" / "oppo/PLZ110" / "recipe.py",
 }
 LAUNCHER_901 = "com.android.launcher/com.android.launcher3.Launcher"
 ASSISTANT_SETTING_901 = "com.coloros.assistantscreen/setting.RecommendServiceSettingActivity"
@@ -724,21 +724,21 @@ BASIC_460 = "com.android.browser/com.android.browser.basicmode.BasicModeSettingA
 HOME_460 = "com.android.browser/com.android.browser.MainActivity"
 # 先试直达设置页、落空后才裸拉起首页的那两份（#667、#912）
 FIRST_HOP = {
-    "xiaomi-M154FF": ".preferences.activity.CustomizationPreferenceActivity",
-    "xiaomi-24129PN74C": ".BrowserSettingsActivity",
+    "M154FF": ".preferences.activity.CustomizationPreferenceActivity",
+    "24129PN74C": ".BrowserSettingsActivity",
 }
 
 RECIPES_460 = (
-    (ROOT / "recipes/xiaomi-M154FF/recipe.py", ("com.android.browser",)),
-    (ROOT / "recipes/xiaomi-25102RKBEC/recipe.py", ("com.android.browser",)),
-    (ROOT / "recipes/redmi-25060RK16C/recipe.py", ("com.android.browser",)),
-    (ROOT / "recipes/xiaomi-24129PN74C/recipe.py", ("com.android.browser",)),
-    (ROOT / "recipes/redmi-23113RKC6C/recipe.py", ("com.android.browser",)),
-    (ROOT / "recipes/xiaomi-2512BPNDAC/recipe.py", ("com.android.browser",)),
-    (ROOT / "recipes/xiaomi-2505APX7BC/recipe.py", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/M154FF/recipe.py", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/25102RKBEC/recipe.py", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/25060RK16C/recipe.py", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/24129PN74C/recipe.py", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/23113RKC6C/recipe.py", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/2512BPNDAC/recipe.py", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/2505APX7BC/recipe.py", ("com.android.browser",)),
     # 这份不走 p.start：强停后用 monkey 拉起
-    (ROOT / "recipes/xiaomi-24129PN74C/recipe_os4.py", None),
-    (ROOT / "recipes/redmi-24122RKC7C/recipe.py", ("com.android.browser", ".BrowserActivity")),
+    (ROOT / "recipes/xiaomi/24129PN74C/recipe_os4.py", None),
+    (ROOT / "recipes/xiaomi/24122RKC7C/recipe.py", ("com.android.browser", ".BrowserActivity")),
 )
 
 
@@ -753,7 +753,7 @@ class BrowserBasicModeTests(unittest.TestCase):
                 raise RuntimeError("启动后停在非预期页面")
 
         p = phone_mock()
-        if recipe.parent.name == "xiaomi-M154FF":
+        if recipe.parent.name == "M154FF":
             p.start.side_effect = start
         p.locked = lambda: False
         p.focus.return_value = focus
@@ -787,12 +787,12 @@ class BrowserBasicModeTests(unittest.TestCase):
         for recipe, start_args in RECIPES_460:
             with self.subTest(recipe=str(recipe)):
                 p, out = self.run_browser_step(recipe, HOME_460)
-                if recipe.parent.name == "xiaomi-M154FF":
+                if recipe.parent.name == "M154FF":
                     self.assertEqual([c.args for c in p.start.call_args_list],
-                                     [("com.android.browser", FIRST_HOP["xiaomi-M154FF"]),
+                                     [("com.android.browser", FIRST_HOP["M154FF"]),
                                       start_args])
                     self.assertIn("浏览器设置入口未找到", out)
-                elif start_args and recipe.parent.name != "xiaomi-24129PN74C":
+                elif start_args and recipe.parent.name != "24129PN74C":
                     p.start.assert_called_once_with(*start_args)
                 self.assertIn("== 浏览器", out)
                 self.assertNotIn("基本模式", out)
@@ -920,7 +920,7 @@ class BrowserEntryTests(unittest.TestCase):
         p.screen.focus.return_value = "com.android.browser/.MainActivity"
         p.in_settings_page.return_value = False
         p.screen.texts.return_value = []
-        scope, _ = load_recipe(p, ROOT / "recipes/xiaomi-M154FF/recipe.py")
+        scope, _ = load_recipe(p, ROOT / "recipes/xiaomi/M154FF/recipe.py")
         self.assertFalse(scope["browser_settings"]())
         p.back.assert_not_called()
 
@@ -961,10 +961,10 @@ class BrowserEntryTests(unittest.TestCase):
 #   两条时间轴：落到工具栏面板时不点任何开关并报出停在哪一页；正常进设置页时照常走到目标行。
 
 
-XIAOMI_586 = ROOT / "recipes/xiaomi-24129PN74C"
+XIAOMI_586 = ROOT / "recipes/xiaomi/24129PN74C"
 RECIPES_586 = ("recipe.py", "recipe_os4.py")
-REDMI_K70_586 = ROOT / "recipes/redmi-23113RKC6C/recipe.py"
-XIAOMI_17U_586 = ROOT / "recipes/xiaomi-2512BPNDAC/recipe.py"
+REDMI_K70_586 = ROOT / "recipes/xiaomi/23113RKC6C/recipe.py"
+XIAOMI_17U_586 = ROOT / "recipes/xiaomi/2512BPNDAC/recipe.py"
 
 BROWSER_586 = "com.android.browser/.BrowserActivity"
 BROWSER_SETTINGS_586 = "com.android.browser/.BrowserSettingsActivity"
@@ -1128,8 +1128,8 @@ class Xiaomi17UltraBrowserSettingsTests(unittest.TestCase):
 #   #667：小米 M154FF、vivo V2547DA 的设置页能直达就直达，打不开才走菜单，断线不当成「这一档不通」。
 
 
-XIAOMI_667 = ROOT / "recipes" / "xiaomi-M154FF" / "recipe.py"
-VIVO_667 = ROOT / "recipes" / "vivo-V2547DA" / "recipe_android17.py"
+XIAOMI_667 = ROOT / "recipes" / "xiaomi/M154FF" / "recipe.py"
+VIVO_667 = ROOT / "recipes" / "vivo/V2547DA" / "recipe_android17.py"
 
 
 def phone_667(start=None, lost=False):
@@ -1331,7 +1331,7 @@ class RecipeQuotingTest(unittest.TestCase):
 
     def test_no_recipe_quotes_the_page_name_before_start(self):
         offenders = []
-        for path in sorted((ROOT / "recipes").glob("*/recipe*.py")):
+        for path in sorted((ROOT / "recipes").glob("*/*/recipe*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Call):
@@ -1390,7 +1390,7 @@ def phone_286(taps=1):
 
 def load_step_286(p, only):
     """按段名加载并执行：返回 (scope, 标准输出)。"""
-    scope, out = load_recipe(p, ROOT / "recipes/oppo-PKT110/recipe.py", only)
+    scope, out = load_recipe(p, ROOT / "recipes/oppo/PKT110/recipe.py", only)
     return scope, out.getvalue()
 
 
@@ -1594,8 +1594,8 @@ def hyperos_recipes_305():
     段体搬进注入面之后脚本正文里只剩 `theme()` 这类一行调用，按正文找 `gear(` 会把它们漏掉：
     这一族用例照旧全绿，沿用 #305 的那批样本却再没有一条打到引擎那份实现。"""
     gear_users = gear_users_1210()
-    for path in sorted(ROOT.glob("recipes/*/recipe*.py")):
-        if not path.parent.name.startswith(("xiaomi-", "redmi-")):
+    for path in sorted(ROOT.glob("recipes/*/*/recipe*.py")):
+        if entries.family(path.parent.parent.name) != "xiaomi":
             continue
         text = path.read_text(encoding="utf-8")
         if "gear(" in text or any(f"{name}(" in text for name in gear_users):
@@ -1732,7 +1732,7 @@ class ScriptsShareOnePredicateTests(unittest.TestCase):
 
     def test_no_recipe_defines_its_own_icon_hit(self):
         offenders = []
-        for path in sorted(ROOT.glob("recipes/*/recipe*.py")):
+        for path in sorted(ROOT.glob("recipes/*/*/recipe*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
                 if isinstance(node, ast.FunctionDef) and node.name == "icon_hit":
@@ -1740,8 +1740,8 @@ class ScriptsShareOnePredicateTests(unittest.TestCase):
         self.assertEqual(offenders, [], "脚本里还留着 icon_hit 的本地副本")
 
 
-VIVO_RECIPES_530 = (ROOT / "recipes/vivo-V2547DA/recipe.py",
-                ROOT / "recipes/vivo-V2547DA/recipe_android17.py")
+VIVO_RECIPES_530 = (ROOT / "recipes/vivo/V2547DA/recipe.py",
+                ROOT / "recipes/vivo/V2547DA/recipe_android17.py")
 
 
 def calls_on_p_530(tree, method):
@@ -1842,8 +1842,8 @@ class VivoGearTests(unittest.TestCase):
 #   直达不通时退回了原路径、断线不被吞成「入口改名」。真机上的落点仍要另验。
 
 
-PNM_796 = ROOT / "recipes" / "honor-PNM-AN10" / "recipe.py"
-PLR_796 = ROOT / "recipes" / "oneplus-PLR110" / "recipe.py"
+PNM_796 = ROOT / "recipes" / "honor/PNM-AN10" / "recipe.py"
+PLR_796 = ROOT / "recipes" / "oppo/PLR110" / "recipe.py"
 
 HIBOARD_START_796 = "am start -f 0x10008000 -n com.hihonor.hiboard/com.hihonor.intelligent.LauncherActivity"
 SEARCH_SETTING_796 = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"
@@ -2000,11 +2000,11 @@ PRIVACY_933 = ("隐私", "隐私授权管理")
 MARKET_933 = "com.heytap.market/com.heytap.market.mine.cn.setting.ui."
 PRIVACY_PAGE_933 = MARKET_933 + "PrivacyActivity"
 RECIPES_933 = {
-    "PLG110": ROOT / "recipes/oppo-PLG110/recipe.py",
-    "PMA110": ROOT / "recipes/oppo-PMA110/recipe.py",
-    "PKX110": ROOT / "recipes/oneplus-PKX110/recipe.py",
-    "RMX3700": ROOT / "recipes/realme-RMX3700/recipe.py",
-    "PHK110": ROOT / "recipes/oneplus-PHK110/recipe_android15.py",
+    "PLG110": ROOT / "recipes/oppo/PLG110/recipe.py",
+    "PMA110": ROOT / "recipes/oppo/PMA110/recipe.py",
+    "PKX110": ROOT / "recipes/oppo/PKX110/recipe.py",
+    "RMX3700": ROOT / "recipes/oppo/RMX3700/recipe.py",
+    "PHK110": ROOT / "recipes/oppo/PHK110/recipe_android15.py",
 }
 
 
@@ -2265,7 +2265,7 @@ class StoreSegmentTests(unittest.TestCase):
 #   页面节点取自报告者贴的 dump（1080×2400）。
 
 
-RECIPE_912 = ROOT / "recipes/xiaomi-24129PN74C/recipe.py"
+RECIPE_912 = ROOT / "recipes/xiaomi/24129PN74C/recipe.py"
 BROWSER_HOME_912 = "com.android.browser/com.android.browser.BrowserActivity"
 BROWSER_BASIC_912 = "com.android.browser/com.android.browser.basicmode.BasicModeSettingActivity"
 
@@ -2471,7 +2471,7 @@ SKIP_730 = "本机没有主题管理包，跳过"
 
 
 def recipes_730():
-    return sorted((ROOT / "recipes").glob("*/recipe*.py"))
+    return sorted((ROOT / "recipes").glob("*/*/recipe*.py"))
 
 
 def literal_730(node):
@@ -2546,8 +2546,8 @@ class ThemeFallbackBehaviourTests(unittest.TestCase):
         return p, out.getvalue(), scope
 
     def test_installed_thememanager_is_launched_directly(self):
-        for path in (ROOT / "recipes/xiaomi-24129PN74C/recipe.py",
-                     ROOT / "recipes/xiaomi-24090RA29C/recipe.py"):
+        for path in (ROOT / "recipes/xiaomi/24129PN74C/recipe.py",
+                     ROOT / "recipes/xiaomi/24090RA29C/recipe.py"):
             with self.subTest(recipe=path.parent.name):
                 p, _, _ = self.load(path, "", "package:/system/app/ThemeManager/ThemeManager.apk")
                 # 只比对拉起那一步：往后的「我的 → 齿轮」与开关校验由 #906 的用例守
@@ -2622,8 +2622,8 @@ def effective_step_body(node, defines=frozenset()):
 def theme_steps_906():
     """[(路径, 段函数)]：所有带 `@step("主题")` 的小米 / 红米脚本段；段体搬进注入面的给实现本身。"""
     found = []
-    for path in sorted((ROOT / "recipes").glob("*/recipe*.py")):
-        if entries.family(path.parent.name.split("-", 1)[0]) != "xiaomi":
+    for path in sorted((ROOT / "recipes").glob("*/*/recipe*.py")):
+        if entries.family(path.parent.parent.name) != "xiaomi":
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         defines = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
@@ -2808,8 +2808,8 @@ OTHER_902 = "com.miui.securitycenter/com.miui.securityscan.activity.MainActivity
 def theme_recipes_902():
     """带 `@step("主题")` 的机型脚本：一份都不能漏，否则「所有共用这段入口的脚本一起改」就没守住。"""
     found = []
-    for path in sorted((ROOT / "recipes").glob("*/recipe*.py")):
-        if entries.family(path.parent.name.split("-", 1)[0]) != "xiaomi":
+    for path in sorted((ROOT / "recipes").glob("*/*/recipe*.py")):
+        if entries.family(path.parent.parent.name) != "xiaomi":
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in tree.body:
@@ -2854,7 +2854,7 @@ class ThemeUnreachableTests(unittest.TestCase):
 
     def test_store_detail_page_landing_is_skipped(self):
         """主题商店缺失 + 落在应用商店详情页：跳过，理由里带落点。"""
-        scope, out, _ = self.run_theme(ROOT / "recipes/xiaomi-24129PN74C/recipe.py", MARKET_902)
+        scope, out, _ = self.run_theme(ROOT / "recipes/xiaomi/24129PN74C/recipe.py", MARKET_902)
         self.assertEqual(scope["SKIPPED_STEPS"], ["主题"])
         self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertIn("com.xiaomi.market", out)
@@ -2897,7 +2897,7 @@ class ThemeUnreachableTests(unittest.TestCase):
         p.d.shell.side_effect = self.manager_only()
         p.start.side_effect = RuntimeError(f"无法打开 {THEME_902}：** No activities found to run")
         out = io.StringIO()
-        scope, _ = load_recipe(p, ROOT / "recipes/xiaomi-24129PN74C/recipe.py", only="主题", out=out)
+        scope, _ = load_recipe(p, ROOT / "recipes/xiaomi/24129PN74C/recipe.py", only="主题", out=out)
         self.assertEqual(scope["FAILED_STEPS"], ["主题"])
         self.assertEqual(scope["SKIPPED_STEPS"], [])
         self.assertIn("No activities found", out.getvalue())
@@ -2910,7 +2910,7 @@ class ThemeUnreachableTests(unittest.TestCase):
         p.d.shell.side_effect = self.manager_only()
         p.start.side_effect = adb_link.DeviceLost("device offline")
         with self.assertRaises(adb_link.DeviceLost):
-            load_recipe(p, ROOT / "recipes/xiaomi-24129PN74C/recipe.py", only="主题", out=io.StringIO())
+            load_recipe(p, ROOT / "recipes/xiaomi/24129PN74C/recipe.py", only="主题", out=io.StringIO())
 
     def test_installed_store_does_not_change_the_launch(self):
         """主题商店在不在都直达代理页（#906），不再经商店冷启动过一次重定向过渡窗。

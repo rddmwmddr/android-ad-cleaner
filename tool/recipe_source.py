@@ -461,12 +461,13 @@ def scan_source(src: str, bindings: Mapping[int, Sequence[str]] | None = None,
 def scan_dir(recipes_dir: str, families: Mapping[str, str] | None = None) -> dict[str, Facts]:
     """一个脚本目录的事实：{相对路径: 事实}，只读 `recipe*.py`，按路径排序。
 
-    `families` 给定时只收品牌认得出的脚本（词库的入口）；不给就全收（入口速查）。遍历口径
-    （文件名、相对路径、品牌过滤）只在这里写一次，两个消费方不再各写一份 glob。"""
+    `families` 给定时只收家族认得出的脚本（词库的入口）；不给就全收（入口速查）。遍历口径
+    （文件名、相对路径、家族过滤）只在这里写一次，两个消费方不再各写一份 glob。
+    路径的第一段是家族（`recipes/<家族>/<型号>/recipe*.py`），家族名本身也在 `families` 里。"""
     out = {}
-    for path in glob.glob(os.path.join(recipes_dir, "*", "recipe*.py")):
+    for path in glob.glob(os.path.join(recipes_dir, "*", "*", "recipe*.py")):
         rel = os.path.relpath(path, recipes_dir).replace(os.sep, "/")
-        if families is not None and families.get(rel.split("-", 1)[0].lower()) is None:
+        if families is not None and families.get(rel.split("/", 1)[0].lower()) is None:
             continue
         with open(path, encoding="utf-8") as handle:
             out[rel] = scan_source(handle.read())

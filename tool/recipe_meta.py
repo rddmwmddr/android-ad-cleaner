@@ -17,12 +17,12 @@ class RecipeMeta(TypedDict):
 
 
 def recipe_files(recipes_dir: str) -> list[str]:
-    """`recipes_dir` 下每个机型脚本的路径，含 `recipe_android15.py` 这类变体。"""
-    return sorted(glob.glob(os.path.join(recipes_dir, "*", "recipe*.py")))
+    """`recipes_dir` 下每个机型脚本的路径（`<家族>/<型号>/recipe*.py`），含 `recipe_android15.py` 这类变体。"""
+    return sorted(glob.glob(os.path.join(recipes_dir, "*", "*", "recipe*.py")))
 
 
 def recipe_id(path: str | os.PathLike[str]) -> str:
-    """脚本对外的稳定身份：所在目录名（`oneplus-PYB110`），不随仓库目录布局变。"""
+    """脚本对外的稳定身份：所在型号目录名（`PYB110`）。目录已按家族分组（`recipes/<家族>/<型号>`），身份取型号段。"""
     return os.path.basename(os.path.dirname(os.fspath(path)))
 
 

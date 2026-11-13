@@ -365,16 +365,16 @@ class DirectoryTest(unittest.TestCase):
 
     def test_scan_dir_reads_recipe_files_only(self):
         with tempfile.TemporaryDirectory() as root:
-            for name in ("xiaomi-M154FF/recipe.py", "xiaomi-M154FF/recipe_os4.py",
-                         "xiaomi-M154FF/notes.txt", "unknown-M1/recipe.py"):
+            for name in ("xiaomi/M154FF/recipe.py", "xiaomi/M154FF/recipe_os4.py",
+                         "xiaomi/M154FF/notes.txt", "unknown/M1/recipe.py"):
                 path = Path(root) / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("def _():\n    pass\n", encoding="utf-8")
             everything = recipe_source.scan_dir(root)
-            self.assertEqual(list(everything), ["unknown-M1/recipe.py",
-                                                "xiaomi-M154FF/recipe.py", "xiaomi-M154FF/recipe_os4.py"])
+            self.assertEqual(list(everything), ["unknown/M1/recipe.py",
+                                                "xiaomi/M154FF/recipe.py", "xiaomi/M154FF/recipe_os4.py"])
             known = recipe_source.scan_dir(root, {"xiaomi": "xiaomi"})
-            self.assertEqual(list(known), ["xiaomi-M154FF/recipe.py", "xiaomi-M154FF/recipe_os4.py"])
+            self.assertEqual(list(known), ["xiaomi/M154FF/recipe.py", "xiaomi/M154FF/recipe_os4.py"])
 
 
 class ErrorTest(unittest.TestCase):

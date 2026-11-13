@@ -13,7 +13,7 @@ from fixtures import load_recipe
 
 class Android15RecipeTests(unittest.TestCase):
     def load(self, phone):
-        scope, _ = load_recipe(phone, ROOT / "recipes/oneplus-PHK110/recipe_android15.py")
+        scope, _ = load_recipe(phone, ROOT / "recipes/oppo/PHK110/recipe_android15.py")
         scope["page"] = lambda *args: True
         return scope
 

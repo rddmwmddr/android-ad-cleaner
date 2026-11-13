@@ -132,18 +132,20 @@ class Word:
     family: str
     group: str | None           # None：页面标签归不到分组
     page: str
-    script: str                 # recipes/ 下的相对路径，比如 xiaomi-M154FF/recipe.py
+    script: str                 # recipes/ 下的相对路径，比如 xiaomi/M154FF/recipe.py
     line: int
     injected: bool = False      # 出处是调用点、词住在注入段体里（#1209）
 
     @property
     def model(self):
-        return self.script.split("/", 1)[0].split("-", 1)[-1]
+        parts = self.script.split("/")
+        return parts[1] if len(parts) > 1 else parts[0]
 
     @property
     def source(self):
-        """短写的出处：默认文件 recipe.py 不写文件名。"""
-        folder, name = self.script.split("/", 1)
+        """短写的出处：默认文件 recipe.py 不写文件名。目录是 `<家族>/<型号>`。"""
+        parts = self.script.split("/")
+        folder, name = "/".join(parts[:-1]), parts[-1]
         return f"{folder}:{self.line}" if name == "recipe.py" else f"{folder}/{name}:{self.line}"
 
 
@@ -288,7 +290,7 @@ def scan(recipes_dir, injected=None, strategies=None):
             recipe_source.strategy_sources() if strategies is None else strategies,
     }
     for script, facts in recipe_source.scan_dir(recipes_dir, FAMILY).items():
-        family = FAMILY[script.split("-", 1)[0].lower()]
+        family = FAMILY[script.split("/", 1)[0].lower()]
         before = len(out.words)
         out.notes += _notes(facts, script)
         _absorb(out, family, script, facts)
@@ -375,7 +377,7 @@ def render(recipes_dir):
              "「要开」是保护类开关：开头带否定词（`polarity.NEG_PREFIX`）且带广告词，引擎会把它拨到开，"
              "判定在 `polarity.want_state()`；不要把这类词条按普通广告开关处理。"
              "「不碰」是点了名、引擎却不会拨的行（既没否定词也没广告词），出现即说明那条点名没生效。", "",
-             "出处写成 `目录:行号`，指 `recipes/<目录>/recipe.py`；别的文件写全文件名。"
+             "出处写成 `目录:行号`，指 `recipes/<家族>/<型号>/recipe.py`；别的文件写全文件名。"
              f"这里读 `p.off()` 和 `close_named()`：共 {len(words)} 处词，另有 {found.whole_page} 处没有点名（整页全关，没有词）。", ""]
     for family, groups in ENTRIES.items():
         brands = "、".join(b for b, f in FAMILY.items() if f == family)
@@ -415,16 +417,16 @@ def render(recipes_dir):
 def gaps(recipes_dir, folder):
     """查漏：同家族别的机型关过、这份脚本没写的词条，按分组列出。
 
-    `folder` 是 recipes/ 下的目录名（`<品牌>-<型号>`）。只比要关的词条，按 key_of() 归一化后比对：
+    `folder` 是 recipes/ 下的相对目录名（`<家族>/<型号>`）。只比要关的词条，按 key_of() 归一化后比对：
     同页保留项和「要开」的保护类开关不在这台机上独立成立，同族叫法也可能整组不同。
     这是写脚本之后的自查清单，不是缺陷报告。
 
-    目录名按大小写不敏感匹配、容忍尾斜杠：`isdir` 在 macOS 上本来就大小写不敏感，
-    不归一化的话认得出目录、却按原样拼 `startswith` 前缀，这份脚本自己的词全被当成漏项。"""
+    目录名按大小写不敏感匹配、容忍尾斜杠：认得出目录、却按原样拼 `startswith` 前缀，
+    这份脚本自己的词会被当成漏项。"""
     folder = _folder_name(recipes_dir, folder)
-    family = FAMILY.get(folder.split("-", 1)[0].lower())
+    family = FAMILY.get(folder.split("/", 1)[0].lower())
     if not family:
-        raise ValueError(f"认不出 {folder} 的品牌：目录名要写成 <品牌>-<型号>")
+        raise ValueError(f"认不出 {folder} 的家族：目录名要写成 <家族>/<型号>")
     found = scan(recipes_dir)
     words = found.words
     mine = {key_of(word.text) for word in words if word.script.startswith(folder + "/")}
@@ -460,12 +462,21 @@ def gaps(recipes_dir, folder):
 
 
 def _folder_name(recipes_dir, folder):
-    """`recipes/` 下的真实目录名：容忍尾斜杠、路径分隔符与大小写差异。找不到就抛 FileNotFoundError。"""
-    wanted = folder.strip().replace(os.sep, "/").strip("/").lower()
-    for name in sorted(os.listdir(recipes_dir)):
-        if name.lower() == wanted and os.path.isdir(os.path.join(recipes_dir, name)):
-            return name
-    raise FileNotFoundError(f"recipes/ 下没有 {folder} 这个目录")
+    """`recipes/` 下的真实相对目录名（`<家族>/<型号>`）：容忍尾斜杠、路径分隔符与大小写差异。
+
+    逐段按大小写不敏感匹配实际目录名，返回**真实的**大小写形式——`startswith` 判据按原样拼前缀，
+    大写形式对不上会把这份脚本自己的词全当成漏项。找不到就抛 FileNotFoundError。"""
+    parts = [seg for seg in folder.strip().replace(os.sep, "/").split("/") if seg and seg != "."]
+    current = recipes_dir
+    actual: list[str] = []
+    for seg in parts:
+        match = next((name for name in sorted(os.listdir(current))
+                      if name.lower() == seg.lower() and os.path.isdir(os.path.join(current, name))), None)
+        if match is None:
+            raise FileNotFoundError(f"recipes/ 下没有 {folder} 这个目录")
+        actual.append(match)
+        current = os.path.join(current, match)
+    return "/".join(actual)
 
 
 def _recipes_dir():

@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 import run
 from fixtures import load_recipe, phone_mock
 
-RECIPE = ROOT / "recipes/xiaomi-M332BF/recipe.py"
+RECIPE = ROOT / "recipes/xiaomi/M332BF/recipe.py"
 
 
 class K90UltraRecipeTests(unittest.TestCase):
@@ -31,7 +31,7 @@ class K90UltraRecipeTests(unittest.TestCase):
     def test_actual_model_selects_own_recipe_and_pins_recorded_build(self):
         path, reference = run.recipe_for("M332BF", "Redmi")
         self.assertFalse(reference)
-        self.assertEqual(Path(path).parent.name, "xiaomi-M332BF")
+        self.assertEqual(Path(path).parent.name, "M332BF")
         meta = run.recipe_meta(path)
         self.assertEqual(meta["models"], ["M332BF"])
         self.assertEqual(meta["build"], "OS4.0.4")

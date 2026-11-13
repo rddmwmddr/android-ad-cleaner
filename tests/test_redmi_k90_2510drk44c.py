@@ -16,13 +16,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 import run
 
-RECIPE = ROOT / "recipes/xiaomi-M154FF/recipe.py"
+RECIPE = ROOT / "recipes/xiaomi/M154FF/recipe.py"
 
 
 class RedmiK90BaseRecipeTests(unittest.TestCase):
     def test_this_model_selects_the_recipe_without_safe_mode(self):
         path, reference = run.recipe_for("2510DRK44C", "Redmi")
-        self.assertEqual(Path(path).parent.name, "xiaomi-M154FF")
+        self.assertEqual(Path(path).parent.name, "M154FF")
         self.assertFalse(reference)
 
     def test_registration_keeps_the_other_recorded_models(self):

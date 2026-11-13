@@ -87,8 +87,8 @@ class MeasureTests(unittest.TestCase):
 
     def test_coverage_math(self):
         with tempfile.TemporaryDirectory() as tmp:
-            model = Path(tmp) / "xiaomi-X"
-            model.mkdir()
+            model = Path(tmp) / "xiaomi" / "X"
+            model.mkdir(parents=True)
             (model / "recipe.py").write_text(SOURCE, encoding="utf-8")
             result = migrate.measure(tmp)
         self.assertEqual(result["total"], 3)

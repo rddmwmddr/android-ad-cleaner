@@ -92,7 +92,7 @@ class LocalFunction:
 
 @dataclass(frozen=True)
 class Script:
-    """一份机型脚本（`recipes/<品牌>-<型号>/recipe*.py`）与它的本机函数。"""
+    """一份机型脚本（`recipes/<家族>/<型号>/recipe*.py`）与它的本机函数。"""
     script: str             # recipes 下的相对路径
     family: str
     model: str
@@ -181,10 +181,10 @@ def counts(src: str) -> dict[str, int]:
 
 
 def _place(script: str) -> tuple[str, str]:
-    """`xiaomi-M154FF/recipe.py` → (家族, 型号)。家族按品牌段查 `entries.FAMILY`，认不出时留空。"""
-    folder = script.split("/", 1)[0]
-    brand, _, model = folder.partition("-")
-    return FAMILY.get(brand.lower(), ""), model or folder
+    """`xiaomi/M154FF/recipe.py` → (家族, 型号)。路径第一段就是家族（`recipes/<家族>/<型号>`），认不出时留空。"""
+    parts = script.split("/")
+    family, model = parts[0], parts[1] if len(parts) > 1 else parts[0]
+    return FAMILY.get(family.lower(), ""), model
 
 
 def audit(recipes_dir: str) -> Report:

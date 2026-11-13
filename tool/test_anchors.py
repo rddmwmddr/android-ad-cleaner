@@ -157,14 +157,16 @@ def recipe_tokens(root):
     recipes = root / "recipes"
     if not recipes.is_dir():
         return frozenset(), frozenset(), ""
-    brands, models, texts = set(), set(), []
-    for folder in sorted(p for p in recipes.iterdir() if p.is_dir()):
-        brand, _, model = folder.name.partition("-")
-        brands.add(_normalize(brand))
-        if model:
-            models.add(_normalize(model))
-        for script in sorted(folder.glob("recipe*.py")):
-            texts.append(script.read_text(encoding="utf-8", errors="replace"))
+    import entries
+    # 目录是 `<家族>/<型号>`：品牌段从 FAMILY 的键取（oneplus / redmi / realme 等家族别名不在路径里），
+    # 型号段取第二层的目录名。
+    brands = {_normalize(brand) for brand in entries.FAMILY}
+    models, texts = set(), []
+    for family in sorted(p for p in recipes.iterdir() if p.is_dir()):
+        for folder in sorted(p for p in family.iterdir() if p.is_dir()):
+            models.add(_normalize(folder.name))
+            for script in sorted(folder.glob("recipe*.py")):
+                texts.append(script.read_text(encoding="utf-8", errors="replace"))
     return frozenset(brands), frozenset(models), _normalize(" ".join(texts))
 
 
