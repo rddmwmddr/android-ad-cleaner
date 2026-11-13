@@ -38,7 +38,8 @@ class Plz110RecipeTests(unittest.TestCase):
         self.assertEqual(scope['app_settings'].call_args_list,
                          [call('com.heytap.market'), call('com.heytap.market')])
         self.assertEqual(scope['row'].call_args_list, [
-            call(('隐私', '隐私授权管理'), package='com.heytap.market', activity='PrivacyActivity',
+            # 页面树里的等价文案是 TOML 数组（转成 list）：按内容与顺序比，容器类型不是判据。
+            call(['隐私', '隐私授权管理'], package='com.heytap.market', activity='PrivacyActivity',
                  tries=3),
             call('个性化推荐', package='com.heytap.market', activity='PersonalRecommendActivity'),
             call('服务管理'),

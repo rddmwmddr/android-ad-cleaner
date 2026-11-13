@@ -1,13 +1,11 @@
 # 一加 15T（PLZ110，ColorOS 17）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
-# 共享库的 app_settings / row / read_switches / close_named 与 require / skip 由装载器注入执行作用域。
-# 只有软件商店留在这里：隐私入口两种叫法 + 服务管理按读到的开关筛名单。其余六段是线性数据。
+# 七段全部落数据；这里只剩注入面按名字取用的模块常量、一个本机安装检查助手与尾钩子。
 import adb_link
 from fast import ScreenLocked, bounds
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import SkipStep, p, require, rt
-    from recipe_nav import app_settings, read_switches, row
     from recipe_strategies import close_named_optional
 
 BUILD = "PLZ110_17.0.0.107(CN01)"
@@ -26,17 +24,6 @@ SEARCH_CARDS = ["未下载应用推荐", "应用建议小卡", "热搜应用", "
 # 轮播单选只有这两个选项，「不显示」是我们要的那一档（沿用 #280 的做法）。
 CAROUSEL_LABELS = {"显示轮播推荐", "不显示轮播推荐"}
 CAROUSEL_OFF = "不显示轮播推荐"
-# 来自本机服务管理页；普通游戏分类、AI 搜索、资产、客服、工具与安全功能不在清单里。
-STORE_PROMOS = [
-    "首页：悬浮活动图标", "首页：活动弹窗", "首页：顶部轮播卡片", "底部活动专区",
-    "应用安全安全内容推荐", "游戏专区：重磅更新卡片", "游戏详情页：游戏活动卡片",
-    "通过游戏助手打开领取游戏福利", "软件专区：福利", "软件专区：购物", "软件专区：快应用",
-    "我的专区：签到按钮", "我的专区：账号会员徽章", "我的专区：应用时刻", "我的专区：积分商城",
-    "我的专区：休闲一刻", "我的专区：安装有礼", "我的专区：福利中心", "我的专区：游戏VIP",
-    "我的专区：金豆乐园", "更新&下载专区：底部弹窗推荐", "活动式详情页", "详情页：活动",
-    "游戏详情页：游戏礼包", "手机管家：应用推荐", "文件管理：应用推荐", "游戏专区：活动集合",
-    "详情页：限时活动", "小游戏二楼和专区", "福利专区",
-]
 
 # 负一屏首页的两条已知文案（PLG110 / PMA110 实测）：头像入口万一改名，两条都在也算到了（#901）
 LAUNCHER = "com.android.launcher/"
@@ -51,21 +38,6 @@ def require_installed(package, label):
         return
     require(result.exit_code in (0, 1) and not result.output.strip(), f"无法读取{label}安装状态")
     raise SkipStep(f"本机未安装{label}")
-
-
-def step_store(p, rt):
-    app_settings(MARKET)
-    # 本版商店叫「隐私授权管理」，同族另有叫「隐私」的（#907）。tries 保住原来 p.enter 的
-    # 「点击被弹窗动画吞掉就再点」：这一行必须点开，后面的行都指着它（#286）。
-    row(("隐私", "隐私授权管理"), package=MARKET, activity="PrivacyActivity", tries=3)
-    row("个性化推荐", package=MARKET, activity="PersonalRecommendActivity")
-    close_named(["个性化推荐"], "个性化推荐")
-    app_settings(MARKET)
-    row("服务管理")
-    available = read_switches("服务管理")
-    names = [name for name in STORE_PROMOS if name in available]
-    require(names, "服务管理未识别到已录制推广位")
-    close_named(names, "服务管理", snapshot=available)
 
 
 def tail():
