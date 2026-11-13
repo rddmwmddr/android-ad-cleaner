@@ -216,5 +216,5 @@ def tail():
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from recipe_kit import require, rt
+    from recipe_kit import p, require, rt
     from recipe_nav import close_named, goto, tap_text, wait_page
