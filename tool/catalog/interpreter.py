@@ -194,6 +194,17 @@ def _code(op: Mapping, g: dict[str, Any]) -> None:
     g[op["name"]](*[_arg(a, g) for a in op.get("args", [])])
 
 
+def _page(op: Mapping, g: dict[str, Any]) -> None:
+    """`page(title, …)` 落点三段判据：实参照 `lib` 的样子原样下发，位置/关键字逐条保真（#1265）。"""
+    g["page"](*[_arg(a, g) for a in op.get("args", [])],
+              **{k: _arg(v, g) for k, v in op.get("kwargs", {}).items()})
+
+
+def _skip(op: Mapping, g: dict[str, Any]) -> None:
+    """按约定跳过这一段：交给注入的 `skip`，它抛命名空间的跳过类，结局记「跳过」（#1265）。"""
+    g["skip"](op["text"])
+
+
 def _print(op: Mapping, g: dict[str, Any]) -> None:
     print(op["text"], flush=True)
 
@@ -359,6 +370,8 @@ _HANDLERS: dict[str, Callable[[Mapping, dict[str, Any]], None]] = {
     "scoped": _scoped,
     "back": _back,
     "top": _top,
+    "page": _page,
+    "skip": _skip,
     "code": _code,
     "print": _print,
     "return": _return,

@@ -547,12 +547,19 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 lower(op.get("ops", []))
             elif kind in ("if_find", "if_entry", "if_lib", "if_focus", "if_tap"):
                 # 带条件分支的 op：两支里的 off / 入口调用一样要读出来，否则词与入口会静默丢（#1263）。
+                if kind == "if_lib":
+                    args = ", ".join(_s(a) for a in op.get("args", []))
+                    lines.append(f"{op['name']}({args})")
                 lower(op.get("ops", []))
                 lower(op.get("else_ops", []))
             elif kind in ("lib", "require_lib", "code", "return_lib"):
                 # 用数据里写得出的真实名字（不折回 close_named），归属才查得准（#1263）。
                 args = ", ".join(_s(a) for a in op.get("args", []))
                 lines.append(f"{op['name']}({args})")
+            elif kind in ("page", "skip"):
+                # 落点断言 / 跳过出口不带词条与入口事实：入口本来自 `p.start` / shell / open_app_settings，
+                # `page` 只是核对；`skip` 的文案是跳过原因。与 `back` / `top` / `print` 同档（#1265）。
+                pass
 
     for segment in data.get("segment", []):
         if "code" in segment:

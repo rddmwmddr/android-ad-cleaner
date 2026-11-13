@@ -48,6 +48,8 @@ OP_KEYS = {
     "if_tap": frozenset({"kind", "text", "exact", "scrolls", "ops", "else_ops"}),
     "back": frozenset({"kind", "n"}),
     "top": frozenset({"kind", "n"}),
+    "page": frozenset({"kind", "args", "kwargs"}),
+    "skip": frozenset({"kind", "text"}),
     "scoped": frozenset({"kind", "systemui_text", "ops"}),
     "code": frozenset({"kind", "name", "args"}),
     "print": frozenset({"kind", "text"}),
@@ -111,6 +113,10 @@ def _validate_op(op: object, where: str) -> None:
         _validate_off(op, where)
     elif kind == "close_all":
         _require(op, "page", where)
+    elif kind == "page":
+        _require(op, "args", where)
+    elif kind == "skip":
+        _require(op, "text", where)
     elif kind in ("lib", "require_lib", "code", "return_lib"):
         _require(op, "name", where)
         if kind == "require_lib":

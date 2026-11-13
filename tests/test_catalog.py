@@ -71,6 +71,22 @@ class ValidatorTests(unittest.TestCase):
         op = {"kind": "return", "value": "false"}
         self._bad({"segment": [{"name": "a", "ops": [op]}]}, "只能是 true / false")
 
+    def test_rejects_page_without_args(self):
+        op = {"kind": "page", "kwargs": {"activity": "X"}}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 args")
+
+    def test_rejects_page_with_an_unknown_key(self):
+        op = {"kind": "page", "args": ["X"], "surprise": 1}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
+
+    def test_rejects_skip_without_text(self):
+        op = {"kind": "skip"}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 text")
+
+    def test_rejects_skip_with_an_unknown_key(self):
+        op = {"kind": "skip", "text": "x", "surprise": 1}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
+
     def test_accepts_the_shipped_data(self):
         import tomllib
         catalog.validate(tomllib.loads((ROOT / DATA).read_text(encoding="utf-8")))
@@ -262,6 +278,49 @@ class ReturnOutcomeTests(unittest.TestCase):
         scope = "def try_off(name):\n    return ok\n"
         self.assertEqual(self.segment_results(toml, "ok = False\n" + scope), [("a", "未完成")])
         self.assertEqual(self.segment_results(toml, "ok = True\n" + scope), [("a", "完成")])
+
+
+class PageOpTests(unittest.TestCase):
+    """`page` op（#1265）：落点三段判据的声明式写法，`args` / `kwargs` 原样交给注入的 `page`。
+
+    机型脚本里 `page("广告跟踪", SETTINGS, "OAIDActivity")` / `page("广告跟踪", activity=…)` 两处
+    写法都出现过，位置实参与关键字实参必须逐条保住，所以照 `lib` 的形状收实参。"""
+
+    def _run(self, toml):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(tmp, toml)
+            seen = []
+            recipe.namespace["page"] = lambda *a, **k: seen.append((a, k))
+            recipe.run()
+        return seen
+
+    def test_positional_args_are_forwarded(self):
+        seen = self._run('[[segment]]\nname="a"\nops=[{kind="page", '
+                         'args=["广告跟踪", "com.android.settings", "OAIDActivity"]}]\n')
+        self.assertEqual(seen, [(("广告跟踪", "com.android.settings", "OAIDActivity"), {})])
+
+    def test_keyword_args_are_forwarded(self):
+        seen = self._run('[[segment]]\nname="a"\nops=[{kind="page", args=["广告跟踪"], '
+                         'kwargs={activity="OAIDActivity"}}]\n')
+        self.assertEqual(seen, [(("广告跟踪",), {"activity": "OAIDActivity"})])
+
+
+class SkipOpTests(unittest.TestCase):
+    """`skip` op（#1265）：按约定跳过这一段（`rt.skip`），结局记「跳过」而不是「未完成」。
+
+    `skip_in_safe_mode` 只认安全模式；这一段在别的条件下也要跳过（如「本机没有这个入口」），
+    文案是机型知识，交给数据。"""
+
+    def test_skip_marks_the_segment_skipped_and_stops_the_ops(self):
+        toml = '[[segment]]\nname="a"\nops=[{kind="skip", text="本机没有"}, {kind="back"}]\n'
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            backs = []
+            phone.back = lambda n=1: backs.append(n)
+            recipe.run()
+        self.assertEqual(recipe.rt.results, [("a", "跳过")])
+        self.assertEqual(recipe.rt.skipped_steps, ["a"])
+        self.assertEqual(backs, [])         # 跳过之后不再做后面的 op
 
 
 class NameSourceBaselineTests(unittest.TestCase):
