@@ -1,0 +1,59 @@
+# 一加 16（PYB110，ColorOS 17.0.0 / Android 17）的页面树（catalog，#1265）。
+# 路径实测：2026-11-12 在 17.0.0.155 上录制，九段全跑 397 秒；同日在 17.0.0.157 上复验。
+# 覆盖：广告跟踪、软件商店、浏览器、主题商店、视频、游戏中心、小布建议、负一屏、下拉搜索，共九段。
+# 与同族 ColorOS 17 脚本的三处差别：商店「我的」页没有设置文字行，只能用公开设置 Intent；
+# 浏览器叫「个性化内容」、视频叫「个性化内容管理」；负一屏没有推荐服务入口，个性化开关
+# 在「隐私 → 个性化推荐」里按模块给。
+model = "PYB110"
+models = ["PYB110"]
+build = "PYB110_17.0.0"
+
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+[const]
+SEARCH_SETTINGS_STYLE = "swipe_strict"
+
+[[segment]]
+name = "广告跟踪"
+ops = [
+  { kind = "lib", name = "ad_tracking_close_all" },
+]
+
+[[segment]]
+name = "软件商店"
+code = "step_store"
+
+[[segment]]
+name = "浏览器"
+code = "step_browser"
+
+[[segment]]
+name = "主题商店"
+ops = [
+  { kind = "lib", name = "theme_shop_settings" },
+]
+
+[[segment]]
+name = "视频"
+code = "step_video"
+
+[[segment]]
+name = "游戏中心"
+ops = [
+  { kind = "lib", name = "game_center_taps" },
+]
+
+[[segment]]
+name = "小布建议"
+ops = [
+  { kind = "lib", name = "assistant_advice_search" },
+]
+
+[[segment]]
+name = "负一屏"
+code = "step_negative_screen"
+
+[[segment]]
+name = "下拉搜索"
+ops = [
+  { kind = "lib", name = "search_settings_swipe" },
+]
