@@ -1,0 +1,45 @@
+# vivo V2303A 页面树（catalog，#1263）。Android 17 / OriginOS 7，2026-11-04 真机实测。
+# 系统广告 / 全局搜索 / 阅图锁屏 用 p.setting 关键词直达；全局搜索的多页循环与应用商店的
+# try/except 兜底是过程段，走 code= 例外函数。
+model = "V2303A"
+models = ["V2303A"]
+build = "CP2A.260605.016"
+
+[const]
+GEAR_STYLE = "vivo"
+
+[[segment]]
+name = "系统广告"
+ops = [
+  { kind = "require_setting", kw = "广告与隐私", miss_print = "没搜到「广告与隐私」" },
+  { kind = "off", only = ["个性化广告", "个性化推荐", "智能推荐服务"], page = "系统·广告与隐私" },
+]
+
+[[segment]]
+name = "全局搜索"
+code = "step_global_search"
+
+[[segment]]
+name = "阅图锁屏"
+ops = [
+  { kind = "require_setting", kw = "锁屏设置", miss_print = "没搜到「锁屏设置」" },
+  { kind = "gated", entries = ["阅图锁屏"], ops = [
+    { kind = "off", only = ["阅图锁屏", "锁屏横滑进入阅图"], page = "阅图锁屏" },
+  ]},
+]
+
+[[segment]]
+name = "应用商店"
+code = "step_store"
+
+[[segment]]
+name = "浏览器"
+ops = [{ kind = "lib", name = "browser_recommendations" }]
+
+[[segment]]
+name = "i管家"
+ops = [{ kind = "lib", name = "i_manager_ads" }]
+
+[[segment]]
+name = "天气"
+ops = [{ kind = "lib", name = "weather_service" }]

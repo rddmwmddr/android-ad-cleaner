@@ -1,5 +1,5 @@
 {
- "script": "recipes/vivo/V2303A/recipe.py",
+ "script": "recipes/vivo/V2303A/V2303A.toml",
  "scenarios": {
   "present": [
    ["系统广告", "locked", [], {}],
