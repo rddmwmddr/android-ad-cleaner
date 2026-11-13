@@ -39,6 +39,7 @@ from captures import root_from_env as capture_root
 from entries import FAMILY          # 品牌族只此一份；广告包、参考脚本与版本比较都按它归
 from host import ON_PHONE           # 手机版不写插电常亮（#731）
 from recipe_meta import recipe_meta
+import recipe_audit
 import verify_ledger
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -662,6 +663,11 @@ def cmd_check(serial, rest):
         print(f"机型脚本：{os.path.relpath(r, ROOT)}；{ver}")
     else:
         print("机型脚本：没有。可跑：通知渠道 chan-scan/chan-off、广告包挂起；其余照 docs/清单 手动做，或用 tool/explore.py 探路")
+    if r:
+        # 这份脚本自带几个本机函数：数字由 recipe_audit 现算，明细用 `python3 tool/recipe_audit.py`（#1240）。
+        local = recipe_audit.counts(Path(r).read_text(encoding="utf-8"))
+        print(f"  本机策略：{local['strategy']} 个；本机函数 {local['total']} 个"
+              f"（引擎词汇 {local['vocabulary']}、真机知识 {local['knowledge']}）")
     for p in ad_packages(i["brand"]):
         exists = "package:" in sh(serial, f"pm path {p}")
         if not exists and p in MSA_PKGS:     # msa 在国行 / 海外版是两个包名，只装一个，另一个不提
@@ -966,6 +972,8 @@ def cmd_status_json(serial, rest):
         "info": i, "locked": locked(serial),
         "recipe": os.path.relpath(r, ROOT) if r else None, "recipe_ref": ref, "recipe_build": rb, "recipe_ok": ok, "steps": steps,
         "recipe_coverage": coverage, "recipe_evidence": evidence, "recipe_verified": verified,
+        # 这份脚本自带几个本机函数：数字与 `check` 那行同一个来源（#1240）。没有脚本时是 None。
+        "recipe_local": recipe_audit.counts(Path(r).read_text(encoding="utf-8")) if r else None,
         "ads": ads, "quickapps": quickapps(serial),
         "stay_on": sh(serial, "settings get global stay_on_while_plugged_in"),
         "dev": sh(serial, "settings get global development_settings_enabled") == "1",
