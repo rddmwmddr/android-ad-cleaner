@@ -77,13 +77,17 @@ def anchor_table(text):
 
 
 def fake_root(tmp, *names, recipes=()):
-    """临时根目录：tests/ 下放这些文件名，recipes/<folder>/recipe.py 写进给定的正文。"""
+    """临时根目录：tests/ 下放这些文件名，`recipes/<家族>/<型号>/recipe.py` 写进给定的正文。
+
+    `recipes` 的键仍写 `<品牌>-<型号>`，这里按 `entries.FAMILY` 拆成家族/型号两层（#1261）。"""
+    import entries
     root = Path(tmp)
     (root / "tests").mkdir()
     for name in names:
         (root / "tests" / name).write_text("", encoding="utf-8")
     for folder, body in recipes:
-        script = root / "recipes" / folder / "recipe.py"
+        brand, _, model = folder.partition("-")
+        script = root / "recipes" / entries.FAMILY.get(brand.lower(), brand) / (model or folder) / "recipe.py"
         script.parent.mkdir(parents=True)
         script.write_text(body, encoding="utf-8")
     return root

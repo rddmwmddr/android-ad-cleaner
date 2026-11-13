@@ -19,7 +19,7 @@ import fast
 import run
 from fixtures import load_recipe, phone_mock
 
-RECIPE = ROOT / "recipes/xiaomi-2505APX7BC/recipe.py"
+RECIPE = ROOT / "recipes/xiaomi/2505APX7BC/recipe.py"
 STEPS = ["系统广告", "应用商店", "手机管家", "下载管理", "主题", "浏览器", "全局搜索", "负一屏", "天气和日历"]
 
 
@@ -45,7 +45,7 @@ class MixFlip2RecipeTests(unittest.TestCase):
     def test_actual_model_selects_own_recipe_and_pins_recorded_build(self):
         path, reference = run.recipe_for("2505APX7BC", "Xiaomi")
         self.assertFalse(reference)
-        self.assertEqual(Path(path).parent.name, "xiaomi-2505APX7BC")
+        self.assertEqual(Path(path).parent.name, "2505APX7BC")
         meta = run.recipe_meta(path)
         self.assertEqual(meta["models"], ["2505APX7BC"])
         self.assertEqual(meta["build"], "")
@@ -63,7 +63,7 @@ class MixFlip2RecipeTests(unittest.TestCase):
                     "os": "OS3.0.309.0.WOCCNXM"}
         path, reference = run.recipe_for("2211133C", "Xiaomi", xiaomi13)
         self.assertTrue(reference)
-        self.assertNotEqual(Path(path).parent.name, "xiaomi-2505APX7BC")
+        self.assertNotEqual(Path(path).parent.name, "2505APX7BC")
 
     def test_bottom_tabs_go_through_tab_not_go_or_tap(self):
         # 这台的第 5 个底栏标签在 y≈94% 屏高；p.tap() 会先命中内容区同名文字（#305 / #386）

@@ -475,18 +475,18 @@ class InjectionPointTests(unittest.TestCase):
 
 # AST 检测器认得出的形状：不带 `only` 的 `p.off(...)`。它既是检测器的期望集，也是行为用例的一部分。
 OFF_CALL_WIDE = [
-    ("recipes/oppo-PKT110/recipe.py", "广告跟踪"),
-    ("recipes/oppo-PKT110/recipe.py", "应用建议"),
-    ("recipes/oppo-PLP120/recipe.py", "广告跟踪"),
-    ("recipes/oneplus-PHK110/recipe.py", "广告跟踪"),
-    ("recipes/oneplus-PKX110/recipe.py", "广告跟踪"),
-    ("recipes/oppo-PKH110/recipe.py", "广告跟踪"),
-    ("recipes/realme-RMX3700/recipe.py", "广告跟踪"),
-    ("recipes/realme-RMX3700/recipe.py", "应用建议"),
-    ("recipes/realme-RMX3888/recipe.py", "广告跟踪"),
-    ("recipes/honor-PNM-AN10/recipe.py", "广告跟踪"),
-    ("recipes/honor-PNM-AN10/recipe.py", "桌面文件夹"),
-    ("recipes/honor-PNM-AN10/recipe.py", "主题"),
+    ("recipes/oppo/PKT110/recipe.py", "广告跟踪"),
+    ("recipes/oppo/PKT110/recipe.py", "应用建议"),
+    ("recipes/oppo/PLP120/recipe.py", "广告跟踪"),
+    ("recipes/oppo/PHK110/recipe.py", "广告跟踪"),
+    ("recipes/oppo/PKX110/recipe.py", "广告跟踪"),
+    ("recipes/oppo/PKH110/recipe.py", "广告跟踪"),
+    ("recipes/oppo/RMX3700/recipe.py", "广告跟踪"),
+    ("recipes/oppo/RMX3700/recipe.py", "应用建议"),
+    ("recipes/oppo/RMX3888/recipe.py", "广告跟踪"),
+    ("recipes/honor/PNM-AN10/recipe.py", "广告跟踪"),
+    ("recipes/honor/PNM-AN10/recipe.py", "桌面文件夹"),
+    ("recipes/honor/PNM-AN10/recipe.py", "主题"),
 ]
 
 # 搬进注入面的整页关闭段（#1213）：脚本侧只剩一行调用，形状改从 `recipe_steps` 的实现里看。
@@ -497,12 +497,12 @@ INJECTED_WIDE = ["ad_tracking_close_all"]
 # 或者段体已经搬进注入面、脚本里只剩一行调用（#1213，形状由 `INJECTED_WIDE` 那条结构断言守）。
 # 它们与上面那份同样是整页关闭，行为用例一条都不能少；期望集不含它们，结构断言才不会因此变红。
 OTHER_WIDE = [
-    ("recipes/honor-CLE-AN00/recipe.py", "广告跟踪"),
-    ("recipes/oppo-PMA110/recipe.py", "广告跟踪"),
-    ("recipes/oppo-PLG110/recipe.py", "广告跟踪"),
-    ("recipes/honor-WKL-AN20/recipe.py", "广告跟踪"),
-    ("recipes/oneplus-PLR110/recipe.py", "广告跟踪"),
-    ("recipes/oneplus-PYB110/recipe.py", "广告跟踪"),
+    ("recipes/honor/CLE-AN00/recipe.py", "广告跟踪"),
+    ("recipes/oppo/PMA110/recipe.py", "广告跟踪"),
+    ("recipes/oppo/PLG110/recipe.py", "广告跟踪"),
+    ("recipes/honor/WKL-AN20/recipe.py", "广告跟踪"),
+    ("recipes/oppo/PLR110/recipe.py", "广告跟踪"),
+    ("recipes/oppo/PYB110/recipe.py", "广告跟踪"),
 ]
 
 # 整段只做整页关闭的段：安全模式下必须走跳过出口
@@ -511,15 +511,15 @@ PAGE_WIDE = OFF_CALL_WIDE + OTHER_WIDE
 # 这几份脚本自带 `guard()`：安全模式下它们在段入口就先按「型号 / 版本不同」跳过，
 # 走不到整页关闭那一段，跳过原因不是本票这一句。
 GUARDED_RECIPES = {
-    "recipes/oneplus-PHK110/recipe.py",
-    "recipes/oneplus-PKX110/recipe.py",
-    "recipes/oppo-PKH110/recipe.py",
-    "recipes/realme-RMX3700/recipe.py",
+    "recipes/oppo/PHK110/recipe.py",
+    "recipes/oppo/PKX110/recipe.py",
+    "recipes/oppo/PKH110/recipe.py",
+    "recipes/oppo/RMX3700/recipe.py",
 }
 
 # 也有 `guard()`，但漏的那条路正是「同型号同版本 + --ref」：型号守卫会放行，
 # 要证明跳过出口生效就得把型号与版本喂对（#947）。
-NEEDS_GUARD_SHELL = {"recipes/honor-WKL-AN20/recipe.py"}
+NEEDS_GUARD_SHELL = {"recipes/honor/WKL-AN20/recipe.py"}
 
 
 def run_recipe_step(device, path, only):
@@ -584,15 +584,15 @@ class SafeModeSkipTests(unittest.TestCase):
     def test_the_run_still_exits_zero(self):
         """跳过台账不参与退出码：这一段没做成，但也没出错。"""
         p = touchless()
-        scope, _ = run_recipe_step(p, "recipes/oppo-PKT110/recipe.py", ["广告跟踪"])
+        scope, _ = run_recipe_step(p, "recipes/oppo/PKT110/recipe.py", ["广告跟踪"])
         self.assertEqual(fast.report_run(scope, p), 0)
 
     def test_untitled_switches_are_left_alone_in_safe_mode(self):
         """vivo 的「个性化推荐」页只有无标题开关：自己按坐标点的那条路同样不进安全模式（#909）。
 
         它不是 `p.off(page=…)`，所以不受引擎那条限制；段落里还关着点名开关，不能整段跳过。"""
-        for path in ("recipes/vivo-V2303A/recipe.py",
-                     "recipes/vivo-V2547DA/recipe_android17.py"):
+        for path in ("recipes/vivo/V2303A/recipe.py",
+                     "recipes/vivo/V2547DA/recipe_android17.py"):
             with self.subTest(recipe=path):
                 p = touchless()
                 p.switches.return_value = [("", True, (1, 2))]
@@ -637,7 +637,7 @@ class AdTrackingTests(unittest.TestCase):
         p, state = self.make()
         p.safe_mode = True
         p.locked.return_value = False
-        scope, printed = run_recipe_step(p, "recipes/oppo-PKT110/recipe.py", ["广告跟踪"])
+        scope, printed = run_recipe_step(p, "recipes/oppo/PKT110/recipe.py", ["广告跟踪"])
         self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertEqual(scope["SKIPPED_STEPS"], ["广告跟踪"])
         self.assertIn("安全模式不做整页全关", printed)
@@ -647,7 +647,7 @@ class AdTrackingTests(unittest.TestCase):
     def test_ad_tracking_still_closes_the_page_without_safe_mode(self):
         """旧树也绿，守的是不回退：跳过出口在非安全模式下必须是惰性的。"""
         p, state = self.make()
-        scope, _ = run_recipe_step(p, "recipes/oppo-PKT110/recipe.py", ["广告跟踪"])
+        scope, _ = run_recipe_step(p, "recipes/oppo/PKT110/recipe.py", ["广告跟踪"])
         self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertEqual(scope["SKIPPED_STEPS"], [])
         self.assertEqual(state[0][1], False)
@@ -657,7 +657,7 @@ class AdTrackingTests(unittest.TestCase):
         p, state = self.make()
         p.safe_mode = True
         p.locked.return_value = False
-        scope, printed = run_recipe_step(p, "recipes/oppo-PKT110/recipe.py", ["应用建议"])
+        scope, printed = run_recipe_step(p, "recipes/oppo/PKT110/recipe.py", ["应用建议"])
         self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertEqual(scope["SKIPPED_STEPS"], ["应用建议"])
         self.assertIn("安全模式不做整页全关", printed)
@@ -666,7 +666,7 @@ class AdTrackingTests(unittest.TestCase):
     def test_app_suggestions_still_closes_the_page_without_safe_mode(self):
         """旧树也绿，守的是不回退：跳过出口在非安全模式下必须是惰性的。"""
         p, state = self.make()
-        scope, _ = run_recipe_step(p, "recipes/oppo-PKT110/recipe.py", ["应用建议"])
+        scope, _ = run_recipe_step(p, "recipes/oppo/PKT110/recipe.py", ["应用建议"])
         self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertEqual(state[0][1], False)
 
@@ -683,15 +683,15 @@ class BehaviourUnchangedTests(unittest.TestCase):
         p.find.return_value = False         # 不点「显示系统程序」，直接开「更多选项」
         p.tap.return_value = True
         p.switches.return_value = []
-        scope, _ = run_recipe_step(p, "recipes/honor-CLE-AN00/recipe.py", ["广告跟踪"])
+        scope, _ = run_recipe_step(p, "recipes/honor/CLE-AN00/recipe.py", ["广告跟踪"])
         self.assertEqual(scope["SKIPPED_STEPS"], [])
         self.assertEqual(scope["FAILED_STEPS"], [])
         p.tap.assert_any_call("全部关闭", exact=True, scrolls=0)
         p.confirm.assert_called_once()
 
     def test_oppo_machines_still_close_the_page_list(self):
-        for path, model in (("recipes/oppo-PMA110/recipe.py", "PMA110"),
-                            ("recipes/oppo-PLG110/recipe.py", "PLG110")):
+        for path, model in (("recipes/oppo/PMA110/recipe.py", "PMA110"),
+                            ("recipes/oppo/PLG110/recipe.py", "PLG110")):
             with self.subTest(recipe=path):
                 p = self.oppo_phone(path, model)
                 scope, _ = run_recipe_step(p, path, ["广告跟踪"])
@@ -732,7 +732,7 @@ class BehaviourUnchangedTests(unittest.TestCase):
         return p
 
     def test_wkl_an20_still_closes_the_whole_page(self):
-        path = "recipes/honor-WKL-AN20/recipe.py"
+        path = "recipes/honor/WKL-AN20/recipe.py"
         p = phone_mock()
         p.locked.return_value = False
         p.focus.return_value = _AnyFocus("com.hihonor.id/_")
@@ -1066,7 +1066,7 @@ class OpenThenMenuTests(unittest.TestCase):
         p = phone_908()
         p.reader.shell = Mock(side_effect=absent_shell_908(commands))
         with patch.object(adb_link, "detached", return_value=False):
-            scope, out = load_recipe(p, ROOT / "recipes/xiaomi-M154FF/recipe.py", only="下载管理")
+            scope, out = load_recipe(p, ROOT / "recipes/xiaomi/M154FF/recipe.py", only="下载管理")
         self.assertEqual(scope["SKIPPED_STEPS"], ["下载管理"])
         self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertIn(f"本机没有安装 {DOWNLOAD_908}", out.getvalue())
@@ -1115,12 +1115,15 @@ def phone_903(*rows):
 
 
 def recipes_903():
-    return sorted((ROOT / "recipes").glob("*/recipe*.py"))
+    return sorted((ROOT / "recipes").glob("*/*/recipe*.py"))
 
 
 class MissingSwitchEvidenceTests(unittest.TestCase):
     def guard_message(self, recipe, names, *rows):
-        scope, _ = load_recipe(phone_903(*rows), ROOT / "recipes" / recipe / "recipe.py")
+        brand, _, model = recipe.partition("-")
+        import entries
+        scope, _ = load_recipe(phone_903(*rows),
+                               ROOT / "recipes" / entries.FAMILY.get(brand, brand) / model / "recipe.py")
         with self.assertRaises(RuntimeError) as caught:
             scope["close_named"](names, "系统·广告服务")
         return str(caught.exception)
@@ -1148,7 +1151,7 @@ class MissingSwitchEvidenceTests(unittest.TestCase):
     def test_empty_name_list_is_still_a_failure(self):
         """「整页开关」那条路（honor 的名单取页面上全部标题）一页空着同样是失败，空名单不许放行。"""
         p = phone_903(row_903("个性化推荐", 320))
-        scope, _ = load_recipe(p, ROOT / "recipes" / "xiaomi-24129PN74C" / "recipe.py")
+        scope, _ = load_recipe(p, ROOT / "recipes" / "xiaomi/24129PN74C" / "recipe.py")
         with self.assertRaises(RuntimeError) as caught:
             scope["require_switches"]({"个性化推荐": True}, [], "系统·广告服务")
         self.assertIn(f"系统·广告服务：{GUARD_903}", str(caught.exception))
@@ -1159,7 +1162,7 @@ class MissingSwitchEvidenceTests(unittest.TestCase):
         evidence = []
         real = p.page_evidence
         p.page_evidence = lambda *a, **k: evidence.append(a) or real(*a, **k)
-        scope, out = load_recipe(p, ROOT / "recipes" / "xiaomi-24129PN74C" / "recipe.py")
+        scope, out = load_recipe(p, ROOT / "recipes" / "xiaomi/24129PN74C" / "recipe.py")
         scope["close_named"](["个性化广告推荐"], "系统·广告服务")
         self.assertEqual(evidence, [])
         self.assertIn("回读确认 0 项", out.getvalue())          # 成功路径仍走原来的收尾
@@ -1167,7 +1170,7 @@ class MissingSwitchEvidenceTests(unittest.TestCase):
 
     def test_failure_still_records_the_step_and_the_exit_code(self):
         p = phone_903(row_903("个性化推荐", 320))
-        scope, _ = load_recipe(p, ROOT / "recipes" / "xiaomi-24129PN74C" / "recipe.py")
+        scope, _ = load_recipe(p, ROOT / "recipes" / "xiaomi/24129PN74C" / "recipe.py")
         scope["ONLY"] = []                  # 装载时一段没跑，这里手动跑一个伪造段
         printed = io.StringIO()
 
@@ -1219,7 +1222,7 @@ class SwitchEvidenceSingleSourceTests(unittest.TestCase):
 
 
 # 两份复制品的宿主脚本（#939 的改动面）：注入面里叫 `page`，脚本不再自带。
-RECIPES_939 = ("oppo-PMX110/recipe.py", "oneplus-PLZ110/recipe.py")
+RECIPES_939 = ("oppo/PMX110/recipe.py", "oppo/PLZ110/recipe.py")
 GAME_939 = "com.nearme.gamecenter"
 SETTING_PAGE_939 = "com.nearme.gamecenter/com.nearme.gamecenter.setting.SettingActivity"
 LAUNCHER_939 = "com.coloros.launcher/.Launcher"
@@ -1302,7 +1305,7 @@ class PageEvidenceTests(unittest.TestCase):
 class PageEvidenceSingleSourceTests(unittest.TestCase):
     def test_the_wording_lives_only_in_recipe_kit(self):
         """三句判据各自复制一份就会再分叉成两种输出形状（#939）。"""
-        sources = sorted((ROOT / "recipes").glob("*/recipe*.py"))
+        sources = sorted((ROOT / "recipes").glob("*/*/recipe*.py"))
         sources += [path for name in ("tool", "gui") for path in sorted((ROOT / name).rglob("*.py"))]
         offenders = [path.relative_to(ROOT).as_posix() for path in sources
                      if path != ROOT / "tool" / "recipe_kit.py"
@@ -1314,7 +1317,7 @@ class PageEvidenceSingleSourceTests(unittest.TestCase):
 #   OPPO / 一加机型脚本的 require_installed()：没装的包 `pm path` 返回退出码 1、输出为空，
 #   那是「没装、跳过本段」，不是「读不出安装状态」（#899，0.4.1 报告 9–10 份）。
 
-RECIPES_899 = ("recipes/oppo-PMX110/recipe.py", "recipes/oneplus-PLZ110/recipe.py")
+RECIPES_899 = ("recipes/oppo/PMX110/recipe.py", "recipes/oppo/PLZ110/recipe.py")
 PACKAGE_899, LABEL_899 = "com.heytap.yoli", "视频"
 CALL_899 = f"pm path {PACKAGE_899}"
 

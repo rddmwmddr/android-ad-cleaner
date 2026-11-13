@@ -573,7 +573,7 @@ class RecipeLineTests(unittest.TestCase):
 
 ID_INFO = {"brand": "OnePlus", "model": "PYB110", "name": "OnePlus PYB110",
            "build": "16.0.9", "android": "16"}
-ID_PATH = os.path.join(ROOT, "recipes", "oneplus-PYB110", "recipe.py")
+ID_PATH = os.path.join(ROOT, "recipes", "oppo/PYB110", "recipe.py")
 
 
 class RecipeIdentityTests(unittest.TestCase):
@@ -598,8 +598,8 @@ class RecipeIdentityTests(unittest.TestCase):
         with contextlib.redirect_stdout(out):
             self.assertEqual(run.cmd_check("S", []), 0)
             self.assertEqual(run.cmd_devices([]), 0)
-        self.assertIn("机型脚本：oneplus-PYB110；录制版本 16.0.9，版本一致", out.getvalue())
-        self.assertIn("机型脚本：oneplus-PYB110\n", out.getvalue())
+        self.assertIn("机型脚本：PYB110；录制版本 16.0.9，版本一致", out.getvalue())
+        self.assertIn("机型脚本：PYB110\n", out.getvalue())
         self.assertNotIn("recipes/", out.getvalue())
 
     def test_status_json_keeps_the_identity_and_a_path_for_file_consumers(self):
@@ -607,8 +607,8 @@ class RecipeIdentityTests(unittest.TestCase):
         with contextlib.redirect_stdout(out):
             self.assertEqual(run.cmd_status_json("S", []), 0)
         status = json.loads(out.getvalue().strip().splitlines()[-1])
-        self.assertEqual(status["recipe"], "oneplus-PYB110")
-        self.assertEqual(status["recipe_path"], os.path.join("recipes", "oneplus-PYB110", "recipe.py"))
+        self.assertEqual(status["recipe"], "PYB110")
+        self.assertEqual(status["recipe_path"], os.path.join("recipes", "oppo/PYB110", "recipe.py"))
 
 
 # ---------- 来源 tests/test_finish_stay_on_632.py ----------

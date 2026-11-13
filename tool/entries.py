@@ -391,7 +391,7 @@ def used_by(recipes_dir):
     surface = recipe_source.surface_sources()
     found = {}
     for rel, facts in recipe_source.scan_dir(recipes_dir).items():
-        model = rel.split("/", 1)[0].split("-", 1)[-1]
+        model = rel.split("/")[1]
         _scan_entries(facts, model, found)
         layer = recipe_source.imported_sources(facts, surface)
         _scan_injected(surface, layer, facts, facts, model, found, set())
@@ -493,10 +493,12 @@ def speedups(recipes_dir):
     只是提示：没走这条直达可能是页面没导出、版本不同或者没装这个 App，不算缺陷。"""
     import glob, os
     models = {}
-    for f in glob.glob(os.path.join(recipes_dir, "*", "recipe*.py")):
-        brand, _, model = os.path.basename(os.path.dirname(f)).partition("-")
-        if brand.lower() in FAMILY:
-            models.setdefault(FAMILY[brand.lower()], set()).add(model)
+    for f in glob.glob(os.path.join(recipes_dir, "*", "*", "recipe*.py")):
+        # 路径是 `<家族>/<型号>/recipe*.py`：第一段就是家族，第二段是型号。
+        parts = os.path.relpath(f, recipes_dir).split(os.sep)
+        family, model = parts[0], parts[1]
+        if FAMILY.get(family.lower()) == family.lower():
+            models.setdefault(family, set()).add(model)
     used = used_by(recipes_dir)
     out = []
     for fam, groups in ENTRIES.items():

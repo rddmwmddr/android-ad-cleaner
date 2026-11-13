@@ -10,8 +10,8 @@ sys.path.insert(0, str(ROOT / "tests"))
 import run
 from fixtures import load_recipe, phone_mock
 
-VARIANT = ROOT / "recipes/oneplus-PJA110/recipe_android16.py"
-OLD = ROOT / "recipes/oneplus-PJA110/recipe.py"
+VARIANT = ROOT / "recipes/oppo/PJA110/recipe_android16.py"
+OLD = ROOT / "recipes/oppo/PJA110/recipe.py"
 MARKET = "com.heytap.market/com.heytap.market.mine.cn.setting.ui.SettingActivity"
 MARKET_MAIN = "com.heytap.market/com.heytap.market.activity.MainActivity"
 BROWSER = "com.heytap.browser/com.heytap.browser.settings.component.BrowserPreferencesPage"

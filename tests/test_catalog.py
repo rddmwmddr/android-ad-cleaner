@@ -22,8 +22,8 @@ import catalog  # noqa: E402
 import fast  # noqa: E402
 import recipe_kit  # noqa: E402
 
-SCRIPT = "recipes/vivo-V1986A/recipe.py"
-DATA = "recipes/vivo-V1986A/V1986A.toml"
+SCRIPT = "recipes/vivo/V1986A/recipe.py"
+DATA = "recipes/vivo/V1986A/V1986A.toml"
 
 
 class EquivalenceTests(unittest.TestCase):

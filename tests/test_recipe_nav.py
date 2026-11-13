@@ -176,7 +176,7 @@ def family_usage(module_name):
     surface = recipe_source.surface_sources()
     usage = {}
     for rel, facts in recipe_source.scan_dir(str(ROOT / "recipes"), entries.FAMILY).items():
-        family = entries.FAMILY.get(rel.split("-", 1)[0].lower())
+        family = entries.FAMILY.get(rel.split("/", 1)[0].lower())
         for name, (owner, _) in recipe_source.imported_sources(facts, surface).items():
             if owner == module_name:
                 usage.setdefault(name, set()).add(family)
@@ -235,7 +235,7 @@ class DriverTests(unittest.TestCase):
         import compare_recipe_calls as driver
         import fast
         calls = driver.run_script(fast, recipe_kit, fixtures,
-                                  ROOT / "recipes" / "xiaomi-24090RA29C" / "recipe.py", "present")
+                                  ROOT / "recipes" / "xiaomi/24090RA29C" / "recipe.py", "present")
         names = [call[1] for call in calls]
         self.assertIn("start", names)
         self.assertIn("entry", names)

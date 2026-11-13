@@ -398,7 +398,7 @@ def measure(recipes_dir: str) -> dict:
     totals = {CONVERTED: 0, MISSING_KEY: 0, UNREPRESENTABLE: 0}
     per_script = {}
     total = 0
-    for path in sorted(glob.glob(os.path.join(recipes_dir, "*", "recipe*.py"))):
+    for path in sorted(glob.glob(os.path.join(recipes_dir, "*", "*", "recipe*.py"))):
         src = open(path, encoding="utf-8").read()
         reports = convert(src, path)
         row = {CONVERTED: 0, MISSING_KEY: 0, UNREPRESENTABLE: 0}

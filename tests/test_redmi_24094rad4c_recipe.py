@@ -13,13 +13,13 @@ from fixtures import load_recipe
 
 class Redmi24094RAD4CRecipeTests(unittest.TestCase):
     def setUp(self):
-        self.path = ROOT / "recipes/redmi-24094RAD4C/recipe.py"
+        self.path = ROOT / "recipes/xiaomi/24094RAD4C/recipe.py"
         self.source = self.path.read_text(encoding="utf-8")
 
     def test_actual_model_selects_own_recipe_and_pins_recorded_build(self):
         path, reference = run.recipe_for("24094RAD4C", "Redmi")
         self.assertFalse(reference)
-        self.assertEqual(Path(path).parent.name, "redmi-24094RAD4C")
+        self.assertEqual(Path(path).parent.name, "24094RAD4C")
         meta = run.recipe_meta(path)
         self.assertEqual(meta["models"], ["24094RAD4C"])
         self.assertEqual(meta["build"], "OS3.0.306.0")
@@ -93,7 +93,7 @@ class Redmi24094RAD4CRecipeTests(unittest.TestCase):
     def test_note_14_pro_remains_a_separate_recipe(self):
         path, reference = run.recipe_for("24090RA29C", "Redmi")
         self.assertFalse(reference)
-        self.assertEqual(Path(path).parent.name, "xiaomi-24090RA29C")
+        self.assertEqual(Path(path).parent.name, "24090RA29C")
 
 
 if __name__ == "__main__":

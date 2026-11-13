@@ -259,25 +259,26 @@ class ListRowTests(unittest.TestCase):
 class ReferenceRecipeTests(unittest.TestCase):
     def test_reference_does_not_change_when_community_recipes_are_added(self):
         with tempfile.TemporaryDirectory() as root:
-            for name in ("xiaomi-24090RA29C", "xiaomi-M154FF", "vivo-V2324HA", "vivo-V2547DA"):
-                Path(root, "recipes", name).mkdir(parents=True)
-                Path(root, "recipes", name, "recipe.py").write_text('BUILD = "x"\n', encoding="utf-8")
+            for family, model in (("xiaomi", "24090RA29C"), ("xiaomi", "M154FF"),
+                                  ("vivo", "V2324HA"), ("vivo", "V2547DA")):
+                Path(root, "recipes", family, model).mkdir(parents=True)
+                Path(root, "recipes", family, model, "recipe.py").write_text('BUILD = "x"\n', encoding="utf-8")
             with patch.object(run, "ROOT", root):
                 path, reference = run.recipe_for("NEWMODEL1", "Redmi")
                 self.assertTrue(reference)
-                self.assertEqual(Path(path).parent.name, "xiaomi-M154FF")
-                self.assertEqual(Path(run.recipe_for("NEWMODEL2", "iQOO")[0]).parent.name, "vivo-V2547DA")
-                self.assertEqual(run.recipe_for("24090RA29C", "Redmi"), (str(Path(root, "recipes", "xiaomi-24090RA29C", "recipe.py")), False))
+                self.assertEqual(Path(path).parent.name, "M154FF")
+                self.assertEqual(Path(run.recipe_for("NEWMODEL2", "iQOO")[0]).parent.name, "V2547DA")
+                self.assertEqual(run.recipe_for("24090RA29C", "Redmi"), (str(Path(root, "recipes", "xiaomi/24090RA29C", "recipe.py")), False))
 
     def test_new_brand_borrows_its_only_recipe_as_reference(self):
         """FAMILY 没登记的品牌，别的型号借不到同品牌脚本；三星进目录时踩过（#605）。"""
         with tempfile.TemporaryDirectory() as root:
-            Path(root, "recipes", "samsung-SM-N9760").mkdir(parents=True)
-            Path(root, "recipes", "samsung-SM-N9760", "recipe.py").write_text('BUILD = "x"\nMODELS = ["SM-N9760"]\n', encoding="utf-8")
+            Path(root, "recipes", "samsung/SM-N9760").mkdir(parents=True)
+            Path(root, "recipes", "samsung/SM-N9760", "recipe.py").write_text('BUILD = "x"\nMODELS = ["SM-N9760"]\n', encoding="utf-8")
             with patch.object(run, "ROOT", root):
                 path, reference = run.recipe_for("SM-S9280", "samsung")
                 self.assertTrue(reference)
-                self.assertEqual(Path(path).parent.name, "samsung-SM-N9760")
+                self.assertEqual(Path(path).parent.name, "SM-N9760")
 
 
 class ScrubTests(unittest.TestCase):

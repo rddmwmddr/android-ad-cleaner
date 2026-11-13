@@ -1,7 +1,7 @@
 # 荣耀 / MagicOS 手动清单
 
-实测机型：PNM-AN10（MagicOS 10），2026-10-23。机型脚本：`recipes/honor-PNM-AN10/`，重跑约 4 分钟。
-补充机型：WKL-AN20（MagicOS 11.0.0.111 / Android 17），2026-10-28 逐项路径实测；[新脚本说明](../../recipes/honor-WKL-AN20/README.md)。新脚本整轮及用时尚未真机复测。
+实测机型：PNM-AN10（MagicOS 10），2026-10-23。机型脚本：`recipes/honor/PNM-AN10/`，重跑约 4 分钟。
+补充机型：WKL-AN20（MagicOS 11.0.0.111 / Android 17），2026-10-28 逐项路径实测；[新脚本说明](../../recipes/honor/WKL-AN20/README.md)。新脚本整轮及用时尚未真机复测。
 补充机型：CLE-AN00（Magic V Flip2，MagicOS 10.0.0.175 / Android 16），2026-11-07 整轮实测，下面「CLE-AN00 的差别」单列。
 符号：🔴 关掉　🟢 保留　⚠️ 注意
 

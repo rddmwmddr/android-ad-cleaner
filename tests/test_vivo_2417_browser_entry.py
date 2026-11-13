@@ -46,7 +46,7 @@ class Vivo2417BrowserEntryTests(unittest.TestCase):
         return p
 
     def browser_step(self, p):
-        scope, _ = load_recipe(p, ROOT / "recipes/vivo-V2417A/recipe.py")
+        scope, _ = load_recipe(p, ROOT / "recipes/vivo/V2417A/recipe.py")
         scope["tap"] = Mock(return_value=True)          # 首页设置/极简首页等子页入口
         scope["close_named"] = Mock(return_value=True)  # 本用例只验入口，不验开关
         return scope

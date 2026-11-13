@@ -23,7 +23,7 @@ from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock, phone_
 import fast
 import run
 
-RECIPE = ROOT / "recipes/oppo-PMX110/recipe.py"
+RECIPE = ROOT / "recipes/oppo/PMX110/recipe.py"
 RECORDED = "PMX110_17.0.0.116(CN01)"
 SEARCH_SETTINGS_FOCUS = ("com.heytap.quicksearchbox/"
                          "com.heytap.quicksearchbox.ui.activity.SearchSettingActivity")

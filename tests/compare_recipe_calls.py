@@ -201,7 +201,7 @@ def run_script(fast, recipe_kit, fixtures, path, scenario):
 
 
 def scripts(root=ROOT):
-    """当前树里的机型脚本，按相对路径排序：`recipes/<目录名>/<脚本名>.py`。"""
+    """当前树里的机型脚本，按相对路径排序：`recipes/<家族>/<型号>/<脚本名>.py`。"""
     root = Path(root).resolve()
     return [path.relative_to(root).as_posix()
             for path in sorted((root / "recipes").rglob("recipe*.py"))]
@@ -233,9 +233,9 @@ def collect(root):
 
 
 def snapshot_name(script):
-    """`recipes/<目录名>/<脚本名>.py` → `<目录名>__<脚本名>.json`。"""
-    folder, name = Path(script).parts[-2:]
-    return f"{folder}__{Path(name).stem}.json"
+    """`recipes/<家族>/<型号>/<脚本名>.py` → `<家族>__<型号>__<脚本名>.json`。"""
+    family, model, name = Path(script).parts[-3:]
+    return f"{family}__{model}__{Path(name).stem}.json"
 
 
 def snapshot_text(script, scenarios):

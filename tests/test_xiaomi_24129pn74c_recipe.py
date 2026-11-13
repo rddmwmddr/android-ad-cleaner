@@ -91,13 +91,13 @@ TOOLBAR_PANEL = """<hierarchy rotation="0">
 
 class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
     def load(self, phone, recipe="recipe.py"):
-        scope, _ = load_recipe(phone, ROOT / "recipes/xiaomi-24129PN74C" / recipe)
+        scope, _ = load_recipe(phone, ROOT / "recipes/xiaomi/24129PN74C" / recipe)
         return scope
 
     def test_actual_model_selects_own_recipe_and_pins_recorded_build(self):
         path, reference = run.recipe_for("24129PN74C", "Xiaomi")
         self.assertFalse(reference)
-        self.assertEqual(Path(path).parent.name, "xiaomi-24129PN74C")
+        self.assertEqual(Path(path).parent.name, "24129PN74C")
         self.assertEqual(run.recipe_meta(path)["build"], "OS3.0.307.0")
         self.assertEqual(run.recipe_meta(path)["models"], ["24129PN74C"])
         self.assertEqual(run.recipe_meta(path)["steps"],
@@ -114,10 +114,10 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
     def test_same_base_package_as_k80_script_but_own_entry_points(self):
         # 底包相同不等于入口相同：浏览器两条入口都在，底栏「菜单」优先；商店没有隐私设置。
         # 两份脚本也都不把底包写进 BUILD，同底包机型不会被任一份「同版本」命中（#942）。
-        k80 = run.recipe_meta(ROOT / "recipes/redmi-25060RK16C/recipe.py")["build"]
+        k80 = run.recipe_meta(ROOT / "recipes/xiaomi/25060RK16C/recipe.py")["build"]
         self.assertEqual(k80, "")
-        self.assertNotIn("BP2A", run.recipe_meta(ROOT / "recipes/xiaomi-24129PN74C/recipe.py")["build"])
-        source = (ROOT / "recipes/xiaomi-24129PN74C/recipe.py").read_text(encoding="utf-8")
+        self.assertNotIn("BP2A", run.recipe_meta(ROOT / "recipes/xiaomi/24129PN74C/recipe.py")["build"])
+        source = (ROOT / "recipes/xiaomi/24129PN74C/recipe.py").read_text(encoding="utf-8")
         # 两条入口的实现在家族库的注入面里（#1244）；这台机声明走「菜单」那条，回退档在库里。
         self.assertIn('BROWSER_FLOW = "menu"', source)
         library = (ROOT / "tool/recipe_nav.py").read_text(encoding="utf-8")
@@ -125,7 +125,7 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
         self.assertIn('if not p.tab("我的"):', library)
 
     def test_system_ads_uses_search_or_deep_link_not_more_security_settings(self):
-        source = (ROOT / "recipes/xiaomi-24129PN74C/recipe.py").read_text(encoding="utf-8")
+        source = (ROOT / "recipes/xiaomi/24129PN74C/recipe.py").read_text(encoding="utf-8")
         # 本机「隐私与安全」是权限中心，没有「更多安全设置」这一项。
         self.assertIn('p.setting("广告服务")', source)
         self.assertIn("com.android.settings/.ad.AdServiceSettings", source)
@@ -135,7 +135,7 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
         self.assertNotIn("更多安全设置", code)
 
     def test_browser_keeps_function_switches_and_turns_off_ads_only(self):
-        source = (ROOT / "recipes/xiaomi-24129PN74C/recipe.py").read_text(encoding="utf-8")
+        source = (ROOT / "recipes/xiaomi/24129PN74C/recipe.py").read_text(encoding="utf-8")
         # 运营任务 = 做任务得金币挣红包，纯营销，要关。
         self.assertIn('p.off(only=["运营任务", "小说"], keep=["我的网盘"]', source)
         # 扫一扫 / 搜索历史 / 书签 / 最常访问是功能项，不能进 only 名单。
@@ -152,7 +152,7 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
             stub(p, "click", lambda x, y: (clicked.append((x, y)), clock.click())[1])
         if backed is not None:
             stub(p, "back", lambda *a, **k: (backed.append(clock.t), clock.click())[1])
-        scope, out = load_recipe(p, ROOT / "recipes/xiaomi-24129PN74C" / recipe, only=only)
+        scope, out = load_recipe(p, ROOT / "recipes/xiaomi/24129PN74C" / recipe, only=only)
         scope["time"] = clock              # 脚本里的 sleep 也推进设备时间轴，否则点完齿轮页面不会换
         return p, scope, out
 
@@ -186,7 +186,7 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
 
     def test_os4_browser_segment_goes_through_browser_settings(self):
         """OS4 浏览器段调的是带兜底的 browser_settings()，不是只认「菜单」的那条（#900）。"""
-        src = (ROOT / "recipes/xiaomi-24129PN74C/recipe_os4.py").read_text(encoding="utf-8")
+        src = (ROOT / "recipes/xiaomi/24129PN74C/recipe_os4.py").read_text(encoding="utf-8")
         self.assertIn("    browser_settings()\n", src)
         self.assertNotIn("浏览器底栏「菜单」未找到", src)
 
@@ -265,7 +265,7 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
 
     def test_protection_switch_is_not_in_any_only_list(self):
         """「限制广告跟踪」「防止广告追踪」这类开关是保护类，打开才对，不能进 only 名单。"""
-        source = (ROOT / "recipes/xiaomi-24129PN74C/recipe.py").read_text(encoding="utf-8")
+        source = (ROOT / "recipes/xiaomi/24129PN74C/recipe.py").read_text(encoding="utf-8")
         for protective in ("限制广告跟踪", "防止广告追踪", "阻止广告跟踪"):
             self.assertNotIn(protective, source)
 

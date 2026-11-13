@@ -17,13 +17,13 @@ from fixtures import load_recipe, phone_mock
 
 class VivoV2417ARecipeTests(unittest.TestCase):
     def load(self, phone, only=None):
-        scope, _ = load_recipe(phone, ROOT / "recipes/vivo-V2417A/recipe.py", only)
+        scope, _ = load_recipe(phone, ROOT / "recipes/vivo/V2417A/recipe.py", only)
         return scope
 
     def test_model_is_matched_without_reference_and_records_exact_build(self):
         path, reference = run.recipe_for("V2417A", "vivo")
         self.assertFalse(reference)
-        self.assertEqual(Path(path).parent.name, "vivo-V2417A")
+        self.assertEqual(Path(path).parent.name, "V2417A")
         meta = run.recipe_meta(path)
         self.assertEqual(meta["build"], "PD2417D_A_16.2.14.1.W10")
         self.assertEqual(meta["models"], ["V2417A"])

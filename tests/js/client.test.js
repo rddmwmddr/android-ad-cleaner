@@ -250,7 +250,7 @@ test("没标录制版本的机型脚本不说「版本一致」（#942）", asyn
   const status = {
     info: { model: "25060RK16C", brand: "Redmi", name: "REDMI K80 Ultra", os: "",
             build: "BP2A.250605.031.A3", android: "16" },
-    recipe: "recipes/redmi-25060RK16C/recipe.py", recipe_ref: false,
+    recipe: "recipes/xiaomi/25060RK16C/recipe.py", recipe_ref: false,
     recipe_build: "", recipe_ok: true, steps: ["系统广告"],
     ads: [], quickapps: [], locked: false, dev: false, backup: null,
     fold_open: false, input_blocked: false, stay_on: "",
