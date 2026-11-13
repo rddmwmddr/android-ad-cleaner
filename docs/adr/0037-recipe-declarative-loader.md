@@ -44,7 +44,7 @@ OPPO 系（oppo / oneplus / realme，16 份，#1245）按同一形状扩展这�
 脚本里，理由与 #1148 留 `off_exact` 时相同。浏览器设置页的两档 OPPO 入口另有约束：入口串按
 执行作用域里的包名常量拼，否则导入同一个 `browser_settings` 的其它家族会被入口速查算上这条直达。
 
-vivo / 荣耀 / 魅族 / 三星（15 份，#1246）按同一形状收口。vivo 九份算一个真正的家族库：
+vivo / 荣耀 / 魅族 / 三星（15 份脚本，#1246）按同一形状收口。vivo 十份（九个型号目录）算一个真正的家族库：
 `tap_row` / `by_desc` / `result_xy` / `search_setting` / `hiboard_panel` / `hiboar_panel` 进 vivo
 分节，关开关的过程（`rows` / `off` / `confirm2` / `dialog_open` / `row_switch` / `switch_off` /
 `setting_search` / `off_one` / `store_personalization`）进策略库；`gear` / `gear_top` /
@@ -56,7 +56,7 @@ vivo / 荣耀 / 魅族 / 三星（15 份，#1246）按同一形状收口。vivo 
 `page_summary` / `tap_id` / `open_app` 搬进共享库，等于给一份脚本造家族库。
 
 三星的 `protect` 因此仍是本机函数：它写的是这一页「点标题而不是点开关、把保护类开关拨回开」，
-且是 #608 的临时回退，重启真机复测后才换回 `p.off`。三星原来那一个本机策略因此不减——这是归属
+且是 #608 的临时回退，等真机复测通过后才换回 `p.off`。三星原来那一个本机策略因此不减——这是归属
 规则的结果，不是漏收。
 
 ### 为什么不是只做模块化
