@@ -22,7 +22,16 @@ code = "step_ad_tracking"
 
 [[segment]]
 name = "浏览器"
-code = "step_browser"
+ops = [
+  { kind = "lib", name = "browser_settings" },
+  { kind = "lib", name = "row", args = ["隐私"] },
+  { kind = "lib", name = "row", args = ["广告管理"] },
+  { kind = "lib", name = "close_named", args = [["开屏广告", "资讯列表广告", "摇一摇广告"], "广告管理"] },
+  { kind = "back" },
+  { kind = "lib", name = "row", args = ["个性化管理"] },
+  # 「个性化内容推荐」在部分安装版本上没有这一行：有就关，没有就记未显示。
+  { kind = "lib", name = "close_named", args = [["个性化广告推荐", "个性化内容推荐"], "个性化管理"], kwargs = { optional = ["个性化内容推荐"] } },
+]
 
 [[segment]]
 name = "软件商店"

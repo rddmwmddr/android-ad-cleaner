@@ -91,17 +91,6 @@ def step_ad_tracking(p, rt):
             p.await_page()
 
 
-def step_browser(p, rt):
-    browser_settings()
-    row("隐私")
-    row("广告管理")
-    close_named(["开屏广告", "资讯列表广告", "摇一摇广告"], "广告管理")
-    p.back()
-    row("个性化管理")
-    # 「个性化内容推荐」在部分安装版本上没有这一行：有就关，没有就记未显示。
-    close_named(["个性化广告推荐", "个性化内容推荐"], "个性化管理", optional=["个性化内容推荐"])
-
-
 def step_store(p, rt):
     app_settings(MARKET)
     row(("隐私", "隐私授权管理"), package=MARKET, activity="PrivacyActivity")
