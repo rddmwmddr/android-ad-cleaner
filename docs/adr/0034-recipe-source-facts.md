@@ -1,5 +1,7 @@
 # 机型脚本的事实由一份纯 AST 层给出
 
+> B 段（catalog）另由 [ADR-0038](0038-recipe-catalog.md) 取代：按 import 归属解析（`surface_sources` / `imported_sources` / `injected_calls` / `step_sources` / `strategy_sources`）随注入面一起消失，事实层退化为代码里的字面量提取器，`scan_source` / `scan_dir` 与字面量投影保留。
+>
 > 部分由 [ADR-0037](0037-recipe-declarative-loader.md) 取代（2026-11-13 修订：脚本顶部多了 `from recipe_kit import step` 与一份 `if TYPE_CHECKING:` 导入，行号与调用写法保持不变）：事实层仍只读 AST。正文保留当时的决定与取舍。
 
 基线 `2434cb1`。
