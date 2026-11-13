@@ -1,0 +1,51 @@
+# OPPO Find X9 Ultra（PMA110），ColorOS 17.0.0.106(CN01) / Android 17 的页面树（catalog，#1265）。
+# 2026-10-29 真机逐页记录；仅收录本机已识别的开关，不包含包操作和通知渠道。
+# 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，未复测（#933）。
+# 八段都写在例外函数里：每段都把 BROWSER / SEARCH / MARKET 这类长 Activity 前缀拼出来再交给
+# tap_page / close_named，还带「读回名单再整表关」「重进一次再回读」这类分支，数据里写不下。
+model = "PMA110"
+models = ["PMA110"]
+build = "PMA110_17.0.0.106(CN01)"
+tail = "tail"
+
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+[const]
+WAIT_PAGE_STYLE = "strict"
+TAP_PAGE_STYLE = "raise"
+READ_SWITCHES_STYLE = "expect"
+OPEN_PAGE_STYLE = "shell"
+APP_SETTINGS_STYLE = "shell"
+SYSTEM_SETTINGS_STYLE = "shell"
+BROWSER_FLOW = "prefs_shell"
+
+[[segment]]
+name = "广告跟踪"
+code = "step_ad_tracking"
+
+[[segment]]
+name = "浏览器"
+code = "step_browser"
+
+[[segment]]
+name = "下拉搜索"
+code = "step_search"
+
+[[segment]]
+name = "软件商店"
+code = "step_store"
+
+[[segment]]
+name = "主题商店"
+code = "step_theme"
+
+[[segment]]
+name = "视频"
+code = "step_video"
+
+[[segment]]
+name = "小布建议"
+code = "step_assistant_advice"
+
+[[segment]]
+name = "负一屏"
+code = "step_negative_screen"
