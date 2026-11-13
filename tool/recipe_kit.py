@@ -15,6 +15,8 @@
 
 import re
 
+from typing import Any
+
 import adb_link
 import recipe_nav
 import recipe_strategies
@@ -25,9 +27,17 @@ from recipe_runtime import Runtime, SkipStep
 
 # 静态导入 `from recipe_kit import p, rt, step` 的落点：前两个只给编辑器与类型检查看，真正的对象
 # 每次装载由 `preamble()` 换掉；`step()` 按当前执行解析。
-p = None
-rt = None
+# 标成 Any：脚本在这两个名字上调的是 Phone 与 Runtime 的整张面，注解只能写成 Any（#1247）。
+p: Any = None
+rt: Any = None
 _runtime = None
+
+
+def __getattr__(name: str) -> Any:
+    """注入名在类型层面可见（#1247）：`require` / `page` / `require_switches` 这些由 `preamble()`
+    写进执行作用域，模块上没有对应的属性。脚本末尾的 `if TYPE_CHECKING:` 块才 import 它们，
+    类型检查靠这一条认得出名字；运行时照旧抛 AttributeError，不在这里造一份代理对象。"""
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 # `Phone.start` 里「落点不对」的两句。只有这两类才按落点判入口不可达：
 # 「本机没有安装 / 无法打开」时前台可能只是桌面，不能当成证据（#902）。
