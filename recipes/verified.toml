@@ -81,7 +81,10 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "174b8ab26853b56e"
 
-["oppo/PHK110/recipe.py"]
+# 形态迁移于 #1264（OPPO 甲批次转页面树）：以下八条 key 改 .toml，日期 / 验证人 / 档位照原样平移。
+# 这一批每份都至少留了一段 code= 例外函数（过程化段），转换不是逐字机械的，body_hash 故意不刷新——
+# verify_ledger 会把它们标成「待复核」，等真机复跑一次再照抄 --hash 的值。
+["oppo/PHK110/PHK110.toml"]
 build = "PHK110_16.0.5.1201"
 date = "2026-10-25"
 by = "机主"
@@ -89,7 +92,7 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "dbd13ddfa67f41de"
 
-["oppo/PHK110/recipe_android15.py"]
+["oppo/PHK110/PHK110-android15.toml"]
 build = "PHK110_15.0.0.601(CN01)"
 date = "2026-10-29"
 by = "机主"
@@ -97,7 +100,7 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "8689e34fcb2b5886"
 
-["oppo/PJA110/recipe.py"]
+["oppo/PJA110/PJA110.toml"]
 build = "PJA110_14.0.0.812"
 date = "2026-10-25"
 by = "机主"
@@ -106,7 +109,7 @@ evidence = "机主自测"
 body_hash = "0ffb7df851564140"
 
 # 路径照同平台 PHK110_16.0.5.1201 已实测的公开入口改写，未在 PJA110 上跑过（#911）。
-["oppo/PJA110/recipe_android16.py"]
+["oppo/PJA110/PJA110-android16.toml"]
 build = "PJA110_16.0.5.1201"
 date = ""
 by = ""
@@ -114,7 +117,7 @@ tier = "未记录"
 evidence = "未知"
 body_hash = "461451f848e6bb50"
 
-["oppo/PKX110/recipe.py"]
+["oppo/PKX110/PKX110.toml"]
 build = "PKX110_16.0.10.500"
 date = "2026-10-28"
 by = "机主"
@@ -146,7 +149,7 @@ tier = "全部"
 evidence = "机主自测"
 body_hash = "c6244cec7e61ddbb"
 
-["oppo/PKH110/recipe.py"]
+["oppo/PKH110/PKH110.toml"]
 build = "PKH110_17.0.0.103"
 date = "2026-10-29"
 by = "机主"
@@ -154,7 +157,7 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "a0f07bd04f4dfb2e"
 
-["oppo/PKT110/recipe.py"]
+["oppo/PKT110/PKT110.toml"]
 build = "PKT110_17.0.0.102(CN01)"
 date = "2026-10-28"
 by = "机主"
@@ -162,7 +165,7 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "edf8f5990b98b9ac"
 
-["oppo/PLG110/recipe.py"]
+["oppo/PLG110/PLG110.toml"]
 build = "PLG110_16.0.10.501(CN01)"
 date = "2026-11-01"
 by = "机主"

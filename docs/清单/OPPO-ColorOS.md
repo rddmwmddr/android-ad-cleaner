@@ -159,7 +159,7 @@ PMX110 / ColorOS 17 上逐个单独挂起实测（Issue #335，2026-10-30）。
 - 连不上 adb、`adb devices` 只显示 `offline`，USB 日志里有 `Error [31]` / `Failed to get BOS header`：是线或接口的问题，换线后连上。
 ### OPPO Find N5（PKH110 / ColorOS 17.0.0.103 / Android 17）
 
-实测日期：2026-10-29。机型脚本：`recipes/oppo/PKH110/recipe.py`，七段整段重跑 144 秒，二次重跑为幂等（新增关闭 0 项）。
+实测日期：2026-10-29。机型脚本：`recipes/oppo/PKH110/PKH110.toml`，七段整段重跑 144 秒，二次重跑为幂等（新增关闭 0 项）。
 
 | 位置 | 差异与处理 |
 |---|---|
@@ -333,7 +333,7 @@ PMX110 / ColorOS 17 上逐个单独挂起实测（Issue #335，2026-10-30）。
 
 ### 一加 Ace 2 Pro（PJA110 / ColorOS 16.0.5.1201 / Android 16）
 
-2026-11-10 按 #911 的报告补变体脚本 `recipes/oppo/PJA110/recipe_android16.py`。路径取自**同平台版本** `PHK110_16.0.5.1201`（一加 Ace 2）已实测的公开入口与 `tool/entries.py` 的 oppo 条目，**没有在 PJA110 上跑过**，合并不等于已走通；等报告者复测。
+2026-11-10 按 #911 的报告补变体脚本 `recipes/oppo/PJA110/PJA110-android16.toml`。路径取自**同平台版本** `PHK110_16.0.5.1201`（一加 Ace 2）已实测的公开入口与 `tool/entries.py` 的 oppo 条目，**没有在 PJA110 上跑过**，合并不等于已走通；等报告者复测。
 
 - **软件商店 / 浏览器**：认 `oppo.intent.action.APP_SETTINGS`（`am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p 包名`）直达设置页，不再走「我的 → 设置」三下连点；落地后同时核对前台 Activity 与页标题。商店落点 `com.heytap.market.mine.cn.setting.ui.SettingActivity`（注意 `.cn.` 段），页标题「应用与服务」；服务管理是 `ServeManagerActivity`。
 - **商店隐私入口**：「隐私」与「隐私授权管理」两种叫法都试——同平台的 ColorOS 16 机型上两种都出现过（Find N6 / Find X9 Pro 叫「隐私授权管理」，13T 叫「隐私」）。
@@ -344,7 +344,7 @@ PMX110 / ColorOS 17 上逐个单独挂起实测（Issue #335，2026-10-30）。
 
 ## 一加 13T（PKX110）
 实测日期：2026-10-28；系统：`PKX110_16.0.10.500(CN01)`，Android 16。
-机型脚本：`recipes/oppo/PKX110/recipe.py`（广告跟踪、软件商店·服务管理、软件商店·个性化、小布建议四段实测通过；浏览器三段、小布建议幂等重跑均 completed）。
+机型脚本：`recipes/oppo/PKX110/PKX110.toml`（广告跟踪、软件商店·服务管理、软件商店·个性化、小布建议四段实测通过；浏览器三段、小布建议幂等重跑均 completed）。
 
 - **广告跟踪**：设置首页点「隐私」进入的是 `com.oplus.securitypermission` 的 `PrivacySettingsDashboardActivity`（不是标准 SubSettings）；「设备标识与广告」在 `OplusSettingsActivity$DevicesIdentifySettingsActivity`；OAID 列表本机 75 项，整页全关 101 秒，引擎翻页正常。
 - **软件商店**：`oppo.intent.action.APP_SETTINGS` 直达 SettingActivity（与 PHK110 一致），服务管理同 Activity；本机推广位约 47 项，除 PHK110 清单外新增：找游戏-休闲/小游戏/VIP、我的专区：账号会员徽章/主题商店/应用时刻/游戏VIP、小游戏二楼和专区、AI智能体、应用安全安全内容推荐等。个性化推荐开关在「隐私（PrivacyActivity）→ 个性化推荐（PersonalRecommendActivity）」二级页；设置页的「隐私」入口必须 exact 匹配，说明文字「…隐私数据」会被子串误中。
@@ -357,7 +357,7 @@ PMX110 / ColorOS 17 上逐个单独挂起实测（Issue #335，2026-10-30）。
 
 ### Android 15：PHK110_15.0.0.601(CN01)
 
-2026-10-29 手动操作实测；自动脚本 `recipes/oppo/PHK110/recipe_android15.py` 根据此记录编写，尚未在真机整段运行验证。它仅在型号和完整系统版本匹配时运行，和 Android 16 版本分开选择。
+2026-10-29 手动操作实测；自动脚本 `recipes/oppo/PHK110/PHK110-android15.toml` 根据此记录编写，尚未在真机整段运行验证。它仅在型号和完整系统版本匹配时运行，和 Android 16 版本分开选择。
 
 - 系统「隐私 → 设备标识与广告 → 广告跟踪」：可逐应用关闭，不重置设备标识符；自动脚本暂不处理。
 - 软件商店：设置 → 隐私授权管理 → 个性化推荐，已关闭。应用更新及安全检测保留。
@@ -370,7 +370,7 @@ PMX110 / ColorOS 17 上逐个单独挂起实测（Issue #335，2026-10-30）。
 
 ### Android 16：PHK110_16.0.5.1201(CN01)
 实测日期：2026-10-25；系统：`PHK110_16.0.5.1201(CN01)`，Android 16。
-机型脚本：`recipes/oppo/PHK110/recipe.py`，只运行与该版本匹配的五段：
+机型脚本：`recipes/oppo/PHK110/PHK110.toml`，只运行与该版本匹配的五段：
 首次人工路径操作之后，软件商店单段重跑 23 秒、五段整段重跑 77 秒；加入精确白名单及失败状态检查后，最终版整段重跑 85 秒、五段均 completed。均为已关闭状态下的幂等重跑，新增关闭项为 0，运行后 `finish` 将插电常亮恢复为 0。这不等于在恢复出厂或首次开启全部开关的手机上做过完整自动化验收。
 ```bash
 python3 tool/run.py -s <序列号> recipe 广告跟踪 软件商店 浏览器首页 浏览器广告 浏览器个性化
