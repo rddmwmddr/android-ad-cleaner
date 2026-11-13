@@ -188,7 +188,7 @@ def _oppo_close_titles(p, g):
 def _oppo_read_on_page(p, g):
     def read_on_page(titles, package):
         """确认落在目标页并读出这一页的开关：读不到目标时整段不动，报错带上停在哪个页与当次
-        读到的标题（#903），不再「核对 0 项」静默收尾。"""
+        读到的标题（沿用 #903），不再「核对 0 项」静默收尾。"""
         from wait import until
 
         g["page"](titles, package)
@@ -215,7 +215,7 @@ def _oppo_wait_switches(p, g):
 
 def _oppo_close_all_listed(p, g):
     def close_all_listed(label):
-        """当前列表里还有开着的就点「全部关闭」，再开一次菜单确认它变灰（#650）。"""
+        """当前列表里还有开着的就点「全部关闭」，再开一次菜单确认它变灰（沿用 #650）。"""
         state = g["menu_state"]()
         if state.close_all_disabled:
             p.back()

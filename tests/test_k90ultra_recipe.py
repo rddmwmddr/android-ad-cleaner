@@ -82,7 +82,7 @@ class K90UltraRecipeTests(unittest.TestCase):
         self.assertIn('p.off(only=["每次联网时通知"], keep=["自动更新"]', self.source)
 
     def test_theme_gear_matches_the_exact_settings_entry(self):
-        # 主题商店的「设置壁纸」也含「设置」，按包含匹配会点进壁纸页（#305 / #374）。
+        # 主题商店的「设置壁纸」也含「设置」，按包含匹配会点进壁纸页（沿用 #305 / #374）。
         # 齿轮实现在家族库的注入面里（#1244），脚本只靠静态 import 声明它用哪个库。
         self.assertIn('p.find("设置", exact=True, edge_ok="tab")',
                       (ROOT / "tool/recipe_nav.py").read_text(encoding="utf-8"))

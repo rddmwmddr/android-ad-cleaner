@@ -1,4 +1,4 @@
-"""机型脚本的公共导航助手（#1150、#1244）：入口、选择器、等待与落点确认收在这里。
+"""机型脚本的公共导航助手（沿用 #1150、#1244）：入口、选择器、等待与落点确认收在这里。
 
 `recipe_kit.preamble()` 写完生命周期与台账之后调用 `install(p, g)`，把公共导航补进同一个
 执行作用域；拨动策略另住 `recipe_strategies`，段体另住 `recipe_steps`。三张表都按名字写进
@@ -49,7 +49,7 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-# ---------- 小米系（xiaomi / redmi，#1151、#1244）----------
+# ---------- 小米系（xiaomi / redmi，沿用 #1151、#1244）----------
 #
 # 同一个注入名在家族内有几套结构不同的实测走法时，各占一档、脚本用模块常量选（`_style()`）：
 # 走法属于这台机的知识，库不按型号猜。缺省一档是多数机型那一套，常量只在偏离缺省时才写。
@@ -132,8 +132,8 @@ def _xiaomi_gear(p, g):
     def gear(toolbar_only=False):
         """很多小米 App 的设置是右上角齿轮图标，没有文字。
         匹配只认正好是「设置」的描述、正文或 setting 类 id：商店「我的」页有一行正文「去功能设置里
-        重新开启」，主题商店有「设置壁纸」，按包含匹配会先命中它们、点进别的子页，整段跑空（#305 / #374）。
-        点完要不要认出设置页按机型：日历的齿轮打开的是 PopupWindow，不校验就会在弹窗里找入口（#407）。"""
+        重新开启」，主题商店有「设置壁纸」，按包含匹配会先命中它们、点进别的子页，整段跑空（沿用 #305 / #374）。
+        点完要不要认出设置页按机型：日历的齿轮打开的是 PopupWindow，不校验就会在弹窗里找入口（沿用 #407）。"""
         style = _style(g, "GEAR_STYLE", ("icon", "checked", "text") + tuple(vivo_styles), "icon")
         if style in vivo_styles:
             return vivo_styles[style]()
@@ -147,7 +147,7 @@ def _xiaomi_gear(p, g):
         if p.in_settings_page():
             return True
         if p.focus() != before:
-            p.back()          # 点开的是弹窗或别的页：关掉，别留给下一段（#331 / #407）
+            p.back()          # 点开的是弹窗或别的页：关掉，别留给下一段（沿用 #331 / #407）
         return False
 
     return gear
@@ -160,7 +160,7 @@ def _xiaomi_gear_top(p, g):
         """只认右上角那个文字就是「设置」的齿轮。
 
         应用商店「我的」页有一条「去功能设置里重新开启」，含「设置」二字且可点，通用 gear() 会先命中它，
-        点开的是手机清理的功能页——这就是 #193 里商店四个入口全部找不到的真正原因。
+        点开的是手机清理的功能页——这就是沿用 #193 那组记录里商店四个入口全部找不到的真正原因。
         """
         from fast import bounds
         for n in p.tree().iter("node"):
@@ -205,7 +205,7 @@ def _xiaomi_enter(p, g):
 
 def _xiaomi_mine_settings(p, g):
     def mine_settings(tries=2):
-        """底栏「我的」→ 「设置」，点完必须认出设置页（#586）。
+        """底栏「我的」→ 「设置」，点完必须认出设置页（沿用 #586）。
 
         不校验的话，点击被吞、或点在了别的面板上，都会当成已经进了设置页：后面几页入口全部
         找不到，整段 0 项又不报错。没落进设置页就退回来重开「我的」再点一次，两次都不成就报当前页。"""
@@ -267,12 +267,12 @@ def _xiaomi_menu_settings(p, g):
         raise RuntimeError(f"浏览器设置页没有打开；停在 {stopped}")
 
     def menu_settings(tries=2):
-        """底栏「菜单」→ 弹窗里的「设置」，点完必须认出设置页（#586）。
+        """底栏「菜单」→ 弹窗里的「设置」，点完必须认出设置页（沿用 #586）。
 
         工具栏右上角也有一个叫「设置」的图标，弹窗还没画出来时按文字点会落到它上面、进首页编辑面板，
         后面几页入口全部找不到，整段 0 项又不报错。所以只点下半屏那一行，且没落进设置页就退回来
         重开菜单再试；两次都不成就报当前页，不在工具栏面板上继续找。
-        底栏没有「菜单」的机型（MIX Flip 2）返回 False，交给 browser_settings() 的「我的」入口（#833）。
+        底栏没有「菜单」的机型（MIX Flip 2）返回 False，交给 browser_settings() 的「我的」入口（沿用 #833）。
         `evidence` 用整页现场报错（沿用 #939），`focus` 只写停在哪；`ids` 按 resource-id 点两个按钮。"""
         style = _style(g, "MENU_STYLE", ("evidence", "focus", "ids"), "evidence")
         if style == "ids":
@@ -289,7 +289,7 @@ def _xiaomi_browser_settings(p, g):
         """先看工具栏，再点底部「我的」；不把资讯正文里的「我的」当导航标签。"""
         before = p.focus()
         if g["gear"](toolbar_only=True):
-            if p.in_settings_page():          # 点完要认出设置页，点击被吞时别在旧页上找入口（#331）
+            if p.in_settings_page():          # 点完要认出设置页，点击被吞时别在旧页上找入口（沿用 #331）
                 return True
             if p.focus() != before:
                 p.back()
@@ -302,11 +302,11 @@ def _xiaomi_browser_settings(p, g):
         return False
 
     def menu_flow():
-        """底栏「菜单」→ 弹窗「设置」；底栏没有「菜单」的机型在「我的」页里找设置（#833）。
+        """底栏「菜单」→ 弹窗「设置」；底栏没有「菜单」的机型在「我的」页里找设置（沿用 #833）。
 
         借这份脚本的机型底栏布局不同：Xiaomi 15 是 主页/视频/AI搜索/菜单/我的，MIX Flip 2 是
         主页/视频/AI搜索/免费小说/我的。两条入口点完都要认出设置页；「我的」那条没进去时报出
-        停在哪一页，不在旧页上继续找「隐私和安全」等子项（#586）。"""
+        停在哪一页，不在旧页上继续找「隐私和安全」等子项（沿用 #586）。"""
         if g["menu_settings"]():
             return
         print("  · 底栏没有「菜单」，改走「我的」→ 设置", flush=True)
@@ -341,7 +341,7 @@ def _xiaomi_browser_start(p, g):
                 p.start("com.android.browser", ".BrowserActivity")
                 return True
             except g["SkipStep"]:
-                raise                 # App 本机没装：放行，不走下面那句按文案判的重试分支（#908）
+                raise                 # App 本机没装：放行，不走下面那句按文案判的重试分支（沿用 #908）
             except RuntimeError as e:
                 if attempt or "离开前台" not in str(e):
                     raise
@@ -471,7 +471,7 @@ def _xiaomi_settings_icon_visible(p, g):
 
 def _xiaomi_theme_settings(p, g):
     def theme_settings(tries=2):
-        """主题「我的」→ 顶部「设置」图标，两次都不成才报错（#912）。
+        """主题「我的」→ 顶部「设置」图标，两次都不成才报错（沿用 #912）。
 
         底栏「我的」只有 content-desc（读作「未选中,我的」），内容区另有「我的点赞 / 我的收藏 /
         我的订单」——`go("我的")` 走包含匹配，会先点内容区那一行；`tab()` 只认屏底带，命中的是底栏。
@@ -490,7 +490,7 @@ def _xiaomi_theme_settings(p, g):
 
 def _xiaomi_direct_settings(p, g):
     def direct_settings():
-        """浏览器设置页能直达就直达（#912）。
+        """浏览器设置页能直达就直达（沿用 #912）。
 
         直达档取自 entries 的浏览器分组，只试直达不试设置搜索：设置搜索会离开浏览器、落到
         系统设置里，拿到的不是这一页。直达不通返回 False，由调用方按「菜单」→「我的」回退。
@@ -1008,7 +1008,7 @@ NAV.update({
 
 
 
-# ---------- OPPO 家族：导航与词汇（#1153、#1154、#1245）----------
+# ---------- OPPO 家族：导航与词汇（沿用 #1153、#1154、#1245）----------
 #
 # ColorOS 脚本共用的导航过程。`SEARCH_TITLES` 仍是脚本侧的东西：PLP120 的搜索页标题名单比
 # 一加两台长，闭包从执行作用域现取、注入版不替它判断。
@@ -1021,7 +1021,7 @@ NAV.update({
 # 调用那一刻报错。
 #
 # `browser_settings` 上文已被 vivo 的菜单版占用，OPPO 这一版是公开 Intent 直达，
-# 另起名字 `browser_settings_direct`，三份脚本的调用点跟着改名（#1153）。PMA110 / PMX110 各自
+# 另起名字 `browser_settings_direct`，三份脚本的调用点跟着改名（沿用 #1153）。PMA110 / PMX110 各自
 # 走设置页的方式结构不同，按跨家族分派表的新 flow 注册（`BROWSER_FLOW`，见文件末尾）。
 #
 # PHK110 / PKX110 / PKH110 的 `off_exact` 与 PLZ110 / PMX110 / PLG110 / PMA110 的 `close_named`
@@ -1093,7 +1093,7 @@ def _oppo_tap_page(p, g):
     def raise_style(text, activity, title=None, scrolls=4, exact=True):
         """`text` 可以给一组等价文案，按顺序试，先命中的点进去；认不到时留下现场再抛。
 
-        软件商店的隐私入口随商店 App 版本叫「隐私」或「隐私授权管理」（#933），单写一支就一定有一段
+        软件商店的隐私入口随商店 App 版本叫「隐私」或「隐私授权管理」（沿用 #933），单写一支就一定有一段
         0 项。认不到时留下停在哪个页面与结构摘要，与 note_miss 同形。"""
         names = (text,) if isinstance(text, str) else tuple(text)
         for name in names:
@@ -1140,7 +1140,7 @@ def _oppo_wait_page(p, g):
     def bool_style(activity, title, timeout=None):
         """等到活动、页标题以及可点击区域连续稳定，避免横向动画期间的越界坐标。
 
-        `title` 可以给一组等价标题：软件商店的隐私页随商店 App 版本叫「隐私」或「隐私授权管理」（#933）。
+        `title` 可以给一组等价标题：软件商店的隐私页随商店 App 版本叫「隐私」或「隐私授权管理」（沿用 #933）。
         没传 timeout 时取脚本常量 `WAIT_PAGE_TIMEOUT`（RMX3700 的录制预算比别家长）。"""
         if timeout is None:
             timeout = g.get("WAIT_PAGE_TIMEOUT", 6)
@@ -1237,7 +1237,7 @@ def _oppo_wait_page(p, g):
 def _oppo_page_activity(p, g):
     """一加旧版的 `page(activity, title)`：确认前台 Activity、标题和开关坐标稳定；出现协议时不操作。
 
-    `title` 可以给一组等价标题：软件商店的隐私页随商店 App 版本叫「隐私」或「隐私授权管理」（#933）。
+    `title` 可以给一组等价标题：软件商店的隐私页随商店 App 版本叫「隐私」或「隐私授权管理」（沿用 #933）。
     与 recipe_kit 注入的 `page()` 同名不同签名，所以注射名是 `page_activity`；脚本把它绑回旧名字，
     段体照旧按 `page(…)` 调用。"""
 
@@ -1273,7 +1273,7 @@ def _oppo_page_activity(p, g):
 
 def _oppo_navigate(p, g):
     def navigate(label, activity, title):
-        """`label` 可以给一组等价入口文案，按顺序试；点到第一个就按落点页面判（#933）。"""
+        """`label` 可以给一组等价入口文案，按顺序试；点到第一个就按落点页面判（沿用 #933）。"""
         labels = (label,) if isinstance(label, str) else tuple(label)
         for name in labels:
             if p.tap(name, exact=True, quiet=len(labels) > 1):
@@ -1293,7 +1293,7 @@ def _oppo_open_settings(p, g):
 
         17.22 的主题商店把这一行读作「设置,有1条新通知」：精确匹配「设置」落空，它又带文字，
         右上角图标的兜底只收无文字节点，同样收不到；游戏中心 14.43.3 反过来是纯齿轮图标。
-        按「文字精确 → 文字包含 → 右上角图标」三级走，点错页先退回来再换下一级（#286）。"""
+        按「文字精确 → 文字包含 → 右上角图标」三级走，点错页先退回来再换下一级（沿用 #286）。"""
         for exact in (True, False):
             if not p.find("设置", exact=exact):
                 continue
@@ -1343,7 +1343,7 @@ def _oppo_search_settings(p, g):
         return g["page"]("com.heytap.quicksearchbox.ui.activity.SearchSettingActivity", "搜索设置")
 
     def wait_style():
-        """先走 scheme，打不开再退回桌面下滑进搜索页、点底部「设置」的旧入口（#165）。"""
+        """先走 scheme，打不开再退回桌面下滑进搜索页、点底部「设置」的旧入口（沿用 #165）。"""
         p.d.shell(g["SEARCH_SETTING"])
         if g["wait_search_settings"]():
             return True
@@ -1354,7 +1354,7 @@ def _oppo_search_settings(p, g):
         return p.tap("设置", exact=True) and g["wait_search_settings"]()
 
     def swipe_style():
-        """先用全局搜索自己的 scheme 落地（同族 PLP120 / PMX110 实测，#796）；打不开再退回桌面下拉。
+        """先用全局搜索自己的 scheme 落地（同族 PLP120 / PMX110 实测，沿用 #796）；打不开再退回桌面下拉。
         SearchSettingActivity 未导出，按组件名 `am start -n` 会被系统拒绝。"""
         p.d.shell(g["SEARCH_SETTING"])
         if g["wait_search_settings"]():
@@ -1417,7 +1417,7 @@ def _oppo_search_settings(p, g):
 
 def _oppo_enter_settings(p, g):
     def enter_settings(*path):
-        """设置 → path 逐跳点开，每一跳都要真的换页：点击被弹窗淡出动画吞掉时重试（#286）。"""
+        """设置 → path 逐跳点开，每一跳都要真的换页：点击被弹窗淡出动画吞掉时重试（沿用 #286）。"""
         p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); g["time"].sleep(1.2)
         for name in path:
             p.enter(name, scrolls=6)
@@ -1426,7 +1426,7 @@ def _oppo_enter_settings(p, g):
 
 def _oppo_enter_privacy(p, g):
     def enter_privacy():
-        """商店的隐私入口随商店 App 版本叫「隐私」或「隐私授权管理」，两个 COS16 机型各是一种（#907）。"""
+        """商店的隐私入口随商店 App 版本叫「隐私」或「隐私授权管理」，两个 COS16 机型各是一种（沿用 #907）。"""
         for name in ("隐私", "隐私授权管理"):
             try:
                 p.enter(name, scrolls=4)
@@ -1471,7 +1471,7 @@ def _oppo_open_search_settings(p, g):
 
 def _oppo_game_settings_direct(p, g):
     def game_settings_direct():
-        """ColorOS 17 的游戏中心设置页认 APP_SETTINGS 动作，直达（PMX110，#650）。
+        """ColorOS 17 的游戏中心设置页认 APP_SETTINGS 动作，直达（PMX110，沿用 #650）。
         旧版本不认这个动作时落不到设置页，返回假交给「我的 → 设置」兜底。"""
         result = p.d.shell("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + g["GAME"])
         if result.exit_code or any(word in result.output for word in
@@ -1491,7 +1491,7 @@ def _oppo_game_settings_direct(p, g):
 def _oppo_game_settings_entry(p, g):
     def game_settings_entry():
         """「我的」页的「设置」：旧版是文字行（可能读作「设置,有1条新通知」），新版是右上角没有
-        文字的齿轮（#292）。文字行点进了别的页就退回来改用齿轮，不把落点押在包含匹配上。"""
+        文字的齿轮（沿用 #292）。文字行点进了别的页就退回来改用齿轮，不把落点押在包含匹配上。"""
         where = p.focus()
         try:
             p.enter("设置", scrolls=0)
@@ -1605,7 +1605,7 @@ def _oppo_system_settings(p, g):
 def _oppo_open_switch_page(p, g):
     def open_switch_page(name, titles, package):
         """点开入口 → 确认落在目标页 → 读出开关；任一步不通就退回原页并返回空，把兜底留给调用方。
-        `p.enter` 只认「页面变了」，点进别的页也算换页，所以落点必须再校验一次（#286）。
+        `p.enter` 只认「页面变了」，点进别的页也算换页，所以落点必须再校验一次（沿用 #286）。
         断线、锁屏与按约定跳过照常上抛，交给段包装收场。"""
         from fast import ScreenLocked
         where = p.focus()
@@ -1656,7 +1656,7 @@ def _oppo_menu_state(p, g):
 
 def _oppo_ad_id_page(p, g):
     def ad_id_page():
-        """到「设备标识与广告」页：先用设置搜索（ColorOS 能直接打开搜索页，#650，实测 4 秒），
+        """到「设备标识与广告」页：先用设置搜索（ColorOS 能直接打开搜索页，沿用 #650，实测 4 秒），
         搜不到再从设置首页一层层找。"""
         if not p.setting("广告跟踪", "限制广告跟踪", path="隐私与安全 > 隐私 > 设备标识与广告"):
             g["system_settings"]()
@@ -1672,7 +1672,7 @@ def _oppo_tap_by_scroll(p, g):
         """在长列表里自己往下翻着找并点击。
 
         p.tap 内部会先回到页顶；小布建议页（小布建议 Activity）回顶时会判定「离开了当前页」并抛错，
-        所以那一类页面必须用这个手动翻找的写法。`text` 可以给一组等价文案，按顺序试（#933）。
+        所以那一类页面必须用这个手动翻找的写法。`text` 可以给一组等价文案，按顺序试（沿用 #933）。
         """
         names = (text,) if isinstance(text, str) else tuple(text)
         for _ in range(max_scrolls):

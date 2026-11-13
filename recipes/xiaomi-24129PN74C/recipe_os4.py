@@ -1,4 +1,4 @@
-# HyperOS 4 变体（PR #298）：同型号的 HyperOS 3 路径在 recipe.py（PR #312）。系统版本对上 OS4.0 时由 run.recipe_for 选这份。小米 HyperOS 4 机型脚本：Xiaomi 15（24129PN74C）
+# HyperOS 4 变体（沿用 PR #298）：同型号的 HyperOS 3 路径在 recipe.py（沿用 PR #312）。系统版本对上 OS4.0 时由 run.recipe_for 选这份。小米 HyperOS 4 机型脚本：Xiaomi 15（24129PN74C）
 from recipe_kit import step
 # 录制：2026-10-29，系统 OS4.0.0.22.XOCCNXM（CP2A.260605.016），九段实测
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑

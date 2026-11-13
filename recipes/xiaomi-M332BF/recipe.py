@@ -1,4 +1,4 @@
-# 小米 HyperOS 4 机型脚本：REDMI K90 Ultra（M332BF）；路径来源：社区报告者 @Sin1ery 2026-10-31 实测（HyperOS OS4.0.4.0.XHPCNXM，Android 17，Issue #374）。
+# 小米 HyperOS 4 机型脚本：REDMI K90 Ultra（M332BF）；路径来源：社区报告者 @Sin1ery 2026-10-31 实测（HyperOS OS4.0.4.0.XHPCNXM，Android 17，沿用 Issue #374）。
 from recipe_kit import step
 # 脚本按那份报告里的四处差异重写，本仓库尚未在这台机器上复跑，合并后等报告者复测。
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑

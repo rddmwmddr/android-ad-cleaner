@@ -1,4 +1,4 @@
-# 小米 HyperOS 4 机型脚本：Xiaomi 18 Pro Max（M154FF）、Xiaomi 18 Fold（2608BPX34C）、REDMI K90（2510DRK44C）；路径来源：18 Pro Max 2026-10-22 实测（OS4.0.24）；18 Fold 2026-10-24 社区实测（Issue #2，CP2A.260605.016）。
+# 小米 HyperOS 4 机型脚本：Xiaomi 18 Pro Max（M154FF）、Xiaomi 18 Fold（2608BPX34C）、REDMI K90（2510DRK44C）；路径来源：18 Pro Max 2026-10-22 实测（OS4.0.24）；18 Fold 2026-10-24 社区实测（沿用 Issue #2，CP2A.260605.016）。
 from recipe_kit import step
 # 三台系统底包相同（CP2A.260605.016），App 版本不同时页面不同：每一步都兼容新旧两种入口，找不到就跳过。
 # K90（OS4.0.5.0.XPKCNXM）按 2026-11-10 社区实测登记（Issue #929）：借这份脚本跑通九段中的八段，

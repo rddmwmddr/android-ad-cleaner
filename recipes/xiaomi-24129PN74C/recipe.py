@@ -31,7 +31,7 @@ from entries import ENTRIES, THEME_DEAD_ENDS, reach
 # 回读确认数由引擎经 rt 记录
 
 # 本机的齿轮入口点完要认出设置页（日历的齿轮开的是 PopupWindow，沿用 #407）；
-# 浏览器入口是底栏「菜单」→ 弹窗「设置」，回退到「我的」+齿轮（#833）。两处走法由家族库按这两个常量选。
+# 浏览器入口是底栏「菜单」→ 弹窗「设置」，回退到「我的」+齿轮（沿用 #833）。两处走法由家族库按这两个常量选。
 GEAR_STYLE = "checked"
 BROWSER_FLOW = "menu"
 

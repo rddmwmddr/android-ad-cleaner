@@ -4,7 +4,7 @@ from recipe_kit import step
 BUILD = "PJA110_14.0.0.812"
 # 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
 CLOSE_NAMED_STYLE = "basic"
-# 旧版应用切到「我的」后首下设置点击会被动画吞掉：走「我的 → 设置」并按前台回读（#286）。
+# 旧版应用切到「我的」后首下设置点击会被动画吞掉：走「我的 → 设置」并按前台回读（沿用 #286）。
 APP_SETTINGS_STYLE = "launch"
 import time
 # 回读确认数由引擎经 rt 记录

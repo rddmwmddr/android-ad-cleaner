@@ -275,7 +275,7 @@ def scan(recipes_dir, injected=None):
 
     `injected` 是段体注入面的 {名字: 源码}，缺省取 `recipe_source.step_sources()`。脚本导入了哪个
     段体名，就把那份实现也扫一遍：词条归调用它的每一个机型，出处记调用点，未解析与整页同样算在
-    这份脚本头上（#1209）。归属跟脚本的 import 走、只解析段体那一张表（#1243）：导航助手的实现
+    这份脚本头上（沿用 #1209）。归属跟脚本的 import 走、只解析段体那一张表（沿用 #1243）：导航助手的实现
     不扫，词住在实现里的只有段体。空表时与加接线之前逐字相同。"""
     out = Scan()
     surface = {recipe_source.STEPS_MODULE: recipe_source.step_sources() if injected is None else injected}
