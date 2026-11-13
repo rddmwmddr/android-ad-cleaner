@@ -125,19 +125,6 @@ def step_theme(p, rt):
     p.back(2)
 
 
-def step_video(p, rt):
-    # 本机 com.heytap.yoli 只有本地视频播放器（LocalVideosListActivity），没有在线内容与「我的」页。
-    p.start(VIDEO)
-    if not maybe("我的"):
-        skip("本机视频 App 只有本地视频播放器，没有在线内容与「我的」页")
-    if not p.tap("设置", exact=True, scrolls=0):
-        raise RuntimeError("视频「我的」页没找到「设置」")
-    if p.tap("个性化内容管理", exact=True):
-        p.off(only=["个性化推荐"], page="视频·个性化内容管理")
-        p.back()
-    p.back(2)
-
-
 def step_game_center(p, rt):
     # 本机未安装：p.start 抛 MissingPackage，段包装按跳过记账。装上之后走同族旧版路径。
     p.start(GAME)

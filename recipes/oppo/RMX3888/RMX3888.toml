@@ -79,7 +79,14 @@ code = "step_theme"
 
 [[segment]]
 name = "视频"
-code = "step_video"
+ops = [
+  # 本机 com.heytap.yoli 只有本地视频播放器（LocalVideosListActivity），没有在线内容与「我的」页。
+  { kind = "start", pkg = "com.heytap.yoli" },
+  { kind = "if_entry", text = "我的", else_ops = [{ kind = "skip", text = "本机视频 App 只有本地视频播放器，没有在线内容与「我的」页" }] },
+  { kind = "require_tap", text = "设置", exact = true, scrolls = 0, miss_print = "视频「我的」页没找到「设置」" },
+  { kind = "if_tap", text = "个性化内容管理", exact = true, ops = [{ kind = "off", only = ["个性化推荐"], page = "视频·个性化内容管理" }, { kind = "back" }] },
+  { kind = "back", n = 2 },
+]
 
 [[segment]]
 name = "游戏中心"
