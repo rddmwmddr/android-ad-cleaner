@@ -63,7 +63,7 @@
 - `Job` 多两个字段：`plan`（这一轮跑的计划）与 `failed_steps`（本步骤里引擎报的段名，每步开始时清空），
   另加三个可注入的起点（`base_results` / `base_lines` / `base_payloads`，见 ADR-0010 的增补段）。
   结果行每行都多一个 `kind`；真正跑过的行还多一个 `failed_steps`，跳过与停止的行只有 `kind`
-  （消费者要用 `r.get("failed_steps") or []` 这种取法）。`tests/compare_api.py` 的对拍输出会因此多这两个键，属预期。
+  （消费者要用 `r.get("failed_steps") or []` 这种取法）。`tests/compare_api.py` 的对拍输出会因此多这两个键，属预期。（2026-11-13 修订：该驱动已退役，见 [ADR-0011](0011-api-splitting.md) 的增补段。）
 - `Dispatcher.start()` 多三个 `base_*` 参数与 `plan_tasks()` 的 `finish` 键；不传时行为与改动前一致。
 - `Api.retry()` 是新入口，手机版经 `main.call()` 的通用 `getattr` 直接可调，不需要在 `EXPORTS` 里登记。
 - 重试状态只活在当前会话的结果页里：换手机、回检测页或重启 App 之后不再提供上一轮的重试入口（`Job` 换了）。
