@@ -1,7 +1,6 @@
 # OPPO Find X10 Pro Max（PMX110，ColorOS 17）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
-# 共享库的 ad_id_page / row / menu_state / more_menu / close_all_listed / app_settings / browser_settings /
-# read_switches / close_named 与 require / skip 由装载器注入执行作用域。三段留在这里：广告跟踪要用
-# 「全部关闭」菜单整表关并恢复显示方式，浏览器与商店按可选入口分岔挑名单。其余六段是线性数据。
+# 剩广告跟踪（菜单「全部关闭」整表关 + 恢复显示方式）与软件商店（读回名单再整表关）两段在这里；
+# 其余七段是线性数据（浏览器也已落数据）。
 from collections import namedtuple
 
 import adb_link

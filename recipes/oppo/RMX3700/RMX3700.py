@@ -1,7 +1,6 @@
 # realme GT Neo5 SE（RMX3700，ColorOS 16）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
-# 共享库的 settings_page / tap_by_scroll / wait_page / open_search_setting / open_search_sub / close_rows
-# 与 skip / skip_in_safe_mode / p.note_miss 由装载器注入执行作用域。六段都留在这里：每段都按
-# wait_page 的落点逐跳判、失败即 return False，本机路径与别家不同。
+# 只剩软件商店在这里：它是四层嵌套的条件树（tap_by_scroll / wait_page / store_privacy 逐层判），
+# 按 docs/04「多层嵌套的整段交给例外函数」留下。其余五段（落点断言 + 一层失败退出）已落数据。
 import time
 
 from typing import TYPE_CHECKING

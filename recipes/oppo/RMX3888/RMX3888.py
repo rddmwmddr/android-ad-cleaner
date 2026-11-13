@@ -1,6 +1,6 @@
 # realme 真我 GT5 Pro（RMX3888，ColorOS 15）的本机例外函数（catalog 的 `code=`，影随同名 `.toml`）。
-# 共享库的 settings_page / has_row / store_privacy / page / maybe 与 skip / skip_in_safe_mode 由装载器
-# 注入执行作用域。九段都留在这里：每段都按 getprop / 页面内容 / 入口是否可点分岔，本机路径与同族不同。
+# 剩五段在这里：负一屏（滑动状态机）、软件商店（多层嵌套 + 无 `require_tap`）、主题（try/except 只认
+# 「无法打开」）、视频（`require(p.tap)` 的报错出口）、游戏中心（`tap_icon` + 复合条件）。其余四段已落数据。
 import time
 
 import adb_link

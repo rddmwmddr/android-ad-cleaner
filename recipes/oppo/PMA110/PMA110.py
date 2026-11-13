@@ -1,7 +1,6 @@
 # OPPO Find X9 Ultra（PMA110，ColorOS 17）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
-# 共享库的 app_settings / system_settings / browser_settings / open_page / tap_page / close_named /
-# read_switches / hide_carousel 与 require / skip 由装载器注入执行作用域。八段都留在这里：长 Activity
-# 前缀、逐个开关页的落点判据、读回名单再整表关、重进一次再回读都是本机知识，数据里写不下。
+# 剩三段在这里：广告跟踪（读回名单再整表关 + 回读核对）、主题商店（`reopen=` 回调重进）、
+# 小布建议（`require(p.tap(...))` 的报错出口）。其余五段（长 Activity 前缀的串联调用）已落数据。
 import time
 
 # bounds 只给注入面的 carousel_choices 取（它按执行作用域解析这个名字）
