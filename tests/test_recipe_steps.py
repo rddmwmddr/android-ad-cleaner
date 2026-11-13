@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 import recipe_kit  # noqa: E402
 import recipe_nav  # noqa: E402
 import recipe_steps  # noqa: E402
+import recipe_strategies  # noqa: E402
 from fixtures import normalize, phone_mock  # noqa: E402
 
 RECIPES = tuple(sorted((ROOT / "recipes").rglob("recipe*.py")))
@@ -108,9 +109,13 @@ class WiringTests(unittest.TestCase):
             "global_search_ads", "weather_service",
         }, set(scope))
 
-    def test_step_names_do_not_collide_with_navigation_names(self):
-        """两张注册表写同一个执行作用域、`injected_sources()` 又按名字合并：同名会静默覆盖。"""
+    def test_registry_names_do_not_collide(self):
+        """三张注册表（`recipe_nav` / `recipe_strategies` / `recipe_steps`）由 `preamble()` 依次
+        `install()` 写同一个执行作用域，同名会在后装的那一步静默覆盖前一张；事实层已按模块分开给
+        （#1243），运行时仍只有这一份作用域，所以三对两两都要空。"""
         self.assertEqual(set(recipe_steps.STEPS) & set(recipe_nav.NAV), set())
+        self.assertEqual(set(recipe_steps.STEPS) & set(recipe_strategies.STRATEGIES), set())
+        self.assertEqual(set(recipe_nav.NAV) & set(recipe_strategies.STRATEGIES), set())
 
     def test_the_steps_module_does_not_import_the_preamble(self):
         tree = ast.parse((ROOT / "tool" / "recipe_steps.py").read_text(encoding="utf-8"))
