@@ -438,6 +438,11 @@ class InjectedStepTest(unittest.TestCase):
 @step("下载管理")
 def _():
     downloads()
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from recipe_steps import downloads
 ''', '''\
 def downloads(p, g):
     def _():
@@ -458,6 +463,11 @@ HOT = ["热点资讯", "热搜榜"]
 @step("负一屏")
 def _():
     downloads()
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from recipe_steps import downloads
 ''', '''\
 def downloads(p, g):
     def _():
@@ -472,6 +482,11 @@ def downloads(p, g):
 @step("下载管理")
 def _():
     downloads()
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from recipe_steps import downloads
 ''', '''\
 def downloads(p, g):
     def _():
@@ -484,7 +499,9 @@ def downloads(p, g):
         self.assertEqual(found.whole_page, 1)
 
     def test_every_caller_is_credited(self):
-        src = '@step("下载管理")\ndef _():\n    downloads()\n'
+        src = ('@step("下载管理")\ndef _():\n    downloads()\n\n'
+               'from typing import TYPE_CHECKING\n\nif TYPE_CHECKING:\n'
+               '    from recipe_steps import downloads\n')
         impl = ('def downloads(p, g):\n    def _():\n'
                 '        p.off(only=["广告推荐"], page="下载管理·设置")\n    return _\n')
         tmp = recipes(**{"xiaomi-A1": src, "redmi-B2": src})
