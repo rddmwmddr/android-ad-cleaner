@@ -9,6 +9,10 @@ from contextlib import contextmanager
 import time
 
 from fast import CONFIRM, Phone, bounds, want_state
+# 家族库按这些常量选走法（#1246），缺省档与实现见 tool/recipe_nav.py。
+TAP_STYLE = "honor"
+APP_SETTINGS_STYLE = "honor"
+BROWSER_FLOW = "honor_plain"
 # 分段结果由引擎经 rt 记录
 # 回读确认数由引擎经 rt 记录
 CHANGES = {
@@ -52,10 +56,6 @@ def settle_page(package, *markers, timeout=5):
         previous = signature
         time.sleep(.25)
     raise RuntimeError("未确认目标设置页：" + "、".join(markers))
-
-
-def tap(text, scrolls=6):
-    require(p.tap(text, exact=True, scrolls=scrolls), "未找到入口「" + text + "」")
 
 
 @contextmanager
@@ -174,25 +174,6 @@ def close_named(names, title, package, marker, max_screens=6, drawn=False):
         print(f"  · {title}：已回读 {len(wanted)} 项", flush=True)
     finally:
         p.switches = native
-
-
-def app_settings(package, *markers):
-    p.start(package)
-    require(p.go("我的", "设置"), "未找到应用设置入口")
-    tap("设置", scrolls=0)
-    settle_page(package, *markers)
-
-
-def browser_settings():
-    package = "com.honor.browser"
-    if p.focus().split("/", 1)[0] == package and {"模式选择", "隐私管理"} <= labels():
-        return package
-    p.start(package)
-    # 本机已验证「更多 → 设置」；经典首页的未知图标位置不猜。
-    tap("更多", scrolls=0)
-    tap("设置", scrolls=0)
-    settle_page(package, "模式选择", "隐私管理")
-    return package
 
 
 def radio(root, text):
@@ -393,3 +374,4 @@ def tail():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import p, require, require_switches, rt, skip, skip_in_safe_mode
+    from recipe_nav import app_settings, browser_settings, tap

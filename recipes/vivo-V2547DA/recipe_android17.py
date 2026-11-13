@@ -9,41 +9,11 @@ from recipe_kit import step
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 BUILD = "PD2547D_A_17.1.10.2"
 MODELS = ["V2547DA"]
+# 家族库按这个常量选走法（#1246），缺省档与实现见 tool/recipe_nav.py。
+GEAR_STYLE = "vivo_landing"
 import time
 
 import adb_link
-
-
-def gear():
-    """vivo App 的设置多是右上角齿轮图标，没有文字。
-
-    判据用引擎的 icon_hit：旧实现按 content-desc / resource-id 子串匹配，id 里带 setting 的
-    其它入口（商店的 securitySettingSwitchLayout 之类）会被当成齿轮先点掉（#530）。
-    点完要认出设置页才算命中：点不动的图标页面没换，接着试下一个候选；点进了别的页先退回来
-    再试；都点不进去时回退到按文字点，回退也没进设置页才算失败（#575）。"""
-    from fast import bounds, icon_hit
-
-    def landed(focus0):
-        if p.focus() == focus0:
-            return False                    # 点击被吞：页面没换，不能当成进了设置页
-        if p.in_settings_page():
-            return True
-        # Activity 名不含 Setting 的 App：只认顶上标题带那一处「设置」——齿轮自己也读作「设置」
-        at = p.find("设置", exact=True)
-        return bool(at) and at[1] < p.H * 0.25
-
-    for n in p.tree().iter("node"):
-        l, t, r, b = bounds(n)
-        icon = "ImageView" in n.get("class", "") and r - l < p.W * 0.25 and b - t < p.H * 0.15
-        if icon_hit(n) and (n.get("clickable") == "true" or icon) and p.on_screen(n):
-            focus0 = p.focus()
-            p.click((l + r) // 2, (t + b) // 2); p.await_page(1.5)
-            if landed(focus0):
-                return True
-            if p.focus() != focus0:         # 点进了别的页：退回来，别用旧树的坐标在新页上接着点
-                p.back(); time.sleep(0.6)
-    focus0 = p.focus()
-    return p.tap("设置", exact=True, scrolls=0) and landed(focus0)
 
 
 @step("系统广告")
@@ -134,5 +104,5 @@ def _():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import SkipStep, maybe, p
-    from recipe_nav import off_unnamed, opened, settings_home
+    from recipe_nav import gear, off_unnamed, opened, settings_home
     from recipe_steps import browser_recommendations, i_manager_ads, weather_service

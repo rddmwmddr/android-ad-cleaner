@@ -6,55 +6,10 @@ from recipe_kit import step
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 BUILD = "PD2309E_A_16"
 MODELS = ["V2309A"]
+# 家族库按这些常量选走法（#1246），缺省档与实现见 tool/recipe_nav.py。
+GEAR_TOP_STYLE = "vivo"
+TAP_ROW_STYLE = "row_span"
 import time
-
-
-def gear_top():
-    """「我的」页右上角齿轮。
-
-    这台是无文字 Button，只有 content-desc="设置"。判据用引擎的 icon_hit（#530 / ADR-0013）：
-    它只认正好是「设置」的描述 / 正文，同页那条「去功能设置里重新开启」的说明行不会被点到，
-    所以不用再按位置收一次。齿轮名字不是恰好「设置」（比如「更多设置」）的机型会在这里漏掉。
-    """
-    from fast import bounds, icon_hit
-    for n in p.tree().iter("node"):
-        if n.get("clickable") != "true" or not p.on_screen(n):
-            continue
-        if not icon_hit(n):
-            continue
-        l, t, r, b = bounds(n)
-        if r > l and b > t:
-            p.click((l + r) // 2, (t + b) // 2); time.sleep(1.0)
-            return True
-    return False
-
-
-def tap_row(title, scrolls=4):
-    """点标题所在的可点行，落点在行宽 40% 处。
-
-    商店设置页点左侧标题文字不跳转（V1986A 同此），要点行中间（#530）。
-    """
-    from fast import bounds
-    for _ in range(scrolls + 1):
-        root = p.tree()
-        parent = {c: par for par in root.iter("node") for c in par}
-        for n in root.iter("node"):
-            if (n.get("text") or "").strip() != title or not p.on_screen(n):
-                continue
-            row = n
-            for _ in range(4):
-                up = parent.get(row)
-                if up is None or up.get("clickable") != "true":
-                    break
-                row = up
-            l, t, r, b = bounds(row)
-            if r <= l or b <= t:
-                l, t, r, b = bounds(n)
-            p.click(int(l + (r - l) * 0.4), (t + b) // 2); time.sleep(1.0)
-            return True
-        if not p.scroll_more():
-            break
-    return False
 
 
 @step("系统广告")
@@ -120,4 +75,5 @@ def _():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import maybe, p, require
+    from recipe_nav import gear_top, tap_row
     from recipe_steps import browser_recommendations, global_search_ads, i_manager_ads, lock_screen_magazine, system_ads_branch
