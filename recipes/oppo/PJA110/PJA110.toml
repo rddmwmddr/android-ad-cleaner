@@ -1,0 +1,44 @@
+# 一加 Ace 2 Pro（PJA110，ColorOS 14.0.0.812 / Android 14）的页面树（catalog，#1264）。
+# 路径来自 2026-10-25 实测：仅覆盖下拉搜索、商店、浏览器；本机联网后验证 9 项，失败会回读并返回非零。
+# 「下拉搜索」的手势坐标算不出来（按 p.W / p.H 现算），走 code= 例外函数；其余三段是线性数据。
+model = "PJA110"
+models = ["PJA110"]
+build = "PJA110_14.0.0.812"
+tail = "tail"
+
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。这一版两档都不是缺省档：
+# 关开关走 basic（标题在开关行外），设置页走 launch（切「我的」后首下点击会被动画吞掉，沿用 #286）。
+[const]
+CLOSE_NAMED_STYLE = "basic"
+APP_SETTINGS_STYLE = "launch"
+START_ACTIVITIES = { "com.heytap.browser" = "com.android.browser.BrowserActivity" }
+
+[[segment]]
+name = "下拉搜索"
+code = "step_search"
+
+[[segment]]
+name = "软件商店"
+ops = [
+  { kind = "lib", name = "app_settings", args = ["com.heytap.market", "com.heytap.market.mine.ui.SettingActivity"] },
+  { kind = "lib", name = "tap", args = ["隐私"] },
+  { kind = "lib", name = "tap", args = ["个性化推荐"] },
+  { kind = "lib", name = "close_named", args = [["个性化推荐"], "商店·个性化推荐"] },
+]
+
+[[segment]]
+name = "商店推广位"
+ops = [
+  { kind = "if_focus", match = "equals", text = "com.heytap.market/com.heytap.market.mine.PersonalRecommendActivity", ops = [{ kind = "back", n = 2 }] },
+  { kind = "lib", name = "app_settings", args = ["com.heytap.market", "com.heytap.market.mine.ui.SettingActivity"] },
+  { kind = "lib", name = "tap", args = ["服务管理"] },
+  { kind = "lib", name = "close_named", args = [["首页：悬浮活动图标", "首页：活动弹窗", "首页：顶部轮播卡片", "底部活动专区", "游戏详情页：游戏活动卡片", "软件专区：福利"], "商店·推广位"], kwargs = { max_screens = 6 } },
+]
+
+[[segment]]
+name = "浏览器"
+ops = [
+  { kind = "lib", name = "app_settings", args = ["com.heytap.browser", "com.heytap.browser.settings.component.BrowserPreferencesPage"] },
+  { kind = "lib", name = "tap", args = ["隐私"] },
+  { kind = "lib", name = "close_named", args = [["个性化推荐"], "浏览器·隐私"] },
+]

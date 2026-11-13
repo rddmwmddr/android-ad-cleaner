@@ -1,0 +1,41 @@
+# 一加 Ace 2 Pro（PJA110），ColorOS 16 / Android 16 的页面树（catalog，#1264）。路径取自同代系统在
+# Ace 2 与 OPPO 机型上已实测的公开入口，PJA110_16.0.5.1201 上尚未整段验证。
+# 仅覆盖下拉搜索、商店、浏览器；广告跟踪、负一屏、主题、视频、游戏中心不在本脚本内。
+model = "PJA110"
+models = ["PJA110"]
+build = "PJA110_16.0.5.1201"
+tail = "tail"
+
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py：设置页走公开 Intent（两个 App 都认），
+# 关开关走 vanish（关掉的项连同整行一起消失）。
+[const]
+OPEN_SETTINGS_STYLE = "shell"
+CLOSE_NAMED_STYLE = "vanish"
+SETTINGS_INTENT = "am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p {}"
+SETTINGS_REFUSED = ["Error", "Exception", "Permission Denial"]
+
+[[segment]]
+name = "下拉搜索"
+code = "step_search"
+
+[[segment]]
+name = "软件商店"
+ops = [
+  { kind = "lib", name = "open_settings", args = ["com.heytap.market", "com.heytap.market.mine.cn.setting.ui.SettingActivity", "应用与服务"] },
+  { kind = "lib", name = "enter_privacy" },
+  { kind = "enter", text = "个性化推荐", scrolls = 4 },
+  { kind = "lib", name = "close_named", args = [["个性化推荐"], "商店·个性化推荐"] },
+]
+
+[[segment]]
+name = "商店推广位"
+code = "step_store_promotions"
+
+[[segment]]
+name = "浏览器"
+ops = [
+  { kind = "lib", name = "open_settings", args = ["com.heytap.browser", "com.heytap.browser.settings.component.BrowserPreferencesPage", "浏览器"] },
+  { kind = "enter", text = "隐私", scrolls = 4 },
+  { kind = "enter", text = "个性化管理", scrolls = 4 },
+  { kind = "lib", name = "close_named", args = [["个性化优惠推荐", "个性化广告推荐"], "浏览器·个性化管理"] },
+]
