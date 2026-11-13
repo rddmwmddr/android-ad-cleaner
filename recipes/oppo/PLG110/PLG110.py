@@ -1,35 +1,25 @@
-# OPPO Find X9 Pro（PLG110），ColorOS 16.0.10.501(CN01) / Android 16。2026-11-01 真机逐页记录；仅收录本机已识别的开关，不包含包操作和通知渠道。
-from recipe_kit import step
-# 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，未复测（#933）。
-BUILD = "PLG110_16.0.10"
-# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
-WAIT_PAGE_STYLE = "raise"
-TAP_PAGE_STYLE = "raise"
-READ_SWITCHES_STYLE = "expect"
-OPEN_PAGE_STYLE = "shell"
-APP_SETTINGS_STYLE = "shell"
-SYSTEM_SETTINGS_STYLE = "shell"
-MODELS = ["PLG110"]
-
-import re
+# OPPO Find X9 Pro（PLG110，ColorOS 16）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
+# 共享库的 system_settings / app_settings / tap_page / read_switches 与 require / skip 由装载器注入。
+# 四段留在代码里：广告跟踪与软件商店按本页实际读到的开关收窄名单并回读，游戏中心与小布建议
+# 要清弹窗、按相邻两行的行状态分岔。
 import time
 
-# bounds 只给注入面的 carousel_choices 取（它按执行作用域解析这个名字）
-from fast import ScreenLocked, bounds
-# 分段结果由引擎经 rt 记录
-# 回读确认数由引擎经 rt 记录
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import VERIFIED_SWITCHES, p, require, rt, skip, skip_in_safe_mode
+    from recipe_nav import app_settings, system_settings, tap_page
+    from recipe_strategies import close_named_expect
 
-SETTINGS = "com.android.settings/com.oplus.settings.feature.homepage.OplusSettingsHomepageActivity"
+BUILD = "PLG110_16.0.10"
+MODELS = ["PLG110"]
+
 OAID = "com.android.settings/com.oplus.settings.feature.notification.oaid.OAIDActivity"
-BROWSER = "com.heytap.browser/com.heytap.browser.settings.component."
-SEARCH = "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity."
 MARKET = "com.heytap.market/com.heytap.market.mine.cn.setting.ui."
-THEME = "com.oplus.themestore"
-VIDEO = "com.heytap.yoli/com.heytap.yoli.mine.setting."
 ADVICE = "com.oplus.pantanal.ums/com.oplus.advice.settings.ui."
-ASSISTANT = "com.coloros.assistantscreen/com.oplus.assistantscreen."
 GAMECENTER = "com.nearme.gamecenter/com.nearme.gamecenter.me.ui."
-SEARCH_SETTINGS = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"
+# 共享库按名字取这两个：system_settings 的 shell 档要设置页的包名+页面，负一屏那两段要设置页前缀。
+SETTINGS = "com.android.settings/com.oplus.settings.feature.homepage.OplusSettingsHomepageActivity"
+ASSISTANT = "com.coloros.assistantscreen/com.oplus.assistantscreen."
 
 # 软件商店服务管理中明确的推广入口
 STORE_PROMOTIONS = [
@@ -47,11 +37,12 @@ STORE_PROMOTIONS = [
     "手机管家：应用推荐", "文件管理：应用推荐", "福利专区",
 ]
 
+# 各段的调用点按旧名字写，实现住在 recipe_strategies 的 `close_named_expect`（读到目标就收手，
+# PLG110 的录制口径），这里绑回旧名字（#1253）。
+close_named = close_named_expect
 
-# ==================== 各段具体实现 ====================
 
-@step("广告跟踪")
-def _():
+def step_ad_tracking(p, rt):
     global VERIFIED_SWITCHES
     skip_in_safe_mode()
     model = p.d.shell("getprop ro.product.model").output.strip()
@@ -73,8 +64,7 @@ def _():
     print(f"  · 广告跟踪：回读确认 {len(before)} 个应用关闭", flush=True)
 
 
-@step("软件商店")
-def _():
+def step_store(p, rt):
     global VERIFIED_SWITCHES
     print("  将关闭个性化推荐与推广服务；保留下载更新与应用安全。", flush=True)
     app_settings("com.heytap.market", MARKET + "SettingActivity", "软件商店")
@@ -98,71 +88,7 @@ def _():
     print("  · 软件商店·服务管理：处理完成，核心服务已保留", flush=True)
 
 
-@step("浏览器")
-def _():
-    print("  将关闭开屏广告、资讯列表广告、个性化搜索与广告推荐；不改默认引擎与主页布局。", flush=True)
-    app_settings("com.heytap.browser", BROWSER + "BrowserPreferencesPage", "浏览器")
-    activity = BROWSER + "BrowserPreferenceActivity"
-    tap_page("隐私", activity, scrolls=4)
-    # 广告管理
-    tap_page("广告管理", activity, scrolls=2)
-    close_named(["开屏广告", "资讯列表广告"], "浏览器·广告管理", activity, "广告管理", 2)
-    p.back()
-    wait_page(activity, "隐私")
-    # 个性化管理
-    tap_page("个性化管理", activity, scrolls=2)
-    close_named(["个性化搜索推荐", "个性化广告推荐"], "浏览器·个性化管理", activity, "个性化管理", 2)
-
-
-@step("下拉搜索")
-def _():
-    print("  将关闭搜索范围中的商业推荐、搜索框提示词、隐私中的个性化推荐。", flush=True)
-    open_page(SEARCH_SETTINGS, SEARCH + "SearchSettingActivity", "搜索设置")
-    activity_source = SEARCH + "SearchSourceActivity"
-    tap_page("搜索范围", activity_source, scrolls=0)
-    close_named(["榜单", "小说", "购物", "个性化推荐", "精选资讯"], "下拉搜索·搜索范围",
-                activity_source, "搜索范围", 6, dependent=["全部"])
-    p.back()
-    activity_func = SEARCH + "SearchFunctionManagerActivity"
-    tap_page("功能管理", activity_func, scrolls=2)
-    close_named(["搜索框提示词"], "下拉搜索·功能管理", activity_func, "功能管理", 2)
-    p.back()
-    activity_priv = SEARCH + "PrivacySettingsActivity"
-    tap_page("隐私", activity_priv, scrolls=4)
-    close_named(["个性化推荐"], "下拉搜索·隐私", activity_priv, "隐私", 2)
-
-
-@step("负一屏")
-def _():
-    print("  将关闭热点资讯、搜索框提示词，轮播改为不显示；保留功能卡片和推荐服务总开关。", flush=True)
-    assistant_settings()
-    activity = ASSISTANT + "setting.AssistantScreenSettingActivity"
-    close_named(["搜索框提示词"], "负一屏·搜索框提示词", activity, "设置", 2)
-    # 轮播推荐单选项
-    tap_page("推荐服务", ASSISTANT + "setting.recommendservice.RecommendServiceSettingActivity", scrolls=0)
-    hide_carousel()
-    p.back()
-    wait_page(activity, "设置")
-    # 隐私中的热点资讯
-    tap_page("隐私", ASSISTANT + "setting.activity.PrivacyActivity", scrolls=4)
-    activity_priv = ASSISTANT + "setting.activity.PersonalRecommendManageActivity"
-    tap_page("个性化推荐", activity_priv, scrolls=0)
-    close_named(["热点资讯"], "负一屏·个性化推荐", activity_priv, "个性化推荐", 2)
-
-
-@step("视频")
-def _():
-    print("  将关闭 OPPO 视频个性化推荐与广告推荐；保留在线播放和下载设置。", flush=True)
-    p.start("com.heytap.yoli")
-    p.go("我的", "设置")
-    tap_page("设置", VIDEO + "SettingActivity", scrolls=0, exact=False)
-    activity = VIDEO + "PersonalizedContentManageActivity"
-    tap_page("个性化管理", activity, scrolls=3)
-    close_named(["个性化广告推荐", "个性化内容推荐"], "OPPO视频·个性化管理", activity, "个性化管理", 2)
-
-
-@step("游戏中心")
-def _():
+def step_game_center(p, rt):
     print("  将关闭游戏中心个性化推荐；保留游戏助手与时长同步。", flush=True)
     p.start("com.nearme.gamecenter")
     time.sleep(1.2)
@@ -188,8 +114,7 @@ def _():
     close_named(["个性化推荐"], "游戏中心·个性化", activity, "个性化推荐管理", 2)
 
 
-@step("小布建议")
-def _():
+def step_advice(p, rt):
     print("  核对并关闭小布建议内容资讯服务；保留出行、生活等实用卡片。", flush=True)
     system_settings()
     require(p.tap("OPPO AI", exact=True, scrolls=6), "未找到 OPPO AI")
@@ -209,27 +134,6 @@ def _():
         p.back()
 
 
-@step("主题商店")
-def _():
-    print("  检查主题商店服务模式；基础服务模式无广告，不代为同意完整模式协议。", flush=True)
-    p.d.shell("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.oplus.themestore")
-    time.sleep(1)
-    if "BasicEntranceActivity" in p.focus():
-        print("  · 主题商店处于「基础服务」模式，本身不含广告，保持不变", flush=True)
-        return
-    print("  · 当前未处于基础服务模式，跳过自动处理以避免误点协议", flush=True)
-
-
 def tail():
     print(f"\n已回读确认 {rt.verified} 项；分段结果：{rt.results}", flush=True)
     print("通知渠道与组件挂起仍走 run.py 的独立流程。", flush=True)
-
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import VERIFIED_SWITCHES, p, require, require_switches, rt, skip, skip_in_safe_mode
-    from recipe_nav import app_settings, assistant_settings, hide_carousel, open_page, read_switches, system_settings, tap_page, wait_page
-    from recipe_strategies import close_named_expect
-
-# 各段的调用点按旧名字写，实现住在 recipe_strategies 的 `close_named_expect`（读到目标就收手，
-# PLG110 的录制口径），这里绑回旧名字（#1253）。
-close_named = close_named_expect
