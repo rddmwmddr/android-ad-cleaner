@@ -10,35 +10,8 @@ MODELS = ["25060RK16C"]
 import time
 from entries import THEME_DEAD_ENDS
 
-
-def browser_settings():
-    """先看工具栏，再点底部「我的」；不把资讯正文里的「我的」当导航标签。"""
-    before = p.focus()
-    if gear(toolbar_only=True):
-        if p.in_settings_page():          # 点完要认出设置页，点击被吞时别在旧页上找入口（#331）
-            return True
-        if p.focus() != before:
-            p.back()
-    for text, (l, t, r, b), node in p.texts():
-        if text == "我的" and t >= p.H * 0.65:
-            before = p.sig()
-            p.click((l + r) // 2, (t + b) // 2)
-            p.settle(before, 1.5)
-            return gear()
-    return False
-
-
-def tab_bot(name):
-    """按屏幕底部 1/10 区域找标签（主题商店无障碍名带「未选中,」前缀，exact 文本够不着）。"""
-    from fast import bounds
-    for n in p.tree().iter("node"):
-        d = (n.get("content-desc") or "") + (n.get("text") or "")
-        if (d == name or d.endswith("," + name) or d.endswith("，" + name)) and p.on_screen(n):
-            l, t, r, b = bounds(n)
-            if b > p.H * 0.85:
-                p.click((l + r) // 2, (t + b) // 2); time.sleep(1.5)
-                return True
-    return False
+# 浏览器设置入口：先看工具栏齿轮，再点底部「我的」找齿轮。
+BROWSER_FLOW = "toolbar"
 
 
 @step("系统广告")
@@ -183,5 +156,5 @@ def _():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import maybe, p, require_switches, start_or_skip
-    from recipe_nav import gear
+    from recipe_nav import browser_settings, gear, tab_bot
     from recipe_steps import downloads, global_search, negative_screen, security_center

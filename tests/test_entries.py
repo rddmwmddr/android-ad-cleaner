@@ -1559,19 +1559,33 @@ GEAR_CENTER_305 = (995, 165)
 
 
 def surface_sources():
-    """注入面两张注册表的源码摊平成一个 {名字: 源码}。两张表不同名，摊平只为按名字查（#1243）。"""
+    """注入面三张注册表的源码摊平成一个 {名字: 源码}。三张表不同名，摊平只为按名字查（#1243）。"""
     return {name: source for table in recipe_source.surface_sources().values()
             for name, source in table.items()}
 
 
 def gear_users_1210():
-    """注入面里真的用上齿轮的实现名（沿用 #1151 的「注入那份也算」口径）。
+    """注入面里真的用上齿轮的实现名（沿用 #1151 的「注入那份也算」口径），顺着调用收传递闭包。
 
-    判据走 `fixtures.normalize()`：`g["gear"]` 折回裸名、docstring 与注释都不剩，实现里提一句不算。"""
-    return {name for name, source in surface_sources().items()
-            if any((isinstance(node, ast.Name) and node.id == "gear")
-                   or (isinstance(node, ast.FunctionDef) and node.name == "gear")
-                   for node in ast.walk(ast.parse(fixtures.normalize(source))))}
+    判据走 `fixtures.normalize()`：`g["gear"]` 折回裸名、docstring 与注释都不剩，实现里提一句不算。
+    实现再调别的注入名也照算：`browser_settings` 只是分派，真正碰 `g["gear"]` 的是家族那一份（#1244），
+    不收传递闭包的话「用齿轮的脚本」会静默漏掉走浏览器入口的那几台。"""
+    calls, found = {}, set()
+    for name, source in surface_sources().items():
+        tree = ast.parse(fixtures.normalize(source))
+        calls[name] = {node.func.id for node in ast.walk(tree)
+                       if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
+        if "gear" in calls[name] or any(isinstance(node, ast.FunctionDef) and node.name == "gear"
+                                        for node in ast.walk(tree)):
+            found.add(name)
+    changed = True
+    while changed:
+        changed = False
+        for name, named in calls.items():
+            if name not in found and named & found:
+                found.add(name)
+                changed = True
+    return found
 
 
 def hyperos_recipes_305():

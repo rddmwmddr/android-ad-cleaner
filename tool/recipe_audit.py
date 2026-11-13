@@ -4,7 +4,7 @@
 只读：扫 `recipes/` 的源码（AST，不 import、不执行、不连手机），不改任何仓库文件。`run.py` 的
 `check` 与 `status-json` 取同一份计数（`counts()`），数出来的东西因此只有一个来源。
 
-归属三档，判据是**函数体自己调了哪些名字**（直接调用，不穿透到它调的本机助手）：
+归属四档，判据是**函数体自己调了哪些名字**（直接调用，不穿透到它调的本机助手）：
 
 - 拨动策略（`strategy`）：`p.off` / `p.setting` / `p.switches` / `p.confirm` 与开关读数这类信号。
   这一档是「怎么把一页开关关掉」的算法：精确匹配、逐行重读、整页全关、标题在行外。
@@ -12,10 +12,14 @@
   确认这类信号。这一档是导航、入口、选择器与等待，引擎本该提供。
 - 真机型知识（`knowledge`）：两档信号都不占。剩下的多是读屏库直调、`getprop` 守卫、这一页 /
   这个包的常量——只有这一档该长期留在机型脚本里。
+- 声明式钩子（`hook`）：`tail` / `guard` / `wrap` / `detail` 这四个名字。它们由引擎在全部段
+  之后 / 段入口 / 段内 / 段失败时调用，内容是这一份脚本的收尾打印与守卫，既不是算法也不是
+  页面知识；按名字单列一档，否则「本机策略数」会被十几个 `tail()` 淹没（#1244）。
 
-优先级固定：拨动策略 > 引擎词汇 > 真机型知识。一个函数既导航又拨开关时算策略，那正是要收走的
-那一类。命中的信号随每行打印出来，判据可复核；信号表在 `STRATEGY_SIGNALS` / `VOCABULARY_SIGNALS`，
-是一组调用名，不是一张按函数名写的名册。
+优先级固定：拨动策略 > 引擎词汇 > 真机型知识（钩子先按名字判，不看调用）。一个函数既导航又
+拨开关时算策略，那正是要收走的那一类。命中的信号随每行打印出来，判据可复核；信号表在
+`STRATEGY_SIGNALS` / `VOCABULARY_SIGNALS`，是一组调用名，不是一张按函数名写的名册；钩子那张
+`HOOK_NAMES` 是唯一按名字判的一档。
 
 `@step` 段体不算本机函数：它们是脚本的段落，不是一份实现（由装载器收集）。「涉及机型数」是
 **同名函数**出现在几个型号上：≥2 说明同一份实现被复制到了别的机型，收进共享库还是参数化由人判断。
@@ -40,9 +44,14 @@ import recipe_source
 from entries import FAMILY, LABEL
 from stdio import use_utf8_console
 
-STRATEGY, VOCABULARY, KNOWLEDGE = "strategy", "vocabulary", "knowledge"
-TIERS = (STRATEGY, VOCABULARY, KNOWLEDGE)
-TIER_LABEL = {STRATEGY: "拨动策略", VOCABULARY: "引擎词汇", KNOWLEDGE: "真机型知识"}
+STRATEGY, VOCABULARY, KNOWLEDGE, HOOK = "strategy", "vocabulary", "knowledge", "hook"
+TIERS = (STRATEGY, VOCABULARY, KNOWLEDGE, HOOK)
+TIER_LABEL = {STRATEGY: "拨动策略", VOCABULARY: "引擎词汇", KNOWLEDGE: "真机型知识",
+              HOOK: "声明式钩子"}
+
+# 四个可选的脚本侧钩子（`recipe_kit.preamble` 的 docstring）：收尾打印、段入口守卫、段内包装、
+# 失败摘要。按名字判，不看函数体调了什么——它们不是算法，也不是页面知识（#1244）。
+HOOK_NAMES = frozenset({"tail", "guard", "wrap", "detail"})
 
 # 拨动策略的信号：关开关的算法会碰到的东西（点名、读回、确认、改动台账）。
 STRATEGY_SIGNALS = frozenset({
@@ -147,7 +156,9 @@ def tier_of(calls: Iterable[str]) -> tuple[str, tuple[str, ...]]:
 
 
 def classify(src: str) -> tuple[LocalFunction, ...]:
-    """一份脚本源码的本机函数：按定义顺序，`models` 留空（那是整个 `recipes/` 的账）。"""
+    """一份脚本源码的本机函数：按定义顺序，`models` 留空（那是整个 `recipes/` 的账）。
+
+    `@step` 段体不算；四个声明式钩子按名字先判成 `hook`，其余才看函数体调了什么。"""
     facts = recipe_source.scan_source(src)
     body_calls = defaultdict(list)
     for call in facts.calls:
@@ -155,7 +166,7 @@ def classify(src: str) -> tuple[LocalFunction, ...]:
     out = []
     for name, line in definitions(src):
         calls = tuple(sorted(set(body_calls.get(name, ()))))
-        tier, signals = tier_of(calls)
+        tier, signals = (HOOK, ()) if name in HOOK_NAMES else tier_of(calls)
         out.append(LocalFunction(name, line, tier, signals, calls))
     return tuple(out)
 
@@ -266,6 +277,8 @@ def _tier_line(counts_of_tiers: dict) -> str:
 
 def _evidence(function: LocalFunction) -> str:
     """判据现场：命中了哪些信号；真机型知识则给出它调过的名字（两档信号都不占正是由这份清单读出来的）。"""
+    if function.tier == HOOK:
+        return "声明式钩子，由引擎调用"
     if function.signals:
         return "命中 " + "、".join(function.signals)
     return ("没有判据信号，只调了 " + "、".join(function.calls)) if function.calls else "函数体没有调用"

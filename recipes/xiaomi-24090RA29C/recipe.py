@@ -9,24 +9,6 @@ import time
 from entries import THEME_DEAD_ENDS
 
 
-def browser_settings():
-    """先看工具栏，再点底部「我的」；不把资讯正文里的「我的」当导航标签。"""
-    before = p.focus()
-    if gear(toolbar_only=True):
-        if p.in_settings_page():          # 点完要认出设置页，点击被吞时别在旧页上找入口（#331）
-            return True
-        if p.focus() != before:
-            p.back()
-    for text, (l, t, r, b), node in p.texts():
-        if text == "我的" and t >= p.H * 0.65:
-            before = p.sig()
-            p.click((l + r) // 2, (t + b) // 2)
-            p.settle(before, 1.5)
-            p.dismiss()                    # 「我的」页可能先弹一键登录框，关掉再找齿轮
-            return gear()
-    return False
-
-
 @step("系统广告")
 def _():
     # 不用设置搜索：HyperOS 搜索框用 setText 输入中文会卡住、一直打「%」。按菜单路径点进去

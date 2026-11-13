@@ -18,10 +18,12 @@ HERE = Path(__file__).resolve().parent
 FAKE_ADB = HERE / "fake_adb.py"
 STAMP = re.compile(r"\d{8}-\d{4}")
 LEDGER_FIELD = re.compile(r'("recipe_(?:coverage|evidence|verified)": )"(?:[^"\\]|\\.)*"')
-# 本机函数计数：四个整数的扁平对象（没有嵌套），`check` 那一行按同一批数字换掉。
+# 本机函数计数：五个整数的扁平对象（没有嵌套），`check` 那一行按同一批数字换掉。
+# 声明式钩子是单独一档（#1244），它在 `check` 那一行只在非零时出现。
 LOCAL_FIELD = re.compile(r'("recipe_local": )\{"total": \d+, "strategy": \d+, "vocabulary": \d+, '
-                         r'"knowledge": \d+\}')
-LOCAL_LINE = re.compile(r"本机策略：\d+ 个；本机函数 \d+ 个（引擎词汇 \d+、真机知识 \d+）")
+                         r'"knowledge": \d+, "hook": \d+\}')
+LOCAL_LINE = re.compile(r"本机策略：\d+ 个；本机函数 \d+ 个"
+                        r"（引擎词汇 \d+、真机知识 \d+(?:、声明式钩子 \d+)?）")
 DROP = ("AAC_EVENTS", "AAC_GUI", "AAC_PAUSE_FILE", "AAC_CAPTURES", "ADB", "ADBUTILS_ADB_PATH")
 
 

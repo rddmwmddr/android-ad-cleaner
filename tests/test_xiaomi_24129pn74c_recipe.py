@@ -118,8 +118,11 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
         self.assertEqual(k80, "")
         self.assertNotIn("BP2A", run.recipe_meta(ROOT / "recipes/xiaomi-24129PN74C/recipe.py")["build"])
         source = (ROOT / "recipes/xiaomi-24129PN74C/recipe.py").read_text(encoding="utf-8")
-        self.assertIn('p.tap("菜单", exact=True, scrolls=0, quiet=True)', source)
-        self.assertIn('if not p.tab("我的"):', source)
+        # 两条入口的实现在家族库的注入面里（#1244）；这台机声明走「菜单」那条，回退档在库里。
+        self.assertIn('BROWSER_FLOW = "menu"', source)
+        library = (ROOT / "tool/recipe_nav.py").read_text(encoding="utf-8")
+        self.assertIn('p.tap("菜单", exact=True, scrolls=0, quiet=True)', library)
+        self.assertIn('if not p.tab("我的"):', library)
 
     def test_system_ads_uses_search_or_deep_link_not_more_security_settings(self):
         source = (ROOT / "recipes/xiaomi-24129PN74C/recipe.py").read_text(encoding="utf-8")
