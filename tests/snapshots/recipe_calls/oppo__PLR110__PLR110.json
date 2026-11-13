@@ -1,5 +1,5 @@
 {
- "script": "recipes/oppo/PLR110/recipe.py",
+ "script": "recipes/oppo/PLR110/PLR110.toml",
  "scenarios": {
   "present": [
    ["广告跟踪", "locked", [], {}],

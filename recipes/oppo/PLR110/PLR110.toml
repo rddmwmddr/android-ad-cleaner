@@ -1,0 +1,56 @@
+# 一加 Ace 6T（PLR110，ColorOS 17.0.0.101 / Android 17）的页面树（catalog，#1265）。
+# 路径实测：2026-10-31。覆盖：广告跟踪、软件商店、浏览器、主题商店、视频、游戏中心、
+# 小布建议、负一屏、下拉搜索，共九段。视频段用 ColorOS 17 的「个性化管理」入口。
+model = "PLR110"
+models = ["PLR110"]
+build = "PLR110_17.0.0.101"
+
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+[const]
+SEARCH_SETTINGS_STYLE = "swipe"
+
+[[segment]]
+name = "广告跟踪"
+ops = [
+  { kind = "lib", name = "ad_tracking_close_all" },
+]
+
+[[segment]]
+name = "软件商店"
+code = "step_store"
+
+[[segment]]
+name = "浏览器"
+code = "step_browser"
+
+[[segment]]
+name = "主题商店"
+ops = [
+  { kind = "lib", name = "theme_shop_settings" },
+]
+
+[[segment]]
+name = "视频"
+code = "step_video"
+
+[[segment]]
+name = "游戏中心"
+ops = [
+  { kind = "lib", name = "game_center_taps" },
+]
+
+[[segment]]
+name = "小布建议"
+ops = [
+  { kind = "lib", name = "assistant_advice_search" },
+]
+
+[[segment]]
+name = "负一屏"
+code = "step_negative_screen"
+
+[[segment]]
+name = "下拉搜索"
+ops = [
+  { kind = "lib", name = "search_settings_swipe" },
+]

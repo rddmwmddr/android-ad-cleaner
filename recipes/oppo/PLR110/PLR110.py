@@ -1,25 +1,25 @@
-# 一加 Ace 6T（PLR110，ColorOS 17.0.0.101 / Android 17）机型脚本。路径实测：2026-10-31。覆盖：广告跟踪、软件商店、浏览器、主题商店、视频、游戏中心、
-from recipe_kit import step
-# 小布建议、负一屏、下拉搜索，共九段。视频段用 ColorOS 17 的「个性化管理」入口。
-# 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
-BUILD = "PLR110_17.0.0.101"
-# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
-SEARCH_SETTINGS_STYLE = "swipe"
-
+# 一加 Ace 6T（PLR110，ColorOS 17）的本机例外函数（catalog 的 `code=`，影随同名 `.toml`）。
+# 共享库的 maybe / p.tap / p.go 与段体助手由装载器注入执行作用域；线性段已转数据，这里只留
+# 需要条件分支、手势坐标与轮播单选探测的四段。
 import time
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p, rt
 
-@step("广告跟踪")
-def _():
-    ad_tracking_close_all()
 
+BUILD = "PLR110_17.0.0.101"
 
 # 服务管理里只保留功能项，其余推广入口全关（本机 2026-10-31 实测共 46 项开关）
 STORE_KEEP = ["帮助与客服", "应用安全", "首页：AI搜索"]
 
+# 全局搜索的设置页 scheme 与页面标题：家族库打开设置页 / 认页时按这些名字从执行作用域取。
+SEARCH_SETTING = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"
+# 设置页上的标题；搜索首页也有「搜索范围」这类文字，所以还要看前台 Activity（SearchSettingActivity）。
+SEARCH_TITLES = {"搜索范围", "首页卡片管理", "功能管理", "账号与隐私"}
 
-@step("软件商店")
-def _():
+
+def step_store(p, rt):
     p.start("com.heytap.market")
     p.go("我的", "设置")
     p.tap("设置", exact=True, scrolls=0)
@@ -34,8 +34,7 @@ def _():
     p.back(2)
 
 
-@step("浏览器")
-def _():
+def step_browser(p, rt):
     p.start("com.heytap.browser")
     # ColorOS 17 首页读不到「我的」/菜单入口，用实测可直达的设置页 Activity；带清栈参数会立刻退出
     p.d.shell("am start -f 0x10008000 -n com.heytap.browser/.settings.component.BrowserPreferencesPage")
@@ -64,13 +63,7 @@ def _():
     p.back(2)
 
 
-@step("主题商店")
-def _():
-    theme_shop_settings()
-
-
-@step("视频")
-def _():
+def step_video(p, rt):
     p.start("com.heytap.yoli", settle=4)    # 开屏广告有约 4 秒倒计时，多留时间点「跳过」
     if not p.go("我的", "设置"):
         raise RuntimeError("没找到「我的」标签")
@@ -86,18 +79,7 @@ def _():
     p.back(2)
 
 
-@step("游戏中心")
-def _():
-    game_center_taps()
-
-
-@step("小布建议")
-def _():
-    assistant_advice_search()
-
-
-@step("负一屏")
-def _():
+def step_negative_screen(p, rt):
     # ColorOS 17：速览内嵌在桌面进程里，焦点仍是 launcher，按页面内容判断进没进
     p.d.shell("input keyevent HOME"); time.sleep(0.6); p.d.shell("input keyevent HOME"); time.sleep(0.6)
     entered = False
@@ -138,19 +120,3 @@ def _():
         p.off(only=["热点资讯"], page="负一屏·热点资讯")
         p.back()
     p.back(3)
-
-
-SEARCH_SETTING = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"
-# 设置页上的标题；搜索首页也有「搜索范围」这类文字，所以还要看前台 Activity（SearchSettingActivity）。
-SEARCH_TITLES = {"搜索范围", "首页卡片管理", "功能管理", "账号与隐私"}
-
-
-@step("下拉搜索")
-def _():
-    search_settings_swipe()
-
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import maybe, p
-    from recipe_nav import search_settings, wait_search_settings
-    from recipe_steps import ad_tracking_close_all, assistant_advice_search, game_center_taps, search_settings_swipe, theme_shop_settings
