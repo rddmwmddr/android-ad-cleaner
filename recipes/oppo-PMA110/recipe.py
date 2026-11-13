@@ -2,6 +2,14 @@
 from recipe_kit import step
 # 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，未复测（#933）。
 BUILD = "PMA110_17.0.0.106(CN01)"
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+WAIT_PAGE_STYLE = "strict"
+TAP_PAGE_STYLE = "raise"
+READ_SWITCHES_STYLE = "expect"
+OPEN_PAGE_STYLE = "shell"
+APP_SETTINGS_STYLE = "shell"
+SYSTEM_SETTINGS_STYLE = "shell"
+BROWSER_FLOW = "prefs_shell"
 
 import re
 import time
@@ -14,6 +22,8 @@ from fast import ScreenLocked, bounds
 SETTINGS = "com.android.settings/com.oplus.settings.feature.homepage.OplusSettingsHomepageActivity"
 OAID = "com.android.settings/com.oplus.settings.feature.notification.oaid.OAIDActivity"
 BROWSER = "com.heytap.browser/com.heytap.browser.settings.component."
+# 浏览器设置页的短命令：入口只属于这台机，家族库按这个名字拼拉起命令（#1245）。
+BROWSER_PREFS = "com.heytap.browser/.settings.component.BrowserPreferencesPage"
 SEARCH = "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity."
 MARKET = "com.heytap.market/com.heytap.market.mine.cn.setting.ui."
 THEME = "com.heytap.themestore/com.nearme.themespace.activities."
@@ -21,61 +31,6 @@ VIDEO = "com.heytap.yoli/com.heytap.yoli.mine.setting."
 ADVICE = "com.oplus.pantanal.ums/com.oplus.advice.settings.ui."
 ASSISTANT = "com.coloros.assistantscreen/com.oplus.assistantscreen."
 SEARCH_SETTINGS = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"
-
-
-def wait_page(activity, title, timeout=6):
-    """只在实际 Activity、标题及可见文字稳定后继续；不在账号页读开关或截图。"""
-    end, previous = time.monotonic() + timeout, None
-    while time.monotonic() < end:
-        if p.locked():
-            raise ScreenLocked("手机锁屏，请机主解锁")
-        if p.focus() == activity:
-            root = p.tree()
-            texts = p.texts(root)
-            consent = {"同意", "同意并继续", "同意并使用", "允许"}
-            require(not any(t in consent and "Button" in n.get("class", "")
-                            for t, _, n in texts), "出现协议或权限申请，本段停止，不代为同意")
-            signature = tuple((t, xy) for t, xy, _ in texts)
-            if any(t == title for t, _, _ in texts) and signature == previous:
-                return
-            previous = signature
-        time.sleep(.15)
-    raise RuntimeError(f"未确认页面「{title}」，不操作开关")
-
-
-def open_page(command, activity, title):
-    result = p.d.shell(command)
-    require(not result.exit_code and not re.search(
-        r"Error|Exception|Permission Denial|unable to resolve", result.output, re.I),
-        f"系统未允许打开「{title}」，未继续操作")
-    wait_page(activity, title)
-
-
-def tap_page(text, activity, title=None, scrolls=4, exact=True):
-    """`text` 可以给一组等价文案，按顺序试，先命中的点进去。
-
-    软件商店的隐私入口随商店 App 版本叫「隐私」或「隐私授权管理」（#933），单写一支就一定有一段
-    0 项。认不到时留下停在哪个页面与结构摘要，与 note_miss 同形。"""
-    names = (text,) if isinstance(text, str) else tuple(text)
-    for name in names:
-        if p.tap(name, exact=exact, scrolls=scrolls, quiet=len(names) > 1):
-            wait_page(activity, title or name)
-            return
-    p.note_miss(" / ".join(names))
-    raise RuntimeError(f"未找到入口「{names[0]}」")
-
-
-def read_switches(activity, title, max_screens=8):
-    """完整读取有界列表；未读完不改，空标题不作为可操作目标。"""
-    wait_page(activity, title)
-    p.top(max_screens)
-    states = {}
-    for _ in range(max_screens):
-        require(p.focus() == activity, "读取时离开目标页面，停止本段")
-        states.update({name: on for name, on, _ in p.switches() if name})
-        if not p.scroll_more():
-            return states
-    raise RuntimeError("列表超过读取上限，未执行关闭")
 
 
 def close_named(names, page, activity, title, max_screens=8, reopen=None, dependent=()):
@@ -96,30 +51,6 @@ def close_named(names, page, activity, title, max_screens=8, reopen=None, depend
                     if name not in names and name not in dependent), f"{page}：其他开关状态变化，请核对")
     rt.confirm(len(names))
     print(f"  · {page}：回读确认 {len(names)} 项关闭", flush=True)
-
-
-def system_settings():
-    open_page("am start -f 0x10008000 -a android.settings.SETTINGS", SETTINGS, "设置")
-
-
-def app_settings(package, activity, title):
-    open_page("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + package,
-              activity, title)
-
-
-def browser_settings():
-    # 直达入口可能复用旧子页；只从已识别的浏览器设置子页返回，不清数据或历史。
-    result = p.d.shell("am start -n com.heytap.browser/.settings.component.BrowserPreferencesPage")
-    require(not result.exit_code and "Error" not in result.output, "浏览器设置未打开")
-    time.sleep(.5)
-    for _ in range(4):
-        current = p.focus()
-        if current == BROWSER + "BrowserPreferencesPage":
-            wait_page(current, "浏览器")
-            return
-        require(current == BROWSER + "BrowserPreferenceActivity", "浏览器进入了未知页面，停止本段")
-        p.back()
-    raise RuntimeError("浏览器未回到设置首页")
 
 
 @step("广告跟踪")
@@ -260,4 +191,5 @@ def tail():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import p, require, require_switches, rt, skip, skip_in_safe_mode
-    from recipe_nav import assistant_settings, hide_carousel
+    from recipe_nav import app_settings, assistant_settings, browser_settings, hide_carousel
+    from recipe_nav import open_page, read_switches, system_settings, tap_page, wait_page

@@ -2,6 +2,9 @@
 from recipe_kit import step
 # 仅覆盖下拉搜索、商店、浏览器；广告跟踪、负一屏、主题、视频、游戏中心不在本脚本内。
 BUILD = "PJA110_16.0.5.1201"
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+OPEN_SETTINGS_STYLE = "shell"
+CLOSE_NAMED_STYLE = "vanish"
 import time
 # 回读确认数由引擎经 rt 记录
 # 录自 ColorOS 14 的商店服务管理，不扩成 PHK110 的 26 项：改名或下架的项跳过，一项都不认识算段失败。
@@ -13,63 +16,6 @@ SETTINGS_REFUSED = ("Error", "Exception", "Permission Denial")
 # SearchSettingActivity 未导出，只有它自己的 scheme 能直接落地（PLP120 / PLG110 / PMX110 实测）。
 SEARCH_SETTINGS = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"
 SEARCH_TITLES = ("搜索范围", "首页卡片管理", "功能管理", "账号与隐私")
-
-
-def open_settings(package, activity, title):
-    """公开设置 Intent 直达 App 设置页，核对前台 Activity 与页标题。"""
-    result = p.d.shell(SETTINGS_INTENT.format(package))
-    require(not result.exit_code and not any(m in result.output for m in SETTINGS_REFUSED),
-            f"{package}：系统不允许直达设置，未操作（{result.output.strip()[-200:]}）")
-    require(p.expect_page(title), f"{package}：设置页未打开；{p.page_evidence()}")
-    landed = p.focus()
-    require(landed.endswith(activity), f"{package}：没落在设置页（停在 {landed}）；{p.page_evidence()}")
-
-
-def enter_privacy():
-    """商店的隐私入口随商店 App 版本叫「隐私」或「隐私授权管理」，两个 COS16 机型各是一种（#907）。"""
-    for name in ("隐私", "隐私授权管理"):
-        try:
-            p.enter(name, scrolls=4)
-            return
-        except RuntimeError as error:
-            if not any(mark in str(error) for mark in ("未找到入口", "页面没有变化")):
-                raise
-    raise RuntimeError(f"没找到商店的隐私入口；{p.page_evidence()}")
-
-
-def close_named(names, page, max_screens=1, snapshot=None):
-    """关掉点名的开关，并核对其他开关未变。`snapshot` 是调用方已经读过的那一页，免得再翻一遍。"""
-    # 回读确认数由引擎经 rt 记录
-    if snapshot is None:
-        p.top(max_screens)
-        snapshot = read_switches(max_screens)
-    require_switches(snapshot, names, page)
-    others = set(snapshot) - set(names)
-    where = p.focus()
-    p.top(max_screens)
-    p.off(only=names, page=page, max_screens=max_screens)
-    p.top(max_screens)
-    after = read_switches(max_screens)
-    for name in names:
-        if after.get(name) is False:
-            continue
-        # 关掉后整行从列表里消失也算已关（引擎回读的 VANISHED）：同页还有别的行、且没换页才算；
-        # 整页读空或换成新页时读屏失败，不能当成关闭成功。
-        require(after.get(name) is None and others & set(after) and p.focus() == where,
-                f"{page}：回读未确认关闭「{name}」")
-    require(all(after.get(name) == state for name, state in snapshot.items() if name in others),
-            f"{page}：其他开关状态变化，请核对")
-    rt.confirm(len(names))
-
-
-def search_settings_ready(timeout=6):
-    """搜索设置页认得出：前台是 quicksearchbox 的设置 Activity，且页面标题是那几组之一。"""
-    from wait import until
-
-    def sample():
-        return "Setting" in p.focus() and any(t in SEARCH_TITLES for t, _, _ in p.texts())
-
-    return bool(until(sample, timeout=timeout, poll=0.2, same=2, now=time.monotonic, sleep=time.sleep))
 
 
 @step("下拉搜索")
@@ -124,4 +70,4 @@ def tail():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import p, require, require_switches, rt
-    from recipe_nav import read_switches
+    from recipe_nav import close_named, enter_privacy, open_settings, read_switches, search_settings_ready

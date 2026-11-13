@@ -41,9 +41,11 @@ LOCAL_PREAMBLE = {
     "skip_in_safe_mode": "整页关闭在安全模式下的跳过出口",
 }
 
-# 记录在案的例外：脚本相对路径 → 允许保留的名字。迁移完成后为空。
+# 记录在案的例外：脚本相对路径 → 允许保留的名字。除这一条外为空。
 ALLOWED = {
-    # 一加旧的 `page(activity, title, timeout=6)`：同样的轮询形状，不在 #939 的改动面
+    # 一加旧版的 `page(activity, title, timeout=6)` 与 recipe_kit 注入的 `page()` 同名不同签名，
+    # #1245 把实现收进 `recipe_nav.page_activity`，脚本里只剩一行绑定：段体（含 recipe_steps
+    # 里按名字取的）仍按旧名字调用，所以这个名字仍在模块体里出现。
     "recipes/oneplus-PHK110/recipe_android15.py": {"page"},
 }
 

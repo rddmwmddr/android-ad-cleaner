@@ -23,6 +23,9 @@ from recipe_kit import step
 #     「使用个性化服务需要安装“主题商店”」——主商店没预装、要联网下载 → 主题段没法自动做。
 #     注意包名不是 com.heytap.themestore（本机没有这个包），enabled=0 是 DEFAULT 不是禁用。
 BUILD = "RMX3700_16.0.5.1300"
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+WAIT_PAGE_TIMEOUT = 8
+SETTINGS_PAGE_STYLE = "scroll"
 
 import time
 # 分段结果由引擎经 rt 记录
@@ -46,114 +49,6 @@ SEARCH_SOURCES = ["个性化推荐", "精选资讯", "搜索建议"]
 SEARCH_CARDS = ["应用建议", "热搜应用", "精选推荐", "热搜榜单", "活动皮肤", "推荐卡片"]
 # 这两个是「应用建议」的子项：父开关一关，这两行直接从页面上消失，所以要先关它们。
 SEARCH_CARD_CHILDREN = ["未下载应用推荐", "应用建议小卡"]
-
-
-def wait_page(activity, title, timeout=8):
-    """等到活动、页标题以及可点击区域连续稳定，避免横向动画期间的越界坐标。
-
-    `title` 可以给一组等价标题：软件商店的隐私页随商店 App 版本叫「隐私」或「隐私授权管理」（#933）。"""
-    titles = (title,) if isinstance(title, str) else tuple(title)
-    deadline, previous = time.monotonic() + timeout, None
-    while time.monotonic() < deadline:
-        if p.locked():
-            return False
-        if not p.focus().endswith(activity):
-            time.sleep(0.2)
-            continue
-        root = p.tree()
-        texts = p.texts(root)
-        # 只识别真正的同意按钮，不把设置页里的「隐私政策」链接当作协议弹窗。
-        if any(t in ("同意", "同意并继续", "同意并使用", "允许")
-               and "Button" in n.get("class", "") for t, _, n in texts):
-            print("  ! 出现协议/权限按钮，本段跳过，不代为同意")
-            return False
-        if not any(t in titles for t, _, _ in texts):
-            time.sleep(0.2)
-            continue
-        switches = p.switches(root)
-        if any(not (0 < xy[0] < p.W and 0 < xy[1] < p.H)
-               for _, _, xy in switches):
-            time.sleep(0.2)
-            continue
-        signature = tuple(t for t, _, _ in texts), tuple(switches)
-        if signature == previous:
-            return True
-        previous = signature
-        time.sleep(0.25)
-    print(f"  ✗ 未确认目标页面「{'、'.join(titles)}」，不操作开关")
-    return False
-
-
-def tap_by_scroll(text, max_scrolls=12):
-    """在长列表里自己往下翻着找并点击。
-
-    p.tap 内部会先回到页顶；小布建议页（小布建议 Activity）回顶时会判定「离开了当前页」并抛错，
-    所以那一类页面必须用这个手动翻找的写法。`text` 可以给一组等价文案，按顺序试（#933）。
-    """
-    names = (text,) if isinstance(text, str) else tuple(text)
-    for _ in range(max_scrolls):
-        for name in names:
-            if p.find(name, exact=True):
-                return p.tap(name, exact=True, scrolls=0)
-        if not p.scroll_more():
-            break
-    return False
-
-
-def settings_page(*path):
-    """打开设置并逐级点进 path 里的每一级。"""
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
-    time.sleep(1.5)
-    for text in path:
-        if not tap_by_scroll(text):
-            print(f"  ! 设置里没找到「{text}」")
-            return False
-        time.sleep(1.2)
-    return True
-
-
-def open_search_setting():
-    """打开全局搜索的设置首页。包被挂起时拉起的是系统「应用已被暂停」页，要区分出来。"""
-    p.d.shell(SEARCH_SETTING)
-    time.sleep(1.8)
-    if "SuspendedAppActivity" in p.focus():
-        print("  ! com.heytap.quicksearchbox 被挂起了，全局搜索整个不可用；"
-              "先 run.py unsuspend com.heytap.quicksearchbox 再跑本段")
-        return False
-    return wait_page("com.heytap.quicksearchbox.ui.activity.SearchSettingActivity", "搜索设置")
-
-
-def close_rows(names, page):
-    """逐项关掉列表里的这些开关。
-
-    首页卡片管理这一类页面，关掉一项这一行就从列表里消失、下面的行整体上移，
-    拿一批旧坐标连点会点到邻居——2026-11-02 实测就是这样误关了本该保留的「便捷服务」。
-    所以每关一项都重新读一次坐标。
-    """
-    done = []
-    for _ in range(len(names) * 3 + 4):
-        todo = [(t, xy) for t, on, xy in p.switches() if t in names and on]
-        if not todo:
-            break
-        title, xy = todo[0]
-        p.click(*xy)
-        time.sleep(0.9)
-        done.append(title)
-    print(f"  · {page}：关了 {len(done)} 项" + (f"（{'、'.join(done)}）" if done else ""))
-    return len(done)
-
-
-def open_search_sub(name, activity):
-    """从搜索设置首页进一个子页。每页都重新打开首页，不靠 back 一层层退。"""
-    if not open_search_setting():
-        return False
-    if not tap_by_scroll(name):
-        print(f"  ! 没找到「{name}」")
-        return False
-    if not wait_page(activity, name):
-        print(f"  ! 没到「{name}」页")
-        return False
-    return True
 
 
 def guard():
@@ -314,3 +209,5 @@ def tail():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import p, rt, skip, skip_in_safe_mode
+    from recipe_nav import open_search_setting, open_search_sub, settings_page, tap_by_scroll, wait_page
+    from recipe_strategies import close_rows

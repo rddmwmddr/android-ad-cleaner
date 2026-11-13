@@ -30,6 +30,20 @@
 
 `NAV` 是扁平表，一个注入名只能放一份实现，而被冻结的段体仍按旧名字调用；所以「同族里同名但走法不同」的各注册一份，由脚本用模块常量选（`GEAR_STYLE` / `BROWSER_FLOW` / `MENU_STYLE`），缺省档保留多数机型的旧行为，值认不出时在调用那一刻报错而不是静默回退。只是字面量不同的参数化后共用。事实层把新模块加进 `SURFACE`，脚本 `TYPE_CHECKING` 块里的 import 指向哪张表就解析哪一份。
 
+OPPO 系（oppo / oneplus / realme，16 份，#1245）按同一形状扩展这张表：`wait_page` / `tap_page` /
+`tap` / `open_settings` / `search_settings` / `open_page` / `app_settings` / `system_settings` /
+`settings_page` / `read_switches` / `close_named` / `hide_carousel` 各按 `*_STYLE` 常量分派，缺省档
+保留未声明常量时的旧行为；`read_switches` / `close_named` 的分派表跟着名字留在 `recipe_nav`
+（一张表一个名字，跨模块分派会把两张注入面绕在一起）。`page(activity, title)` 与 recipe_kit 注入
+的 `page()` 同名不同签名，库里叫 `page_activity`，脚本把它绑回旧名字给段体用。
+
+有一类函数故意不收：函数体里带着 `p.off(only=list(targets), …)` / `keep=…` 的，是 `vocab.py`
+「未解析」台账与整页关闭数的现场，而词库只扫段体那张表；搬进策略库就把这几个数一起搬没了，
+与本段「词库逐字节不变（含未解析数）」的验收冲突。所以 `off_exact`（一加两台与 PKH110）、
+`close_named`（PLZ110 / PMX110 / PLG110 / PMA110）、`close_group` / `close_all`（PKT110）留在
+脚本里，理由与 #1148 留 `off_exact` 时相同。浏览器设置页的两档 OPPO 入口另有约束：入口串按
+执行作用域里的包名常量拼，否则导入同一个 `browser_settings` 的其它家族会被入口速查算上这条直达。
+
 ### 为什么不是只做模块化
 
 只把 `exec` 换成 `import`、保留执行式 `@step`，会得到最坏的组合：导入仍有设备动作，段顺序仍由书写顺序与钩子位置决定，`only` 仍从 `globals()` 取，三处装载点仍各写一份。脚本看起来是模块，行为契约却还是「导入即执行」，静态检查与装载期报错都无从谈起。声明式段、单一装载器与 `rt` 是同一笔改动的三个面：没有声明式段，装载器无法在导入后再决定跑哪些段；没有 `rt`，段过滤与台账只能继续留在 `globals()` 里。

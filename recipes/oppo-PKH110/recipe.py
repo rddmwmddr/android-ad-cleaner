@@ -19,46 +19,6 @@ STORE_PROMOTIONS = [
 ]
 
 
-def close_titles(wanted, max_rounds=8):
-    """逐页只点标题完全等于 wanted 里某项的开关，点完回读。
-    ColorOS 17 有「应用建议」是「应用建议小卡」子串的情况，p.off 的子串匹配会误伤，所以用精确标题。"""
-    remaining, failed = list(wanted), []
-    for _ in range(max_rounds):
-        cur = {t: (c, xy) for t, c, xy in p.switches()}
-        hit = [t for t in remaining if t in cur]
-        for t in hit:
-            cur = {t2: (c, xy) for t2, c, xy in p.switches()}
-            was_on = bool(cur.get(t, (False, None))[0])
-            for _ in range(3):
-                cur = {t2: (c, xy) for t2, c, xy in p.switches()}
-                if t not in cur:
-                    break
-                c, xy = cur[t]
-                if not c:
-                    break
-                if not (0 < xy[0] < p.W and 0 < xy[1] < p.H):
-                    print(f"  ! 「{t}」坐标越界，跳过不做")
-                    break
-                p.click(*xy)
-                time.sleep(0.5)
-                p.confirm()
-                time.sleep(0.5)
-            final = {t2: c for t2, c, _ in p.switches()}
-            remaining.remove(t)
-            if final.get(t) is False:
-                print(f"  {'关' if was_on else '· 已是关闭状态'} {t}")
-            elif t in final:
-                print(f"  ✗ 关不掉 {t}")
-                failed.append(t)
-        if not remaining:
-            break
-        if not p.scroll_more():
-            break
-    if remaining:
-        print(f"  ! 未找到 {remaining}")
-    return not failed and not remaining
-
-
 def off_exact(names, page, max_screens=16):
     """逐页传入当前可见的精确标题，不把子串扩展到未知服务（用于需要翻多屏的页面）。"""
     wanted, seen, failed = set(names), set(), set()
@@ -171,22 +131,6 @@ def _():
     return True
 
 
-def open_search_settings():
-    """ColorOS 17 的下拉搜索设置挂在 quicksearchbox 里；桌面下滑手势在 adb 下不稳定，直接拉 Activity。"""
-    p.d.shell("am start -f 0x10008000 -n com.heytap.quicksearchbox/.ui.activity.SearchHomeActivity")
-    time.sleep(2.2)
-    p.d.shell("input keyevent BACK")          # 收键盘
-    time.sleep(0.8)
-    cands = sorted((tp, l, tp, r, b) for t, (l, tp, r, b), _ in p.texts() if t == "设置")
-    if not cands:
-        print("  ✗ 搜索页没有「设置」入口")
-        return False
-    _, l, tp, r, b = cands[-1]                # 底部那个才是搜索设置
-    p.click((l + r) // 2, (tp + b) // 2)
-    time.sleep(2)
-    return p.focus().endswith("SearchSettingActivity")
-
-
 @step("下拉搜索")
 def _():
     if not open_search_settings():
@@ -219,5 +163,6 @@ def tail():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import p, rt, skip, skip_in_safe_mode
-    from recipe_nav import browser_settings_direct, tap_page
+    from recipe_nav import browser_settings_direct, open_search_settings, tap_page
+    from recipe_strategies import close_titles
     from recipe_steps import browser_home, store_promotions
