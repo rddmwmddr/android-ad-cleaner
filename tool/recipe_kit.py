@@ -130,8 +130,8 @@ def preamble(p, g, rt=None):
             raise ScreenLocked("手机锁屏，请机主解锁")
 
     def skip_in_safe_mode():
-        """整页关闭的段落在安全模式下按跳过结束（#909）：只记跳过台账，不动失败台账与退出码。"""
-        if p.safe_mode:
+        """整页关闭的段落在安全模式下按跳过结束（沿用 #909）：只记跳过台账，不动失败台账与退出码。"""
+        if rt.safe_mode:
             skip(SAFE_MODE_PAGE_WIDE)
 
     def start_or_skip(pkg, activity, dead_ends, reason):

@@ -114,6 +114,15 @@ class Runtime:
         """回读确认关闭了几项。只读：脚本经 `confirm()` 记，不能直接改这个数。"""
         return self._verified
 
+    @property
+    def safe_mode(self) -> bool:
+        """这次执行是不是安全模式（只关点名的开关）。实体仍归 `Phone` / 拨动会话，公开面冻结。"""
+        return self.p.safe_mode
+
+    @safe_mode.setter
+    def safe_mode(self, value) -> None:
+        self.p.safe_mode = value
+
     def confirm(self, count=1) -> None:
         """记「回读确认了几项」。脚本唯一的写入入口，参数是这一次确认的条数。"""
         if count:
