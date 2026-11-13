@@ -19,9 +19,22 @@
 文内按家族分节，`install()` 落在最后。
 """
 
+from typing import Any
+
 # 名字 → 工厂。工厂收 (p, g)，只造闭包、不碰手机，返回写进执行作用域的那个函数。
 # 守卫按这张表取注入面的实现源码，比对脚本里还留着的逐字副本（tests/test_recipe_strategies.py）。
 STRATEGIES = {}
+
+# 「跨家族」分节收进来的注入名：这些实现必须被 ≥2 个家族使用（#1247 的守卫，判据按节算）。
+# 现在这张表全是家族分节（小米系 / OPPO / vivo），没有跨家族条目，所以这里是空的；
+# 往这里加名字时先数家族，只有一个家族在用的放家族分节，别开共享库。
+SHARED = frozenset()
+
+
+def __getattr__(name: str) -> Any:
+    """注入名在类型层面可见（#1247）：脚本 `if TYPE_CHECKING:` 块里的 import 落到这里。
+    运行时这些名字住在执行作用域，模块上没有对应属性，照旧抛 AttributeError。"""
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 # ---------- 小米系（xiaomi / redmi，#1244）----------

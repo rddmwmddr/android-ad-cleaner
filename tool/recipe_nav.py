@@ -29,12 +29,24 @@
 
 import re
 import time
+from typing import Any
 
 from wait import GiveUp, until
 
 # 名字 → 工厂。工厂收 (p, g)，只造闭包、不碰手机，返回写进执行作用域的那个函数。
 # 守卫按这张表取注入面的实现源码，比对脚本里还留着的逐字副本（tests/test_recipe_nav.py）。
 NAV = {}
+
+# 「跨家族」分节收进来的注入名：这些实现必须被 ≥2 个家族使用（#1247 的守卫，判据按节算）。
+# 家族分节（小米系 / vivo / OPPO / 荣耀 / 魅族）不受这条限制——那是新机型并入的入口，
+# 允许单脚本变体。往这里加名字之前先数家族：只有一个家族在用的，放家族分节。
+SHARED = frozenset({"tap", "opened", "my_tab", "tap_text", "goto", "browser_settings"})
+
+
+def __getattr__(name: str) -> Any:
+    """注入名在类型层面可见（#1247）：脚本 `if TYPE_CHECKING:` 块里的 import 落到这里。
+    运行时这些名字住在执行作用域，模块上没有对应属性，照旧抛 AttributeError。"""
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 # ---------- 小米系（xiaomi / redmi，#1151、#1244）----------

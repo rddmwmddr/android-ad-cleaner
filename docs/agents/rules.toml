@@ -943,8 +943,8 @@ id = "doc.pr.device-pr-three-checks"
 source = "docs/agents/issue-tracker.md#Pull requests as a triage surface"
 check = "none"
 status = "manual"
-why = "机型 PR 只靠 CI 挡不住三件必查的事：开关换成配方自己逐个点、确认框自己写 helper、CHANGELOG / README 机型表 / 清单三处不齐。`p.confirm()` 只是「可能点到确认按钮」的匹配，不是「弹窗存在」的判据，所以三查不能省。"
-expires_if = "配方改由引擎统一的 DSL 表达、这三件事不再有手工写法时删。"
+why = "机型 PR 只靠 CI 挡不住四件必查的事：开关换成配方自己逐个点、确认框自己写 helper、CHANGELOG / README 机型表 / 清单三处不齐、脚本与 `adapt gen` 的骨架不同形。`p.confirm()` 只是「可能点到确认按钮」的匹配，不是「弹窗存在」的判据，所以这几项不能省；第四条（#1247）挡的是「文档说骨架长什么样、生成器不是那个样」——新脚本照文档写、生成器却给出另一种形状，两边都会有人照抄。机器侧只有骨架那几行有守卫（`tests/test_adapt_cli.py` 的 `DraftGenTests`），其余仍靠人。"
+expires_if = "配方改由引擎统一的 DSL 表达、这几件事不再有手工写法时删。"
 
 [[rule]]
 id = "doc.pr.core-pr-reimplement"
@@ -1215,3 +1215,19 @@ check = "test:test_recipe_loader::RecipeLoaderGuardTests.test_module_body_has_on
 status = "enforced"
 why = "机型脚本以前靠执行式 `@step` 在模块体里按书写顺序跑段，顺手写在模块级的一句 `print` / `for` / `p…()` 也会在导入时执行；#1241 把段改成声明式之后，这类语句会让「导入零动作」重新破掉，而且执行顺序藏进模块体、装载器看不见。守卫只允许导入、定义、常量、模块 docstring 与 `if TYPE_CHECKING:` 块，收尾打印搬进 `tail()`、其余语句搬进段体或模块级助手（ADR-0037）。"
 expires_if = "脚本不再按模块装载（换成数据树 + 解释器）时，这条与 `recipe_loader` 的装载形状一起删。"
+
+[[rule]]
+id = "dev.recipes.shared-sections"
+source = "CLAUDE.md#开发"
+check = "test:test_recipe_nav::SharedSectionTests.test_every_shared_implementation_serves_two_families"
+status = "enforced"
+why = "新机型的第一份脚本最容易顺手把自己的走法塞进共享库：只有这一台机在用，下一台要改它时得先猜它在服务谁，家族分节也因此长不出自己的形状（#1244–#1246 的归属规则、#1247 的守卫）。判据按**节**算：`recipe_nav.SHARED` / `recipe_strategies.SHARED` 列出的注入名必须被 ≥2 个家族使用（家族取自 `entries.FAMILY`，脚本侧的使用取自事实层的 import）；家族分节不受这条限制，它是新机型并入的入口，允许单脚本变体。清单只在库里写一份，用例不另抄名单。"
+expires_if = "脚本改由数据树 + 解释器驱动、共享助手不再是手写实现时删。"
+
+[[rule]]
+id = "doc.pr.docs-and-generator-in-sync"
+source = "docs/agents/issue-tracker.md#Pull requests as a triage surface"
+check = "test:test_adapt_cli::DraftGenTests.test_docs_04_shows_the_same_skeleton"
+status = "enforced"
+why = "新机型的脚本骨架有两份写法：docs/04 给人看、`adapt gen` 给机器写。两份不同形时，照文档手写的脚本会缺 `tail()` 或 `if TYPE_CHECKING:` 块，照生成器写的人又看不出哪些名字由库提供——两边都有人照抄，所以第四查要挡它（#1247）。机器守卫钉住骨架那几行（`from recipe_kit import step`、`from typing import TYPE_CHECKING`、`if TYPE_CHECKING:` 与块里的 `close_named, p, require, rt`），文档与生成器任缺一行即红；骨架的其余内容仍靠人对照。"
+expires_if = "生成器不再产出草稿、或 docs/04 与生成器共用一份模板时删。"
