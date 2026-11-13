@@ -271,15 +271,17 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "b087a62e4649c68a"
 
-["vivo/V1986A/recipe.py"]
+# 形态迁移于 #1263（vivo 转页面树）：以下 vivo 条目 key 改 .toml，body_hash 换成新形态的值，
+# 复核状态按等价证据（快照 + 投影）平移；用到 code= 兜底的在 verify_ledger 里显示待复核。
+["vivo/V1986A/V1986A.toml"]
 build = "PD1986_A_8.21.29"
 date = "2026-10-30"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
-body_hash = "51ac07656416aa3c"
+body_hash = "66ad74039836222a"
 
-["vivo/V2303A/recipe.py"]
+["vivo/V2303A/V2303A.toml"]
 build = "CP2A.260605.016"
 date = "2026-11-04"
 by = "机主"
@@ -287,40 +289,40 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "aa2de27226037611"
 
-["vivo/V2309A/recipe.py"]
+["vivo/V2309A/V2309A.toml"]
 build = "PD2309E_A_16.2.15.0.W10"
 date = "2026-11-03"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
-body_hash = "7907243005a1039f"
+body_hash = "038e7911e8fe0c91"
 
-["vivo/V2324HA/recipe.py"]
+["vivo/V2324HA/V2324HA.toml"]
 build = "PD2324J_A_16.2.13.1.W10"
 date = "2026-10-27"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
-body_hash = "e9ab1cbb2513cfac"
+body_hash = "ce8aa12140a29ffe"
 
-["vivo/V2361A/recipe.py"]
+["vivo/V2361A/V2361A.toml"]
 build = "PD2361B_A_16.2.12.2.W10"
 date = "2026-10-26"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
-body_hash = "6f85cca3ecd5ca48"
+body_hash = "65c6295a56ffe14a"
 
-["vivo/V2417A/recipe.py"]
+["vivo/V2417A/V2417A.toml"]
 build = "PD2417D_A_16.2.14.1.W10"
 date = "2026-10-30"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
-body_hash = "cc4ce8b6c5865f6b"
+body_hash = "ba2e77b6eca124bd"
 
 # 头注没有日期，也没有同目录 README：这份只有入口约定，真机整段验证没有记录。
-["vivo/V2545A/recipe.py"]
+["vivo/V2545A/V2545A.toml"]
 build = "PD2545B_A_16.0.16.0.W10"
 date = ""
 by = ""
@@ -328,7 +330,7 @@ tier = "未记录"
 evidence = "未知"
 body_hash = "141bd6fdbe88d532"
 
-["vivo/V2547A/recipe.py"]
+["vivo/V2547A/V2547A.toml"]
 build = "PD2547B_A_17.1.10.2"
 date = "2026-10-25"
 by = "机主"
@@ -337,15 +339,15 @@ evidence = "机主自测"
 body_hash = "442d25dffddafb5b"
 
 # 头注 11-03 与 11-07 两行写的都是改动后「未复测」，日期取最后一次真机验证的 10-28。
-["vivo/V2547DA/recipe.py"]
+["vivo/V2547DA/V2547DA.toml"]
 build = "PD2547D_A_16.0.21.21.W10"
 date = "2026-10-28"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
-body_hash = "b517012fc7a8fe99"
+body_hash = "0808524c8de5dcf2"
 
-["vivo/V2547DA/recipe_android17.py"]
+["vivo/V2547DA/V2547DA-android17.toml"]
 build = "PD2547D_A_17.1.10.2.W10"
 date = "2026-11-07"
 by = "机主"

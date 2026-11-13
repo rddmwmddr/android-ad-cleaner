@@ -384,7 +384,10 @@ def _recipe_files():
             continue
         toml = sorted(glob.glob(os.path.join(d, "*.toml")))
         if toml:
-            out += toml
+            # 正本是 `<型号>.toml`（目录名即型号，见 #1261）；其余 `*.toml` 是版本变体，由
+            # `recipe_for` 按 build 单独挑，和 `recipe_*.py` 变体同一口径（#1263）。
+            main = os.path.join(d, os.path.basename(d) + ".toml")
+            out.append(main if os.path.exists(main) else toml[0])
             continue
         out += sorted(glob.glob(os.path.join(d, "recipe*.py")))
     return out
@@ -397,8 +400,11 @@ def recipe_for(model, brand="", device_info=None):
         d = os.path.basename(os.path.dirname(r))
         if d == model or model in recipe_meta(r)["models"]:
             # 一个型号可能有不同系统版本的实测路径。仅在版本明确匹配时选择变体。
+            # 变体两种形态：`recipe_*.py` 与 `<型号>-*.toml`（转目录化之后的变体）。
             if device_info:
-                variants = sorted(glob.glob(os.path.join(os.path.dirname(r), "recipe_*.py")))
+                here = os.path.dirname(r)
+                variants = sorted(glob.glob(os.path.join(here, "recipe_*.py")))
+                variants += [t for t in sorted(glob.glob(os.path.join(here, "*.toml"))) if t != r]
                 for variant in variants:
                     recorded = recipe_meta(variant)["build"]
                     if recorded and build_ok(device_info, recorded):

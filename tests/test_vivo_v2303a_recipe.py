@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 import run
 from fixtures import load_recipe, phone_mock
 
-RECIPE = ROOT / "recipes/vivo/V2303A/recipe.py"
+RECIPE = ROOT / "recipes/vivo/V2303A/V2303A.toml"
 
 
 def make_phone(**fields):

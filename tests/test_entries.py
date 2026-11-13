@@ -1129,7 +1129,7 @@ class Xiaomi17UltraBrowserSettingsTests(unittest.TestCase):
 
 
 XIAOMI_667 = ROOT / "recipes" / "xiaomi/M154FF" / "recipe.py"
-VIVO_667 = ROOT / "recipes" / "vivo/V2547DA" / "recipe_android17.py"
+VIVO_667 = ROOT / "recipes" / "vivo/V2547DA" / "V2547DA-android17.toml"
 
 
 def phone_667(start=None, lost=False):
@@ -1740,8 +1740,8 @@ class ScriptsShareOnePredicateTests(unittest.TestCase):
         self.assertEqual(offenders, [], "脚本里还留着 icon_hit 的本地副本")
 
 
-VIVO_RECIPES_530 = (ROOT / "recipes/vivo/V2547DA/recipe.py",
-                ROOT / "recipes/vivo/V2547DA/recipe_android17.py")
+VIVO_RECIPES_530 = (ROOT / "recipes/vivo/V2547DA/V2547DA.toml",
+                ROOT / "recipes/vivo/V2547DA/V2547DA-android17.toml")
 
 
 def calls_on_p_530(tree, method):
@@ -1758,11 +1758,19 @@ class VivoStoreEntryTests(unittest.TestCase):
     """vivo 参考脚本的商店段改用引擎入口，不再按精确文字点底栏（#530）。"""
 
     def test_store_section_uses_the_bottom_tab_helper(self):
+        import tomllib
         for path in VIVO_RECIPES_530:
             with self.subTest(recipe=path.name):
-                tree = ast.parse(path.read_text(encoding="utf-8"))
-                names = [a.value for call in calls_on_p_530(tree, "tab")
-                         for a in call.args if isinstance(a, ast.Constant)]
+                data = tomllib.loads(path.read_text(encoding="utf-8"))
+                store = next(seg for seg in data["segment"] if seg["name"] == "应用商店")
+                if "code" in store:
+                    # 过程段在例外 .py 里：那里照旧该是 p.tab("我的")
+                    tree = ast.parse(path.with_suffix(".py").read_text(encoding="utf-8"))
+                    names = [a.value for call in calls_on_p_530(tree, "tab")
+                             for a in call.args if isinstance(a, ast.Constant)]
+                else:
+                    # 数据段：require_tab 就是引擎的底带 p.tab()（ADR-0012）
+                    names = [op.get("name") for op in store["ops"] if op.get("kind") == "require_tab"]
                 self.assertIn("我的", names, "商店段没改用 p.tab(\"我的\")")
 
 

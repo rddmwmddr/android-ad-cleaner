@@ -18,7 +18,7 @@ MODELS = ["V1986A"]
 # 家族库按这些常量选走法（#1246），缺省档与实现见 tool/recipe_nav.py。
 TAP_ROW_STYLE = "subtitle"
 MY_TAB_STYLE = "vivo"
-import time
+import time  # noqa: F401 - 基线副本，保持与旧脚本逐字一致
 
 
 @step("系统广告")

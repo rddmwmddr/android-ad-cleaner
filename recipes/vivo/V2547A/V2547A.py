@@ -1,5 +1,6 @@
+# V2547A 的本机例外函数（catalog 的 `code=`，影随 `V2547A.toml`）。本机 8 段都是过程段
+# （goto / 循环 / confirm2 / resourceId 点击），逐字保留原实现；线性助手照留。
 # vivo X300 Ultra（V2547A，OriginOS 7，Android 17）机型脚本；2026-10-25 在真机逐页实测，8 段整段跑通，重跑 126 秒。
-from recipe_kit import step
 BUILD = "PD2547B_A_17.1.10.2"          # ro.build.display.id 的开头；对不上引擎只提示，不阻断
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 #
@@ -32,8 +33,8 @@ def bounds_of(n):
 
 
 # ---------- 各段 ----------
-@step("广告与隐私")
-def _():
+
+def step_ad_privacy(p, rt):
     if not search_setting("广告与隐私"):
         print("  ✗ 没进到广告与隐私"); return
     print("  · 广告与隐私")
@@ -42,8 +43,8 @@ def _():
     p.back(1)
 
 
-@step("负一屏")
-def _():
+
+def step_negative(p, rt):
     if not hiboar_panel():
         print("  ✗ 没滑到负一屏（桌面可能没开负一屏），跳过"); return
     print("  · 负一屏设置面板")
@@ -63,8 +64,8 @@ def _():
     p.back(3)
 
 
-@step("全局搜索")
-def _():
+
+def step_global_search(p, rt):
     p.start("com.vivo.globalsearch", ".view.SearchSettingsActivity", settle=0.8)
     if "globalsearch" not in p.focus():
         print("  ✗ 没拉起全局搜索设置"); return
@@ -82,8 +83,8 @@ def _():
     p.back(1)
 
 
-@step("应用商店")
-def _():
+
+def step_store(p, rt):
     p.start("com.bbk.appstore", settle=1.0)
     if not tap_text("我的"):
         print("  ✗ 没找到「我的」"); return
@@ -104,8 +105,8 @@ def _():
     p.back(3)
 
 
-@step("浏览器")
-def _():
+
+def step_browser(p, rt):
     p.start("com.vivo.browser", settle=1.5)
     if not browser_settings():
         print("  ✗ 没进到浏览器设置"); return
@@ -125,8 +126,8 @@ def _():
     p.back(3)
 
 
-@step("阅图锁屏")
-def _():
+
+def step_lock_screen(p, rt):
     if not search_setting("阅图锁屏"):
         print("  ✗ 没进到阅图锁屏"); return
     if "MagazineSettings" not in p.focus():        # 万一停在搜索结果页，再点一次结果
@@ -139,8 +140,8 @@ def _():
     p.back(2)
 
 
-@step("i管家")
-def _():
+
+def step_i_manager(p, rt):
     p.start("com.iqoo.secure", settle=2.0)
     time.sleep(1.2)                            # 首屏有体检动画，动画期间点设置会被吞
     ok = False
@@ -160,8 +161,8 @@ def _():
     p.back(2)
 
 
-@step("天气")
-def _():
+
+def step_weather(p, rt):
     p.start("com.vivo.weather", settle=1.2)
     # 页面上也有个「更多」文字（展开按钮），右上角才是菜单，按 resourceId 点
     try:

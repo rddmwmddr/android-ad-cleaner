@@ -17,7 +17,7 @@ from fixtures import load_recipe
 
 class VivoV1986ARecipeTests(unittest.TestCase):
     def load(self, phone):
-        scope, _ = load_recipe(phone, ROOT / "recipes/vivo/V1986A/recipe.py")
+        scope, _ = load_recipe(phone, ROOT / "recipes/vivo/V1986A/V1986A.toml")
         return scope
 
     def test_actual_model_selects_own_recipe_not_reference(self):

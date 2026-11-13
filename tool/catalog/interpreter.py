@@ -256,6 +256,47 @@ def _require_setting(op: Mapping, g: dict[str, Any]) -> None:
         raise RuntimeError(op["miss_print"])
 
 
+def _require_focus(op: Mapping, g: dict[str, Any]) -> None:
+    """`require("<片段>" in p.focus(), 文案)`：读一次前台再断言，前台读取照旧进调用序列。"""
+    g["require"](op["contains"] in g["p"].focus(), op["miss_print"])
+
+
+def _require_find(op: Mapping, g: dict[str, Any]) -> None:
+    """`require(p.find(text, exact=…), 文案)`：找一次再断言。"""
+    kwargs: dict[str, Any] = {}
+    if "exact" in op:
+        kwargs["exact"] = op["exact"]
+    g["require"](g["p"].find(op["text"], **kwargs), op["miss_print"])
+
+
+def _if_find(op: Mapping, g: dict[str, Any]) -> None:
+    """`if p.find(text, exact=…): … else …`。"""
+    kwargs: dict[str, Any] = {}
+    if "exact" in op:
+        kwargs["exact"] = op["exact"]
+    if g["p"].find(op["text"], **kwargs):
+        _run(op.get("ops", []), g)
+    else:
+        _run(op.get("else_ops", []), g)
+
+
+def _if_entry(op: Mapping, g: dict[str, Any]) -> None:
+    """`if p.entry(text, scrolls=…): … else …`（与 `gated` 的区别是带 else 分支）。"""
+    if g["p"].entry(op["text"], scrolls=op.get("scrolls", 6)):
+        _run(op.get("ops", []), g)
+    else:
+        _run(op.get("else_ops", []), g)
+
+
+def _if_lib(op: Mapping, g: dict[str, Any]) -> None:
+    """`if <库助手>(…): … else …`（如 `if tap_row("消息提醒"): …`）。返回值决定走哪支。"""
+    if g[op["name"]](*[_arg(a, g) for a in op.get("args", [])],
+                     **{k: _arg(v, g) for k, v in op.get("kwargs", {}).items()}):
+        _run(op.get("ops", []), g)
+    else:
+        _run(op.get("else_ops", []), g)
+
+
 _HANDLERS: dict[str, Callable[[Mapping, dict[str, Any]], None]] = {
     "lib": _lib,
     "require_lib": _require_lib,
@@ -285,4 +326,9 @@ _HANDLERS: dict[str, Callable[[Mapping, dict[str, Any]], None]] = {
     "dismiss": _dismiss,
     "skip_in_safe_mode": _skip_in_safe_mode,
     "require_setting": _require_setting,
+    "require_focus": _require_focus,
+    "require_find": _require_find,
+    "if_find": _if_find,
+    "if_entry": _if_entry,
+    "if_lib": _if_lib,
 }

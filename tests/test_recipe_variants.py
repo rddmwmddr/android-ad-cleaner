@@ -38,9 +38,9 @@ class VariantTests(unittest.TestCase):
     def test_vivo_x300_ultra_satellite_android_17(self):
         # #220：同一型号升到 Android 17 后商店入口换了，路径按系统版本分开
         self.assertEqual(self.pick("V2547DA", "vivo", "", "PD2547D_A_17.1.10.2.W10"),
-                         "vivo/V2547DA/recipe_android17.py")
+                         "vivo/V2547DA/V2547DA-android17.toml")
         self.assertEqual(self.pick("V2547DA", "vivo", "", "PD2547D_A_16.0.22.14.W10"),
-                         "vivo/V2547DA/recipe.py")
+                         "vivo/V2547DA/V2547DA.toml")
 
     def test_variants_are_packaged(self):
         shipped = {Path(src).relative_to(ROOT).as_posix() for src, _ in bundle_data(ROOT)}

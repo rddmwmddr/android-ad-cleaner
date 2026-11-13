@@ -591,8 +591,8 @@ class SafeModeSkipTests(unittest.TestCase):
         """vivo 的「个性化推荐」页只有无标题开关：自己按坐标点的那条路同样不进安全模式（#909）。
 
         它不是 `p.off(page=…)`，所以不受引擎那条限制；段落里还关着点名开关，不能整段跳过。"""
-        for path in ("recipes/vivo/V2303A/recipe.py",
-                     "recipes/vivo/V2547DA/recipe_android17.py"):
+        for path in ("recipes/vivo/V2303A/V2303A.toml",
+                     "recipes/vivo/V2547DA/V2547DA-android17.toml"):
             with self.subTest(recipe=path):
                 p = touchless()
                 p.switches.return_value = [("", True, (1, 2))]
@@ -1169,10 +1169,12 @@ class MissingSwitchEvidenceTests(unittest.TestCase):
     def guard_message(self, recipe, names, *rows):
         brand, _, model = recipe.partition("-")
         import entries
-        scope, _ = load_recipe(phone_903(*rows),
-                               ROOT / "recipes" / entries.FAMILY.get(brand, brand) / model / "recipe.py")
+        base = ROOT / "recipes" / entries.FAMILY.get(brand, brand) / model
+        path = base / "recipe.py" if (base / "recipe.py").exists() else base / (model + ".toml")
+        scope, _ = load_recipe(phone_903(*rows), path)
+        close = scope.get("close_named") or scope["close_named_vivo"]
         with self.assertRaises(RuntimeError) as caught:
-            scope["close_named"](names, "系统·广告服务")
+            close(names, "系统·广告服务")
         return str(caught.exception)
 
     def test_missing_target_lists_the_switch_titles_in_page_order(self):

@@ -1,0 +1,112 @@
+# vivo V2417A 页面树（catalog，#1263）。路径 2026-10-30 真机逐页操作。
+model = "V2417A"
+models = ["V2417A"]
+build = "PD2417D_A_16.2.14.1.W10"
+tail = "tail"
+
+[const]
+READ_SWITCHES_STYLE = "vivo"
+
+[[segment]]
+name = "系统广告"
+ops = [
+  { kind = "start", pkg = "com.android.settings", activity = ".Settings$AdAndPrivacyActivityForOsTwo", settle = 0 },
+  { kind = "require_focus", contains = "AdAndPrivacyActivityForOsTwo", miss_print = "未进入广告与隐私页" },
+  { kind = "lib", name = "close_named_vivo", args = [["个性化广告", "个性化推荐", "智能推荐服务"], "系统·广告与隐私"] },
+]
+
+[[segment]]
+name = "全局搜索"
+ops = [
+  { kind = "start", pkg = "com.vivo.globalsearch", activity = ".view.SearchSettingsActivity" },
+  { kind = "lib", name = "tap", args = ["首页展示内容"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "close_named_vivo", args = [["搜索框推荐词", "推荐卡片"], "全局搜索·首页展示内容"] },
+  { kind = "lib", name = "tap", args = ["推荐热搜榜单"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "close_named_vivo", args = [["热门搜索"], "全局搜索·热搜榜单"] },
+  { kind = "back", n = 2 },
+  { kind = "lib", name = "tap", args = ["个性化内容"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "close_named_vivo", args = [["广告个性化"], "全局搜索·个性化内容"] },
+]
+
+[[segment]]
+name = "阅图锁屏"
+ops = [
+  { kind = "start", pkg = "com.vivo.magazine", activity = ".ui.MagazineSettings" },
+  { kind = "lib", name = "close_named_vivo", args = [["阅图锁屏", "锁屏横滑进入阅图"], "阅图锁屏"], kwargs = { max_screens = 2 } },
+]
+
+[[segment]]
+name = "应用商店"
+ops = [
+  { kind = "start", pkg = "com.bbk.appstore" },
+  { kind = "if_find", text = "进入首页", exact = true, ops = [
+    { kind = "lib", name = "tap", args = ["进入首页"], kwargs = { scrolls = 0 } },
+  ]},
+  { kind = "require_go", text = "我的", expect = "设置", miss_print = "未进入商店·我的页" },
+  { kind = "require_go", text = "设置", expect = "关于", miss_print = "未进入商店设置" },
+  { kind = "require_focus", contains = "AppstoreSettingsActivity", miss_print = "商店设置页面不符" },
+  { kind = "lib", name = "tap", args = ["关于"] },
+  { kind = "lib", name = "tap", args = ["个性化推荐"] },
+  { kind = "lib", name = "store_personalization" },
+  { kind = "back" },
+  { kind = "lib", name = "tap", args = ["服务管理"] },
+  { kind = "lib", name = "close_named_vivo", args = [["签到有礼", "顶部轮播图", "顶部栏目", "开屏", "摇一摇", "悬浮球", "限时推广"], "商店·服务管理"], kwargs = { max_screens = 2 } },
+]
+
+[[segment]]
+name = "浏览器"
+ops = [
+  { kind = "start", pkg = "com.vivo.browser", settle = 2.0 },
+  { kind = "if_entry", text = "菜单", scrolls = 0, else_ops = [
+    { kind = "require_go", text = "我的", expect = "设置", miss_print = "未打开浏览器设置入口（「菜单」与「我的」都试过；权限申请只拒绝）" },
+  ]},
+  { kind = "require_go", text = "设置", expect = "首页设置", miss_print = "未进入浏览器设置" },
+  { kind = "require_focus", contains = "SettingActivity", miss_print = "浏览器设置页面不符" },
+  { kind = "lib", name = "tap", args = ["首页设置"] },
+  { kind = "lib", name = "tap", args = ["极简首页"], kwargs = { scrolls = 0 } },
+  { kind = "require_find", text = "首页上滑展示资讯", exact = true, miss_print = "未切换到极简首页" },
+  { kind = "lib", name = "close_named_vivo", args = [["首页上滑展示资讯"], "浏览器·首页设置"] },
+  { kind = "back" },
+  { kind = "lib", name = "tap", args = ["网页浏览设置"] },
+  { kind = "lib", name = "close_named_vivo", args = [["网页下载相关推荐"], "浏览器·网页浏览"] },
+  { kind = "back" },
+  { kind = "lib", name = "tap", args = ["更多设置"] },
+  { kind = "lib", name = "close_named_vivo", args = [["WiFi连接跳转新闻资讯", "下载管理页展示热门应用", "下载管理页展示下载热榜"], "浏览器·更多设置"], kwargs = { max_screens = 2 } },
+  { kind = "back" },
+  { kind = "lib", name = "tap", args = ["隐私权限设置"] },
+  { kind = "lib", name = "close_named_vivo", args = [["个性化内容", "第三方应用来源个性化推荐", "个性化广告推荐"], "浏览器·隐私"] },
+]
+
+[[segment]]
+name = "i管家"
+ops = [
+  { kind = "start", pkg = "com.iqoo.secure", activity = ".MainSettings" },
+  { kind = "lib", name = "tap", args = ["关于"] },
+  { kind = "lib", name = "tap", args = ["个性化设置"] },
+  { kind = "lib", name = "close_named_vivo", args = [["应用个性化推荐"], "手机管家·个性化设置"] },
+]
+
+[[segment]]
+name = "天气"
+ops = [
+  { kind = "start", pkg = "com.vivo.weather", activity = ".WeatherSettings" },
+  { kind = "lib", name = "close_named_vivo", args = [["天气服务"], "天气·热点资讯通知"] },
+]
+
+[[segment]]
+name = "负一屏"
+ops = [
+  { kind = "lib", name = "hiboard_panel" },
+  { kind = "lib", name = "tap", args = ["更多设置"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "tap", args = ["个性化推荐"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "close_named_vivo", args = [["服务推荐", "资讯推荐"], "负一屏·个性化推荐"] },
+  { kind = "back", n = 2 },
+  { kind = "lib", name = "hiboard_panel" },
+  { kind = "lib", name = "tap", args = ["内容精选"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "close_named_vivo", args = [["内容精选"], "负一屏·内容精选"] },
+  { kind = "back" },
+  { kind = "lib", name = "hiboard_panel" },
+  { kind = "lib", name = "tap", args = ["热点资讯"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "close_named_vivo", args = [["热点资讯"], "负一屏·热点资讯"] },
+  { kind = "back" },
+]

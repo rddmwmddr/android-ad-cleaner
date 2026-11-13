@@ -22,7 +22,7 @@ import catalog  # noqa: E402
 import fast  # noqa: E402
 import recipe_kit  # noqa: E402
 
-SCRIPT = "recipes/vivo/V1986A/recipe.py"
+SCRIPT = "tests/fixtures/vivo_v1986a/recipe.py"
 DATA = "recipes/vivo/V1986A/V1986A.toml"
 
 
@@ -256,6 +256,47 @@ class ReaderTests(unittest.TestCase):
             bad = Path(tmp) / "bad.toml"
             bad.write_text('model = "x"\n[[segment]]\nname = "s"\nops = [{kind = "nope"}]\n', encoding="utf-8")
             self.assertTrue(typecheck_recipes._check_catalog(str(bad))[0])
+
+    def test_every_toml_lib_call_resolves_to_an_implementation(self):
+        """`.toml` 里每个 lib / require_lib 名都要经事实层解析到实现（入口归属的根因守护，#1263）。
+
+        归属靠 `scan_catalog` 给 `Call.module` 盖章；漏盖时 `imported_sources()` 拿不到实现，
+        入口速查会把这台机从「用过的机型」里静默删掉（`com.iqoo.secure` / `com.vivo.weather` 那次）。
+        覆盖全部已转型号，不是抽查一份。"""
+        import tomllib
+        import recipe_source
+
+        surface = recipe_source.surface_sources()
+
+        def lib_names(ops):
+            for op in ops:
+                if op.get("kind") in ("lib", "require_lib") and "name" in op:
+                    yield op["name"]
+                yield from lib_names(op.get("ops") or [])
+                yield from lib_names(op.get("else_ops") or [])
+
+        checked = 0
+        for toml in sorted((ROOT / "recipes").rglob("*.toml")):
+            data = tomllib.loads(toml.read_text(encoding="utf-8"))
+            segments = data.get("segment")
+            if not segments:          # recipes/verified.toml 这类非页面树文件
+                continue
+            wanted = {name for seg in segments for name in lib_names(seg.get("ops") or [])}
+            if not wanted:
+                continue
+            checked += 1
+            facts = recipe_source.scan_catalog_file(str(toml))
+            missing = wanted - set(recipe_source.imported_sources(facts, surface))
+            self.assertEqual(missing, set(),
+                             f"{toml.relative_to(ROOT)}：这些 lib 名没解析到实现 {sorted(missing)}")
+        self.assertGreater(checked, 0, "一份带 lib 的 .toml 都没扫到：发现口径坏了")
+
+    def test_entry_doc_matches_generator(self):
+        """提交的 `docs/清单/入口速查.md` 必须与生成器逐字一致（入口归属变化的产物守护，#1263）。"""
+        import entries
+        doc = (ROOT / "docs" / "清单" / "入口速查.md").read_text(encoding="utf-8")
+        self.assertEqual(doc, entries.markdown(str(ROOT / "recipes")),
+                         "改了 tool/entries.py 或机型脚本后重新生成：python3 tool/entries.py > docs/清单/入口速查.md")
 
 
 class GenTests(unittest.TestCase):
