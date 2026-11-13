@@ -201,10 +201,18 @@ def run_script(fast, recipe_kit, fixtures, path, scenario):
 
 
 def scripts(root=ROOT):
-    """当前树里的机型脚本，按相对路径排序：`recipes/<家族>/<型号>/<脚本名>.py`。"""
+    """当前树里的机型脚本，按相对路径排序：`recipe*.py` 加 catalog 的 `<型号>.toml`。
+
+    一个型号目录要么是 `.py`（迁移期仍是活的）、要么是 `<型号>.toml`（已转页面树）；同目录两者都在时
+    `.py` 优先（迁移期的等价副本，如 V1986A），不让一份机型记两遍（#1262）。"""
     root = Path(root).resolve()
-    return [path.relative_to(root).as_posix()
-            for path in sorted((root / "recipes").rglob("recipe*.py"))]
+    found = [path.relative_to(root).as_posix()
+             for path in sorted((root / "recipes").rglob("recipe*.py"))]
+    for toml in sorted((root / "recipes").glob("*/*/*.toml")):
+        if any(toml.parent.glob("recipe*.py")):
+            continue
+        found.append(toml.relative_to(root).as_posix())
+    return sorted(found)
 
 
 def dump(root):

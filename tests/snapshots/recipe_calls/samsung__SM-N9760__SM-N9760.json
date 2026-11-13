@@ -1,5 +1,5 @@
 {
- "script": "recipes/samsung/SM-N9760/recipe.py",
+ "script": "recipes/samsung/SM-N9760/SM-N9760.toml",
  "scenarios": {
   "present": [
    ["广告", "locked", [], {}],
