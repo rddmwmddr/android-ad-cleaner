@@ -33,9 +33,9 @@ name = "桌面文件夹"
 ops = [
   {kind = "skip_in_safe_mode"},
   {kind = "start", pkg = "com.hihonor.appmarket", activity = ".module.topapps.TopAppsSettingActivity"},
-  {kind = "off", page = "精品应用·更多推荐"},
+  {kind = "off", page = "精品应用·更多推荐", page_wide = true},
   {kind = "start", pkg = "com.hihonor.appmarket", activity = ".popularapps.activity.PopularAppsSettingActivity"},
-  {kind = "off", page = "热门推荐管理"},
+  {kind = "off", page = "热门推荐管理", page_wide = true},
 ]
 
 [[segment]]
@@ -80,7 +80,7 @@ ops = [
   {kind = "tap", text = "更多设置", exact = true},
   {kind = "off", only = ["接收新通知"], page = "阅读·设置（推书通知）"},
   {kind = "tap", text = "广告推荐服务", exact = true, scrolls = 0},
-  {kind = "off", page = "阅读·广告推荐服务"},
+  {kind = "off", page = "阅读·广告推荐服务", page_wide = true},
   {kind = "back", n = 2},
 ]
 

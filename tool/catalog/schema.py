@@ -17,7 +17,7 @@ SEGMENT_KEYS = frozenset({"name", "code", "ops"})
 # 每种 op 允许的键。白名单：出现名单外的键即报错。
 OP_KEYS = {
     "lib": frozenset({"kind", "name", "args", "kwargs"}),
-    "off": frozenset({"kind", "only", "only_code", "keep", "page", "max_screens"}),
+    "off": frozenset({"kind", "only", "only_code", "keep", "page", "max_screens", "page_wide"}),
     "close_all": frozenset({"kind", "page", "button"}),
     "start": frozenset({"kind", "pkg", "activity", "settle", "foreground", "expect", "budget"}),
     "entry": frozenset({"kind", "text", "scrolls"}),
@@ -152,10 +152,12 @@ def _validate_off(op: Mapping, where: str) -> None:
     has_only, has_code = "only" in op, "only_code" in op
     if has_only and has_code:
         raise SchemaError(f"{where} 的 off 不能同时给 only 与 only_code")
+    if not has_only and not has_code and not op.get("page_wide"):
+        raise SchemaError(f"{where} 的 off 没点名：整页全关请加 page_wide=true，或用 close_all")
     if has_only:
         only = op["only"]
         if not isinstance(only, list) or not only:
-            raise SchemaError(f"{where} 的 off 的 only 必须是非空数组（整页全关就省略 only）")
+            raise SchemaError(f"{where} 的 off 的 only 必须是非空数组（整页全关就写 page_wide=true）")
         overlap = set(only) & set(op.get("keep", []))
         if overlap:
             raise SchemaError(f"{where} 的 off 里 only 与 keep 重叠：{sorted(overlap)}")

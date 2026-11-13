@@ -23,7 +23,7 @@ CLUES = ROOT / "docs" / "清单" / "词条线索.md"
 
 # 解析不出的 only=，按脚本冻结。新脚本多了这种写法，先看能不能写成字面量或模块级常量，确实不能再改这里。
 UNRESOLVED_ONLY = {
-    "honor/CLE-AN00/recipe.py": 1,
+    "honor/CLE-AN00/CLE-AN00.toml": 1,
     "oppo/PHK110/recipe.py": 1,
     "oppo/PKX110/recipe.py": 1,
     "oppo/PKH110/recipe.py": 1,
@@ -65,14 +65,14 @@ UNRESOLVED_KEEP = {
 }
 # 模块级字典里的说明文字，按脚本冻结。
 DICT_NOTES = {
-    "honor/WKL-AN20/recipe.py": 37,
+    "honor/WKL-AN20/WKL-AN20.toml": 37,
 }
 # 一条词条都读不出来的脚本（判据就是零词条）：开关点名散在自建函数里（vivo-V2547A 的 off()、
 # oneplus-PHK110 的 off_exact()、samsung-SM-N9760 的 protect()），或者名单运行时才算。
 SILENT = (
     "oppo/PHK110/recipe.py",
     "oppo/PHK110/recipe_android15.py",
-    "samsung/SM-N9760/recipe.py",
+    "samsung/SM-N9760/SM-N9760.toml",
     "vivo/V2547A/recipe.py",
 )
 # 页面标签归不到分组的调用。多出来的先看能不能加进 vocab.PAGES。
@@ -107,6 +107,10 @@ class RealRecipesTest(unittest.TestCase):
         for word in self.scan.words:
             if word.injected:
                 continue            # 词在注入段体里，出处是调用点；下面一条用例守它（#1209）
+            if word.script.endswith(".toml"):
+                # 数据形态：词条出处是合成的等价源码行号，不是 .toml 正文里的行；只校验文件在。
+                self.assertTrue((ROOT / "recipes" / word.script).is_file(), word.source)
+                continue
             lines = cache.setdefault(word.script, (ROOT / "recipes" / word.script).read_text(encoding="utf-8").splitlines())
             self.assertIn(word.text, lines[word.line - 1], word.source)
 

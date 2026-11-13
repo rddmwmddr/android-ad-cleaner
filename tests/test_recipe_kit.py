@@ -484,9 +484,9 @@ OFF_CALL_WIDE = [
     ("recipes/oppo/RMX3700/recipe.py", "广告跟踪"),
     ("recipes/oppo/RMX3700/recipe.py", "应用建议"),
     ("recipes/oppo/RMX3888/recipe.py", "广告跟踪"),
-    ("recipes/honor/PNM-AN10/recipe.py", "广告跟踪"),
-    ("recipes/honor/PNM-AN10/recipe.py", "桌面文件夹"),
-    ("recipes/honor/PNM-AN10/recipe.py", "主题"),
+    ("recipes/honor/PNM-AN10/PNM-AN10.toml", "广告跟踪"),
+    ("recipes/honor/PNM-AN10/PNM-AN10.toml", "桌面文件夹"),
+    ("recipes/honor/PNM-AN10/PNM-AN10.toml", "主题"),
 ]
 
 # 搬进注入面的整页关闭段（#1213）：脚本侧只剩一行调用，形状改从 `recipe_steps` 的实现里看。
@@ -497,10 +497,10 @@ INJECTED_WIDE = ["ad_tracking_close_all"]
 # 或者段体已经搬进注入面、脚本里只剩一行调用（#1213，形状由 `INJECTED_WIDE` 那条结构断言守）。
 # 它们与上面那份同样是整页关闭，行为用例一条都不能少；期望集不含它们，结构断言才不会因此变红。
 OTHER_WIDE = [
-    ("recipes/honor/CLE-AN00/recipe.py", "广告跟踪"),
+    ("recipes/honor/CLE-AN00/CLE-AN00.toml", "广告跟踪"),
     ("recipes/oppo/PMA110/recipe.py", "广告跟踪"),
     ("recipes/oppo/PLG110/recipe.py", "广告跟踪"),
-    ("recipes/honor/WKL-AN20/recipe.py", "广告跟踪"),
+    ("recipes/honor/WKL-AN20/WKL-AN20.toml", "广告跟踪"),
     ("recipes/oppo/PLR110/recipe.py", "广告跟踪"),
     ("recipes/oppo/PYB110/recipe.py", "广告跟踪"),
 ]
@@ -519,7 +519,7 @@ GUARDED_RECIPES = {
 
 # 也有 `guard()`，但漏的那条路正是「同型号同版本 + --ref」：型号守卫会放行，
 # 要证明跳过出口生效就得把型号与版本喂对（#947）。
-NEEDS_GUARD_SHELL = {"recipes/honor/WKL-AN20/recipe.py"}
+NEEDS_GUARD_SHELL = {"recipes/honor/WKL-AN20/WKL-AN20.toml"}
 
 
 def run_recipe_step(device, path, only):
@@ -683,7 +683,7 @@ class BehaviourUnchangedTests(unittest.TestCase):
         p.find.return_value = False         # 不点「显示系统程序」，直接开「更多选项」
         p.tap.return_value = True
         p.switches.return_value = []
-        scope, _ = run_recipe_step(p, "recipes/honor/CLE-AN00/recipe.py", ["广告跟踪"])
+        scope, _ = run_recipe_step(p, "recipes/honor/CLE-AN00/CLE-AN00.toml", ["广告跟踪"])
         self.assertEqual(scope["SKIPPED_STEPS"], [])
         self.assertEqual(scope["FAILED_STEPS"], [])
         p.tap.assert_any_call("全部关闭", exact=True, scrolls=0)
@@ -732,7 +732,7 @@ class BehaviourUnchangedTests(unittest.TestCase):
         return p
 
     def test_wkl_an20_still_closes_the_whole_page(self):
-        path = "recipes/honor/WKL-AN20/recipe.py"
+        path = "recipes/honor/WKL-AN20/WKL-AN20.toml"
         p = phone_mock()
         p.locked.return_value = False
         p.focus.return_value = _AnyFocus("com.hihonor.id/_")
@@ -814,6 +814,46 @@ def whole_page_steps(source, helpers=()):
         name = first.args[0].value if first.args else node.name
         steps[name] = (node in wide and node not in narrow, node)
     return steps
+
+
+def toml_wide_steps(toml_path, helpers=()):
+    """`.toml` 机型的整页关闭段：{段名: (是否整页关闭, 段首是否跳过出口)}。
+
+    数据段看 `off` 的 `page_wide`（且不混点名开关，与 `wide_flags()` 的「整段只做整页关闭」同判据）；
+    `code=` 段看同名 `.py` 例外里的那个函数，复用同一份 `wide_flags()` / `first_call_name()`。"""
+    import tomllib
+    import os
+    with open(toml_path, "rb") as handle:
+        data = tomllib.load(handle)
+    exc = str(toml_path)[:-len(".toml")] + ".py"
+    funcs, by_name = [], {}
+    if os.path.exists(exc):
+        tree = ast.parse(open(exc, encoding="utf-8").read())
+        funcs = [node for node in tree.body if isinstance(node, ast.FunctionDef)]
+        by_name = {node.name: node for node in funcs}
+    wide, narrow = wide_flags(funcs + list(helpers))
+
+    def flat(ops):
+        for op in ops:
+            yield op
+            yield from flat(op.get("ops", []))
+
+    out = {}
+    for seg in data.get("segment", []):
+        name = seg["name"]
+        if "code" in seg:
+            node = by_name.get(seg["code"])
+            if node is None:
+                continue
+            out[name] = (node in wide and node not in narrow,
+                         first_call_name(node) == "skip_in_safe_mode")
+        else:
+            ops = seg.get("ops", [])
+            has_wide = any(o.get("kind") == "off" and o.get("page_wide") for o in flat(ops))
+            has_named = any(o.get("kind") == "off" and ("only" in o or "only_code" in o) for o in flat(ops))
+            first = ops[0].get("kind") if ops else None
+            out[name] = (has_wide and not has_named, first == "skip_in_safe_mode")
+    return out
 
 
 def first_call_name(node):
@@ -902,6 +942,13 @@ def _():
                 checked.append((str(path), name))
                 self.assertEqual(first_call_name(node), "skip_in_safe_mode",
                                  f"{path} 的「{name}」整页关闭，安全模式下要整段跳过")
+        for path in sorted((ROOT / "recipes").glob("*/*/*.toml")):
+            for name, (is_wide, first_skips) in toml_wide_steps(path, helpers).items():
+                if not is_wide:
+                    continue
+                checked.append((str(path), name))
+                self.assertTrue(first_skips,
+                                f"{path} 的「{name}」整页关闭，安全模式下要整段跳过")
         injected = injected_wide_steps()
         for name, node in injected.items():
             self.assertEqual(first_call_name(node), "skip_in_safe_mode",

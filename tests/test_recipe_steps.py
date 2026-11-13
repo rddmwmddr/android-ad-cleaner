@@ -21,7 +21,7 @@ import recipe_steps  # noqa: E402
 import recipe_strategies  # noqa: E402
 from fixtures import normalize, phone_mock  # noqa: E402
 
-RECIPES = tuple(sorted((ROOT / "recipes").rglob("recipe*.py")))
+RECIPES = tuple(sorted((ROOT / "recipes").rglob("*.py")))
 
 
 def step_surface():

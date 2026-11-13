@@ -14,9 +14,6 @@ if TYPE_CHECKING:
 BUILD = ""
 MODELS = ["PNM-AN10"]
 
-NO = ("取消", "以后再说", "禁止", "暂不", "跳过", "我知道了")
-
-
 def dismiss(*words):
     """开 App 时的推荐弹窗/协议弹窗：一律点「取消/以后再说/禁止」，不替用户同意。"""
     for _ in range(3):
@@ -27,7 +24,10 @@ def dismiss(*words):
         p.tap(hit[0], exact=True, scrolls=0)
 
 
-def dismiss_no(p, rt):
+NO = ("取消", "以后再说", "禁止", "暂不", "跳过", "我知道了")
+
+
+def dismiss_no():
     dismiss(*NO)
 
 

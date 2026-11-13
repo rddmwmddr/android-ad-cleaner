@@ -19,6 +19,40 @@ from recipe_runtime import Step
 from . import interpreter, schema
 
 
+class CatalogScope(dict):
+    """catalog 的执行作用域：字典本体是例外函数/注入名的命名空间，`ONLY` / `HALTED` 代理到这次执行的 `rt`。
+
+    与 `recipe_loader.RecipeScope` 同一形状：测试装载（`tests/fixtures.load_recipe`）返回它、拿它当
+    脚本命名空间用，`scope["ONLY"] = [...]` 改的是 `rt.only`，`scope["rt"].run_step(...)` 才按新名单跑。
+    `exec` 写名字走字典本体（CPython 不调子类的 `__setitem__`），代理只服务测试侧的显式读写。"""
+
+    def __init__(self, *args, rt=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.rt = rt
+
+    def __getitem__(self, key):
+        if key == "ONLY":
+            return self.rt.only
+        if key == "HALTED":
+            return self.rt.halted
+        return super().__getitem__(key)
+
+    def __setitem__(self, key, value):
+        if key == "ONLY":
+            self.rt.only = value
+            return
+        if key == "HALTED":
+            self.rt.halted = value
+            return
+        super().__setitem__(key, value)
+
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+
 class LoadedCatalog:
     """装载后的数据：这次执行、执行作用域、按书写顺序排好的段。形状对齐 `LoadedRecipe`。"""
 
@@ -63,7 +97,7 @@ def load(path, p, only=(), clock=None, namespace=None) -> LoadedCatalog:
     schema.validate(data)
 
     rt = recipe_runtime.Runtime(p, list(only), clock)
-    g: dict = dict(namespace or {})
+    g: dict = CatalogScope(namespace or {}, rt=rt)
     g["time"] = clock or time
     g.update(data.get("const", {}))
     rt.namespace = g

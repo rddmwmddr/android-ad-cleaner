@@ -1842,7 +1842,7 @@ class VivoGearTests(unittest.TestCase):
 #   直达不通时退回了原路径、断线不被吞成「入口改名」。真机上的落点仍要另验。
 
 
-PNM_796 = ROOT / "recipes" / "honor/PNM-AN10" / "recipe.py"
+PNM_796 = ROOT / "recipes" / "honor/PNM-AN10" / "PNM-AN10.toml"
 PLR_796 = ROOT / "recipes" / "oppo/PLR110" / "recipe.py"
 
 HIBOARD_START_796 = "am start -f 0x10008000 -n com.hihonor.hiboard/com.hihonor.intelligent.LauncherActivity"

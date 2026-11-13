@@ -24,7 +24,7 @@ import recipe_source  # noqa: E402
 import recipe_strategies  # noqa: E402
 from fixtures import normalize, phone_mock  # noqa: E402
 
-RECIPES = tuple(sorted((ROOT / "recipes").rglob("recipe*.py")))
+RECIPES = tuple(sorted((ROOT / "recipes").rglob("*.py")))
 DRIVER = ROOT / "tests" / "compare_recipe_calls.py"
 # 两张注入面各自的共享分节清单：recipe_nav / recipe_strategies 的 `SHARED` 由本文件消费（#1247）。
 SURFACES = ((recipe_nav, recipe_source.NAV_MODULE, "NAV"),

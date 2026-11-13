@@ -189,11 +189,25 @@ def _place(script: str) -> tuple[str, str]:
 
 def audit(recipes_dir: str) -> Report:
     """扫整个 `recipes/`：每份脚本的本机函数，加上「同名函数出现在几台机型」。"""
-    family_of, model_of, functions_of = {}, {}, {}
+    family_of, model_of = {}, {}
+    functions_of: dict[str, tuple] = {}
     for script in recipe_source.scan_dir(recipes_dir):
         family, model = _place(script)
-        with open(os.path.join(recipes_dir, script), encoding="utf-8") as handle:
-            functions = classify(handle.read())
+        path = os.path.join(recipes_dir, script)
+        seg_codes = set()
+        if script.endswith(".toml"):
+            # catalog 机型：本机函数在同目录同名的 `.py` 例外里；没有例外就没有本机函数。
+            import tomllib
+            with open(path, "rb") as handle:
+                data = tomllib.load(handle)
+            # 段 `code=` 指向的函数等同旧 `@step` 段体，不是本机助手，不计入（与原口径一致）。
+            seg_codes = {seg["code"] for seg in data.get("segment", []) if "code" in seg}
+            path = path[:-len(".toml")] + ".py"
+            if not os.path.isfile(path):
+                family_of[script], model_of[script], functions_of[script] = family, model, ()
+                continue
+        with open(path, encoding="utf-8") as handle:
+            functions = tuple(f for f in classify(handle.read()) if f.name not in seg_codes)
         family_of[script], model_of[script], functions_of[script] = family, model, functions
     reuse = defaultdict(set)
     for script, functions in functions_of.items():
