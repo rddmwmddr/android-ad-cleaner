@@ -4,10 +4,13 @@
 # 要清弹窗、按相邻两行的行状态分岔。
 import time
 
+# bounds 只给注入面的 carousel_choices 取（它按执行作用域解析这个名字）
+from fast import ScreenLocked, bounds
+
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import VERIFIED_SWITCHES, p, require, rt, skip, skip_in_safe_mode
-    from recipe_nav import app_settings, system_settings, tap_page
+    from recipe_nav import app_settings, read_switches, system_settings, tap_page
     from recipe_strategies import close_named_expect
 
 BUILD = "PLG110_16.0.10"
