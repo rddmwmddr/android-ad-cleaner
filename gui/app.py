@@ -14,7 +14,7 @@ except ImportError:
     import winpreflight, updates, update_install, harmony_bridge
 
 APP_NAME = "肉呆去广告"
-VERSION = "0.4.3"
+VERSION = "0.4.4"
 FROZEN = getattr(sys, "frozen", False)
 BASE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TOOL = os.path.join(BASE, "tool")
