@@ -98,7 +98,7 @@ BUILD_GATED = {"oneplus-PHK110": ("PHK110", "PHK110_16.0.5.1201")}
 
 
 def recipe_of(name):
-    """`"oppo-PMX110"` → `recipes/oppo/PMX110/recipe.py`（目录按家族/型号两层，#1261）。"""
+    """`"oppo-PMX110"` → `recipes/oppo/PMX110/PMX110.toml`（目录按家族/型号两层，#1261）。"""
     brand, _, model = name.partition("-")
     import entries
     d = ROOT / "recipes" / entries.FAMILY.get(brand.lower(), brand) / (model or name)
