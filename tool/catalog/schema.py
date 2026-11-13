@@ -38,6 +38,11 @@ OP_KEYS = {
     "dismiss": frozenset({"kind"}),
     "skip_in_safe_mode": frozenset({"kind"}),
     "require_setting": frozenset({"kind", "kw", "entry", "miss_print"}),
+    "require_focus": frozenset({"kind", "contains", "miss_print"}),
+    "require_find": frozenset({"kind", "text", "exact", "miss_print"}),
+    "if_find": frozenset({"kind", "text", "exact", "ops", "else_ops"}),
+    "if_entry": frozenset({"kind", "text", "scrolls", "ops", "else_ops"}),
+    "if_lib": frozenset({"kind", "name", "args", "kwargs", "ops", "else_ops"}),
     "back": frozenset({"kind", "n"}),
     "top": frozenset({"kind", "n"}),
     "scoped": frozenset({"kind", "systemui_text", "ops"}),
@@ -132,6 +137,20 @@ def _validate_op(op: object, where: str) -> None:
     elif kind == "require_setting":
         _require(op, "kw", where)
         _require(op, "miss_print", where)
+    elif kind == "require_focus":
+        _require(op, "contains", where)
+        _require(op, "miss_print", where)
+    elif kind == "require_find":
+        _require(op, "text", where)
+        _require(op, "miss_print", where)
+    elif kind in ("if_find", "if_entry"):
+        _require(op, "text", where)
+        _validate_ops(op.get("ops", []), where)
+        _validate_ops(op.get("else_ops", []), where)
+    elif kind == "if_lib":
+        _require(op, "name", where)
+        _validate_ops(op.get("ops", []), where)
+        _validate_ops(op.get("else_ops", []), where)
     elif kind == "start":
         _require(op, "pkg", where)
     elif kind == "gated":

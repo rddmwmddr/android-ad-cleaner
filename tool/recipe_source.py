@@ -535,10 +535,19 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                     lines.append(f"maybe({_s(text)})")
                 lower(op.get("ops", []))
             elif kind == "scoped":
+                if "systemui_text" in op:
+                    lines.append(f"p.systemui_text = {op['systemui_text']!r}")
                 lower(op.get("ops", []))
+            elif kind in ("if_find", "if_entry", "if_lib"):
+                # 带条件分支的 op：两支里的 off / 入口调用一样要读出来，否则词与入口会静默丢（#1263）。
+                lower(op.get("ops", []))
+                lower(op.get("else_ops", []))
             elif kind in ("lib", "require_lib", "code"):
                 args = ", ".join(_s(a) for a in op.get("args", []))
-                lines.append(f"{op['name']}({args})")
+                # 词库按 `close_named(...)` 认词；策略库的变体名（close_named_vivo）折回旧名，
+                # 名单里的开关名才不会被漏读（#1263）。
+                name = "close_named" if op["name"].startswith("close_named") else op["name"]
+                lines.append(f"{name}({args})")
 
     for segment in data.get("segment", []):
         if "code" in segment:
