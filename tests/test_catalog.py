@@ -137,6 +137,25 @@ class PageWideTests(unittest.TestCase):
         self.assertIn("a", recipe.rt.skipped_steps)
 
 
+class CodeFallbackTests(unittest.TestCase):
+    """`code = "<本机策略名>"` 兜底端到端可用（#1260）：例外 `.py` 里的普通函数由装载入口装进命名空间，
+    段里 `code=` 真跑到它，`p` / `rt` 作参数传入。批次（#1262–#1267）靠这条路收表达不了的段。"""
+
+    def test_segment_code_runs_the_exception_function(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(
+                tmp,
+                '[[segment]]\nname="a"\ncode="local_x"\n',
+                "def local_x(p, rt):\n    p.back(2)\n    rt.confirm(3)\n",
+            )
+            backs = []
+            phone.back = lambda n=1: backs.append(n)
+            recipe.run()
+        self.assertEqual(backs, [2], "code= 没跑到例外函数，或 p / rt 没按参数传进去")
+        self.assertEqual(recipe.rt.verified, 3, "例外函数里 rt.confirm 没记进这次执行")
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+
+
 class NameSourceBaselineTests(unittest.TestCase):
     """词库按名单来源记：数据里每一条要关的 / 要留的词都能说出自己是字面量还是本机策略。
 
