@@ -493,9 +493,14 @@ def speedups(recipes_dir):
     只是提示：没走这条直达可能是页面没导出、版本不同或者没装这个 App，不算缺陷。"""
     import glob, os
     models = {}
-    for f in glob.glob(os.path.join(recipes_dir, "*", "*", "recipe*.py")):
-        # 路径是 `<家族>/<型号>/recipe*.py`：第一段就是家族，第二段是型号。
+    # 每个型号目录一份：`recipe*.py` 或 catalog 的 `<型号>.toml`（转换后 `.py` 可能已不在）。
+    for f in glob.glob(os.path.join(recipes_dir, "*", "*", "*")):
+        name = os.path.basename(f)
+        if not (name.startswith("recipe") and name.endswith(".py")) and not name.endswith(".toml"):
+            continue
         parts = os.path.relpath(f, recipes_dir).split(os.sep)
+        if len(parts) != 3:
+            continue
         family, model = parts[0], parts[1]
         if FAMILY.get(family.lower()) == family.lower():
             models.setdefault(family, set()).add(model)

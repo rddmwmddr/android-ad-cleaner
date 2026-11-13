@@ -16,7 +16,7 @@ from fixtures import load_recipe, phone_stub
 
 class HonorWKLRecipeTests(unittest.TestCase):
     def load(self, phone):
-        scope, _ = load_recipe(phone, ROOT / "recipes/honor/WKL-AN20/recipe.py")
+        scope, _ = load_recipe(phone, ROOT / "recipes/honor/WKL-AN20/WKL-AN20.toml")
         return scope
 
     def phone(self, xml="<hierarchy/>"):
@@ -83,7 +83,8 @@ class HonorWKLRecipeTests(unittest.TestCase):
         scope = self.load(p)
         scope["ONLY"] = []
         with contextlib.redirect_stdout(io.StringIO()):
-            scope["rt"].run_step("音乐", scope["_"])
+            action = next(st.action for st in scope["rt"].steps if st.name == "音乐")
+            scope["rt"].run_step("音乐", action)
         self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertEqual(scope["RESULTS"], [("音乐", "跳过")])
 

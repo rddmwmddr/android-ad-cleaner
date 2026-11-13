@@ -1,5 +1,5 @@
 {
- "script": "recipes/meizu/MEIZU 21 Pro/recipe.py",
+ "script": "recipes/meizu/MEIZU 21 Pro/MEIZU 21 Pro.toml",
  "scenarios": {
   "present": [
    ["系统跟踪", "d.shell", ["getprop ro.product.model"], {}],

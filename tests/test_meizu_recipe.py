@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 import run
 from fixtures import load_recipe, phone_mock
 
-RECIPE = ROOT / "recipes/meizu/MEIZU 21 Pro/recipe.py"
+RECIPE = ROOT / "recipes/meizu/MEIZU 21 Pro/MEIZU 21 Pro.toml"
 
 
 class MeizuRecipeTests(unittest.TestCase):

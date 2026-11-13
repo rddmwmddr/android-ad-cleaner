@@ -1,20 +1,23 @@
-# 荣耀 WKL-AN20，MagicOS 11 / Android 17。路径逐项实测：2026-10-28。新脚本整轮待真机复测；音乐须先由机主打开「更多设置」，再单段运行。
-from recipe_kit import step
-# 由 tool/fast.py 注入 p 和 ONLY；不包含通知渠道、挂包或 Scene 激活操作。
-BUILD = "WKL-AN20 11.0.0.111(SP7C00E110R101P7)"
-MODELS = ["WKL-AN20"]
-
+# 荣耀 WKL-AN20 的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
+# 共享库的 tap / app_settings / browser_settings / close_named / require / skip 由装载器注入执行作用域。
+# 线性段已转成 `.toml` 数据；这里只留过程化的段（safe_ui 坐标手势、settle_page+radio 单选组、
+# 条件分支）与模块级钩子，逐字保留原实现。
 import copy
 from contextlib import contextmanager
 import time
 
 from fast import CONFIRM, bounds
-# 家族库按这些常量选走法（#1246），缺省档与实现见 tool/recipe_nav.py。
-TAP_STYLE = "honor"
-APP_SETTINGS_STYLE = "honor"
-BROWSER_FLOW = "honor_plain"
-# 分段结果由引擎经 rt 记录
-# 回读确认数由引擎经 rt 记录
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, require, rt, skip, skip_in_safe_mode
+    from recipe_nav import browser_settings, tap
+    from recipe_strategies import close_named_honor
+
+BUILD = "WKL-AN20 11.0.0.111(SP7C00E110R101P7)"
+MODELS = ["WKL-AN20"]
+
+# 各分组这一版改了什么（词库「字典常量里的说明文字」的出处；运行时不用，仅承载说明）。
 CHANGES = {
     "广告跟踪": "应用的 OAID 读取权限",
     "智能推荐服务": "智能推荐服务",
@@ -31,12 +34,14 @@ CHANGES = {
     "音乐": "朋友页显示推荐动态、展示“摇一摇”类开屏广告、个性化广告推荐",
 }
 
+# close_named 的实现按名字注入为 close_named_honor；数据段与 code 段都按旧名 close_named 用。
+close_named = close_named_honor
+
 
 def labels(root=None):
     return {text for text, _, _ in p.texts(root)}
 
 
-# 这一页等标题出现，超时只说明「没等到」；注入 page() 判的是「到了但标题不对」，两者不能互换（#939 留待再议）。
 def settle_page(package, *markers, timeout=5):
     """包名、可见标题和节点位置连续稳定后才使用坐标；不输出账号内容。"""
     deadline, previous = time.monotonic() + timeout, None
@@ -79,7 +84,6 @@ def safe_ui():
         time.sleep(.25)
 
     def switches(root=None):
-        # 引擎会为自绘 switch 自动截图。默认屏蔽它，导航账号页时也不会截图。
         root = copy.deepcopy(root if root is not None else p.tree())
         for node in root.iter("node"):
             if node.get("checkable") != "true" and "switch" in node.get("resource-id", "").lower():
@@ -96,7 +100,6 @@ def safe_ui():
                 if ((node.get("text") or "").strip() != text
                         or node.get("enabled") == "false" or not p.on_screen(node)):
                     continue
-                # 音乐的实测确认框里「确定」不一定是 Button；仅在该明确对话框中接受。
                 if "Button" not in node.get("class", "") and not (music_dialog and text == "确定"):
                     continue
                 left, top, right, bottom = bounds(node)
@@ -147,8 +150,12 @@ def radio(root, text):
     return next(iter(unique.values()))
 
 
-@step("广告跟踪")
-def _():
+def tail():
+    print(f"\n已回读 {rt.verified} 项；分段结果：{rt.results}", flush=True)
+    print("YOYO 新闻资讯、旧版文件夹管理入口未适配；通知渠道、快应用请走 run.py 独立流程。", flush=True)
+
+
+def step_ad_tracking(p, rt):
     skip_in_safe_mode()
     require(p.setting("广告", "广告与隐私"), "未进入广告与隐私")
     settle_page("com.hihonor.id", "广告与隐私")
@@ -158,43 +165,11 @@ def _():
     elif not p.find("隐藏系统程序", exact=True):
         raise RuntimeError("未确认显示系统程序的菜单状态")
     if p.find("隐藏系统程序", exact=True) or p.find("全部关闭", exact=True):
-        p.back()  # 菜单仍开着时只收起菜单。
+        p.back()
     close_named(None, "广告与隐私·OAID读取权限", "com.hihonor.id", "广告与隐私", max_screens=40)
 
 
-@step("智能推荐服务")
-def _():
-    p.start("com.hihonor.id", ".oaid.ui.IntelligentRecommendActivity")
-    close_named(["智能推荐服务"], "广告与隐私·智能推荐服务", "com.hihonor.id", "智能推荐服务")
-
-
-@step("系统管家")
-def _():
-    package = "com.hihonor.systemmanager"
-    p.start(package, ".mainscreen.SettingActivity")
-    close_named(["应用推荐"], "系统管家·设置", package, "设置")
-
-
-@step("应用市场")
-def _():
-    package = "com.hihonor.appmarket"
-    app_settings(package, "内容推荐服务", "消息通知管理")
-    tap("内容推荐服务")
-    close_named(["营销服务推荐", "个性化服务推荐"], "市场·内容推荐服务", package, "内容推荐服务")
-    p.back()
-    tap("消息通知管理")
-    close_named(["消息通知"], "市场·消息通知管理", package, "消息通知管理")
-    p.back()
-    tap("消息中心提醒")
-    close_named(["活动福利", "游戏动态"], "市场·消息中心提醒", package, "消息中心提醒")
-    p.back()
-    tap("热门推荐管理")
-    close_named(["热门推荐管理"], "市场·热门推荐管理", package, "热门推荐管理")
-    # 不切基本服务模式；保留应用更新、安装、下载和服务模式的当前设置。
-
-
-@step("浏览器首页")
-def _():
+def step_browser_home(p, rt):
     package = browser_settings()
     tap("模式选择")
     root = settle_page(package, "模式选择", "简洁首页")
@@ -209,8 +184,7 @@ def _():
         p.changed.append(("浏览器·模式选择", "简洁首页"))
 
 
-@step("浏览器推荐")
-def _():
+def step_browser_recs(p, rt):
     package = browser_settings()
     tap("消息通知")
     close_named(["精彩推荐", "每日推送", "新闻热点", "兴趣推送"], "浏览器·消息通知", package, "消息通知")
@@ -223,23 +197,14 @@ def _():
     close_named(["个性化广告", "允许摇一摇进入广告"], "浏览器·互动广告", package, "互动广告管理")
 
 
-@step("视频")
-def _():
-    package = "com.hihonor.youku.video"
-    p.start(package, "com.youku.android.youkusetting.activity.SettingsActivity")
-    tap("其他设置")
-    close_named(["个性化内容", "个性化广告", "允许视频采集OAID推荐广告"], "视频·其他设置", package, "其他设置")
-
-
-@step("搜索")
-def _():
+def step_search(p, rt):
     p.d.press("home")
     time.sleep(.5)
     p.d.press("home")
     p.tree()
     p.d.swipe(p.W // 2, p.H * 3 // 10, p.W // 2, p.H * 7 // 10, duration=.3)
     time.sleep(1)
-    p.d.press("back")  # 仅收起搜索键盘，不改搜索功能。
+    p.d.press("back")
     settle_page("com.hihonor.search", "更多")
     tap("更多", scrolls=0)
     tap("设置", scrolls=0)
@@ -247,8 +212,7 @@ def _():
     close_named(["热搜榜", "热搜词推荐"], "搜索·首页显示", "com.hihonor.search", "首页显示")
 
 
-@step("负一屏")
-def _():
+def step_negative(p, rt):
     package = "com.hihonor.hiboard"
     p.d.press("home")
     time.sleep(.5)
@@ -267,8 +231,7 @@ def _():
     close_named(["资讯精选"], "负一屏·资讯服务", package, "资讯服务")
 
 
-@step("阅读")
-def _():
+def step_reader(p, rt):
     package = "com.hihonor.dz.reader"
     p.start(package)
     require(p.go("我的", "更多设置"), "未找到阅读设置入口")
@@ -276,22 +239,9 @@ def _():
     settle_page(package, "广告推荐服务")
     tap("广告推荐服务", scrolls=0)
     close_named(["个性化广告"], "阅读·广告推荐服务", package, "广告推荐服务", drawn=True)
-    # 不操作「接收新通知」，不把通知总开关作为营销渠道的替代方案。
 
 
-@step("主题")
-def _():
-    package = "com.hihonor.android.thememanager"
-    app_settings(package, "个性化服务", "通知")  # SettingsAC 不允许 shell 直达，走正常界面。
-    tap("个性化服务", scrolls=0)
-    close_named(["个性化内容", "个性化广告"], "主题·个性化服务", package, "个性化服务")
-    p.back()
-    tap("通知", scrolls=0)
-    close_named(["消息通知", "短信", "邮件"], "主题·内容推荐和活动通知", package, "通知")
-
-
-@step("魔法画报")
-def _():
+def step_magazine(p, rt):
     require(p.setting("画报", "魔法画报"), "未搜到魔法画报")
     if p.focus().split("/", 1)[0] != "com.hihonor.magazine":
         tap("魔法画报", scrolls=0)
@@ -299,10 +249,7 @@ def _():
                 "魔法画报", "com.hihonor.magazine", "魔法画报")
 
 
-@step("音乐")
-def _():
-    # 此机之前由机主手动打开，未验证从首页可靠自动进入；不复制其他机型的图标位置。
-    # 全跑时跳过此段；手动进入「更多设置」后用 recipe 音乐 单独执行。
+def step_music(p, rt):
     if rt.only != ["音乐"]:
         skip("请手动打开荣耀音乐 → 我的 → 设置 → 更多设置，再单段运行「音乐」")
     package = "com.hihonor.cloudmusic"
@@ -311,20 +258,3 @@ def _():
     close_named(["朋友页显示推荐动态", "展示“摇一摇”类开屏广告"], "音乐·消息和隐私设置", package, "消息和隐私设置")
     tap("广告推荐设置")
     close_named(["个性化广告推荐"], "音乐·广告推荐设置", package, "广告推荐设置")
-    # 个性化服务保留；第三方推送含评论提醒，不整项关闭。
-
-
-def tail():
-    print(f"\n已回读 {rt.verified} 项；分段结果：{rt.results}", flush=True)
-    print("YOYO 新闻资讯、旧版文件夹管理入口未适配；通知渠道、快应用请走 run.py 独立流程。", flush=True)
-
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import p, require, require_switches, rt, skip, skip_in_safe_mode
-    from recipe_nav import app_settings, browser_settings, tap
-    from recipe_strategies import close_named_honor, scan_switches
-
-# `scan` / `close_named` 的实现搬进 recipe_strategies（#1253）：`close_named_honor` 内部按
-# `g["scan_switches"]` 取扫描那一档。调用点仍写 `close_named`——名单写在调用点，词库按这个名字
-# 读词；这里把注入实现绑回旧名字。
-close_named = close_named_honor

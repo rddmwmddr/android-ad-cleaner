@@ -368,9 +368,31 @@ def same_version_family_recipe(allr, fam, preferred, device_info):
     return sorted(ranked)[0][3] if ranked else None
 
 
+def _recipe_files():
+    """每个型号目录的「主脚本」：优先 `recipe.py`，否则已转 catalog 的 `<型号>.toml`。
+
+    变体 `recipe_*.py` 不算主脚本：它们是同一型号的不同版本，由 `recipe_for` 按 build 单独挑
+    （与旧 `glob(recipe.py)` 的口径一致，否则变体会被当成另一台机的正本）。没有 `recipe.py`
+    也没有 `.toml` 的异常目录（真实仓库没有）退回变体，免得整台机消失。"""
+    out = []
+    for d in sorted(glob.glob(os.path.join(ROOT, "recipes", "*", "*"))):
+        if not os.path.isdir(d):
+            continue
+        base = os.path.join(d, "recipe.py")
+        if os.path.exists(base):
+            out.append(base)
+            continue
+        toml = sorted(glob.glob(os.path.join(d, "*.toml")))
+        if toml:
+            out += toml
+            continue
+        out += sorted(glob.glob(os.path.join(d, "recipe*.py")))
+    return out
+
+
 def recipe_for(model, brand="", device_info=None):
     """返回 (路径, 是否参考)。先找本型号（目录名或脚本里的 MODELS）；没有就找同家族别的机型，作参考。"""
-    allr = sorted(glob.glob(os.path.join(ROOT, "recipes", "*", "*", "recipe.py")))
+    allr = _recipe_files()
     for r in allr:
         d = os.path.basename(os.path.dirname(r))
         if d == model or model in recipe_meta(r)["models"]:
@@ -383,7 +405,9 @@ def recipe_for(model, brand="", device_info=None):
                         return variant, False
             return r, False
     fam = FAMILY.get((brand or "").lower(), "")
-    preferred = os.path.join(ROOT, "recipes", fam, REFERENCE.get(fam, ""), "recipe.py")
+    refdir = os.path.join(ROOT, "recipes", fam, REFERENCE.get(fam, ""))
+    _refcand = sorted(glob.glob(os.path.join(refdir, "recipe.py"))) + sorted(glob.glob(os.path.join(refdir, "*.toml")))
+    preferred = _refcand[0] if _refcand else os.path.join(refdir, "recipe.py")
     if fam in REFERENCE and os.path.exists(preferred):
         # 固定参考的 BUILD 常写得粗（OS4.0、16），前缀一命中就到它为止，同族里录在同版本上的
         # 脚本永远进不了候选。两条路径同池排（#969）；固定参考的 BUILD 写粗只是让它自己不够贴。

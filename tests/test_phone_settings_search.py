@@ -144,7 +144,7 @@ class SettingSearchExitTests(unittest.TestCase):
 
 
 class HonorYoyoSearchFailureTests(unittest.TestCase):
-    RECIPE = ROOT / "recipes/honor/PNM-AN10/recipe.py"
+    RECIPE = ROOT / "recipes/honor/PNM-AN10/PNM-AN10.toml"
 
     def test_missing_search_result_skips_dismiss_and_off(self):
         p = fake_phone()

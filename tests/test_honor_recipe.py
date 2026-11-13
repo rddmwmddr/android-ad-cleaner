@@ -14,7 +14,7 @@ import adb_link
 import fast
 from fixtures import load_recipe, phone_mock, phone_stub, stub
 
-RECIPE = ROOT / "recipes/honor/PNM-AN10/recipe.py"
+RECIPE = ROOT / "recipes/honor/PNM-AN10/PNM-AN10.toml"
 
 
 def load(phone, only=("__no_steps__",)):

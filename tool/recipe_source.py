@@ -527,6 +527,9 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 lines.append(f'p.start({_s(op["pkg"])}{extra})')
             elif kind in ("entry", "require_entry"):
                 lines.append(f"p.entry({_s(op['text'])})")
+            elif kind == "require_setting":
+                extra = f", {_s(op['entry'])}" if "entry" in op else ""
+                lines.append(f"p.setting({_s(op['kw'])}{extra})")
             elif kind == "gated":
                 for text in op.get("entries", []):
                     lines.append(f"maybe({_s(text)})")

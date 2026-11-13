@@ -17,13 +17,27 @@ SEGMENT_KEYS = frozenset({"name", "code", "ops"})
 # 每种 op 允许的键。白名单：出现名单外的键即报错。
 OP_KEYS = {
     "lib": frozenset({"kind", "name", "args", "kwargs"}),
-    "off": frozenset({"kind", "only", "only_code", "keep", "page", "max_screens"}),
+    "off": frozenset({"kind", "only", "only_code", "keep", "page", "max_screens", "page_wide"}),
     "close_all": frozenset({"kind", "page", "button"}),
     "start": frozenset({"kind", "pkg", "activity", "settle", "foreground", "expect", "budget"}),
     "entry": frozenset({"kind", "text", "scrolls"}),
     "gated": frozenset({"kind", "entries", "scrolls", "ops"}),
     "require_entry": frozenset({"kind", "text", "scrolls", "miss_print", "miss_back"}),
     "require_lib": frozenset({"kind", "name", "args", "kwargs", "miss_print", "miss_back"}),
+    "require_tab": frozenset({"kind", "name", "miss_print"}),
+    "require_go": frozenset({"kind", "text", "expect", "miss_print"}),
+    "require_unlocked": frozenset({"kind", "miss_print"}),
+    "shell": frozenset({"kind", "command"}),
+    "sleep": frozenset({"kind", "seconds"}),
+    "press": frozenset({"kind", "key"}),
+    "app_stop": frozenset({"kind", "pkg"}),
+    "note_miss": frozenset({"kind", "text"}),
+    "miss_reset": frozenset({"kind"}),
+    "tap": frozenset({"kind", "text", "exact", "scrolls", "kwargs"}),
+    "go": frozenset({"kind", "text", "expect"}),
+    "dismiss": frozenset({"kind"}),
+    "skip_in_safe_mode": frozenset({"kind"}),
+    "require_setting": frozenset({"kind", "kw", "entry", "miss_print"}),
     "back": frozenset({"kind", "n"}),
     "top": frozenset({"kind", "n"}),
     "scoped": frozenset({"kind", "systemui_text", "ops"}),
@@ -93,6 +107,31 @@ def _validate_op(op: object, where: str) -> None:
         _require(op, "text", where)
         if kind == "require_entry":
             _require(op, "miss_print", where)
+    elif kind == "require_tab":
+        _require(op, "name", where)
+        _require(op, "miss_print", where)
+    elif kind == "require_go":
+        _require(op, "text", where)
+        _require(op, "expect", where)
+        _require(op, "miss_print", where)
+    elif kind == "shell":
+        _require(op, "command", where)
+    elif kind == "sleep":
+        _require(op, "seconds", where)
+    elif kind == "press":
+        _require(op, "key", where)
+    elif kind == "app_stop":
+        _require(op, "pkg", where)
+    elif kind == "note_miss":
+        _require(op, "text", where)
+    elif kind == "tap":
+        _require(op, "text", where)
+    elif kind == "go":
+        _require(op, "text", where)
+        _require(op, "expect", where)
+    elif kind == "require_setting":
+        _require(op, "kw", where)
+        _require(op, "miss_print", where)
     elif kind == "start":
         _require(op, "pkg", where)
     elif kind == "gated":
@@ -105,17 +144,20 @@ def _validate_op(op: object, where: str) -> None:
 
 
 def _validate_off(op: Mapping, where: str) -> None:
-    """`off` 的两态：内联字面量 `only`，或 `only_code` 指向本机策略；两者运行期都算「点名」。"""
+    """`off` 三种形态：内联字面量 `only` / `only_code` 指向本机策略 / 都不给 = 整页全关（`p.off` 无 only）。
+
+    `only` 与 `only_code` 是「点名」（安全模式不抑制）；都不给时按 `p.off(page=…)` 的整页全关，与
+    UI 按钮式的 `close_all` 是两条不同的路（前者是引擎的 plan_switches 没有 only，后者点屏幕上的按钮）。"""
     _require(op, "page", where)
     has_only, has_code = "only" in op, "only_code" in op
     if has_only and has_code:
         raise SchemaError(f"{where} 的 off 不能同时给 only 与 only_code")
-    if not has_only and not has_code:
-        raise SchemaError(f"{where} 的 off 没点名：整页全关请用 kind=close_all")
+    if not has_only and not has_code and not op.get("page_wide"):
+        raise SchemaError(f"{where} 的 off 没点名：整页全关请加 page_wide=true，或用 close_all")
     if has_only:
         only = op["only"]
         if not isinstance(only, list) or not only:
-            raise SchemaError(f"{where} 的 off 的 only 必须是非空数组（整页全关请用 close_all）")
+            raise SchemaError(f"{where} 的 off 的 only 必须是非空数组（整页全关就写 page_wide=true）")
         overlap = set(only) & set(op.get("keep", []))
         if overlap:
             raise SchemaError(f"{where} 的 off 里 only 与 keep 重叠：{sorted(overlap)}")

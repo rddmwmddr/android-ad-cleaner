@@ -1,5 +1,5 @@
 {
- "script": "recipes/honor/CLE-AN00/recipe.py",
+ "script": "recipes/honor/CLE-AN00/CLE-AN00.toml",
  "scenarios": {
   "present": [
    ["广告跟踪", "locked", [], {}],
@@ -13,7 +13,7 @@
    ["广告跟踪", "switches", [], {}],
    ["智能推荐服务", "locked", [], {}],
    ["智能推荐服务", "start", ["com.hihonor.id", ".oaid.ui.IntelligentRecommendActivity"], {"settle": 0.5}],
-   ["智能推荐服务", "off", [], {"only": ["智能推荐服务"], "page": "广告与隐私·智能推荐服务"}],
+   ["智能推荐服务", "off", [], {"page": "广告与隐私·智能推荐服务", "only": ["智能推荐服务"]}],
    ["YOYO", "locked", [], {}],
    ["YOYO", "setting", ["新闻资讯"], {}],
    ["YOYO", "d.shell", ["am start -f 0x10008000 -a oplus.intent.action.settings.MAIN_SEARCH"], {}],
@@ -85,7 +85,7 @@
    ["视频", "find", ["同意"], {"exact": true, "edge_ok": "tab"}],
    ["系统管家", "locked", [], {}],
    ["系统管家", "start", ["com.hihonor.systemmanager", ".mainscreen.SettingActivity"], {"expect": "应用推荐"}],
-   ["系统管家", "off", [], {"only": ["应用推荐"], "page": "系统管家·设置"}],
+   ["系统管家", "off", [], {"page": "系统管家·设置", "only": ["应用推荐"]}],
    ["系统管家", "back", [], {}],
    ["音乐", "locked", [], {}],
    ["音乐", "d.shell", ["dumpsys media_session"], {}],
@@ -136,7 +136,7 @@
    ["广告跟踪", "entry", ["更多选项"], {"scrolls": 0}],
    ["智能推荐服务", "locked", [], {}],
    ["智能推荐服务", "start", ["com.hihonor.id", ".oaid.ui.IntelligentRecommendActivity"], {"settle": 0.5}],
-   ["智能推荐服务", "off", [], {"only": ["智能推荐服务"], "page": "广告与隐私·智能推荐服务"}],
+   ["智能推荐服务", "off", [], {"page": "广告与隐私·智能推荐服务", "only": ["智能推荐服务"]}],
    ["YOYO", "locked", [], {}],
    ["YOYO", "setting", ["新闻资讯"], {}],
    ["YOYO", "d.shell", ["am start -f 0x10008000 -a oplus.intent.action.settings.MAIN_SEARCH"], {}],
@@ -221,7 +221,7 @@
    ["视频", "entry", ["其他设置"], {"scrolls": 4}],
    ["系统管家", "locked", [], {}],
    ["系统管家", "start", ["com.hihonor.systemmanager", ".mainscreen.SettingActivity"], {"expect": "应用推荐"}],
-   ["系统管家", "off", [], {"only": ["应用推荐"], "page": "系统管家·设置"}],
+   ["系统管家", "off", [], {"page": "系统管家·设置", "only": ["应用推荐"]}],
    ["系统管家", "back", [], {}],
    ["音乐", "locked", [], {}],
    ["音乐", "d.shell", ["dumpsys media_session"], {}],

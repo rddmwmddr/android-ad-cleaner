@@ -99,7 +99,11 @@ def recipe_of(name):
     """`"oppo-PMX110"` → `recipes/oppo/PMX110/recipe.py`（目录按家族/型号两层，#1261）。"""
     brand, _, model = name.partition("-")
     import entries
-    return ROOT / "recipes" / entries.FAMILY.get(brand.lower(), brand) / (model or name) / "recipe.py"
+    d = ROOT / "recipes" / entries.FAMILY.get(brand.lower(), brand) / (model or name)
+    for cand in (d / "recipe.py", d / (f"{model or name}.toml")):
+        if cand.exists():
+            return cand
+    return d / "recipe.py"
 
 
 class TheGuardItself(unittest.TestCase):
