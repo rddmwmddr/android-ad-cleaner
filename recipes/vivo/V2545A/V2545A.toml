@@ -1,0 +1,102 @@
+# vivo X Fold6（V2545A）页面树（catalog，#1263）。OriginOS 6 Fold，2026 逐步真机核对。
+model = "V2545A"
+models = ["V2545A"]
+build = "PD2545B_A_16.0.16.0.W10"
+
+[const]
+GEAR_STYLE = "vivo_desc"
+
+[[segment]]
+name = "系统广告"
+code = "step_system_ads"
+
+[[segment]]
+name = "全局搜索"
+ops = [
+  { kind = "lib", name = "settings_home" },
+  { kind = "gated", entries = ["系统管理与升级", "全局搜索"], ops = [
+    { kind = "gated", entries = ["个性化内容"], ops = [
+      { kind = "off", only = ["广告个性化"], page = "全局搜索·个性化内容" },
+      { kind = "back" },
+    ]},
+  ]},
+]
+
+[[segment]]
+name = "阅图锁屏"
+ops = [
+  { kind = "lib", name = "settings_home" },
+  { kind = "gated", entries = ["桌面、锁屏与壁纸", "锁屏设置", "阅图锁屏"], ops = [
+    { kind = "off", only = ["阅图锁屏", "轮播壁纸"], page = "锁屏·阅图锁屏" },
+  ]},
+]
+
+[[segment]]
+name = "应用商店"
+ops = [
+  { kind = "start", pkg = "com.bbk.appstore" },
+  { kind = "sleep", seconds = 2 },
+  { kind = "lib", name = "by_desc", args = ["我的"] },
+  { kind = "lib", name = "gear" },
+  { kind = "gated", entries = ["关于"], ops = [
+    { kind = "gated", entries = ["个性化推荐"], ops = [
+      { kind = "lib", name = "switch_off", args = ["个性化推荐"], kwargs = { page = "商店·个性化推荐" } },
+      { kind = "lib", name = "switch_off", args = ["个性化广告推荐"], kwargs = { page = "商店·个性化推荐" } },
+      { kind = "back" },
+    ]},
+    { kind = "gated", entries = ["服务管理"], ops = [
+      { kind = "off", only = ["签到有礼", "顶部轮播图", "顶部栏目", "开屏", "摇一摇", "悬浮窗", "限时推广"], keep = ["我的服务", "空间清理"], page = "商店·服务管理" },
+      { kind = "back" },
+    ]},
+    { kind = "back", n = 2 },
+  ]},
+]
+
+[[segment]]
+name = "浏览器"
+ops = [
+  { kind = "start", pkg = "com.vivo.browser" },
+  { kind = "sleep", seconds = 2 },
+  { kind = "lib", name = "by_desc", args = ["菜单"] },
+  { kind = "lib", name = "by_desc", args = ["设置"], kwargs = { wait = 2 } },
+  { kind = "gated", entries = ["首页设置"], ops = [
+    { kind = "entry", text = "极简首页", scrolls = 0 },
+    { kind = "off", only = ["首页上滑展示资讯"], page = "浏览器·首页设置" },
+    { kind = "back" },
+    { kind = "sleep", seconds = 1 },
+  ]},
+  { kind = "gated", entries = ["隐私权限设置"], ops = [
+    { kind = "off", only = ["个性化内容", "第三方应用来源个性化推荐", "个性化广告推荐"], page = "浏览器·隐私权限设置" },
+    { kind = "back" },
+    { kind = "sleep", seconds = 1 },
+  ]},
+  { kind = "gated", entries = ["网页浏览设置"], ops = [
+    { kind = "off", only = ["网页下载相关推荐"], page = "浏览器·网页浏览设置" },
+    { kind = "back" },
+    { kind = "sleep", seconds = 1 },
+  ]},
+  { kind = "gated", entries = ["更多设置"], ops = [
+    { kind = "off", only = ["WiFi连接跳转新闻资讯", "跳转新闻资讯"], page = "浏览器·更多设置" },
+    { kind = "back" },
+    { kind = "sleep", seconds = 1 },
+  ]},
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "i管家"
+ops = [
+  { kind = "print", text = "  跳过：i管家首次启动强制要求同意用户协议，按规则不代点。" },
+  { kind = "print", text = "  手动做：i管家 → 设置 → 关于 → 个性化设置 → 关「应用个性化推荐」" },
+]
+
+[[segment]]
+name = "天气"
+ops = [
+  { kind = "start", pkg = "com.vivo.weather" },
+  { kind = "sleep", seconds = 2 },
+  { kind = "lib", name = "by_desc", args = ["更多"] },
+  { kind = "entry", text = "设置", scrolls = 0 },
+  { kind = "off", only = ["天气服务"], page = "天气·设置" },
+  { kind = "back", n = 2 },
+]
