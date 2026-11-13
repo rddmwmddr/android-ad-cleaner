@@ -1,0 +1,188 @@
+"""catalog 解释器：把页面树数据翻成对 `p` 的调用（ADR-0038）。
+
+一条硬约束：每段的段体都包成一个 action，由 `recipe_runtime.Runtime.run_step` 执行，段归属钩子
+`OBSERVER` 照样拿得到段名——13,484 条调用序列快照的段维靠它对齐。
+
+页面算法一律复用，不新写：关一页走 `p.off()`（`plan_switches` / `readback` 不动），等页面走
+`p.entry()` / `p.start()`（内部都是 `wait.until`），入口回落走 `entries.reach`（经库保留）。解释器
+只把「该调哪个 p 方法、带哪些实参」按数据的书写顺序发出去，不碰这些算法本身。
+
+复用注入面：迁移期 `settings_home` / `my_tab` / `tap_row` / `off_one` 等仍是 `NAV` / `STEPS` /
+`STRATEGIES` 的工厂 `(p, g) -> closure`。装载器已经把 `g` 喂给 `recipe_kit.preamble()`，`lib` /
+`require_lib` 就按名字从 `g` 里取那份闭包直接调——调用序列因此与旧脚本逐条相同。
+"""
+from collections.abc import Callable, Mapping
+from typing import Any
+
+
+class _Abort(Exception):
+    """段内早退（`require_*` 没找到、`return` op）：停在当前段，剩下的 op 不再做。
+
+    它不是失败：段体自己 `return` 也是这个结局（只影响分段落点，不影响退出码，沿用 #838）。
+    在段 action 的边界被吞掉，不会漏到 `Runtime.run_step` 的失败分支。
+    """
+
+
+def segment_action(segment: Mapping, g: dict[str, Any]) -> Callable[[], Any]:
+    """把一段声明包成段体 action：整段交给 `code=` 例外函数，或按 `ops` 逐个执行。"""
+    if "code" in segment:
+        function = g[segment["code"]]
+
+        def run_code() -> Any:
+            try:
+                return function(g["p"], g["rt"])
+            except _Abort:
+                return None
+
+        return run_code
+
+    ops = segment.get("ops", [])
+
+    def run_ops() -> Any:
+        try:
+            _run(ops, g)
+        except _Abort:
+            return None
+        return None
+
+    return run_ops
+
+
+def _run(ops: Any, g: dict[str, Any]) -> None:
+    for op in ops:
+        _run_op(op, g)
+
+
+def _run_op(op: Mapping, g: dict[str, Any]) -> None:
+    kind = op["kind"]
+    handler = _HANDLERS[kind]
+    handler(op, g)
+
+
+def _lib(op: Mapping, g: dict[str, Any]) -> None:
+    g[op["name"]](*op.get("args", []), **op.get("kwargs", {}))
+
+
+def _require_lib(op: Mapping, g: dict[str, Any]) -> None:
+    """本机策略返回假时按「这一段没做成」早退：先打现场，再回退，再停（沿用脚本里的写法）。"""
+    result = g[op["name"]](*op.get("args", []), **op.get("kwargs", {}))
+    if not result:
+        print(op["miss_print"], flush=True)
+        if op.get("miss_back"):
+            g["p"].back(op["miss_back"])
+        raise _Abort
+
+
+def _off(op: Mapping, g: dict[str, Any]) -> None:
+    """按实参是否出现原样下发：段体写 `p.off(only=…, page=…)` 就只带这两个键，调用序列才逐条一致。"""
+    kwargs: dict[str, Any] = {"page": op["page"]}
+    if "only_code" in op:
+        kwargs["only"] = g[op["only_code"]]()
+    elif "only" in op:
+        kwargs["only"] = list(op["only"])
+    if "keep" in op:
+        kwargs["keep"] = list(op["keep"])
+    if "max_screens" in op:
+        kwargs["max_screens"] = op["max_screens"]
+    g["p"].off(**kwargs)
+
+
+def _close_all(op: Mapping, g: dict[str, Any]) -> None:
+    """UI 上的「全部关闭」按钮：单列一种动作，登记为 page-wide。
+
+    安全模式下整页全关不点（只关点名的开关，沿用 ADR-0008 / #909），与 `skip_in_safe_mode` 同一判据。
+    """
+    rt = g["rt"]
+    if rt.safe_mode:
+        rt.skip("安全模式不做整页全关：本段没有可点名的开关，请按清单手动关")
+        return
+    page = g["p"]
+    page.tap(op.get("button", "全部关闭"), exact=True)
+    page.confirm()
+
+
+def _start(op: Mapping, g: dict[str, Any]) -> None:
+    args = [op["pkg"]]
+    kwargs: dict[str, Any] = {}
+    if "activity" in op:
+        args.append(op["activity"])
+    for key in ("settle", "foreground", "expect", "budget"):
+        if key in op:
+            kwargs[key] = op[key]
+    g["p"].start(*args, **kwargs)
+
+
+def _entry(op: Mapping, g: dict[str, Any]) -> None:
+    g["p"].entry(op["text"], scrolls=op.get("scrolls", 6))
+
+
+def _require_entry(op: Mapping, g: dict[str, Any]) -> None:
+    if not g["p"].entry(op["text"], scrolls=op.get("scrolls", 6)):
+        print(op["miss_print"], flush=True)
+        if op.get("miss_back"):
+            g["p"].back(op["miss_back"])
+        raise _Abort
+
+
+def _gated(op: Mapping, g: dict[str, Any]) -> None:
+    """逐个认入口（`p.entry`），任一个认不出就跳过整块（对应 `if maybe(A) and maybe(B): …`）。"""
+    scrolls = op.get("scrolls", 6)
+    for text in op["entries"]:
+        if not g["p"].entry(text, scrolls=scrolls):
+            return
+    _run(op.get("ops", []), g)
+
+
+def _scoped(op: Mapping, g: dict[str, Any]) -> None:
+    """作用域内设一个页面属性、退出恢复（对应段体里的 try/finally，例如锁屏页的 `systemui_text`）。"""
+    page = g["p"]
+    saved = {}
+    if "systemui_text" in op:
+        saved["systemui_text"] = page.systemui_text
+        page.systemui_text = op["systemui_text"]
+    try:
+        _run(op.get("ops", []), g)
+    finally:
+        for name, value in saved.items():
+            setattr(page, name, value)
+
+
+def _back(op: Mapping, g: dict[str, Any]) -> None:
+    if "n" in op:
+        g["p"].back(op["n"])
+    else:
+        g["p"].back()
+
+
+def _top(op: Mapping, g: dict[str, Any]) -> None:
+    g["p"].top(op.get("n"))
+
+
+def _code(op: Mapping, g: dict[str, Any]) -> None:
+    g[op["name"]](*op.get("args", []))
+
+
+def _print(op: Mapping, g: dict[str, Any]) -> None:
+    print(op["text"], flush=True)
+
+
+def _return(op: Mapping, g: dict[str, Any]) -> None:
+    raise _Abort
+
+
+_HANDLERS: dict[str, Callable[[Mapping, dict[str, Any]], None]] = {
+    "lib": _lib,
+    "require_lib": _require_lib,
+    "off": _off,
+    "close_all": _close_all,
+    "start": _start,
+    "entry": _entry,
+    "require_entry": _require_entry,
+    "gated": _gated,
+    "scoped": _scoped,
+    "back": _back,
+    "top": _top,
+    "code": _code,
+    "print": _print,
+    "return": _return,
+}

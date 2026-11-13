@@ -14,9 +14,14 @@
 """
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import recipe_kit
 import recipe_runtime
+
+if TYPE_CHECKING:
+    from catalog import LoadedCatalog
+
 
 
 class RecipeScope(dict):
@@ -77,8 +82,15 @@ def _module_name(path) -> str:
     return "recipe_" + "_".join(part for part in (folder, stem) if part).replace(" ", "_").replace("-", "_")
 
 
-def load(path, p, only=(), clock=None, namespace=None) -> LoadedRecipe:
-    """装载一份脚本（不执行任何段）。`only` 为空表示「全部段」。"""
+def load(path, p, only=(), clock=None, namespace=None) -> "LoadedRecipe | LoadedCatalog":
+    """装载一份脚本（不执行任何段）。`only` 为空表示「全部段」。
+
+    ADR-0038 起这里也是 catalog 数据的唯一入口：`.toml` 或目录走 `catalog.load`，`.py` 走本模块。
+    两条路返回同形对象（`.namespace` / `.rt` / `.steps` / `.run()`），调用方不必区分。
+    """
+    if str(path).endswith(".toml") or Path(path).is_dir():
+        import catalog
+        return catalog.load(path, p, only=only, clock=clock, namespace=namespace)
     source = Path(path).read_text(encoding="utf-8")
     rt = recipe_runtime.Runtime(p, list(only), clock)
     scope = RecipeScope(rt=rt)
