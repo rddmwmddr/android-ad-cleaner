@@ -7,6 +7,7 @@
 # by = "@login"                            # 验证人：@login（带 @）或 机主，与复测队列同格式
 # tier = "部分"                            # 覆盖度：全部 / 部分 / 未记录
 # evidence = "报告者自述"                  # 证据来源：用例 / 现场 / 报告者自述 / 机主自测 / 未知
+# body_hash = "0123456789abcdef"           # 段体哈希：脚本里 @step 段体归一后的摘要，见下
 #
 # 覆盖度与证据来源是两个正交维度（#1124 之前是同一个 tier）：一个是「跑到什么程度」，一个是
 # 「凭什么算跑过」，别用一个字段同时表达。
@@ -19,6 +20,12 @@
 #
 # build 必须以脚本自己声明的 BUILD 打头；认不出更细的版本时才写 BUILD 本身。对不上时命令行标
 # 「build 不符」，数据契约测试报红。覆盖度是「未记录」的条目不做这项校验，build 可以留空。
+#
+# body_hash 是脚本里每个 `@step(...)` 段体的归一后摘要（去注释、docstring 与装饰器后取 sha256
+# 前 16 位，算法只在 `tool/verify_ledger.py`）。它对不上现在的脚本时命令行标「待复核」——判据是段体
+# 正文变没变，不是文件改没改：挪函数、改注释、把模块级助手搬进库都不算改，改段体或改段名才算。
+# 刷新它：`python3 tool/verify_ledger.py --hash` 打印每份脚本当前的值，只打印不写文件；验证或发版后
+# 照抄进对应条目。没有 body_hash 的旧记录按「尚未建立基线」处理，不标「待复核」。
 #
 # 2026-11-09 初始化（#918）：44 份的日期与档位取自配方头注，不按措辞分档，一律「部分验证」。
 # 头注里的日期混着「改动日期」，只取最后一次真机验证那一条（如 vivo-V2547DA/recipe.py 记 10-28，
@@ -39,6 +46,7 @@ date = "2026-11-07"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "56933b6ab97892ac"
 
 # 头注只写「2026-10-23 实测通过」，没有更细的版本；脚本 BUILD 也是空串。
 ["honor-PNM-AN10/recipe.py"]
@@ -47,6 +55,7 @@ date = "2026-10-23"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "7f02db6159e305a0"
 
 ["honor-WKL-AN20/recipe.py"]
 build = "WKL-AN20 11.0.0.111(SP7C00E110R101P7)"
@@ -54,6 +63,7 @@ date = "2026-10-28"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "23f80511588084bc"
 
 ["meizu-MEIZU 21 Pro/recipe.py"]
 build = "Flyme 12.6.0.0A"
@@ -61,6 +71,7 @@ date = "2026-10-30"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "174b8ab26853b56e"
 
 ["oneplus-PHK110/recipe.py"]
 build = "PHK110_16.0.5.1201"
@@ -68,6 +79,7 @@ date = "2026-10-25"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "dbd13ddfa67f41de"
 
 ["oneplus-PHK110/recipe_android15.py"]
 build = "PHK110_15.0.0.601(CN01)"
@@ -75,6 +87,7 @@ date = "2026-10-29"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "8689e34fcb2b5886"
 
 ["oneplus-PJA110/recipe.py"]
 build = "PJA110_14.0.0.812"
@@ -82,6 +95,7 @@ date = "2026-10-25"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "0ffb7df851564140"
 
 # 路径照同平台 PHK110_16.0.5.1201 已实测的公开入口改写，未在 PJA110 上跑过（#911）。
 ["oneplus-PJA110/recipe_android16.py"]
@@ -90,6 +104,7 @@ date = ""
 by = ""
 tier = "未记录"
 evidence = "未知"
+body_hash = "461451f848e6bb50"
 
 ["oneplus-PKX110/recipe.py"]
 build = "PKX110_16.0.10.500"
@@ -97,6 +112,7 @@ date = "2026-10-28"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "343182a115909141"
 
 ["oneplus-PLR110/recipe.py"]
 build = "PLR110_17.0.0.101"
@@ -104,6 +120,7 @@ date = "2026-10-31"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "eb6195ac0df28e18"
 
 ["oneplus-PLZ110/recipe.py"]
 build = "PLZ110_17.0.0.107(CN01)"
@@ -111,6 +128,7 @@ date = "2026-11-08"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "9b756ea72e042af8"
 
 ["oneplus-PYB110/recipe.py"]
 build = "PYB110_17.0.0.157(CN01)"
@@ -118,6 +136,7 @@ date = "2026-11-12"
 by = "机主"
 tier = "全部"
 evidence = "机主自测"
+body_hash = "c6244cec7e61ddbb"
 
 ["oppo-PKH110/recipe.py"]
 build = "PKH110_17.0.0.103"
@@ -125,6 +144,7 @@ date = "2026-10-29"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "a0f07bd04f4dfb2e"
 
 ["oppo-PKT110/recipe.py"]
 build = "PKT110_17.0.0.102(CN01)"
@@ -132,6 +152,7 @@ date = "2026-10-28"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "edf8f5990b98b9ac"
 
 ["oppo-PLG110/recipe.py"]
 build = "PLG110_16.0.10.501(CN01)"
@@ -139,6 +160,7 @@ date = "2026-11-01"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "a759f3405b22582b"
 
 ["oppo-PLP120/recipe.py"]
 build = "PLP120_16.0.9"
@@ -146,6 +168,7 @@ date = "2026-10-22"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "f8247f2acd80dece"
 
 ["oppo-PMA110/recipe.py"]
 build = "PMA110_17.0.0.106(CN01)"
@@ -153,6 +176,7 @@ date = "2026-10-29"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "ccc6f6301b1c79ef"
 
 # 头注只写到 11-05 的逐页核对；同目录 README 记到 11-07「从开启状态」整轮补验，贡献者实测、维护方未复跑。
 ["oppo-PMX110/recipe.py"]
@@ -161,6 +185,7 @@ date = "2026-11-07"
 by = ""
 tier = "部分"
 evidence = "未知"
+body_hash = "b97b06f1e0635edf"
 
 ["realme-RMX3700/recipe.py"]
 build = "RMX3700_16.0.5.1300(CN01)"
@@ -168,6 +193,7 @@ date = "2026-11-02"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "e02ae196cdeafc9d"
 
 # 按报告者（#1083）的实测落点写成，本仓库没有这台手机、未复跑，所以不记验证人与日期。
 ["realme-RMX3888/recipe.py"]
@@ -176,6 +202,7 @@ date = ""
 by = ""
 tier = "未记录"
 evidence = "未知"
+body_hash = "a2e91e3faa289d6f"
 
 ["redmi-23049RAD8C/recipe.py"]
 build = "OS3.0.5.0.VMRCNXM"
@@ -183,6 +210,7 @@ date = "2026-10-25"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "237412fef62a60ac"
 
 ["redmi-23113RKC6C/recipe.py"]
 build = "OS3.0.307.0.WNKCNXM"
@@ -190,6 +218,7 @@ date = "2026-10-26"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "b551ba562e0f711c"
 
 # 头注没写日期：整轮记录在 docs/14-红米K70Pro实测.md（10-30 九段 235 秒、退出码 0）。
 ["redmi-23117RK66C/recipe.py"]
@@ -198,6 +227,7 @@ date = "2026-10-30"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "4a838bcf77407410"
 
 ["redmi-24094RAD4C/recipe.py"]
 build = "OS3.0.306.0.WOQCNXM"
@@ -205,6 +235,7 @@ date = "2026-10-30"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "8aaca2252904b87c"
 
 ["redmi-24122RKC7C/recipe.py"]
 build = "OS3.0.304.0.WOMCNXM"
@@ -212,6 +243,7 @@ date = "2026-10-29"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "32014e348e625ef6"
 
 ["redmi-25060RK16C/recipe.py"]
 build = "BP2A.250605.031.A3"
@@ -219,6 +251,7 @@ date = "2026-10-27"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "9d85fa3e32489326"
 
 ["samsung-SM-N9760/recipe.py"]
 build = "SP1A.210812.016.N9760ZCU6HZE1"
@@ -226,6 +259,7 @@ date = "2026-11-05"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "b087a62e4649c68a"
 
 ["vivo-V1986A/recipe.py"]
 build = "PD1986_A_8.21.29"
@@ -233,6 +267,7 @@ date = "2026-10-30"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "51ac07656416aa3c"
 
 ["vivo-V2303A/recipe.py"]
 build = "CP2A.260605.016"
@@ -240,6 +275,7 @@ date = "2026-11-04"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "aa2de27226037611"
 
 ["vivo-V2309A/recipe.py"]
 build = "PD2309E_A_16.2.15.0.W10"
@@ -247,6 +283,7 @@ date = "2026-11-03"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "7907243005a1039f"
 
 ["vivo-V2324HA/recipe.py"]
 build = "PD2324J_A_16.2.13.1.W10"
@@ -254,6 +291,7 @@ date = "2026-10-27"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "e9ab1cbb2513cfac"
 
 ["vivo-V2361A/recipe.py"]
 build = "PD2361B_A_16.2.12.2.W10"
@@ -261,6 +299,7 @@ date = "2026-10-26"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "6f85cca3ecd5ca48"
 
 ["vivo-V2417A/recipe.py"]
 build = "PD2417D_A_16.2.14.1.W10"
@@ -268,6 +307,7 @@ date = "2026-10-30"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "cc4ce8b6c5865f6b"
 
 # 头注没有日期，也没有同目录 README：这份只有入口约定，真机整段验证没有记录。
 ["vivo-V2545A/recipe.py"]
@@ -276,6 +316,7 @@ date = ""
 by = ""
 tier = "未记录"
 evidence = "未知"
+body_hash = "141bd6fdbe88d532"
 
 ["vivo-V2547A/recipe.py"]
 build = "PD2547B_A_17.1.10.2"
@@ -283,6 +324,7 @@ date = "2026-10-25"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "442d25dffddafb5b"
 
 # 头注 11-03 与 11-07 两行写的都是改动后「未复测」，日期取最后一次真机验证的 10-28。
 ["vivo-V2547DA/recipe.py"]
@@ -291,6 +333,7 @@ date = "2026-10-28"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "b517012fc7a8fe99"
 
 ["vivo-V2547DA/recipe_android17.py"]
 build = "PD2547D_A_17.1.10.2.W10"
@@ -298,6 +341,7 @@ date = "2026-11-07"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "b7d9a1180fff0c45"
 
 # 10-29 那次是 14 Pro 社区实测（Issue #317），头注没留验证人 ID。
 ["xiaomi-2304FPN6DC/recipe.py"]
@@ -306,6 +350,7 @@ date = "2026-10-29"
 by = ""
 tier = "部分"
 evidence = "未知"
+body_hash = "3bca328ba9edc99b"
 
 ["xiaomi-24090RA29C/recipe.py"]
 build = "OS3.0.309.0.WOOCNXM"
@@ -313,6 +358,7 @@ date = "2026-10-26"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "294dbb60b4b6637c"
 
 ["xiaomi-2410CRP4CC/recipe.py"]
 build = "OS2.0.208.0.VOZCNXM"
@@ -320,6 +366,7 @@ date = "2026-10-28"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "42a43039e18b3981"
 
 ["xiaomi-24129PN74C/recipe.py"]
 build = "OS3.0.307.0.WOCCNXM"
@@ -327,6 +374,7 @@ date = "2026-10-29"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "f03134d7d32bed9d"
 
 ["xiaomi-24129PN74C/recipe_os4.py"]
 build = "OS4.0.0.22.XOCCNXM"
@@ -334,6 +382,7 @@ date = "2026-10-29"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "450849695fe3bb0d"
 
 # 社区实测，头注没留验证人 ID。
 ["xiaomi-2505APX7BC/recipe.py"]
@@ -342,6 +391,7 @@ date = "2026-11-05"
 by = ""
 tier = "部分"
 evidence = "未知"
+body_hash = "f2a708b7a8e2df92"
 
 ["xiaomi-25102RKBEC/recipe.py"]
 build = "OS4.0.2.0.XPMCNXM"
@@ -349,6 +399,7 @@ date = "2026-10-27"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "0b4f93a3b8e7e42c"
 
 ["xiaomi-2512BPNDAC/recipe.py"]
 build = "OS4.0.5.0.XPACNXM"
@@ -356,6 +407,7 @@ date = "2026-10-28"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "7e1fa02ca356f80c"
 
 # 头注还停在 10-22 录制与 10-24 的 18 Fold 社区记录；同目录 README 与机型表记 11-07 本机整轮复测。
 ["xiaomi-M154FF/recipe.py"]
@@ -364,6 +416,7 @@ date = "2026-11-07"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
+body_hash = "a1284e48c1ef40c2"
 
 ["xiaomi-M332BF/recipe.py"]
 build = "OS4.0.4.0.XHPCNXM"
@@ -371,3 +424,4 @@ date = "2026-10-31"
 by = "@Sin1ery"
 tier = "部分"
 evidence = "报告者自述"
+body_hash = "2cfc939e390d7036"

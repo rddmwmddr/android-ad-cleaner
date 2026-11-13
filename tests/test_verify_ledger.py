@@ -1,11 +1,13 @@
-"""配方验证台账（tool/verify_ledger.py，#916、#917、#918）：每个配方文件一行、缺记录显示「未记录」、
-按距今天数降序、末行三档分布、验证之后改过的标「待复核」、记录的 build 对不上脚本 BUILD 的标「build 不符」。
+"""配方验证台账（tool/verify_ledger.py，沿用 #916、#917、#918；段体哈希判据见 #1242）：
+每个配方文件一行、缺记录显示「未记录」、按距今天数降序、末行三档分布、段体正文改过的标「待复核」、
+记录的 build 对不上脚本 BUILD 的标「build 不符」。
 
 覆盖度（`tier`）与证据来源（`evidence`）是两个维度：前两类用例里 `entry()` 单独验「台账里没有这份脚本
 时退回未记录 / 未知」，`rows()` 验两个值都被带到行上。
 
-前两类用例只验外部行为：给定配方目录、已解析的台账、一个注入的「今天」、注入的改动日期与注入的
-脚本 BUILD，算出什么结果；不钉真实日期，也不验输出的列宽。`changed_dates()` 单独在临时 git 仓库里验。
+前两类用例只验外部行为：给定配方目录、已解析的台账、一个注入的「今天」、注入的段体哈希与注入的
+脚本 BUILD，算出什么结果；不钉真实日期，也不验输出的列宽。`body_hash()` 用临时脚本文件验「归一」
+到底消掉了哪些差异：只改注释 / 格式 / 顺序不算改，段体正文或段名改了才算改。
 
 最后一类是数据契约：直接读真实 `recipes/` 与 `recipes/verified.toml`，不注入假数据——它的价值就是
 「真实数据符合契约」（形状照 tests/test_vocab.py 的 RealRecipesTest）。
@@ -16,7 +18,6 @@ import contextlib
 import io
 import json
 import os
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -163,40 +164,60 @@ class RowsTest(unittest.TestCase):
                                           "by": "机主", "tier": "全部"}}
         self.assertEqual(verify_ledger.rows(self.dir, records, TODAY)[0].days, 0)
 
-    def test_review_flag_marks_scripts_changed_after_verification(self):
+    def test_review_flag_marks_scripts_whose_step_body_hash_moved(self):
         for name in ("xiaomi-A/recipe.py", "oppo-B/recipe.py", "vivo-C/recipe.py", "honor-D/recipe.py"):
             self.recipe(name)
         records = {
-            "xiaomi-A/recipe.py": {"build": "A_1.0", "date": "2026-11-01", "by": "机主", "tier": "全部"},
-            "oppo-B/recipe.py": {"build": "B_2.0", "date": "2026-11-08", "by": "机主", "tier": "全部"},
-            "vivo-C/recipe.py": {"build": "C_3.0", "date": "2026-10-01", "by": "机主", "tier": "部分"},
+            "xiaomi-A/recipe.py": {"build": "A_1.0", "date": "2026-11-01", "by": "机主",
+                                   "tier": "全部", "body_hash": "aaaaaaaaaaaaaaaa"},
+            "oppo-B/recipe.py": {"build": "B_2.0", "date": "2026-11-08", "by": "机主",
+                                 "tier": "全部", "body_hash": "bbbbbbbbbbbbbbbb"},
+            "vivo-C/recipe.py": {"build": "C_3.0", "date": "2026-10-01", "by": "机主",
+                                 "tier": "部分", "body_hash": "cccccccccccccccc"},
         }
-        changed = {
-            "xiaomi-A/recipe.py": "2026-11-08",   # 验完之后改过
-            "oppo-B/recipe.py": "2026-11-08",     # 与验证同一天
-            "vivo-C/recipe.py": "2026-09-30",     # 验证之前改的
-            "honor-D/recipe.py": "2026-11-08",    # 没有验证记录，无从比较
+        hashes = {
+            "xiaomi-A/recipe.py": "aaaaaaaaaaaaaaaa",   # 段体没变
+            "oppo-B/recipe.py": "bbbbbbbbbbbbbbbb",     # 段体没变
+            "vivo-C/recipe.py": "dddddddddddddddd",     # 段体改过
+            "honor-D/recipe.py": "eeeeeeeeeeeeeeee",    # 没有验证记录，无从比较
         }
-        rows = {row.path: row for row in verify_ledger.rows(self.dir, records, TODAY, changed=changed)}
-        self.assertTrue(rows["xiaomi-A/recipe.py"].review)
-        self.assertEqual(rows["xiaomi-A/recipe.py"].changed_on, "2026-11-08")
+        rows = {row.path: row for row in verify_ledger.rows(self.dir, records, TODAY, hashes=hashes)}
+        self.assertFalse(rows["xiaomi-A/recipe.py"].review)
         self.assertFalse(rows["oppo-B/recipe.py"].review)
-        self.assertFalse(rows["vivo-C/recipe.py"].review)
+        self.assertTrue(rows["vivo-C/recipe.py"].review)
         self.assertFalse(rows["honor-D/recipe.py"].review)
-        lines = verify_ledger.render(self.dir, records, TODAY, changed=changed).splitlines()
+        # 哈希本身不进输出行：判据在行尾的那个词上
+        lines = verify_ledger.render(self.dir, records, TODAY, hashes=hashes).splitlines()
         self.assertEqual([line.split("\t")[0] for line in lines if line.endswith("待复核")],
-                         ["xiaomi-A/recipe.py"])
+                         ["vivo-C/recipe.py"])
+        self.assertNotIn("cccccccccccccccc", "\n".join(lines))
+
+    def test_a_record_without_a_hash_is_not_marked_for_review(self):
+        """旧记录没有 body_hash 时是「尚未建立基线」，不是「改过」：把无从比较当成改过会让
+        整份旧台账一上来全红，反而看不出哪一份真的变过。"""
+        for name in ("xiaomi-A/recipe.py", "oppo-B/recipe.py"):
+            self.recipe(name)
+        records = {
+            "xiaomi-A/recipe.py": {"build": "A_1.0", "date": "2026-11-01", "by": "机主", "tier": "全部"},
+            "oppo-B/recipe.py": {"build": "B_2.0", "date": "2026-11-08", "by": "机主", "tier": "全部",
+                                 "body_hash": "b" * 16},
+        }
+        hashes = {"xiaomi-A/recipe.py": "a" * 16, "oppo-B/recipe.py": ""}   # 后一份当前哈希也读不到
+        rows = {row.path: row for row in verify_ledger.rows(self.dir, records, TODAY, hashes=hashes)}
+        self.assertFalse(rows["xiaomi-A/recipe.py"].review)
+        self.assertFalse(rows["oppo-B/recipe.py"].review)
 
     def test_an_explicitly_unrecorded_tier_has_no_days_or_review_flag(self):
         self.recipe("vivo-C/recipe.py")
         records = {"vivo-C/recipe.py": {"build": "C_3.0", "date": "2026-01-05",
-                                        "by": "@someone", "tier": "未记录"}}
-        changed = {"vivo-C/recipe.py": "2026-06-01"}
-        [row] = verify_ledger.rows(self.dir, records, TODAY, changed=changed)
+                                        "by": "@someone", "tier": "未记录",
+                                        "body_hash": "c" * 16}}
+        hashes = {"vivo-C/recipe.py": "d" * 16}
+        [row] = verify_ledger.rows(self.dir, records, TODAY, hashes=hashes)
         self.assertEqual(row.tier, verify_ledger.UNRECORDED)
         self.assertIsNone(row.days)          # 没有可信记录：日期不参与排序、分档，也不标待复核
         self.assertFalse(row.review)
-        self.assertEqual(verify_ledger.render(self.dir, records, TODAY, changed=changed).splitlines()[0],
+        self.assertEqual(verify_ledger.render(self.dir, records, TODAY, hashes=hashes).splitlines()[0],
                          f"vivo-C/recipe.py\t{verify_ledger.UNRECORDED}")
 
     def test_distribution_splits_rows_into_three_buckets_and_sums_to_all(self):
@@ -258,8 +279,9 @@ class RowsTest(unittest.TestCase):
     def test_review_and_build_mismatch_marks_share_the_line_tail(self):
         self.recipe("xiaomi-A/recipe.py")
         records = {"xiaomi-A/recipe.py": {"build": "OLD_1.0", "date": "2026-11-01",
-                                          "by": "机主", "tier": "部分"}}
-        line = verify_ledger.render(self.dir, records, TODAY, changed={"xiaomi-A/recipe.py": "2026-11-08"},
+                                          "by": "机主", "tier": "部分",
+                                          "body_hash": "b" * 16}}
+        line = verify_ledger.render(self.dir, records, TODAY, hashes={"xiaomi-A/recipe.py": "a" * 16},
                                     builds={"xiaomi-A/recipe.py": "A_2.0"}).splitlines()[0]
         self.assertTrue(line.endswith(f"{verify_ledger.REVIEW} · {verify_ledger.BUILD_MISMATCH}"))
 
@@ -271,50 +293,92 @@ class RowsTest(unittest.TestCase):
                          {"xiaomi-A/recipe.py": "PMX110_17.0.0", "oppo-B/recipe.py": ""})
 
 
-class ChangedDatesTest(unittest.TestCase):
-    """生产路径：从 git 取每个配方最后一次改动的作者日期。用临时仓库，不碰真实 `recipes/`。"""
+class BodyHashTest(unittest.TestCase):
+    """段体哈希的归一（#1242）：只改注释 / 格式 / 函数位置 / 函数名不算改；段体正文或段名改了才算改。
+
+    用临时脚本文件，不装载脚本、不碰真实 `recipes/`。两个分区各一条：一条把「迁移里会发生、
+    但不该改哈希」的写法都试一遍，另一条是真正该翻成待复核的改动。
+    """
+
+    BEFORE = '''BUILD = "A_1.0"
+
+def helper():
+    return 1
+
+@step("系统广告")
+def _():
+    # 原始注释
+    p.off(only=["个性化广告推荐"], page="系统·广告服务")
+
+@step("应用商店")
+def _():
+    p.start("com.xiaomi.market")
+'''
 
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        self.root = Path(tmp.name)
-        self.recipes = self.root / "recipes"
-        self.recipes.mkdir()
+        self.dir = Path(tmp.name)
 
-    def git(self, *args, env=None):
-        subprocess.run(["git", "-C", str(self.root), *args], check=True, env=env,
-                       capture_output=True)
-
-    def commit_recipe(self, name, author_date):
-        path = self.recipes / name
+    def hash_of(self, text, name="recipe.py"):
+        path = self.dir / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text('BUILD = "A_1.0"\n', encoding="utf-8")
-        env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.com",
-               "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.com",
-               "GIT_AUTHOR_DATE": f"{author_date}T10:00:00+0800",
-               "GIT_COMMITTER_DATE": "2026-11-20T10:00:00+0800"}
-        self.git("add", "-A", env=env)
-        # 本机全局的 commit-msg 钩子会查 DCO、可能还带签名，临时仓库里一律关掉
-        self.git("-c", "commit.gpgsign=false", "commit", "--no-verify", "-qm", name, env=env)
+        path.write_text(text, encoding="utf-8")
+        return verify_ledger.body_hash(path)
 
-    def test_author_date_of_the_last_commit_touching_each_recipe(self):
-        self.git("init", "-q")
-        self.commit_recipe("xiaomi-A/recipe.py", "2026-11-05")
-        self.commit_recipe("oppo-B/recipe.py", "2026-10-01")
-        # 提交日期（2026-11-20）故意晚于作者日期：rebase 会改写前者，不该被它带偏
-        self.assertEqual(verify_ledger.changed_dates(self.recipes),
-                         {"xiaomi-A/recipe.py": "2026-11-05", "oppo-B/recipe.py": "2026-10-01"})
+    def test_comments_format_and_function_shape_do_not_change_the_hash(self):
+        """这条守的是「迁移不该翻成待复核」：注释、docstring、折行、函数名、段的先后、
+        模块级助手的位置全变，段体正文还是那两句。"""
+        after = '''BUILD = "A_1.0"
 
-    def test_a_folder_outside_git_yields_no_dates(self):
-        (self.recipes / "xiaomi-A").mkdir()
-        (self.recipes / "xiaomi-A" / "recipe.py").write_text('BUILD = "A_1.0"\n', encoding="utf-8")
-        self.assertEqual(verify_ledger.changed_dates(self.recipes), {})
+
+@step("应用商店")
+def market():
+    p.start("com.xiaomi.market")
+
+
+@step("系统广告")
+def system_ads():
+    """段体里的 docstring 不是行为。"""
+    # 注释改过了
+    p.off(
+        only=["个性化广告推荐"],
+        page="系统·广告服务",
+    )
+
+
+def helper():
+    """模块级助手挪到了段后面，多了一个 docstring。"""
+    return 1
+'''
+        self.assertEqual(self.hash_of(self.BEFORE), self.hash_of(after))
+
+    def test_a_changed_step_body_or_step_name_changes_the_hash(self):
+        body_changed = self.BEFORE.replace('"个性化广告推荐"', '"个性化推荐"')
+        name_changed = self.BEFORE.replace('@step("系统广告")', '@step("系统·广告")')
+        self.assertNotEqual(self.hash_of(self.BEFORE), self.hash_of(body_changed))
+        self.assertNotEqual(self.hash_of(self.BEFORE), self.hash_of(name_changed))
+
+    def test_a_removed_step_changes_the_hash(self):
+        fewer = self.BEFORE.split('@step("应用商店")')[0]
+        self.assertNotEqual(self.hash_of(self.BEFORE), self.hash_of(fewer))
+
+    def test_hashes_are_listed_by_path_with_a_short_digest(self):
+        self.hash_of(self.BEFORE, "xiaomi-A/recipe.py")
+        self.hash_of('BUILD = "B_9.0"\n', "oppo-B/recipe.py")
+        hashes = verify_ledger.body_hashes(self.dir)
+        self.assertEqual(set(hashes), {"xiaomi-A/recipe.py", "oppo-B/recipe.py"})
+        self.assertRegex(hashes["xiaomi-A/recipe.py"], rf"^[0-9a-f]{{{verify_ledger.HASH_LEN}}}$")
+        listing = verify_ledger.hash_listing(self.dir)
+        self.assertEqual([line.split("\t")[0] for line in listing.splitlines()],
+                         ["oppo-B/recipe.py", "xiaomi-A/recipe.py"])
+        self.assertEqual(listing.splitlines()[1].split("\t")[1], hashes["xiaomi-A/recipe.py"])
 
 
 class RealRecipesContractTest(unittest.TestCase):
     """真实仓库的数据契约，无注入点：每份配方都有条目、记录的 build 对得上脚本 BUILD、
-    覆盖度与证据来源都是已知取值、日期格式合法。台账真正的失效方式是「新配方悄悄不在里面」，
-    这一类就是拦它。"""
+    覆盖度与证据来源都是已知取值、日期格式合法、每条记录都有段体哈希基线。台账真正的失效方式是
+    「新配方悄悄不在里面」与「新条目忘了记基线」，这一类就是拦它。"""
 
     @classmethod
     def setUpClass(cls):
@@ -331,12 +395,24 @@ class RealRecipesContractTest(unittest.TestCase):
         stale = sorted(set(self.records) - set(self.paths))
         self.assertEqual(stale, [], "配方改名或删除后，台账里的旧 key 要跟着删：\n" + "\n".join(stale))
 
-    def test_every_record_has_the_five_fields(self):
+    def test_every_record_has_the_six_fields(self):
         for path, record in sorted(self.records.items()):
             with self.subTest(path):
-                self.assertEqual(set(record), {"build", "date", "by", "tier", "evidence"})
-                for field in ("build", "date", "by", "evidence"):
+                self.assertEqual(set(record), {"build", "date", "by", "tier", "evidence", "body_hash"})
+                for field in ("build", "date", "by", "evidence", "body_hash"):
                     self.assertIsInstance(record[field], str)
+                # 每一条都已建立基线（2026-11-13 迁移前一次性写入）：空串或格式不对就没有判据了
+                self.assertRegex(record["body_hash"], rf"^[0-9a-f]{{{verify_ledger.HASH_LEN}}}$")
+
+    def test_every_recipe_gets_a_well_formed_hash(self):
+        """真实 47 份脚本都算得出哈希。哈希是跨平台判据（CI 的 Linux 3.13、Windows 3.12），
+        序列化因此不走 `ast.dump()`；跨版本对拍由本地两条解释器各跑一次 `--hash` 完成，这里只守
+        覆盖与形状。"""
+        hashes = verify_ledger.body_hashes(self.dir)
+        self.assertEqual(set(hashes), set(self.paths))
+        for path, value in sorted(hashes.items()):
+            with self.subTest(path):
+                self.assertRegex(value, rf"^[0-9a-f]{{{verify_ledger.HASH_LEN}}}$")
 
     def test_recorded_builds_start_with_the_scripts_declared_build(self):
         builds = verify_ledger.declared_builds(self.dir)
