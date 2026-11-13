@@ -15,17 +15,17 @@ https://t.me/+A5X3Mxzs-Cg3NjYx
 
 插上手机，点几下按钮。不需要 Python，也不需要 AI 工具。
 
-> **v0.4.3 · 2026-11-11**：0.4.2 的手机版装上后一打开就报错闪退，这一版修好了。桌面客户端把引擎内部按阶段拆成几块，用起来不变。0.4.1 及以前没有应用内更新，要先手动装一次 0.4.2；从 0.4.2 起可以在 App 里检查、下载并安装更新，手机版仍需在系统弹窗里确认；0.2.7 起的客户端左下角会提示新版；请重新下载，已有备份会保留。详见 [更新记录](CHANGELOG.md)，错误日志上报说明见 [这里](docs/12-错误日志上报.md)。官网：https://ahuamiao.com/sites/other/android-ad-removal-intro.html
+> **v0.4.4 · 2026-11-13**：这一版给一加 16 与真我 GT5 Pro 补了机型脚本，修好了长列表页只关最后一段、vivo 锁屏段一直没生效等几处问题；引擎里把各机型脚本里重复的段体与导航收成共用一份，用起来不变。0.4.1 及以前没有应用内更新，要先手动装一次 0.4.2；从 0.4.2 起可以在 App 里检查、下载并安装更新，手机版仍需在系统弹窗里确认；0.2.7 起的客户端左下角会提示新版；请重新下载，已有备份会保留。详见 [更新记录](CHANGELOG.md)，错误日志上报说明见 [这里](docs/12-错误日志上报.md)。官网：https://ahuamiao.com/sites/other/android-ad-removal-intro.html
 
 此前版本已处理 Windows 本地页面超时、荣耀截图越界、通知渠道误操作风险、vivo 快应用与备份问题。各 Issue 的处理范围和待验证项见 [社区问题处理记录](docs/09-社区问题处理.md)。0.4.2 起 Mac / Windows 客户端也能连纯血鸿蒙手机，这条通道还没有在鸿蒙真机上复测，见 [鸿蒙接入说明](harmony/README.md)。
 
 | 设备 | 下载 | 说明 |
 |---|---|---|
-| Mac · Apple 芯片（M1 及以后） | [AndroidAdCleaner-0.4.3-mac-arm64.dmg](https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.3/AndroidAdCleaner-0.4.3-mac-arm64.dmg) | 已签名、通过苹果公证，双击就能打开 |
-| Mac · Intel 芯片（macOS 11 及以上） | [AndroidAdCleaner-0.4.3-mac-intel.dmg](https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.3/AndroidAdCleaner-0.4.3-mac-intel.dmg) | 同上 |
-| Windows 10 / 11 · 安装版 | [AndroidAdCleaner-0.4.3-windows-setup.exe](https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.3/AndroidAdCleaner-0.4.3-windows-setup.exe) | 弹「Windows 已保护你的电脑」时点「更多信息」→「仍要运行」；和旧版共用安装标识，会原地升级 |
-| Windows 10 / 11 · 免安装 | [AndroidAdCleaner-0.4.3-windows-portable.zip](https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.3/AndroidAdCleaner-0.4.3-windows-portable.zip) | 解压后双击 `AndroidAdCleaner.exe`；不会替换、也不会卸载已安装的旧版 |
-| 安卓手机 · 手机版（安卓 11 及以上） | [AndroidAdCleaner-0.4.3-android-arm64.apk](https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.3/AndroidAdCleaner-0.4.3-android-arm64.apk) | 不用连电脑，安装和授权见[手机版教程](docs/手机版教程/README.md) |
+| Mac · Apple 芯片（M1 及以后） | [AndroidAdCleaner-0.4.4-mac-arm64.dmg](https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.4/AndroidAdCleaner-0.4.4-mac-arm64.dmg) | 已签名、通过苹果公证，双击就能打开 |
+| Mac · Intel 芯片（macOS 11 及以上） | [AndroidAdCleaner-0.4.4-mac-intel.dmg](https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.4/AndroidAdCleaner-0.4.4-mac-intel.dmg) | 同上 |
+| Windows 10 / 11 · 安装版 | [AndroidAdCleaner-0.4.4-windows-setup.exe](https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.4/AndroidAdCleaner-0.4.4-windows-setup.exe) | 弹「Windows 已保护你的电脑」时点「更多信息」→「仍要运行」；和旧版共用安装标识，会原地升级 |
+| Windows 10 / 11 · 免安装 | [AndroidAdCleaner-0.4.4-windows-portable.zip](https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.4/AndroidAdCleaner-0.4.4-windows-portable.zip) | 解压后双击 `AndroidAdCleaner.exe`；不会替换、也不会卸载已安装的旧版 |
+| 安卓手机 · 手机版（安卓 11 及以上） | [AndroidAdCleaner-0.4.4-android-arm64.apk](https://github.com/rddmwmddr/android-ad-cleaner/releases/download/v0.4.4/AndroidAdCleaner-0.4.4-android-arm64.apk) | 不用连电脑，安装和授权见[手机版教程](docs/手机版教程/README.md) |
 
 不知道 Mac 是哪种芯片：左上角苹果图标 → 关于本机，「芯片」写 Apple M 开头的选 Apple 芯片。所有版本：[Releases](https://github.com/rddmwmddr/android-ad-cleaner/releases)；国内下载走 [Gitee](https://gitee.com/rddmw/android-ad-cleaner/releases)，不用登录（Windows 安装版只在 GitHub 上）。国内走 Gitee 时拿到的是 Windows 免安装版，它不会替换已安装的旧版：要顶掉旧版，用安装版覆盖安装，或先在 Windows「设置」的应用列表里卸载旧的「安卓去广告」（0.3.2 及更早版本装的名字）再删掉旧快捷方式；卸载只删程序目录，数据与备份保留；免安装版启动时若发现旧版还在，也会在界面里提示一次。用法：[docs/08-桌面客户端.md](docs/08-桌面客户端.md)。
 
