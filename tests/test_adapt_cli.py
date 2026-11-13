@@ -276,6 +276,17 @@ class CheckReportTests(unittest.TestCase):
         self.assertTrue(adapt.print_report(report))
         self.assertEqual(p.off.call_count, 2)
 
+    def test_check_draft_runs_through_the_only_loader(self):
+        """`adapt check` 与正式脚本共用一处装载：草稿交给 `recipe_loader.run()`，不自带 exec（ADR-0037）。"""
+        with tempfile.TemporaryDirectory() as d:
+            out = self.draft(d)
+            p = draft_phone([[("个性化推荐", True, (1, 2))]] * 10)
+            with patch.object(adapt.recipe_loader, "run", wraps=adapt.recipe_loader.run) as run:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    adapt.check_draft(p, str(out))
+        run.assert_called_once_with(str(out), p, only=[])
+        self.assertIs(p.safe_mode, True)        # 装载前就切进安全模式，草稿不会整页全关
+
     def test_missing_switch_fails_the_step_without_clicking(self):
         with tempfile.TemporaryDirectory() as d:
             out = self.draft(d)
