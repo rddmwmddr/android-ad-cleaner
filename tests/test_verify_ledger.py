@@ -464,8 +464,9 @@ def status_json(device=None):
 class StatusJsonVerificationTests(unittest.TestCase):
     def test_values_come_from_the_ledger_row_for_this_script(self):
         st, load = status_json()
-        # `recipe` 是仓库相对路径，分隔符跟着平台走；台账键另在引擎侧统一成 "/"
-        self.assertEqual(st["recipe"], os.path.join("recipes", "xiaomi-M154FF", "recipe.py"))
+        # `recipe` 是脚本身份，`recipe_path` 才是仓库相对路径（分隔符跟着平台走）；台账键另在引擎侧统一成 "/"
+        self.assertEqual(st["recipe"], "xiaomi-M154FF")
+        self.assertEqual(st["recipe_path"], os.path.join("recipes", "xiaomi-M154FF", "recipe.py"))
         load.assert_called_once_with(LEDGER_PATH)
         record = LEDGER["xiaomi-M154FF/recipe.py"]
         self.assertEqual((st["recipe_coverage"], st["recipe_evidence"], st["recipe_verified"]),

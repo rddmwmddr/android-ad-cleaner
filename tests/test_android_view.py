@@ -34,7 +34,7 @@ class FakeApi:
 
 def status(**over):
     base = {"info": {"name": "Phone X", "brand": "OPPO", "model": "PX1", "os": "16"},
-            "steps": ["桌面", "浏览器"], "recipe": "oppo/PX1", "recipe_ok": True, "recipe_ref": False,
+            "steps": ["桌面", "浏览器"], "recipe": "oppo-PX1", "recipe_ok": True, "recipe_ref": False,
             "quickapps": [], "ads": []}
     return {**base, **over}
 
@@ -238,7 +238,7 @@ class DetectTest(unittest.TestCase):
                 self.assertTrue((ROOT / "docs" / "清单" / filename).is_file())
 
     def test_reference_recipe_runs_in_safe_mode(self):
-        d = self.detect(recipe="oppo/PX9", recipe_ref=True, recipe_ok=False)
+        d = self.detect(recipe="oppo-PX9", recipe_ref=True, recipe_ok=False)
         self.assertTrue(d["ref"])
         self.assertIn("PX9", d["recipe_label"])
         self.assertIn("安全模式", d["recipe_note"])

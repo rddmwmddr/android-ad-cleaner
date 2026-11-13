@@ -206,8 +206,9 @@ def _recipe(status, info):
         return None, ""
     ref = bool(status.get("recipe_ref"))
     ok = bool(status.get("recipe_ok"))
+    # `recipe` 就是脚本的稳定身份（目录名），不再从路径里切。
     recipe = status.get("recipe") or ""
-    label = f"试用同品牌参考脚本（{recipe.split('/')[1]} 录制）" if ref and "/" in recipe else (
+    label = f"试用同品牌参考脚本（{recipe} 录制）" if ref and recipe else (
         "试用同品牌参考脚本" if ref else "按机型脚本自动关")
     note = ("安全模式：只关脚本里点名的开关，不做整页全关；页面不一样时，找不到入口的步骤会跳过。" if ref or not ok
             else "系统广告、负一屏、搜索、商店、浏览器、主题等 App 里的推荐和广告开关。")
