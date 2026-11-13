@@ -189,18 +189,19 @@ class DriverTests(unittest.TestCase):
         import fast
         calls = driver.run_script(fast, recipe_kit, fixtures,
                                   ROOT / "recipes" / "xiaomi-24090RA29C" / "recipe.py", "present")
-        names = [call[0] for call in calls]
+        names = [call[1] for call in calls]
         self.assertIn("start", names)
         self.assertIn("entry", names)
         self.assertIn("d.shell", names)
+        self.assertIn("系统广告", {call[0] for call in calls})
         self.assertGreater(len(calls), 40)
 
     def test_the_comparison_reports_drift_and_the_empty_comparison(self):
         """驱动自己的三条结论：序列不同、某个场景一条都没记到、总量低于下限 —— 都要报出来。"""
         import compare_recipe_calls as driver
-        calls = [["start", ["com.example.app"], {}]]
+        calls = [["段甲", "start", ["com.example.app"], {}]]
         base = {"a.py": {"present": calls, "absent": calls}}
-        drifted = {"a.py": {"present": calls + [["click", [1, 2], {}]], "absent": calls}}
+        drifted = {"a.py": {"present": calls + [["段甲", "click", [1, 2], {}]], "absent": calls}}
         found, _ = driver.problems(base, drifted)
         self.assertTrue(any(summary.startswith("a.py[present]") for summary, _ in found), found)
 
@@ -209,7 +210,7 @@ class DriverTests(unittest.TestCase):
         self.assertIn("一条调用都没记到", [summary for summary, _ in found])
 
         found, total = driver.problems(base, base)
-        self.assertIn("对拍没测到东西", [summary for summary, _ in found])
+        self.assertIn("没测到东西", [summary for summary, _ in found])
         self.assertLess(total, driver.MIN_CALLS)
 
 
