@@ -45,7 +45,7 @@
 ### 三块不互读的守卫
 
 - `tests/test_api_structure.py`：解析 `gui/app.py`，断言三个新类体里不出现另外两个类的名字，也不出现指向对方的属性；另断言 `Api` 的 22 个窗口桥方法名与参数列表等于从基线抄死的清单。
-- `tests/compare_api.py`：同一串 `Api` 调用喂给基线 `gui/app.py` 与当前版本，比较方法签名、下载状态、上报结果、执行序列与 `job.results` 的 `rc`。调用串用 `Api(runner=…)` 注入假启动器，不 patch `subprocess`。它要 `git archive` 基线提交，CI 是浅克隆，所以**手动跑、不进单测**：`python tests/compare_api.py --baseline <SHA>`。每条场景的 `reached` 由观察值派生（走到了 stopped / skipped / link-lost / limited 等哪条分支），不是场景名。
+- `tests/compare_api.py`：同一串 `Api` 调用喂给基线 `gui/app.py` 与当前版本，比较方法签名、下载状态、上报结果、执行序列与 `job.results` 的 `rc`。调用串用 `Api(runner=…)` 注入假启动器，不 patch `subprocess`。它要 `git archive` 基线提交，CI 是浅克隆，所以**手动跑、不进单测**：`python tests/compare_api.py --baseline <SHA>`。每条场景的 `reached` 由观察值派生（走到了 stopped / skipped / link-lost / limited 等哪条分支），不是场景名。（2026-11-13 修订：该驱动已退役，见文末增补。）
 
 ## Considered Options
 
@@ -60,7 +60,7 @@
 ## Consequences
 
 - 13 个直接构造 `app.Api(dir)` 的测试文件零改动，`api.job` / `api._log` / `api._work` / `api._run` 等调用面保持原样。
-- 新增两份证据：`tests/test_api_structure.py`（常驻结构守卫，进单测）与 `tests/compare_api.py`（改前改后对拍，手动跑）。对拍场景覆盖下载回退 / 校验失败 / 源表异常、上报 ok / duplicate / 429 / 空报告 / 限频、执行成功 / 失败 / 停止 / ui_busy / link_lost / 事件 / 载荷行分流；守卫走不到目标分支的场景不算证据。
+- 新增两份证据：`tests/test_api_structure.py`（常驻结构守卫，进单测）与 `tests/compare_api.py`（改前改后对拍，手动跑）。对拍场景覆盖下载回退 / 校验失败 / 源表异常、上报 ok / duplicate / 429 / 空报告 / 限频、执行成功 / 失败 / 停止 / ui_busy / link_lost / 事件 / 载荷行分流；守卫走不到目标分支的场景不算证据。（2026-11-13 修订：对拍那一份已退役，只剩结构守卫，见文末增补。）
 - 拆类改动在一个代码 commit 里落地：三块的 `Api.__init__` 接线与门面转发互相引用，硬拆成三个提交会让中间态跑不起来。测试与文档各一个 commit。
 - `#452` 的三处竞态先于本决策合入，拆类把它们原样带进 `Dispatcher`：`_log` / `_event` 收自己那一次的 `job`，spawn 登记时补杀漏网的进程，收尾行与 `running=False` 在同一临界区。`download_adb()` 的「判 running 与起线程之间」并发下载竞态是基线原有，不在这里修。
 - 验收：3.15 与 3.12 各 847 项回归全过（含结构守卫 5 项）；ruff 0.17.3 净；对拍 20 条场景与 `a788fa1` 零差异、守卫全部命中。
@@ -80,3 +80,12 @@
 ## 补记（2026-11-09，#888）
 
 应用内更新（[ADR-0030](0030-in-app-update.md)）在门面上加了 `check_update` / `update_state` / `download_update` / `cancel_update` / `install_update`：状态、清单与下载都在 `gui/updates.py`，门面只转发。上面写的「22 个窗口桥」「13 个方法」是拆分当时的口径，本文不改写历史；当前窗口桥以 `tests/test_api_structure.py` 的 `BRIDGE` 为准——#888 之前已经是 27 个，本次增至 32 个。
+
+## 增补：退役 Api 对拍驱动（#1230）
+
+`tests/compare_api.py` 已删除，不写替代驱动。
+
+- **退役原因**：基线钉在拆类前的 `b1f4919`，拆类合入后每一次功能变更都会在它眼里变成一条差异，从那以后报出的任何一条都不再能归因到「拆类改坏了什么」。文件也不在 `test_*.py` 的收集范围、不被任何用例 import，CI 与脚本都不调它——它读起来像活工具，实际只是一把基线过期的尺子，下一个照着跑的人会把预期变更当成证据。
+- **退役前实跑证据**（2026-11-13，`--baseline b1f4919`）：20 条场景与守卫全部命中，37 处字段差异逐条都可归到之后的预期变更——`results[].kind` / `results[].failed_steps` 来自 #638 的段级重试（ADR-0026），上报日志里 `[页面骨架]` → `[诊断载荷]` 来自 #939 的落点现场，`client_version` 随发版从 0.3.0 前进到 0.4.3；另有 2 条签名差异（`_log` / `_event` 多出 `job=None`，来自 #452 的竞态修复）、1 个本决策有意移除的 `_fetch`、20 个后续新增的 `Api` 方法。没有一条指向拆类本身。
+- **接替者只有结构层**：`tests/test_api_structure.py` 钉住窗口桥方法名与参数列表、三个类体互不引用，不比较下载 / 上报 / 执行的输出。行为层的对拍从此不常备，这是明确接受的空缺，不是遗漏。
+- **取回方式**：`git show f2a9122:tests/compare_api.py > tests/compare_api.py`——`f2a9122` 是删除前最后一版（比 #651 的 `342d105` 多一次 ruff 的 `zip(strict=False)` 修正）。取回后须把 `--baseline` 重钉到当前要证明的那次改动之前的固定 SHA，并重新满足 [CODING_STANDARDS.md](../../CODING_STANDARDS.md) 的「对拍要能证伪」：守卫要走得到目标分支，差异要能归到本次改动。
