@@ -10,7 +10,7 @@ import time
 OPEN_SETTINGS_STYLE = "intent"
 SEARCH_SETTINGS_STYLE = "page"
 # 家族库的 `page_activity` 与 recipe_kit 注入的 `page()` 同名不同签名，绑回旧名字给段体用。
-page = page_activity
+page = page_activity  # noqa: F821 — 装载器执行模块体前已把注入名写进作用域
 
 
 def guard():
