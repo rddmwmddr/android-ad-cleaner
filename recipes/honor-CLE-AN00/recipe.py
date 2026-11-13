@@ -5,16 +5,13 @@ from recipe_kit import step
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 BUILD = "CLE-AN00 10.0.0"
 MODELS = ["CLE-AN00"]
+# 家族库按这些常量选走法（#1246），缺省档与实现见 tool/recipe_nav.py。
+ENTER_STYLE = "honor"
+MY_TAB_STYLE = "honor"
 import re
 import time
 
 from fast import bounds
-
-
-def enter(text, scrolls=4):
-    """必需入口：没有就是这一段没跑成，不能报成功。"""
-    if not p.entry(text, scrolls=scrolls):
-        raise RuntimeError(f"入口「{text}」没找到")
 
 
 def no_agreement(app):
@@ -53,19 +50,6 @@ def wait_home(app):
     for _ in range(4):
         time.sleep(0.5)
         no_agreement(app)
-
-
-def my_tab(app):
-    """底栏可能被晚到的弹窗盖住（阅读开屏广告之后才弹「发现新版本」）：关掉再找。协议框不关，只跳过。"""
-    for _ in range(4):
-        no_agreement(app)
-        if p.find("我的", edge_ok="tab"):
-            break
-        p.dismiss()
-        time.sleep(1.5)
-    if not p.tab("我的"):
-        raise RuntimeError(f"{app}底部「我的」没找到")
-    time.sleep(1)
 
 
 @step("广告跟踪")
@@ -323,3 +307,4 @@ def _():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import p, skip, skip_in_safe_mode
+    from recipe_nav import enter, my_tab

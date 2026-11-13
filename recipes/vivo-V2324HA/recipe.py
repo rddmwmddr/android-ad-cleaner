@@ -4,18 +4,9 @@ from recipe_kit import step
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 BUILD = "PD2324J_A_16"
 MODELS = ["V2324HA"]
+# 家族库按这个常量选走法（#1246），缺省档与实现见 tool/recipe_nav.py。
+GEAR_STYLE = "vivo_desc"
 import time
-
-
-def gear():
-    """vivo App 的设置多是右上角齿轮图标，没有文字。"""
-    for n in p.tree().iter("node"):
-        d = (n.get("content-desc") or "") + (n.get("resource-id") or "")
-        if any(k in d.lower() for k in ("设置", "setting")) and n.get("clickable") == "true" and p.on_screen(n):
-            from fast import bounds
-            l, t, r, b = bounds(n); p.click((l + r) // 2, (t + b) // 2); time.sleep(1)
-            return True
-    return p.tap("设置", exact=True, scrolls=0)
 
 
 @step("系统广告")
@@ -104,5 +95,5 @@ def _():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import maybe, p
-    from recipe_nav import settings_home
+    from recipe_nav import gear, settings_home
     from recipe_steps import lock_screen_magazine, system_ads_branch

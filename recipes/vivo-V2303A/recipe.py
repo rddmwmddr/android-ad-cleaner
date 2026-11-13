@@ -7,22 +7,9 @@ from recipe_kit import step
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 BUILD = "CP2A.260605.016"
 MODELS = ["V2303A"]
+# 家族库按这个常量选走法（#1246），缺省档与实现见 tool/recipe_nav.py。
+GEAR_STYLE = "vivo"
 import time
-
-
-def gear():
-    """vivo App 的设置多是右上角齿轮图标，没有文字。
-
-    判据用引擎的 icon_hit：旧实现按 content-desc / resource-id 子串匹配，id 里带 setting 的
-    其它入口（商店的 securitySettingSwitchLayout 之类）会被当成齿轮先点掉（#530）。"""
-    from fast import bounds, icon_hit
-    for n in p.tree().iter("node"):
-        l, t, r, b = bounds(n)
-        icon = "ImageView" in n.get("class", "") and r - l < p.W * 0.25 and b - t < p.H * 0.15
-        if icon_hit(n) and (n.get("clickable") == "true" or icon) and p.on_screen(n):
-            p.click((l + r) // 2, (t + b) // 2); time.sleep(1)
-            return True
-    return p.tap("设置", exact=True, scrolls=0)
 
 
 @step("系统广告")
@@ -112,5 +99,5 @@ def _():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import SkipStep, maybe, p
-    from recipe_nav import off_unnamed
+    from recipe_nav import gear, off_unnamed
     from recipe_steps import browser_recommendations, i_manager_ads, weather_service
