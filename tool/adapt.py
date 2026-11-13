@@ -3,7 +3,7 @@
 
   adapt.py survey -s SERIAL                  只读试入口：拿同家族验证过的直达逐条打开，报打不打得开、命中的同组词条、App 装没装
   adapt.py explore -s SERIAL [包名 …]        只读探路（复用 explore.py）→ 探路-<型号>.tsv
-  adapt.py gen 探路-<型号>.tsv [-o 输出.py]   把人工勾选的开关生成 recipe 草稿（不碰手机）
+  adapt.py gen 探路-<型号>.tsv [-o 输出.toml]   把人工勾选的开关生成页面树草稿（不碰手机；-o x.py 产旧格式）
                      [--pick 清单.txt]       勾选清单：每行一个开关标题（不用改 TSV 时用它）
                      [--model 型号] [--build 录制版本]
   adapt.py check -s SERIAL 草稿.py [段名 …]   安全模式自检草稿，输出适配报告
@@ -148,6 +148,39 @@ def render_draft(groups, model, build, source):
     return "\n".join(lines)
 
 
+def render_catalog_draft(groups, model, build, source):
+    """`adapt gen` 的 catalog 骨架（ADR-0038，`<型号>.toml`）：每段的入口与待关名单写成页面树数据。
+
+    骨架是「待验证草稿」，起点形状已经对：每段一个 `[[segment]]`，`start` 拉起 → `entry` 逐层进子页 →
+    `off` 关点名的开关。人只需在手机上核对、补 `activity` / 守卫 / 例外，不再是写一个程序。这里不产
+    `code=` 例外：草稿没有本机知识，<型号>.py 有例外时才另写。
+    """
+    when = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    lines = [
+        "# ===================== 待验证草稿（页面树）· adapt gen 生成 =====================",
+        "# 这不是适配成果：入口路径、开关标题全部来自探路读屏，未经人工逐步核对。",
+        f"# 生成时间：{when}；来源：{source}",
+        "# 自检：python3 tool/run.py -s <序列号> adapt check <本文件>",
+        "#   自检只证明「进得去、关得掉、回读确认」，不代表适配完成；转为正式数据前必须人工核对。",
+        "# 不要直接放进 recipes/：放进去会被当成本型号的正式脚本自动匹配。",
+        "# 页面树只装机型知识；失败怎么收场、顺序、重试、台账归运行时（ADR-0038）。",
+        "# ==========================================================================",
+        f"model = {json.dumps(model, ensure_ascii=False)}",
+        f"models = {json.dumps([model] if model else [], ensure_ascii=False)}",
+        f"build = {json.dumps(build, ensure_ascii=False)}",
+    ]
+    for pkg, page, names in groups:
+        lines += ["", "[[segment]]", f"name = {json.dumps(step_name(pkg, page), ensure_ascii=False)}", "ops = ["]
+        lines.append(f"  {{kind = \"start\", pkg = {json.dumps(pkg, ensure_ascii=False)}}},")
+        for seg in [s.strip() for s in page.split(">") if s.strip()][1:]:
+            lines.append(f"  {{kind = \"entry\", text = {json.dumps(seg, ensure_ascii=False)}}},")
+        only = json.dumps(names, ensure_ascii=False)
+        lines.append(f"  {{kind = \"off\", only = {only}, page = {json.dumps(page, ensure_ascii=False)}}},")
+        lines.append("]")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def cmd_gen(rest):
     tsv = out = None
     picks, model, build = [], "", ""
@@ -168,7 +201,7 @@ def cmd_gen(rest):
                 build = value
             i += 2
         elif a.startswith("-"):
-            return fail(f"不认识的选项 {a}。用法：run.py adapt gen <探路-型号.tsv> [-o 输出.py] [--pick 清单.txt] "
+            return fail(f"不认识的选项 {a}。用法：run.py adapt gen <探路-型号.tsv> [-o 输出.toml] [--pick 清单.txt] "
                         "[--model 型号] [--build 录制版本]")
         elif tsv is None:
             tsv = a
@@ -176,7 +209,7 @@ def cmd_gen(rest):
         else:
             return fail("只收一个探路 TSV 文件；要合并多份结果请先手工合并")
     if not tsv:
-        return fail("用法：run.py adapt gen <探路-型号.tsv> [-o 输出.py] [--pick 清单.txt] [--model 型号] [--build 录制版本]")
+        return fail("用法：run.py adapt gen <探路-型号.tsv> [-o 输出.toml] [--pick 清单.txt] [--model 型号] [--build 录制版本]")
     if not os.path.exists(tsv):
         return fail(f"找不到 {tsv}")
     rows = parse_tsv(tsv)
@@ -203,13 +236,20 @@ def cmd_gen(rest):
         print(f"⚠ 这些是保护类开关（打开才是保护），没有写进草稿：{'、'.join(protection)}")
     if ad_left:
         print(f"另有 {ad_left} 个疑似广告开关没有勾选，未写进草稿（工具不自动决定关哪些）")
-    src = render_draft(groups, model=model, build=build, source=os.path.basename(tsv))
-    out = out or (f"草稿-{model}.py" if model else "草稿.py")
+    # 默认产出 catalog 骨架（`.toml`，ADR-0038）；显式 `-o x.py` 才产旧的 `.py` 草稿（沿用 #1247）。
+    legacy_py = bool(out) and (out or "").lower().endswith(".py")
+    if legacy_py:
+        src = render_draft(groups, model=model, build=build, source=os.path.basename(tsv))
+        target = out or "草稿.py"
+    else:
+        src = render_catalog_draft(groups, model=model, build=build, source=os.path.basename(tsv))
+        target = out or (f"草稿-{model}.toml" if model else "草稿.toml")
+    out = target
     try:
-        with open(out, "w", encoding="utf-8") as f:
+        with open(target, "w", encoding="utf-8") as f:
             f.write(src)
     except OSError as e:
-        return fail(f"写不出 {out}：{e}")
+        return fail(f"写不出 {target}：{e}")
     total = sum(len(names) for _, _, names in groups)
     print(f"草稿已生成：{out}（{len(groups)} 段，{total} 个开关，均为待验证）")
     if not model:

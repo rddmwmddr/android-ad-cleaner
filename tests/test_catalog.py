@@ -258,5 +258,22 @@ class ReaderTests(unittest.TestCase):
             self.assertTrue(typecheck_recipes._check_catalog(str(bad))[0])
 
 
+class GenTests(unittest.TestCase):
+    """#1270：`adapt gen` 默认产出的是页面树骨架，起点形状就对（能过校验器）。"""
+
+    def test_catalog_draft_is_valid_schema(self):
+        import adapt
+        from tomllib import loads
+        src = adapt.render_catalog_draft(
+            [("com.bbk.appstore", "我的>设置>关于", ["个性化推荐", "服务管理"])],
+            model="TEST01", build="OS1", source="探路-TEST01.tsv")
+        data = loads(src)
+        catalog.validate(data)
+        self.assertEqual(data["models"], ["TEST01"])
+        self.assertEqual([s["name"] for s in data["segment"]], ["com.bbk.appstore · 我的>设置>关于"])
+        kinds = [op["kind"] for op in data["segment"][0]["ops"]]
+        self.assertEqual(kinds, ["start", "entry", "entry", "off"])
+
+
 if __name__ == "__main__":
     unittest.main()

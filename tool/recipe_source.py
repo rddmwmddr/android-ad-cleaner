@@ -30,6 +30,7 @@ import os
 import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from typing import Any
 
 _Function = ast.FunctionDef | ast.AsyncFunctionDef
 _Position = tuple[int, int]
@@ -497,7 +498,7 @@ def _s(value: object) -> str:
     return json.dumps(value, ensure_ascii=False) if isinstance(value, str) else repr(value)
 
 
-def _catalog_src(data: Mapping) -> str:
+def _catalog_src(data: Mapping[str, Any]) -> str:
     """把一份 catalog 数据降成等价的 Python 源码：每个 op 一行语句，复用 `scan_source` 的读法。
 
     只关心事实层会读的调用：`p.off`（含 only/keep/page）、`p.start`、`p.entry`（maybe）、
@@ -505,7 +506,7 @@ def _catalog_src(data: Mapping) -> str:
     `p.off`，与旧脚本「整页关闭」同一个事实形状。`back` / `top` / `print` / `return` 不产生事实。"""
     lines: list[str] = []
 
-    def lower(ops: Sequence) -> None:
+    def lower(ops: Sequence[Any]) -> None:
         for op in ops:
             if not isinstance(op, Mapping):
                 continue
@@ -553,7 +554,7 @@ def _lib_modules() -> dict[str, str]:
     return {name: modules[0] for name, modules in index.items() if len(modules) == 1}
 
 
-def scan_catalog(data: Mapping, exception_src: str | None = None) -> Facts:
+def scan_catalog(data: Mapping[str, Any], exception_src: str | None = None) -> Facts:
     """一份 catalog 数据的事实：把数据降成等价源码交给 `scan_source`，再把库调用的归属补上。
 
     库调用（`lib` 的 `settings_home` / `off_one` 等）在数据里没有 import 头，归属由 `_lib_modules()`

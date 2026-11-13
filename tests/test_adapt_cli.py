@@ -230,15 +230,17 @@ class DraftGenTests(unittest.TestCase):
         return out
 
     def test_docs_04_shows_the_same_skeleton(self):
-        """文档与生成器同步（#1247 的第四查）：docs/04 贴出的骨架行必须在 `render_draft()` 里原样存在，
-        反过来也成立——改一边漏一边即红。"""
+        """文档与生成器同步（#1247 的第四查，页面树形态 #1270）：docs/04 贴出的骨架里每个 op 行必须与
+        `render_catalog_draft()` 产出的原样一致，反过来也成立——改一边漏一边即红。"""
         doc = (ROOT / "docs" / "04-给新机型写脚本.md").read_text(encoding="utf-8")
-        draft = adapt.render_draft([("com.example", "设置", ["示例开关"])],
-                                   model="EXAMPLE", build="", source="探路-EXAMPLE.tsv")
-        for line in ("from recipe_kit import step", "from typing import TYPE_CHECKING",
-                     "if TYPE_CHECKING:", "    from recipe_kit import close_named, p, require, rt"):
+        draft = adapt.render_catalog_draft([("com.heytap.market", "设置 > 隐私", ["个性化推荐"])],
+                                           model="PLP120", build="", source="探路-PLP120.tsv")
+        op_lines = [line.strip() for line in draft.splitlines() if "{kind" in line]
+        self.assertTrue(op_lines, "生成的骨架里没有 op 行")
+        for line in op_lines:
             self.assertIn(line, doc, f"docs/04 的骨架缺这一行：{line}")
-            self.assertIn(line, draft, f"adapt gen 的骨架缺这一行：{line}")
+        for line in ('model = "PLP120"', 'models = ["PLP120"]', 'build = ""'):
+            self.assertIn(line, doc, f"docs/04 缺这一行：{line}")
 
     def test_no_selection_refuses_to_generate(self):
         err = io.StringIO()
