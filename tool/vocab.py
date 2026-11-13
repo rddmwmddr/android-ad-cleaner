@@ -273,22 +273,23 @@ def _absorb(out, family, script, facts, call_site=None):
 def scan(recipes_dir, injected=None):
     """读所有机型脚本。认不出品牌的目录不进库（tests/test_entries.py 守着每个品牌都有家族）。
 
-    `injected` 是段体注入面的 {名字: 源码}，缺省取 `recipe_source.step_sources()`。脚本调了哪个
-    注入名，就把那份实现也扫一遍：词条归调用它的每一个机型，出处记调用点，未解析与整页同样算在
-    这份脚本头上（#1209）。空表时与加接线之前逐字相同。"""
+    `injected` 是段体注入面的 {名字: 源码}，缺省取 `recipe_source.step_sources()`。脚本导入了哪个
+    段体名，就把那份实现也扫一遍：词条归调用它的每一个机型，出处记调用点，未解析与整页同样算在
+    这份脚本头上（#1209）。归属跟脚本的 import 走、只解析段体那一张表（#1243）：导航助手的实现
+    不扫，词住在实现里的只有段体。空表时与加接线之前逐字相同。"""
     out = Scan()
-    injected = recipe_source.step_sources() if injected is None else injected
+    surface = {recipe_source.STEPS_MODULE: recipe_source.step_sources() if injected is None else injected}
     for script, facts in recipe_source.scan_dir(recipes_dir, FAMILY).items():
         family = FAMILY[script.split("-", 1)[0].lower()]
         before = len(out.words)
         out.notes += _notes(facts, script)
         _absorb(out, family, script, facts)
-        for name in sorted(injected):
-            calls = recipe_source.injected_calls(facts, name)
+        for name, (module, source) in sorted(recipe_source.imported_sources(facts, surface).items()):
+            calls = recipe_source.injected_calls(facts, name, module)
             if not calls:
                 continue
             # 段体无形参，实参不跨文件；只有模块常量住在脚本里，按名字交回去
-            impl = recipe_source.scan_source(injected[name], externals=facts.constants)
+            impl = recipe_source.scan_source(source, externals=facts.constants)
             for call in calls:
                 _absorb(out, family, script, impl, call_site=call.line)
         if len(out.words) == before:

@@ -123,7 +123,7 @@ class WiringTests(unittest.TestCase):
         self.assertNotIn("recipe_kit", imported, "两个模块互相 import 会绕成环")
 
     def test_the_facts_layer_sees_the_step_surface(self):
-        """`injected_sources()` 合并两张注册表，词库只看段体那一张（#1209）。"""
+        """两张注册表按归属分开给（沿用 #1209 的分工：词库只看段体那一张），归属跟 import 走（#1243）。"""
         import recipe_source
 
         def factory(p, g):
@@ -132,10 +132,11 @@ class WiringTests(unittest.TestCase):
             return probe_step
 
         with patch.dict(recipe_steps.STEPS, {"probe_step": factory}):
-            self.assertIn("probe_step", recipe_source.injected_sources())
+            surface = recipe_source.surface_sources()
+            self.assertIn("probe_step", surface[recipe_source.STEPS_MODULE])
             self.assertIn("probe_step", recipe_source.step_sources())
         self.assertNotIn("probe_step", recipe_source.step_sources())
-        self.assertIn("open_app_settings", recipe_source.injected_sources())
+        self.assertIn("open_app_settings", surface[recipe_source.NAV_MODULE])
 
 
 class CallerScopeTests(unittest.TestCase):
