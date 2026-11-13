@@ -309,6 +309,26 @@ def _require_setting(op: Mapping, g: dict[str, Any]) -> None:
         raise RuntimeError(op["miss_print"])
 
 
+def _require_tap(op: Mapping, g: dict[str, Any]) -> None:
+    """`require(p.tap(text, exact=…, scrolls=…), 文案)`：点不到就按这一段失败（#1265）。"""
+    kwargs: dict[str, Any] = {}
+    for key in ("exact", "scrolls"):
+        if key in op:
+            kwargs[key] = op[key]
+    if not g["p"].tap(op["text"], **kwargs):
+        raise RuntimeError(op["miss_print"])
+
+
+def _close_listed(op: Mapping, g: dict[str, Any]) -> None:
+    """读回这一页的开关 → 只留点名的、页上真有的行 → 整表关（#1265）。
+
+    与旧脚本逐字同形：`read_switches(page)` → 按候选名单过滤 → 空的按失败收尾 → `close_named`。"""
+    available = g["read_switches"](op["page"])
+    names = [name for name in op["names"] if name in available]
+    g["require"](names, op["miss_print"])
+    g["close_named"](names, op["page"], snapshot=available)
+
+
 def _require_focus(op: Mapping, g: dict[str, Any]) -> None:
     """`require("<片段>" in p.focus(), 文案)`：读一次前台再断言，前台读取照旧进调用序列。"""
     g["require"](op["contains"] in g["p"].focus(), op["miss_print"])
@@ -392,6 +412,8 @@ _HANDLERS: dict[str, Callable[[Mapping, dict[str, Any]], None]] = {
     "miss_reset": _miss_reset,
     "require_unlocked": _require_unlocked,
     "require_tab": _require_tab,
+    "require_tap": _require_tap,
+    "close_listed": _close_listed,
     "require_go": _require_go,
     "tap": _tap,
     "go": _go,

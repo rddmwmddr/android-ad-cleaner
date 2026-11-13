@@ -19,6 +19,7 @@ OP_KEYS = {
     "lib": frozenset({"kind", "name", "args", "kwargs"}),
     "off": frozenset({"kind", "only", "only_code", "keep", "page", "max_screens", "page_wide"}),
     "close_all": frozenset({"kind", "page", "button"}),
+    "close_listed": frozenset({"kind", "names", "page", "miss_print"}),
     "start": frozenset({"kind", "pkg", "activity", "settle", "foreground", "expect", "budget"}),
     "entry": frozenset({"kind", "text", "scrolls"}),
     "enter": frozenset({"kind", "text", "scrolls"}),
@@ -26,6 +27,7 @@ OP_KEYS = {
     "require_entry": frozenset({"kind", "text", "scrolls", "miss_print", "miss_back"}),
     "require_lib": frozenset({"kind", "name", "args", "kwargs", "miss_print", "miss_back"}),
     "require_tab": frozenset({"kind", "name", "miss_print"}),
+    "require_tap": frozenset({"kind", "text", "exact", "scrolls", "miss_print"}),
     "require_go": frozenset({"kind", "text", "expect", "miss_print"}),
     "require_unlocked": frozenset({"kind", "miss_print"}),
     "shell": frozenset({"kind", "command"}),
@@ -130,6 +132,13 @@ def _validate_op(op: object, where: str) -> None:
             _require(op, "miss_print", where)
     elif kind == "require_tab":
         _require(op, "name", where)
+        _require(op, "miss_print", where)
+    elif kind == "require_tap":
+        _require(op, "text", where)
+        _require(op, "miss_print", where)
+    elif kind == "close_listed":
+        _require(op, "names", where)
+        _require(op, "page", where)
         _require(op, "miss_print", where)
     elif kind == "require_go":
         _require(op, "text", where)

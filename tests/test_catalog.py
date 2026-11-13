@@ -95,6 +95,22 @@ class ValidatorTests(unittest.TestCase):
         op = {"kind": "fail", "text": "x", "surprise": 1}
         self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
 
+    def test_rejects_require_tap_without_miss_print(self):
+        op = {"kind": "require_tap", "text": "设置"}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 miss_print")
+
+    def test_rejects_require_tap_with_an_unknown_key(self):
+        op = {"kind": "require_tap", "text": "x", "miss_print": "y", "surprise": 1}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
+
+    def test_rejects_close_listed_without_names(self):
+        op = {"kind": "close_listed", "page": "p", "miss_print": "y"}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 names")
+
+    def test_rejects_close_listed_with_an_unknown_key(self):
+        op = {"kind": "close_listed", "names": ["a"], "page": "p", "miss_print": "y", "surprise": 1}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
+
     def test_accepts_the_shipped_data(self):
         import tomllib
         catalog.validate(tomllib.loads((ROOT / DATA).read_text(encoding="utf-8")))
@@ -345,6 +361,60 @@ class FailOpTests(unittest.TestCase):
         self.assertEqual(recipe.rt.results, [("a", "未完成")])
         self.assertEqual(recipe.rt.failed_steps, ["a"])
         self.assertEqual(backs, [])
+
+
+class RequireTapOpTests(unittest.TestCase):
+    """`require_tap` op（#1265）：`require(p.tap(text, exact=…, scrolls=…), 文案)` 与 `if not p.tap(...): raise`
+    是同一族（`require_go` / `require_tab` 的补齐）：点不到就按这一段失败，报错带文案、进失败段台账。"""
+
+    TOML = ('[[segment]]\nname="a"\nops=[{kind="require_tap", text="设置", exact=true, scrolls=0,'
+            ' miss_print="没找到设置"}]\n')
+
+    def test_tap_lands_and_the_segment_completes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.TOML)
+            seen = []
+            phone.tap = lambda text, **kw: seen.append((text, kw)) or True
+            recipe.run()
+        self.assertEqual(seen, [("设置", {"exact": True, "scrolls": 0})])
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+
+    def test_missing_tap_fails_with_the_reason(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.TOML)
+            phone.tap = lambda text, **kw: False
+            recipe.run()
+        self.assertEqual(recipe.rt.results, [("a", "未完成")])
+        self.assertEqual(recipe.rt.failed_steps, ["a"])
+
+
+class CloseListedOpTests(unittest.TestCase):
+    """`close_listed` op（#1265）：「读回这一页的开关 → 只留点名的、页上真有的行 → 整表关」。
+
+    PLZ110 / PMX110 的软件商店同形：`read_switches(page)` 读回，按候选名单过滤，空的按失败收尾，
+    再 `close_named(names, page, snapshot=available)`。名单是机型知识，交给数据。"""
+
+    TOML = ('[[segment]]\nname="a"\nops=[{kind="close_listed", names=["甲", "乙", "丙"],'
+            ' page="服务管理", miss_print="没识别到"}]\n')
+
+    def test_keeps_present_rows_and_closes_them_with_the_snapshot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.TOML)
+            opened = []
+            saved = {"甲": True, "丙": True}
+            recipe.namespace["read_switches"] = lambda page: dict(saved)
+            recipe.namespace["close_named"] = lambda names, page, **kw: opened.append((names, page, kw))
+            recipe.run()
+        self.assertEqual(opened, [(["甲", "丙"], "服务管理", {"snapshot": saved})])
+
+    def test_empty_filter_fails_with_the_reason(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.TOML)
+            recipe.namespace["read_switches"] = lambda page: {}
+            recipe.namespace["close_named"] = lambda *a, **k: None
+            recipe.run()
+        self.assertEqual(recipe.rt.results, [("a", "未完成")])
+        self.assertEqual(recipe.rt.failed_steps, ["a"])
 
 
 class NameSourceBaselineTests(unittest.TestCase):
