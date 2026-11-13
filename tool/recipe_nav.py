@@ -698,7 +698,7 @@ def _vivo_gear(p, g):
 
 
 def _vivo_gear_desc(p, g):
-    """V2324HA / V2545A 的齿轮：按 content-desc / resource-id 子串认（#530 之前的走法）。"""
+    """V2324HA / V2545A 的齿轮：按 content-desc / resource-id 子串认（沿用 #530 之前的走法）。"""
     def gear():
         for n in p.tree().iter("node"):
             d = (n.get("content-desc") or "") + (n.get("resource-id") or "")
@@ -749,7 +749,7 @@ def _vivo_gear_top_style(p, g):
     def gear_top():
         """V2309A 的「我的」页右上角齿轮：无文字 Button，只有 content-desc="设置"。
 
-        判据用引擎的 icon_hit（#530 / ADR-0013）：它只认正好是「设置」的描述 / 正文，同页那条
+        判据用引擎的 icon_hit（沿用 #530 / ADR-0013）：它只认正好是「设置」的描述 / 正文，同页那条
         「去功能设置里重新开启」的说明行不会被点到，所以不用再按位置收一次。齿轮名字不是恰好
         「设置」（比如「更多设置」）的机型会在这里漏掉。
         """
@@ -782,7 +782,7 @@ def _vivo_tap_row(p, g):
     def row_span_style(title, scrolls=4):
         """点标题所在的可点行，落点在行宽 40% 处。
 
-        商店设置页点左侧标题文字不跳转（V1986A 同此），要点行中间（#530）。
+        商店设置页点左侧标题文字不跳转（V1986A 同此），要点行中间（沿用 #530）。
         """
         from fast import bounds
         for _ in range(scrolls + 1):
@@ -811,7 +811,7 @@ def _vivo_tap_row(p, g):
 
         有的 vivo 页面左侧文字节点不转发点击（应用商店「关于」页的「服务管理」就是这样，
         点文字没反应，点行中间才进得去）。
-        进页后立刻找会对着还没画完的页面报「没找到」，先等这一页站稳（#331）。"""
+        进页后立刻找会对着还没画完的页面报「没找到」，先等这一页站稳（沿用 #331）。"""
         p.await_page()
         xy = p.find(w, exact=True)
         for _ in range(scrolls):
