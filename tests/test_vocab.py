@@ -46,9 +46,11 @@ UNRESOLVED_ONLY = {
 # close_named() 第一个参数解析不出的，和上面分开冻结，免得一个口径盖住另一个。
 UNRESOLVED_CLOSE = {
     "oppo/PJA110/PJA110-android16.toml": 1,
-    "oppo/PLZ110/PLZ110.toml": 2,
+    # 软件商店里「读回名单→过滤→整表关」那一处从运行期变量 `names` 收进了 `close_listed` op（#1265），
+    # 不再是读不出的表达式，未解析各减 1；词条多重集与总数不变。
+    "oppo/PLZ110/PLZ110.toml": 1,
     "oppo/PKT110/PKT110.toml": 3,
-    "oppo/PMX110/PMX110.toml": 2,
+    "oppo/PMX110/PMX110.toml": 1,
     "xiaomi/23117RK66C/recipe.py": 1,
 }
 # 解析不出的 keep=，同样按脚本冻结：它只影响同页保留项，读不出时那页的约束就整段丢了。
