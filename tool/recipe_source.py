@@ -536,7 +536,8 @@ def step_sources() -> dict[str, str]:
     """段体注入面（`recipe_steps.STEPS`）的源码：{注入名: 源码}。词库扫这一张与策略库那一张（#1253）。
 
     导航助手的开关名单写在调用点的实参里（`close_named(NAMES, page=…)`），扫它们的实现只会
-    读到形参、记成一串没读出来的未解析；词住在实现里的只有段体与拨动策略两张表（#1209、#1253）。"""
+    读到形参、记成一串没读出来的未解析；词住在实现里的只有段体与拨动策略两张表（段体沿用 #1209，
+    #1253 起策略库也扫）。"""
     import inspect
     import recipe_steps
     return {name: inspect.getsource(factory) for name, factory in recipe_steps.STEPS.items()}

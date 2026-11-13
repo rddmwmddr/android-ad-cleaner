@@ -511,7 +511,7 @@ def downloads(p, g):
                          {("A1", "xiaomi-A1:3"), ("B2", "redmi-B2:3")})
 
     def test_the_surfaces_only_add_words_at_their_call_sites(self):
-        """两张注入面只添「词住在实现里」的那一份，脚本自己那份一个字不变（#1210、#1253）。
+        """两张注入面只添「词住在实现里」的那一份，脚本自己那份一个字不变（沿用 #1210；#1253 起两张表）。
 
         关掉两张表读到的就是加接线之前的样子：两边词数相加必须等于全量，多算与漏算都在这里红。"""
         without, default = vocab.scan(RECIPES, injected={}, strategies={}), vocab.scan(RECIPES)

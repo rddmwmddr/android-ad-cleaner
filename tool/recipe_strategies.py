@@ -10,7 +10,7 @@
 `recipe_steps`——这里只放「怎么把开关关掉」那一类（精确匹配、逐行重读、整页全关、父子项、
 短按被吞、标题在行外、标题随状态变）。同一个注入名在家族里有几套走法、由脚本常量选的
 （`read_switches` / `close_named` / `hide_carousel`），分派表跟着名字住在 `recipe_nav`：一张表
-一个名字，跨模块分派会把两张注入面绕在一起（#1245）。带 `p.off(only=…)` / `keep=…` 现场的也收
+一个名字，跨模块分派会把两张注入面绕在一起（沿用 #1245）。带 `p.off(only=…)` / `keep=…` 现场的也收
 这里（#1253）：词库（`vocab.py`）除了段体表也扫这一张表，`recipe_source.strategy_sources()` 由
 脚本的 import 决定扫哪几份，现场跟着实现走、读数不变。
 
@@ -96,7 +96,7 @@ STRATEGIES.update({
 })
 
 
-# ---------- OPPO 家族（oppo / oneplus / realme，#1245、#1253）----------
+# ---------- OPPO 家族（oppo / oneplus / realme，沿用 #1245；#1253）----------
 #
 # 一族里逐字相同的拨动过程收在这里；同一个名字在家族内有几套走法的（`read_switches` /
 # `close_named` / `hide_carousel`）各占一档、按脚本常量分派，那几张表跟着名字住在 `recipe_nav`
@@ -769,7 +769,7 @@ STRATEGIES.update({
 
 def _honor_baidu_browser(p, g):
     def baidu_browser():
-        """新机预装 com.hihonor.baidu.browser（#87 社区实测 PTP-AN00）：我的 → 右上齿轮 → 消息设置 / 隐私设置。
+        """新机预装 com.hihonor.baidu.browser（沿用 #87 社区实测 PTP-AN00）：我的 → 右上齿轮 → 消息设置 / 隐私设置。
         「广告设置」是网页，读不到开关；其中「不看程序化广告」「不看个性化广告」要打开，请手动处理。"""
         import re
 
@@ -879,7 +879,7 @@ def _meizu_safe_switches(p, g):
 
 # ---------- 三星 ----------
 #
-# `protect` 仍是本机函数：它写的是这一页「点标题而不是点开关、把保护类开关拨回开」，且是 #608 的
+# `protect` 仍是本机函数：它写的是这一页「点标题而不是点开关、把保护类开关拨回开」，且是沿用 #608 的
 # 临时回退，等真机复测通过后才换回 `p.off`。按归属规则（只服务一台机）留在脚本里。
 
 
