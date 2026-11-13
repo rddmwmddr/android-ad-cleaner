@@ -212,7 +212,8 @@ class DraftGenTests(unittest.TestCase):
 
     def test_generated_draft_loads_through_the_only_loader(self):
         """`adapt check` 与正式脚本走同一个装载器：草稿能在 `recipe_loader.load()` 里装满段，
-        且导入不产生任何设备动作（草稿没有 import 头时也一样，`step` 由装载器注入）。"""
+        且导入不产生任何设备动作（`adapt gen` 的草稿带 import 头；旧草稿没有 import 头也照样能装，
+        `step` 由装载器注入）。"""
         with tempfile.TemporaryDirectory() as d:
             out = self.draft_path(d)
             phone = phone_mock()
@@ -286,6 +287,49 @@ class CheckReportTests(unittest.TestCase):
                     adapt.check_draft(p, str(out))
         run.assert_called_once_with(str(out), p, only=[])
         self.assertIs(p.safe_mode, True)        # 装载前就切进安全模式，草稿不会整页全关
+
+    def test_pre_1247_draft_keeps_its_own_verified_count(self):
+        """旧格式草稿（#1247 之前）在模块体里 `VERIFIED_SWITCHES = 0`，把装载器注入的计数器覆盖成
+        普通 int，自己的助手再 `+=` 记在那一份上；自检取回读数时两份都要认，否则这类草稿恒报
+        「回读确认关闭：0 项 / 自检未通过」。
+
+        尾部那行 `print(...)` 仍是模块体语句，装载时就执行（旧格式的既有行为，不为它加特例）：
+        那一刻段还没跑，所以打出来的是执行前的 0。
+        """
+        legacy = (
+            "# -*- coding: utf-8 -*-\n"
+            'BUILD = "PJA110_14.0.0.812"\n'
+            'MODELS = ["PJA110"]\n'
+            "\n"
+            "VERIFIED_SWITCHES = 0        # 回读确认关闭的开关数\n"
+            "\n"
+            "\n"
+            "def close_named(names, page):\n"
+            "    global VERIFIED_SWITCHES\n"
+            "    VERIFIED_SWITCHES += p.off(only=names, page=page)\n"
+            "\n"
+            "\n"
+            '@step("com.heytap.market · 设置 > 隐私")\n'
+            "def _():\n"
+            '    p.start("com.heytap.market")\n'
+            '    p.tap("设置", exact=True)\n'
+            '    close_named(["个性化推荐"], "设置 > 隐私")\n'
+            "\n"
+            "\n"
+            'print(f"\\n草稿自检：回读确认 {VERIFIED_SWITCHES} 项，",\n'
+            '      f"未完成步骤 {len(FAILED_STEPS)} 个", flush=True)\n'
+        )
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "旧草稿.py"
+            out.write_text(legacy, encoding="utf-8")
+            p = draft_phone([[("个性化推荐", True, (1, 2))]] * 4)
+            p.off.return_value = 1
+            printed = io.StringIO()
+            with contextlib.redirect_stdout(printed):
+                report = adapt.check_draft(p, str(out))
+        self.assertIn("草稿自检：回读确认 0 项", printed.getvalue())    # 装载期那行确实跑了
+        self.assertEqual(report, {"verified": 1, "failed_steps": []})
+        self.assertTrue(adapt.print_report(report))
 
     def test_missing_switch_fails_the_step_without_clicking(self):
         with tempfile.TemporaryDirectory() as d:

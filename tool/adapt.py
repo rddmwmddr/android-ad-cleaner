@@ -124,8 +124,7 @@ def render_draft(groups, model, build, source):
             "def _():",
             f"    # 待验证：入口路径来自探路（{page}）",
             f"    p.start({json.dumps(pkg, ensure_ascii=False)})",
-            '    if p.find("我的", exact=True, edge_ok="tab"):',
-            '        p.tap("我的", exact=True, scrolls=0)',
+            '    p.tab("我的")                  # 底栏标签一律用 tab()：go/find 会先命中内容区同名文字',
             '    require(p.tap("设置", exact=True, scrolls=3), "未找到设置入口「设置」")',
         ]
         for seg in [s.strip() for s in page.split(">") if s.strip()][1:]:
@@ -227,7 +226,7 @@ def cmd_gen(rest):
 
 def check_draft(p, recipe_path, only=()):
     """安全模式跑草稿并统计回读结果。装载与 fast.py 的 `run` 分支同一份（ADR-0037）：
-    草稿没有 import 头也照旧可装载，`step` 由装载器注入。"""
+    `adapt gen` 产出的草稿带 import 头，旧草稿没有 import 头也照旧可装载（`step` 由装载器注入）。"""
     with open(recipe_path, encoding="utf-8") as f:
         src = f.read()
     # 手改过的草稿若写了不带 only= 的 p.off()，靠这个也只关点名的开关，不整页全关。
@@ -241,8 +240,11 @@ def check_draft(p, recipe_path, only=()):
     # 草稿的 `close_named` / `read_switches` 也来自这层注入（沿用 #1151）：点名开关缺一个就整段
     # 报错、这一步记成失败，没找到的项因此落在 failed_steps 里，不再有 missing / pending 两份台账。
     recipe = recipe_loader.run(recipe_path, p, only=list(only))
+    # 旧格式草稿（#1247 之前生成的）在模块体里写 `VERIFIED_SWITCHES = 0`，把装载器注入的计数器
+    # 覆盖成普通 int，脚本自己的助手再 `+=` 记在那一份上；只读 `rt.verified` 会恒为 0。两份都认：
+    # 注入的 Counter 取 `int()` 就是 `rt.verified`，被覆盖成 int 时就是脚本自己那个数。
     return {
-        "verified": recipe.rt.verified,
+        "verified": int(recipe.namespace.get("VERIFIED_SWITCHES", recipe.rt.verified)),
         "failed_steps": list(recipe.rt.failed_steps),
     }
 

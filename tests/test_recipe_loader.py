@@ -188,7 +188,8 @@ class RecipeLoaderGuardTests(unittest.TestCase):
                 recipe_loader.load(path, Mock())
 
     def test_the_generated_draft_loads_through_the_same_loader(self):
-        """`adapt gen` 的草稿没有 import 头：`step` 由装载器注入，同一个入口也要装得进去。"""
+        """`adapt gen` 的草稿带 import 头，仍走同一个装载入口；旧草稿没有 import 头也一样装得进去
+        （`step` 由装载器注入）。"""
         draft = adapt.render_draft([("com.example", "设置 > 隐私", ["个性化推荐"])],
                                    "PLP120", "PLP120_16.0.9", "探路.tsv")
         with tempfile.TemporaryDirectory() as directory:
