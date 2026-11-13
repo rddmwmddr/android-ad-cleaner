@@ -510,11 +510,11 @@ def downloads(p, g):
         self.assertEqual({(w.model, w.source) for w in found.words},
                          {("A1", "xiaomi-A1:3"), ("B2", "redmi-B2:3")})
 
-    def test_the_surface_only_adds_words_at_its_call_sites(self):
-        """注入面只添「词住在段体里」的那一份，脚本自己那份一个字不变（#1210）。
+    def test_the_surfaces_only_add_words_at_their_call_sites(self):
+        """两张注入面只添「词住在实现里」的那一份，脚本自己那份一个字不变（#1210、#1253）。
 
-        关掉注入面读到的就是加接线之前的样子：两边词数相加必须等于全量，多算与漏算都在这里红。"""
-        without, default = vocab.scan(RECIPES, injected={}), vocab.scan(RECIPES)
+        关掉两张表读到的就是加接线之前的样子：两边词数相加必须等于全量，多算与漏算都在这里红。"""
+        without, default = vocab.scan(RECIPES, injected={}, strategies={}), vocab.scan(RECIPES)
         self.assertFalse(any(w.injected for w in without.words))
         added = [w for w in default.words if w.injected]
         self.assertTrue(added, "注入面一条词都没读到：接线断了")

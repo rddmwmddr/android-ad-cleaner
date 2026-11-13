@@ -10,8 +10,8 @@
 
 机型脚本只解释一次：调用点与模块级常量由 `recipe_source` 的事实层给出（沿用 #1156 的分工），
 这里只做页面到分组的映射、方向判定与统计口径，不再自己 `ast.parse` 脚本。
-段体搬进注入面之后（#1209），脚本调了哪个段体就把那份实现也扫一遍：词条归调用它的每一个机型，
-出处写调用点。只扫段体那张表，导航助手的名单本来就在调用点的实参里。
+段体与拨动策略搬进注入面之后（#1209、#1253），脚本 import 了哪份实现就把那份也扫一遍：词条归
+调用它的每一个机型，出处写调用点。扫段体与策略两张表，导航助手的名单本来就在调用点的实参里。
 
   python3 tool/vocab.py > docs/清单/词库.md
   python3 tool/vocab.py gaps <目录名>            查漏：同家族别的机型关过、这份脚本没写的词条
@@ -270,15 +270,23 @@ def _absorb(out, family, script, facts, call_site=None):
                                          tuple(dict.fromkeys(w.text for w in here))))
 
 
-def scan(recipes_dir, injected=None):
+def scan(recipes_dir, injected=None, strategies=None):
     """读所有机型脚本。认不出品牌的目录不进库（tests/test_entries.py 守着每个品牌都有家族）。
 
-    `injected` 是段体注入面的 {名字: 源码}，缺省取 `recipe_source.step_sources()`。脚本导入了哪个
-    段体名，就把那份实现也扫一遍：词条归调用它的每一个机型，出处记调用点，未解析与整页同样算在
-    这份脚本头上（沿用 #1209）。归属跟脚本的 import 走、只解析段体那一张表（沿用 #1243）：导航助手的实现
-    不扫，词住在实现里的只有段体。空表时与加接线之前逐字相同。"""
+    `injected` / `strategies` 是段体表与策略库的 {名字: 源码}，缺省取 `recipe_source.step_sources()`
+    与 `strategy_sources()`。脚本导入了哪个名字，就把那份实现扫一遍：词条归调用它的机型，出处记
+    调用点，未解析与整页同样算在这份脚本头上（沿用 #1209、#1253）。归属跟脚本的 import 走
+    （沿用 #1243）：导航助手那张表不扫——它的开关名单在调用点的实参里。
+
+    同一份实现一处只算一次：策略会被一个段调用好几次（`close_all` 出现两次），按调用点各算一遍
+    会把未解析与整页数乘起来；脚本搬掉本地 `def` 之前，那份实现也只是模块里的一份。没有直接
+    调用点的（库按名字回调的钩子、`off_exact = off_exact_paged` 这种别名）记到脚本导入它的那一行。"""
     out = Scan()
-    surface = {recipe_source.STEPS_MODULE: recipe_source.step_sources() if injected is None else injected}
+    surface = {
+        recipe_source.STEPS_MODULE: recipe_source.step_sources() if injected is None else injected,
+        recipe_source.STRATEGIES_MODULE:
+            recipe_source.strategy_sources() if strategies is None else strategies,
+    }
     for script, facts in recipe_source.scan_dir(recipes_dir, FAMILY).items():
         family = FAMILY[script.split("-", 1)[0].lower()]
         before = len(out.words)
@@ -286,12 +294,12 @@ def scan(recipes_dir, injected=None):
         _absorb(out, family, script, facts)
         for name, (module, source) in sorted(recipe_source.imported_sources(facts, surface).items()):
             calls = recipe_source.injected_calls(facts, name, module)
-            if not calls:
+            at = calls[0].line if calls else facts.import_lines.get(name)
+            if at is None:
                 continue
-            # 段体无形参，实参不跨文件；只有模块常量住在脚本里，按名字交回去
+            # 实现无形参可跨文件取；只有模块常量住在脚本里，按名字交回去
             impl = recipe_source.scan_source(source, externals=facts.constants)
-            for call in calls:
-                _absorb(out, family, script, impl, call_site=call.line)
+            _absorb(out, family, script, impl, call_site=at)
         if len(out.words) == before:
             out.silent.append(script)
     return out
