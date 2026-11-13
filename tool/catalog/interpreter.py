@@ -205,6 +205,14 @@ def _skip(op: Mapping, g: dict[str, Any]) -> None:
     g["skip"](op["text"])
 
 
+def _fail(op: Mapping, g: dict[str, Any]) -> None:
+    """这一段失败并带一句原因：走注入的 `require`（抛 RuntimeError），结局「未完成」且进失败段台账（#1265）。
+
+    与 `return value=false` 的区别：后者只改分段结局、不进 `failed_steps`；旧脚本用 `raise` 的失败出口
+    要进台账（重试按失败段定位），用这条。"""
+    g["require"](False, op["text"])
+
+
 def _print(op: Mapping, g: dict[str, Any]) -> None:
     print(op["text"], flush=True)
 
@@ -372,6 +380,7 @@ _HANDLERS: dict[str, Callable[[Mapping, dict[str, Any]], None]] = {
     "top": _top,
     "page": _page,
     "skip": _skip,
+    "fail": _fail,
     "code": _code,
     "print": _print,
     "return": _return,

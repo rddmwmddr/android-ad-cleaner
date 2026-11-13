@@ -50,6 +50,7 @@ OP_KEYS = {
     "top": frozenset({"kind", "n"}),
     "page": frozenset({"kind", "args", "kwargs"}),
     "skip": frozenset({"kind", "text"}),
+    "fail": frozenset({"kind", "text"}),
     "scoped": frozenset({"kind", "systemui_text", "ops"}),
     "code": frozenset({"kind", "name", "args"}),
     "print": frozenset({"kind", "text"}),
@@ -116,6 +117,8 @@ def _validate_op(op: object, where: str) -> None:
     elif kind == "page":
         _require(op, "args", where)
     elif kind == "skip":
+        _require(op, "text", where)
+    elif kind == "fail":
         _require(op, "text", where)
     elif kind in ("lib", "require_lib", "code", "return_lib"):
         _require(op, "name", where)

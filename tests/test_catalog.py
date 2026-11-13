@@ -87,6 +87,14 @@ class ValidatorTests(unittest.TestCase):
         op = {"kind": "skip", "text": "x", "surprise": 1}
         self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
 
+    def test_rejects_fail_without_text(self):
+        op = {"kind": "fail"}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 text")
+
+    def test_rejects_fail_with_an_unknown_key(self):
+        op = {"kind": "fail", "text": "x", "surprise": 1}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
+
     def test_accepts_the_shipped_data(self):
         import tomllib
         catalog.validate(tomllib.loads((ROOT / DATA).read_text(encoding="utf-8")))
@@ -321,6 +329,22 @@ class SkipOpTests(unittest.TestCase):
         self.assertEqual(recipe.rt.results, [("a", "跳过")])
         self.assertEqual(recipe.rt.skipped_steps, ["a"])
         self.assertEqual(backs, [])         # 跳过之后不再做后面的 op
+
+
+class FailOpTests(unittest.TestCase):
+    """`fail` op（#1265）：这一段失败并带一句原因，进 `failed_steps`（与 `return false` 只改
+    分段结局不同——失败段台账要能列出来，重试也按它定位）。"""
+
+    def test_fail_marks_the_segment_failed_with_the_reason(self):
+        toml = '[[segment]]\nname="a"\nops=[{kind="fail", text="设置里没走到"}, {kind="back"}]\n'
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            backs = []
+            phone.back = lambda n=1: backs.append(n)
+            recipe.run()
+        self.assertEqual(recipe.rt.results, [("a", "未完成")])
+        self.assertEqual(recipe.rt.failed_steps, ["a"])
+        self.assertEqual(backs, [])
 
 
 class NameSourceBaselineTests(unittest.TestCase):

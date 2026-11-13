@@ -556,7 +556,7 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 # 用数据里写得出的真实名字（不折回 close_named），归属才查得准（#1263）。
                 args = ", ".join(_s(a) for a in op.get("args", []))
                 lines.append(f"{op['name']}({args})")
-            elif kind in ("page", "skip"):
+            elif kind in ("page", "skip", "fail"):
                 # 落点断言 / 跳过出口不带词条与入口事实：入口本来自 `p.start` / shell / open_app_settings，
                 # `page` 只是核对；`skip` 的文案是跳过原因。与 `back` / `top` / `print` 同档（#1265）。
                 pass
