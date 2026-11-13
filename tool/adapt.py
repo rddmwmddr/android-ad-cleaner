@@ -111,6 +111,8 @@ def render_draft(groups, model, build, source):
         "（小米系填 HyperOS 版本号，别填 Android 底包）。",
         "# 不要直接放进 recipes/：放进去会被当成本型号的正式脚本自动匹配。",
         "# ======================================================================",
+        "from recipe_kit import step",
+        "",
         f"BUILD = {json.dumps(build)}",
         f"MODELS = {json.dumps([model] if model else [], ensure_ascii=False)}",
     ]
@@ -135,6 +137,13 @@ def render_draft(groups, model, build, source):
         "def tail():",
         '    print(f"\\n草稿自检：回读确认 {rt.verified} 项，"',
         '          f"未完成步骤 {len(rt.failed_steps)} 个", flush=True)',
+        "",
+        "",
+        "# 除 p / rt 外的裸名字都要在这里声明「谁提供」：装载器按名字把实现写进执行作用域，",
+        "# 这个块只给静态检查与编辑器看，运行时一行都不执行（同正式机型脚本，ADR-0037）。",
+        "from typing import TYPE_CHECKING",
+        "if TYPE_CHECKING:",
+        "    from recipe_kit import close_named, p, require, rt",
         "",
     ]
     return "\n".join(lines)
