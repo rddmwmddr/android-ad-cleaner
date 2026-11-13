@@ -32,8 +32,8 @@ class VariantTests(unittest.TestCase):
                          "xiaomi/24129PN74C/recipe_os4.py")
 
     def test_oneplus_ace_2_android_15(self):
-        self.assertEqual(self.pick("PHK110", "OnePlus", "", "PHK110_15.0.0.601(CN01)"), "oppo/PHK110/recipe_android15.py")
-        self.assertEqual(self.pick("PHK110", "OnePlus", "", "PHK110_16.0.5.701(CN01)"), "oppo/PHK110/recipe.py")
+        self.assertEqual(self.pick("PHK110", "OnePlus", "", "PHK110_15.0.0.601(CN01)"), "oppo/PHK110/PHK110-android15.toml")
+        self.assertEqual(self.pick("PHK110", "OnePlus", "", "PHK110_16.0.5.701(CN01)"), "oppo/PHK110/PHK110.toml")
 
     def test_vivo_x300_ultra_satellite_android_17(self):
         # #220：同一型号升到 Android 17 后商店入口换了，路径按系统版本分开

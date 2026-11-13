@@ -24,10 +24,10 @@ CLUES = ROOT / "docs" / "清单" / "词条线索.md"
 # 解析不出的 only=，按脚本冻结。新脚本多了这种写法，先看能不能写成字面量或模块级常量，确实不能再改这里。
 UNRESOLVED_ONLY = {
     "honor/CLE-AN00/CLE-AN00.toml": 1,
-    "oppo/PHK110/recipe.py": 1,
-    "oppo/PKX110/recipe.py": 1,
-    "oppo/PKH110/recipe.py": 1,
-    "oppo/PLG110/recipe.py": 2,
+    "oppo/PHK110/PHK110.toml": 1,
+    "oppo/PKX110/PKX110.toml": 1,
+    "oppo/PKH110/PKH110.toml": 1,
+    "oppo/PLG110/PLG110.toml": 2,
     "oppo/PLP120/recipe.py": 1,
     "oppo/PMA110/recipe.py": 1,
     "xiaomi/23049RAD8C/recipe.py": 1,
@@ -45,19 +45,19 @@ UNRESOLVED_ONLY = {
 }
 # close_named() 第一个参数解析不出的，和上面分开冻结，免得一个口径盖住另一个。
 UNRESOLVED_CLOSE = {
-    "oppo/PJA110/recipe_android16.py": 1,
+    "oppo/PJA110/PJA110-android16.toml": 1,
     "oppo/PLZ110/recipe.py": 2,
-    "oppo/PKT110/recipe.py": 3,
+    "oppo/PKT110/PKT110.toml": 3,
     "oppo/PMX110/recipe.py": 2,
     "xiaomi/23117RK66C/recipe.py": 1,
 }
 # 解析不出的 keep=，同样按脚本冻结：它只影响同页保留项，读不出时那页的约束就整段丢了。
 UNRESOLVED_KEEP = {
-    "oppo/PHK110/recipe.py": 1,
-    "oppo/PKX110/recipe.py": 1,
+    "oppo/PHK110/PHK110.toml": 1,
+    "oppo/PKX110/PKX110.toml": 1,
     "oppo/PLZ110/recipe.py": 1,
-    "oppo/PKH110/recipe.py": 1,
-    "oppo/PLG110/recipe.py": 2,
+    "oppo/PKH110/PKH110.toml": 1,
+    "oppo/PLG110/PLG110.toml": 2,
     "oppo/PMA110/recipe.py": 1,
     "oppo/PMX110/recipe.py": 1,
     # close_named_vivo 的实现里 keep 是运行时算的（`[n for n in before …]`），不可读；转数据后它
@@ -71,8 +71,8 @@ DICT_NOTES = {
 # 一条词条都读不出来的脚本（判据就是零词条）：开关点名散在自建函数里（vivo-V2547A 的 off()、
 # oneplus-PHK110 的 off_exact()、samsung-SM-N9760 的 protect()），或者名单运行时才算。
 SILENT = (
-    "oppo/PHK110/recipe.py",
-    "oppo/PHK110/recipe_android15.py",
+    "oppo/PHK110/PHK110-android15.toml",
+    "oppo/PHK110/PHK110.toml",
     "samsung/SM-N9760/SM-N9760.toml",
     "vivo/V2547A/V2547A.toml",
 )

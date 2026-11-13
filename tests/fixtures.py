@@ -57,6 +57,20 @@ def load_tool():
         sys.path.insert(0, tool)
 
 
+def recipe_sources(folder=None):
+    """机型脚本的源码：还是 `recipe*.py` 的，加上已转页面树的同名例外 `.py`（#1264）。
+
+    转成页面树之后，过程化的段与模块级常量住在同目录同名的 `.py` 里；只 glob `recipe*.py`
+    会让这些机型从「文案 / 实现只住一处」这类守卫里静默消失。"""
+    root = Path(folder or ROOT) / "recipes"
+    found = set(root.glob("*/*/recipe*.py"))
+    for toml in root.glob("*/*/*.toml"):
+        exception = toml.with_suffix(".py")
+        if exception.is_file():
+            found.add(exception)
+    return sorted(found)
+
+
 def all_pages(folder=None):
     """tests/ 里所有能解析的 <hierarchy> 字面量：[(来源标签, xml)]。
 

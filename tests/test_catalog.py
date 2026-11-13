@@ -63,6 +63,14 @@ class ValidatorTests(unittest.TestCase):
         data = {"segment": [{"name": "a", "ops": []}, {"name": "a", "ops": []}]}
         self._bad(data, "段名重复")
 
+    def test_rejects_unknown_focus_match(self):
+        op = {"kind": "if_focus", "text": "p", "match": "fnmatch"}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "match='fnmatch' 认不出")
+
+    def test_rejects_a_non_boolean_return_value(self):
+        op = {"kind": "return", "value": "false"}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "只能是 true / false")
+
     def test_accepts_the_shipped_data(self):
         import tomllib
         catalog.validate(tomllib.loads((ROOT / DATA).read_text(encoding="utf-8")))
@@ -154,6 +162,106 @@ class CodeFallbackTests(unittest.TestCase):
         self.assertEqual(backs, [2], "code= 没跑到例外函数，或 p / rt 没按参数传进去")
         self.assertEqual(recipe.rt.verified, 3, "例外函数里 rt.confirm 没记进这次执行")
         self.assertEqual(recipe.rt.results, [("a", "完成")])
+
+
+class EnterOpTests(unittest.TestCase):
+    """`enter` op（#1264）：数据里的 `p.enter(text, scrolls=…)`，与 `entry`（布尔入口）是两条路。"""
+
+    def test_enter_passes_text_and_scrolls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="enter", text="隐私", scrolls=4}]\n')
+            seen = []
+            phone.enter = lambda text, scrolls=6: seen.append((text, scrolls))
+            recipe.run()
+        self.assertEqual(seen, [("隐私", 4)])
+
+
+class IfFocusOpTests(unittest.TestCase):
+    """`if_focus` op（#1264）：按前台窗口判走哪一支，`match` 明写比法（equals / starts / contains）。"""
+
+    TOML = ('[[segment]]\nname="a"\nops=[{kind="if_focus", text="com.heytap.market/", match="starts",'
+            ' ops=[{kind="back", n=2}], else_ops=[{kind="back", n=1}]}]\n')
+
+    def _run(self, focus):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.TOML)
+            backs = []
+            phone.focus = lambda *a, **k: focus
+            phone.back = lambda n=1: backs.append(n)
+            recipe.run()
+        return backs
+
+    def test_starts_branch_is_taken_when_the_foreground_matches(self):
+        self.assertEqual(self._run("com.heytap.market/com.heytap.market.mine.ui.X"), [2])
+
+    def test_else_branch_is_taken_when_the_foreground_differs(self):
+        self.assertEqual(self._run("com.heytap.browser/.BrowserActivity"), [1])
+
+    def test_equals_does_not_match_a_longer_foreground(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="if_focus", text="p/.A", match="equals",'
+                     ' ops=[{kind="back", n=2}], else_ops=[{kind="back", n=1}]}]\n')
+            backs = []
+            phone.focus = lambda *a, **k: "p/.A/.B"
+            phone.back = lambda n=1: backs.append(n)
+            recipe.run()
+        self.assertEqual(backs, [1])
+
+
+class IfTapOpTests(unittest.TestCase):
+    """`if_tap` op（#1264）：`if p.tap(text, exact=…, scrolls=…): … else: …`，返回值决定走哪支。
+
+    与 `lib` 里的 `tap` 不同：那个注入名失败就抛错（`TAP_STYLE` 的走法），这个按返回值分岔。"""
+
+    TOML = ('[[segment]]\nname="a"\nops=[{kind="if_tap", text="广告管理", exact=true, scrolls=0,'
+            ' ops=[{kind="back", n=2}], else_ops=[{kind="back", n=1}]}]\n')
+
+    def _run(self, hit):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.TOML)
+            backs, taps = [], []
+            phone.tap = lambda text, **kw: taps.append((text, kw)) or hit
+            phone.back = lambda n=1: backs.append(n)
+            recipe.run()
+        return taps, backs
+
+    def test_ops_branch_runs_when_the_tap_lands(self):
+        taps, backs = self._run(True)
+        self.assertEqual(backs, [2])
+        self.assertEqual(taps, [("广告管理", {"exact": True, "scrolls": 0})])
+
+    def test_else_branch_runs_when_the_tap_misses(self):
+        self.assertEqual(self._run(False)[1], [1])
+
+
+class ReturnOutcomeTests(unittest.TestCase):
+    """段的结局（#1264）：`return` 带 `value` 时整段按它记，`return_lib` 按库调用的返回值记。
+
+    `run_step` 只在段体返回 `False` 时记「未完成」（`recipe_runtime` 的 `outcome is False`）；这三个
+    出口是数据里唯一能表达「这一段没做成但不算异常」的地方。
+    """
+
+    def segment_results(self, toml, py_text=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(tmp, toml, py_text)
+            recipe.run()
+        return recipe.rt.results
+
+    def test_return_false_marks_the_segment_failed(self):
+        self.assertEqual(self.segment_results('[[segment]]\nname="a"\nops=[{kind="return", value=false}]\n'),
+                         [("a", "未完成")])
+
+    def test_return_without_a_value_ends_the_segment_as_done(self):
+        self.assertEqual(self.segment_results('[[segment]]\nname="a"\nops=[{kind="return"}]\n'),
+                         [("a", "完成")])
+
+    def test_return_lib_takes_the_result_of_the_call(self):
+        toml = '[[segment]]\nname="a"\nops=[{kind="return_lib", name="try_off", args=["x"]}]\n'
+        scope = "def try_off(name):\n    return ok\n"
+        self.assertEqual(self.segment_results(toml, "ok = False\n" + scope), [("a", "未完成")])
+        self.assertEqual(self.segment_results(toml, "ok = True\n" + scope), [("a", "完成")])
 
 
 class NameSourceBaselineTests(unittest.TestCase):

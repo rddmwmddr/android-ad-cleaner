@@ -28,7 +28,7 @@ import adb_link
 import fast
 import recipe_kit
 from fixtures import (EMPTY_PAGE, Clock, fake_phone, install_clock, load_recipe,
-                      phone_mock, phone_stub)
+                      phone_mock, phone_stub, recipe_sources)
 
 # 三段的骨架：甲跑完、乙按脚本怎么写怎么跑、丙永远不该被执行（锁屏场景）
 SECTIONS = '''
@@ -475,12 +475,12 @@ class InjectionPointTests(unittest.TestCase):
 
 # AST 检测器认得出的形状：不带 `only` 的 `p.off(...)`。它既是检测器的期望集，也是行为用例的一部分。
 OFF_CALL_WIDE = [
-    ("recipes/oppo/PKT110/recipe.py", "广告跟踪"),
-    ("recipes/oppo/PKT110/recipe.py", "应用建议"),
+    ("recipes/oppo/PKT110/PKT110.toml", "广告跟踪"),
+    ("recipes/oppo/PKT110/PKT110.toml", "应用建议"),
     ("recipes/oppo/PLP120/recipe.py", "广告跟踪"),
-    ("recipes/oppo/PHK110/recipe.py", "广告跟踪"),
-    ("recipes/oppo/PKX110/recipe.py", "广告跟踪"),
-    ("recipes/oppo/PKH110/recipe.py", "广告跟踪"),
+    ("recipes/oppo/PHK110/PHK110.toml", "广告跟踪"),
+    ("recipes/oppo/PKX110/PKX110.toml", "广告跟踪"),
+    ("recipes/oppo/PKH110/PKH110.toml", "广告跟踪"),
     ("recipes/oppo/RMX3700/recipe.py", "广告跟踪"),
     ("recipes/oppo/RMX3700/recipe.py", "应用建议"),
     ("recipes/oppo/RMX3888/recipe.py", "广告跟踪"),
@@ -499,7 +499,7 @@ INJECTED_WIDE = ["ad_tracking_close_all"]
 OTHER_WIDE = [
     ("recipes/honor/CLE-AN00/CLE-AN00.toml", "广告跟踪"),
     ("recipes/oppo/PMA110/recipe.py", "广告跟踪"),
-    ("recipes/oppo/PLG110/recipe.py", "广告跟踪"),
+    ("recipes/oppo/PLG110/PLG110.toml", "广告跟踪"),
     ("recipes/honor/WKL-AN20/WKL-AN20.toml", "广告跟踪"),
     ("recipes/oppo/PLR110/recipe.py", "广告跟踪"),
     ("recipes/oppo/PYB110/recipe.py", "广告跟踪"),
@@ -511,9 +511,9 @@ PAGE_WIDE = OFF_CALL_WIDE + OTHER_WIDE
 # 这几份脚本自带 `guard()`：安全模式下它们在段入口就先按「型号 / 版本不同」跳过，
 # 走不到整页关闭那一段，跳过原因不是本票这一句。
 GUARDED_RECIPES = {
-    "recipes/oppo/PHK110/recipe.py",
-    "recipes/oppo/PKX110/recipe.py",
-    "recipes/oppo/PKH110/recipe.py",
+    "recipes/oppo/PHK110/PHK110.toml",
+    "recipes/oppo/PKX110/PKX110.toml",
+    "recipes/oppo/PKH110/PKH110.toml",
     "recipes/oppo/RMX3700/recipe.py",
 }
 
@@ -584,7 +584,7 @@ class SafeModeSkipTests(unittest.TestCase):
     def test_the_run_still_exits_zero(self):
         """跳过台账不参与退出码：这一段没做成，但也没出错。"""
         p = touchless()
-        scope, _ = run_recipe_step(p, "recipes/oppo/PKT110/recipe.py", ["广告跟踪"])
+        scope, _ = run_recipe_step(p, "recipes/oppo/PKT110/PKT110.toml", ["广告跟踪"])
         self.assertEqual(fast.report_run(scope, p), 0)
 
     def test_untitled_switches_are_left_alone_in_safe_mode(self):
@@ -637,7 +637,7 @@ class AdTrackingTests(unittest.TestCase):
         p, state = self.make()
         p.safe_mode = True
         p.locked.return_value = False
-        scope, printed = run_recipe_step(p, "recipes/oppo/PKT110/recipe.py", ["广告跟踪"])
+        scope, printed = run_recipe_step(p, "recipes/oppo/PKT110/PKT110.toml", ["广告跟踪"])
         self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertEqual(scope["SKIPPED_STEPS"], ["广告跟踪"])
         self.assertIn("安全模式不做整页全关", printed)
@@ -647,7 +647,7 @@ class AdTrackingTests(unittest.TestCase):
     def test_ad_tracking_still_closes_the_page_without_safe_mode(self):
         """旧树也绿，守的是不回退：跳过出口在非安全模式下必须是惰性的。"""
         p, state = self.make()
-        scope, _ = run_recipe_step(p, "recipes/oppo/PKT110/recipe.py", ["广告跟踪"])
+        scope, _ = run_recipe_step(p, "recipes/oppo/PKT110/PKT110.toml", ["广告跟踪"])
         self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertEqual(scope["SKIPPED_STEPS"], [])
         self.assertEqual(state[0][1], False)
@@ -657,7 +657,7 @@ class AdTrackingTests(unittest.TestCase):
         p, state = self.make()
         p.safe_mode = True
         p.locked.return_value = False
-        scope, printed = run_recipe_step(p, "recipes/oppo/PKT110/recipe.py", ["应用建议"])
+        scope, printed = run_recipe_step(p, "recipes/oppo/PKT110/PKT110.toml", ["应用建议"])
         self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertEqual(scope["SKIPPED_STEPS"], ["应用建议"])
         self.assertIn("安全模式不做整页全关", printed)
@@ -666,7 +666,7 @@ class AdTrackingTests(unittest.TestCase):
     def test_app_suggestions_still_closes_the_page_without_safe_mode(self):
         """旧树也绿，守的是不回退：跳过出口在非安全模式下必须是惰性的。"""
         p, state = self.make()
-        scope, _ = run_recipe_step(p, "recipes/oppo/PKT110/recipe.py", ["应用建议"])
+        scope, _ = run_recipe_step(p, "recipes/oppo/PKT110/PKT110.toml", ["应用建议"])
         self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertEqual(state[0][1], False)
 
@@ -691,7 +691,7 @@ class BehaviourUnchangedTests(unittest.TestCase):
 
     def test_oppo_machines_still_close_the_page_list(self):
         for path, model in (("recipes/oppo/PMA110/recipe.py", "PMA110"),
-                            ("recipes/oppo/PLG110/recipe.py", "PLG110")):
+                            ("recipes/oppo/PLG110/PLG110.toml", "PLG110")):
             with self.subTest(recipe=path):
                 p = self.oppo_phone(path, model)
                 scope, _ = run_recipe_step(p, path, ["广告跟踪"])
@@ -849,7 +849,9 @@ def toml_wide_steps(toml_path, helpers=()):
                          first_call_name(node) == "skip_in_safe_mode")
         else:
             ops = seg.get("ops", [])
-            has_wide = any(o.get("kind") == "off" and o.get("page_wide") for o in flat(ops))
+            has_wide = any(o.get("kind") == "off" and o.get("page_wide")
+                           or o.get("kind") == "lib" and o.get("name") == "close_all"
+                           for o in flat(ops))
             has_named = any(o.get("kind") == "off" and ("only" in o or "only_code" in o) for o in flat(ops))
             first = ops[0].get("kind") if ops else None
             out[name] = (has_wide and not has_named, first == "skip_in_safe_mode")
@@ -1162,7 +1164,8 @@ def phone_903(*rows):
 
 
 def recipes_903():
-    return sorted((ROOT / "recipes").glob("*/*/recipe*.py"))
+    """`recipe*.py` 与已转页面树的同名例外 `.py`（#1264）：只扫前者会让转过的机型静默消失。"""
+    return recipe_sources()
 
 
 class MissingSwitchEvidenceTests(unittest.TestCase):
@@ -1354,7 +1357,7 @@ class PageEvidenceTests(unittest.TestCase):
 class PageEvidenceSingleSourceTests(unittest.TestCase):
     def test_the_wording_lives_only_in_recipe_kit(self):
         """三句判据各自复制一份就会再分叉成两种输出形状（#939）。"""
-        sources = sorted((ROOT / "recipes").glob("*/*/recipe*.py"))
+        sources = recipe_sources()
         sources += [path for name in ("tool", "gui") for path in sorted((ROOT / name).rglob("*.py"))]
         offenders = [path.relative_to(ROOT).as_posix() for path in sources
                      if path != ROOT / "tool" / "recipe_kit.py"

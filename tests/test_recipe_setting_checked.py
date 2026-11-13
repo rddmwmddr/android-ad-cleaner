@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, call
 
+import fixtures
 from fixtures import load_recipe, phone_mock
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,7 +23,8 @@ CHECKING_CALLS = ("bool", "require")
 
 
 def recipes():
-    return sorted((ROOT / "recipes").glob("*/*/recipe*.py"))
+    """`recipe*.py` 与已转页面树的同名例外 `.py`（#1264）：只扫前者会让转过的机型静默消失。"""
+    return fixtures.recipe_sources()
 
 
 def tree_of(path):

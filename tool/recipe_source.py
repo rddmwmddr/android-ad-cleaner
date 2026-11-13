@@ -529,6 +529,8 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 lines.append(f'p.start({_s(op["pkg"])}{extra})')
             elif kind in ("entry", "require_entry"):
                 lines.append(f"p.entry({_s(op['text'])})")
+            elif kind == "enter":
+                lines.append(f"p.enter({_s(op['text'])})")
             elif kind == "require_setting":
                 extra = f", {_s(op['entry'])}" if "entry" in op else ""
                 lines.append(f"p.setting({_s(op['kw'])}{extra})")
@@ -543,11 +545,11 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 if "systemui_text" in op:
                     lines.append(f"p.systemui_text = {op['systemui_text']!r}")
                 lower(op.get("ops", []))
-            elif kind in ("if_find", "if_entry", "if_lib"):
+            elif kind in ("if_find", "if_entry", "if_lib", "if_focus", "if_tap"):
                 # 带条件分支的 op：两支里的 off / 入口调用一样要读出来，否则词与入口会静默丢（#1263）。
                 lower(op.get("ops", []))
                 lower(op.get("else_ops", []))
-            elif kind in ("lib", "require_lib", "code"):
+            elif kind in ("lib", "require_lib", "code", "return_lib"):
                 # 用数据里写得出的真实名字（不折回 close_named），归属才查得准（#1263）。
                 args = ", ".join(_s(a) for a in op.get("args", []))
                 lines.append(f"{op['name']}({args})")

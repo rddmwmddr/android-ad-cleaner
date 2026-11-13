@@ -1,5 +1,5 @@
 {
- "script": "recipes/oppo/PHK110/recipe_android15.py",
+ "script": "recipes/oppo/PHK110/PHK110-android15.toml",
  "scenarios": {
   "present": [
    ["搜索卡片", "d.shell", ["getprop ro.product.model"], {}],

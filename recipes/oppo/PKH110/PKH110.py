@@ -1,11 +1,16 @@
-# OPPO Find N5（PKH110，ColorOS 17.0.0.103）机型脚本。路径实测：2026-10-29。只收录已走通的系统广告跟踪、商店、浏览器、主题、下拉搜索。
-from recipe_kit import step
-# 不挂包、不动通知渠道；这些操作仍走 run.py 的独立、需确认流程。
+# OPPO Find N5（PKH110，ColorOS 17.0.0.103）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
+# 共享库的 tap_page / close_titles / off_exact_paged_optional 与 require / skip 由装载器注入执行作用域。
+# 段体的条件分支、逐项精确标题与等待循环留下，逐字保留原实现；线性的两段已转成数据。
+import time
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, rt, skip, skip_in_safe_mode
+    from recipe_nav import browser_settings_direct, open_search_settings, tap_page
+    from recipe_strategies import close_titles, off_exact_paged_optional
+
 BUILD = "PKH110_17.0.0.103"
 MODELS = ["PKH110"]
-
-import time
-# 分段结果由引擎经 rt 记录
 
 # 仅关闭明确列名的推广入口。没有列出的入口（包括未来新增项）不主动处理。
 STORE_PROMOTIONS = [
@@ -18,6 +23,10 @@ STORE_PROMOTIONS = [
     "手机管家：应用推荐", "文件管理：应用推荐", "游戏专区：活动集合", "详情页：限时活动", "福利专区",
 ]
 
+# 段体（store_promotions）按 `g["off_exact"]` 取这个钩子，实现住在 recipe_strategies 的
+# `off_exact_paged_optional`（本机「未找到」不算失败），这里绑回旧名字（#1253）。
+off_exact = off_exact_paged_optional
+
 
 def guard():
     model = p.d.shell("getprop ro.product.model").output.strip()
@@ -26,8 +35,7 @@ def guard():
         skip("型号或系统版本不同，跳过；请重新核对页面")
 
 
-@step("广告跟踪")
-def _():
+def step_ad_tracking(p, rt):
     # ColorOS 17：「隐私」已并入「隐私与安全」。设置搜索能搜到「设备标识与广告」但点搜索结果不跳转，
     # 因此走面板路径；该页 Activity 为 OplusSettingsActivity$DevicesIdentifySettingsActivity。
     skip_in_safe_mode()
@@ -54,18 +62,7 @@ def _():
     return True
 
 
-@step("软件商店")
-def _():
-    store_promotions()
-
-
-@step("浏览器首页")
-def _():
-    browser_home()
-
-
-@step("浏览器广告")
-def _():
+def step_browser_ads(p, rt):
     if not browser_settings_direct():
         return False
     activity = "com.heytap.browser.settings.component.BrowserPreferenceActivity"
@@ -76,8 +73,7 @@ def _():
     return completed
 
 
-@step("浏览器个性化")
-def _():
+def step_browser_personalized(p, rt):
     # 该页只有「个性化内容推荐」「个性化广告推荐」两项；两项都开时只读到后者的 Switch。
     if not browser_settings_direct():
         return False
@@ -87,8 +83,7 @@ def _():
     return close_titles(["个性化广告推荐"])
 
 
-@step("主题商店")
-def _():
+def step_theme(p, rt):
     # 主题商店的 APP_SETTINGS 页没有固定标题（ColorOS 17 直接落在 SettingActivity 列表），
     # 因此这里只确认前台包名，不等页标题。
     p.d.shell("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.heytap.themestore")
@@ -106,8 +101,7 @@ def _():
     return True
 
 
-@step("下拉搜索")
-def _():
+def step_search(p, rt):
     if not open_search_settings():
         return False
     # 「搜索范围」页全是数据源（本机应用、相册、网页搜索结果等），关掉会搜不到东西，不动。
@@ -134,14 +128,3 @@ def tail():
     print("\n本机型脚本不处理：负一屏（设置页受 oppo.permission.OPPO_COMPONENT_SAFE 保护，"
           "adb 边缘手势进不去，需机主手动在负一屏内关「热点资讯」「轮播推荐」）、OPPO 视频、游戏中心。")
     print("分段结果：", rt.results)
-
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import p, rt, skip, skip_in_safe_mode
-    from recipe_nav import browser_settings_direct, open_search_settings, tap_page
-    from recipe_strategies import close_titles, off_exact_paged_optional
-    from recipe_steps import browser_home, store_promotions
-
-# 段体（store_promotions）按 `g["off_exact"]` 取这个钩子，实现住在 recipe_strategies 的
-# `off_exact_paged_optional`（本机「未找到」不算失败），这里绑回旧名字（#1253）。
-off_exact = off_exact_paged_optional

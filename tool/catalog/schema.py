@@ -21,6 +21,7 @@ OP_KEYS = {
     "close_all": frozenset({"kind", "page", "button"}),
     "start": frozenset({"kind", "pkg", "activity", "settle", "foreground", "expect", "budget"}),
     "entry": frozenset({"kind", "text", "scrolls"}),
+    "enter": frozenset({"kind", "text", "scrolls"}),
     "gated": frozenset({"kind", "entries", "scrolls", "ops"}),
     "require_entry": frozenset({"kind", "text", "scrolls", "miss_print", "miss_back"}),
     "require_lib": frozenset({"kind", "name", "args", "kwargs", "miss_print", "miss_back"}),
@@ -43,14 +44,20 @@ OP_KEYS = {
     "if_find": frozenset({"kind", "text", "exact", "ops", "else_ops"}),
     "if_entry": frozenset({"kind", "text", "scrolls", "ops", "else_ops"}),
     "if_lib": frozenset({"kind", "name", "args", "kwargs", "ops", "else_ops"}),
+    "if_focus": frozenset({"kind", "text", "match", "ops", "else_ops"}),
+    "if_tap": frozenset({"kind", "text", "exact", "scrolls", "ops", "else_ops"}),
     "back": frozenset({"kind", "n"}),
     "top": frozenset({"kind", "n"}),
     "scoped": frozenset({"kind", "systemui_text", "ops"}),
     "code": frozenset({"kind", "name", "args"}),
     "print": frozenset({"kind", "text"}),
-    "return": frozenset({"kind"}),
+    "return": frozenset({"kind", "value"}),
+    "return_lib": frozenset({"kind", "name", "args", "kwargs"}),
 }
 OP_KINDS = frozenset(OP_KEYS)
+
+# `if_focus` 的比法：前台窗口原文与数据里的 text 怎么比。缺省 contains（与 `require_focus` 同档）。
+FOCUS_MATCHES = frozenset({"equals", "starts", "contains"})
 
 
 class SchemaError(ValueError):
@@ -104,11 +111,11 @@ def _validate_op(op: object, where: str) -> None:
         _validate_off(op, where)
     elif kind == "close_all":
         _require(op, "page", where)
-    elif kind in ("lib", "require_lib", "code"):
+    elif kind in ("lib", "require_lib", "code", "return_lib"):
         _require(op, "name", where)
         if kind == "require_lib":
             _require(op, "miss_print", where)
-    elif kind in ("entry", "require_entry"):
+    elif kind in ("entry", "require_entry", "enter"):
         _require(op, "text", where)
         if kind == "require_entry":
             _require(op, "miss_print", where)
@@ -143,8 +150,11 @@ def _validate_op(op: object, where: str) -> None:
     elif kind == "require_find":
         _require(op, "text", where)
         _require(op, "miss_print", where)
-    elif kind in ("if_find", "if_entry"):
+    elif kind in ("if_find", "if_entry", "if_focus", "if_tap"):
         _require(op, "text", where)
+        if kind == "if_focus" and op.get("match", "contains") not in FOCUS_MATCHES:
+            raise SchemaError(f"{where} 的 match={op['match']!r} 认不出；可用的是 "
+                              f"{sorted(FOCUS_MATCHES)}")
         _validate_ops(op.get("ops", []), where)
         _validate_ops(op.get("else_ops", []), where)
     elif kind == "if_lib":
@@ -160,6 +170,8 @@ def _validate_op(op: object, where: str) -> None:
         _validate_ops(op.get("ops", []), where)
     elif kind == "scoped":
         _validate_ops(op.get("ops", []), where)
+    elif kind == "return" and "value" in op and not isinstance(op["value"], bool):
+        raise SchemaError(f"{where} 的 value 只能是 true / false（段的结局）")
 
 
 def _validate_off(op: Mapping, where: str) -> None:

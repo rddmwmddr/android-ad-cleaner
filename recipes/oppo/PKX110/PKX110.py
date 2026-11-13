@@ -1,15 +1,16 @@
-# 一加 13T（PKX110，ColorOS 16.0.10.500 / Android 16）机型脚本。路径实测：2026-10-28 现场探路（应用与服务、服务管理两页与 PHK110 同 Activity）。
-from recipe_kit import step
-# 骨架取自 oneplus-PHK110（ColorOS 16）；入口差异参考 docs/清单/OPPO-ColorOS.md 的一加 Ace 5（PKG110）记录。
-# 2026-11-10 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，未复测（#933）。
-# 不挂包、不动通知渠道；这些操作仍走 run.py 的独立、需确认流程。
-BUILD = "PKX110_16.0.10"
-# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
-TAP_PAGE_STYLE = "tuple"
-MODELS = ["PKX110"]
-
+# 一加 13T（PKX110，ColorOS 16.0.10.500 / Android 16）的本机例外函数与钩子（catalog 的 `code=`，
+# 影随同名 `.toml`）。共享库的 tap_page / store_promotions / browser_* 与 require / skip 由装载器注入。
+# 广告跟踪（逐页等列表 + 整页全关）与小布建议（行状态判定 + 翻页）留下，逐字保留原实现。
 import time
-# 分段结果由引擎经 rt 记录
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, rt, skip, skip_in_safe_mode
+    from recipe_nav import tap_page
+    from recipe_strategies import off_exact_paged
+
+BUILD = "PKX110_16.0.10"
+MODELS = ["PKX110"]
 
 # 服务管理里明确的推广入口（PHK110 清单 + 本机实测新增项）。未列出的入口不主动处理。
 STORE_PROMOTIONS = [
@@ -27,6 +28,10 @@ STORE_PROMOTIONS = [
     "手机管家：应用推荐", "文件管理：应用推荐", "福利专区",
 ]
 
+# 段体（store_promotions / browser_ads / browser_personalized）按 `g["off_exact"]` 取这个钩子，
+# 实现住在 recipe_strategies 的 `off_exact_paged`，这里绑回旧名字（ColorOS 16 那一套，#1253）。
+off_exact = off_exact_paged
+
 
 def guard():
     model = p.d.shell("getprop ro.product.model").output.strip()
@@ -35,8 +40,7 @@ def guard():
         skip("型号或系统版本不同，跳过；请重新核对页面")
 
 
-@step("广告跟踪")
-def _():
+def step_ad_tracking(p, rt):
     # 2026-10-28 实测：隐私页在 com.oplus.securitypermission，设备标识与广告在 OplusSettingsActivity$DevicesIdentifySettingsActivity。
     skip_in_safe_mode()
     p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
@@ -61,45 +65,7 @@ def _():
     return True
 
 
-@step("软件商店·服务管理")
-def _():
-    store_promotions()
-
-
-@step("软件商店·个性化")
-def _():
-    if not open_app_settings("com.heytap.market", "com.heytap.market.mine.cn.setting.ui.SettingActivity", "应用与服务"):
-        return False
-    # 入口在设置页底部「账号与隐私」分组下；必须 exact，说明文字里有“…隐私数据”会误中。
-    # 这一行有的商店版本叫「隐私授权管理」（#933）。
-    if not tap_page(("隐私", "隐私授权管理"), "com.heytap.market.mine.cn.setting.ui.PrivacyActivity",
-                    ("隐私", "隐私授权管理")):
-        print("  · 没找到商店「隐私」入口，跳过")
-        return False
-    # 开关在二级页「个性化推荐」里（与 PKG110 记录一致），入口行不是开关。
-    if not tap_page("个性化推荐", "com.heytap.market.mine.cn.setting.ui.PersonalRecommendActivity", "个性化推荐"):
-        print("  · 没找到「个性化推荐」子页，跳过")
-        return False
-    return off_exact(["个性化推荐"], "商店·个性化推荐", max_screens=2)
-
-
-@step("浏览器首页")
-def _():
-    browser_home()
-
-
-@step("浏览器广告")
-def _():
-    browser_ads()
-
-
-@step("浏览器个性化")
-def _():
-    browser_personalized()
-
-
-@step("小布建议")
-def _():
+def step_advice(p, rt):
     # 2026-10-28 实测：设置首页 → OPPO AI（com.oplus.pantanal.ums/com.ums.aisetting.AISettingActivity）
     # → 小布建议（AdviceSettingActivity）。资讯服务是行状态（已卸载/已开启），不是本页开关，
     # 要关就点进「内容资讯 → 资讯服务」二级页（PKG110 同）。本机全部服务已是「已卸载」，无开关。
@@ -131,14 +97,3 @@ def tail():
     print("设置组件不存在时）；下拉搜索、负一屏属于原厂桌面，换用第三方桌面后不在使用面，未收录。")
     print("广告包、乐划锁屏、快应用和通知渠道请按 run.py 标准流程另行确认。")
     print("分段结果：", rt.results)
-
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import p, rt, skip, skip_in_safe_mode
-    from recipe_nav import open_app_settings, tap_page, wait_page
-    from recipe_strategies import off_exact_paged
-    from recipe_steps import browser_ads, browser_home, browser_personalized, store_promotions
-
-# 段体（store_promotions / browser_ads / browser_personalized）按 `g["off_exact"]` 取这个钩子，
-# 实现住在 recipe_strategies 的 `off_exact_paged`，这里绑回旧名字（ColorOS 16 那一套，#1253）。
-off_exact = off_exact_paged

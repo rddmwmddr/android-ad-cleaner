@@ -1,5 +1,5 @@
 {
- "script": "recipes/oppo/PJA110/recipe_android16.py",
+ "script": "recipes/oppo/PJA110/PJA110-android16.toml",
  "scenarios": {
   "present": [
    ["下拉搜索", "locked", [], {}],

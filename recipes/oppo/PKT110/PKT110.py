@@ -1,14 +1,17 @@
-# OPPO Find X8s（PKT110），ColorOS 17.0.0.102(CN01) / Android 17。路径与开关来自 2026-10-28 在 PKT110 真机上逐段实测。
-from recipe_kit import step
-# 不覆盖软件商店（ColorOS 17 的设置页里没有「隐私」「服务管理」，商店首页的推广位也关不掉），
-# 也不覆盖负一屏（速览）——那边没有「推荐服务」分组。详见 docs/清单/OPPO-ColorOS.md。
-BUILD = "PKT110_17.0.0.102(CN01)"
-# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
-TAP_STYLE = "exact"
-READ_SWITCHES_STYLE = "first"
-CLOSE_NAMED_STYLE = "reopen"
+# OPPO Find X8s（PKT110，ColorOS 17）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
+# 共享库的 tap / close_named / close_all / close_group / open_settings 与 require / skip 由装载器注入。
+# 四段留在代码里：广告跟踪与游戏中心要清页面状态并逐个点名弹窗按钮，下拉搜索按读到的开关分岔，
+# 主题商店的「重进一次再回读」要传回调。
 import time
-# 回读确认数由引擎经 rt 记录
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, require, rt, skip_in_safe_mode
+    from recipe_nav import close_named, open_settings, tap
+    from recipe_strategies import close_all, close_group, wait_switches
+
+BUILD = "PKT110_17.0.0.102(CN01)"
+
 # 全局搜索的设置页没有导出：adb am start 会被系统拒绝（SecurityException: not exported），
 # 只能用它自己的 gs:// scheme 打开。
 SEARCH_SETTING = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"
@@ -22,8 +25,7 @@ HOME_CARD_PARENT = "应用建议"
 SEARCH_SOURCES = ["个性化推荐", "精选资讯", "搜索建议"]
 
 
-@step("广告跟踪")
-def _():
+def step_ad_tracking(p, rt):
     """设置 → 隐私与安全 → 设备标识与广告 → 广告跟踪。
     每个 App 一个开关、没有总开关，本机 96 个 App，分五屏。"""
     skip_in_safe_mode()
@@ -39,8 +41,7 @@ def _():
     close_all("广告跟踪", max_screens=40)
 
 
-@step("下拉搜索")
-def _():
+def step_search(p, rt):
     """全局搜索的设置页（gs://search/setting）：搜索首页上的推荐卡片、搜索结果里的推荐源、
     搜索框提示词、消息通知、隐私里的个性化推荐。
     「便捷服务」和搜索范围里的内容源（榜单、小红书、购物等）不是广告位，不动。"""
@@ -68,24 +69,7 @@ def _():
     close_named(["个性化推荐"], "下拉搜索·隐私", max_screens=2)
 
 
-@step("浏览器")
-def _():
-    """浏览器 → 隐私：广告管理里的开屏/资讯列表广告、个性化管理里的个性化广告推荐。
-    「摇一摇广告」在两个上级开关关掉后仍显示为开且点不动（系统置灰），不单独点。"""
-    p.start("com.heytap.browser")
-    # 这台机上「我的」点进去是菜单浮层，直接用公开入口进设置页
-    p.d.shell("am start -n com.heytap.browser/.settings.component.BrowserPreferencesPage"); time.sleep(1.5)
-    require("com.heytap.browser" in p.focus(), "浏览器设置页没有打开")
-    tap("隐私")
-    if p.tap("广告管理", exact=True, scrolls=0):
-        close_named(["开屏广告", "资讯列表广告"], "浏览器·广告管理")
-        p.back()
-    tap("个性化管理")
-    close_named(["个性化广告推荐"], "浏览器·个性化管理")
-
-
-@step("主题商店")
-def _():
+def step_theme(p, rt):
     """主题商店 → 我的 → 设置：服务管理 → 消息与广告；隐私 → 个性化推荐设置。
     「个性化推荐设置」点下去先弹确认框，确认后页面退回「设置」，回读前要重新进一次。
     首页的「检测到新版本」弹窗盖住底部标签栏，关弹窗的动画会把紧跟着的点击吞掉，
@@ -112,18 +96,7 @@ def _():
     close_named(["个性化推荐设置"], "主题·个性化推荐", reopen=to_privacy)
 
 
-@step("视频")
-def _():
-    """OPPO 视频 → 我的（底部标签）→ 设置 → 个性化管理。"""
-    p.start("com.heytap.yoli")
-    p.enter("我的")
-    p.enter("设置")
-    p.enter("个性化管理", scrolls=6)
-    close_named(["个性化广告推荐", "个性化内容推荐"], "视频·个性化管理")
-
-
-@step("游戏中心")
-def _():
+def step_game_center(p, rt):
     """游戏中心 → 我的 → 设置 → 隐私开关设置 → 个性化推荐管理。
     「设置」在 14.43.3 上是「我的」页右上角的齿轮图标，没有文字（#292）；旧版是「设置,有新通知」文字行。
     「我的」页还带「页面升级」弹窗，先关掉。"""
@@ -142,41 +115,5 @@ def _():
     close_named(["个性化推荐"], "游戏中心·个性化推荐")
 
 
-@step("小布建议")
-def _():
-    """设置 → OPPO AI → 小布建议 → 内容资讯里的「资讯服务」，
-    再进「场景服务」里的「视界日报」「小红书资讯」。
-    「内容资讯」是分组标题，页面上没有开关；开关在它下面那一行的二级页里。
-    快递、航班、日程提醒、商圈服务在同一页，保持不动。"""
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
-    tap("OPPO AI", scrolls=6)
-    tap("小布建议", scrolls=6)
-    tap("资讯服务", scrolls=8)
-    close_named(["资讯服务"], "小布建议·资讯服务")
-    tap("视界日报", scrolls=0)
-    close_named(["视界日报"], "小布建议·视界日报")
-    p.back()
-    tap("小红书资讯", scrolls=0)
-    close_named(["小红书资讯"], "小布建议·小红书资讯")
-
-
-@step("应用建议")
-def _():
-    """小布建议 → 其他 → 应用建议：搜索首页上那排「应用建议」卡片，
-    每个被推荐的应用一个开关（com.oplus.metis），整页关掉。"""
-    skip_in_safe_mode()
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
-    tap("OPPO AI", scrolls=6)
-    tap("小布建议", scrolls=6)
-    tap("应用建议", scrolls=10)
-    close_all("应用建议", max_screens=40)
-
-
 def tail():
     print(f"\n已回读确认 {rt.verified} 项；未完成步骤 {len(rt.failed_steps)} 个", flush=True)
-
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import p, require, require_switches, rt, skip_in_safe_mode
-    from recipe_nav import close_named, open_settings, read_switches, tap
-    from recipe_strategies import close_all, close_group, wait_switches

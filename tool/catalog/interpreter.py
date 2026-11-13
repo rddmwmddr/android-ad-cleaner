@@ -20,7 +20,14 @@ class _Abort(Exception):
 
     它不是失败：段体自己 `return` 也是这个结局（只影响分段落点，不影响退出码，沿用 #838）。
     在段 action 的边界被吞掉，不会漏到 `Runtime.run_step` 的失败分支。
+
+    `value` 是段体的返回值：`return value=false` 与 `return_lib` 靠它把「这一段没做全」交给
+    `Runtime.run_step`（`outcome is False` 记「未完成」），默认 None 与旧 `return` 逐字相同。
     """
+
+    def __init__(self, value: Any = None) -> None:
+        super().__init__()
+        self.value = value
 
 
 def segment_action(segment: Mapping, g: dict[str, Any]) -> Callable[[], Any]:
@@ -31,8 +38,8 @@ def segment_action(segment: Mapping, g: dict[str, Any]) -> Callable[[], Any]:
         def run_code() -> Any:
             try:
                 return function(g["p"], g["rt"])
-            except _Abort:
-                return None
+            except _Abort as stop:
+                return stop.value
 
         return run_code
 
@@ -41,8 +48,8 @@ def segment_action(segment: Mapping, g: dict[str, Any]) -> Callable[[], Any]:
     def run_ops() -> Any:
         try:
             _run(ops, g)
-        except _Abort:
-            return None
+        except _Abort as stop:
+            return stop.value
         return None
 
     return run_ops
@@ -133,6 +140,14 @@ def _entry(op: Mapping, g: dict[str, Any]) -> None:
     g["p"].entry(op["text"], scrolls=op.get("scrolls", 6))
 
 
+def _enter(op: Mapping, g: dict[str, Any]) -> None:
+    """`p.enter(text, scrolls=…)`：只带数据里写了的实参，调用序列才与旧脚本逐条一致。"""
+    if "scrolls" in op:
+        g["p"].enter(op["text"], scrolls=op["scrolls"])
+    else:
+        g["p"].enter(op["text"])
+
+
 def _require_entry(op: Mapping, g: dict[str, Any]) -> None:
     if not g["p"].entry(op["text"], scrolls=op.get("scrolls", 6)):
         print(op["miss_print"], flush=True)
@@ -184,7 +199,26 @@ def _print(op: Mapping, g: dict[str, Any]) -> None:
 
 
 def _return(op: Mapping, g: dict[str, Any]) -> None:
-    raise _Abort
+    """`return` / `return False`：段的结局由 `value` 定，没写就与旧 `return` 一样（完成）。"""
+    raise _Abort(op.get("value"))
+
+
+def _return_lib(op: Mapping, g: dict[str, Any]) -> None:
+    """`return <库助手>(…)`：段的结局就是这个调用的返回值（假时记「未完成」，与段体 `return` 同档）。"""
+    result = g[op["name"]](*[_arg(a, g) for a in op.get("args", [])],
+                           **{k: _arg(v, g) for k, v in op.get("kwargs", {}).items()})
+    if not result:
+        raise _Abort(False)
+
+
+def _if_focus(op: Mapping, g: dict[str, Any]) -> None:
+    """`if p.focus() <比法> text: … else: …`：`match` 明写 equals / starts / contains，缺省 contains。"""
+    where = g["p"].focus()
+    match = op.get("match", "contains")
+    hit = {"equals": where == op["text"],
+           "starts": where.startswith(op["text"]),
+           "contains": op["text"] in where}[match]
+    _run(op.get("ops", []) if hit else op.get("else_ops", []), g)
 
 
 def _shell(op: Mapping, g: dict[str, Any]) -> None:
@@ -280,6 +314,18 @@ def _if_find(op: Mapping, g: dict[str, Any]) -> None:
         _run(op.get("else_ops", []), g)
 
 
+def _if_tap(op: Mapping, g: dict[str, Any]) -> None:
+    """`if p.tap(text, exact=…, scrolls=…): … else: …`：门面自己的返回值决定走哪支。"""
+    kwargs: dict[str, Any] = {}
+    for key in ("exact", "scrolls"):
+        if key in op:
+            kwargs[key] = op[key]
+    if g["p"].tap(op["text"], **kwargs):
+        _run(op.get("ops", []), g)
+    else:
+        _run(op.get("else_ops", []), g)
+
+
 def _if_entry(op: Mapping, g: dict[str, Any]) -> None:
     """`if p.entry(text, scrolls=…): … else …`（与 `gated` 的区别是带 else 分支）。"""
     if g["p"].entry(op["text"], scrolls=op.get("scrolls", 6)):
@@ -304,6 +350,10 @@ _HANDLERS: dict[str, Callable[[Mapping, dict[str, Any]], None]] = {
     "close_all": _close_all,
     "start": _start,
     "entry": _entry,
+    "enter": _enter,
+    "if_focus": _if_focus,
+    "if_tap": _if_tap,
+    "return_lib": _return_lib,
     "require_entry": _require_entry,
     "gated": _gated,
     "scoped": _scoped,
