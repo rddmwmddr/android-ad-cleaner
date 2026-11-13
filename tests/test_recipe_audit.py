@@ -111,15 +111,27 @@ class TierTests(unittest.TestCase):
                          (recipe_audit.KNOWLEDGE, ()))
         self.assertEqual(recipe_audit.tier_of([]), (recipe_audit.KNOWLEDGE, ()))
 
+    def test_the_declarative_hooks_are_their_own_tier(self):
+        """`tail` / `guard` / `wrap` / `detail` 按名字判成钩子，不看函数体调了什么（#1244）。
+
+        不收的话十几个 `tail()` 会混进真机型知识，本机策略数也被收尾打印淹没。"""
+        source = ('def tail():\n    print(rt.verified)\n'
+                  'def guard():\n    require(p.d.shell("getprop x") == "1", "型号不符")\n'
+                  'def helper():\n    return tail\n')
+        found = {function.name: function for function in recipe_audit.classify(source)}
+        self.assertEqual(found["tail"].tier, recipe_audit.HOOK)
+        self.assertEqual(found["guard"].tier, recipe_audit.HOOK)
+        self.assertNotEqual(found["helper"].tier, recipe_audit.HOOK)
+
 
 class CountsTests(unittest.TestCase):
     def test_counts_one_recipe_by_tier(self):
         self.assertEqual(recipe_audit.counts(RECIPE),
-                         {"total": 3, "strategy": 1, "vocabulary": 1, "knowledge": 1})
+                         {"total": 3, "strategy": 1, "vocabulary": 1, "knowledge": 1, "hook": 0})
 
     def test_counts_a_recipe_with_no_local_functions(self):
         self.assertEqual(recipe_audit.counts(EMPTY),
-                         {"total": 0, "strategy": 0, "vocabulary": 0, "knowledge": 0})
+                         {"total": 0, "strategy": 0, "vocabulary": 0, "knowledge": 0, "hook": 0})
 
     def test_classify_keeps_the_signals_as_evidence(self):
         found = {function.name: function for function in recipe_audit.classify(RECIPE)}
@@ -140,7 +152,8 @@ class AuditTests(unittest.TestCase):
         self.assertEqual([script.script for script in report.scripts],
                          ["redmi-FAKEB/recipe.py", "vivo-FAKEC/recipe.py", "xiaomi-FAKEA/recipe.py"])
         self.assertEqual(report.counts(),
-                         {"scripts": 3, "total": 4, "strategy": 1, "vocabulary": 2, "knowledge": 1})
+                         {"scripts": 3, "total": 4, "strategy": 1, "vocabulary": 2, "knowledge": 1,
+                          "hook": 0})
         # open_settings 在 FAKEA 与 FAKEB 上各有一份：这就是「该不该升格」的可见证据
         self.assertEqual(report.names["open_settings"], ("FAKEA", "FAKEB"))
         self.assertEqual(len(report.names["close_exact"]), 1)
@@ -161,7 +174,8 @@ class AuditTests(unittest.TestCase):
         by_tier = recipe_audit.filtered(report, tier=recipe_audit.KNOWLEDGE)
         self.assertEqual([script.model for script in by_tier.scripts], ["FAKEA"])
         self.assertEqual(by_tier.counts(),
-                         {"scripts": 1, "total": 1, "strategy": 0, "vocabulary": 0, "knowledge": 1})
+                         {"scripts": 1, "total": 1, "strategy": 0, "vocabulary": 0, "knowledge": 1,
+                          "hook": 0})
 
 
 class CliTests(unittest.TestCase):
@@ -238,7 +252,7 @@ class RealRecipesTests(unittest.TestCase):
 
 # ---------- run.py 的两个出口：`check` 的那一行与 `status-json` 的 `recipe_local` ----------
 # 数字本身由上面几层用假脚本验；这里守的是「出口拿的是 `counts()` 的结果、字段名与文案不再变」。
-COUNTS = {"total": 3, "strategy": 1, "vocabulary": 1, "knowledge": 1}
+COUNTS = {"total": 3, "strategy": 1, "vocabulary": 1, "knowledge": 1, "hook": 0}
 DEVICE = {"model": "M154FF", "brand": "Xiaomi", "name": "Xiaomi 13",
           "build": "OS4.0.24", "os": "OS4.0.24", "android": "15"}
 

@@ -666,8 +666,9 @@ def cmd_check(serial, rest):
     if r:
         # 这份脚本自带几个本机函数：数字由 recipe_audit 现算，明细用 `python3 tool/recipe_audit.py`（#1240）。
         local = recipe_audit.counts(Path(r).read_text(encoding="utf-8"))
+        hooks = f"、声明式钩子 {local['hook']}" if local["hook"] else ""
         print(f"  本机策略：{local['strategy']} 个；本机函数 {local['total']} 个"
-              f"（引擎词汇 {local['vocabulary']}、真机知识 {local['knowledge']}）")
+              f"（引擎词汇 {local['vocabulary']}、真机知识 {local['knowledge']}{hooks}）")
     for p in ad_packages(i["brand"]):
         exists = "package:" in sh(serial, f"pm path {p}")
         if not exists and p in MSA_PKGS:     # msa 在国行 / 海外版是两个包名，只装一个，另一个不提
