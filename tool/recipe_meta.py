@@ -21,6 +21,11 @@ def recipe_files(recipes_dir: str) -> list[str]:
     return sorted(glob.glob(os.path.join(recipes_dir, "*", "recipe*.py")))
 
 
+def recipe_id(path: str | os.PathLike[str]) -> str:
+    """脚本对外的稳定身份：所在目录名（`oneplus-PYB110`），不随仓库目录布局变。"""
+    return os.path.basename(os.path.dirname(os.fspath(path)))
+
+
 def recipe_meta(path: str | os.PathLike[str]) -> RecipeMeta:
     with open(path, encoding="utf-8") as f:
         src = f.read()
