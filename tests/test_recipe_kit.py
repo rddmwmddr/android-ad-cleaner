@@ -477,13 +477,13 @@ class InjectionPointTests(unittest.TestCase):
 OFF_CALL_WIDE = [
     ("recipes/oppo/PKT110/PKT110.toml", "广告跟踪"),
     ("recipes/oppo/PKT110/PKT110.toml", "应用建议"),
-    ("recipes/oppo/PLP120/recipe.py", "广告跟踪"),
+    ("recipes/oppo/PLP120/PLP120.toml", "广告跟踪"),
     ("recipes/oppo/PHK110/PHK110.toml", "广告跟踪"),
     ("recipes/oppo/PKX110/PKX110.toml", "广告跟踪"),
     ("recipes/oppo/PKH110/PKH110.toml", "广告跟踪"),
-    ("recipes/oppo/RMX3700/recipe.py", "广告跟踪"),
-    ("recipes/oppo/RMX3700/recipe.py", "应用建议"),
-    ("recipes/oppo/RMX3888/recipe.py", "广告跟踪"),
+    ("recipes/oppo/RMX3700/RMX3700.toml", "广告跟踪"),
+    ("recipes/oppo/RMX3700/RMX3700.toml", "应用建议"),
+    ("recipes/oppo/RMX3888/RMX3888.toml", "广告跟踪"),
     ("recipes/honor/PNM-AN10/PNM-AN10.toml", "广告跟踪"),
     ("recipes/honor/PNM-AN10/PNM-AN10.toml", "桌面文件夹"),
     ("recipes/honor/PNM-AN10/PNM-AN10.toml", "主题"),
@@ -498,11 +498,11 @@ INJECTED_WIDE = ["ad_tracking_close_all"]
 # 它们与上面那份同样是整页关闭，行为用例一条都不能少；期望集不含它们，结构断言才不会因此变红。
 OTHER_WIDE = [
     ("recipes/honor/CLE-AN00/CLE-AN00.toml", "广告跟踪"),
-    ("recipes/oppo/PMA110/recipe.py", "广告跟踪"),
+    ("recipes/oppo/PMA110/PMA110.toml", "广告跟踪"),
     ("recipes/oppo/PLG110/PLG110.toml", "广告跟踪"),
     ("recipes/honor/WKL-AN20/WKL-AN20.toml", "广告跟踪"),
-    ("recipes/oppo/PLR110/recipe.py", "广告跟踪"),
-    ("recipes/oppo/PYB110/recipe.py", "广告跟踪"),
+    ("recipes/oppo/PLR110/PLR110.toml", "广告跟踪"),
+    ("recipes/oppo/PYB110/PYB110.toml", "广告跟踪"),
 ]
 
 # 整段只做整页关闭的段：安全模式下必须走跳过出口
@@ -514,7 +514,7 @@ GUARDED_RECIPES = {
     "recipes/oppo/PHK110/PHK110.toml",
     "recipes/oppo/PKX110/PKX110.toml",
     "recipes/oppo/PKH110/PKH110.toml",
-    "recipes/oppo/RMX3700/recipe.py",
+    "recipes/oppo/RMX3700/RMX3700.toml",
 }
 
 # 也有 `guard()`，但漏的那条路正是「同型号同版本 + --ref」：型号守卫会放行，
@@ -690,7 +690,7 @@ class BehaviourUnchangedTests(unittest.TestCase):
         p.confirm.assert_called_once()
 
     def test_oppo_machines_still_close_the_page_list(self):
-        for path, model in (("recipes/oppo/PMA110/recipe.py", "PMA110"),
+        for path, model in (("recipes/oppo/PMA110/PMA110.toml", "PMA110"),
                             ("recipes/oppo/PLG110/PLG110.toml", "PLG110")):
             with self.subTest(recipe=path):
                 p = self.oppo_phone(path, model)
@@ -1274,7 +1274,7 @@ class SwitchEvidenceSingleSourceTests(unittest.TestCase):
 
 
 # 两份复制品的宿主脚本（#939 的改动面）：注入面里叫 `page`，脚本不再自带。
-RECIPES_939 = ("oppo/PMX110/recipe.py", "oppo/PLZ110/recipe.py")
+RECIPES_939 = ("oppo/PMX110/PMX110.toml", "oppo/PLZ110/PLZ110.toml")
 GAME_939 = "com.nearme.gamecenter"
 SETTING_PAGE_939 = "com.nearme.gamecenter/com.nearme.gamecenter.setting.SettingActivity"
 LAUNCHER_939 = "com.coloros.launcher/.Launcher"
@@ -1369,7 +1369,7 @@ class PageEvidenceSingleSourceTests(unittest.TestCase):
 #   OPPO / 一加机型脚本的 require_installed()：没装的包 `pm path` 返回退出码 1、输出为空，
 #   那是「没装、跳过本段」，不是「读不出安装状态」（#899，0.4.1 报告 9–10 份）。
 
-RECIPES_899 = ("recipes/oppo/PMX110/recipe.py", "recipes/oppo/PLZ110/recipe.py")
+RECIPES_899 = ("recipes/oppo/PMX110/PMX110.toml", "recipes/oppo/PLZ110/PLZ110.toml")
 PACKAGE_899, LABEL_899 = "com.heytap.yoli", "视频"
 CALL_899 = f"pm path {PACKAGE_899}"
 

@@ -1,0 +1,105 @@
+# realme GT Neo5 SE（RMX3700，ColorOS 16.0.5.1300(CN01)）的页面树（catalog，#1265）。
+# 路径实测：2026-10-30，下拉搜索 2026-11-02 补测。软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法
+# （#933，未复测）。只收录已走通的：广告跟踪、软件商店、浏览器、下拉搜索、小布建议、应用建议。
+# 不挂包、不动通知渠道；这些操作仍走 run.py 的独立、需确认流程。
+#
+# 本机实测与其它机型的差异（务必保留在注释里，别照抄别家机型）：
+#   · ColorOS 16 的广告跟踪入口在「隐私 → 设备标识与广告 → 广告跟踪」，不是 17 的「隐私与安全」。
+#   · 软件商店有「服务管理」（OPPO GT5 Pro 那台没有），共 46 项；
+#     隐私相关不在「隐私」页，而在「账号与隐私 → 隐私授权管理 → 个性化推荐」。
+#   · 浏览器主页是「简洁」模式，没有底部「我的」和菜单；必须用 BrowserPreferencesPage 直达。
+#   · 小布建议叫「NEXT AI」（不是「OPPO AI」）。
+#   · 下拉搜索的设置页 SearchSettingActivity 没导出，用 `-n` 组件名会被系统拒绝；
+#     走应用自己的 gs://search/setting。前提是 com.heytap.quicksearchbox 没被挂起——
+#     它一挂，这个 scheme 落到系统的 SuspendedAppActivity「应用已被暂停」页。
+#   · 负一屏的设置页 com.heytap.iflow.main.setting.SettingsActivity 存在，但 am start 要
+#     oppo.permission.OPPO_COMPONENT_SAFE（OPPO 私有权限，只有系统应用持有），adb 起不来；
+#     速览界面上也没有头像或齿轮 → 负一屏段做不了。
+#   · 本机没有独立视频 App：com.coloros.video 是本地播放器（只列手机里的文件，没有在线资讯流），
+#     com.heytap.yoli 未安装 → 视频段没有可关的广告位。
+#   · 主题商店 com.oplus.themestore 在 /product/priv-app/KeKeOplusThemeStore-CN/，是个入口壳：
+#     oaps://theme 进 .entrance.BasicEntranceActivity，点「打开主题商店」弹
+#     「使用个性化服务需要安装“主题商店”」——主商店没预装、要联网下载 → 主题段没法自动做。
+#     注意包名不是 com.heytap.themestore（本机没有这个包），enabled=0 是 DEFAULT 不是禁用。
+# 广告跟踪 / 浏览器 / 下拉搜索 / 小布建议 / 应用建议五段已落数据（每段都是「逐跳落点断言 + 失败即
+# `return false`」的一层分支）；软件商店是四层嵌套的条件树，按 docs/04 留 `code=`。
+model = "RMX3700"
+models = ["RMX3700"]
+build = "RMX3700_16.0.5.1300"
+guard = "guard"
+tail = "tail"
+
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+[const]
+SETTINGS_PAGE_STYLE = "scroll"
+
+[[segment]]
+name = "广告跟踪"
+ops = [
+  # 每个 App 一个 OAID 开关、没有总开关，新装 App 默认开。
+  { kind = "skip_in_safe_mode" },
+  { kind = "if_lib", name = "settings_page", args = ["隐私"], else_ops = [{ kind = "return", value = false }] },
+  { kind = "if_lib", name = "wait_page", args = ["com.oplusos.securitypermission.privacy.PrivacySettingsDashboardActivity", "隐私"], else_ops = [{ kind = "return", value = false }] },
+  { kind = "if_lib", name = "tap_by_scroll", args = ["设备标识与广告"], else_ops = [{ kind = "print", text = "  ! 没找到「设备标识与广告」" }, { kind = "return", value = false }] },
+  { kind = "if_lib", name = "wait_page", args = ["com.oplus.settings.OplusSettingsActivity$DevicesIdentifySettingsActivity", "设备标识与广告"], else_ops = [{ kind = "return", value = false }] },
+  { kind = "if_lib", name = "tap_by_scroll", args = ["广告跟踪"], else_ops = [{ kind = "print", text = "  ! 没找到「广告跟踪」" }, { kind = "return", value = false }] },
+  { kind = "if_lib", name = "wait_page", args = ["com.oplus.settings.feature.notification.oaid.OAIDActivity", "广告跟踪"], else_ops = [{ kind = "return", value = false }] },
+  # 页面上全是 App 名，没有服务类开关，整页关掉即可。
+  { kind = "off", page = "广告跟踪", page_wide = true },
+]
+
+[[segment]]
+name = "软件商店"
+code = "step_store"
+
+[[segment]]
+name = "浏览器"
+ops = [
+  # 主页是「简洁」模式：没有底部「我的」，也没有菜单。设置页只能按公开 Activity 直达。
+  { kind = "shell", command = "am start -n com.heytap.browser/com.heytap.browser.settings.component.BrowserPreferencesPage" },
+  { kind = "sleep", seconds = 1.5 },
+  { kind = "if_lib", name = "wait_page", args = ["com.heytap.browser.settings.component.BrowserPreferencesPage", "浏览器"], else_ops = [{ kind = "return", value = false }] },
+  { kind = "if_lib", name = "tap_by_scroll", args = ["隐私"], else_ops = [{ kind = "print", text = "  ! 没找到「隐私」" }, { kind = "return", value = false }] },
+  { kind = "if_lib", name = "wait_page", args = ["com.heytap.browser.settings.component.BrowserPreferenceActivity", "隐私"], else_ops = [{ kind = "return", value = false }] },
+  { kind = "if_lib", name = "tap_by_scroll", args = ["广告管理"], else_ops = [{ kind = "print", text = "  ! 没找到「广告管理」" }, { kind = "return", value = false }] },
+  { kind = "off", only = ["开屏广告", "资讯列表广告", "摇一摇广告"], page = "浏览器·广告管理" },
+]
+
+[[segment]]
+name = "下拉搜索"
+ops = [
+  # 搜索设置首页本身 0 个开关，全部开关都在子页里。「账号与隐私」是分组标题，点它没反应。
+  { kind = "if_lib", name = "open_search_setting", else_ops = [{ kind = "return", value = false }] },
+  # 搜索范围 24 个开关：只有 3 个推荐位要关，其余是内容源和数据源。
+  { kind = "if_lib", name = "open_search_sub", args = ["搜索范围", "com.heytap.quicksearchbox.ui.activity.SearchSourceActivity"], ops = [{ kind = "off", only = ["个性化推荐", "精选资讯", "搜索建议"], page = "搜索范围" }] },
+  # 功能管理：只关「搜索框提示词」。语音搜索、扫一扫是功能，搜索历史是用户自己的记录。
+  { kind = "if_lib", name = "open_search_sub", args = ["功能管理", "com.heytap.quicksearchbox.ui.activity.SearchFunctionManagerActivity"], ops = [{ kind = "off", only = ["搜索框提示词"], page = "功能管理" }] },
+  # 首页卡片管理：先关「应用建议」的两个子项，否则父项一关它们就从页面上消失，关不掉。
+  { kind = "if_lib", name = "open_search_sub", args = ["首页卡片管理", "com.heytap.quicksearchbox.ui.activity.SearchModuleManagerActivity"], ops = [{ kind = "lib", name = "close_rows", args = [["未下载应用推荐", "应用建议小卡"], "首页卡片·子项"] }, { kind = "lib", name = "close_rows", args = [["应用建议", "热搜应用", "精选推荐", "热搜榜单", "活动皮肤", "推荐卡片"], "首页卡片"] }] },
+  # 消息管理：本机录制时「消息通知」已经是关的，这里只做回读兜底。
+  { kind = "if_lib", name = "open_search_sub", args = ["消息管理", "com.heytap.quicksearchbox.ui.activity.SearchPushManagerActivity"], ops = [{ kind = "off", only = ["消息通知"], page = "消息管理" }] },
+]
+
+[[segment]]
+name = "小布建议"
+ops = [
+  # realme 上叫「NEXT AI」，不是「OPPO AI」。
+  { kind = "if_lib", name = "settings_page", args = ["NEXT AI", "小布建议"], else_ops = [{ kind = "return", value = false }] },
+  { kind = "if_lib", name = "wait_page", args = ["com.oplus.advice.settings.ui.AdviceSettingActivity", "小布建议"], else_ops = [{ kind = "return", value = false }] },
+  { kind = "if_lib", name = "tap_by_scroll", args = ["资讯服务"], else_ops = [{ kind = "print", text = "  ! 没找到「资讯服务」" }, { kind = "return", value = false }] },
+  { kind = "if_lib", name = "wait_page", args = ["com.oplus.advice.settings.ui.detail.SceneServiceActivity", "资讯服务"], else_ops = [{ kind = "return", value = false }] },
+  # 关掉主开关，下面的视界日报 / AI快讯 / 小红书资讯随之失效。
+  { kind = "off", only = ["资讯服务"], page = "小布建议·资讯服务" },
+]
+
+[[segment]]
+name = "应用建议"
+ops = [
+  # 负一屏/助手里的「应用建议」：每个已装 App 一个开关，关掉即不再出现在推荐里。
+  { kind = "skip_in_safe_mode" },
+  { kind = "if_lib", name = "settings_page", args = ["NEXT AI", "小布建议"], else_ops = [{ kind = "return", value = false }] },
+  { kind = "if_lib", name = "wait_page", args = ["com.oplus.advice.settings.ui.AdviceSettingActivity", "小布建议"], else_ops = [{ kind = "return", value = false }] },
+  { kind = "if_lib", name = "tap_by_scroll", args = ["应用建议"], else_ops = [{ kind = "print", text = "  ! 没找到「应用建议」" }, { kind = "return", value = false }] },
+  { kind = "if_lib", name = "wait_page", args = ["com.oplus.metis.v2.ui.settings.SettingActivity", "应用建议"], else_ops = [{ kind = "return", value = false }] },
+  { kind = "off", page = "应用建议", page_wide = true },
+]

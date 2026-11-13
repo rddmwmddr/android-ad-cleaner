@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 import run
 from fixtures import load_recipe
 
-RECIPE = ROOT / "recipes/oppo/PMA110/recipe.py"
+RECIPE = ROOT / "recipes/oppo/PMA110/PMA110.toml"
 
 
 def load(phone, only=None):

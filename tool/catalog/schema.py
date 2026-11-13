@@ -19,6 +19,7 @@ OP_KEYS = {
     "lib": frozenset({"kind", "name", "args", "kwargs"}),
     "off": frozenset({"kind", "only", "only_code", "keep", "page", "max_screens", "page_wide"}),
     "close_all": frozenset({"kind", "page", "button"}),
+    "close_listed": frozenset({"kind", "names", "page", "miss_print"}),
     "start": frozenset({"kind", "pkg", "activity", "settle", "foreground", "expect", "budget"}),
     "entry": frozenset({"kind", "text", "scrolls"}),
     "enter": frozenset({"kind", "text", "scrolls"}),
@@ -26,6 +27,7 @@ OP_KEYS = {
     "require_entry": frozenset({"kind", "text", "scrolls", "miss_print", "miss_back"}),
     "require_lib": frozenset({"kind", "name", "args", "kwargs", "miss_print", "miss_back"}),
     "require_tab": frozenset({"kind", "name", "miss_print"}),
+    "require_tap": frozenset({"kind", "text", "exact", "scrolls", "miss_print"}),
     "require_go": frozenset({"kind", "text", "expect", "miss_print"}),
     "require_unlocked": frozenset({"kind", "miss_print"}),
     "shell": frozenset({"kind", "command"}),
@@ -48,6 +50,9 @@ OP_KEYS = {
     "if_tap": frozenset({"kind", "text", "exact", "scrolls", "ops", "else_ops"}),
     "back": frozenset({"kind", "n"}),
     "top": frozenset({"kind", "n"}),
+    "page": frozenset({"kind", "args", "kwargs"}),
+    "skip": frozenset({"kind", "text"}),
+    "fail": frozenset({"kind", "text"}),
     "scoped": frozenset({"kind", "systemui_text", "ops"}),
     "code": frozenset({"kind", "name", "args"}),
     "print": frozenset({"kind", "text"}),
@@ -111,6 +116,12 @@ def _validate_op(op: object, where: str) -> None:
         _validate_off(op, where)
     elif kind == "close_all":
         _require(op, "page", where)
+    elif kind == "page":
+        _require(op, "args", where)
+    elif kind == "skip":
+        _require(op, "text", where)
+    elif kind == "fail":
+        _require(op, "text", where)
     elif kind in ("lib", "require_lib", "code", "return_lib"):
         _require(op, "name", where)
         if kind == "require_lib":
@@ -121,6 +132,13 @@ def _validate_op(op: object, where: str) -> None:
             _require(op, "miss_print", where)
     elif kind == "require_tab":
         _require(op, "name", where)
+        _require(op, "miss_print", where)
+    elif kind == "require_tap":
+        _require(op, "text", where)
+        _require(op, "miss_print", where)
+    elif kind == "close_listed":
+        _require(op, "names", where)
+        _require(op, "page", where)
         _require(op, "miss_print", where)
     elif kind == "require_go":
         _require(op, "text", where)
@@ -214,13 +232,16 @@ def words(data: Mapping) -> list[tuple[str, str]]:
     found: list[tuple[str, str]] = []
     for segment in data.get("segment", []):
         for op in _walk(segment.get("ops", [])):
-            if op.get("kind") != "off":
-                continue
-            if "only" in op:
-                found += [(text, "literal") for text in op["only"]]
-            elif "only_code" in op:
-                found.append((op["only_code"], "strategy"))
-            found += [(text, "literal") for text in op.get("keep", [])]
+            kind = op.get("kind")
+            if kind == "off":
+                if "only" in op:
+                    found += [(text, "literal") for text in op["only"]]
+                elif "only_code" in op:
+                    found.append((op["only_code"], "strategy"))
+                found += [(text, "literal") for text in op.get("keep", [])]
+            elif kind == "close_listed":
+                # 「读回名单→过滤→整表关」的候选名单也是「这一页要关的名字」，与 `close_named` 同档（#1265）。
+                found += [(text, "literal") for text in op.get("names", [])]
     return found
 
 

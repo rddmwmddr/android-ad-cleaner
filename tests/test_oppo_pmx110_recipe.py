@@ -5,7 +5,6 @@ chan-scan / chan-off 在渠道级处理。关闭前先读整页并核对目标�
 非目标未变。轮播推荐那一页的父容器会把两个选项的标签并成一段文字，按子串匹配会把
 「不显示」点到「显示」上（#280）。脚本按录制版本钉住 BUILD，不留 `recipe_<版本>.py` 变体。
 """
-import ast
 import contextlib
 import io
 from pathlib import Path
@@ -23,7 +22,7 @@ from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock, phone_
 import fast
 import run
 
-RECIPE = ROOT / "recipes/oppo/PMX110/recipe.py"
+RECIPE = ROOT / "recipes/oppo/PMX110/PMX110.toml"
 RECORDED = "PMX110_17.0.0.116(CN01)"
 SEARCH_SETTINGS_FOCUS = ("com.heytap.quicksearchbox/"
                          "com.heytap.quicksearchbox.ui.activity.SearchSettingActivity")
@@ -37,13 +36,10 @@ def load(phone, only=("__no_steps__",), out=None):
 
 
 def action(scope, name):
-    """取真实分段的函数体，以便给它的协作者注入失败；不复制分段实现。"""
-    node = next(n for n in ast.parse(RECIPE.read_text(encoding="utf-8")).body
-                if isinstance(n, ast.FunctionDef) and n.decorator_list
-                and n.decorator_list[0].args[0].value == name)
-    node.decorator_list, node.name = [], "selected_action"
-    exec(compile(ast.Module(body=[node], type_ignores=[]), str(RECIPE), "exec"), scope)
-    return scope["selected_action"]
+    """取真实分段的 action：数据段是解释器包好的那段，`code=` 段直接取例外函数（#1265）。
+
+    这样给协作者注入失败时不必从源码里抠函数体——装载后的 `rt.steps` 就是真正会跑的那一段。"""
+    return next(item.action for item in scope["rt"].steps if item.name == name)
 
 
 def carousel_page():
@@ -404,7 +400,7 @@ class MarketPrivacyEntryTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "未进入目标设置页"):
             action(self.scope, "软件商店")()
         self.scope["row"].assert_called_once_with(
-            ("隐私", "隐私授权管理"), package="com.heytap.market", activity="PrivacyActivity")
+            ["隐私", "隐私授权管理"], package="com.heytap.market", activity="PrivacyActivity")
         self.scope["app_settings"].assert_called_once_with("com.heytap.market")
         self.scope["close_named"].assert_not_called()
         self.scope["read_switches"].assert_not_called()
@@ -428,7 +424,8 @@ class StoreThemeVideoTests(unittest.TestCase):
         self.assertEqual(self.scope["app_settings"].call_args_list,
                          [call("com.heytap.market"), call("com.heytap.market")])
         self.assertEqual(self.scope["row"].call_args_list,
-                         [call(("隐私", "隐私授权管理"), package="com.heytap.market",
+                         # 页面树里的等价文案是 TOML 数组（转成 list）：按内容与顺序比，容器类型不是判据。
+                         [call(["隐私", "隐私授权管理"], package="com.heytap.market",
                                activity="PrivacyActivity"),
                           call("个性化推荐"), call("服务管理")])
         self.assertEqual([c.args[0] for c in self.scope["close_named"].call_args_list],

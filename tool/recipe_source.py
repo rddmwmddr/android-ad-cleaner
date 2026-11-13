@@ -547,12 +547,24 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 lower(op.get("ops", []))
             elif kind in ("if_find", "if_entry", "if_lib", "if_focus", "if_tap"):
                 # 带条件分支的 op：两支里的 off / 入口调用一样要读出来，否则词与入口会静默丢（#1263）。
+                if kind == "if_lib":
+                    args = ", ".join(_s(a) for a in op.get("args", []))
+                    lines.append(f"{op['name']}({args})")
                 lower(op.get("ops", []))
                 lower(op.get("else_ops", []))
             elif kind in ("lib", "require_lib", "code", "return_lib"):
                 # 用数据里写得出的真实名字（不折回 close_named），归属才查得准（#1263）。
                 args = ", ".join(_s(a) for a in op.get("args", []))
                 lines.append(f"{op['name']}({args})")
+            elif kind == "close_listed":
+                # 候选名单是「这一页要关掉这些名字」，按 `close_named(名单, 页)` 投影进事实层：
+                # 词库按 close 那一类读得出这些字面量（旧脚本里 `names` 是运行期变量，读不出，#1265）。
+                names = ", ".join(_s(name) for name in op.get("names", []))
+                lines.append(f"close_named([{names}], {_s(op['page'])})")
+            elif kind in ("page", "skip", "fail", "require_tap"):
+                # 落点断言 / 跳过 / 失败出口 / 必需点按不带词条与入口事实：入口本来自 `p.start` / shell /
+                # `open_app_settings`，`page` 只是核对。与 `back` / `top` / `print` 同档（#1265）。
+                pass
 
     for segment in data.get("segment", []):
         if "code" in segment:

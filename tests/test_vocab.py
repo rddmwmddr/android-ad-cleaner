@@ -28,8 +28,8 @@ UNRESOLVED_ONLY = {
     "oppo/PKX110/PKX110.toml": 1,
     "oppo/PKH110/PKH110.toml": 1,
     "oppo/PLG110/PLG110.toml": 2,
-    "oppo/PLP120/recipe.py": 1,
-    "oppo/PMA110/recipe.py": 1,
+    "oppo/PLP120/PLP120.toml": 1,
+    "oppo/PMA110/PMA110.toml": 1,
     "xiaomi/23049RAD8C/recipe.py": 1,
     "xiaomi/25060RK16C/recipe.py": 1,
     "vivo/V2303A/V2303A.toml": 1,
@@ -46,20 +46,24 @@ UNRESOLVED_ONLY = {
 # close_named() 第一个参数解析不出的，和上面分开冻结，免得一个口径盖住另一个。
 UNRESOLVED_CLOSE = {
     "oppo/PJA110/PJA110-android16.toml": 1,
-    "oppo/PLZ110/recipe.py": 2,
+    # 软件商店里「读回名单→过滤→整表关」那一处从运行期变量 `names` 收进了 `close_listed` op（#1265），
+    # 候选名单按字面量投影进词库（每台 +30 个词，见 `test_close_listed_names_reach_the_scan`），
+    # 这一处不再是未解析，未解析各减 1；剩下的 1 是 `search_settings_direct` 首页卡片名单的运行期
+    # `names`，属另一页，与本段无关。
+    "oppo/PLZ110/PLZ110.toml": 1,
     "oppo/PKT110/PKT110.toml": 3,
-    "oppo/PMX110/recipe.py": 2,
+    "oppo/PMX110/PMX110.toml": 1,
     "xiaomi/23117RK66C/recipe.py": 1,
 }
 # 解析不出的 keep=，同样按脚本冻结：它只影响同页保留项，读不出时那页的约束就整段丢了。
 UNRESOLVED_KEEP = {
     "oppo/PHK110/PHK110.toml": 1,
     "oppo/PKX110/PKX110.toml": 1,
-    "oppo/PLZ110/recipe.py": 1,
+    "oppo/PLZ110/PLZ110.toml": 1,
     "oppo/PKH110/PKH110.toml": 1,
     "oppo/PLG110/PLG110.toml": 2,
-    "oppo/PMA110/recipe.py": 1,
-    "oppo/PMX110/recipe.py": 1,
+    "oppo/PMA110/PMA110.toml": 1,
+    "oppo/PMX110/PMX110.toml": 1,
     # close_named_vivo 的实现里 keep 是运行时算的（`[n for n in before …]`），不可读；转数据后它
     # 被正确归属到 recipe_strategies、于是这份实现被扫到，多出一条未解析（词条数不变，#1263）。
     "vivo/V2417A/V2417A.toml": 1,
@@ -132,6 +136,17 @@ class RealRecipesTest(unittest.TestCase):
             self.assertIn(group, entries.ENTRIES[family], f"{family} {prefix}")
         placed = {(w.family, w.group) for w in self.scan.words if w.group}
         self.assertLessEqual(placed, {(f, g) for f, groups in entries.ENTRIES.items() for g in groups})
+
+    def test_close_listed_names_reach_the_scan(self):
+        """`close_listed` 的候选名单是「这一页要关的这些名字」，必须当字面量进词库（#1265）。
+
+        先证红：`_catalog_src` 不投影 `close_listed` 时，这 30 个名字既不进词条也不进未解析清单
+        （旧脚本里 `close_named(names, …)` 的 `names` 是运行期变量，词库读不出；改成数据后名字明明
+        是字面量，投影一断就两头落空）。这里按型号点名一个词，投影在就该读得到。"""
+        found = {(word.model, word.text) for word in self.scan.words}
+        for model in ("PLZ110", "PMX110"):
+            self.assertIn((model, "应用安全安全内容推荐"), found)
+            self.assertIn((model, "小游戏二楼和专区"), found)
 
     def test_unresolved_only_is_frozen_per_script(self):
         self.assertEqual(dict(Counter(c.script for c in self.scan.unresolved_only)), UNRESOLVED_ONLY)
