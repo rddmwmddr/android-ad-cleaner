@@ -118,6 +118,42 @@ class BrowserFlowTests(unittest.TestCase):
         self.assertEqual(called, ["vivo"])
 
 
+class FamilyStyleTests(unittest.TestCase):
+    """OPPO 系的走法表（#1245）：缺省档保留旧行为，认不出的常量在调用那一刻报错。
+
+    这几个名字的注入实现横跨两个家族（小米那份住在 `recipe_nav`），所以缺省一档必须仍是旧行为 ——
+    静默回退会点到别的页，比报错更难查（沿用 #819 的口径）。
+    """
+
+    def test_an_unknown_wait_page_style_fails_instead_of_falling_back(self):
+        _phone, g = scope(WAIT_PAGE_STYLE="typo")
+        with self.assertRaisesRegex(RuntimeError, "WAIT_PAGE_STYLE"):
+            g["wait_page"]("example.app/Activity", "标题")
+
+    def test_an_unknown_read_switch_style_fails_instead_of_falling_back(self):
+        _phone, g = scope(READ_SWITCHES_STYLE="typo")
+        with self.assertRaisesRegex(RuntimeError, "READ_SWITCHES_STYLE"):
+            g["read_switches"](1)
+
+    def test_an_unknown_close_named_style_fails_instead_of_falling_back(self):
+        _phone, g = scope(CLOSE_NAMED_STYLE="typo")
+        with self.assertRaisesRegex(RuntimeError, "CLOSE_NAMED_STYLE"):
+            g["close_named"](["甲"], "页")
+
+    def test_the_wait_page_default_keeps_the_old_page_wait(self):
+        """没写常量时走 bool 档：空页面上等到预算用完返回 False，不抛（未迁移家族的行为）。"""
+        _phone, g = scope()
+        self.assertFalse(g["wait_page"]("example.app/Activity", "标题", timeout=0))
+
+    def test_the_exact_tap_style_names_the_current_page(self):
+        """PKT110 那一档把当前页文字写进失败句：查「没找到入口」时分得清是改名还是没进页。"""
+        _phone, g = scope(TAP_STYLE="exact")
+        _phone.tap.return_value = False
+        _phone.page_text.return_value = "com.example/.Main"
+        with self.assertRaisesRegex(RuntimeError, "未找到入口「多选」；当前页：com.example/.Main"):
+            g["tap"]("多选", scrolls=0)
+
+
 class StrategyBehaviourTests(unittest.TestCase):
     def test_close_with_plain_tap_confirms_each_row_and_records_the_change(self):
         """短按被吞的那类页面：用 `input tap` 点，回读确认，并记一行改动台账。"""

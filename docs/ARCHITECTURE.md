@@ -34,7 +34,7 @@
 | `fast.py` | 引擎出口：`Phone` 门面只做转发与组合；协作者都在 `tool/phone/`（下一张表），模块级名字仍从这里可 import（[ADR-0033](adr/0033-phone-phase-modules.md)） |
 | `recipe_kit.py` | 机型脚本的前导：段包装、入口断言、跳过出口、两个台账（[ADR-0029](adr/0029-recipe-preamble-injection.md)） |
 | `recipe_nav.py` | 机型脚本的公共导航助手：入口、选择器、等待与落点确认收在这里，由 `preamble()` 调 `install()` 注入；按家族分节（小米系 / vivo / OPPO / 其余·跨家族）。同一个名字在家族内有几套实测走法时，各占一档、脚本用模块常量选（`GEAR_STYLE` / `BROWSER_FLOW` / `MENU_STYLE`），缺省一档保留旧行为；未迁移的家族仍是「同名但代码不同的留在脚本里覆盖」（[ADR-0029](adr/0029-recipe-preamble-injection.md)、#1244） |
-| `recipe_strategies.py` | 机型脚本的拨动策略：怎么把一页开关关掉（精确匹配、逐行重读、整页全关、父子项、短按被吞、标题在行外），与 `recipe_nav` 同一形状、由 `preamble()` 在导航之后调 `install()` 注入（#1244） |
+| `recipe_strategies.py` | 机型脚本的拨动策略：怎么把一页开关关掉（精确匹配、逐行重读、整页全关、父子项、短按被吞、标题在行外），与 `recipe_nav` 同一形状、由 `preamble()` 在导航之后调 `install()` 注入；函数体带着词库「未解析」现场的那几个留在机型脚本里（#1244、#1245） |
 | `recipe_steps.py` | 机型脚本的公共段体：跨文件代码逐字相同的 `@step` 段体收在这里，由 `preamble()` 在导航之后调 `install()` 注入；脚本侧只留一行调用，段体依赖的模块常量按名字从执行作用域现取，同名但代码不同的是机型知识、留在脚本里（[ADR-0035](adr/0035-recipe-steps-injection.md)） |
 | `recipe_meta.py` | 机型脚本头部的元数据：录制版本、机型列表、段名；只有正则，不背 CLI 入口的副作用 |
 | `recipe_source.py` | 机型脚本的事实层：一份源码里的调用点与模块级常量，纯 AST，入口速查与词库共用（[ADR-0034](adr/0034-recipe-source-facts.md)） |
