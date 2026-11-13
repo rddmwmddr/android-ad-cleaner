@@ -33,19 +33,6 @@ STORE_KEEP = ["帮助与客服", "应用安全", "我的专区：应用工具", 
               "应用使用记录", "首页：AI搜索"]
 
 
-def step_ad_tracking(p, rt):
-    # 每个 App 一个 OAID 开关、没有总开关（本机 219 个），新装 App 默认开，整页关掉即可。
-    skip_in_safe_mode()
-    found = settings_page("隐私", "更多", "设备标识与广告", "广告跟踪")
-    if not found:
-        p.miss = 0
-        found = settings_page("隐私", "设备标识与广告", "广告跟踪")
-    if not found:
-        raise RuntimeError("设置里没走到「隐私 → 更多 → 设备标识与广告 → 广告跟踪」")
-    page("广告跟踪", SETTINGS, "OAIDActivity")
-    p.off(page="广告跟踪", max_screens=40)
-
-
 def step_negative_screen(p, rt):
     # 本机这一层没有「推荐服务 → 轮播推荐」，也没有「搜索框提示词」：两处默认已关，没有可关的项。
     p.d.shell("input keyevent HOME"); time.sleep(0.6)
@@ -87,29 +74,6 @@ def step_negative_screen(p, rt):
     p.back(2)
 
 
-def step_search(p, rt):
-    # 搜索设置首页本身 0 个开关，开关都在子页里。「账号与隐私」是分组标题，点它多数情况没反应。
-    p.d.shell(SEARCH_SETTING)
-    time.sleep(1.8)
-    if "SuspendedAppActivity" in p.focus():
-        skip(f"{SEARCH} 被挂起了，全局搜索不可用；先 run.py unsuspend {SEARCH} 再跑本段")
-    page("搜索范围", SEARCH, "SearchSettingActivity")
-    if p.tap("搜索范围", exact=True):
-        p.off(only=SEARCH_SOURCES, page="下拉搜索·搜索范围")
-        p.back()
-    if p.tap("功能管理", exact=True):
-        # 语音搜索、扫一扫是功能，搜索历史是用户自己的记录，只关提示词。
-        p.off(only=["搜索框提示词"], page="下拉搜索·功能管理")
-        p.back()
-    p.miss = 0
-    if not p.tap("账号与隐私", exact=True):
-        p.miss = 0                       # 有的版本里它只是分组标题
-    if p.tap("隐私", exact=True):
-        p.off(only=["个性化推荐"], page="下拉搜索·隐私")
-        p.back(2)
-    p.back(2)
-
-
 def step_store(p, rt):
     p.start(MARKET)
     if not p.tab("我的"):
@@ -133,28 +97,6 @@ def step_store(p, rt):
     else:
         p.note_miss("隐私")
         print("  · 商店里没找到「隐私 / 隐私授权管理」", flush=True)
-    p.back(2)
-
-
-def step_browser(p, rt):
-    # 40.9.14.1 的「隐私」页已没有「广告管理」入口；主页布局默认已是「简洁」。
-    # 首页也没有底部「我的」和菜单，只能按页面名直达设置页（带清栈参数会立刻退出）。
-    p.start(BROWSER)
-    p.d.shell("am start -n com.heytap.browser/com.heytap.browser.settings.component.BrowserPreferencesPage")
-    time.sleep(1.5)
-    if BROWSER not in p.focus():
-        raise RuntimeError("浏览器设置页没有打开")
-    if p.tap("主页设置", exact=True):
-        if p.tap("页面布局", exact=True):
-            p.tap("简洁", exact=True, scrolls=0)
-            p.back()
-        p.back()
-    if p.tap("隐私", exact=True):
-        if p.tap("广告管理", exact=True):
-            p.off(only=["开屏广告", "资讯列表广告", "摇一摇广告"], page="浏览器·广告管理")
-        else:
-            print("  · 「隐私」页没有「广告管理」，本段没有可关的项（本机 40.9.14.1）", flush=True)
-        p.back()
     p.back(2)
 
 
@@ -207,17 +149,3 @@ def step_game_center(p, rt):
     if p.tap("隐私开关设置", exact=True) and p.tap("个性化推荐管理", exact=True):
         p.off(only=["个性化推荐"], page="游戏中心·个性化推荐管理")
     p.back(4)
-
-
-def step_assistant_advice(p, rt):
-    # 本机设置里的入口叫「AI」（com.coloros.sceneservice 的设置页），不叫「OPPO AI」；
-    # 报告者实测「小布建议」总开关默认已关，没再往下点。开着时才去二级页关「资讯服务」。
-    if not settings_page("AI") and not settings_page("OPPO AI"):
-        raise RuntimeError("设置里没找到小布建议入口（「AI」/「OPPO AI」）")
-    page("小布建议", activity="SettingsActivity")
-    if p.tap("资讯服务", exact=True):
-        # 关掉主开关，下面的视界日报 / AI 快讯 / 小红书资讯随之失效。
-        p.off(only=["资讯服务"], page="小布建议·资讯服务")
-    else:
-        print("  · 没有「资讯服务」入口（本机小布建议总开关默认已关）", flush=True)
-    p.back(2)
