@@ -44,6 +44,21 @@ OPPO 系（oppo / oneplus / realme，16 份，#1245）按同一形状扩展这�
 脚本里，理由与 #1148 留 `off_exact` 时相同。浏览器设置页的两档 OPPO 入口另有约束：入口串按
 执行作用域里的包名常量拼，否则导入同一个 `browser_settings` 的其它家族会被入口速查算上这条直达。
 
+vivo / 荣耀 / 魅族 / 三星（15 份，#1246）按同一形状收口。vivo 九份算一个真正的家族库：
+`tap_row` / `by_desc` / `result_xy` / `search_setting` / `hiboard_panel` / `hiboar_panel` 进 vivo
+分节，关开关的过程（`rows` / `off` / `confirm2` / `dialog_open` / `row_switch` / `switch_off` /
+`setting_search` / `off_one` / `store_personalization`）进策略库；`gear` / `gear_top` /
+`read_switches` / `browser_settings` 各加 vivo 档。荣耀只有三份、魅族与三星各一份，都不足以开
+家族库：它们只往共享库加「注入名已经住在那里、别家也在用」的档（`enter` / `tap` /
+`app_settings` / `open_settings` / `my_tab` / `tap_text` / `goto` / `wait_page` / `close_named` /
+`browser_settings`）；其余本机助手留在脚本里，逐个列在 #1246 的汇报与票面评论里。判据是
+「这一份实现是不是别家也在用」：只服务一台机的 `settle_page` / `labels` / `radio` / `dismiss` /
+`page_summary` / `tap_id` / `open_app` 搬进共享库，等于给一份脚本造家族库。
+
+三星的 `protect` 因此仍是本机函数：它写的是这一页「点标题而不是点开关、把保护类开关拨回开」，
+且是 #608 的临时回退，重启真机复测后才换回 `p.off`。三星原来那一个本机策略因此不减——这是归属
+规则的结果，不是漏收。
+
 ### 为什么不是只做模块化
 
 只把 `exec` 换成 `import`、保留执行式 `@step`，会得到最坏的组合：导入仍有设备动作，段顺序仍由书写顺序与钩子位置决定，`only` 仍从 `globals()` 取，三处装载点仍各写一份。脚本看起来是模块，行为契约却还是「导入即执行」，静态检查与装载期报错都无从谈起。声明式段、单一装载器与 `rt` 是同一笔改动的三个面：没有声明式段，装载器无法在导入后再决定跑哪些段；没有 `rt`，段过滤与台账只能继续留在 `globals()` 里。
