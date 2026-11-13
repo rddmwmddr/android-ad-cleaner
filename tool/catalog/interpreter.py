@@ -314,6 +314,18 @@ def _if_find(op: Mapping, g: dict[str, Any]) -> None:
         _run(op.get("else_ops", []), g)
 
 
+def _if_tap(op: Mapping, g: dict[str, Any]) -> None:
+    """`if p.tap(text, exact=…, scrolls=…): … else: …`：门面自己的返回值决定走哪支。"""
+    kwargs: dict[str, Any] = {}
+    for key in ("exact", "scrolls"):
+        if key in op:
+            kwargs[key] = op[key]
+    if g["p"].tap(op["text"], **kwargs):
+        _run(op.get("ops", []), g)
+    else:
+        _run(op.get("else_ops", []), g)
+
+
 def _if_entry(op: Mapping, g: dict[str, Any]) -> None:
     """`if p.entry(text, scrolls=…): … else …`（与 `gated` 的区别是带 else 分支）。"""
     if g["p"].entry(op["text"], scrolls=op.get("scrolls", 6)):
@@ -340,6 +352,7 @@ _HANDLERS: dict[str, Callable[[Mapping, dict[str, Any]], None]] = {
     "entry": _entry,
     "enter": _enter,
     "if_focus": _if_focus,
+    "if_tap": _if_tap,
     "return_lib": _return_lib,
     "require_entry": _require_entry,
     "gated": _gated,

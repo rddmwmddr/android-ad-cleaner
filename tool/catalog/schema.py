@@ -45,6 +45,7 @@ OP_KEYS = {
     "if_entry": frozenset({"kind", "text", "scrolls", "ops", "else_ops"}),
     "if_lib": frozenset({"kind", "name", "args", "kwargs", "ops", "else_ops"}),
     "if_focus": frozenset({"kind", "text", "match", "ops", "else_ops"}),
+    "if_tap": frozenset({"kind", "text", "exact", "scrolls", "ops", "else_ops"}),
     "back": frozenset({"kind", "n"}),
     "top": frozenset({"kind", "n"}),
     "scoped": frozenset({"kind", "systemui_text", "ops"}),
@@ -149,7 +150,7 @@ def _validate_op(op: object, where: str) -> None:
     elif kind == "require_find":
         _require(op, "text", where)
         _require(op, "miss_print", where)
-    elif kind in ("if_find", "if_entry", "if_focus"):
+    elif kind in ("if_find", "if_entry", "if_focus", "if_tap"):
         _require(op, "text", where)
         if kind == "if_focus" and op.get("match", "contains") not in FOCUS_MATCHES:
             raise SchemaError(f"{where} 的 match={op['match']!r} 认不出；可用的是 "

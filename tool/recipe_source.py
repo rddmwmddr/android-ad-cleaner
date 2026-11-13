@@ -545,7 +545,7 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 if "systemui_text" in op:
                     lines.append(f"p.systemui_text = {op['systemui_text']!r}")
                 lower(op.get("ops", []))
-            elif kind in ("if_find", "if_entry", "if_lib", "if_focus"):
+            elif kind in ("if_find", "if_entry", "if_lib", "if_focus", "if_tap"):
                 # 带条件分支的 op：两支里的 off / 入口调用一样要读出来，否则词与入口会静默丢（#1263）。
                 lower(op.get("ops", []))
                 lower(op.get("else_ops", []))

@@ -210,6 +210,32 @@ class IfFocusOpTests(unittest.TestCase):
         self.assertEqual(backs, [1])
 
 
+class IfTapOpTests(unittest.TestCase):
+    """`if_tap` op（#1264）：`if p.tap(text, exact=…, scrolls=…): … else: …`，返回值决定走哪支。
+
+    与 `lib` 里的 `tap` 不同：那个注入名失败就抛错（`TAP_STYLE` 的走法），这个按返回值分岔。"""
+
+    TOML = ('[[segment]]\nname="a"\nops=[{kind="if_tap", text="广告管理", exact=true, scrolls=0,'
+            ' ops=[{kind="back", n=2}], else_ops=[{kind="back", n=1}]}]\n')
+
+    def _run(self, hit):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.TOML)
+            backs, taps = [], []
+            phone.tap = lambda text, **kw: taps.append((text, kw)) or hit
+            phone.back = lambda n=1: backs.append(n)
+            recipe.run()
+        return taps, backs
+
+    def test_ops_branch_runs_when_the_tap_lands(self):
+        taps, backs = self._run(True)
+        self.assertEqual(backs, [2])
+        self.assertEqual(taps, [("广告管理", {"exact": True, "scrolls": 0})])
+
+    def test_else_branch_runs_when_the_tap_misses(self):
+        self.assertEqual(self._run(False)[1], [1])
+
+
 class ReturnOutcomeTests(unittest.TestCase):
     """段的结局（#1264）：`return` 带 `value` 时整段按它记，`return_lib` 按库调用的返回值记。
 
