@@ -44,51 +44,6 @@ def step_store(p, rt):
     p.back(2)
 
 
-def step_browser(p, rt):
-    p.start("com.heytap.browser")
-    # 首页读不到「我的」/菜单入口，用实测可直达的设置页 Activity；带清栈参数会立刻退出
-    p.d.shell("am start -f 0x10008000 -n com.heytap.browser/.settings.component.BrowserPreferencesPage")
-    time.sleep(1.2)
-    if "com.heytap.browser" not in p.focus():
-        raise RuntimeError("浏览器设置页没有打开")
-    if p.tap("主页设置", exact=True):
-        if p.tap("页面布局", exact=True):
-            p.tap("简洁", exact=True, scrolls=0)
-            p.back()
-        p.back()
-    if p.tap("隐私", exact=True):
-        if p.tap("广告管理", exact=True):
-            # 摇一摇广告随上级开关灰置（开屏/资讯列表都关了就不会展示），不点它
-            p.off(only=["开屏广告", "资讯列表广告"], page="浏览器·广告管理")
-            p.back()
-        if maybe("个性化内容"):
-            # ColorOS 17.0.0.155 的入口叫「个性化内容」，不是 PLR110 上的「个性化管理」
-            p.off(only=["个性化内容"], page="浏览器·个性化内容")
-            p.back()
-        p.back()
-    if maybe("消息管理"):
-        # 允许通知、互动消息、锁屏通知、其他服务保留；资讯类推送关掉
-        p.off(only=["精彩推荐", "重点时事", "本地资讯", "个性化推荐"], page="浏览器·消息管理")
-        p.back()
-    p.back(2)
-
-
-def step_video(p, rt):
-    p.start("com.heytap.yoli", settle=4)    # 开屏广告有约 4 秒倒计时，多留时间点「跳过」
-    if not p.go("我的", "设置"):
-        raise RuntimeError("没找到「我的」标签")
-    p.tap("设置", exact=True, scrolls=0)
-    # 这版入口叫「个性化内容管理」（PLR110 上的「个性化管理」在这台机没有）
-    if p.tap("个性化内容管理", exact=True):
-        p.off(only=["个性化推荐"], page="视频·个性化内容管理")
-        p.back()
-    # 互动消息、服务通知、会员权益、其他服务保留
-    if p.tap("消息通知", exact=True):
-        p.off(only=["热点时事", "精彩推荐", "个性化推荐", "本地新闻"], page="视频·消息通知")
-        p.back()
-    p.back(2)
-
-
 def step_negative_screen(p, rt):
     # ColorOS 17：速览内嵌在桌面进程里，焦点仍是 launcher，按页面内容判断进没进
     p.d.shell("input keyevent HOME"); time.sleep(0.6); p.d.shell("input keyevent HOME"); time.sleep(0.6)
