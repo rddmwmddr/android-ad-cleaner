@@ -1,0 +1,65 @@
+# OPPO Find X10 Pro Max（PMX110）：2026-11-05 逐页核对，ColorOS 17 / Android 17，实测版本；
+# PMX110_17.0.0.116(CN01)。BUILD 只写到 17.0.0：同代的 17.0.0.x 共用这份路径，其他 ColorOS 17
+# 机型也靠这个前缀把这份脚本当同族参考（#319 / #483）。
+# 只关点名的广告与推荐；搜索数据源、服务通知与消息总开关保留，营销由 chan-scan / chan-off
+# 在渠道级处理。通知渠道、组件挂起和快应用继续走 run.py 的独立确认流程。
+# 2026-11-10 负一屏入口改从内侧右滑、已在负一屏不再滑走、认不到入口时留页面现场（#901），未复测。
+# 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，按落在商店隐私页判，未复测（#907）。
+model = "PMX110"
+models = ["PMX110"]
+build = "PMX110_17.0.0"
+tail = "tail"
+
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+[const]
+READ_SWITCHES_STYLE = "title"
+HIDE_CAROUSEL_STYLE = "labels"
+BROWSER_FLOW = "prefs_start"
+
+[[segment]]
+name = "广告跟踪"
+code = "step_ad_tracking"
+
+[[segment]]
+name = "浏览器"
+code = "step_browser"
+
+[[segment]]
+name = "软件商店"
+code = "step_store"
+
+[[segment]]
+name = "下拉搜索"
+ops = [
+  { kind = "lib", name = "search_settings_direct" },
+]
+
+[[segment]]
+name = "负一屏"
+ops = [
+  { kind = "lib", name = "assistant_screen" },
+]
+
+[[segment]]
+name = "主题"
+ops = [
+  { kind = "lib", name = "theme_store_settings" },
+]
+
+[[segment]]
+name = "视频"
+ops = [
+  { kind = "lib", name = "video_direct" },
+]
+
+[[segment]]
+name = "游戏中心"
+ops = [
+  { kind = "lib", name = "game_center_direct" },
+]
+
+[[segment]]
+name = "小布建议"
+ops = [
+  { kind = "lib", name = "assistant_advice_rows" },
+]

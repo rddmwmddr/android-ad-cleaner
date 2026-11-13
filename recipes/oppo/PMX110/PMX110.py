@@ -1,22 +1,21 @@
-# OPPO Find X10 Pro Max（PMX110）：2026-11-05 逐页核对，ColorOS 17 / Android 17，实测版本；PMX110_17.0.0.116(CN01)。BUILD 只写到 17.0.0：同代的 17.0.0.x 共用这份路径，其他 ColorOS 17
-from recipe_kit import step
-# 机型也靠这个前缀把这份脚本当同族参考（#319 / #483）。
-# 只关点名的广告与推荐；搜索数据源、服务通知与消息总开关保留，营销由 chan-scan / chan-off
-# 在渠道级处理。通知渠道、组件挂起和快应用继续走 run.py 的独立确认流程。
-# 2026-11-10 负一屏入口改从内侧右滑、已在负一屏不再滑走、认不到入口时留页面现场（#901），未复测。
-# 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，按落在商店隐私页判，未复测（#907）。
-BUILD = "PMX110_17.0.0"
-# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
-READ_SWITCHES_STYLE = "title"
-HIDE_CAROUSEL_STYLE = "labels"
-BROWSER_FLOW = "prefs_start"
-# 浏览器设置页的包名：入口只属于这台机，家族库按这个名字拼拉起命令（#1245）。
-BROWSER_PKG = "com.heytap.browser"
-# 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
+# OPPO Find X10 Pro Max（PMX110，ColorOS 17）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
+# 共享库的 ad_id_page / row / menu_state / more_menu / close_all_listed / app_settings / browser_settings /
+# read_switches / close_named 与 require / skip 由装载器注入执行作用域。三段留在这里：广告跟踪要用
+# 「全部关闭」菜单整表关并恢复显示方式，浏览器与商店按可选入口分岔挑名单。其余六段是线性数据。
 from collections import namedtuple
 
 import adb_link
 from fast import ScreenLocked, bounds
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, page, require, rt, skip
+    from recipe_nav import ad_id_page, app_settings, browser_settings, menu_state, more_menu, read_switches, row
+    from recipe_strategies import close_all_listed, close_named_optional
+
+BUILD = "PMX110_17.0.0"
+# 浏览器设置页的包名：入口只属于这台机，家族库按这个名字拼拉起命令（#1245）。
+BROWSER_PKG = "com.heytap.browser"
 
 MenuState = namedtuple("MenuState", "close_all_disabled system_apps_shown")
 # 分段结果由引擎经 rt 记录
@@ -45,6 +44,10 @@ STORE_PROMOS = [
     "详情页：限时活动", "小游戏二楼和专区", "福利专区",
 ]
 
+# 负一屏首页的两条已知文案（PLG110 / PMA110 实测）：头像入口万一改名，两条都在也算到了（#901）
+LAUNCHER = "com.android.launcher/"
+ASSISTANT_HOME = {"我的服务", "添加卡片"}
+
 
 def require_installed(package, label):
     """没装的包 `pm path` 输出为空，退出码是 1（adb shell v2 带回）或 0（不带回退出码的通道）：
@@ -62,8 +65,7 @@ def _labelled(text, name):
     return text.startswith(name) and (not rest or rest[0] in " ,，、-")
 
 
-@step("广告跟踪")
-def _():
+def step_ad_tracking(p, rt):
     # 每个应用一个开关。用菜单「全部关闭」整表关，再看它是否置灰来确认（#650）：
     # 以前逐行读整个列表（547 个具名项）两遍，约 27 分钟；现在不用滚动列表，个人应用名单也不必读出来。
     # 版本由引擎判（录制版本对不上会置 safe_mode）；这里只挡「拿这份脚本去跑别的型号」。
@@ -89,8 +91,7 @@ def _():
             p.await_page()
 
 
-@step("浏览器")
-def _():
+def step_browser(p, rt):
     browser_settings()
     row("隐私")
     row("广告管理")
@@ -101,8 +102,7 @@ def _():
     close_named(["个性化广告推荐", "个性化内容推荐"], "个性化管理", optional=["个性化内容推荐"])
 
 
-@step("软件商店")
-def _():
+def step_store(p, rt):
     app_settings(MARKET)
     row(("隐私", "隐私授权管理"), package=MARKET, activity="PrivacyActivity")
     row("个性化推荐")
@@ -115,53 +115,10 @@ def _():
     close_named(names, "服务管理", snapshot=available)
 
 
-@step("下拉搜索")
-def _():
-    search_settings_direct()
-
-
-# 下面两个名字给注入面的负一屏助手取（at_assistant / assistant_icon 跑在 recipe_nav 里）
-LAUNCHER = "com.android.launcher/"
-# 负一屏首页的两条已知文案（PLG110 / PMA110 实测）：头像入口万一改名，两条都在也算到了（#901）
-ASSISTANT_HOME = {"我的服务", "添加卡片"}
-
-
-@step("负一屏")
-def _():
-    assistant_screen()
-
-
-@step("主题")
-def _():
-    theme_store_settings()
-
-
-@step("视频")
-def _():
-    video_direct()
-
-
-@step("游戏中心")
-def _():
-    game_center_direct()
-
-
-@step("小布建议")
-def _():
-    assistant_advice_rows()
-
-
 def tail():
     print(f"\n逐项回读确认 {rt.verified} 项；完成 {sum(state == '完成' for _, state in rt.results)} 段，"
           f"跳过 {sum(state == '跳过' for _, state in rt.results)} 段，未显示项 {len(SKIPPED_ITEMS)} 组", flush=True)
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import p, page, require, require_switches, rt, skip
-    from recipe_nav import ad_id_page, app_settings, browser_settings, hide_carousel, menu_state
-    from recipe_nav import more_menu, read_switches, row, switch_signature, switch_top, system_settings
-    from recipe_strategies import close_all_listed, close_named_optional
-    from recipe_steps import assistant_advice_rows, assistant_screen, game_center_direct, search_settings_direct, theme_store_settings, video_direct
 
 # 负一屏 / 主题 / 视频 / 游戏中心的段体按 `g["close_named"]` 取这个钩子，实现住在
 # recipe_strategies 的 `close_named_optional`，这里绑回旧名字（#1253）。
