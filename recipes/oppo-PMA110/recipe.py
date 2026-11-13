@@ -190,6 +190,6 @@ def tail():
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from recipe_kit import p, require, require_switches, rt, skip, skip_in_safe_mode
+    from recipe_kit import VERIFIED_SWITCHES, p, require, require_switches, rt, skip, skip_in_safe_mode
     from recipe_nav import app_settings, assistant_settings, browser_settings, hide_carousel
     from recipe_nav import open_page, read_switches, system_settings, tap_page, wait_page

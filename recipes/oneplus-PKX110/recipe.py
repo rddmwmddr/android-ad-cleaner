@@ -137,7 +137,8 @@ def _():
     if not tap_page("小布建议", "com.oplus.advice.settings.ui.AdviceSettingActivity", "小布建议"):
         return False
     texts = [t for t, _, _ in p.texts()]
-    if any("资讯服务" in t and "已卸载" in x for t, x in zip(texts, texts[1:])):
+    # 相邻两行配对，长度必然差一：strict=False 是有意的
+    if any("资讯服务" in t and "已卸载" in x for t, x in zip(texts, texts[1:], strict=False)):
         print("  · 资讯服务已是「已卸载」，无需处理")
         return True
     for _ in range(8):

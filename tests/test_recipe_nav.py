@@ -16,13 +16,19 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
+import entries  # noqa: E402
 import fixtures  # noqa: E402
 import recipe_kit  # noqa: E402
 import recipe_nav  # noqa: E402
+import recipe_source  # noqa: E402
+import recipe_strategies  # noqa: E402
 from fixtures import normalize, phone_mock  # noqa: E402
 
 RECIPES = tuple(sorted((ROOT / "recipes").rglob("recipe*.py")))
 DRIVER = ROOT / "tests" / "compare_recipe_calls.py"
+# 两张注入面各自的共享分节清单：recipe_nav / recipe_strategies 的 `SHARED` 由本文件消费（#1247）。
+SURFACES = ((recipe_nav, recipe_source.NAV_MODULE, "NAV"),
+            (recipe_strategies, recipe_source.STRATEGIES_MODULE, "STRATEGIES"))
 
 
 def surface():
@@ -160,6 +166,47 @@ def gear(toolbar_only=False):
 '''
         self.assertEqual(kept_copies([("sample.py", script)], injected),
                          {"sample.py": ["gear"]})
+
+
+def family_usage(module_name):
+    """{注入名: {家族}}：脚本实际用到哪个库的哪个名字，家族取自 `entries.FAMILY`。
+
+    实现是否被用到只看脚本自己的 import（`recipe_source.imported_sources()`，`if TYPE_CHECKING:`
+    块也算），本地同名 `def` 覆盖导入版的不算；没有 import 的裸名字也不算。"""
+    surface = recipe_source.surface_sources()
+    usage = {}
+    for rel, facts in recipe_source.scan_dir(str(ROOT / "recipes"), entries.FAMILY).items():
+        family = entries.FAMILY.get(rel.split("-", 1)[0].lower())
+        for name, (owner, _) in recipe_source.imported_sources(facts, surface).items():
+            if owner == module_name:
+                usage.setdefault(name, set()).add(family)
+    return usage
+
+
+class SharedSectionTests(unittest.TestCase):
+    """共享（跨家族）分节里的实现必须被 ≥2 个家族使用（#1247，规则 `dev.recipes.shared-sections`）。
+
+    判据按**节**算：`recipe_nav.SHARED` / `recipe_strategies.SHARED` 是「跨家族」分节收进来的
+    注入名，清单只在库里写一份，这里不另抄。家族分节（小米系 / vivo / OPPO / 荣耀 / 魅族）
+    不受这条限制——那是新机型并入的入口，允许单脚本变体。"""
+
+    def test_shared_names_are_registered_implementations(self):
+        """`SHARED` 里的每个名字都得是那张注册表里真有的一份实现，不然守卫查的是一个不存在的东西。"""
+        for module, _, registry in SURFACES:
+            with self.subTest(module=module.__name__):
+                self.assertLessEqual(module.SHARED, set(getattr(module, registry)))
+
+    def test_every_shared_implementation_serves_two_families(self):
+        self.assertTrue(recipe_nav.SHARED, "共享分节的清单是空的，这条守卫会空转")
+        for module, module_name, _ in SURFACES:
+            usage = family_usage(module_name)
+            for name in sorted(module.SHARED):
+                with self.subTest(module=module_name, name=name):
+                    families = usage.get(name, set())
+                    self.assertGreaterEqual(
+                        len(families), 2,
+                        f"{module_name}.{name} 住在共享分节，却只有 {sorted(families)} 用；"
+                        "只服务一个家族的实现放家族分节，别往共享库塞")
 
 
 class DriverTests(unittest.TestCase):

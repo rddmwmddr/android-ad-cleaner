@@ -102,7 +102,7 @@ id = "dev.ruff.pinned-and-scoped"
 source = "CLAUDE.md#开发"
 check = "test:test_doc_consistency::LintCommandTests.test_ruff_targets_match_everywhere"
 status = "enforced"
-why = "CLAUDE.md 曾只写「同一份 CI 里跑 ruff」，本地没有可执行命令，agent 各自猜版本；现在版本钉 0.17.3、目标清单在 CLAUDE.md、release.md、CONTRIBUTING.md 与 CI 逐字一致（b17d420、#624；CONTRIBUTING.md 由 #851 补入），ruff 平台无关，只在 Linux job 跑一次（#856）。守卫比的是目标清单，版本号多处一致仍靠人。"
+why = "CLAUDE.md 曾只写「同一份 CI 里跑 ruff」，本地没有可执行命令，agent 各自猜版本；现在版本钉 0.17.3、目标清单在 CLAUDE.md、release.md、CONTRIBUTING.md 与 CI 逐字一致（沿用 b17d420、#624；CONTRIBUTING.md 由 #851 补入），ruff 平台无关，只在 Linux job 跑一次（#856）。守卫比的是目标清单，版本号多处一致仍靠人。`recipes/` 从 #1247 起也在清单里：脚本除 `p` / `rt` 外的裸名字都走顶部 import，未定义名看得见；剩下的 61 条 F401 是注入面按名字取用的假阳性，按文件整类关在 `pyproject.toml` 的 per-file-ignores 里，不在脚本里撒 noqa。"
 expires_if = "CI 与本地共用一个命令来源、目标清单不再需要多处对照时，连同 LintCommandTests 一起删。"
 since = "b17d420"
 
@@ -119,7 +119,7 @@ id = "dev.types.narrow-scope-in-config"
 source = "CLAUDE.md#开发"
 check = "ci:types"
 status = "enforced"
-why = "类型错误此前只能靠人读：`None` 上取属性、传错参数类型都要等真机走到那条分支才炸，审查 agent 每轮在用 token 替代机器本该做的事。扫描范围与宽松档参数收进 pyproject.toml，命令不带参数，没有第二份口径；类型检查拆成独立 types job，红了不与用例失败混在一起（#993、#996）。不做全量注解：这个仓库的 bug 主要是「静默成功 / 静默跳过」，全量注解的收益不确定，代价是撞上它赖以灵活的假对象与注入作用域。"
+why = "类型错误此前只能靠人读：`None` 上取属性、传错参数类型都要等真机走到那条分支才炸，审查 agent 每轮在用 token 替代机器本该做的事。扫描范围与宽松档参数收进 pyproject.toml，命令不带参数，没有第二份口径；类型检查拆成独立 types job，红了不与用例失败混在一起（沿用 #993、#996）。`recipes/` 从 #1247 起也查：脚本除 `p` / `rt` 外的裸名字走顶部 import，注入面在类型层面用模块级 `__getattr__` 认得出；43 份脚本都叫 `recipe.py`，一次扫会撞模块名，所以由 `tool/typecheck_recipes.py` 逐份喂给同一个宽松档（`python -m mypy`，`MYPYPATH=tool`），范围与参数仍只来自 pyproject。不做全量注解：这个仓库的 bug 主要是「静默成功 / 静默跳过」，全量注解的收益不确定，代价是撞上它赖以灵活的假对象与注入作用域。"
 expires_if = "类型检查不再跑 mypy，或扫描范围重新回到命令行参数里时删。"
 
 [[rule]]
@@ -943,8 +943,8 @@ id = "doc.pr.device-pr-three-checks"
 source = "docs/agents/issue-tracker.md#Pull requests as a triage surface"
 check = "none"
 status = "manual"
-why = "机型 PR 只靠 CI 挡不住三件必查的事：开关换成配方自己逐个点、确认框自己写 helper、CHANGELOG / README 机型表 / 清单三处不齐。`p.confirm()` 只是「可能点到确认按钮」的匹配，不是「弹窗存在」的判据，所以三查不能省。"
-expires_if = "配方改由引擎统一的 DSL 表达、这三件事不再有手工写法时删。"
+why = "机型 PR 只靠 CI 挡不住四件必查的事：开关换成配方自己逐个点、确认框自己写 helper、CHANGELOG / README 机型表 / 清单三处不齐、脚本与 `adapt gen` 的骨架不同形。`p.confirm()` 只是「可能点到确认按钮」的匹配，不是「弹窗存在」的判据，所以这几项不能省；第四条（#1247）挡的是「文档说骨架长什么样、生成器不是那个样」——新脚本照文档写、生成器却给出另一种形状，两边都会有人照抄。机器侧只有骨架那几行有守卫（`tests/test_adapt_cli.py` 的 `DraftGenTests`），其余仍靠人。"
+expires_if = "配方改由引擎统一的 DSL 表达、这几件事不再有手工写法时删。"
 
 [[rule]]
 id = "doc.pr.core-pr-reimplement"
@@ -1215,3 +1215,19 @@ check = "test:test_recipe_loader::RecipeLoaderGuardTests.test_module_body_has_on
 status = "enforced"
 why = "机型脚本以前靠执行式 `@step` 在模块体里按书写顺序跑段，顺手写在模块级的一句 `print` / `for` / `p…()` 也会在导入时执行；#1241 把段改成声明式之后，这类语句会让「导入零动作」重新破掉，而且执行顺序藏进模块体、装载器看不见。守卫只允许导入、定义、常量、模块 docstring 与 `if TYPE_CHECKING:` 块，收尾打印搬进 `tail()`、其余语句搬进段体或模块级助手（ADR-0037）。"
 expires_if = "脚本不再按模块装载（换成数据树 + 解释器）时，这条与 `recipe_loader` 的装载形状一起删。"
+
+[[rule]]
+id = "dev.recipes.shared-sections"
+source = "CLAUDE.md#开发"
+check = "test:test_recipe_nav::SharedSectionTests.test_every_shared_implementation_serves_two_families"
+status = "enforced"
+why = "新机型的第一份脚本最容易顺手把自己的走法塞进共享库：只有这一台机在用，下一台要改它时得先猜它在服务谁，家族分节也因此长不出自己的形状（归属规则沿用 #1244–#1246，#1247 落成守卫）。判据按**节**算：`recipe_nav.SHARED` / `recipe_strategies.SHARED` 列出的注入名必须被 ≥2 个家族使用（家族取自 `entries.FAMILY`，脚本侧的使用取自事实层的 import）；家族分节不受这条限制，它是新机型并入的入口，允许单脚本变体。清单只在库里写一份，用例不另抄名单。"
+expires_if = "脚本改由数据树 + 解释器驱动、共享助手不再是手写实现时删。"
+
+[[rule]]
+id = "doc.pr.docs-and-generator-in-sync"
+source = "docs/agents/issue-tracker.md#Pull requests as a triage surface"
+check = "test:test_adapt_cli::DraftGenTests.test_docs_04_shows_the_same_skeleton"
+status = "enforced"
+why = "新机型的脚本骨架有两份写法：docs/04 给人看、`adapt gen` 给机器写。两份不同形时，照文档手写的脚本会缺 `tail()` 或 `if TYPE_CHECKING:` 块，照生成器写的人又看不出哪些名字由库提供——两边都有人照抄，所以第四查要挡它（#1247）。机器守卫钉住骨架那几行（`from recipe_kit import step`、`from typing import TYPE_CHECKING`、`if TYPE_CHECKING:` 与块里的 `close_named, p, require, rt`），文档与生成器任缺一行即红；骨架的其余内容仍靠人对照。"
+expires_if = "生成器不再产出草稿、或 docs/04 与生成器共用一份模板时删。"

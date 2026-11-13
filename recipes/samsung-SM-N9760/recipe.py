@@ -31,7 +31,7 @@ def protect(title_part):
     再查 settings get global advertising_id 返回 null。
     """
     p.await_page()
-    for t, checked, xy in p.switches():
+    for t, checked, _ in p.switches():
         if title_part not in t:
             continue
         if checked:

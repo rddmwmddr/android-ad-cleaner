@@ -114,7 +114,7 @@ def _():
         current = read_switches(activity_serve, "服务管理", 8)
         require(all(current.get(name) is False for name in to_close), "服务管理回读未确认关闭")
         VERIFIED_SWITCHES += len(to_close)
-    print(f"  · 软件商店·服务管理：处理完成，核心服务已保留", flush=True)
+    print("  · 软件商店·服务管理：处理完成，核心服务已保留", flush=True)
 
 
 @step("浏览器")
@@ -219,7 +219,8 @@ def _():
         if not p.scroll_more():
             break
     texts = [t for t, _, _ in p.texts()]
-    if any("资讯服务" in t and "未开启" in x for t, x in zip(texts, texts[1:])):
+    # 相邻两行配对，长度必然差一：strict=False 是有意的
+    if any("资讯服务" in t and "未开启" in x for t, x in zip(texts, texts[1:], strict=False)):
         print("  · 资讯服务已是「未开启」，保持不变", flush=True)
         return
     if p.tap("资讯服务", exact=True, scrolls=0):
@@ -230,7 +231,7 @@ def _():
 @step("主题商店")
 def _():
     print("  检查主题商店服务模式；基础服务模式无广告，不代为同意完整模式协议。", flush=True)
-    result = p.d.shell("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.oplus.themestore").output
+    p.d.shell("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.oplus.themestore")
     time.sleep(1)
     if "BasicEntranceActivity" in p.focus():
         print("  · 主题商店处于「基础服务」模式，本身不含广告，保持不变", flush=True)
@@ -244,5 +245,5 @@ def tail():
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from recipe_kit import p, require, require_switches, rt, skip, skip_in_safe_mode
+    from recipe_kit import VERIFIED_SWITCHES, p, require, require_switches, rt, skip, skip_in_safe_mode
     from recipe_nav import app_settings, assistant_settings, hide_carousel, open_page, read_switches, system_settings, tap_page, wait_page

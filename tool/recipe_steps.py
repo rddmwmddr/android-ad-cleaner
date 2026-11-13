@@ -26,6 +26,12 @@ from typing import Any
 STEPS: dict[str, Callable[[Any, Any], Callable[..., Any]]] = {}
 
 
+def __getattr__(name: str) -> Any:
+    """注入名在类型层面可见（#1247）：脚本 `if TYPE_CHECKING:` 块里的 import 落到这里。
+    运行时这些名字住在执行作用域，模块上没有对应属性，照旧抛 AttributeError。"""
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 # ---------- 小米系（xiaomi / redmi，#1210）----------
 #
 # 同名多簇各用能看出差异的注入名：下载管理分主体 / 探路 / 点击三版，天气和日历分点击 / 探路两版，

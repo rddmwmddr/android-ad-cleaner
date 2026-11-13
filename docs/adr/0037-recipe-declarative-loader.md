@@ -63,6 +63,13 @@ vivo / 荣耀 / 魅族 / 三星（15 份脚本，#1246）按同一形状收口�
 
 只把 `exec` 换成 `import`、保留执行式 `@step`，会得到最坏的组合：导入仍有设备动作，段顺序仍由书写顺序与钩子位置决定，`only` 仍从 `globals()` 取，三处装载点仍各写一份。脚本看起来是模块，行为契约却还是「导入即执行」，静态检查与装载期报错都无从谈起。声明式段、单一装载器与 `rt` 是同一笔改动的三个面：没有声明式段，装载器无法在导入后再决定跑哪些段；没有 `rt`，段过滤与台账只能继续留在 `globals()` 里。
 
+### 增补（#1247）：草稿与静态检查收口
+
+- `adapt gen` 的草稿不再是没有 import 头的特例：它带上 `from recipe_kit import step` 与文件末尾的 `if TYPE_CHECKING:` 块，与正式脚本同形，因此能被 `recipe_loader.load()` 直接装载（`adapt check` 走的仍是同一个装载器，上面 Decision 里「草稿没有 import 头」那句只描述当时的生成物）。
+- 注入名在类型层面可见：`recipe_kit` / `recipe_nav` / `recipe_strategies` / `recipe_steps` 各有一个模块级 `__getattr__`，`if TYPE_CHECKING:` 块里的 import 因此认得出来，运行时照旧由执行作用域提供。
+- `recipes/` 进静态检查：ruff 的 F401 在 `pyproject.toml` 按文件整类关掉（注入面按名字取用是假阳性）；mypy 由 `tool/typecheck_recipes.py` 逐份喂给同一个宽松档（43 份都叫 `recipe.py`，一次扫会撞模块名）。
+- 共享分节的归属规则落成机器判据：`recipe_nav.SHARED` / `recipe_strategies.SHARED` 列出的注入名必须被 ≥2 个家族使用，见规则 `dev.recipes.shared-sections`；家族分节允许单脚本变体。
+
 ### 目录化是后续方向
 
 本票只做运行时形状：脚本仍是 Python 模块，段体仍是代码。真正的门槛在写脚本的人——一份机型脚本仍等于一个程序，要手写翻页、返回与等待。数据树 + 解释器（「进哪一页、关哪些、留哪些」由数据描述，运行时解释）是后续方向，由独立追踪票承载；它要求先有本票的运行时（段、`rt`、单一装载器）与词汇层（#1244–#1246）。本票的 `rt` 与装载器按「将来由解释器驱动」设计，但不实现数据模型。
