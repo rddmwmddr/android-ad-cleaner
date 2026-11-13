@@ -73,23 +73,6 @@ def step_theme(p, rt):
     close_named(["个性化推荐设置"], "主题商店·隐私", THEME + "PrivacyActivity", "隐私", 2, reopen=privacy)
 
 
-def step_assistant_advice(p, rt):
-    print("  将关闭资讯服务、视界日报、小红书资讯；保留出行、快递、日程等服务。", flush=True)
-    system_settings()
-    # OPPO AI 首页 Activity 随版本变化，只在本机实测的小布建议页后开始读开关。
-    require(p.tap("OPPO AI", exact=True, scrolls=6), "未找到 OPPO AI")
-    tap_page("小布建议", ADVICE + "AdviceSettingActivity", scrolls=5)
-    activity = ADVICE + "detail.SceneServiceActivity"
-    tap_page("资讯服务", activity, title="服务设置", scrolls=8)
-    close_named(["资讯服务"], "小布建议·资讯服务", activity, "服务设置", 2)
-    detail = ADVICE + "detail.AdviceDetailActivity"
-    tap_page("视界日报", detail, title="服务设置", scrolls=0)
-    close_named(["视界日报"], "小布建议·视界日报", detail, "服务设置", 2)
-    p.back()
-    tap_page("小红书资讯", detail, title="服务设置", scrolls=0)
-    close_named(["小红书资讯"], "小布建议·小红书资讯", detail, "服务设置", 2)
-
-
 def tail():
     print(f"\n已回读确认 {rt.verified} 项；分段结果：{rt.results}", flush=True)
     print("录制时本机未安装游戏中心，未录入；通知渠道与组件挂起仍走 run.py 的独立流程。", flush=True)

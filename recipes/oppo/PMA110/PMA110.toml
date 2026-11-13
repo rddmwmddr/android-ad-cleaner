@@ -78,7 +78,20 @@ ops = [
 
 [[segment]]
 name = "小布建议"
-code = "step_assistant_advice"
+ops = [
+  { kind = "print", text = "  将关闭资讯服务、视界日报、小红书资讯；保留出行、快递、日程等服务。" },
+  { kind = "lib", name = "system_settings" },
+  # OPPO AI 首页 Activity 随版本变化，先点「OPPO AI」这一行，点不到就整段失败。
+  { kind = "require_tap", text = "OPPO AI", exact = true, scrolls = 6, miss_print = "未找到 OPPO AI" },
+  { kind = "lib", name = "tap_page", args = ["小布建议", "com.oplus.pantanal.ums/com.oplus.advice.settings.ui.AdviceSettingActivity"], kwargs = { scrolls = 5 } },
+  { kind = "lib", name = "tap_page", args = ["资讯服务", "com.oplus.pantanal.ums/com.oplus.advice.settings.ui.detail.SceneServiceActivity"], kwargs = { title = "服务设置", scrolls = 8 } },
+  { kind = "lib", name = "close_named", args = [["资讯服务"], "小布建议·资讯服务", "com.oplus.pantanal.ums/com.oplus.advice.settings.ui.detail.SceneServiceActivity", "服务设置", 2] },
+  { kind = "lib", name = "tap_page", args = ["视界日报", "com.oplus.pantanal.ums/com.oplus.advice.settings.ui.detail.AdviceDetailActivity"], kwargs = { title = "服务设置", scrolls = 0 } },
+  { kind = "lib", name = "close_named", args = [["视界日报"], "小布建议·视界日报", "com.oplus.pantanal.ums/com.oplus.advice.settings.ui.detail.AdviceDetailActivity", "服务设置", 2] },
+  { kind = "back" },
+  { kind = "lib", name = "tap_page", args = ["小红书资讯", "com.oplus.pantanal.ums/com.oplus.advice.settings.ui.detail.AdviceDetailActivity"], kwargs = { title = "服务设置", scrolls = 0 } },
+  { kind = "lib", name = "close_named", args = [["小红书资讯"], "小布建议·小红书资讯", "com.oplus.pantanal.ums/com.oplus.advice.settings.ui.detail.AdviceDetailActivity", "服务设置", 2] },
+]
 
 [[segment]]
 name = "负一屏"
