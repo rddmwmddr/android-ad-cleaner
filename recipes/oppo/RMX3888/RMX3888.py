@@ -1,28 +1,18 @@
-# realme 真我 GT5 Pro（RMX3888，ColorOS 15.0.0.420(CN01) / Android 15）机型脚本。按报告者（沿用 #1083）逐段实测的落点写成，本仓库没有这台手机，未在真机复跑，待复测。
-from recipe_kit import step
-# 只关点名的广告与推荐；营销通知、组件挂起与快应用仍走 run.py 的独立确认流程。
-#
-# 本机实测与同族 OPPO 脚本的差别（别照抄别家脚本的路径）：
-#   · 广告跟踪在「隐私 → 更多 → 设备标识与广告 → 广告跟踪」，页内 219 个开关
-#     （`com.oplus.settings.feature.notification.oaid.OAIDActivity`）。
-#   · 负一屏这一层没有「推荐服务 → 轮播推荐」，也没有「搜索框提示词」；推荐服务与热点资讯默认已关。
-#     设置页是 `com.oplus.assistantscreen.setting.AssistantScreenSettingActivity`。
-#   · 软件商店的个性化推荐是子页 `com.heytap.market.mine.PersonalRecommendActivity`，不是就地开关；
-#     服务管理 46 项。
-#   · 浏览器 40.9.14.1 的「隐私」页已没有「广告管理」入口；主页布局默认已经是「简洁」。
-#     设置页可以直达 `com.heytap.browser/.settings.component.BrowserPreferencesPage`。
-#   · 主题商店的包名是 `com.oplus.themestore`（不是同族的 `com.heytap.themestore`），而且没有
-#     启动界面：`resolve-activity` 返回 No activity found，这一段在本机做不了。
-#   · `com.heytap.yoli` 只有本地视频播放器（`LocalVideosListActivity`），没有在线内容与「我的」页。
-#   · 游戏中心 `com.nearme.gamecenter` 确实未安装。
-#   · 设置里的小布建议入口叫「AI」（`com.coloros.sceneservice`），不叫「OPPO AI」；总开关默认已关。
-BUILD = "RMX3888_15.0.0.420"
-MODELS = ["RMX3888"]
-
+# realme 真我 GT5 Pro（RMX3888，ColorOS 15）的本机例外函数（catalog 的 `code=`，影随同名 `.toml`）。
+# 共享库的 settings_page / has_row / store_privacy / page / maybe 与 skip / skip_in_safe_mode 由装载器
+# 注入执行作用域。九段都留在这里：每段都按 getprop / 页面内容 / 入口是否可点分岔，本机路径与同族不同。
 import time
 
 import adb_link
 from fast import ScreenLocked
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import SkipStep, maybe, p, page, skip, skip_in_safe_mode
+    from recipe_nav import has_row, settings_page, store_privacy
+
+BUILD = "RMX3888_15.0.0.420"
+MODELS = ["RMX3888"]
 
 SETTINGS = "com.android.settings"
 MARKET = "com.heytap.market"
@@ -43,8 +33,7 @@ STORE_KEEP = ["帮助与客服", "应用安全", "我的专区：应用工具", 
               "应用使用记录", "首页：AI搜索"]
 
 
-@step("广告跟踪")
-def _():
+def step_ad_tracking(p, rt):
     # 每个 App 一个 OAID 开关、没有总开关（本机 219 个），新装 App 默认开，整页关掉即可。
     skip_in_safe_mode()
     found = settings_page("隐私", "更多", "设备标识与广告", "广告跟踪")
@@ -57,8 +46,7 @@ def _():
     p.off(page="广告跟踪", max_screens=40)
 
 
-@step("负一屏")
-def _():
+def step_negative_screen(p, rt):
     # 本机这一层没有「推荐服务 → 轮播推荐」，也没有「搜索框提示词」：两处默认已关，没有可关的项。
     p.d.shell("input keyevent HOME"); time.sleep(0.6)
     p.d.shell("input keyevent HOME"); time.sleep(0.6)
@@ -99,8 +87,7 @@ def _():
     p.back(2)
 
 
-@step("下拉搜索")
-def _():
+def step_search(p, rt):
     # 搜索设置首页本身 0 个开关，开关都在子页里。「账号与隐私」是分组标题，点它多数情况没反应。
     p.d.shell(SEARCH_SETTING)
     time.sleep(1.8)
@@ -123,8 +110,7 @@ def _():
     p.back(2)
 
 
-@step("软件商店")
-def _():
+def step_store(p, rt):
     p.start(MARKET)
     if not p.tab("我的"):
         raise RuntimeError("商店里没找到底部「我的」")
@@ -150,8 +136,7 @@ def _():
     p.back(2)
 
 
-@step("浏览器")
-def _():
+def step_browser(p, rt):
     # 40.9.14.1 的「隐私」页已没有「广告管理」入口；主页布局默认已是「简洁」。
     # 首页也没有底部「我的」和菜单，只能按页面名直达设置页（带清栈参数会立刻退出）。
     p.start(BROWSER)
@@ -173,8 +158,7 @@ def _():
     p.back(2)
 
 
-@step("主题")
-def _():
+def step_theme(p, rt):
     # 包名不是同族的 com.heytap.themestore，而且没有启动界面：resolve-activity 返回
     # No activity found，拉起命令只会报「无法打开」。本机这一段做不了，按跳过收尾。
     try:
@@ -199,8 +183,7 @@ def _():
     p.back(2)
 
 
-@step("视频")
-def _():
+def step_video(p, rt):
     # 本机 com.heytap.yoli 只有本地视频播放器（LocalVideosListActivity），没有在线内容与「我的」页。
     p.start(VIDEO)
     if not maybe("我的"):
@@ -213,8 +196,7 @@ def _():
     p.back(2)
 
 
-@step("游戏中心")
-def _():
+def step_game_center(p, rt):
     # 本机未安装：p.start 抛 MissingPackage，段包装按跳过记账。装上之后走同族旧版路径。
     p.start(GAME)
     if not p.tab("我的"):
@@ -227,8 +209,7 @@ def _():
     p.back(4)
 
 
-@step("小布建议")
-def _():
+def step_assistant_advice(p, rt):
     # 本机设置里的入口叫「AI」（com.coloros.sceneservice 的设置页），不叫「OPPO AI」；
     # 报告者实测「小布建议」总开关默认已关，没再往下点。开着时才去二级页关「资讯服务」。
     if not settings_page("AI") and not settings_page("OPPO AI"):
@@ -240,8 +221,3 @@ def _():
     else:
         print("  · 没有「资讯服务」入口（本机小布建议总开关默认已关）", flush=True)
     p.back(2)
-
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import SkipStep, maybe, p, page, skip, skip_in_safe_mode
-    from recipe_nav import has_row, settings_page, store_privacy

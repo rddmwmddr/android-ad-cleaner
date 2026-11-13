@@ -1,0 +1,58 @@
+# realme 真我 GT5 Pro（RMX3888，ColorOS 15.0.0.420(CN01) / Android 15）的页面树（catalog，#1265）。
+# 按报告者（沿用 #1083）逐段实测的落点写成，本仓库没有这台手机，未在真机复跑，待复测。
+# 只关点名的广告与推荐；营销通知、组件挂起与快应用仍走 run.py 的独立确认流程。
+#
+# 本机实测与同族 OPPO 脚本的差别（别照抄别家脚本的路径）：
+#   · 广告跟踪在「隐私 → 更多 → 设备标识与广告 → 广告跟踪」，页内 219 个开关
+#     （`com.oplus.settings.feature.notification.oaid.OAIDActivity`）。
+#   · 负一屏这一层没有「推荐服务 → 轮播推荐」，也没有「搜索框提示词」；推荐服务与热点资讯默认已关。
+#     设置页是 `com.oplus.assistantscreen.setting.AssistantScreenSettingActivity`。
+#   · 软件商店的个性化推荐是子页 `com.heytap.market.mine.PersonalRecommendActivity`，不是就地开关；
+#     服务管理 46 项。
+#   · 浏览器 40.9.14.1 的「隐私」页已没有「广告管理」入口；主页布局默认已经是「简洁」。
+#     设置页可以直达 `com.heytap.browser/.settings.component.BrowserPreferencesPage`。
+#   · 主题商店的包名是 `com.oplus.themestore`（不是同族的 `com.heytap.themestore`），而且没有
+#     启动界面：`resolve-activity` 返回 No activity found，这一段在本机做不了。
+#   · `com.heytap.yoli` 只有本地视频播放器（`LocalVideosListActivity`），没有在线内容与「我的」页。
+#   · 游戏中心 `com.nearme.gamecenter` 确实未安装。
+#   · 设置里的小布建议入口叫「AI」（`com.coloros.sceneservice`），不叫「OPPO AI」；总开关默认已关。
+# 九段都写在例外函数里：每段都按 getprop / 页面内容 / 入口是否可点分岔，本机路径与同族不同，数据里写不下。
+model = "RMX3888"
+models = ["RMX3888"]
+build = "RMX3888_15.0.0.420"
+
+[[segment]]
+name = "广告跟踪"
+code = "step_ad_tracking"
+
+[[segment]]
+name = "负一屏"
+code = "step_negative_screen"
+
+[[segment]]
+name = "下拉搜索"
+code = "step_search"
+
+[[segment]]
+name = "软件商店"
+code = "step_store"
+
+[[segment]]
+name = "浏览器"
+code = "step_browser"
+
+[[segment]]
+name = "主题"
+code = "step_theme"
+
+[[segment]]
+name = "视频"
+code = "step_video"
+
+[[segment]]
+name = "游戏中心"
+code = "step_game_center"
+
+[[segment]]
+name = "小布建议"
+code = "step_assistant_advice"

@@ -1,5 +1,5 @@
 {
- "script": "recipes/oppo/RMX3888/recipe.py",
+ "script": "recipes/oppo/RMX3888/RMX3888.toml",
  "scenarios": {
   "present": [
    ["广告跟踪", "locked", [], {}],
