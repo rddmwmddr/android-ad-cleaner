@@ -4,98 +4,13 @@ from recipe_kit import step
 BUILD = "PHK110_15.0.0.601(CN01)"
 
 import time
-from wait import GiveUp, until
 # 分段结果由引擎经 rt 记录
 
-
-def page(activity, title, timeout=6):
-    """确认前台 Activity、标题和开关坐标稳定；出现协议时不操作。
-
-    `title` 可以给一组等价标题：软件商店的隐私页随商店 App 版本叫「隐私」或「隐私授权管理」（#933）。"""
-    titles = (title,) if isinstance(title, str) else tuple(title)
-
-    def sample():
-        if p.locked():
-            raise GiveUp()
-        if not p.focus().endswith(activity):
-            return None
-        root = p.tree()
-        texts = p.texts(root)
-        if any(t in ("同意", "同意并继续", "同意并使用", "允许", "开始使用")
-               and "Button" in n.get("class", "") for t, _, n in texts):
-            print("  ! 出现协议或权限提示，跳过")
-            raise GiveUp()
-        switches = p.switches(root)
-        if (not any(t in titles for t, _, _ in texts)
-                or any(not (0 < xy[0] < p.W and 0 < xy[1] < p.H)
-                       for _, _, xy in switches)):
-            return None
-        return tuple(t for t, _, _ in texts), tuple(switches)
-
-    found = until(sample, timeout=timeout, poll=.2, same=2, now=time.monotonic, sleep=time.sleep)
-    if not found:
-        print(f"  ✗ 未确认页面「{'、'.join(titles)}」，跳过")
-    return bool(found)
-
-
-def navigate(label, activity, title):
-    """`label` 可以给一组等价入口文案，按顺序试；点到第一个就按落点页面判（#933）。"""
-    labels = (label,) if isinstance(label, str) else tuple(label)
-    for name in labels:
-        if p.tap(name, exact=True, quiet=len(labels) > 1):
-            return page(activity, title)
-    p.note_miss(" / ".join(labels))
-    return False
-
-
-def off_exact(names, activity, title):
-    """只处理当前页精确匹配的开关，并在同一页面读回。"""
-    if not page(activity, title):
-        return False
-    switches = p.switches()
-    visible = {name for name, _, _ in switches}
-    wanted = set(names)
-    if not wanted <= visible:
-        print(f"  ! 缺少开关 {sorted(wanted - visible)}，本页不操作")
-        return False
-    for name in names:
-        if not page(activity, title):
-            return False
-        matches = [(on, xy) for label, on, xy in p.switches() if label == name]
-        if len(matches) != 1:
-            print(f"  ! 开关「{name}」无法唯一确认，停止")
-            return False
-        on, xy = matches[0]
-        if on:
-            p.click(*xy)
-            p.confirm()
-            if not page(activity, title):
-                return False
-            after = [(on, xy) for label, on, xy in p.switches() if label == name]
-            if len(after) != 1 or after[0][0]:
-                print(f"  ! 开关「{name}」未确认关闭")
-                return False
-            p.changed.append((title, name))
-            print(f"  关 {name}")
-    states = {name: on for name, on, _ in p.switches() if name in wanted}
-    if set(states) != wanted or any(states.values()):
-        print("  ! 开关未全部确认关闭")
-        return False
-    return True
-
-
-def open_settings(package, activity, title):
-    out = p.d.shell("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + package)
-    if out.exit_code or any(x in out.output for x in ("Error", "Exception", "Permission Denial")):
-        return False
-    return page(activity, title)
-
-
-def search_settings():
-    out = p.d.shell("am start -a android.intent.action.VIEW -d gs://search/setting")
-    if out.exit_code or "Error" in out.output:
-        return False
-    return page("com.heytap.quicksearchbox.ui.activity.SearchSettingActivity", "搜索设置")
+# 家族库按常量选走法（#1245）：设置页走公开 Intent，下拉搜索走 scheme + 落点断言。
+OPEN_SETTINGS_STYLE = "intent"
+SEARCH_SETTINGS_STYLE = "page"
+# 家族库的 `page_activity` 与 recipe_kit 注入的 `page()` 同名不同签名，绑回旧名字给段体用。
+page = page_activity
 
 
 def guard():
@@ -186,3 +101,6 @@ def tail():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import p, rt, skip
+    from recipe_nav import navigate, open_settings, page_activity, search_settings
+    from recipe_nav import tap_page, wait_page
+    from recipe_strategies import off_exact

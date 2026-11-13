@@ -3,6 +3,10 @@ from recipe_kit import step
 # 不覆盖软件商店（ColorOS 17 的设置页里没有「隐私」「服务管理」，商店首页的推广位也关不掉），
 # 也不覆盖负一屏（速览）——那边没有「推荐服务」分组。详见 docs/清单/OPPO-ColorOS.md。
 BUILD = "PKT110_17.0.0.102(CN01)"
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+TAP_STYLE = "exact"
+READ_SWITCHES_STYLE = "first"
+CLOSE_NAMED_STYLE = "reopen"
 import time
 # 回读确认数由引擎经 rt 记录
 # 全局搜索的设置页没有导出：adb am start 会被系统拒绝（SecurityException: not exported），
@@ -16,74 +20,6 @@ HOME_CARD_CHILDREN = ["未下载应用推荐", "应用建议小卡"]
 HOME_CARD_PARENT = "应用建议"
 # 搜索结果里带出来的推荐源。「榜单」「小红书」「购物」这些是内容源不是广告位，保持不动。
 SEARCH_SOURCES = ["个性化推荐", "精选资讯", "搜索建议"]
-
-
-def tap(name, scrolls=4, exact=True):
-    if not p.tap(name, exact=exact, scrolls=scrolls):
-        raise RuntimeError(f"未找到入口「{name}」；当前页：{p.page_text()}")
-
-
-def open_settings(expect=("服务管理", "隐私")):
-    """进「设置」入口，落地页出现 expect 之一才算成功。
-    17.22 的主题商店把这一行读作「设置,有1条新通知」：精确匹配「设置」落空，它又带文字，
-    右上角图标的兜底只收无文字节点，同样收不到；游戏中心 14.43.3 反过来是纯齿轮图标。
-    按「文字精确 → 文字包含 → 右上角图标」三级走，点错页先退回来再换下一级（#286）。"""
-    for exact in (True, False):
-        if not p.find("设置", exact=exact):
-            continue
-        before = p.sig()
-        if p.tap("设置", exact=exact, scrolls=0) and any(p.find(w, exact=True) for w in expect):
-            return True
-        if p.sig() != before:
-            p.back()
-    return p.tap_icon(list(expect))
-
-
-def read_switches(max_screens, first=None):
-    """读这一页的开关。first 是刚读到的第一屏，复用它，不多读一遍。"""
-    current = {}
-    items = first if first is not None else p.switches()
-    current.update({title: on for title, on, _ in items})
-    for _ in range(max_screens - 1):
-        if not p.scroll_more():
-            break
-        current.update({title: on for title, on, _ in p.switches()})
-    return current
-
-
-def wait_switches(timeout=4.0):
-    """刚进二级页时开关还没画出来：等一下再读，别把空页面当成「没找到目标开关」。"""
-    end = time.time() + timeout
-    while True:
-        found = p.switches()
-        if found:
-            return found
-        if time.time() >= end:
-            return []
-        time.sleep(0.2)
-
-
-def close_named(names, page, max_screens=1, reopen=None, gone=()):
-    """关掉点名的开关并回读确认；其他开关的状态不能变。
-    reopen：有的页点完开关会弹确认框、确认后退回上一级，回读前用这个回调重新进一次。
-    gone：父开关一关就会从页面上消失的那几行，回读时不再要求它们还在。"""
-    # 回读确认数由引擎经 rt 记录
-    p.top(max_screens)
-    first = wait_switches()
-    require(first, f"{page}：页面里没读到开关，未操作")
-    before = read_switches(max_screens, first=first)
-    require_switches(before, names, page)
-    p.top(max_screens)
-    p.off(only=names, page=page, max_screens=max_screens)
-    if reopen:
-        reopen()
-    p.top(max_screens)
-    current = read_switches(max_screens)
-    require(all(current.get(name) is False for name in names), f"{page}：回读未确认关闭")
-    require(all(current.get(name) == state for name, state in before.items()
-                if name not in names and name not in gone),
-            f"{page}：其他开关状态变化，请核对")
-    rt.confirm(len(names))
 
 
 def close_group(children, parent, page, max_screens=1):
@@ -272,3 +208,5 @@ def tail():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import p, require, require_switches, rt, skip_in_safe_mode
+    from recipe_nav import close_named, open_settings, read_switches, tap
+    from recipe_strategies import wait_switches

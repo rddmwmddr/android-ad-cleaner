@@ -2,42 +2,16 @@
 from recipe_kit import step
 # 不代表系统广告跟踪、负一屏、主题、视频等均已适配。
 BUILD = "PJA110_14.0.0.812"
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+CLOSE_NAMED_STYLE = "basic"
+# 旧版应用切到「我的」后首下设置点击会被动画吞掉：走「我的 → 设置」并按前台回读（#286）。
+APP_SETTINGS_STYLE = "launch"
 import time
 # 回读确认数由引擎经 rt 记录
 PROMOTIONS = ["首页：悬浮活动图标", "首页：活动弹窗", "首页：顶部轮播卡片", "底部活动专区",
               "游戏详情页：游戏活动卡片", "软件专区：福利"]
 # 浏览器使用实机解析出的公开入口；商店沿用先停止、再从桌面启动，避免复用旧子页。
 START_ACTIVITIES = {"com.heytap.browser": "com.android.browser.BrowserActivity"}
-
-
-def app_settings(package, activity):
-    if p.focus() == f"{package}/{activity}":
-        return
-    p.start(package, activity=START_ACTIVITIES.get(package))
-    require(p.go("我的", "设置"), "未进入包含设置按钮的「我的」页")
-    # 旧版应用切换到「我的」后，首下设置点击可能被动画吞掉；按实际前台回读。
-    for _ in range(3):
-        require(p.focus().split("/", 1)[0] == package, "应用已离开前台，停止本段")
-        if p.focus() == f"{package}/{activity}":
-            return
-        tap("设置", scrolls=0)
-        time.sleep(.4)
-    require(p.focus() == f"{package}/{activity}", "设置页未打开，停止本段")
-
-
-def close_named(names, page, max_screens=1):
-    # 回读确认数由引擎经 rt 记录
-    p.top(max_screens)
-    before = read_switches(max_screens)
-    require_switches(before, names, page)
-    p.top(max_screens)
-    p.off(only=names, page=page, max_screens=max_screens)
-    p.top(max_screens)
-    current = read_switches(max_screens)
-    require(all(current.get(name) is False for name in names), f"{page}：回读未确认关闭")
-    require(all(current.get(name) == state for name, state in before.items() if name not in names),
-            f"{page}：其他开关状态变化，请核对")
-    rt.confirm(len(names))
 
 
 @step("下拉搜索")
@@ -82,4 +56,4 @@ def tail():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import p, require, require_switches, rt
-    from recipe_nav import read_switches, tap
+    from recipe_nav import app_settings, close_named, read_switches, tap

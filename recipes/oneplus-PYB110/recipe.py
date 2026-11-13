@@ -6,6 +6,8 @@ from recipe_kit import step
 # 在「隐私 → 个性化推荐」里按模块给。
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 BUILD = "PYB110_17.0.0"
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+SEARCH_SETTINGS_STYLE = "swipe_strict"
 
 import time
 
@@ -143,34 +145,6 @@ SEARCH_SETTING = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://
 SEARCH_TITLES = {"搜索范围", "首页卡片管理", "功能管理", "账号与隐私"}
 
 
-def search_settings():
-    """先用全局搜索自己的 scheme 落地（同族 PLP120 / PMX110 实测）；打不开再退回桌面下拉。
-    SearchSettingActivity 未导出，按组件名 `am start -n` 会被系统拒绝。"""
-    p.d.shell(SEARCH_SETTING)
-    if wait_search_settings():
-        return True
-    p.d.shell("input keyevent HOME"); time.sleep(0.6)
-    # HOME 可能停在速览页（左一屏）：先左滑回主桌面，否则下拉手势被速览吃掉
-    p.d.shell(f"input swipe {p.W*6//7} {p.H//2} {p.W//7} {p.H//2} 250"); time.sleep(1.0)
-    p.d.shell(f"input swipe {p.W//2} {p.H*3//10} {p.W//2} {p.H*7//10} 300"); time.sleep(1.5)
-    if "quicksearchbox" not in p.focus():
-        raise RuntimeError("下拉没进全局搜索")
-    # 收键盘要点键盘上的「收起键盘」箭头；按返回会整页退出
-    p.tap("收起键盘", exact=True, scrolls=0)
-    time.sleep(0.8)
-    # 页面底部出现「设置」按钮；应用建议里也有「设置」图标，点最靠下的那个
-    cands = [((l + r) // 2, (tp + b) // 2) for t, (l, tp, r, b), _ in p.texts()
-             if t == "设置" and tp > p.H * 0.8]
-    if not cands:
-        raise RuntimeError("搜索页底部没有「设置」")
-    before = p.sig()
-    p.click(*cands[-1])
-    p.settle(before, 1.5)
-    if "SearchSetting" not in p.focus():
-        raise RuntimeError("没进搜索设置")
-    return True
-
-
 @step("下拉搜索")
 def _():
     search_settings_swipe()
@@ -178,5 +152,5 @@ def _():
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import maybe, p
-    from recipe_nav import wait_search_settings
+    from recipe_nav import search_settings, wait_search_settings
     from recipe_steps import ad_tracking_close_all, assistant_advice_search, game_center_taps, search_settings_swipe, theme_shop_settings
