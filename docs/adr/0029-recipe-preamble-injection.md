@@ -1,5 +1,7 @@
 # 机型脚本的前导由引擎注入
 
+> B 段（catalog）另由 [ADR-0038](0038-recipe-catalog.md) 取代：`preamble()` / `install()` 与执行作用域随「脚本是 exec 进来的代码模块」这一前提一起消失，例外函数改成普通函数、`p` / `rt` 作参数传入。
+>
 > 部分由 [ADR-0037](0037-recipe-declarative-loader.md) 取代（2026-11-13 修订：`@step` 改为声明式、段过滤与台账收进 `rt`，装载点只剩 `tool/recipe_loader.py` 一处）：前导仍由装载器注入。正文保留当时的决定与取舍。
 
 基线 `cd77080`。
