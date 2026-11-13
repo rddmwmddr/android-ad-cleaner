@@ -1,21 +1,23 @@
 """机型脚本的执行作用域：`p`、`rt` 与共享助手由装载器写进来，脚本不再自己定义这些名字（沿用 #838）。
 
 唯一的装载点是 `tool/recipe_loader.py`（ADR-0037）：它建出这次的 `rt`（`recipe_runtime.Runtime`），
-调 `preamble(p, g, rt)` 把两个协作者、声明式段装饰器、跳过 / 断言 / 台账出口与两张注入面写进执行
+调 `preamble(p, g, rt)` 把两个协作者、声明式段装饰器、跳过 / 断言 / 台账出口与三张注入面写进执行
 作用域，再 `exec` 模块体。`@step` 只登记段名，真正执行由 `rt.run()` 负责——导入一份脚本不产生任何
 设备动作。
 
 脚本顶部那句 `from recipe_kit import step`（静态检查与编辑器用）落到本模块的 `step()`：它按「当前
 这次执行」解析，同一时刻只允许一个活动执行（`Runtime.activate()`）。
 
-公共导航助手另住 `recipe_nav`、公共段体另住 `recipe_steps`：`preamble()` 写完生命周期与台账后
-依次调它们的 `install()`，本模块只管生命周期与台账（沿用 #1150、#1209 的注入面）。
+公共导航助手另住 `recipe_nav`、拨动策略另住 `recipe_strategies`、公共段体另住 `recipe_steps`：
+`preamble()` 写完生命周期与台账后依次调它们的 `install()`（导航 → 策略 → 段体，闭包对名字都是
+调用时现取，顺序不影响语义），本模块只管生命周期与台账（沿用 #1150、#1209、#1244 的注入面）。
 """
 
 import re
 
 import adb_link
 import recipe_nav
+import recipe_strategies
 import recipe_steps
 from recipe_runtime import DONE as DONE, FAILED as FAILED, NOT_RUN as NOT_RUN, SKIPPED as SKIPPED
 from recipe_runtime import DuplicateStep as DuplicateStep, MissingPackage as MissingPackage
@@ -157,6 +159,7 @@ def preamble(p, g, rt=None):
               "require_switches": require_switches, "skip_in_safe_mode": skip_in_safe_mode,
               "VERIFIED_SWITCHES": rt.counter})
     recipe_nav.install(p, g)
+    recipe_strategies.install(p, g)
     recipe_steps.install(p, g)
     return g
 

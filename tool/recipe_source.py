@@ -19,8 +19,9 @@ r"""机型脚本的「事实」层：一份源码里发生了哪些调用。纯 
 
 共享实现的归属跟脚本的 import 走（#1243）：`from recipe_nav import gear` 与
 `import recipe_steps` + `recipe_steps.downloads(…)` 两种写法都解析到 X 里那一份实现，
-`recipe_nav` 只查 `NAV`、`recipe_steps` 只查 `STEPS`，两张表不再按名字合并（同名实现会静默互相覆盖）。
-脚本本地同名 `def` 覆盖导入版；没有 import 的裸名字不算注入实现。
+`recipe_nav` 只查 `NAV`、`recipe_strategies` 只查 `STRATEGIES`、`recipe_steps` 只查 `STEPS`，
+三张表不按名字合并（同名实现会静默互相覆盖）。脚本本地同名 `def` 覆盖导入版；没有 import 的
+裸名字不算注入实现。
 """
 import ast
 import glob
@@ -31,10 +32,11 @@ from dataclasses import dataclass, field
 _Function = ast.FunctionDef | ast.AsyncFunctionDef
 _Position = tuple[int, int]
 
-# 注入面的两个归属模块（#1243）：脚本从哪个模块导入，实现就解析到那个模块的注册表里。
+# 注入面的三个归属模块（#1243、#1244）：脚本从哪个模块导入，实现就解析到那个模块的注册表里。
 NAV_MODULE = "recipe_nav"
+STRATEGIES_MODULE = "recipe_strategies"
 STEPS_MODULE = "recipe_steps"
-SURFACE = (NAV_MODULE, STEPS_MODULE)
+SURFACE = (NAV_MODULE, STRATEGIES_MODULE, STEPS_MODULE)
 
 
 @dataclass(frozen=True)
@@ -476,17 +478,20 @@ def injected_calls(facts: Facts, name: str, module: str | None = None) -> tuple[
 
 
 def surface_sources() -> dict[str, dict[str, str]]:
-    """注入面（`tool/recipe_nav.py` 与 `tool/recipe_steps.py`）的源码，按归属模块分开：
-    `{"recipe_nav": {名字: 源码}, "recipe_steps": {名字: 源码}}`。
+    """注入面（`tool/recipe_nav.py` / `tool/recipe_strategies.py` / `tool/recipe_steps.py`）的源码，
+    按归属模块分开：`{"recipe_nav": {名字: 源码}, "recipe_strategies": {名字: 源码},
+    "recipe_steps": {名字: 源码}}`。
 
     不按名字合并：同名实现各按脚本导入的那个模块解析，静默互相覆盖的那条路不再走（#1243）。
     实现里的入口写在实现里、脚本只剩一行调用；要事实就交给 `scan_source`，跨文件的形参取值由
     调用方按位置传 `bindings`、模块常量按名字传 `externals`（沿用 #1153、#1154、#1209）。
-    延迟 import：只有调用它时才加载这两张表，事实层本身不连带它们。"""
+    延迟 import：只有调用它时才加载这三张表，事实层本身不连带它们。"""
     import inspect
     import recipe_nav
+    import recipe_strategies
     import recipe_steps
-    registries = {NAV_MODULE: recipe_nav.NAV, STEPS_MODULE: recipe_steps.STEPS}
+    registries = {NAV_MODULE: recipe_nav.NAV, STRATEGIES_MODULE: recipe_strategies.STRATEGIES,
+                  STEPS_MODULE: recipe_steps.STEPS}
     return {module: {name: inspect.getsource(factory) for name, factory in registries[module].items()}
             for module in SURFACE}
 

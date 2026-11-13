@@ -1,20 +1,24 @@
-"""机型脚本的公共导航助手（#1150）：跨文件代码逐字相同的那些导航过程收在这里。
+"""机型脚本的公共导航助手（#1150、#1244）：入口、选择器、等待与落点确认收在这里。
 
 `recipe_kit.preamble()` 写完生命周期与台账之后调用 `install(p, g)`，把公共导航补进同一个
-执行作用域。脚本本地定义的同名名字后执行、覆盖注入版，所以同名多簇的机型差异继续留在各自
-脚本里，搬过来的只有代码逐字相同的副本（迁移后脚本侧只删定义、不改调用点）。
+执行作用域；拨动策略另住 `recipe_strategies`，段体另住 `recipe_steps`。三张表都按名字写进
+同一个作用域，脚本侧只留调用点。
 
 实现不 import `recipe_kit`：`skip` / `require` 这类前导名字由工厂从 `g` 取、包进闭包，
 两个模块因此没有依赖关系（方向只有 `preamble()` → `install()` 这一条）。
 
-实现体必须与被搬走的脚本副本代码逐字相同：守卫把工厂里返回的函数源码与脚本里还留着的本地定义
+同一个名字在一个家族里有几套结构不同的实测走法时，各占一档（如 `gear` 的 icon / checked / text），
+由脚本的模块常量选（`_style()`）；缺省一档是多数机型那一套。只有字面量不同的参数化后共用一份。
+未迁移的家族仍是老规矩：脚本本地同名定义后执行、覆盖注入版，同名但代码不同的是机型知识。
+实现体与被搬走的脚本副本代码逐字相同：守卫把工厂里返回的函数源码与脚本里还留着的本地定义
 都折成 AST（剥注释、docstring、折行）后比对，改一边不改另一边即红（tests/test_recipe_nav.py）。
 `g["X"]` 现取与随之消失的 `global X` 是搬动本身带来的改写，比对前由守卫折算掉。
 
 闭包对名字一律按 `g` 现取（包括 `g["time"]`）：脚本原来是在自己的全局里解析这些名字，换到
 这个模块后仍取当次执行作用域里的那一个，测试装的假时钟才照旧生效。
 
-文件内按家族分节：小米系 / vivo / OPPO（公用与两大对各一节）/ 其余·跨家族，`install()` 落在最后。
+文件内按家族分节：小米系 / vivo / OPPO（公用与两大对各一节）/ 其余·跨家族，名字被两个家族
+占用的那一处（`browser_settings`）另有一节分派，`install()` 落在最后。
 """
 
 import time
@@ -26,11 +30,23 @@ from wait import until
 NAV = {}
 
 
-# ---------- 小米系（xiaomi / redmi，#1151）----------
+# ---------- 小米系（xiaomi / redmi，#1151、#1244）----------
 #
-# 23113RKC6C / 24122RKC7C / 24129PN74C 那份 `tap_any` 与本实现循环变量名不同，按「同名多簇」
-# 留在脚本里覆盖注入版。三兄弟（23113RKC6C / 23117RK66C / 24122RKC7C）与 24094RAD4C 的 `gear`
-# 只差排版，按代码逐字判据在 #1153 一并删掉、改走注入版。
+# 同一个注入名在家族内有几套结构不同的实测走法时，各占一档、脚本用模块常量选（`_style()`）：
+# 走法属于这台机的知识，库不按型号猜。缺省一档是多数机型那一套，常量只在偏离缺省时才写。
+# 23113RKC6C / 24122RKC7C / 24129PN74C 那份 `tap_any` 是死代码（定义后没人调），#1244 删掉。
+
+def _style(g, constant, choices, default):
+    """脚本的模块级常量选了哪一档走法：缺省 `default`，认不出当场报错。
+
+    静默回退会点错入口，比报错更难查（沿用 #819 的口径）。常量是脚本自己的页面知识，
+    库按它选实现，不按型号猜。
+    """
+    value = g.get(constant, default)
+    if value not in choices:
+        raise RuntimeError(f"脚本常量 {constant} = {value!r} 认不出；可用的：{'、'.join(choices)}")
+    return value
+
 
 def _xiaomi_tap_any(p, g):
     def tap_any(*names, scrolls=6):
@@ -41,10 +57,9 @@ def _xiaomi_tap_any(p, g):
 
 
 def _xiaomi_gear(p, g):
-    def gear(toolbar_only=False):
-        """很多小米 App 的设置是右上角齿轮图标，没有文字。
-        匹配只认正好是「设置」的描述、正文或 setting 类 id：商店「我的」页有一行正文「去功能设置里
-        重新开启」，主题商店有「设置壁纸」，按包含匹配会先命中它们、点进别的子页，整段跑空（#305 / #374）。"""
+    """设置入口（齿轮）。`GEAR_STYLE` 选走法：icon / checked / text，缺省 icon。"""
+
+    def icon_style(toolbar_only):
         from fast import bounds, icon_hit
 
         for n in p.tree().iter("node"):
@@ -67,7 +82,381 @@ def _xiaomi_gear(p, g):
                 break
         return False
 
+    def text_style(toolbar_only):
+        from fast import bounds, icon_hit
+
+        for n in p.tree().iter("node"):
+            l, t, r, b = bounds(n)
+            if icon_hit(n) and (n.get("clickable") == "true" or "ImageView" in n.get("class", "")) and p.on_screen(n) and (not toolbar_only or b < p.H * 0.23):
+                p.click((l + r) // 2, (t + b) // 2); g["time"].sleep(1)
+                return True
+        # 兜底：正文正好是「设置」两个字的一行（有些 App 是文字入口），只在屏幕上半部分找，
+        # 免得点到正文中间的「…设置…」长句。
+        for n in p.tree().iter("node"):
+            l, t, r, b = bounds(n)
+            if (n.get("text") or "").strip() == "设置" and n.get("clickable") == "true" and b < p.H * 0.45 and p.on_screen(n):
+                p.click((l + r) // 2, (t + b) // 2); g["time"].sleep(1)
+                return True
+        # 下载管理、天气的齿轮藏在右上「更多」菜单里。
+        for n in p.tree().iter("node"):
+            key = (n.get("content-desc") or "") + " " + (n.get("resource-id") or "")
+            l, t, r, b = bounds(n)
+            if any(k in key.lower() for k in ("更多", "more", "menu")) and n.get("clickable") == "true" and p.on_screen(n) and b < p.H * 0.22:
+                p.click((l + r) // 2, (t + b) // 2); g["time"].sleep(0.5)
+                if p.tap("设置", exact=True, scrolls=0):
+                    return True
+                break
+        return False
+
+    def gear(toolbar_only=False):
+        """很多小米 App 的设置是右上角齿轮图标，没有文字。
+        匹配只认正好是「设置」的描述、正文或 setting 类 id：商店「我的」页有一行正文「去功能设置里
+        重新开启」，主题商店有「设置壁纸」，按包含匹配会先命中它们、点进别的子页，整段跑空（#305 / #374）。
+        点完要不要认出设置页按机型：日历的齿轮打开的是 PopupWindow，不校验就会在弹窗里找入口（#407）。"""
+        style = _style(g, "GEAR_STYLE", ("icon", "checked", "text"), "icon")
+        if style == "text":
+            return text_style(toolbar_only)
+        if style == "icon":
+            return icon_style(toolbar_only)
+        before = p.focus()
+        if not icon_style(toolbar_only):
+            return False
+        if p.in_settings_page():
+            return True
+        if p.focus() != before:
+            p.back()          # 点开的是弹窗或别的页：关掉，别留给下一段（#331 / #407）
+        return False
+
     return gear
+
+
+def _xiaomi_gear_top(p, g):
+    def gear_top():
+        """只认右上角那个文字就是「设置」的齿轮。
+
+        应用商店「我的」页有一条「去功能设置里重新开启」，含「设置」二字且可点，通用 gear() 会先命中它，
+        点开的是手机清理的功能页——这就是 #193 里商店四个入口全部找不到的真正原因。
+        """
+        from fast import bounds
+        for n in p.tree().iter("node"):
+            t = (n.get("text") or n.get("content-desc") or "").strip()
+            if t != "设置" or n.get("clickable") != "true" or not p.on_screen(n):
+                continue
+            l, top, r, b = bounds(n)
+            if b < p.H * 0.25 and (l + r) // 2 > p.W * 0.7:
+                p.click((l + r) // 2, (top + b) // 2)
+                g["time"].sleep(1)
+                return True
+        return False
+
+    return gear_top
+
+
+def _xiaomi_enter(p, g):
+    def enter(name, scrolls=6):
+        g["require"](p.entry(name, scrolls=scrolls), f"未找到「{name}」")
+
+    return enter
+
+
+def _xiaomi_mine_settings(p, g):
+    def mine_settings(tries=2):
+        """底栏「我的」→ 「设置」，点完必须认出设置页（#586）。
+
+        不校验的话，点击被吞、或点在了别的面板上，都会当成已经进了设置页：后面几页入口全部
+        找不到，整段 0 项又不报错。没落进设置页就退回来重开「我的」再点一次，两次都不成就报当前页。"""
+        stopped = ""
+        for _ in range(tries):
+            if not p.tap("我的", exact=True, scrolls=0):
+                raise RuntimeError("未找到浏览器「我的」")
+            if not p.tap("设置", exact=True, scrolls=0):
+                raise RuntimeError("未找到浏览器「设置」")
+            if p.in_settings_page():
+                return
+            stopped = p.focus()
+            p.back()
+        raise RuntimeError(f"浏览器设置页没有打开；停在 {stopped}")
+
+    return mine_settings
+
+
+def _xiaomi_menu_settings(p, g):
+    """底栏「菜单」→ 弹窗「设置」。`MENU_STYLE` 选走法：evidence / focus / ids，缺省 evidence。"""
+
+    def tap_style(tries, evidence):
+        stopped = None
+        for _ in range(tries):
+            if not p.tap("菜单", exact=True, scrolls=0, quiet=True):
+                if stopped is None:
+                    return False
+                raise RuntimeError("浏览器设置页没有打开；"
+                                   + (p.page_evidence() if evidence else f"停在 {stopped}"))
+            xy = g["popup_row"]("设置", below=0.3)
+            if not xy:
+                raise RuntimeError("浏览器菜单里没有「设置」；"
+                                   + (p.page_evidence() if evidence else f"停在 {p.focus()}"))
+            before = p.sig()
+            p.click(*xy)
+            p.settle(before, 1.5)
+            if p.in_settings_page():
+                return True
+            # 弹窗这一行在屏上才走到这里，所以按返回是收起弹窗或退出面板，不会离开浏览器首页
+            # focus 读不出前台时是空串，别让它被当成「还没进过弹窗」
+            current = p.focus()
+            stopped = current if evidence else (current or "读不出前台")
+            p.back()
+        raise RuntimeError("浏览器设置页没有打开；"
+                           + (p.page_evidence() if evidence else f"停在 {stopped}"))
+
+    def ids_style(tries):
+        stopped = ""
+        for _ in range(tries):
+            if not g["by_id"]("com.android.browser:id/action_more"):
+                raise RuntimeError("浏览器底部「菜单」未找到")
+            if not g["by_id"]("com.android.browser:id/action_menu_setting"):
+                raise RuntimeError("菜单弹窗里的「设置」未找到")
+            g["time"].sleep(2)
+            if p.in_settings_page():
+                return
+            stopped = p.focus()
+            p.back()
+        raise RuntimeError(f"浏览器设置页没有打开；停在 {stopped}")
+
+    def menu_settings(tries=2):
+        """底栏「菜单」→ 弹窗里的「设置」，点完必须认出设置页（#586）。
+
+        工具栏右上角也有一个叫「设置」的图标，弹窗还没画出来时按文字点会落到它上面、进首页编辑面板，
+        后面几页入口全部找不到，整段 0 项又不报错。所以只点下半屏那一行，且没落进设置页就退回来
+        重开菜单再试；两次都不成就报当前页，不在工具栏面板上继续找。
+        底栏没有「菜单」的机型（MIX Flip 2）返回 False，交给 browser_settings() 的「我的」入口（#833）。
+        `evidence` 用整页现场报错（沿用 #939），`focus` 只写停在哪；`ids` 按 resource-id 点两个按钮。"""
+        style = _style(g, "MENU_STYLE", ("evidence", "focus", "ids"), "evidence")
+        if style == "ids":
+            return ids_style(tries)
+        return tap_style(tries, style == "evidence")
+
+    return menu_settings
+
+
+def _xiaomi_browser_settings(p, g):
+    """浏览器设置页的入口。`BROWSER_FLOW` 选走法：toolbar / menu / mine，缺省 toolbar。"""
+
+    def toolbar_flow():
+        """先看工具栏，再点底部「我的」；不把资讯正文里的「我的」当导航标签。"""
+        before = p.focus()
+        if g["gear"](toolbar_only=True):
+            if p.in_settings_page():          # 点完要认出设置页，点击被吞时别在旧页上找入口（#331）
+                return True
+            if p.focus() != before:
+                p.back()
+        for text, (l, t, r, b), _node in p.texts():
+            if text == "我的" and t >= p.H * 0.65:
+                before = p.sig()
+                p.click((l + r) // 2, (t + b) // 2)
+                p.settle(before, 1.5)
+                return g["gear"]()
+        return False
+
+    def menu_flow():
+        """底栏「菜单」→ 弹窗「设置」；底栏没有「菜单」的机型在「我的」页里找设置（#833）。
+
+        借这份脚本的机型底栏布局不同：Xiaomi 15 是 主页/视频/AI搜索/菜单/我的，MIX Flip 2 是
+        主页/视频/AI搜索/免费小说/我的。两条入口点完都要认出设置页；「我的」那条没进去时报出
+        停在哪一页，不在旧页上继续找「隐私和安全」等子项（#586）。"""
+        if g["menu_settings"]():
+            return
+        print("  · 底栏没有「菜单」，改走「我的」→ 设置", flush=True)
+        evidence = _style(g, "MENU_STYLE", ("evidence", "focus", "ids"), "evidence") == "evidence"
+        if not p.tab("我的"):
+            raise RuntimeError("浏览器底部没有「菜单」，也没有「我的」标签；"
+                               + (p.page_evidence() if evidence else f"停在 {p.focus()}"))
+        p.dismiss()                       # 「我的」页可能先弹一键登录框，盖住齿轮
+        if not g["gear"]():
+            raise RuntimeError("浏览器设置页没有打开；"
+                               + (p.page_evidence() if evidence else f"停在 {p.focus()}"))
+
+    def mine_flow():
+        """底部「我的」→ 设置。底栏没有「我的」、或那一页认不出设置页时返回 False。"""
+        if not p.tab("我的"):
+            return False
+        g["time"].sleep(1)
+        return g["gear"]()
+
+    def browser_settings():
+        flow = _style(g, "BROWSER_FLOW", ("toolbar", "menu", "mine"), "toolbar")
+        return {"toolbar": toolbar_flow, "menu": menu_flow, "mine": mine_flow}[flow]()
+
+    return browser_settings
+
+
+def _xiaomi_browser_start(p, g):
+    def browser_start():
+        """冷启动偶发被启动过渡窗判断成「离开前台」：先强停再直达 BrowserActivity，重试一次。"""
+        for attempt in range(2):
+            try:
+                p.start("com.android.browser", ".BrowserActivity")
+                return True
+            except g["SkipStep"]:
+                raise                 # App 本机没装：放行，不走下面那句按文案判的重试分支（#908）
+            except RuntimeError as e:
+                if attempt or "离开前台" not in str(e):
+                    raise
+                p.d.shell("am force-stop com.android.browser")
+                g["time"].sleep(1.5)
+        return False
+
+    return browser_start
+
+
+def _xiaomi_tab(p, g):
+    def tab(name):
+        """点顶部分栏标签（隐私 / 安全）。
+        页面里同名文字常有两个（分栏标签 + 下面分组标题），取屏幕最上面那个。"""
+        cand = []
+        for text, (l, t, r, b), _node in p.texts():
+            if text == name and t < p.H * 0.40:
+                cand.append((t, (l + r) // 2, (t + b) // 2))
+        if not cand:
+            return False
+        cand.sort()
+        p.click(cand[0][1], cand[0][2]); g["time"].sleep(1.2)
+        return True
+
+    return tab
+
+
+def _xiaomi_tab_bot(p, g):
+    def tab_bot(name):
+        """按屏幕底部 1/10 区域找标签（主题商店无障碍名带「未选中,」前缀，exact 文本够不着）。"""
+        from fast import bounds
+        for n in p.tree().iter("node"):
+            d = (n.get("content-desc") or "") + (n.get("text") or "")
+            if (d == name or d.endswith("," + name) or d.endswith("，" + name)) and p.on_screen(n):
+                l, t, r, b = bounds(n)
+                if b > p.H * 0.85:
+                    p.click((l + r) // 2, (t + b) // 2); g["time"].sleep(1.5)
+                    return True
+        return False
+
+    return tab_bot
+
+
+def _xiaomi_tap_bottom_tab(p, g):
+    def tap_bottom_tab(name):
+        """按屏幕底部标签栏找入口，避开内容区里同名的普通文字。"""
+        from fast import bounds
+        for n in p.tree().iter("node"):
+            d = (n.get("content-desc") or "") + (n.get("text") or "")
+            if not d or name not in d:
+                continue
+            l, t, r, b = bounds(n)
+            if b > p.H * 0.85 and p.on_screen(n):
+                p.click((l + r) // 2, (t + b) // 2); g["time"].sleep(1.5)
+                return True
+        return False
+
+    return tap_bottom_tab
+
+
+def _xiaomi_wait_bottom_tab(p, g):
+    def wait_bottom_tab(name, tries=5):
+        """主题商店冷启动先出开屏或更新层，底部栏可能晚几秒才稳定。"""
+        for _ in range(tries):
+            p.dismiss()
+            if g["tap_bottom_tab"](name):
+                return True
+            g["time"].sleep(0.8)
+        return False
+
+    return wait_bottom_tab
+
+
+def _xiaomi_bottom_tab(p, g):
+    def bottom_tab(name="我的"):
+        """点底部标签。这些 App 的标签文字能找到，但点进去后没有带文字的「设置」，
+        所以不能写 p.go("我的", "设置")。"""
+        for t, (l, top, r, b), _n in p.texts():
+            if t.strip() == name and top > p.H * 0.85:
+                p.click((l + r) // 2, (top + b) // 2); g["time"].sleep(2.5)
+                return True
+        return False
+
+    return bottom_tab
+
+
+def _xiaomi_by_id(p, g):
+    def by_id(rid, wait=1.5):
+        """按 resource-id 点控件：这台浏览器工具栏和弹窗里各有一个叫「设置」的图标，按文字会点错。"""
+        from fast import bounds
+        t0 = g["time"].time()
+        while g["time"].time() - t0 < wait:
+            for n in p.tree().iter("node"):
+                if n.get("resource-id") == rid:
+                    l, t, r, b = bounds(n)
+                    p.click((l + r) // 2, (t + b) // 2)
+                    return True
+            g["time"].sleep(0.2)
+        return False
+
+    return by_id
+
+
+def _xiaomi_tap_low(p, g):
+    def tap_low(name, tries=3):
+        """页底最后那一项（商店的「隐私设置」）：读屏读得到，但坐标超过引擎的点击安全线，
+        要轻滑一小段再点。别用 tap(scrolls=N)：它翻页会直接翻过这一项，翻进「功能设置」子页。"""
+        for _ in range(tries):
+            if p.tap(name, exact=True, scrolls=0):
+                return True
+            p.d.shell("input swipe 600 2000 600 1700 150"); g["time"].sleep(0.7)
+        return False
+
+    return tap_low
+
+
+def _xiaomi_settings_icon_visible(p, g):
+    def settings_icon_visible():
+        """「设置」入口进了界面树且可见：只等它出现，点不点得中由 gear() 再判。
+
+        判据是 icon_hit()（与 gear() 同一份），但不管可点性与位置——这两条留给 gear()。"""
+        from fast import icon_hit
+        return any(icon_hit(n) and p.on_screen(n) for n in p.tree().iter("node"))
+
+    return settings_icon_visible
+
+
+def _xiaomi_theme_settings(p, g):
+    def theme_settings(tries=2):
+        """主题「我的」→ 顶部「设置」图标，两次都不成才报错（#912）。
+
+        底栏「我的」只有 content-desc（读作「未选中,我的」），内容区另有「我的点赞 / 我的收藏 /
+        我的订单」——`go("我的")` 走包含匹配，会先点内容区那一行；`tab()` 只认屏底带，命中的是底栏。
+        点进「我的」后图标要晚一帧才进树，gear() 只读一次树，所以先等图标出现再交给它。"""
+        for _ in range(tries):
+            if not p.tab("我的"):
+                raise RuntimeError("未进入主题「我的」；" + p.page_evidence())
+            p.dismiss()                   # 「我的」页可能先弹登录 / 引导弹窗，盖住图标
+            until(g["settings_icon_visible"], timeout=3, poll=0.3, now=g["time"].time, sleep=g["time"].sleep)
+            if g["gear"]():
+                return
+        raise RuntimeError("主题设置入口没找到；" + p.page_evidence())
+
+    return theme_settings
+
+
+def _xiaomi_direct_settings(p, g):
+    def direct_settings():
+        """浏览器设置页能直达就直达（#912）。
+
+        直达档取自 entries 的浏览器分组，只试直达不试设置搜索：设置搜索会离开浏览器、落到
+        系统设置里，拿到的不是这一页。直达不通返回 False，由调用方按「菜单」→「我的」回退。
+        报告者实测那两条回退对时序敏感：点完底栏「我的」立刻点「设置」会点空，隔 0.2 秒才稳。"""
+        if g["reach"](p, g["BROWSER_SETTINGS_ENTRY"], allow_search=False) != "direct":
+            return False
+        print("  · 直达浏览器设置页", flush=True)
+        return True
+
+    return direct_settings
 
 
 def _xiaomi_read_switches(p, g):
@@ -118,11 +507,15 @@ def _xiaomi_security_tab(p, g):
 
 
 def _xiaomi_popup_row(p, g):
-    def popup_row(text, timeout=3.0):
-        """屏幕下半段里文字正好是 text 的那一行：菜单弹窗从底部升起，工具栏上的同名图标在上半屏。"""
+    def popup_row(text, timeout=3.0, below=0.0):
+        """浮层里文字正好是 text 的那一行；below 是它必须落在屏高多少比例以下。
+
+        底栏菜单弹窗从底部升起，工具栏上的同名图标在上半屏，那种场景传 below=0.3 把上半屏排掉；
+        天气的「更多设置」浮层从右上锚点往下展开，位置不固定在屏底，所以默认不设下限。
+        刚打开的浮层里等入口不要用 scrolls=0 的 p.tap()（它等待期间会 dismiss 掉浮层，docs/04）。"""
         def row():
             for t, (l, top, r, b), _n in p.texts():
-                if t == text and top > p.H * 0.3:
+                if t == text and top > p.H * below:
                     return (l + r) // 2, (top + b) // 2
             return None
         return until(row, timeout=timeout, poll=0.3, now=g["time"].time, sleep=g["time"].sleep)
@@ -148,6 +541,21 @@ def _xiaomi_tap_tab(p, g):
 NAV.update({
     "tap_any": _xiaomi_tap_any,
     "gear": _xiaomi_gear,
+    "gear_top": _xiaomi_gear_top,
+    "enter": _xiaomi_enter,
+    "mine_settings": _xiaomi_mine_settings,
+    "menu_settings": _xiaomi_menu_settings,
+    "browser_start": _xiaomi_browser_start,
+    "tab": _xiaomi_tab,
+    "tab_bot": _xiaomi_tab_bot,
+    "tap_bottom_tab": _xiaomi_tap_bottom_tab,
+    "wait_bottom_tab": _xiaomi_wait_bottom_tab,
+    "bottom_tab": _xiaomi_bottom_tab,
+    "by_id": _xiaomi_by_id,
+    "tap_low": _xiaomi_tap_low,
+    "settings_icon_visible": _xiaomi_settings_icon_visible,
+    "theme_settings": _xiaomi_theme_settings,
+    "direct_settings": _xiaomi_direct_settings,
     "read_switches": _xiaomi_read_switches,
     "close_named": _xiaomi_close_named,
     "security_tab": _xiaomi_security_tab,
@@ -243,8 +651,9 @@ def _vivo_off_unnamed(p, g):
 
 
 NAV["settings_home"] = _vivo_settings_home
-NAV["browser_settings"] = _vivo_browser_settings
 NAV["off_unnamed"] = _vivo_off_unnamed
+# `browser_settings` 这个名字小米系也在用：两个家族的实现由文件末尾的分派器按脚本常量选
+# （`_browser_settings()`），这里不注册、免得被后来的那一行静默覆盖。
 
 
 
@@ -635,6 +1044,29 @@ def _plain_opened(p, g):
 
 
 NAV.update({"tap": _plain_tap, "opened": _plain_opened})
+
+
+# ---------- 名字被两个家族占用：`browser_settings` ----------
+#
+# 注入面一个名字只能放一份实现，而 vivo 的「右上菜单 → 设置」与小米系的三种走法各自都有脚本
+# 在段体里按 `browser_settings()` 点名调用（段体不能改），所以这个共用名按脚本常量 `BROWSER_FLOW`
+# 分派：缺省（没写常量）走 vivo 那一套——未迁移的家族行为不变；小米系三类机型各自声明
+# toolbar / menu / mine（#1244）。后两批（#1245 / #1246）往同一张表里加自己的值。
+#
+# 两条实现在各自的家族分节里；这里只做分派，不复制实现。
+
+def _browser_settings(p, g):
+    def browser_settings():
+        if g.get("BROWSER_FLOW", "vivo") == "vivo":
+            return g["browser_settings_vivo"]()
+        return g["browser_settings_xiaomi"]()
+
+    return browser_settings
+
+
+NAV.update({"browser_settings": _browser_settings,
+            "browser_settings_vivo": _vivo_browser_settings,
+            "browser_settings_xiaomi": _xiaomi_browser_settings})
 
 
 

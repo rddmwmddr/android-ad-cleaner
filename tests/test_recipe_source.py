@@ -290,7 +290,7 @@ class ImportTest(unittest.TestCase):
         with patch.dict(recipe_nav.NAV, {"shared": nav_factory}), \
                 patch.dict(recipe_steps.STEPS, {"shared": steps_factory}):
             surface = recipe_source.surface_sources()
-        self.assertEqual(sorted(surface), ["recipe_nav", "recipe_steps"])
+        self.assertEqual(sorted(surface), ["recipe_nav", "recipe_steps", "recipe_strategies"])
         self.assertEqual(recipe_source.imported_sources(from_nav, surface)["shared"][0], "recipe_nav")
         self.assertIn("com.nav", recipe_source.imported_sources(from_nav, surface)["shared"][1])
         self.assertEqual(recipe_source.imported_sources(from_steps, surface)["shared"][0], "recipe_steps")
