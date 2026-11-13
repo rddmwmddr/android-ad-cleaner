@@ -227,6 +227,35 @@ def _require_go(op: Mapping, g: dict[str, Any]) -> None:
         raise RuntimeError(op["miss_print"])
 
 
+def _tap(op: Mapping, g: dict[str, Any]) -> None:
+    kwargs: dict[str, Any] = {}
+    for key in ("exact", "scrolls"):
+        if key in op:
+            kwargs[key] = op[key]
+    kwargs.update(op.get("kwargs", {}))
+    g["p"].tap(op["text"], **kwargs)
+
+
+def _go(op: Mapping, g: dict[str, Any]) -> None:
+    g["p"].go(op["text"], op["expect"])
+
+
+def _dismiss(op: Mapping, g: dict[str, Any]) -> None:
+    g["p"].dismiss()
+
+
+def _skip_in_safe_mode(op: Mapping, g: dict[str, Any]) -> None:
+    g["skip_in_safe_mode"]()
+
+
+def _require_setting(op: Mapping, g: dict[str, Any]) -> None:
+    args = [op["kw"]]
+    if "entry" in op:
+        args.append(op["entry"])
+    if not g["p"].setting(*args):
+        raise RuntimeError(op["miss_print"])
+
+
 _HANDLERS: dict[str, Callable[[Mapping, dict[str, Any]], None]] = {
     "lib": _lib,
     "require_lib": _require_lib,
@@ -251,4 +280,9 @@ _HANDLERS: dict[str, Callable[[Mapping, dict[str, Any]], None]] = {
     "require_unlocked": _require_unlocked,
     "require_tab": _require_tab,
     "require_go": _require_go,
+    "tap": _tap,
+    "go": _go,
+    "dismiss": _dismiss,
+    "skip_in_safe_mode": _skip_in_safe_mode,
+    "require_setting": _require_setting,
 }

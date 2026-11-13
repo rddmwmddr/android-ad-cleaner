@@ -33,6 +33,11 @@ OP_KEYS = {
     "app_stop": frozenset({"kind", "pkg"}),
     "note_miss": frozenset({"kind", "text"}),
     "miss_reset": frozenset({"kind"}),
+    "tap": frozenset({"kind", "text", "exact", "scrolls", "kwargs"}),
+    "go": frozenset({"kind", "text", "expect"}),
+    "dismiss": frozenset({"kind"}),
+    "skip_in_safe_mode": frozenset({"kind"}),
+    "require_setting": frozenset({"kind", "kw", "entry", "miss_print"}),
     "back": frozenset({"kind", "n"}),
     "top": frozenset({"kind", "n"}),
     "scoped": frozenset({"kind", "systemui_text", "ops"}),
@@ -119,6 +124,14 @@ def _validate_op(op: object, where: str) -> None:
         _require(op, "pkg", where)
     elif kind == "note_miss":
         _require(op, "text", where)
+    elif kind == "tap":
+        _require(op, "text", where)
+    elif kind == "go":
+        _require(op, "text", where)
+        _require(op, "expect", where)
+    elif kind == "require_setting":
+        _require(op, "kw", where)
+        _require(op, "miss_print", where)
     elif kind == "start":
         _require(op, "pkg", where)
     elif kind == "gated":
