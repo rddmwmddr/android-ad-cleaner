@@ -1,0 +1,56 @@
+# realme GT Neo5 SE（RMX3700，ColorOS 16.0.5.1300(CN01)）的页面树（catalog，#1265）。
+# 路径实测：2026-10-30，下拉搜索 2026-11-02 补测。软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法
+# （#933，未复测）。只收录已走通的：广告跟踪、软件商店、浏览器、下拉搜索、小布建议、应用建议。
+# 不挂包、不动通知渠道；这些操作仍走 run.py 的独立、需确认流程。
+#
+# 本机实测与其它机型的差异（务必保留在注释里，别照抄别家机型）：
+#   · ColorOS 16 的广告跟踪入口在「隐私 → 设备标识与广告 → 广告跟踪」，不是 17 的「隐私与安全」。
+#   · 软件商店有「服务管理」（OPPO GT5 Pro 那台没有），共 46 项；
+#     隐私相关不在「隐私」页，而在「账号与隐私 → 隐私授权管理 → 个性化推荐」。
+#   · 浏览器主页是「简洁」模式，没有底部「我的」和菜单；必须用 BrowserPreferencesPage 直达。
+#   · 小布建议叫「NEXT AI」（不是「OPPO AI」）。
+#   · 下拉搜索的设置页 SearchSettingActivity 没导出，用 `-n` 组件名会被系统拒绝；
+#     走应用自己的 gs://search/setting。前提是 com.heytap.quicksearchbox 没被挂起——
+#     它一挂，这个 scheme 落到系统的 SuspendedAppActivity「应用已被暂停」页。
+#   · 负一屏的设置页 com.heytap.iflow.main.setting.SettingsActivity 存在，但 am start 要
+#     oppo.permission.OPPO_COMPONENT_SAFE（OPPO 私有权限，只有系统应用持有），adb 起不来；
+#     速览界面上也没有头像或齿轮 → 负一屏段做不了。
+#   · 本机没有独立视频 App：com.coloros.video 是本地播放器（只列手机里的文件，没有在线资讯流），
+#     com.heytap.yoli 未安装 → 视频段没有可关的广告位。
+#   · 主题商店 com.oplus.themestore 在 /product/priv-app/KeKeOplusThemeStore-CN/，是个入口壳：
+#     oaps://theme 进 .entrance.BasicEntranceActivity，点「打开主题商店」弹
+#     「使用个性化服务需要安装“主题商店”」——主商店没预装、要联网下载 → 主题段没法自动做。
+#     注意包名不是 com.heytap.themestore（本机没有这个包），enabled=0 是 DEFAULT 不是禁用。
+model = "RMX3700"
+models = ["RMX3700"]
+build = "RMX3700_16.0.5.1300"
+guard = "guard"
+tail = "tail"
+
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+[const]
+SETTINGS_PAGE_STYLE = "scroll"
+
+[[segment]]
+name = "广告跟踪"
+code = "step_ad_tracking"
+
+[[segment]]
+name = "软件商店"
+code = "step_store"
+
+[[segment]]
+name = "浏览器"
+code = "step_browser"
+
+[[segment]]
+name = "下拉搜索"
+code = "step_search"
+
+[[segment]]
+name = "小布建议"
+code = "step_assistant_advice"
+
+[[segment]]
+name = "应用建议"
+code = "step_app_suggestions"

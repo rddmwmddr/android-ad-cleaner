@@ -1,34 +1,18 @@
-# realme GT Neo5 SE（RMX3700，ColorOS 16.0.5.1300(CN01)）机型脚本。路径实测：2026-10-30，下拉搜索 2026-11-02 补测。软件商店隐私入口接受「隐私」与
-from recipe_kit import step
-# 「隐私授权管理」两种叫法（#933，未复测）。只收录已走通的：
-# 广告跟踪、软件商店、浏览器、下拉搜索、小布建议、应用建议。
-# 不挂包、不动通知渠道；这些操作仍走 run.py 的独立、需确认流程。
-#
-# 本机实测与其它机型的差异（务必保留在注释里，别照抄别家机型）：
-#   · ColorOS 16 的广告跟踪入口在「隐私 → 设备标识与广告 → 广告跟踪」，不是 17 的「隐私与安全」。
-#   · 软件商店有「服务管理」（OPPO GT5 Pro 那台没有），共 46 项；
-#     隐私相关不在「隐私」页，而在「账号与隐私 → 隐私授权管理 → 个性化推荐」。
-#   · 浏览器主页是「简洁」模式，没有底部「我的」和菜单；必须用 BrowserPreferencesPage 直达。
-#   · 小布建议叫「NEXT AI」（不是「OPPO AI」）。
-#   · 下拉搜索的设置页 SearchSettingActivity 没导出，用 `-n` 组件名会被系统拒绝；
-#     走应用自己的 gs://search/setting。前提是 com.heytap.quicksearchbox 没被挂起——
-#     它一挂，这个 scheme 落到系统的 SuspendedAppActivity「应用已被暂停」页。
-#   · 负一屏的设置页 com.heytap.iflow.main.setting.SettingsActivity 存在，但 am start 要
-#     oppo.permission.OPPO_COMPONENT_SAFE（OPPO 私有权限，只有系统应用持有），adb 起不来；
-#     速览界面上也没有头像或齿轮 → 负一屏段做不了。
-#   · 本机没有独立视频 App：com.coloros.video 是本地播放器（只列手机里的文件，没有在线资讯流），
-#     com.heytap.yoli 未安装 → 视频段没有可关的广告位。
-#   · 主题商店 com.oplus.themestore 在 /product/priv-app/KeKeOplusThemeStore-CN/，是个入口壳：
-#     oaps://theme 进 .entrance.BasicEntranceActivity，点「打开主题商店」弹
-#     「使用个性化服务需要安装“主题商店”」——主商店没预装、要联网下载 → 主题段没法自动做。
-#     注意包名不是 com.heytap.themestore（本机没有这个包），enabled=0 是 DEFAULT 不是禁用。
+# realme GT Neo5 SE（RMX3700，ColorOS 16）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
+# 共享库的 settings_page / tap_by_scroll / wait_page / open_search_setting / open_search_sub / close_rows
+# 与 skip / skip_in_safe_mode / p.note_miss 由装载器注入执行作用域。六段都留在这里：每段都按
+# wait_page 的落点逐跳判、失败即 return False，本机路径与别家不同。
+import time
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import p, rt, skip, skip_in_safe_mode
+    from recipe_nav import open_search_setting, open_search_sub, settings_page, tap_by_scroll, wait_page
+    from recipe_strategies import close_rows
+
 BUILD = "RMX3700_16.0.5.1300"
 # 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
 WAIT_PAGE_TIMEOUT = 8
-SETTINGS_PAGE_STYLE = "scroll"
-
-import time
-# 分段结果由引擎经 rt 记录
 
 # 商店「服务管理」是「关掉后隐藏对应服务入口」的开关。服务类入口要留，推广入口才关。
 STORE_KEEP = [
@@ -58,8 +42,7 @@ def guard():
         skip("型号或系统版本不同，跳过；请重新核对页面")
 
 
-@step("广告跟踪")
-def _():
+def step_ad_tracking(p, rt):
     # 每个 App 一个 OAID 开关、没有总开关，新装 App 默认开。
     skip_in_safe_mode()
     if not settings_page("隐私"):
@@ -82,8 +65,7 @@ def _():
     return True
 
 
-@step("软件商店")
-def _():
+def step_store(p, rt):
     p.start("com.heytap.market")
     p.tap("我的", exact=True, scrolls=0)
     time.sleep(1.2)
@@ -127,8 +109,7 @@ def _():
     return True
 
 
-@step("浏览器")
-def _():
+def step_browser(p, rt):
     # 主页是「简洁」模式：没有底部「我的」，也没有菜单。设置页只能按公开 Activity 直达。
     p.d.shell("am start -n com.heytap.browser/com.heytap.browser.settings.component.BrowserPreferencesPage")
     time.sleep(1.5)
@@ -146,8 +127,7 @@ def _():
     return True
 
 
-@step("下拉搜索")
-def _():
+def step_search(p, rt):
     # 搜索设置首页本身 0 个开关，全部开关都在子页里。「账号与隐私」是分组标题，点它没反应。
     if not open_search_setting():
         return False
@@ -167,8 +147,7 @@ def _():
     return True
 
 
-@step("小布建议")
-def _():
+def step_assistant_advice(p, rt):
     # realme 上叫「NEXT AI」，不是「OPPO AI」。
     if not settings_page("NEXT AI", "小布建议"):
         return False
@@ -184,8 +163,7 @@ def _():
     return True
 
 
-@step("应用建议")
-def _():
+def step_app_suggestions(p, rt):
     # 负一屏/助手里的「应用建议」：每个已装 App 一个开关，关掉即不再出现在推荐里。
     skip_in_safe_mode()
     if not settings_page("NEXT AI", "小布建议"):
@@ -205,9 +183,3 @@ def tail():
     print("\n== 结果", flush=True)
     for name, state in rt.results:
         print(f"  {name}: {state}")
-
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import p, rt, skip, skip_in_safe_mode
-    from recipe_nav import open_search_setting, open_search_sub, settings_page, tap_by_scroll, wait_page
-    from recipe_strategies import close_rows

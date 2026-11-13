@@ -1,5 +1,5 @@
 {
- "script": "recipes/oppo/RMX3700/recipe.py",
+ "script": "recipes/oppo/RMX3700/RMX3700.toml",
  "scenarios": {
   "present": [
    ["广告跟踪", "d.shell", ["getprop ro.product.model"], {}],
