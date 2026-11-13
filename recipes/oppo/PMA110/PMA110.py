@@ -56,43 +56,6 @@ def step_ad_tracking(p, rt):
     print(f"  · 广告跟踪：回读确认 {len(before)} 个应用关闭", flush=True)
 
 
-def step_browser(p, rt):
-    print("  将关闭个性化搜索/优惠推荐、开屏/资讯列表广告。", flush=True)
-    browser_settings()
-    activity = BROWSER + "BrowserPreferenceActivity"
-    tap_page("隐私", activity, scrolls=4)
-    close_named(["个性化搜索推荐", "个性化优惠推荐"], "浏览器·隐私", activity, "隐私", 2)
-    tap_page("广告管理", activity, scrolls=0)
-    close_named(["开屏广告", "资讯列表广告"], "浏览器·广告管理", activity, "广告管理", 2)
-    print("  · 不单独点击灰置的摇一摇项；未验证简洁首页，不改布局。", flush=True)
-
-
-def step_search(p, rt):
-    print("  将关闭个性化推荐、精选资讯、搜索框提示词；保留消息总开关与搜索数据源。", flush=True)
-    open_page(SEARCH_SETTINGS, SEARCH + "SearchSettingActivity", "搜索设置")
-    activity = SEARCH + "SearchSourceActivity"
-    tap_page("搜索范围", activity, scrolls=0)
-    # 「全部」是聚合状态；两个子项关掉时它会随之变化，不直接拨它。
-    close_named(["个性化推荐", "精选资讯"], "下拉搜索·搜索范围", activity, "搜索范围", 6, dependent=["全部"])
-    p.back()
-    activity = SEARCH + "SearchFunctionManagerActivity"
-    tap_page("功能管理", activity, scrolls=2)
-    close_named(["搜索框提示词"], "下拉搜索·功能管理", activity, "功能管理", 2)
-    p.back()
-    activity = SEARCH + "PrivacySettingsActivity"
-    tap_page("隐私", activity, scrolls=4)
-    close_named(["个性化推荐"], "下拉搜索·隐私", activity, "隐私", 2)
-
-
-def step_store(p, rt):
-    print("  将关闭个性化推荐；保留下载、更新、应用安全与全部服务模式。", flush=True)
-    app_settings("com.heytap.market", MARKET + "SettingActivity", "软件商店")
-    tap_page(("隐私", "隐私授权管理"), MARKET + "PrivacyActivity", scrolls=8)
-    activity = MARKET + "PersonalRecommendActivity"
-    tap_page("个性化推荐", activity, scrolls=0)
-    close_named(["个性化推荐"], "软件商店·个性化推荐", activity, "个性化推荐", 4)
-
-
 def step_theme(p, rt):
     print("  将关闭开屏广告、锁屏左滑精选、个性化推荐；保留消息总开关与锁屏相机。", flush=True)
     app_settings("com.heytap.themestore", THEME + "SettingActivity", "主题商店")
@@ -111,16 +74,6 @@ def step_theme(p, rt):
     close_named(["个性化推荐设置"], "主题商店·隐私", THEME + "PrivacyActivity", "隐私", 2, reopen=privacy)
 
 
-def step_video(p, rt):
-    print("  将关闭 OPPO 视频个性化推荐；保留在线播放和下载设置。", flush=True)
-    p.start("com.heytap.yoli")
-    require(p.go("我的", "设置"), "未找到视频设置入口")
-    tap_page("设置", VIDEO + "SettingActivity", scrolls=0, exact=False)
-    activity = VIDEO + "PersonalizedContentManageActivity"
-    tap_page("个性化内容管理", activity, scrolls=3)
-    close_named(["个性化推荐"], "OPPO视频·个性化内容管理", activity, "个性化内容管理", 2)
-
-
 def step_assistant_advice(p, rt):
     print("  将关闭资讯服务、视界日报、小红书资讯；保留出行、快递、日程等服务。", flush=True)
     system_settings()
@@ -136,23 +89,6 @@ def step_assistant_advice(p, rt):
     p.back()
     tap_page("小红书资讯", detail, title="服务设置", scrolls=0)
     close_named(["小红书资讯"], "小布建议·小红书资讯", detail, "服务设置", 2)
-
-
-def step_negative_screen(p, rt):
-    print("  将关闭热点资讯及其个性化推荐，轮播改为不显示；保留功能卡片和推荐服务总开关。", flush=True)
-    assistant_settings()
-    activity = ASSISTANT + "card.infoflow.setting.activity.InfoFlowSettingActivity"
-    tap_page("热点资讯", activity, scrolls=0)
-    close_named(["热点资讯"], "负一屏·热点资讯", activity, "热点资讯", 2)
-    p.back()
-    activity = ASSISTANT + "setting.recommendservice.RecommendServiceSettingActivity"
-    tap_page("推荐服务", activity, scrolls=0)
-    hide_carousel()
-    p.back()
-    tap_page("隐私", ASSISTANT + "setting.activity.PrivacyActivity", scrolls=4)
-    activity = ASSISTANT + "setting.activity.PersonalRecommendManageActivity"
-    tap_page("个性化推荐", activity, scrolls=0)
-    close_named(["热点资讯"], "负一屏·个性化推荐", activity, "个性化推荐", 2)
 
 
 def tail():

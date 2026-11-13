@@ -2245,7 +2245,8 @@ class StoreSegmentTests(unittest.TestCase):
 
     def test_pma110_passes_both_wording(self):
         scope = self.segment("PMA110", "软件商店", app_settings=None, tap_page=None, close_named=None)
-        self.assertEqual(scope["tap_page"].call_args_list[0].args[0], PRIVACY_933)
+        # 页面树里的等价文案是 TOML 数组（转成 list）：按内容与顺序比，容器类型不是判据。
+        self.assertEqual(tuple(scope["tap_page"].call_args_list[0].args[0]), PRIVACY_933)
 
     def test_pkx110_passes_both_wording(self):
         scope = self.segment("PKX110", "软件商店·个性化",
