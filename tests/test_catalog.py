@@ -192,5 +192,88 @@ def _script_off_literals(path):
     return found
 
 
+class ReaderTests(unittest.TestCase):
+    """#1270：只扫 `recipe*.py` 的消费者（词库 / 入口速查 / 台账 / 类型检查）也认 `<型号>.toml`。
+
+    判据是「同一台机的 `.py` 与 `.toml` 投影出同一份词库与入口」：把 V1986A 的两份分别放进临时
+    目录，`.py` 一份、`.toml` 一份，各自 `vocab.scan` 与 `entries.used_by`，结果必须相同。这证明
+    转成数据之后脚本不会从这些生成物里消失（否则批次验收「词条总数不下降 / 入口速查不变」无从谈起）。
+    """
+
+    def _project(self, keep):
+        """把 V1986A 的指定形态放进临时 recipes 目录，返回 (词库投影, 计数, 入口投影)。"""
+        import shutil
+
+        import entries
+        import vocab
+        with tempfile.TemporaryDirectory() as tmp:
+            model_dir = Path(tmp) / "vivo" / "V1986A"
+            model_dir.mkdir(parents=True)
+            shutil.copy(ROOT / keep, model_dir / Path(keep).name)
+            scan = vocab.scan(tmp)
+            words = sorted((w.text, w.kind, w.family, w.group, w.page) for w in scan.words)
+            counts = (scan.whole_page, len(scan.unresolved_only), len(scan.unresolved_close),
+                      len(scan.unresolved_keep), sorted(scan.silent))
+            return words, counts, entries.used_by(tmp)
+
+    def test_toml_projects_the_same_words_as_py(self):
+        self.assertEqual(self._project(SCRIPT), self._project(DATA))
+
+    def test_scan_dir_handles_a_toml_model(self):
+        import recipe_source
+        with tempfile.TemporaryDirectory() as tmp:
+            model_dir = Path(tmp) / "vivo" / "V1986A"
+            model_dir.mkdir(parents=True)
+            (model_dir / "V1986A.toml").write_text((ROOT / DATA).read_text(encoding="utf-8"), encoding="utf-8")
+            facts = recipe_source.scan_dir(tmp)
+            self.assertEqual(list(facts), ["vivo/V1986A/V1986A.toml"])
+            self.assertTrue(any(call.name == "p.off" for call in facts["vivo/V1986A/V1986A.toml"].calls))
+
+    def test_recipe_files_prefers_py_then_falls_back_to_toml(self):
+        import recipe_meta
+        with tempfile.TemporaryDirectory() as tmp:
+            model_dir = Path(tmp) / "vivo" / "V1986A"
+            model_dir.mkdir(parents=True)
+            (model_dir / "recipe.py").write_text("MODELS = ['x']\n", encoding="utf-8")
+            (model_dir / "V1986A.toml").write_text((ROOT / DATA).read_text(encoding="utf-8"), encoding="utf-8")
+            self.assertEqual([Path(p).name for p in recipe_meta.recipe_files(tmp)], ["recipe.py"])
+            (model_dir / "recipe.py").unlink()
+            self.assertEqual([Path(p).name for p in recipe_meta.recipe_files(tmp)], ["V1986A.toml"])
+
+    def test_recipe_meta_reads_toml(self):
+        import recipe_meta
+        meta = recipe_meta.recipe_meta(str(ROOT / DATA))
+        self.assertEqual(meta["build"], "PD1986_A_8")
+        self.assertEqual(meta["models"], ["V1986A"])
+        self.assertEqual(meta["steps"], ["系统广告", "阅图锁屏", "应用商店"])
+
+    def test_typecheck_validates_toml_data(self):
+        import typecheck_recipes
+        with tempfile.TemporaryDirectory() as tmp:
+            good = Path(tmp) / "good.toml"
+            good.write_text((ROOT / DATA).read_text(encoding="utf-8"), encoding="utf-8")
+            self.assertFalse(typecheck_recipes._check_catalog(str(good))[0])
+            bad = Path(tmp) / "bad.toml"
+            bad.write_text('model = "x"\n[[segment]]\nname = "s"\nops = [{kind = "nope"}]\n', encoding="utf-8")
+            self.assertTrue(typecheck_recipes._check_catalog(str(bad))[0])
+
+
+class GenTests(unittest.TestCase):
+    """#1270：`adapt gen` 默认产出的是页面树骨架，起点形状就对（能过校验器）。"""
+
+    def test_catalog_draft_is_valid_schema(self):
+        import adapt
+        from tomllib import loads
+        src = adapt.render_catalog_draft(
+            [("com.bbk.appstore", "我的>设置>关于", ["个性化推荐", "服务管理"])],
+            model="TEST01", build="OS1", source="探路-TEST01.tsv")
+        data = loads(src)
+        catalog.validate(data)
+        self.assertEqual(data["models"], ["TEST01"])
+        self.assertEqual([s["name"] for s in data["segment"]], ["com.bbk.appstore · 我的>设置>关于"])
+        kinds = [op["kind"] for op in data["segment"][0]["ops"]]
+        self.assertEqual(kinds, ["start", "entry", "entry", "off"])
+
+
 if __name__ == "__main__":
     unittest.main()

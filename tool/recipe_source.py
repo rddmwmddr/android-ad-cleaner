@@ -25,9 +25,12 @@ r"""机型脚本的「事实」层：一份源码里发生了哪些调用。纯 
 """
 import ast
 import glob
+import json
 import os
+import tomllib
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from typing import Any
 
 _Function = ast.FunctionDef | ast.AsyncFunctionDef
 _Position = tuple[int, int]
@@ -459,19 +462,144 @@ def scan_source(src: str, bindings: Mapping[int, Sequence[str]] | None = None,
 
 
 def scan_dir(recipes_dir: str, families: Mapping[str, str] | None = None) -> dict[str, Facts]:
-    """一个脚本目录的事实：{相对路径: 事实}，只读 `recipe*.py`，按路径排序。
+    """一个脚本目录的事实：{相对路径: 事实}，按路径排序。
+
+    每个型号目录（`recipes/<家族>/<型号>/`）只出**一份**事实，两条来源：
+    - 有 `recipe*.py`（含 `recipe_android15.py` 这类变体）时读这些源码（迁移期 `.py` 仍是活的，
+      `.toml` 只是同目录的等价副本，例如 `V1986A`）；
+    - 没有 `recipe*.py`、只有 `<型号>.toml` 时读 catalog 数据（`scan_catalog`，含同目录
+      `<型号>.py` 例外函数）。这样转成数据之后脚本不会从词库 / 入口速查里消失（#1270）。
 
     `families` 给定时只收家族认得出的脚本（词库的入口）；不给就全收（入口速查）。遍历口径
-    （文件名、相对路径、家族过滤）只在这里写一次，两个消费方不再各写一份 glob。
-    路径的第一段是家族（`recipes/<家族>/<型号>/recipe*.py`），家族名本身也在 `families` 里。"""
+    （目录切分、文件名、家族过滤）只在这里写一次，两个消费方不再各写一份 glob。
+    路径的第一段是家族（`recipes/<家族>/<型号>/…`），家族名本身也在 `families` 里。"""
     out = {}
-    for path in glob.glob(os.path.join(recipes_dir, "*", "*", "recipe*.py")):
-        rel = os.path.relpath(path, recipes_dir).replace(os.sep, "/")
-        if families is not None and families.get(rel.split("/", 1)[0].lower()) is None:
+    for model_dir in sorted(glob.glob(os.path.join(recipes_dir, "*", "*"))):
+        if not os.path.isdir(model_dir):
             continue
-        with open(path, encoding="utf-8") as handle:
-            out[rel] = scan_source(handle.read())
+        rel_dir = os.path.relpath(model_dir, recipes_dir).replace(os.sep, "/")
+        if families is not None and families.get(rel_dir.split("/", 1)[0].lower()) is None:
+            continue
+        py = sorted(glob.glob(os.path.join(model_dir, "recipe*.py")))
+        if py:
+            for path in py:
+                rel = os.path.relpath(path, recipes_dir).replace(os.sep, "/")
+                with open(path, encoding="utf-8") as handle:
+                    out[rel] = scan_source(handle.read())
+            continue
+        for toml in sorted(glob.glob(os.path.join(model_dir, "*.toml"))):
+            rel = os.path.relpath(toml, recipes_dir).replace(os.sep, "/")
+            out[rel] = scan_catalog_file(toml)
     return dict(sorted(out.items()))
+
+
+def _s(value: object) -> str:
+    """把 TOML 里的标量写成 Python 字面量（字符串走 json，数字/布尔原样）。"""
+    return json.dumps(value, ensure_ascii=False) if isinstance(value, str) else repr(value)
+
+
+def _catalog_src(data: Mapping[str, Any]) -> str:
+    """把一份 catalog 数据降成等价的 Python 源码：每个 op 一行语句，复用 `scan_source` 的读法。
+
+    只关心事实层会读的调用：`p.off`（含 only/keep/page）、`p.start`、`p.entry`（maybe）、
+    库调用（`lib` / `require_lib` / `code` 的裸名）。整页关闭 `close_all` 降成不带 only 的
+    `p.off`，与旧脚本「整页关闭」同一个事实形状。`back` / `top` / `print` / `return` 不产生事实。"""
+    lines: list[str] = []
+
+    def lower(ops: Sequence[Any]) -> None:
+        for op in ops:
+            if not isinstance(op, Mapping):
+                continue
+            kind = op.get("kind")
+            if kind == "off":
+                args = ""
+                if "only" in op:
+                    args += f"only={json.dumps(op['only'], ensure_ascii=False)}, "
+                elif "only_code" in op:
+                    args += f"only={op['only_code']}(), "
+                if "keep" in op:
+                    args += f"keep={json.dumps(op['keep'], ensure_ascii=False)}, "
+                lines.append(f'p.off({args}page={_s(op["page"])})')
+            elif kind == "close_all":
+                lines.append(f'p.off(page={_s(op["page"])})')
+            elif kind == "start":
+                extra = f", {_s(op['activity'])}" if "activity" in op else ""
+                lines.append(f'p.start({_s(op["pkg"])}{extra})')
+            elif kind in ("entry", "require_entry"):
+                lines.append(f"p.entry({_s(op['text'])})")
+            elif kind == "gated":
+                for text in op.get("entries", []):
+                    lines.append(f"maybe({_s(text)})")
+                lower(op.get("ops", []))
+            elif kind == "scoped":
+                lower(op.get("ops", []))
+            elif kind in ("lib", "require_lib", "code"):
+                args = ", ".join(_s(a) for a in op.get("args", []))
+                lines.append(f"{op['name']}({args})")
+
+    for segment in data.get("segment", []):
+        if "code" in segment:
+            lines.append(f"{segment['code']}()")
+        else:
+            lower(segment.get("ops", []))
+    return "\n".join(lines) or "pass"
+
+
+def _lib_modules() -> dict[str, str]:
+    """注入名 → 归属模块，只收能在三张表里唯一定位的名字（同名多簇的不猜）。"""
+    index: dict[str, list[str]] = {}
+    for module, table in surface_sources().items():
+        for name in table:
+            index.setdefault(name, []).append(module)
+    return {name: modules[0] for name, modules in index.items() if len(modules) == 1}
+
+
+def scan_catalog(data: Mapping[str, Any], exception_src: str | None = None) -> Facts:
+    """一份 catalog 数据的事实：把数据降成等价源码交给 `scan_source`，再把库调用的归属补上。
+
+    库调用（`lib` 的 `settings_home` / `off_one` 等）在数据里没有 import 头，归属由 `_lib_modules()`
+    在三张注入表里唯一定位后补进 `imports`，`imported_sources()` 因此照常解析到那份实现、扫出它的入口。
+    `exception_src` 是同目录 `<型号>.py` 例外函数源码：它与数据是同一台机的两份，合并成一份事实
+    （`code=` 段的词住在例外函数里，别丢）。"""
+    base = scan_source(_catalog_src(data))
+    modules = _lib_modules()
+    imports = dict(base.imports)
+    import_lines = dict(base.import_lines)
+    for call in base.calls:
+        if call.injected and call.name not in imports and call.name not in base.defines:
+            module = modules.get(call.name)
+            if module is not None:
+                imports[call.name] = module
+                import_lines.setdefault(call.name, call.line)
+    base = replace(base, imports=imports, import_lines=import_lines)
+    if exception_src is None:
+        return base
+    return _merge_facts(base, scan_source(exception_src))
+
+
+def scan_catalog_file(toml_path: str) -> Facts:
+    """读一份 `<型号>.toml`（含同目录 `<型号>.py` 例外）并给出事实。"""
+    with open(toml_path, "rb") as handle:
+        data = tomllib.load(handle)
+    companion = os.path.splitext(toml_path)[0] + ".py"
+    exception_src = None
+    if os.path.isfile(companion):
+        with open(companion, encoding="utf-8") as handle:
+            exception_src = handle.read()
+    return scan_catalog(data, exception_src)
+
+
+def _merge_facts(first: Facts, second: Facts) -> Facts:
+    """两份事实并成一份（数据 + 例外函数）：调用点合并、定义并集、常量与导入合并。
+
+    行号在两份里各从 1 起，合并后可能重号——词库的出处行只是定位，重号不影响词条与计数。"""
+    return Facts(
+        calls=tuple(sorted(first.calls + second.calls, key=lambda call: (call.line, call.name))),
+        defines=first.defines | second.defines,
+        dict_entries=first.dict_entries + second.dict_entries,
+        constants={**first.constants, **second.constants},
+        imports={**first.imports, **second.imports},
+        import_lines={**first.import_lines, **second.import_lines})
 
 
 def injected_calls(facts: Facts, name: str, module: str | None = None) -> tuple[Call, ...]:

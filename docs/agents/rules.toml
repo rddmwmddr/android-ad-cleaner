@@ -1178,7 +1178,7 @@ expires_if = "结果页与退出码改由单独的结局字段表达、不再从
 
 [[rule]]
 id = "dev.recipes.no-local-preamble"
-source = "docs/04-给新机型写脚本.md#一段机型脚本长什么样"
+source = "docs/04-给新机型写脚本.md#本机例外函数"
 check = "test:test_recipe_preamble_migration::StructureTests.test_recipes_do_not_define_the_preamble"
 status = "enforced"
 why = "43 份脚本各抄一份段包装，已经分化成两代：锁屏时一代抛异常（记未完成），一代打印一句「后面的都不跑」就返回（退出码仍是 0，结果页显示成功）。#838 把前导收进引擎、#839 删掉 43 份本地副本；再留一份副本就会长出第三代，而且新写脚本的人不知道该抄哪一版。"
@@ -1186,7 +1186,7 @@ expires_if = "不再按 exec 跑脚本（改成 import 一个自带前导的模�
 
 [[rule]]
 id = "dev.recipes.safe-mode-page-wide-skip"
-source = "docs/04-给新机型写脚本.md#一段机型脚本长什么样"
+source = "docs/04-给新机型写脚本.md#本机例外函数"
 check = "test:test_recipe_kit::WholePageStepGuardTests.test_page_wide_segments_start_with_the_safe_mode_exit"
 status = "enforced"
 why = "安全模式下 `off()` 只关点名的开关，整页关闭的段落一个都点不到；段落再回读「必须全关」就稳定记成失败，用户看到的是「没关掉」而不是「这段没做」（#909 的 PKT110 上报）。出口写成段体第一句，是因为写在后面等于先翻页、再判没关掉，失败现场与结论都指向错的环节。"
@@ -1194,7 +1194,7 @@ expires_if = "安全模式不再限制整页关闭（能安全地按页面结构
 
 [[rule]]
 id = "dev.recipes.skip-passes-through-helpers"
-source = "docs/04-给新机型写脚本.md#一段机型脚本长什么样"
+source = "docs/04-给新机型写脚本.md#本机例外函数"
 check = "none"
 status = "manual"
 why = "「先试直达、失败再走菜单」的助手按 `except RuntimeError` 收下「这条路不通」；跳过若被它吞掉，这一段会从跳过退化成走菜单后的空跑或假失败，用户看到的是「没关掉」而不是「这台机没有这个 App」（#908 的 Redmi 15 5G）。判据只认类型（`SkipStep`）：按中文文案判会在措辞调整时静默失效。机器判据探过（#1002）：AST 查「宽捕获的 try 体可能抛跳过、块里又没有 raise」会命中 PLZ110 / PMX110 的 `hide_carousel`（经 `read_switches` → `page` 可能按跳过收场，是真命中，修它要改机型脚本行为），判据还依赖一份「哪些调用会抛跳过」的名单，引擎新增跳过出口时会静默漏判——故仍记 manual，探针输出在票面。"
