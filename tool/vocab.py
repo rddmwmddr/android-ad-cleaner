@@ -223,8 +223,12 @@ def _strings(arg):
 
 
 def _word_calls(facts):
-    """读词的两类调用，按行号排；同一行先 `p.off()` 再 `close_named()`（沿用旧口径）。"""
-    calls = [call for call in facts.calls if call.name in ("p.off", "close_named")]
+    """读词的两类调用，按行号排；同一行先 `p.off()` 再 `close_named()`（沿用旧口径）。
+
+    策略库把 `close_named` 拆成带后缀的注入名（`close_named_vivo` 等，见 #1253），它们都带开关
+    名单，按前缀一并认（#1263）；数据里写的就是真实名，不折回。"""
+    calls = [call for call in facts.calls
+             if call.name == "p.off" or call.name.startswith("close_named")]
     calls.sort(key=lambda call: (call.line, call.name != "p.off"))
     return calls
 

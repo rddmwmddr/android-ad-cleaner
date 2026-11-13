@@ -368,11 +368,13 @@ class _Source:
 
 
 def _page(call: ast.Call) -> str:
-    """这一处调用报的页面标签：`page=` / `title=` 关键字实参，或 `close_named` 的第二个位置实参。
+    """这一处调用报的页面标签：`page=` / `title=` 关键字实参，或 `close_named*` 的第二个位置实参。
 
-    两个消费方都要这一份标签（词库拿它归分组，入口速查不用），写法只在 `_label()` 里有一处。"""
+    两个消费方都要这一份标签（词库拿它归分组，入口速查不用），写法只在 `_label()` 里有一处。
+    `close_named` 与策略库的 `close_named_vivo` 等同族名字都是「名单, 页面」的位置写法（#1263）。"""
     kwargs = {keyword.arg: keyword.value for keyword in call.keywords if keyword.arg}
-    if _plain_name(call.func) == "close_named":
+    name = _plain_name(call.func)
+    if name is not None and name.startswith("close_named"):
         positional = list(call.args) + [None, None]
         node = positional[1] or kwargs.get("page") or kwargs.get("title")
     else:
@@ -530,6 +532,9 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
             elif kind == "require_setting":
                 extra = f", {_s(op['entry'])}" if "entry" in op else ""
                 lines.append(f"p.setting({_s(op['kw'])}{extra})")
+            elif kind == "shell":
+                # 不经门面的拉起串（`am start …`）也是入口，不降级的话入口速查会漏掉这台机（#1263）。
+                lines.append(f"p.d.shell({_s(op['command'])})")
             elif kind == "gated":
                 for text in op.get("entries", []):
                     lines.append(f"maybe({_s(text)})")
@@ -543,11 +548,9 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 lower(op.get("ops", []))
                 lower(op.get("else_ops", []))
             elif kind in ("lib", "require_lib", "code"):
+                # 用数据里写得出的真实名字（不折回 close_named），归属才查得准（#1263）。
                 args = ", ".join(_s(a) for a in op.get("args", []))
-                # 词库按 `close_named(...)` 认词；策略库的变体名（close_named_vivo）折回旧名，
-                # 名单里的开关名才不会被漏读（#1263）。
-                name = "close_named" if op["name"].startswith("close_named") else op["name"]
-                lines.append(f"{name}({args})")
+                lines.append(f"{op['name']}({args})")
 
     for segment in data.get("segment", []):
         if "code" in segment:
@@ -570,20 +573,25 @@ def scan_catalog(data: Mapping[str, Any], exception_src: str | None = None) -> F
     """一份 catalog 数据的事实：把数据降成等价源码交给 `scan_source`，再把库调用的归属补上。
 
     库调用（`lib` 的 `settings_home` / `off_one` 等）在数据里没有 import 头，归属由 `_lib_modules()`
-    在三张注入表里唯一定位后补进 `imports`，`imported_sources()` 因此照常解析到那份实现、扫出它的入口。
+    在三张注入表里唯一定位后补进 `imports`；同时把 `Call.module` 也盖上同一份归属——`injected_calls()`
+    按模块筛调用点，`Call.module` 是空串时脚本这一层一个实现都扫不到，入口速查会静默丢掉机型归属
+    （#1263）。数据显式点名实现，归属靠名字查、不靠 import，与 ADR-0038 一致。
     `exception_src` 是同目录 `<型号>.py` 例外函数源码：它与数据是同一台机的两份，合并成一份事实
     （`code=` 段的词住在例外函数里，别丢）。"""
     base = scan_source(_catalog_src(data))
     modules = _lib_modules()
     imports = dict(base.imports)
     import_lines = dict(base.import_lines)
+    calls = []
     for call in base.calls:
-        if call.injected and call.name not in imports and call.name not in base.defines:
+        if call.injected and call.name not in base.defines:
             module = modules.get(call.name)
             if module is not None:
-                imports[call.name] = module
+                imports.setdefault(call.name, module)
                 import_lines.setdefault(call.name, call.line)
-    base = replace(base, imports=imports, import_lines=import_lines)
+                call = replace(call, module=module)
+        calls.append(call)
+    base = replace(base, calls=tuple(calls), imports=imports, import_lines=import_lines)
     if exception_src is None:
         return base
     return _merge_facts(base, scan_source(exception_src))

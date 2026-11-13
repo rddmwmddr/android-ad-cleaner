@@ -60,6 +60,9 @@ UNRESOLVED_KEEP = {
     "oppo/PLG110/recipe.py": 2,
     "oppo/PMA110/recipe.py": 1,
     "oppo/PMX110/recipe.py": 1,
+    # close_named_vivo 的实现里 keep 是运行时算的（`[n for n in before …]`），不可读；转数据后它
+    # 被正确归属到 recipe_strategies、于是这份实现被扫到，多出一条未解析（词条数不变，#1263）。
+    "vivo/V2417A/V2417A.toml": 1,
 }
 # 模块级字典里的说明文字，按脚本冻结。
 DICT_NOTES = {
