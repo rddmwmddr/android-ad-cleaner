@@ -2,7 +2,6 @@
 
 回读守卫沿用 PMX110 已有行为，旧实现也绿，守的是不回退。
 """
-import ast
 from pathlib import Path
 import sys
 import unittest
@@ -15,7 +14,7 @@ from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock
 import fast
 import run
 
-RECIPE = ROOT / 'recipes/oppo/PLZ110/recipe.py'
+RECIPE = ROOT / 'recipes/oppo/PLZ110/PLZ110.toml'
 
 class Plz110RecipeTests(unittest.TestCase):
     def test_exact_model_has_its_own_seven_verified_segments(self):
@@ -34,12 +33,8 @@ class Plz110RecipeTests(unittest.TestCase):
         for helper in ('app_settings', 'row', 'close_named'):
             scope[helper] = Mock()
         scope['read_switches'] = Mock(return_value={'福利专区': False})
-        node = next(node for node in ast.parse(RECIPE.read_text(encoding='utf-8')).body
-                    if isinstance(node, ast.FunctionDef) and node.decorator_list
-                    and node.decorator_list[0].args[0].value == '软件商店')
-        node.decorator_list, node.name = [], 'store_action'
-        exec(compile(ast.Module(body=[node], type_ignores=[]), str(RECIPE), 'exec'), scope)
-        scope['store_action']()
+        store = next(item.action for item in scope['rt'].steps if item.name == '软件商店')
+        store()
         self.assertEqual(scope['app_settings'].call_args_list,
                          [call('com.heytap.market'), call('com.heytap.market')])
         self.assertEqual(scope['row'].call_args_list, [

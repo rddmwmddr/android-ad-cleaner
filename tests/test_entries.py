@@ -498,8 +498,8 @@ class ReachTest(unittest.TestCase):
 
 
 RECIPES_901 = {
-    "PMX110": ROOT / "recipes" / "oppo/PMX110" / "recipe.py",
-    "PLZ110": ROOT / "recipes" / "oppo/PLZ110" / "recipe.py",
+    "PMX110": ROOT / "recipes" / "oppo/PMX110" / "PMX110.toml",
+    "PLZ110": ROOT / "recipes" / "oppo/PLZ110" / "PLZ110.toml",
 }
 LAUNCHER_901 = "com.android.launcher/com.android.launcher3.Launcher"
 ASSISTANT_SETTING_901 = "com.coloros.assistantscreen/setting.RecommendServiceSettingActivity"
@@ -562,13 +562,10 @@ def load_901(p, recipe):
 
 
 def action_901(scope, recipe, name):
-    """取真实分段的函数体，以便给它的协作者注入替身；不复制分段实现。"""
-    node = next(n for n in ast.parse(recipe.read_text(encoding="utf-8")).body
-                if isinstance(n, ast.FunctionDef) and n.decorator_list
-                and n.decorator_list[0].args[0].value == name)
-    node.decorator_list, node.name = [], "selected_action"
-    exec(compile(ast.Module(body=[node], type_ignores=[]), str(recipe), "exec"), scope)
-    return scope["selected_action"]
+    """取真实分段的 action，以便给它的协作者注入替身；不复制分段实现（#1265）。
+
+    `.py` 与页面树（`.toml`）的 `rt.steps` 都按段名挂着真正会跑的那一段，从那里取即可。"""
+    return next(item.action for item in scope["rt"].steps if item.name == name)
 
 
 class AssistantEntryTests(unittest.TestCase):
@@ -1851,7 +1848,7 @@ class VivoGearTests(unittest.TestCase):
 
 
 PNM_796 = ROOT / "recipes" / "honor/PNM-AN10" / "PNM-AN10.toml"
-PLR_796 = ROOT / "recipes" / "oppo/PLR110" / "recipe.py"
+PLR_796 = ROOT / "recipes" / "oppo/PLR110" / "PLR110.toml"
 
 HIBOARD_START_796 = "am start -f 0x10008000 -n com.hihonor.hiboard/com.hihonor.intelligent.LauncherActivity"
 SEARCH_SETTING_796 = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"
@@ -2009,9 +2006,9 @@ MARKET_933 = "com.heytap.market/com.heytap.market.mine.cn.setting.ui."
 PRIVACY_PAGE_933 = MARKET_933 + "PrivacyActivity"
 RECIPES_933 = {
     "PLG110": ROOT / "recipes/oppo/PLG110/PLG110.toml",
-    "PMA110": ROOT / "recipes/oppo/PMA110/recipe.py",
+    "PMA110": ROOT / "recipes/oppo/PMA110/PMA110.toml",
     "PKX110": ROOT / "recipes/oppo/PKX110/PKX110.toml",
-    "RMX3700": ROOT / "recipes/oppo/RMX3700/recipe.py",
+    "RMX3700": ROOT / "recipes/oppo/RMX3700/RMX3700.toml",
     "PHK110": ROOT / "recipes/oppo/PHK110/PHK110-android15.toml",
 }
 
@@ -2271,7 +2268,7 @@ class StoreSegmentTests(unittest.TestCase):
         scope["wait_page"] = Mock(return_value=True)
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            action_933(scope, RECIPES_933["RMX3700"], "软件商店")()
+            next(item.action for item in scope["rt"].steps if item.name == "软件商店")()
         self.assertIn("没找到「隐私授权管理」", out.getvalue())
         p.note_miss.assert_called_once_with("隐私 / 隐私授权管理")
 
