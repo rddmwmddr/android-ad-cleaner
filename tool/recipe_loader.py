@@ -4,8 +4,8 @@
 `@step` 在那一刻只登记段名并原样返回函数，所以导入一份脚本不产生任何设备动作；段过滤与执行
 由 `LoadedRecipe.run()` 负责，顺序按函数定义行号。
 
-草稿（`adapt gen` 产出、没有 import 头）与正式脚本走同一个入口：装载器注入 `step`，
-草稿顶部那句 `@step(...)` 因此照旧可用。
+`adapt gen` 现在产出的草稿带 import 头（`from recipe_kit import step`），与正式脚本走同一个入口；
+`#1247` 之前的旧草稿没有 import 头，装载器仍注入 `step`，那句 `@step(...)` 因此照旧可用。
 
 `RecipeScope` 是执行作用域的字典，测试装载（`tests/fixtures.load_recipe`）拿它当返回值：
 `scope["rt"]` 是真的执行上下文，`scope["ONLY"]` 代理到 rt 上，`scope["VERIFIED_SWITCHES"]`
