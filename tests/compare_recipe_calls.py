@@ -183,7 +183,10 @@ def fake_until(clock):
     """
     import wait
     bound = functools.partial(wait.until, now=clock.time, sleep=clock.sleep)
-    with patch.object(wait, "until", bound):
+    # 直接 `from wait import until` 的模块持有另一份绑定：只换 `wait.until` 换不到它，
+    # 那些调用仍用定义时绑死的真时钟，采样轮数随机器快慢变（Windows CI 因此多出两轮）。
+    import recipe_nav
+    with patch.object(wait, "until", bound), patch.object(recipe_nav, "until", bound):
         yield
 
 
