@@ -630,6 +630,19 @@ def cmd_ui_check(serial, rest):
     return py("fast.py", "-s", serial, "check")
 
 
+def local_counts(recipe_path):
+    """本机函数计数；脚本读不出时返回 None（语法错、编码坏、文件消失）。
+
+    `check` 与 `status-json` 以前只做正则，坏脚本不会让它们崩掉；`recipe_audit.counts()` 走
+    `ast.parse`，语法错会抛 `SyntaxError`。一条坏脚本不能把整条诊断失败——`status-json` 崩了，
+    GUI 与 `android/smoke.py` 都拿不到 JSON。降级只影响这一个数，别的诊断照常出。
+    """
+    try:
+        return recipe_audit.counts(Path(recipe_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError, SyntaxError):
+        return None
+
+
 def cmd_check(serial, rest):
     i = info(serial); r, ref = recipe_for(i["model"], i["brand"], i)
     print(f"机型：{i['name'] if i['name'].upper().startswith(i['brand'].upper()) else i['brand']+' '+i['name']}（{i['model']}），系统 {i['build']}，Android {i['android']}")
@@ -663,9 +676,10 @@ def cmd_check(serial, rest):
         print(f"机型脚本：{os.path.relpath(r, ROOT)}；{ver}")
     else:
         print("机型脚本：没有。可跑：通知渠道 chan-scan/chan-off、广告包挂起；其余照 docs/清单 手动做，或用 tool/explore.py 探路")
-    if r:
-        # 这份脚本自带几个本机函数：数字由 recipe_audit 现算，明细用 `python3 tool/recipe_audit.py`（#1240）。
-        local = recipe_audit.counts(Path(r).read_text(encoding="utf-8"))
+    # 这份脚本自带几个本机函数：数字由 recipe_audit 现算，明细用 `python3 tool/recipe_audit.py`（#1240）。
+    # 脚本坏到读不出计数时这一行不打印，别让一条坏脚本带走整条诊断（见 local_counts）。
+    local = local_counts(r) if r else None
+    if local:
         hooks = f"、声明式钩子 {local['hook']}" if local["hook"] else ""
         print(f"  本机策略：{local['strategy']} 个；本机函数 {local['total']} 个"
               f"（引擎词汇 {local['vocabulary']}、真机知识 {local['knowledge']}{hooks}）")
@@ -973,8 +987,8 @@ def cmd_status_json(serial, rest):
         "info": i, "locked": locked(serial),
         "recipe": os.path.relpath(r, ROOT) if r else None, "recipe_ref": ref, "recipe_build": rb, "recipe_ok": ok, "steps": steps,
         "recipe_coverage": coverage, "recipe_evidence": evidence, "recipe_verified": verified,
-        # 这份脚本自带几个本机函数：数字与 `check` 那行同一个来源（#1240）。没有脚本时是 None。
-        "recipe_local": recipe_audit.counts(Path(r).read_text(encoding="utf-8")) if r else None,
+        # 这份脚本自带几个本机函数：数字与 `check` 那行同一个来源（#1240）。没有脚本或脚本坏了读不出时是 None。
+        "recipe_local": local_counts(r) if r else None,
         "ads": ads, "quickapps": quickapps(serial),
         "stay_on": sh(serial, "settings get global stay_on_while_plugged_in"),
         "dev": sh(serial, "settings get global development_settings_enabled") == "1",

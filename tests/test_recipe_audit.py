@@ -306,6 +306,28 @@ class RunOutputTests(unittest.TestCase):
             self.assertEqual(run.cmd_check("S", []), 0)
         self.assertIn("本机策略：1 个；本机函数 3 个（引擎词汇 1、真机知识 1）", out.getvalue())
 
+    def test_a_broken_script_degrades_instead_of_crashing_both_diagnostics(self):
+        """语法错的脚本不能让 `check` / `status-json` 整条崩：`status-json` 崩了 GUI 与真机冒烟都拿不到
+        JSON。读不出计数时 `recipe_local` 记 None、`check` 那行不打印，其余诊断照常出。"""
+        status, listing = io.StringIO(), io.StringIO()
+        with patch.object(run, "info", return_value=DEVICE), \
+             patch.object(run, "locked", return_value=False), \
+             patch.object(run, "input_blocked", return_value=False), \
+             patch.object(run, "ad_packages", return_value=()), \
+             patch.object(run, "quickapps", return_value=[]), \
+             patch.object(run, "sh", return_value=""), \
+             patch.object(run, "suspended", return_value=False), \
+             patch.object(run, "fold_open", return_value=False), \
+             patch.object(run.recipe_audit, "counts", side_effect=SyntaxError("坏脚本")):
+            with contextlib.redirect_stdout(status):
+                self.assertEqual(run.cmd_status_json("S", []), 0)
+            with contextlib.redirect_stdout(listing):
+                self.assertEqual(run.cmd_check("S", []), 0)
+        payload = json.loads(status.getvalue().strip().splitlines()[-1])
+        self.assertIsNone(payload["recipe_local"])
+        self.assertIn("机型：", listing.getvalue())          # 别的诊断照常出
+        self.assertNotIn("本机策略", listing.getvalue())     # 这一行读不出就不打印
+
 
 if __name__ == "__main__":
     unittest.main()
