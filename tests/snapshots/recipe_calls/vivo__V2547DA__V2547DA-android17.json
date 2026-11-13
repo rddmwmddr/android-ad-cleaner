@@ -1,5 +1,5 @@
 {
- "script": "recipes/vivo/V2547DA/recipe_android17.py",
+ "script": "recipes/vivo/V2547DA/V2547DA-android17.toml",
  "scenarios": {
   "present": [
    ["系统广告", "locked", [], {}],
