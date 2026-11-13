@@ -78,11 +78,8 @@ def assert_no_other_window(root, package):
     require(not foreign, "检测到其他应用窗口或权限页，停止本段")
 
 
-def safe_switches(activity):
-    require(p.focus() == activity, "页面已变化，停止本段")
-    root = p.tree()
-    assert_no_other_window(root, activity.split("/", 1)[0])
-    return p.switches(root)
+# `safe_switches` 的实现搬进 recipe_strategies（#1253）：它按 `g["assert_no_other_window"]` 取上面
+# 这个本机助手，`TARGET_PACKAGE` 约定仍留在这里。
 
 
 @step("系统跟踪")
@@ -218,3 +215,4 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import p, require, rt
     from recipe_nav import close_named, goto, tap_text, wait_page
+    from recipe_strategies import safe_switches

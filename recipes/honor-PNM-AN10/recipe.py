@@ -4,7 +4,6 @@ BUILD = ""
 # 家族库按这些常量选走法（#1246），缺省档与实现见 tool/recipe_nav.py。
 BROWSER_FLOW = "honor_mounted"
 OPEN_SETTINGS_STYLE = "honor"
-import re
 import time
 
 import adb_link
@@ -157,32 +156,8 @@ def _():
     p.back()
 
 
-def baidu_browser():
-    """新机预装 com.hihonor.baidu.browser（#87 社区实测 PTP-AN00）：我的 → 右上齿轮 → 消息设置 / 隐私设置。
-    「广告设置」是网页，读不到开关；其中「不看程序化广告」「不看个性化广告」要打开，请手动处理。"""
-    p.start("com.hihonor.baidu.browser")
-    p.dismiss()
-    for text, (l, t, r, b), _ in p.texts():
-        if text == "我的" and t >= p.H * 0.8:
-            p.click((l + r) // 2, (t + b) // 2); time.sleep(1); break
-    else:
-        print("  ✗ 没找到底部「我的」"); return False
-    from fast import bounds
-    icons = [n for n in p.tree().iter("node") if n.get("clickable") == "true" and p.on_screen(n)
-             and bounds(n)[3] < p.H * 0.15 and bounds(n)[0] > p.W * 0.5
-             and re.search(r"设置|setting", (n.get("content-desc") or "") + (n.get("resource-id") or ""), re.I)]
-    if len(icons) != 1:
-        print("  ✗ 没找到右上角唯一的设置图标"); return False
-    l, t, r, b = bounds(icons[0]); p.click((l + r) // 2, (t + b) // 2); time.sleep(1)
-    if p.tap("消息设置", exact=True):
-        p.off(only=["新闻热点", "兴趣推送"], page="浏览器·消息设置")
-        p.back()
-    if p.tap("隐私设置", exact=True):
-        p.off(only=["搜索个性化推荐", "搜索下一条推荐"], page="浏览器·隐私设置")
-        p.back()
-    print("  · 「隐私设置 → 偏好设置 → 广告设置」是网页，请手动打开「不看程序化广告」「不看个性化广告」")
-    p.back(2)
-    return False
+# `browser_settings` 的荣耀档按名字回调 `g["baidu_browser"]`，实现住在 recipe_strategies（#1253）。
+# 它没有脚本内的调用点，词库按下面 TYPE_CHECKING 那一行算它的出处。
 
 
 @step("浏览器")
@@ -291,3 +266,4 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import SkipStep, p, skip_in_safe_mode
     from recipe_nav import browser_settings, open_settings
+    from recipe_strategies import baidu_browser

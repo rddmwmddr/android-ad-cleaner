@@ -91,12 +91,14 @@ class Facts:
     模块级字典里的常量键值对（词库拿它筛说明文字，判不判中文留给消费方），模块级字符串
     常量（单串与列表）——扫注入实现时，调用方把 `constants` 交回 `scan_source(externals=…)`，
     实现里按名字取的值才读得出——以及导入的名字与归属模块（`{名字: 模块}`，含 `if TYPE_CHECKING:`
-    块；`import X` 记成 `{X: X}`，`import X as Y` 记成 `{Y: X}`，消费方按它解析共享实现的归属）。"""
+    块；`import X` 记成 `{X: X}`，`import X as Y` 记成 `{Y: X}`，消费方按它解析共享实现的归属）
+    与导入行号（`{名字: 行号}`，没有调用点可写出处时词库退到这一行，#1253）。"""
     calls: tuple[Call, ...]
     defines: frozenset[str]
     dict_entries: tuple[DictEntry, ...] = ()
     constants: Mapping[str, tuple[Item, ...]] = field(default_factory=dict)
     imports: Mapping[str, str] = field(default_factory=dict)
+    import_lines: Mapping[str, int] = field(default_factory=dict)
 
 
 def _string_value(node: ast.AST) -> str | None:
@@ -162,24 +164,32 @@ def _call_name(func: ast.expr, modules: Mapping[str, str],
     return ast.unparse(func), False, ""
 
 
-def _imports(tree: ast.Module) -> tuple[dict[str, str], dict[str, str]]:
-    """（名字 → 归属模块, 模块别名 → 模块）。
+def _imports(tree: ast.Module) -> tuple[dict[str, str], dict[str, str], dict[str, int]]:
+    """（名字 → 归属模块, 模块别名 → 模块, 名字 → 导入行号）。
 
     只收模块级语句与 `if TYPE_CHECKING:` / `try:` 块里的导入：`if TYPE_CHECKING:` 里的那些在运行时
     不执行、静态检查才看得见，正是脚本声明「谁提供这个实现」的地方。函数体里的局部导入不收，
-    它只在那一个函数里可见。`from . import x` 这类没有模块名，记空串。"""
+    它只在那一个函数里可见。`from . import x` 这类没有模块名，记空串。
+
+    行号是那个名字在脚本里的唯一落点：实现由库提供、脚本只按名字取（`g["off_exact"]` 那种钩子、或
+    模块级别名）时没有调用点可写出处，词库退到这一行（#1253）。"""
     names: dict[str, str] = {}
     modules: dict[str, str] = {}
+    lines: dict[str, int] = {}
 
     def walk(body: Sequence[ast.stmt]) -> None:
         for node in body:
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    modules[alias.asname or alias.name.split(".")[0]] = alias.name
+                    name = alias.asname or alias.name.split(".")[0]
+                    modules[name] = alias.name
+                    lines[name] = alias.lineno
             elif isinstance(node, ast.ImportFrom):
                 module = node.module or ""
                 for alias in node.names:
-                    names[alias.asname or alias.name] = module
+                    name = alias.asname or alias.name
+                    names[name] = module
+                    lines[name] = alias.lineno
             elif isinstance(node, (ast.If, ast.Try)):
                 walk(node.body)
                 walk(node.orelse)
@@ -187,7 +197,7 @@ def _imports(tree: ast.Module) -> tuple[dict[str, str], dict[str, str]]:
                     walk(handler.body)
 
     walk(tree.body)
-    return names, modules
+    return names, modules, lines
 
 
 def _param_names(function: _Function | None) -> tuple[str, ...]:
@@ -278,7 +288,7 @@ class _Source:
         self.assigns: dict[str, list[tuple[_Position, ast.expr]]] = {}
         self.bindings: Mapping[int, Sequence[str]] = bindings or {}
         self.externals: Mapping[str, Sequence[Item]] = externals or {}
-        self.imports, self.modules = _imports(tree)
+        self.imports, self.modules, self.import_lines = _imports(tree)
         self.calls: list[tuple[ast.Call, _Function | None]] = []
         for node in ast.walk(tree):
             if (isinstance(node, ast.Assign) and len(node.targets) == 1
@@ -445,7 +455,7 @@ def scan_source(src: str, bindings: Mapping[int, Sequence[str]] | None = None,
     return Facts(calls=tuple(calls), defines=frozenset(
         node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))),
         dict_entries=_dict_entries(tree), constants=_module_values(tree),
-        imports={**source.modules, **source.imports})
+        imports={**source.modules, **source.imports}, import_lines=source.import_lines)
 
 
 def scan_dir(recipes_dir: str, families: Mapping[str, str] | None = None) -> dict[str, Facts]:
@@ -523,10 +533,21 @@ def imported_sources(facts: Facts,
 
 
 def step_sources() -> dict[str, str]:
-    """段体注入面（`recipe_steps.STEPS`）的源码：{注入名: 源码}，词库只扫这一张表。
+    """段体注入面（`recipe_steps.STEPS`）的源码：{注入名: 源码}。词库扫这一张与策略库那一张（#1253）。
 
     导航助手的开关名单写在调用点的实参里（`close_named(NAMES, page=…)`），扫它们的实现只会
-    读到形参、记成一串没读出来的未解析；词住在实现里的只有段体那张表（#1209）。"""
+    读到形参、记成一串没读出来的未解析；词住在实现里的只有段体与拨动策略两张表（段体沿用 #1209，
+    #1253 起策略库也扫）。"""
     import inspect
     import recipe_steps
     return {name: inspect.getsource(factory) for name, factory in recipe_steps.STEPS.items()}
+
+
+def strategy_sources() -> dict[str, str]:
+    """拨动策略注入面（`recipe_strategies.STRATEGIES`）的源码：{注入名: 源码}。
+
+    这一张表的实现里也有 `p.off(only=…)` / `keep=…` 现场（#1253 把剩下的 14 个搬进来之前没有），
+    所以词库不能只扫段体；导航助手那张表不在词库范围内。"""
+    import inspect
+    import recipe_strategies
+    return {name: inspect.getsource(factory) for name, factory in recipe_strategies.STRATEGIES.items()}

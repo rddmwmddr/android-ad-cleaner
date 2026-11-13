@@ -10,11 +10,14 @@
 `recipe_steps`——这里只放「怎么把开关关掉」那一类（精确匹配、逐行重读、整页全关、父子项、
 短按被吞、标题在行外、标题随状态变）。同一个注入名在家族里有几套走法、由脚本常量选的
 （`read_switches` / `close_named` / `hide_carousel`），分派表跟着名字住在 `recipe_nav`：一张表
-一个名字，跨模块分派会把两张注入面绕在一起（#1245）。函数体里带着 `vocab.py` 要列的
-`p.off(only=…)` / `keep=…` 现场的，继续留在机型脚本里，别为了收口把那份证据搬走。
+一个名字，跨模块分派会把两张注入面绕在一起（沿用 #1245）。带 `p.off(only=…)` / `keep=…` 现场的也收
+这里（#1253）：词库（`vocab.py`）除了段体表也扫这一张表，`recipe_source.strategy_sources()` 由
+脚本的 import 决定扫哪几份，现场跟着实现走、读数不变。
 
 事实层按脚本的 import 解析到本模块的 `STRATEGIES` 表（`recipe_source.SURFACE`，沿用 #1243）：
 脚本写 `from recipe_strategies import close_with_plain_tap`，词库与入口速查才扫得到实现。
+注入名在本模块内必须唯一（表是扁平的）；`preamble()` 先装 `recipe_nav`、再装这里，同名会盖掉
+nav 那几档，所以 nav 已有的名字（`close_named` / `off_exact` / `read_switches`）在这里一律带后缀。
 
 文内按家族分节，`install()` 落在最后。
 """
@@ -26,7 +29,7 @@ from typing import Any
 STRATEGIES = {}
 
 # 「跨家族」分节收进来的注入名：这些实现必须被 ≥2 个家族使用（#1247 的守卫，判据按节算）。
-# 现在这张表全是家族分节（小米系 / OPPO / vivo），没有跨家族条目，所以这里是空的；
+# 现在这张表全是家族分节（小米系 / OPPO / vivo / 荣耀 / 魅族），没有跨家族条目，所以这里是空的；
 # 往这里加名字时先数家族，只有一个家族在用的放家族分节，别开共享库。
 SHARED = frozenset()
 
@@ -93,15 +96,19 @@ STRATEGIES.update({
 })
 
 
-# ---------- OPPO 家族（oppo / oneplus / realme，#1245）----------
+# ---------- OPPO 家族（oppo / oneplus / realme，沿用 #1245；#1253）----------
 #
 # 一族里逐字相同的拨动过程收在这里；同一个名字在家族内有几套走法的（`read_switches` /
 # `close_named` / `hide_carousel`）各占一档、按脚本常量分派，那几张表跟着名字住在 `recipe_nav`
 # ——一张表一个名字，跨模块分派会把两张注入面绕在一起。
 #
-# 留在脚本里的策略函数不是漏收：函数体里的 `p.off(only=list(targets), …)` 与 `keep=…` 是
-# `vocab.py` 的「未解析」台账现场，`close_all` 的整页关闭也计入那一节的数；#1237 的判据要求
-# 这几个数逐字不变，搬走就把证据一起搬没了（沿用 #1148 的口径）。
+# 剩下的 14 个带 `p.off(only=…)` / `keep=…` 现场的拨动策略在这里（#1253）：词库现在也扫这一张表
+# （`recipe_source.strategy_sources()`），现场跟着实现走、读数不变。注入名不能复用 nav 的
+# `close_named` / `off_exact`（`preamble()` 先装 nav、再装这里，同名会把它盖掉），所以几套走法
+# 各起一个名字；脚本用别名把库按名字回调的那两个钩子绑回旧名（`off_exact = off_exact_paged`、
+# `close_named = close_named_optional`），段体里的 `g["off_exact"]` / `g["close_named"]` 不用改。
+# 内层闭包仍叫旧名（`off_exact` / `close_named`）：词库按 `call.function == "close_named"` 认
+# 「off 在助手里面」，改名会把那份未解析数从「不算」变成「算」。
 
 def _oppo_off_exact(p, g):
     def off_exact(names, activity, title):
@@ -255,8 +262,192 @@ def _oppo_close_rows(p, g):
     return close_rows
 
 
+def _oppo_off_exact_paged(p, g):
+    def off_exact(names, page, max_screens=16):
+        """逐页传入当前可见的精确标题，不把“福利”之类子串扩展到未知服务。"""
+        wanted, seen, failed = set(names), set(), set()
+        for _ in range(max_screens):
+            root = p.tree()
+            visible = {title for title, _, _ in p.switches(root)}
+            targets = wanted & visible
+            seen.update(targets)
+            if targets:
+                before = len(p.changed)
+                expected_changes = {title for title, on, _ in p.switches(root)
+                                    if on and title in targets}
+                # fast.off 的 only 是子串匹配；把所有非精确命中的可见标题排除。
+                # max_screens=1 仍可能翻一页，所以每轮重新获取实际可见页面。
+                p.off(only=list(targets), keep=list(visible - targets), page=page, max_screens=1)
+                changed = {title for _, title in p.changed[before:]}
+                failed.update(expected_changes - changed)
+            elif not p.scroll_more():
+                break
+            # off 已尝试翻到下一屏；只在全局滚动到底后收尾。
+            current = {title for title, _, _ in p.switches()}
+            if current == visible:
+                break
+        if failed or wanted - seen:
+            print(f"  ! 未关闭 {sorted(failed)}；未找到 {sorted(wanted - seen)}")
+            return False
+        return True
+
+    return off_exact
+
+
+def _oppo_off_exact_paged_optional(p, g):
+    def off_exact(names, page, max_screens=16):
+        """逐页传入当前可见的精确标题，不把子串扩展到未知服务（用于需要翻多屏的页面）。"""
+        wanted, seen, failed = set(names), set(), set()
+        for _ in range(max_screens):
+            root = p.tree()
+            visible = {title for title, _, _ in p.switches(root)}
+            targets = wanted & visible
+            seen.update(targets)
+            if targets:
+                before = len(p.changed)
+                expected = {title for title, on, _ in p.switches(root) if on and title in targets}
+                p.off(only=list(targets), keep=list(visible - targets), page=page, max_screens=1)
+                changed = {title for _, title in p.changed[before:]}
+                failed.update(expected - changed)
+            elif not p.scroll_more():
+                break
+            current = {title for title, _, _ in p.switches()}
+            if current == visible:
+                break
+        if failed or wanted - seen:
+            print(f"  ! 未关闭 {sorted(failed)}；本机型无此项 {sorted(wanted - seen)}")
+            return not failed
+        return True
+
+    return off_exact
+
+
+def _oppo_close_named_optional(p, g):
+    def close_named(names, title, max_screens=12, dependent=(), reopen=None, snapshot=None, optional=()):
+        """关掉点名的开关，并核对目标已关、非目标未变。
+
+        optional 里的名字允许这次页面上没有：记成「未显示」并继续；名单其余项缺一个就整段不动。
+        """
+        # 回读确认数由引擎经 rt 记录
+        before = g["read_switches"](title, max_screens) if snapshot is None else snapshot
+        g["require_switches"](before, names, title, optional=optional)
+        present = [name for name in names if name in before]
+        absent = [name for name in names if name not in before]
+        if absent:
+            note = f"{title}：本次未显示 {'、'.join(absent)}，未操作、不计为已关闭"
+            g["SKIPPED_ITEMS"].append(note)
+            print("  · " + note, flush=True)
+        if not present:
+            return
+        if not any(before[name] for name in present):
+            g["rt"].confirm(len(present))
+            print(f"  · {title}：读取确认 {len(present)} 项原已关闭，未点击", flush=True)
+            return
+        p.top(max_screens)
+        p.off(only=list(present), keep=[name for name in before if name not in names],
+              page=title, max_screens=max_screens)
+        if reopen:
+            reopen()
+        after = g["read_switches"](title, max_screens)
+        g["require"](all(after.get(name) is False for name in present), f"{title}：回读未确认关闭")
+        g["require"](all(after.get(name) == state for name, state in before.items()
+                    if name not in names and name not in dependent), f"{title}：其他功能开关状态变化")
+        g["rt"].confirm(len(present))
+        print(f"  · {title}：回读确认 {len(present)} 项关闭", flush=True)
+
+    return close_named
+
+
+def _oppo_close_named_expect(p, g):
+    def close_named(names, page, activity, title=None, max_screens=8, reopen=None, dependent=()):
+        """精确核对标题再调用引擎；回读关闭状态，同时保留其他功能开关。"""
+        # 回读确认数由引擎经 rt 记录
+        before = g["read_switches"](activity, title, max_screens, expect=names)
+        g["require_switches"](before, names, page)
+        if any(before[name] for name in names):
+            p.top(max_screens)
+            p.off(only=list(names), keep=[name for name in before if name not in names],
+                  page=page, max_screens=max_screens)
+            if reopen:
+                reopen()
+            current = g["read_switches"](activity, title, max_screens, expect=names)
+            g["require"](all(current.get(name) is False for name in names), f"{page}：回读未确认关闭")
+            g["require"](all(current.get(name) == state for name, state in before.items()
+                        if name not in names and name not in dependent), f"{page}：其他开关状态变化，请核对")
+        g["rt"].confirm(len(names))
+        print(f"  · {page}：回读确认 {len(names)} 项关闭", flush=True)
+
+    return close_named
+
+
+def _oppo_close_named_plain(p, g):
+    def close_named(names, page, activity, title, max_screens=8, reopen=None, dependent=()):
+        """精确核对标题再调用引擎；回读关闭状态，同时保留其他功能开关。"""
+        # 回读确认数由引擎经 rt 记录
+        before = g["read_switches"](activity, title, max_screens)
+        g["require_switches"](before, names, page)
+        if any(before[name] for name in names):
+            p.top(max_screens)
+            # off 的 only 为子串匹配，keep 排除所有非精确目标（包括未知的相似标题）。
+            p.off(only=list(names), keep=[name for name in before if name not in names],
+                  page=page, max_screens=max_screens)
+            if reopen:
+                reopen()
+            current = g["read_switches"](activity, title, max_screens)
+            g["require"](all(current.get(name) is False for name in names), f"{page}：回读未确认关闭")
+            g["require"](all(current.get(name) == state for name, state in before.items()
+                        if name not in names and name not in dependent), f"{page}：其他开关状态变化，请核对")
+        g["rt"].confirm(len(names))
+        print(f"  · {page}：回读确认 {len(names)} 项关闭", flush=True)
+
+    return close_named
+
+
+def _oppo_close_group(p, g):
+    def close_group(children, parent, page, max_screens=1):
+        """有的开关是父项的子项：父开关一关，子项那两行就从页面上消失了（点不到、也回读不到）。
+        父项还开着时先关子项再关父项；父项本来就是关的，子项压根不在页面上，只关父项。"""
+        p.top(max_screens)
+        first = g["wait_switches"]()
+        g["require"](first, f"{page}：页面里没读到开关，未操作")
+        if g["read_switches"](max_screens, first=first).get(parent):
+            g["close_named"](children, page, max_screens=max_screens)
+            g["close_named"]([parent], page, max_screens=max_screens, gone=children)
+        else:
+            g["close_named"]([parent], page, max_screens=max_screens)
+
+    return close_group
+
+
+def _oppo_close_all(p, g):
+    def close_all(page, max_screens):
+        """整页关掉所有开关（逐 App 的广告跟踪列表用），关完回读确认。"""
+        # 回读确认数由引擎经 rt 记录
+        p.top(max_screens)
+        first = g["wait_switches"]()
+        g["require"](first, f"{page}：没读到开关，未操作")
+        before = g["read_switches"](max_screens, first=first)
+        g["require"](before, f"{page}：没读到开关，未操作")
+        p.top(max_screens)                   # 读完整页会翻到底；p.off 自己也回顶，这一下是让前后两段都从页顶读
+        p.off(page=page, max_screens=max_screens)
+        p.top(max_screens)
+        current = g["read_switches"](max_screens)
+        still = sorted(name for name, on in current.items() if on)
+        g["require"](not still, f"{page}：回读未确认关闭（仍有 {len(still)} 项开着）")
+        g["rt"].confirm(len(before))
+
+    return close_all
+
+
 STRATEGIES.update({
     "off_exact": _oppo_off_exact,
+    "off_exact_paged": _oppo_off_exact_paged,
+    "off_exact_paged_optional": _oppo_off_exact_paged_optional,
+    "close_named_optional": _oppo_close_named_optional,
+    "close_named_expect": _oppo_close_named_expect,
+    "close_named_plain": _oppo_close_named_plain,
+    "close_group": _oppo_close_group,
+    "close_all": _oppo_close_all,
     "close_titles": _oppo_close_titles,
     "read_on_page": _oppo_read_on_page,
     "wait_switches": _oppo_wait_switches,
@@ -540,8 +731,24 @@ def _vivo_off(p, g):
     return off
 
 
+def _vivo_close_named(p, g):
+    def close_named(names, page, max_screens=1):
+        p.top(max_screens)
+        before = g["read_switches"](max_screens)
+        g["require_switches"](before, names, page)
+        p.top(max_screens)
+        # only 在引擎中是包含匹配；明确保留本页其余开关，回读再核对一次。
+        p.off(only=names, keep=[name for name in before if name not in names],
+              page=page, max_screens=max_screens)
+        p.top(max_screens)
+        g["verify"](before, g["read_switches"](max_screens), names, page)
+
+    return close_named
+
+
 STRATEGIES.update({
     "off_one": _vivo_off_one,
+    "close_named_vivo": _vivo_close_named,
     "row_switch": _vivo_row_switch,
     "switch_off": _vivo_switch_off,
     "setting_search": _vivo_setting_search,
@@ -553,12 +760,135 @@ STRATEGIES.update({
 })
 
 
-# ---------- 荣耀 / 魅族 / 三星（#1246）----------
+# ---------- 荣耀（#1253）----------
 #
-# 这三家都不足以为「关开关的算法」开一节：魅族的 `close_named` 是共享名的一档、住 `recipe_nav`
-# （一张表一个名字，沿用 #1245）；荣耀三份里只有 WKL-AN20 的 `close_named` / `scan` 带
-# `p.off(only=…)` 现场，按同一口径留在脚本；三星的 `protect` 只有一台机用、按归属规则
-# 留在脚本里。所以这里没有它们的条目——不是漏收。
+# 这三份里只收「关开关的算法」：WKL-AN20 的 `close_named` 带 `p.off(only=…)` 现场，它的扫描助手
+# `scan` 一起搬成 `scan_switches`；PNM-AN10 的 `baidu_browser` 是 `browser_settings` 荣耀档按名字
+# 回调的钩子（`g["baidu_browser"]`），实现也搬过来了。荣耀专用的导航助手（`settle_page` /
+# `labels` / `radio` / `dismiss`）仍留在脚本：它们读的是这一台的页面，别家不用。
+
+def _honor_baidu_browser(p, g):
+    def baidu_browser():
+        """新机预装 com.hihonor.baidu.browser（沿用 #87 社区实测 PTP-AN00）：我的 → 右上齿轮 → 消息设置 / 隐私设置。
+        「广告设置」是网页，读不到开关；其中「不看程序化广告」「不看个性化广告」要打开，请手动处理。"""
+        import re
+
+        from fast import bounds
+
+        p.start("com.hihonor.baidu.browser")
+        p.dismiss()
+        for text, (l, t, r, b), _ in p.texts():
+            if text == "我的" and t >= p.H * 0.8:
+                p.click((l + r) // 2, (t + b) // 2); g["time"].sleep(1); break
+        else:
+            print("  ✗ 没找到底部「我的」"); return False
+        icons = [n for n in p.tree().iter("node") if n.get("clickable") == "true" and p.on_screen(n)
+                 and bounds(n)[3] < p.H * 0.15 and bounds(n)[0] > p.W * 0.5
+                 and re.search(r"设置|setting", (n.get("content-desc") or "") + (n.get("resource-id") or ""), re.I)]
+        if len(icons) != 1:
+            print("  ✗ 没找到右上角唯一的设置图标"); return False
+        l, t, r, b = bounds(icons[0]); p.click((l + r) // 2, (t + b) // 2); g["time"].sleep(1)
+        if p.tap("消息设置", exact=True):
+            p.off(only=["新闻热点", "兴趣推送"], page="浏览器·消息设置")
+            p.back()
+        if p.tap("隐私设置", exact=True):
+            p.off(only=["搜索个性化推荐", "搜索下一条推荐"], page="浏览器·隐私设置")
+            p.back()
+        print("  · 「隐私设置 → 偏好设置 → 广告设置」是网页，请手动打开「不看程序化广告」「不看个性化广告」")
+        p.back(2)
+        return False
+
+    return baidu_browser
+
+
+def _honor_scan_switches(p, g):
+    def scan_switches(max_screens):
+        states = {}
+        for index in range(max_screens):
+            for title, state, _ in p.switches():
+                g["require"](bool(title), "出现无标题开关，未操作")
+                g["require"](title not in states or states[title] == state, "同名开关状态不一致，未操作")
+                states[title] = state
+            if not p.scroll_more():
+                return states
+            g["require"](index + 1 < max_screens, "列表超过扫描上限，未确认完整列表")
+        return states
+
+    return scan_switches
+
+
+def _honor_close_named(p, g):
+    def close_named(names, title, package, marker, max_screens=6, drawn=False):
+        """精确标题白名单；操作前完整扫描，操作后核对目标及其他开关。"""
+        from fast import Phone, want_state
+
+        # 回读确认数由引擎经 rt 记录
+        g["settle_page"](package, marker)
+        native = p.switches
+
+        def read(root=None):
+            root = root if root is not None else p.tree()
+            g["require"](p.focus().split("/", 1)[0] == package and marker in g["labels"](root),
+                         "已离开目标设置页，停止读取开关")
+            # 仅阅读的「广告推荐服务」设置页允许截图识别自绘开关，不写图片文件。
+            if drawn:
+                g["require"](package == "com.hihonor.dz.reader" and marker == "广告推荐服务",
+                             "此页不允许自绘开关截图")
+                return Phone.switches(p, root)
+            return native(root)
+
+        p.switches = read
+        try:
+            p.top(max_screens)
+            before = g["scan_switches"](max_screens)
+            # OAID 的应用名称随安装列表变化，不把机主应用清单写入脚本。
+            wanted = set(before) if names is None else set(names)
+            g["require_switches"](before, wanted, title)
+            p.top(max_screens)
+            p.switches = lambda root=None: [item for item in read(root) if item[0] in wanted]
+            p.off(only=sorted(wanted), page=title, max_screens=max_screens)
+            p.switches = read
+            p.top(max_screens)
+            after = g["scan_switches"](max_screens)
+            g["require"](all(after.get(name) == want_state(name) for name in wanted),
+                         title + "：回读未确认目标状态")
+            g["require"](all(after.get(name) == state for name, state in before.items() if name not in wanted),
+                         title + "：其他开关状态变化，请机主核对")
+            g["rt"].confirm(len(wanted))
+            print(f"  · {title}：已回读 {len(wanted)} 项", flush=True)
+        finally:
+            p.switches = native
+
+    return close_named
+
+
+# ---------- 魅族（#1253）----------
+#
+# 只有 `safe_switches` 这一档：读开关前先确认没换页、没有别的窗口压在上面。判据里那两件事由脚本的
+# `assert_no_other_window` 与 `TARGET_PACKAGE` 约定给出，仍留在脚本，这里按名字从执行作用域取。
+
+def _meizu_safe_switches(p, g):
+    def safe_switches(activity):
+        g["require"](p.focus() == activity, "页面已变化，停止本段")
+        root = p.tree()
+        g["assert_no_other_window"](root, activity.split("/", 1)[0])
+        return p.switches(root)
+
+    return safe_switches
+
+
+# ---------- 三星 ----------
+#
+# `protect` 仍是本机函数：它写的是这一页「点标题而不是点开关、把保护类开关拨回开」，且是沿用 #608 的
+# 临时回退，等真机复测通过后才换回 `p.off`。按归属规则（只服务一台机）留在脚本里。
+
+
+STRATEGIES.update({
+    "baidu_browser": _honor_baidu_browser,
+    "scan_switches": _honor_scan_switches,
+    "close_named_honor": _honor_close_named,
+    "safe_switches": _meizu_safe_switches,
+})
 
 
 def install(p, g):

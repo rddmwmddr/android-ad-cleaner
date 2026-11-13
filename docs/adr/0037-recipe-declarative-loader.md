@@ -70,6 +70,29 @@ vivo / 荣耀 / 魅族 / 三星（15 份脚本，#1246）按同一形状收口�
 - `recipes/` 进静态检查：ruff 的 F401 在 `pyproject.toml` 按文件整类关掉（注入面按名字取用是假阳性）；mypy 由 `tool/typecheck_recipes.py` 逐份喂给同一个宽松档（43 份都叫 `recipe.py`，一次扫会撞模块名）。
 - 共享分节的归属规则落成机器判据：`recipe_nav.SHARED` / `recipe_strategies.SHARED` 列出的注入名必须被 ≥2 个家族使用，见规则 `dev.recipes.shared-sections`；家族分节允许单脚本变体。
 
+### 增补（#1253）：词库扩到策略库
+
+上面「词汇与策略库」一节里有一类函数故意留在脚本：函数体里带 `p.off(only=…)` / `keep=…` 现场，
+而词库只看段体那张表，搬走就读数变小。这一条现在解开了——词库也扫策略库
+（`recipe_source.strategy_sources()`，`tool/vocab.py` 的 `scan()` 收 `strategies=`），扫哪几份仍由
+脚本自己的 import 决定（#1243 的口径不变），所以现场可以跟着实现走：
+
+- 剩下 14 个拨动策略（OPPO 9、vivo 1、荣耀 3、魅族 1）搬进 `recipe_strategies` 的家族分节，脚本
+  只留调用点。词条数 / 方向 / 未解析 / `keep=` / 整页关闭数与改动前逐条相同，入口速查与段体哈希
+  逐字节不变。三星 `protect` 仍是本机函数：它是 #608 的临时回退，等真机复测通过后才换回 `p.off`。
+- **同一份实现一处只算一次。** 策略会被一个段调用多次（`close_all` 出现两次），按调用点各扫一遍
+  会把未解析与整页数乘起来；脚本搬掉本地 `def` 之前，那份实现也只是模块里的一份。所以词库对每个
+  导入的注入名只扫一次、出处记第一个调用点。
+- **没有调用点的实现记到导入行。** 有两类：库按名字回调的钩子（`browser_settings` 的荣耀档调
+  `g["baidu_browser"]`）与模块别名（`off_exact = off_exact_paged`、`close_named = close_named_optional`）。
+  事实层因此多记一份 `Facts.import_lines`，词库在零调用点时退到那一行；别名本身是脚本声明
+  「执行作用域里这个旧名字由那份实现提供」，与 `recipe_android15.py` 的 `page = page_activity` 同形。
+- **注入名不能和 nav 撞。** `preamble()` 先装 `recipe_nav`、再装 `recipe_strategies`，同名会把 nav
+  那几档盖掉（`close_named` 的 meizu 档、`off_exact` 的 Android 15 档）。所以策略库里的几套走法各
+  用带后缀的注入名，脚本用别名把库按名字回调的那两个钩子绑回旧名字，段体一行都不用改。
+- **内层闭包仍叫旧名**（`off_exact` / `close_named`）：词库的 `_absorb()` 按 `call.function ==
+  "close_named"` 认「`p.off` 在助手里面」，改名会把那份未解析数从「不算」变成「算」。
+
 ### 目录化是后续方向
 
 本票只做运行时形状：脚本仍是 Python 模块，段体仍是代码。真正的门槛在写脚本的人——一份机型脚本仍等于一个程序，要手写翻页、返回与等待。数据树 + 解释器（「进哪一页、关哪些、留哪些」由数据描述，运行时解释）是后续方向，由独立追踪票承载；它要求先有本票的运行时（段、`rt`、单一装载器）与词汇层（#1244–#1246）。本票的 `rt` 与装载器按「将来由解释器驱动」设计，但不实现数据模型。

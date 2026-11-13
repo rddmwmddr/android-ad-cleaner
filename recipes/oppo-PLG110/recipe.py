@@ -48,25 +48,6 @@ STORE_PROMOTIONS = [
 ]
 
 
-def close_named(names, page, activity, title=None, max_screens=8, reopen=None, dependent=()):
-    """精确核对标题再调用引擎；回读关闭状态，同时保留其他功能开关。"""
-    # 回读确认数由引擎经 rt 记录
-    before = read_switches(activity, title, max_screens, expect=names)
-    require_switches(before, names, page)
-    if any(before[name] for name in names):
-        p.top(max_screens)
-        p.off(only=list(names), keep=[name for name in before if name not in names],
-              page=page, max_screens=max_screens)
-        if reopen:
-            reopen()
-        current = read_switches(activity, title, max_screens, expect=names)
-        require(all(current.get(name) is False for name in names), f"{page}：回读未确认关闭")
-        require(all(current.get(name) == state for name, state in before.items()
-                    if name not in names and name not in dependent), f"{page}：其他开关状态变化，请核对")
-    rt.confirm(len(names))
-    print(f"  · {page}：回读确认 {len(names)} 项关闭", flush=True)
-
-
 # ==================== 各段具体实现 ====================
 
 @step("广告跟踪")
@@ -247,3 +228,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import VERIFIED_SWITCHES, p, require, require_switches, rt, skip, skip_in_safe_mode
     from recipe_nav import app_settings, assistant_settings, hide_carousel, open_page, read_switches, system_settings, tap_page, wait_page
+    from recipe_strategies import close_named_expect
+
+# 各段的调用点按旧名字写，实现住在 recipe_strategies 的 `close_named_expect`（读到目标就收手，
+# PLG110 的录制口径），这里绑回旧名字（#1253）。
+close_named = close_named_expect

@@ -510,15 +510,63 @@ def downloads(p, g):
         self.assertEqual({(w.model, w.source) for w in found.words},
                          {("A1", "xiaomi-A1:3"), ("B2", "redmi-B2:3")})
 
-    def test_the_surface_only_adds_words_at_its_call_sites(self):
-        """注入面只添「词住在段体里」的那一份，脚本自己那份一个字不变（#1210）。
+    def test_the_surfaces_only_add_words_at_their_call_sites(self):
+        """两张注入面只添「词住在实现里」的那一份，脚本自己那份一个字不变（沿用 #1210；#1253 起两张表）。
 
-        关掉注入面读到的就是加接线之前的样子：两边词数相加必须等于全量，多算与漏算都在这里红。"""
-        without, default = vocab.scan(RECIPES, injected={}), vocab.scan(RECIPES)
+        关掉两张表读到的就是加接线之前的样子：两边词数相加必须等于全量，多算与漏算都在这里红。"""
+        without, default = vocab.scan(RECIPES, injected={}, strategies={}), vocab.scan(RECIPES)
         self.assertFalse(any(w.injected for w in without.words))
         added = [w for w in default.words if w.injected]
         self.assertTrue(added, "注入面一条词都没读到：接线断了")
         self.assertEqual(len(without.words) + len(added), len(default.words))
+
+
+class StrategySurfaceTest(unittest.TestCase):
+    """拨动策略那张注入面（#1253）：一份实现只算一次，没有调用点的记到导入行。"""
+
+    def scan(self, src, impl, folder="xiaomi-A1"):
+        tmp = recipes(**{folder: src})
+        self.addCleanup(tmp.cleanup)
+        return vocab.scan(tmp.name, injected={}, strategies={"downloads": impl})
+
+    def test_a_strategy_called_twice_is_charged_once(self):
+        """一份实现是模块里的一份：按调用点各扫一遍会把未解析与整页数乘起来。"""
+        found = self.scan('''\
+@step("下载管理")
+def _():
+    downloads()
+    downloads()
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from recipe_strategies import downloads
+''', '''\
+def downloads(p, g):
+    def _():
+        p.off(only=list(targets), page="下载管理·设置")
+        p.off(page="下载管理·设置")
+    return _
+''')
+        self.assertEqual([(c.script, c.line) for c in found.unresolved_only],
+                         [("xiaomi-A1/recipe.py", 3)])
+        self.assertEqual(found.whole_page, 1)
+
+    def test_an_imported_strategy_without_a_call_site_is_charged_to_the_import_line(self):
+        """库按名字回调的钩子与模块别名没有调用点：出处记脚本导入它的那一行。"""
+        found = self.scan('''\
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from recipe_strategies import downloads
+''', '''\
+def downloads(p, g):
+    def _():
+        p.off(only=["广告推荐"], page="下载管理·设置")
+    return _
+''')
+        self.assertEqual([(w.text, w.source, w.injected) for w in found.words],
+                         [("广告推荐", "xiaomi-A1:4", True)])
 
 
 class RenderTest(unittest.TestCase):

@@ -33,26 +33,6 @@ ASSISTANT = "com.coloros.assistantscreen/com.oplus.assistantscreen."
 SEARCH_SETTINGS = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"
 
 
-def close_named(names, page, activity, title, max_screens=8, reopen=None, dependent=()):
-    """精确核对标题再调用引擎；回读关闭状态，同时保留其他功能开关。"""
-    # 回读确认数由引擎经 rt 记录
-    before = read_switches(activity, title, max_screens)
-    require_switches(before, names, page)
-    if any(before[name] for name in names):
-        p.top(max_screens)
-        # off 的 only 为子串匹配，keep 排除所有非精确目标（包括未知的相似标题）。
-        p.off(only=list(names), keep=[name for name in before if name not in names],
-              page=page, max_screens=max_screens)
-        if reopen:
-            reopen()
-        current = read_switches(activity, title, max_screens)
-        require(all(current.get(name) is False for name in names), f"{page}：回读未确认关闭")
-        require(all(current.get(name) == state for name, state in before.items()
-                    if name not in names and name not in dependent), f"{page}：其他开关状态变化，请核对")
-    rt.confirm(len(names))
-    print(f"  · {page}：回读确认 {len(names)} 项关闭", flush=True)
-
-
 @step("广告跟踪")
 def _():
     global VERIFIED_SWITCHES
@@ -193,3 +173,7 @@ if TYPE_CHECKING:
     from recipe_kit import VERIFIED_SWITCHES, p, require, require_switches, rt, skip, skip_in_safe_mode
     from recipe_nav import app_settings, assistant_settings, browser_settings, hide_carousel
     from recipe_nav import open_page, read_switches, system_settings, tap_page, wait_page
+    from recipe_strategies import close_named_plain
+
+# 各段的调用点按旧名字写，实现住在 recipe_strategies 的 `close_named_plain`，这里绑回旧名字（#1253）。
+close_named = close_named_plain

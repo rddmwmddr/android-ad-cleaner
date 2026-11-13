@@ -22,18 +22,6 @@ def verify(before, current, names, page):
     print(f"  ✓ {page}：回读确认 {len(names)} 项关闭，其他开关未变", flush=True)
 
 
-def close_named(names, page, max_screens=1):
-    p.top(max_screens)
-    before = read_switches(max_screens)
-    require_switches(before, names, page)
-    p.top(max_screens)
-    # only 在引擎中是包含匹配；明确保留本页其余开关，回读再核对一次。
-    p.off(only=names, keep=[name for name in before if name not in names],
-          page=page, max_screens=max_screens)
-    p.top(max_screens)
-    verify(before, read_switches(max_screens), names, page)
-
-
 @step("系统广告")
 def _():
     # $ 由 Phone._launch 交给 Android shell 前整串引用一次，这里照字面量写。
@@ -147,4 +135,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import p, require, require_switches, rt
     from recipe_nav import hiboard_panel, read_switches, tap
-    from recipe_strategies import store_personalization
+    from recipe_strategies import close_named_vivo, store_personalization
+
+# 各段的调用点按旧名字写，实现住在 recipe_strategies 的 `close_named_vivo`（回读走本机的
+# `verify`），这里绑回旧名字（#1253）。
+close_named = close_named_vivo

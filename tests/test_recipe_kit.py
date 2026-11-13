@@ -794,11 +794,15 @@ def wide_flags(nodes):
     return wide, narrow
 
 
-def whole_page_steps(source):
-    """段名 → 是否「整段只做整页关闭」，判据见 `wide_flags()`。"""
+def whole_page_steps(source, helpers=()):
+    """段名 → 是否「整段只做整页关闭」，判据见 `wide_flags()`。
+
+    `helpers` 是注入面里的函数节点：段体按名字调到的那份实现不在本文件里，
+    要把节点一起交进来，调用链才连得上（#1253 起整页关闭的 `close_all` 住在策略库）。"""
     tree = ast.parse(source)
     # 段函数全都叫 `_`，认人只能按节点本身，不能按函数名
-    wide, narrow = wide_flags([node for node in tree.body if isinstance(node, ast.FunctionDef)])
+    nodes = [node for node in tree.body if isinstance(node, ast.FunctionDef)] + list(helpers)
+    wide, narrow = wide_flags(nodes)
     steps = {}
     for node in tree.body:
         if not isinstance(node, ast.FunctionDef) or not node.decorator_list:
@@ -824,6 +828,23 @@ def first_call_name(node):
                 and isinstance(fn.slice, ast.Constant) and isinstance(fn.slice.value, str)):
             return fn.slice.value
     return None
+
+
+def injected_strategy_functions():
+    """注入拨动策略里的全部函数节点：段体按名字调到的实现住在这里，判据要跟得下去（#1253）。
+
+    `close_all` 的 `p.off(page=…)` 是 PKT110 那两段整页关闭现场；它搬走之后脚本里只剩一行调用，
+    `whole_page_steps()` 只按名字认本文件里的函数就看不见了。"""
+    import inspect
+    import textwrap
+
+    import recipe_strategies
+
+    nodes = []
+    for factory in recipe_strategies.STRATEGIES.values():
+        tree = ast.parse(textwrap.dedent(inspect.getsource(factory)))
+        nodes += [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
+    return nodes
 
 
 def injected_wide_steps():
@@ -872,8 +893,9 @@ def _():
     def test_page_wide_segments_start_with_the_safe_mode_exit(self):
         """整页关闭的段落要把跳过出口写在第一句：写在后面等于先翻页、再判没关掉。"""
         checked = []
+        helpers = injected_strategy_functions()
         for path in sorted((ROOT / "recipes").rglob("recipe*.py")):
-            steps = whole_page_steps(path.read_text(encoding="utf-8"))
+            steps = whole_page_steps(path.read_text(encoding="utf-8"), helpers)
             for name, (is_wide, node) in steps.items():
                 if not is_wide:
                     continue
