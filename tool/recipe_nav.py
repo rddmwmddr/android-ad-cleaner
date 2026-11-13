@@ -17,12 +17,14 @@
 闭包对名字一律按 `g` 现取（包括 `g["time"]`）：脚本原来是在自己的全局里解析这些名字，换到
 这个模块后仍取当次执行作用域里的那一个，测试装的假时钟才照旧生效。
 
-文件内按家族分节：小米系 / vivo / OPPO（导航与词汇、两大对、策略分派各一节）/ 其余·跨家族，
-名字被两个家族占用的那一处（`browser_settings`）另有一节分派，`install()` 落在最后。OPPO 那一族
-的走法常量最多（`WAIT_PAGE_STYLE` / `TAP_PAGE_STYLE` / `TAP_STYLE` / `OPEN_SETTINGS_STYLE` /
-`SEARCH_SETTINGS_STYLE` / `OPEN_PAGE_STYLE` / `APP_SETTINGS_STYLE` / `SYSTEM_SETTINGS_STYLE` /
-`SETTINGS_PAGE_STYLE` / `READ_SWITCHES_STYLE` / `CLOSE_NAMED_STYLE` / `HIDE_CAROUSEL_STYLE`），
-`read_switches` / `close_named` 两档也住这一节：一张表一个名字，跨模块分派会把两张注入面绕在一起。
+文件内按家族分节：小米系 / vivo / OPPO（导航与词汇、两大对、策略分派各一节）/ 荣耀 / 魅族 /
+其余·跨家族，名字被两个家族占用的那一处（`browser_settings`）另有一节分派，`install()` 落在最后。
+荣耀与魅族只有三份与一份脚本（#1246）：这两节只收「注入名已经住在共享库、别家也在用」的实现，
+各占一档；只服务一台机的辅助留在脚本里。OPPO 那一族的走法常量最多（`WAIT_PAGE_STYLE` /
+`TAP_PAGE_STYLE` / `TAP_STYLE` / `OPEN_SETTINGS_STYLE` / `SEARCH_SETTINGS_STYLE` /
+`OPEN_PAGE_STYLE` / `APP_SETTINGS_STYLE` / `SYSTEM_SETTINGS_STYLE` / `SETTINGS_PAGE_STYLE` /
+`READ_SWITCHES_STYLE` / `CLOSE_NAMED_STYLE` / `HIDE_CAROUSEL_STYLE`），`read_switches` /
+`close_named` 两档也住这一节：一张表一个名字，跨模块分派会把两张注入面绕在一起。
 """
 
 import re
@@ -62,7 +64,9 @@ def _xiaomi_tap_any(p, g):
 
 
 def _xiaomi_gear(p, g):
-    """设置入口（齿轮）。`GEAR_STYLE` 选走法：icon / checked / text，缺省 icon。"""
+    """设置入口（齿轮）。`GEAR_STYLE` 选走法：icon / checked / text（小米系）与
+    vivo / vivo_desc / vivo_landing（vivo 系），缺省 icon。vivo 那三档住在 vivo 分节。"""
+    vivo_styles = {name: factory(p, g) for name, factory in _VIVO_GEAR_FACTORIES.items()}
 
     def icon_style(toolbar_only):
         from fast import bounds, icon_hit
@@ -118,7 +122,9 @@ def _xiaomi_gear(p, g):
         匹配只认正好是「设置」的描述、正文或 setting 类 id：商店「我的」页有一行正文「去功能设置里
         重新开启」，主题商店有「设置壁纸」，按包含匹配会先命中它们、点进别的子页，整段跑空（#305 / #374）。
         点完要不要认出设置页按机型：日历的齿轮打开的是 PopupWindow，不校验就会在弹窗里找入口（#407）。"""
-        style = _style(g, "GEAR_STYLE", ("icon", "checked", "text"), "icon")
+        style = _style(g, "GEAR_STYLE", ("icon", "checked", "text") + tuple(vivo_styles), "icon")
+        if style in vivo_styles:
+            return vivo_styles[style]()
         if style == "text":
             return text_style(toolbar_only)
         if style == "icon":
@@ -136,7 +142,9 @@ def _xiaomi_gear(p, g):
 
 
 def _xiaomi_gear_top(p, g):
-    def gear_top():
+    """「我的」页右上角齿轮。`GEAR_TOP_STYLE` 选走法：text（小米系）/ vivo（V2309A），缺省 text。"""
+
+    def text_style():
         """只认右上角那个文字就是「设置」的齿轮。
 
         应用商店「我的」页有一条「去功能设置里重新开启」，含「设置」二字且可点，通用 gear() 会先命中它，
@@ -154,12 +162,31 @@ def _xiaomi_gear_top(p, g):
                 return True
         return False
 
+    vivo_style = _vivo_gear_top_style(p, g)
+
+    def gear_top():
+        style = _style(g, "GEAR_TOP_STYLE", ("text", "vivo"), "text")
+        return {"text": text_style, "vivo": vivo_style}[style]()
+
     return gear_top
 
 
 def _xiaomi_enter(p, g):
-    def enter(name, scrolls=6):
+    """必需入口。`ENTER_STYLE` 选走法：require（小米系，默认 scrolls=6）/ honor（scrolls=4），缺省 require。"""
+
+    def require_style(name, scrolls=6):
         g["require"](p.entry(name, scrolls=scrolls), f"未找到「{name}」")
+
+    def honor_style(name, scrolls=4):
+        """必需入口：没有就是这一段没跑成，不能报成功。"""
+        if not p.entry(name, scrolls=scrolls):
+            raise RuntimeError(f"入口「{name}」没找到")
+
+    def enter(name, scrolls=None):
+        style = _style(g, "ENTER_STYLE", ("require", "honor"), "require")
+        if style == "honor":
+            return honor_style(name, 4 if scrolls is None else scrolls)
+        return require_style(name, 6 if scrolls is None else scrolls)
 
     return enter
 
@@ -655,8 +682,314 @@ def _vivo_off_unnamed(p, g):
     return off_unnamed
 
 
+def _vivo_gear(p, g):
+    """V2303A 的齿轮：引擎 icon_hit 判据，图标还认「ImageView 且尺寸像图标」的节点。"""
+    def gear():
+        from fast import bounds, icon_hit
+        for n in p.tree().iter("node"):
+            l, t, r, b = bounds(n)
+            icon = "ImageView" in n.get("class", "") and r - l < p.W * 0.25 and b - t < p.H * 0.15
+            if icon_hit(n) and (n.get("clickable") == "true" or icon) and p.on_screen(n):
+                p.click((l + r) // 2, (t + b) // 2); g["time"].sleep(1)
+                return True
+        return p.tap("设置", exact=True, scrolls=0)
+
+    return gear
+
+
+def _vivo_gear_desc(p, g):
+    """V2324HA / V2545A 的齿轮：按 content-desc / resource-id 子串认（#530 之前的走法）。"""
+    def gear():
+        for n in p.tree().iter("node"):
+            d = (n.get("content-desc") or "") + (n.get("resource-id") or "")
+            if any(k in d.lower() for k in ("设置", "setting")) and n.get("clickable") == "true" and p.on_screen(n):
+                from fast import bounds
+                l, t, r, b = bounds(n); p.click((l + r) // 2, (t + b) // 2); g["time"].sleep(1)
+                return True
+        return p.tap("设置", exact=True, scrolls=0)
+
+    return gear
+
+
+def _vivo_gear_landing(p, g):
+    """V2547DA 的齿轮：点完要认出设置页，点不动的继续试，最后回退按文字点（沿用 #575）。"""
+    def gear():
+        from fast import bounds, icon_hit
+
+        def landed(focus0):
+            if p.focus() == focus0:
+                return False                    # 点击被吞：页面没换，不能当成进了设置页
+            if p.in_settings_page():
+                return True
+            # Activity 名不含 Setting 的 App：只认顶上标题带那一处「设置」——齿轮自己也读作「设置」
+            at = p.find("设置", exact=True)
+            return bool(at) and at[1] < p.H * 0.25
+
+        for n in p.tree().iter("node"):
+            l, t, r, b = bounds(n)
+            icon = "ImageView" in n.get("class", "") and r - l < p.W * 0.25 and b - t < p.H * 0.15
+            if icon_hit(n) and (n.get("clickable") == "true" or icon) and p.on_screen(n):
+                focus0 = p.focus()
+                p.click((l + r) // 2, (t + b) // 2); p.await_page(1.5)
+                if landed(focus0):
+                    return True
+                if p.focus() != focus0:         # 点进了别的页：退回来，别用旧树的坐标在新页上接着点
+                    p.back(); g["time"].sleep(0.6)
+        focus0 = p.focus()
+        return p.tap("设置", exact=True, scrolls=0) and landed(focus0)
+
+    return gear
+
+
+_VIVO_GEAR_FACTORIES = {"vivo": _vivo_gear, "vivo_desc": _vivo_gear_desc,
+                        "vivo_landing": _vivo_gear_landing}
+
+
+def _vivo_gear_top_style(p, g):
+    def gear_top():
+        """V2309A 的「我的」页右上角齿轮：无文字 Button，只有 content-desc="设置"。
+
+        判据用引擎的 icon_hit（#530 / ADR-0013）：它只认正好是「设置」的描述 / 正文，同页那条
+        「去功能设置里重新开启」的说明行不会被点到，所以不用再按位置收一次。齿轮名字不是恰好
+        「设置」（比如「更多设置」）的机型会在这里漏掉。
+        """
+        from fast import bounds, icon_hit
+        for n in p.tree().iter("node"):
+            if n.get("clickable") != "true" or not p.on_screen(n):
+                continue
+            if not icon_hit(n):
+                continue
+            l, t, r, b = bounds(n)
+            if r > l and b > t:
+                p.click((l + r) // 2, (t + b) // 2); g["time"].sleep(1.0)
+                return True
+        return False
+
+    return gear_top
+
+
+def _vivo_tap_row(p, g):
+    """点列表项。`TAP_ROW_STYLE` 选走法：subtitle / row_span / centre，缺省 centre。"""
+
+    def subtitle_style(subtitle):
+        """点「副标题」所在那一行的中间：本机有些行点左侧标题文字不跳转（V1986A）。"""
+        for t, (_l, tp, _r, b), _n in p.texts():
+            if t.startswith(subtitle):
+                p.click(int(p.W * 0.4), (tp + b) // 2); g["time"].sleep(1.0)
+                return True
+        return False
+
+    def row_span_style(title, scrolls=4):
+        """点标题所在的可点行，落点在行宽 40% 处。
+
+        商店设置页点左侧标题文字不跳转（V1986A 同此），要点行中间（#530）。
+        """
+        from fast import bounds
+        for _ in range(scrolls + 1):
+            root = p.tree()
+            parent = {c: par for par in root.iter("node") for c in par}
+            for n in root.iter("node"):
+                if (n.get("text") or "").strip() != title or not p.on_screen(n):
+                    continue
+                row = n
+                for _ in range(4):
+                    up = parent.get(row)
+                    if up is None or up.get("clickable") != "true":
+                        break
+                    row = up
+                l, t, r, b = bounds(row)
+                if r <= l or b <= t:
+                    l, t, r, b = bounds(n)
+                p.click(int(l + (r - l) * 0.4), (t + b) // 2); g["time"].sleep(1.0)
+                return True
+            if not p.scroll_more():
+                break
+        return False
+
+    def centre_style(w, scrolls=0, wait=1.3):
+        """点列表项：先找到文字，再点整行水平中间（V2547A）。
+
+        有的 vivo 页面左侧文字节点不转发点击（应用商店「关于」页的「服务管理」就是这样，
+        点文字没反应，点行中间才进得去）。
+        进页后立刻找会对着还没画完的页面报「没找到」，先等这一页站稳（#331）。"""
+        p.await_page()
+        xy = p.find(w, exact=True)
+        for _ in range(scrolls):
+            if xy:
+                break
+            if not p.scroll_more():
+                break
+            xy = p.find(w, exact=True)
+        if not xy:
+            return False
+        b = p.sig()
+        p.click(p.W // 2, xy[1])
+        p.settle(b, wait + 0.4)
+        g["time"].sleep(wait)
+        return True
+
+    def tap_row(*args, **kwargs):
+        style = _style(g, "TAP_ROW_STYLE", ("subtitle", "row_span", "centre"), "centre")
+        if style == "subtitle":
+            return subtitle_style(*args, **kwargs)
+        if style == "row_span":
+            return row_span_style(*args, **kwargs)
+        return centre_style(*args, **kwargs)
+
+    return tap_row
+
+
+def _vivo_by_desc(p, g):
+    def by_desc(kw, wait=1.2):
+        """底部 tab、右上齿轮这类入口只有 content-desc，没有文字。"""
+        from fast import bounds
+        for n in p.tree().iter("node"):
+            if kw in (n.get("content-desc") or "") and n.get("clickable") == "true" and p.on_screen(n):
+                l, t, r, b = bounds(n)
+                p.click((l + r) // 2, (t + b) // 2); g["time"].sleep(wait)
+                return True
+        return False
+
+    return by_desc
+
+
+def _vivo_result_xy(p, g):
+    def result_xy(kw, root=None):
+        """搜索结果里挑真正那一条。
+
+        搜索框本身是个 EditText，里面也有刚输入的关键词（y 在页面顶部），
+        p.find(keyword) 按文档顺序会先命中它 —— 点上去等于又点了一次输入框，页面根本不跳，
+        而且不会报错，整段就这么静默空跑。所以这里排除 EditText，并跳过顶部搜索栏那块。"""
+        root = root if root is not None else p.tree()
+        for t, (l, tp, r, b), n in p.texts(root):
+            if t != kw or "EditText" in (n.get("class") or ""):
+                continue
+            cy = (tp + b) // 2
+            if b <= tp or cy < p.H * 0.13:
+                continue
+            return ((l + r) // 2, cy)
+        return None
+
+    return result_xy
+
+
+def _vivo_search_setting(p, g):
+    def search_setting(kw, pick=True):
+        """在系统设置里搜 kw 并点进第一条结果。
+
+        引擎的 p.setting 依赖 focused 输入框，在 vivo 上时而等不到（会抛异常），这里直接按 resourceId
+        取输入框。点完还要确认焦点窗口真的变了，否则返回 False —— 宁可报错，也不要装作进去了。"""
+        p.miss = 0
+        p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
+        for _ in range(24):
+            if p.find("搜索设置项"):
+                break
+            g["time"].sleep(0.25)
+        if not p.tap("搜索设置项", scrolls=0, wait=0.6):
+            print("  ✗ 设置首页没找到搜索框"); return False
+        try:
+            p.d(resourceId="com.android.settings:id/vigour_search_edit").set_text(kw)
+        except Exception as e:
+            print(f"  ✗ 搜索框输入失败：{e}"); return False
+        xy = None
+        for _ in range(12):
+            xy = g["result_xy"](kw)
+            if xy:
+                break
+            g["time"].sleep(0.25)
+        if not xy:
+            print(f"  ✗ 没搜到「{kw}」"); return False
+        if not pick:
+            return True
+        before = p.focus()
+        p.click(p.W // 2, xy[1])
+        for _ in range(15):
+            if p.focus() != before:
+                g["time"].sleep(0.7)
+                return True
+            g["time"].sleep(0.2)
+        print(f"  ✗ 点「{kw}」的搜索结果没有跳转")
+        return False
+
+    return search_setting
+
+
+def _vivo_hiboard_panel(p, g):
+    def hiboard_panel():
+        """回到负一屏的设置面板（V2417A 的路径）。"""
+        if "com.vivo.hiboard.settings.AppletSettingActivity" in p.focus():
+            return
+        # 此页面未导出，不能 am start；两次 HOME 回默认桌面，再按真机路径滑入。
+        for _ in range(2):
+            signature = p.sig()
+            p.d.shell("input keyevent HOME")
+            p.settle(signature, 1.0)
+        # HOME 会恢复上次停留的负一屏；已在 HiBoard 时不必再当普通桌面横滑。
+        home = p.focus()
+        if home != "HiBoard":
+            g["require"](home.startswith("com.bbk.launcher2/"), "未回到系统桌面，停止负一屏段")
+            signature = p.sig()
+            p.d.shell(f"input swipe {p.W // 10} {p.H // 2} {p.W * 9 // 10} {p.H // 2} 300")
+            p.settle(signature, 1.5)
+        g["require"](p.focus() == "HiBoard" and p.find("添加组件", exact=True),
+                     "未进入负一屏（可能未启用），停止本段")
+        g["require"](p.go("设置", "更多设置"), "未进入负一屏设置")
+        g["require"]("com.vivo.hiboard.settings.AppletSettingActivity" in p.focus(), "负一屏设置页面不符")
+
+    return hiboard_panel
+
+
+def _vivo_hiboar_panel(p, g):
+    def hiboar_panel():
+        """回到负一屏的设置面板（V2547A 的路径，名字按脚本原样保留）。
+
+        子页来来回回地 back 很容易多退一层回到负一屏主页，后面的项就全找不到了 ——
+        所以每进一个子页之前都用 Activity 确认一次，不在面板上就重新滑进来。
+        不能用「屏上有『热点资讯』」来判断：负一屏主页上本来就有资讯卡片，会误判成面板。"""
+        if "AppletSettingActivity" in p.focus():
+            return True
+        p.d.shell("input keyevent HOME"); g["time"].sleep(1.0)
+        for _ in range(3):
+            p.d.shell(f"input swipe {p.W//10} {p.H//2} {p.W*9//10} {p.H//2} 250")
+            g["time"].sleep(1.5)
+            if p.find("添加组件") or p.find("小V建议"):
+                break
+        p.tap("设置", exact=True, scrolls=0, wait=1.3)
+        return "AppletSettingActivity" in p.focus()
+
+    return hiboar_panel
+
+
+def _vivo_read_switches_style(p, g):
+    def read_switches(max_screens=1):
+        """读这一页的开关，标题按脚本的 `title_key()` 归并（V2417A：vivo 把说明拼在点号后）。"""
+        result = {}
+        for screen in range(max_screens):
+            items = until(p.switches, timeout=3, poll=0.2)
+            g["require"](items, "页面里没有读到开关，停止本段")
+            current = {}
+            for title, state, _ in items:
+                key = g["title_key"](title)
+                g["require"](key not in current, f"开关标题不唯一：{key}")
+                current[key] = state
+            result.update(current)
+            if screen + 1 < max_screens and not p.scroll_more():
+                break
+        return result
+
+    return read_switches
+
+
 NAV["settings_home"] = _vivo_settings_home
 NAV["off_unnamed"] = _vivo_off_unnamed
+NAV.update({
+    "tap_row": _vivo_tap_row,
+    "by_desc": _vivo_by_desc,
+    "result_xy": _vivo_result_xy,
+    "search_setting": _vivo_search_setting,
+    "hiboard_panel": _vivo_hiboard_panel,
+    "hiboar_panel": _vivo_hiboar_panel,
+})
 # `browser_settings` 这个名字小米系也在用：两个家族的实现由文件末尾的分派器按脚本常量选
 # （`_browser_settings()`），这里不注册、免得被后来的那一行静默覆盖。
 
@@ -788,7 +1121,9 @@ def _oppo_browser_settings_direct(p, g):
 
 
 def _oppo_wait_page(p, g):
-    """等到页面认得出。`WAIT_PAGE_STYLE` 选走法：bool / raise / strict，缺省 bool。"""
+    """等到页面认得出。`WAIT_PAGE_STYLE` 选走法：bool / raise / strict / meizu，缺省 bool。"""
+
+    meizu_style = _meizu_wait_page(p, g)
 
     def bool_style(activity, title, timeout=None):
         """等到活动、页标题以及可点击区域连续稳定，避免横向动画期间的越界坐标。
@@ -873,11 +1208,13 @@ def _oppo_wait_page(p, g):
         raise RuntimeError(f"未确认页面「{title}」，不操作开关")
 
     def wait_page(activity, title=None, timeout=None):
-        style = _style(g, "WAIT_PAGE_STYLE", ("bool", "raise", "strict"), "bool")
+        style = _style(g, "WAIT_PAGE_STYLE", ("bool", "raise", "strict", "meizu"), "bool")
         if style == "raise":
             return raise_style(activity, title, timeout)
         if style == "strict":
             return strict_style(activity, title, timeout)
+        if style == "meizu":
+            return meizu_style(activity, title, 8 if timeout is None else timeout)
         return bool_style(activity, title, timeout)
 
     return wait_page
@@ -935,7 +1272,9 @@ def _oppo_navigate(p, g):
 
 
 def _oppo_open_settings(p, g):
-    """进「设置」入口。`OPEN_SETTINGS_STYLE` 选走法：text / intent / shell，缺省 text。"""
+    """进「设置」入口。`OPEN_SETTINGS_STYLE` 选走法：text / intent / shell / honor，缺省 text。
+
+    honor 那一档与 text 逐字同形，只是没给实参时的默认落点词是荣耀的「个性化服务 / 通知」。"""
 
     def text_style(expect=("服务管理", "隐私")):
         """进「设置」入口，落地页出现 expect 之一才算成功。
@@ -970,11 +1309,13 @@ def _oppo_open_settings(p, g):
         g["require"](landed.endswith(activity), f"{package}：没落在设置页（停在 {landed}）；{p.page_evidence()}")
 
     def open_settings(*args, **kwargs):
-        style = _style(g, "OPEN_SETTINGS_STYLE", ("text", "intent", "shell"), "text")
+        style = _style(g, "OPEN_SETTINGS_STYLE", ("text", "intent", "shell", "honor"), "text")
         if style == "intent":
             return intent_style(*args, **kwargs)
         if style == "shell":
             return shell_style(*args, **kwargs)
+        if style == "honor" and not args and "expect" not in kwargs:
+            kwargs["expect"] = ("个性化服务", "通知")
         return text_style(*args, **kwargs)
 
     return open_settings
@@ -1195,7 +1536,7 @@ def _oppo_open_page(p, g):
 
 
 def _oppo_app_settings(p, g):
-    """打开 App 自己的设置页。`APP_SETTINGS_STYLE` 选走法：direct / launch / shell，缺省 direct。"""
+    """打开 App 自己的设置页。`APP_SETTINGS_STYLE` 选走法：direct / launch / shell / honor，缺省 direct。"""
 
     def direct_style(package):
         g["open_page"]("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + package,
@@ -1220,11 +1561,13 @@ def _oppo_app_settings(p, g):
                        activity, title)
 
     def app_settings(*args, **kwargs):
-        style = _style(g, "APP_SETTINGS_STYLE", ("direct", "launch", "shell"), "direct")
+        style = _style(g, "APP_SETTINGS_STYLE", ("direct", "launch", "shell", "honor"), "direct")
         if style == "launch":
             return launch_style(*args, **kwargs)
         if style == "shell":
             return shell_style(*args, **kwargs)
+        if style == "honor":
+            return _honor_app_settings(p, g)(*args, **kwargs)
         return direct_style(*args, **kwargs)
 
     return app_settings
@@ -1359,9 +1702,10 @@ def _oppo_open_search_sub(p, g):
 
 
 def _oppo_read_switches(p, g):
-    """读这一页的开关。`READ_SWITCHES_STYLE`：plain / title / first / expect，缺省 plain（小米系）。"""
+    """读这一页的开关。`READ_SWITCHES_STYLE`：plain / title / first / expect / vivo，缺省 plain（小米系）。"""
 
     plain_style = _xiaomi_read_switches(p, g)
+    vivo_style = _vivo_read_switches_style(p, g)
 
     def title_style(title, max_screens=12):
         from fast import ScreenLocked
@@ -1422,17 +1766,18 @@ def _oppo_read_switches(p, g):
         raise RuntimeError("列表超过读取上限，未执行关闭")
 
     def read_switches(*args, **kwargs):
-        style = _style(g, "READ_SWITCHES_STYLE", ("plain", "title", "first", "expect"), "plain")
-        return {"plain": plain_style, "title": title_style,
-                "first": first_style, "expect": expect_style}[style](*args, **kwargs)
+        style = _style(g, "READ_SWITCHES_STYLE", ("plain", "title", "first", "expect", "vivo"), "plain")
+        return {"plain": plain_style, "title": title_style, "first": first_style,
+                "expect": expect_style, "vivo": vivo_style}[style](*args, **kwargs)
 
     return read_switches
 
 
 def _oppo_close_named(p, g):
-    """关掉点名的开关并回读。`CLOSE_NAMED_STYLE`：plain / basic / vanish / reopen，缺省 plain（小米系）。"""
+    """关掉点名的开关并回读。`CLOSE_NAMED_STYLE`：plain / basic / vanish / reopen / meizu，缺省 plain（小米系）。"""
 
     plain_style = _xiaomi_close_named(p, g)
+    meizu_style = _meizu_close_named(p, g)
 
     def basic_style(names, page, max_screens=1):
         # 回读确认数由引擎经 rt 记录
@@ -1495,9 +1840,9 @@ def _oppo_close_named(p, g):
         g["rt"].confirm(len(names))
 
     def close_named(*args, **kwargs):
-        style = _style(g, "CLOSE_NAMED_STYLE", ("plain", "basic", "vanish", "reopen"), "plain")
-        return {"plain": plain_style, "basic": basic_style,
-                "vanish": vanish_style, "reopen": reopen_style}[style](*args, **kwargs)
+        style = _style(g, "CLOSE_NAMED_STYLE", ("plain", "basic", "vanish", "reopen", "meizu"), "plain")
+        return {"plain": plain_style, "basic": basic_style, "vanish": vanish_style,
+                "reopen": reopen_style, "meizu": meizu_style}[style](*args, **kwargs)
 
     return close_named
 
@@ -1835,6 +2180,205 @@ NAV.update({
 })
 
 
+# ---------- 荣耀（#1246）----------
+#
+# 这家只有三份脚本，家族分节只收「注入名已经住在共享库、别家也在用」的那几档：`app_settings`
+# 与 `browser_settings`（PNM-AN10 / WKL-AN20 都走这个注入名）的荣耀走法写在下面，`enter` /
+# `tap` / `open_settings` 的荣耀档在各自主分派里（`ENTER_STYLE` / `TAP_STYLE` /
+# `OPEN_SETTINGS_STYLE`），`my_tab` 在跨家族分节（`MY_TAB_STYLE`）。只在这一家出现、代码也只
+# 服务这一台机的辅助（`settle_page` / `radio` / `labels` / `dismiss` 等）留在脚本里。
+#
+# 走法各按脚本常量选：`ENTER_STYLE` / `TAP_STYLE` / `APP_SETTINGS_STYLE` / `OPEN_SETTINGS_STYLE` /
+# `BROWSER_FLOW` / `MY_TAB_STYLE`，缺省档都是别的家族原有的走法，不声明常量时行为不变。
+
+def _honor_my_tab(p, g):
+    def my_tab(app):
+        """底栏可能被晚到的弹窗盖住（阅读开屏广告之后才弹「发现新版本」）：关掉再找。
+
+        协议框不关，只跳过（CLE-AN00）。"""
+        for _ in range(4):
+            g["no_agreement"](app)
+            if p.find("我的", edge_ok="tab"):
+                break
+            p.dismiss()
+            g["time"].sleep(1.5)
+        if not p.tab("我的"):
+            raise RuntimeError(f"{app}底部「我的」没找到")
+        g["time"].sleep(1)
+
+    return my_tab
+
+
+def _honor_browser_settings_mounted(p, g):
+    """PNM-AN10：有荣耀浏览器就走它，预装百度版的走 `baidu_browser()`。"""
+    def browser_settings():
+        if "package:" not in p.d.shell("pm path com.honor.browser").output:
+            return g["baidu_browser"]()
+        p.start("com.honor.browser")
+        p.dismiss()
+        if p.find("我的", exact=True):                       # 经典首页：我的 → 右上第三个图标
+            p.tap("我的", exact=True, scrolls=0)
+            p.d(resourceId="com.honor.browser:id/top_local_icon")[2].click()
+            g["time"].sleep(1)
+        else:                                                # 简洁首页：更多 → 设置
+            p.tap("更多", exact=True, scrolls=0)
+            p.tap("设置", exact=True, scrolls=0)
+
+    return browser_settings
+
+
+def _honor_browser_settings_plain(p, g):
+    """WKL-AN20：已在本机设置页就直接用，否则「更多 → 设置」并按落点认页。"""
+    def browser_settings():
+        package = "com.honor.browser"
+        if p.focus().split("/", 1)[0] == package and {"模式选择", "隐私管理"} <= g["labels"]():
+            return package
+        p.start(package)
+        # 本机已验证「更多 → 设置」；经典首页的未知图标位置不猜。
+        g["tap"]("更多", scrolls=0)
+        g["tap"]("设置", scrolls=0)
+        g["settle_page"](package, "模式选择", "隐私管理")
+        return package
+
+    return browser_settings
+
+
+def _honor_app_settings(p, g):
+    def app_settings(package, *markers):
+        p.start(package)
+        g["require"](p.go("我的", "设置"), "未找到应用设置入口")
+        g["tap"]("设置", scrolls=0)
+        g["settle_page"](package, *markers)
+
+    return app_settings
+
+
+# ---------- 魅族（#1246）----------
+#
+# 只有一份脚本，家族分节不成立：只收注入名已经住在共享库、别家也在用的那几个
+# （`wait_page` / `tap_text` / `goto` / `close_named`），各占一档。其余本机助手
+# （`page_summary` / `tap_id` / `open_app` / `assert_no_other_window` / `safe_switches`）
+# 服务的是这台机的页面与 `TARGET_PACKAGE` 约定，留在脚本里。
+
+def _meizu_wait_page(p, g):
+    def wait_page(activity, title, timeout=8):
+        """等页面认得出，顺手记下目标包名给同脚本的其它助手用（Flyme 的 `TARGET_PACKAGE` 约定）。
+
+        `TARGET_PACKAGE` 是脚本的模块常量，所以写回执行作用域，脚本里按裸名字读的助手照旧看得到。"""
+        deadline = g["time"].monotonic() + timeout
+        while g["time"].monotonic() < deadline:
+            g["require"](not p.locked(), "手机锁屏，请机主解锁")
+            if p.focus() == activity:
+                texts = p.texts(p.tree())
+                g["require"](not any(t in ("同意", "同意并继续", "同意并使用", "允许")
+                                     and "Button" in (n.get("class") or "") for t, _, n in texts),
+                             "出现协议或权限申请，未同意，停止本段")
+                if any(t == title and n.get("package") == activity.split("/", 1)[0] for t, _, n in texts):
+                    g["TARGET_PACKAGE"] = activity.split("/", 1)[0]
+                    return
+            g["time"].sleep(.2)
+        raise RuntimeError(f"未确认目标页「{title}」：{activity}")
+
+    return wait_page
+
+
+def _meizu_tap_text(p, g):
+    def tap_text(text, scrolls=0):
+        """只点击可见的准确文字；找不到时只滚动当前页面，不自动处理弹窗。"""
+        initial = p.focus()
+        for index in range(scrolls + 1):
+            g["require"](not p.locked(), "手机锁屏，请机主解锁")
+            g["require"](p.focus() == initial, "页面已变化，停止点击")
+            root = p.tree()
+            g["assert_no_other_window"](root, g["TARGET_PACKAGE"])
+            hits = [(b, n) for t, b, n in p.texts(root)
+                    if t == text and n.get("package") == g["TARGET_PACKAGE"]]
+            # 同一按钮可同时有容器和子文字；不同区域的同名项不猜。
+            centers = {((b[0] + b[2]) // 2, (b[1] + b[3]) // 2) for b, _ in hits}
+            if centers:
+                if len(centers) > 1:
+                    # 父子节点的中心可有微小偏移，但不能指向不同位置。
+                    xs, ys = zip(*centers, strict=True)     # centers 都是 (x, y) 两元组
+                    g["require"](max(xs) - min(xs) < p.W * .15 and max(ys) - min(ys) < p.H * .08,
+                                 f"「{text}」有多个位置，未点击")
+                x, y = min(centers, key=lambda xy: xy[1])
+                g["require"](0 <= x < p.W and 0 <= y < p.H, "坐标不在屏幕内")
+                # 底部可能被系统导航区域覆盖，即使文字节点中心仍在屏幕内。
+                if y >= p.H * .95:
+                    if index < scrolls and p.scroll_more():
+                        continue
+                    raise RuntimeError(f"「{text}」位于屏幕底部导航区域附近，未点击")
+                p.click(x, y)
+                g["time"].sleep(.7)
+                return
+            if index == scrolls or not p.scroll_more():
+                break
+        raise RuntimeError(f"未找到「{text}」")
+
+    return tap_text
+
+
+def _meizu_goto(p, g):
+    def goto(text, activity, title, scrolls=0):
+        g["tap_text"](text, scrolls)
+        g["wait_page"](activity, title)
+
+    return goto
+
+
+def _meizu_close_named(p, g):
+    def close_named(names, page, activity):
+        """精确标题、逐项点击、识别关闭确认框并回读；有变化或不确定立即停止。"""
+        g["require"](p.focus() == activity, f"{page}：页面不符")
+        before_list = g["safe_switches"](activity)
+        g["require"](all(sum(1 for t, _, _ in before_list if t == name) == 1 for name in names),
+                     f"{page}：目标开关未全部唯一识别，未操作")
+        baseline = {t: on for t, on, _ in before_list}
+        print(f"  准备关闭 {page}：{'、'.join(names)}；已关闭的保持不变", flush=True)
+        for name in names:
+            g["require"](not p.locked(), "手机锁屏，请机主解锁")
+            g["require"](p.focus() == activity, "页面已变化，停止本段")
+            switches = [(on, xy) for t, on, xy in g["safe_switches"](activity) if t == name]
+            g["require"](len(switches) == 1, f"{name}：开关不唯一")
+            on, (x, y) = switches[0]
+            if not on:
+                print(f"  · {name} 已关闭", flush=True)
+                continue
+            g["require"](not any(n.get("checkable") == "true" and n.get("enabled") == "false"
+                                 and p.on_screen(n) and (lambda b: b[0] <= x <= b[2] and b[1] <= y <= b[3])
+                                 (__import__("fast").bounds(n)) for n in p.tree().iter("node")),
+                         f"{name}：开关不可操作")
+            p.click(x, y)
+            g["time"].sleep(.8)
+            g["require"](not p.locked(), "手机锁屏，请机主解锁")
+            g["require"](p.focus() == activity, "点击后页面变化，停止本段")
+            root = p.tree()
+            g["assert_no_other_window"](root, activity.split("/", 1)[0])
+            texts = p.texts(root)
+            titles = [t for t, _, _ in texts if "确定关闭" in t and name in t]
+            confirmations = [(b, n) for t, b, n in texts if t == "确定" and "Button" in (n.get("class") or "")]
+            if titles:
+                g["require"](len(confirmations) == 1, f"{name}：关闭确认框无法识别")
+                b, _ = confirmations[0]
+                g["require"](0 <= (b[0] + b[2]) // 2 < p.W and 0 <= (b[1] + b[3]) // 2 < p.H,
+                             "确认按钮不在屏幕内，停止")
+                p.click((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)
+                g["time"].sleep(.8)
+            else:
+                g["require"](not confirmations, "出现无法识别的确认框，停止")
+            g["require"](p.focus() == activity, "确认后页面变化，停止")
+            after_list = g["safe_switches"](activity)
+            after = {t: on for t, on, _ in after_list}
+            g["require"](sum(1 for t, _, _ in after_list if t == name) == 1 and after.get(name) is False,
+                         f"{name}：回读未确认关闭")
+            g["require"](all(after.get(t) == state for t, state in baseline.items() if t not in names),
+                         f"{page}：其他开关状态变化，请手动核对")
+            p.changed.append((page, name))
+            print(f"  关 {name}（已回读）", flush=True)
+
+    return close_named
+
+
 # ---------- 跨家族 ----------
 #
 # `tap`：按名字点入口、找不到就 `require` 报错。一加 PJA110 与 vivo V2417A 各一份逐字相同。
@@ -1846,7 +2390,7 @@ NAV.update({
 # 闭包从执行作用域取它，删掉这行 import 就是 AttributeError。
 
 def _plain_tap(p, g):
-    """按名字点入口、找不到就报错。`TAP_STYLE` 选走法：require / exact，缺省 require。"""
+    """按名字点入口、找不到就报错。`TAP_STYLE` 选走法：require / exact / honor，缺省 require。"""
 
     def require_style(name, scrolls=4):
         g["require"](p.tap(name, exact=True, scrolls=scrolls), f"未找到入口「{name}」")
@@ -1856,9 +2400,14 @@ def _plain_tap(p, g):
         if not p.tap(name, exact=exact, scrolls=scrolls):
             raise RuntimeError(f"未找到入口「{name}」；当前页：{p.page_text()}")
 
-    def tap(name, scrolls=4):
-        style = _style(g, "TAP_STYLE", ("require", "exact"), "require")
-        return exact_style(name, scrolls) if style == "exact" else require_style(name, scrolls)
+    def tap(name, scrolls=None):
+        style = _style(g, "TAP_STYLE", ("require", "exact", "honor"), "require")
+        if scrolls is None:
+            # honor 那一档只是默认翻页预算不同（WKL-AN20 录的是 6 屏），句子与 require 逐字相同。
+            scrolls = 6 if style == "honor" else 4
+        if style == "exact":
+            return exact_style(name, scrolls)
+        return require_style(name, scrolls)
 
     return tap
 
@@ -1881,7 +2430,83 @@ def _plain_opened(p, g):
     return opened
 
 
-NAV.update({"tap": _plain_tap, "opened": _plain_opened})
+def _vivo_my_tab(p, g):
+    def my_tab():
+        """应用商店底部「我的」标签：在 y>92% 处，find() 默认不点，直接按坐标点最后一个标签（V1986A）。"""
+        xy = p.find("我的", edge_ok="tab")
+        if xy:
+            p.click(*xy)
+        else:
+            p.click(int(p.W * 0.9), int(p.H * 0.96))
+        g["time"].sleep(1.2)
+
+    return my_tab
+
+
+def _plain_my_tab(p, g):
+    """底部「我的」标签。`MY_TAB_STYLE` 选走法：vivo / honor，缺省 vivo。"""
+    honor_style = _honor_my_tab(p, g)
+
+    def my_tab(*args, **kwargs):
+        style = _style(g, "MY_TAB_STYLE", ("vivo", "honor"), "vivo")
+        if style == "honor":
+            return honor_style(*args, **kwargs)
+        return _vivo_my_tab(p, g)(*args, **kwargs)
+
+    return my_tab
+
+
+def _vivo_tap_text_style(p, g):
+    def tap_text(w, scrolls=0, wait=1.3):
+        ok = p.tap(w, exact=True, scrolls=scrolls)
+        g["time"].sleep(wait)
+        return ok
+
+    return tap_text
+
+
+def _plain_tap_text(p, g):
+    """点一段文字。`TAP_TEXT_STYLE` 选走法：vivo / meizu，缺省 vivo（V2547A 那一套）。"""
+    meizu_style = _meizu_tap_text(p, g)
+    vivo_style = _vivo_tap_text_style(p, g)
+
+    def tap_text(*args, **kwargs):
+        style = _style(g, "TAP_TEXT_STYLE", ("vivo", "meizu"), "vivo")
+        if style == "meizu":
+            return meizu_style(*args, **kwargs)
+        return vivo_style(*args, **kwargs)
+
+    return tap_text
+
+
+def _vivo_goto_style(p, g):
+    def goto(name, scrolls=0):
+        """点进一个列表项，并把结果打出来。
+
+        不打印就没法区分「这页确实没开关可关」和「压根没进到这页」，跑完看到 0 个也敢信。"""
+        ok = g["tap_row"](name, scrolls=scrolls)
+        print(f"  · {name}" if ok else f"  ✗ 没找到「{name}」")
+        return ok
+
+    return goto
+
+
+def _plain_goto(p, g):
+    """点进列表项并等目标页。`GOTO_STYLE` 选走法：vivo / meizu，缺省 vivo。"""
+    meizu_style = _meizu_goto(p, g)
+    vivo_style = _vivo_goto_style(p, g)
+
+    def goto(*args, **kwargs):
+        style = _style(g, "GOTO_STYLE", ("vivo", "meizu"), "vivo")
+        if style == "meizu":
+            return meizu_style(*args, **kwargs)
+        return vivo_style(*args, **kwargs)
+
+    return goto
+
+
+NAV.update({"tap": _plain_tap, "opened": _plain_opened, "my_tab": _plain_my_tab,
+            "tap_text": _plain_tap_text, "goto": _plain_goto})
 
 
 # ---------- 名字被两个家族占用：`browser_settings` ----------
@@ -1931,14 +2556,39 @@ def _browser_settings(p, g):
             p.back()
         raise RuntimeError("浏览器未回到设置首页")
 
+    def vivo_menu_flow():
+        """首选右上「菜单 → 设置」，进不去退回底部「我的」（V2547A）。
+
+        实测冷启动会直接停在首页，底部只有菜单/窗口，没有「我的」，走「我的」会整段跑空。"""
+        try:
+            p.d(resourceId="com.vivo.browser:id/menu_btn").click()
+            g["time"].sleep(1.4)
+            if p.tap("设置", exact=True, scrolls=0, wait=1.3) and "SettingActivity" in p.focus():
+                return True
+        except Exception:
+            pass
+        p.d.shell("input keyevent BACK")
+        g["time"].sleep(0.8)
+        if p.tap("我的", exact=True, scrolls=4, wait=1.2):     # 兜底：「我的」页顶部也有设置入口
+            p.top()
+            if p.tap("设置", exact=True, scrolls=0, wait=1.3) and "SettingActivity" in p.focus():
+                return True
+        return False
+
+    honor_flows = {"honor_mounted": _honor_browser_settings_mounted(p, g),
+                   "honor_plain": _honor_browser_settings_plain(p, g)}
+
     def browser_settings():
-        flow = _style(g, "BROWSER_FLOW", ("vivo", "toolbar", "menu", "mine",
-                                          "prefs_shell", "prefs_start"), "vivo")
+        flow = _style(g, "BROWSER_FLOW", ("vivo", "toolbar", "menu", "mine", "prefs_shell",
+                                          "prefs_start", "vivo_menu", "honor_mounted", "honor_plain"), "vivo")
         if flow == "vivo":
             return g["browser_settings_vivo"]()
         if flow in ("toolbar", "menu", "mine"):
             return g["browser_settings_xiaomi"]()
-        return {"prefs_shell": prefs_shell_flow, "prefs_start": prefs_start_flow}[flow]()
+        if flow in honor_flows:
+            return honor_flows[flow]()
+        return {"prefs_shell": prefs_shell_flow, "prefs_start": prefs_start_flow,
+                "vivo_menu": vivo_menu_flow}[flow]()
 
     return browser_settings
 
