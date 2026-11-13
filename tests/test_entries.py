@@ -1390,7 +1390,7 @@ def phone_286(taps=1):
 
 def load_step_286(p, only):
     """按段名加载并执行：返回 (scope, 标准输出)。"""
-    scope, out = load_recipe(p, ROOT / "recipes/oppo/PKT110/recipe.py", only)
+    scope, out = load_recipe(p, ROOT / "recipes/oppo/PKT110/PKT110.toml", only)
     return scope, out.getvalue()
 
 
@@ -2008,11 +2008,11 @@ PRIVACY_933 = ("隐私", "隐私授权管理")
 MARKET_933 = "com.heytap.market/com.heytap.market.mine.cn.setting.ui."
 PRIVACY_PAGE_933 = MARKET_933 + "PrivacyActivity"
 RECIPES_933 = {
-    "PLG110": ROOT / "recipes/oppo/PLG110/recipe.py",
+    "PLG110": ROOT / "recipes/oppo/PLG110/PLG110.toml",
     "PMA110": ROOT / "recipes/oppo/PMA110/recipe.py",
-    "PKX110": ROOT / "recipes/oppo/PKX110/recipe.py",
+    "PKX110": ROOT / "recipes/oppo/PKX110/PKX110.toml",
     "RMX3700": ROOT / "recipes/oppo/RMX3700/recipe.py",
-    "PHK110": ROOT / "recipes/oppo/PHK110/recipe_android15.py",
+    "PHK110": ROOT / "recipes/oppo/PHK110/PHK110-android15.toml",
 }
 
 
@@ -2220,16 +2220,31 @@ class StoreSegmentTests(unittest.TestCase):
     """商店段把两种文案一起交给本脚本的入口方法 —— 撤掉实现这几条就红。"""
 
     def segment(self, name, step, **stubs):
-        scope = load_933(segment_phone_933(), RECIPES_933[name])
+        """装载真实机型脚本，只跑这一段；把它的协作者换成 Mock，断言段体交给了什么。
+
+        页面树（`.toml`）的段体已经是数据：按段名从装载后的 `rt` 取 action，不再从源码里抠函数体
+        （#1264）。仍是 `recipe.py` 的机型照旧走 `action_933()` 的那条 AST 路径。"""
+        recipe = RECIPES_933[name]
+        if recipe.suffix == ".toml":
+            scope, _ = load_recipe(segment_phone_933(), recipe)   # 装载但一段都不跑
+            for helper, value in stubs.items():
+                scope[helper] = Mock(return_value=value)
+            scope["ONLY"] = []                                     # 放开段过滤，下面只跑这一段
+            scope.pop("guard", None)                               # 只验段体：型号守卫不是这条用例的对象
+            action = next(item.action for item in scope["rt"].steps if item.name == step)
+            scope["rt"].run_step(step, action)
+            return scope
+        scope = load_933(segment_phone_933(), recipe)
         for helper, value in stubs.items():
             scope[helper] = Mock(return_value=value)
-        action_933(scope, RECIPES_933[name], step)()
+        action_933(scope, recipe, step)()
         return scope
 
+    # 页面树里的等价文案是 TOML 数组（转成 list）：按内容与顺序比，容器类型不是判据。
     def test_plg110_passes_both_wording(self):
         scope = self.segment("PLG110", "软件商店",
                              app_settings=None, tap_page=None, close_named=None, read_switches={})
-        self.assertEqual(scope["tap_page"].call_args_list[0].args[0], PRIVACY_933)
+        self.assertEqual(tuple(scope["tap_page"].call_args_list[0].args[0]), PRIVACY_933)
 
     def test_pma110_passes_both_wording(self):
         scope = self.segment("PMA110", "软件商店", app_settings=None, tap_page=None, close_named=None)
@@ -2238,7 +2253,7 @@ class StoreSegmentTests(unittest.TestCase):
     def test_pkx110_passes_both_wording(self):
         scope = self.segment("PKX110", "软件商店·个性化",
                              open_app_settings=True, tap_page=True, off_exact=True)
-        self.assertEqual(scope["tap_page"].call_args_list[0].args[0], PRIVACY_933)
+        self.assertEqual(tuple(scope["tap_page"].call_args_list[0].args[0]), PRIVACY_933)
 
     def test_rmx3700_passes_both_wording(self):
         scope = self.segment("RMX3700", "软件商店", tap_by_scroll=True, wait_page=True)
@@ -2247,7 +2262,7 @@ class StoreSegmentTests(unittest.TestCase):
     def test_phk110_passes_both_wording(self):
         scope = self.segment("PHK110", "软件商店个性化",
                              open_settings=True, navigate=True, off_exact=True)
-        self.assertEqual(scope["navigate"].call_args_list[0].args[0], PRIVACY_933)
+        self.assertEqual(tuple(scope["navigate"].call_args_list[0].args[0]), PRIVACY_933)
 
     def test_rmx3700_missing_row_keeps_the_original_line_and_the_scene(self):
         p = segment_phone_933()

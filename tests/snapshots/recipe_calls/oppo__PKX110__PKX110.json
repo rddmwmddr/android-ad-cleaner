@@ -1,5 +1,5 @@
 {
- "script": "recipes/oppo/PKX110/recipe.py",
+ "script": "recipes/oppo/PKX110/PKX110.toml",
  "scenarios": {
   "present": [
    ["广告跟踪", "d.shell", ["getprop ro.product.model"], {}],
