@@ -1,0 +1,43 @@
+# OPPO Find N6（PLP120，ColorOS 16.0.9 / ColorOS 17）的页面树（catalog，#1265）。
+# 路径 2026-10-22 实测，机型脚本整段跑待验证；2026-11-10 补 ColorOS 17（PLP120_17.0.0.109 / Android 17）
+# 的两段路径，未复测（沿用 #905）。九段都写在例外函数里：入口逐层回退、按页面分支、读到的开关再筛名单
+# 都是本机知识，数据里写不下。
+model = "PLP120"
+models = ["PLP120"]
+build = "PLP120_16.0.9"
+
+[[segment]]
+name = "广告跟踪"
+code = "step_ad_tracking"
+
+[[segment]]
+name = "负一屏"
+code = "step_negative_screen"
+
+[[segment]]
+name = "下拉搜索"
+code = "step_search"
+
+[[segment]]
+name = "软件商店"
+code = "step_store"
+
+[[segment]]
+name = "浏览器"
+code = "step_browser"
+
+[[segment]]
+name = "主题"
+code = "step_theme"
+
+[[segment]]
+name = "视频"
+code = "step_video"
+
+[[segment]]
+name = "游戏中心"
+code = "step_game_center"
+
+[[segment]]
+name = "小布建议"
+code = "step_assistant_advice"
