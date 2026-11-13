@@ -42,7 +42,7 @@ git commit -s -m "fix(chan_fast): keep the channel page open when a row vanishes
 
 ## 两类 PR 的分岔
 
-- **机型 / 清单类**：改动主要是机型脚本与清单数据。合并前要过的三查见 [issue-tracker](docs/agents/issue-tracker.md) 的「Pull requests as a triage surface」。
+- **机型 / 清单类**：改动主要是机型脚本与清单数据。合并前要过的四项检查见 [issue-tracker](docs/agents/issue-tracker.md) 的「Pull requests as a triage surface」。
 - **核心行为类**：碰引擎、客户端或架构。这类不整单合并，按本仓库的模型重写；采纳口径见 [docs/09](docs/09-社区问题处理.md) 的「相关 PR 的采用范围」。
 
 ## 验证
