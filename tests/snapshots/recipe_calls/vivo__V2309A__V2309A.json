@@ -1,5 +1,5 @@
 {
- "script": "recipes/vivo/V2309A/recipe.py",
+ "script": "recipes/vivo/V2309A/V2309A.toml",
  "scenarios": {
   "present": [
    ["系统广告", "locked", [], {}],
@@ -41,7 +41,7 @@
    ["i管家", "back", [3], {}],
    ["天气", "locked", [], {}],
    ["天气", "d.shell", ["am start -f 0x10008000 -n com.vivo.weather/.WeatherSettings"], {}],
-   ["天气", "off", [], {"only": ["天气服务"], "keep": ["气象预警", "异常天气", "地震预警"], "page": "天气·设置"}]
+   ["天气", "off", [], {"page": "天气·设置", "only": ["天气服务"], "keep": ["气象预警", "异常天气", "地震预警"]}]
   ],
   "absent": [
    ["系统广告", "locked", [], {}],
@@ -65,7 +65,7 @@
    ["i管家", "back", [3], {}],
    ["天气", "locked", [], {}],
    ["天气", "d.shell", ["am start -f 0x10008000 -n com.vivo.weather/.WeatherSettings"], {}],
-   ["天气", "off", [], {"only": ["天气服务"], "keep": ["气象预警", "异常天气", "地震预警"], "page": "天气·设置"}]
+   ["天气", "off", [], {"page": "天气·设置", "only": ["天气服务"], "keep": ["气象预警", "异常天气", "地震预警"]}]
   ]
  }
 }
