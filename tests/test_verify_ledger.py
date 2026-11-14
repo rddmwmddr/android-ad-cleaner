@@ -456,7 +456,7 @@ class StatusJsonVerificationTests(unittest.TestCase):
         st, load = status_json()
         # `recipe` 是脚本身份，`recipe_path` 才是仓库相对路径（分隔符跟着平台走）；台账键另在引擎侧统一成 "/"
         self.assertEqual(st["recipe"], "M154FF")
-        self.assertEqual(st["recipe_path"], os.path.join("recipes", "xiaomi/M154FF", "M154FF.toml"))
+        self.assertEqual(st["recipe_path"], os.path.join("recipes", "xiaomi", "M154FF", "M154FF.toml"))
         load.assert_called_once_with(LEDGER_PATH)
         record = LEDGER["xiaomi/M154FF/M154FF.toml"]
         self.assertEqual((st["recipe_coverage"], st["recipe_evidence"], st["recipe_verified"]),

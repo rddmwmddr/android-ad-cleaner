@@ -608,7 +608,7 @@ class RecipeIdentityTests(unittest.TestCase):
             self.assertEqual(run.cmd_status_json("S", []), 0)
         status = json.loads(out.getvalue().strip().splitlines()[-1])
         self.assertEqual(status["recipe"], "PYB110")
-        self.assertEqual(status["recipe_path"], os.path.join("recipes", "oppo/PYB110", "recipe.py"))
+        self.assertEqual(status["recipe_path"], os.path.join("recipes", "oppo", "PYB110", "recipe.py"))
 
 
 # ---------- 来源 tests/test_finish_stay_on_632.py ----------
