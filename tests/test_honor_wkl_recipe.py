@@ -155,7 +155,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
           <node resource-id="app:id/switch" class="android.widget.ImageView"
            clickable="true" bounds="[900,400][1000,450]"/></hierarchy>''')
         scope = self.load(p)
-        with scope["safe_ui"]():
+        with scope["safe_ui"](p, scope["rt"]):
             self.assertEqual(p.switches(), [])
         p.d.screenshot.assert_not_called()
 
@@ -166,7 +166,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
           <node text="确定" class="android.widget.Button" bounds="[500,700][600,800]"/>
           </hierarchy>''')
         scope = self.load(p)
-        with patch.object(scope["time"], "sleep"), scope["safe_ui"]():
+        with patch.object(scope["time"], "sleep"), scope["safe_ui"](p, scope["rt"]):
             self.assertEqual(p.confirm(), "确定")
         p.d.click.assert_called_once_with(550, 750)
 
@@ -174,13 +174,13 @@ class HonorWKLRecipeTests(unittest.TestCase):
         p = self.phone('''<hierarchy><node text="确定" class="android.widget.TextView"
                            bounds="[500,700][600,800]"/></hierarchy>''')
         scope = self.load(p)
-        with patch.object(scope["time"], "sleep"), scope["safe_ui"]():
+        with patch.object(scope["time"], "sleep"), scope["safe_ui"](p, scope["rt"]):
             self.assertIsNone(p.confirm())
         p.d.click.assert_not_called()
         root = p.screen.tree.return_value
         ET.SubElement(root, "node", text="关闭个性化广告推荐", bounds="[100,300][800,400]")
         ET.SubElement(root, "node", text="取消", bounds="[100,700][200,800]")
-        with patch.object(scope["time"], "sleep"), scope["safe_ui"]():
+        with patch.object(scope["time"], "sleep"), scope["safe_ui"](p, scope["rt"]):
             self.assertEqual(p.confirm(), "确定")
         p.d.click.assert_called_once_with(550, 750)
 
@@ -189,7 +189,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
         scope = self.load(p)
         originals = {name: getattr(p, name) for name in ("click", "scroll", "confirm", "switches")}
         with self.assertRaisesRegex(RuntimeError, "stop"):
-            with scope["safe_ui"]():
+            with scope["safe_ui"](p, scope["rt"]):
                 raise RuntimeError("stop")
         for name, value in originals.items():
             self.assertEqual(getattr(p, name), value)
@@ -202,14 +202,14 @@ class HonorWKLRecipeTests(unittest.TestCase):
           </node></hierarchy>''')
         scope = self.load(p)
         with self.assertRaisesRegex(RuntimeError, "唯一单选按钮"):
-            scope["radio"](p.tree(), "简洁首页")
+            scope["radio"](p, scope["rt"], p.tree(), "简洁首页")
         p.d.click.assert_not_called()
         root = ET.fromstring('''<hierarchy><node bounds="[0,200][1080,400]">
           <node text="简洁首页" bounds="[50,250][500,300]"/>
           <node class="android.widget.RadioButton" checkable="true" checked="false"
            bounds="[900,250][1000,300]"/>
           </node></hierarchy>''')
-        self.assertEqual(scope["radio"](root, "简洁首页").get("checked"), "false")
+        self.assertEqual(scope["radio"](p, scope["rt"], root, "简洁首页").get("checked"), "false")
 
 
 if __name__ == "__main__":

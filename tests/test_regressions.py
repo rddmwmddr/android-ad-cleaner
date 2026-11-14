@@ -456,9 +456,9 @@ class LaunchTests(unittest.TestCase):
         p.d.shell.return_value = types.SimpleNamespace(output="test-build")
         p.changed = [("已成功的页面", "个性化推荐")]
         with tempfile.TemporaryDirectory() as directory:
-            recipe = Path(directory) / "recipe.py"
-            recipe.write_text('@step("服务管理")\ndef _():\n    require(False, "未找到入口")\n',
-                              encoding="utf-8")
+            recipe = Path(directory) / "recipe.toml"
+            recipe.write_text('model = "x"\nmodels = ["x"]\n[[segment]]\nname = "服务管理"\n'
+                              'ops = [{kind = "fail", text = "未找到入口"}]\n', encoding="utf-8")
             with patch.dict(os.environ, {"AAC_BACKUPS": directory}), contextlib.redirect_stdout(io.StringIO()):
                 with self.assertRaises(SystemExit) as result:
                     fast.execute(p, "run", [str(recipe)])
@@ -470,11 +470,13 @@ class LaunchTests(unittest.TestCase):
         p.locked = Mock(return_value=False)
         p.d.shell.return_value = types.SimpleNamespace(output="different-version")
         with tempfile.TemporaryDirectory() as d:
-            recipe = Path(d) / "recipe.py"
-            recipe.write_text('BUILD = "old-version"\nassert p.safe_mode is True\n')
+            recipe = Path(d) / "recipe.toml"
+            recipe.write_text('model = "x"\nmodels = ["x"]\nbuild = "old-version"\n'
+                              '[[segment]]\nname = "a"\nops = []\n', encoding="utf-8")
             with patch.object(fast, "Phone", return_value=p), patch.object(sys, "argv", ["fast.py", "-s", "test", "run", str(recipe)]), \
                  patch.dict(os.environ, {"AAC_BACKUPS": d}), contextlib.redirect_stdout(io.StringIO()):
                 fast.main()
+            self.assertTrue(p.safe_mode)
 
     def test_reference_script_flag_reaches_safe_mode(self):
         # run.py 用 --ref 传下来，不再靠 AAC_REF 环境变量
@@ -482,12 +484,13 @@ class LaunchTests(unittest.TestCase):
         p.locked = Mock(return_value=False)
         p.d.shell.return_value = types.SimpleNamespace(output="OS4.0")
         with tempfile.TemporaryDirectory() as d:
-            recipe = Path(d) / "recipe.py"
-            recipe.write_text('assert p.safe_mode is True\n')
+            recipe = Path(d) / "recipe.toml"
+            recipe.write_text('model = "x"\nmodels = ["x"]\n[[segment]]\nname = "a"\nops = []\n', encoding="utf-8")
             with patch.object(fast, "Phone", return_value=p), \
                  patch.object(sys, "argv", ["fast.py", "-s", "test", "run", str(recipe), "--ref"]), \
                  patch.dict(os.environ, {"AAC_BACKUPS": d}), contextlib.redirect_stdout(io.StringIO()):
                 fast.main()
+            self.assertTrue(p.safe_mode)
         self.assertNotIn("AAC_REF", os.environ)
 
     def test_vivo_model_alias_and_version(self):
