@@ -420,6 +420,17 @@ class CloseListedOpTests(unittest.TestCase):
             recipe.run()
         self.assertEqual(opened, [(["甲", "丙"], "服务管理", {"snapshot": saved})])
 
+    def test_selects_the_optional_variant_when_the_constant_is_set(self):
+        """`close_listed` 按 CLOSE_NAMED_OPTIONAL 选档（#1268 修的生产 bug）。"""
+        toml = '[const]\nCLOSE_NAMED_OPTIONAL = true\n' + self.TOML
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(tmp, toml)
+            seen = []
+            patch_library(self, read_switches=lambda p, rt, page: {"甲": True},
+                          close_named_optional=lambda p, rt, names, page, **kw: seen.append(names))
+            recipe.run()
+        self.assertEqual(seen, [["甲"]])
+
     def test_empty_filter_fails_with_the_reason(self):
         with tempfile.TemporaryDirectory() as tmp:
             recipe, phone, _calls = _load_tmp(tmp, self.TOML)

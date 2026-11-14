@@ -465,7 +465,7 @@ class LaunchTests(unittest.TestCase):
             self.assertEqual(result.exception.code, 1)
             self.assertIn("已成功的页面", Path(directory, "run-log.txt").read_text(encoding="utf-8"))
 
-    def test_version_mismatch_reaches_safe_mode(self):
+    def test_toml_build_mismatch_reaches_safe_mode(self):
         p = phone()
         p.locked = Mock(return_value=False)
         p.d.shell.return_value = types.SimpleNamespace(output="different-version")
@@ -477,6 +477,19 @@ class LaunchTests(unittest.TestCase):
                  patch.dict(os.environ, {"AAC_BACKUPS": d}), contextlib.redirect_stdout(io.StringIO()):
                 fast.main()
             self.assertTrue(p.safe_mode)
+
+    def test_toml_matching_build_stays_out_of_safe_mode(self):
+        p = phone()
+        p.locked = Mock(return_value=False)
+        p.d.shell.return_value = types.SimpleNamespace(output="old-version")
+        with tempfile.TemporaryDirectory() as d:
+            recipe = Path(d) / "recipe.toml"
+            recipe.write_text('model = "x"\nmodels = ["x"]\nbuild = "old-version"\n'
+                              '[[segment]]\nname = "a"\nops = []\n', encoding="utf-8")
+            with patch.object(fast, "Phone", return_value=p), patch.object(sys, "argv", ["fast.py", "-s", "test", "run", str(recipe)]), \
+                 patch.dict(os.environ, {"AAC_BACKUPS": d}), contextlib.redirect_stdout(io.StringIO()):
+                fast.main()
+            self.assertFalse(p.safe_mode)
 
     def test_reference_script_flag_reaches_safe_mode(self):
         # run.py 用 --ref 传下来，不再靠 AAC_REF 环境变量

@@ -11,7 +11,7 @@ from pathlib import Path
 import sys
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, call
+from unittest.mock import Mock, call, patch
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -834,3 +834,60 @@ class StepDecoratorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CloseNamedVariantTests(unittest.TestCase):
+    """共享段体的 close_named 档位（#1268 修的生产 bug：OPPO 曾走了小米那一支）。"""
+
+    RECIPES = (RECIPE, ROOT / "recipes/oppo/PLZ110/PLZ110.toml")
+
+    def test_toml_declares_the_optional_variant(self):
+        import tomllib
+        for recipe in self.RECIPES:
+            with self.subTest(recipe=recipe.name):
+                const = tomllib.loads(recipe.read_text(encoding="utf-8"))["const"]
+                self.assertIs(const["CLOSE_NAMED_OPTIONAL"], True)
+
+    def test_shared_close_named_accepts_optional_kwargs(self):
+        from types import MappingProxyType
+        import recipe_runtime
+        import recipe_steps
+        rt = recipe_runtime.Runtime(Mock())
+        rt.constants = MappingProxyType({"CLOSE_NAMED_OPTIONAL": True})
+        seen = []
+        with patch.object(recipe_steps.strategies, "close_named_optional",
+                          lambda p, rt, *a, **k: seen.append((a, k))):
+            recipe_steps.close_named_step(Mock(), rt, ["甲"], "页",
+                                          dependent=["全部"], snapshot={"甲": True}, reopen=None)
+        self.assertEqual(seen, [((["甲"], "页"), {"dependent": ["全部"], "snapshot": {"甲": True},
+                                                "reopen": None})])
+
+    def test_shared_close_named_defaults_to_the_nav_dispatcher(self):
+        from types import MappingProxyType
+        import recipe_runtime
+        import recipe_steps
+        rt = recipe_runtime.Runtime(Mock())
+        rt.constants = MappingProxyType({})
+        seen = []
+        with patch.object(recipe_steps.nav, "close_named",
+                          lambda p, rt, *a, **k: seen.append((a, k))):
+            recipe_steps.close_named_step(Mock(), rt, ["甲"], "页")
+        self.assertEqual(seen, [((["甲"], "页"), {})])
+
+
+class MenuStateSurfaceTests(unittest.TestCase):
+    """`menu_state` 返回模块里的 MenuState（#1268 修的生产 bug：曾误从 rt.constants 取）。"""
+
+    def test_menu_state_returns_the_module_namedtuple(self):
+        from types import MappingProxyType
+        import recipe_nav
+        import recipe_runtime
+        p = Mock()
+        p.texts.return_value = [("全部关闭 - 已停用", (0, 0), {})]
+        p.await_page = Mock()
+        rt = recipe_runtime.Runtime(p)
+        rt.constants = MappingProxyType({})
+        with patch.object(recipe_nav, "more_menu", lambda p, rt: None):
+            state = recipe_nav.menu_state(p, rt)
+        self.assertIsInstance(state, recipe_nav.MenuState)
+        self.assertTrue(state.close_all_disabled)
