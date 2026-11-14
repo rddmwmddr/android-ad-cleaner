@@ -4,9 +4,9 @@
 段 action。返回的 `LoadedCatalog` 与 `recipe_loader.LoadedRecipe` 同形（`.namespace` / `.rt` /
 `.steps` / `.run()`），所以 `tests/fixtures.load_recipe` 与调用序列快照驱动不必区分两种格式。
 
-装载只做四件事：读数据、校验、把这次的执行作用域建起来（`recipe_kit.preamble()` 照旧装注入面，
-迁移期库仍是工厂闭包）、按段登记 action。真正的执行在 `LoadedCatalog.run()` 里，段一律经
-`Runtime.run_step`，段归属不断。
+装载只做四件事：读数据、校验、建出例外模块命名空间与这次执行的 `rt`（例外 `.py` 是普通模块，
+exec 进一个 dict 供 `code=` 与钩子按名字取）、按段登记 action。真正的执行在 `LoadedCatalog.run()`
+里，段一律经 `Runtime.run_step`，段归属不断。
 """
 import tomllib
 from pathlib import Path
@@ -94,7 +94,7 @@ class CatalogScope(dict):
 
 
 class LoadedCatalog:
-    """装载后的数据：这次执行、执行作用域、按书写顺序排好的段。形状对齐 `LoadedRecipe`。"""
+    """装载后的数据：这次执行、例外模块命名空间、按书写顺序排好的段。形状对齐 `LoadedRecipe`。"""
 
     def __init__(self, path: str, namespace: dict, rt: recipe_runtime.Runtime):
         self.path = path

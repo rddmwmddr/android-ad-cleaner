@@ -91,9 +91,9 @@ class DictEntry:
 
 @dataclass(frozen=True)
 class Facts:
-    """一份源码的事实：调用点清单、模块级定义的函数名（本地定义会盖住注入版的那份）、
+    """一份源码的事实：调用点清单、模块级定义的函数名（本地定义优先）、
     模块级字典里的常量键值对（词库拿它筛说明文字，判不判中文留给消费方），模块级字符串
-    常量（单串与列表）——扫注入实现时，调用方把 `constants` 交回 `scan_source(externals=…)`，
+    常量（单串与列表）——扫库实现时，调用方把 `constants` 交回 `scan_source(externals=…)`，
     实现里按名字取的值才读得出——以及导入的名字与归属模块（`{名字: 模块}`，含 `if TYPE_CHECKING:`
     块；`import X` 记成 `{X: X}`，`import X as Y` 记成 `{Y: X}`，消费方按它解析共享实现的归属）
     与导入行号（`{名字: 行号}`，没有调用点可写出处时词库退到这一行，#1253）。"""
@@ -166,10 +166,10 @@ def business_args(call: "Call") -> tuple["Arg", ...]:
 
 def _call_name(func: ast.expr, modules: Mapping[str, str],
                names: Mapping[str, str]) -> tuple[str, bool, str]:
-    """（归一后的调用名, 是不是执行作用域里的名字, 归属模块）。
+    """（归一后的调用名, 是不是按名字写的调用, 归属模块）。
 
-    `g["X"](…)` 与裸名 `X(…)` 归一成 `X`；`M.X(…)`（`M` 是注入面模块的导入别名）同样归一成 `X`，
-    归属记 `M`，这样 `import recipe_nav` + `recipe_nav.gear(…)` 与 `from recipe_nav import gear`
+    裸名 `X(…)` 与历史写法 `g["X"](…)` 归一成 `X`；`M.X(…)`（`M` 是库模块的导入别名）同样归一成
+    `X`，归属记 `M`，这样 `import recipe_nav` + `recipe_nav.gear(…)` 与 `from recipe_nav import gear`
     两种写法走到同一份实现（#1243）。其余属性调用（`p.start`、`time.sleep`）原样留全名。"""
     if (isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name)
             and modules.get(func.value.id) in SURFACE):
