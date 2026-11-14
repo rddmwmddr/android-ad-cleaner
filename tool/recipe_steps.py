@@ -230,7 +230,7 @@ def system_ads_security(p, rt):
     rt.require(nav.security_tab(p, rt), "未识别「安全」标签")
     rt.require(p.tap("更多安全设置", exact=True, scrolls=6), "未找到「更多安全设置」")
     rt.require(p.tap("广告服务", exact=True, scrolls=6), "未找到「广告服务」")
-    _close_named_fn(rt)(p, rt, ["个性化广告推荐"], "系统·广告服务")
+    close_named_step(p, rt, ["个性化广告推荐"], "系统·广告服务")
 
 
 
@@ -268,18 +268,18 @@ def browser_home(p, rt):
 
 
 
-def _close_named_fn(rt):
-    """共享段体里的 close_named 档位：默认小米那一档，PMX110 / PLZ110 用 optional（#1268）。"""
-    if rt.constants.get("CLOSE_NAMED_OPTIONAL"):
-        return strategies.close_named_optional
-    return nav.close_named
+def close_named_step(p, rt, names, title, *args, **kwargs):
+    """共享段体里的 close_named 档位：默认小米那一档，PMX110 / PLZ110 用 optional（#1268）。
+
+    名字带 `close_named` 前缀：事实层按前缀认「这一页点名关了哪些开关」，改包装不丢词条。"""
+    fn = strategies.close_named_optional if rt.constants.get("CLOSE_NAMED_OPTIONAL") else nav.close_named
+    return fn(p, rt, names, title, *args, **kwargs)
 
 
-def _off_exact_fn(rt):
+def off_exact_step(p, rt, names, page, *args, **kwargs):
     """共享段体里的 off_exact 档位：默认 paged，PKH110 用允许缺项的那一档（#1268）。"""
-    if rt.constants.get("OFF_EXACT_OPTIONAL"):
-        return strategies.off_exact_paged_optional
-    return strategies.off_exact_paged
+    fn = strategies.off_exact_paged_optional if rt.constants.get("OFF_EXACT_OPTIONAL") else strategies.off_exact_paged
+    return fn(p, rt, names, page, *args, **kwargs)
 
 def store_promotions(p, rt):
     if not nav.open_app_settings(p, rt, "com.heytap.market",
@@ -290,7 +290,7 @@ def store_promotions(p, rt):
                          "com.heytap.market.mine.cn.setting.ui.ServeManagerActivity", "服务管理"):
         return False
     p.top(n=12)
-    return _off_exact_fn(rt)(p, rt, rt.constants['STORE_PROMOTIONS'], "商店·推广入口")
+    return off_exact_step(p, rt, rt.constants['STORE_PROMOTIONS'], "商店·推广入口")
 
 
 def browser_ads(p, rt):
@@ -299,7 +299,7 @@ def browser_ads(p, rt):
     activity = "com.heytap.browser.settings.component.BrowserPreferenceActivity"
     if not nav.tap_page(p, rt, "隐私", activity, "隐私") or not nav.tap_page(p, rt, "广告管理", activity, "广告管理"):
         return False
-    completed = _off_exact_fn(rt)(p, rt, ["开屏广告", "资讯列表广告"], "浏览器·广告管理", max_screens=2)
+    completed = off_exact_step(p, rt, ["开屏广告", "资讯列表广告"], "浏览器·广告管理", max_screens=2)
     print("  · 摇一摇广告可能随上级开关灰置；不将 checked=true 的灰置项计作独立关闭")
     return completed
 
@@ -310,7 +310,7 @@ def browser_personalized(p, rt):
     activity = "com.heytap.browser.settings.component.BrowserPreferenceActivity"
     if not nav.tap_page(p, rt, "隐私", activity, "隐私") or not nav.tap_page(p, rt, "个性化管理", activity, "个性化管理"):
         return False
-    return _off_exact_fn(rt)(p, rt, ["个性化优惠推荐", "个性化广告推荐"], "浏览器·个性化管理", max_screens=2)
+    return off_exact_step(p, rt, ["个性化优惠推荐", "个性化广告推荐"], "浏览器·个性化管理", max_screens=2)
 
 
 
@@ -343,7 +343,7 @@ def assistant_screen(p, rt):
     # 热点资讯页有导出，直达（沿用 #650 的做法），不用回设置页再滚动找
     hot_news = "am start -f 0x10008000 -n com.coloros.assistantscreen/com.oplus.assistantscreen.card.infoflow.setting.activity.InfoFlowSettingActivity"
     nav.open_page(p, rt, hot_news, "热点资讯", "com.coloros.assistantscreen", "InfoFlowSettingActivity")
-    _close_named_fn(rt)(p, rt, ["热点资讯"], "热点资讯")
+    close_named_step(p, rt, ["热点资讯"], "热点资讯")
     if carousel_error:
         raise RuntimeError(f"热点资讯已核对；轮播推荐未完成：{carousel_error}")
 
@@ -351,13 +351,13 @@ def assistant_screen(p, rt):
 def search_settings_direct(p, rt):
     nav.open_page(p, rt, rt.constants['SEARCH_SETTINGS'], "搜索范围", rt.constants['SEARCH'], "SearchSettingActivity")
     nav.row(p, rt, "搜索范围")
-    _close_named_fn(rt)(p, rt, ["个性化推荐", "精选资讯"], "搜索范围", dependent=["全部"])
+    close_named_step(p, rt, ["个性化推荐", "精选资讯"], "搜索范围", dependent=["全部"])
     p.back()
     nav.row(p, rt, "首页卡片管理")
     cards = nav.read_switches(p, rt, "首页卡片管理")
     names = [name for name in rt.constants['SEARCH_CARDS'] if name in cards]
     if names:
-        _close_named_fn(rt)(p, rt, names, "首页卡片管理", snapshot=cards)
+        close_named_step(p, rt, names, "首页卡片管理", snapshot=cards)
     missing = len(rt.constants['SEARCH_CARDS']) - len(names)
     if missing:
         note = f"首页卡片管理：本次未显示 {missing} 个录制推广项，未操作、不计为已关闭"
@@ -365,18 +365,18 @@ def search_settings_direct(p, rt):
         print("  · " + note, flush=True)
     p.back()
     nav.row(p, rt, "功能管理")
-    _close_named_fn(rt)(p, rt, ["搜索框提示词"], "功能管理")
+    close_named_step(p, rt, ["搜索框提示词"], "功能管理")
     p.back()
     # 「账号与隐私」只是设置页上的分组标题，没有二级页面；直接点它下面的隐私行。
     nav.row(p, rt, "隐私")
-    _close_named_fn(rt)(p, rt, ["个性化推荐"], "隐私")
+    close_named_step(p, rt, ["个性化推荐"], "隐私")
 
 
 def theme_store_settings(p, rt):
     nav.app_settings(p, rt, rt.constants['THEME'])
     nav.row(p, rt, "服务管理")
     nav.row(p, rt, "消息与广告")
-    _close_named_fn(rt)(p, rt, ["开屏广告"], "消息与广告")
+    close_named_step(p, rt, ["开屏广告"], "消息与广告")
     nav.app_settings(p, rt, rt.constants['THEME'])
     nav.row(p, rt, "隐私")
 
@@ -384,7 +384,7 @@ def theme_store_settings(p, rt):
         nav.app_settings(p, rt, rt.constants['THEME'])
         nav.row(p, rt, "隐私")
 
-    _close_named_fn(rt)(p, rt, ["个性化推荐设置"], "隐私", reopen=reopen)
+    close_named_step(p, rt, ["个性化推荐设置"], "隐私", reopen=reopen)
 
 
 def video_direct(p, rt):
@@ -394,7 +394,7 @@ def video_direct(p, rt):
     nav.open_page(p, rt, "am start -f 0x10008000 -a android.intent.action.VIEW -p " + rt.constants['VIDEO']
                    + " -d yoli://yoli.com/mine_act_lib_yoli/settings", "设置", rt.constants['VIDEO'], "SettingActivity")
     nav.row(p, rt, "个性化管理")
-    _close_named_fn(rt)(p, rt, ["个性化广告推荐", "个性化内容推荐"], "个性化管理")
+    close_named_step(p, rt, ["个性化广告推荐", "个性化内容推荐"], "个性化管理")
 
 
 def game_center_direct(p, rt):
@@ -403,7 +403,7 @@ def game_center_direct(p, rt):
                    "游戏中心", rt.constants['GAME'], "SettingActivity")
     nav.row(p, rt, "隐私开关设置", scrolls=6)
     nav.row(p, rt, "个性化推荐管理", scrolls=4)
-    _close_named_fn(rt)(p, rt, ["个性化推荐"], "个性化推荐管理")
+    close_named_step(p, rt, ["个性化推荐"], "个性化推荐管理")
     p.confirm()
 
 
@@ -412,7 +412,7 @@ def assistant_advice_rows(p, rt):
     nav.row(p, rt, "OPPO AI")
     nav.row(p, rt, "小布建议")
     nav.row(p, rt, "资讯服务")
-    _close_named_fn(rt)(p, rt, ["资讯服务"], "资讯服务")
+    close_named_step(p, rt, ["资讯服务"], "资讯服务")
 
 
 # ---------- OPPO 两大对：PLR110 / PYB110（#1213）----------

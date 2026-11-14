@@ -2811,7 +2811,7 @@ class ThemeLandingGuardTests(unittest.TestCase):
             with self.subTest(recipe=str(path.relative_to(ROOT))):
                 if form == "ast":
                     self.assertTrue(called_names_906(body) & {
-                        "require_switches", "close_named", "close_named_optional", "_close_named_fn"},
+                        "require_switches", "close_named", "close_named_optional", "close_named_step", "off_exact_step"},
                                     f"{path.name}: 点名开关没有校验")
                 else:
                     self.assertTrue(verifies_switches_906(body), f"{path.name}: 点名开关没有校验")
