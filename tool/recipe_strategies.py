@@ -19,11 +19,10 @@ import recipe_nav as nav
 
 from typing import Any
 
-# 名字 → 工厂。工厂收 (p, g)，只造闭包、不碰手机，返回写进执行作用域的那个函数。
 # 数据可调用的公开实现：`tool/catalog/interpreter.py` 按这些名字建分派表。
 __all__ = ("baidu_browser", "close_all", "close_all_listed", "close_group", "close_named_expect", "close_named_honor", "close_named_optional", "close_named_plain", "close_named_vivo", "close_rows", "close_titles", "close_with_plain_tap", "confirm2", "dialog_open", "gear_tap", "off", "off_exact", "off_exact_paged", "off_exact_paged_optional", "off_one", "read_on_page", "row_switch", "rows", "safe_switches", "scan_switches", "setting_search", "store_personalization", "switch_off", "wait_switches")
 
-# 「跨家族」分节收进来的注入名：这些实现必须被 ≥2 个家族使用（#1247 的守卫，判据按节算）。
+# 「跨家族」分节：这些实现必须被 ≥2 个家族使用（#1247 的判据，守卫归 #1269 重建）。
 # 现在这张表全是家族分节（小米系 / OPPO / vivo / 荣耀 / 魅族），没有跨家族条目，所以这里是空的；
 # 往这里加名字时先数家族，只有一个家族在用的放家族分节，别开共享库。
 SHARED = frozenset()
@@ -84,17 +83,15 @@ def gear_tap(p, rt, pkg, activity):
 
 # ---------- OPPO 家族（oppo / oneplus / realme，沿用 #1245；#1253）----------
 #
-# 一族里逐字相同的拨动过程收在这里；同一个名字在家族内有几套走法的（`read_switches` /
-# `close_named` / `hide_carousel`）各占一档、按脚本常量分派，那几张表跟着名字住在 `recipe_nav`
-# ——一张表一个名字，跨模块分派会把两张注入面绕在一起。
+# 一族里逐字相同的拨动过程收在这里。同一个动作在家族内有几套走法的（`read_switches` /
+# `close_named` / `hide_carousel`），每套各起一个名字（`close_named_optional` / `close_named_plain`
+# / `off_exact_paged` …），由数据顶层 `[const]` 指名用哪一套——没有按名字覆盖，也就没有「谁盖住谁」。
+# 那几张「走法表」跟着名字住在 `recipe_nav`，一张表一个名字。
 #
-# 剩下的 14 个带 `p.off(only=…)` / `keep=…` 现场的拨动策略在这里（#1253）：词库现在也扫这一张表
-# （`recipe_source.strategy_sources()`），现场跟着实现走、读数不变。注入名不能复用 nav 的
-# `close_named` / `off_exact`（`preamble()` 先装 nav、再装这里，同名会把它盖掉），所以几套走法
-# 各起一个名字；脚本用别名把库按名字回调的那两个钩子绑回旧名（`off_exact = off_exact_paged`、
-# `close_named = close_named_optional`），段体里的 `g["off_exact"]` / `g["close_named"]` 不用改。
-# 内层闭包仍叫旧名（`off_exact` / `close_named`）：词库按 `call.function == "close_named"` 认
-# 「off 在助手里面」，改名会把那份未解析数从「不算」变成「算」。
+# 带 `p.off(only=…)` / `keep=…` 现场的拨动策略在这里（#1253）：词库也扫这一张表
+# （`recipe_source.library_sources()`），现场跟着实现走、读数不变。词库按
+# `call.function == "close_named"` 认「off 在助手里面」，所以内层仍用旧名；改外层的公开名
+# 不影响那份未解析计数。
 
 def off_exact(p, rt, names, activity, title):
     """只处理当前页精确匹配的开关，并在同一页面读回（PHK110 的 Android 15 变体）。"""
