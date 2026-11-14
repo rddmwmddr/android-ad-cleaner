@@ -10,18 +10,18 @@ r"""机型脚本的「事实」层：一份源码里发生了哪些调用。纯 
 - 赋值取到的字符串原样返回，不复刻旧词法里 `[\w.$]` 那道字符集卡：那道卡只卡「按位置猜赋值」
   这一条路，同一批串在源码正文里本来就看得见（`hot_news` 这种整条命令串是被正则直接捞到的）。
   收成一份事实后只剩一种读法，再卡会把这类机型的出处读丢；实测放开它，两份生成物一个字不变。
-- 形参回填只在同一份源码内做，且只从函数定义之后的调用处取：调用处不在本文件里（注入实现）时
+- 形参回填只在同一份源码内做，且只从函数定义之后的调用处取：调用处不在本文件里（实现住在 `recipe_lib`）时
   返回空，由调用方按形参位置传 `bindings` 把两侧合起来（沿用 #1149 的口径）。按名字取外部值同理：
   `externals` 收调用脚本的模块级字符串常量，实现里 `g["HOT"]` 这类写法因此读得出（#1209）。
 - 语法错一律抛 `SyntaxError`，不做容错返回：静默少几台机型比崩掉更糟。
 - f-string 不解析：`f"am start … {activity}"` 现在算不上入口，这里也不让它算上；页面标签仍按
   `{变量}` 的写法渲染（那是标签的写法，不是值）。
 
-共享实现的归属跟脚本的 import 走（#1243）：`from recipe_nav import gear` 与
-`import recipe_steps` + `recipe_steps.downloads(…)` 两种写法都解析到 X 里那一份实现，
-`recipe_nav` 只查 `NAV`、`recipe_strategies` 只查 `STRATEGIES`、`recipe_steps` 只查 `STEPS`，
-三张表不按名字合并（同名实现会静默互相覆盖）。脚本本地同名 `def` 覆盖导入版；没有 import 的
-裸名字不算注入实现。
+库实现的归属按名字查，不按脚本的 import 解析（#1268）：`library_sources()` 从 `recipe_nav` /
+`recipe_strategies` / `recipe_steps` 三个稳定 import 面取实现，归属写函数真正的 `__module__`
+（`recipe_lib.<家族>` / `recipe_lib.shared`）；数据里的 `lib` 名由 `_lib_modules()` 在这张表里
+唯一定位。没有按 import 归属的三张注册表，也没有同名覆盖：装载时库名先进 `LIBRARY`，例外命名
+空间只补库里没有的名字。
 """
 import ast
 import glob
@@ -35,7 +35,7 @@ from typing import Any
 _Function = ast.FunctionDef | ast.AsyncFunctionDef
 _Position = tuple[int, int]
 
-# 注入面的三个归属模块（#1243、#1244）：脚本从哪个模块导入，实现就解析到那个模块的注册表里。
+# 三个稳定 import 面（#1243、#1269）：实现住在 `recipe_lib`，这三个模块只做重导出，事实层经它们取名字。
 NAV_MODULE = "recipe_nav"
 STRATEGIES_MODULE = "recipe_strategies"
 STEPS_MODULE = "recipe_steps"
