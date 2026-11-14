@@ -362,6 +362,17 @@ class FailOpTests(unittest.TestCase):
         self.assertEqual(recipe.rt.failed_steps, ["a"])
         self.assertEqual(backs, [])
 
+    def test_evidence_appends_the_page_snapshot(self):
+        """`raise RuntimeError("…；" + p.page_evidence())`：现场只在真走到失败时读（#1267）。"""
+        toml = '[[segment]]\nname="a"\nops=[{kind="fail", text="未进入；", evidence=true}]\n'
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            reads = []
+            phone.page_evidence = lambda titles=(): reads.append(titles) or "EVIDENCE"
+            recipe.run()
+        self.assertEqual(reads, [()])
+        self.assertEqual(recipe.rt.failed_steps, ["a"])
+
 
 class RequireTapOpTests(unittest.TestCase):
     """`require_tap` op（#1265）：`require(p.tap(text, exact=…, scrolls=…), 文案)` 与 `if not p.tap(...): raise`
@@ -648,6 +659,21 @@ class IfLibAnyOpTests(unittest.TestCase):
     def test_both_miss_takes_the_else_branch(self):
         self.assertEqual(self._run(False, False),
                          [("gear", {"toolbar_only": True}), ("gear", {}), ("back", 2)])
+
+    def test_a_page_method_can_stand_in_for_a_helper(self):
+        """`tab_bot("我的") or p.tap("我的", exact=True, scrolls=0)`：短路链里可以混门面方法。"""
+        toml = ('[[segment]]\nname="a"\nops=[{kind="if_lib_any", calls=[{name="tab_bot", args=["我的"]},'
+                ' {method="tap", args=["我的"], kwargs={exact=true, scrolls=0}}],'
+                ' ops=[{kind="back", n=1}], else_ops=[{kind="back", n=2}]}]\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            seen = []
+            phone.tap = lambda text, **kw: seen.append(("tap", text, kw)) or False
+            phone.back = lambda n=1: seen.append(("back", n))
+            recipe.namespace.update({"tab_bot": lambda name: seen.append(("tab_bot", name)) or False})
+            recipe.run()
+        self.assertEqual(seen, [("tab_bot", "我的"), ("tap", "我的", {"exact": True, "scrolls": 0}),
+                                ("back", 2)])
 
 
 class RequireExpectOpTests(unittest.TestCase):

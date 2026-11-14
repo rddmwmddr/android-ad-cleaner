@@ -245,7 +245,7 @@ class PreferenceGearLandingTests(unittest.TestCase):
 
     def test_gear_landing_on_a_preference_activity_counts_as_entering_settings(self):
         p = self.gear_phone()
-        scope, _ = load_recipe(p, ROOT / "recipes/xiaomi/24129PN74C/recipe_os4.py")
+        scope, _ = load_recipe(p, ROOT / "recipes/xiaomi/24129PN74C/24129PN74C-os4.toml")
         self.assertTrue(scope["gear"]())
         p.screen.back.assert_not_called()
 

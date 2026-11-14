@@ -102,10 +102,15 @@ class MeasureTests(unittest.TestCase):
         """真实仓库的覆盖率应 ≥80%（#1260 的采纳判定）。跌破说明脚本形态或分类口径变了，要回 grilling。
 
         分母不能是空集：每个含 `.py` 的家族目录分别量一遍，各自 `total > 0`（#1263）。
-        """
+        最后一批迁完（#1267）之后整个 `recipes/` 已没有 `@step` 脚本，采纳线被「全部迁完」
+        取代——这一支要求「分母为空」确实是因为一份都不剩，别的判据照旧。"""
         result = migrate.measure(str(ROOT / "recipes"))
         self.assertEqual(families_without_measured_segments(result, ROOT / "recipes"), set(),
                          "有家族还带 @step 脚本、却一段体都没进测量：分母是空集，覆盖率在空转")
+        if result["total"] == 0:
+            self.assertEqual(sorted((ROOT / "recipes").glob("*/*/recipe*.py")), [],
+                             "分母是空集，但仓库里还有 `recipe*.py`：测量口径坏了")
+            return
         self.assertGreaterEqual(result["coverage"], 0.80,
                                 f"覆盖率跌破 80%：{result['coverage']:.1%}，选择停工回 grilling")
 

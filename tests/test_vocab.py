@@ -32,14 +32,13 @@ UNRESOLVED_ONLY = {
     "oppo/PMA110/PMA110.toml": 1,
     # 23049RAD8C / 2304FPN6DC / 24090RA29C / 2410CRP4CC 的浏览器子页循环转成数据后按页展开，
     # 每页的 only 都是字面量，这四处不再是未解析（#1266）。
-    "xiaomi/25060RK16C/recipe.py": 1,
     "vivo/V2303A/V2303A.toml": 1,
     "vivo/V2547DA/V2547DA-android17.toml": 4,
-    "xiaomi/24129PN74C/recipe_os4.py": 2,
-    "xiaomi/25102RKBEC/recipe.py": 1,
-    "xiaomi/2512BPNDAC/recipe.py": 1,
-    "xiaomi/M154FF/recipe.py": 1,
-    "xiaomi/M332BF/recipe.py": 1,
+    # 小米乙批（#1267）按页展开后，25060RK16C / 25102RKBEC / 2512BPNDAC / M332BF 的浏览器循环
+    # 不再是未解析（那几份的名单进了词条）；剩下的两条都在 code= 例外函数里：
+    # 24129PN74C-os4 的全局搜索用局部 HOT 关两次，M154FF 的浏览器循环仍在例外函数里。
+    "xiaomi/24129PN74C/24129PN74C-os4.toml": 2,
+    "xiaomi/M154FF/M154FF.toml": 1,
 }
 # close_named() 第一个参数解析不出的，和上面分开冻结，免得一个口径盖住另一个。
 UNRESOLVED_CLOSE = {

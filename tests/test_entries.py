@@ -728,15 +728,15 @@ FIRST_HOP = {
 }
 
 RECIPES_460 = (
-    (ROOT / "recipes/xiaomi/M154FF/recipe.py", ("com.android.browser",)),
-    (ROOT / "recipes/xiaomi/25102RKBEC/recipe.py", ("com.android.browser",)),
-    (ROOT / "recipes/xiaomi/25060RK16C/recipe.py", ("com.android.browser",)),
-    (ROOT / "recipes/xiaomi/24129PN74C/recipe.py", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/M154FF/M154FF.toml", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/25102RKBEC/25102RKBEC.toml", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/25060RK16C/25060RK16C.toml", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml", ("com.android.browser",)),
     (ROOT / "recipes/xiaomi/23113RKC6C/23113RKC6C.toml", ("com.android.browser",)),
-    (ROOT / "recipes/xiaomi/2512BPNDAC/recipe.py", ("com.android.browser",)),
-    (ROOT / "recipes/xiaomi/2505APX7BC/recipe.py", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/2512BPNDAC/2512BPNDAC.toml", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/2505APX7BC/2505APX7BC.toml", ("com.android.browser",)),
     # 这份不走 p.start：强停后用 monkey 拉起
-    (ROOT / "recipes/xiaomi/24129PN74C/recipe_os4.py", None),
+    (ROOT / "recipes/xiaomi/24129PN74C/24129PN74C-os4.toml", None),
     (ROOT / "recipes/xiaomi/24122RKC7C/24122RKC7C.toml", ("com.android.browser", ".BrowserActivity")),
 )
 
@@ -919,7 +919,7 @@ class BrowserEntryTests(unittest.TestCase):
         p.screen.focus.return_value = "com.android.browser/.MainActivity"
         p.in_settings_page.return_value = False
         p.screen.texts.return_value = []
-        scope, _ = load_recipe(p, ROOT / "recipes/xiaomi/M154FF/recipe.py")
+        scope, _ = load_recipe(p, ROOT / "recipes/xiaomi/M154FF/M154FF.toml")
         self.assertFalse(scope["browser_settings"]())
         p.back.assert_not_called()
 
@@ -961,9 +961,9 @@ class BrowserEntryTests(unittest.TestCase):
 
 
 XIAOMI_586 = ROOT / "recipes/xiaomi/24129PN74C"
-RECIPES_586 = ("recipe.py", "recipe_os4.py")
+RECIPES_586 = ("24129PN74C.toml", "24129PN74C-os4.toml")
 REDMI_K70_586 = ROOT / "recipes/xiaomi/23113RKC6C/23113RKC6C.toml"
-XIAOMI_17U_586 = ROOT / "recipes/xiaomi/2512BPNDAC/recipe.py"
+XIAOMI_17U_586 = ROOT / "recipes/xiaomi/2512BPNDAC/2512BPNDAC.toml"
 
 BROWSER_586 = "com.android.browser/.BrowserActivity"
 BROWSER_SETTINGS_586 = "com.android.browser/.BrowserSettingsActivity"
@@ -1035,8 +1035,8 @@ class XiaomiBrowserSettingsTests(unittest.TestCase):
         """正常路径：菜单 → 弹窗「设置」→ BrowserSettingsActivity，后面的行照常处理。"""
         expected = {
             # OS3 这份还要处理「显示猜你想搜模块」，也就是 #281 手动补上的那一项
-            "recipe.py": [ADS_586, call(only=["显示猜你想搜模块"], page="浏览器·搜索设置")],
-            "recipe_os4.py": [ADS_586],
+            "24129PN74C.toml": [ADS_586, call(only=["显示猜你想搜模块"], page="浏览器·搜索设置")],
+            "24129PN74C-os4.toml": [ADS_586],
         }
         for name in RECIPES_586:
             with self.subTest(recipe=name):
@@ -1127,7 +1127,7 @@ class Xiaomi17UltraBrowserSettingsTests(unittest.TestCase):
 #   #667：小米 M154FF、vivo V2547DA 的设置页能直达就直达，打不开才走菜单，断线不当成「这一档不通」。
 
 
-XIAOMI_667 = ROOT / "recipes" / "xiaomi/M154FF" / "recipe.py"
+XIAOMI_667 = ROOT / "recipes" / "xiaomi/M154FF" / "M154FF.toml"
 VIVO_667 = ROOT / "recipes" / "vivo/V2547DA" / "V2547DA-android17.toml"
 
 
@@ -2299,7 +2299,7 @@ class StoreSegmentTests(unittest.TestCase):
 #   页面节点取自报告者贴的 dump（1080×2400）。
 
 
-RECIPE_912 = ROOT / "recipes/xiaomi/24129PN74C/recipe.py"
+RECIPE_912 = ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml"
 BROWSER_HOME_912 = "com.android.browser/com.android.browser.BrowserActivity"
 BROWSER_BASIC_912 = "com.android.browser/com.android.browser.basicmode.BasicModeSettingActivity"
 
@@ -2613,7 +2613,7 @@ class ThemeFallbackBehaviourTests(unittest.TestCase):
         return p, out.getvalue(), scope
 
     def test_installed_thememanager_is_launched_directly(self):
-        for path in (ROOT / "recipes/xiaomi/24129PN74C/recipe.py",
+        for path in (ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml",
                      ROOT / "recipes/xiaomi/24090RA29C/24090RA29C.toml"):
             with self.subTest(recipe=path.parent.name):
                 p, _, _ = self.load(path, "", "package:/system/app/ThemeManager/ThemeManager.apk")
@@ -3011,7 +3011,7 @@ class ThemeUnreachableTests(unittest.TestCase):
 
     def test_store_detail_page_landing_is_skipped(self):
         """主题商店缺失 + 落在应用商店详情页：跳过，理由里带落点。"""
-        scope, out, _ = self.run_theme(ROOT / "recipes/xiaomi/24129PN74C/recipe.py", MARKET_902)
+        scope, out, _ = self.run_theme(ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml", MARKET_902)
         self.assertEqual(scope["SKIPPED_STEPS"], ["主题"])
         self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertIn("com.xiaomi.market", out)
@@ -3054,7 +3054,7 @@ class ThemeUnreachableTests(unittest.TestCase):
         p.d.shell.side_effect = self.manager_only()
         p.start.side_effect = RuntimeError(f"无法打开 {THEME_902}：** No activities found to run")
         out = io.StringIO()
-        scope, _ = load_recipe(p, ROOT / "recipes/xiaomi/24129PN74C/recipe.py", only="主题", out=out)
+        scope, _ = load_recipe(p, ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml", only="主题", out=out)
         self.assertEqual(scope["FAILED_STEPS"], ["主题"])
         self.assertEqual(scope["SKIPPED_STEPS"], [])
         self.assertIn("No activities found", out.getvalue())
@@ -3067,7 +3067,7 @@ class ThemeUnreachableTests(unittest.TestCase):
         p.d.shell.side_effect = self.manager_only()
         p.start.side_effect = adb_link.DeviceLost("device offline")
         with self.assertRaises(adb_link.DeviceLost):
-            load_recipe(p, ROOT / "recipes/xiaomi/24129PN74C/recipe.py", only="主题", out=io.StringIO())
+            load_recipe(p, ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml", only="主题", out=io.StringIO())
 
     def test_installed_store_does_not_change_the_launch(self):
         """主题商店在不在都直达代理页（#906），不再经商店冷启动过一次重定向过渡窗。

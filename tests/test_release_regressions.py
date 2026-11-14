@@ -20,7 +20,7 @@ from fixtures import FakeRunner, fake_adb, load_recipe, phone_stub
 
 
 def recipe(p, only="__no_steps__"):
-    scope, _ = load_recipe(p, ROOT / "recipes/xiaomi/M154FF/recipe.py", only)
+    scope, _ = load_recipe(p, ROOT / "recipes/xiaomi/M154FF/M154FF.toml", only)
     return scope
 
 
