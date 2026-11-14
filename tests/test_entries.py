@@ -2409,7 +2409,7 @@ class ThemeSettingsTests(ClockCase):
 
     def load(self):
         scope, _ = load_recipe(self.p, RECIPE_912)
-        scope["time"] = self.clock        # 脚本级等待也走同一只假钟
+        scope["rt"].clock = self.clock        # 脚本级等待也走同一只假钟
         return scope
 
     def test_my_tab_hits_the_bottom_bar_not_the_content_rows(self):
