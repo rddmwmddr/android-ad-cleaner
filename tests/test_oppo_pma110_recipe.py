@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import run
+import recipe_nav
 from fixtures import load_recipe
 
 RECIPE = ROOT / "recipes/oppo/PMA110/PMA110.toml"
@@ -35,10 +36,17 @@ class Pma110RecipeTests(unittest.TestCase):
     def setUp(self):
         self.p = Mock()
         self.p.changed = []
+        self.p.locked.return_value = False
         self.scope = load(self.p)
+        # close_named_plain 直接调库里的 read_switches；用例往 self.read_switches 放桩
+        self.read_switches = Mock()
+        patcher = patch.object(recipe_nav, "read_switches",
+                               lambda p, rt, *a, **k: self.read_switches(*a, **k))
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def states(self, before, after):
-        self.scope["read_switches"] = Mock(side_effect=[before, after])
+        self.read_switches = Mock(side_effect=[before, after])
 
     def close(self, names, **kwargs):
         return self.scope["close_named_plain"](names, "测试设置", "test/Settings", "测试设置", **kwargs)
@@ -51,13 +59,13 @@ class Pma110RecipeTests(unittest.TestCase):
         self.assertEqual(len(run.recipe_meta(path)["steps"]), 8)
 
     def test_missing_target_prevents_all_switch_changes(self):
-        self.scope["read_switches"] = Mock(return_value={"应用安全": True})
+        self.read_switches = Mock(return_value={"应用安全": True})
         with self.assertRaisesRegex(RuntimeError, "未识别全部目标"):
             self.close(["个性化推荐"])
         self.p.off.assert_not_called()
 
     def test_already_closed_target_does_not_touch_service_switch(self):
-        self.scope["read_switches"] = Mock(return_value={"个性化推荐": False, "天气预警": True})
+        self.read_switches = Mock(return_value={"个性化推荐": False, "天气预警": True})
         self.close(["个性化推荐"])
         self.p.off.assert_not_called()
         self.assertEqual(self.scope["VERIFIED_SWITCHES"], 1)
@@ -141,7 +149,7 @@ class Pma110RecipeTests(unittest.TestCase):
         self.p.tree.return_value = root
         self.p.focus.return_value = self.scope["ASSISTANT"] + "setting.recommendservice.RecommendServiceSettingActivity"
         self.scope["wait_page"] = Mock()
-        self.scope["read_switches"] = Mock(return_value={"推荐服务": True})
+        self.read_switches = Mock(return_value={"推荐服务": True})
         def click(*_):
             for n in root.iter("node"):
                 if n.get("checkable") == "true":
@@ -157,7 +165,7 @@ class Pma110RecipeTests(unittest.TestCase):
         self.p.tree.return_value = radios()
         self.p.focus.return_value = "unrelated/Activity"
         self.scope["wait_page"] = Mock()
-        self.scope["read_switches"] = Mock(return_value={"推荐服务": True})
+        self.read_switches = Mock(return_value={"推荐服务": True})
         with self.assertRaisesRegex(RuntimeError, "页面变化"):
             self.scope["hide_carousel"]()
         self.p.click.assert_not_called()
