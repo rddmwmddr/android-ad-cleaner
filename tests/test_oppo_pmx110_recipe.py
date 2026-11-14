@@ -37,7 +37,8 @@ _SEAM_PATCHERS = []
 
 
 def tearDownModule():
-    for patcher in _SEAM_PATCHERS:
+    # 后进先出：同一属性被多次 patch 时，按插入顺序 stop 会把更早的 delegate 留在模块上
+    for patcher in reversed(_SEAM_PATCHERS):
         patcher.stop()
     _SEAM_PATCHERS.clear()
 
