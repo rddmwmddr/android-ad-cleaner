@@ -34,15 +34,13 @@ UNRESOLVED_ONLY = {
     'oppo/PKX110/PKX110.toml': 1,
     'oppo/PLG110/PLG110.toml': 3,
     'oppo/PLP120/PLP120.toml': 1,
-    'oppo/PLZ110/PLZ110.toml': 22,
+    'oppo/PLZ110/PLZ110.toml': 4,
     'oppo/PMA110/PMA110.toml': 2,
-    'oppo/PMX110/PMX110.toml': 22,
+    'oppo/PMX110/PMX110.toml': 4,
     'vivo/V2303A/V2303A.toml': 1,
     'vivo/V2417A/V2417A.toml': 1,
     'vivo/V2547DA/V2547DA-android17.toml': 4,
-    'xiaomi/23113RKC6C/23113RKC6C.toml': 3,
     'xiaomi/23117RK66C/23117RK66C.toml': 3,
-    'xiaomi/24122RKC7C/24122RKC7C.toml': 3,
     'xiaomi/24129PN74C/24129PN74C-os4.toml': 2,
     'xiaomi/24129PN74C/24129PN74C.toml': 3,
     'xiaomi/M154FF/M154FF.toml': 1,
@@ -82,12 +80,12 @@ SILENT = (
 UNCLASSIFIED = {
     ('honor', '<title>'): 1,
     ('meizu', '<page>'): 3,
-    ('oppo', '<page>'): 63,
+    ('oppo', '<page>'): 27,
     ('oppo', '<title>'): 2,
     ('oppo', '个性化管理'): 3,
     ('oppo', '隐私'): 4,
     ('vivo', '<page>'): 1,
-    ('xiaomi', '<page>'): 12,
+    ('xiaomi', '<page>'): 6,
 }
 
 
