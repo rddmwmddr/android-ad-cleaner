@@ -12,12 +12,18 @@
                                       每份配方一行「路径<TAB>段体哈希」，只打印不写文件；
                                       真机验证或发版后照抄进 recipes/verified.toml
 
-记录的段体哈希与脚本现在算出来的对不上时标「待复核」：判据是脚本里 `@step(...)` 段体的
-正文改过没有，不是文件改过没有（沿用 #916 的台账；判据从提交日期换成哈希见 #1242）。
-段体哈希把脚本解析成 AST，去掉注释、docstring 与装饰器，按结构序列化后拼起来取 sha256
-前 16 位；只改注释 / 折行 / 函数顺序，或者把模块级助手搬进库，都不改哈希。段名参与哈希，
-所以改段名也会标「待复核」。旧记录没有哈希时无从比较，不标「待复核」——那是「尚未建立
-基线」，不是「改过」。
+记录的段体哈希与脚本现在算出来的对不上时标「待复核」：判据是段体内容改过没有，不是文件改过
+没有（沿用 #916 的台账；判据从提交日期换成哈希见 #1242）。段体哈希把段体解析成 AST，去掉注释
+与 docstring，再序列化后拼起来取 sha256 前 16 位；段名参与拼接，所以改段名也会标「待复核」。
+
+两种形态各算各的。`.py` 机型脚本只取 `@step(...)` 段体，注释、折行、函数顺序与装饰器都不进，
+把模块级助手搬进库因此不算改。页面树数据取每个 `[[segment]]` 的归一 JSON（键顺序与段的先后不
+影响），再整份拼上同名例外 `.py` 的模块体——`code=` 的那些段就住在那儿，按整文件算而不按段
+收窄：`code=` 函数还会调用同文件的助手、读模块级常量，按段收窄得把解释器的名字解析再复刻
+一遍，漏一个就是又一次「改过看不出来」。整文件那头顺序也算，所以挪函数、把助手搬进 `recipe_lib`
+都会翻成待复核（#1276）。
+
+旧记录没有哈希时无从比较，不标「待复核」——那是「尚未建立基线」，不是「改过」。
 
 记录的 build 与脚本声明的 `BUILD` 前缀对不上时标「build 不符」：脚本涨版本而记录还停在旧版，
 就该重新验一次，而不是让它继续显示成验过。脚本没声明 `BUILD` 时无从比较，不标。
@@ -152,10 +158,35 @@ def step_bodies(path):
     return sorted(out)
 
 
+def _exception_body(path):
+    """同名例外 `.py` 归一后的模块体；页面树数据没有这份文件时是 None。
+
+    找法与装载器一致（`.toml` 换后缀）。只有页面树数据才有这一项：旧形态的 `.py` 机型脚本换后缀
+    还是它自己，拿自己跟自己拼会把模块级常量也算进段体哈希。
+
+    走 `ast.unparse` 而不复用 `_canonical`：后者按字段名逐项展开，CPython 给节点加字段就整批改
+    哈希（3.15 给 `Import` 加了 `is_lazy`，同一份树在 3.13 与 3.15 上 47 行里有 44 行不同），而
+    `--hash` 是照抄进台账的基线。`unparse` 由语义重生成源码，3.11–3.15 上 42 份逐字节相同。
+    """
+    if not str(path).endswith(".toml"):
+        return None
+    companion = os.path.splitext(os.fspath(path))[0] + ".py"
+    if not os.path.isfile(companion):
+        return None
+    with open(companion, encoding="utf-8") as f:
+        tree = ast.parse(f.read(), filename=companion)
+    stripped = _DocstringFree().visit(ast.Module(body=list(tree.body), type_ignores=[]))
+    return ast.unparse(stripped)
+
+
 def body_hash(path):
-    """一份脚本的段体哈希：按段名拼起每个段名与归一后段体，取 sha256 前 HASH_LEN 位。"""
-    payload = "\n\n".join(f"{name}\n{dump}" for name, dump in step_bodies(path))
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:HASH_LEN]
+    """一份脚本的段体哈希：按段名拼起每个段名与归一后段体，页面树数据再接上同名例外 `.py` 的
+    归一模块体，取 sha256 前 HASH_LEN 位。"""
+    parts = [f"{name}\n{dump}" for name, dump in step_bodies(path)]
+    exception = _exception_body(path)
+    if exception is not None:
+        parts.append(exception)
+    return hashlib.sha256("\n\n".join(parts).encode("utf-8")).hexdigest()[:HASH_LEN]
 
 
 def body_hashes(recipes_dir):
