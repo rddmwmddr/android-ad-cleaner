@@ -31,6 +31,42 @@ def include_names(line):
     return [part.strip().strip('"') for part in match.group(1).split(",") if part.strip()]
 
 
+def exclude_names(line):
+    match = re.search(r"exclude\(([^)]*)\)", line)
+    if match is None:
+        return []
+    return [part.strip().strip('"') for part in match.group(1).split(",") if part.strip()]
+
+
+def ant_match(path, pattern):
+    """Ant / Gradle 的 include 口径：`**` 跨目录段（含零段），`*` 只在单段内匹配。"""
+    parts, pat = path.split("/"), pattern.split("/")
+
+    def go(i, j):
+        if j == len(pat):
+            return i == len(parts)
+        if pat[j] == "**":
+            return go(i, j + 1) or (i < len(parts) and go(i + 1, j))
+        if i >= len(parts):
+            return False
+        return fnmatch.fnmatchcase(parts[i], pat[j]) and go(i + 1, j + 1)
+
+    return go(0, 0)
+
+
+def packaged(folder):
+    """构建脚本对 `<folder>/<相对路径>` 的判定（include 命中且 exclude 未命中）。"""
+    line = bundle_line(folder)
+    includes = include_names(line)
+    excludes = exclude_names(line)
+
+    def covered(rel):
+        return (any(ant_match(rel, pattern) for pattern in includes)
+                and not any(ant_match(rel, pattern) for pattern in excludes))
+
+    return covered
+
+
 def gui_bundle_files():
     """按构建脚本原样取出拷进 assets/aac/gui 的文件清单（include 减去 exclude）。"""
     line = bundle_line("gui")
@@ -76,6 +112,34 @@ class AndroidRecipeBundleTests(unittest.TestCase):
         """手机宿主也读 `recipes/verified.toml`（status-json 的验证档位，#1124）：漏了这一行，
         手机上跟桌面版就差一个值，而且要到真机跑 status-json 才发现。"""
         self.assertIn("verified.toml", include_names(bundle_line("recipes")))
+
+    def test_recipes_copy_covers_every_recipe_file(self):
+        """数据是 `recipes/<家族>/<型号>/<型号>.toml`（含变体），例外是同目录的 `.py`。
+
+        `*/recipe*.py` 那套旧口径在迁移后一份都匹配不到（#1269），这里按真实布局对一遍。"""
+        covered = packaged("recipes")
+        files = [path for path in sorted((ROOT / "recipes").glob("*/*/*"))
+                 if path.is_file() and path.suffix in (".toml", ".py")]
+        self.assertTrue(files)
+        missing = [path.relative_to(ROOT / "recipes").as_posix()
+                   for path in files if not covered(path.relative_to(ROOT / "recipes").as_posix())]
+        self.assertEqual(missing, [], "这些机型数据/例外没进 APK")
+
+    def test_recipe_library_is_copied(self):
+        """库实现现在住在 `recipe_lib/`（#1269）：不随包发出去，手机上 `import recipe_nav` 就会断。"""
+        covered = packaged("recipe_lib")
+        files = [path.name for path in sorted((ROOT / "recipe_lib").glob("*.py"))]
+        self.assertTrue(files)
+        self.assertEqual([name for name in files if not covered(name)], [])
+
+
+class AndroidToolBundleTests(unittest.TestCase):
+    def test_tool_copy_covers_every_module(self):
+        covered = packaged("tool")
+        files = [path.relative_to(ROOT / "tool").as_posix()
+                 for path in sorted((ROOT / "tool").rglob("*.py"))]
+        self.assertTrue(files)
+        self.assertEqual([rel for rel in files if not covered(rel)], [], "这些引擎模块没进 APK")
 
 
 if __name__ == "__main__":

@@ -34,7 +34,7 @@ $RUN $PY -m PyInstaller --noconfirm --windowed --name "$NAME" \
   --distpath $OUT --workpath gui/build/$ARCH --specpath gui/build/$ARCH \
   --osx-bundle-identifier com.rddmwmddr.androidadcleaner \
   --icon "$PWD/gui/icon.icns" \
-  --add-data "$DATA/tool:tool" --add-data "$DATA/recipes:recipes" \
+  --add-data "$DATA/tool:tool" --add-data "$DATA/recipe_lib:recipe_lib" --add-data "$DATA/recipes:recipes" \
   --add-data "$DATA/images:images" --add-data "$DATA/gui/web:gui/web" \
   --add-data "$DATA/harmony:harmony" \
   --collect-all uiautomator2 --collect-all adbutils \
