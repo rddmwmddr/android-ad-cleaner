@@ -18,7 +18,11 @@ TESTS = ROOT / "tests"
 # 匹配 0 份，下面「装载时不许碰手机」的循环就一次都不跑（#1268）。
 RECIPES = tuple(sorted(toml for toml in (ROOT / "recipes").rglob("*.toml")
                        if toml.name != "verified.toml"))
-MODEL_DIRS = tuple(sorted(d for d in (ROOT / "recipes").glob("*/*") if d.is_dir()))
+# 型号目录的判据是「里面有配方文件」，不是「是个目录」：迁移前的旧布局目录
+# （`recipes/<家族>-<型号>/`）可能只留下 `__pycache__`，按目录数会把它们算成缺数据的型号。
+MODEL_DIRS = tuple(sorted(d for d in (ROOT / "recipes").glob("*/*")
+                          if d.is_dir() and any(f.suffix in (".toml", ".py") for f in d.iterdir()
+                                                if f.is_file())))
 
 fixtures.load_tool()
 import recipe_loader  # noqa: E402
