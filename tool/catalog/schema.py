@@ -18,17 +18,22 @@ SEGMENT_KEYS = frozenset({"name", "code", "ops"})
 OP_KEYS = {
     "lib": frozenset({"kind", "name", "args", "kwargs"}),
     "off": frozenset({"kind", "only", "only_code", "keep", "page", "max_screens", "page_wide"}),
+    "off_required": frozenset({"kind", "only", "keep", "page", "contains"}),
     "close_all": frozenset({"kind", "page", "button"}),
     "close_listed": frozenset({"kind", "names", "page", "miss_print"}),
     "start": frozenset({"kind", "pkg", "activity", "settle", "foreground", "expect", "budget"}),
+    "start_or_skip": frozenset({"kind", "pkg", "activity", "dead_ends", "reason"}),
+    "skip_unless_installed": frozenset({"kind", "command", "contains", "text"}),
+    "await_page": frozenset({"kind"}),
     "entry": frozenset({"kind", "text", "scrolls"}),
     "enter": frozenset({"kind", "text", "scrolls"}),
     "gated": frozenset({"kind", "entries", "scrolls", "ops"}),
     "require_entry": frozenset({"kind", "text", "scrolls", "miss_print", "miss_back"}),
-    "require_lib": frozenset({"kind", "name", "args", "kwargs", "miss_print", "miss_back"}),
-    "require_tab": frozenset({"kind", "name", "miss_print"}),
-    "require_tap": frozenset({"kind", "text", "exact", "scrolls", "miss_print"}),
-    "require_go": frozenset({"kind", "text", "expect", "miss_print"}),
+    "require_lib": frozenset({"kind", "name", "args", "kwargs", "miss_print", "miss_back",
+                              "fail", "evidence"}),
+    "require_tab": frozenset({"kind", "name", "miss_print", "evidence"}),
+    "require_tap": frozenset({"kind", "text", "exact", "scrolls", "miss_print", "evidence"}),
+    "require_go": frozenset({"kind", "text", "expect", "miss_print", "evidence"}),
     "require_unlocked": frozenset({"kind", "miss_print"}),
     "shell": frozenset({"kind", "command"}),
     "sleep": frozenset({"kind", "seconds"}),
@@ -62,7 +67,7 @@ OP_KEYS = {
 OP_KINDS = frozenset(OP_KEYS)
 
 # `if_focus` 的比法：前台窗口原文与数据里的 text 怎么比。缺省 contains（与 `require_focus` 同档）。
-FOCUS_MATCHES = frozenset({"equals", "starts", "contains"})
+FOCUS_MATCHES = frozenset({"equals", "starts", "contains", "icontains"})
 
 
 class SchemaError(ValueError):
@@ -114,6 +119,8 @@ def _validate_op(op: object, where: str) -> None:
     _reject_extra(op, OP_KEYS[kind], where)
     if kind == "off":
         _validate_off(op, where)
+    elif kind == "off_required":
+        _validate_off_required(op, where)
     elif kind == "close_all":
         _require(op, "page", where)
     elif kind == "page":
@@ -181,6 +188,12 @@ def _validate_op(op: object, where: str) -> None:
         _validate_ops(op.get("else_ops", []), where)
     elif kind == "start":
         _require(op, "pkg", where)
+    elif kind == "start_or_skip":
+        for key in ("pkg", "activity", "dead_ends", "reason"):
+            _require(op, key, where)
+    elif kind == "skip_unless_installed":
+        for key in ("command", "contains", "text"):
+            _require(op, key, where)
     elif kind == "gated":
         entries = op.get("entries")
         if not isinstance(entries, list) or not entries:
@@ -212,6 +225,18 @@ def _validate_off(op: Mapping, where: str) -> None:
             raise SchemaError(f"{where} 的 off 里 only 与 keep 重叠：{sorted(overlap)}")
 
 
+def _validate_off_required(op: Mapping, where: str) -> None:
+    """`off_required`：跨翻页读齐开关、点名断言都在再关。`only` 必填且非空，`keep` 不许与它重叠。"""
+    _require(op, "only", where)
+    _require(op, "page", where)
+    only = op["only"]
+    if not isinstance(only, list) or not only:
+        raise SchemaError(f"{where} 的 off_required 的 only 必须是非空数组")
+    overlap = set(only) & set(op.get("keep", []))
+    if overlap:
+        raise SchemaError(f"{where} 的 off_required 里 only 与 keep 重叠：{sorted(overlap)}")
+
+
 def _require(op: Mapping, key: str, where: str) -> None:
     if key not in op:
         raise SchemaError(f"{where} 缺 {key}")
@@ -233,7 +258,7 @@ def words(data: Mapping) -> list[tuple[str, str]]:
     for segment in data.get("segment", []):
         for op in _walk(segment.get("ops", [])):
             kind = op.get("kind")
-            if kind == "off":
+            if kind in ("off", "off_required"):
                 if "only" in op:
                     found += [(text, "literal") for text in op["only"]]
                 elif "only_code" in op:

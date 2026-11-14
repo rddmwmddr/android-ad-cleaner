@@ -417,6 +417,224 @@ class CloseListedOpTests(unittest.TestCase):
         self.assertEqual(recipe.rt.failed_steps, ["a"])
 
 
+class StartOrSkipOpTests(unittest.TestCase):
+    """`start_or_skip` op（#1266）：数据里的 `start_or_skip(pkg, activity, dead_ends=…, reason=…)`。
+
+    小米主题页是同一形状（5 台机型）：直达代理页，落点被系统转去商店 / 桌面时按跳过收尾。包名、
+    Activity、落点名单与跳过理由是机型知识，交给数据；「落点不对就跳过」仍是库助手那一条。
+    """
+
+    TOML = ('[[segment]]\nname="a"\nops=[{kind="start_or_skip", pkg="com.example.theme",'
+            ' activity=".Proxy", dead_ends=["com.example.market"], reason="打不开"}]\n')
+
+    def test_forwards_the_landing_and_dead_ends(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(tmp, self.TOML)
+            seen = []
+            recipe.namespace["start_or_skip"] = lambda pkg, activity, **kw: seen.append((pkg, activity, kw))
+            recipe.run()
+        self.assertEqual(seen, [("com.example.theme", ".Proxy",
+                                 {"dead_ends": ["com.example.market"], "reason": "打不开"})])
+
+
+class SkipUnlessInstalledTests(unittest.TestCase):
+    """`skip_unless_installed` op（#1266）：`if "package:" not in p.d.shell("pm path X").output: print; return`。
+
+    本机没装主题管理包时，后面的入口一个都走不到：打印一句、按「完成」收尾（旧脚本是 `return`，
+    不是失败），后面的 op 不再做。"""
+    from types import SimpleNamespace as _NS
+
+    TOML = ('[[segment]]\nname="a"\nops=[{kind="skip_unless_installed",'
+            ' command="pm path com.example.theme", contains="package:", text="  · 没有"},'
+            ' {kind="back"}]\n')
+
+    def _run(self, output):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.TOML)
+            backs = []
+            phone.back = lambda n=1: backs.append(n)
+            phone.d.shell = lambda command, **kw: self._NS(output=output, exit_code=0)
+            recipe.run()
+        return recipe, backs
+
+    def test_missing_marker_prints_and_ends_the_segment(self):
+        recipe, backs = self._run("")
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+        self.assertEqual(backs, [], "跳过之后不该再做后面的 op")
+
+    def test_present_marker_continues(self):
+        recipe, backs = self._run("package:/system/app/ThemeManager/ThemeManager.apk")
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+        self.assertEqual(backs, [1])
+
+
+class AwaitPageOpTests(unittest.TestCase):
+    """`await_page` op（#1266）：齿轮点完这一页可能还没画完，数据里显式等一次。"""
+
+    def test_calls_await_page(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="await_page"}]\n')
+            seen = []
+            phone.await_page = lambda *a, **k: seen.append(a)
+            recipe.run()
+        self.assertEqual(seen, [()])
+
+
+class OffRequiredOpTests(unittest.TestCase):
+    """`off_required` op（#1266）：先跨翻页把这一页的开关读齐、点名断言都在，再点名关。
+
+    4 台小米机型的主题设置同形：`before = {}; for _ in range(2): …p.switches(); if not
+    p.scroll_more(): break` → `p.top(2)` → `require_switches(before, …, contains=True)` →
+    `p.off(only=…, keep=…, page=…)`。点名与保留项是机型知识，交给数据。"""
+
+    TOML = ('[[segment]]\nname="a"\nops=[{kind="off_required", only=["每次联网时通知"],'
+            ' keep=["自动更新"], page="主题·设置", contains=true}]\n')
+
+    def test_collects_across_scrolls_then_toggles_only_and_keep(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, calls = _load_tmp(tmp, self.TOML)
+            phone.switches = lambda root=None: [("每次联网时通知", True, (1, 2)),
+                                                ("自动更新", True, (3, 4))]
+            phone.scroll_more = lambda: False
+            tops = []
+            phone.top = lambda n=None: tops.append(n)
+            recipe.run()
+        self.assertEqual(tops, [2])
+        self.assertEqual(calls, [("off", {"only": ["每次联网时通知"], "keep": ["自动更新"],
+                                          "page": "主题·设置"})])
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+
+    def test_missing_target_fails_with_the_page_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, calls = _load_tmp(tmp, self.TOML)
+            phone.switches = lambda root=None: []
+            phone.scroll_more = lambda: False
+            phone.top = lambda n=None: None
+            phone.page_evidence = lambda titles=(): "EVIDENCE"
+            recipe.run()
+        self.assertEqual(calls, [])
+        self.assertEqual(recipe.rt.results, [("a", "未完成")])
+        self.assertEqual(recipe.rt.failed_steps, ["a"])
+
+
+class RequireFailTests(unittest.TestCase):
+    """`require_lib` 的 `fail` / `evidence`（#1266）：旧脚本 `if not gear(): raise RuntimeError(…；+ p.page_evidence())`。
+
+    `require_lib` 原来按「打印现场再早退（完成）」收尾；`fail=true` 让它按这一段失败收尾、进失败段
+    台账（重试按它定位），`evidence=true` 把当次页面现场接在文案后面。`require_tab` / `require_go` /
+    `require_tap` 本来就 raise，只补 `evidence`。"""
+
+    def _run(self, toml, **ns):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            phone.page_evidence = lambda titles=(): "EVIDENCE"
+            recipe.namespace.update(ns)
+            recipe.run()
+        return recipe
+
+    def test_require_lib_fail_raises_and_adds_the_evidence(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="require_lib", name="gear",'
+                ' miss_print="主题设置入口没找到；", fail=true, evidence=true}]\n')
+        recipe = self._run(toml, gear=lambda **kw: False)
+        self.assertEqual(recipe.rt.results, [("a", "未完成")])
+        self.assertEqual(recipe.rt.failed_steps, ["a"])
+
+    def test_require_lib_without_fail_prints_and_ends_as_done(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="require_lib", name="gear", miss_print="…"}]\n')
+        recipe = self._run(toml, gear=lambda **kw: False)
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+        self.assertEqual(recipe.rt.failed_steps, [])
+
+    def test_require_tab_evidence_calls_page_evidence_on_miss(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="require_tab", name="我的",'
+                ' miss_print="主题底部「我的」未找到；", evidence=true}]\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            evidence = []
+            phone.tab = lambda name: False
+            phone.page_evidence = lambda titles=(): evidence.append(titles) or "EVIDENCE"
+            recipe.run()
+        self.assertEqual(evidence, [()])
+        self.assertEqual(recipe.rt.failed_steps, ["a"])
+
+
+class IfFocusCaseInsensitiveTests(unittest.TestCase):
+    """`if_focus` 的 `icontains`（#1266）：旧脚本 `if "basicmode" in p.focus().lower()`。
+
+    浏览器拒绝协议后落到 basicmode 设置页，大小写不保证；小米族 8 份脚本都是先小写再比。"""
+
+    TOML = ('[[segment]]\nname="a"\nops=[{kind="if_focus", text="basicmode", match="icontains",'
+            ' ops=[{kind="back", n=2}], else_ops=[{kind="back", n=1}]}]\n')
+
+    def _run(self, focus):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.TOML)
+            backs = []
+            phone.focus = lambda *a, **k: focus
+            phone.back = lambda n=1: backs.append(n)
+            recipe.run()
+        return backs
+
+    def test_matches_in_any_case(self):
+        self.assertEqual(self._run("com.android.browser/.BasicModeSettingActivity"), [2])
+
+    def test_else_branch_when_not_found(self):
+        self.assertEqual(self._run("com.android.browser/.BrowserActivity"), [1])
+
+
+class NewOpValidatorTests(unittest.TestCase):
+    """新 op 的封闭清单（#1266）：缺键、名单外的键都在装载期报。"""
+
+    def _bad(self, data, needle):
+        with self.assertRaises(catalog.SchemaError) as caught:
+            catalog.validate(data)
+        self.assertIn(needle, str(caught.exception))
+
+    def test_start_or_skip_requires_dead_ends(self):
+        op = {"kind": "start_or_skip", "pkg": "p", "activity": "a", "reason": "r"}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 dead_ends")
+
+    def test_start_or_skip_rejects_an_unknown_key(self):
+        op = {"kind": "start_or_skip", "pkg": "p", "activity": "a",
+              "dead_ends": ["x"], "reason": "r", "surprise": 1}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
+
+    def test_skip_unless_installed_requires_the_marker(self):
+        op = {"kind": "skip_unless_installed", "command": "pm path x", "text": "t"}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 contains")
+
+    def test_off_required_requires_only(self):
+        op = {"kind": "off_required", "page": "p"}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 only")
+
+    def test_off_required_rejects_an_empty_only(self):
+        op = {"kind": "off_required", "only": [], "page": "p"}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "非空")
+
+
+class OffRequiredProjectionTests(unittest.TestCase):
+    """`off_required` 的名字要同时进词库与事实层（#1266）：漏一处，入口速查 / 词库就静默丢名字。
+
+    这正是前三批连踩三次的坑（`close_listed`、`if_lib`…）：带开关名字的新 op 必须两处一起接。"""
+
+    DATA = {"segment": [{"name": "a", "ops": [
+        {"kind": "off_required", "only": ["每次联网时通知"], "keep": ["自动更新"], "page": "主题·设置"}]}]}
+
+    def test_words_lists_only_and_keep_as_literals(self):
+        self.assertEqual(sorted(catalog.words(self.DATA)),
+                         [("每次联网时通知", "literal"), ("自动更新", "literal")])
+
+    def test_facts_project_the_off_call(self):
+        import recipe_source
+        facts = recipe_source.scan_catalog(self.DATA)
+        offs = [call for call in facts.calls if call.name == "p.off"]
+        self.assertEqual(len(offs), 1, "off_required 没投影成 p.off，词库会漏掉这两个名")
+        lowered = recipe_source._catalog_src(self.DATA)
+        self.assertIn('only=["每次联网时通知"]', lowered)
+        self.assertIn('keep=["自动更新"]', lowered)
+
+
 class NameSourceBaselineTests(unittest.TestCase):
     """词库按名单来源记：数据里每一条要关的 / 要留的词都能说出自己是字面量还是本机策略。
 
