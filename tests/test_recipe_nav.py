@@ -25,13 +25,16 @@ sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT))          # recipe_lib 在仓库根
 
 import entries  # noqa: E402
+import recipe_audit  # noqa: E402
 import recipe_lib  # noqa: E402
 import recipe_source  # noqa: E402
 
 RECIPES = ROOT / "recipes"
 FAMILIES = set(entries.LABEL)
-# 数据按名字点名的过程化钩子：段体（`code=`）、水印尾钩子、页面守卫。它们是这一台机的知识。
-HOOK_KEYS = ("tail", "guard", "detail")
+# 数据按名字点名的过程化钩子（`tail` / `guard` / `wrap` / `detail`）：它们是这一台机的知识。
+# 名单的单一来源是 `recipe_audit.HOOK_NAMES`——另写一份时漏掉的名字（如 `wrap`）会被当成
+# 「必须升格的助手」误报。
+HOOK_KEYS = recipe_audit.HOOK_NAMES
 
 
 def library_nodes():
@@ -65,7 +68,7 @@ def references(node, names):
 
 
 def dispatched_hooks(model_dir):
-    """这一台机的数据用 `code=` / `tail` / `guard` / `detail` 点名的过程化钩子名。"""
+    """这一台机的数据用 `code=` / `tail` / `guard` / `wrap` / `detail` 点名的过程化钩子名。"""
     hooks = set()
     for path in model_dir.glob("*.toml"):
         data = tomllib.loads(path.read_text(encoding="utf-8"))
@@ -101,6 +104,14 @@ class PromotionTests(unittest.TestCase):
                 offenders.append(f"`{name}` 出现在 {len(models)} 台机型（{', '.join(sorted(models))}）"
                                  "却没进 recipe_lib：升格进家族库或 shared.py")
         self.assertEqual(offenders, [])
+
+    def test_wrap_is_recognized_as_a_hook(self):
+        """`wrap = "safe_ui"` 是声明式钩子（`recipe_audit.HOOK_NAMES`），不是要升格的助手。
+
+        钩子名单另写一份时漏掉 `wrap`，`safe_ui` 就会被算成普通本机函数；它一旦被第二台机
+        复用，上面那条会误报「出现在 ≥2 台机型却没进 recipe_lib」（#1269）。
+        """
+        self.assertIn("safe_ui", dispatched_hooks(RECIPES / "honor" / "WKL-AN20"))
 
 
 class SharedLibraryTests(unittest.TestCase):

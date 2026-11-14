@@ -270,6 +270,22 @@ class ReferenceRecipeTests(unittest.TestCase):
                 self.assertEqual(Path(run.recipe_for("NEWMODEL2", "iQOO")[0]).parent.name, "V2547DA")
                 self.assertEqual(run.recipe_for("24090RA29C", "Redmi"), (str(Path(root, "recipes", "xiaomi/24090RA29C", "recipe.py")), False))
 
+    def test_reference_prefers_the_main_toml_over_a_version_variant(self):
+        """主本优先于变体：`-android17` 这类变体按字母序排在 `.` 前面，取 `sorted()[0]` 会选错。
+
+        选错时参考脚本变成 Android 17 变体，`same_version_family_recipe()` 的 `ref_core`
+        跟着从 `16` 变成 `17.x`，同族候选的比较基准整个歪掉（#1263）。
+        """
+        with tempfile.TemporaryDirectory() as root:
+            here = Path(root, "recipes", "vivo", "V2547DA")
+            here.mkdir(parents=True)
+            (here / "V2547DA.toml").write_text('build = "16"\n', encoding="utf-8")
+            (here / "V2547DA-android17.toml").write_text('build = "17.1.10.2"\n', encoding="utf-8")
+            with patch.object(run, "ROOT", root):
+                path, reference = run.recipe_for("ZZZ0000", "iQOO")
+        self.assertTrue(reference)
+        self.assertEqual(Path(path).name, "V2547DA.toml")
+
     def test_new_brand_borrows_its_only_recipe_as_reference(self):
         """FAMILY 没登记的品牌，别的型号借不到同品牌脚本；三星进目录时踩过（#605）。"""
         with tempfile.TemporaryDirectory() as root:

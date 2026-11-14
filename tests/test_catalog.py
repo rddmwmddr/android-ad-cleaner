@@ -7,6 +7,7 @@
 import ast
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -166,6 +167,103 @@ class OnlySourceTests(unittest.TestCase):
         self.assertEqual(calls, [("off", {"page": "p", "only": ["A", "B"]})])
 
 
+SKIP_IN_SAFE_MODE = "skip_in_safe_mode"
+
+
+def _call_name(call):
+    """`p.off(...)` / `strategies.close_all(...)` 里的 `off` / `close_all`。"""
+    func = call.func
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return func.id if isinstance(func, ast.Name) else ""
+
+
+def _py_close_form(call):
+    """一次调用是不是整页关闭：`wide` / `named` / `None`（不是拨动）。
+
+    `p.off()` 不带 `only`、任何 `close_all*`、以及名单实参为 `None` 的 `close_named*` 都是整页关闭。
+    """
+    name = _call_name(call)
+    if name == "off":
+        return "named" if "only" in {keyword.arg for keyword in call.keywords} else "wide"
+    if name.startswith("close_all"):
+        return "wide"
+    if name.startswith("close_named"):
+        argument = call.args[2] if len(call.args) > 2 else None
+        return "wide" if isinstance(argument, ast.Constant) and argument.value is None else "named"
+    return None
+
+
+def _toml_close_form(op):
+    """数据里一条 op 的拨动形态，与 `_py_close_form()` 同一套判据（`off` / `lib` 两种写法）。"""
+    kind = op.get("kind")
+    if kind == "off":
+        return "named" if "only" in op or "only_code" in op else "wide"
+    if kind == "close_all":
+        return "wide"                                 # 解释器 op：点 UI 的「全部关闭」按钮
+    if kind == "off_required":
+        return "named"
+    if kind == "lib":
+        name = str(op.get("name", ""))
+        if name.startswith("close_all"):
+            return "wide"
+        if name.startswith("close_named"):
+            args = op.get("args") or []
+            return "wide" if not args or args[0] is None else "named"
+    return None
+
+
+def page_wide_toml_units(path):
+    """一份数据里「整段只做整页关闭」的段：[(段名, 首句 kind)]。
+
+    只看段**顶层**的拨动：嵌在 `if_tap` / `if_entry` 里的不算（它不一定执行），段里还关着点名
+    开关的也不算（那些段不能整段跳过）。
+    """
+    data = tomllib.loads(Path(path).read_text(encoding="utf-8"))
+    units = []
+    for segment in data.get("segment", []):
+        ops = [op for op in segment.get("ops") or [] if isinstance(op, dict)]
+        forms = [form for form in (_toml_close_form(op) for op in ops) if form]
+        if forms and all(form == "wide" for form in forms):
+            units.append((segment.get("name"), ops[0]["kind"] if ops else None))
+    return units
+
+
+def _starts_with_safe_mode_exit(fn):
+    """函数体第一句（跳过 docstring）是不是安全模式跳过出口。
+
+    两种写法都算：`rt.skip_in_safe_mode()`，以及「先判 safe_mode、命中就 skip」的守卫
+    （PMX110 还要顺带挡别的型号，所以它的出口长成一条 if）。
+    """
+    body = list(fn.body)
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
+            and isinstance(body[0].value.value, str):
+        body = body[1:]
+    if not body:
+        return False
+    first = body[0]
+    if isinstance(first, ast.Expr) and isinstance(first.value, ast.Call):
+        return _call_name(first.value) == SKIP_IN_SAFE_MODE
+    if isinstance(first, ast.If) and "safe_mode" in ast.unparse(first.test):
+        return any(_call_name(call).endswith("skip")
+                   for stmt in first.body for call in ast.walk(stmt) if isinstance(call, ast.Call))
+    return False
+
+
+def page_wide_py_units(path):
+    """例外 `.py` 里「整段只做整页关闭」的模块级函数：[(函数名, 是否以跳过出口开头)]。"""
+    tree = ast.parse(Path(path).read_text(encoding="utf-8"))
+    units = []
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        forms = [form for form in (_py_close_form(call) for call in ast.walk(node)
+                                   if isinstance(call, ast.Call)) if form]
+        if forms and all(form == "wide" for form in forms):
+            units.append((node.name, _starts_with_safe_mode_exit(node)))
+    return units
+
+
 class PageWideTests(unittest.TestCase):
     """UI「全部关闭」按钮单列一种动作，登记为 page-wide：安全模式下不点，普通模式点按钮并确认。"""
 
@@ -185,6 +283,30 @@ class PageWideTests(unittest.TestCase):
             recipe.run()
         self.assertEqual(calls, [])
         self.assertIn("a", recipe.rt.skipped_steps)
+
+    def test_page_wide_units_start_with_a_safe_mode_exit(self):
+        """整段只做整页关闭的段 / 函数，安全模式下必须走跳过出口（#909、#947）。
+
+        安全模式下 `off()` 只关点名的开关，整页关闭的单元一个都点不到；它再回读「必须全关」就
+        稳定记成失败。出口写在第一句，是因为写在后面等于先翻页、再报「没关掉」，现场与结论都
+        指向错的环节。数据与例外 `.py` 两侧都扫：判据是「顶层拨动全是整页关闭形态」——段里还
+        关着点名开关的不算，那些段整段跳过会把正常该关的项也丢掉。
+        """
+        offenders, checked = [], 0
+        for path in sorted((ROOT / "recipes").rglob("*.toml")):
+            if path.name == "verified.toml":
+                continue
+            for name, first in page_wide_toml_units(path):
+                checked += 1
+                if first != SKIP_IN_SAFE_MODE:
+                    offenders.append(f"{path.relative_to(ROOT)} 段「{name}」：首句是 {first!r}")
+        for path in sorted((ROOT / "recipes").rglob("*.py")):
+            for name, ok in page_wide_py_units(path):
+                checked += 1
+                if not ok:
+                    offenders.append(f"{path.relative_to(ROOT)}:{name} 首句不是安全模式跳过出口")
+        self.assertGreater(checked, 0, "一份整页关闭单元都没扫到：这条守卫空转")
+        self.assertEqual(offenders, [], "整页关闭的段没在安全模式下按跳过收尾")
 
 
 class CodeFallbackTests(unittest.TestCase):

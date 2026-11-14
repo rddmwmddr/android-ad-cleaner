@@ -1672,11 +1672,17 @@ class IconHitTests(unittest.TestCase):
 
 
 class ScriptsShareOnePredicateTests(unittest.TestCase):
-    """13 份小米 / 红米脚本不再各留一份 icon_hit，改用引擎这一份（#530）。"""
+    """13 份小米 / 红米脚本不再各留一份 icon_hit，改用引擎这一份（#530）。
+
+    `recipe*.py` 已随目录化删除，本机代码只剩各型号的例外 `.py`；扫描口径取
+    `fixtures.recipe_sources()`（`recipe*.py` + 同名例外 `.py`），扫 0 份就是这条守卫空转。
+    """
 
     def test_no_recipe_defines_its_own_icon_hit(self):
+        sources = fixtures.recipe_sources()
+        self.assertTrue(sources, "没扫到机型源码：`recipe_sources()` 的口径或数据搬家了")
         offenders = []
-        for path in sorted(ROOT.glob("recipes/*/*/recipe*.py")):
+        for path in sources:
             tree = ast.parse(path.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
                 if isinstance(node, ast.FunctionDef) and node.name == "icon_hit":

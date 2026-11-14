@@ -14,7 +14,11 @@ import fixtures
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "tests"
-RECIPES = tuple(sorted((ROOT / "recipes").rglob("recipe*.py")))
+# 47 份数据（`verified.toml` 是台账不是机型数据）。迁移后没有 `recipe*.py` 了：glob 那个模式
+# 匹配 0 份，下面「装载时不许碰手机」的循环就一次都不跑（#1268）。
+RECIPES = tuple(sorted(toml for toml in (ROOT / "recipes").rglob("*.toml")
+                       if toml.name != "verified.toml"))
+MODEL_DIRS = tuple(sorted(d for d in (ROOT / "recipes").glob("*/*") if d.is_dir()))
 
 fixtures.load_tool()
 import recipe_loader  # noqa: E402
@@ -102,18 +106,43 @@ class RecipeLoaderGuardTests(unittest.TestCase):
                 self.assertTrue(bypasses(ast.parse(source)), source)
 
 
-    def test_loading_any_recipe_makes_no_device_calls(self):
-        """导入零动作：装载 47 份脚本，`Phone` 上一个方法都不许被调用（段只在 `run()` 里跑）。
+    def test_every_model_directory_is_loaded(self):
+        """发现本身要有内容：每个型号目录都得出至少一份数据，别让下面那条循环静默空转。
 
-        这条同时守住「`@step` 只登记、不执行」：任何一份把动作写在模块体里、或让装饰器在装载时
-        执行段体，这里都会看到 `mock_calls` 非空。
+        判据是目录与数据的对应关系，不是写死的份数——数据增删时这条不用跟着改。
         """
+        covered = {toml.parent for toml in RECIPES}
+        missing = [str(d.relative_to(ROOT)) for d in MODEL_DIRS if d not in covered]
+        self.assertEqual(missing, [], "这些型号目录没有可装载的数据文件")
+
+    def test_loading_any_recipe_makes_no_device_calls(self):
+        """导入零动作：装载全部数据，`Phone` 上一个方法都不许被调用（段只在 `run()` 里跑）。
+
+        这条同时守住「段只登记、不执行」：任何一份把动作写在模块体里、或让装载器在装载时
+        执行段体，这里都会看到 `mock_calls` 非空。例外 `.py` 的模块体也在装载时 exec，
+        所以它们的形状另外由 `test_exception_modules_have_no_import_time_statements` 钉。
+        """
+        self.assertGreaterEqual(len(RECIPES), len(MODEL_DIRS), "发现到的数据比型号目录还少")
         for path in RECIPES:
             with self.subTest(recipe=str(path.relative_to(ROOT))):
                 phone = Mock()
                 recipe_loader.load(path, phone)
                 self.assertEqual(phone.mock_calls, [],
                                  f"{path.relative_to(ROOT)} 在装载时碰了手机")
+
+    def test_exception_modules_have_no_import_time_statements(self):
+        """例外 `.py` 由装载器 `exec` 进一个 dict，模块体里多一句就会在装载时执行。
+
+        形状判据在 `module_body_offenders()`：只允许导入 / 定义 / 常量 / `if TYPE_CHECKING:`
+        与模块 docstring。
+        """
+        sources = fixtures.recipe_sources()
+        self.assertTrue(sources, "没扫到例外 .py：`recipe_sources()` 的口径或数据搬家了")
+        offenders = []
+        for path in sources:
+            for line, kind in module_body_offenders(path.read_text(encoding="utf-8"), str(path)):
+                offenders.append(f"{path.relative_to(ROOT)}:{line} 模块体里写了 {kind}")
+        self.assertEqual(offenders, [], "装载时就会执行的语句不在允许的形状里")
 
 
 
