@@ -704,6 +704,18 @@ class AtFocusTests(unittest.TestCase):
         self.assertEqual(reads, [1])
         self.assertEqual(recipe.rt.failed_steps, ["a"])
 
+    def test_at_focus_reads_the_foreground_even_when_the_check_passes(self):
+        """现场是 require 的实参：老脚本无论成败都先读一次前台，对拍里那条调用不能少。"""
+        toml = ('[[segment]]\nname="a"\nops=[{kind="require_lib", name="browser_settings",'
+                ' miss_print="没找到", fail=true, at_focus=true}]\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            reads = []
+            phone.focus = lambda *a, **k: reads.append(1) or "com.android.browser/.Main"
+            recipe.namespace.update({"browser_settings": lambda: True})
+            recipe.run()
+        self.assertEqual(reads, [1])
+
     def test_require_tab_at_focus_reads_the_foreground_on_miss(self):
         toml = ('[[segment]]\nname="a"\nops=[{kind="require_tab", name="我的",'
                 ' miss_print="没有「我的」", at_focus=true}]\n')
