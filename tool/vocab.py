@@ -308,7 +308,22 @@ def scan(recipes_dir, injected=None, strategies=None):
         _absorb_implementations(out, family, script, facts, facts, sources, facts.constants, frozenset())
         if len(out.words) == before:
             out.silent.append(script)
+    # 同一份实现可能经多条调用链被扫到；台账按「哪一行有什么读不出」记账，同一
+    # (script, line, text) 只记一次（重复计数不增加信息，只让台账难读）。
+    out.unresolved_only = _dedupe_calls(out.unresolved_only)
+    out.unresolved_close = _dedupe_calls(out.unresolved_close)
+    out.unresolved_keep = _dedupe_calls(out.unresolved_keep)
     return out
+
+
+def _dedupe_calls(calls):
+    seen, kept = set(), []
+    for call in calls:
+        key = (call.script, call.line, call.text)
+        if key not in seen:
+            seen.add(key)
+            kept.append(call)
+    return kept
 
 
 def _absorb_implementations(out, family, script, current, caller, sources, constants, seen):
