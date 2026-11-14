@@ -5,7 +5,7 @@
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import Mock, call
+from unittest.mock import Mock, call, patch
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,6 +13,9 @@ sys.path.insert(0, str(ROOT / 'tool'))
 from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock
 import fast
 import run
+import recipe_nav
+import recipe_strategies
+import recipe_steps
 
 RECIPE = ROOT / 'recipes/oppo/PLZ110/PLZ110.toml'
 
@@ -28,11 +31,24 @@ class Plz110RecipeTests(unittest.TestCase):
         scope, _ = load_recipe(phone, RECIPE, ['__no_steps__'])
         return phone, scope
 
+    def stub(self, scope, name, mock):
+        """把库实现换成桩：例外函数与解释器按模块属性调用，scope 里只留同一份给断言。"""
+        for module in (recipe_nav, recipe_strategies, recipe_steps):
+            if hasattr(module, name):
+                def wrapper(p, rt, *a, _m=mock, **k):
+                    return _m(*a, **k)
+                patcher = patch.object(module, name, wrapper)
+                patcher.start()
+                self.addCleanup(patcher.stop)
+                break
+        scope[name] = mock
+        return mock
+
     def test_store_prefers_privacy_entry_with_authorization_fallback(self):
         phone, scope = self.scope()
-        for helper in ('app_settings', 'row', 'close_named'):
-            scope[helper] = Mock()
-        scope['read_switches'] = Mock(return_value={'福利专区': False})
+        for helper in ('app_settings', 'row', 'close_named_optional'):
+            self.stub(scope, helper, Mock())
+        self.stub(scope, 'read_switches', Mock(return_value={'福利专区': False}))
         store = next(item.action for item in scope['rt'].steps if item.name == '软件商店')
         store()
         self.assertEqual(scope['app_settings'].call_args_list,
@@ -45,7 +61,7 @@ class Plz110RecipeTests(unittest.TestCase):
             call('服务管理'),
         ])
         scope['read_switches'].assert_called_once_with('服务管理')
-        self.assertEqual(scope['close_named'].call_args_list, [
+        self.assertEqual(scope['close_named_optional'].call_args_list, [
             call(['个性化推荐'], '个性化推荐'),
             call(['福利专区'], '服务管理', snapshot={'福利专区': False}),
         ])
@@ -104,30 +120,30 @@ class Plz110RecipeTests(unittest.TestCase):
 
     def test_already_closed_targets_do_not_click_service_switches(self):
         phone, scope = self.scope()
-        scope['read_switches'] = Mock(return_value={
+        self.stub(scope, 'read_switches', Mock(return_value={
             '应用安全': True, '应用安全安全内容推荐': False, '帮助与客服': True,
-        })
-        scope['close_named'](['应用安全安全内容推荐'], '服务管理')
+        }))
+        scope['close_named_optional'](['应用安全安全内容推荐'], '服务管理')
         scope['read_switches'].assert_called_once_with('服务管理', 12)
         phone.off.assert_not_called()
         self.assertEqual(scope['VERIFIED_SWITCHES'], 1)
 
     def test_service_change_fails_readback(self):
         phone, scope = self.scope()
-        scope['read_switches'] = Mock(side_effect=[
+        self.stub(scope, 'read_switches', Mock(side_effect=[
             {'应用安全': True, '应用安全安全内容推荐': True},
             {'应用安全': False, '应用安全安全内容推荐': False},
-        ])
+        ]))
         with self.assertRaisesRegex(RuntimeError, '其他功能开关状态变化'):
-            scope['close_named'](['应用安全安全内容推荐'], '服务管理')
+            scope['close_named_optional'](['应用安全安全内容推荐'], '服务管理')
         self.assertEqual(scope['read_switches'].call_count, 2)
         phone.off.assert_called_once()
 
     def test_missing_target_does_not_click(self):
         phone, scope = self.scope()
-        scope['read_switches'] = Mock(return_value={'应用安全': True})
+        self.stub(scope, 'read_switches', Mock(return_value={'应用安全': True}))
         with self.assertRaisesRegex(RuntimeError, '未识别全部目标'):
-            scope['close_named'](['应用安全安全内容推荐'], '服务管理')
+            scope['close_named_optional'](['应用安全安全内容推荐'], '服务管理')
         scope['read_switches'].assert_called_once_with('服务管理', 12)
         phone.off.assert_not_called()
 

@@ -108,8 +108,8 @@ def radio(p, rt, root, text):
                        and n.get("checkable") == "true" and p.on_screen(n)]
             left, top, right, bottom = bounds(node)
             if len(choices) == 1 and right > left and 0 < bottom - top <= p.H * .35:
-                _, rt, _, rb = bounds(choices[0])
-                rt.require(abs((rt + rb) - (label_box[1] + label_box[3])) <= p.H * .24,
+                _, right, _, rb = bounds(choices[0])
+                rt.require(abs((right + rb) - (label_box[1] + label_box[3])) <= p.H * .24,
                         "单选按钮与文字不在同一选项区域")
                 candidates.append(choices[0])
                 break

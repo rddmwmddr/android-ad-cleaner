@@ -103,7 +103,7 @@ class RecipeSafetyTests(unittest.TestCase):
         phone.screen.tree = lambda: None
         phone.switches = lambda root=None: [("帮助与客服", True, (1000, 600))]
         phone.scroll_more = lambda: False
-        function = load(phone)["off_exact"]
+        function = load(phone)["off_exact_paged"]
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertFalse(function(["开屏广告"], "test"))
 
@@ -112,7 +112,7 @@ class RecipeSafetyTests(unittest.TestCase):
         phone.screen.tree = lambda: None
         phone.switches = lambda root=None: [("开屏广告", True, (1000, 600))]
         phone.off = lambda **kwargs: 0
-        function = load(phone)["off_exact"]
+        function = load(phone)["off_exact_paged"]
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertFalse(function(["开屏广告"], "test"))
 
@@ -125,7 +125,7 @@ class RecipeSafetyTests(unittest.TestCase):
             ("开屏广告权限提醒", True, (1000, 900)),
         ]
         phone.off = lambda **kwargs: calls.append(kwargs)
-        function = load(phone)["off_exact"]
+        function = load(phone)["off_exact_paged"]
         self.assertTrue(function(["开屏广告"], "test"))
         self.assertEqual(calls[0]["only"], ["开屏广告"])
         self.assertIn("开屏广告权限提醒", calls[0]["keep"])

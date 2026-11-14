@@ -10,6 +10,8 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 import adb_link
+import recipe_nav
+import recipe_strategies
 import run
 from fixtures import load_recipe, phone_stub
 
@@ -33,9 +35,14 @@ class HonorWKLRecipeTests(unittest.TestCase):
         p.screen.focus.return_value = "com.example/.Settings"
         p.screen.tree.return_value = ET.fromstring("<hierarchy/>")
         scope = self.load(p)
-        scope["settle_page"] = Mock()
-        scope["labels"] = Mock(return_value={"设置"})
-        scope["scan_switches"] = Mock(side_effect=[before, after])
+        for module, name, mock in (
+                (recipe_nav, "settle_page", Mock()),
+                (recipe_nav, "labels", Mock(return_value={"设置"})),
+                (recipe_strategies, "scan_switches", Mock(side_effect=[before, after]))):
+            patcher = patch.object(module, name, mock)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+            scope[name] = mock
         return p, scope
 
     def test_model_build_and_steps_are_discoverable_by_runner(self):
