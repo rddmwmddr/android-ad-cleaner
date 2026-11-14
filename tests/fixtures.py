@@ -756,3 +756,42 @@ class GitRepo:
                               env=dict(self.env, **(env_extra or {})),
                               capture_output=True, text=True, encoding="utf-8", errors="replace")
         return done.returncode, done.stdout + done.stderr
+
+
+def patch_library(case, targets):
+    """测试替身接缝：`targets = {"nav.wait_page": mock, "strategies.close_named_optional": mock}`。
+
+    只替换 `recipe_nav` / `recipe_strategies` / `recipe_steps` 的模块属性，调用方带上的 `(p, rt)`
+    前缀先剥掉，桩收到的就是业务实参。`case.addCleanup` 按 LIFO 还原（同一个属性被多次替换时也
+    能回到最初那份）。这是**测试专用**的接缝：生产代码不按名字查表取实现。
+    """
+    import catalog.interpreter as interpreter
+    import recipe_nav
+    import recipe_strategies
+    import recipe_steps
+    modules = {"nav": recipe_nav, "strategies": recipe_strategies, "steps": recipe_steps}
+    saved = []
+    for dotted, mock in targets.items():
+        module_name, attr = dotted.split(".", 1)
+        module = modules[module_name]
+        original = getattr(module, attr)
+        old_library = interpreter.LIBRARY.get(attr)
+        saved.append((module, attr, original, old_library))
+
+        def wrapper(p, rt, *args, _mock=mock, **kwargs):
+            return _mock(*args, **kwargs)
+
+        setattr(module, attr, wrapper)
+        # 数据 `lib` op 查 LIBRARY、例外/库代码查模块属性：同一个替身两处都换。
+        interpreter.LIBRARY[attr] = wrapper
+
+    def restore():
+        for module, attr, original, old_library in reversed(saved):
+            setattr(module, attr, original)
+            if old_library is None:
+                interpreter.LIBRARY.pop(attr, None)
+            else:
+                interpreter.LIBRARY[attr] = old_library
+
+    case.addCleanup(restore)
+    return targets

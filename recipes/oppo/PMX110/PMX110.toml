@@ -12,6 +12,8 @@ tail = "tail"
 
 # 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
 [const]
+# 共享段体的 close_named 走「允许缺项」那一档（这两台的旧别名，见 #1268）。
+CLOSE_NAMED_OPTIONAL = true
 READ_SWITCHES_STYLE = "title"
 HIDE_CAROUSEL_STYLE = "labels"
 BROWSER_FLOW = "prefs_start"
