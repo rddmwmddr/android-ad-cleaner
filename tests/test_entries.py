@@ -15,7 +15,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, call
+from unittest.mock import Mock, call, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -27,6 +27,9 @@ import entries  # noqa: E402
 import fast  # noqa: E402
 import fixtures  # noqa: E402
 import recipe_meta  # noqa: E402
+import recipe_nav  # noqa: E402
+import recipe_strategies  # noqa: E402
+import recipe_steps  # noqa: E402
 import recipe_source  # noqa: E402
 import row  # noqa: E402
 from fast import ScreenLocked  # noqa: E402
@@ -1961,14 +1964,8 @@ def load_933(phone, recipe):
 
 
 def action_933(scope, recipe, name):
-    """取真实分段的函数体，以便给它的协作者注入替身；不复制分段实现。"""
-    node = next(n for n in ast.parse(recipe.read_text(encoding="utf-8")).body
-                if isinstance(n, ast.FunctionDef) and n.decorator_list
-                and n.decorator_list[0].args[0].value == name)
-    node.decorator_list, node.name = [], "selected_action"
-    exec(compile(ast.Module(body=[node], type_ignores=[]), str(recipe), "exec"), scope)
-    return scope["selected_action"]
-
+    """取真实分段的 action：装载后的 `rt.steps` 就是真正会跑的那一段（#1265）。"""
+    return next(item.action for item in scope["rt"].steps if item.name == name)
 
 def tapping_phone_933(present):
     """只在 `present` 里的文案点得动的假手机。"""
@@ -2053,7 +2050,10 @@ class Pkx110EntryTests(unittest.TestCase):
     def entry(self, present):
         p = tapping_phone_933(present)
         scope = load_933(p, RECIPES_933["PKX110"])
-        scope["wait_page"] = Mock(return_value=True)
+        self.wait_page = Mock(return_value=True)
+        patcher = patch.object(recipe_nav, "wait_page", self.wait_page)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         return p, scope
 
     def test_each_wording_opens_the_store_privacy_page(self):
@@ -2061,7 +2061,8 @@ class Pkx110EntryTests(unittest.TestCase):
             with self.subTest(wording):
                 p, scope = self.entry({wording})
                 self.assertTrue(scope["tap_page"](PRIVACY_933, PRIVACY_PAGE_933, PRIVACY_933))
-                scope["wait_page"].assert_called_once_with(PRIVACY_PAGE_933, PRIVACY_933)
+                self.wait_page.assert_called_once()
+                self.assertEqual(self.wait_page.call_args.args[2:], (PRIVACY_PAGE_933, PRIVACY_933))
                 p.note_miss.assert_not_called()
 
     def test_privacy_wording_wins_when_both_are_on_the_page(self):
@@ -2073,7 +2074,7 @@ class Pkx110EntryTests(unittest.TestCase):
         p, scope = self.entry(set())
         self.assertFalse(scope["tap_page"](PRIVACY_933, PRIVACY_PAGE_933, PRIVACY_933))
         p.note_miss.assert_called_once_with("隐私 / 隐私授权管理")
-        scope["wait_page"].assert_not_called()
+        self.wait_page.assert_not_called()
 
     def test_page_title_accepts_either_wording(self):
         for wording in PRIVACY_933:
@@ -2083,8 +2084,11 @@ class Pkx110EntryTests(unittest.TestCase):
 
     def test_failed_landing_is_not_retried_on_the_next_wording(self):
         """点开了但没落到隐私页：就此停段，不在别的页面上再点一次同名行。"""
-        p, scope = self.entry(set(PRIVACY_933))
-        scope["wait_page"] = Mock(return_value=False)
+        p = tapping_phone_933(set(PRIVACY_933))
+        scope = load_933(p, RECIPES_933["PKX110"])
+        patcher = patch.object(recipe_nav, "wait_page", Mock(return_value=False))
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.assertFalse(scope["tap_page"](PRIVACY_933, PRIVACY_PAGE_933, PRIVACY_933))
         p.tap.assert_called_once_with("隐私", exact=True, quiet=True)
 
@@ -2093,7 +2097,10 @@ class Phk110EntryTests(unittest.TestCase):
     def entry(self, present):
         p = tapping_phone_933(present)
         scope = load_933(p, RECIPES_933["PHK110"])
-        scope["page"] = Mock(return_value=True)
+        self.page = Mock(return_value=True)
+        patcher = patch.object(recipe_nav, "page_activity", self.page)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         return p, scope
 
     def test_each_wording_opens_the_store_privacy_page(self):
@@ -2101,7 +2108,7 @@ class Phk110EntryTests(unittest.TestCase):
             with self.subTest(wording):
                 p, scope = self.entry({wording})
                 self.assertTrue(scope["navigate"](PRIVACY_933, "PrivacyActivity", PRIVACY_933))
-                scope["page"].assert_called_once_with("PrivacyActivity", PRIVACY_933)
+                self.assertEqual(self.page.call_args.args[2:], ("PrivacyActivity", PRIVACY_933))
                 p.note_miss.assert_not_called()
 
     def test_privacy_wording_wins_when_both_are_on_the_page(self):
@@ -2113,13 +2120,13 @@ class Phk110EntryTests(unittest.TestCase):
         p, scope = self.entry(set())
         self.assertFalse(scope["navigate"](PRIVACY_933, "PrivacyActivity", PRIVACY_933))
         p.note_miss.assert_called_once_with("隐私 / 隐私授权管理")
-        scope["page"].assert_not_called()
+        self.page.assert_not_called()
 
     def test_page_title_accepts_either_wording(self):
         for wording in PRIVACY_933:
             with self.subTest(wording):
                 scope = load_933(store_page_933(wording), RECIPES_933["PHK110"])
-                self.assertTrue(scope["page"]("PrivacyActivity", PRIVACY_933))
+                self.assertTrue(scope["page_activity"]("PrivacyActivity", PRIVACY_933))
 
 
 class Rmx3700EntryTests(unittest.TestCase):
@@ -2167,7 +2174,14 @@ class StoreSegmentTests(unittest.TestCase):
         if recipe.suffix == ".toml":
             scope, _ = load_recipe(segment_phone_933(), recipe)   # 装载但一段都不跑
             for helper, value in stubs.items():
-                scope[helper] = Mock(return_value=value)
+                mock = Mock(return_value=value)
+                scope[helper] = mock
+                for module in (recipe_nav, recipe_strategies, recipe_steps):
+                    if hasattr(module, helper):
+                        patcher = patch.object(module, helper, mock)
+                        patcher.start()
+                        self.addCleanup(patcher.stop)
+                        break
             scope["ONLY"] = []                                     # 放开段过滤，下面只跑这一段
             scope.pop("guard", None)                               # 只验段体：型号守卫不是这条用例的对象
             action = next(item.action for item in scope["rt"].steps if item.name == step)
@@ -2183,26 +2197,26 @@ class StoreSegmentTests(unittest.TestCase):
     def test_plg110_passes_both_wording(self):
         scope = self.segment("PLG110", "软件商店",
                              app_settings=None, tap_page=None, close_named=None, read_switches={})
-        self.assertEqual(tuple(scope["tap_page"].call_args_list[0].args[0]), PRIVACY_933)
+        self.assertEqual(tuple(scope["tap_page"].call_args_list[0].args[2]), PRIVACY_933)
 
     def test_pma110_passes_both_wording(self):
         scope = self.segment("PMA110", "软件商店", app_settings=None, tap_page=None, close_named=None)
         # 页面树里的等价文案是 TOML 数组（转成 list）：按内容与顺序比，容器类型不是判据。
-        self.assertEqual(tuple(scope["tap_page"].call_args_list[0].args[0]), PRIVACY_933)
+        self.assertEqual(tuple(scope["tap_page"].call_args_list[0].args[2]), PRIVACY_933)
 
     def test_pkx110_passes_both_wording(self):
         scope = self.segment("PKX110", "软件商店·个性化",
                              open_app_settings=True, tap_page=True, off_exact=True)
-        self.assertEqual(tuple(scope["tap_page"].call_args_list[0].args[0]), PRIVACY_933)
+        self.assertEqual(tuple(scope["tap_page"].call_args_list[0].args[2]), PRIVACY_933)
 
     def test_rmx3700_passes_both_wording(self):
         scope = self.segment("RMX3700", "软件商店", tap_by_scroll=True, wait_page=True)
-        self.assertIn(PRIVACY_933, [c.args[0] for c in scope["tap_by_scroll"].call_args_list])
+        self.assertIn(PRIVACY_933, [c.args[2] for c in scope["tap_by_scroll"].call_args_list])
 
     def test_phk110_passes_both_wording(self):
         scope = self.segment("PHK110", "软件商店个性化",
                              open_settings=True, navigate=True, off_exact=True)
-        self.assertEqual(tuple(scope["navigate"].call_args_list[0].args[0]), PRIVACY_933)
+        self.assertEqual(tuple(scope["navigate"].call_args_list[0].args[2]), PRIVACY_933)
 
     def test_rmx3700_missing_row_keeps_the_original_line_and_the_scene(self):
         p = segment_phone_933()
