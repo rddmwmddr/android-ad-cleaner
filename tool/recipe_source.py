@@ -151,6 +151,18 @@ def _plain_name(func: ast.expr) -> str | None:
     return None
 
 
+def business_args(call: "Call") -> tuple["Arg", ...]:
+    """注入调用现在统一带 `(p, rt)` 前缀（#1268），词库与入口速查要的是业务实参。
+
+    前缀只认事实层自己的形状：前两个位置实参的原文正好是 `p` / `rt`。`p.off(...)` 这类方法调用
+    不是 injected，原样返回。"""
+    args = call.args
+    if (call.injected and len(args) >= 2 and args[0].keyword is None and args[1].keyword is None
+            and args[0].text == "p" and args[1].text == "rt"):
+        return args[2:]
+    return args
+
+
 def _call_name(func: ast.expr, modules: Mapping[str, str],
                names: Mapping[str, str]) -> tuple[str, bool, str]:
     """（归一后的调用名, 是不是执行作用域里的名字, 归属模块）。
@@ -248,6 +260,17 @@ def _values(source: "_Source", node: ast.expr, function: _Function | None,
         if value is not None:
             return _string_list(value)
         return source.external(node.slice.value)
+    # `rt.constants["HOT"]` / `rt.constants.get("HOT")`：注入面拆除后常量从 rt 取，值仍在调用脚本里。
+    if (isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute)
+            and isinstance(node.value.value, ast.Name) and node.value.value.id == "rt"
+            and node.value.attr == "constants" and isinstance(node.slice, ast.Constant)):
+        return source.external(node.slice.value)
+    if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Attribute)
+            and isinstance(node.func.value.value, ast.Name) and node.func.value.value.id == "rt"
+            and node.func.value.attr == "constants" and node.func.attr == "get"
+            and node.args and isinstance(node.args[0], ast.Constant)):
+        return source.external(node.args[0].value)
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
         left = _values(source, node.left, function, backfill)
         right = _values(source, node.right, function, backfill)
@@ -374,8 +397,14 @@ def _page(call: ast.Call) -> str:
     `close_named` 与策略库的 `close_named_vivo` 等同族名字都是「名单, 页面」的位置写法（#1263）。"""
     kwargs = {keyword.arg: keyword.value for keyword in call.keywords if keyword.arg}
     name = _plain_name(call.func)
+    if name is None and isinstance(call.func, ast.Attribute) and call.func.attr.startswith("close_named"):
+        name = call.func.attr        # `strategies.close_named_vivo(...)`：模块限定名也要认
     if name is not None and name.startswith("close_named"):
-        positional = list(call.args) + [None, None]
+        positional: list[ast.expr | None] = list(call.args)
+        if (len(positional) >= 2 and isinstance(positional[0], ast.Name) and positional[0].id == "p"
+                and isinstance(positional[1], ast.Name) and positional[1].id == "rt"):
+            positional = positional[2:]     # 注入调用统一带 (p, rt) 前缀
+        positional += [None, None]
         node = positional[1] or kwargs.get("page") or kwargs.get("title")
     else:
         node = kwargs.get("page") or kwargs.get("title")
@@ -528,9 +557,7 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 extra = f", {_s(op['activity'])}" if "activity" in op else ""
                 lines.append(f'p.start({_s(op["pkg"])}{extra})')
             elif kind == "start_or_skip":
-                # 旧脚本的 `start_or_skip(...)` 不是 `p.start`，入口速查本来就不认它；照原样投影，
-                # 事实形状与转换前一致（#1266）。
-                lines.append(f'start_or_skip({_s(op["pkg"])}, {_s(op["activity"])})')
+                lines.append(f'start_or_skip(p, rt, {_s(op["pkg"])}, {_s(op["activity"])})')
             elif kind == "skip_unless_installed":
                 # `p.d.shell("pm path …")` 原样进事实层（不是 am start，不构成入口，只是不丢这条读）。
                 lines.append(f"p.d.shell({_s(op['command'])})")
@@ -549,7 +576,7 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 lines.append(f"p.d.shell({_s(op['command'])})")
             elif kind == "gated":
                 for text in op.get("entries", []):
-                    lines.append(f"maybe({_s(text)})")
+                    lines.append(f"maybe(p, rt, {_s(text)})")
                 lower(op.get("ops", []))
             elif kind == "scoped":
                 if "systemui_text" in op:
@@ -559,24 +586,26 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 # 带条件分支的 op：两支里的 off / 入口调用一样要读出来，否则词与入口会静默丢（#1263）。
                 if kind == "if_lib":
                     args = ", ".join(_s(a) for a in op.get("args", []))
-                    lines.append(f"{op['name']}({args})")
+                    lines.append(f"{op['name']}(p, rt, {args})" if args else f"{op['name']}(p, rt)")
                 elif kind == "if_lib_any":
                     # 短路的每个助手都调得到：漏一个，入口归属就少一条（#1267）。
                     for call in op.get("calls", []):
                         args = ", ".join(_s(a) for a in call.get("args", []))
-                        name = f"p.{call['method']}" if "method" in call else call["name"]
-                        lines.append(f"{name}({args})")
+                        if "method" in call:
+                            lines.append(f"p.{call['method']}({args})")
+                        else:
+                            lines.append(f"{call['name']}(p, rt, {args})" if args else f"{call['name']}(p, rt)")
                 lower(op.get("ops", []))
                 lower(op.get("else_ops", []))
             elif kind in ("lib", "require_lib", "code", "return_lib"):
                 # 用数据里写得出的真实名字（不折回 close_named），归属才查得准（#1263）。
                 args = ", ".join(_s(a) for a in op.get("args", []))
-                lines.append(f"{op['name']}({args})")
+                lines.append(f"{op['name']}(p, rt, {args})" if args else f"{op['name']}(p, rt)")
             elif kind == "close_listed":
                 # 候选名单是「这一页要关掉这些名字」，按 `close_named(名单, 页)` 投影进事实层：
                 # 词库按 close 那一类读得出这些字面量（旧脚本里 `names` 是运行期变量，读不出，#1265）。
                 names = ", ".join(_s(name) for name in op.get("names", []))
-                lines.append(f"close_named([{names}], {_s(op['page'])})")
+                lines.append(f"close_named(p, rt, [{names}], {_s(op['page'])})")
             elif kind in ("page", "skip", "fail", "require_tap"):
                 # 落点断言 / 跳过 / 失败出口 / 必需点按不带词条与入口事实：入口本来自 `p.start` / shell /
                 # `open_app_settings`，`page` 只是核对。与 `back` / `top` / `print` 同档（#1265）。
@@ -584,19 +613,34 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
 
     for segment in data.get("segment", []):
         if "code" in segment:
-            lines.append(f"{segment['code']}()")
+            lines.append(f"{segment['code']}(p, rt)")
         else:
             lower(segment.get("ops", []))
     return "\n".join(lines) or "pass"
 
 
+def library_sources() -> dict[str, tuple[str, str]]:
+    """三个库里数据可调用的实现：{名字: (归属模块, 源码)}。
+
+    `__all__` 全局唯一，名字直接定位实现，不再按脚本 import 做归属解析（#1268）。
+    词库与入口速查拿它扫实现里的字面量。延迟 import：只有调用它时才加载这三个库。"""
+    import inspect
+    import recipe_nav
+    import recipe_strategies
+    import recipe_steps
+    # 实现之间用 `nav.x(...)` / `strategies.x(...)` 互调；`inspect.getsource` 只有函数体、没有模块头，
+    # 补三行 import 让事实层把跨模块调用认成注入调用、逐层往下扫（行号整体后移三行，只影响出处定位）。
+    prefix = "import recipe_nav as nav\nimport recipe_strategies as strategies\nimport recipe_steps as steps\n"
+    out: dict[str, tuple[str, str]] = {}
+    for module in (recipe_nav, recipe_strategies, recipe_steps):
+        for name in module.__all__:
+            out[name] = (module.__name__, prefix + inspect.getsource(getattr(module, name)))
+    return out
+
+
 def _lib_modules() -> dict[str, str]:
-    """注入名 → 归属模块，只收能在三张表里唯一定位的名字（同名多簇的不猜）。"""
-    index: dict[str, list[str]] = {}
-    for module, table in surface_sources().items():
-        for name in table:
-            index.setdefault(name, []).append(module)
-    return {name: modules[0] for name, modules in index.items() if len(modules) == 1}
+    """数据 `lib` 名 → 归属模块。三个库的 `__all__` 全局唯一（#1268：没有同名覆盖）。"""
+    return {name: module for name, (module, _source) in library_sources().items()}
 
 
 def scan_catalog(data: Mapping[str, Any], exception_src: str | None = None) -> Facts:
@@ -651,82 +695,3 @@ def _merge_facts(first: Facts, second: Facts) -> Facts:
         imports={**first.imports, **second.imports},
         import_lines={**first.import_lines, **second.import_lines})
 
-
-def injected_calls(facts: Facts, name: str, module: str | None = None) -> tuple[Call, ...]:
-    """源码里调用到某个注入名的调用点。脚本本地定义了同名实现的走本地那份，注入版不算（沿用 #1153 的做法）。
-
-    `module` 给定时只认归属那个模块的调用——脚本 `from X import n` / `X.n(…)` 两种写法都记成 X，
-    没 import 的裸名字归属是空串，因此不再算注入实现（#1243）。不给时按名字认：注入实现没有
-    导入头，共享名从执行作用域按名字现取（`g["…"]`），那一层没有归属可跟。
-    两个消费方（入口速查、词库）都按这一条筛，判据不再各写一份。"""
-    if name in facts.defines:
-        return ()
-    return tuple(call for call in facts.calls
-                 if call.injected and call.name == name
-                 and (module is None or call.module == module))
-
-
-def surface_sources() -> dict[str, dict[str, str]]:
-    """注入面（`tool/recipe_nav.py` / `tool/recipe_strategies.py` / `tool/recipe_steps.py`）的源码，
-    按归属模块分开：`{"recipe_nav": {名字: 源码}, "recipe_strategies": {名字: 源码},
-    "recipe_steps": {名字: 源码}}`。
-
-    不按名字合并：同名实现各按脚本导入的那个模块解析，静默互相覆盖的那条路不再走（#1243）。
-    实现里的入口写在实现里、脚本只剩一行调用；要事实就交给 `scan_source`，跨文件的形参取值由
-    调用方按位置传 `bindings`、模块常量按名字传 `externals`（沿用 #1153、#1154、#1209）。
-    延迟 import：只有调用它时才加载这三张表，事实层本身不连带它们。"""
-    import inspect
-    import recipe_nav
-    import recipe_strategies
-    import recipe_steps
-    registries = {NAV_MODULE: recipe_nav.NAV, STRATEGIES_MODULE: recipe_strategies.STRATEGIES,
-                  STEPS_MODULE: recipe_steps.STEPS}
-    return {module: {name: inspect.getsource(factory) for name, factory in registries[module].items()}
-            for module in SURFACE}
-
-
-def imported_sources(facts: Facts,
-                     surface: Mapping[str, Mapping[str, str]]) -> dict[str, tuple[str, str]]:
-    """这份源码导入的注入实现：`{名字: (归属模块, 源码)}`。
-
-    归属只看源码自己的 import（`from X import n` 与 `X.n(…)` 两种写法，含 `if TYPE_CHECKING:` 块）：
-    `recipe_nav` 只查 `NAV`、`recipe_strategies` 只查 `STRATEGIES`、`recipe_steps` 只查 `STEPS`，
-    三张表不按名字合并。脚本本地同名 `def`
-    覆盖导入版，那种名字不在里面；没有 import 的裸名字也不是注入实现。`X.n(…)` 那种只有调用点
-    能看出用了哪个名字，所以按调用点补一遍（`Call.module` 记着 `X`）。
-    `surface` 是 `surface_sources()`（词库只交段体那一张，见 `step_sources()`）。"""
-    out: dict[str, tuple[str, str]] = {}
-    for name, module in facts.imports.items():
-        if name in facts.defines:
-            continue
-        source = surface.get(module, {}).get(name)
-        if source is not None:
-            out[name] = (module, source)
-    for call in facts.calls:
-        if not call.injected or call.name in facts.defines or call.name in out:
-            continue
-        source = surface.get(call.module, {}).get(call.name)
-        if source is not None:
-            out[call.name] = (call.module, source)
-    return out
-
-
-def step_sources() -> dict[str, str]:
-    """段体注入面（`recipe_steps.STEPS`）的源码：{注入名: 源码}。词库扫这一张与策略库那一张（#1253）。
-
-    导航助手的开关名单写在调用点的实参里（`close_named(NAMES, page=…)`），扫它们的实现只会
-    读到形参、记成一串没读出来的未解析；词住在实现里的只有段体与拨动策略两张表（段体沿用 #1209，
-    #1253 起策略库也扫）。"""
-    import inspect
-    import recipe_steps
-    return {name: inspect.getsource(factory) for name, factory in recipe_steps.STEPS.items()}
-
-
-def strategy_sources() -> dict[str, str]:
-    """拨动策略注入面（`recipe_strategies.STRATEGIES`）的源码：{注入名: 源码}。
-
-    这一张表的实现里也有 `p.off(only=…)` / `keep=…` 现场（#1253 把剩下的 14 个搬进来之前没有），
-    所以词库不能只扫段体；导航助手那张表不在词库范围内。"""
-    import inspect
-    import recipe_strategies
-    return {name: inspect.getsource(factory) for name, factory in recipe_strategies.STRATEGIES.items()}

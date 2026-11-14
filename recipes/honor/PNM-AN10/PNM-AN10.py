@@ -6,6 +6,8 @@ import time
 from fast import ScreenLocked
 import recipe_nav as nav
 from recipe_runtime import SkipStep
+# 本机没装荣耀浏览器时 browser_settings 会回退到预装百度浏览器那套；这份依赖在事实层要留一条出处。
+from recipe_strategies import baidu_browser
 
 
 BUILD = ""

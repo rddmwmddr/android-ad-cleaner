@@ -2144,8 +2144,6 @@ def goto(p, rt, *args, **kwargs):
 # 两条实现在各自的家族分节里；这里只做分派，不复制实现。
 
 def browser_settings(p, rt):
-    honor_flows = {"honor_mounted": functools.partial(_honor_browser_settings_mounted, p, rt),
-                   "honor_plain": functools.partial(_honor_browser_settings_plain, p, rt)}
     def prefs_shell_flow():
         """直达设置页后只认已识别的子页，不从旧子页或数据页继续（PMA110）。
 
@@ -2203,8 +2201,10 @@ def browser_settings(p, rt):
         return browser_settings_vivo(p, rt)
     if flow in ("toolbar", "menu", "mine"):
         return browser_settings_xiaomi(p, rt)
-    if flow in honor_flows:
-        return honor_flows[flow]()
+    if flow == "honor_mounted":
+        return _honor_browser_settings_mounted(p, rt)
+    if flow == "honor_plain":
+        return _honor_browser_settings_plain(p, rt)
     return {"prefs_shell": prefs_shell_flow, "prefs_start": prefs_start_flow,
             "vivo_menu": vivo_menu_flow}[flow]()
 

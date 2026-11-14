@@ -165,7 +165,8 @@ def classify(src: str) -> tuple[LocalFunction, ...]:
         body_calls[call.function].append(call.name)
     out = []
     for name, line in definitions(src):
-        calls = tuple(sorted(set(body_calls.get(name, ()))))
+        # 出口现在是 rt 上的方法：`rt.require_switches` 与裸名同档
+        calls = tuple(sorted({call.removeprefix("rt.") for call in body_calls.get(name, ())}))
         tier, signals = (HOOK, ()) if name in HOOK_NAMES else tier_of(calls)
         out.append(LocalFunction(name, line, tier, signals, calls))
     return tuple(out)

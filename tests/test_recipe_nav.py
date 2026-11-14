@@ -10,13 +10,11 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-import entries  # noqa: E402
 import fixtures  # noqa: E402
 import recipe_kit  # noqa: E402
 import recipe_nav  # noqa: E402
@@ -69,166 +67,7 @@ def kept_copies(scripts, injected):
     return offenders
 
 
-class WiringTests(unittest.TestCase):
-    def test_the_preamble_installs_the_public_navigation(self):
-        phone, scope = phone_mock(), {}
-        with patch.object(recipe_nav, "install", wraps=recipe_nav.install) as install:
-            recipe_kit.preamble(phone, scope)
-        self.assertEqual(install.call_count, 1)
-        self.assertEqual(install.call_args.args, (phone, scope))
 
-    def test_the_xiaomi_family_helpers_are_installed(self):
-        """#1151 收的五个簇都在注入面里：脚本删了本地定义，靠的就是这几个名字。"""
-        phone, scope = phone_mock(), {}
-        recipe_kit.preamble(phone, scope)
-        self.assertLessEqual({"tap_any", "gear", "close_named", "read_switches", "security_tab"},
-                             set(scope))
-
-    def test_the_remaining_navigation_clusters_are_installed(self):
-        """按代码逐字判据翻出来的六个簇（#1148）：脚本侧同名定义已删，靠的就是这几个名字。"""
-        phone, scope = phone_mock(), {}
-        recipe_kit.preamble(phone, scope)
-        self.assertLessEqual({"wait_page", "off_unnamed", "opened", "popup_row", "tap_tab",
-                              "hide_carousel"}, set(scope))
-
-    def test_injected_helpers_read_the_preamble_names_from_the_scope(self):
-        """实现从执行作用域取 `skip` / `require`，所以 `recipe_nav` 不用 import `recipe_kit`。"""
-        phone = phone_mock()
-
-        def factory(p, g):
-            def sample_helper():
-                return p, g["skip"], g["require"]
-            return sample_helper
-
-        with patch.dict(recipe_nav.NAV, {"sample_helper": factory}):
-            scope = {}
-            recipe_kit.preamble(phone, scope)
-            p, skip, require = scope["sample_helper"]()
-        self.assertIs(p, phone)
-        self.assertIs(skip, scope["skip"])
-        self.assertIs(require, scope["require"])
-
-    def test_the_navigation_module_does_not_import_the_preamble(self):
-        tree = ast.parse((ROOT / "tool" / "recipe_nav.py").read_text(encoding="utf-8"))
-        imported = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                imported.update(alias.name for alias in node.names)
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                imported.add(node.module)
-        self.assertNotIn("recipe_kit", imported, "两个模块互相 import 会绕成环")
-
-
-class CopyGuardTests(unittest.TestCase):
-    def test_no_script_keeps_a_byte_identical_copy(self):
-        scripts = [(path.relative_to(ROOT).as_posix(), path.read_text(encoding="utf-8"))
-                   for path in RECIPES]
-        self.assertEqual(families_missing_scripts([rel for rel, _ in scripts], ROOT / "recipes"), set(),
-                         "有家族一份 .py 都没扫到：发现口径坏了")
-        self.assertEqual(kept_copies(scripts, surface()), {},
-                         "脚本还留着注入面的逐字副本：删掉本地定义，让脚本走注入版")
-
-    def test_family_coverage_predicate_catches_a_whole_missing_family(self):
-        """反例：只给一个家族的路径，磁盘上别的家族整块没被扫到时要报出来。"""
-        missing = families_missing_scripts(["vivo/V1/recipe.py"], ROOT / "recipes")
-        self.assertIn("oppo", missing)
-        self.assertNotIn("vivo", missing)
-
-    def test_the_guard_reports_a_copy_and_spares_a_differing_sibling(self):
-        script = '''\
-def gear(toolbar_only=False):
-    return p.find("设置", exact=True)
-
-
-def close_named(names, page):
-    return p.off(only=names, page=page)
-'''
-        injected = {
-            "gear": normalize('''\
-def gear(toolbar_only=False):
-    return p.find("设置", exact=True)
-'''),
-            "close_named": normalize('''\
-def close_named(names, page):
-    return p.off(only=names, page=page, max_screens=12)
-'''),
-        }
-        self.assertEqual(kept_copies([("sample.py", script)], injected),
-                         {"sample.py": ["gear"]})
-
-    def test_the_guard_sees_through_the_scope_rewrite(self):
-        """注入版把脚本全局改成 `g["X"]` 现取：旧写法搬回来也要认出来（#1151）。"""
-        script = '''\
-def tap_any(*names, scrolls=6):
-    """依次试几个入口名，点中一个就返回 True。"""
-    return any(maybe(n, scrolls) for n in names)
-'''
-        injected = {"tap_any": normalize('''\
-def tap_any(*names, scrolls=6):
-    """依次试几个入口名，点中一个就返回 True。"""
-    return any(g["maybe"](n, scrolls) for n in names)
-''')}
-        self.assertEqual(kept_copies([("sample.py", script)], injected),
-                         {"sample.py": ["tap_any"]})
-
-    def test_the_guard_ignores_comments_docstrings_and_wrapping(self):
-        """代码相同、注释与折行不同也算副本（#1153）：V2309A 那份就是被文本判据漏掉的。"""
-        injected = {"gear": normalize('''\
-def gear(toolbar_only=False):
-    """很多小米 App 的设置是右上角齿轮图标。"""
-    return p.find("设置", exact=True)
-''')}
-        script = '''\
-
-
-def gear(toolbar_only=False):
-    # 注释与文档串各写各的
-    return p.find(
-        "设置", exact=True)
-'''
-        self.assertEqual(kept_copies([("sample.py", script)], injected),
-                         {"sample.py": ["gear"]})
-
-
-def family_usage(module_name):
-    """{注入名: {家族}}：脚本实际用到哪个库的哪个名字，家族取自 `entries.FAMILY`。
-
-    实现是否被用到只看脚本自己的 import（`recipe_source.imported_sources()`，`if TYPE_CHECKING:`
-    块也算），本地同名 `def` 覆盖导入版的不算；没有 import 的裸名字也不算。"""
-    surface = recipe_source.surface_sources()
-    usage = {}
-    for rel, facts in recipe_source.scan_dir(str(ROOT / "recipes"), entries.FAMILY).items():
-        family = entries.FAMILY.get(rel.split("/", 1)[0].lower())
-        for name, (owner, _) in recipe_source.imported_sources(facts, surface).items():
-            if owner == module_name:
-                usage.setdefault(name, set()).add(family)
-    return usage
-
-
-class SharedSectionTests(unittest.TestCase):
-    """共享（跨家族）分节里的实现必须被 ≥2 个家族使用（#1247，规则 `dev.recipes.shared-sections`）。
-
-    判据按**节**算：`recipe_nav.SHARED` / `recipe_strategies.SHARED` 是「跨家族」分节收进来的
-    注入名，清单只在库里写一份，这里不另抄。家族分节（小米系 / vivo / OPPO / 荣耀 / 魅族）
-    不受这条限制——那是新机型并入的入口，允许单脚本变体。"""
-
-    def test_shared_names_are_registered_implementations(self):
-        """`SHARED` 里的每个名字都得是那张注册表里真有的一份实现，不然守卫查的是一个不存在的东西。"""
-        for module, _, registry in SURFACES:
-            with self.subTest(module=module.__name__):
-                self.assertLessEqual(module.SHARED, set(getattr(module, registry)))
-
-    def test_every_shared_implementation_serves_two_families(self):
-        self.assertTrue(recipe_nav.SHARED, "共享分节的清单是空的，这条守卫会空转")
-        for module, module_name, _ in SURFACES:
-            usage = family_usage(module_name)
-            for name in sorted(module.SHARED):
-                with self.subTest(module=module_name, name=name):
-                    families = usage.get(name, set())
-                    self.assertGreaterEqual(
-                        len(families), 2,
-                        f"{module_name}.{name} 住在共享分节，却只有 {sorted(families)} 用；"
-                        "只服务一个家族的实现放家族分节，别往共享库塞")
 
 
 class DriverTests(unittest.TestCase):

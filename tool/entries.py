@@ -297,7 +297,7 @@ def source_key(d):
 _AM_PAGE = re.compile(r"am start\b[^\n]*?-n\s+([\w.]+)/([\w.$]+)")
 _AM_INTENT = re.compile(r"am start\b[^\n]*?-a\s+([\w.]+)[^\n]*?-p\s+([\w.]+)")
 # 拉起入口的调用名：Phone.start 与共享的 start_or_skip 助手（沿用 #902）。
-_START_CALLS = frozenset({"p.start", "start_or_skip"})
+_START_CALLS = frozenset({"p.start", "start_or_skip", "rt.start_or_skip"})
 
 
 def _value(arg):
@@ -312,7 +312,7 @@ def _arg_of(call, index, keyword=None):
 
     `keyword is None` 时不做关键字回退：位置实参的 `keyword` 也是 None，回退会把它自己
     当成第二个实参，单实参的调用就凭空多出一档入口。"""
-    positional = [arg for arg in call.args if arg.keyword is None]
+    positional = [arg for arg in recipe_source.business_args(call) if arg.keyword is None]
     if index < len(positional):
         return positional[index]
     if keyword is None:
@@ -356,7 +356,7 @@ def _bindings(calls):
     """脚本调注入助手时按位置传的实参：实参在脚本里、形参在实现里，事实层按位置把两侧合起来。"""
     out = {}
     for call in calls:
-        for index, arg in enumerate(arg for arg in call.args if arg.keyword is None):
+        for index, arg in enumerate(arg for arg in recipe_source.business_args(call) if arg.keyword is None):
             if arg.param is None and arg.values:
                 out.setdefault(index, []).extend(item.text for item in arg.values)
     return {index: tuple(texts) for index, texts in out.items()}
@@ -388,40 +388,32 @@ def used_by(recipes_dir):
 
     只认字面量：经 `reach(p, ENTRIES[...])` 消费的那几条（浏览器段，#912）看不出来，
     这张表会把用得上的机型算成没用过。"""
-    surface = recipe_source.surface_sources()
+    sources = recipe_source.library_sources()
     found = {}
     for rel, facts in recipe_source.scan_dir(recipes_dir).items():
         model = rel.split("/")[1]
         _scan_entries(facts, model, found)
-        layer = recipe_source.imported_sources(facts, surface)
-        _scan_injected(surface, layer, facts, facts, model, found, set())
+        _scan_implementations(facts, facts, model, found, sources, facts.constants, frozenset())
     return found
 
 
-def _scan_injected(surface, layer, current, caller, model, found, seen):
-    """注入实现逐层往下扫：`layer` 是这一层能调到的 {名字: (归属模块, 源码)}，`current` 是这一层的事实
-    （脚本本身，或上一层实现），`caller` 是调用脚本的事实（模块常量与本地定义都在它那儿）。
-    `seen` 按路径传，同一条链上只扫一次、防绕圈；换一条路再调到同一个注入名仍要扫，实参来自不同的调用点。
+def _scan_implementations(current, caller, model, found, sources, constants, seen):
+    """库实现逐层往下扫：当前事实里调到的库实现，扫它的源码并按调用点把实参合回去。
 
-    脚本层的 `layer` 由 `imported_sources()` 给出：只含它 import 的名字、按归属模块解析；
-    实现层没有导入头，`layer` 是 `_surface_layer()` 摊开的全部实现，`injected_calls()` 按名字认。
-    判据仍是 `injected_calls()`：脚本本地定义了同名的走本地那份，深、浅两层都不算。"""
-    for name, (module, source) in sorted(layer.items()):
+    `current` 是这一层的事实（脚本本身或上一层实现），`caller` 是调用脚本的事实（模块常量与本地定义
+    都在它那儿）。同名实现按名字只扫一次；`seen` 沿一条链传，防绕圈。"""
+    names = dict.fromkeys(call.name for call in current.calls if call.injected)
+    for name in names:
         if name in seen or name in caller.defines:
             continue
-        calls = recipe_source.injected_calls(current, name, module)
-        if not calls:
+        entry = sources.get(name)
+        if entry is None:
             continue
-        impl = recipe_source.scan_source(source, _bindings(calls),
-                                         externals=caller.constants)
+        _module, source = entry
+        calls = tuple(call for call in current.calls if call.injected and call.name == name)
+        impl = recipe_source.scan_source(source, _bindings(calls), externals=constants)
         _scan_entries(impl, model, found)
-        _scan_injected(surface, _surface_layer(surface), impl, caller, model, found, seen | {name})
-
-
-def _surface_layer(surface):
-    """实现层能调到的全部注入实现：{名字: (None, 源码)}。归属未知——实现里按名字现取（`g["…"]`），
-    没有 import 头；`injected_calls()` 收到 `module=None` 时按名字认。"""
-    return {name: (None, source) for table in surface.values() for name, source in table.items()}
+        _scan_implementations(impl, caller, model, found, sources, constants, seen | {name})
 
 
 def open_direct(p, d, settle=1.2):

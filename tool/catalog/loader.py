@@ -19,11 +19,18 @@ from . import interpreter, schema
 
 
 class CatalogScope(dict):
-    """catalog 的执行作用域：字典本体是例外函数/注入名的命名空间，`ONLY` / `HALTED` 代理到这次执行的 `rt`。
+    """例外函数的模块命名空间，外加给测试的只读视图。
 
-    与 `recipe_loader.RecipeScope` 同一形状：测试装载（`tests/fixtures.load_recipe`）返回它、拿它当
-    脚本命名空间用，`scope["ONLY"] = [...]` 改的是 `rt.only`，`scope["rt"].run_step(...)` 才按新名单跑。
-    `exec` 写名字走字典本体（CPython 不调子类的 `__setitem__`），代理只服务测试侧的显式读写。"""
+    字典本体只装例外模块自己定义/导入的名字（`exec` 写名字走本体，CPython 不调子类的
+    `__setitem__`）。`ONLY` / `HALTED` 代理到这次执行的 `rt`；其余几个名字（`rt` / `p` / `time` /
+    台账 / 库助手）是测试方便读取的视图——**解释器不从这里取实现**（它查 `interpreter.LIBRARY`），
+    所以这不是注入面：往这里写同名键不会改变执行。"""
+
+    # 测试读的台账 / 时钟 / 计数器：都是 rt 上同一批对象
+    _RT_VIEW = {"rt": lambda rt: rt, "p": lambda rt: rt.p, "time": lambda rt: rt.clock,
+                "FAILED_STEPS": lambda rt: rt.failed_steps, "SKIPPED_STEPS": lambda rt: rt.skipped_steps,
+                "HALTED_STEPS": lambda rt: rt.halted_steps, "RESULTS": lambda rt: rt.results,
+                "VERIFIED_SWITCHES": lambda rt: rt.counter}
 
     def __init__(self, *args, rt=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -34,7 +41,18 @@ class CatalogScope(dict):
             return self.rt.only
         if key == "HALTED":
             return self.rt.halted
-        return super().__getitem__(key)
+        if key == "SkipStep":
+            return recipe_runtime.SkipStep
+        if key in self._RT_VIEW:
+            return self._RT_VIEW[key](self.rt)
+        try:
+            return super().__getitem__(key)
+        except KeyError:
+            fn = interpreter.LIBRARY.get(key)
+            if fn is None:
+                raise
+            import functools
+            return functools.partial(fn, self.rt.p, self.rt)
 
     def __setitem__(self, key, value):
         if key == "ONLY":
