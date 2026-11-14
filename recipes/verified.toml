@@ -147,11 +147,11 @@ body_hash = "9b756ea72e042af8"
 
 ["oppo/PYB110/PYB110.toml"]
 build = "PYB110_17.0.0.157(CN01)"
-date = "2026-11-12"
+date = "2026-11-14"
 by = "机主"
-tier = "全部"
-evidence = "机主自测"
-body_hash = "c6244cec7e61ddbb"
+tier = "部分"
+evidence = "现场"
+body_hash = "53ee48488c7ad54c"
 
 ["oppo/PKH110/PKH110.toml"]
 build = "PKH110_17.0.0.103"
