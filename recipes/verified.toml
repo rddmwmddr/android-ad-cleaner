@@ -21,11 +21,15 @@
 # build 必须以脚本自己声明的 BUILD 打头；认不出更细的版本时才写 BUILD 本身。对不上时命令行标
 # 「build 不符」，数据契约测试报红。覆盖度是「未记录」的条目不做这项校验，build 可以留空。
 #
-# body_hash 是脚本里每个 `@step(...)` 段体的归一后摘要（去注释、docstring 与装饰器后取 sha256
-# 前 16 位，算法只在 `tool/verify_ledger.py`）。它对不上现在的脚本时命令行标「待复核」——判据是段体
-# 正文变没变，不是文件改没改：挪函数、改注释、把模块级助手搬进库都不算改，改段体或改段名才算。
-# 刷新它：`python3 tool/verify_ledger.py --hash` 打印每份脚本当前的值，只打印不写文件；验证或发版后
-# 照抄进对应条目。没有 body_hash 的旧记录按「尚未建立基线」处理，不标「待复核」。
+# body_hash 是每个段体的归一后摘要（`.toml` 取每段规范化后的数据，例外 `.py` 取函数正文，算法只在
+# `tool/verify_ledger.py`），记的是**当初在真机上验证的那份段体**。它对不上现在的脚本时命令行标
+# 「待复核」——判据是段体内容变没变，不是文件改没改：挪函数、改注释、把模块级助手搬进库都不算改，
+# 改段体或改段名才算。
+# 刷新它：`python3 tool/verify_ledger.py --hash` 打印每份脚本当前的值，只打印不写文件；真机验证或
+# 发版后照抄进对应条目。没有 body_hash 的旧记录按「尚未建立基线」处理，不标「待复核」。
+# 2026-11-14 的形态迁移（#1262–#1267）之前的哈希取自旧算法（`@step` 段体），与现在的 `.toml` 口径
+# 不同、值必然对不上；迁移后还没真机复跑的条目会一直显示「待复核」，直到复跑后照抄 `--hash`。
+# 不要把哈希刷新成新形态来消掉这个提示：那会把「验证过的是旧形态」抹成「已验证」。
 #
 # 2026-11-09 初始化（#918）：44 份的日期与档位取自配方头注，不按措辞分档，一律「部分验证」。
 # 头注里的日期混着「改动日期」，只取最后一次真机验证那一条（如 vivo-V2547DA/recipe.py 记 10-28，
@@ -229,7 +233,7 @@ date = "2026-10-26"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
-body_hash = "34a76e1200676e9b"
+body_hash = "b551ba562e0f711c"
 
 # 头注没写日期：整轮记录在 docs/14-红米K70Pro实测.md（10-30 九段 235 秒、退出码 0）。
 ["xiaomi/23117RK66C/23117RK66C.toml"]
@@ -277,15 +281,15 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "b087a62e4649c68a"
 
-# 形态迁移于 #1263（vivo 转页面树）：以下 vivo 条目 key 改 .toml，body_hash 换成新形态的值，
-# 复核状态按等价证据（快照 + 投影）平移；用到 code= 兜底的在 verify_ledger 里显示待复核。
+# 形态迁移于 #1263（vivo 转页面树）：以下 vivo 条目 key 改 .toml，body_hash 保留迁移前那份的值
+# （旧算法，与现在的段体口径不同），所以在 verify_ledger 里显示「待复核」，直到真机复跑后照抄 --hash。
 ["vivo/V1986A/V1986A.toml"]
 build = "PD1986_A_8.21.29"
 date = "2026-10-30"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
-body_hash = "66ad74039836222a"
+body_hash = "51ac07656416aa3c"
 
 ["vivo/V2303A/V2303A.toml"]
 build = "CP2A.260605.016"
@@ -301,7 +305,7 @@ date = "2026-11-03"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
-body_hash = "038e7911e8fe0c91"
+body_hash = "7907243005a1039f"
 
 ["vivo/V2324HA/V2324HA.toml"]
 build = "PD2324J_A_16.2.13.1.W10"
@@ -309,7 +313,7 @@ date = "2026-10-27"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
-body_hash = "ce8aa12140a29ffe"
+body_hash = "e9ab1cbb2513cfac"
 
 ["vivo/V2361A/V2361A.toml"]
 build = "PD2361B_A_16.2.12.2.W10"
@@ -317,7 +321,7 @@ date = "2026-10-26"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
-body_hash = "65c6295a56ffe14a"
+body_hash = "6f85cca3ecd5ca48"
 
 ["vivo/V2417A/V2417A.toml"]
 build = "PD2417D_A_16.2.14.1.W10"
@@ -325,7 +329,7 @@ date = "2026-10-30"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
-body_hash = "ba2e77b6eca124bd"
+body_hash = "cc4ce8b6c5865f6b"
 
 # 头注没有日期，也没有同目录 README：这份只有入口约定，真机整段验证没有记录。
 ["vivo/V2545A/V2545A.toml"]
@@ -351,7 +355,7 @@ date = "2026-10-28"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
-body_hash = "0808524c8de5dcf2"
+body_hash = "b517012fc7a8fe99"
 
 ["vivo/V2547DA/V2547DA-android17.toml"]
 build = "PD2547D_A_17.1.10.2.W10"

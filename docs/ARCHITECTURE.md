@@ -33,6 +33,7 @@
 | `run.py` | 总入口：命令分派、退出码、设备信息、备份的存取 |
 | `fast.py` | 引擎出口：`Phone` 门面只做转发与组合；协作者都在 `tool/phone/`（下一张表），模块级名字仍从这里可 import（[ADR-0033](adr/0033-phone-phase-modules.md)） |
 | `recipe_loader.py` | 机型脚本的唯一装载入口：按路径转发到 `tool/catalog`（`.toml` 页面树），不再有 `.py` 脚本分支；`fast.execute`、`adapt.check_draft`、`tests/fixtures.load_recipe` 三处都走它（[ADR-0038](adr/0038-recipe-catalog.md)） |
+| `tool/catalog/` | 页面树的装载 + 校验 + 解释器（`loader.py` / `schema.py` / `interpreter.py`）：数据的唯一执行入口，校验器与解释器共用 `load()`，未知 kind 与多余键在装载期就报错；每段的段体包成 action 经 `Runtime.run_step` 执行，段归属不断。`recipe_loader.py` 把 `.toml` 转发到这里（[ADR-0038](adr/0038-recipe-catalog.md)） |
 | `recipe_runtime.py` | 这一次执行（`rt`）：段过滤、跳过/断言出口（`page` / `require_switches` / `skip_in_safe_mode` / `start_or_skip`）、安全模式、分段台账、失败段与中止、时钟、每机型常量与回读确认数；段包装在 `Runtime.run_step()`，数据段按声明顺序执行（[ADR-0038](adr/0038-recipe-catalog.md)、#1268） |
 | `recipe_kit.py` | 运行时名词的显式 re-export（`DONE` / `SkipStep` / `Runtime` 等）；`preamble()` / `@step` / 执行作用域都已删除（#1268） |
 | [recipe_lib/](../recipe_lib/) | 机型库（#1269）：按家族分文件（`<家族>.py`）+ 跨家族共享（`shared.py`），文件内分「词汇 / 策略」。实现都是普通函数收 `(p, rt, …)`，数据用 `lib` 按名字点名；同一个名字有几套实测走法时由 `rt.constants` 里的机型常量选（`GEAR_STYLE` / `BROWSER_FLOW` / `MENU_STYLE` 等），缺省档保留旧行为。归属按家族数算，守卫在 `tests/test_recipe_nav.py`（[ADR-0038](adr/0038-recipe-catalog.md)、#1269） |

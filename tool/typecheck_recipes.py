@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""跑一遍机型脚本的类型检查（#1247）：`recipes/*/*/recipe*.py` 逐份交给 mypy 的宽松档。
+"""跑一遍机型脚本的检查（#1247）：每个型号目录出一份活脚本，`.toml` 走 catalog 校验器，例外 `.py` 交 mypy。
 
-为什么不是一条 `mypy recipes`：43 份脚本都叫 `recipe.py`（另有 4 份版本变体），mypy 按
-basename 取模块名，一次扫多份会报 `Duplicate module named 'recipe'`；目录名
-（`xiaomi-M154FF`、`MEIZU 21 Pro`）也不是合法标识符，`--explicit-package-bases` 给不出唯一
-模块名。所以这里逐份起一次 mypy，
-每份单独成模块（模块名都叫 `recipe`，互不冲突）；`tool/` 走 `MYPYPATH` 当库目录，
-脚本末尾 `if TYPE_CHECKING:` 块里那些注入名由各注入面模块的 `__getattr__` 认得。
+为什么 `.py` 不是一条 `mypy recipes`：例外文件名有的不是合法标识符（`23049RAD8C`、`MEIZU 21 Pro`），
+mypy 按 basename 取模块名会直接报错；同一目录的变体（`PHK110.py` / `PHK110-android15.py`）也考不出
+唯一模块名。所以逐份起一次 mypy，每份单独成模块；`tool/` 走 `MYPYPATH` 当库目录，例外函数顶部的
+显式 import 因此解析得到。
+
+`.toml` 没有 Python 可查，改走 `tool/catalog` 的 schema 校验器：未知 kind、多余键、缺段这类错在这里
+就红，不必等装载或真机。
 
 范围与宽松档参数仍只在仓库根 `pyproject.toml` 的 `[tool.mypy]`：这一条只决定「怎么扫」，
 不决定「扫得严不严」。`recipes/` 不进严格档名单（判据见 `dev.types.narrow-scope-in-config`）。
@@ -14,6 +15,7 @@ basename 取模块名，一次扫多份会报 `Duplicate module named 'recipe'`�
 `gui/` 与 `tool/` 仍由不带参数的那条 `mypy` 负责；本脚本只管机型脚本。
 横传的参数原样交给每一次 mypy（例如 `--no-incremental`）。
 """
+
 import glob
 import os
 import subprocess
