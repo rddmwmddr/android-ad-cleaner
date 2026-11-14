@@ -65,10 +65,11 @@ class Arg:
 
 @dataclass(frozen=True)
 class Call:
-    """一个调用点。`injected` 指它调的是执行作用域里的名字（裸名或 `g["X"]`），不是 `p.…` 这类属性。
+    """一个调用点。`injected` 指它是按名字写的调用（裸名、`X.n(…)`，或历史写法 `g["X"]`），
+    不是 `p.…` 这类属性调用；事实层用它把库 / 本机函数与设备门面方法分开。
 
-    `module` 是这个名字的归属模块：脚本 `from X import n` 与 `X.n(…)` 两种写法都记成 `X`；
-    裸名字没有 import、或实现里 `g["X"]` 现取的那种没有归属，记空串（#1243）。
+    `module` 是这个名字的归属模块：`import X` 后的 `X.n(…)` 与 `from X import n` 都记成 `X`；
+    裸名字没有 import 时记空串。
 
     实参先按位置排，再排关键字实参；`keyword` 为 None 的才是位置实参。"""
     name: str

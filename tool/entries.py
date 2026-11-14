@@ -372,16 +372,13 @@ def used_by(recipes_dir):
     `am start -a <action> -p <包名>` 这类公开 Intent 入口单记一档（#956）；
     经 `open_app_settings(包名, 页面, …)` 打开的那一类同样是直达（它包着 APP_SETTINGS 的 Intent）。
 
-    搬进注入面（`tool/recipe_nav.py` 与 `tool/recipe_steps.py`）的实现，入口写在实现里、脚本只剩
-    一行调用：脚本导入了哪个注入名，就把那份实现也扫一遍，否则「用过的机型」会静默漏掉（沿用 #1153 的做法）。
-    归属跟脚本的 import 走（#1243）：`from recipe_nav import gear` 只解析 `NAV` 里那份、
-    `from recipe_steps import store` 只解析 `STEPS` 里那份，三张表不按名字合并。
-    实现里再调别的注入名也照着往下扫：段体调 `browser_settings_direct`，入口写在第二层，只看脚本
-    那一层会把调段体的机型漏掉（沿用 #1212）。实现自己没有导入头、共享名从执行作用域按名字现取，
-    所以那一层按名字在三张表里找。
+    共享实现（`tool/recipe_nav.py` / `tool/recipe_strategies.py` / `tool/recipe_steps.py`）里的入口
+    也要算到调用它的机型：脚本本身或实现里按名字调用库函数时，事实层按 `Call.module` 逐层往下扫，
+    否则「用过的机型」会静默漏掉（沿用 #1153、#1212）。实现之间是普通函数调用（同模块裸名 /
+    跨模块 `nav.x`），不再有 import 归属表。
     包名这类实参仍在脚本里（`app_settings(MARKET)`），形参在实现里，按位置把两侧合起来才还原得出
-    包名（沿用 #1154 的做法）；段体按名字取的模块常量以 `externals` 交回去（#1209）。定义了本地
-    同名实现的脚本走本地那份，不扫注入版（`injected_calls()` 判这一条，深浅两层同判）。
+    包名（沿用 #1154 的做法）；模块常量以 `externals` 交回去——实现里写成 `rt.constants['X']`（#1209）。
+    脚本本地同名定义优先，不扫库版。
 
     命令串只从调用的实参里取：变量、拼接与模板常量都还原得到，没被任何调用引用的字符串常量不算
     出处；语法错的脚本经事实层直接抛 `SyntaxError`，不再静默少算（沿用 #1195 的口径）。

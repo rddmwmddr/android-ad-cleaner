@@ -21,8 +21,7 @@ __all__ = ("ad_tracking_close_all", "assistant_advice_rows", "assistant_advice_s
 
 
 def __getattr__(name: str) -> Any:
-    """注入名在类型层面可见（#1247）：脚本 `if TYPE_CHECKING:` 块里的 import 落到这里。
-    运行时这些名字住在执行作用域，模块上没有对应属性，照旧抛 AttributeError。"""
+    """模块没有这个名字时照旧抛 AttributeError（库实现都是模块里的真实函数，不是运行期注入）。"""
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -311,7 +310,7 @@ def browser_personalized(p, rt):
 #
 # 这一对走 ColorOS 17 的直达档：设置页有公开 Intent，`open_page` 落地后按具名行往下点，
 # 不经过「我的」与齿轮。段体里的 `read_switches` / `close_named` / `require_installed` /
-# `hide_carousel` 都是这两份脚本自己的 helper，按执行作用域现取。
+# `hide_carousel` 是库函数或这两份脚本自己的 helper，按普通函数调用。
 
 def assistant_screen(p, rt):
     from fast import ScreenLocked
@@ -499,9 +498,9 @@ def assistant_advice_search(p, rt):
 
 # ---------- vivo（#1211）----------
 #
-# `settings_home` / `browser_settings` / `maybe` 都住在执行作用域里，按 `g` 现取；`time` 同理——
-# 测试装载时它是假钟，内联 `import time` 会让等待变回真实睡眠。段体无形参，机型差异只能是
-# 另一份实现：「系统广告」两簇一个用 `or` 认「安全 / 安全与隐私」两种叫法、一个直接串联，各占一个名字。
+# `settings_home` / `browser_settings` / `maybe` 都是库函数（跨模块 `nav.x` 或同模块裸名）；
+# 等待走 `rt.clock`——测试装载时它是假钟，别内联 `time.sleep`，否则等待变回真实睡眠。段体无形参，
+# 机型差异只能是另一份实现：「系统广告」两簇一个用 `or` 认「安全 / 安全与隐私」两种叫法、一个直接串联，各占一个名字。
 
 def browser_recommendations(p, rt):
     """浏览器设置页几处推荐开关。没有右上菜单按钮的机型整段跳过。"""

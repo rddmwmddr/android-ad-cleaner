@@ -41,8 +41,7 @@ SHARED = frozenset({"tap", "opened", "my_tab", "tap_text", "goto", "browser_sett
 
 
 def __getattr__(name: str) -> Any:
-    """注入名在类型层面可见（#1247）：脚本 `if TYPE_CHECKING:` 块里的 import 落到这里。
-    运行时这些名字住在执行作用域，模块上没有对应属性，照旧抛 AttributeError。"""
+    """模块没有这个名字时照旧抛 AttributeError（库实现都是模块里的真实函数，不是运行期注入）。"""
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -849,7 +848,7 @@ def _vivo_read_switches_style(p, rt, max_screens=1):
 # ---------- OPPO 家族：导航与词汇（沿用 #1153、#1154、#1245）----------
 #
 # ColorOS 脚本共用的导航过程。`SEARCH_TITLES` 仍是脚本侧的东西：PLP120 的搜索页标题名单比
-# 一加两台长，闭包从执行作用域现取、注入版不替它判断。
+# 一加两台长，从 `rt.constants['SEARCH_TITLES']` 取，库不替它判断。
 #
 # 同一个注入名在这个家族里有几套结构不同的实测走法时，各占一档、脚本用模块常量选（`_style()`，
 # 与小米系同一份）：`WAIT_PAGE_STYLE` / `TAP_PAGE_STYLE` / `TAP_STYLE` / `OPEN_SETTINGS_STYLE` /
@@ -1629,8 +1628,7 @@ def store_privacy(p, rt):
 #
 # `assistant_settings` 与 `at_assistant` / `assistant_icon` 的常量与下一步由脚本侧给出：
 # 两份脚本各有一份同名的本地 `tap_page`（#1245 起走 `TAP_PAGE_STYLE` 的 raise 档）。`row` 与
-# `carousel_choices` 的 `bounds` 同样按执行作用域取，两份 PLG/PMA 脚本的 `from fast import …`
-# 因此要留着（`bounds` 唯一的读者是注入版）。
+# `carousel_choices` 用库自己 `from row import bounds` 的那份，不再从脚本取。
 
 def row(p, rt, text, title=None, package=None, activity=None, scrolls=8, tries=1):
     """只点具名导航行，避免点隐私页的过度授权横幅；坐标来自当前节点。
@@ -1921,9 +1919,9 @@ def _honor_app_settings(p, rt, package, *markers):
 # `recipe_strategies`，它按 `g["assert_no_other_window"]` 取这里留下的那个助手。
 
 def _meizu_wait_page(p, rt, activity, title, timeout=8):
-    """等页面认得出，顺手记下目标包名给同脚本的其它助手用（Flyme 的 `TARGET_PACKAGE` 约定）。
+    """等页面认得出，顺手记下落到的包名给同脚本的其它助手用（Flyme 的 `TARGET_PACKAGE` 约定）。
 
-    `TARGET_PACKAGE` 是脚本的模块常量，所以写回执行作用域，脚本里按裸名字读的助手照旧看得到。"""
+    落到的包名写到 `rt.target`，同脚本的 `tap_id` 从那里读。"""
     deadline = rt.clock.monotonic() + timeout
     while rt.clock.monotonic() < deadline:
         rt.require(not p.locked(), "手机锁屏，请机主解锁")
@@ -2034,8 +2032,7 @@ def _meizu_close_named(p, rt, names, page, activity):
 # honor-WKL-AN20 的 `scrolls=6` 签名仍不同，留本地覆盖。
 #
 # `opened`：试一条直达页面、不通就走菜单。vivo V2547DA 的 Android 17 变体与小米 M154FF /
-# M332BF 三份逐字相同，意图也一致，所以共用一个注入名。脚本侧的 `import adb_link` 要留着：
-# 闭包从执行作用域取它，删掉这行 import 就是 AttributeError。
+# M332BF 三份逐字相同，意图也一致，所以共用一个实现。库实现直接 `import adb_link`。
 
 def tap(p, rt, name, scrolls=None):
     def require_style(name, scrolls=4):
@@ -2141,7 +2138,7 @@ def browser_settings(p, rt):
         """直达设置页后只认已识别的子页，不从旧子页或数据页继续（PMA110）。
 
         直达入口可能复用旧子页；只从已识别的浏览器设置子页返回，不清数据或历史。
-        命令串按执行作用域的 `BROWSER` 拼：这一档的入口只属于这台机，事实层按调用方的常量
+        命令串按 `rt.constants['BROWSER_PREFS']` 拼：这一档的入口只属于这台机，事实层按调用方的常量
         还原，别的家族导入同一个 `browser_settings` 时读不出这条入口（#1245）。"""
         result = p.d.shell("am start -n " + rt.constants['BROWSER_PREFS'])
         rt.require(not result.exit_code and "Error" not in result.output, "浏览器设置未打开")
@@ -2158,7 +2155,7 @@ def browser_settings(p, rt):
     def prefs_start_flow():
         """用 `p.start` 拉设置页后逐帧核对前台，落在子页就退回（PMX110）。
 
-        包名同样从执行作用域取（PMX110 的 `BROWSER_PKG`），理由与上一档相同。"""
+        包名从 `rt.constants['BROWSER_PKG']` 取（PMX110），理由与上一档相同。"""
         p.start(rt.constants['BROWSER_PKG'], ".settings.component.BrowserPreferencesPage")
         for _ in range(4):
             p.await_page()
@@ -2202,7 +2199,7 @@ def browser_settings(p, rt):
             "vivo_menu": vivo_menu_flow}[flow]()
 
 
-# ---------- 本机助手（原先由例外 `.py` 经执行作用域提供，注入面拆除后收进库里）----------
+# ---------- 本机助手（原先住例外 `.py`，注入面拆除后成为库函数）----------
 
 def maybe(p, rt, name, scrolls=6):
     """入口可选：`p.entry` 的薄封装，返回成没成。"""

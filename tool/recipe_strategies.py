@@ -29,8 +29,7 @@ SHARED = frozenset()
 
 
 def __getattr__(name: str) -> Any:
-    """注入名在类型层面可见（#1247）：脚本 `if TYPE_CHECKING:` 块里的 import 落到这里。
-    运行时这些名字住在执行作用域，模块上没有对应属性，照旧抛 AttributeError。"""
+    """模块没有这个名字时照旧抛 AttributeError（库实现都是模块里的真实函数，不是运行期注入）。"""
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -744,8 +743,8 @@ def close_named_honor(p, rt, names, title, package, marker, max_screens=6, drawn
 
 # ---------- 魅族（#1253）----------
 #
-# 只有 `safe_switches` 这一档：读开关前先确认没换页、没有别的窗口压在上面。判据里那两件事由脚本的
-# `assert_no_other_window` 与 `TARGET_PACKAGE` 约定给出，仍留在脚本，这里按名字从执行作用域取。
+# 只有 `safe_switches` 这一档：读开关前先确认没换页、没有别的窗口压在上面。判据里那两件事由
+# 库里的 `assert_no_other_window` 与 `rt.target` 给出。
 
 def safe_switches(p, rt, activity):
     rt.require(p.focus() == activity, "页面已变化，停止本段")

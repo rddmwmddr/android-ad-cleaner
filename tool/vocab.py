@@ -317,6 +317,7 @@ def scan(recipes_dir, injected=None, strategies=None):
 
 
 def _dedupe_calls(calls):
+    """同一实现经多条调用链被扫到时按 `(script, line, text)` 去重；同一行不同文本仍各记一条。"""
     seen, kept = set(), []
     for call in calls:
         key = (call.script, call.line, call.text)

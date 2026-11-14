@@ -3,9 +3,8 @@
 机型脚本只拿两个协作者：`p`（设备面，公开面冻结）与 `rt`（这一次执行）。台账由引擎写、脚本只读；
 脚本要表达「回读确认了几项」只能调 `rt.confirm()`，不能自己累加（沿用 #838 的台账，#1241 把计数收进 rt）。
 
-段包装从 `recipe_kit.preamble()` 搬到这里（ADR-0037）：`@step` 现在只登记段名并原样返回函数，
-装载器按定义行号排序、由 `Runtime.run()` 逐段执行；顺序与「导入即执行」那一版相同，行为判据是
-47 份脚本的调用序列快照（`tests/snapshots/recipe_calls/`）。
+段包装在 `Runtime.run_step()`：解释器把数据段包成 action、按声明顺序执行，顺序与旧脚本相同；
+行为判据是 47 份数据的调用序列快照（`tests/snapshots/recipe_calls/`）。
 """
 import re
 import time
@@ -75,11 +74,10 @@ class Active:
 
 
 class Counter:
-    """注入到执行作用域的 `VERIFIED_SWITCHES`：`+=` 就是 `rt.confirm()`，读出来是 rt 上的数。
+    """回读确认计数器（`rt.counter`）：`+=` 就是 `rt.confirm()`，读出来是 rt 上的数。
 
-    两段脚本（oppo-PLG110 / PMA110）的 `+=` 写在段体里，段体正文一个字都不能动（台账哈希
-    的判据）。给它们一个引擎写的计数器，`VERIFIED_SWITCHES += n` 因此仍经 rt 记账，而不是
-    在脚本里留一份自己的数。其余脚本的模块级助手直接调 `rt.confirm(n)`。
+    老脚本用 `VERIFIED_SWITCHES += n` 记账的那两段（oppo-PLG110 / PMA110），`+=` 仍经 rt 记账，
+    而不是在脚本里留一份自己的数；其余地方直接调 `rt.confirm(n)`。
     """
 
     def __init__(self, rt):
