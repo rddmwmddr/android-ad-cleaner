@@ -1,25 +1,18 @@
-"""机型脚本的拨动策略注入面（#1244）：把一页开关关掉的算法收在这里。
+"""机型脚本的拨动策略库（#1244）：把一页开关关掉的算法收在这里。
 
-与 `recipe_nav` / `recipe_steps` 同一形状、同一方向：工厂收 `(p, g)`，只造闭包、不碰手机；
-`recipe_kit.preamble()` 写完生命周期、台账与导航助手之后调 `install(p, g)`，把策略补进同一个
-执行作用域。脚本侧只留调用点，前导名字（`require` / `require_switches` / `rt` 等）一律按 `g` 现取，
-本模块不 import `recipe_kit`。
+与 `recipe_nav` / `recipe_steps` 同一形状：普通函数收 `(p, rt, …)`，只下发设备动作，不碰数据解释。
+同模块直接调用；跨模块用 `import recipe_nav as nav` 在运行期取属性。数据用 `lib` 按名字点名。
 
-归属：同一家族 ≥2 机型使用的进家族分节，跨 ≥2 家族使用的进「跨家族」，只是字面量不同的参数化后
+归属：同一家族 ≥2 机型使用的进家族分节，跨 ≥2 家族使用的进「跨家族」，只是字面量不同时参数化后
 共用一份；别把只有该家族用的实现挪进「跨家族」。导航、入口、选择器与等待归 `recipe_nav`，段体归
-`recipe_steps`——这里只放「怎么把开关关掉」那一类（精确匹配、逐行重读、整页全关、父子项、
-短按被吞、标题在行外、标题随状态变）。同一个注入名在家族里有几套走法、由脚本常量选的
-（`read_switches` / `close_named` / `hide_carousel`），分派表跟着名字住在 `recipe_nav`：一张表
-一个名字，跨模块分派会把两张注入面绕在一起（沿用 #1245）。带 `p.off(only=…)` / `keep=…` 现场的也收
-这里（#1253）：词库（`vocab.py`）除了段体表也扫这一张表，`recipe_source.strategy_sources()` 由
-脚本的 import 决定扫哪几份，现场跟着实现走、读数不变。
+`recipe_steps`——这里只放「怎么把开关关掉」那一类（精确匹配、逐行重读、整页全关、父子项、短按被吞、
+标题在行外、标题随状态变）。同一个名字在家族里有几套走法、由 `rt.constants` 里的机型常量选的
+（`read_switches` / `close_named` / `hide_carousel`），分派表跟着名字住在 `recipe_nav`。
 
-事实层按脚本的 import 解析到本模块的 `STRATEGIES` 表（`recipe_source.SURFACE`，沿用 #1243）：
-脚本写 `from recipe_strategies import close_with_plain_tap`，词库与入口速查才扫得到实现。
-注入名在本模块内必须唯一（表是扁平的）；`preamble()` 先装 `recipe_nav`、再装这里，同名会盖掉
-nav 那几档，所以 nav 已有的名字（`close_named` / `off_exact` / `read_switches`）在这里一律带后缀。
+带 `p.off(only=…)` / `keep=…` 现场的也收这里（#1253）：词库（`vocab.py`）扫本模块的实现源码取开关名，
+`recipe_source.library_sources()` 按 `__all__` 给出实现；不再按脚本 import 解析归属。
 
-文内按家族分节，`install()` 落在最后。
+文内按家族分节。
 """
 
 import recipe_nav as nav

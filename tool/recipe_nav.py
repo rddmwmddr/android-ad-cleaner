@@ -1,30 +1,19 @@
-"""机型脚本的公共导航助手（沿用 #1150、#1244）：入口、选择器、等待与落点确认收在这里。
+"""机型脚本的公共导航库（沿用 #1150、#1244）：入口、选择器、等待与落点确认收在这里。
 
-`recipe_kit.preamble()` 写完生命周期与台账之后调用 `install(p, g)`，把公共导航补进同一个
-执行作用域；拨动策略另住 `recipe_strategies`，段体另住 `recipe_steps`。三张表都按名字写进
-同一个作用域，脚本侧只留调用点。
-
-实现不 import `recipe_kit`：`skip` / `require` 这类前导名字由工厂从 `g` 取、包进闭包，
-两个模块因此没有依赖关系（方向只有 `preamble()` → `install()` 这一条）。
+实现是普通函数，收 `(p, rt, …)`：`p` 是设备面，`rt` 是这次执行（`constants` / `clock` / 跳过与断言
+出口）。同模块直接调用；跨模块用 `import recipe_strategies as strategies` 在运行期取属性，避开
+`nav ↔ strategies` 的循环 import。数据用 `lib` 按名字点名，解释器查 `tool/catalog/interpreter.py`
+的 `LIBRARY`；例外 `.py` 与库实现之间是普通 import。
 
 同一个名字在一个家族里有几套结构不同的实测走法时，各占一档（如 `gear` 的 icon / checked / text），
-由脚本的模块常量选（`_style()`）；缺省一档是多数机型那一套。只有字面量不同的参数化后共用一份。
-未迁移的家族仍是老规矩：脚本本地同名定义后执行、覆盖注入版，同名但代码不同的是机型知识。
-实现体与被搬走的脚本副本代码逐字相同：守卫把工厂里返回的函数源码与脚本里还留着的本地定义
-都折成 AST（剥注释、docstring、折行）后比对，改一边不改另一边即红（tests/test_recipe_nav.py）。
-`g["X"]` 现取与随之消失的 `global X` 是搬动本身带来的改写，比对前由守卫折算掉。
+由 `rt.constants` 里的机型常量选（`_style()`，缺省一档是多数机型那一套）；只有字面量不同的参数化后
+共用一份。
 
-闭包对名字一律按 `g` 现取（包括 `g["time"]`）：脚本原来是在自己的全局里解析这些名字，换到
-这个模块后仍取当次执行作用域里的那一个，测试装的假时钟才照旧生效。
+本机助手 `settle_page` / `labels` / `no_agreement` / `assert_no_other_window` / `title_key` /
+`_labelled` / `MenuState` 在注入面拆除时从例外 `.py` 提升到这里，按同一名字导出；#1269 按家族归位。
 
-文件内按家族分节：小米系 / vivo / OPPO（导航与词汇、两大对、策略分派各一节）/ 荣耀 / 魅族 /
-其余·跨家族，名字被两个家族占用的那一处（`browser_settings`）另有一节分派，`install()` 落在最后。
-荣耀与魅族只有三份与一份脚本（#1246）：这两节只收「注入名已经住在共享库、别家也在用」的实现，
-各占一档；只服务一台机的辅助留在脚本里。OPPO 那一族的走法常量最多（`WAIT_PAGE_STYLE` /
-`TAP_PAGE_STYLE` / `TAP_STYLE` / `OPEN_SETTINGS_STYLE` / `SEARCH_SETTINGS_STYLE` /
-`OPEN_PAGE_STYLE` / `APP_SETTINGS_STYLE` / `SYSTEM_SETTINGS_STYLE` / `SETTINGS_PAGE_STYLE` /
-`READ_SWITCHES_STYLE` / `CLOSE_NAMED_STYLE` / `HIDE_CAROUSEL_STYLE`），`read_switches` /
-`close_named` 两档也住这一节：一张表一个名字，跨模块分派会把两张注入面绕在一起。
+文件内按家族分节：小米系 / vivo / OPPO / 荣耀 / 魅族 / 其余·跨家族；名字被两个家族占用的那一处
+（`browser_settings`）另有一节分派。
 """
 
 import functools

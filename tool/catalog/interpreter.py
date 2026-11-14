@@ -7,9 +7,8 @@
 `p.entry()` / `p.start()`（内部都是 `wait.until`），入口回落走 `entries.reach`（经库保留）。解释器
 只把「该调哪个 p 方法、带哪些实参」按数据的书写顺序发出去，不碰这些算法本身。
 
-复用注入面：迁移期 `settings_home` / `my_tab` / `tap_row` / `off_one` 等仍是 `NAV` / `STEPS` /
-`STRATEGIES` 的工厂 `(p, g) -> closure`。装载器已经把 `g` 喂给 `recipe_kit.preamble()`，`lib` /
-`require_lib` 就按名字从 `g` 里取那份闭包直接调——调用序列因此与旧脚本逐条相同。
+库调用按名字解析：`lib` / `require_lib` / `if_lib` / `return_lib` 查本模块的 `LIBRARY`（三个库的
+`__all__`），查不到再查本机例外命名空间；实现是普通函数，收 `(p, rt, …)`，调用序列与旧脚本逐条相同。
 """
 from collections.abc import Callable, Mapping
 from typing import Any
