@@ -11,8 +11,9 @@ gui/dist/
 gui/ChineseSimplified.isl
 发布/
 recipes/zztest-*/
-# 运行日志按型号目录落（`recipes/<家族>/<型号>/`，#1261 之后）
+# 运行日志：新布局 `recipes/<家族>/<型号>/`（#1261 之后），旧布局的残留目录也留一条
 recipes/*/*/run-log.txt
+recipes/*/run-log.txt
 # 本机私有：运维记录、服务端部署代码
 CLAUDE.local.md
 .private/
