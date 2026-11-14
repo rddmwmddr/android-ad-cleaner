@@ -50,7 +50,7 @@ code = "step_theme"
 name = "视频"
 ops = [
   {kind = "start", pkg = "com.hihonor.youku.video", activity = "com.youku.android.youkusetting.activity.SettingsActivity"},
-  {kind = "code", name = "no_agreement", args = ["视频"]},
+  {kind = "lib", name = "no_agreement", args = ["视频"]},
   {kind = "lib", name = "enter", args = ["其他设置"]},
   {kind = "off", only = ["个性化内容", "个性化广告", "允许视频采集OAID推荐广告"], page = "视频·其他设置"},
   {kind = "back", n = 2},

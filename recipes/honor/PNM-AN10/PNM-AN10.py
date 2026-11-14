@@ -4,17 +4,14 @@
 import adb_link
 import time
 from fast import ScreenLocked
+import recipe_nav as nav
+from recipe_runtime import SkipStep
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import SkipStep, p, rt, skip_in_safe_mode
-    from recipe_nav import browser_settings, open_settings
-    from recipe_strategies import baidu_browser
 
 BUILD = ""
 MODELS = ["PNM-AN10"]
 
-def dismiss(*words):
+def dismiss(p, rt, *words):
     """开 App 时的推荐弹窗/协议弹窗：一律点「取消/以后再说/禁止」，不替用户同意。"""
     for _ in range(3):
         tx = {t for t, _, _ in p.texts()}
@@ -27,11 +24,11 @@ def dismiss(*words):
 NO = ("取消", "以后再说", "禁止", "暂不", "跳过", "我知道了")
 
 
-def dismiss_no():
-    dismiss(*NO)
+def dismiss_no(p, rt):
+    dismiss(p, rt, *NO)
 
 
-def open_entry(text, scrolls=0):
+def open_entry(p, rt, text, scrolls=0):
     """点开会换页的菜单项，点不进去就记下停在哪一页并跳过本段。断线与锁屏照常上抛。"""
     try:
         p.enter(text, scrolls=scrolls)
@@ -45,7 +42,7 @@ def open_entry(text, scrolls=0):
 
 
 def step_ad_tracking(p, rt):
-    skip_in_safe_mode()
+    rt.skip_in_safe_mode()
     try:
         p.start("com.hihonor.id", ".oaid.ui.AdvertisingPrivacyActivity", expect="应用广告跟踪管理")
     except (adb_link.DeviceLost, ScreenLocked, SkipStep):
@@ -116,7 +113,7 @@ def step_market(p, rt):
     if p.find("基本服务", exact=True, edge_ok="tab") and not p.find("我的", exact=True, edge_ok="tab"):
         print("  已是基本服务模式（没有推荐、没有设置入口），跳过"); return
     p.tap("我的", exact=True, scrolls=0)
-    dismiss(*NO)
+    dismiss(p, rt, *NO)
     p.tap("设置", exact=True, scrolls=0)
     p.tap("内容推荐服务", exact=True)
     p.off(only=["营销服务推荐"], page="市场·内容推荐服务")
@@ -135,7 +132,7 @@ def step_market(p, rt):
 
 
 def step_browser(p, rt):
-    if browser_settings() is False:
+    if nav.browser_settings(p, rt) is False:
         return
     p.tap("模式选择", exact=True)
     p.tap("简洁首页", exact=True, scrolls=0)
@@ -153,13 +150,13 @@ def step_browser(p, rt):
 
 
 def step_theme(p, rt):
-    skip_in_safe_mode()
+    rt.skip_in_safe_mode()
     p.start("com.hihonor.android.thememanager")
     p.dismiss()
     if not p.tab("我的"):
         p.tap("我的", exact=True, scrolls=0)
     p.dismiss()
-    if not open_settings(("个性化服务", "通知")):
+    if not nav.open_settings(p, rt, ("个性化服务", "通知")):
         p.note_miss("设置")
         return
     p.enter("通知")
@@ -176,12 +173,12 @@ def step_music(p, rt):
     time.sleep(1); p.dismiss()
     p.d(text="我的").click(); time.sleep(1); p.dismiss()
     p.d(resourceId="com.hihonor.cloudmusic:id/ic_setting").click(); time.sleep(1.2)
-    if not open_entry("更多设置"):
+    if not open_entry(p, rt, "更多设置"):
         return
-    if not open_entry("消息和隐私设置", scrolls=6):
+    if not open_entry(p, rt, "消息和隐私设置", scrolls=6):
         return
     p.off(only=["朋友页显示推荐动态"], page="音乐·消息和隐私")
-    if not open_entry("第三方推送服务开关", scrolls=6):
+    if not open_entry(p, rt, "第三方推送服务开关", scrolls=6):
         return
     p.off(page="音乐·第三方推送（活动、中奖信息）")
     p.back(3)

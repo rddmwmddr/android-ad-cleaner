@@ -50,7 +50,7 @@ ops = [
   {kind = "code", name = "open_app", args = ["com.meizu.mstore", "我的"]},
   {kind = "lib", name = "wait_page", args = ["com.meizu.mstore/com.meizu.flyme.appcenter.activitys.AppMainActivity", "我的"]},
   {kind = "require_unlocked", miss_print = "手机锁屏，请机主解锁"},
-  {kind = "code", name = "assert_no_other_window", args = [{expr = "tree"}, "com.meizu.mstore"]},
+  {kind = "lib", name = "assert_no_other_window", args = [{expr = "tree"}, "com.meizu.mstore"]},
   {kind = "require_tab", name = "我的", miss_print = "应用商店底部没有「我的」标签"},
   {kind = "lib", name = "wait_page", args = ["com.meizu.mstore/com.meizu.flyme.appcenter.activitys.AppMainActivity", "设置"]},
   {kind = "lib", name = "goto", args = ["设置", "com.meizu.mstore/com.meizu.flyme.appcenter.activitys.AppSettingsPreferenceActivity", "应用更新通知"]},

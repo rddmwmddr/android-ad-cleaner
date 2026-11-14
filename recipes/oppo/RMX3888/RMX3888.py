@@ -5,11 +5,9 @@ import time
 
 import adb_link
 from fast import ScreenLocked
+import recipe_nav as nav
+from recipe_runtime import SkipStep
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import SkipStep, maybe, p, page, skip, skip_in_safe_mode
-    from recipe_nav import has_row, settings_page, store_privacy
 
 BUILD = "RMX3888_15.0.0.420"
 MODELS = ["RMX3888"]
@@ -45,17 +43,17 @@ def step_negative_screen(p, rt):
             break
     if not entered:
         raise RuntimeError("右滑没进负一屏（速览），本段没做成")
-    if not maybe("我的") and not maybe("头像"):
+    if not nav.maybe(p, rt, "我的") and not nav.maybe(p, rt, "头像"):
         raise RuntimeError("负一屏里没找到「我的」或头像入口")
     if not p.tap("设置", exact=True, scrolls=0):
         raise RuntimeError("负一屏没有设置入口")
     if not p.in_settings_page():
         raise RuntimeError("负一屏的设置页没有打开")
-    has_tips = has_row("搜索框提示词")
-    has_service = has_row("推荐服务")
+    has_tips = nav.has_row(p, rt, "搜索框提示词")
+    has_service = nav.has_row(p, rt, "推荐服务")
     if not (has_tips or has_service):
         p.back(2)
-        skip("本机这一层没有「推荐服务」与「搜索框提示词」，没有可关的推荐位")
+        rt.skip("本机这一层没有「推荐服务」与「搜索框提示词」，没有可关的推荐位")
     p.top(3)                 # 探测时翻过页；关开关要从页顶往下读
     if has_tips:
         p.off(only=["搜索框提示词"], page="负一屏")
@@ -81,14 +79,14 @@ def step_store(p, rt):
     time.sleep(1.0)
     if not p.tap("设置", exact=True, scrolls=0):
         raise RuntimeError("商店「我的」页没找到「设置」")
-    page("设置", MARKET, "SettingActivity")
+    rt.page("设置", MARKET, "SettingActivity")
     if p.tap("服务管理", exact=True):
         p.off(keep=STORE_KEEP, page="商店·服务管理")
         p.back()
     # 个性化推荐是入口行，开关在下一层的 PersonalRecommendActivity，不是就地开关。
-    if store_privacy():
+    if nav.store_privacy(p, rt):
         if p.tap("个性化推荐", exact=True):
-            page("个性化推荐", MARKET, "PersonalRecommendActivity")
+            rt.page("个性化推荐", MARKET, "PersonalRecommendActivity")
             p.off(only=["个性化推荐"], page="商店·个性化推荐")
             p.back()
         else:
@@ -110,7 +108,7 @@ def step_theme(p, rt):
     except RuntimeError as error:
         if "无法打开" not in str(error):
             raise
-        skip(f"主题商店（{THEME}）没有启动界面，本机做不了这一段")
+        rt.skip(f"主题商店（{THEME}）没有启动界面，本机做不了这一段")
     p.go("我的", "设置")
     p.tap("设置", exact=True, scrolls=0)
     if p.tap("服务管理", exact=True):

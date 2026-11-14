@@ -8,12 +8,10 @@
 迁移期库仍是工厂闭包）、按段登记 action。真正的执行在 `LoadedCatalog.run()` 里，段一律经
 `Runtime.run_step`，段归属不断。
 """
-import time
 import tomllib
 from pathlib import Path
 from types import MappingProxyType
 
-import recipe_kit
 import recipe_runtime
 from recipe_runtime import Step
 
@@ -98,11 +96,9 @@ def load(path, p, only=(), clock=None, namespace=None) -> LoadedCatalog:
     schema.validate(data)
 
     rt = recipe_runtime.Runtime(p, list(only), clock)
+    # 例外函数的模块命名空间：装载器只往里 exec 本机代码，不注入 p / rt / 常量——那是注入面。
     g: dict = CatalogScope(namespace or {}, rt=rt)
-    g["time"] = clock or time
-    g.update(data.get("const", {}))
     rt.namespace = g
-    recipe_kit.preamble(p, g, rt)
 
     exception = _exception_source(toml)
     if exception is not None:
@@ -120,5 +116,5 @@ def load(path, p, only=(), clock=None, namespace=None) -> LoadedCatalog:
             g[hook] = g[data[hook]]
 
     for index, segment in enumerate(data["segment"]):
-        rt.steps.append(Step(segment["name"], interpreter.segment_action(segment, g), index))
+        rt.steps.append(Step(segment["name"], interpreter.segment_action(segment, p, rt, g), index))
     return LoadedCatalog(str(toml), g, rt)

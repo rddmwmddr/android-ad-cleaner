@@ -2,10 +2,6 @@
 # 只剩负一屏：滑动循环 + 先探测是否已在速览 + 轮播单选的 checked 状态重查，是真正的状态机。
 import time
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import p, rt
-
 
 BUILD = "PLR110_17.0.0.101"
 

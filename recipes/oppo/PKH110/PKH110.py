@@ -2,12 +2,9 @@
 # 共享库的 tap_page / close_titles / off_exact_paged_optional 与 require / skip 由装载器注入执行作用域。
 # 段体的条件分支、逐项精确标题与等待循环留下，逐字保留原实现；线性的两段已转成数据。
 import time
+import recipe_nav as nav
+import recipe_strategies as strategies
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import p, rt, skip, skip_in_safe_mode
-    from recipe_nav import browser_settings_direct, open_search_settings, tap_page
-    from recipe_strategies import close_titles, off_exact_paged_optional
 
 BUILD = "PKH110_17.0.0.103"
 MODELS = ["PKH110"]
@@ -25,29 +22,28 @@ STORE_PROMOTIONS = [
 
 # 段体（store_promotions）按 `g["off_exact"]` 取这个钩子，实现住在 recipe_strategies 的
 # `off_exact_paged_optional`（本机「未找到」不算失败），这里绑回旧名字（#1253）。
-off_exact = off_exact_paged_optional
 
 
 def guard(p, rt):
     model = p.d.shell("getprop ro.product.model").output.strip()
     build = p.d.shell("getprop ro.build.display.id").output.strip()
     if model not in MODELS or not build.startswith(BUILD):
-        skip("型号或系统版本不同，跳过；请重新核对页面")
+        rt.skip("型号或系统版本不同，跳过；请重新核对页面")
 
 
 def step_ad_tracking(p, rt):
     # ColorOS 17：「隐私」已并入「隐私与安全」。设置搜索能搜到「设备标识与广告」但点搜索结果不跳转，
     # 因此走面板路径；该页 Activity 为 OplusSettingsActivity$DevicesIdentifySettingsActivity。
-    skip_in_safe_mode()
+    rt.skip_in_safe_mode()
     p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
     time.sleep(1.5)
     if not p.tap("隐私与安全", scrolls=3):
         print("  ✗ 没找到「隐私与安全」")
         return False
     time.sleep(1.5)
-    if not tap_page("设备标识与广告", "DevicesIdentifySettingsActivity", "设备标识与广告"):
+    if not nav.tap_page(p, rt, "设备标识与广告", "DevicesIdentifySettingsActivity", "设备标识与广告"):
         return False
-    if not tap_page("广告跟踪", "OAIDActivity", "广告跟踪"):
+    if not nav.tap_page(p, rt, "广告跟踪", "OAIDActivity", "广告跟踪"):
         return False
     # 等应用列表真正加载，不能把只有标题的空白加载页视为完成。
     for _ in range(30):
@@ -63,24 +59,24 @@ def step_ad_tracking(p, rt):
 
 
 def step_browser_ads(p, rt):
-    if not browser_settings_direct():
+    if not nav.browser_settings_direct(p, rt):
         return False
     activity = "com.heytap.browser.settings.component.BrowserPreferenceActivity"
-    if not tap_page("隐私", activity, "隐私") or not tap_page("广告管理", activity, "广告管理"):
+    if not nav.tap_page(p, rt, "隐私", activity, "隐私") or not nav.tap_page(p, rt, "广告管理", activity, "广告管理"):
         return False
-    completed = off_exact(["开屏广告", "资讯列表广告"], "浏览器·广告管理", max_screens=2)
+    completed = strategies.off_exact_paged_optional(p, rt, ["开屏广告", "资讯列表广告"], "浏览器·广告管理", max_screens=2)
     print("  · 摇一摇广告可能随上级开关灰置；灰置项不计作独立关闭")
     return completed
 
 
 def step_browser_personalized(p, rt):
     # 该页只有「个性化内容推荐」「个性化广告推荐」两项；两项都开时只读到后者的 Switch。
-    if not browser_settings_direct():
+    if not nav.browser_settings_direct(p, rt):
         return False
     activity = "com.heytap.browser.settings.component.BrowserPreferenceActivity"
-    if not tap_page("隐私", activity, "隐私") or not tap_page("个性化管理", activity, "个性化管理"):
+    if not nav.tap_page(p, rt, "隐私", activity, "隐私") or not nav.tap_page(p, rt, "个性化管理", activity, "个性化管理"):
         return False
-    return close_titles(["个性化广告推荐"])
+    return strategies.close_titles(p, rt, ["个性化广告推荐"])
 
 
 def step_theme(p, rt):
@@ -102,22 +98,22 @@ def step_theme(p, rt):
 
 
 def step_search(p, rt):
-    if not open_search_settings():
+    if not nav.open_search_settings(p, rt):
         return False
     # 「搜索范围」页全是数据源（本机应用、相册、网页搜索结果等），关掉会搜不到东西，不动。
     if p.tap("首页卡片管理", exact=True, scrolls=3):
         time.sleep(1.8)
         # 关掉「探索发现」后，它下面的「每日热榜」「推荐卡片」会从列表里一并消失。
-        close_titles(["未下载应用推荐", "应用建议小卡", "探索发现", "每日热榜", "推荐卡片"])
+        strategies.close_titles(p, rt, ["未下载应用推荐", "应用建议小卡", "探索发现", "每日热榜", "推荐卡片"])
         p.back()
         time.sleep(1)
     else:
         print("  ✗ 没找到「首页卡片管理」")
-    if not open_search_settings():
+    if not nav.open_search_settings(p, rt):
         return False
     if p.tap("功能管理", exact=True, scrolls=3):
         time.sleep(1.8)
-        close_titles(["搜索框提示词", "搜索框顶部推荐词", "猜你想搜"])
+        strategies.close_titles(p, rt, ["搜索框提示词", "搜索框顶部推荐词", "猜你想搜"])
         p.back()
     else:
         print("  ✗ 没找到「功能管理」")

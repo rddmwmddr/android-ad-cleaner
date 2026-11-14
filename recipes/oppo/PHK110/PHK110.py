@@ -2,12 +2,8 @@
 # 共享库的 store_promotions / browser_* 与 require / skip 由装载器注入执行作用域。
 # 广告跟踪（设置搜索 + 等列表 + 整页全关）留下，逐字保留原实现；线性的四段已转成数据。
 import time
+import recipe_nav as nav
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import p, rt, skip, skip_in_safe_mode
-    from recipe_nav import tap_page, wait_page
-    from recipe_strategies import off_exact_paged
 
 BUILD = "PHK110_16.0.5.1201"
 
@@ -24,29 +20,28 @@ STORE_PROMOTIONS = [
 
 # 段体（store_promotions / browser_ads / browser_personalized）按 `g["off_exact"]` 取这个钩子，
 # 实现住在 recipe_strategies 的 `off_exact_paged`，这里绑回旧名字（ColorOS 16 那一套，#1253）。
-off_exact = off_exact_paged
 
 
 def guard(p, rt):
     model = p.d.shell("getprop ro.product.model").output.strip()
     build = p.d.shell("getprop ro.build.display.id").output.strip()
     if model != "PHK110" or not build.startswith(BUILD):
-        skip("型号或系统版本不同，跳过；请重新核对页面")
+        rt.skip("型号或系统版本不同，跳过；请重新核对页面")
 
 
 def step_ad_tracking(p, rt):
     # 此版本的 OAIDActivity 不能由 shell 直接拉起，必须走系统设置中的搜索结果。
-    skip_in_safe_mode()
+    rt.skip_in_safe_mode()
     if not p.setting("设备标识与广告"):
         raise RuntimeError("没搜到「设备标识与广告」")
     result = p.d(resourceId="android:id/title", text="设备标识与广告")
     if result.exists:
         result.click()
-    if not wait_page("com.android.settings.SubSettings", "设备标识与广告"):
+    if not nav.wait_page(p, rt, "com.android.settings.SubSettings", "设备标识与广告"):
         return False
     if not p.find("重置设备标识符", exact=True):
         return False
-    if not tap_page("广告跟踪", "com.oplus.settings.feature.notification.oaid.OAIDActivity", "广告跟踪"):
+    if not nav.tap_page(p, rt, "广告跟踪", "com.oplus.settings.feature.notification.oaid.OAIDActivity", "广告跟踪"):
         return False
     # 等应用列表真正加载，不能把只有标题的空白加载页视为完成。
     for _ in range(30):

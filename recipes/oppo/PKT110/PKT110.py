@@ -3,12 +3,9 @@
 # 四段留在代码里：广告跟踪与游戏中心要清页面状态并逐个点名弹窗按钮，下拉搜索按读到的开关分岔，
 # 主题商店的「重进一次再回读」要传回调。
 import time
+import recipe_nav as nav
+import recipe_strategies as strategies
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import p, require, rt, skip_in_safe_mode
-    from recipe_nav import close_named, open_settings, tap
-    from recipe_strategies import close_all, close_group, wait_switches
 
 BUILD = "PKT110_17.0.0.102(CN01)"
 
@@ -28,17 +25,17 @@ SEARCH_SOURCES = ["个性化推荐", "精选资讯", "搜索建议"]
 def step_ad_tracking(p, rt):
     """设置 → 隐私与安全 → 设备标识与广告 → 广告跟踪。
     每个 App 一个开关、没有总开关，本机 96 个 App，分五屏。"""
-    skip_in_safe_mode()
+    rt.skip_in_safe_mode()
     p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
     p.miss = 0
     # 17 把入口改名叫「隐私与安全」：先试新名字，免得在旧名字上白翻一轮、还打印一行失败（#292）。
     if not p.tap("隐私与安全", exact=True):
         p.miss = 0
-        tap("隐私")
-    tap("设备标识与广告")
-    tap("广告跟踪")
+        nav.tap(p, rt, "隐私")
+    nav.tap(p, rt, "设备标识与广告")
+    nav.tap(p, rt, "广告跟踪")
     time.sleep(1)
-    close_all("广告跟踪", max_screens=40)
+    strategies.close_all(p, rt, "广告跟踪", max_screens=40)
 
 
 def step_search(p, rt):
@@ -46,27 +43,27 @@ def step_search(p, rt):
     搜索框提示词、消息通知、隐私里的个性化推荐。
     「便捷服务」和搜索范围里的内容源（榜单、小红书、购物等）不是广告位，不动。"""
     p.d.shell(SEARCH_SETTING); time.sleep(1.5)
-    require("com.heytap.quicksearchbox" in p.focus(), "全局搜索设置页没有打开")
-    tap("首页卡片管理")
-    require("SearchModuleManagerActivity" in p.focus(), "首页卡片管理页没有打开")
-    if wait_switches():
-        close_group(HOME_CARD_CHILDREN, HOME_CARD_PARENT, "下拉搜索·首页卡片管理", max_screens=3)
-        close_named(HOME_CARDS, "下拉搜索·首页卡片管理", max_screens=3)
+    rt.require("com.heytap.quicksearchbox" in p.focus(), "全局搜索设置页没有打开")
+    nav.tap(p, rt, "首页卡片管理")
+    rt.require("SearchModuleManagerActivity" in p.focus(), "首页卡片管理页没有打开")
+    if strategies.wait_switches(p, rt):
+        strategies.close_group(p, rt, HOME_CARD_CHILDREN, HOME_CARD_PARENT, "下拉搜索·首页卡片管理", max_screens=3)
+        nav.close_named(p, rt, HOME_CARDS, "下拉搜索·首页卡片管理", max_screens=3)
     else:
         # 推荐卡片全部关掉之后，这一页就不再列出任何卡片（2026-10-28 实测）。
         print("  · 首页卡片管理：这页没有列出卡片，没有可关的开关", flush=True)
     p.back()
-    tap("搜索范围")
-    close_named(SEARCH_SOURCES, "下拉搜索·搜索范围", max_screens=6)
+    nav.tap(p, rt, "搜索范围")
+    nav.close_named(p, rt, SEARCH_SOURCES, "下拉搜索·搜索范围", max_screens=6)
     p.back()
-    tap("功能管理")
-    close_named(["搜索框提示词"], "下拉搜索·功能管理", max_screens=2)
+    nav.tap(p, rt, "功能管理")
+    nav.close_named(p, rt, ["搜索框提示词"], "下拉搜索·功能管理", max_screens=2)
     p.back()
-    tap("消息管理")
-    close_named(["消息通知"], "下拉搜索·消息管理", max_screens=2)
+    nav.tap(p, rt, "消息管理")
+    nav.close_named(p, rt, ["消息通知"], "下拉搜索·消息管理", max_screens=2)
     p.back()
-    tap("隐私")
-    close_named(["个性化推荐"], "下拉搜索·隐私", max_screens=2)
+    nav.tap(p, rt, "隐私")
+    nav.close_named(p, rt, ["个性化推荐"], "下拉搜索·隐私", max_screens=2)
 
 
 def step_theme(p, rt):
@@ -77,7 +74,7 @@ def step_theme(p, rt):
     「我的」页的「设置」在 17.22 上带通知角标（读作「设置,有1条新通知」），别的版本是纯齿轮，
     两种都要能进——见 open_settings()。"""
     def enter_settings():
-        require(open_settings(), "没找到「设置」入口：文字与右上角图标都试过")
+        rt.require(nav.open_settings(p, rt), "没找到「设置」入口：文字与右上角图标都试过")
 
     def to_privacy():
         p.start("com.heytap.themestore")
@@ -90,10 +87,10 @@ def step_theme(p, rt):
     enter_settings()
     p.enter("服务管理")
     p.enter("消息与广告")
-    close_named(["消息通知", "开屏广告"], "主题·消息与广告")
+    nav.close_named(p, rt, ["消息通知", "开屏广告"], "主题·消息与广告")
     p.back(2)
     to_privacy()
-    close_named(["个性化推荐设置"], "主题·个性化推荐", reopen=to_privacy)
+    nav.close_named(p, rt, ["个性化推荐设置"], "主题·个性化推荐", reopen=to_privacy)
 
 
 def step_game_center(p, rt):
@@ -109,10 +106,10 @@ def step_game_center(p, rt):
         p.tap("我知道了", exact=True, scrolls=0); time.sleep(1.2)
     else:
         p.dismiss()
-    require(open_settings(("隐私开关设置", "隐私")), "没找到设置入口：右上角图标都点过")
-    tap("隐私开关设置")
-    tap("个性化推荐管理")
-    close_named(["个性化推荐"], "游戏中心·个性化推荐")
+    rt.require(nav.open_settings(p, rt, ("隐私开关设置", "隐私")), "没找到设置入口：右上角图标都点过")
+    nav.tap(p, rt, "隐私开关设置")
+    nav.tap(p, rt, "个性化推荐管理")
+    nav.close_named(p, rt, ["个性化推荐"], "游戏中心·个性化推荐")
 
 
 def tail(p, rt):

@@ -2,12 +2,8 @@
 # 影随同名 `.toml`）。共享库的 tap_page / store_promotions / browser_* 与 require / skip 由装载器注入。
 # 广告跟踪（逐页等列表 + 整页全关）与小布建议（行状态判定 + 翻页）留下，逐字保留原实现。
 import time
+import recipe_nav as nav
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import p, rt, skip, skip_in_safe_mode
-    from recipe_nav import tap_page
-    from recipe_strategies import off_exact_paged
 
 BUILD = "PKX110_16.0.10"
 MODELS = ["PKX110"]
@@ -30,27 +26,26 @@ STORE_PROMOTIONS = [
 
 # 段体（store_promotions / browser_ads / browser_personalized）按 `g["off_exact"]` 取这个钩子，
 # 实现住在 recipe_strategies 的 `off_exact_paged`，这里绑回旧名字（ColorOS 16 那一套，#1253）。
-off_exact = off_exact_paged
 
 
 def guard(p, rt):
     model = p.d.shell("getprop ro.product.model").output.strip()
     build = p.d.shell("getprop ro.build.display.id").output.strip()
     if model != "PKX110" or not build.startswith(BUILD):
-        skip("型号或系统版本不同，跳过；请重新核对页面")
+        rt.skip("型号或系统版本不同，跳过；请重新核对页面")
 
 
 def step_ad_tracking(p, rt):
     # 2026-10-28 实测：隐私页在 com.oplus.securitypermission，设备标识与广告在 OplusSettingsActivity$DevicesIdentifySettingsActivity。
-    skip_in_safe_mode()
+    rt.skip_in_safe_mode()
     p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
-    if not tap_page("隐私", "com.oplusos.securitypermission.privacy.PrivacySettingsDashboardActivity", "隐私"):
+    if not nav.tap_page(p, rt, "隐私", "com.oplusos.securitypermission.privacy.PrivacySettingsDashboardActivity", "隐私"):
         return False
-    if not tap_page("设备标识与广告", "OplusSettingsActivity$DevicesIdentifySettingsActivity", "设备标识与广告"):
+    if not nav.tap_page(p, rt, "设备标识与广告", "OplusSettingsActivity$DevicesIdentifySettingsActivity", "设备标识与广告"):
         return False
     if not p.find("重置设备标识符", exact=True):
         return False
-    if not tap_page("广告跟踪", "com.oplus.settings.feature.notification.oaid.OAIDActivity", "广告跟踪"):
+    if not nav.tap_page(p, rt, "广告跟踪", "com.oplus.settings.feature.notification.oaid.OAIDActivity", "广告跟踪"):
         return False
     # 等应用列表真正加载，不能把只有标题的空白加载页视为完成。
     for _ in range(30):
@@ -70,9 +65,9 @@ def step_advice(p, rt):
     # → 小布建议（AdviceSettingActivity）。资讯服务是行状态（已卸载/已开启），不是本页开关，
     # 要关就点进「内容资讯 → 资讯服务」二级页（PKG110 同）。本机全部服务已是「已卸载」，无开关。
     p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
-    if not tap_page("OPPO AI", "com.ums.aisetting.AISettingActivity", "OPPO AI"):
+    if not nav.tap_page(p, rt, "OPPO AI", "com.ums.aisetting.AISettingActivity", "OPPO AI"):
         return False
-    if not tap_page("小布建议", "com.oplus.advice.settings.ui.AdviceSettingActivity", "小布建议"):
+    if not nav.tap_page(p, rt, "小布建议", "com.oplus.advice.settings.ui.AdviceSettingActivity", "小布建议"):
         return False
     texts = [t for t, _, _ in p.texts()]
     # 相邻两行配对，长度必然差一：strict=False 是有意的

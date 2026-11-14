@@ -2,10 +2,8 @@
 # 共享库的 maybe / p.tap / p.go 与段体助手由装载器注入执行作用域；线性段已转数据，这里只留
 # 需要条件分支与手势坐标的四段。
 import time
+import recipe_nav as nav
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import maybe, p, rt
 
 BUILD = "PYB110_17.0.0"
 
@@ -27,7 +25,7 @@ def step_store(p, rt):
     if not p.in_settings_page():
         raise RuntimeError("商店设置页没有打开")
     # 本版商店设置页没有「消息管理」入口（服务管理关前关后都读不到），按可选入口处理
-    if maybe("消息管理"):
+    if nav.maybe(p, rt, "消息管理"):
         # 下载/更新/安装提醒是功能通知，只关热门内容推送
         p.off(only=["热门内容推送"], page="商店·消息管理")
         p.back()

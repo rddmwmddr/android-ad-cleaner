@@ -7,12 +7,9 @@ from contextlib import contextmanager
 import time
 
 from fast import CONFIRM, bounds
+import recipe_nav as nav
+import recipe_strategies as strategies
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import p, require, rt, skip, skip_in_safe_mode
-    from recipe_nav import browser_settings, tap
-    from recipe_strategies import close_named_honor
 
 BUILD = "WKL-AN20 11.0.0.111(SP7C00E110R101P7)"
 MODELS = ["WKL-AN20"]
@@ -35,32 +32,6 @@ CHANGES = {
 }
 
 # close_named 的实现按名字注入为 close_named_honor；数据段与 code 段都按旧名 close_named 用。
-close_named = close_named_honor
-
-
-def labels(root=None):
-    return {text for text, _, _ in p.texts(root)}
-
-
-def settle_page(package, *markers, timeout=5):
-    """包名、可见标题和节点位置连续稳定后才使用坐标；不输出账号内容。"""
-    deadline, previous = time.monotonic() + timeout, None
-    while time.monotonic() < deadline:
-        require(not p.locked(), "手机锁屏，请机主解锁后重跑")
-        root = p.tree()
-        texts = p.texts(root)
-        if any(text in ("同意", "同意并继续", "同意并使用", "允许")
-               and "Button" in node.get("class", "")
-               for text, _, node in texts):
-            p.dismiss()
-            raise RuntimeError("遇到协议或权限申请，未代为同意，本段停止")
-        signature = (p.focus(), tuple((text, box) for text, box, _ in texts))
-        if signature[0].split("/", 1)[0] == package and set(markers) <= labels(root):
-            if texts and signature == previous:
-                return root
-        previous = signature
-        time.sleep(.25)
-    raise RuntimeError("未确认目标设置页：" + "、".join(markers))
 
 
 @contextmanager
@@ -69,14 +40,14 @@ def safe_ui(p, rt):
     original = {name: getattr(p, name) for name in ("click", "scroll", "confirm", "switches")}
 
     def click(x, y):
-        require(not p.locked(), "手机锁屏，未点击")
-        require(tuple(p.d.window_size()) == (p.W, p.H), "屏幕尺寸变化，未使用旧坐标")
-        require(0 <= x < p.W and 0 <= y < p.H, "按钮在屏外，未点击")
+        rt.require(not p.locked(), "手机锁屏，未点击")
+        rt.require(tuple(p.d.window_size()) == (p.W, p.H), "屏幕尺寸变化，未使用旧坐标")
+        rt.require(0 <= x < p.W and 0 <= y < p.H, "按钮在屏外，未点击")
         p.d.click(x, y)
 
     def scroll(frac=.45, up=False):
         p.tree()
-        require(not p.locked(), "手机锁屏，未滑动")
+        rt.require(not p.locked(), "手机锁屏，未滑动")
         y1, y2 = int(p.H * .8), int(p.H * (.8 - min(frac, .58)))
         if up:
             y1, y2 = y2, y1
@@ -93,7 +64,7 @@ def safe_ui(p, rt):
     def confirm():
         time.sleep(.2)
         root = p.tree()
-        visible = labels(root)
+        visible = nav.labels(p, root)
         music_dialog = {"关闭个性化广告推荐", "取消"} <= visible
         for text in CONFIRM:
             for node in root.iter("node"):
@@ -118,15 +89,15 @@ def safe_ui(p, rt):
 
 def guard(p, rt):
     if p.d.shell("getprop ro.product.model").output.strip() not in MODELS:
-        skip("型号不匹配，跳过；不使用其他型号的路径")
+        rt.skip("型号不匹配，跳过；不使用其他型号的路径")
     if not p.d.shell("getprop ro.build.display.id").output.strip().startswith(BUILD):
-        skip("系统版本不匹配，跳过；请重新核对页面")
+        rt.skip("系统版本不匹配，跳过；请重新核对页面")
 
 
 wrap = safe_ui
 
 
-def radio(root, text):
+def radio(p, rt, root, text):
     parents = {child: parent for parent in root.iter() for child in parent}
     candidates = []
     for label, label_box, node in p.texts(root):
@@ -138,7 +109,7 @@ def radio(root, text):
             left, top, right, bottom = bounds(node)
             if len(choices) == 1 and right > left and 0 < bottom - top <= p.H * .35:
                 _, rt, _, rb = bounds(choices[0])
-                require(abs((rt + rb) - (label_box[1] + label_box[3])) <= p.H * .24,
+                rt.require(abs((rt + rb) - (label_box[1] + label_box[3])) <= p.H * .24,
                         "单选按钮与文字不在同一选项区域")
                 candidates.append(choices[0])
                 break
@@ -146,7 +117,7 @@ def radio(root, text):
             if node is None:
                 break
     unique = {id(node): node for node in candidates}
-    require(len(unique) == 1, "未识别「" + text + "」对应的唯一单选按钮")
+    rt.require(len(unique) == 1, "未识别「" + text + "」对应的唯一单选按钮")
     return next(iter(unique.values()))
 
 
@@ -156,45 +127,45 @@ def tail(p, rt):
 
 
 def step_ad_tracking(p, rt):
-    skip_in_safe_mode()
-    require(p.setting("广告", "广告与隐私"), "未进入广告与隐私")
-    settle_page("com.hihonor.id", "广告与隐私")
-    tap("更多选项", scrolls=0)
+    rt.skip_in_safe_mode()
+    rt.require(p.setting("广告", "广告与隐私"), "未进入广告与隐私")
+    nav.settle_page(p, rt, "com.hihonor.id", "广告与隐私")
+    nav.tap(p, rt, "更多选项", scrolls=0)
     if p.find("显示系统程序", exact=True):
-        tap("显示系统程序", scrolls=0)
+        nav.tap(p, rt, "显示系统程序", scrolls=0)
     elif not p.find("隐藏系统程序", exact=True):
         raise RuntimeError("未确认显示系统程序的菜单状态")
     if p.find("隐藏系统程序", exact=True) or p.find("全部关闭", exact=True):
         p.back()
-    close_named(None, "广告与隐私·OAID读取权限", "com.hihonor.id", "广告与隐私", max_screens=40)
+    strategies.close_named_honor(p, rt, None, "广告与隐私·OAID读取权限", "com.hihonor.id", "广告与隐私", max_screens=40)
 
 
 def step_browser_home(p, rt):
-    package = browser_settings()
-    tap("模式选择")
-    root = settle_page(package, "模式选择", "简洁首页")
-    choice = radio(root, "简洁首页")
+    package = nav.browser_settings(p, rt)
+    nav.tap(p, rt, "模式选择")
+    root = nav.settle_page(p, rt, package, "模式选择", "简洁首页")
+    choice = radio(p, rt, root, "简洁首页")
     if choice.get("checked") != "true":
-        require(choice.get("enabled") != "false", "简洁首页选项不可用")
+        rt.require(choice.get("enabled") != "false", "简洁首页选项不可用")
         left, top, right, bottom = bounds(choice)
         p.click((left + right) // 2, (top + bottom) // 2)
         time.sleep(.5)
-        require(radio(settle_page(package, "简洁首页"), "简洁首页").get("checked") == "true",
+        rt.require(radio(nav.settle_pagele_page(p, rt, package, "简洁首页"), "简洁首页").get("checked") == "true",
                 "回读未确认简洁首页")
         p.changed.append(("浏览器·模式选择", "简洁首页"))
 
 
 def step_browser_recs(p, rt):
-    package = browser_settings()
-    tap("消息通知")
-    close_named(["精彩推荐", "每日推送", "新闻热点", "兴趣推送"], "浏览器·消息通知", package, "消息通知")
+    package = nav.browser_settings(p, rt)
+    nav.tap(p, rt, "消息通知")
+    strategies.close_named_honor(p, rt, ["精彩推荐", "每日推送", "新闻热点", "兴趣推送"], "浏览器·消息通知", package, "消息通知")
     p.back()
-    tap("隐私管理")
-    tap("个性化推荐", scrolls=0)
-    close_named(["个性化内容"], "浏览器·个性化推荐", package, "个性化推荐")
+    nav.tap(p, rt, "隐私管理")
+    nav.tap(p, rt, "个性化推荐", scrolls=0)
+    strategies.close_named_honor(p, rt, ["个性化内容"], "浏览器·个性化推荐", package, "个性化推荐")
     p.back()
-    tap("互动广告管理", scrolls=0)
-    close_named(["个性化广告", "允许摇一摇进入广告"], "浏览器·互动广告", package, "互动广告管理")
+    nav.tap(p, rt, "互动广告管理", scrolls=0)
+    strategies.close_named_honor(p, rt, ["个性化广告", "允许摇一摇进入广告"], "浏览器·互动广告", package, "互动广告管理")
 
 
 def step_search(p, rt):
@@ -205,11 +176,11 @@ def step_search(p, rt):
     p.d.swipe(p.W // 2, p.H * 3 // 10, p.W // 2, p.H * 7 // 10, duration=.3)
     time.sleep(1)
     p.d.press("back")
-    settle_page("com.hihonor.search", "更多")
-    tap("更多", scrolls=0)
-    tap("设置", scrolls=0)
-    tap("首页显示")
-    close_named(["热搜榜", "热搜词推荐"], "搜索·首页显示", "com.hihonor.search", "首页显示")
+    nav.settle_page(p, rt, "com.hihonor.search", "更多")
+    nav.tap(p, rt, "更多", scrolls=0)
+    nav.tap(p, rt, "设置", scrolls=0)
+    nav.tap(p, rt, "首页显示")
+    strategies.close_named_honor(p, rt, ["热搜榜", "热搜词推荐"], "搜索·首页显示", "com.hihonor.search", "首页显示")
 
 
 def step_negative(p, rt):
@@ -222,39 +193,39 @@ def step_negative(p, rt):
         p.tree()
         p.d.swipe(p.W // 7, p.H // 2, p.W * 6 // 7, p.H // 2, duration=.3)
         time.sleep(.7)
-    settle_page(package, "头像")
-    tap("头像", scrolls=0)
-    tap("设置", scrolls=0)
-    close_named(["智能推荐", "个性化广告", "个性化消息"], "负一屏·设置", package, "设置")
+    nav.settle_page(p, rt, package, "头像")
+    nav.tap(p, rt, "头像", scrolls=0)
+    nav.tap(p, rt, "设置", scrolls=0)
+    strategies.close_named_honor(p, rt, ["智能推荐", "个性化广告", "个性化消息"], "负一屏·设置", package, "设置")
     p.back()
-    tap("资讯服务", scrolls=0)
-    close_named(["资讯精选"], "负一屏·资讯服务", package, "资讯服务")
+    nav.tap(p, rt, "资讯服务", scrolls=0)
+    strategies.close_named_honor(p, rt, ["资讯精选"], "负一屏·资讯服务", package, "资讯服务")
 
 
 def step_reader(p, rt):
     package = "com.hihonor.dz.reader"
     p.start(package)
-    require(p.go("我的", "更多设置"), "未找到阅读设置入口")
-    tap("更多设置")
-    settle_page(package, "广告推荐服务")
-    tap("广告推荐服务", scrolls=0)
-    close_named(["个性化广告"], "阅读·广告推荐服务", package, "广告推荐服务", drawn=True)
+    rt.require(p.go("我的", "更多设置"), "未找到阅读设置入口")
+    nav.tap(p, rt, "更多设置")
+    nav.settle_page(p, rt, package, "广告推荐服务")
+    nav.tap(p, rt, "广告推荐服务", scrolls=0)
+    strategies.close_named_honor(p, rt, ["个性化广告"], "阅读·广告推荐服务", package, "广告推荐服务", drawn=True)
 
 
 def step_magazine(p, rt):
-    require(p.setting("画报", "魔法画报"), "未搜到魔法画报")
+    rt.require(p.setting("画报", "魔法画报"), "未搜到魔法画报")
     if p.focus().split("/", 1)[0] != "com.hihonor.magazine":
-        tap("魔法画报", scrolls=0)
-    close_named(["锁屏壁纸轮播", "锁屏进入魔法画报", "数据流量自动更新"],
+        nav.tap(p, rt, "魔法画报", scrolls=0)
+    strategies.close_named_honor(p, rt, ["锁屏壁纸轮播", "锁屏进入魔法画报", "数据流量自动更新"],
                 "魔法画报", "com.hihonor.magazine", "魔法画报")
 
 
 def step_music(p, rt):
     if rt.only != ["音乐"]:
-        skip("请手动打开荣耀音乐 → 我的 → 设置 → 更多设置，再单段运行「音乐」")
+        rt.skip("请手动打开荣耀音乐 → 我的 → 设置 → 更多设置，再单段运行「音乐」")
     package = "com.hihonor.cloudmusic"
-    settle_page(package, "消息和隐私设置")
-    tap("消息和隐私设置")
-    close_named(["朋友页显示推荐动态", "展示“摇一摇”类开屏广告"], "音乐·消息和隐私设置", package, "消息和隐私设置")
-    tap("广告推荐设置")
-    close_named(["个性化广告推荐"], "音乐·广告推荐设置", package, "广告推荐设置")
+    nav.settle_page(p, rt, package, "消息和隐私设置")
+    nav.tap(p, rt, "消息和隐私设置")
+    strategies.close_named_honor(p, rt, ["朋友页显示推荐动态", "展示“摇一摇”类开屏广告"], "音乐·消息和隐私设置", package, "消息和隐私设置")
+    nav.tap(p, rt, "广告推荐设置")
+    strategies.close_named_honor(p, rt, ["个性化广告推荐"], "音乐·广告推荐设置", package, "广告推荐设置")

@@ -3,12 +3,8 @@
 # （2026-11-05 真机实测）；off() 的落点是开关本体（control() 取内层 Switch），在这页上点了没反应。
 # p / rt 由 catalog 装载器写进执行作用域（preamble），例外函数按模块全局名取。
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import p
 
-
-def protect(title_part):
+def protect(p, rt, title_part):
     """把标题含 title_part、当前为「关」的保护类开关拨到「开」，并回读确认。
 
     点标题后弹「停止根据您的兴趣展示广告？…取消 / 确定」，用 p.confirm() 收掉。
