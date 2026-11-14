@@ -180,6 +180,29 @@ def counts(src: str) -> dict[str, int]:
     return out
 
 
+def counts_for(path: str) -> dict[str, int]:
+    """一份机型脚本（`.py` 或 catalog `.toml`）的本机函数计数，口径同 `audit()`。
+
+    `.toml` 的助手在同目录同名的 `.py` 例外里；段 `code=` 指向的函数等同旧 `@step` 段体，不计入。
+    没有例外文件就是 0 个本机函数（不是「读不到」）。"""
+    if not str(path).endswith(".toml"):
+        with open(path, encoding="utf-8") as handle:
+            return counts(handle.read())
+    import tomllib
+    with open(path, "rb") as handle:
+        data = tomllib.load(handle)
+    codes = {segment["code"] for segment in data.get("segment", []) if "code" in segment}
+    companion = str(path)[:-len(".toml")] + ".py"
+    if not os.path.isfile(companion):
+        return {"total": 0, **{tier: 0 for tier in TIERS}}
+    with open(companion, encoding="utf-8") as handle:
+        functions = [f for f in classify(handle.read()) if f.name not in codes]
+    out = {"total": len(functions), **{tier: 0 for tier in TIERS}}
+    for function in functions:
+        out[function.tier] += 1
+    return out
+
+
 def _place(script: str) -> tuple[str, str]:
     """`xiaomi/M154FF/recipe.py` → (家族, 型号)。路径第一段就是家族（`recipes/<家族>/<型号>`），认不出时留空。"""
     parts = script.split("/")

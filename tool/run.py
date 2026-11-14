@@ -666,12 +666,13 @@ def cmd_ui_check(serial, rest):
 def local_counts(recipe_path):
     """本机函数计数；脚本读不出时返回 None（语法错、编码坏、文件消失）。
 
-    `check` 与 `status-json` 以前只做正则，坏脚本不会让它们崩掉；`recipe_audit.counts()` 走
-    `ast.parse`，语法错会抛 `SyntaxError`。一条坏脚本不能把整条诊断失败——`status-json` 崩了，
-    GUI 与 `android/smoke.py` 都拿不到 JSON。降级只影响这一个数，别的诊断照常出。
+    `check` 与 `status-json` 以前只做正则，坏脚本不会让它们崩掉；计数走 `ast.parse`，语法错会抛
+    `SyntaxError`。一条坏脚本不能把整条诊断失败——`status-json` 崩了，GUI 与 `android/smoke.py`
+    都拿不到 JSON。降级只影响这一个数，别的诊断照常出。catalog 机型读同目录的 `.py` 例外，
+    与 `recipe_audit.audit()` 同一口径（`counts_for`）。
     """
     try:
-        return recipe_audit.counts(Path(recipe_path).read_text(encoding="utf-8"))
+        return recipe_audit.counts_for(str(recipe_path))
     except (OSError, ValueError, SyntaxError):
         return None
 

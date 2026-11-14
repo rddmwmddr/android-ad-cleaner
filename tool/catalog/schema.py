@@ -61,7 +61,7 @@ OP_KEYS = {
     "top": frozenset({"kind", "n"}),
     "page": frozenset({"kind", "args", "kwargs"}),
     "skip": frozenset({"kind", "text"}),
-    "fail": frozenset({"kind", "text"}),
+    "fail": frozenset({"kind", "text", "evidence"}),
     "scoped": frozenset({"kind", "systemui_text", "ops"}),
     "code": frozenset({"kind", "name", "args"}),
     "print": frozenset({"kind", "text"}),
@@ -181,7 +181,7 @@ def _validate_op(op: object, where: str) -> None:
         _validate_calls(op, where, ("args", "kwargs"), required="args")
         _require(op, "miss_print", where)
     elif kind == "if_lib_any":
-        _validate_calls(op, where, ("name", "args", "kwargs"), required="name")
+        _validate_calls(op, where, ("name", "method", "args", "kwargs"), required=("name", "method"))
         _validate_ops(op.get("ops", []), where)
         _validate_ops(op.get("else_ops", []), where)
     elif kind == "require_focus":
@@ -252,11 +252,12 @@ def _validate_off_required(op: Mapping, where: str) -> None:
         raise SchemaError(f"{where} 的 off_required 里 only 与 keep 重叠：{sorted(overlap)}")
 
 
-def _validate_calls(op: Mapping, where: str, allowed: tuple, required: str) -> None:
+def _validate_calls(op: Mapping, where: str, allowed: tuple, required: str | tuple) -> None:
     """`calls` 表：短路 OR 的几次调用，每次只允许 `allowed` 里的键、必须给 `required`。
 
-    两次短路的语义都落在数据里：`if_lib_any` 的每个调用要 `name`，`require_expect` 的每个调用要
-    `args`（`p.expect_page` 的第一个实参）。实参逐条照原样下发，位置 / 关键字不合并。"""
+    `required` 是元组时要求「恰好一个」：`if_lib_any` 的每次调用要么是注入助手（`name`），要么是
+    页面门面方法（`method`）——旧脚本的短路链两种都串过。`require_expect` 的每个调用要 `args`
+    （`p.expect_page` 的第一个实参）。实参逐条照原样下发，位置 / 关键字不合并。"""
     calls = op.get("calls")
     if "calls" not in op:
         raise SchemaError(f"{where} 缺 calls")
@@ -267,7 +268,11 @@ def _validate_calls(op: Mapping, where: str, allowed: tuple, required: str) -> N
         if not isinstance(call, Mapping):
             raise SchemaError(f"{place} 必须是表")
         _reject_extra(call, frozenset(allowed), place)
-        if required not in call:
+        if isinstance(required, tuple):
+            present = [key for key in required if key in call]
+            if len(present) != 1:
+                raise SchemaError(f"{place} 要给「{' / '.join(required)}」里的恰好一个")
+        elif required not in call:
             raise SchemaError(f"{place} 缺 {required}")
         if "args" in call and (not isinstance(call["args"], list) or not call["args"]):
             raise SchemaError(f"{place} 的 args 必须是非空数组")

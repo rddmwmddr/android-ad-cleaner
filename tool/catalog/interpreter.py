@@ -235,8 +235,10 @@ def _fail(op: Mapping, g: dict[str, Any]) -> None:
     """这一段失败并带一句原因：走注入的 `require`（抛 RuntimeError），结局「未完成」且进失败段台账（#1265）。
 
     与 `return value=false` 的区别：后者只改分段结局、不进 `failed_steps`；旧脚本用 `raise` 的失败出口
-    要进台账（重试按失败段定位），用这条。"""
-    g["require"](False, op["text"])
+    要进台账（重试按失败段定位），用这条。`evidence=true` 接上页面现场，与
+    `raise RuntimeError("…；" + p.page_evidence())` 同形（只在真走到失败时读，#1267）。"""
+    text = op["text"] + g["p"].page_evidence() if op.get("evidence") else op["text"]
+    g["require"](False, text)
 
 
 def _print(op: Mapping, g: dict[str, Any]) -> None:
@@ -468,11 +470,12 @@ def _if_setting(op: Mapping, g: dict[str, Any]) -> None:
 def _if_lib_any(op: Mapping, g: dict[str, Any]) -> None:
     """`<助手A>(…) or <助手B>(…)`：短路取第一个成功的助手（#1267）。
 
-    旧脚本用 `or` 串两个入口助手（`gear(toolbar_only=True) or gear()`）：第一个成真时第二个不调，
-    这个调用序列按数据里的顺序原样发出，与旧脚本逐条相同。"""
+    旧脚本用 `or` 串入口助手（`gear(toolbar_only=True) or gear()`），短路链里也会混门面的布尔方法
+    （`tab_bot("我的") or p.tap("我的", …)`）：第一个成真时后面的不调，调用序列与旧脚本逐条相同。"""
     for call in op["calls"]:
-        if g[call["name"]](*[_arg(a, g) for a in call.get("args", [])],
-                           **{k: _arg(v, g) for k, v in call.get("kwargs", {}).items()}):
+        target = getattr(g["p"], call["method"]) if "method" in call else g[call["name"]]
+        if target(*[_arg(a, g) for a in call.get("args", [])],
+                  **{k: _arg(v, g) for k, v in call.get("kwargs", {}).items()}):
             _run(op.get("ops", []), g)
             return
     _run(op.get("else_ops", []), g)

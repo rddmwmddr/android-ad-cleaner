@@ -564,7 +564,8 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                     # 短路的每个助手都调得到：漏一个，入口归属就少一条（#1267）。
                     for call in op.get("calls", []):
                         args = ", ".join(_s(a) for a in call.get("args", []))
-                        lines.append(f"{call['name']}({args})")
+                        name = f"p.{call['method']}" if "method" in call else call["name"]
+                        lines.append(f"{name}({args})")
                 lower(op.get("ops", []))
                 lower(op.get("else_ops", []))
             elif kind in ("lib", "require_lib", "code", "return_lib"):
