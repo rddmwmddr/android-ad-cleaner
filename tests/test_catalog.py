@@ -14,13 +14,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "tool"))
 
-import compare_recipe_calls as driver  # noqa: E402
 import fixtures  # noqa: E402
 
 fixtures.load_tool()
 import catalog  # noqa: E402
 import fast  # noqa: E402
-import recipe_kit  # noqa: E402
 
 SCRIPT = "tests/fixtures/vivo_v1986a/recipe.py"
 DATA = "recipes/vivo/V1986A/V1986A.toml"

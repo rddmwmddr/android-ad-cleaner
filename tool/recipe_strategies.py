@@ -105,7 +105,7 @@ def gear_tap(p, rt, pkg, activity):
 
 def off_exact(p, rt, names, activity, title):
     """只处理当前页精确匹配的开关，并在同一页面读回（PHK110 的 Android 15 变体）。"""
-    if not rt.page(activity, title):
+    if not nav.page_activity(p, rt, activity, title):
         return False
     switches = p.switches()
     visible = {name for name, _, _ in switches}
@@ -114,7 +114,7 @@ def off_exact(p, rt, names, activity, title):
         print(f"  ! 缺少开关 {sorted(wanted - visible)}，本页不操作")
         return False
     for name in names:
-        if not rt.page(activity, title):
+        if not nav.page_activity(p, rt, activity, title):
             return False
         matches = [(on, xy) for label, on, xy in p.switches() if label == name]
         if len(matches) != 1:
@@ -124,7 +124,7 @@ def off_exact(p, rt, names, activity, title):
         if on:
             p.click(*xy)
             p.confirm()
-            if not rt.page(activity, title):
+            if not nav.page_activity(p, rt, activity, title):
                 return False
             after = [(on, xy) for label, on, xy in p.switches() if label == name]
             if len(after) != 1 or after[0][0]:

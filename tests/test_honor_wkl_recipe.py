@@ -110,7 +110,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
     def test_missing_switch_stops_before_any_changes(self):
         p, scope = self.closing_scope({"应用更新": True}, {})
         with self.assertRaisesRegex(RuntimeError, "未识别全部目标"):
-            scope["close_named"](["个性化广告"], "测试", "com.example", "设置")
+            scope["close_named_honor"](["个性化广告"], "测试", "com.example", "设置")
         scope["settle_page"].assert_called_once()
         p.off.assert_not_called()
         self.assertEqual(scope["VERIFIED_SWITCHES"], 0)
@@ -124,7 +124,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
                                    ("应用更新", True, (100, 500))]
         filtered = []
         p.off.side_effect = lambda **kw: filtered.extend(p.switches())
-        scope["close_named"](["个性化广告"], "测试", "com.example", "设置")
+        scope["close_named_honor"](["个性化广告"], "测试", "com.example", "设置")
         scope["settle_page"].assert_called_once()
         self.assertEqual([row[0] for row in filtered], ["个性化广告"])
         self.assertEqual(scope["VERIFIED_SWITCHES"], 1)
@@ -132,7 +132,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
     def test_reverted_target_is_not_reported_as_verified(self):
         p, scope = self.closing_scope({"个性化广告": True}, {"个性化广告": True})
         with self.assertRaisesRegex(RuntimeError, "回读未确认"):
-            scope["close_named"](["个性化广告"], "测试", "com.example", "设置")
+            scope["close_named_honor"](["个性化广告"], "测试", "com.example", "设置")
         scope["settle_page"].assert_called_once()
         self.assertEqual(scope["VERIFIED_SWITCHES"], 0)
 
@@ -140,13 +140,13 @@ class HonorWKLRecipeTests(unittest.TestCase):
         p, scope = self.closing_scope({"个性化广告": True, "评论提醒": True},
                                      {"个性化广告": False, "评论提醒": False})
         with self.assertRaisesRegex(RuntimeError, "其他开关状态变化"):
-            scope["close_named"](["个性化广告"], "测试", "com.example", "设置")
+            scope["close_named_honor"](["个性化广告"], "测试", "com.example", "设置")
         scope["settle_page"].assert_called_once()
         self.assertEqual(scope["VERIFIED_SWITCHES"], 0)
 
     def test_protection_switch_must_be_on(self):
         p, scope = self.closing_scope({"限制广告跟踪": False}, {"限制广告跟踪": True})
-        scope["close_named"](["限制广告跟踪"], "测试", "com.example", "设置")
+        scope["close_named_honor"](["限制广告跟踪"], "测试", "com.example", "设置")
         scope["settle_page"].assert_called_once()
         self.assertEqual(scope["VERIFIED_SWITCHES"], 1)
 

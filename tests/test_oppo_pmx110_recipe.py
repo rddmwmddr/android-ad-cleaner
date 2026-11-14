@@ -91,18 +91,18 @@ class CloseNamedTests(unittest.TestCase):
 
     def close(self, before, after, names=("开屏广告",), **kwargs):
         self.scope["read_switches"] = Mock(side_effect=[before, after])
-        return self.scope["close_named"](names, "测试设置", **kwargs)
+        return self.scope["close_named_optional"](names, "测试设置", **kwargs)
 
     def test_missing_target_stops_before_any_switch_operation(self):
         self.scope["read_switches"] = Mock(return_value={"消息通知": True})
         with self.assertRaisesRegex(RuntimeError, "未识别全部目标"):
-            self.scope["close_named"](["开屏广告"], "测试设置")
+            self.scope["close_named_optional"](["开屏广告"], "测试设置")
         self.scope["read_switches"].assert_called_once_with("测试设置", 12)
         self.p.off.assert_not_called()
 
     def test_already_closed_targets_are_read_once_without_clicking(self):
         self.scope["read_switches"] = Mock(return_value={"开屏广告": False, "消息通知": True})
-        self.scope["close_named"](["开屏广告"], "测试设置")
+        self.scope["close_named_optional"](["开屏广告"], "测试设置")
         self.scope["read_switches"].assert_called_once_with("测试设置", 12)
         self.p.off.assert_not_called()
         self.assertEqual(self.scope["VERIFIED_SWITCHES"], 1)
@@ -160,7 +160,7 @@ class CloseNamedTests(unittest.TestCase):
             return next(values)
         self.scope["read_switches"] = Mock(side_effect=read)
         reopen = Mock(side_effect=lambda: events.append("重新进入"))
-        self.scope["close_named"](["个性化推荐设置"], "隐私", reopen=reopen)
+        self.scope["close_named_optional"](["个性化推荐设置"], "隐私", reopen=reopen)
         reopen.assert_called_once_with()
         self.assertEqual(self.scope["read_switches"].call_count, 2)
         self.assertEqual(events, ["读取", "重新进入", "读取"])
@@ -281,13 +281,13 @@ class SearchStepTests(unittest.TestCase):
     def test_search_never_touches_message_master_or_sources(self):
         self.scope["open_page"] = Mock()
         self.scope["row"] = Mock()
-        self.scope["close_named"] = Mock()
+        self.scope["close_named_optional"] = Mock()
         self.scope["read_switches"] = Mock(
             return_value={name: False for name in self.scope["SEARCH_CARDS"]})
         action(self.scope, "下拉搜索")()
         self.scope["open_page"].assert_called_once()
         self.scope["read_switches"].assert_called_once_with("首页卡片管理")
-        names = [name for c in self.scope["close_named"].call_args_list for name in c.args[0]]
+        names = [name for c in self.scope["close_named_optional"].call_args_list for name in c.args[0]]
         self.assertEqual(names, ["个性化推荐", "精选资讯", "未下载应用推荐", "应用建议小卡", "热搜应用",
                                  "精选推荐", "热搜榜单", "活动皮肤", "推荐卡片", "搜索框提示词", "个性化推荐"])
         self.assertEqual([c.args[0] for c in self.scope["row"].call_args_list],
@@ -300,10 +300,10 @@ class SearchStepTests(unittest.TestCase):
     def test_empty_card_page_is_reported_without_claiming_verified_items(self):
         self.scope["open_page"] = Mock()
         self.scope["row"] = Mock()
-        self.scope["close_named"] = Mock()
+        self.scope["close_named_optional"] = Mock()
         self.scope["read_switches"] = Mock(return_value={})
         action(self.scope, "下拉搜索")()
-        self.assertEqual([c.args[1] for c in self.scope["close_named"].call_args_list],
+        self.assertEqual([c.args[1] for c in self.scope["close_named_optional"].call_args_list],
                          ["搜索范围", "功能管理", "隐私"])
         self.assertEqual(len(self.scope["SKIPPED_ITEMS"]), 1)
         self.assertIn("7", self.scope["SKIPPED_ITEMS"][0])
@@ -395,14 +395,14 @@ class MarketPrivacyEntryTests(unittest.TestCase):
     def test_failed_landing_ends_the_segment_without_touching_later_rows(self):
         self.scope["app_settings"] = Mock()
         self.scope["row"] = Mock(side_effect=RuntimeError("未进入目标设置页，未操作开关"))
-        self.scope["close_named"] = Mock()
+        self.scope["close_named_optional"] = Mock()
         self.scope["read_switches"] = Mock()
         with self.assertRaisesRegex(RuntimeError, "未进入目标设置页"):
             action(self.scope, "软件商店")()
         self.scope["row"].assert_called_once_with(
             ["隐私", "隐私授权管理"], package="com.heytap.market", activity="PrivacyActivity")
         self.scope["app_settings"].assert_called_once_with("com.heytap.market")
-        self.scope["close_named"].assert_not_called()
+        self.scope["close_named_optional"].assert_not_called()
         self.scope["read_switches"].assert_not_called()
 
 
@@ -418,7 +418,7 @@ class StoreThemeVideoTests(unittest.TestCase):
         self.scope["row"] = Mock()
         self.scope["read_switches"] = Mock(return_value={"首页：活动弹窗": True, "应用安全": True,
             "帮助与客服": True, "首页：AI搜索": True, "游戏专区：找游戏": True, "AI智能体": True})
-        self.scope["close_named"] = Mock()
+        self.scope["close_named_optional"] = Mock()
         action(self.scope, "软件商店")()
         self.scope["read_switches"].assert_called_once_with("服务管理")
         self.assertEqual(self.scope["app_settings"].call_args_list,
@@ -428,7 +428,7 @@ class StoreThemeVideoTests(unittest.TestCase):
                          [call(["隐私", "隐私授权管理"], package="com.heytap.market",
                                activity="PrivacyActivity"),
                           call("个性化推荐"), call("服务管理")])
-        self.assertEqual([c.args[0] for c in self.scope["close_named"].call_args_list],
+        self.assertEqual([c.args[0] for c in self.scope["close_named_optional"].call_args_list],
                          [["个性化推荐"], ["首页：活动弹窗"]])
 
     def menu(self, *screens):
@@ -479,7 +479,7 @@ class StoreThemeVideoTests(unittest.TestCase):
         self.scope["require_installed"] = Mock()
         self.scope["open_page"] = Mock()
         self.scope["row"] = Mock()
-        self.scope["close_named"] = Mock()
+        self.scope["close_named_optional"] = Mock()
         action(self.scope, "游戏中心")()
         self.assertIn("APP_SETTINGS -p com.nearme.gamecenter", self.scope["open_page"].call_args.args[0])
         self.assertEqual([c.args[0] for c in self.scope["row"].call_args_list], ["隐私开关设置", "个性化推荐管理"])
@@ -487,11 +487,11 @@ class StoreThemeVideoTests(unittest.TestCase):
     def test_theme_only_closes_the_ad_switch(self):
         self.scope["app_settings"] = Mock()
         self.scope["row"] = Mock()
-        self.scope["close_named"] = Mock()
+        self.scope["close_named_optional"] = Mock()
         action(self.scope, "主题")()
-        self.assertEqual([c.args[0] for c in self.scope["close_named"].call_args_list],
+        self.assertEqual([c.args[0] for c in self.scope["close_named_optional"].call_args_list],
                          [["开屏广告"], ["个性化推荐设置"]])
-        self.assertEqual([c.args[1] for c in self.scope["close_named"].call_args_list],
+        self.assertEqual([c.args[1] for c in self.scope["close_named_optional"].call_args_list],
                          ["消息与广告", "隐私"])
         self.assertEqual(self.scope["app_settings"].call_args_list,
                          [call("com.heytap.themestore"), call("com.heytap.themestore")])
@@ -499,14 +499,14 @@ class StoreThemeVideoTests(unittest.TestCase):
     def test_browser_treats_content_recommendation_as_optional(self):
         self.scope["browser_settings"] = Mock()
         self.scope["row"] = Mock()
-        self.scope["close_named"] = Mock()
+        self.scope["close_named_optional"] = Mock()
         action(self.scope, "浏览器")()
         self.assertEqual([c.args[0] for c in self.scope["row"].call_args_list],
                          ["隐私", "广告管理", "个性化管理"])
-        self.assertEqual([c.args[0] for c in self.scope["close_named"].call_args_list],
+        self.assertEqual([c.args[0] for c in self.scope["close_named_optional"].call_args_list],
                          [["开屏广告", "资讯列表广告", "摇一摇广告"],
                           ["个性化广告推荐", "个性化内容推荐"]])
-        self.assertEqual(self.scope["close_named"].call_args_list[1].kwargs,
+        self.assertEqual(self.scope["close_named_optional"].call_args_list[1].kwargs,
                          {"optional": ["个性化内容推荐"]})
 
     def test_video_missing_app_skips_without_launching(self):
@@ -523,7 +523,7 @@ class StoreThemeVideoTests(unittest.TestCase):
         self.p.focus.return_value = "com.heytap.yoli/com.heytap.yoli.mine.setting.SettingActivity"
         self.p.find.return_value = True
         self.scope["row"] = Mock()
-        self.scope["close_named"] = Mock()
+        self.scope["close_named_optional"] = Mock()
         action(self.scope, "视频")()
         launch = self.p.d.shell.call_args_list[1].args[0]
         self.assertIn("yoli://yoli.com/mine_act_lib_yoli/settings", launch)
@@ -647,12 +647,12 @@ class NegativeScreenTests(unittest.TestCase):
         scope = load(p)
         scope["row"] = Mock()
         scope["hide_carousel"] = Mock(side_effect=RuntimeError("单选缺失"))
-        scope["close_named"] = Mock()
+        scope["close_named_optional"] = Mock()
         scope["open_page"] = Mock()
         with self.assertRaisesRegex(RuntimeError, "热点资讯已核对"):
             action(scope, "负一屏")()
         scope["hide_carousel"].assert_called_once_with()
-        scope["close_named"].assert_called_once_with(["热点资讯"], "热点资讯")
+        scope["close_named_optional"].assert_called_once_with(["热点资讯"], "热点资讯")
         self.assertEqual([c.args[0] for c in scope["row"].call_args_list], ["设置", "推荐服务"])
         self.assertIn("InfoFlowSettingActivity", scope["open_page"].call_args.args[0])    # 直达，不回设置页找（#650）
 
@@ -666,7 +666,7 @@ class GameCenterTests(unittest.TestCase):
             exit_code=0, output="package:/data/app/gamecenter/base.apk")
         self.scope = load(self.p)
         self.scope["row"] = Mock()
-        self.scope["close_named"] = Mock()
+        self.scope["close_named_optional"] = Mock()
 
     def test_missing_app_skips_without_launching(self):
         self.p.d.shell.return_value = SimpleNamespace(exit_code=0, output="")
@@ -684,7 +684,7 @@ class GameCenterTests(unittest.TestCase):
         self.assertIn("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.nearme.gamecenter",
                       [c.args[0] for c in self.p.d.shell.call_args_list])
         self.assertEqual([c.args[0] for c in self.scope["row"].call_args_list], ["隐私开关设置", "个性化推荐管理"])
-        self.assertEqual(self.scope["close_named"].call_args_list, [call(["个性化推荐"], "个性化推荐管理")])
+        self.assertEqual(self.scope["close_named_optional"].call_args_list, [call(["个性化推荐"], "个性化推荐管理")])
 
     def test_denied_settings_entry_stops_before_rows(self):
         def shell(command):
@@ -695,7 +695,7 @@ class GameCenterTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "系统未允许"):
             action(self.scope, "游戏中心")()
         self.scope["row"].assert_not_called()
-        self.scope["close_named"].assert_not_called()
+        self.scope["close_named_optional"].assert_not_called()
 
 
 class AdTrackingFlowTests(unittest.TestCase):

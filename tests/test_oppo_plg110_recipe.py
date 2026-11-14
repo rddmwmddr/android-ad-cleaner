@@ -38,7 +38,7 @@ class Plg110RecipeTests(unittest.TestCase):
         self.scope["read_switches"] = Mock(side_effect=[before, after])
 
     def close(self, names, **kwargs):
-        return self.scope["close_named"](names, "测试设置", "test/Settings", "测试设置", **kwargs)
+        return self.scope["close_named_expect"](names, "测试设置", "test/Settings", "测试设置", **kwargs)
 
     def test_model_uses_its_own_versioned_recipe(self):
         path, reference = run.recipe_for("PLG110", "OPPO")
