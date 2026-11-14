@@ -1,5 +1,6 @@
 # Xiaomi 15（24129PN74C）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
 # 应用商店的「个性化服务」按运行时读到的开关位置分岔：新版本是子页入口、老版本开关就在本页。
+import time
 from dataclasses import replace
 
 # `entries.reach` 留在执行作用域里：`recipe_nav.direct_settings` 按 `g["reach"]` 取它。
@@ -7,7 +8,7 @@ from entries import ENTRIES, reach
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from recipe_kit import maybe, p, rt
+    from recipe_kit import maybe, p, require, rt
 
 # 热搜榜的候选开关名：`recipe_steps.global_search` 从执行作用域按名字取。
 HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "知乎", "精选"]

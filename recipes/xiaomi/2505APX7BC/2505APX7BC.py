@@ -1,5 +1,6 @@
 # Xiaomi MIX Flip 2（2505APX7BC）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
 # 应用商店的「个性化服务」按运行时读到的开关位置分岔；天气的设置藏在 PopupWindow 菜单里，按坐标点。
+import time
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import maybe, p, require, rt, start_or_skip
@@ -65,6 +66,3 @@ def step_weather_calendar(p, rt):
         print("  · 日历：本版无此类开关（7 项全是功能开关），跳过")
     p.back()
 
-
-def tail():
-    print(f"\n回读确认 {rt.verified} 项；步骤异常 {len(rt.failed_steps)} 个", flush=True)

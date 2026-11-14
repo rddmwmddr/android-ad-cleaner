@@ -15,7 +15,6 @@
 model = "2512BPNDAC"
 models = ["2512BPNDAC"]
 build = "OS4.0.5.0"
-tail = "tail"
 
 # 这台的齿轮是纯图标，另有正文「设置」兜底；浏览器两个按钮都按 resource-id 点。
 [const]

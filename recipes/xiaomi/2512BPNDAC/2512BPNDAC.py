@@ -49,6 +49,3 @@ def step_store(p, rt):
         p.off(only=["新手帮助"], keep=["推送消息", "应用更新"], page="商店·通知设置"); p.back()
     p.back(2)
 
-
-def tail():
-    print(f"\n回读确认 {rt.verified} 项；步骤异常 {len(rt.failed_steps)} 个", flush=True)

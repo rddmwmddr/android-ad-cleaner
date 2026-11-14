@@ -4,7 +4,7 @@ from entries import THEME_DEAD_ENDS
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from recipe_kit import maybe, p, rt, start_or_skip
+    from recipe_kit import maybe, p, require_switches, rt, start_or_skip
     from recipe_nav import gear, opened, tap_any
 
 # 热搜榜的候选开关名：`recipe_steps.global_search` 从执行作用域按名字取。
@@ -64,6 +64,3 @@ def step_theme(p, rt):
         p.off(only=["个性化推荐"], page="主题·隐私"); p.back()
     p.back(2)
 
-
-def tail():
-    print(f"\n回读确认 {rt.verified} 项；步骤异常 {len(rt.failed_steps)} 个", flush=True)

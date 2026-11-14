@@ -1,5 +1,6 @@
 # REDMI K80 Ultra（25060RK16C）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
 # 系统广告的「设置搜索不可用就退回菜单路径」与商店的其余分岔留在过程化实现里。
+import time
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from recipe_kit import maybe, p, rt
@@ -60,6 +61,3 @@ def step_store(p, rt):
     # 模式切换：机主拍板保持标准模式，本脚本不切极简
     p.back(2)
 
-
-def tail():
-    print(f"\n回读确认 {rt.verified} 项；步骤异常 {len(rt.failed_steps)} 个", flush=True)

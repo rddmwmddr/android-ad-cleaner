@@ -6,7 +6,6 @@
 model = "M332BF"
 models = ["M332BF"]
 build = "OS4.0.4"
-tail = "tail"
 
 [[segment]]
 name = "系统广告"

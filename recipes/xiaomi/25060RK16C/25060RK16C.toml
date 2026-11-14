@@ -9,7 +9,6 @@
 model = "25060RK16C"
 models = ["25060RK16C"]
 build = ""
-tail = "tail"
 
 # 浏览器设置入口：先看工具栏齿轮，再点底部「我的」找齿轮。
 [const]

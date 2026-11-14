@@ -15,7 +15,6 @@
 model = "25102RKBEC"
 models = ["25102RKBEC"]
 build = "OS4.0"
-tail = "tail"
 
 # 浏览器设置入口：先看工具栏齿轮，再点底部「我的」找齿轮。
 [const]

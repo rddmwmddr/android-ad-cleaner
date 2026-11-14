@@ -1,6 +1,7 @@
 # REDMI K90 Pro Max（25102RKBEC）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
 # 系统广告的分栏判定与手机管家的逐屏下翻都要运行时读数，留在过程化实现里。
 # `recipe_steps.theme` 按 `g["THEME_DEAD_ENDS"]` 取落点名单，下面这句导入把它留在执行作用域里。
+import time
 from entries import THEME_DEAD_ENDS
 
 from typing import TYPE_CHECKING
@@ -44,6 +45,3 @@ def step_security_center(p, rt):
         p.off(only=["推荐内容"], page="管家·垃圾清理"); p.back()
     p.back(2)
 
-
-def tail():
-    print(f"\n回读确认 {rt.verified} 项；步骤异常 {len(rt.failed_steps)} 个", flush=True)

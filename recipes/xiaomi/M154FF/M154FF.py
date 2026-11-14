@@ -1,5 +1,6 @@
 # Xiaomi 18 Pro Max（M154FF）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
 # 系统广告 / 应用商店 / 浏览器用 `opened()` 的直达探路：拉起函数作为回调传进去，留在这里。
+import time
 from entries import THEME_DEAD_ENDS
 
 from typing import TYPE_CHECKING
@@ -73,6 +74,3 @@ def step_browser(p, rt):
             p.off(only=only, page=f"浏览器·{page}"); p.back()
     p.back(2)
 
-
-def tail():
-    print(f"\n回读确认 {rt.verified} 项；步骤异常 {len(rt.failed_steps)} 个", flush=True)

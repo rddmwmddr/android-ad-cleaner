@@ -9,7 +9,6 @@
 model = "M154FF"
 models = ["M154FF", "2608BPX34C", "2510DRK44C"]
 build = "OS4.0"
-tail = "tail"
 
 # 浏览器设置入口：先看工具栏齿轮，再点底部「我的」找齿轮。
 [const]

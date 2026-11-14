@@ -1,5 +1,6 @@
 # Xiaomi 15 HyperOS 4 变体（24129PN74C）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
 # 应用商店的冷启动等待循环、全局搜索的榜单分类循环留在过程化实现里。
+import time
 from entries import THEME_DEAD_ENDS
 
 from typing import TYPE_CHECKING
