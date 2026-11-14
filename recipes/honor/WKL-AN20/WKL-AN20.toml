@@ -21,14 +21,14 @@ code = "step_ad_tracking"
 name = "智能推荐服务"
 ops = [
   {kind = "start", pkg = "com.hihonor.id", activity = ".oaid.ui.IntelligentRecommendActivity"},
-  {kind = "lib", name = "close_named", args = [["智能推荐服务"], "广告与隐私·智能推荐服务", "com.hihonor.id", "智能推荐服务"]},
+  {kind = "lib", name = "close_named_honor", args = [["智能推荐服务"], "广告与隐私·智能推荐服务", "com.hihonor.id", "智能推荐服务"]},
 ]
 
 [[segment]]
 name = "系统管家"
 ops = [
   {kind = "start", pkg = "com.hihonor.systemmanager", activity = ".mainscreen.SettingActivity"},
-  {kind = "lib", name = "close_named", args = [["应用推荐"], "系统管家·设置", "com.hihonor.systemmanager", "设置"]},
+  {kind = "lib", name = "close_named_honor", args = [["应用推荐"], "系统管家·设置", "com.hihonor.systemmanager", "设置"]},
 ]
 
 [[segment]]
@@ -36,16 +36,16 @@ name = "应用市场"
 ops = [
   {kind = "lib", name = "app_settings", args = ["com.hihonor.appmarket", "内容推荐服务", "消息通知管理"]},
   {kind = "lib", name = "tap", args = ["内容推荐服务"]},
-  {kind = "lib", name = "close_named", args = [["营销服务推荐", "个性化服务推荐"], "市场·内容推荐服务", "com.hihonor.appmarket", "内容推荐服务"]},
+  {kind = "lib", name = "close_named_honor", args = [["营销服务推荐", "个性化服务推荐"], "市场·内容推荐服务", "com.hihonor.appmarket", "内容推荐服务"]},
   {kind = "back"},
   {kind = "lib", name = "tap", args = ["消息通知管理"]},
-  {kind = "lib", name = "close_named", args = [["消息通知"], "市场·消息通知管理", "com.hihonor.appmarket", "消息通知管理"]},
+  {kind = "lib", name = "close_named_honor", args = [["消息通知"], "市场·消息通知管理", "com.hihonor.appmarket", "消息通知管理"]},
   {kind = "back"},
   {kind = "lib", name = "tap", args = ["消息中心提醒"]},
-  {kind = "lib", name = "close_named", args = [["活动福利", "游戏动态"], "市场·消息中心提醒", "com.hihonor.appmarket", "消息中心提醒"]},
+  {kind = "lib", name = "close_named_honor", args = [["活动福利", "游戏动态"], "市场·消息中心提醒", "com.hihonor.appmarket", "消息中心提醒"]},
   {kind = "back"},
   {kind = "lib", name = "tap", args = ["热门推荐管理"]},
-  {kind = "lib", name = "close_named", args = [["热门推荐管理"], "市场·热门推荐管理", "com.hihonor.appmarket", "热门推荐管理"]},
+  {kind = "lib", name = "close_named_honor", args = [["热门推荐管理"], "市场·热门推荐管理", "com.hihonor.appmarket", "热门推荐管理"]},
 ]
 
 [[segment]]
@@ -61,7 +61,7 @@ name = "视频"
 ops = [
   {kind = "start", pkg = "com.hihonor.youku.video", activity = "com.youku.android.youkusetting.activity.SettingsActivity"},
   {kind = "lib", name = "tap", args = ["其他设置"]},
-  {kind = "lib", name = "close_named", args = [["个性化内容", "个性化广告", "允许视频采集OAID推荐广告"], "视频·其他设置", "com.hihonor.youku.video", "其他设置"]},
+  {kind = "lib", name = "close_named_honor", args = [["个性化内容", "个性化广告", "允许视频采集OAID推荐广告"], "视频·其他设置", "com.hihonor.youku.video", "其他设置"]},
 ]
 
 [[segment]]
@@ -81,10 +81,10 @@ name = "主题"
 ops = [
   {kind = "lib", name = "app_settings", args = ["com.hihonor.android.thememanager", "个性化服务", "通知"]},
   {kind = "lib", name = "tap", args = ["个性化服务"], kwargs = {scrolls = 0}},
-  {kind = "lib", name = "close_named", args = [["个性化内容", "个性化广告"], "主题·个性化服务", "com.hihonor.android.thememanager", "个性化服务"]},
+  {kind = "lib", name = "close_named_honor", args = [["个性化内容", "个性化广告"], "主题·个性化服务", "com.hihonor.android.thememanager", "个性化服务"]},
   {kind = "back"},
   {kind = "lib", name = "tap", args = ["通知"], kwargs = {scrolls = 0}},
-  {kind = "lib", name = "close_named", args = [["消息通知", "短信", "邮件"], "主题·内容推荐和活动通知", "com.hihonor.android.thememanager", "通知"]},
+  {kind = "lib", name = "close_named_honor", args = [["消息通知", "短信", "邮件"], "主题·内容推荐和活动通知", "com.hihonor.android.thememanager", "通知"]},
 ]
 
 [[segment]]

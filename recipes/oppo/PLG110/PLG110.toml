@@ -31,11 +31,11 @@ ops = [
   { kind = "lib", name = "app_settings", args = ["com.heytap.browser", "com.heytap.browser.settings.component.BrowserPreferencesPage", "浏览器"] },
   { kind = "lib", name = "tap_page", args = ["隐私", "com.heytap.browser.settings.component.BrowserPreferenceActivity"], kwargs = { scrolls = 4 } },
   { kind = "lib", name = "tap_page", args = ["广告管理", "com.heytap.browser.settings.component.BrowserPreferenceActivity"], kwargs = { scrolls = 2 } },
-  { kind = "lib", name = "close_named", args = [["开屏广告", "资讯列表广告"], "浏览器·广告管理", "com.heytap.browser.settings.component.BrowserPreferenceActivity", "广告管理", 2] },
+  { kind = "lib", name = "close_named_expect", args = [["开屏广告", "资讯列表广告"], "浏览器·广告管理", "com.heytap.browser.settings.component.BrowserPreferenceActivity", "广告管理", 2] },
   { kind = "back" },
   { kind = "lib", name = "wait_page", args = ["com.heytap.browser.settings.component.BrowserPreferenceActivity", "隐私"] },
   { kind = "lib", name = "tap_page", args = ["个性化管理", "com.heytap.browser.settings.component.BrowserPreferenceActivity"], kwargs = { scrolls = 2 } },
-  { kind = "lib", name = "close_named", args = [["个性化搜索推荐", "个性化广告推荐"], "浏览器·个性化管理", "com.heytap.browser.settings.component.BrowserPreferenceActivity", "个性化管理", 2] },
+  { kind = "lib", name = "close_named_expect", args = [["个性化搜索推荐", "个性化广告推荐"], "浏览器·个性化管理", "com.heytap.browser.settings.component.BrowserPreferenceActivity", "个性化管理", 2] },
 ]
 
 [[segment]]
@@ -44,13 +44,13 @@ ops = [
   { kind = "print", text = "  将关闭搜索范围中的商业推荐、搜索框提示词、隐私中的个性化推荐。" },
   { kind = "lib", name = "open_page", args = ["am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.SearchSettingActivity", "搜索设置"] },
   { kind = "lib", name = "tap_page", args = ["搜索范围", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.SearchSourceActivity"], kwargs = { scrolls = 0 } },
-  { kind = "lib", name = "close_named", args = [["榜单", "小说", "购物", "个性化推荐", "精选资讯"], "下拉搜索·搜索范围", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.SearchSourceActivity", "搜索范围", 6], kwargs = { dependent = ["全部"] } },
+  { kind = "lib", name = "close_named_expect", args = [["榜单", "小说", "购物", "个性化推荐", "精选资讯"], "下拉搜索·搜索范围", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.SearchSourceActivity", "搜索范围", 6], kwargs = { dependent = ["全部"] } },
   { kind = "back" },
   { kind = "lib", name = "tap_page", args = ["功能管理", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.SearchFunctionManagerActivity"], kwargs = { scrolls = 2 } },
-  { kind = "lib", name = "close_named", args = [["搜索框提示词"], "下拉搜索·功能管理", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.SearchFunctionManagerActivity", "功能管理", 2] },
+  { kind = "lib", name = "close_named_expect", args = [["搜索框提示词"], "下拉搜索·功能管理", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.SearchFunctionManagerActivity", "功能管理", 2] },
   { kind = "back" },
   { kind = "lib", name = "tap_page", args = ["隐私", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.PrivacySettingsActivity"], kwargs = { scrolls = 4 } },
-  { kind = "lib", name = "close_named", args = [["个性化推荐"], "下拉搜索·隐私", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.PrivacySettingsActivity", "隐私", 2] },
+  { kind = "lib", name = "close_named_expect", args = [["个性化推荐"], "下拉搜索·隐私", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.PrivacySettingsActivity", "隐私", 2] },
 ]
 
 [[segment]]
@@ -58,14 +58,14 @@ name = "负一屏"
 ops = [
   { kind = "print", text = "  将关闭热点资讯、搜索框提示词，轮播改为不显示；保留功能卡片和推荐服务总开关。" },
   { kind = "lib", name = "assistant_settings" },
-  { kind = "lib", name = "close_named", args = [["搜索框提示词"], "负一屏·搜索框提示词", "com.coloros.assistantscreen/com.oplus.assistantscreen.setting.AssistantScreenSettingActivity", "设置", 2] },
+  { kind = "lib", name = "close_named_expect", args = [["搜索框提示词"], "负一屏·搜索框提示词", "com.coloros.assistantscreen/com.oplus.assistantscreen.setting.AssistantScreenSettingActivity", "设置", 2] },
   { kind = "lib", name = "tap_page", args = ["推荐服务", "com.coloros.assistantscreen/com.oplus.assistantscreen.setting.recommendservice.RecommendServiceSettingActivity"], kwargs = { scrolls = 0 } },
   { kind = "lib", name = "hide_carousel" },
   { kind = "back" },
   { kind = "lib", name = "wait_page", args = ["com.coloros.assistantscreen/com.oplus.assistantscreen.setting.AssistantScreenSettingActivity", "设置"] },
   { kind = "lib", name = "tap_page", args = ["隐私", "com.coloros.assistantscreen/com.oplus.assistantscreen.setting.activity.PrivacyActivity"], kwargs = { scrolls = 4 } },
   { kind = "lib", name = "tap_page", args = ["个性化推荐", "com.coloros.assistantscreen/com.oplus.assistantscreen.setting.activity.PersonalRecommendManageActivity"], kwargs = { scrolls = 0 } },
-  { kind = "lib", name = "close_named", args = [["热点资讯"], "负一屏·个性化推荐", "com.coloros.assistantscreen/com.oplus.assistantscreen.setting.activity.PersonalRecommendManageActivity", "个性化推荐", 2] },
+  { kind = "lib", name = "close_named_expect", args = [["热点资讯"], "负一屏·个性化推荐", "com.coloros.assistantscreen/com.oplus.assistantscreen.setting.activity.PersonalRecommendManageActivity", "个性化推荐", 2] },
 ]
 
 [[segment]]
@@ -76,7 +76,7 @@ ops = [
   { kind = "go", text = "我的", expect = "设置" },
   { kind = "lib", name = "tap_page", args = ["设置", "com.heytap.yoli/com.heytap.yoli.mine.setting.SettingActivity"], kwargs = { scrolls = 0, exact = false } },
   { kind = "lib", name = "tap_page", args = ["个性化管理", "com.heytap.yoli/com.heytap.yoli.mine.setting.PersonalizedContentManageActivity"], kwargs = { scrolls = 3 } },
-  { kind = "lib", name = "close_named", args = [["个性化广告推荐", "个性化内容推荐"], "OPPO视频·个性化管理", "com.heytap.yoli/com.heytap.yoli.mine.setting.PersonalizedContentManageActivity", "个性化管理", 2] },
+  { kind = "lib", name = "close_named_expect", args = [["个性化广告推荐", "个性化内容推荐"], "OPPO视频·个性化管理", "com.heytap.yoli/com.heytap.yoli.mine.setting.PersonalizedContentManageActivity", "个性化管理", 2] },
 ]
 
 [[segment]]

@@ -29,7 +29,7 @@ ops = [
   { kind = "if_lib", name = "open_app_settings", args = ["com.heytap.market", "com.heytap.market.mine.cn.setting.ui.SettingActivity", "应用与服务"], else_ops = [{ kind = "return", value = false }] },
   { kind = "if_lib", name = "tap_page", args = [["隐私", "隐私授权管理"], "com.heytap.market.mine.cn.setting.ui.PrivacyActivity", ["隐私", "隐私授权管理"]], else_ops = [{ kind = "print", text = "  · 没找到商店「隐私」入口，跳过" }, { kind = "return", value = false }] },
   { kind = "if_lib", name = "tap_page", args = ["个性化推荐", "com.heytap.market.mine.cn.setting.ui.PersonalRecommendActivity", "个性化推荐"], else_ops = [{ kind = "print", text = "  · 没找到「个性化推荐」子页，跳过" }, { kind = "return", value = false }] },
-  { kind = "return_lib", name = "off_exact", args = [["个性化推荐"], "商店·个性化推荐"], kwargs = { max_screens = 2 } },
+  { kind = "return_lib", name = "off_exact_paged", args = [["个性化推荐"], "商店·个性化推荐"], kwargs = { max_screens = 2 } },
 ]
 
 [[segment]]

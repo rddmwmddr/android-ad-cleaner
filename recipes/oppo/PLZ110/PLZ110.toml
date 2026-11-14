@@ -19,7 +19,7 @@ ops = [
   # 本版商店叫「隐私授权管理」，同族另有叫「隐私」的（#907）。tries 保住「点击被弹窗动画吞掉就再点」。
   { kind = "lib", name = "row", args = [["隐私", "隐私授权管理"]], kwargs = { package = "com.heytap.market", activity = "PrivacyActivity", tries = 3 } },
   { kind = "lib", name = "row", args = ["个性化推荐"], kwargs = { package = "com.heytap.market", activity = "PersonalRecommendActivity" } },
-  { kind = "lib", name = "close_named", args = [["个性化推荐"], "个性化推荐"] },
+  { kind = "lib", name = "close_named_optional", args = [["个性化推荐"], "个性化推荐"] },
   { kind = "lib", name = "app_settings", args = ["com.heytap.market"] },
   { kind = "lib", name = "row", args = ["服务管理"] },
   # 服务管理按页上实有的行筛候选推广位再整表关；一个都没识别到就按失败收尾。

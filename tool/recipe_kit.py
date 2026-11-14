@@ -77,9 +77,10 @@ def preamble(p, g, rt=None):
               "maybe": maybe, "start_or_skip": rt.start_or_skip, "page": rt.page,
               "require_switches": rt.require_switches, "skip_in_safe_mode": rt.skip_in_safe_mode,
               "VERIFIED_SWITCHES": rt.counter})
-    recipe_nav.install(p, g)
-    recipe_strategies.install(p, g)
-    recipe_steps.install(p, g)
+    import functools
+    for module in (recipe_nav, recipe_strategies, recipe_steps):
+        for name in module.__all__:
+            g[name] = functools.partial(getattr(module, name), p, rt)
     return g
 
 
