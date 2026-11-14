@@ -35,9 +35,8 @@
 | `recipe_loader.py` | 机型脚本的唯一装载入口：按路径转发到 `tool/catalog`（`.toml` 页面树），不再有 `.py` 脚本分支；`fast.execute`、`adapt.check_draft`、`tests/fixtures.load_recipe` 三处都走它（[ADR-0038](adr/0038-recipe-catalog.md)） |
 | `recipe_runtime.py` | 这一次执行（`rt`）：段过滤、跳过/断言出口（`page` / `require_switches` / `skip_in_safe_mode` / `start_or_skip`）、安全模式、分段台账、失败段与中止、时钟、每机型常量与回读确认数；段包装在 `Runtime.run_step()`，数据段按声明顺序执行（[ADR-0038](adr/0038-recipe-catalog.md)、#1268） |
 | `recipe_kit.py` | 运行时名词的显式 re-export（`DONE` / `SkipStep` / `Runtime` 等）；`preamble()` / `@step` / 执行作用域都已删除（#1268） |
-| `recipe_nav.py` | 公共导航库：入口、选择器、等待与落点确认，普通函数收 `(p, rt, …)`，数据用 `lib` 按名字点名；按家族分节，同一个名字有几套实测走法时由 `rt.constants` 里的小米/OPPO/vivo 常量选（`GEAR_STYLE` / `BROWSER_FLOW` / `MENU_STYLE`），缺省档保留旧行为（#1244、#1268） |
-| `recipe_strategies.py` | 拨动策略库：怎么把一页开关关掉（精确匹配、逐行重读、整页全关、父子项、短按被吞、标题在行外），普通函数收 `(p, rt, …)`；词库扫它的实现源码取开关名（#1245、#1253、#1268） |
-| `recipe_steps.py` | 跨机型复用的段体库：整段流程写成普通函数收 `(p, rt, …)`，数据用 `lib` 点名，模块常量从 `rt.constants` 取（[ADR-0038](adr/0038-recipe-catalog.md)、#1268） |
+| [recipe_lib/](../recipe_lib/) | 机型库（#1269）：按家族分文件（`<家族>.py`）+ 跨家族共享（`shared.py`），文件内分「词汇 / 策略」。实现都是普通函数收 `(p, rt, …)`，数据用 `lib` 按名字点名；同一个名字有几套实测走法时由 `rt.constants` 里的机型常量选（`GEAR_STYLE` / `BROWSER_FLOW` / `MENU_STYLE` 等），缺省档保留旧行为。归属按家族数算，守卫在 `tests/test_recipe_nav.py`（[ADR-0038](adr/0038-recipe-catalog.md)、#1269） |
+| `recipe_nav.py` / `recipe_strategies.py` / `recipe_steps.py` | `recipe_lib` 的稳定 import 面（#1269）：机型例外 `.py` 仍从这里取名字，内部实现已搬进 `recipe_lib`；新实现不要写进这三个文件 |
 | `recipe_audit.py` | 本机函数审计：每份脚本自己定义了哪些模块级函数、归哪一档，「本机策略：N 个」从哪来；`check` 与 `status-json` 取同一份计数（`counts()`），只读 AST、不 import、不连手机 |
 | `recipe_meta.py` | 机型脚本头部的元数据：录制版本、机型列表、段名，以及对外的稳定身份（目录名，`recipe_id()`）；只有正则，不背 CLI 入口的副作用 |
 | `recipe_source.py` | 机型脚本的事实层：一份源码里的调用点与模块级常量，纯 AST，入口速查与词库共用（[ADR-0034](adr/0034-recipe-source-facts.md)） |
