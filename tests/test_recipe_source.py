@@ -12,14 +12,11 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 
-import recipe_nav  # noqa: E402
 import recipe_source  # noqa: E402
-import recipe_steps  # noqa: E402
 
 
 def scan(src):

@@ -48,11 +48,30 @@ class CatalogScope(dict):
         try:
             return super().__getitem__(key)
         except KeyError:
-            fn = interpreter.LIBRARY.get(key)
-            if fn is None:
-                raise
-            import functools
-            return functools.partial(fn, self.rt.p, self.rt)
+            return self._library_view(key)
+
+    def _library_view(self, key):
+        """测试读库助手用的视图：`__all__` 里的实现 + 提升进库的本机助手。"""
+        import functools
+        import recipe_nav
+        import recipe_steps
+        import recipe_strategies
+        fn = interpreter.LIBRARY.get(key)
+        if fn is None:
+            for module in (recipe_nav, recipe_strategies, recipe_steps):
+                value = getattr(module, key, None)
+                if value is not None and not key.startswith("__"):
+                    fn = value
+                    break
+        if fn is None:
+            raise KeyError(key)
+        if isinstance(fn, type):                 # MenuState 这类 namedtuple
+            return fn
+        if key in ("title_key", "_labelled"):    # 纯函数：不绑协作者
+            return fn
+        if key == "labels":                      # `labels(p, root=None)`
+            return functools.partial(fn, self.rt.p)
+        return functools.partial(fn, self.rt.p, self.rt)
 
     def __setitem__(self, key, value):
         if key == "ONLY":
