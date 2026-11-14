@@ -1,0 +1,64 @@
+# Redmi Note 12 Turbo（23049RAD8C，HyperOS 1 / OS3.0.5.0）机型脚本；适配机型：Redmi Note 12 Turbo（23049RAD8C）
+# 路径来源：2026-10-25 实测（OS3.0.5.0.VMRCNXM，Android 15）
+# 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
+# 2026-11-14 转页面树（#1266）：浏览器段落成导航数据，其余按名字调共享段体；系统广告 / 应用商店 /
+# 天气和日历里的 try/except 兜底与运行时分岔留在同名 `.py` 的 `code =`。
+model = "23049RAD8C"
+models = ["23049RAD8C"]
+build = "OS3.0.5.0"
+
+[[segment]]
+name = "系统广告"
+code = "step_system_ads"
+
+[[segment]]
+name = "应用商店"
+code = "step_store"
+
+[[segment]]
+name = "手机管家"
+ops = [{ kind = "lib", name = "security_center" }]
+
+[[segment]]
+name = "下载管理"
+ops = [{ kind = "lib", name = "downloads" }]
+
+[[segment]]
+name = "主题"
+ops = [{ kind = "lib", name = "theme" }]
+
+[[segment]]
+name = "浏览器"
+ops = [
+  # 直达设置页
+  { kind = "start", pkg = "com.android.browser", activity = "com.android.browser.BrowserSettingsActivity" },
+  { kind = "if_entry", text = "隐私和安全", ops = [
+    { kind = "off", only = ["个性化内容推荐", "个性化广告推荐"], page = "浏览器·隐私和安全" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "主页设置", ops = [
+    { kind = "off", only = ["宫格位推送"], page = "浏览器·主页设置" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "搜索设置", ops = [
+    { kind = "off", only = ["猜你想搜"], page = "浏览器·搜索设置" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "功能设置", ops = [
+    { kind = "off", only = ["小说"], page = "浏览器·功能设置" },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "全局搜索"
+ops = [{ kind = "lib", name = "global_search" }]
+
+[[segment]]
+name = "负一屏"
+ops = [{ kind = "lib", name = "negative_screen" }]
+
+[[segment]]
+name = "天气和日历"
+code = "step_weather_calendar"
