@@ -127,7 +127,7 @@ id = "dev.types.strict-on-pure-modules"
 source = "CLAUDE.md#开发"
 check = "none"
 status = "manual"
-why = "宽松档只查函数体内的表达式：一个没写返回类型的函数被调用方按返回值用时不会红，把 `str | None` 传给只收 `str` 的正则 `search()` 也要等真机走到那条分支。这九个模块不碰设备、不碰手机界面、不依赖假对象，注解补完能让调用方一起被查；其余引擎目录带假对象与注入作用域，全仓开严格档会撞上它们赖以灵活的形状（沿用 #997）。mypy 在 overrides 里把 `strict = true` 当全局设置，所以名单里是逐项 flag；整块删掉这些 override 时 mypy 仍绿（宽松档不要求注解），没有能返红的守卫，所以只记 manual。"
+why = "宽松档只查函数体内的表达式：一个没写返回类型的函数被调用方按返回值用时不会红，把 `str | None` 传给只收 `str` 的正则 `search()` 也要等真机走到那条分支。这十个模块不碰设备、不碰手机界面、不依赖假对象，注解补完能让调用方一起被查；其余引擎目录带假对象，全仓开严格档会撞上它们赖以灵活的形状（沿用 #997）。mypy 在 overrides 里把 `strict = true` 当全局设置，所以名单里是逐项 flag；整块删掉这些 override 时 mypy 仍绿（宽松档不要求注解），没有能返红的守卫，所以只记 manual。"
 expires_if = "这几类模块开始依赖假对象或注入作用域、严格档保持不住绿时删；或全仓改成严格档时并进 dev.types.narrow-scope-in-config。"
 
 [[rule]]
@@ -277,7 +277,7 @@ expires_if = "拨动计划与回读合并成一个对象、调用方不再各自
 [[rule]]
 id = "dev.switches.missing-target-evidence"
 source = "CLAUDE.md#开发"
-check = "code:tool/recipe_kit.py:preamble"
+check = "code:tool/recipe_runtime.py:Runtime"
 status = "code"
 why = "点名开关没出现时只报一句「未识别全部目标开关，未操作」，9 份 HyperOS 3.0 上报分不清是改名、页面空着还是根本没进页面（#903）；守卫原本在 14 处脚本里各写一份，补证据要改 14 遍，漏一处输出又分叉。同一个前导里的 `page()` 是同一类失败的另一种问法（到了但页面不对，包名 / Activity / 标题），OPPO 与一加两份复制品同样只报一句话（#939）。"
 expires_if = "开关名单断言并入引擎、机型脚本不再各自核对页面上有哪些标题时删。"
@@ -285,10 +285,10 @@ expires_if = "开关名单断言并入引擎、机型脚本不再各自核对页
 [[rule]]
 id = "dev.steps.injection-surface"
 source = "CLAUDE.md#开发"
-check = "test:test_recipe_steps::CopyGuardTests.test_no_script_keeps_a_byte_identical_copy"
-status = "enforced"
-why = "34 簇段体被逐字复制了 80 份，改一处判据要改十几遍、漏一份就分叉（沿用 #1149 的簇账）；搬进注入面之后还要挡住一种半拉子状态：搬了代码没删副本，两边各跑一份。段体的模块常量必须留在脚本里按名字取——同名段体在不同脚本里取值不同，内联等于把两份数据并成一份错的（ADR-0035），这一条没有机械守卫，靠审查。"
-expires_if = "43 份脚本的段体全部搬完、仓库里不再有 `@step` 段体副本时，删这条反向守卫；`STEPS` 与这个注入面长期保留。"
+check = "none"
+status = "manual"
+why = "注入面已拆除（#1268）：库实现是 `recipe_nav` / `recipe_strategies` / `recipe_steps` 里的普通函数，收 `(p, rt, …)`，数据用 `lib`/`code` 按名字点名；没有执行作用域、没有工厂闭包、没有同名覆盖。事实层退化为字面量提取器（`library_sources()` + `scan_source`），不再做 import 归属解析。这条没有返红的守卫，靠审查：往库里加实现时只加普通函数与 `__all__`，别再引入第二套名字注入。"
+expires_if = "库按家族拆开（#1269）之后，本条并入那边的归属判据。"
 
 [[rule]]
 id = "dev.launch.foreground-ownership"
@@ -1163,7 +1163,7 @@ expires_if = "失败说明改由结构化诊断字段给出、脚本自己就能
 [[rule]]
 id = "domain.steps.optional-entry-not-unfinished"
 source = "CONTEXT.md#执行"
-check = "code:tool/recipe_kit.py:preamble"
+check = "code:tool/recipe_runtime.py:Runtime"
 status = "code"
 why = "可选入口经 maybe() / p.entry() 找不到只返回 False，不记 FAILED_STEPS、退出码仍是 0；记成未完成，没装某个 App 的机型会整段失败。与 dev.navigation.raise-vs-false 相邻但不同：那条判写脚本时该选哪个方法（该 raise 的写成返回 False 就是 #776，段内空跑还按成功记），这条判引擎把哪种失败算进退出码。方法选择的对照表在 docs/04 的「该用哪个导航方法」。实现在 `preamble()` 注入的 `maybe` 闭包里。"
 expires_if = "可选入口与必需入口统一成一种失败语义、脚本不再自己选时删。"
@@ -1171,25 +1171,17 @@ expires_if = "可选入口与必需入口统一成一种失败语义、脚本不
 [[rule]]
 id = "domain.steps.skip-ledger"
 source = "CONTEXT.md#执行"
-check = "code:tool/recipe_kit.py:preamble"
+check = "code:tool/recipe_runtime.py:Runtime"
 status = "code"
 why = "「按约定不跑」与「没跑成」共用一个台账时，结果页会把型号 / 版本不符、要机主手动进入的段算成失败并可重试，重跑还是同样跳过。跳过台账独立、不进 failed_steps 事件，退出码只看失败台账（#838、ADR-0029）。实现在 `preamble()` 注入的 `skip` 闭包里。"
 expires_if = "结果页与退出码改由单独的结局字段表达、不再从台账推断时删。"
 
 [[rule]]
-id = "dev.recipes.no-local-preamble"
-source = "docs/04-给新机型写脚本.md#本机例外函数"
-check = "test:test_recipe_preamble_migration::StructureTests.test_recipes_do_not_define_the_preamble"
-status = "enforced"
-why = "43 份脚本各抄一份段包装，已经分化成两代：锁屏时一代抛异常（记未完成），一代打印一句「后面的都不跑」就返回（退出码仍是 0，结果页显示成功）。#838 把前导收进引擎、#839 删掉 43 份本地副本；再留一份副本就会长出第三代，而且新写脚本的人不知道该抄哪一版。"
-expires_if = "不再按 exec 跑脚本（改成 import 一个自带前导的模块）时，这条与 docs/04 的那一段一起删。"
-
-[[rule]]
 id = "dev.recipes.safe-mode-page-wide-skip"
 source = "docs/04-给新机型写脚本.md#本机例外函数"
-check = "test:test_recipe_kit::WholePageStepGuardTests.test_page_wide_segments_start_with_the_safe_mode_exit"
+check = "test:test_catalog::PageWideTests.test_skips_in_safe_mode"
 status = "enforced"
-why = "安全模式下 `off()` 只关点名的开关，整页关闭的段落一个都点不到；段落再回读「必须全关」就稳定记成失败，用户看到的是「没关掉」而不是「这段没做」（#909 的 PKT110 上报）。出口写成段体第一句，是因为写在后面等于先翻页、再判没关掉，失败现场与结论都指向错的环节。"
+why = "安全模式下 `off()` 只关点名的开关，整页关闭的段落一个都点不到；段落再回读「必须全关」就稳定记成失败，用户看到的是「没关掉」而不是「这段没做」（#909 的 PKT110 上报）。出口写成段体第一句（或数据里的 `skip_in_safe_mode` op），是因为写在后面等于先翻页、再判没关掉，失败现场与结论都指向错的环节。"
 expires_if = "安全模式不再限制整页关闭（能安全地按页面结构判断该关哪些）时删。"
 
 [[rule]]
@@ -1211,18 +1203,18 @@ expires_if = "开了 Dependabot（版本更新或安全更新），或依赖不�
 [[rule]]
 id = "dev.recipes.module-body-shape"
 source = "CLAUDE.md#开发"
-check = "test:test_recipe_loader::RecipeLoaderGuardTests.test_module_body_has_only_definitions_and_constants"
-status = "enforced"
-why = "机型脚本以前靠执行式 `@step` 在模块体里按书写顺序跑段，顺手写在模块级的一句 `print` / `for` / `p…()` 也会在导入时执行；#1241 把段改成声明式之后，这类语句会让「导入零动作」重新破掉，而且执行顺序藏进模块体、装载器看不见。守卫只允许导入、定义、常量、模块 docstring 与 `if TYPE_CHECKING:` 块，收尾打印搬进 `tail()`、其余语句搬进段体或模块级助手（ADR-0037）。"
-expires_if = "脚本不再按模块装载（换成数据树 + 解释器）时，这条与 `recipe_loader` 的装载形状一起删。"
+check = "none"
+status = "manual"
+why = "机型脚本的数据形态是 `.toml` 页面树，唯一装载点是 `tool/catalog`（#1268）。同目录例外 `.py` 只是普通模块：函数收 `(p, rt, …)`、顶部显式 import 库，装载器把它 exec 进一个普通命名空间供 `code=` 与钩子按名字取。导入不产生设备动作；别再往里写注入、执行式段或模块级动作。"
+expires_if = "例外函数进一步数据化、不再需要 exec 命名空间时删。"
 
 [[rule]]
 id = "dev.recipes.shared-sections"
 source = "CLAUDE.md#开发"
-check = "test:test_recipe_nav::SharedSectionTests.test_every_shared_implementation_serves_two_families"
-status = "enforced"
-why = "新机型的第一份脚本最容易顺手把自己的走法塞进共享库：只有这一台机在用，下一台要改它时得先猜它在服务谁，家族分节也因此长不出自己的形状（归属规则沿用 #1244–#1246，#1247 落成守卫）。判据按**节**算：`recipe_nav.SHARED` / `recipe_strategies.SHARED` 列出的注入名必须被 ≥2 个家族使用（家族取自 `entries.FAMILY`，脚本侧的使用取自事实层的 import）；家族分节不受这条限制，它是新机型并入的入口，允许单脚本变体。清单只在库里写一份，用例不另抄名单。"
-expires_if = "脚本改由数据树 + 解释器驱动、共享助手不再是手写实现时删。"
+check = "none"
+status = "manual"
+why = "判据不变，仍按**节**算：共享（跨家族）分节里的实现必须被 ≥2 个家族使用（家族取自 `entries.FAMILY`），家族分节允许单脚本变体。`test_recipe_nav.py` 的 `SharedSectionTests` 已随注入面删除（#1268），这条现在**没有机械守卫**；守卫随 `recipe_lib/<家族>.py` + `shared.py` 的拆分在 #1269 重建，届时要重新落成 CI。当前共享库里仍有单家族实现的残留（#1268 为拆注入面把它们从例外 `.py` 提升进库），#1269 一并归位。"
+expires_if = "守卫在 #1269 重建后改回 enforced；本条并入那边的规则。"
 
 [[rule]]
 id = "doc.pr.docs-and-generator-in-sync"

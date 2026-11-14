@@ -1,6 +1,8 @@
 # V2547A 的本机例外函数（catalog 的 `code=`，影随 `V2547A.toml`）。本机 8 段都是过程段
 # （goto / 循环 / confirm2 / resourceId 点击），逐字保留原实现；线性助手照留。
 # vivo X300 Ultra（V2547A，OriginOS 7，Android 17）机型脚本；2026-10-25 在真机逐页实测，8 段整段跑通，重跑 126 秒。
+import recipe_nav as nav
+import recipe_strategies as strategies
 BUILD = "PD2547B_A_17.1.10.2"          # ro.build.display.id 的开头；对不上引擎只提示，不阻断
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 #
@@ -27,7 +29,7 @@ BOUNDS = re.compile(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]")
 CONFIRM = ("确认关闭", "仍要关闭", "仍然关闭", "确定关闭", "继续关闭", "关闭推荐", "确定", "确认", "关闭")
 
 
-def bounds_of(n):
+def bounds_of(p, rt, n):
     m = BOUNDS.match(n.get("bounds") or "")
     return tuple(map(int, m.groups())) if m else (0, 0, 0, 0)
 
@@ -35,110 +37,104 @@ def bounds_of(n):
 # ---------- 各段 ----------
 
 def step_ad_privacy(p, rt):
-    if not search_setting("广告与隐私"):
+    if not nav.search_setting(p, rt, "广告与隐私"):
         print("  ✗ 没进到广告与隐私"); return
     print("  · 广告与隐私")
-    off(only=["个性化广告", "个性化推荐", "智能推荐服务"], page="系统·广告与隐私")
+    strategies.off(p, rt, only=["个性化广告", "个性化推荐", "智能推荐服务"], page="系统·广告与隐私")
     # 「生活服务」推送建议不在本机型清单范围内，不动
     p.back(1)
 
 
-
 def step_negative(p, rt):
-    if not hiboar_panel():
+    if not nav.hiboar_panel(p, rt):
         print("  ✗ 没滑到负一屏（桌面可能没开负一屏），跳过"); return
     print("  · 负一屏设置面板")
-    if goto("更多设置"):
-        if goto("个性化推荐"):
-            off(only=["服务推荐", "资讯推荐"], page="负一屏·个性化推荐")
+    if nav.goto(p, rt, "更多设置"):
+        if nav.goto(p, rt, "个性化推荐"):
+            strategies.off(p, rt, only=["服务推荐", "资讯推荐"], page="负一屏·个性化推荐")
     # ⚠ 便捷生活里的「推荐服务」不要关：那 10 个图标（扫码、手电筒、计算器）都靠它补位，关了整块变空
     for name in ("内容精选", "热点资讯"):
-        if not hiboar_panel():
+        if not nav.hiboar_panel(p, rt):
             print("  ✗ 回不到负一屏设置面板"); break
         p.top()
         # 热点资讯页的标题会串成页标题，rows() 已按行还原真实标题；
         # 悬浮/经典/卡片形态是单选钮，rows() 也排除了，不会被当开关拨
-        if goto(name, scrolls=6):
-            off(only=[name], page=f"负一屏·{name}")
+        if nav.goto(p, rt, name, scrolls=6):
+            strategies.off(p, rt, only=[name], page=f"负一屏·{name}")
     # 小V建议（航班、快递提醒）保留不动
     p.back(3)
-
 
 
 def step_global_search(p, rt):
     p.start("com.vivo.globalsearch", ".view.SearchSettingsActivity", settle=0.8)
     if "globalsearch" not in p.focus():
         print("  ✗ 没拉起全局搜索设置"); return
-    if goto("首页展示内容"):
-        off(only=["搜索框推荐词", "推荐卡片"], page="搜索·首页展示内容")
-        if goto("推荐热搜榜单", scrolls=4):
-            off(only=["热门搜索"], page="搜索·推荐热搜榜单")
+    if nav.goto(p, rt, "首页展示内容"):
+        strategies.off(p, rt, only=["搜索框推荐词", "推荐卡片"], page="搜索·首页展示内容")
+        if nav.goto(p, rt, "推荐热搜榜单", scrolls=4):
+            strategies.off(p, rt, only=["热门搜索"], page="搜索·推荐热搜榜单")
             p.back(1)
         p.back(1)
     p.top()
-    if goto("个性化内容"):
-        off(only=["广告个性化"], page="搜索·个性化内容")   # 应用建议、搜索结果个性化保留
+    if nav.goto(p, rt, "个性化内容"):
+        strategies.off(p, rt, only=["广告个性化"], page="搜索·个性化内容")   # 应用建议、搜索结果个性化保留
         p.back(1)
     # 「搜索项」是搜索范围本身，不动
     p.back(1)
 
 
-
 def step_store(p, rt):
     p.start("com.bbk.appstore", settle=1.0)
-    if not tap_text("我的"):
+    if not nav.tap_text(p, rt, "我的"):
         print("  ✗ 没找到「我的」"); return
-    if not tap_text("设置"):
+    if not nav.tap_text(p, rt, "设置"):
         print("  ✗ 「我的」页没找到设置"); return
     print(f"  · 商店设置页 {p.focus()}")
-    if goto("关于"):
-        if goto("个性化推荐"):
-            off(only=["个性化推荐"], page="商店·个性化推荐")
+    if nav.goto(p, rt, "关于"):
+        if nav.goto(p, rt, "个性化推荐"):
+            strategies.off(p, rt, only=["个性化推荐"], page="商店·个性化推荐")
             p.back(1); time.sleep(0.8)
         p.top()
-        if goto("服务管理", scrolls=2):
+        if nav.goto(p, rt, "服务管理", scrolls=2):
             # 这一页用白名单：「我的服务」「空间清理」要留着
-            off(only=["签到有礼", "顶部轮播图", "顶部栏目", "开屏", "摇一摇", "悬浮窗", "限时推广"],
+            strategies.off(p, rt, only=["签到有礼", "顶部轮播图", "顶部栏目", "开屏", "摇一摇", "悬浮窗", "限时推广"],
                 keep=["我的服务", "空间清理"], page="商店·服务管理")
             p.back(1); time.sleep(0.8)
         p.back(1)
     p.back(3)
 
 
-
 def step_browser(p, rt):
     p.start("com.vivo.browser", settle=1.5)
-    if not browser_settings():
+    if not nav.browser_settings(p, rt):
         print("  ✗ 没进到浏览器设置"); return
     print(f"  · 浏览器设置页 {p.focus()}")
-    if goto("首页设置"):
+    if nav.goto(p, rt, "首页设置"):
         if p.tap("极简首页", exact=True, scrolls=0):    # 三选一的卡片，不能点行中间
-            confirm2()
+            strategies.confirm2(p, rt)
             print("  · 首页切成极简首页")
         p.back(1); time.sleep(0.6); p.top()
     for name, words in (("网页浏览设置", ["网页下载相关推荐"]),
                         ("更多设置", ["WiFi连接跳转新闻资讯"]),        # 在设置页中段
                         ("隐私权限设置", ["个性化内容", "第三方应用来源个性化推荐", "个性化广告推荐"])):
         p.top()                                   # 每次都从顶部开始翻，位置才可预期
-        if goto(name, scrolls=10):
-            off(only=words, page=f"浏览器·{name}")
+        if nav.goto(p, rt, name, scrolls=10):
+            strategies.off(p, rt, only=words, page=f"浏览器·{name}")
             p.back(1); time.sleep(0.6)
     p.back(3)
 
 
-
 def step_lock_screen(p, rt):
-    if not search_setting("阅图锁屏"):
+    if not nav.search_setting(p, rt, "阅图锁屏"):
         print("  ✗ 没进到阅图锁屏"); return
     if "MagazineSettings" not in p.focus():        # 万一停在搜索结果页，再点一次结果
         p.tap("阅图锁屏", exact=True, scrolls=4)
         time.sleep(1.5)
     print(f"  · 阅图锁屏页 {p.focus()}")
-    off(only=["阅图锁屏", "锁屏横滑进入阅图"],
+    strategies.off(p, rt, only=["阅图锁屏", "锁屏横滑进入阅图"],
         keep=["锁屏底部壁纸", "移动网络自动更新"], page="系统·阅图锁屏")
     # 锁屏壁纸保持原样
     p.back(2)
-
 
 
 def step_i_manager(p, rt):
@@ -153,13 +149,12 @@ def step_i_manager(p, rt):
                 break
     if not ok:
         print("  ✗ 没进到 i 管家设置"); return
-    if goto("关于", scrolls=2):
-        if goto("个性化设置", scrolls=2):
-            off(only=["应用个性化推荐", "清理个性化推荐"], page="i管家·个性化设置")
+    if nav.goto(p, rt, "关于", scrolls=2):
+        if nav.goto(p, rt, "个性化设置", scrolls=2):
+            strategies.off(p, rt, only=["应用个性化推荐", "清理个性化推荐"], page="i管家·个性化设置")
             p.back(1)
         p.back(1)
     p.back(2)
-
 
 
 def step_weather(p, rt):
@@ -170,15 +165,10 @@ def step_weather(p, rt):
     except Exception:
         print("  ✗ 没找到天气右上角的更多按钮"); return
     time.sleep(1.3)
-    if not tap_text("设置"):
+    if not nav.tap_text(p, rt, "设置"):
         print("  ✗ 天气菜单里没找到设置"); return
     print(f"  · 天气设置页 {p.focus()}")
-    off(only=["天气服务"], keep=["气象预警", "异常天气", "地震预警"], page="天气·设置")
+    strategies.off(p, rt, only=["天气服务"], keep=["气象预警", "异常天气", "地震预警"], page="天气·设置")
     # 气象预警、异常天气、地震预警、提醒城市都保留
     p.back(2)
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import p
-    from recipe_nav import browser_settings, goto, hiboar_panel, result_xy, search_setting, tap_row, tap_text
-    from recipe_strategies import confirm2, dialog_open, off, rows

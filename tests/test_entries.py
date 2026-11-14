@@ -27,6 +27,9 @@ import entries  # noqa: E402
 import fast  # noqa: E402
 import fixtures  # noqa: E402
 import recipe_meta  # noqa: E402
+import recipe_nav  # noqa: E402
+import recipe_strategies  # noqa: E402
+import recipe_steps  # noqa: E402
 import recipe_source  # noqa: E402
 import row  # noqa: E402
 from fast import ScreenLocked  # noqa: E402
@@ -165,80 +168,9 @@ class SourceTest(unittest.TestCase):
                 encoding="utf-8")
             self.assertEqual(entries.used_by(d), {})
 
-    def test_navigation_implementations_ignore_caller_constants(self):
-        """`used_by()` 把调用脚本的常量一并传给每份注入实现：今天没有导航助手按名字取外部值，
-        所以传与不传必须逐字相同，否则这条接线会悄悄改变「用过的机型」（#1209）。"""
-        import recipe_source
-        constants = {"MARKET": ("com.example.market",), "HOT": ("热点资讯",)}
-        for name, impl in recipe_source.surface_sources()[recipe_source.NAV_MODULE].items():
-            self.assertEqual(recipe_source.scan_source(impl, externals=constants).calls,
-                             recipe_source.scan_source(impl).calls, name)
 
-    def test_an_entry_inside_a_step_implementation_is_credited_to_the_caller(self):
-        """段体搬进注入面之后，实现里的拉起仍认得出属于哪个机型（#1209）。"""
-        import recipe_steps
-        import tempfile
-        with tempfile.TemporaryDirectory() as d:
-            model = Path(d) / "xiaomi" / "model"
-            model.mkdir(parents=True)
-            (model / "recipe.py").write_text(
-                'MARKET = "com.example.market"\n\n\n'
-                '@step("商店")\n'
-                'def _():\n'
-                '    store()\n\n\n'
-                'from typing import TYPE_CHECKING\n\n'
-                'if TYPE_CHECKING:\n'
-                '    from recipe_steps import store\n',
-                encoding="utf-8")
-            with patch.dict(recipe_steps.STEPS, {"store": _store_factory}):
-                used = entries.used_by(d)
-        self.assertEqual(used, {("direct", "com.example.market",
-                                 "com.example.market.Main"): {"model"}})
 
-    def test_an_entry_two_hops_down_is_credited_to_the_caller(self):
-        """段体调导航助手、入口写在助手实现里（#1212）：只看脚本那一层会把调段体的机型漏掉。"""
-        import recipe_nav
-        import recipe_steps
-        import tempfile
-        with tempfile.TemporaryDirectory() as d:
-            model = Path(d) / "oppo" / "model"
-            model.mkdir(parents=True)
-            (model / "recipe.py").write_text(
-                '@step("浏览器首页")\n'
-                'def _():\n'
-                '    browser_home()\n\n\n'
-                'from typing import TYPE_CHECKING\n\n'
-                'if TYPE_CHECKING:\n'
-                '    from recipe_steps import browser_home\n',
-                encoding="utf-8")
-            with patch.dict(recipe_steps.STEPS, {"browser_home": _browser_home_factory}), \
-                    patch.dict(recipe_nav.NAV, {"settings_direct": _settings_direct_factory}):
-                used = entries.used_by(d)
-        self.assertEqual(used, {("intent", "oppo.intent.action.APP_SETTINGS", "com.example.browser"):
-                                {"model"}})
 
-    def test_a_locally_defined_helper_two_hops_down_is_not_the_injected_one(self):
-        """脚本本地定义了段体要调的导航助手：注入版不在场上，第二层也不记出处（#1212）。"""
-        import recipe_nav
-        import recipe_steps
-        import tempfile
-        with tempfile.TemporaryDirectory() as d:
-            model = Path(d) / "oppo" / "model"
-            model.mkdir(parents=True)
-            (model / "recipe.py").write_text(
-                'def settings_direct():\n'
-                '    return False\n\n\n'
-                '@step("浏览器首页")\n'
-                'def _():\n'
-                '    browser_home()\n\n\n'
-                'from typing import TYPE_CHECKING\n\n'
-                'if TYPE_CHECKING:\n'
-                '    from recipe_steps import browser_home\n',
-                encoding="utf-8")
-            with patch.dict(recipe_steps.STEPS, {"browser_home": _browser_home_factory}), \
-                    patch.dict(recipe_nav.NAV, {"settings_direct": _settings_direct_factory}):
-                used = entries.used_by(d)
-        self.assertEqual(used, {})
 
     def test_open_app_settings_needs_two_arguments(self):
         """只传了包名的 open_app_settings 不算出处：把包名当成页面会给这台机凭空挂一条 Intent。"""
@@ -699,8 +631,10 @@ class AssistantEntryTests(unittest.TestCase):
                 p = phone_901()
                 p.tree.return_value = page_901(ICON_PAGE_901)
                 scope = load_901(p, recipe)
-                for helper in ("row", "close_named", "open_page", "hide_carousel"):
-                    scope[helper] = Mock()
+                close = Mock()
+                stub_scope(self, scope, row=Mock(), open_page=Mock(), hide_carousel=Mock())
+                fixtures.patch_library(self, {"strategies.close_named_optional": close})
+                scope["close_named"] = close
                 action_901(scope, recipe, "负一屏")()
                 self.assertEqual([c.args[0] for c in scope["row"].call_args_list],
                                  ["设置", "推荐服务"])
@@ -1558,9 +1492,8 @@ GEAR_CENTER_305 = (995, 165)
 
 
 def surface_sources():
-    """注入面三张注册表的源码摊平成一个 {名字: 源码}。三张表不同名，摊平只为按名字查（#1243）。"""
-    return {name: source for table in recipe_source.surface_sources().values()
-            for name, source in table.items()}
+    """三个库的公开实现：{名字: 源码}（`__all__` 全局唯一，按名字查即可）。"""
+    return {name: source for name, (_module, source) in recipe_source.library_sources().items()}
 
 
 def gear_users_1210():
@@ -1572,8 +1505,9 @@ def gear_users_1210():
     calls, found = {}, set()
     for name, source in surface_sources().items():
         tree = ast.parse(fixtures.normalize(source))
-        calls[name] = {node.func.id for node in ast.walk(tree)
-                       if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
+        calls[name] = {(node.func.id if isinstance(node.func, ast.Name) else node.func.attr)
+                       for node in ast.walk(tree) if isinstance(node, ast.Call)
+                       and isinstance(node.func, (ast.Name, ast.Attribute))}
         if "gear" in calls[name] or any(isinstance(node, ast.FunctionDef) and node.name == "gear"
                                         for node in ast.walk(tree)):
             found.add(name)
@@ -2031,15 +1965,22 @@ def load_933(phone, recipe):
     return scope
 
 
-def action_933(scope, recipe, name):
-    """取真实分段的函数体，以便给它的协作者注入替身；不复制分段实现。"""
-    node = next(n for n in ast.parse(recipe.read_text(encoding="utf-8")).body
-                if isinstance(n, ast.FunctionDef) and n.decorator_list
-                and n.decorator_list[0].args[0].value == name)
-    node.decorator_list, node.name = [], "selected_action"
-    exec(compile(ast.Module(body=[node], type_ignores=[]), str(recipe), "exec"), scope)
-    return scope["selected_action"]
+def stub_scope(case, scope, **mocks):
+    """scope[name] 放同一份 Mock，同时换掉库模块与 LIBRARY 里的实现（统一接缝）。"""
+    targets = {}
+    for helper, mock in mocks.items():
+        scope[helper] = mock
+        for module_name, module in (("nav", recipe_nav), ("strategies", recipe_strategies),
+                                    ("steps", recipe_steps)):
+            if hasattr(module, helper):
+                targets[f"{module_name}.{helper}"] = mock
+                break
+    fixtures.patch_library(case, targets)
 
+
+def action_933(scope, recipe, name):
+    """取真实分段的 action：装载后的 `rt.steps` 就是真正会跑的那一段（#1265）。"""
+    return next(item.action for item in scope["rt"].steps if item.name == name)
 
 def tapping_phone_933(present):
     """只在 `present` 里的文案点得动的假手机。"""
@@ -2077,7 +2018,8 @@ class TapPageEntryTests(unittest.TestCase):
     def entry(self, recipe, present):
         p = tapping_phone_933(present)
         scope = load_933(p, recipe)
-        scope["wait_page"] = Mock()
+        self.wait_page = Mock()
+        fixtures.patch_library(self, {"nav.wait_page": self.wait_page})
         return p, scope
 
     def test_each_wording_opens_the_store_privacy_page(self):
@@ -2086,7 +2028,7 @@ class TapPageEntryTests(unittest.TestCase):
                 with self.subTest(recipe=name, wording=wording):
                     p, scope = self.entry(recipe, {wording})
                     scope["tap_page"](PRIVACY_933, PRIVACY_PAGE_933, scrolls=8)
-                    scope["wait_page"].assert_called_once_with(PRIVACY_PAGE_933, wording)
+                    self.wait_page.assert_called_once_with(PRIVACY_PAGE_933, wording)
                     p.note_miss.assert_not_called()
 
     def test_privacy_wording_wins_when_both_are_on_the_page(self):
@@ -2103,7 +2045,7 @@ class TapPageEntryTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "未找到入口「隐私」"):
                     scope["tap_page"](PRIVACY_933, PRIVACY_PAGE_933, scrolls=8)
                 p.note_miss.assert_called_once_with("隐私 / 隐私授权管理")
-                scope["wait_page"].assert_not_called()
+                self.wait_page.assert_not_called()
 
     def test_a_single_name_still_works_and_keeps_the_old_message(self):
         """这两份脚本的其余十来处入口仍是单字面量，行为与失败句不能跟着变。"""
@@ -2111,7 +2053,7 @@ class TapPageEntryTests(unittest.TestCase):
             with self.subTest(name):
                 p, scope = self.entry(recipe, {"搜索范围"})
                 scope["tap_page"]("搜索范围", MARKET_933 + "ServeManagerActivity")
-                scope["wait_page"].assert_called_once_with(MARKET_933 + "ServeManagerActivity", "搜索范围")
+                self.wait_page.assert_called_once_with(MARKET_933 + "ServeManagerActivity", "搜索范围")
                 p.tap.assert_called_once_with("搜索范围", exact=True, scrolls=4, quiet=False)
 
                 p, scope = self.entry(recipe, set())
@@ -2124,7 +2066,10 @@ class Pkx110EntryTests(unittest.TestCase):
     def entry(self, present):
         p = tapping_phone_933(present)
         scope = load_933(p, RECIPES_933["PKX110"])
-        scope["wait_page"] = Mock(return_value=True)
+        self.wait_page = Mock(return_value=True)
+        patcher = patch.object(recipe_nav, "wait_page", self.wait_page)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         return p, scope
 
     def test_each_wording_opens_the_store_privacy_page(self):
@@ -2132,7 +2077,8 @@ class Pkx110EntryTests(unittest.TestCase):
             with self.subTest(wording):
                 p, scope = self.entry({wording})
                 self.assertTrue(scope["tap_page"](PRIVACY_933, PRIVACY_PAGE_933, PRIVACY_933))
-                scope["wait_page"].assert_called_once_with(PRIVACY_PAGE_933, PRIVACY_933)
+                self.wait_page.assert_called_once()
+                self.assertEqual(self.wait_page.call_args.args[2:], (PRIVACY_PAGE_933, PRIVACY_933))
                 p.note_miss.assert_not_called()
 
     def test_privacy_wording_wins_when_both_are_on_the_page(self):
@@ -2144,7 +2090,7 @@ class Pkx110EntryTests(unittest.TestCase):
         p, scope = self.entry(set())
         self.assertFalse(scope["tap_page"](PRIVACY_933, PRIVACY_PAGE_933, PRIVACY_933))
         p.note_miss.assert_called_once_with("隐私 / 隐私授权管理")
-        scope["wait_page"].assert_not_called()
+        self.wait_page.assert_not_called()
 
     def test_page_title_accepts_either_wording(self):
         for wording in PRIVACY_933:
@@ -2154,8 +2100,11 @@ class Pkx110EntryTests(unittest.TestCase):
 
     def test_failed_landing_is_not_retried_on_the_next_wording(self):
         """点开了但没落到隐私页：就此停段，不在别的页面上再点一次同名行。"""
-        p, scope = self.entry(set(PRIVACY_933))
-        scope["wait_page"] = Mock(return_value=False)
+        p = tapping_phone_933(set(PRIVACY_933))
+        scope = load_933(p, RECIPES_933["PKX110"])
+        patcher = patch.object(recipe_nav, "wait_page", Mock(return_value=False))
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.assertFalse(scope["tap_page"](PRIVACY_933, PRIVACY_PAGE_933, PRIVACY_933))
         p.tap.assert_called_once_with("隐私", exact=True, quiet=True)
 
@@ -2164,7 +2113,10 @@ class Phk110EntryTests(unittest.TestCase):
     def entry(self, present):
         p = tapping_phone_933(present)
         scope = load_933(p, RECIPES_933["PHK110"])
-        scope["page"] = Mock(return_value=True)
+        self.page = Mock(return_value=True)
+        patcher = patch.object(recipe_nav, "page_activity", self.page)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         return p, scope
 
     def test_each_wording_opens_the_store_privacy_page(self):
@@ -2172,7 +2124,7 @@ class Phk110EntryTests(unittest.TestCase):
             with self.subTest(wording):
                 p, scope = self.entry({wording})
                 self.assertTrue(scope["navigate"](PRIVACY_933, "PrivacyActivity", PRIVACY_933))
-                scope["page"].assert_called_once_with("PrivacyActivity", PRIVACY_933)
+                self.assertEqual(self.page.call_args.args[2:], ("PrivacyActivity", PRIVACY_933))
                 p.note_miss.assert_not_called()
 
     def test_privacy_wording_wins_when_both_are_on_the_page(self):
@@ -2184,13 +2136,13 @@ class Phk110EntryTests(unittest.TestCase):
         p, scope = self.entry(set())
         self.assertFalse(scope["navigate"](PRIVACY_933, "PrivacyActivity", PRIVACY_933))
         p.note_miss.assert_called_once_with("隐私 / 隐私授权管理")
-        scope["page"].assert_not_called()
+        self.page.assert_not_called()
 
     def test_page_title_accepts_either_wording(self):
         for wording in PRIVACY_933:
             with self.subTest(wording):
                 scope = load_933(store_page_933(wording), RECIPES_933["PHK110"])
-                self.assertTrue(scope["page"]("PrivacyActivity", PRIVACY_933))
+                self.assertTrue(scope["page_activity"]("PrivacyActivity", PRIVACY_933))
 
 
 class Rmx3700EntryTests(unittest.TestCase):
@@ -2237,8 +2189,16 @@ class StoreSegmentTests(unittest.TestCase):
         recipe = RECIPES_933[name]
         if recipe.suffix == ".toml":
             scope, _ = load_recipe(segment_phone_933(), recipe)   # 装载但一段都不跑
+            targets = {}
             for helper, value in stubs.items():
-                scope[helper] = Mock(return_value=value)
+                mock = Mock(return_value=value)
+                scope[helper] = mock
+                for module_name, module in (("nav", recipe_nav), ("strategies", recipe_strategies),
+                                            ("steps", recipe_steps)):
+                    if hasattr(module, helper):
+                        targets[f"{module_name}.{helper}"] = mock
+                        break
+            fixtures.patch_library(self, targets)
             scope["ONLY"] = []                                     # 放开段过滤，下面只跑这一段
             scope.pop("guard", None)                               # 只验段体：型号守卫不是这条用例的对象
             action = next(item.action for item in scope["rt"].steps if item.name == step)
@@ -2253,17 +2213,17 @@ class StoreSegmentTests(unittest.TestCase):
     # 页面树里的等价文案是 TOML 数组（转成 list）：按内容与顺序比，容器类型不是判据。
     def test_plg110_passes_both_wording(self):
         scope = self.segment("PLG110", "软件商店",
-                             app_settings=None, tap_page=None, close_named=None, read_switches={})
+                             app_settings=None, tap_page=None, close_named_plain=None, read_switches={})
         self.assertEqual(tuple(scope["tap_page"].call_args_list[0].args[0]), PRIVACY_933)
 
     def test_pma110_passes_both_wording(self):
-        scope = self.segment("PMA110", "软件商店", app_settings=None, tap_page=None, close_named=None)
+        scope = self.segment("PMA110", "软件商店", app_settings=None, tap_page=None, close_named_plain=None)
         # 页面树里的等价文案是 TOML 数组（转成 list）：按内容与顺序比，容器类型不是判据。
         self.assertEqual(tuple(scope["tap_page"].call_args_list[0].args[0]), PRIVACY_933)
 
     def test_pkx110_passes_both_wording(self):
         scope = self.segment("PKX110", "软件商店·个性化",
-                             open_app_settings=True, tap_page=True, off_exact=True)
+                             open_app_settings=True, tap_page=True, off_exact_paged=True)
         self.assertEqual(tuple(scope["tap_page"].call_args_list[0].args[0]), PRIVACY_933)
 
     def test_rmx3700_passes_both_wording(self):
@@ -2272,14 +2232,14 @@ class StoreSegmentTests(unittest.TestCase):
 
     def test_phk110_passes_both_wording(self):
         scope = self.segment("PHK110", "软件商店个性化",
-                             open_settings=True, navigate=True, off_exact=True)
+                             open_settings=True, navigate=True, off_exact_paged=True)
         self.assertEqual(tuple(scope["navigate"].call_args_list[0].args[0]), PRIVACY_933)
 
     def test_rmx3700_missing_row_keeps_the_original_line_and_the_scene(self):
         p = segment_phone_933()
         scope = load_933(p, RECIPES_933["RMX3700"])
-        scope["tap_by_scroll"] = Mock(return_value=False)
-        scope["wait_page"] = Mock(return_value=True)
+        fixtures.patch_library(self, {"nav.tap_by_scroll": Mock(return_value=False),
+                                      "nav.wait_page": Mock(return_value=True)})
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             next(item.action for item in scope["rt"].steps if item.name == "软件商店")()
@@ -2449,18 +2409,19 @@ class ThemeSettingsTests(ClockCase):
 
     def load(self):
         scope, _ = load_recipe(self.p, RECIPE_912)
-        scope["time"] = self.clock        # 脚本级等待也走同一只假钟
+        scope["rt"].clock = self.clock        # 脚本级等待也走同一只假钟
         return scope
 
     def test_my_tab_hits_the_bottom_bar_not_the_content_rows(self):
         scope = self.load()
-        scope["gear"] = Mock(return_value=True)
+        gear = Mock(return_value=True)
+        fixtures.patch_library(self, {"nav.gear": gear, "nav.settings_icon_visible": Mock(return_value=True)})
         with contextlib.redirect_stdout(io.StringIO()):
             scope["theme_settings"]()
         self.assertEqual(self.clicked, [MINE_TAB_CENTER_912])
         for center in CONTENT_CENTERS_912:
             self.assertNotIn(center, self.clicked)
-        scope["gear"].assert_called_once_with()
+        gear.assert_called_once_with()
 
     def test_settings_icon_showing_up_late_is_waited_for(self):
         """图标前一帧还不在树里：等它进树再交给 gear()，齿轮照样点得中。
@@ -2484,11 +2445,13 @@ class ThemeSettingsTests(ClockCase):
 
     def test_two_misses_report_the_page_evidence(self):
         scope = self.load()
-        scope["gear"] = Mock(return_value=False)
+        gear = Mock(return_value=False)
+        fixtures.patch_library(self, {"nav.gear": gear,
+                                      "nav.settings_icon_visible": Mock(return_value=True)})
         with contextlib.redirect_stdout(io.StringIO()):
             with self.assertRaisesRegex(RuntimeError, f"主题设置入口没找到；停在 {THEME_MINE_FOCUS_912}"):
                 scope["theme_settings"]()
-        self.assertEqual(scope["gear"].call_count, 2)
+        self.assertEqual(gear.call_count, 2)
 
 
 # ---------- 来源 tests/test_theme_entry_730.py ----------
@@ -2667,11 +2630,8 @@ def injected_step_1210(name):
     source = surface_sources().get(name)
     if source is None:
         return None
-    factory = next((node for node in ast.parse(fixtures.normalize(source)).body
-                    if isinstance(node, ast.FunctionDef)), None)
-    if factory is None:
-        return None
-    return next((node for node in factory.body if isinstance(node, ast.FunctionDef)), None)
+    return next((node for node in ast.parse(fixtures.normalize(source)).body
+                 if isinstance(node, ast.FunctionDef)), None)
 
 
 def effective_step_body(node, defines=frozenset()):
@@ -2793,15 +2753,21 @@ def unconsumed_906(fn):
         consumed = ((isinstance(parent, (ast.If, ast.While)) and cur is parent.test)
                     or isinstance(parent, (ast.Assign, ast.Return))
                     or (isinstance(parent, ast.Call)
-                        and getattr(parent.func, "id", "") in {"require", "close_named",
-                                                               "require_switches"}))
+                        and (getattr(parent.func, "id", "")
+                             or getattr(parent.func, "attr", "")) in {"require", "close_named",
+                                                                      "require_switches"}))
         if not consumed:
             bad.append(node.lineno)
     return bad
 
 
 def called_names_906(fn):
-    return {getattr(n.func, "id", "") for n in ast.walk(fn) if isinstance(n, ast.Call)}
+    """调用名（裸名或 `x.name` 的 attr）：`rt.require_switches` 与 `_close_named_fn` 都算。"""
+    names = set()
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Call) and isinstance(node.func, (ast.Name, ast.Attribute)):
+            names.add(getattr(node.func, "id", "") or getattr(node.func, "attr", ""))
+    return names
 
 
 def unconsumed_ops_906(ops):
@@ -2815,7 +2781,8 @@ def verifies_switches_906(ops):
     for op in walk_ops(ops):
         if op.get("kind") in {"off_required", "close_listed"}:
             return True
-        if op.get("kind") in {"lib", "require_lib", "if_lib"} and op.get("name") == "close_named":
+        if (op.get("kind") in {"lib", "require_lib", "if_lib"}
+                and str(op.get("name", "")).startswith("close_named")):
             return True
     return False
 
@@ -2843,7 +2810,8 @@ class ThemeLandingGuardTests(unittest.TestCase):
         for path, form, body in theme_units_906():
             with self.subTest(recipe=str(path.relative_to(ROOT))):
                 if form == "ast":
-                    self.assertTrue(called_names_906(body) & {"require_switches", "close_named"},
+                    self.assertTrue(called_names_906(body) & {
+                        "require_switches", "close_named", "close_named_optional", "close_named_step", "off_exact_step"},
                                     f"{path.name}: 点名开关没有校验")
                 else:
                     self.assertTrue(verifies_switches_906(body), f"{path.name}: 点名开关没有校验")

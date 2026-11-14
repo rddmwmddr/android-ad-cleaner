@@ -89,8 +89,8 @@ class MeizuRecipeTests(unittest.TestCase):
                                [("入口", (100, 1200, 900, 1280), target)]]
         p.scroll_more.return_value = True
         scope = self.load(p)
-        scope["TARGET_PACKAGE"] = "app"
-        with patch.object(scope["time"], "sleep"):
+        scope["rt"].target = "app"
+        with patch.object(scope["rt"].clock, "sleep"):
             scope["tap_text"]("入口", scrolls=1)
         p.scroll_more.assert_called_once()
         p.click.assert_called_once_with(500, 1240)
@@ -100,7 +100,7 @@ class MeizuRecipeTests(unittest.TestCase):
         p = self.phone()
         p.focus.return_value = "com.android.browser/BrowserActivity"
         scope = self.load(p)
-        scope["open_app"]("com.android.browser", "工具")
+        scope["open_app"](p, scope["rt"], "com.android.browser", "工具")
         p.start.assert_called_once_with("com.android.browser", expect="工具")
 
     def test_browser_enters_settings_through_go_and_still_confirms_the_page(self):
@@ -201,7 +201,7 @@ class MeizuRecipeTests(unittest.TestCase):
         p.texts.return_value = [("确定关闭目标？", (100, 1000, 800, 1100), ET.Element("node")),
                                 ("确定", (600, 1200, 800, 1300), button)]
         scope = self.load(p)
-        with patch.object(scope["time"], "sleep"):
+        with patch.object(scope["rt"].clock, "sleep"):
             scope["close_named"](["目标"], "页面", "app/Settings")
         self.assertEqual(p.click.call_count, 2)
         self.assertEqual(p.changed, [("页面", "目标")])

@@ -1,6 +1,6 @@
 {
   "provenance": {
-    "baseline": "18057cd+uncommitted-1270",
+    "baseline": "HEAD",
     "how": "git archive <sha> | tar -x -C /tmp/aac-adapt-base && .venv/bin/python tests/make_adapt_cli_baseline.py /tmp/aac-adapt-base <sha>",
     "cases": 19
   },
@@ -63,17 +63,17 @@
     "gen-写不出": {
       "rc": 1,
       "stdout": "⚠ 这些是保护类开关（打开才是保护），没有写进草稿：限制广告跟踪\n",
-      "stderr": "写不出 无此目录/草稿.py：[Errno 2] <OSERR>: '无此目录/草稿.py'\n"
+      "stderr": "写不出 无此目录/草稿.toml：[Errno 2] <OSERR>: '无此目录/草稿.toml'\n"
     },
     "check-缺参数": {
       "rc": 1,
       "stdout": "",
-      "stderr": "用法：run.py adapt check -s <序列号> <草稿.py> [段名 …]\n"
+      "stderr": "用法：run.py adapt check -s <序列号> <草稿.toml> [段名 …]\n"
     },
     "check-参数顺序错": {
       "rc": 1,
       "stdout": "",
-      "stderr": "用法：run.py adapt check -s <序列号> <草稿.py> [段名 …]\n"
+      "stderr": "用法：run.py adapt check -s <序列号> <草稿.toml> [段名 …]\n"
     },
     "check-找不到草稿": {
       "rc": 1,

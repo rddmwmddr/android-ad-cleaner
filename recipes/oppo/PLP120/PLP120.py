@@ -7,13 +7,9 @@ import time
 
 import adb_link
 from fast import ScreenLocked
+import recipe_nav as nav
+import recipe_strategies as strategies
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import p, page, require_switches
-    from recipe_nav import enter_settings, game_settings_direct, game_settings_entry, game_settings_via_mine
-    from recipe_nav import open_switch_page, search_settings
-    from recipe_strategies import read_on_page
 
 BUILD = "PLP120_16.0.9"
 
@@ -48,7 +44,7 @@ SEARCH_SETTING = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://
 SEARCH_TITLES = {"搜索范围", "功能管理", "搜索引擎", "消息管理", "账号与隐私"}
 
 
-def search_sources():
+def search_sources(p, rt):
     """借给别的机型（安全模式）时只关推荐位：ColorOS 17 上榜单 / 小说 / 购物是内容源，关掉会搜不到东西。"""
     if p.safe_mode:
         return ["个性化推荐", "精选资讯"]
@@ -56,11 +52,11 @@ def search_sources():
 
 
 def step_search(p, rt):
-    if not search_settings():
+    if not nav.search_settings(p, rt):
         print("  · 跳过：没有认出全局搜索设置页（入口不可用或被系统限制）", flush=True)
         return
     if p.tap("搜索范围", exact=True):
-        p.off(only=search_sources(), page="下拉搜索·搜索范围")
+        p.off(only=search_sources(p, rt), page="下拉搜索·搜索范围")
         p.back()
     if p.tap("功能管理", exact=True):
         p.off(only=["搜索框提示词"], page="下拉搜索·功能管理")
@@ -97,12 +93,12 @@ def step_browser(p, rt):
 
 
 def step_game_center(p, rt):
-    direct = game_settings_direct()
+    direct = nav.game_settings_direct(p, rt)
     if not direct:
-        game_settings_via_mine()
+        nav.game_settings_via_mine(p, rt)
     p.enter("隐私开关设置", scrolls=6)
     p.enter("个性化推荐管理", scrolls=4)
-    require_switches(read_on_page("个性化推荐管理", GAME), ["个性化推荐"], "个性化推荐管理")
+    rt.require_switches(strategies.read_on_page(p, rt, "个性化推荐管理", GAME), ["个性化推荐"], "个性化推荐管理")
     p.off(only=["个性化推荐"], page="游戏中心·个性化推荐")
     p.back(3 if direct else 4)
 
@@ -111,17 +107,17 @@ def step_assistant_advice(p, rt):
     # ColorOS 17：「内容资讯」是点不动的分组标题，入口是它下面那行「资讯服务」，开关在二级页
     # （PMX110 / #905）。ColorOS 16 仍是点「内容资讯」进列表页、在那页上关。
     # 这一页还有快递、航班、日程提醒与商圈服务，保持不动。
-    enter_settings("OPPO AI", "小布建议")
-    page("小布建议", SETTINGS)
-    switches = open_switch_page("资讯服务", "资讯服务", SETTINGS)
+    nav.enter_settings(p, rt, "OPPO AI", "小布建议")
+    rt.page("小布建议", SETTINGS)
+    switches = nav.open_switch_page(p, rt, "资讯服务", "资讯服务", SETTINGS)
     if switches is not None:
-        require_switches(switches, ["资讯服务"], "资讯服务")
+        rt.require_switches(switches, ["资讯服务"], "资讯服务")
         p.off(only=["资讯服务"], page="小布建议·资讯服务")
         return
     # 旧版本这一页的标题没有实测记录，两种叫法都认。
-    switches = open_switch_page("内容资讯", ["内容资讯", "资讯服务"], SETTINGS)
+    switches = nav.open_switch_page(p, rt, "内容资讯", ["内容资讯", "资讯服务"], SETTINGS)
     if switches is not None:
-        require_switches(switches, ["资讯服务"], "内容资讯")
+        rt.require_switches(switches, ["资讯服务"], "内容资讯")
         p.off(only=["资讯服务"], page="小布建议·内容资讯")
         return
     raise RuntimeError("小布建议：「资讯服务」与「内容资讯」两条入口都没进去")

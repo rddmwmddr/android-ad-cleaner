@@ -1,12 +1,10 @@
 # V2303A 本机例外函数（catalog，#1263）：全局搜索的多页循环、应用商店的直达兜底是过程段。
 # 由 catalog.loader 装进执行作用域（preamble 已注入 maybe / gear / off_unnamed / SkipStep / time）。
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    import time
-    from recipe_kit import SkipStep, maybe
-    from recipe_nav import gear, off_unnamed
 
+import time
+import recipe_nav as nav
+from recipe_runtime import SkipStep
 def step_global_search(p, rt):
     # 每个子页都先重新 p.setting("全局搜索") 回到主页再钻，保证每段起点干净。
     for name, switches in (
@@ -18,7 +16,7 @@ def step_global_search(p, rt):
         if not p.setting("全局搜索"):
             raise RuntimeError("没搜到「全局搜索」")
         try:
-            if maybe(name, scrolls=2):
+            if nav.maybe(p, rt, name, scrolls=2):
                 p.off(only=switches, page=f"全局搜索·{name}"); p.back()
         except Exception as e:
             print(f"  · {name} 跳过：{e}")
@@ -39,14 +37,14 @@ def step_store(p, rt):
         if not p.tab("我的"):
             raise RuntimeError("商店底部「我的」标签没找到")
         time.sleep(0.8)
-        gear()
-    if maybe("关于"):
-        if maybe("个性化推荐"):
+        nav.gear(p, rt)
+    if nav.maybe(p, rt, "关于"):
+        if nav.maybe(p, rt, "个性化推荐"):
             p.off(only=["个性化推荐", "个性化广告推荐"], page="商店·个性化推荐")
             p.top()                     # p.off 会往下翻；这一页的开关在上面时别错过
-            off_unnamed("商店·个性化推荐")
+            nav.off_unnamed(p, rt, "商店·个性化推荐")
             p.back(); time.sleep(0.5)
-        if maybe("服务管理"):
+        if nav.maybe(p, rt, "服务管理"):
             p.off(only=["签到有礼", "顶部轮播图", "顶部栏目", "开屏", "摇一摇", "悬浮窗", "限时推广"],
                   keep=["我的服务", "空间清理"], page="商店·服务管理")
             p.back()

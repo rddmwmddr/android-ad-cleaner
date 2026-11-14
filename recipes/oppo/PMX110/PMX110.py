@@ -4,18 +4,15 @@ from collections import namedtuple
 
 import adb_link
 from fast import ScreenLocked, bounds
+import recipe_nav as nav
+import recipe_strategies as strategies
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import p, page, require, rt, skip
-    from recipe_nav import ad_id_page, app_settings, browser_settings, menu_state, more_menu, read_switches, row
-    from recipe_strategies import close_all_listed, close_named_optional
 
 BUILD = "PMX110_17.0.0"
 # 浏览器设置页的包名：入口只属于这台机，家族库按这个名字拼拉起命令（#1245）。
 BROWSER_PKG = "com.heytap.browser"
 
-MenuState = namedtuple("MenuState", "close_all_disabled system_apps_shown")
+
 # 分段结果由引擎经 rt 记录
 SKIPPED_ITEMS = []
 # 回读确认数由引擎经 rt 记录
@@ -35,53 +32,37 @@ LAUNCHER = "com.android.launcher/"
 ASSISTANT_HOME = {"我的服务", "添加卡片"}
 
 
-def require_installed(package, label):
-    """没装的包 `pm path` 输出为空，退出码是 1（adb shell v2 带回）或 0（不带回退出码的通道）：
-    那是「没装」，跳过本段，不算读不出（#899）。有报错文字或别的退出码才算读不出。"""
-    result = p.d.shell("pm path " + package)
-    if "package:" in result.output:
-        return
-    require(result.exit_code in (0, 1) and not result.output.strip(), f"无法读取{label}安装状态")
-    skip(f"本机未安装{label}")
-
-
-def _labelled(text, name):
-    """读屏会把状态后缀并进同一段文字（「全部关闭 - 已停用」），按主语认。"""
-    rest = text[len(name):]
-    return text.startswith(name) and (not rest or rest[0] in " ,，、-")
-
-
 def step_ad_tracking(p, rt):
     # 每个应用一个开关。用菜单「全部关闭」整表关，再看它是否置灰来确认（#650）：
     # 以前逐行读整个列表（547 个具名项）两遍，约 27 分钟；现在不用滚动列表，个人应用名单也不必读出来。
     # 版本由引擎判（录制版本对不上会置 safe_mode）；这里只挡「拿这份脚本去跑别的型号」。
     if p.safe_mode or p.d.shell("getprop ro.product.model").output.strip() != "PMX110":
-        skip("仅在 PMX110 上批量处理广告跟踪")
-    ad_id_page()
-    row("广告跟踪", activity="OAIDActivity")
-    state = menu_state()
+        rt.skip("仅在 PMX110 上批量处理广告跟踪")
+    nav.ad_id_page(p, rt)
+    nav.row(p, rt, "广告跟踪", activity="OAIDActivity")
+    state = nav.menu_state(p, rt)
     p.back()
-    close_all_listed("系统应用已显示" if state.system_apps_shown else "用户应用")
+    strategies.close_all_listed(p, rt, "系统应用已显示" if state.system_apps_shown else "用户应用")
     if not state.system_apps_shown:
-        more_menu()
-        require(p.tap("显示系统应用", scrolls=0), "未能显示系统应用")
+        nav.more_menu(p, rt)
+        rt.require(p.tap("显示系统应用", scrolls=0), "未能显示系统应用")
         p.await_page()
-        page("广告跟踪", activity="OAIDActivity")
+        rt.page("广告跟踪", activity="OAIDActivity")
         try:
-            close_all_listed("含系统应用")
+            strategies.close_all_listed(p, rt, "含系统应用")
         finally:
-            more_menu()                       # 显示方式恢复原样，不改机主的列表偏好
+            nav.more_menu(p, rt)                       # 显示方式恢复原样，不改机主的列表偏好
             if not p.tap("隐藏系统应用", scrolls=0):
                 p.back()
                 print("  · 没找到「隐藏系统应用」，列表保持显示系统应用", flush=True)
             p.await_page()
 
 
-def tail():
+def tail(p, rt):
     print(f"\n逐项回读确认 {rt.verified} 项；完成 {sum(state == '完成' for _, state in rt.results)} 段，"
           f"跳过 {sum(state == '跳过' for _, state in rt.results)} 段，未显示项 {len(SKIPPED_ITEMS)} 组", flush=True)
 
 
 # 负一屏 / 主题 / 视频 / 游戏中心的段体按 `g["close_named"]` 取这个钩子，实现住在
 # recipe_strategies 的 `close_named_optional`，这里绑回旧名字（#1253）。
-close_named = close_named_optional
+

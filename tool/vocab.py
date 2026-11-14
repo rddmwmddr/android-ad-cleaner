@@ -209,8 +209,8 @@ def _keyword(call, name):
 
 
 def _positional(call, index):
-    """第几个位置实参（`close_named` 的名单与标签）；没写是 None。"""
-    found = [arg for arg in call.args if arg.keyword is None]
+    """第几个业务位置实参（`close_named` 的名单与标签）；注入调用的 (p, rt) 前缀先剥掉。"""
+    found = [arg for arg in recipe_source.business_args(call) if arg.keyword is None]
     return found[index] if index < len(found) else None
 
 
@@ -282,36 +282,70 @@ def _absorb(out, family, script, facts, call_site=None):
 def scan(recipes_dir, injected=None, strategies=None):
     """读所有机型脚本。认不出品牌的目录不进库（tests/test_entries.py 守着每个品牌都有家族）。
 
-    `injected` / `strategies` 是段体表与策略库的 {名字: 源码}，缺省取 `recipe_source.step_sources()`
-    与 `strategy_sources()`。脚本导入了哪个名字，就把那份实现扫一遍：词条归调用它的机型，出处记
-    调用点，未解析与整页同样算在这份脚本头上（沿用 #1209、#1253）。归属跟脚本的 import 走
-    （沿用 #1243）：导航助手那张表不扫——它的开关名单在调用点的实参里。
+    `injected` / `strategies` 是段体库与策略库的 {名字: 源码}，缺省由
+    `recipe_source.library_sources()` 提供。脚本（或其例外函数）调到了哪个库实现，就把那份实现
+    扫一遍：词条归调用它的机型，出处记调用点，未解析与整页同样算在这份脚本头上（沿用 #1209、#1253）。
+    导航助手的开关名单在调用点的实参里，实现里没有词。
 
-    同一份实现一处只算一次：策略会被一个段调用好几次（`close_all` 出现两次），按调用点各算一遍
-    会把未解析与整页数乘起来；脚本搬掉本地 `def` 之前，那份实现也只是模块里的一份。没有直接
-    调用点的（库按名字回调的钩子、`off_exact = off_exact_paged` 这种别名）记到脚本导入它的那一行。"""
+    同一份实现一处只算一次：策略会被一个段调用好几次（`close_all` 出现两次），按名字去重；
+    实现里再调别的库实现逐层往下扫（段体调 `browser_settings_direct`）。"""
     out = Scan()
-    surface = {
-        recipe_source.STEPS_MODULE: recipe_source.step_sources() if injected is None else injected,
-        recipe_source.STRATEGIES_MODULE:
-            recipe_source.strategy_sources() if strategies is None else strategies,
-    }
+    if injected is None and strategies is None:
+        sources = recipe_source.library_sources()
+    else:
+        # 用例交来的是「只有这几份实现」：空表就是关掉实现扫描，用来量接线前后的差。
+        sources = {}
+        if injected:
+            sources.update({name: (recipe_source.STEPS_MODULE, source) for name, source in injected.items()})
+        if strategies:
+            sources.update({name: (recipe_source.STRATEGIES_MODULE, source)
+                            for name, source in strategies.items()})
     for script, facts in recipe_source.scan_dir(recipes_dir, FAMILY).items():
         family = FAMILY[script.split("/", 1)[0].lower()]
         before = len(out.words)
         out.notes += _notes(facts, script)
         _absorb(out, family, script, facts)
-        for name, (module, source) in sorted(recipe_source.imported_sources(facts, surface).items()):
-            calls = recipe_source.injected_calls(facts, name, module)
-            at = calls[0].line if calls else facts.import_lines.get(name)
-            if at is None:
-                continue
-            # 实现无形参可跨文件取；只有模块常量住在脚本里，按名字交回去
-            impl = recipe_source.scan_source(source, externals=facts.constants)
-            _absorb(out, family, script, impl, call_site=at)
+        _absorb_implementations(out, family, script, facts, facts, sources, facts.constants, frozenset())
         if len(out.words) == before:
             out.silent.append(script)
+    # 同一份实现可能经多条调用链被扫到；台账按「哪一行有什么读不出」记账，同一
+    # (script, line, text) 只记一次（重复计数不增加信息，只让台账难读）。
+    out.unresolved_only = _dedupe_calls(out.unresolved_only)
+    out.unresolved_close = _dedupe_calls(out.unresolved_close)
+    out.unresolved_keep = _dedupe_calls(out.unresolved_keep)
     return out
+
+
+def _dedupe_calls(calls):
+    """同一实现经多条调用链被扫到时按 `(script, line, text)` 去重；同一行不同文本仍各记一条。"""
+    seen, kept = set(), []
+    for call in calls:
+        key = (call.script, call.line, call.text)
+        if key not in seen:
+            seen.add(key)
+            kept.append(call)
+    return kept
+
+
+def _absorb_implementations(out, family, script, current, caller, sources, constants, seen):
+    """库实现逐层往下扫：当前事实里调到的库实现各扫一次，词条归这份脚本。"""
+    used = dict.fromkeys(call.name for call in current.calls if call.injected and call.module)
+    if current is caller:
+        used.update(caller.import_lines)   # 脚本 import 过的实现算用过；递归层只看实际调用
+    for name in used:
+        if name in seen or name in caller.defines:
+            continue
+        entry = sources.get(name)
+        if entry is None:
+            continue
+        _module, source = entry
+        calls = tuple(call for call in current.calls if call.injected and call.name == name)
+        at = calls[0].line if calls else caller.import_lines.get(name)
+        if at is None:
+            continue
+        impl = recipe_source.scan_source(source, externals=constants)
+        _absorb(out, family, script, impl, call_site=at)
+        _absorb_implementations(out, family, script, impl, caller, sources, constants, seen | {name})
 
 
 def _spelled(words):

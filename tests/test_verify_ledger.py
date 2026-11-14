@@ -43,23 +43,25 @@ class RowsTest(unittest.TestCase):
     def recipe(self, name):
         path = Path(self.dir, name)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text('BUILD = "PMX110_17.0.0"\n', encoding="utf-8")
+        model = path.stem.split("-", 1)[0]
+        path.write_text(f'model = "{model}"\nmodels = ["{model}"]\nbuild = "PMX110_17.0.0"\n',
+                        encoding="utf-8")
 
     def recipes(self, *names):
         for name in names:
             self.recipe(name)
 
     def test_three_coverage_values_are_read_back_with_their_fields(self):
-        self.recipes("xiaomi/A/recipe.py", "oppo/B/recipe.py", "vivo/C/recipe.py",
-                     "honor/D/recipe_android15.py")
+        self.recipes("xiaomi/A/A.toml", "oppo/B/B.toml", "vivo/C/C.toml",
+                     "honor/D/D-android15.toml")
         records = {
-            "xiaomi/A/recipe.py": {"build": "A_1.0.2(CN01)", "date": "2026-11-08", "by": "机主",
+            "xiaomi/A/A.toml": {"build": "A_1.0.2(CN01)", "date": "2026-11-08", "by": "机主",
                                    "tier": "全部", "evidence": "现场"},
-            "oppo/B/recipe.py": {"build": "B_2.1", "date": "2026-09-01", "by": "@someone",
+            "oppo/B/B.toml": {"build": "B_2.1", "date": "2026-09-01", "by": "@someone",
                                  "tier": "部分", "evidence": "报告者自述"},
-            "vivo/C/recipe.py": {"build": "C_3.0", "date": "2026-01-05", "by": "@someone",
+            "vivo/C/C.toml": {"build": "C_3.0", "date": "2026-01-05", "by": "@someone",
                                  "tier": "未记录", "evidence": "未知"},
-            "honor/D/recipe_android15.py": {"build": "D_4.0", "date": "2026-11-09", "by": "机主",
+            "honor/D/D-android15.toml": {"build": "D_4.0", "date": "2026-11-09", "by": "机主",
                                             "tier": "全部", "evidence": "机主自测"},
         }
         got = {row.path: row for row in verify_ledger.rows(self.dir, records, TODAY)}
@@ -71,162 +73,162 @@ class RowsTest(unittest.TestCase):
                 self.assertEqual((got[path].build, got[path].date, got[path].verifier),
                                  (record["build"], record["date"], record["by"]))
         # 记成「未记录」的行和缺记录的行一样只打路径：没有可信记录，其余几样就不该出现
-        self.assertIn("vivo/C/recipe.py\t未记录",
+        self.assertIn("vivo/C/C.toml\t未记录",
                       verify_ledger.render(self.dir, records, TODAY).splitlines())
         # 覆盖度与证据来源是两列，互不代替：同样的「部分」可以来自报告者自述，也可以来自用例
         line = next(line for line in verify_ledger.render(self.dir, records, TODAY).splitlines()
-                    if line.startswith("oppo/B/recipe.py\t"))
+                    if line.startswith("oppo/B/B.toml\t"))
         self.assertEqual(line.split("\t")[5:], ["部分", "报告者自述"])
 
     def test_coverage_and_evidence_round_trip_through_a_toml_file(self):
         """读写往返：写进 toml 的两个字段，`load()` + `entry()`/`rows()` 原样读回来。"""
-        self.recipe("xiaomi/A/recipe.py")
+        self.recipe("xiaomi/A/A.toml")
         path = Path(self.dir, "verified.toml")
-        path.write_text('["xiaomi/A/recipe.py"]\nbuild = "A_1.0"\ndate = "2026-11-08"\n'
+        path.write_text('["xiaomi/A/A.toml"]\nbuild = "A_1.0"\ndate = "2026-11-08"\n'
                         'by = "机主"\ntier = "全部"\nevidence = "用例"\n', encoding="utf-8")
         records = verify_ledger.load(path)
-        self.assertEqual(verify_ledger.entry(records, "xiaomi/A/recipe.py"),
+        self.assertEqual(verify_ledger.entry(records, "xiaomi/A/A.toml"),
                          ("全部", "用例", "2026-11-08"))
         [row] = verify_ledger.rows(self.dir, records, TODAY)
         self.assertEqual((row.tier, row.evidence), ("全部", "用例"))
 
     def test_a_script_missing_from_the_ledger_reads_as_unrecorded_and_unknown(self):
         """台账里没有这份脚本时给「未记录 / 未知 / 空」，不抛错：缺数据本身就是一个结论。"""
-        records = {"xiaomi/A/recipe.py": {"build": "A_1.0", "date": "2026-11-08", "by": "机主",
+        records = {"xiaomi/A/A.toml": {"build": "A_1.0", "date": "2026-11-08", "by": "机主",
                                           "tier": "全部", "evidence": "现场"}}
-        self.assertEqual(verify_ledger.entry(records, "oppo/B/recipe.py"),
+        self.assertEqual(verify_ledger.entry(records, "oppo/B/B.toml"),
                          (verify_ledger.UNRECORDED, verify_ledger.UNKNOWN_EVIDENCE, ""))
         self.assertEqual(verify_ledger.entry({}, ""),
                          (verify_ledger.UNRECORDED, verify_ledger.UNKNOWN_EVIDENCE, ""))
 
     def test_recipe_without_a_record_still_gets_a_row(self):
-        self.recipe("xiaomi/A/recipe.py")
-        self.recipe("oppo/B/recipe.py")
-        records = {"xiaomi/A/recipe.py": {"build": "A_1.0.2(CN01)", "date": "2026-11-08",
+        self.recipe("xiaomi/A/A.toml")
+        self.recipe("oppo/B/B.toml")
+        records = {"xiaomi/A/A.toml": {"build": "A_1.0.2(CN01)", "date": "2026-11-08",
                                           "by": "机主", "tier": "全部"}}
         rows = {row.path: row for row in verify_ledger.rows(self.dir, records, TODAY)}
         self.assertEqual(len(rows), 2)      # 缺数据不能让配方从输出里消失
-        missing = rows["oppo/B/recipe.py"]
+        missing = rows["oppo/B/B.toml"]
         self.assertEqual(missing.tier, verify_ledger.UNRECORDED)
         self.assertEqual((missing.build, missing.date, missing.verifier), ("", "", ""))
         self.assertIsNone(missing.days)
-        self.assertIn("oppo/B/recipe.py\t未记录",
+        self.assertIn("oppo/B/B.toml\t未记录",
                       verify_ledger.render(self.dir, records, TODAY).splitlines())
 
     def test_variants_in_one_folder_are_separate_rows(self):
-        self.recipe("xiaomi/A/recipe.py")
-        self.recipe("xiaomi/A/recipe_os4.py")
-        records = {"xiaomi/A/recipe_os4.py": {"build": "OS4.0.1", "date": "2026-10-01",
+        self.recipe("xiaomi/A/A.toml")
+        self.recipe("xiaomi/A/A-os4.toml")
+        records = {"xiaomi/A/A-os4.toml": {"build": "OS4.0.1", "date": "2026-10-01",
                                               "by": "@someone", "tier": "部分"}}
         rows = verify_ledger.rows(self.dir, records, TODAY)
         self.assertEqual({row.path: row.tier for row in rows},
-                         {"xiaomi/A/recipe.py": verify_ledger.UNRECORDED,
-                          "xiaomi/A/recipe_os4.py": "部分"})
+                         {"xiaomi/A/A.toml": verify_ledger.UNRECORDED,
+                          "xiaomi/A/A-os4.toml": "部分"})
 
     def test_days_come_from_the_injected_today(self):
-        self.recipe("xiaomi/A/recipe.py")
-        self.recipe("oppo/B/recipe.py")
+        self.recipe("xiaomi/A/A.toml")
+        self.recipe("oppo/B/B.toml")
         records = {
-            "xiaomi/A/recipe.py": {"build": "A_1.0", "date": "2026-10-30", "by": "机主", "tier": "全部"},
-            "oppo/B/recipe.py": {"build": "B_2.0", "date": "2026-11-09", "by": "机主", "tier": "全部"},
+            "xiaomi/A/A.toml": {"build": "A_1.0", "date": "2026-10-30", "by": "机主", "tier": "全部"},
+            "oppo/B/B.toml": {"build": "B_2.0", "date": "2026-11-09", "by": "机主", "tier": "全部"},
         }
         got = {row.path: row.days for row in verify_ledger.rows(self.dir, records, TODAY)}
-        self.assertEqual(got, {"xiaomi/A/recipe.py": 10, "oppo/B/recipe.py": 0})
+        self.assertEqual(got, {"xiaomi/A/A.toml": 10, "oppo/B/B.toml": 0})
 
     def test_render_prints_one_line_per_recipe(self):
-        for name in ("xiaomi/A/recipe.py", "oppo/B/recipe.py", "vivo/C/recipe.py"):
+        for name in ("xiaomi/A/A.toml", "oppo/B/B.toml", "vivo/C/C.toml"):
             self.recipe(name)
-        records = {"xiaomi/A/recipe.py": {"build": "A_1.0", "date": "2026-11-08",
+        records = {"xiaomi/A/A.toml": {"build": "A_1.0", "date": "2026-11-08",
                                           "by": "机主", "tier": "全部"}}
         lines = verify_ledger.render(self.dir, records, TODAY).splitlines()[:-1]  # 末行是分布
         self.assertEqual({line.split("\t")[0] for line in lines},
-                         {"xiaomi/A/recipe.py", "oppo/B/recipe.py", "vivo/C/recipe.py"})
-        [line] = [line for line in lines if line.startswith("xiaomi/A/recipe.py\t")]
+                         {"xiaomi/A/A.toml", "oppo/B/B.toml", "vivo/C/C.toml"})
+        [line] = [line for line in lines if line.startswith("xiaomi/A/A.toml\t")]
         self.assertEqual(line.split("\t")[2:], ["A_1.0", "2026-11-08", "机主", "全部", "未知"])
 
     def test_rows_carry_days_and_render_sorts_them_descending(self):
-        for name in ("xiaomi/A/recipe.py", "oppo/B/recipe.py", "vivo/C/recipe.py"):
+        for name in ("xiaomi/A/A.toml", "oppo/B/B.toml", "vivo/C/C.toml"):
             self.recipe(name)
         records = {
-            "xiaomi/A/recipe.py": {"build": "A_1.0", "date": "2026-10-30", "by": "机主", "tier": "全部"},
-            "oppo/B/recipe.py": {"build": "B_2.0", "date": "2026-11-08", "by": "@someone", "tier": "部分"},
+            "xiaomi/A/A.toml": {"build": "A_1.0", "date": "2026-10-30", "by": "机主", "tier": "全部"},
+            "oppo/B/B.toml": {"build": "B_2.0", "date": "2026-11-08", "by": "@someone", "tier": "部分"},
         }
         lines = verify_ledger.render(self.dir, records, TODAY).splitlines()[:-1]  # 末行是分布
         self.assertEqual([line.split("\t")[0] for line in lines],
-                         ["xiaomi/A/recipe.py", "oppo/B/recipe.py", "vivo/C/recipe.py"])
+                         ["xiaomi/A/A.toml", "oppo/B/B.toml", "vivo/C/C.toml"])
         self.assertEqual(lines[0].split("\t")[1:], ["10", "A_1.0", "2026-10-30", "机主", "全部", "未知"])
         self.assertEqual(lines[1].split("\t")[1], "1")
         self.assertEqual(lines[2].split("\t")[1], verify_ledger.UNRECORDED)
 
     def test_a_future_verification_date_is_not_negative(self):
-        self.recipe("xiaomi/A/recipe.py")
-        records = {"xiaomi/A/recipe.py": {"build": "A_1.0", "date": "2026-11-20",
+        self.recipe("xiaomi/A/A.toml")
+        records = {"xiaomi/A/A.toml": {"build": "A_1.0", "date": "2026-11-20",
                                           "by": "机主", "tier": "全部"}}
         self.assertEqual(verify_ledger.rows(self.dir, records, TODAY)[0].days, 0)
 
     def test_review_flag_marks_scripts_whose_step_body_hash_moved(self):
-        for name in ("xiaomi/A/recipe.py", "oppo/B/recipe.py", "vivo/C/recipe.py", "honor/D/recipe.py"):
+        for name in ("xiaomi/A/A.toml", "oppo/B/B.toml", "vivo/C/C.toml", "honor/D/D.toml"):
             self.recipe(name)
         records = {
-            "xiaomi/A/recipe.py": {"build": "A_1.0", "date": "2026-11-01", "by": "机主",
+            "xiaomi/A/A.toml": {"build": "A_1.0", "date": "2026-11-01", "by": "机主",
                                    "tier": "全部", "body_hash": "aaaaaaaaaaaaaaaa"},
-            "oppo/B/recipe.py": {"build": "B_2.0", "date": "2026-11-08", "by": "机主",
+            "oppo/B/B.toml": {"build": "B_2.0", "date": "2026-11-08", "by": "机主",
                                  "tier": "全部", "body_hash": "bbbbbbbbbbbbbbbb"},
-            "vivo/C/recipe.py": {"build": "C_3.0", "date": "2026-10-01", "by": "机主",
+            "vivo/C/C.toml": {"build": "C_3.0", "date": "2026-10-01", "by": "机主",
                                  "tier": "部分", "body_hash": "cccccccccccccccc"},
         }
         hashes = {
-            "xiaomi/A/recipe.py": "aaaaaaaaaaaaaaaa",   # 段体没变
-            "oppo/B/recipe.py": "bbbbbbbbbbbbbbbb",     # 段体没变
-            "vivo/C/recipe.py": "dddddddddddddddd",     # 段体改过
-            "honor/D/recipe.py": "eeeeeeeeeeeeeeee",    # 没有验证记录，无从比较
+            "xiaomi/A/A.toml": "aaaaaaaaaaaaaaaa",   # 段体没变
+            "oppo/B/B.toml": "bbbbbbbbbbbbbbbb",     # 段体没变
+            "vivo/C/C.toml": "dddddddddddddddd",     # 段体改过
+            "honor/D/D.toml": "eeeeeeeeeeeeeeee",    # 没有验证记录，无从比较
         }
         rows = {row.path: row for row in verify_ledger.rows(self.dir, records, TODAY, hashes=hashes)}
-        self.assertFalse(rows["xiaomi/A/recipe.py"].review)
-        self.assertFalse(rows["oppo/B/recipe.py"].review)
-        self.assertTrue(rows["vivo/C/recipe.py"].review)
-        self.assertFalse(rows["honor/D/recipe.py"].review)
+        self.assertFalse(rows["xiaomi/A/A.toml"].review)
+        self.assertFalse(rows["oppo/B/B.toml"].review)
+        self.assertTrue(rows["vivo/C/C.toml"].review)
+        self.assertFalse(rows["honor/D/D.toml"].review)
         # 哈希本身不进输出行：判据在行尾的那个词上
         lines = verify_ledger.render(self.dir, records, TODAY, hashes=hashes).splitlines()
         self.assertEqual([line.split("\t")[0] for line in lines if line.endswith("待复核")],
-                         ["vivo/C/recipe.py"])
+                         ["vivo/C/C.toml"])
         self.assertNotIn("cccccccccccccccc", "\n".join(lines))
 
     def test_a_record_without_a_hash_is_not_marked_for_review(self):
         """旧记录没有 body_hash 时是「尚未建立基线」，不是「改过」：把无从比较当成改过会让
         整份旧台账一上来全红，反而看不出哪一份真的变过。"""
-        for name in ("xiaomi/A/recipe.py", "oppo/B/recipe.py"):
+        for name in ("xiaomi/A/A.toml", "oppo/B/B.toml"):
             self.recipe(name)
         records = {
-            "xiaomi/A/recipe.py": {"build": "A_1.0", "date": "2026-11-01", "by": "机主", "tier": "全部"},
-            "oppo/B/recipe.py": {"build": "B_2.0", "date": "2026-11-08", "by": "机主", "tier": "全部",
+            "xiaomi/A/A.toml": {"build": "A_1.0", "date": "2026-11-01", "by": "机主", "tier": "全部"},
+            "oppo/B/B.toml": {"build": "B_2.0", "date": "2026-11-08", "by": "机主", "tier": "全部",
                                  "body_hash": "b" * 16},
         }
-        hashes = {"xiaomi/A/recipe.py": "a" * 16, "oppo/B/recipe.py": ""}   # 后一份当前哈希也读不到
+        hashes = {"xiaomi/A/A.toml": "a" * 16, "oppo/B/B.toml": ""}   # 后一份当前哈希也读不到
         rows = {row.path: row for row in verify_ledger.rows(self.dir, records, TODAY, hashes=hashes)}
-        self.assertFalse(rows["xiaomi/A/recipe.py"].review)
-        self.assertFalse(rows["oppo/B/recipe.py"].review)
+        self.assertFalse(rows["xiaomi/A/A.toml"].review)
+        self.assertFalse(rows["oppo/B/B.toml"].review)
 
     def test_an_explicitly_unrecorded_tier_has_no_days_or_review_flag(self):
-        self.recipe("vivo/C/recipe.py")
-        records = {"vivo/C/recipe.py": {"build": "C_3.0", "date": "2026-01-05",
+        self.recipe("vivo/C/C.toml")
+        records = {"vivo/C/C.toml": {"build": "C_3.0", "date": "2026-01-05",
                                         "by": "@someone", "tier": "未记录",
                                         "body_hash": "c" * 16}}
-        hashes = {"vivo/C/recipe.py": "d" * 16}
+        hashes = {"vivo/C/C.toml": "d" * 16}
         [row] = verify_ledger.rows(self.dir, records, TODAY, hashes=hashes)
         self.assertEqual(row.tier, verify_ledger.UNRECORDED)
         self.assertIsNone(row.days)          # 没有可信记录：日期不参与排序、分档，也不标待复核
         self.assertFalse(row.review)
         self.assertEqual(verify_ledger.render(self.dir, records, TODAY, hashes=hashes).splitlines()[0],
-                         f"vivo/C/recipe.py\t{verify_ledger.UNRECORDED}")
+                         f"vivo/C/C.toml\t{verify_ledger.UNRECORDED}")
 
     def test_distribution_splits_rows_into_three_buckets_and_sums_to_all(self):
         days = {"a": "2026-11-09", "b": "2026-10-10", "c": "2026-10-09",
                 "d": "2026-08-11", "e": "2026-08-10"}
         for name in days:
-            self.recipe(f"{name}/X/recipe.py")
-        self.recipe("f/X/recipe.py")     # 没有记录，并入最旧一档
-        records = {f"{name}/X/recipe.py": {"build": name.upper(), "date": day,
+            self.recipe(f"{name}/X/X.toml")
+        self.recipe("f/X/X.toml")     # 没有记录，并入最旧一档
+        records = {f"{name}/X/X.toml": {"build": name.upper(), "date": day,
                                            "by": "机主", "tier": "部分"}
                    for name, day in days.items()}
         rows = verify_ledger.rows(self.dir, records, TODAY)
@@ -238,81 +240,78 @@ class RowsTest(unittest.TestCase):
                          "30 天以内 2 · 31–90 天 2 · 90 天以上 2（共 6 份）")
 
     def test_recorded_build_must_start_with_the_scripts_declared_build(self):
-        self.recipes("xiaomi/A/recipe.py", "oppo/B/recipe.py", "vivo/C/recipe.py")
+        self.recipes("xiaomi/A/A.toml", "oppo/B/B.toml", "vivo/C/C.toml")
         records = {
-            "xiaomi/A/recipe.py": {"build": "A_1.0.2(CN01)", "date": "2026-11-08",
+            "xiaomi/A/A.toml": {"build": "A_1.0.2(CN01)", "date": "2026-11-08",
                                    "by": "机主", "tier": "部分"},
-            "oppo/B/recipe.py": {"build": "B_3.0", "date": "2026-11-08", "by": "机主", "tier": "部分"},
-            "vivo/C/recipe.py": {"build": "C_3.0", "date": "2026-11-08", "by": "机主", "tier": "部分"},
+            "oppo/B/B.toml": {"build": "B_3.0", "date": "2026-11-08", "by": "机主", "tier": "部分"},
+            "vivo/C/C.toml": {"build": "C_3.0", "date": "2026-11-08", "by": "机主", "tier": "部分"},
         }
-        builds = {"xiaomi/A/recipe.py": "A_1.0", "oppo/B/recipe.py": "B_2.0", "vivo/C/recipe.py": ""}
+        builds = {"xiaomi/A/A.toml": "A_1.0", "oppo/B/B.toml": "B_2.0", "vivo/C/C.toml": ""}
         rows = {row.path: row for row in verify_ledger.rows(self.dir, records, TODAY, builds=builds)}
-        self.assertFalse(rows["xiaomi/A/recipe.py"].build_mismatch)
-        self.assertTrue(rows["oppo/B/recipe.py"].build_mismatch)    # 记录不是脚本声明的 B_2.0 打头
-        self.assertFalse(rows["vivo/C/recipe.py"].build_mismatch)   # 脚本没声明 BUILD，无从比较
+        self.assertFalse(rows["xiaomi/A/A.toml"].build_mismatch)
+        self.assertTrue(rows["oppo/B/B.toml"].build_mismatch)    # 记录不是脚本声明的 B_2.0 打头
+        self.assertFalse(rows["vivo/C/C.toml"].build_mismatch)   # 脚本没声明 BUILD，无从比较
         lines = verify_ledger.render(self.dir, records, TODAY, builds=builds).splitlines()
         marked = [line.split("\t")[0] for line in lines if line.endswith(verify_ledger.BUILD_MISMATCH)]
-        self.assertEqual(marked, ["oppo/B/recipe.py"])
+        self.assertEqual(marked, ["oppo/B/B.toml"])
 
     def test_a_record_without_a_build_fails_the_prefix_check(self):
-        self.recipe("xiaomi/A/recipe.py")
-        records = {"xiaomi/A/recipe.py": {"date": "2026-11-08", "by": "机主", "tier": "部分"}}
-        [row] = verify_ledger.rows(self.dir, records, TODAY, builds={"xiaomi/A/recipe.py": "A_1.0"})
+        self.recipe("xiaomi/A/A.toml")
+        records = {"xiaomi/A/A.toml": {"date": "2026-11-08", "by": "机主", "tier": "部分"}}
+        [row] = verify_ledger.rows(self.dir, records, TODAY, builds={"xiaomi/A/A.toml": "A_1.0"})
         self.assertTrue(row.build_mismatch)   # 记录缺 build 就不是「对得上」
 
     def test_a_missing_record_is_not_reported_as_a_build_mismatch(self):
-        self.recipe("xiaomi/A/recipe.py")
-        [row] = verify_ledger.rows(self.dir, {}, TODAY, builds={"xiaomi/A/recipe.py": "A_1.0"})
+        self.recipe("xiaomi/A/A.toml")
+        [row] = verify_ledger.rows(self.dir, {}, TODAY, builds={"xiaomi/A/A.toml": "A_1.0"})
         self.assertEqual((row.tier, row.build_mismatch), (verify_ledger.UNRECORDED, False))
 
     def test_an_unrecorded_record_is_not_checked_against_the_script_build(self):
         """「未记录」是说这份脚本没有可信记录，不是「验的时候脚本是旧版」：build 不参与校验，
         否则只想登记「还没验」的人会被报成版本不符。"""
-        self.recipe("vivo/C/recipe.py")
-        records = {"vivo/C/recipe.py": {"build": "", "date": "", "by": "", "tier": "未记录"}}
-        rows = verify_ledger.rows(self.dir, records, TODAY, builds={"vivo/C/recipe.py": "C_3.0"})
+        self.recipe("vivo/C/C.toml")
+        records = {"vivo/C/C.toml": {"build": "", "date": "", "by": "", "tier": "未记录"}}
+        rows = verify_ledger.rows(self.dir, records, TODAY, builds={"vivo/C/C.toml": "C_3.0"})
         self.assertFalse(rows[0].build_mismatch)
         self.assertEqual(verify_ledger.render(self.dir, records, TODAY,
-                                              builds={"vivo/C/recipe.py": "C_3.0"}).splitlines()[0],
-                         f"vivo/C/recipe.py\t{verify_ledger.UNRECORDED}")
+                                              builds={"vivo/C/C.toml": "C_3.0"}).splitlines()[0],
+                         f"vivo/C/C.toml\t{verify_ledger.UNRECORDED}")
 
     def test_review_and_build_mismatch_marks_share_the_line_tail(self):
-        self.recipe("xiaomi/A/recipe.py")
-        records = {"xiaomi/A/recipe.py": {"build": "OLD_1.0", "date": "2026-11-01",
+        self.recipe("xiaomi/A/A.toml")
+        records = {"xiaomi/A/A.toml": {"build": "OLD_1.0", "date": "2026-11-01",
                                           "by": "机主", "tier": "部分",
                                           "body_hash": "b" * 16}}
-        line = verify_ledger.render(self.dir, records, TODAY, hashes={"xiaomi/A/recipe.py": "a" * 16},
-                                    builds={"xiaomi/A/recipe.py": "A_2.0"}).splitlines()[0]
+        line = verify_ledger.render(self.dir, records, TODAY, hashes={"xiaomi/A/A.toml": "a" * 16},
+                                    builds={"xiaomi/A/A.toml": "A_2.0"}).splitlines()[0]
         self.assertTrue(line.endswith(f"{verify_ledger.REVIEW} · {verify_ledger.BUILD_MISMATCH}"))
 
     def test_declared_builds_are_read_from_the_scripts(self):
-        self.recipe("xiaomi/A/recipe.py")
+        self.recipe("xiaomi/A/A.toml")
         Path(self.dir, "oppo", "B").mkdir(parents=True)
-        Path(self.dir, "oppo", "B", "recipe.py").write_text('# 无 BUILD\nVERIFIED = 0\n', encoding="utf-8")
+        Path(self.dir, "oppo", "B", "B.toml").write_text('model = "B"\nmodels = ["B"]\n', encoding="utf-8")
         self.assertEqual(verify_ledger.declared_builds(self.dir),
-                         {"xiaomi/A/recipe.py": "PMX110_17.0.0", "oppo/B/recipe.py": ""})
+                         {"xiaomi/A/A.toml": "PMX110_17.0.0", "oppo/B/B.toml": ""})
 
 
 class BodyHashTest(unittest.TestCase):
-    """段体哈希的归一（#1242）：只改注释 / 格式 / 函数位置 / 函数名不算改；段体正文或段名改了才算改。
+    """段体哈希的归一（#1242）：只改注释 / 键顺序 / 段的先后不算改；段体内容或段名改了才算改。
 
-    用临时脚本文件，不装载脚本、不碰真实 `recipes/`。两个分区各一条：一条把「迁移里会发生、
+    用临时页面树文件，不装载脚本、不碰真实 `recipes/`。两个分区各一条：一条把「迁移里会发生、
     但不该改哈希」的写法都试一遍，另一条是真正该翻成待复核的改动。
     """
 
-    BEFORE = '''BUILD = "A_1.0"
+    BEFORE = '''model = "A"
+build = "A_1.0"
 
-def helper():
-    return 1
+[[segment]]
+name = "系统广告"
+ops = [{ kind = "off", only = ["个性化广告推荐"], page = "系统·广告服务" }]
 
-@step("系统广告")
-def _():
-    # 原始注释
-    p.off(only=["个性化广告推荐"], page="系统·广告服务")
-
-@step("应用商店")
-def _():
-    p.start("com.xiaomi.market")
+[[segment]]
+name = "应用商店"
+ops = [{ kind = "start", pkg = "com.xiaomi.market" }]
 '''
 
     def setUp(self):
@@ -320,59 +319,50 @@ def _():
         self.addCleanup(tmp.cleanup)
         self.dir = Path(tmp.name)
 
-    def hash_of(self, text, name="recipe.py"):
+    def hash_of(self, text, name="A.toml"):
         path = self.dir / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
         return verify_ledger.body_hash(path)
 
-    def test_comments_format_and_function_shape_do_not_change_the_hash(self):
-        """这条守的是「迁移不该翻成待复核」：注释、docstring、折行、函数名、段的先后、
-        模块级助手的位置全变，段体正文还是那两句。"""
-        after = '''BUILD = "A_1.0"
+    def test_comments_key_order_and_segment_order_do_not_change_the_hash(self):
+        """这条守的是「迁移不该翻成待复核」：注释、空白、键顺序、段的先后全变，段体内容还是那些。"""
+        after = '''# 注释不吃进哈希
+build = "A_1.0"
+model = "A"
 
+[[segment]]
+name = "应用商店"
+ops = [ { pkg = "com.xiaomi.market", kind = "start" } ]
 
-@step("应用商店")
-def market():
-    p.start("com.xiaomi.market")
-
-
-@step("系统广告")
-def system_ads():
-    """段体里的 docstring 不是行为。"""
-    # 注释改过了
-    p.off(
-        only=["个性化广告推荐"],
-        page="系统·广告服务",
-    )
-
-
-def helper():
-    """模块级助手挪到了段后面，多了一个 docstring。"""
-    return 1
+[[segment]]
+name = "系统广告"
+ops = [
+  { page = "系统·广告服务", only = ["个性化广告推荐"], kind = "off" },
+]
 '''
         self.assertEqual(self.hash_of(self.BEFORE), self.hash_of(after))
 
     def test_a_changed_step_body_or_step_name_changes_the_hash(self):
         body_changed = self.BEFORE.replace('"个性化广告推荐"', '"个性化推荐"')
-        name_changed = self.BEFORE.replace('@step("系统广告")', '@step("系统·广告")')
+        name_changed = self.BEFORE.replace('name = "系统广告"', 'name = "系统·广告"')
         self.assertNotEqual(self.hash_of(self.BEFORE), self.hash_of(body_changed))
         self.assertNotEqual(self.hash_of(self.BEFORE), self.hash_of(name_changed))
 
     def test_a_removed_step_changes_the_hash(self):
-        fewer = self.BEFORE.split('@step("应用商店")')[0]
+        fewer = self.BEFORE.split('[[segment]]\nname = "应用商店"')[0]
         self.assertNotEqual(self.hash_of(self.BEFORE), self.hash_of(fewer))
 
     def test_hashes_are_listed_by_path_with_a_short_digest(self):
-        self.hash_of(self.BEFORE, "xiaomi/A/recipe.py")
-        self.hash_of('BUILD = "B_9.0"\n', "oppo/B/recipe.py")
+        self.hash_of(self.BEFORE, "xiaomi/A/A.toml")
+        self.hash_of('model = "B"\nbuild = "B_9.0"\n', "oppo/B/B.toml")
         hashes = verify_ledger.body_hashes(self.dir)
-        self.assertEqual(set(hashes), {"xiaomi/A/recipe.py", "oppo/B/recipe.py"})
-        self.assertRegex(hashes["xiaomi/A/recipe.py"], rf"^[0-9a-f]{{{verify_ledger.HASH_LEN}}}$")
+        self.assertEqual(set(hashes), {"xiaomi/A/A.toml", "oppo/B/B.toml"})
+        self.assertRegex(hashes["xiaomi/A/A.toml"], rf"^[0-9a-f]{{{verify_ledger.HASH_LEN}}}$")
         listing = verify_ledger.hash_listing(self.dir)
         self.assertEqual([line.split("\t")[0] for line in listing.splitlines()],
-                         ["oppo/B/recipe.py", "xiaomi/A/recipe.py"])
-        self.assertEqual(listing.splitlines()[1].split("\t")[1], hashes["xiaomi/A/recipe.py"])
+                         ["oppo/B/B.toml", "xiaomi/A/A.toml"])
+        self.assertEqual(listing.splitlines()[1].split("\t")[1], hashes["xiaomi/A/A.toml"])
 
 
 class RealRecipesContractTest(unittest.TestCase):

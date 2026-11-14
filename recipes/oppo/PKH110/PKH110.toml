@@ -7,6 +7,10 @@ build = "PKH110_17.0.0.103"
 guard = "guard"
 tail = "tail"
 
+[const]
+# 共享段体 store_promotions 的 off_exact 走「允许本机没有这一项」那一档（#1268）。
+OFF_EXACT_OPTIONAL = true
+
 [[segment]]
 name = "广告跟踪"
 code = "step_ad_tracking"

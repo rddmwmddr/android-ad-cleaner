@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import fast
 import run
+import fixtures
 from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock, stub
 
 GEAR_PAGE = """<hierarchy rotation="0">
@@ -93,6 +94,7 @@ TOOLBAR_PANEL = """<hierarchy rotation="0">
 class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
     def load(self, phone, recipe="24129PN74C.toml"):
         scope, _ = load_recipe(phone, ROOT / "recipes/xiaomi/24129PN74C" / recipe)
+        fixtures.bridge_scope(self, scope)
         return scope
 
     def test_actual_model_selects_own_recipe_and_pins_recorded_build(self):
@@ -164,7 +166,7 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
         if backed is not None:
             stub(p, "back", lambda *a, **k: (backed.append(clock.t), clock.click())[1])
         scope, out = load_recipe(p, ROOT / "recipes/xiaomi/24129PN74C" / recipe, only=only)
-        scope["time"] = clock              # 脚本里的 sleep 也推进设备时间轴，否则点完齿轮页面不会换
+        scope["rt"].clock = clock              # 脚本里的 sleep 也推进设备时间轴，否则点完齿轮页面不会换
         return p, scope, out
 
     def test_browser_prefers_the_menu_entry_and_never_touches_my_tab(self):
@@ -288,7 +290,7 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
         p = fake_phone(clock=clock, stages=[(0.0, GEAR_PAGE)], focus=focus_stages)
         p.back = Mock()
         scope = self.load(p, recipe)
-        scope["time"] = clock
+        scope["rt"].clock = clock
         return p, scope
 
     def test_gear_rejects_a_click_that_lands_on_a_popup(self):
@@ -323,6 +325,7 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
         p.locked = lambda: False
         recipe = recipe_loader.load(ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml", p,
                                     only=["天气和日历"], clock=Clock())
+        fixtures.bridge_scope(self, recipe.namespace)
         gear = recipe.namespace["gear"] = Mock(return_value=gear_result)
         entry = p.entry = Mock(return_value=True)
         self.out = out = io.StringIO()

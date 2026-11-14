@@ -5,10 +5,9 @@ from dataclasses import replace
 
 # `entries.reach` 留在执行作用域里：`recipe_nav.direct_settings` 按 `g["reach"]` 取它。
 from entries import ENTRIES, reach
+import recipe_nav as nav
+import recipe_steps as steps
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import maybe, p, require, rt
 
 # 热搜榜的候选开关名：`recipe_steps.global_search` 从执行作用域按名字取。
 HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "知乎", "精选"]
@@ -29,19 +28,19 @@ def step_store(p, rt):
     if p.find("回到首页", exact=True):
         p.tap("回到首页", exact=True, scrolls=0)
         time.sleep(2)
-    require(p.tab("我的"), "商店底部「我的」标签没找到")
+    rt.require(p.tab("我的"), "商店底部「我的」标签没找到")
     time.sleep(2)
-    require(p.tap("设置", exact=True, scrolls=4), "商店设置图标没找到")
+    rt.require(p.tap("设置", exact=True, scrolls=4), "商店设置图标没找到")
     time.sleep(1)
     # 本版没有「隐私设置/个性化服务」和「秒装」，有就关，没有就跳过。
-    if maybe("隐私设置"):
+    if nav.maybe(p, rt, "隐私设置"):
         nested = not any("个性化服务" in t for t, _, _ in p.switches())
-        if not nested or maybe("个性化服务"):
+        if not nested or nav.maybe(p, rt, "个性化服务"):
             p.off(only=["个性化服务", "个性化推荐"], page="商店·个性化服务")
             if nested:
                 p.back()
         p.back()
-    if maybe("通知设置"):
+    if nav.maybe(p, rt, "通知设置"):
         # 只关「新手帮助」。不碰「推送消息」：它是父开关，关了会连点赞/评论消息一起关。
         p.off(only=["新手帮助"], keep=["推送消息", "应用更新"], page="商店·通知设置")
         p.back()
@@ -49,5 +48,5 @@ def step_store(p, rt):
     p.back(2)
 
 
-def tail():
+def tail(p, rt):
     print(f"\n回读确认 {rt.verified} 项；步骤异常 {len(rt.failed_steps)} 个", flush=True)

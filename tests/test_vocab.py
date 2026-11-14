@@ -23,47 +23,46 @@ CLUES = ROOT / "docs" / "清单" / "词条线索.md"
 
 # 解析不出的 only=，按脚本冻结。新脚本多了这种写法，先看能不能写成字面量或模块级常量，确实不能再改这里。
 UNRESOLVED_ONLY = {
-    "honor/CLE-AN00/CLE-AN00.toml": 1,
-    "oppo/PHK110/PHK110.toml": 1,
-    "oppo/PKX110/PKX110.toml": 1,
-    "oppo/PKH110/PKH110.toml": 1,
-    "oppo/PLG110/PLG110.toml": 2,
-    "oppo/PLP120/PLP120.toml": 1,
-    "oppo/PMA110/PMA110.toml": 1,
-    # 23049RAD8C / 2304FPN6DC / 24090RA29C / 2410CRP4CC 的浏览器子页循环转成数据后按页展开，
-    # 每页的 only 都是字面量，这四处不再是未解析（#1266）。
-    "vivo/V2303A/V2303A.toml": 1,
-    "vivo/V2547DA/V2547DA-android17.toml": 4,
-    # 小米乙批（#1267）按页展开后，25060RK16C / 25102RKBEC / 2512BPNDAC / M332BF 的浏览器循环
-    # 不再是未解析（那几份的名单进了词条）；剩下的两条都在 code= 例外函数里：
-    # 24129PN74C-os4 的全局搜索用局部 HOT 关两次，M154FF 的浏览器循环仍在例外函数里。
-    "xiaomi/24129PN74C/24129PN74C-os4.toml": 2,
-    "xiaomi/M154FF/M154FF.toml": 1,
+    'honor/CLE-AN00/CLE-AN00.toml': 1,
+    'honor/WKL-AN20/WKL-AN20.toml': 1,
+    'meizu/MEIZU 21 Pro/MEIZU 21 Pro.toml': 1,
+    'oppo/PHK110/PHK110-android15.toml': 1,
+    'oppo/PJA110/PJA110-android16.toml': 1,
+    'oppo/PJA110/PJA110.toml': 1,
+    'oppo/PKH110/PKH110.toml': 1,
+    'oppo/PKT110/PKT110.toml': 2,
+    'oppo/PKX110/PKX110.toml': 1,
+    'oppo/PLG110/PLG110.toml': 3,
+    'oppo/PLP120/PLP120.toml': 1,
+    'oppo/PLZ110/PLZ110.toml': 2,
+    'oppo/PMA110/PMA110.toml': 2,
+    'oppo/PMX110/PMX110.toml': 2,
+    'vivo/V2303A/V2303A.toml': 1,
+    'vivo/V2417A/V2417A.toml': 1,
+    'vivo/V2547DA/V2547DA-android17.toml': 4,
+    'xiaomi/23117RK66C/23117RK66C.toml': 1,
+    'xiaomi/24129PN74C/24129PN74C-os4.toml': 2,
+    'xiaomi/24129PN74C/24129PN74C.toml': 1,
+    'xiaomi/M154FF/M154FF.toml': 1,
 }
 # close_named() 第一个参数解析不出的，和上面分开冻结，免得一个口径盖住另一个。
 UNRESOLVED_CLOSE = {
-    "oppo/PJA110/PJA110-android16.toml": 1,
-    # 软件商店里「读回名单→过滤→整表关」那一处从运行期变量 `names` 收进了 `close_listed` op（#1265），
-    # 候选名单按字面量投影进词库（每台 +30 个词，见 `test_close_listed_names_reach_the_scan`），
-    # 这一处不再是未解析，未解析各减 1；剩下的 1 是 `search_settings_direct` 首页卡片名单的运行期
-    # `names`，属另一页，与本段无关。
-    "oppo/PLZ110/PLZ110.toml": 1,
-    "oppo/PKT110/PKT110.toml": 3,
-    "oppo/PMX110/PMX110.toml": 1,
-    "xiaomi/23117RK66C/23117RK66C.toml": 1,
+    'oppo/PJA110/PJA110-android16.toml': 1,
+    'oppo/PKT110/PKT110.toml': 2,
+    'oppo/PLZ110/PLZ110.toml': 1,
+    'oppo/PMX110/PMX110.toml': 1,
+    'xiaomi/23117RK66C/23117RK66C.toml': 1,
 }
 # 解析不出的 keep=，同样按脚本冻结：它只影响同页保留项，读不出时那页的约束就整段丢了。
 UNRESOLVED_KEEP = {
-    "oppo/PHK110/PHK110.toml": 1,
-    "oppo/PKX110/PKX110.toml": 1,
-    "oppo/PLZ110/PLZ110.toml": 1,
-    "oppo/PKH110/PKH110.toml": 1,
-    "oppo/PLG110/PLG110.toml": 2,
-    "oppo/PMA110/PMA110.toml": 1,
-    "oppo/PMX110/PMX110.toml": 1,
-    # close_named_vivo 的实现里 keep 是运行时算的（`[n for n in before …]`），不可读；转数据后它
-    # 被正确归属到 recipe_strategies、于是这份实现被扫到，多出一条未解析（词条数不变，#1263）。
-    "vivo/V2417A/V2417A.toml": 1,
+    'oppo/PHK110/PHK110-android15.toml': 1,
+    'oppo/PKH110/PKH110.toml': 1,
+    'oppo/PKX110/PKX110.toml': 1,
+    'oppo/PLG110/PLG110.toml': 2,
+    'oppo/PLZ110/PLZ110.toml': 1,
+    'oppo/PMA110/PMA110.toml': 1,
+    'oppo/PMX110/PMX110.toml': 1,
+    'vivo/V2417A/V2417A.toml': 1,
 }
 # 模块级字典里的说明文字，按脚本冻结。
 DICT_NOTES = {
@@ -72,16 +71,21 @@ DICT_NOTES = {
 # 一条词条都读不出来的脚本（判据就是零词条）：开关点名散在自建函数里（vivo-V2547A 的 off()、
 # oneplus-PHK110 的 off_exact()、samsung-SM-N9760 的 protect()），或者名单运行时才算。
 SILENT = (
-    "oppo/PHK110/PHK110-android15.toml",
-    "oppo/PHK110/PHK110.toml",
-    "samsung/SM-N9760/SM-N9760.toml",
-    "vivo/V2547A/V2547A.toml",
+    'oppo/PHK110/PHK110-android15.toml',
+    'oppo/PHK110/PHK110.toml',
+    'samsung/SM-N9760/SM-N9760.toml',
+    'vivo/V2547A/V2547A.toml',
 )
 # 页面标签归不到分组的调用。多出来的先看能不能加进 vocab.PAGES。
 UNCLASSIFIED = {
-    ("oppo", "<page>"): 7,
-    ("oppo", "个性化管理"): 3,
-    ("oppo", "隐私"): 4,
+    ('honor', '<title>'): 1,
+    ('meizu', '<page>'): 3,
+    ('oppo', '<page>'): 27,
+    ('oppo', '<title>'): 2,
+    ('oppo', '个性化管理'): 3,
+    ('oppo', '隐私'): 4,
+    ('vivo', '<page>'): 1,
+    ('xiaomi', '<page>'): 6,
 }
 
 

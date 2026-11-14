@@ -3,10 +3,6 @@
 import adb_link
 from fast import ScreenLocked, bounds
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import SkipStep, p, require, rt
-    from recipe_strategies import close_named_optional
 
 BUILD = "PLZ110_17.0.0.107(CN01)"
 
@@ -30,21 +26,11 @@ LAUNCHER = "com.android.launcher/"
 ASSISTANT_HOME = {"我的服务", "添加卡片"}
 
 
-def require_installed(package, label):
-    """没装的包 `pm path` 输出为空，退出码是 1（adb shell v2 带回）或 0（不带回退出码的通道）：
-    那是「没装」，跳过本段，不算读不出（#899）。有报错文字或别的退出码才算读不出。"""
-    result = p.d.shell("pm path " + package)
-    if "package:" in result.output:
-        return
-    require(result.exit_code in (0, 1) and not result.output.strip(), f"无法读取{label}安装状态")
-    raise SkipStep(f"本机未安装{label}")
-
-
-def tail():
+def tail(p, rt):
     print(f"\n逐项回读确认 {rt.verified} 项；完成 {sum(state == '完成' for _, state in rt.results)} 段，"
           f"跳过 {sum(state == '跳过' for _, state in rt.results)} 段，未显示项 {len(SKIPPED_ITEMS)} 组", flush=True)
 
 
 # 负一屏 / 主题 / 视频 / 游戏中心的段体按 `g["close_named"]` 取这个钩子，实现住在
 # recipe_strategies 的 `close_named_optional`，这里绑回旧名字（#1253）。
-close_named = close_named_optional
+

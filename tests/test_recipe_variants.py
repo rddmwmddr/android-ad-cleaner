@@ -44,7 +44,7 @@ class VariantTests(unittest.TestCase):
 
     def test_variants_are_packaged(self):
         shipped = {Path(src).relative_to(ROOT).as_posix() for src, _ in bundle_data(ROOT)}
-        for variant in ROOT.glob("recipes/*/*/recipe_*.py"):
+        for variant in ROOT.glob("recipes/*/*/*.toml"):
             self.assertIn(variant.relative_to(ROOT).as_posix(), shipped)
 
     def test_verification_ledger_is_packaged(self):
@@ -60,13 +60,15 @@ def _nested(name):
     return f"{run.FAMILY.get(brand.lower(), brand)}/{model or name}"
 
 
-def write_recipe(root, name, build, steps, filename="recipe.py"):
-    """一份能装载的最小脚本：段体写成真的 `def`，因为除了按正则读元数据的，还有按 AST 读源码的
-    （`tool/recipe_audit.py` 的本机函数审计）。`pass` 体不碰手机。"""
+def write_recipe(root, name, build, steps, filename=None):
+    """一份能装载的最小页面树：每段一个空的 `[[segment]]`，`model` 取目录名。"""
     d = Path(root, "recipes", *_nested(name).split("/"))
     d.mkdir(parents=True, exist_ok=True)
-    body = "".join(f'@step("步骤{i}")\ndef _():\n    pass\n\n' for i in range(steps))
-    Path(d, filename).write_text(f'BUILD = "{build}"\n{body}', encoding="utf-8")
+    model = d.name
+    filename = filename or f"{model}.toml"
+    body = "".join(f'[[segment]]\nname = "步骤{i}"\nops = []\n' for i in range(steps))
+    Path(d, filename).write_text(
+        f'model = "{model}"\nmodels = ["{model}"]\nbuild = "{build}"\n{body}', encoding="utf-8")
 
 
 class XiaomiFamilyTests(unittest.TestCase):
@@ -134,9 +136,9 @@ class XiaomiFamilyTests(unittest.TestCase):
         self.assertTrue(reference)
 
     def test_version_variants_are_not_candidates(self):
-        write_recipe(self.root, "xiaomi-NEW3", "OS3.0.308.0", 9, filename="recipe_v2.py")
+        write_recipe(self.root, "xiaomi-NEW3", "OS3.0.308.0", 9, filename="NEW3-v2.toml")
         path, _ = self.pick("OS3.0.308.0.WNBCNXM")
-        self.assertEqual(Path(path).name, "recipe.py")
+        self.assertEqual(Path(path).name, "NEW3.toml")
 
     def test_a_script_recorded_on_the_android_base_is_never_picked(self):
         # #942：底包是跨机型共享的 Android 构建号，同一代的小米机都报同一个。
@@ -352,7 +354,8 @@ class ReferenceCheckLineTests(unittest.TestCase):
     def check_output(self, recorded, name="xiaomi-M154FF", brand="Xiaomi"):
         with tempfile.TemporaryDirectory() as root:
             write_recipe(root, name, recorded, 9)
-            recipe = str(Path(root, "recipes", *_nested(name).split("/"), "recipe.py"))
+            model = _nested(name).split("/")[1]
+            recipe = str(Path(root, "recipes", *_nested(name).split("/"), f"{model}.toml"))
             out = io.StringIO()
             with patch.object(run, "ROOT", root), \
                  patch.object(run, "info", return_value=dict(self.INFO, brand=brand)) as info, \
@@ -426,7 +429,7 @@ class ReferenceCheckLineTests(unittest.TestCase):
     def test_unknown_device_version_is_not_called_different(self):
         with tempfile.TemporaryDirectory() as root:
             write_recipe(root, "xiaomi-REF", "OS3.0.308", 9)
-            recipe = str(Path(root, "recipes", *_nested("xiaomi-REF").split("/"), "recipe.py"))
+            recipe = str(Path(root, "recipes", *_nested("xiaomi-REF").split("/"), "REF.toml"))
             out = io.StringIO()
             unknown = dict(self.INFO, build="", os="")
             with patch.object(run, "ROOT", root), \

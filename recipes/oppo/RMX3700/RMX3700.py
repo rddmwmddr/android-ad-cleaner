@@ -2,12 +2,8 @@
 # 只剩软件商店在这里：它是四层嵌套的条件树（tap_by_scroll / wait_page / store_privacy 逐层判），
 # 按 docs/04「多层嵌套的整段交给例外函数」留下。其余五段（落点断言 + 一层失败退出）已落数据。
 import time
+import recipe_nav as nav
 
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import p, rt, skip, skip_in_safe_mode
-    from recipe_nav import open_search_setting, open_search_sub, settings_page, tap_by_scroll, wait_page
-    from recipe_strategies import close_rows
 
 BUILD = "RMX3700_16.0.5.1300"
 # 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
@@ -27,11 +23,11 @@ STORE_KEEP = [
 SEARCH_SETTING = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"
 
 
-def guard():
+def guard(p, rt):
     model = p.d.shell("getprop ro.product.model").output.strip()
     build = p.d.shell("getprop ro.build.display.id").output.strip()
     if model != "RMX3700" or not build.startswith(BUILD):
-        skip("型号或系统版本不同，跳过；请重新核对页面")
+        rt.skip("型号或系统版本不同，跳过；请重新核对页面")
 
 
 def step_store(p, rt):
@@ -42,12 +38,12 @@ def step_store(p, rt):
         print("  ! 商店里没找到「设置」")
         return False
     time.sleep(1.5)
-    if not wait_page("com.heytap.market.mine.cn.setting.ui.SettingActivity", "设置"):
+    if not nav.wait_page(p, rt, "com.heytap.market.mine.cn.setting.ui.SettingActivity", "设置"):
         return False
 
     # 服务管理：46 项推广/服务入口，只保留 STORE_KEEP 里的服务类。
-    if tap_by_scroll("服务管理"):
-        if wait_page("com.heytap.market.mine.cn.setting.ui.ServeManagerActivity", "服务管理"):
+    if nav.tap_by_scroll(p, rt, "服务管理"):
+        if nav.wait_page(p, rt, "com.heytap.market.mine.cn.setting.ui.ServeManagerActivity", "服务管理"):
             p.off(keep=STORE_KEEP, page="商店·服务管理")
         else:
             print("  ! 没到「服务管理」页")
@@ -56,12 +52,12 @@ def step_store(p, rt):
 
     # 个性化推荐不在「隐私」页，在「账号与隐私 → 隐私授权管理 → 个性化推荐」。
     # 商店 App 自己升级，这一行在有的版本里叫「隐私」（#933）；两页都可以当落点判。
-    tap_by_scroll("账号与隐私")
+    nav.tap_by_scroll(p, rt, "账号与隐私")
     privacy = ("隐私", "隐私授权管理")
-    if tap_by_scroll(privacy):
-        if wait_page("com.heytap.market.mine.cn.setting.ui.PrivacyActivity", privacy):
-            if tap_by_scroll("个性化推荐"):
-                if wait_page("com.heytap.market.mine.cn.setting.ui.PersonalRecommendActivity",
+    if nav.tap_by_scroll(p, rt, privacy):
+        if nav.wait_page(p, rt, "com.heytap.market.mine.cn.setting.ui.PrivacyActivity", privacy):
+            if nav.tap_by_scroll(p, rt, "个性化推荐"):
+                if nav.wait_page(p, rt, "com.heytap.market.mine.cn.setting.ui.PersonalRecommendActivity",
                              "个性化推荐"):
                     p.off(only=["个性化推荐"], page="商店·个性化推荐")
                 else:
@@ -78,7 +74,7 @@ def step_store(p, rt):
     return True
 
 
-def tail():
+def tail(p, rt):
     print("\n== 结果", flush=True)
     for name, state in rt.results:
         print(f"  {name}: {state}")
