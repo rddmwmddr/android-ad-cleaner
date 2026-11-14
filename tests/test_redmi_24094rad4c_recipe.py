@@ -1,6 +1,7 @@
 """Redmi Note 14 5G：专用型号匹配、系统版本锁定和保守的开关范围。"""
 from pathlib import Path
 import sys
+import tomllib
 import unittest
 from unittest.mock import Mock
 
@@ -11,10 +12,28 @@ import run
 from fixtures import load_recipe
 
 
+def segment_of(data, name):
+    return next(s for s in data["segment"] if s["name"] == name)
+
+
+def ops_of(data, name):
+    """`.toml` 里某一段的 op 列表（`code=` 段给空）。"""
+    return segment_of(data, name).get("ops", [])
+
+
+def walk(ops):
+    for op in ops:
+        yield op
+        yield from walk(op.get("ops", []))
+        yield from walk(op.get("else_ops", []))
+
+
 class Redmi24094RAD4CRecipeTests(unittest.TestCase):
     def setUp(self):
-        self.path = ROOT / "recipes/xiaomi/24094RAD4C/recipe.py"
-        self.source = self.path.read_text(encoding="utf-8")
+        self.path = ROOT / "recipes/xiaomi/24094RAD4C/24094RAD4C.toml"
+        with open(self.path, "rb") as handle:
+            self.data = tomllib.load(handle)
+        self.source = (self.path.with_suffix(".py").read_text(encoding="utf-8"))
 
     def test_actual_model_selects_own_recipe_and_pins_recorded_build(self):
         path, reference = run.recipe_for("24094RAD4C", "Redmi")
@@ -33,17 +52,25 @@ class Redmi24094RAD4CRecipeTests(unittest.TestCase):
         self.assertFalse(run.build_ok(phone, "OS4.0"))
 
     def test_script_keeps_store_mode_updates_and_functional_browser_entries(self):
-        self.assertNotIn('p.tap("极简模式"', self.source)
+        self.assertNotIn("极简模式", self.source)
+        self.assertEqual(segment_of(self.data, "应用商店").get("code"), "step_store")
+        # 商店的「不碰父开关」名单住在例外函数里，逐字保留。
         self.assertIn('keep=["推送消息", "应用更新"]', self.source)
-        self.assertIn('keep=["自动更新"]', self.source)
-        self.assertIn('p.off(only=["宫格位推送"]', self.source)
-        self.assertIn('p.off(only=["猜你想搜"]', self.source)
-        self.assertNotIn('p.off(only=["小说"]', self.source)
-        self.assertIn('close_with_plain_tap(["个性化内容推荐", "个性化广告推荐"]', self.source)
+        theme = [op for op in walk(ops_of(self.data, "主题")) if op.get("kind") == "off_required"]
+        self.assertEqual([op.get("keep") for op in theme], [["自动更新"]])
+        browser = [op for op in walk(ops_of(self.data, "浏览器")) if op.get("kind") == "off"]
+        self.assertIn(["宫格位推送"], [op.get("only") for op in browser])
+        self.assertIn(["猜你想搜"], [op.get("only") for op in browser])
+        self.assertNotIn(["小说"], [op.get("only") for op in browser])
+        plain = [op for op in walk(ops_of(self.data, "浏览器"))
+                 if op.get("kind") == "lib" and op.get("name") == "close_with_plain_tap"]
+        self.assertIn(["个性化内容推荐", "个性化广告推荐"], [op.get("args")[0] for op in plain])
 
     def test_theme_handles_the_observed_skippable_splash_ad(self):
-        self.assertIn('p.find("跳过广告")', self.source)
-        self.assertIn('p.tap("跳过广告", scrolls=0)', self.source)
+        theme = list(walk(ops_of(self.data, "主题")))
+        find = [op for op in theme if op.get("kind") == "if_find" and op.get("text") == "跳过广告"]
+        self.assertTrue(find, "主题段没有处理开屏广告")
+        self.assertIn({"kind": "tap", "text": "跳过广告", "scrolls": 0}, find[0]["ops"])
 
     def test_theme_waits_for_the_bottom_tab_to_settle(self):
         p = Mock()
