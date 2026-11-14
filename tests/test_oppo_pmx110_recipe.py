@@ -11,19 +11,17 @@ from pathlib import Path
 import sys
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, call
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
+import fixtures
 from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock, phone_stub
 import fast
 import run
-import recipe_nav
-import recipe_strategies
-import recipe_steps
 
 RECIPE = ROOT / "recipes/oppo/PMX110/PMX110.toml"
 RECORDED = "PMX110_17.0.0.116(CN01)"
@@ -33,42 +31,10 @@ SEARCH_HOME_FOCUS = ("com.heytap.quicksearchbox/"
                      "com.heytap.quicksearchbox.ui.activity.MultiSearchHomeActivity")
 
 
-_SEAM_PATCHERS = []
-
-
-def tearDownModule():
-    # 后进先出：同一属性被多次 patch 时，按插入顺序 stop 会把更早的 delegate 留在模块上
-    for patcher in reversed(_SEAM_PATCHERS):
-        patcher.stop()
-    _SEAM_PATCHERS.clear()
-
-
-def _install_seams(scope):
-    """测试接缝：用例照旧往 scope[name] 放 Mock，执行按模块属性走；没放桩时用真实现。"""
-    for name in ("read_switches", "open_page", "row", "app_settings", "close_named_optional",
-                 "more_menu", "menu_state", "settings_page", "tap_page", "wait_page", "navigate"):
-        for module in (recipe_nav, recipe_strategies, recipe_steps):
-            real = getattr(module, name, None)
-            if real is None:
-                continue
-
-            def delegate(*a, _name=name, _real=real, **k):
-                if _name in dict.keys(scope):
-                    return scope[_name](*a[2:], **k)
-                return _real(*a, **k)
-
-            patcher = patch.object(module, name, delegate)
-            patcher.start()
-            _SEAM_PATCHERS.append(patcher)
-            break
-    rt = scope["rt"]
-    real_page = rt.page
-    rt.page = lambda *a, **k: scope["page"](*a, **k) if "page" in dict.keys(scope) else real_page(*a, **k)
-
-
-def load(phone, only=("__no_steps__",), out=None):
+def load(phone, only=("__no_steps__",), out=None, case=None):
     scope, _ = load_recipe(phone, RECIPE, only, out)
-    _install_seams(scope)
+    if case is not None:
+        fixtures.bridge_scope(case, scope)
     return scope
 
 
@@ -124,7 +90,7 @@ class RecipeSelectionTests(unittest.TestCase):
 class CloseNamedTests(unittest.TestCase):
     def setUp(self):
         self.p = phone_mock(W=1272, H=2772)
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
 
     def close(self, before, after, names=("开屏广告",), **kwargs):
         self.scope["read_switches"] = Mock(side_effect=[before, after])
@@ -207,7 +173,7 @@ class ReadSwitchesTests(unittest.TestCase):
     def setUp(self):
         self.p = phone_mock(W=1272, H=2772)
         self.p.locked.return_value = False
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
         self.scope["page"] = Mock()
         self.scope["switch_top"] = Mock()
 
@@ -247,7 +213,7 @@ class SwitchTopTests(unittest.TestCase):
         p = phone_mock(W=1272, H=2772)
         p.locked.return_value = False
         p.switches.return_value = [("许可", False, (100, 500))]
-        scope = load(p)
+        scope = load(p, case=self)
         scope["switch_top"](80)
         p.top.assert_called_once_with(1)
         self.assertEqual(p.switches.call_count, 2)
@@ -259,7 +225,7 @@ class NavigationTests(unittest.TestCase):
         self.p.locked.return_value = False
         self.p.focus.return_value = "test/Settings"
         self.p.texts.return_value = []
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
 
     def test_denied_public_entry_stops_before_page_or_taps(self):
         self.p.d.shell.return_value = SimpleNamespace(exit_code=1, output="Permission Denial")
@@ -313,7 +279,7 @@ class SearchStepTests(unittest.TestCase):
         self.p = phone_mock(W=1080, H=2340)
         self.p.locked.return_value = False
         self.p.texts.return_value = []
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
 
     def test_search_never_touches_message_master_or_sources(self):
         self.scope["open_page"] = Mock()
@@ -349,7 +315,7 @@ class SearchStepTests(unittest.TestCase):
         self.p.d.shell.return_value = SimpleNamespace(exit_code=0, output="")
         self.p.focus.return_value = SEARCH_SETTINGS_FOCUS
         self.p.find.return_value = False
-        scope = load(self.p, only=("下拉搜索",))
+        scope = load(self.p, only=("下拉搜索",), case=self)
         self.assertEqual(scope["FAILED_STEPS"], ["下拉搜索"])
         self.p.off.assert_not_called()
 
@@ -357,7 +323,7 @@ class SearchStepTests(unittest.TestCase):
         self.p.d.shell.return_value = SimpleNamespace(exit_code=0, output="")
         self.p.focus.return_value = SEARCH_HOME_FOCUS
         self.p.find.return_value = True
-        scope = load(self.p, only=("下拉搜索",))
+        scope = load(self.p, only=("下拉搜索",), case=self)
         self.assertEqual(scope["FAILED_STEPS"], ["下拉搜索"])
         self.p.off.assert_not_called()
         self.p.click.assert_not_called()
@@ -381,7 +347,7 @@ class MarketPrivacyEntryTests(unittest.TestCase):
         self.p.texts.return_value = []
         self.p.settle.return_value = True
         self.p.scroll_more.return_value = False
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
 
     def market_page(self, *names):
         rows = "".join(
@@ -421,7 +387,7 @@ class MarketPrivacyEntryTests(unittest.TestCase):
                            focus=((0.0, self.SETTINGS),))
         lines = []
         phone.say = phone.conn.say = lambda *a, **k: lines.append(" ".join(str(x) for x in a))
-        scope = load(phone)
+        scope = load(phone, case=self)
         with self.assertRaisesRegex(RuntimeError, "没找到入口「隐私」，未继续本段"):
             scope["row"](self.NAMES, package="com.heytap.market", activity="PrivacyActivity")
         log = "\n".join(lines)
@@ -448,7 +414,7 @@ class StoreThemeVideoTests(unittest.TestCase):
         self.p = phone_mock(W=1080, H=2340)
         self.p.locked.return_value = False
         self.p.texts.return_value = []
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
 
     def test_store_closes_named_promotions_only(self):
         self.scope["app_settings"] = Mock()
@@ -584,7 +550,7 @@ class CarouselTests(unittest.TestCase):
         self.p.locked.return_value = False
         self.p.on_screen.return_value = True
         self.p.focus.return_value = "com.coloros.assistantscreen/setting.RecommendServiceSettingActivity"
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
         self.scope["read_switches"] = Mock(return_value={"推荐服务": True})
 
     def click_to(self, root, target_bounds):
@@ -681,7 +647,7 @@ class NegativeScreenTests(unittest.TestCase):
         </hierarchy>''')
         # 负一屏内嵌在桌面进程里，前台仍是 launcher（#901）
         p.focus.return_value = "com.android.launcher/com.android.launcher3.Launcher"
-        scope = load(p)
+        scope = load(p, case=self)
         scope["row"] = Mock()
         scope["hide_carousel"] = Mock(side_effect=RuntimeError("单选缺失"))
         scope["close_named_optional"] = Mock()
@@ -701,7 +667,7 @@ class GameCenterTests(unittest.TestCase):
         self.p.texts.return_value = []
         self.p.d.shell.return_value = SimpleNamespace(
             exit_code=0, output="package:/data/app/gamecenter/base.apk")
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
         self.scope["row"] = Mock()
         self.scope["close_named_optional"] = Mock()
 
@@ -748,7 +714,7 @@ class AdTrackingFlowTests(unittest.TestCase):
         self.p.tap = Mock(return_value=True)
         self.p.d.shell = Mock(side_effect=lambda cmd: SimpleNamespace(
             exit_code=0, output="PMX110" if cmd.startswith("getprop") else ""))
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
         self.scope["p"].setting = Mock()
         self.scope["menu_state"] = Mock()
         self.scope["close_all_listed"] = Mock()
@@ -821,7 +787,7 @@ class TrackingGuardTests(unittest.TestCase):
         self.p = phone_mock(W=1272, H=2772)
         self.p.locked.return_value = False
         self.p.texts.return_value = []
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
 
     def test_safe_mode_skips_before_navigation(self):
         self.p.safe_mode = True
@@ -843,7 +809,7 @@ class StepDecoratorTests(unittest.TestCase):
     def setUp(self):
         self.p = phone_mock(W=1272, H=2772)
         self.p.locked.return_value = False
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
 
     def test_lock_halts_remaining_segments(self):
         self.scope["ONLY"] = []

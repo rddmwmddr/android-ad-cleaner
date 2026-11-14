@@ -23,7 +23,6 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import adb_link  # noqa: E402
 import chan_fast  # noqa: E402
-import catalog.interpreter as interpreter  # noqa: E402
 import entries  # noqa: E402
 import fast  # noqa: E402
 import fixtures  # noqa: E402

@@ -399,7 +399,9 @@ def _close_listed(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
     available = LIBRARY["read_switches"](p, rt, op["page"])
     names = [name for name in op["names"] if name in available]
     rt.require(names, op["miss_print"])
-    LIBRARY["close_named"](p, rt, names, op["page"], snapshot=available)
+    close = (LIBRARY["close_named_optional"] if rt.constants.get("CLOSE_NAMED_OPTIONAL")
+             else LIBRARY["close_named"])
+    close(p, rt, names, op["page"], snapshot=available)
 
 
 def _off_required(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:

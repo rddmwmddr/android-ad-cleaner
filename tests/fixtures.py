@@ -795,3 +795,55 @@ def patch_library(case, targets):
 
     case.addCleanup(restore)
     return targets
+
+
+def bridge_scope(case, scope, names=None):
+    """把库实现接到 `scope[name]`：用例照旧 `scope[name] = Mock()`，执行按模块属性 / `LIBRARY` 走。
+
+    没设桩的名字走原实现（创建接缝时捕获的那一份），所以缺省行为不变。`rt.page` 单独接
+    （测试常 `scope["page"] = Mock()`）。测试专用接缝，生产代码不按名字查表；`addCleanup` LIFO 还原。
+    """
+    import catalog.interpreter as interpreter
+    import recipe_nav
+    import recipe_strategies
+    import recipe_steps
+    modules = (recipe_nav, recipe_strategies, recipe_steps)
+    names = names or (
+        "read_switches", "open_page", "row", "app_settings", "close_named_optional",
+        "browser_settings", "require_installed", "switch_top", "hide_carousel", "more_menu",
+        "menu_state", "settings_page", "tap_page", "wait_page", "navigate", "tap_by_scroll",
+        "settings_icon_visible", "gear", "theme_settings", "open_settings",
+        "close_all_listed", "system_settings", "assistant_settings", "settings_home",
+        "open_app_settings", "close_named", "read_on_page", "tap_by_scroll", "scan_switches",
+        "safe_switches", "store_personalization", "assistant_screen", "negative_screen")
+    saved = []
+    for name in names:
+        for module in modules:
+            if not hasattr(module, name):
+                continue
+            original = getattr(module, name)
+            old_library = interpreter.LIBRARY.get(name)
+
+            def delegate(*args, _name=name, _real=original, **kwargs):
+                if _name in dict.keys(scope):
+                    return scope[_name](*args[2:], **kwargs)
+                return _real(*args, **kwargs)
+
+            setattr(module, name, delegate)
+            interpreter.LIBRARY[name] = delegate
+            saved.append((module, name, original, old_library))
+            break
+    rt = scope["rt"]
+    real_page = rt.page
+    rt.page = lambda *args, **kwargs: (scope["page"](*args, **kwargs)
+                                       if "page" in dict.keys(scope) else real_page(*args, **kwargs))
+
+    def restore():
+        for module, name, original, old_library in reversed(saved):
+            setattr(module, name, original)
+            if old_library is None:
+                interpreter.LIBRARY.pop(name, None)
+            else:
+                interpreter.LIBRARY[name] = old_library
+
+    case.addCleanup(restore)

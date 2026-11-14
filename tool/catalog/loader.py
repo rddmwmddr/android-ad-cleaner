@@ -37,6 +37,11 @@ class CatalogScope(dict):
         self.rt = rt
 
     def __getitem__(self, key):
+        # 显式写进来的键优先（测试桩）；没写过才走只读视图。
+        try:
+            return super().__getitem__(key)
+        except KeyError:
+            pass
         if key == "ONLY":
             return self.rt.only
         if key == "HALTED":
@@ -47,10 +52,7 @@ class CatalogScope(dict):
             return self._RT_VIEW[key](self.rt)
         if key in ("page", "require", "skip", "require_switches", "skip_in_safe_mode", "start_or_skip"):
             return getattr(self.rt, key)
-        try:
-            return super().__getitem__(key)
-        except KeyError:
-            return self._library_view(key)
+        return self._library_view(key)
 
     def _library_view(self, key):
         """测试读库助手用的视图：`__all__` 里的实现 + 提升进库的本机助手。"""

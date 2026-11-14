@@ -1406,7 +1406,7 @@ def menu_state(p, rt):
     # 显示系统应用后，这一项换成「隐藏系统应用」（PMX110 实测）
     system_shown = any(t.startswith("隐藏系统应用") or (t.startswith("显示系统应用") and "已选中" in t
                                                        and "未选中" not in t) for t, _, _ in items)
-    return rt.constants['MenuState'](disabled, system_shown)
+    return MenuState(disabled, system_shown)
 
 
 def ad_id_page(p, rt):
