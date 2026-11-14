@@ -11,7 +11,7 @@ from pathlib import Path
 import sys
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, call
+from unittest.mock import Mock, call, patch
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +21,9 @@ sys.path.insert(0, str(ROOT / "tests"))
 from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock, phone_stub
 import fast
 import run
+import recipe_nav
+import recipe_strategies
+import recipe_steps
 
 RECIPE = ROOT / "recipes/oppo/PMX110/PMX110.toml"
 RECORDED = "PMX110_17.0.0.116(CN01)"
@@ -30,8 +33,41 @@ SEARCH_HOME_FOCUS = ("com.heytap.quicksearchbox/"
                      "com.heytap.quicksearchbox.ui.activity.MultiSearchHomeActivity")
 
 
+_SEAM_PATCHERS = []
+
+
+def tearDownModule():
+    for patcher in _SEAM_PATCHERS:
+        patcher.stop()
+    _SEAM_PATCHERS.clear()
+
+
+def _install_seams(scope):
+    """测试接缝：用例照旧往 scope[name] 放 Mock，执行按模块属性走；没放桩时用真实现。"""
+    for name in ("read_switches", "open_page", "row", "app_settings", "close_named_optional",
+                 "more_menu", "menu_state", "settings_page", "tap_page", "wait_page", "navigate"):
+        for module in (recipe_nav, recipe_strategies, recipe_steps):
+            real = getattr(module, name, None)
+            if real is None:
+                continue
+
+            def delegate(*a, _name=name, _real=real, **k):
+                if _name in dict.keys(scope):
+                    return scope[_name](*a[2:], **k)
+                return _real(*a, **k)
+
+            patcher = patch.object(module, name, delegate)
+            patcher.start()
+            _SEAM_PATCHERS.append(patcher)
+            break
+    rt = scope["rt"]
+    real_page = rt.page
+    rt.page = lambda *a, **k: scope["page"](*a, **k) if "page" in dict.keys(scope) else real_page(*a, **k)
+
+
 def load(phone, only=("__no_steps__",), out=None):
     scope, _ = load_recipe(phone, RECIPE, only, out)
+    _install_seams(scope)
     return scope
 
 
