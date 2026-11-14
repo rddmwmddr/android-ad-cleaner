@@ -132,7 +132,9 @@ def _off(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
         kwargs["keep"] = list(op["keep"])
     if "max_screens" in op:
         kwargs["max_screens"] = op["max_screens"]
-    p.off(**kwargs)
+    done = p.off(**kwargs)
+    if isinstance(done, int):
+        rt.confirm(done)
 
 
 def _close_all(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
@@ -416,7 +418,9 @@ def _off_required(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
     kwargs: dict[str, Any] = {"only": list(op["only"]), "page": op["page"]}
     if "keep" in op:
         kwargs["keep"] = list(op["keep"])
-    page.off(**kwargs)
+    done = page.off(**kwargs)
+    if isinstance(done, int):
+        rt.confirm(done)
 
 
 def _require_focus(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:

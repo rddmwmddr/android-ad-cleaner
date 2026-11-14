@@ -15,7 +15,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, call
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -165,80 +165,9 @@ class SourceTest(unittest.TestCase):
                 encoding="utf-8")
             self.assertEqual(entries.used_by(d), {})
 
-    def test_navigation_implementations_ignore_caller_constants(self):
-        """`used_by()` 把调用脚本的常量一并传给每份注入实现：今天没有导航助手按名字取外部值，
-        所以传与不传必须逐字相同，否则这条接线会悄悄改变「用过的机型」（#1209）。"""
-        import recipe_source
-        constants = {"MARKET": ("com.example.market",), "HOT": ("热点资讯",)}
-        for name, impl in recipe_source.surface_sources()[recipe_source.NAV_MODULE].items():
-            self.assertEqual(recipe_source.scan_source(impl, externals=constants).calls,
-                             recipe_source.scan_source(impl).calls, name)
 
-    def test_an_entry_inside_a_step_implementation_is_credited_to_the_caller(self):
-        """段体搬进注入面之后，实现里的拉起仍认得出属于哪个机型（#1209）。"""
-        import recipe_steps
-        import tempfile
-        with tempfile.TemporaryDirectory() as d:
-            model = Path(d) / "xiaomi" / "model"
-            model.mkdir(parents=True)
-            (model / "recipe.py").write_text(
-                'MARKET = "com.example.market"\n\n\n'
-                '@step("商店")\n'
-                'def _():\n'
-                '    store()\n\n\n'
-                'from typing import TYPE_CHECKING\n\n'
-                'if TYPE_CHECKING:\n'
-                '    from recipe_steps import store\n',
-                encoding="utf-8")
-            with patch.dict(recipe_steps.STEPS, {"store": _store_factory}):
-                used = entries.used_by(d)
-        self.assertEqual(used, {("direct", "com.example.market",
-                                 "com.example.market.Main"): {"model"}})
 
-    def test_an_entry_two_hops_down_is_credited_to_the_caller(self):
-        """段体调导航助手、入口写在助手实现里（#1212）：只看脚本那一层会把调段体的机型漏掉。"""
-        import recipe_nav
-        import recipe_steps
-        import tempfile
-        with tempfile.TemporaryDirectory() as d:
-            model = Path(d) / "oppo" / "model"
-            model.mkdir(parents=True)
-            (model / "recipe.py").write_text(
-                '@step("浏览器首页")\n'
-                'def _():\n'
-                '    browser_home()\n\n\n'
-                'from typing import TYPE_CHECKING\n\n'
-                'if TYPE_CHECKING:\n'
-                '    from recipe_steps import browser_home\n',
-                encoding="utf-8")
-            with patch.dict(recipe_steps.STEPS, {"browser_home": _browser_home_factory}), \
-                    patch.dict(recipe_nav.NAV, {"settings_direct": _settings_direct_factory}):
-                used = entries.used_by(d)
-        self.assertEqual(used, {("intent", "oppo.intent.action.APP_SETTINGS", "com.example.browser"):
-                                {"model"}})
 
-    def test_a_locally_defined_helper_two_hops_down_is_not_the_injected_one(self):
-        """脚本本地定义了段体要调的导航助手：注入版不在场上，第二层也不记出处（#1212）。"""
-        import recipe_nav
-        import recipe_steps
-        import tempfile
-        with tempfile.TemporaryDirectory() as d:
-            model = Path(d) / "oppo" / "model"
-            model.mkdir(parents=True)
-            (model / "recipe.py").write_text(
-                'def settings_direct():\n'
-                '    return False\n\n\n'
-                '@step("浏览器首页")\n'
-                'def _():\n'
-                '    browser_home()\n\n\n'
-                'from typing import TYPE_CHECKING\n\n'
-                'if TYPE_CHECKING:\n'
-                '    from recipe_steps import browser_home\n',
-                encoding="utf-8")
-            with patch.dict(recipe_steps.STEPS, {"browser_home": _browser_home_factory}), \
-                    patch.dict(recipe_nav.NAV, {"settings_direct": _settings_direct_factory}):
-                used = entries.used_by(d)
-        self.assertEqual(used, {})
 
     def test_open_app_settings_needs_two_arguments(self):
         """只传了包名的 open_app_settings 不算出处：把包名当成页面会给这台机凭空挂一条 Intent。"""
@@ -1558,9 +1487,8 @@ GEAR_CENTER_305 = (995, 165)
 
 
 def surface_sources():
-    """注入面三张注册表的源码摊平成一个 {名字: 源码}。三张表不同名，摊平只为按名字查（#1243）。"""
-    return {name: source for table in recipe_source.surface_sources().values()
-            for name, source in table.items()}
+    """三个库的公开实现：{名字: 源码}（`__all__` 全局唯一，按名字查即可）。"""
+    return {name: source for name, (_module, source) in recipe_source.library_sources().items()}
 
 
 def gear_users_1210():
@@ -1572,8 +1500,9 @@ def gear_users_1210():
     calls, found = {}, set()
     for name, source in surface_sources().items():
         tree = ast.parse(fixtures.normalize(source))
-        calls[name] = {node.func.id for node in ast.walk(tree)
-                       if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
+        calls[name] = {(node.func.id if isinstance(node.func, ast.Name) else node.func.attr)
+                       for node in ast.walk(tree) if isinstance(node, ast.Call)
+                       and isinstance(node.func, (ast.Name, ast.Attribute))}
         if "gear" in calls[name] or any(isinstance(node, ast.FunctionDef) and node.name == "gear"
                                         for node in ast.walk(tree)):
             found.add(name)
@@ -2667,11 +2596,8 @@ def injected_step_1210(name):
     source = surface_sources().get(name)
     if source is None:
         return None
-    factory = next((node for node in ast.parse(fixtures.normalize(source)).body
-                    if isinstance(node, ast.FunctionDef)), None)
-    if factory is None:
-        return None
-    return next((node for node in factory.body if isinstance(node, ast.FunctionDef)), None)
+    return next((node for node in ast.parse(fixtures.normalize(source)).body
+                 if isinstance(node, ast.FunctionDef)), None)
 
 
 def effective_step_body(node, defines=frozenset()):
@@ -2793,8 +2719,9 @@ def unconsumed_906(fn):
         consumed = ((isinstance(parent, (ast.If, ast.While)) and cur is parent.test)
                     or isinstance(parent, (ast.Assign, ast.Return))
                     or (isinstance(parent, ast.Call)
-                        and getattr(parent.func, "id", "") in {"require", "close_named",
-                                                               "require_switches"}))
+                        and (getattr(parent.func, "id", "")
+                             or getattr(parent.func, "attr", "")) in {"require", "close_named",
+                                                                      "require_switches"}))
         if not consumed:
             bad.append(node.lineno)
     return bad

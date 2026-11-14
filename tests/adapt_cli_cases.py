@@ -45,8 +45,8 @@ CASES = [
          expect=["没有勾选任何开关"]),
     case("gen-找不到勾选清单", ["gen", "探路.tsv", "--pick", "无.txt"], {"探路.tsv": TSV},
          expect=["找不到勾选清单 无.txt"]),
-    case("gen-写不出", ["gen", "探路.tsv", "-o", "无此目录/草稿.py"], {"探路.tsv": TSV},
-         expect=["写不出 无此目录/草稿.py"]),
+    case("gen-写不出", ["gen", "探路.tsv", "-o", "无此目录/草稿.toml"], {"探路.tsv": TSV},
+         expect=["写不出 无此目录/草稿.toml"]),
     # ---------- check：Phone 之前的参数校验 ----------
     case("check-缺参数", ["check"], expect=["用法：run.py adapt check -s"]),
     case("check-参数顺序错", ["check", "S", "草稿.py"], expect=["用法：run.py adapt check -s"]),

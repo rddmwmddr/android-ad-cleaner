@@ -16,6 +16,7 @@ import io
 import json
 import sys
 import tempfile
+import tomllib
 import types
 import unittest
 from pathlib import Path
@@ -155,7 +156,7 @@ class SelectionTests(unittest.TestCase):
 
 class DraftGenTests(unittest.TestCase):
     def gen(self, directory, extra=()):
-        out = Path(directory) / "草稿.py"
+        out = Path(directory) / "草稿.toml"
         with contextlib.redirect_stdout(io.StringIO()):
             adapt.cmd_gen([str(write_tsv(directory)), "-o", str(out), *extra])
         return out.read_text(encoding="utf-8")
@@ -163,16 +164,16 @@ class DraftGenTests(unittest.TestCase):
     def test_draft_header_carries_build_models_and_unverified_marks(self):
         with tempfile.TemporaryDirectory() as d:
             src = self.gen(d)
-        self.assertIn('BUILD = ""', src)
-        self.assertIn('MODELS = ["PJA110"]', src)                    # 型号从文件名认出
+        self.assertIn('build = ""', src)
+        self.assertIn('models = ["PJA110"]', src)                    # 型号从文件名认出
         self.assertIn("待验证草稿", src)
         self.assertIn("这不是适配成果", src)
         self.assertIn("不要直接放进 recipes/", src)
-        compile(src, "草稿.py", "exec")                              # 生成物必须是合法 Python
+        tomllib.loads(src)                                           # 生成物必须是合法 TOML
 
     def test_step_literal_format_survives_run_recipe_meta(self):
         with tempfile.TemporaryDirectory() as d:
-            out = Path(d) / "草稿.py"
+            out = Path(d) / "草稿.toml"
             with contextlib.redirect_stdout(io.StringIO()):
                 adapt.cmd_gen([str(write_tsv(d)), "-o", str(out)])
             meta = run.recipe_meta(str(out))
@@ -183,37 +184,32 @@ class DraftGenTests(unittest.TestCase):
     def test_switches_are_written_as_named_only_list(self):
         with tempfile.TemporaryDirectory() as d:
             src = self.gen(d)
-        self.assertIn('close_named(["个性化推荐"], "设置 > 隐私")', src)
-        self.assertNotIn("keep=", src)                               # 草稿不做整页全关
-        self.assertNotIn("def close_named", src)                     # 用注入面那一份（#1151）
-        self.assertNotIn("def read_switches", src)
+        self.assertIn('{kind = "off", only = ["个性化推荐"], page = "设置 > 隐私"}', src)
+        self.assertNotIn("keep =", src)                               # 草稿不做整页全关
 
     def test_navigation_paths_come_from_explore(self):
         with tempfile.TemporaryDirectory() as d:
             src = self.gen(d)
-        self.assertIn('require(p.tap("设置", exact=True, scrolls=3), "未找到设置入口「设置」")', src)
-        self.assertIn('require(p.tap("隐私", exact=True, scrolls=4), "未找到子页入口「隐私」")', src)
+        self.assertIn('{kind = "entry", text = "隐私"}', src)
+        self.assertNotIn('text = "设置"', src)   # 第一跳是 start 的包名，不单列 entry
 
     def test_model_and_build_options_override(self):
         with tempfile.TemporaryDirectory() as d:
             src = self.gen(d, ["--model", "PLP120", "--build", "PLP120_16.0.9"])
-        self.assertIn('BUILD = "PLP120_16.0.9"', src)
-        self.assertIn('MODELS = ["PLP120"]', src)
+        self.assertIn('build = "PLP120_16.0.9"', src)
+        self.assertIn('models = ["PLP120"]', src)
 
-    def test_skeleton_declares_step_and_the_injected_names(self):
-        """草稿要能直接装载：`step` 是真的 import，其余注入名在文件末尾的 `if TYPE_CHECKING:`
-        块里声明归属（与正式脚本同形，ADR-0037）。少一段，`adapt check` 跑不动或静态检查认不出。"""
+    def test_skeleton_is_data_only(self):
+        """草稿只有页面树数据：不再产 `.py` 脚本，也就不该出现 `@step` / 注入名 import（#1268）。"""
         with tempfile.TemporaryDirectory() as d:
             src = self.gen(d)
-        self.assertIn("\nfrom recipe_kit import step\n", src)
-        self.assertTrue(src.rstrip().endswith(
-            "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n"
-            "    from recipe_kit import close_named, p, require, rt"), src[-300:])
+        self.assertNotIn("@step", src)
+        self.assertNotIn("from recipe_kit", src)
+        self.assertNotIn("TYPE_CHECKING", src)
 
     def test_generated_draft_loads_through_the_only_loader(self):
-        """`adapt check` 与正式脚本走同一个装载器：草稿能在 `recipe_loader.load()` 里装满段，
-        且导入不产生任何设备动作（`adapt gen` 的草稿带 import 头；旧草稿没有 import 头也照样能装，
-        `step` 由装载器注入）。"""
+        """`adapt check` 与正式数据走同一个装载器：草稿能在 `recipe_loader.load()` 里装满段，
+        且导入不产生任何设备动作。"""
         with tempfile.TemporaryDirectory() as d:
             out = self.draft_path(d)
             phone = phone_mock()
@@ -224,13 +220,13 @@ class DraftGenTests(unittest.TestCase):
         self.assertEqual(phone.mock_calls, [], "装载草稿不该碰手机")
 
     def draft_path(self, directory):
-        out = Path(directory) / "草稿.py"
+        out = Path(directory) / "草稿.toml"
         with contextlib.redirect_stdout(io.StringIO()):
             adapt.cmd_gen([str(write_tsv(directory)), "-o", str(out)])
         return out
 
     def test_docs_04_shows_the_same_skeleton(self):
-        """文档与生成器同步（#1247 的第四查，页面树形态 #1270）：docs/04 贴出的骨架里每个 op 行必须与
+        """文档与生成器同步（页面树形态 #1270）：docs/04 贴出的骨架里每个 op 行必须与
         `render_catalog_draft()` 产出的原样一致，反过来也成立——改一边漏一边即红。"""
         doc = (ROOT / "docs" / "04-给新机型写脚本.md").read_text(encoding="utf-8")
         draft = adapt.render_catalog_draft([("com.heytap.market", "设置 > 隐私", ["个性化推荐"])],
@@ -242,27 +238,38 @@ class DraftGenTests(unittest.TestCase):
         for line in ('model = "PLP120"', 'models = ["PLP120"]', 'build = ""'):
             self.assertIn(line, doc, f"docs/04 缺这一行：{line}")
 
+    def test_py_output_is_rejected(self):
+        """`-o x.py` 是已删除的死路径：明确报错，不静默产出一份装载器不认的脚本（#1268）。"""
+        err = io.StringIO()
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "草稿.py"
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+                code = adapt.cmd_gen([str(write_tsv(d)), "-o", str(out)])
+            self.assertFalse(out.exists())
+        self.assertEqual(code, 1)
+        self.assertIn(".toml", err.getvalue())
+
     def test_no_selection_refuses_to_generate(self):
         err = io.StringIO()
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "empty.tsv"
             path.write_text("com.a\t设置\t个性化推荐\t开\t★\t\n", encoding="utf-8")
             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
-                code = adapt.cmd_gen([str(path), "-o", str(Path(d) / "x.py")])
-            self.assertFalse((Path(d) / "x.py").exists())
+                code = adapt.cmd_gen([str(path), "-o", str(Path(d) / "x.toml")])
+            self.assertFalse((Path(d) / "x.toml").exists())
         self.assertEqual(code, 1)
         self.assertIn("没有勾选任何开关", err.getvalue())
 
     def test_successful_generation_returns_zero(self):
         with tempfile.TemporaryDirectory() as d:
             with contextlib.redirect_stdout(io.StringIO()):
-                code = adapt.cmd_gen([str(write_tsv(d)), "-o", str(Path(d) / "草稿.py")])
+                code = adapt.cmd_gen([str(write_tsv(d)), "-o", str(Path(d) / "草稿.toml")])
         self.assertEqual(code, 0)
 
 
 class CheckReportTests(unittest.TestCase):
     def draft(self, directory):
-        out = Path(directory) / "草稿.py"
+        out = Path(directory) / "草稿.toml"
         with contextlib.redirect_stdout(io.StringIO()):
             adapt.cmd_gen([str(write_tsv(directory)), "-o", str(out)])
         return out
@@ -270,7 +277,8 @@ class CheckReportTests(unittest.TestCase):
     def test_all_closed_report_matches_readback(self):
         with tempfile.TemporaryDirectory() as d:
             out = self.draft(d)
-            p = draft_phone([[("个性化推荐", True, (1, 2))], [("个性化推荐", False, (1, 2))]] * 2)
+            p = draft_phone([[]] * 10)
+            p.off.return_value = 1               # 每段关掉一项：回读确认数来自 p.off 的返回值
             self.assertIs(p.safe_mode, False)
             with contextlib.redirect_stdout(io.StringIO()):
                 report = adapt.check_draft(p, str(out))
@@ -280,92 +288,34 @@ class CheckReportTests(unittest.TestCase):
         self.assertEqual(p.off.call_count, 2)
 
     def test_check_draft_runs_through_the_only_loader(self):
-        """`adapt check` 与正式脚本共用一处装载：草稿交给 `recipe_loader.run()`，不自带 exec（ADR-0037）。"""
+        """`adapt check` 与正式数据共用一处装载：草稿交给 `recipe_loader.run()`，不自带 exec。"""
         with tempfile.TemporaryDirectory() as d:
             out = self.draft(d)
-            p = draft_phone([[("个性化推荐", True, (1, 2))]] * 10)
+            p = draft_phone([[]] * 10)
             with patch.object(adapt.recipe_loader, "run", wraps=adapt.recipe_loader.run) as run:
                 with contextlib.redirect_stdout(io.StringIO()):
                     adapt.check_draft(p, str(out))
         run.assert_called_once_with(str(out), p, only=[])
         self.assertIs(p.safe_mode, True)        # 装载前就切进安全模式，草稿不会整页全关
 
-    def test_pre_1247_draft_keeps_its_own_verified_count(self):
-        """旧格式草稿（#1247 之前）在模块体里 `VERIFIED_SWITCHES = 0`，把装载器注入的计数器覆盖成
-        普通 int，自己的助手再 `+=` 记在那一份上；自检取回读数时两份都要认，否则这类草稿恒报
-        「回读确认关闭：0 项 / 自检未通过」。
-
-        尾部那行 `print(...)` 仍是模块体语句，装载时就执行（旧格式的既有行为，不为它加特例）：
-        那一刻段还没跑，所以打出来的是执行前的 0。
-        """
-        legacy = (
-            "# -*- coding: utf-8 -*-\n"
-            'BUILD = "PJA110_14.0.0.812"\n'
-            'MODELS = ["PJA110"]\n'
-            "\n"
-            "VERIFIED_SWITCHES = 0        # 回读确认关闭的开关数\n"
-            "\n"
-            "\n"
-            "def close_named(names, page):\n"
-            "    global VERIFIED_SWITCHES\n"
-            "    VERIFIED_SWITCHES += p.off(only=names, page=page)\n"
-            "\n"
-            "\n"
-            '@step("com.heytap.market · 设置 > 隐私")\n'
-            "def _():\n"
-            '    p.start("com.heytap.market")\n'
-            '    p.tap("设置", exact=True)\n'
-            '    close_named(["个性化推荐"], "设置 > 隐私")\n'
-            "\n"
-            "\n"
-            'print(f"\\n草稿自检：回读确认 {VERIFIED_SWITCHES} 项，",\n'
-            '      f"未完成步骤 {len(FAILED_STEPS)} 个", flush=True)\n'
-        )
+    def test_check_rejects_a_py_path(self):
+        """`check` 只认 `.toml`：`.py` 报告一句明确错误，不静默失败（#1268）。"""
         with tempfile.TemporaryDirectory() as d:
-            out = Path(d) / "旧草稿.py"
-            out.write_text(legacy, encoding="utf-8")
-            p = draft_phone([[("个性化推荐", True, (1, 2))]] * 4)
-            p.off.return_value = 1
-            printed = io.StringIO()
-            with contextlib.redirect_stdout(printed):
-                report = adapt.check_draft(p, str(out))
-        self.assertIn("草稿自检：回读确认 0 项", printed.getvalue())    # 装载期那行确实跑了
-        self.assertEqual(report, {"verified": 1, "failed_steps": []})
-        self.assertTrue(adapt.print_report(report))
+            out = Path(d) / "草稿.py"
+            out.write_text("BUILD = ''\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, ".toml"):
+                adapt.check_draft(draft_phone([]), str(out))
 
-    def test_missing_switch_fails_the_step_without_clicking(self):
+    def test_unconfirmed_readback_is_not_success(self):
         with tempfile.TemporaryDirectory() as d:
             out = self.draft(d)
-            p = draft_phone([[("别的开关", True, (1, 2))]] * 10)
+            p = draft_phone([[]] * 10)
+            p.off.return_value = 0               # 点了但回读没确认
             with contextlib.redirect_stdout(io.StringIO()):
                 report = adapt.check_draft(p, str(out))
-        self.assertEqual(report["verified"], 0)
-        self.assertEqual(report["failed_steps"],
-                         ["com.heytap.market · 设置 > 隐私", "com.heytap.browser · 设置 > 隐私"])
-        p.off.assert_not_called()
+        self.assertEqual(report, {"verified": 0, "failed_steps": []})
+        self.assertEqual(p.off.call_count, 2)
         self.assertFalse(adapt.print_report(report))
-
-    def test_unconfirmed_readback_is_a_failed_step_not_success(self):
-        with tempfile.TemporaryDirectory() as d:
-            out = self.draft(d)
-            p = draft_phone([[("个性化推荐", True, (1, 2))]] * 10)
-            with contextlib.redirect_stdout(io.StringIO()):
-                report = adapt.check_draft(p, str(out))
-        self.assertEqual(report["verified"], 0)
-        self.assertEqual(report["failed_steps"],
-                         ["com.heytap.market · 设置 > 隐私", "com.heytap.browser · 设置 > 隐私"])
-        self.assertEqual(p.off.call_count, 2)                       # 点了但回读没确认
-        self.assertFalse(adapt.print_report(report))
-
-    def test_failed_entry_lands_in_failed_steps(self):
-        with tempfile.TemporaryDirectory() as d:
-            out = self.draft(d)
-            p = draft_phone([], tap_ok=False)
-            with contextlib.redirect_stdout(io.StringIO()):
-                report = adapt.check_draft(p, str(out))
-        self.assertEqual(report["verified"], 0)
-        self.assertEqual(report["failed_steps"],
-                         ["com.heytap.market · 设置 > 隐私", "com.heytap.browser · 设置 > 隐私"])
 
     def test_partial_completion_is_never_worded_as_success(self):
         out = io.StringIO()
@@ -375,9 +325,9 @@ class CheckReportTests(unittest.TestCase):
         self.assertIn("部分完成", out.getvalue())
         self.assertIn("不能把部分完成当成适配成功", out.getvalue())
 
-    def run_check_entry(self, draft_path, switch_lists):
+    def run_check_entry(self, draft_path, phone=None):
         """走 check 的真实入口（`adapt.main(["check", …])`），拿返回的退出码。"""
-        p = draft_phone(switch_lists)
+        p = phone or draft_phone([[]] * 10)
         with patch.object(adapt, "Phone") as P, contextlib.redirect_stdout(io.StringIO()):
             P.return_value.__enter__.return_value = p
             return adapt.main(["check", "-s", "FAKE_SERIAL", str(draft_path)])
@@ -413,20 +363,16 @@ class CheckReportTests(unittest.TestCase):
         self.assertEqual(err.getvalue(), "")
 
     def test_all_closed_check_exits_zero(self):
+        p = draft_phone([[]] * 10)
+        p.off.return_value = 1
         with tempfile.TemporaryDirectory() as d:
-            code = self.run_check_entry(self.draft(d), [
-                [("个性化推荐", True, (1, 2))], [("个性化推荐", False, (1, 2))],
-                [("个性化推荐", True, (1, 2))], [("个性化推荐", False, (1, 2))],
-            ])
-        self.assertEqual(code, 0)
+            self.assertEqual(self.run_check_entry(self.draft(d), p), 0)
 
     def test_partial_completion_check_exits_one(self):
+        p = draft_phone([[]] * 10)
+        p.off.side_effect = [1, RuntimeError("第二段没做成")]
         with tempfile.TemporaryDirectory() as d:
-            code = self.run_check_entry(self.draft(d), [
-                [("个性化推荐", True, (1, 2))], [("个性化推荐", False, (1, 2))],
-                [("个性化推荐", True, (1, 2))], [("个性化推荐", True, (1, 2))],
-            ])
-        self.assertEqual(code, 1)      # 部分完成不是成功：退出码必须非 0，不能被当成自检通过
+            self.assertEqual(self.run_check_entry(self.draft(d), p), 1)
 
 
 class ExploreNavigationTests(unittest.TestCase):

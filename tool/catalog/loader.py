@@ -45,6 +45,8 @@ class CatalogScope(dict):
             return recipe_runtime.SkipStep
         if key in self._RT_VIEW:
             return self._RT_VIEW[key](self.rt)
+        if key in ("page", "require", "skip", "require_switches", "skip_in_safe_mode", "start_or_skip"):
+            return getattr(self.rt, key)
         try:
             return super().__getitem__(key)
         except KeyError:

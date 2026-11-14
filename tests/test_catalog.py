@@ -26,15 +26,19 @@ SCRIPT = "tests/fixtures/vivo_v1986a/recipe.py"
 DATA = "recipes/vivo/V1986A/V1986A.toml"
 
 
-class EquivalenceTests(unittest.TestCase):
-    """第一刀：一份手写转换的数据，在两场景下的调用序列与旧脚本逐条一致。"""
 
-    def test_converted_data_reproduces_the_script_call_sequence(self):
-        for scenario in driver.SCENARIOS:
-            old = driver.run_script(fast, recipe_kit, fixtures, ROOT / SCRIPT, scenario)
-            new = driver.run_script(fast, recipe_kit, fixtures, ROOT / DATA, scenario)
-            self.assertTrue(old, f"{scenario}：旧脚本一条调用都没记到，对拍会空转")
-            self.assertEqual(old, new, f"{scenario}：数据与旧脚本的调用序列不同")
+def patch_library(case, **fns):
+    """把库实现换成桩：解释器按名字查 `interpreter.LIBRARY`，只在用例期间替换。"""
+    import catalog.interpreter as interpreter
+    saved = {name: interpreter.LIBRARY.get(name) for name in fns}
+    interpreter.LIBRARY.update(fns)
+    def restore():
+        for name, value in saved.items():
+            if value is None:
+                interpreter.LIBRARY.pop(name, None)
+            else:
+                interpreter.LIBRARY[name] = value
+    case.addCleanup(restore)
 
 
 class ValidatorTests(unittest.TestCase):
@@ -158,7 +162,7 @@ class OnlySourceTests(unittest.TestCase):
             recipe, _phone, calls = _load_tmp(
                 tmp,
                 '[[segment]]\nname="a"\nops=[{kind="off", only_code="targets", page="p"}]\n',
-                "def targets():\n    return ['A', 'B']\n",
+                "def targets(p, rt):\n    return ['A', 'B']\n",
             )
             recipe.run()
         self.assertEqual(calls, [("off", {"page": "p", "only": ["A", "B"]})])
@@ -299,7 +303,7 @@ class ReturnOutcomeTests(unittest.TestCase):
 
     def test_return_lib_takes_the_result_of_the_call(self):
         toml = '[[segment]]\nname="a"\nops=[{kind="return_lib", name="try_off", args=["x"]}]\n'
-        scope = "def try_off(name):\n    return ok\n"
+        scope = "def try_off(p, rt, name):\n    return ok\n"
         self.assertEqual(self.segment_results(toml, "ok = False\n" + scope), [("a", "未完成")])
         self.assertEqual(self.segment_results(toml, "ok = True\n" + scope), [("a", "完成")])
 
@@ -314,7 +318,7 @@ class PageOpTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             recipe, _phone, _calls = _load_tmp(tmp, toml)
             seen = []
-            recipe.namespace["page"] = lambda *a, **k: seen.append((a, k))
+            recipe.rt.page = lambda *a, **k: seen.append((a, k))
             recipe.run()
         return seen
 
@@ -413,16 +417,16 @@ class CloseListedOpTests(unittest.TestCase):
             recipe, phone, _calls = _load_tmp(tmp, self.TOML)
             opened = []
             saved = {"甲": True, "丙": True}
-            recipe.namespace["read_switches"] = lambda page: dict(saved)
-            recipe.namespace["close_named"] = lambda names, page, **kw: opened.append((names, page, kw))
+            patch_library(self, read_switches=lambda p, rt, page: dict(saved),
+                          close_named=lambda p, rt, names, page, **kw: opened.append((names, page, kw)))
             recipe.run()
         self.assertEqual(opened, [(["甲", "丙"], "服务管理", {"snapshot": saved})])
 
     def test_empty_filter_fails_with_the_reason(self):
         with tempfile.TemporaryDirectory() as tmp:
             recipe, phone, _calls = _load_tmp(tmp, self.TOML)
-            recipe.namespace["read_switches"] = lambda page: {}
-            recipe.namespace["close_named"] = lambda *a, **k: None
+            patch_library(self, read_switches=lambda p, rt, page: {},
+                          close_named=lambda p, rt, *a, **k: None)
             recipe.run()
         self.assertEqual(recipe.rt.results, [("a", "未完成")])
         self.assertEqual(recipe.rt.failed_steps, ["a"])
@@ -442,7 +446,7 @@ class StartOrSkipOpTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             recipe, _phone, _calls = _load_tmp(tmp, self.TOML)
             seen = []
-            recipe.namespace["start_or_skip"] = lambda pkg, activity, **kw: seen.append((pkg, activity, kw))
+            recipe.rt.start_or_skip = lambda pkg, activity, **kw: seen.append((pkg, activity, kw))
             recipe.run()
         self.assertEqual(seen, [("com.example.theme", ".Proxy",
                                  {"dead_ends": ["com.example.market"], "reason": "打不开"})])
@@ -643,9 +647,8 @@ class IfLibAnyOpTests(unittest.TestCase):
             recipe, phone, _calls = _load_tmp(tmp, self.TOML)
             seen = []
             phone.back = lambda n=1: seen.append(("back", n))
-            recipe.namespace.update({
-                "gear": lambda **kw: seen.append(("gear", kw)) or (first if "toolbar_only" in kw else second),
-            })
+            patch_library(self, gear=lambda p, rt, **kw: seen.append(("gear", kw))
+                          or (first if "toolbar_only" in kw else second))
             recipe.run()
         return seen
 
@@ -670,7 +673,7 @@ class IfLibAnyOpTests(unittest.TestCase):
             seen = []
             phone.tap = lambda text, **kw: seen.append(("tap", text, kw)) or False
             phone.back = lambda n=1: seen.append(("back", n))
-            recipe.namespace.update({"tab_bot": lambda name: seen.append(("tab_bot", name)) or False})
+            patch_library(self, tab_bot=lambda p, rt, name: seen.append(("tab_bot", name)) or False)
             recipe.run()
         self.assertEqual(seen, [("tab_bot", "我的"), ("tap", "我的", {"exact": True, "scrolls": 0}),
                                 ("back", 2)])
@@ -725,7 +728,7 @@ class AtFocusTests(unittest.TestCase):
             recipe, phone, _calls = _load_tmp(tmp, toml)
             reads = []
             phone.focus = lambda *a, **k: reads.append(1) or "com.android.browser/.Main"
-            recipe.namespace.update({"browser_settings": lambda: False})
+            patch_library(self, browser_settings=lambda p, rt: False)
             recipe.run()
         self.assertEqual(reads, [1])
         self.assertEqual(recipe.rt.failed_steps, ["a"])
@@ -738,7 +741,7 @@ class AtFocusTests(unittest.TestCase):
             recipe, phone, _calls = _load_tmp(tmp, toml)
             reads = []
             phone.focus = lambda *a, **k: reads.append(1) or "com.android.browser/.Main"
-            recipe.namespace.update({"browser_settings": lambda: True})
+            patch_library(self, browser_settings=lambda p, rt: True)
             recipe.run()
         self.assertEqual(reads, [1])
 
@@ -856,7 +859,7 @@ class NewOpProjectionTests(unittest.TestCase):
         self.assertIn('p.setting("广告服务")', lowered)
         self.assertIn('p.d.shell("am start -n com.android.settings/.ad.AdServiceSettings")', lowered)
         self.assertEqual([line for line in lowered.splitlines() if line.startswith("gear(")],
-                         ["gear()", "gear()"])
+                         ["gear(p, rt)", "gear(p, rt)"])
 
     def test_if_setting_names_resolve_into_the_entry_facts(self):
         import recipe_source
@@ -930,24 +933,7 @@ class ReaderTests(unittest.TestCase):
     转成数据之后脚本不会从这些生成物里消失（否则批次验收「词条总数不下降 / 入口速查不变」无从谈起）。
     """
 
-    def _project(self, keep):
-        """把 V1986A 的指定形态放进临时 recipes 目录，返回 (词库投影, 计数, 入口投影)。"""
-        import shutil
 
-        import entries
-        import vocab
-        with tempfile.TemporaryDirectory() as tmp:
-            model_dir = Path(tmp) / "vivo" / "V1986A"
-            model_dir.mkdir(parents=True)
-            shutil.copy(ROOT / keep, model_dir / Path(keep).name)
-            scan = vocab.scan(tmp)
-            words = sorted((w.text, w.kind, w.family, w.group, w.page) for w in scan.words)
-            counts = (scan.whole_page, len(scan.unresolved_only), len(scan.unresolved_close),
-                      len(scan.unresolved_keep), sorted(scan.silent))
-            return words, counts, entries.used_by(tmp)
-
-    def test_toml_projects_the_same_words_as_py(self):
-        self.assertEqual(self._project(SCRIPT), self._project(DATA))
 
     def test_scan_dir_handles_a_toml_model(self):
         import recipe_source
@@ -959,16 +945,6 @@ class ReaderTests(unittest.TestCase):
             self.assertEqual(list(facts), ["vivo/V1986A/V1986A.toml"])
             self.assertTrue(any(call.name == "p.off" for call in facts["vivo/V1986A/V1986A.toml"].calls))
 
-    def test_recipe_files_prefers_py_then_falls_back_to_toml(self):
-        import recipe_meta
-        with tempfile.TemporaryDirectory() as tmp:
-            model_dir = Path(tmp) / "vivo" / "V1986A"
-            model_dir.mkdir(parents=True)
-            (model_dir / "recipe.py").write_text("MODELS = ['x']\n", encoding="utf-8")
-            (model_dir / "V1986A.toml").write_text((ROOT / DATA).read_text(encoding="utf-8"), encoding="utf-8")
-            self.assertEqual([Path(p).name for p in recipe_meta.recipe_files(tmp)], ["recipe.py"])
-            (model_dir / "recipe.py").unlink()
-            self.assertEqual([Path(p).name for p in recipe_meta.recipe_files(tmp)], ["V1986A.toml"])
 
     def test_recipe_meta_reads_toml(self):
         import recipe_meta
@@ -988,15 +964,14 @@ class ReaderTests(unittest.TestCase):
             self.assertTrue(typecheck_recipes._check_catalog(str(bad))[0])
 
     def test_every_toml_lib_call_resolves_to_an_implementation(self):
-        """`.toml` 里每个 lib / require_lib 名都要经事实层解析到实现（入口归属的根因守护，#1263）。
+        """`.toml` 里每个 lib / require_lib 名都要在库的 `__all__` 里（入口归属的根因守护）。
 
-        归属靠 `scan_catalog` 给 `Call.module` 盖章；漏盖时 `imported_sources()` 拿不到实现，
-        入口速查会把这台机从「用过的机型」里静默删掉（`com.iqoo.secure` / `com.vivo.weather` 那次）。
-        覆盖全部已转型号，不是抽查一份。"""
+        数据显式点名实现，名字解析不到时入口速查会把这台机从「用过的机型」里静默删掉
+        （`com.iqoo.secure` / `com.vivo.weather` 那次）。覆盖全部已转型号，不是抽查一份。"""
         import tomllib
         import recipe_source
 
-        surface = recipe_source.surface_sources()
+        library = set(recipe_source.library_sources())
 
         def lib_names(ops):
             for op in ops:
@@ -1015,8 +990,7 @@ class ReaderTests(unittest.TestCase):
             if not wanted:
                 continue
             checked += 1
-            facts = recipe_source.scan_catalog_file(str(toml))
-            missing = wanted - set(recipe_source.imported_sources(facts, surface))
+            missing = wanted - library
             self.assertEqual(missing, set(),
                              f"{toml.relative_to(ROOT)}：这些 lib 名没解析到实现 {sorted(missing)}")
         self.assertGreater(checked, 0, "一份带 lib 的 .toml 都没扫到：发现口径坏了")
