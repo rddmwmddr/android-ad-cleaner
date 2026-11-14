@@ -2,22 +2,20 @@
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import run
+import fixtures
 from fixtures import load_recipe
 
 
 class Android15RecipeTests(unittest.TestCase):
     def load(self, phone):
         scope, _ = load_recipe(phone, ROOT / "recipes/oppo/PHK110/PHK110-android15.toml")
-        import recipe_nav
-        patcher = patch.object(recipe_nav, "page_activity", lambda *args, **kwargs: True)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        fixtures.patch_surface(self, "page_activity", lambda *args, **kwargs: True)
         return scope
 
     def test_matching_version_selects_variant_and_other_versions_keep_original(self):

@@ -15,7 +15,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, call
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -2067,9 +2067,7 @@ class Pkx110EntryTests(unittest.TestCase):
         p = tapping_phone_933(present)
         scope = load_933(p, RECIPES_933["PKX110"])
         self.wait_page = Mock(return_value=True)
-        patcher = patch.object(recipe_nav, "wait_page", self.wait_page)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        fixtures.patch_surface(self, "wait_page", self.wait_page)
         return p, scope
 
     def test_each_wording_opens_the_store_privacy_page(self):
@@ -2102,9 +2100,7 @@ class Pkx110EntryTests(unittest.TestCase):
         """点开了但没落到隐私页：就此停段，不在别的页面上再点一次同名行。"""
         p = tapping_phone_933(set(PRIVACY_933))
         scope = load_933(p, RECIPES_933["PKX110"])
-        patcher = patch.object(recipe_nav, "wait_page", Mock(return_value=False))
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        fixtures.patch_surface(self, "wait_page", Mock(return_value=False))
         self.assertFalse(scope["tap_page"](PRIVACY_933, PRIVACY_PAGE_933, PRIVACY_933))
         p.tap.assert_called_once_with("隐私", exact=True, quiet=True)
 
@@ -2114,9 +2110,7 @@ class Phk110EntryTests(unittest.TestCase):
         p = tapping_phone_933(present)
         scope = load_933(p, RECIPES_933["PHK110"])
         self.page = Mock(return_value=True)
-        patcher = patch.object(recipe_nav, "page_activity", self.page)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        fixtures.patch_surface(self, "page_activity", self.page)
         return p, scope
 
     def test_each_wording_opens_the_store_privacy_page(self):
