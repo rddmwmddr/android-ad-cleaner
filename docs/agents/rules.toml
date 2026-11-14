@@ -1179,7 +1179,7 @@ expires_if = "结果页与退出码改由单独的结局字段表达、不再从
 [[rule]]
 id = "dev.recipes.safe-mode-page-wide-skip"
 source = "docs/04-给新机型写脚本.md#本机例外函数"
-check = "test:test_catalog::PageWideTests.test_skips_in_safe_mode"
+check = "test:test_catalog::PageWideTests.test_page_wide_units_start_with_a_safe_mode_exit"
 status = "enforced"
 why = "安全模式下 `off()` 只关点名的开关，整页关闭的段落一个都点不到；段落再回读「必须全关」就稳定记成失败，用户看到的是「没关掉」而不是「这段没做」（#909 的 PKT110 上报）。出口写成段体第一句（或数据里的 `skip_in_safe_mode` op），是因为写在后面等于先翻页、再判没关掉，失败现场与结论都指向错的环节。"
 expires_if = "安全模式不再限制整页关闭（能安全地按页面结构判断该关哪些）时删。"

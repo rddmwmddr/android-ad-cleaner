@@ -133,17 +133,18 @@ def _off(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
         kwargs["max_screens"] = op["max_screens"]
     done = p.off(**kwargs)
     if isinstance(done, int):
+        # `Toggler.off()` 的返回值是回读确认到目标态的条数（它只在回读给出 reached / vanished
+        # 之后才 +1），正好是 `rt.confirm()` 要的那一个数，不是「扫过几项」。
         rt.confirm(done)
 
 
 def _close_all(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
     """UI 上的「全部关闭」按钮：单列一种动作，登记为 page-wide。
 
-    安全模式下整页全关不点（只关点名的开关，沿用 ADR-0008 / #909），与 `skip_in_safe_mode` 同一判据。
+    安全模式下整页全关不点（只关点名的开关，沿用 ADR-0008 / #909）：出口就是 `rt.skip_in_safe_mode()`，
+    跳过原因只在那里定义，不在解释器里另抄一份。
     """
-    if rt.safe_mode:
-        rt.skip("安全模式不做整页全关：本段没有可点名的开关，请按清单手动关")
-        return
+    rt.skip_in_safe_mode()
     page = p
     page.tap(op.get("button", "全部关闭"), exact=True)
     page.confirm()

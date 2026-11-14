@@ -368,8 +368,24 @@ def same_version_family_recipe(allr, fam, preferred, device_info):
     return sorted(ranked)[0][3] if ranked else None
 
 
+def _main_script(directory):
+    """型号目录的主脚本：优先 `recipe.py`，否则已转 catalog 的 `<型号>.toml`；都没有返回 None。
+
+    正本是 `<型号>.toml`（目录名即型号，见 #1261）；其余 `*.toml`（`<型号>-<变体>.toml`）是版本
+    变体，由 `recipe_for` 按 build 单独挑（#1263）。按字母序排的话 `-` 排在 `.` 前面，变体会顶掉
+    正本，所以主本 / 变体只能按名字判，不能取 `sorted(...)[0]`。"""
+    base = os.path.join(directory, "recipe.py")
+    if os.path.exists(base):
+        return base
+    toml = sorted(glob.glob(os.path.join(directory, "*.toml")))
+    if not toml:
+        return None
+    main = os.path.join(directory, os.path.basename(directory) + ".toml")
+    return main if os.path.exists(main) else toml[0]
+
+
 def _recipe_files():
-    """每个型号目录的「主脚本」：优先 `recipe.py`，否则已转 catalog 的 `<型号>.toml`。
+    """每个型号目录的「主脚本」：`_main_script()`。
 
     变体 `recipe_*.py` 不算主脚本：它们是同一型号的不同版本，由 `recipe_for` 按 build 单独挑
     （与旧 `glob(recipe.py)` 的口径一致，否则变体会被当成另一台机的正本）。没有 `recipe.py`
@@ -378,16 +394,9 @@ def _recipe_files():
     for d in sorted(glob.glob(os.path.join(ROOT, "recipes", "*", "*"))):
         if not os.path.isdir(d):
             continue
-        base = os.path.join(d, "recipe.py")
-        if os.path.exists(base):
-            out.append(base)
-            continue
-        toml = sorted(glob.glob(os.path.join(d, "*.toml")))
-        if toml:
-            # 正本是 `<型号>.toml`（目录名即型号，见 #1261）；其余 `*.toml` 是版本变体，由
-            # `recipe_for` 按 build 单独挑，和 `recipe_*.py` 变体同一口径（#1263）。
-            main = os.path.join(d, os.path.basename(d) + ".toml")
-            out.append(main if os.path.exists(main) else toml[0])
+        main = _main_script(d)
+        if main is not None:
+            out.append(main)
             continue
         out += sorted(glob.glob(os.path.join(d, "recipe*.py")))
     return out
@@ -412,8 +421,10 @@ def recipe_for(model, brand="", device_info=None):
             return r, False
     fam = FAMILY.get((brand or "").lower(), "")
     refdir = os.path.join(ROOT, "recipes", fam, REFERENCE.get(fam, ""))
-    _refcand = sorted(glob.glob(os.path.join(refdir, "recipe.py"))) + sorted(glob.glob(os.path.join(refdir, "*.toml")))
-    preferred = _refcand[0] if _refcand else os.path.join(refdir, "recipe.py")
+    # 参考脚本与 `_recipe_files()` 同一口径：主本优先于变体。vivo 的 `V2547DA-android17.toml`
+    # 按字母序排在 `V2547DA.toml` 前面，取 `sorted(...)[0]` 会让参考变成 Android 17 变体，
+    # `same_version_family_recipe()` 的 `ref_core` 跟着从 `16` 变 `17.1.10.2`。
+    preferred = _main_script(refdir) or os.path.join(refdir, "recipe.py")
     if fam in REFERENCE and os.path.exists(preferred):
         # 固定参考的 BUILD 常写得粗（OS4.0、16），前缀一命中就到它为止，同族里录在同版本上的
         # 脚本永远进不了候选。两条路径同池排（#969）；固定参考的 BUILD 写粗只是让它自己不够贴。
