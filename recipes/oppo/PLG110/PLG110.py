@@ -137,6 +137,6 @@ def step_advice(p, rt):
         p.back()
 
 
-def tail():
+def tail(p, rt):
     print(f"\n已回读确认 {rt.verified} 项；分段结果：{rt.results}", flush=True)
     print("通知渠道与组件挂起仍走 run.py 的独立流程。", flush=True)

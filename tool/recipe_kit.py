@@ -13,15 +13,14 @@
 调用时现取，顺序不影响语义），本模块只管生命周期与台账（沿用 #1150、#1209、#1244 的注入面）。
 """
 
-import re
-
 from typing import Any
 
-import adb_link
 import recipe_nav
 import recipe_strategies
 import recipe_steps
 from recipe_runtime import DONE as DONE, FAILED as FAILED, NOT_RUN as NOT_RUN, SKIPPED as SKIPPED
+from recipe_runtime import LANDING as LANDING, WRONG_LANDING as WRONG_LANDING
+from recipe_runtime import SAFE_MODE_PAGE_WIDE as SAFE_MODE_PAGE_WIDE
 from recipe_runtime import DuplicateStep as DuplicateStep, MissingPackage as MissingPackage
 from recipe_runtime import Runtime, SkipStep
 
@@ -40,16 +39,6 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-# `Phone.start` 里「落点不对」的两句。只有这两类才按落点判入口不可达：
-# 「本机没有安装 / 无法打开」时前台可能只是桌面，不能当成证据（#902）。
-WRONG_LANDING = ("没有进入前台", "启动后离开前台")
-# 那两句里的落点原文 `停在 包名/页面；…`。从报错里取，不再重读前台：
-# 抛出之后再读有一小段窗口期，前台已经切走就会判错。
-LANDING = re.compile(r"停在 ([^\s/；]+)")
-# 整页关闭的段落在安全模式下的跳过原因（#909）
-SAFE_MODE_PAGE_WIDE = "安全模式不做整页全关：本段没有可点名的开关，请按清单手动关"
-
-
 def preamble(p, g, rt=None):
     """把这次的执行写进 `g` 并原样返回它：`p` / `rt` / 声明式 `step`、出口与两个台账、三张注入面。
 
@@ -62,7 +51,6 @@ def preamble(p, g, rt=None):
     没定义就什么都不做 —— 大多数脚本不需要，前导也不替它们造一个。
     """
     global _runtime
-    from fast import ScreenLocked     # fast 在顶部 import 本模块，取在调用时才不绕进循环
 
     if rt is None:
         rt = Runtime(p, list(g.get("ONLY") or []))
@@ -82,92 +70,12 @@ def preamble(p, g, rt=None):
     g["RESULTS"] = rt.results
     g["step"] = rt.step
 
-    def require(ok, reason):
-        rt.require(ok, reason)
-
-    def skip(reason):
-        rt.skip(reason)
-
     def maybe(name, scrolls=6):
         return p.entry(name, scrolls=scrolls)
 
-    def require_switches(before, names, title, optional=(), contains=False):
-        """点名要关的开关没全部出现时整段不动，并把页面证据带进报错（#903）。
-
-        `before` 是这次读到的开关（{标题: 状态}，按页面顺序）：报错里带上停在哪个页、结构摘要
-        与当次读到的标题，下一轮上报才能分辨「改名了 / 页面是空的 / 页面根本没打开」。
-        `contains=True` 表示名单是关键词，标题附带整段说明也算命中（小米系脚本的写法）；
-        默认要求标题与名单逐字相同。`optional` 里的名字允许这次没有。
-        名单为空也算没识别到：整页开关那条路（页面上有哪行关哪行）一页空着同样是失败。
-        成功时不建这段证据，也不重读页面，输出与加它之前逐字一致。
-        """
-        def found(name):
-            if name in optional:
-                return True
-            return any(name in t for t in before) if contains else name in before
-
-        if names and all(found(name) for name in names):
-            return
-        raise RuntimeError(f"{title}：未识别全部目标开关，未操作；{p.page_evidence(list(before))}")
-
-    def page(title, package=None, activity=None):
-        """确认当前页面落在预期上：包名、Activity、页面标题三段判据（#939）。
-
-        三段失败时先 `p.note_miss()` 留一行与入口失败同形的现场（停在哪个 Activity、
-        结构摘要），再抛原来的错：报错文案是上报与用例逐字认的第一句，现场只走那条
-        独立输出行。没有它，`未确认页面「游戏中心」` 分不清是标题改名还是页面没加载完。
-        现场行里「没找到」的是这一段缺的那样东西（包名 / Activity / 标题），不是一律写标题：
-        落点跑偏时标题往往就在屏上，写成标题会把人引去查改名。
-        等待由引擎负责；页面即使已经站稳也必须过这三段，旧页不能当成目标页。
-        `title` 给一组时任一出现即算到页；`package` / `activity` 按 `包名/Activity` 判。
-        """
-        p.await_page(budget=6)
-        where = p.focus()
-        titles = (title,) if isinstance(title, str) else tuple(title)
-
-        def miss(found, reason):
-            p.note_miss(found)
-            raise RuntimeError(reason)
-
-        if package and where.split("/", 1)[0] != package:
-            miss(package, "未进入目标应用，未操作开关")
-        if activity and activity not in where.split("/", 1)[-1]:
-            miss(activity, "未进入目标设置页，未操作开关")
-        if not any(p.find(t, exact=True) for t in titles):
-            miss(" / ".join(titles), f"未确认页面「{'、'.join(titles)}」，未操作开关")
-        if any(text in {"同意", "同意并继续", "同意并使用", "允许", "仅在使用中允许"}
-               and "Button" in node.get("class", "") for text, _, node in p.texts()):
-            p.dismiss()
-            skip("出现协议或权限申请，不代为同意")
-        if p.locked():
-            raise ScreenLocked("手机锁屏，请机主解锁")
-
-    def skip_in_safe_mode():
-        """整页关闭的段落在安全模式下按跳过结束（沿用 #909）：只记跳过台账，不动失败台账与退出码。"""
-        if rt.safe_mode:
-            skip(SAFE_MODE_PAGE_WIDE)
-
-    def start_or_skip(pkg, activity, dead_ends, reason):
-        """拉起 App；前台没到、报错里的落点又在前 `dead_ends` 里时按跳过结束本段，不算失败。
-
-        给「本机缺了配套 App，入口会被系统转去别处」这一类用（#902：没有主题商店时，
-        主题管理包的代理页会落到应用商店详情页或桌面）。落点在别的 App、或失败根本不是
-        「落点不对」（拉不起来）时照旧上抛，保留 `Phone.start` 的落点诊断（#547）；
-        包没装时 `Phone.start` 抛的是 `MissingPackage`，上抛后由段包装记跳过（#908）。"""
-        try:
-            p.start(pkg, activity)
-        except adb_link.DeviceLost:
-            raise                       # 断线不是入口不可达：整轮停下，不按跳过收尾
-        except RuntimeError as error:
-            lost = str(error)
-            landed = LANDING.search(lost)
-            if landed and landed.group(1) in dead_ends and any(mark in lost for mark in WRONG_LANDING):
-                skip(f"{reason}（停在 {landed.group(1)}）")
-            raise
-
-    g.update({"SkipStep": SkipStep, "skip": skip, "require": require,
-              "maybe": maybe, "start_or_skip": start_or_skip, "page": page,
-              "require_switches": require_switches, "skip_in_safe_mode": skip_in_safe_mode,
+    g.update({"SkipStep": SkipStep, "skip": rt.skip, "require": rt.require,
+              "maybe": maybe, "start_or_skip": rt.start_or_skip, "page": rt.page,
+              "require_switches": rt.require_switches, "skip_in_safe_mode": rt.skip_in_safe_mode,
               "VERIFIED_SWITCHES": rt.counter})
     recipe_nav.install(p, g)
     recipe_strategies.install(p, g)

@@ -27,7 +27,7 @@ STORE_KEEP = [
 SEARCH_SETTING = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"
 
 
-def guard():
+def guard(p, rt):
     model = p.d.shell("getprop ro.product.model").output.strip()
     build = p.d.shell("getprop ro.build.display.id").output.strip()
     if model != "RMX3700" or not build.startswith(BUILD):
@@ -78,7 +78,7 @@ def step_store(p, rt):
     return True
 
 
-def tail():
+def tail(p, rt):
     print("\n== 结果", flush=True)
     for name, state in rt.results:
         print(f"  {name}: {state}")

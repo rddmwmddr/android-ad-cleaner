@@ -73,7 +73,7 @@ def step_theme(p, rt):
     close_named(["个性化推荐设置"], "主题商店·隐私", THEME + "PrivacyActivity", "隐私", 2, reopen=privacy)
 
 
-def tail():
+def tail(p, rt):
     print(f"\n已回读确认 {rt.verified} 项；分段结果：{rt.results}", flush=True)
     print("录制时本机未安装游戏中心，未录入；通知渠道与组件挂起仍走 run.py 的独立流程。", flush=True)
     print("乐划须先由机主在应用内关闭锁屏功能，再按本人意愿挂起；本脚本不动乐划。", flush=True)

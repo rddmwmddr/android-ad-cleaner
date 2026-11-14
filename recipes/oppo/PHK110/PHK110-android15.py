@@ -12,7 +12,7 @@ BUILD = "PHK110_15.0.0.601(CN01)"
 page = page_activity
 
 
-def guard():
+def guard(p, rt):
     model = p.d.shell("getprop ro.product.model").output.strip()
     build = p.d.shell("getprop ro.build.display.id").output.strip()
     if model != "PHK110" or not build.startswith(BUILD):
@@ -39,7 +39,7 @@ def step_browser_home(p, rt):
     return True
 
 
-def tail():
+def tail(p, rt):
     print("\n负一屏、主题、系统广告跟踪：请按本机实测记录手动核对。视频和小游戏未自动处理。")
     print("通知渠道、广告包和快应用按独立流程处理，挂起须机主同意。")
     print("分段结果：", rt.results)

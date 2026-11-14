@@ -11,6 +11,7 @@
 import time
 import tomllib
 from pathlib import Path
+from types import MappingProxyType
 
 import recipe_kit
 import recipe_runtime
@@ -107,6 +108,12 @@ def load(path, p, only=(), clock=None, namespace=None) -> LoadedCatalog:
     if exception is not None:
         source, filename = exception
         exec(compile(source, filename, "exec"), g)   # noqa: S102 - 本机例外函数，只此一处
+
+    # 每机型常量：toml 的 `[const]` 与例外模块的全大写模块级名字。只读视图，值是共享对象。
+    constants = dict(data.get("const", {}))
+    constants.update({key: value for key, value in g.items()
+                      if key.isupper() and not callable(value)})
+    rt.constants = MappingProxyType(constants)
 
     for hook in ("tail", "guard", "detail", "wrap"):
         if hook in data:

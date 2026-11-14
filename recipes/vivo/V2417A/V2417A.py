@@ -18,5 +18,5 @@ def verify(before, current, names, page):
     print(f"  ✓ {page}：回读确认 {len(names)} 项关闭，其他开关未变", flush=True)
 
 
-def tail():
+def tail(p, rt):
     print(f"\n回读确认 {rt.verified} 项关闭；未完成 {len(rt.failed_steps)} 段", flush=True)

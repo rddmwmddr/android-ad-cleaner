@@ -49,5 +49,5 @@ def step_store(p, rt):
     p.back(2)
 
 
-def tail():
+def tail(p, rt):
     print(f"\n回读确认 {rt.verified} 项；步骤异常 {len(rt.failed_steps)} 个", flush=True)

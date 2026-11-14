@@ -27,7 +27,7 @@ STORE_PROMOTIONS = [
 off_exact = off_exact_paged
 
 
-def guard():
+def guard(p, rt):
     model = p.d.shell("getprop ro.product.model").output.strip()
     build = p.d.shell("getprop ro.build.display.id").output.strip()
     if model != "PHK110" or not build.startswith(BUILD):
@@ -61,7 +61,7 @@ def step_ad_tracking(p, rt):
     return True
 
 
-def tail():
+def tail(p, rt):
     print("\n本机型脚本不处理：下拉搜索、负一屏、主题服务模式、视频和游戏中心。")
     print("广告包、乐划锁屏、快应用和通知渠道请按 run.py 标准流程另行确认。")
     print("分段结果：", rt.results)

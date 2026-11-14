@@ -20,5 +20,5 @@ def step_search(p, rt):
     close_named(["个性化推荐"], "下拉搜索·隐私")
 
 
-def tail():
+def tail(p, rt):
     print(f"\n已回读确认 {rt.verified} 项；未完成步骤 {len(rt.failed_steps)} 个", flush=True)

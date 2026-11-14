@@ -12,5 +12,5 @@ HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "�
 # `recipe_steps.theme` 按 `g["THEME_DEAD_ENDS"]` 取落点名单，上面那句导入把它留在执行作用域里（#1266）。
 
 
-def tail():
+def tail(p, rt):
     print(f"\n系统广告段回读确认 {rt.verified} 项；步骤异常 {len(rt.failed_steps)} 个", flush=True)

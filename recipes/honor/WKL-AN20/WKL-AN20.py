@@ -64,7 +64,7 @@ def settle_page(package, *markers, timeout=5):
 
 
 @contextmanager
-def safe_ui():
+def safe_ui(p, rt):
     """只在本段内使用 u2 手势、原生开关及屏内确认按钮，结束后还原引擎。"""
     original = {name: getattr(p, name) for name in ("click", "scroll", "confirm", "switches")}
 
@@ -116,7 +116,7 @@ def safe_ui():
             setattr(p, name, value)
 
 
-def guard():
+def guard(p, rt):
     if p.d.shell("getprop ro.product.model").output.strip() not in MODELS:
         skip("型号不匹配，跳过；不使用其他型号的路径")
     if not p.d.shell("getprop ro.build.display.id").output.strip().startswith(BUILD):
@@ -150,7 +150,7 @@ def radio(root, text):
     return next(iter(unique.values()))
 
 
-def tail():
+def tail(p, rt):
     print(f"\n已回读 {rt.verified} 项；分段结果：{rt.results}", flush=True)
     print("YOYO 新闻资讯、旧版文件夹管理入口未适配；通知渠道、快应用请走 run.py 独立流程。", flush=True)
 

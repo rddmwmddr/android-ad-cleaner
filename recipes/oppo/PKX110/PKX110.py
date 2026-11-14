@@ -33,7 +33,7 @@ STORE_PROMOTIONS = [
 off_exact = off_exact_paged
 
 
-def guard():
+def guard(p, rt):
     model = p.d.shell("getprop ro.product.model").output.strip()
     build = p.d.shell("getprop ro.build.display.id").output.strip()
     if model != "PKX110" or not build.startswith(BUILD):
@@ -92,7 +92,7 @@ def step_advice(p, rt):
     return False
 
 
-def tail():
+def tail(p, rt):
     print("\n本机型脚本说明：浏览器段按「入口检测不到就跳过」处理（com.heytap.browser 预装但无桌面入口、")
     print("设置组件不存在时）；下拉搜索、负一屏属于原厂桌面，换用第三方桌面后不在使用面，未收录。")
     print("广告包、乐划锁屏、快应用和通知渠道请按 run.py 标准流程另行确认。")

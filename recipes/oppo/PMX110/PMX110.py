@@ -77,7 +77,7 @@ def step_ad_tracking(p, rt):
             p.await_page()
 
 
-def tail():
+def tail(p, rt):
     print(f"\n逐项回读确认 {rt.verified} 项；完成 {sum(state == '完成' for _, state in rt.results)} 段，"
           f"跳过 {sum(state == '跳过' for _, state in rt.results)} 段，未显示项 {len(SKIPPED_ITEMS)} 组", flush=True)
 

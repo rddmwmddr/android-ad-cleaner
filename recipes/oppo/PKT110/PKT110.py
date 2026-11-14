@@ -115,5 +115,5 @@ def step_game_center(p, rt):
     close_named(["个性化推荐"], "游戏中心·个性化推荐")
 
 
-def tail():
+def tail(p, rt):
     print(f"\n已回读确认 {rt.verified} 项；未完成步骤 {len(rt.failed_steps)} 个", flush=True)

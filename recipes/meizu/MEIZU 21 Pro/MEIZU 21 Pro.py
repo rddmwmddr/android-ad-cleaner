@@ -12,7 +12,7 @@ MODELS = ["MEIZU 21 Pro"]
 TARGET_PACKAGE = ""
 
 
-def page_summary():
+def page_summary(p, rt):
     """失败时的页面结构：只报 Activity 与计数，不带页面文字，也不截屏（账号页不外泄）。"""
     from row import summary
     try:
@@ -24,7 +24,7 @@ def page_summary():
         return "当前页面结构读取失败"
 
 
-def guard():
+def guard(p, rt):
     # 安全模式下不因型号拒跑；否则比对机型与版本。
     if p.safe_mode:
         return
@@ -67,7 +67,7 @@ def assert_no_other_window(root, package):
     require(not foreign, "检测到其他应用窗口或权限页，停止本段")
 
 
-def tail():
+def tail(p, rt):
     print(f"\n已调整 {len(p.changed)} 项；未完成步骤 {len(rt.failed_steps)} 个。", flush=True)
     print("通知渠道、广告包、快应用按标准流程另行处理。", flush=True)
 

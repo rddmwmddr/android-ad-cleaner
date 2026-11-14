@@ -42,5 +42,5 @@ def step_store_promotions(p, rt):
     close_named([name for name in PROMOTIONS if name in page], "商店·推广位", max_screens=6, snapshot=page)
 
 
-def tail():
+def tail(p, rt):
     print(f"\n已回读确认 {rt.verified} 项；未完成步骤 {len(rt.failed_steps)} 个", flush=True)

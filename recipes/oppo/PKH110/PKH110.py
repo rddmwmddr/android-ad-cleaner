@@ -28,7 +28,7 @@ STORE_PROMOTIONS = [
 off_exact = off_exact_paged_optional
 
 
-def guard():
+def guard(p, rt):
     model = p.d.shell("getprop ro.product.model").output.strip()
     build = p.d.shell("getprop ro.build.display.id").output.strip()
     if model not in MODELS or not build.startswith(BUILD):
@@ -124,7 +124,7 @@ def step_search(p, rt):
     return True
 
 
-def tail():
+def tail(p, rt):
     print("\n本机型脚本不处理：负一屏（设置页受 oppo.permission.OPPO_COMPONENT_SAFE 保护，"
           "adb 边缘手势进不去，需机主手动在负一屏内关「热点资讯」「轮播推荐」）、OPPO 视频、游戏中心。")
     print("分段结果：", rt.results)

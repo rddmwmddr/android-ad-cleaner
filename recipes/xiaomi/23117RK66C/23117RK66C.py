@@ -28,5 +28,5 @@ def step_global_search(p, rt):
         p.back()
 
 
-def tail():
+def tail(p, rt):
     print(f"\n逐页回读确认 {rt.verified} 项；步骤异常 {len(rt.failed_steps)} 个", flush=True)
