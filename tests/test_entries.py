@@ -2614,7 +2614,7 @@ class ThemeFallbackBehaviourTests(unittest.TestCase):
 
     def test_installed_thememanager_is_launched_directly(self):
         for path in (ROOT / "recipes/xiaomi/24129PN74C/recipe.py",
-                     ROOT / "recipes/xiaomi/24090RA29C/recipe.py"):
+                     ROOT / "recipes/xiaomi/24090RA29C/24090RA29C.toml"):
             with self.subTest(recipe=path.parent.name):
                 p, _, _ = self.load(path, "", "package:/system/app/ThemeManager/ThemeManager.apk")
                 # 只比对拉起那一步：往后的「我的 → 齿轮」与开关校验由 #906 的用例守
