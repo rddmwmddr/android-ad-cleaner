@@ -11,7 +11,7 @@ from pathlib import Path
 import sys
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, call
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -855,10 +855,10 @@ class CloseNamedVariantTests(unittest.TestCase):
         rt = recipe_runtime.Runtime(Mock())
         rt.constants = MappingProxyType({"CLOSE_NAMED_OPTIONAL": True})
         seen = []
-        with patch.object(recipe_steps.strategies, "close_named_optional",
-                          lambda p, rt, *a, **k: seen.append((a, k))):
-            recipe_steps.close_named_step(Mock(), rt, ["甲"], "页",
-                                          dependent=["全部"], snapshot={"甲": True}, reopen=None)
+        fixtures.patch_surface(self, "close_named_optional",
+                               lambda p, rt, *a, **k: seen.append((a, k)))
+        recipe_steps.close_named_step(Mock(), rt, ["甲"], "页",
+                                      dependent=["全部"], snapshot={"甲": True}, reopen=None)
         self.assertEqual(seen, [((["甲"], "页"), {"dependent": ["全部"], "snapshot": {"甲": True},
                                                 "reopen": None})])
 
@@ -869,9 +869,9 @@ class CloseNamedVariantTests(unittest.TestCase):
         rt = recipe_runtime.Runtime(Mock())
         rt.constants = MappingProxyType({})
         seen = []
-        with patch.object(recipe_steps.nav, "close_named",
-                          lambda p, rt, *a, **k: seen.append((a, k))):
-            recipe_steps.close_named_step(Mock(), rt, ["甲"], "页")
+        fixtures.patch_surface(self, "close_named",
+                               lambda p, rt, *a, **k: seen.append((a, k)))
+        recipe_steps.close_named_step(Mock(), rt, ["甲"], "页")
         self.assertEqual(seen, [((["甲"], "页"), {})])
 
 
@@ -887,7 +887,7 @@ class MenuStateSurfaceTests(unittest.TestCase):
         p.await_page = Mock()
         rt = recipe_runtime.Runtime(p)
         rt.constants = MappingProxyType({})
-        with patch.object(recipe_nav, "more_menu", lambda p, rt: None):
-            state = recipe_nav.menu_state(p, rt)
+        fixtures.patch_surface(self, "more_menu", lambda p, rt: None)
+        state = recipe_nav.menu_state(p, rt)
         self.assertIsInstance(state, recipe_nav.MenuState)
         self.assertTrue(state.close_all_disabled)

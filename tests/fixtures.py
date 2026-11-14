@@ -758,30 +758,69 @@ class GitRepo:
         return done.returncode, done.stdout + done.stderr
 
 
-def patch_library(case, targets):
-    """测试替身接缝：`targets = {"nav.wait_page": mock, "strategies.close_named_optional": mock}`。
+def _library_surfaces():
+    """库名字可能出现在哪些模块的全局名里：#1269 拆库后是三个重导出面 + `recipe_lib` 各家族模块。
 
-    只替换 `recipe_nav` / `recipe_strategies` / `recipe_steps` 的模块属性，调用方带上的 `(p, rt)`
-    前缀先剥掉，桩收到的就是业务实参。`case.addCleanup` 按 LIFO 还原（同一个属性被多次替换时也
-    能回到最初那份）。这是**测试专用**的接缝：生产代码不按名字查表取实现。
-    """
-    import catalog.interpreter as interpreter
+    同一个实现既可能是家族的 owner（`recipe_lib.<家族>`），也可能被 `from recipe_lib.shared import X`
+    复制进调用方的全局名；调用点按裸名解析，所以桩要把每一份同名绑定都换掉。"""
     import recipe_nav
     import recipe_strategies
     import recipe_steps
-    modules = {"nav": recipe_nav, "strategies": recipe_strategies, "steps": recipe_steps}
+    import recipe_lib
+    return (recipe_nav, recipe_strategies, recipe_steps) + tuple(recipe_lib.MODULES)
+
+
+def patch_surface(case, name, mock):
+    """把库实现 `name` 在所有库模块里换成 `mock`（原样调用，不剥 `(p, rt)`）。
+
+    实现按裸名解析自己所在模块的全局名，跨模块又可能被 `from recipe_lib.x import name` 复制一份；
+    只换 `recipe_nav.<name>` 换不到那些绑定。`addCleanup` 还原。测试专用接缝。
+    """
+    import catalog.interpreter as interpreter
+    surfaces = _library_surfaces()
+    old_library = interpreter.LIBRARY.get(name)
+    saved = []
+    for module in surfaces:
+        if hasattr(module, name):
+            saved.append((module, name, getattr(module, name)))
+            setattr(module, name, mock)
+    interpreter.LIBRARY[name] = mock
+
+    def restore():
+        for module, attr, original in reversed(saved):
+            setattr(module, attr, original)
+        if old_library is None:
+            interpreter.LIBRARY.pop(name, None)
+        else:
+            interpreter.LIBRARY[name] = old_library
+
+    case.addCleanup(restore)
+    return mock
+
+
+def patch_library(case, targets):
+    """测试替身接缝：`targets = {"nav.wait_page": mock, "strategies.close_named_optional": mock}`。
+
+    键的第二段是名字（`nav.` / `strategies.` / `steps.` 前缀只为兼容，不决定 owner）；实现按名字在
+    `recipe_lib` 各模块与三个重导出面里逐份替换。调用方带上的 `(p, rt)` 前缀先剥掉，桩收到的就是
+    业务实参。`case.addCleanup` 按 LIFO 还原。这是**测试专用**的接缝：生产代码不按名字查表取实现。
+    """
+    import catalog.interpreter as interpreter
+    surfaces = _library_surfaces()
     saved = []
     for dotted, mock in targets.items():
-        module_name, attr = dotted.split(".", 1)
-        module = modules[module_name]
-        original = getattr(module, attr)
-        old_library = interpreter.LIBRARY.get(attr)
-        saved.append((module, attr, original, old_library))
+        attr = dotted.split(".", 1)[1]
 
         def wrapper(p, rt, *args, _mock=mock, **kwargs):
             return _mock(*args, **kwargs)
 
-        setattr(module, attr, wrapper)
+        owners = [module for module in surfaces if hasattr(module, attr)]
+        if not owners:
+            raise AttributeError(attr)
+        old_library = interpreter.LIBRARY.get(attr)
+        for module in owners:
+            saved.append((module, attr, getattr(module, attr), old_library))
+            setattr(module, attr, wrapper)
         # 数据 `lib` op 查 LIBRARY、例外/库代码查模块属性：同一个替身两处都换。
         interpreter.LIBRARY[attr] = wrapper
 
@@ -804,10 +843,7 @@ def bridge_scope(case, scope, names=None):
     （测试常 `scope["page"] = Mock()`）。测试专用接缝，生产代码不按名字查表；`addCleanup` LIFO 还原。
     """
     import catalog.interpreter as interpreter
-    import recipe_nav
-    import recipe_strategies
-    import recipe_steps
-    modules = (recipe_nav, recipe_strategies, recipe_steps)
+    surfaces = _library_surfaces()
     names = names or (
         "read_switches", "open_page", "row", "app_settings", "close_named_optional",
         "browser_settings", "require_installed", "switch_top", "hide_carousel", "more_menu",
@@ -819,11 +855,12 @@ def bridge_scope(case, scope, names=None):
         "safe_switches", "store_personalization", "assistant_screen", "negative_screen")
     saved = []
     for name in names:
-        for module in modules:
-            if not hasattr(module, name):
-                continue
+        owners = [module for module in surfaces if hasattr(module, name)]
+        if not owners:
+            continue
+        old_library = interpreter.LIBRARY.get(name)
+        for module in owners:
             original = getattr(module, name)
-            old_library = interpreter.LIBRARY.get(name)
 
             def delegate(*args, _name=name, _real=original, **kwargs):
                 if _name in dict.keys(scope):
@@ -831,9 +868,8 @@ def bridge_scope(case, scope, names=None):
                 return _real(*args, **kwargs)
 
             setattr(module, name, delegate)
-            interpreter.LIBRARY[name] = delegate
             saved.append((module, name, original, old_library))
-            break
+        interpreter.LIBRARY[name] = delegate
     rt = scope["rt"]
     real_page = rt.page
     rt.page = lambda *args, **kwargs: (scope["page"](*args, **kwargs)

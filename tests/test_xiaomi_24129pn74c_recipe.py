@@ -123,7 +123,8 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
         source = (ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml").read_text(encoding="utf-8")
         # 两条入口的实现在家族库的注入面里（#1244）；这台机声明走「菜单」那条，回退档在库里。
         self.assertIn('BROWSER_FLOW = "menu"', source)
-        library = (ROOT / "tool/recipe_nav.py").read_text(encoding="utf-8")
+        library = "\n".join(path.read_text(encoding="utf-8")
+                             for path in sorted((ROOT / "recipe_lib").glob("*.py")))
         self.assertIn('p.tap("菜单", exact=True, scrolls=0, quiet=True)', library)
         self.assertIn('if not p.tab("我的"):', library)
 

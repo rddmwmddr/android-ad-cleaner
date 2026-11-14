@@ -46,7 +46,7 @@ def step_ad_privacy(p, rt):
 
 
 def step_negative(p, rt):
-    if not nav.hiboar_panel(p, rt):
+    if not nav.hiboard_panel_v2547a(p, rt):
         print("  ✗ 没滑到负一屏（桌面可能没开负一屏），跳过"); return
     print("  · 负一屏设置面板")
     if nav.goto(p, rt, "更多设置"):
@@ -54,7 +54,7 @@ def step_negative(p, rt):
             strategies.off(p, rt, only=["服务推荐", "资讯推荐"], page="负一屏·个性化推荐")
     # ⚠ 便捷生活里的「推荐服务」不要关：那 10 个图标（扫码、手电筒、计算器）都靠它补位，关了整块变空
     for name in ("内容精选", "热点资讯"):
-        if not nav.hiboar_panel(p, rt):
+        if not nav.hiboard_panel_v2547a(p, rt):
             print("  ✗ 回不到负一屏设置面板"); break
         p.top()
         # 热点资讯页的标题会串成页标题，rows() 已按行还原真实标题；

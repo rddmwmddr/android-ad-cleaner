@@ -6,6 +6,7 @@
 import contextlib
 import io
 from pathlib import Path
+import re
 import sys
 import tempfile
 import unittest
@@ -51,6 +52,41 @@ class VariantTests(unittest.TestCase):
         """status-json 从这份台账现读验证档位（#1124）：不随包发出去，客户端就跑不出那三个值。"""
         shipped = {Path(src).relative_to(ROOT).as_posix() for src, _ in bundle_data(ROOT)}
         self.assertIn("recipes/verified.toml", shipped)
+
+    def test_exception_functions_are_packaged(self):
+        """每台机的例外 `.py`（数据 `code=` 调用的过程化段）也要进包，否则那段在桌面上直接 NameError。"""
+        shipped = {Path(src).relative_to(ROOT).as_posix() for src, _ in bundle_data(ROOT)}
+        missing = [path.relative_to(ROOT).as_posix() for path in ROOT.glob("recipes/*/*/*.py")
+                   if path.relative_to(ROOT).as_posix() not in shipped]
+        self.assertEqual(missing, [])
+
+    def test_library_is_packaged(self):
+        """库实现住在 `recipe_lib/`（#1269）：漏掉它，桌面版与手机版都会在 `import recipe_nav` 时断。"""
+        shipped = {Path(src).relative_to(ROOT).as_posix() for src, _ in bundle_data(ROOT)}
+        missing = [path.relative_to(ROOT).as_posix() for path in ROOT.glob("recipe_lib/*.py")
+                   if path.relative_to(ROOT).as_posix() not in shipped]
+        self.assertTrue(list(ROOT.glob("recipe_lib/*.py")))
+        self.assertEqual(missing, [])
+
+    def test_engine_modules_are_packaged(self):
+        """`tool/**/*.py`（含 `tool/phone/`、`tool/catalog/` 子包）全部进包。"""
+        shipped = {Path(src).relative_to(ROOT).as_posix() for src, _ in bundle_data(ROOT)}
+        missing = [path.relative_to(ROOT).as_posix() for path in ROOT.glob("tool/**/*.py")
+                   if path.relative_to(ROOT).as_posix() not in shipped]
+        self.assertEqual(missing, [])
+
+    def test_mac_bundle_adds_every_staged_directory(self):
+        """`build_mac.sh` 的 `--add-data` 要把 bundle_data 暂存的每个目录装进 .app。
+
+        这一步不是 bundle_data 自己做的：漏一个（#1269 的 `recipe_lib`）时暂存目录有、`.app` 里没有，
+        `import recipe_nav` 在打包件里当场断，桌面端与回归却都在完整仓库上跑、抓不到。"""
+        script = (ROOT / "gui" / "build_mac.sh").read_text(encoding="utf-8")
+        dests = re.findall(r'--add-data\s+"[^"]*:([^"]+)"', script)
+        self.assertTrue(dests)
+        staged = {directory for _src, directory in bundle_data(ROOT)}
+        missing = [directory for directory in sorted(staged)
+                   if not any(directory == dest or directory.startswith(dest + "/") for dest in dests)]
+        self.assertEqual(missing, [], "这些暂存目录没被 --add-data 装进 .app")
 
 
 # ---------- #319 / #969 / #942：参考脚本按录制版本在同族里挑 ----------

@@ -287,8 +287,8 @@ id = "dev.steps.injection-surface"
 source = "CLAUDE.md#开发"
 check = "none"
 status = "manual"
-why = "注入面已拆除（#1268）：库实现是 `recipe_nav` / `recipe_strategies` / `recipe_steps` 里的普通函数，收 `(p, rt, …)`，数据用 `lib`/`code` 按名字点名；没有执行作用域、没有工厂闭包、没有同名覆盖。事实层退化为字面量提取器（`library_sources()` + `scan_source`），不再做 import 归属解析。这条没有返红的守卫，靠审查：往库里加实现时只加普通函数与 `__all__`，别再引入第二套名字注入。"
-expires_if = "库按家族拆开（#1269）之后，本条并入那边的归属判据。"
+why = "注入面已拆除（#1268），库也在 #1269 按家族拆开：实现住在 `recipe_lib/<家族>.py` / `shared.py`，是普通函数，收 `(p, rt, …)`，数据用 `lib`/`code` 按名字点名；`tool/recipe_nav.py` 等三个只是重导出面。没有执行作用域、没有工厂闭包、没有同名覆盖。事实层退化为字面量提取器（`library_sources()` + `scan_source`），不再做 import 归属解析。这条没有返红的守卫，靠审查：往库里加实现时写进 `recipe_lib` 的普通函数与 `__all__`，别再引入第二套名字注入。"
+expires_if = "机型库若改回单一模块或引入新的名称注入机制时重议。"
 
 [[rule]]
 id = "dev.launch.foreground-ownership"
@@ -1211,10 +1211,10 @@ expires_if = "例外函数进一步数据化、不再需要 exec 命名空间时
 [[rule]]
 id = "dev.recipes.shared-sections"
 source = "CLAUDE.md#开发"
-check = "none"
-status = "manual"
-why = "判据不变，仍按**节**算：共享（跨家族）分节里的实现必须被 ≥2 个家族使用（家族取自 `entries.FAMILY`），家族分节允许单脚本变体。`test_recipe_nav.py` 的 `SharedSectionTests` 已随注入面删除（#1268），这条现在**没有机械守卫**；守卫随 `recipe_lib/<家族>.py` + `shared.py` 的拆分在 #1269 重建，届时要重新落成 CI。当前共享库里仍有单家族实现的残留（#1268 为拆注入面把它们从例外 `.py` 提升进库），#1269 一并归位。"
-expires_if = "守卫在 #1269 重建后改回 enforced；本条并入那边的规则。"
+check = "test:test_recipe_nav::SharedLibraryTests.test_shared_impls_are_used_by_at_least_two_families"
+status = "enforced"
+why = "库按家族拆开后（#1269），归属判据按**家族数**算（家族取自 `entries.FAMILY`）：只被一个家族用到的进 `recipe_lib/<家族>.py`，被 ≥2 个家族用到的进 `recipe_lib/shared.py`，家族文件允许单脚本变体。两条机械守卫在 `tests/test_recipe_nav.py`：反向 `SharedLibraryTests` 要求 `shared.py` 的每个实现被 ≥2 个家族使用（按实际调用点与调用图算，分派器不把调用方的家族传给家族实现）；正向 `PromotionTests` 要求例外 `.py` 里的同名助手出现在 ≥2 台机型（或本地重定义了库实现）时必须升格进 `recipe_lib`。"
+expires_if = "若机型库改成按机型（而不是按家族）归属，或 `shared.py` 被别的共享形态取代时重议。"
 
 [[rule]]
 id = "doc.pr.docs-and-generator-in-sync"

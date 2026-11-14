@@ -38,7 +38,7 @@ import json
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -47,6 +47,7 @@ TESTS = Path(__file__).resolve().parent
 ROOT = TESTS.parent
 sys.path.insert(0, str(TESTS))
 sys.path.insert(0, str(ROOT / "tool"))
+sys.path.insert(0, str(ROOT))  # recipe_lib 在仓库根
 import fixtures  # noqa: E402
 from stdio import use_utf8_console  # noqa: E402  出口取当前副本的，不对拍基线那一份
 
@@ -185,8 +186,13 @@ def fake_until(clock):
     bound = functools.partial(wait.until, now=clock.time, sleep=clock.sleep)
     # 直接 `from wait import until` 的模块持有另一份绑定：只换 `wait.until` 换不到它，
     # 那些调用仍用定义时绑死的真时钟，采样轮数随机器快慢变（Windows CI 因此多出两轮）。
-    import recipe_nav
-    with patch.object(wait, "until", bound), patch.object(recipe_nav, "until", bound):
+    # #1269 拆库后这些绑定在 `recipe_lib` 各模块里，逐一替换。
+    import recipe_lib
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(wait, "until", bound))
+        for module in recipe_lib.MODULES:
+            if hasattr(module, "until"):
+                stack.enter_context(patch.object(module, "until", bound))
         yield
 
 

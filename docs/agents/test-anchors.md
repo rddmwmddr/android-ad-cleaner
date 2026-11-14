@@ -64,7 +64,7 @@
 | `test_recipe_meta_module.py` | 配方元数据住中立模块：非 CLI 代码 import 它不背 CLI 副作用。 |
 | `test_recipe_variants.py` | 同一型号按系统版本选脚本变体、变体要进安装包，以及没有本型号脚本时参考脚本按录制版本在同族里挑。 |
 | `test_recipe_setting_checked.py` | 机型脚本必须消费 p.setting() 的返回值，不能空跑还记成功。 |
-| `test_recipe_nav.py` | 公共导航库的普通函数实现，以及调用序列对拍驱动自己管基线 worktree。 |
+| `test_recipe_nav.py` | 机型库的拆分守卫（例外 `.py` 的同名助手必须升格进 `recipe_lib`；`shared.py` 的实现必须被 ≥2 个家族使用），以及调用序列对拍驱动自己管基线 worktree。 |
 | `test_recipe_source.py` | 脚本事实层：实参按语法切分、形参回填与读不出态、Intent 三种包名写法，以及语法错直接抛。 |
 | `test_catalog.py` | catalog 内核：页面树数据经唯一装载入口跑出与旧脚本逐条相同的调用序列、校验器在装载期拒绝非法数据、only 两态与 page-wide 全关。 |
 | `test_catalog_migrate.py` | 迁移转换器的三列分类（converted / missing-key / unrepresentable）与覆盖率口径，转换产物过 schema 校验，真实仓库覆盖率守 80% 采纳线。 |

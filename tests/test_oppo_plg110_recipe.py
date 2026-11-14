@@ -2,14 +2,14 @@
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import run
-import recipe_nav
+import fixtures
 from fixtures import load_recipe
 
 RECIPE = ROOT / "recipes/oppo/PLG110/PLG110.toml"
@@ -36,10 +36,8 @@ class Plg110RecipeTests(unittest.TestCase):
         self.p.locked.return_value = False
         self.scope = load(self.p)
         self.read_switches = Mock()
-        patcher = patch.object(recipe_nav, "read_switches",
+        fixtures.patch_surface(self, "read_switches",
                                lambda p, rt, *a, **k: self.read_switches(*a, **k))
-        patcher.start()
-        self.addCleanup(patcher.stop)
 
     def states(self, before, after):
         self.read_switches = Mock(side_effect=[before, after])

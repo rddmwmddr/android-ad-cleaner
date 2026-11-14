@@ -621,22 +621,30 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
 
 
 def library_sources() -> dict[str, tuple[str, str]]:
-    """三个库里数据可调用的实现：{名字: (归属模块, 源码)}。
+    """机型库数据可调用的实现：{名字: (归属模块, 源码)}。
 
-    `__all__` 全局唯一，名字直接定位实现，不再按脚本 import 做归属解析（#1268）。
-    词库与入口速查拿它扫实现里的字面量。延迟 import：只有调用它时才加载这三个库。"""
+    名字全局唯一，直接定位实现，不再按脚本 import 做归属解析（#1268）。#1269 拆库后实现按家族住在
+    `recipe_lib/<家族>.py` / `recipe_lib/shared.py`，`tool/recipe_nav.py` 等三个只做重导出；这里经
+    重导出面拿到函数对象，归属写它真正的 `__module__`（`recipe_lib.shared` 等）。
+    词库与入口速查拿它扫实现里的字面量。延迟 import：只有调用它时才加载库。"""
     import inspect
     import recipe_nav
     import recipe_strategies
     import recipe_steps
-    # 实现之间用 `nav.x(...)` / `strategies.x(...)` 互调；`inspect.getsource` 只有函数体、没有模块头，
-    # 补三行 import 让事实层把跨模块调用认成注入调用、逐层往下扫（行号整体后移三行，只影响出处定位）。
-    prefix = "import recipe_nav as nav\nimport recipe_strategies as strategies\nimport recipe_steps as steps\n"
-    out: dict[str, tuple[str, str]] = {}
+    found: dict[str, tuple[str, str]] = {}
     for module in (recipe_nav, recipe_strategies, recipe_steps):
         for name in module.__all__:
-            out[name] = (module.__name__, prefix + inspect.getsource(getattr(module, name)))
-    return out
+            function = getattr(module, name)
+            found[name] = (function.__module__, inspect.getsource(function))
+    # 实现之间用裸名字互调；`inspect.getsource` 只有函数体、没有模块头。补一组
+    # `from recipe_lib.<模块> import <名字>`，事实层才给裸调用记上归属模块（`Call.module`）——
+    # 词库的逐层下扫按「有归属的注入调用」筛，缺了它整条实现链会被静默跳过（#1269）。
+    by_module: dict[str, list[str]] = {}
+    for name, (owner, _source) in found.items():
+        by_module.setdefault(owner, []).append(name)
+    prefix = "\n".join(f"from {owner} import {', '.join(sorted(names))}"
+                       for owner, names in sorted(by_module.items())) + "\n"
+    return {name: (owner, prefix + source) for name, (owner, source) in found.items()}
 
 
 def _lib_modules() -> dict[str, str]:
