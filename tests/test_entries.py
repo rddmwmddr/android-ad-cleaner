@@ -737,7 +737,7 @@ RECIPES_460 = (
     (ROOT / "recipes/xiaomi/2505APX7BC/recipe.py", ("com.android.browser",)),
     # 这份不走 p.start：强停后用 monkey 拉起
     (ROOT / "recipes/xiaomi/24129PN74C/recipe_os4.py", None),
-    (ROOT / "recipes/xiaomi/24122RKC7C/recipe.py", ("com.android.browser", ".BrowserActivity")),
+    (ROOT / "recipes/xiaomi/24122RKC7C/24122RKC7C.toml", ("com.android.browser", ".BrowserActivity")),
 )
 
 

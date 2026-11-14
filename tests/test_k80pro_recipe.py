@@ -14,7 +14,7 @@ from fixtures import load_recipe
 
 class K80ProRecipeTests(unittest.TestCase):
     def load(self, phone):
-        scope, _ = load_recipe(phone, ROOT / "recipes/xiaomi/24122RKC7C/recipe.py")
+        scope, _ = load_recipe(phone, ROOT / "recipes/xiaomi/24122RKC7C/24122RKC7C.toml")
         return scope
 
     def test_actual_model_selects_own_recipe_and_pins_recorded_build(self):
