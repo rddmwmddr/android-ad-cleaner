@@ -7,7 +7,8 @@
 
 前两类用例只验外部行为：给定配方目录、已解析的台账、一个注入的「今天」、注入的段体哈希与注入的
 脚本 BUILD，算出什么结果；不钉真实日期，也不验输出的列宽。`body_hash()` 用临时脚本文件验「归一」
-到底消掉了哪些差异：只改注释 / 格式 / 顺序不算改，段体正文或段名改了才算改。
+到底消掉了哪些差异：注释与格式不算改，段体正文或段名改了才算改（例外 `.py` 是整文件，顺序进哈希，
+见 `ExceptionBodyTest`）。
 
 最后一类是数据契约：直接读真实 `recipes/` 与 `recipes/verified.toml`，不注入假数据——它的价值就是
 「真实数据符合契约」（形状照 tests/test_vocab.py 的 RealRecipesTest）。
@@ -319,11 +320,14 @@ ops = [{ kind = "start", pkg = "com.xiaomi.market" }]
         self.addCleanup(tmp.cleanup)
         self.dir = Path(tmp.name)
 
-    def hash_of(self, text, name="A.toml"):
+    def write(self, text, name):
         path = self.dir / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
-        return verify_ledger.body_hash(path)
+        return path
+
+    def hash_of(self, text, name="A.toml"):
+        return verify_ledger.body_hash(self.write(text, name))
 
     def test_comments_key_order_and_segment_order_do_not_change_the_hash(self):
         """这条守的是「迁移不该翻成待复核」：注释、空白、键顺序、段的先后全变，段体内容还是那些。"""
@@ -363,6 +367,96 @@ ops = [
         self.assertEqual([line.split("\t")[0] for line in listing.splitlines()],
                          ["oppo/B/B.toml", "xiaomi/A/A.toml"])
         self.assertEqual(listing.splitlines()[1].split("\t")[1], hashes["xiaomi/A/A.toml"])
+
+
+class ExceptionBodyTest(unittest.TestCase):
+    """同名例外 `.py` 也算段体（#1276）：B 段之后一段的知识可以整个住在 `code=` 函数里，
+    只哈希 `[[segment]]` 数据会让「改过」看不出来。
+
+    按整文件哈希，不按段收窄：例外 `.py` 只服务同目录同名的那份数据，被 `code=` 点名的函数还会
+    调用同文件的助手、读模块级常量，按段收窄得把解释器的名字解析与传递闭包复刻一遍，漏一个就是又
+    一次「改过看不出来」。代价是同文件里改了不相干的函数也会翻成待复核——那个文件本来就只为这一份
+    数据存在。
+    """
+
+    TOML = '''model = "A"
+build = "A_1.0"
+
+[[segment]]
+name = "广告跟踪"
+code = "step_ads"
+
+[[segment]]
+name = "应用商店"
+ops = [{ kind = "start", pkg = "com.xiaomi.market" }]
+'''
+
+    EXCEPTION = '''def step_ads(p, rt):
+    p.off(only=["个性化广告推荐"], page="广告跟踪")
+'''
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+
+    def write(self, text, name):
+        path = self.dir / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def hash_of(self, text, name="A.toml"):
+        return verify_ledger.body_hash(self.write(text, name))
+
+    def test_a_changed_exception_function_body_changes_the_hash(self):
+        """票面判据：改 `code=` 指向的例外函数体 → 这一份的哈希变 → 台账翻成待复核。"""
+        self.write(self.TOML, "A.toml")
+        self.write(self.EXCEPTION, "A.py")
+        before = verify_ledger.body_hash(self.dir / "A.toml")
+        self.write(self.EXCEPTION.replace('"个性化广告推荐"', '"个性化推荐"'), "A.py")
+        self.assertNotEqual(before, verify_ledger.body_hash(self.dir / "A.toml"))
+
+    def test_a_module_level_constant_in_the_exception_also_counts(self):
+        """`code=` 函数读的模块级常量（如 PMA110 的 `THEME`）不在任何函数体里。"""
+        self.write(self.TOML, "A.toml")
+        self.write(self.EXCEPTION, "A.py")
+        before = verify_ledger.body_hash(self.dir / "A.toml")
+        self.write('THEME = "com.heytap.themestore/.SettingActivity"\n\n' + self.EXCEPTION, "A.py")
+        self.assertNotEqual(before, verify_ledger.body_hash(self.dir / "A.toml"))
+
+    def test_comments_and_docstrings_in_the_exception_do_not_change_the_hash(self):
+        """与 `.py` 机型脚本同档的归一：注释、docstring 不是行为，改它不该翻成待复核。
+
+        旧树也绿（那时例外 `.py` 根本不参与哈希），守的是不回退。"""
+        self.write(self.TOML, "A.toml")
+        self.write(self.EXCEPTION, "A.py")
+        before = verify_ledger.body_hash(self.dir / "A.toml")
+        self.write('''# 注释不进哈希
+"""模块说明也不进。"""
+
+
+def step_ads(p, rt):
+    """段说明。"""
+    p.off(only=["个性化广告推荐"], page="广告跟踪")
+''', "A.py")
+        self.assertEqual(before, verify_ledger.body_hash(self.dir / "A.toml"))
+
+    def test_a_py_only_script_still_hashes_its_step_bodies_only(self):
+        """旧形态的 `.py` 脚本没有同名例外这一项：模块级常量改不改都不动哈希（沿用 #1242 的口径）。
+
+        旧树也绿，守的是不回退——`_exception_body()` 认后缀时不能把自己算进去。"""
+        script = '''from recipe_runtime import step
+
+SETTINGS = "com.android.settings/.Settings"
+
+
+@step("广告")
+def ads(p, rt):
+    p.off(only=["个性化广告推荐"], page="广告")
+'''
+        self.assertEqual(self.hash_of(script, "X.py"),
+                         self.hash_of(script.replace("com.android.settings", "com.x"), "X.py"))
 
 
 class RealRecipesContractTest(unittest.TestCase):
