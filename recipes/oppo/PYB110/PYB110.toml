@@ -1,0 +1,85 @@
+# 一加 16（PYB110，ColorOS 17.0.0 / Android 17）的页面树（catalog，#1265）。
+# 路径实测：2026-11-12 在 17.0.0.155 上录制，九段全跑 397 秒；同日在 17.0.0.157 上复验。
+# 覆盖：广告跟踪、软件商店、浏览器、主题商店、视频、游戏中心、小布建议、负一屏、下拉搜索，共九段。
+# 与同族 ColorOS 17 脚本的三处差别：商店「我的」页没有设置文字行，只能用公开设置 Intent；
+# 浏览器叫「个性化内容」、视频叫「个性化内容管理」；负一屏没有推荐服务入口，个性化开关
+# 在「隐私 → 个性化推荐」里按模块给。
+model = "PYB110"
+models = ["PYB110"]
+build = "PYB110_17.0.0"
+
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+[const]
+SEARCH_SETTINGS_STYLE = "swipe_strict"
+
+[[segment]]
+name = "广告跟踪"
+ops = [
+  { kind = "lib", name = "ad_tracking_close_all" },
+]
+
+[[segment]]
+name = "软件商店"
+code = "step_store"
+
+[[segment]]
+name = "浏览器"
+ops = [
+  { kind = "start", pkg = "com.heytap.browser" },
+  # 首页读不到「我的」/菜单入口，用实测可直达的设置页 Activity；带清栈参数会立刻退出。
+  { kind = "shell", command = "am start -f 0x10008000 -n com.heytap.browser/.settings.component.BrowserPreferencesPage" },
+  { kind = "sleep", seconds = 1.2 },
+  { kind = "require_focus", contains = "com.heytap.browser", miss_print = "浏览器设置页没有打开" },
+  { kind = "if_tap", text = "主页设置", exact = true, ops = [{ kind = "if_tap", text = "页面布局", exact = true, ops = [{ kind = "tap", text = "简洁", exact = true, scrolls = 0 }, { kind = "back" }] }, { kind = "back" }] },
+  { kind = "if_tap", text = "隐私", exact = true, ops = [
+      # 摇一摇广告随上级开关灰置（开屏/资讯列表都关了就不会展示），不点它。
+      { kind = "if_tap", text = "广告管理", exact = true, ops = [{ kind = "off", only = ["开屏广告", "资讯列表广告"], page = "浏览器·广告管理" }, { kind = "back" }] },
+      # ColorOS 17.0.0.155 的入口叫「个性化内容」，不是 PLR110 上的「个性化管理」。
+      { kind = "if_entry", text = "个性化内容", ops = [{ kind = "off", only = ["个性化内容"], page = "浏览器·个性化内容" }, { kind = "back" }] },
+      { kind = "back" },
+  ] },
+  # 允许通知、互动消息、锁屏通知、其他服务保留；资讯类推送关掉。
+  { kind = "if_entry", text = "消息管理", ops = [{ kind = "off", only = ["精彩推荐", "重点时事", "本地资讯", "个性化推荐"], page = "浏览器·消息管理" }, { kind = "back" }] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "主题商店"
+ops = [
+  { kind = "lib", name = "theme_shop_settings" },
+]
+
+[[segment]]
+name = "视频"
+ops = [
+  { kind = "start", pkg = "com.heytap.yoli", settle = 4 },
+  { kind = "require_go", text = "我的", expect = "设置", miss_print = "没找到「我的」标签" },
+  { kind = "tap", text = "设置", exact = true, scrolls = 0 },
+  # 这版入口叫「个性化内容管理」（PLR110 上的「个性化管理」在这台机没有）。
+  { kind = "if_tap", text = "个性化内容管理", exact = true, ops = [{ kind = "off", only = ["个性化推荐"], page = "视频·个性化内容管理" }, { kind = "back" }] },
+  # 互动消息、服务通知、会员权益、其他服务保留。
+  { kind = "if_tap", text = "消息通知", exact = true, ops = [{ kind = "off", only = ["热点时事", "精彩推荐", "个性化推荐", "本地新闻"], page = "视频·消息通知" }, { kind = "back" }] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "游戏中心"
+ops = [
+  { kind = "lib", name = "game_center_taps" },
+]
+
+[[segment]]
+name = "小布建议"
+ops = [
+  { kind = "lib", name = "assistant_advice_search" },
+]
+
+[[segment]]
+name = "负一屏"
+code = "step_negative_screen"
+
+[[segment]]
+name = "下拉搜索"
+ops = [
+  { kind = "lib", name = "search_settings_swipe" },
+]

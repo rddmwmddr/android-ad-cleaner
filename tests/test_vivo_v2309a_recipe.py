@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 import run
 from fixtures import load_recipe, phone_mock
 
-RECIPE = ROOT / "recipes/vivo-V2309A/recipe.py"
+RECIPE = ROOT / "recipes/vivo/V2309A/V2309A.toml"
 
 # 「我的」页真机读数：右上角是无文字齿轮；下面还有一条含「设置」的可点行当诱饵（#305）。
 DECOY_ROW = ('<node class="android.widget.TextView" text="去功能设置里重新开启"'
@@ -57,7 +57,7 @@ class VivoV2309ARecipeTests(unittest.TestCase):
     def test_model_is_matched_without_reference_and_records_build(self):
         path, reference = run.recipe_for("V2309A", "vivo")
         self.assertFalse(reference)
-        self.assertEqual(Path(path).parent.name, "vivo-V2309A")
+        self.assertEqual(Path(path).parent.name, "V2309A")
         meta = run.recipe_meta(path)
         self.assertEqual(meta["build"], "PD2309E_A_16")
         self.assertEqual(meta["models"], ["V2309A"])

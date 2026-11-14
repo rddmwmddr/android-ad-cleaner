@@ -11,6 +11,8 @@ gui/dist/
 gui/ChineseSimplified.isl
 发布/
 recipes/zztest-*/
+# 运行日志：新布局 `recipes/<家族>/<型号>/`（#1261 之后），旧布局的残留目录也留一条
+recipes/*/*/run-log.txt
 recipes/*/run-log.txt
 # 本机私有：运维记录、服务端部署代码
 CLAUDE.local.md
@@ -22,7 +24,7 @@ CLAUDE.local.md
 /session_checkbox_adapter.py
 
 # 前端用例的 jsdom 依赖（按 package-lock.json 用 npm ci 装）
-node_modules/
+/node_modules
 
 # 鸿蒙 HDC 只在构建期从 OpenHarmony SDK 下载校验，二进制不入库（gui/hdc_fetch.py）
 /harmony/desktop/vendor/*/hdc

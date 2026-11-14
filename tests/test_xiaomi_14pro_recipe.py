@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 import run
 
-RECIPE = ROOT / "recipes/xiaomi-2304FPN6DC/recipe.py"
+RECIPE = ROOT / "recipes/xiaomi/2304FPN6DC/2304FPN6DC.toml"
 
 
 class Xiaomi14ProRecipeTests(unittest.TestCase):

@@ -6,16 +6,26 @@
 `runpy.run_path`，也不许直接 exec 一份脚本源码。
 """
 import ast
-import tempfile
-import time
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 
 import fixtures
-from fixtures import load_recipe
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "tests"
+# 47 份数据（`verified.toml` 是台账不是机型数据）。迁移后没有 `recipe*.py` 了：glob 那个模式
+# 匹配 0 份，下面「装载时不许碰手机」的循环就一次都不跑（#1268）。
+RECIPES = tuple(sorted(toml for toml in (ROOT / "recipes").rglob("*.toml")
+                       if toml.name != "verified.toml"))
+# 型号目录的判据是「里面有配方文件」，不是「是个目录」：迁移前的旧布局目录
+# （`recipes/<家族>-<型号>/`）可能只留下 `__pycache__`，按目录数会把它们算成缺数据的型号。
+MODEL_DIRS = tuple(sorted(d for d in (ROOT / "recipes").glob("*/*")
+                          if d.is_dir() and any(f.suffix in (".toml", ".py") for f in d.iterdir()
+                                                if f.is_file())))
+
+fixtures.load_tool()
+import recipe_loader  # noqa: E402
 
 
 def _is_call(node, name, dotted=True):
@@ -54,6 +64,28 @@ def bypasses(tree):
     return found
 
 
+def module_body_offenders(source, filename="<script>"):
+    """模块体里不属于「导入 / 定义 / 常量 / `if TYPE_CHECKING:` / 模块 docstring」的语句。
+
+    返回 [(行号, 语句类型)]；空表示形状合规。脚本的顺序与钩子都由装载器驱动，模块体里多写一句
+    `print` / `for` / `p…()` 就会在导入时执行，破坏「导入零动作」。
+    """
+    allowed = (ast.Import, ast.ImportFrom, ast.Assign, ast.AnnAssign,
+               ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+    found = []
+    for node in ast.parse(source, filename).body:
+        if isinstance(node, allowed):
+            continue
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) \
+                and isinstance(node.value.value, str):
+            continue                                  # 模块 docstring
+        if isinstance(node, ast.If) and isinstance(node.test, ast.Name) \
+                and node.test.id == "TYPE_CHECKING":
+            continue
+        found.append((node.lineno, type(node).__name__))
+    return found
+
+
 class RecipeLoaderGuardTests(unittest.TestCase):
     def test_no_file_under_tests_loads_a_recipe_on_its_own(self):
         checked = 0
@@ -77,38 +109,48 @@ class RecipeLoaderGuardTests(unittest.TestCase):
             with self.subTest(source=source):
                 self.assertTrue(bypasses(ast.parse(source)), source)
 
-    def test_load_recipe_itself_never_sleeps_for_real(self):
-        script = "import time\nBUILD = 'x'\nMODELS = ['x']\ntime.sleep(30)\nVALUE = 1\n"
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory, "recipe.py")
-            path.write_text(script, encoding="utf-8")
-            started = time.monotonic()
-            scope, _ = load_recipe(object(), path)
-            elapsed = time.monotonic() - started
-        self.assertEqual(scope["VALUE"], 1)
-        self.assertLess(elapsed, 1.0, "装载时真的睡眠了")
-        self.assertIsInstance(scope["time"], fixtures.RecipeClock)
-        scope["time"].sleep(30)                       # 装载之后脚本里的 sleep 也不占真实时间
-        self.assertLess(time.monotonic() - started, 1.0)
 
-    def test_a_deadline_loop_polls_through_the_fake_clock_instead_of_busy_waiting(self):
-        """三个读数要成套：只挡 sleep 而让 time() 走真实时钟，这个循环会忙转满 5 秒。"""
-        script = ("import time\nBUILD = 'x'\nMODELS = ['x']\nROUNDS = 0\n"
-                  "def spin():\n"
-                  "    global ROUNDS\n"
-                  "    deadline = time.time() + 5\n"
-                  "    while time.time() < deadline:\n"
-                  "        ROUNDS += 1\n"
-                  "        time.sleep(0.2)\n")
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory, "recipe.py")
-            path.write_text(script, encoding="utf-8")
-            scope, _ = load_recipe(object(), path)
-            started = time.monotonic()
-            scope["spin"]()
-            elapsed = time.monotonic() - started
-        self.assertEqual(scope["ROUNDS"], 25)
-        self.assertLess(elapsed, 1.0, "截止时间循环在真实时钟上忙转了")
+    def test_every_model_directory_is_loaded(self):
+        """发现本身要有内容：每个型号目录都得出至少一份数据，别让下面那条循环静默空转。
+
+        判据是目录与数据的对应关系，不是写死的份数——数据增删时这条不用跟着改。
+        """
+        covered = {toml.parent for toml in RECIPES}
+        missing = [str(d.relative_to(ROOT)) for d in MODEL_DIRS if d not in covered]
+        self.assertEqual(missing, [], "这些型号目录没有可装载的数据文件")
+
+    def test_loading_any_recipe_makes_no_device_calls(self):
+        """导入零动作：装载全部数据，`Phone` 上一个方法都不许被调用（段只在 `run()` 里跑）。
+
+        这条同时守住「段只登记、不执行」：任何一份把动作写在模块体里、或让装载器在装载时
+        执行段体，这里都会看到 `mock_calls` 非空。例外 `.py` 的模块体也在装载时 exec，
+        所以它们的形状另外由 `test_exception_modules_have_no_import_time_statements` 钉。
+        """
+        self.assertGreaterEqual(len(RECIPES), len(MODEL_DIRS), "发现到的数据比型号目录还少")
+        for path in RECIPES:
+            with self.subTest(recipe=str(path.relative_to(ROOT))):
+                phone = Mock()
+                recipe_loader.load(path, phone)
+                self.assertEqual(phone.mock_calls, [],
+                                 f"{path.relative_to(ROOT)} 在装载时碰了手机")
+
+    def test_exception_modules_have_no_import_time_statements(self):
+        """例外 `.py` 由装载器 `exec` 进一个 dict，模块体里多一句就会在装载时执行。
+
+        形状判据在 `module_body_offenders()`：只允许导入 / 定义 / 常量 / `if TYPE_CHECKING:`
+        与模块 docstring。
+        """
+        sources = fixtures.recipe_sources()
+        self.assertTrue(sources, "没扫到例外 .py：`recipe_sources()` 的口径或数据搬家了")
+        offenders = []
+        for path in sources:
+            for line, kind in module_body_offenders(path.read_text(encoding="utf-8"), str(path)):
+                offenders.append(f"{path.relative_to(ROOT)}:{line} 模块体里写了 {kind}")
+        self.assertEqual(offenders, [], "装载时就会执行的语句不在允许的形状里")
+
+
+
+
 
 
 if __name__ == "__main__":

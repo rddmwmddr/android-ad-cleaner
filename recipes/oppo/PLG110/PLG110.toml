@@ -1,0 +1,101 @@
+# OPPO Find X9 Pro（PLG110），ColorOS 16.0.10.501(CN01) / Android 16 的页面树（catalog，#1264）。
+# 2026-11-01 真机逐页记录；仅收录本机已识别的开关，不包含包操作和通知渠道。
+# 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，未复测（#933）。
+model = "PLG110"
+models = ["PLG110"]
+build = "PLG110_16.0.10"
+tail = "tail"
+
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。这一版的设置页与命令串都走 shell，
+# 页面确认失败即报错，读开关按 expect 名单收窄。
+[const]
+WAIT_PAGE_STYLE = "raise"
+TAP_PAGE_STYLE = "raise"
+READ_SWITCHES_STYLE = "expect"
+OPEN_PAGE_STYLE = "shell"
+APP_SETTINGS_STYLE = "shell"
+SYSTEM_SETTINGS_STYLE = "shell"
+
+[[segment]]
+name = "广告跟踪"
+code = "step_ad_tracking"
+
+[[segment]]
+name = "软件商店"
+code = "step_store"
+
+[[segment]]
+name = "浏览器"
+ops = [
+  { kind = "print", text = "  将关闭开屏广告、资讯列表广告、个性化搜索与广告推荐；不改默认引擎与主页布局。" },
+  { kind = "lib", name = "app_settings", args = ["com.heytap.browser", "com.heytap.browser.settings.component.BrowserPreferencesPage", "浏览器"] },
+  { kind = "lib", name = "tap_page", args = ["隐私", "com.heytap.browser.settings.component.BrowserPreferenceActivity"], kwargs = { scrolls = 4 } },
+  { kind = "lib", name = "tap_page", args = ["广告管理", "com.heytap.browser.settings.component.BrowserPreferenceActivity"], kwargs = { scrolls = 2 } },
+  { kind = "lib", name = "close_named_expect", args = [["开屏广告", "资讯列表广告"], "浏览器·广告管理", "com.heytap.browser.settings.component.BrowserPreferenceActivity", "广告管理", 2] },
+  { kind = "back" },
+  { kind = "lib", name = "wait_page", args = ["com.heytap.browser.settings.component.BrowserPreferenceActivity", "隐私"] },
+  { kind = "lib", name = "tap_page", args = ["个性化管理", "com.heytap.browser.settings.component.BrowserPreferenceActivity"], kwargs = { scrolls = 2 } },
+  { kind = "lib", name = "close_named_expect", args = [["个性化搜索推荐", "个性化广告推荐"], "浏览器·个性化管理", "com.heytap.browser.settings.component.BrowserPreferenceActivity", "个性化管理", 2] },
+]
+
+[[segment]]
+name = "下拉搜索"
+ops = [
+  { kind = "print", text = "  将关闭搜索范围中的商业推荐、搜索框提示词、隐私中的个性化推荐。" },
+  { kind = "lib", name = "open_page", args = ["am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.SearchSettingActivity", "搜索设置"] },
+  { kind = "lib", name = "tap_page", args = ["搜索范围", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.SearchSourceActivity"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "close_named_expect", args = [["榜单", "小说", "购物", "个性化推荐", "精选资讯"], "下拉搜索·搜索范围", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.SearchSourceActivity", "搜索范围", 6], kwargs = { dependent = ["全部"] } },
+  { kind = "back" },
+  { kind = "lib", name = "tap_page", args = ["功能管理", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.SearchFunctionManagerActivity"], kwargs = { scrolls = 2 } },
+  { kind = "lib", name = "close_named_expect", args = [["搜索框提示词"], "下拉搜索·功能管理", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.SearchFunctionManagerActivity", "功能管理", 2] },
+  { kind = "back" },
+  { kind = "lib", name = "tap_page", args = ["隐私", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.PrivacySettingsActivity"], kwargs = { scrolls = 4 } },
+  { kind = "lib", name = "close_named_expect", args = [["个性化推荐"], "下拉搜索·隐私", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.PrivacySettingsActivity", "隐私", 2] },
+]
+
+[[segment]]
+name = "负一屏"
+ops = [
+  { kind = "print", text = "  将关闭热点资讯、搜索框提示词，轮播改为不显示；保留功能卡片和推荐服务总开关。" },
+  { kind = "lib", name = "assistant_settings" },
+  { kind = "lib", name = "close_named_expect", args = [["搜索框提示词"], "负一屏·搜索框提示词", "com.coloros.assistantscreen/com.oplus.assistantscreen.setting.AssistantScreenSettingActivity", "设置", 2] },
+  { kind = "lib", name = "tap_page", args = ["推荐服务", "com.coloros.assistantscreen/com.oplus.assistantscreen.setting.recommendservice.RecommendServiceSettingActivity"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "hide_carousel" },
+  { kind = "back" },
+  { kind = "lib", name = "wait_page", args = ["com.coloros.assistantscreen/com.oplus.assistantscreen.setting.AssistantScreenSettingActivity", "设置"] },
+  { kind = "lib", name = "tap_page", args = ["隐私", "com.coloros.assistantscreen/com.oplus.assistantscreen.setting.activity.PrivacyActivity"], kwargs = { scrolls = 4 } },
+  { kind = "lib", name = "tap_page", args = ["个性化推荐", "com.coloros.assistantscreen/com.oplus.assistantscreen.setting.activity.PersonalRecommendManageActivity"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "close_named_expect", args = [["热点资讯"], "负一屏·个性化推荐", "com.coloros.assistantscreen/com.oplus.assistantscreen.setting.activity.PersonalRecommendManageActivity", "个性化推荐", 2] },
+]
+
+[[segment]]
+name = "视频"
+ops = [
+  { kind = "print", text = "  将关闭 OPPO 视频个性化推荐与广告推荐；保留在线播放和下载设置。" },
+  { kind = "start", pkg = "com.heytap.yoli" },
+  { kind = "go", text = "我的", expect = "设置" },
+  { kind = "lib", name = "tap_page", args = ["设置", "com.heytap.yoli/com.heytap.yoli.mine.setting.SettingActivity"], kwargs = { scrolls = 0, exact = false } },
+  { kind = "lib", name = "tap_page", args = ["个性化管理", "com.heytap.yoli/com.heytap.yoli.mine.setting.PersonalizedContentManageActivity"], kwargs = { scrolls = 3 } },
+  { kind = "lib", name = "close_named_expect", args = [["个性化广告推荐", "个性化内容推荐"], "OPPO视频·个性化管理", "com.heytap.yoli/com.heytap.yoli.mine.setting.PersonalizedContentManageActivity", "个性化管理", 2] },
+]
+
+[[segment]]
+name = "游戏中心"
+code = "step_game_center"
+
+[[segment]]
+name = "小布建议"
+code = "step_advice"
+
+[[segment]]
+name = "主题商店"
+ops = [
+  { kind = "print", text = "  检查主题商店服务模式；基础服务模式无广告，不代为同意完整模式协议。" },
+  { kind = "shell", command = "am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.oplus.themestore" },
+  { kind = "sleep", seconds = 1 },
+  { kind = "if_focus", text = "BasicEntranceActivity", ops = [
+    { kind = "print", text = "  · 主题商店处于「基础服务」模式，本身不含广告，保持不变" },
+    { kind = "return" },
+  ] },
+  { kind = "print", text = "  · 当前未处于基础服务模式，跳过自动处理以避免误点协议" },
+]

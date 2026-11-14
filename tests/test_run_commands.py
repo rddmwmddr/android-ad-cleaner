@@ -539,32 +539,76 @@ class RecipeLineTests(unittest.TestCase):
 
     def test_borrowed_reference_script_is_not_reported_as_a_version_mismatch(self):
         # 版本与实机完全一致（build_ok 为真），只是因为借了同品牌的脚本
-        st = status_778(recipe="recipes/meizu-MEIZU 21 Pro/recipe.py", recipe_ref=True,
+        st = status_778(recipe="meizu-MEIZU 21 Pro", recipe_ref=True,
                     recipe_build="Flyme 12.6.0.0A", recipe_ok=False)
         self.assertTrue(run.build_ok(INFO_778, st["recipe_build"]))
         line = self.diagnostics(st)
-        self.assertIn("- 机型脚本：recipes/meizu-MEIZU 21 Pro/recipe.py"
+        self.assertIn("- 机型脚本：meizu-MEIZU 21 Pro"
                       "（同品牌参考脚本，录制版本 Flyme 12.6.0.0A）", line)
         self.assertNotIn("不一致", line)
 
     def test_borrowed_reference_script_without_a_recorded_version(self):
-        line = self.diagnostics(status_778(recipe="recipes/meizu-MEIZU 21 Pro/recipe.py", recipe_ref=True))
+        line = self.diagnostics(status_778(recipe="meizu-MEIZU 21 Pro", recipe_ref=True))
         self.assertIn("（同品牌参考脚本，录制版本 未标）", line)
         self.assertNotIn("不一致", line)
 
     def test_own_script_keeps_the_version_comparison(self):
-        line = self.diagnostics(status_778(recipe="recipes/meizu-MEIZU 21 Note/recipe.py",
+        line = self.diagnostics(status_778(recipe="meizu-MEIZU 21 Note",
                                        recipe_build="Flyme 12.6.0.0A"))
-        self.assertIn("- 机型脚本：recipes/meizu-MEIZU 21 Note/recipe.py（录制版本 Flyme 12.6.0.0A，一致）", line)
+        self.assertIn("- 机型脚本：meizu-MEIZU 21 Note（录制版本 Flyme 12.6.0.0A，一致）", line)
         self.assertNotIn("参考", line)
 
     def test_own_script_with_a_different_version_still_says_so(self):
-        line = self.diagnostics(status_778(recipe="recipes/meizu-MEIZU 21 Note/recipe.py",
+        line = self.diagnostics(status_778(recipe="meizu-MEIZU 21 Note",
                                        recipe_build="Flyme 12.5.0.0A", recipe_ok=False))
         self.assertIn("（录制版本 Flyme 12.5.0.0A，不一致）", line)
 
     def test_no_script_stays_no_script(self):
         self.assertIn("- 机型脚本：无", self.diagnostics(status_778()))
+
+
+# ---------- #1252：诊断行只打脚本身份，status-json 另留 recipe_path ----------
+#   报告者贴的日志里脚本身份要稳定（#1237 用户故事 17）：取脚本目录名，不随仓库目录布局变。
+
+
+ID_INFO = {"brand": "OnePlus", "model": "PYB110", "name": "OnePlus PYB110",
+           "build": "16.0.9", "android": "16"}
+ID_PATH = os.path.join(ROOT, "recipes", "oppo/PYB110", "recipe.py")
+
+
+class RecipeIdentityTests(unittest.TestCase):
+    def setUp(self):
+        patchers = [patch.object(run, "adb", return_value="adb"),
+                    patch.object(run.subprocess, "run", return_value=SimpleNamespace(
+                        stdout="List of devices attached\nS\tdevice\n")),
+                    patch.object(run, "info", return_value=ID_INFO),
+                    patch.object(run, "recipe_for", return_value=(ID_PATH, False)),
+                    patch.object(run, "recipe_meta", return_value={"build": "16.0.9", "steps": ["系统广告"]}),
+                    patch.object(run, "locked", return_value=False),
+                    patch.object(run, "input_blocked", return_value=False),
+                    patch.object(run, "ad_packages", return_value=()),
+                    patch.object(run, "quickapps", return_value=[]),
+                    patch.object(run, "local_counts", return_value=None),
+                    patch.object(run, "sh", return_value="")]
+        for patcher in patchers:
+            patcher.start(); self.addCleanup(patcher.stop)
+
+    def test_check_and_devices_print_the_identity_without_the_path(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(run.cmd_check("S", []), 0)
+            self.assertEqual(run.cmd_devices([]), 0)
+        self.assertIn("机型脚本：PYB110；录制版本 16.0.9，版本一致", out.getvalue())
+        self.assertIn("机型脚本：PYB110\n", out.getvalue())
+        self.assertNotIn("recipes/", out.getvalue())
+
+    def test_status_json_keeps_the_identity_and_a_path_for_file_consumers(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(run.cmd_status_json("S", []), 0)
+        status = json.loads(out.getvalue().strip().splitlines()[-1])
+        self.assertEqual(status["recipe"], "PYB110")
+        self.assertEqual(status["recipe_path"], os.path.join("recipes", "oppo", "PYB110", "recipe.py"))
 
 
 # ---------- 来源 tests/test_finish_stay_on_632.py ----------

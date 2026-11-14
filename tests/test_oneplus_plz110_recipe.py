@@ -2,7 +2,6 @@
 
 回读守卫沿用 PMX110 已有行为，旧实现也绿，守的是不回退。
 """
-import ast
 from pathlib import Path
 import sys
 import unittest
@@ -13,9 +12,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tool'))
 from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock
 import fast
+import fixtures
 import run
+import recipe_nav
+import recipe_strategies
+import recipe_steps
 
-RECIPE = ROOT / 'recipes/oneplus-PLZ110/recipe.py'
+RECIPE = ROOT / 'recipes/oppo/PLZ110/PLZ110.toml'
 
 class Plz110RecipeTests(unittest.TestCase):
     def test_exact_model_has_its_own_seven_verified_segments(self):
@@ -29,27 +32,34 @@ class Plz110RecipeTests(unittest.TestCase):
         scope, _ = load_recipe(phone, RECIPE, ['__no_steps__'])
         return phone, scope
 
+    def stub(self, scope, name, mock):
+        """把库实现换成桩：例外函数与解释器按模块属性调用，scope 里只留同一份给断言。"""
+        for module_name, module in (("nav", recipe_nav), ("strategies", recipe_strategies),
+                                    ("steps", recipe_steps)):
+            if hasattr(module, name):
+                fixtures.patch_library(self, {f"{module_name}.{name}": mock})
+                break
+        scope[name] = mock
+        return mock
+
     def test_store_prefers_privacy_entry_with_authorization_fallback(self):
         phone, scope = self.scope()
-        for helper in ('app_settings', 'row', 'close_named'):
-            scope[helper] = Mock()
-        scope['read_switches'] = Mock(return_value={'福利专区': False})
-        node = next(node for node in ast.parse(RECIPE.read_text(encoding='utf-8')).body
-                    if isinstance(node, ast.FunctionDef) and node.decorator_list
-                    and node.decorator_list[0].args[0].value == '软件商店')
-        node.decorator_list, node.name = [], 'store_action'
-        exec(compile(ast.Module(body=[node], type_ignores=[]), str(RECIPE), 'exec'), scope)
-        scope['store_action']()
+        for helper in ('app_settings', 'row', 'close_named_optional'):
+            self.stub(scope, helper, Mock())
+        self.stub(scope, 'read_switches', Mock(return_value={'福利专区': False}))
+        store = next(item.action for item in scope['rt'].steps if item.name == '软件商店')
+        store()
         self.assertEqual(scope['app_settings'].call_args_list,
                          [call('com.heytap.market'), call('com.heytap.market')])
         self.assertEqual(scope['row'].call_args_list, [
-            call(('隐私', '隐私授权管理'), package='com.heytap.market', activity='PrivacyActivity',
+            # 页面树里的等价文案是 TOML 数组（转成 list）：按内容与顺序比，容器类型不是判据。
+            call(['隐私', '隐私授权管理'], package='com.heytap.market', activity='PrivacyActivity',
                  tries=3),
             call('个性化推荐', package='com.heytap.market', activity='PersonalRecommendActivity'),
             call('服务管理'),
         ])
         scope['read_switches'].assert_called_once_with('服务管理')
-        self.assertEqual(scope['close_named'].call_args_list, [
+        self.assertEqual(scope['close_named_optional'].call_args_list, [
             call(['个性化推荐'], '个性化推荐'),
             call(['福利专区'], '服务管理', snapshot={'福利专区': False}),
         ])
@@ -108,30 +118,30 @@ class Plz110RecipeTests(unittest.TestCase):
 
     def test_already_closed_targets_do_not_click_service_switches(self):
         phone, scope = self.scope()
-        scope['read_switches'] = Mock(return_value={
+        self.stub(scope, 'read_switches', Mock(return_value={
             '应用安全': True, '应用安全安全内容推荐': False, '帮助与客服': True,
-        })
-        scope['close_named'](['应用安全安全内容推荐'], '服务管理')
+        }))
+        scope['close_named_optional'](['应用安全安全内容推荐'], '服务管理')
         scope['read_switches'].assert_called_once_with('服务管理', 12)
         phone.off.assert_not_called()
         self.assertEqual(scope['VERIFIED_SWITCHES'], 1)
 
     def test_service_change_fails_readback(self):
         phone, scope = self.scope()
-        scope['read_switches'] = Mock(side_effect=[
+        self.stub(scope, 'read_switches', Mock(side_effect=[
             {'应用安全': True, '应用安全安全内容推荐': True},
             {'应用安全': False, '应用安全安全内容推荐': False},
-        ])
+        ]))
         with self.assertRaisesRegex(RuntimeError, '其他功能开关状态变化'):
-            scope['close_named'](['应用安全安全内容推荐'], '服务管理')
+            scope['close_named_optional'](['应用安全安全内容推荐'], '服务管理')
         self.assertEqual(scope['read_switches'].call_count, 2)
         phone.off.assert_called_once()
 
     def test_missing_target_does_not_click(self):
         phone, scope = self.scope()
-        scope['read_switches'] = Mock(return_value={'应用安全': True})
+        self.stub(scope, 'read_switches', Mock(return_value={'应用安全': True}))
         with self.assertRaisesRegex(RuntimeError, '未识别全部目标'):
-            scope['close_named'](['应用安全安全内容推荐'], '服务管理')
+            scope['close_named_optional'](['应用安全安全内容推荐'], '服务管理')
         scope['read_switches'].assert_called_once_with('服务管理', 12)
         phone.off.assert_not_called()
 

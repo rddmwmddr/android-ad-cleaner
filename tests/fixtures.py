@@ -57,6 +57,20 @@ def load_tool():
         sys.path.insert(0, tool)
 
 
+def recipe_sources(folder=None):
+    """机型脚本的源码：还是 `recipe*.py` 的，加上已转页面树的同名例外 `.py`（#1264）。
+
+    转成页面树之后，过程化的段与模块级常量住在同目录同名的 `.py` 里；只 glob `recipe*.py`
+    会让这些机型从「文案 / 实现只住一处」这类守卫里静默消失。"""
+    root = Path(folder or ROOT) / "recipes"
+    found = set(root.glob("*/*/recipe*.py"))
+    for toml in root.glob("*/*/*.toml"):
+        exception = toml.with_suffix(".py")
+        if exception.is_file():
+            found.add(exception)
+    return sorted(found)
+
+
 def all_pages(folder=None):
     """tests/ 里所有能解析的 <hierarchy> 字面量：[(来源标签, xml)]。
 
@@ -450,7 +464,7 @@ def normalize(source):
     文档串各写各的，但都不改行为，逐字判据只认代码本身。`global X` 是本地定义留下的产物，
     改走注入之后不再需要，一起丢掉。`recipe_steps` 在 mypy 严格档的名单里，实现上的签名注解
     是那份要求的产物，脚本副本不写，同样不改行为。函数体里的变量注解（`AnnAssign`）不剥：
-    出现时两边都会写，不写的那一边本来就该红。两个注入面的副本守卫共用这一份判据。"""
+    出现时两边都会写，不写的那一边本来就该红。三个注入面的副本守卫共用这一份判据。"""
     tree = ast.parse(textwrap.dedent(source))
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Module)) \
@@ -500,26 +514,24 @@ class RecipeClock:
 
 
 def load_recipe(phone, path, only=None, out=None, **extra):
-    """装载机型脚本：注入 p / ONLY / 假 time，返回 (scope, 输出流)。
+    """装载并跑完机型脚本：返回 (scope, 输出流)。装载本身走 `tool/recipe_loader.py`，与引擎同一份。
 
-    ONLY 命中的段在 exec 当时就跑，而脚本自己的 `import time` 会盖掉注入的同名全局，
-    所以执行期换的是模块上的 sleep / time / monotonic；跑完再把 scope["time"] 换成
-    RecipeClock，用例之后调脚本里的函数也不真睡。
+    脚本自己的 `import time` 会盖掉注入的同名全局，所以执行期换的是模块上的 sleep / time /
+    monotonic；跑完再把 scope["time"] 换成 RecipeClock，用例之后调脚本里的函数也不真睡。
 
-    `only` 照机型脚本自己的约定：不给（None）表示一段都不跑，给空集合表示跑全部段
-    （脚本里是 `ONLY = globals().get("ONLY") or []` 配 `if not ONLY or name in ONLY`）。
+    `only`：不给（None）表示一段都不跑，给空集合表示跑全部段。`scope["ONLY"]` 与
+    `scope["VERIFIED_SWITCHES"]` 代理到这次的 `rt`，装载之后改名单、读回读确认数都照旧生效。
     """
     clock = RecipeClock()
-    scope = {"p": phone, "ONLY": _only_list(only), **extra}
     load_tool()
-    import recipe_kit                      # 与引擎注入同一份；tool/ 只在 load_tool() 之后才在 sys.path 上
-    recipe_kit.preamble(phone, scope)
+    import recipe_loader                   # 与引擎同一份；tool/ 只在 load_tool() 之后才在 sys.path 上
     out = out if out is not None else io.StringIO()
     with patch.object(_time, "sleep", clock.sleep), patch.object(_time, "time", clock.time), \
             patch.object(_time, "monotonic", clock.monotonic), contextlib.redirect_stdout(out):
-        exec(compile(Path(path).read_text(encoding="utf-8"), str(path), "exec"), scope)
-    scope["time"] = clock
-    return scope, out
+        recipe = recipe_loader.load(path, phone, only=_only_list(only), clock=clock, namespace=extra)
+        recipe.run()
+    recipe.namespace["time"] = clock
+    return recipe.namespace, out
 
 
 def _only_list(only):
@@ -744,3 +756,131 @@ class GitRepo:
                               env=dict(self.env, **(env_extra or {})),
                               capture_output=True, text=True, encoding="utf-8", errors="replace")
         return done.returncode, done.stdout + done.stderr
+
+
+def _library_surfaces():
+    """库名字可能出现在哪些模块的全局名里：#1269 拆库后是三个重导出面 + `recipe_lib` 各家族模块。
+
+    同一个实现既可能是家族的 owner（`recipe_lib.<家族>`），也可能被 `from recipe_lib.shared import X`
+    复制进调用方的全局名；调用点按裸名解析，所以桩要把每一份同名绑定都换掉。"""
+    import recipe_nav
+    import recipe_strategies
+    import recipe_steps
+    import recipe_lib
+    return (recipe_nav, recipe_strategies, recipe_steps) + tuple(recipe_lib.MODULES)
+
+
+def patch_surface(case, name, mock):
+    """把库实现 `name` 在所有库模块里换成 `mock`（原样调用，不剥 `(p, rt)`）。
+
+    实现按裸名解析自己所在模块的全局名，跨模块又可能被 `from recipe_lib.x import name` 复制一份；
+    只换 `recipe_nav.<name>` 换不到那些绑定。`addCleanup` 还原。测试专用接缝。
+    """
+    import catalog.interpreter as interpreter
+    surfaces = _library_surfaces()
+    old_library = interpreter.LIBRARY.get(name)
+    saved = []
+    for module in surfaces:
+        if hasattr(module, name):
+            saved.append((module, name, getattr(module, name)))
+            setattr(module, name, mock)
+    interpreter.LIBRARY[name] = mock
+
+    def restore():
+        for module, attr, original in reversed(saved):
+            setattr(module, attr, original)
+        if old_library is None:
+            interpreter.LIBRARY.pop(name, None)
+        else:
+            interpreter.LIBRARY[name] = old_library
+
+    case.addCleanup(restore)
+    return mock
+
+
+def patch_library(case, targets):
+    """测试替身接缝：`targets = {"nav.wait_page": mock, "strategies.close_named_optional": mock}`。
+
+    键的第二段是名字（`nav.` / `strategies.` / `steps.` 前缀只为兼容，不决定 owner）；实现按名字在
+    `recipe_lib` 各模块与三个重导出面里逐份替换。调用方带上的 `(p, rt)` 前缀先剥掉，桩收到的就是
+    业务实参。`case.addCleanup` 按 LIFO 还原。这是**测试专用**的接缝：生产代码不按名字查表取实现。
+    """
+    import catalog.interpreter as interpreter
+    surfaces = _library_surfaces()
+    saved = []
+    for dotted, mock in targets.items():
+        attr = dotted.split(".", 1)[1]
+
+        def wrapper(p, rt, *args, _mock=mock, **kwargs):
+            return _mock(*args, **kwargs)
+
+        owners = [module for module in surfaces if hasattr(module, attr)]
+        if not owners:
+            raise AttributeError(attr)
+        old_library = interpreter.LIBRARY.get(attr)
+        for module in owners:
+            saved.append((module, attr, getattr(module, attr), old_library))
+            setattr(module, attr, wrapper)
+        # 数据 `lib` op 查 LIBRARY、例外/库代码查模块属性：同一个替身两处都换。
+        interpreter.LIBRARY[attr] = wrapper
+
+    def restore():
+        for module, attr, original, old_library in reversed(saved):
+            setattr(module, attr, original)
+            if old_library is None:
+                interpreter.LIBRARY.pop(attr, None)
+            else:
+                interpreter.LIBRARY[attr] = old_library
+
+    case.addCleanup(restore)
+    return targets
+
+
+def bridge_scope(case, scope, names=None):
+    """把库实现接到 `scope[name]`：用例照旧 `scope[name] = Mock()`，执行按模块属性 / `LIBRARY` 走。
+
+    没设桩的名字走原实现（创建接缝时捕获的那一份），所以缺省行为不变。`rt.page` 单独接
+    （测试常 `scope["page"] = Mock()`）。测试专用接缝，生产代码不按名字查表；`addCleanup` LIFO 还原。
+    """
+    import catalog.interpreter as interpreter
+    surfaces = _library_surfaces()
+    names = names or (
+        "read_switches", "open_page", "row", "app_settings", "close_named_optional",
+        "browser_settings", "require_installed", "switch_top", "hide_carousel", "more_menu",
+        "menu_state", "settings_page", "tap_page", "wait_page", "navigate", "tap_by_scroll",
+        "settings_icon_visible", "gear", "theme_settings", "open_settings",
+        "close_all_listed", "system_settings", "assistant_settings", "settings_home", "tap", "close_named_vivo",
+        "open_app_settings", "close_named", "read_on_page", "tap_by_scroll", "scan_switches",
+        "tap_bottom_tab", "wait_bottom_tab", "close_with_plain_tap", "close_named_plain",
+        "safe_switches", "store_personalization", "assistant_screen", "negative_screen")
+    saved = []
+    for name in names:
+        owners = [module for module in surfaces if hasattr(module, name)]
+        if not owners:
+            continue
+        old_library = interpreter.LIBRARY.get(name)
+        for module in owners:
+            original = getattr(module, name)
+
+            def delegate(*args, _name=name, _real=original, **kwargs):
+                if _name in dict.keys(scope):
+                    return scope[_name](*args[2:], **kwargs)
+                return _real(*args, **kwargs)
+
+            setattr(module, name, delegate)
+            saved.append((module, name, original, old_library))
+        interpreter.LIBRARY[name] = delegate
+    rt = scope["rt"]
+    real_page = rt.page
+    rt.page = lambda *args, **kwargs: (scope["page"](*args, **kwargs)
+                                       if "page" in dict.keys(scope) else real_page(*args, **kwargs))
+
+    def restore():
+        for module, name, original, old_library in reversed(saved):
+            setattr(module, name, original)
+            if old_library is None:
+                interpreter.LIBRARY.pop(name, None)
+            else:
+                interpreter.LIBRARY[name] = old_library
+
+    case.addCleanup(restore)

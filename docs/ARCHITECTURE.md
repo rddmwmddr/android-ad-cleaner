@@ -32,10 +32,14 @@
 |---|---|
 | `run.py` | 总入口：命令分派、退出码、设备信息、备份的存取 |
 | `fast.py` | 引擎出口：`Phone` 门面只做转发与组合；协作者都在 `tool/phone/`（下一张表），模块级名字仍从这里可 import（[ADR-0033](adr/0033-phone-phase-modules.md)） |
-| `recipe_kit.py` | 机型脚本的前导：段包装、入口断言、跳过出口、两个台账（[ADR-0029](adr/0029-recipe-preamble-injection.md)） |
-| `recipe_nav.py` | 机型脚本的公共导航助手：跨文件代码逐字相同的导航过程收在这里，由 `preamble()` 调 `install()` 注入；按家族分节（小米系 / vivo / OPPO / 其余·跨家族），同名但代码不同的是机型知识、留在脚本里覆盖（[ADR-0029](adr/0029-recipe-preamble-injection.md)） |
-| `recipe_steps.py` | 机型脚本的公共段体：跨文件代码逐字相同的 `@step` 段体收在这里，由 `preamble()` 在导航之后调 `install()` 注入；脚本侧只留一行调用，段体依赖的模块常量按名字从执行作用域现取，同名但代码不同的是机型知识、留在脚本里（[ADR-0035](adr/0035-recipe-steps-injection.md)） |
-| `recipe_meta.py` | 机型脚本头部的元数据：录制版本、机型列表、段名；只有正则，不背 CLI 入口的副作用 |
+| `recipe_loader.py` | 机型脚本的唯一装载入口：按路径转发到 `tool/catalog`（`.toml` 页面树），不再有 `.py` 脚本分支；`fast.execute`、`adapt.check_draft`、`tests/fixtures.load_recipe` 三处都走它（[ADR-0038](adr/0038-recipe-catalog.md)） |
+| `tool/catalog/` | 页面树的装载 + 校验 + 解释器（`loader.py` / `schema.py` / `interpreter.py`）：数据的唯一执行入口，校验器与解释器共用 `load()`，未知 kind 与多余键在装载期就报错；每段的段体包成 action 经 `Runtime.run_step` 执行，段归属不断。`recipe_loader.py` 把 `.toml` 转发到这里（[ADR-0038](adr/0038-recipe-catalog.md)） |
+| `recipe_runtime.py` | 这一次执行（`rt`）：段过滤、跳过/断言出口（`page` / `require_switches` / `skip_in_safe_mode` / `start_or_skip`）、安全模式、分段台账、失败段与中止、时钟、每机型常量与回读确认数；段包装在 `Runtime.run_step()`，数据段按声明顺序执行（[ADR-0038](adr/0038-recipe-catalog.md)、#1268） |
+| `recipe_kit.py` | 运行时名词的显式 re-export（`DONE` / `SkipStep` / `Runtime` 等）；`preamble()` / `@step` / 执行作用域都已删除（#1268） |
+| [recipe_lib/](../recipe_lib/) | 机型库（#1269）：按家族分文件（`<家族>.py`）+ 跨家族共享（`shared.py`），文件内分「词汇 / 策略」。实现都是普通函数收 `(p, rt, …)`，数据用 `lib` 按名字点名；同一个名字有几套实测走法时由 `rt.constants` 里的机型常量选（`GEAR_STYLE` / `BROWSER_FLOW` / `MENU_STYLE` 等），缺省档保留旧行为。归属按家族数算，守卫在 `tests/test_recipe_nav.py`（[ADR-0038](adr/0038-recipe-catalog.md)、#1269） |
+| `recipe_nav.py` / `recipe_strategies.py` / `recipe_steps.py` | `recipe_lib` 的稳定 import 面（#1269）：机型例外 `.py` 仍从这里取名字，内部实现已搬进 `recipe_lib`；新实现不要写进这三个文件 |
+| `recipe_audit.py` | 本机函数审计：每份脚本自己定义了哪些模块级函数、归哪一档，「本机策略：N 个」从哪来；`check` 与 `status-json` 取同一份计数（`counts()`），只读 AST、不 import、不连手机 |
+| `recipe_meta.py` | 机型脚本头部的元数据：录制版本、机型列表、段名，以及对外的稳定身份（目录名，`recipe_id()`）；只有正则，不背 CLI 入口的副作用 |
 | `recipe_source.py` | 机型脚本的事实层：一份源码里的调用点与模块级常量，纯 AST，入口速查与词库共用（[ADR-0034](adr/0034-recipe-source-facts.md)） |
 | `chan_fast.py` | 营销通知渠道：`ChannelPage`（到页 + 认行）、批处理循环 |
 | `channel_policy.py` | 渠道判定：营销候选、扫描排除、默认不勾、受保护、前台服务 |
@@ -84,7 +88,7 @@
 | `huawei_channels.py` | 华为 ALN-AL00 的清单式渠道处理，需人工审核清单，客户端不自动跑 |
 | `gen_brand_taps.py` | 从 `docs/手机版教程/brand-taps.json` 渲染连点表 |
 | `gen_site_css.py` | 把仓库根 `site.css` 渲染进官网两页的共享样式块 |
-| `verify_ledger.py` | 配方验证台账：读 `recipes/verified.toml`，每个配方文件一行、按距今天数降序，覆盖度与证据来源是两个维度（`entry()` 也供 `run.py` 的 `status-json` 取这三样），缺记录的条目 `entry()` 给「未记录 / 未知」、CLI 行只打「未记录」，验后改过标「待复核」，记录 build 对不上脚本 `BUILD` 的打「build 不符」（沿用 #916、#917、#918 的台账口径，#1124 拆出证据来源） |
+| `verify_ledger.py` | 配方验证台账：读 `recipes/verified.toml`，每个配方文件一行、按距今天数降序，覆盖度与证据来源是两个维度（`entry()` 也供 `run.py` 的 `status-json` 取这三样），缺记录的条目 `entry()` 给「未记录 / 未知」、CLI 行只打「未记录」，段体正文改过标「待复核」（比记录里的 `body_hash` 与脚本现算的值；`--hash` 只打印刷新基线用的当前值），记录 build 对不上脚本 `BUILD` 的打「build 不符」（沿用 #916、#917、#918 的台账口径，沿用 #1124 的证据来源拆档，沿用 #1242 把判据从提交日期换成段体哈希） |
 | `check_dco.py` | PR 的 DCO 校验：逐个非 merge 提交比对 `Signed-off-by` 与作者邮箱（#848） |
 | `check_conventional.py` | PR 的提交主题校验：`type(scope): subject`，类型清单 `TYPES` 也在这里（#849） |
 | `check_ticket_ref.py` | PR 的票号校验：分支名以 `-<票号>` 结尾、正文有 `Refs #N` / `Closes #N` 且是同一张（#1001） |

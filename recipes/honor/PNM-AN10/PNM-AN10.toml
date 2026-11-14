@@ -1,0 +1,89 @@
+# 荣耀 PNM-AN10（MagicOS 10）的页面树（catalog，#1262）。2026-10-23 实测通过。
+# 线性段是数据；过程化的段（坐标、选择器、dumpsys、条件分支）走 code= 例外函数。
+model = "PNM-AN10"
+models = ["PNM-AN10"]
+build = ""
+
+[const]
+BROWSER_FLOW = "honor_mounted"
+OPEN_SETTINGS_STYLE = "honor"
+
+[[segment]]
+name = "广告跟踪"
+code = "step_ad_tracking"
+
+[[segment]]
+name = "YOYO"
+ops = [
+  {kind = "require_setting", kw = "新闻资讯", miss_print = "没搜到「新闻资讯」"},
+  {kind = "code", name = "dismiss_no"},
+  {kind = "off", only = ["新闻资讯"], page = "YOYO 建议"},
+]
+
+[[segment]]
+name = "搜索"
+code = "step_search"
+
+[[segment]]
+name = "负一屏"
+code = "step_negative"
+
+[[segment]]
+name = "桌面文件夹"
+ops = [
+  {kind = "skip_in_safe_mode"},
+  {kind = "start", pkg = "com.hihonor.appmarket", activity = ".module.topapps.TopAppsSettingActivity"},
+  {kind = "off", page = "精品应用·更多推荐", page_wide = true},
+  {kind = "start", pkg = "com.hihonor.appmarket", activity = ".popularapps.activity.PopularAppsSettingActivity"},
+  {kind = "off", page = "热门推荐管理", page_wide = true},
+]
+
+[[segment]]
+name = "市场"
+code = "step_market"
+
+[[segment]]
+name = "浏览器"
+code = "step_browser"
+
+[[segment]]
+name = "主题"
+code = "step_theme"
+
+[[segment]]
+name = "视频"
+ops = [
+  {kind = "start", pkg = "com.hihonor.youku.video", activity = "com.youku.android.youkusetting.activity.SettingsActivity"},
+  {kind = "dismiss"},
+  {kind = "tap", text = "其他设置", exact = true},
+  {kind = "off", only = ["个性化内容", "个性化广告", "OAID"], page = "视频·其他设置"},
+  {kind = "back", n = 2},
+]
+
+[[segment]]
+name = "系统管家"
+ops = [
+  {kind = "start", pkg = "com.hihonor.systemmanager", activity = ".mainscreen.SettingActivity"},
+  {kind = "off", only = ["应用推荐"], page = "系统管家·设置"},
+  {kind = "back"},
+]
+
+[[segment]]
+name = "音乐"
+code = "step_music"
+
+[[segment]]
+name = "阅读"
+ops = [
+  {kind = "start", pkg = "com.hihonor.dz.reader"},
+  {kind = "go", text = "我的", expect = "更多设置"},
+  {kind = "tap", text = "更多设置", exact = true},
+  {kind = "off", only = ["接收新通知"], page = "阅读·设置（推书通知）"},
+  {kind = "tap", text = "广告推荐服务", exact = true, scrolls = 0},
+  {kind = "off", page = "阅读·广告推荐服务", page_wide = true},
+  {kind = "back", n = 2},
+]
+
+[[segment]]
+name = "魔法画报"
+code = "step_magazine"

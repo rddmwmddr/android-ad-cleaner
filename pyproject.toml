@@ -8,10 +8,17 @@ extend-exclude = [".private"]
 # zip 缺 strict、盲断异常等）。不加格式与行长规则。
 select = ["F", "E9", "B"]
 
-# 类型检查只接窄口径：扫引擎目录，扫界面目录与机型脚本不在范围。
+[tool.ruff.lint.per-file-ignores]
+# 机型脚本的 F401 是假阳性（#1247）：注入面按名字从执行作用域取用，`import time` /
+# `import adb_link` 删掉运行时就 KeyError；`if TYPE_CHECKING:` 块里的 import 只给静态检查看。
+# 整类关在这里，别在每个文件里撒 `# noqa`。
+"recipes/**/*.py" = ["F401"]
+
+# 类型检查只接窄口径：`tool/` 走不带参数的那条 mypy；机型脚本由 `tool/typecheck_recipes.py`
+# 逐份跑（43 份都叫 `recipe.py`，一次扫会撞模块名，理由在那个脚本的 docstring 里）。
 [tool.mypy]
-# 扫描范围属于配置：`gui/` 有自己的平台分支与假对象，`recipes/` 靠注入作用域执行，
-# 静态分析在那里看到的全是未定义名。
+# 扫描范围属于配置：`gui/` 有自己的平台分支与假对象；`recipes/` 不走 `files`，
+# 由 `typecheck_recipes.py` 逐份喂给同一个宽松档。
 files = ["tool"]
 # 与 `.python-version`、跑 unittest 的 Linux job 同版。
 python_version = "3.13"
@@ -28,9 +35,11 @@ disable_error_code = ["var-annotated"]
 # 不写 `strict = true`：实测 mypy 1.18.2 在 overrides 里把它当全局设置（全仓一起变严格），
 # per-module 只认逐项 flag。`warn_redundant_casts` 不是 per-module 可写项，
 # `warn_unused_configs` 只对全局有意义，两项只能留在缺省。
+# `recipe_steps` 已从严格档移除（#1268）：它不再是纯逻辑段体表，而是直接下发设备动作的库实现，
+# 与 `recipe_nav` / `recipe_strategies` 同类，按宽松档检查。
 [[tool.mypy.overrides]]
 module = ["polarity", "channel_policy", "host", "events", "recipe_meta", "recipe_source",
-          "recipe_steps", "reader", "plan", "summary", "coverage_note"]
+          "reader", "plan", "summary", "coverage_note"]
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
 disallow_untyped_calls = true

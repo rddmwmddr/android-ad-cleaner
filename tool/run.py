@@ -38,7 +38,8 @@ from captures import Captures, human_size
 from captures import root_from_env as capture_root
 from entries import FAMILY          # 品牌族只此一份；广告包、参考脚本与版本比较都按它归
 from host import ON_PHONE           # 手机版不写插电常亮（#731）
-from recipe_meta import recipe_meta
+from recipe_meta import recipe_id, recipe_meta
+import recipe_audit
 import verify_ledger
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -282,8 +283,9 @@ def ad_packages(brand):
 
 # 没有本型号脚本时用的同品牌参考脚本。以前取目录名排第一的那份，社区每加一个机型，
 # 别的手机用的参考脚本就可能跟着变（10-28 合并社区机型脚本时发现）；固定成一份经过真机验证的最全的。
-REFERENCE = {"oppo": "oppo-PLP120", "honor": "honor-PNM-AN10", "xiaomi": "xiaomi-M154FF", "vivo": "vivo-V2547DA",
-             "meizu": "meizu-MEIZU 21 Pro"}
+# 家族 → 固定参考脚本的型号目录名（`recipes/<家族>/<型号>/recipe.py`）。
+REFERENCE = {"oppo": "PLP120", "honor": "PNM-AN10", "xiaomi": "M154FF", "vivo": "V2547DA",
+             "meizu": "MEIZU 21 Pro"}
 
 # 把脚本 BUILD 或设备版本抽成版本核心时要先切掉的机型名标记（#319）。
 VERSION_MARKER = {"oppo": "_", "vivo": "_A_", "honor": " ", "meizu": "Flyme"}
@@ -332,7 +334,9 @@ def version_match(device_info, recorded, fam):
 
 
 def _dir_family(path):
-    return FAMILY.get(os.path.basename(os.path.dirname(path)).split("-", 1)[0].lower(), "")
+    """脚本所属家族：路径是 `recipes/<家族>/<型号>/recipe*.py`，家族是型号目录的上一级目录名。"""
+    family = os.path.basename(os.path.dirname(os.path.dirname(path)))
+    return FAMILY.get(family.lower(), "")
 
 
 def same_version_family_recipe(allr, fam, preferred, device_info):
@@ -364,22 +368,63 @@ def same_version_family_recipe(allr, fam, preferred, device_info):
     return sorted(ranked)[0][3] if ranked else None
 
 
+def _main_script(directory):
+    """型号目录的主脚本：优先 `recipe.py`，否则已转 catalog 的 `<型号>.toml`；都没有返回 None。
+
+    正本是 `<型号>.toml`（目录名即型号，见 #1261）；其余 `*.toml`（`<型号>-<变体>.toml`）是版本
+    变体，由 `recipe_for` 按 build 单独挑（#1263）。按字母序排的话 `-` 排在 `.` 前面，变体会顶掉
+    正本，所以主本 / 变体只能按名字判，不能取 `sorted(...)[0]`。"""
+    base = os.path.join(directory, "recipe.py")
+    if os.path.exists(base):
+        return base
+    toml = sorted(glob.glob(os.path.join(directory, "*.toml")))
+    if not toml:
+        return None
+    main = os.path.join(directory, os.path.basename(directory) + ".toml")
+    return main if os.path.exists(main) else toml[0]
+
+
+def _recipe_files():
+    """每个型号目录的「主脚本」：`_main_script()`。
+
+    变体 `recipe_*.py` 不算主脚本：它们是同一型号的不同版本，由 `recipe_for` 按 build 单独挑
+    （与旧 `glob(recipe.py)` 的口径一致，否则变体会被当成另一台机的正本）。没有 `recipe.py`
+    也没有 `.toml` 的异常目录（真实仓库没有）退回变体，免得整台机消失。"""
+    out = []
+    for d in sorted(glob.glob(os.path.join(ROOT, "recipes", "*", "*"))):
+        if not os.path.isdir(d):
+            continue
+        main = _main_script(d)
+        if main is not None:
+            out.append(main)
+            continue
+        out += sorted(glob.glob(os.path.join(d, "recipe*.py")))
+    return out
+
+
 def recipe_for(model, brand="", device_info=None):
-    """返回 (路径, 是否参考)。先找本型号（目录名或脚本里的 MODELS）；没有就找同品牌别的机型，作参考。"""
-    allr = sorted(glob.glob(os.path.join(ROOT, "recipes", "*", "recipe.py")))
+    """返回 (路径, 是否参考)。先找本型号（目录名或脚本里的 MODELS）；没有就找同家族别的机型，作参考。"""
+    allr = _recipe_files()
     for r in allr:
         d = os.path.basename(os.path.dirname(r))
-        if d.endswith("-" + model) or model in recipe_meta(r)["models"]:
+        if d == model or model in recipe_meta(r)["models"]:
             # 一个型号可能有不同系统版本的实测路径。仅在版本明确匹配时选择变体。
+            # 变体两种形态：`recipe_*.py` 与 `<型号>-*.toml`（转目录化之后的变体）。
             if device_info:
-                variants = sorted(glob.glob(os.path.join(os.path.dirname(r), "recipe_*.py")))
+                here = os.path.dirname(r)
+                variants = sorted(glob.glob(os.path.join(here, "recipe_*.py")))
+                variants += [t for t in sorted(glob.glob(os.path.join(here, "*.toml"))) if t != r]
                 for variant in variants:
                     recorded = recipe_meta(variant)["build"]
                     if recorded and build_ok(device_info, recorded):
                         return variant, False
             return r, False
     fam = FAMILY.get((brand or "").lower(), "")
-    preferred = os.path.join(ROOT, "recipes", REFERENCE.get(fam, ""), "recipe.py")
+    refdir = os.path.join(ROOT, "recipes", fam, REFERENCE.get(fam, ""))
+    # 参考脚本与 `_recipe_files()` 同一口径：主本优先于变体。vivo 的 `V2547DA-android17.toml`
+    # 按字母序排在 `V2547DA.toml` 前面，取 `sorted(...)[0]` 会让参考变成 Android 17 变体，
+    # `same_version_family_recipe()` 的 `ref_core` 跟着从 `16` 变 `17.1.10.2`。
+    preferred = _main_script(refdir) or os.path.join(refdir, "recipe.py")
     if fam in REFERENCE and os.path.exists(preferred):
         # 固定参考的 BUILD 常写得粗（OS4.0、16），前缀一命中就到它为止，同族里录在同版本上的
         # 脚本永远进不了候选。两条路径同池排（#969）；固定参考的 BUILD 写粗只是让它自己不够贴。
@@ -389,7 +434,7 @@ def recipe_for(model, brand="", device_info=None):
                 return picked, True
         return preferred, True
     for r in allr:
-        if fam and os.path.basename(os.path.dirname(r)).startswith(fam + "-"):
+        if fam and _dir_family(r) == fam:
             return r, True
     return None, False
 
@@ -605,7 +650,7 @@ def cmd_devices(rest):
         if st != "device":
             print(f"{ser}\t{st}\t（unauthorized=手机上点「允许 USB 调试」；offline=重插或重开无线调试）"); continue
         i = info(ser); r, ref = recipe_for(i["model"], i["brand"], i)
-        tag = (os.path.relpath(r, ROOT) + ("（同品牌参考）" if ref else "")) if r else "无（只能跑通用部分）"
+        tag = (recipe_id(r) + ("（同品牌参考）" if ref else "")) if r else "无（只能跑通用部分）"
         print(f"{ser}\t{i['name'] or i['brand']+' '+i['model']}\t{i['model']}\t{i['build']}\t机型脚本：{tag}")
     return 0
 
@@ -627,6 +672,20 @@ def cmd_captures(rest):
 
 def cmd_ui_check(serial, rest):
     return py("fast.py", "-s", serial, "check")
+
+
+def local_counts(recipe_path):
+    """本机函数计数；脚本读不出时返回 None（语法错、编码坏、文件消失）。
+
+    `check` 与 `status-json` 以前只做正则，坏脚本不会让它们崩掉；计数走 `ast.parse`，语法错会抛
+    `SyntaxError`。一条坏脚本不能把整条诊断失败——`status-json` 崩了，GUI 与 `android/smoke.py`
+    都拿不到 JSON。降级只影响这一个数，别的诊断照常出。catalog 机型读同目录的 `.py` 例外，
+    与 `recipe_audit.audit()` 同一口径（`counts_for`）。
+    """
+    try:
+        return recipe_audit.counts_for(str(recipe_path))
+    except (OSError, ValueError, SyntaxError):
+        return None
 
 
 def cmd_check(serial, rest):
@@ -651,17 +710,24 @@ def cmd_check(serial, rest):
         # 换到同族更贴的那份时要说清楚：报告者据此判断要不要手动补入口再报障（#969）。
         # 没有固定参考的品牌（三星、华为）走的是「取同品牌第一份」，没比过版本，不能这么说。
         pinned = REFERENCE.get(fam)
-        note = "（同族同版本，非固定参考）" if pinned and os.path.basename(os.path.dirname(r)) != pinned else ""
-        print(f"机型脚本：本型号没有；同品牌参考 {os.path.relpath(r, ROOT)}{note}，{ver}。"
+        note = "（同族同版本，非固定参考）" if pinned and recipe_id(r) != pinned else ""
+        print(f"机型脚本：本型号没有；同品牌参考 {recipe_id(r)}{note}，{ver}。"
               f"要用：recipe --ref（安全模式：只关脚本里点名的开关，找不到就跳过）")
     elif r:
         rb = recipe_meta(r)["build"]
         # 没标录制版本就无从比对，不能说成「一致」：置空是「只录到底包」这类脚本的常态（#942）。
         ver = f"录制版本 {rb}，{'版本一致' if build_ok(i, rb) else '版本不同：用安全模式跑，部分步骤可能找不到入口'}" if rb \
             else "录制版本 未标，不比对版本"
-        print(f"机型脚本：{os.path.relpath(r, ROOT)}；{ver}")
+        print(f"机型脚本：{recipe_id(r)}；{ver}")
     else:
         print("机型脚本：没有。可跑：通知渠道 chan-scan/chan-off、广告包挂起；其余照 docs/清单 手动做，或用 tool/explore.py 探路")
+    # 这份脚本自带几个本机函数：数字由 recipe_audit 现算，明细用 `python3 tool/recipe_audit.py`（#1240）。
+    # 脚本坏到读不出计数时这一行不打印，别让一条坏脚本带走整条诊断（见 local_counts）。
+    local = local_counts(r) if r else None
+    if local:
+        hooks = f"、声明式钩子 {local['hook']}" if local["hook"] else ""
+        print(f"  本机策略：{local['strategy']} 个；本机函数 {local['total']} 个"
+              f"（引擎词汇 {local['vocabulary']}、真机知识 {local['knowledge']}{hooks}）")
     for p in ad_packages(i["brand"]):
         exists = "package:" in sh(serial, f"pm path {p}")
         if not exists and p in MSA_PKGS:     # msa 在国行 / 海外版是两个包名，只装一个，另一个不提
@@ -964,8 +1030,11 @@ def cmd_status_json(serial, rest):
         ledger, os.path.relpath(r, RECIPES).replace(os.sep, "/") if r else "")
     print(json.dumps({
         "info": i, "locked": locked(serial),
-        "recipe": os.path.relpath(r, ROOT) if r else None, "recipe_ref": ref, "recipe_build": rb, "recipe_ok": ok, "steps": steps,
+        "recipe": recipe_id(r) if r else None, "recipe_path": os.path.relpath(r, ROOT) if r else None,
+        "recipe_ref": ref, "recipe_build": rb, "recipe_ok": ok, "steps": steps,
         "recipe_coverage": coverage, "recipe_evidence": evidence, "recipe_verified": verified,
+        # 这份脚本自带几个本机函数：数字与 `check` 那行同一个来源（#1240）。没有脚本或脚本坏了读不出时是 None。
+        "recipe_local": local_counts(r) if r else None,
         "ads": ads, "quickapps": quickapps(serial),
         "stay_on": sh(serial, "settings get global stay_on_while_plugged_in"),
         "dev": sh(serial, "settings get global development_settings_enabled") == "1",

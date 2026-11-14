@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 from fixtures import load_recipe, phone_mock
 from fast import ScreenLocked
 
-RECIPE = ROOT / "recipes/oppo-PLP120/recipe.py"
+RECIPE = ROOT / "recipes/oppo/PLP120/PLP120.toml"
 SETTINGS_FOCUS = "com.android.settings/com.oplus.settings.OplusSettingsActivity"
 GAME_HOME = "com.nearme.gamecenter/com.nearme.gamecenter.ui.activity.MainActivity"
 GAME_SETTINGS = "com.nearme.gamecenter/com.nearme.gamecenter.settings.SettingActivity"

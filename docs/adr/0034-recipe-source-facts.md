@@ -1,5 +1,9 @@
 # 机型脚本的事实由一份纯 AST 层给出
 
+> B 段（catalog）另由 [ADR-0038](0038-recipe-catalog.md) 取代：按 import 归属解析（`surface_sources` / `imported_sources` / `injected_calls` / `step_sources` / `strategy_sources`）随注入面一起消失，事实层退化为代码里的字面量提取器，`scan_source` / `scan_dir` 与字面量投影保留。
+>
+> 部分由 [ADR-0037](0037-recipe-declarative-loader.md) 取代（2026-11-13 修订：脚本顶部多了 `from recipe_kit import step` 与一份 `if TYPE_CHECKING:` 导入，行号与调用写法保持不变）：事实层仍只读 AST。正文保留当时的决定与取舍。
+
 基线 `2434cb1`。
 
 维护者有两套词法读同一批 43 份机型脚本：入口速查（`tool/entries.py`）按正则切实参、按位置猜赋值；词库（`tool/vocab.py`）走 AST。同一份脚本被解释两次，修一处漏一处——`oneplus-PJA110` 的 `p.start(package, activity=START_ACTIVITIES.get(package))` 就被正则截断过，只因截断后的第二实参既不是字面量也不是标识符、被当时那道严格性检查挡掉，才没有污染生成物（#1156；那道检查是 #1197 删掉的 `_arg_at`）。更紧的是 #1149：段体搬进注入面之后，`p.off(only=[...])` 的字面量会离开脚本，「从脚本现算词条」这条数据源就断了。需要一层能同时回答「这台机用了哪些入口」和「这段关掉了哪些词」。

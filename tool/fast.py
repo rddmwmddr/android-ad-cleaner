@@ -11,7 +11,8 @@
   fast.py -s SERIAL run 机型脚本.py         跑一个品牌机型脚本
 在脚本里：from fast import Phone
 """
-import os, re, sys, time
+import tomllib
+import os, sys, time
 # 显式 re-export：测试与机型脚本用 `fast.ET.fromstring` 解析 dump（模块级名字原地不动）。
 from xml.etree import ElementTree as ET  # noqa: F401 - 显式 re-export：`fast.ET` 是模块级名字
 from stdio import use_utf8_console
@@ -34,7 +35,9 @@ from phone.session import ChannelSession, LaunchSession, LostNote
 import adb_link
 import backups
 import events
-import recipe_kit
+# 显式 re-export：测试与机型脚本拿 `fast.recipe_kit` 取注入面（`preamble` 的调用点已收进装载器）。
+import recipe_kit as recipe_kit
+import recipe_loader
 import wait
 from reader import Reader
 from row import bounds as bounds
@@ -505,21 +508,31 @@ def missed_line(missed, limit=MISSED_SHOWN):
 def report_run(g, p):
     """机型脚本跑完的收尾：先报没做成的段，再报没拨动的开关；任一非空就返回 1（#788）。
 
-    `g` 是 `exec` 的脚本作用域，`p` 是这一轮的 Phone。
+    `g` 可以是这次的 `rt`（`recipe_runtime.Runtime`）或装载作用域；`p` 是这一轮的 Phone。
     段名同时发 `failed_steps` 事件（客户端按它只重跑那几段，#638）；没拨动的开关只有人读的这一行，
     客户端按退出码把整个任务标「失败」。#758 的摘要要把它算进「K 段未完成」，得先有页→段映射。
     中止过的段落另起一行「因中止未执行：…」；第一行与 `failed_steps` 事件仍列全部段名（#838）。
     """
-    if g.get("FAILED_STEPS"):
-        failed = list(g["FAILED_STEPS"])
-        halted = [name for name in failed if name in (g.get("HALTED_STEPS") or [])]
+    failed, halted = _ledger(g)
+    if failed:
         events.emit("failed_steps", steps=failed)
         print("未完成步骤：" + "、".join(failed), flush=True)
         if halted:
             print("因中止未执行：" + "、".join(halted), flush=True)
     if p.missed:
         print(missed_line(p.missed), flush=True)
-    return 1 if g.get("FAILED_STEPS") or p.missed else 0
+    return 1 if failed or p.missed else 0
+
+
+def _ledger(g):
+    """失败段与「因中止未执行」的段名：优先读这次的 `rt`，兼容直接传作用域字典的调用点。"""
+    if hasattr(g, "failed_steps"):
+        return list(g.failed_steps), list(g.halted_steps)
+    rt = g.get("rt") if isinstance(g, dict) else None
+    if rt is not None and hasattr(rt, "failed_steps"):
+        return list(rt.failed_steps), list(rt.halted_steps)
+    failed = list(g.get("FAILED_STEPS") or [])
+    return failed, [name for name in failed if name in (g.get("HALTED_STEPS") or [])]
 
 
 def main():
@@ -583,19 +596,19 @@ def execute(p, cmd, rest):
         rest = [x for x in rest if x != "--ref"]
         if not p.wait_unlocked():
             print("✗ 手机一直锁屏，本步骤没有执行。请解锁手机、保持亮屏后重试"); sys.exit(2)
-        g = {"p": p, "__name__": "__recipe__", "ONLY": rest[1:]}
-        recipe_kit.preamble(p, g)
-        with open(rest[0], encoding="utf-8") as f:
-            src = f.read()
+        # 数据是 `.toml`（#1268）：记录版本从顶层 `build` 读；`.py` 脚本已不再装载。
+        recorded = ""
+        if str(rest[0]).lower().endswith(".toml"):
+            with open(rest[0], "rb") as f:
+                recorded = str(tomllib.load(f).get("build", ""))
         build = p.d.shell("getprop ro.build.display.id").output.strip()
         osv = p.d.shell("getprop ro.mi.os.version.incremental").output.strip()     # 小米：HyperOS 版本号
-        m = re.search(r'^BUILD\s*=\s*"([^"]+)"', src, re.M)
-        if m and not (build.startswith(m.group(1)) or osv.startswith(m.group(1))):
+        if recorded and not (build.startswith(recorded) or osv.startswith(recorded)):
             p.safe_mode = True
-            print(f"⚠ 机型脚本是按 {m.group(1)} 录的，这台是 {osv or build}：用安全模式跑（只关点名的开关），没找到的段会快速跳过")
+            print(f"⚠ 机型脚本是按 {recorded} 录的，这台是 {osv or build}：用安全模式跑（只关点名的开关），没找到的段会快速跳过")
         t = time.time()
         try:
-            exec(src, g)
+            recipe = recipe_loader.run(rest[0], p, only=rest[1:])
         except adb_link.DeviceLost as e:
             print(f"\n✗ {e}\n已停止：关了 {len(p.changed)} 个，{time.time()-t:.0f} 秒", flush=True)
             sys.exit(1)
@@ -610,7 +623,7 @@ def execute(p, cmd, rest):
                     f.write(f"{pg}\t{tt}\n")
         except OSError:
             pass
-        if report_run(g, p):
+        if report_run(recipe.rt, p):
             sys.exit(1)
     else:
         print(__doc__)

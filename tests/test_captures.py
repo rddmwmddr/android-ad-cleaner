@@ -59,13 +59,16 @@ def run_step(fast_mod, store, body, name="主题"):
     phone.screen.tree = lambda: ET.fromstring(PAGE)
     phone.screen.dump = PAGE
     phone.screen.captures = store
-    scope = {"p": phone, "ONLY": []}
-    fast_mod.recipe_kit.preamble(phone, scope)
+    import recipe_runtime
+    rt = recipe_runtime.Runtime(phone, [])
+    rt.namespace = {}
+    scope = {"p": phone, "rt": rt, "ONLY": rt.only}
+
+    def 段体():
+        body(phone)
 
     with contextlib.redirect_stdout(io.StringIO()):
-        @scope["step"](name)
-        def 段体():
-            body(phone)
+        scope["rt"].run_step(name, 段体)
     return phone
 
 
@@ -171,12 +174,15 @@ class CaptureLabelTests(unittest.TestCase):
     def test_the_step_name_comes_from_the_section_wrapper(self):
         phone = fixtures.phone_stub("test", fast_mod=self.fast)
         phone.locked = lambda: False
-        scope = {"p": phone, "ONLY": []}
-        self.fast.recipe_kit.preamble(phone, scope)
+        import recipe_runtime
+        rt = recipe_runtime.Runtime(phone, [])
+        rt.namespace = {}
+        scope = {"p": phone, "rt": rt, "ONLY": rt.only}
+        def body():
+            return None
+
         with contextlib.redirect_stdout(io.StringIO()):
-            @scope["step"]("主题")
-            def body():
-                return None
+            scope["rt"].run_step("主题", body)
         self.assertEqual(phone.screen.captures.step, "主题")
 
     def test_folder_name_drops_path_separators(self):

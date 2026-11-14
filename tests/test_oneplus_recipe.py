@@ -13,13 +13,13 @@ from fixtures import load_recipe
 
 class OnePlusRecipeTests(unittest.TestCase):
     def load(self, phone):
-        scope, _ = load_recipe(phone, ROOT / "recipes/oneplus-PJA110/recipe.py")
+        scope, _ = load_recipe(phone, ROOT / "recipes/oppo/PJA110/PJA110.toml")
         return scope
 
     def test_actual_model_selects_own_recipe_and_pins_recorded_build(self):
         path, reference = run.recipe_for("PJA110", "OnePlus")
         self.assertFalse(reference)
-        self.assertEqual(Path(path).parent.name, "oneplus-PJA110")
+        self.assertEqual(Path(path).parent.name, "PJA110")
         self.assertEqual(run.recipe_meta(path)["build"], "PJA110_14.0.0.812")
 
     def test_missing_target_aborts_without_clicking_any_switch(self):

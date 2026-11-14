@@ -1,0 +1,143 @@
+# 红米 HyperOS 机型脚本：REDMI K80 Ultra（25060RK16C，BP2A.250605.031.A3 / Android 16）；路径来源：2026-10-27 本机 explore.py 探路（探路-25060RK16C.tsv，17 个 App / 121 个开关）+ 同品牌 xiaomi-M154FF 适配。
+# 机主拍板（2026-10-27）：关「宫格位推送 / 猜你想搜 / 我的视频 / 小说 / 我的网盘 / 自动开启畅读 / 新手帮助 / 秒装」；
+#   保留「扫一扫、搜索历史、快捷功能模块、翻译提示、密码保存、自动填充、删除安装包、计算器语音播报」；商店保持标准模式（不切极简）。
+# 浏览器「隐私防护」页的广告过滤 / 防跟踪 / 下载防护是保护类（开着才对），本脚本不碰。
+# 用法：python tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
+# BUILD 置空：只录到底包，没记到 HyperOS 版本号；底包跨机型共享、不能进 BUILD（#942）。
+# 2026-11-14 转页面树（#1267）：系统广告的兜底链与商店的运行时分岔留在同名 `.py` 的 `code =`；
+# 其余段落成导航数据（浏览器的四个子页按页展开）。
+model = "25060RK16C"
+models = ["25060RK16C"]
+build = ""
+
+# 浏览器设置入口：先看工具栏齿轮，再点底部「我的」找齿轮。
+[const]
+BROWSER_FLOW = "toolbar"
+
+[[segment]]
+name = "系统广告"
+code = "step_system_ads"
+
+[[segment]]
+name = "应用商店"
+code = "step_store"
+
+[[segment]]
+name = "手机管家"
+ops = [{ kind = "lib", name = "security_center" }]
+
+[[segment]]
+name = "下载管理"
+ops = [{ kind = "lib", name = "downloads" }]
+
+[[segment]]
+name = "主题"
+ops = [
+  # 实测：经 themestore 冷启动重定向到 thememanager 的过渡窗会把引擎前台校验搞崩；直接拉最终页最稳
+  { kind = "skip_unless_installed", command = "pm path com.android.thememanager", contains = "package:", text = "  · 本机没有主题管理包，跳过" },
+  { kind = "start_or_skip", pkg = "com.android.thememanager", activity = ".ThemeResourceProxyTabActivity", dead_ends = ["com.xiaomi.market", "com.miui.home"], reason = "主题页打不开" },
+  # 导航失败以前记成跳过、与「本页没有目标开关」同形：三步都校验，报错带页面现场（#906）。
+  { kind = "if_lib_any", calls = [{ name = "tab_bot", args = ["我的"] }, { method = "tap", args = ["我的"], kwargs = { exact = true, scrolls = 0 } }], ops = [
+    { kind = "if_lib_any", calls = [{ name = "gear", kwargs = { toolbar_only = true } }, { name = "gear" }], ops = [
+      { kind = "await_page" },
+      { kind = "off_required", only = ["每次联网时通知"], keep = ["自动更新"], page = "主题·设置", contains = true },
+      { kind = "if_entry", text = "隐私设置", ops = [
+        { kind = "off", only = ["个性化推荐"], page = "主题·隐私" },
+        { kind = "back" },
+      ] },
+      { kind = "back", n = 2 },
+    ], else_ops = [
+      { kind = "fail", text = "主题设置入口没找到；", evidence = true },
+    ] },
+  ], else_ops = [
+    { kind = "fail", text = "主题「我的」标签没找到；", evidence = true },
+  ] },
+]
+
+[[segment]]
+name = "浏览器"
+ops = [
+  # 只关机主点名的（见文件头注释）；「隐私防护」页的保护类开关不碰
+  { kind = "start", pkg = "com.android.browser" },
+  { kind = "if_focus", text = "basicmode", match = "icontains", ops = [
+    # 拒绝浏览器协议后落到基本模式设置页，设置入口都不在这条路径上，找下去只会空转报错（#414、#460）
+    { kind = "print", text = "  · 浏览器处在基本模式，设置入口不在这条路径上，本段跳过" },
+    { kind = "return" },
+  ] },
+  { kind = "require_lib", name = "browser_settings", miss_print = "浏览器设置入口未找到；未点击正文中的文字", fail = true },
+  { kind = "if_entry", text = "隐私和安全", ops = [
+    { kind = "off", only = ["个性化内容推荐", "个性化广告推荐"], page = "浏览器·隐私和安全" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "主页设置", ops = [
+    { kind = "off", only = ["宫格位推送"], page = "浏览器·主页设置" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "搜索设置", ops = [
+    # 扫一扫/搜索历史/快捷功能保留（机主）
+    { kind = "off", only = ["猜你想搜"], page = "浏览器·搜索设置" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "功能设置", ops = [
+    { kind = "off", only = ["我的视频", "小说", "我的网盘"], page = "浏览器·功能设置" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "网页浏览设置", ops = [
+    # 翻译提示/密码保存/自动填充保留（机主）
+    { kind = "off", only = ["畅读"], page = "浏览器·网页浏览设置" },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "全局搜索"
+ops = [{ kind = "lib", name = "global_search" }]
+
+[[segment]]
+name = "负一屏"
+ops = [{ kind = "lib", name = "negative_screen" }]
+
+[[segment]]
+name = "天气和日历"
+ops = [
+  # 2026-10-27 K80 实测：这两个 App 的本系统界面没有可见的「用户体验计划/内容推广」；找不到就安静跳过，不算失败。
+  # 两个 App 同一套走法，按包名各展开一份：天气多了「城市管理」。
+  { kind = "start", pkg = "com.miui.weather2" },
+  { kind = "if_find", text = "城市管理", exact = true, edge_ok = "tab", ops = [
+    { kind = "tap", text = "城市管理", exact = true, scrolls = 0 },
+  ] },
+  { kind = "if_lib_any", calls = [{ name = "gear", kwargs = { toolbar_only = true } }, { name = "gear" }], ops = [
+    { kind = "if_find", text = "用户体验计划", exact = true, ops = [
+      { kind = "if_tap", text = "用户体验计划", exact = true, scrolls = 6, ops = [
+        { kind = "off", only = ["推荐", "广告", "个性化", "内容推广", "天气视频卡片"], page = "com.miui.weather2·用户体验计划" },
+        { kind = "back" },
+      ], else_ops = [
+        { kind = "print", text = "  · com.miui.weather2 没有用户体验计划，跳过" },
+      ] },
+    ], else_ops = [
+      { kind = "print", text = "  · com.miui.weather2 没有用户体验计划，跳过" },
+    ] },
+    { kind = "back", n = 3 },
+  ], else_ops = [
+    { kind = "print", text = "  · com.miui.weather2 本版本没有可识别的设置入口，跳过" },
+    { kind = "back", n = 2 },
+  ] },
+  { kind = "start", pkg = "com.android.calendar" },
+  { kind = "if_lib_any", calls = [{ name = "gear", kwargs = { toolbar_only = true } }, { name = "gear" }], ops = [
+    { kind = "if_find", text = "用户体验计划", exact = true, ops = [
+      { kind = "if_tap", text = "用户体验计划", exact = true, scrolls = 6, ops = [
+        { kind = "off", only = ["推荐", "广告", "个性化", "内容推广", "天气视频卡片"], page = "com.android.calendar·用户体验计划" },
+        { kind = "back" },
+      ], else_ops = [
+        { kind = "print", text = "  · com.android.calendar 没有用户体验计划，跳过" },
+      ] },
+    ], else_ops = [
+      { kind = "print", text = "  · com.android.calendar 没有用户体验计划，跳过" },
+    ] },
+    { kind = "back", n = 3 },
+  ], else_ops = [
+    { kind = "print", text = "  · com.android.calendar 本版本没有可识别的设置入口，跳过" },
+    { kind = "back", n = 2 },
+  ] },
+]

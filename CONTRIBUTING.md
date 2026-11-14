@@ -42,18 +42,18 @@ git commit -s -m "fix(chan_fast): keep the channel page open when a row vanishes
 
 ## 两类 PR 的分岔
 
-- **机型 / 清单类**：改动主要是机型脚本与清单数据。合并前要过的三查见 [issue-tracker](docs/agents/issue-tracker.md) 的「Pull requests as a triage surface」。
+- **机型 / 清单类**：改动主要是机型脚本与清单数据。合并前要过的四项检查见 [issue-tracker](docs/agents/issue-tracker.md) 的「Pull requests as a triage surface」。
 - **核心行为类**：碰引擎、客户端或架构。这类不整单合并，按本仓库的模型重写；采纳口径见 [docs/09](docs/09-社区问题处理.md) 的「相关 PR 的采用范围」。
 
 ## 验证
 
 ```bash
 .venv/bin/python -m unittest discover -s tests
-uvx ruff@0.17.3 check tool tests gui android/app/src/main/python android/smoke.py
-.venv/bin/pip install mypy==1.18.2 && .venv/bin/mypy
+uvx ruff@0.17.3 check tool tests gui android/app/src/main/python android/smoke.py recipes recipe_lib
+.venv/bin/pip install mypy==1.18.2 && .venv/bin/mypy && .venv/bin/python tool/typecheck_recipes.py
 ```
 
-第一条跑全量回归，第二条是仓库的静态检查，第三条是引擎目录的类型检查。三条命令的口径、解释器版本与为什么钉这两个版本，见 [CLAUDE.md](CLAUDE.md) 的「开发」一节。
+第一条跑全量回归，第二条是仓库的静态检查，第三条是引擎目录加机型脚本的类型检查（机型脚本由驱动逐份喂给同一个宽松档）。这几条命令的口径、解释器版本与为什么钉这两个版本，见 [CLAUDE.md](CLAUDE.md) 的「开发」一节。
 
 ## 维护者处理外部 PR
 

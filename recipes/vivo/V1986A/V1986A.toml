@@ -1,0 +1,50 @@
+# vivo V1986A（iQOO Neo 系）机型脚本的页面树（catalog，#1259 手写转换的第一份）。
+# 与同目录 recipe.py 逐条等价，证据见 tests/test_catalog.py；#1261 之后才替换 recipe.py。
+model = "V1986A"
+models = ["V1986A"]
+build = "PD1986_A_8"
+
+# 家族库按这两个常量选走法（与 recipe.py 顶部一致）：不写会退回缺省档，走法与旧脚本分叉。
+[const]
+TAP_ROW_STYLE = "subtitle"
+MY_TAB_STYLE = "vivo"
+
+[[segment]]
+name = "系统广告"
+ops = [
+  {kind = "lib", name = "settings_home"},
+  {kind = "gated", entries = ["安全", "更多安全设置", "广告与隐私"], ops = [
+    {kind = "off", only = ["个性化广告", "个性化推荐", "智能推荐服务"], page = "系统·广告与隐私"},
+  ]},
+]
+
+[[segment]]
+name = "阅图锁屏"
+ops = [
+  {kind = "lib", name = "settings_home"},
+  {kind = "gated", entries = ["桌面、锁屏与壁纸", "锁屏设置"], ops = [
+    {kind = "scoped", systemui_text = true, ops = [
+      {kind = "gated", entries = ["阅图锁屏"], ops = [
+        {kind = "off", only = ["阅图锁屏", "锁屏横滑进入阅图"], page = "阅图锁屏"},
+      ]},
+    ]},
+  ]},
+]
+
+[[segment]]
+name = "应用商店"
+ops = [
+  {kind = "start", pkg = "com.bbk.appstore"},
+  {kind = "lib", name = "my_tab"},
+  {kind = "require_entry", text = "设置", scrolls = 0, miss_print = "  ✗ 没进应用商店设置页", miss_back = 2},
+  {kind = "require_lib", name = "tap_row", args = ["包括禁用服务设置"], miss_print = "  ✗ 没找到「关于」那一行", miss_back = 2},
+  {kind = "gated", entries = ["服务管理"], scrolls = 2, ops = [
+    {kind = "off", only = ["签到有礼", "顶部轮播图", "顶部栏目", "开屏", "摇一摇", "悬浮球", "限时推广"], keep = ["我的服务", "空间清理"], page = "商店·服务管理"},
+    {kind = "back"},
+  ]},
+  {kind = "gated", entries = ["个性化推荐"], scrolls = 2, ops = [
+    {kind = "lib", name = "off_one", args = ["个性化推荐", "商店·个性化推荐"]},
+    {kind = "back"},
+  ]},
+  {kind = "back", n = 2},
+]

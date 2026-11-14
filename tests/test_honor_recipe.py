@@ -14,7 +14,7 @@ import adb_link
 import fast
 from fixtures import load_recipe, phone_mock, phone_stub, stub
 
-RECIPE = ROOT / "recipes/honor-PNM-AN10/recipe.py"
+RECIPE = ROOT / "recipes/honor/PNM-AN10/PNM-AN10.toml"
 
 
 def load(phone, only=("__no_steps__",)):
@@ -201,7 +201,7 @@ class HonorMusicTests(unittest.TestCase):
                 p.enter.side_effect = error
                 scope = load(p)
                 with self.assertRaises(type(error)):
-                    scope["open_entry"]("更多设置")
+                    scope["open_entry"](p, scope["rt"], "更多设置")
                 p.note_miss.assert_not_called()
 
     def test_missing_third_party_entry_stops_before_the_second_page(self):

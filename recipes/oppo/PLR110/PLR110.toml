@@ -1,0 +1,91 @@
+# 一加 Ace 6T（PLR110，ColorOS 17.0.0.101 / Android 17）的页面树（catalog，#1265）。
+# 路径实测：2026-10-31。覆盖：广告跟踪、软件商店、浏览器、主题商店、视频、游戏中心、
+# 小布建议、负一屏、下拉搜索，共九段。视频段用 ColorOS 17 的「个性化管理」入口。
+# 只剩负一屏 `code=`（滑动循环 + 轮播单选状态机）；其余八段都落数据。
+model = "PLR110"
+models = ["PLR110"]
+build = "PLR110_17.0.0.101"
+
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+[const]
+SEARCH_SETTINGS_STYLE = "swipe"
+
+[[segment]]
+name = "广告跟踪"
+ops = [
+  { kind = "lib", name = "ad_tracking_close_all" },
+]
+
+[[segment]]
+name = "软件商店"
+ops = [
+  { kind = "start", pkg = "com.heytap.market" },
+  { kind = "go", text = "我的", expect = "设置" },
+  { kind = "tap", text = "设置", exact = true, scrolls = 0 },
+  { kind = "if_entry", text = "服务管理", ops = [{ kind = "off", page = "商店·服务管理", page_wide = true, keep = ["帮助与客服", "应用安全", "首页：AI搜索"] }, { kind = "back" }] },
+  # 下载/更新/安装提醒是功能通知，只关热门内容推送。
+  { kind = "if_entry", text = "消息管理", ops = [{ kind = "off", only = ["热门内容推送"], page = "商店·消息管理" }, { kind = "back" }] },
+  # 「账号与隐私」分组下的「账号设置」没有广告开关，不进。
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "浏览器"
+ops = [
+  { kind = "start", pkg = "com.heytap.browser" },
+  # ColorOS 17 首页读不到「我的」/菜单入口，用实测可直达的设置页 Activity；带清栈参数会立刻退出。
+  { kind = "shell", command = "am start -f 0x10008000 -n com.heytap.browser/.settings.component.BrowserPreferencesPage" },
+  { kind = "sleep", seconds = 1.2 },
+  { kind = "if_focus", text = "com.heytap.browser", match = "contains", else_ops = [{ kind = "print", text = "  ✗ 浏览器设置页没有打开" }, { kind = "return" }] },
+  { kind = "if_tap", text = "主页设置", exact = true, ops = [{ kind = "if_tap", text = "页面布局", exact = true, ops = [{ kind = "tap", text = "简洁", exact = true, scrolls = 0 }, { kind = "back" }] }, { kind = "back" }] },
+  { kind = "if_tap", text = "隐私", exact = true, ops = [
+      # 摇一摇广告随上级开关灰置（开屏/资讯列表都关了就不会展示），不点它。
+      { kind = "if_tap", text = "广告管理", exact = true, ops = [{ kind = "off", only = ["开屏广告", "资讯列表广告"], page = "浏览器·广告管理" }, { kind = "back" }] },
+      { kind = "if_entry", text = "个性化管理", ops = [{ kind = "off", only = ["个性化广告推荐", "个性化优惠推荐"], page = "浏览器·个性化管理" }, { kind = "back" }] },
+      { kind = "back" },
+  ] },
+  # 允许通知、互动消息、锁屏通知、其他服务保留；资讯类推送关掉。
+  { kind = "if_entry", text = "消息管理", ops = [{ kind = "off", only = ["精彩推荐", "重点时事", "本地资讯", "个性化推荐"], page = "浏览器·消息管理" }, { kind = "back" }] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "主题商店"
+ops = [
+  { kind = "lib", name = "theme_shop_settings" },
+]
+
+[[segment]]
+name = "视频"
+ops = [
+  { kind = "start", pkg = "com.heytap.yoli", settle = 4 },
+  { kind = "require_go", text = "我的", expect = "设置", miss_print = "没找到「我的」标签" },
+  { kind = "tap", text = "设置", exact = true, scrolls = 0 },
+  # 这版入口叫「个性化管理」（PLP120 的「个性化内容管理」已改名）。
+  { kind = "if_tap", text = "个性化管理", exact = true, ops = [{ kind = "off", only = ["个性化广告推荐", "个性化内容推荐"], page = "视频·个性化管理" }, { kind = "back" }] },
+  # 互动消息、服务通知、会员权益、其他服务保留。
+  { kind = "if_tap", text = "消息通知", exact = true, ops = [{ kind = "off", only = ["热点时事", "精彩推荐", "个性化推荐", "本地新闻"], page = "视频·消息通知" }, { kind = "back" }] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "游戏中心"
+ops = [
+  { kind = "lib", name = "game_center_taps" },
+]
+
+[[segment]]
+name = "小布建议"
+ops = [
+  { kind = "lib", name = "assistant_advice_search" },
+]
+
+[[segment]]
+name = "负一屏"
+code = "step_negative_screen"
+
+[[segment]]
+name = "下拉搜索"
+ops = [
+  { kind = "lib", name = "search_settings_swipe" },
+]

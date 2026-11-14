@@ -8,7 +8,7 @@ import unittest
 from fixtures import load_recipe, phone_stub
 
 ROOT = Path(__file__).resolve().parents[1]
-RECIPE = ROOT / "recipes/realme-RMX3700/recipe.py"
+RECIPE = ROOT / "recipes/oppo/RMX3700/RMX3700.toml"
 
 STEPS = ["广告跟踪", "软件商店", "浏览器", "下拉搜索", "小布建议", "应用建议"]
 
@@ -74,54 +74,49 @@ class RecipeSafetyTests(unittest.TestCase):
 
     def test_tap_by_scroll_never_uses_top(self):
         """p.tap 内部会先回到页顶；小布建议页回顶会判定「离开了当前页」并抛错。"""
-        function = load()["tap_by_scroll"]
         phone = make_phone()
         calls = []
         phone.find = lambda text, exact=False: True
         phone.tap = lambda text, exact=False, scrolls=6: calls.append((text, scrolls)) or True
-        function.__globals__["p"] = phone
+        function = load(phone)["tap_by_scroll"]
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertTrue(function("资讯服务"))
         self.assertEqual(calls, [("资讯服务", 0)])
 
     def test_tap_by_scroll_gives_up_when_not_found(self):
-        function = load()["tap_by_scroll"]
         phone = make_phone()
         phone.find = lambda text, exact=False: False
         phone.scroll_more = lambda: False
-        function.__globals__["p"] = phone
+        function = load(phone)["tap_by_scroll"]
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertFalse(function("不存在的入口"))
 
     def test_wait_page_rejects_out_of_screen_coordinates(self):
-        function = load()["wait_page"]
         phone = make_phone()
         phone.screen.focus = lambda: "example.app/ExampleActivity"
         phone.screen.tree = lambda: None
         phone.screen.texts = lambda root: [("设置", (0, 0, 100, 100), {"class": "TextView"})]
         phone.switches = lambda root: [("广告", True, (2294, 600))]
-        function.__globals__["p"] = phone
+        function = load(phone)["wait_page"]
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertFalse(function("ExampleActivity", "设置", timeout=0.01))
 
     def test_wait_page_rejects_consent_button(self):
-        function = load()["wait_page"]
         phone = make_phone()
         phone.screen.focus = lambda: "example.app/ExampleActivity"
         phone.screen.tree = lambda: None
         phone.screen.texts = lambda root: [("同意并继续", (0, 0, 100, 100), {"class": "android.widget.Button"})]
-        function.__globals__["p"] = phone
+        function = load(phone)["wait_page"]
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertFalse(function("ExampleActivity", "设置", timeout=0.01))
 
     def test_wait_page_requires_matching_activity(self):
-        function = load()["wait_page"]
         phone = make_phone()
         phone.screen.focus = lambda: "example.app/OtherActivity"
         phone.screen.tree = lambda: None
         phone.screen.texts = lambda root: [("设置", (0, 0, 100, 100), {"class": "TextView"})]
         phone.switches = lambda root: []
-        function.__globals__["p"] = phone
+        function = load(phone)["wait_page"]
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertFalse(function("ExampleActivity", "设置", timeout=0.01))
 

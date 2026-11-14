@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, call
 
+import fixtures
 from fixtures import load_recipe, phone_mock
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,7 +23,8 @@ CHECKING_CALLS = ("bool", "require")
 
 
 def recipes():
-    return sorted((ROOT / "recipes").glob("*/recipe*.py"))
+    """`recipe*.py` 与已转页面树的同名例外 `.py`（#1264）：只扫前者会让转过的机型静默消失。"""
+    return fixtures.recipe_sources()
 
 
 def tree_of(path):
@@ -96,7 +98,14 @@ BUILD_GATED = {"oneplus-PHK110": ("PHK110", "PHK110_16.0.5.1201")}
 
 
 def recipe_of(name):
-    return ROOT / "recipes" / name / "recipe.py"
+    """`"oppo-PMX110"` → `recipes/oppo/PMX110/PMX110.toml`（目录按家族/型号两层，#1261）。"""
+    brand, _, model = name.partition("-")
+    import entries
+    d = ROOT / "recipes" / entries.FAMILY.get(brand.lower(), brand) / (model or name)
+    for cand in (d / "recipe.py", d / (f"{model or name}.toml")):
+        if cand.exists():
+            return cand
+    return d / "recipe.py"
 
 
 class TheGuardItself(unittest.TestCase):
@@ -231,6 +240,7 @@ class FallbackStaysSilent(unittest.TestCase):
         p = unlocked_phone()
         p.setting = lambda *a, **k: True
         scope, _ = load_recipe(p, recipe_of("oppo-PMX110"))
+        fixtures.bridge_scope(self, scope)
         scope["page"], scope["row"], scope["system_settings"] = Mock(), Mock(), Mock()
         scope["ad_id_page"]()
         scope["page"].assert_called_once_with("设备标识与广告")
@@ -240,6 +250,7 @@ class FallbackStaysSilent(unittest.TestCase):
         p = unlocked_phone()
         p.setting = lambda *a, **k: False
         scope, _ = load_recipe(p, recipe_of("oppo-PMX110"))
+        fixtures.bridge_scope(self, scope)
         scope["page"], scope["row"], scope["system_settings"] = Mock(), Mock(), Mock()
         scope["ad_id_page"]()
         scope["page"].assert_not_called()

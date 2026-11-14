@@ -1,0 +1,53 @@
+# vivo V2547DA（卫星通信版）页面树（catalog，#1263）。路径 2026-10-28 真机整段跑通。
+model = "V2547DA"
+models = ["V2547DA"]
+build = "PD2547D_A_16"
+
+[const]
+GEAR_STYLE = "vivo_landing"
+
+[[segment]]
+name = "系统广告"
+ops = [{ kind = "lib", name = "system_ads_branch" }]
+
+[[segment]]
+name = "全局搜索"
+ops = [{ kind = "lib", name = "global_search_ads" }]
+
+[[segment]]
+name = "阅图锁屏"
+ops = [{ kind = "lib", name = "lock_screen_magazine" }]
+
+[[segment]]
+name = "应用商店"
+ops = [
+  { kind = "start", pkg = "com.bbk.appstore", expect = ["我的"] },
+  { kind = "require_tab", name = "我的", miss_print = "商店底部「我的」标签没找到" },
+  { kind = "sleep", seconds = 0.8 },
+  { kind = "lib", name = "gear" },
+  { kind = "gated", entries = ["关于"], ops = [
+    { kind = "gated", entries = ["个性化推荐"], ops = [
+      { kind = "off", only = ["个性化推荐", "个性化广告推荐"], page = "商店·个性化推荐" },
+      { kind = "back" },
+      { kind = "sleep", seconds = 0.5 },
+    ]},
+    { kind = "gated", entries = ["服务管理"], ops = [
+      { kind = "off", only = ["签到有礼", "顶部轮播图", "顶部栏目", "开屏", "摇一摇", "悬浮窗", "限时推广"], keep = ["我的服务", "空间清理"], page = "商店·服务管理" },
+      { kind = "back" },
+    ]},
+    { kind = "back" },
+  ]},
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "浏览器"
+ops = [{ kind = "lib", name = "browser_recommendations" }]
+
+[[segment]]
+name = "i管家"
+ops = [{ kind = "lib", name = "i_manager_ads" }]
+
+[[segment]]
+name = "天气"
+ops = [{ kind = "lib", name = "weather_service" }]

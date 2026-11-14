@@ -3,15 +3,15 @@
 
   adapt.py survey -s SERIAL                  只读试入口：拿同家族验证过的直达逐条打开，报打不打得开、命中的同组词条、App 装没装
   adapt.py explore -s SERIAL [包名 …]        只读探路（复用 explore.py）→ 探路-<型号>.tsv
-  adapt.py gen 探路-<型号>.tsv [-o 输出.py]   把人工勾选的开关生成 recipe 草稿（不碰手机）
+  adapt.py gen 探路-<型号>.tsv [-o 输出.toml]   把人工勾选的开关生成页面树草稿（不碰手机）
                      [--pick 清单.txt]       勾选清单：每行一个开关标题（不用改 TSV 时用它）
                      [--model 型号] [--build 录制版本]
-  adapt.py check -s SERIAL 草稿.py [段名 …]   安全模式自检草稿，输出适配报告
+  adapt.py check -s SERIAL 草稿.toml [段名 …] 安全模式自检草稿，输出适配报告
 
 草稿不是适配：入口路径来自探路读屏，未经人工逐步核对；自检只证明「进得去、关得掉、回读确认」。
 转正式机型脚本前必须人工在手机上核对，并补上 BUILD 录制版本。不要直接放进 recipes/。
 """
-import datetime, json, os, re, subprocess, sys
+import datetime, json, os, re, subprocess, sys, tomllib
 import xml.etree.ElementTree as ET
 from stdio import use_utf8_console
 
@@ -19,7 +19,7 @@ use_utf8_console()
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import entries
 import fast                                    # 只读 want_state / 驱动 Phone；不改引擎
-import recipe_kit
+import recipe_loader
 import vocab
 from fast import Phone
 from run import fail, script_cmd             # 错误渲染与打包版的 --cli 规矩都只在 run.py 写一份
@@ -93,52 +93,41 @@ def step_name(pkg, page):
     return name
 
 
-# 草稿只留台账变量：`read_switches` / `close_named` 用注入面那一份（#1151），否则新写出的
-# 脚本又把本地副本带走，两代实现的坑重挖一遍。
-DRAFT_HELPERS = '''
-VERIFIED_SWITCHES = 0        # 回读确认关闭的开关数
-'''
+# 草稿不再自带台账变量：回读确认数与分段结果都在这层注入的 `rt` 上（ADR-0037），
+# `read_switches` / `close_named` 同样用注入面那一份（沿用 #1151），否则新写出的脚本又把
+# 本地副本带走，两代实现的坑重挖一遍。
 
 
-def render_draft(groups, model, build, source):
+def render_catalog_draft(groups, model, build, source):
+    """`adapt gen` 的 catalog 骨架（ADR-0038，`<型号>.toml`）：每段的入口与待关名单写成页面树数据。
+
+    骨架是「待验证草稿」，起点形状已经对：每段一个 `[[segment]]`，`start` 拉起 → `entry` 逐层进子页 →
+    `off` 关点名的开关。人只需在手机上核对、补 `activity` / 守卫 / 例外，不再是写一个程序。这里不产
+    `code=` 例外：草稿没有本机知识，<型号>.py 有例外时才另写。
+    """
     when = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     lines = [
-        "# -*- coding: utf-8 -*-",
-        "# ===================== 待验证草稿 · adapt gen 生成 =====================",
-        "# 这不是适配成果：下面的入口路径、开关标题全部来自探路读屏，未经人工逐步核对。",
+        "# ===================== 待验证草稿（页面树）· adapt gen 生成 =====================",
+        "# 这不是适配成果：入口路径、开关标题全部来自探路读屏，未经人工逐步核对。",
         f"# 生成时间：{when}；来源：{source}",
         "# 自检：python3 tool/run.py -s <序列号> adapt check <本文件>",
-        "#   自检只证明「进得去、关得掉、回读确认」，不代表适配完成；",
-        "#   转为正式机型脚本前，必须人工在手机上核对每一步，并补 BUILD 录制版本"
-        "（小米系填 HyperOS 版本号，别填 Android 底包）。",
+        "#   自检只证明「进得去、关得掉、回读确认」，不代表适配完成；转为正式数据前必须人工核对。",
         "# 不要直接放进 recipes/：放进去会被当成本型号的正式脚本自动匹配。",
-        "# ======================================================================",
-        f"BUILD = {json.dumps(build)}",
-        f"MODELS = {json.dumps([model] if model else [], ensure_ascii=False)}",
+        "# 页面树只装机型知识；失败怎么收场、顺序、重试、台账归运行时（ADR-0038）。",
+        "# ==========================================================================",
+        f"model = {json.dumps(model, ensure_ascii=False)}",
+        f"models = {json.dumps([model] if model else [], ensure_ascii=False)}",
+        f"build = {json.dumps(build, ensure_ascii=False)}",
     ]
-    lines += DRAFT_HELPERS.strip("\n").split("\n")
     for pkg, page, names in groups:
-        lines += [
-            "",
-            "",
-            f"@step({json.dumps(step_name(pkg, page), ensure_ascii=False)})",
-            "def _():",
-            f"    # 待验证：入口路径来自探路（{page}）",
-            f"    p.start({json.dumps(pkg, ensure_ascii=False)})",
-            '    if p.find("我的", exact=True, edge_ok="tab"):',
-            '        p.tap("我的", exact=True, scrolls=0)',
-            '    require(p.tap("设置", exact=True, scrolls=3), "未找到设置入口「设置」")',
-        ]
+        lines += ["", "[[segment]]", f"name = {json.dumps(step_name(pkg, page), ensure_ascii=False)}", "ops = ["]
+        lines.append(f"  {{kind = \"start\", pkg = {json.dumps(pkg, ensure_ascii=False)}}},")
         for seg in [s.strip() for s in page.split(">") if s.strip()][1:]:
-            lines.append(f'    require(p.tap({json.dumps(seg, ensure_ascii=False)}, exact=True, scrolls=4), "未找到子页入口「{seg}」")')
-        lines.append(f"    close_named({json.dumps(names, ensure_ascii=False)}, {json.dumps(page, ensure_ascii=False)})")
-    lines += [
-        "",
-        "",
-        'print(f"\\n草稿自检：回读确认 {VERIFIED_SWITCHES} 项，"',
-        '      f"未完成步骤 {len(FAILED_STEPS)} 个", flush=True)',
-        "",
-    ]
+            lines.append(f"  {{kind = \"entry\", text = {json.dumps(seg, ensure_ascii=False)}}},")
+        only = json.dumps(names, ensure_ascii=False)
+        lines.append(f"  {{kind = \"off\", only = {only}, page = {json.dumps(page, ensure_ascii=False)}}},")
+        lines.append("]")
+    lines.append("")
     return "\n".join(lines)
 
 
@@ -162,7 +151,7 @@ def cmd_gen(rest):
                 build = value
             i += 2
         elif a.startswith("-"):
-            return fail(f"不认识的选项 {a}。用法：run.py adapt gen <探路-型号.tsv> [-o 输出.py] [--pick 清单.txt] "
+            return fail(f"不认识的选项 {a}。用法：run.py adapt gen <探路-型号.tsv> [-o 输出.toml] [--pick 清单.txt] "
                         "[--model 型号] [--build 录制版本]")
         elif tsv is None:
             tsv = a
@@ -170,7 +159,7 @@ def cmd_gen(rest):
         else:
             return fail("只收一个探路 TSV 文件；要合并多份结果请先手工合并")
     if not tsv:
-        return fail("用法：run.py adapt gen <探路-型号.tsv> [-o 输出.py] [--pick 清单.txt] [--model 型号] [--build 录制版本]")
+        return fail("用法：run.py adapt gen <探路-型号.tsv> [-o 输出.toml] [--pick 清单.txt] [--model 型号] [--build 录制版本]")
     if not os.path.exists(tsv):
         return fail(f"找不到 {tsv}")
     rows = parse_tsv(tsv)
@@ -197,13 +186,17 @@ def cmd_gen(rest):
         print(f"⚠ 这些是保护类开关（打开才是保护），没有写进草稿：{'、'.join(protection)}")
     if ad_left:
         print(f"另有 {ad_left} 个疑似广告开关没有勾选，未写进草稿（工具不自动决定关哪些）")
-    src = render_draft(groups, model=model, build=build, source=os.path.basename(tsv))
-    out = out or (f"草稿-{model}.py" if model else "草稿.py")
+    # 只有 catalog 骨架（`.toml`，ADR-0038）：`.py` 机型脚本已随注入面删除（#1268）。
+    if out and not out.lower().endswith(".toml"):
+        return fail(f"-o 只收 .toml 页面树草稿；{out} 不是 .toml（.py 机型脚本已删除，#1268）")
+    src = render_catalog_draft(groups, model=model, build=build, source=os.path.basename(tsv))
+    target = out or (f"草稿-{model}.toml" if model else "草稿.toml")
+    out = target
     try:
-        with open(out, "w", encoding="utf-8") as f:
+        with open(target, "w", encoding="utf-8") as f:
             f.write(src)
     except OSError as e:
-        return fail(f"写不出 {out}：{e}")
+        return fail(f"写不出 {target}：{e}")
     total = sum(len(names) for _, _, names in groups)
     print(f"草稿已生成：{out}（{len(groups)} 段，{total} 个开关，均为待验证）")
     if not model:
@@ -219,27 +212,21 @@ def cmd_gen(rest):
 # ---------- 安全模式自检 ----------
 
 def check_draft(p, recipe_path, only=()):
-    """安全模式跑草稿并统计回读结果。驱动方式与 fast.py 的 `run` 分支一致：
-    exec 注入 p/ONLY 到 globals，引擎逻辑本身不改。"""
-    with open(recipe_path, encoding="utf-8") as f:
-        src = f.read()
+    """安全模式跑草稿并统计回读结果。草稿唯一形态是 catalog 页面树（`.toml`，ADR-0038）。"""
+    if not str(recipe_path).lower().endswith(".toml"):
+        raise ValueError(f"{recipe_path}：check 只认 .toml 页面树草稿；.py 机型脚本已随注入面删除（#1268）")
+    with open(recipe_path, "rb") as f:
+        data = tomllib.load(f)
     # 手改过的草稿若写了不带 only= 的 p.off()，靠这个也只关点名的开关，不整页全关。
     p.safe_mode = True
     p.screen.captures.task = "adapt"        # 失败现场按任务归档（#1126）
-    g = {"p": p, "__name__": "__draft__", "ONLY": list(only)}
-    # 草稿的 `close_named` / `read_switches` 也来自这层注入（#1151）：点名开关缺一个就整段
-    # 报错、这一步记成失败，没找到的项因此落在 failed_steps 里，不再有 missing / pending 两份台账。
-    recipe_kit.preamble(p, g)
     build = p.d.shell("getprop ro.build.display.id").output.strip()
     osv = p.d.shell("getprop ro.mi.os.version.incremental").output.strip()
-    m = re.search(r'^BUILD\s*=\s*"([^"]+)"', src, re.M)
-    if m and not (build.startswith(m.group(1)) or osv.startswith(m.group(1))):
-        print(f"⚠ 草稿标注 BUILD {m.group(1)}，这台是 {osv or build}：按安全模式跑（只关点名的开关）")
-    exec(compile(src, recipe_path, "exec"), g)
-    return {
-        "verified": g.get("VERIFIED_SWITCHES", 0) or 0,
-        "failed_steps": list(g.get("FAILED_STEPS", []) or []),
-    }
+    recorded = str(data.get("build", ""))
+    if recorded and not (build.startswith(recorded) or osv.startswith(recorded)):
+        print(f"⚠ 草稿标注 BUILD {recorded}，这台是 {osv or build}：按安全模式跑（只关点名的开关）")
+    recipe = recipe_loader.run(recipe_path, p, only=list(only))
+    return {"verified": recipe.rt.verified, "failed_steps": list(recipe.rt.failed_steps)}
 
 
 def print_report(report):
@@ -264,7 +251,7 @@ def print_report(report):
 
 def cmd_check(rest):
     if len(rest) < 3 or rest[0] != "-s":
-        return fail("用法：run.py adapt check -s <序列号> <草稿.py> [段名 …]")
+        return fail("用法：run.py adapt check -s <序列号> <草稿.toml> [段名 …]")
     serial, recipe, only = rest[1], rest[2], rest[3:]
     if not os.path.exists(recipe):
         return fail(f"找不到 {recipe}")

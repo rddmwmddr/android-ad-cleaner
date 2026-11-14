@@ -4,6 +4,7 @@
 用例只护住「选得到这份脚本」「广告服务与浏览器直达」「只关点名开关」这三件事。
 """
 import ast
+import tomllib
 import io
 from pathlib import Path
 import sys
@@ -15,7 +16,8 @@ sys.path.insert(0, str(ROOT / "tests"))
 import run
 from fixtures import load_recipe, phone_mock
 
-RECIPE = ROOT / "recipes/xiaomi-M332BF/recipe.py"
+RECIPE = ROOT / "recipes/xiaomi/M332BF/M332BF.toml"
+EXCEPTIONS = ROOT / "recipes/xiaomi/M332BF/M332BF.py"
 
 
 class K90UltraRecipeTests(unittest.TestCase):
@@ -31,7 +33,7 @@ class K90UltraRecipeTests(unittest.TestCase):
     def test_actual_model_selects_own_recipe_and_pins_recorded_build(self):
         path, reference = run.recipe_for("M332BF", "Redmi")
         self.assertFalse(reference)
-        self.assertEqual(Path(path).parent.name, "xiaomi-M332BF")
+        self.assertEqual(Path(path).parent.name, "M332BF")
         meta = run.recipe_meta(path)
         self.assertEqual(meta["models"], ["M332BF"])
         self.assertEqual(meta["build"], "OS4.0.4")
@@ -68,22 +70,41 @@ class K90UltraRecipeTests(unittest.TestCase):
                          ("com.android.browser", ".BrowserSettingsActivity"))
 
     def test_every_switch_page_names_the_switches_it_touches(self):
-        # 不整页全关：每一处 p.off 都写死 only / keep（注释里提到 p.off() 不算调用）
-        calls = [n for n in ast.walk(ast.parse(self.source))
+        # 不整页全关：数据里的每一条 off 都点名 only；例外函数里的 p.off 同理。
+        data = tomllib.loads(self.source)
+        offs = [op for segment in data["segment"] for op in _walk(segment.get("ops", []))
+                if op.get("kind") in ("off", "off_required")]
+        self.assertTrue(offs)
+        for op in offs:
+            self.assertIn("only", op, f"{op['page']} 的 off 没有点名目标")
+        named = {(op["page"], tuple(op["only"]), tuple(op.get("keep", []))) for op in offs}
+        self.assertIn(("系统·广告服务", ("个性化广告推荐",), ()), named)
+        self.assertIn(("浏览器·隐私和安全", ("个性化内容推荐", "个性化广告推荐"), ()), named)
+        # 主题段整段留在例外函数里：那一条 off 的 only / keep 在源码里点名。
+        source = EXCEPTIONS.read_text(encoding="utf-8")
+        self.assertIn('p.off(only=["每次联网时通知"], keep=["自动更新"], page="主题·设置")', source)
+        calls = [n for n in ast.walk(ast.parse(source))
                  if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
                  and n.func.attr == "off"]
-        self.assertTrue(calls)
         for call in calls:
-            keywords = {k.arg for k in call.keywords}
-            self.assertTrue(keywords & {"only", "keep"},
+            self.assertTrue({k.arg for k in call.keywords} & {"only", "keep"},
                             f"第 {call.lineno} 行的 off() 没有点名目标")
-        self.assertIn('p.off(only=["个性化广告推荐"]', self.source)
-        self.assertIn('p.off(only=["个性化内容推荐", "个性化广告推荐"]', self.source)
-        self.assertIn('p.off(only=["每次联网时通知"], keep=["自动更新"]', self.source)
 
     def test_theme_gear_matches_the_exact_settings_entry(self):
-        # 主题商店的「设置壁纸」也含「设置」，按包含匹配会点进壁纸页（#305 / #374）
-        self.assertIn('p.find("设置", exact=True, edge_ok="tab")', self.source)
+        # 主题商店的「设置壁纸」也含「设置」，按包含匹配会点进壁纸页（沿用 #305 / #374）。
+        # 齿轮实现在家族库的注入面里（#1244），脚本只靠静态 import 声明它用哪个库。
+        self.assertIn('p.find("设置", exact=True, edge_ok="tab")',
+                      "\n".join(path.read_text(encoding="utf-8")
+                                for path in sorted((ROOT / "recipe_lib").glob("*.py"))))
+        self.assertIn("import recipe_nav as nav", EXCEPTIONS.read_text(encoding="utf-8"))
+
+
+def _walk(ops):
+    """展开带分支的 op（if_entry / if_lib_any …）里的子表。"""
+    for op in ops:
+        yield op
+        yield from _walk(op.get("ops", []))
+        yield from _walk(op.get("else_ops", []))
 
 
 if __name__ == "__main__":

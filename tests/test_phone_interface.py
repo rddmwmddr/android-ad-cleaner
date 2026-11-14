@@ -710,9 +710,9 @@ class ReportRunTests(unittest.TestCase):
         页面一直是那两行开着——`Device` 的点击只推进假时钟，回读永远没到位。"""
         p = fake_phone(stages=[(0.0, LIST_PAGE)])
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp, "recipe.py")
-            path.write_text('p.off(page="设置·广告服务")\n', encoding="utf-8")
-            scope, _ = load_recipe(p, path)
+            path = Path(tmp, "recipe.toml")
+            path.write_text('model = "x"\nmodels = ["x"]\n[[segment]]\nname = "a"\nops = [{kind = "off", page = "设置·广告服务", page_wide = true}]\n', encoding="utf-8")
+            scope, _ = load_recipe(p, path, [])
         self.assertEqual(p.missed, [("设置·广告服务", "个性化推荐"), ("设置·广告服务", "猜你喜欢")])
         with patch("builtins.print"):
             self.assertEqual(fast.report_run(scope, p), 1)
@@ -724,8 +724,8 @@ class ReportRunTests(unittest.TestCase):
         p = fake_phone(clock=clock, stages=[(0.0, page)])
         out, code = io.StringIO(), 0
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp, "recipe.py")
-            path.write_text('p.off(page="设置·广告服务")\n', encoding="utf-8")
+            path = Path(tmp, "recipe.toml")
+            path.write_text('model = "x"\nmodels = ["x"]\n[[segment]]\nname = "a"\nops = [{kind = "off", page = "设置·广告服务", page_wide = true}]\n', encoding="utf-8")
             with patch.dict(os.environ, {"AAC_BACKUPS": tmp}), contextlib.redirect_stdout(out):
                 try:
                     fast.execute(p, "run", [str(path)])

@@ -297,7 +297,7 @@ def source_key(d):
 _AM_PAGE = re.compile(r"am start\b[^\n]*?-n\s+([\w.]+)/([\w.$]+)")
 _AM_INTENT = re.compile(r"am start\b[^\n]*?-a\s+([\w.]+)[^\n]*?-p\s+([\w.]+)")
 # 拉起入口的调用名：Phone.start 与共享的 start_or_skip 助手（沿用 #902）。
-_START_CALLS = frozenset({"p.start", "start_or_skip"})
+_START_CALLS = frozenset({"p.start", "start_or_skip", "rt.start_or_skip"})
 
 
 def _value(arg):
@@ -312,7 +312,7 @@ def _arg_of(call, index, keyword=None):
 
     `keyword is None` 时不做关键字回退：位置实参的 `keyword` 也是 None，回退会把它自己
     当成第二个实参，单实参的调用就凭空多出一档入口。"""
-    positional = [arg for arg in call.args if arg.keyword is None]
+    positional = [arg for arg in recipe_source.business_args(call) if arg.keyword is None]
     if index < len(positional):
         return positional[index]
     if keyword is None:
@@ -356,7 +356,7 @@ def _bindings(calls):
     """脚本调注入助手时按位置传的实参：实参在脚本里、形参在实现里，事实层按位置把两侧合起来。"""
     out = {}
     for call in calls:
-        for index, arg in enumerate(arg for arg in call.args if arg.keyword is None):
+        for index, arg in enumerate(arg for arg in recipe_source.business_args(call) if arg.keyword is None):
             if arg.param is None and arg.values:
                 out.setdefault(index, []).extend(item.text for item in arg.values)
     return {index: tuple(texts) for index, texts in out.items()}
@@ -372,44 +372,45 @@ def used_by(recipes_dir):
     `am start -a <action> -p <包名>` 这类公开 Intent 入口单记一档（#956）；
     经 `open_app_settings(包名, 页面, …)` 打开的那一类同样是直达（它包着 APP_SETTINGS 的 Intent）。
 
-    搬进注入面（`tool/recipe_nav.py` 与 `tool/recipe_steps.py`）的实现，入口写在实现里、脚本只剩
-    一行调用：脚本调用了哪个注入名，就把那份实现也扫一遍，否则「用过的机型」会静默漏掉（沿用 #1153 的做法）。
-    实现里再调别的注入名也照着往下扫：段体调 `browser_settings_direct`，入口写在第二层，只看脚本
-    那一层会把调段体的机型漏掉（#1212）。
+    共享实现（`tool/recipe_nav.py` / `tool/recipe_strategies.py` / `tool/recipe_steps.py`）里的入口
+    也要算到调用它的机型：脚本本身或实现里按名字调用库函数时，事实层按 `Call.module` 逐层往下扫，
+    否则「用过的机型」会静默漏掉（沿用 #1153、#1212）。实现之间是普通函数调用（同模块裸名 /
+    跨模块 `nav.x`），不再有 import 归属表。
     包名这类实参仍在脚本里（`app_settings(MARKET)`），形参在实现里，按位置把两侧合起来才还原得出
-    包名（沿用 #1154 的做法）；段体按名字取的模块常量以 `externals` 交回去（#1209）。定义了本地
-    同名实现的脚本走本地那份，不扫注入版（`injected_calls()` 判这一条，深浅两层同判）。
+    包名（沿用 #1154 的做法）；模块常量以 `externals` 交回去——实现里写成 `rt.constants['X']`（#1209）。
+    脚本本地同名定义优先，不扫库版。
 
     命令串只从调用的实参里取：变量、拼接与模板常量都还原得到，没被任何调用引用的字符串常量不算
     出处；语法错的脚本经事实层直接抛 `SyntaxError`，不再静默少算（沿用 #1195 的口径）。
 
     只认字面量：经 `reach(p, ENTRIES[...])` 消费的那几条（浏览器段，#912）看不出来，
     这张表会把用得上的机型算成没用过。"""
-    injected = recipe_source.injected_sources()
+    sources = recipe_source.library_sources()
     found = {}
     for rel, facts in recipe_source.scan_dir(recipes_dir).items():
-        model = rel.split("/", 1)[0].split("-", 1)[-1]
+        model = rel.split("/")[1]
         _scan_entries(facts, model, found)
-        _scan_injected(injected, facts, facts, model, found, set())
+        _scan_implementations(facts, facts, model, found, sources, facts.constants, frozenset())
     return found
 
 
-def _scan_injected(injected, current, caller, model, found, seen):
-    """注入实现逐层往下扫：`current` 是这一层的事实（脚本本身，或上一层实现），`caller` 是调用
-    脚本的事实（模块常量与本地定义都在它那儿）。`seen` 按路径传，同一条链上只扫一次、防绕圈；
-    换一条路再调到同一个注入名仍要扫，实参来自不同的调用点。
+def _scan_implementations(current, caller, model, found, sources, constants, seen):
+    """库实现逐层往下扫：当前事实里调到的库实现，扫它的源码并按调用点把实参合回去。
 
-    判据仍是 `injected_calls()`：脚本本地定义了同名的走本地那份，深、浅两层都不算。"""
-    for name in sorted(injected):
+    `current` 是这一层的事实（脚本本身或上一层实现），`caller` 是调用脚本的事实（模块常量与本地定义
+    都在它那儿）。同名实现按名字只扫一次；`seen` 沿一条链传，防绕圈。"""
+    names = dict.fromkeys(call.name for call in current.calls if call.injected)
+    for name in names:
         if name in seen or name in caller.defines:
             continue
-        calls = recipe_source.injected_calls(current, name)
-        if not calls:
+        entry = sources.get(name)
+        if entry is None:
             continue
-        impl = recipe_source.scan_source(injected[name], _bindings(calls),
-                                         externals=caller.constants)
+        _module, source = entry
+        calls = tuple(call for call in current.calls if call.injected and call.name == name)
+        impl = recipe_source.scan_source(source, _bindings(calls), externals=constants)
         _scan_entries(impl, model, found)
-        _scan_injected(injected, impl, caller, model, found, seen | {name})
+        _scan_implementations(impl, caller, model, found, sources, constants, seen | {name})
 
 
 def open_direct(p, d, settle=1.2):
@@ -481,10 +482,17 @@ def speedups(recipes_dir):
     只是提示：没走这条直达可能是页面没导出、版本不同或者没装这个 App，不算缺陷。"""
     import glob, os
     models = {}
-    for f in glob.glob(os.path.join(recipes_dir, "*", "recipe*.py")):
-        brand, _, model = os.path.basename(os.path.dirname(f)).partition("-")
-        if brand.lower() in FAMILY:
-            models.setdefault(FAMILY[brand.lower()], set()).add(model)
+    # 每个型号目录一份：`recipe*.py` 或 catalog 的 `<型号>.toml`（转换后 `.py` 可能已不在）。
+    for f in glob.glob(os.path.join(recipes_dir, "*", "*", "*")):
+        name = os.path.basename(f)
+        if not (name.startswith("recipe") and name.endswith(".py")) and not name.endswith(".toml"):
+            continue
+        parts = os.path.relpath(f, recipes_dir).split(os.sep)
+        if len(parts) != 3:
+            continue
+        family, model = parts[0], parts[1]
+        if FAMILY.get(family.lower()) == family.lower():
+            models.setdefault(family, set()).add(model)
     used = used_by(recipes_dir)
     out = []
     for fam, groups in ENTRIES.items():

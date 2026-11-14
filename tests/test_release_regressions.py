@@ -20,7 +20,7 @@ from fixtures import FakeRunner, fake_adb, load_recipe, phone_stub
 
 
 def recipe(p, only="__no_steps__"):
-    scope, _ = load_recipe(p, ROOT / "recipes/xiaomi-M154FF/recipe.py", only)
+    scope, _ = load_recipe(p, ROOT / "recipes/xiaomi/M154FF/M154FF.toml", only)
     return scope
 
 
@@ -394,8 +394,8 @@ class BundleTests(unittest.TestCase):
     def test_only_public_runtime_assets_are_staged(self):
         with tempfile.TemporaryDirectory() as directory:
             root, out = Path(directory, "source"), Path(directory, "stage")
-            public = {"tool/run.py", "recipes/xiaomi-test/recipe.py", "gui/web/index.html", "gui/web/img/guide.png", "images/guide.png"}
-            private = {"recipes/xiaomi-test/run-log.txt", "recipes/zztest-device/recipe.py", "tool/__pycache__/secret.pyc",
+            public = {"tool/run.py", "recipes/xiaomi/test/test.toml", "gui/web/index.html", "gui/web/img/guide.png", "images/guide.png"}
+            private = {"recipes/xiaomi/test/run-log.txt", "recipes/xiaomi/zztest-device/test.toml", "tool/__pycache__/secret.pyc",
                        "gui/web/private.txt", "backups/phone.json", "images/private.txt"}
             for name in public | private:
                 path = root / name

@@ -12,14 +12,16 @@ import contextlib
 import io
 from pathlib import Path
 import sys
+import tomllib
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import fast
 import run
+import fixtures
 from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock, stub
 
 GEAR_PAGE = """<hierarchy rotation="0">
@@ -32,7 +34,7 @@ CALENDAR = "com.android.calendar/com.android.calendar.AllInOneActivity"
 CALENDAR_SETTINGS = "com.android.calendar/com.android.calendar.settings.SettingsActivity"
 WEATHER_SETTINGS = "com.miui.weather2/com.miui.weather2.settings.WeatherSettingsActivity"
 POPUP = "PopupWindow:9e12e45"
-RECIPES = ("recipe.py", "recipe_os4.py")
+RECIPES = ("24129PN74C.toml", "24129PN74C-os4.toml")
 
 BROWSER = "com.android.browser/com.android.browser.BrowserActivity"
 BROWSER_SETTINGS = "com.android.browser/com.android.browser.BrowserSettingsActivity"
@@ -90,14 +92,15 @@ TOOLBAR_PANEL = """<hierarchy rotation="0">
 
 
 class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
-    def load(self, phone, recipe="recipe.py"):
-        scope, _ = load_recipe(phone, ROOT / "recipes/xiaomi-24129PN74C" / recipe)
+    def load(self, phone, recipe="24129PN74C.toml"):
+        scope, _ = load_recipe(phone, ROOT / "recipes/xiaomi/24129PN74C" / recipe)
+        fixtures.bridge_scope(self, scope)
         return scope
 
     def test_actual_model_selects_own_recipe_and_pins_recorded_build(self):
         path, reference = run.recipe_for("24129PN74C", "Xiaomi")
         self.assertFalse(reference)
-        self.assertEqual(Path(path).parent.name, "xiaomi-24129PN74C")
+        self.assertEqual(Path(path).parent.name, "24129PN74C")
         self.assertEqual(run.recipe_meta(path)["build"], "OS3.0.307.0")
         self.assertEqual(run.recipe_meta(path)["models"], ["24129PN74C"])
         self.assertEqual(run.recipe_meta(path)["steps"],
@@ -114,32 +117,46 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
     def test_same_base_package_as_k80_script_but_own_entry_points(self):
         # 底包相同不等于入口相同：浏览器两条入口都在，底栏「菜单」优先；商店没有隐私设置。
         # 两份脚本也都不把底包写进 BUILD，同底包机型不会被任一份「同版本」命中（#942）。
-        k80 = run.recipe_meta(ROOT / "recipes/redmi-25060RK16C/recipe.py")["build"]
+        k80 = run.recipe_meta(ROOT / "recipes/xiaomi/25060RK16C/25060RK16C.toml")["build"]
         self.assertEqual(k80, "")
-        self.assertNotIn("BP2A", run.recipe_meta(ROOT / "recipes/xiaomi-24129PN74C/recipe.py")["build"])
-        source = (ROOT / "recipes/xiaomi-24129PN74C/recipe.py").read_text(encoding="utf-8")
-        self.assertIn('p.tap("菜单", exact=True, scrolls=0, quiet=True)', source)
-        self.assertIn('if not p.tab("我的"):', source)
+        self.assertNotIn("BP2A", run.recipe_meta(ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml")["build"])
+        source = (ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml").read_text(encoding="utf-8")
+        # 两条入口的实现在家族库的注入面里（#1244）；这台机声明走「菜单」那条，回退档在库里。
+        self.assertIn('BROWSER_FLOW = "menu"', source)
+        library = "\n".join(path.read_text(encoding="utf-8")
+                             for path in sorted((ROOT / "recipe_lib").glob("*.py")))
+        self.assertIn('p.tap("菜单", exact=True, scrolls=0, quiet=True)', library)
+        self.assertIn('if not p.tab("我的"):', library)
 
     def test_system_ads_uses_search_or_deep_link_not_more_security_settings(self):
-        source = (ROOT / "recipes/xiaomi-24129PN74C/recipe.py").read_text(encoding="utf-8")
-        # 本机「隐私与安全」是权限中心，没有「更多安全设置」这一项。
-        self.assertIn('p.setting("广告服务")', source)
-        self.assertIn("com.android.settings/.ad.AdServiceSettings", source)
-        # 菜单路径里不能出现「更多安全设置」这个点击动作（注释里的说明不算）。
-        code = "\n".join(line for line in source.splitlines()
+        data = tomllib.loads((ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml").read_text(encoding="utf-8"))
+        ops = data["segment"][0]["ops"]
+        # 本机「隐私与安全」是权限中心，没有「更多安全设置」这一项：搜索直达 + 深链兜底。
+        self.assertEqual(ops[0]["kind"], "if_setting")
+        self.assertEqual(ops[0]["kw"], "广告服务")
+        self.assertEqual([op for op in ops[0]["else_ops"] if op["kind"] == "shell"],
+                         [{"kind": "shell",
+                           "command": "am start -f 0x10008000 -n com.android.settings/.ad.AdServiceSettings"}])
+        # 整份数据里不能出现「更多安全设置」这个点击动作（注释里的说明不算）。
+        code = "\n".join(line for line in
+                         (ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml").read_text(encoding="utf-8").splitlines()
                          if not line.lstrip().startswith("#"))
         self.assertNotIn("更多安全设置", code)
 
     def test_browser_keeps_function_switches_and_turns_off_ads_only(self):
-        source = (ROOT / "recipes/xiaomi-24129PN74C/recipe.py").read_text(encoding="utf-8")
+        data = tomllib.loads((ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml").read_text(encoding="utf-8"))
+        browser = next(seg for seg in data["segment"] if seg["name"] == "浏览器")
+        offs = [inner for op in browser["ops"] if op["kind"] == "if_entry"
+                for inner in op["ops"] if inner["kind"] == "off"]
         # 运营任务 = 做任务得金币挣红包，纯营销，要关。
-        self.assertIn('p.off(only=["运营任务", "小说"], keep=["我的网盘"]', source)
+        self.assertIn({"kind": "off", "only": ["运营任务", "小说"], "keep": ["我的网盘"],
+                       "page": "浏览器·功能设置"}, offs)
         # 扫一扫 / 搜索历史 / 书签 / 最常访问是功能项，不能进 only 名单。
+        source = (ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml").read_text(encoding="utf-8")
         for functional in ("显示扫一扫模块", "显示搜索历史模块", "显示书签模块", "显示最常访问模块"):
             self.assertNotIn(functional, source)
 
-    def browser_phone(self, stages, focus, clicked=None, backed=None, only=None, recipe="recipe.py", **fields):
+    def browser_phone(self, stages, focus, clicked=None, backed=None, only=None, recipe="24129PN74C.toml", **fields):
         """假手机 + 按时间轴换页：底栏点「菜单」会先空转 6 秒，页面切换都排在这之后。"""
         clock = Clock(click_cost=0.05)
         clocked(self, fast, clock)
@@ -149,8 +166,8 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
             stub(p, "click", lambda x, y: (clicked.append((x, y)), clock.click())[1])
         if backed is not None:
             stub(p, "back", lambda *a, **k: (backed.append(clock.t), clock.click())[1])
-        scope, out = load_recipe(p, ROOT / "recipes/xiaomi-24129PN74C" / recipe, only=only)
-        scope["time"] = clock              # 脚本里的 sleep 也推进设备时间轴，否则点完齿轮页面不会换
+        scope, out = load_recipe(p, ROOT / "recipes/xiaomi/24129PN74C" / recipe, only=only)
+        scope["rt"].clock = clock              # 脚本里的 sleep 也推进设备时间轴，否则点完齿轮页面不会换
         return p, scope, out
 
     def test_browser_prefers_the_menu_entry_and_never_touches_my_tab(self):
@@ -183,9 +200,11 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
 
     def test_os4_browser_segment_goes_through_browser_settings(self):
         """OS4 浏览器段调的是带兜底的 browser_settings()，不是只认「菜单」的那条（#900）。"""
-        src = (ROOT / "recipes/xiaomi-24129PN74C/recipe_os4.py").read_text(encoding="utf-8")
-        self.assertIn("    browser_settings()\n", src)
-        self.assertNotIn("浏览器底栏「菜单」未找到", src)
+        data = tomllib.loads((ROOT / "recipes/xiaomi/24129PN74C/24129PN74C-os4.toml").read_text(encoding="utf-8"))
+        browser = next(seg for seg in data["segment"] if seg["name"] == "浏览器")
+        self.assertEqual([op["name"] for op in browser["ops"] if op["kind"] == "lib"],
+                         ["browser_settings"])
+        self.assertNotIn("浏览器底栏「菜单」未找到", repr(data))
 
     def test_menu_entry_stopping_on_a_blank_focus_still_fails_loudly(self):
         """底栏有「菜单」却两次都没进设置页、中途读不出前台：不能当成「没有菜单」改走「我的」（#581）。
@@ -262,17 +281,17 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
 
     def test_protection_switch_is_not_in_any_only_list(self):
         """「限制广告跟踪」「防止广告追踪」这类开关是保护类，打开才对，不能进 only 名单。"""
-        source = (ROOT / "recipes/xiaomi-24129PN74C/recipe.py").read_text(encoding="utf-8")
+        source = (ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml").read_text(encoding="utf-8")
         for protective in ("限制广告跟踪", "防止广告追踪", "阻止广告跟踪"):
             self.assertNotIn(protective, source)
 
-    def gear_phone(self, focus_stages, recipe="recipe.py"):
+    def gear_phone(self, focus_stages, recipe="24129PN74C.toml"):
         clock = Clock()
         clocked(self, fast, clock)
         p = fake_phone(clock=clock, stages=[(0.0, GEAR_PAGE)], focus=focus_stages)
         p.back = Mock()
         scope = self.load(p, recipe)
-        scope["time"] = clock
+        scope["rt"].clock = clock
         return p, scope
 
     def test_gear_rejects_a_click_that_lands_on_a_popup(self):
@@ -300,23 +319,29 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
                     self.assertTrue(scope["gear"](toolbar_only=True))
                     p.back.assert_not_called()
 
-    def calendar_section(self):
+    def calendar_section(self, gear_result):
+        """跑「天气和日历」一段：把注入面的 gear / maybe 换成桩，再交给 rt 跑数据里的段。"""
+        import recipe_loader
         p = phone_mock()
         p.locked = lambda: False
-        scope = self.load(p)
-        return p, scope
+        recipe = recipe_loader.load(ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml", p,
+                                    only=["天气和日历"], clock=Clock())
+        fixtures.bridge_scope(self, recipe.namespace)
+        gear = recipe.namespace["gear"] = Mock(return_value=gear_result)
+        entry = p.entry = Mock(return_value=True)
+        self.out = out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            recipe.run()
+        return p, gear, entry
 
     def test_calendar_section_skips_instead_of_searching_inside_the_popup(self):
-        p, scope = self.calendar_section()
-        gear = scope["gear"] = Mock(return_value=False)
-        entry = scope["maybe"] = Mock(return_value=True)
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out), patch.object(scope["time"], "sleep"):
-            scope["_"]()
-        self.assertIn("日历没有可识别的设置入口，跳过", out.getvalue())
+        p, gear, entry = self.calendar_section(gear_result=False)
         # 天气、日历各试一次工具栏齿轮 + 一次全页齿轮，失败后都不进 maybe。
         self.assertEqual(gear.call_count, 4)
         entry.assert_not_called()
+        self.assertEqual(p.off.call_count, 0)
+        self.assertIn("天气没有可识别的设置入口，跳过", self.out.getvalue())
+        self.assertIn("日历没有可识别的设置入口，跳过", self.out.getvalue())
 
     def test_weather_section_still_opens_the_user_experience_plan(self):
         """天气齿轮进的是真设置页：校验不能把这一段拦下来。
@@ -324,11 +349,7 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
         gear() 在天气设置页焦点下返回 True 由 test_gear_accepts_calendar_and_weather_settings_pages
         证明；这条只管「gear 成功之后两段都照常处理」。
         """
-        p, scope = self.calendar_section()
-        gear = scope["gear"] = Mock(return_value=True)
-        scope["maybe"] = Mock(return_value=True)
-        with contextlib.redirect_stdout(io.StringIO()), patch.object(scope["time"], "sleep"):
-            scope["_"]()
+        p, gear, _entry = self.calendar_section(gear_result=True)
         self.assertEqual(gear.call_count, 2)
         pages = [call.kwargs["page"] for call in p.off.call_args_list]
         self.assertIn("天气·用户体验计划", pages)

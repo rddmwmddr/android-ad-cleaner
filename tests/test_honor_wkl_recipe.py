@@ -11,12 +11,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 import adb_link
 import run
+import fixtures
 from fixtures import load_recipe, phone_stub
 
 
 class HonorWKLRecipeTests(unittest.TestCase):
     def load(self, phone):
-        scope, _ = load_recipe(phone, ROOT / "recipes/honor-WKL-AN20/recipe.py")
+        scope, _ = load_recipe(phone, ROOT / "recipes/honor/WKL-AN20/WKL-AN20.toml")
         return scope
 
     def phone(self, xml="<hierarchy/>"):
@@ -33,16 +34,19 @@ class HonorWKLRecipeTests(unittest.TestCase):
         p.screen.focus.return_value = "com.example/.Settings"
         p.screen.tree.return_value = ET.fromstring("<hierarchy/>")
         scope = self.load(p)
-        scope["settle_page"] = Mock()
-        scope["labels"] = Mock(return_value={"设置"})
-        scope["scan"] = Mock(side_effect=[before, after])
+        for name, mock in (
+                ("settle_page", Mock()),
+                ("labels", Mock(return_value={"设置"})),
+                ("scan_switches", Mock(side_effect=[before, after]))):
+            fixtures.patch_surface(self, name, mock)
+            scope[name] = mock
         return p, scope
 
     def test_model_build_and_steps_are_discoverable_by_runner(self):
         path, reference = run.recipe_for("WKL-AN20", "HONOR")
         self.assertFalse(reference)
         meta = run.recipe_meta(path)
-        self.assertEqual(Path(path).parent.name, "honor-WKL-AN20")
+        self.assertEqual(Path(path).parent.name, "WKL-AN20")
         self.assertEqual(meta["build"], "WKL-AN20 11.0.0.111(SP7C00E110R101P7)")
         self.assertEqual(len(meta["steps"]), 13)
         self.assertIn("音乐", meta["steps"])
@@ -55,7 +59,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
         scope["ONLY"] = ["系统管家"]
         action = Mock()
         with contextlib.redirect_stdout(io.StringIO()):
-            scope["step"]("系统管家")(action)
+            scope["rt"].run_step("系统管家", action)
         action.assert_not_called()
         p.start.assert_not_called()
         self.assertEqual(scope["FAILED_STEPS"], [])
@@ -68,7 +72,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
         scope["ONLY"] = ["系统管家"]
         action = Mock()
         with contextlib.redirect_stdout(io.StringIO()):
-            scope["step"]("系统管家")(action)
+            scope["rt"].run_step("系统管家", action)
         action.assert_not_called()
         self.assertEqual(scope["FAILED_STEPS"], [])
 
@@ -83,7 +87,8 @@ class HonorWKLRecipeTests(unittest.TestCase):
         scope = self.load(p)
         scope["ONLY"] = []
         with contextlib.redirect_stdout(io.StringIO()):
-            scope["step"]("音乐")(scope["_"])
+            action = next(st.action for st in scope["rt"].steps if st.name == "音乐")
+            scope["rt"].run_step("音乐", action)
         self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertEqual(scope["RESULTS"], [("音乐", "跳过")])
 
@@ -94,7 +99,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
         scope = self.load(p)
         scope["ONLY"] = ["系统管家"]
         with contextlib.redirect_stdout(io.StringIO()):
-            scope["step"]("系统管家")(Mock(side_effect=scope["SkipStep"]("按约定跳过")))
+            scope["rt"].run_step("系统管家", Mock(side_effect=scope["SkipStep"]("按约定跳过")))
         self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertEqual(scope["RESULTS"], [("系统管家", "跳过")])
 
@@ -104,12 +109,12 @@ class HonorWKLRecipeTests(unittest.TestCase):
         scope = self.load(p)
         scope["ONLY"] = ["系统管家"]
         with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(adb_link.DeviceLost):
-            scope["step"]("系统管家")(Mock())
+            scope["rt"].run_step("系统管家", Mock())
 
     def test_missing_switch_stops_before_any_changes(self):
         p, scope = self.closing_scope({"应用更新": True}, {})
         with self.assertRaisesRegex(RuntimeError, "未识别全部目标"):
-            scope["close_named"](["个性化广告"], "测试", "com.example", "设置")
+            scope["close_named_honor"](["个性化广告"], "测试", "com.example", "设置")
         scope["settle_page"].assert_called_once()
         p.off.assert_not_called()
         self.assertEqual(scope["VERIFIED_SWITCHES"], 0)
@@ -123,7 +128,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
                                    ("应用更新", True, (100, 500))]
         filtered = []
         p.off.side_effect = lambda **kw: filtered.extend(p.switches())
-        scope["close_named"](["个性化广告"], "测试", "com.example", "设置")
+        scope["close_named_honor"](["个性化广告"], "测试", "com.example", "设置")
         scope["settle_page"].assert_called_once()
         self.assertEqual([row[0] for row in filtered], ["个性化广告"])
         self.assertEqual(scope["VERIFIED_SWITCHES"], 1)
@@ -131,7 +136,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
     def test_reverted_target_is_not_reported_as_verified(self):
         p, scope = self.closing_scope({"个性化广告": True}, {"个性化广告": True})
         with self.assertRaisesRegex(RuntimeError, "回读未确认"):
-            scope["close_named"](["个性化广告"], "测试", "com.example", "设置")
+            scope["close_named_honor"](["个性化广告"], "测试", "com.example", "设置")
         scope["settle_page"].assert_called_once()
         self.assertEqual(scope["VERIFIED_SWITCHES"], 0)
 
@@ -139,13 +144,13 @@ class HonorWKLRecipeTests(unittest.TestCase):
         p, scope = self.closing_scope({"个性化广告": True, "评论提醒": True},
                                      {"个性化广告": False, "评论提醒": False})
         with self.assertRaisesRegex(RuntimeError, "其他开关状态变化"):
-            scope["close_named"](["个性化广告"], "测试", "com.example", "设置")
+            scope["close_named_honor"](["个性化广告"], "测试", "com.example", "设置")
         scope["settle_page"].assert_called_once()
         self.assertEqual(scope["VERIFIED_SWITCHES"], 0)
 
     def test_protection_switch_must_be_on(self):
         p, scope = self.closing_scope({"限制广告跟踪": False}, {"限制广告跟踪": True})
-        scope["close_named"](["限制广告跟踪"], "测试", "com.example", "设置")
+        scope["close_named_honor"](["限制广告跟踪"], "测试", "com.example", "设置")
         scope["settle_page"].assert_called_once()
         self.assertEqual(scope["VERIFIED_SWITCHES"], 1)
 
@@ -154,7 +159,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
           <node resource-id="app:id/switch" class="android.widget.ImageView"
            clickable="true" bounds="[900,400][1000,450]"/></hierarchy>''')
         scope = self.load(p)
-        with scope["safe_ui"]():
+        with scope["safe_ui"](p, scope["rt"]):
             self.assertEqual(p.switches(), [])
         p.d.screenshot.assert_not_called()
 
@@ -165,7 +170,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
           <node text="确定" class="android.widget.Button" bounds="[500,700][600,800]"/>
           </hierarchy>''')
         scope = self.load(p)
-        with patch.object(scope["time"], "sleep"), scope["safe_ui"]():
+        with patch.object(scope["time"], "sleep"), scope["safe_ui"](p, scope["rt"]):
             self.assertEqual(p.confirm(), "确定")
         p.d.click.assert_called_once_with(550, 750)
 
@@ -173,13 +178,13 @@ class HonorWKLRecipeTests(unittest.TestCase):
         p = self.phone('''<hierarchy><node text="确定" class="android.widget.TextView"
                            bounds="[500,700][600,800]"/></hierarchy>''')
         scope = self.load(p)
-        with patch.object(scope["time"], "sleep"), scope["safe_ui"]():
+        with patch.object(scope["time"], "sleep"), scope["safe_ui"](p, scope["rt"]):
             self.assertIsNone(p.confirm())
         p.d.click.assert_not_called()
         root = p.screen.tree.return_value
         ET.SubElement(root, "node", text="关闭个性化广告推荐", bounds="[100,300][800,400]")
         ET.SubElement(root, "node", text="取消", bounds="[100,700][200,800]")
-        with patch.object(scope["time"], "sleep"), scope["safe_ui"]():
+        with patch.object(scope["time"], "sleep"), scope["safe_ui"](p, scope["rt"]):
             self.assertEqual(p.confirm(), "确定")
         p.d.click.assert_called_once_with(550, 750)
 
@@ -188,7 +193,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
         scope = self.load(p)
         originals = {name: getattr(p, name) for name in ("click", "scroll", "confirm", "switches")}
         with self.assertRaisesRegex(RuntimeError, "stop"):
-            with scope["safe_ui"]():
+            with scope["safe_ui"](p, scope["rt"]):
                 raise RuntimeError("stop")
         for name, value in originals.items():
             self.assertEqual(getattr(p, name), value)
@@ -201,14 +206,14 @@ class HonorWKLRecipeTests(unittest.TestCase):
           </node></hierarchy>''')
         scope = self.load(p)
         with self.assertRaisesRegex(RuntimeError, "唯一单选按钮"):
-            scope["radio"](p.tree(), "简洁首页")
+            scope["radio"](p, scope["rt"], p.tree(), "简洁首页")
         p.d.click.assert_not_called()
         root = ET.fromstring('''<hierarchy><node bounds="[0,200][1080,400]">
           <node text="简洁首页" bounds="[50,250][500,300]"/>
           <node class="android.widget.RadioButton" checkable="true" checked="false"
            bounds="[900,250][1000,300]"/>
           </node></hierarchy>''')
-        self.assertEqual(scope["radio"](root, "简洁首页").get("checked"), "false")
+        self.assertEqual(scope["radio"](p, scope["rt"], root, "简洁首页").get("checked"), "false")
 
 
 if __name__ == "__main__":

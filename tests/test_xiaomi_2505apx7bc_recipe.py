@@ -5,6 +5,7 @@
 「用户体验计划」时一项都不动。
 """
 import ast
+import tomllib
 import io
 from pathlib import Path
 import sys
@@ -19,7 +20,8 @@ import fast
 import run
 from fixtures import load_recipe, phone_mock
 
-RECIPE = ROOT / "recipes/xiaomi-2505APX7BC/recipe.py"
+RECIPE = ROOT / "recipes/xiaomi/2505APX7BC/2505APX7BC.toml"
+EXCEPTIONS = ROOT / "recipes/xiaomi/2505APX7BC/2505APX7BC.py"
 STEPS = ["系统广告", "应用商店", "手机管家", "下载管理", "主题", "浏览器", "全局搜索", "负一屏", "天气和日历"]
 
 
@@ -45,7 +47,7 @@ class MixFlip2RecipeTests(unittest.TestCase):
     def test_actual_model_selects_own_recipe_and_pins_recorded_build(self):
         path, reference = run.recipe_for("2505APX7BC", "Xiaomi")
         self.assertFalse(reference)
-        self.assertEqual(Path(path).parent.name, "xiaomi-2505APX7BC")
+        self.assertEqual(Path(path).parent.name, "2505APX7BC")
         meta = run.recipe_meta(path)
         self.assertEqual(meta["models"], ["2505APX7BC"])
         self.assertEqual(meta["build"], "")
@@ -63,11 +65,16 @@ class MixFlip2RecipeTests(unittest.TestCase):
                     "os": "OS3.0.309.0.WOCCNXM"}
         path, reference = run.recipe_for("2211133C", "Xiaomi", xiaomi13)
         self.assertTrue(reference)
-        self.assertNotEqual(Path(path).parent.name, "xiaomi-2505APX7BC")
+        self.assertNotEqual(Path(path).parent.name, "2505APX7BC")
 
     def test_bottom_tabs_go_through_tab_not_go_or_tap(self):
-        # 这台的第 5 个底栏标签在 y≈94% 屏高；p.tap() 会先命中内容区同名文字（#305 / #386）
-        called = {n.func.attr for n in ast.walk(ast.parse(self.source))
+        # 这台的第 5 个底栏标签在 y≈94% 屏高；p.tap() 会先命中内容区同名文字（#305 / #386）。
+        # 数据里走 `require_tab`（门面的 p.tab）；例外函数里点「我的」也只调 p.tab。
+        data = tomllib.loads(self.source)
+        tabs = [op for segment in data["segment"] for op in segment.get("ops", [])
+                if op.get("kind") == "require_tab" and op.get("name") == "我的"]
+        self.assertEqual(len(tabs), 1, "主题段要到「我的」页：数据里应有 require_tab")
+        called = {n.func.attr for n in ast.walk(ast.parse(EXCEPTIONS.read_text(encoding="utf-8")))
                   if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
                   and n.func.attr in {"tab", "go", "tap", "entry"}
                   and any(isinstance(a, ast.Constant) and a.value == "我的" for a in n.args)}
@@ -189,19 +196,28 @@ class MixFlip2RecipeTests(unittest.TestCase):
         self.assertEqual(pages, ["天气·用户体验计划", "日历·用户体验计划"])
 
     def test_every_switch_page_names_the_switches_it_touches(self):
-        # 不整页全关：每一处 p.off 都写死 only / keep（注释里提到 p.off() 不算调用）
-        calls = [n for n in ast.walk(ast.parse(self.source))
-                 if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
-                 and n.func.attr == "off"]
-        self.assertTrue(calls)
-        for node in calls:
-            keywords = {k.arg for k in node.keywords}
-            self.assertTrue(keywords & {"only", "keep"},
-                            f"第 {node.lineno} 行的 off() 没有点名目标")
-        self.assertIn('p.off(only=["个性化广告推荐"]', self.source)
-        self.assertIn('p.off(only=["每次联网时通知"], keep=["自动更新"]', self.source)
-        self.assertIn('p.off(only=["小说"], keep=["我的网盘"]', self.source)
-        self.assertIn('p.off(only=["显示猜你想搜模块"]', self.source)
+        # 不整页全关：每一条 off 都点名 only（整页全关要显式写 page_wide / close_all）。
+        data = tomllib.loads(self.source)
+        offs = [op for segment in data["segment"] for op in _walk(segment.get("ops", []))
+                if op.get("kind") in ("off", "off_required")]
+        self.assertTrue(offs)
+        for op in offs:
+            self.assertIn("only", op, f"{op['page']} 的 off 没有点名目标")
+        named = {(op["page"], tuple(op["only"]), tuple(op.get("keep", []))) for op in offs}
+        self.assertIn(("系统·广告服务", ("个性化广告推荐",), ()), named)
+
+        self.assertIn(("主题·设置", ("每次联网时通知",), ("自动更新",)), named)
+        self.assertIn(("浏览器·功能设置", ("小说",), ("我的网盘",)), named)
+        self.assertIn(("浏览器·搜索设置", ("显示猜你想搜模块",),
+                       ("扫一扫", "AI搜索", "搜索历史", "搜索引擎切换栏")), named)
+
+
+def _walk(ops):
+    """展开带分支的 op（if_entry / if_lib_any …）里的子表。"""
+    for op in ops:
+        yield op
+        yield from _walk(op.get("ops", []))
+        yield from _walk(op.get("else_ops", []))
 
 
 if __name__ == "__main__":

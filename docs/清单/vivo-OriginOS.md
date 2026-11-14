@@ -7,10 +7,10 @@
 - vivo X300 Ultra（V2547A，OriginOS 7，Android 17），2026-10-25。
 - vivo X Fold6（V2545A，OriginOS 6 Fold，Android 16），2026-10-26。
 - iQOO Z11 Turbo（V2536A，OriginOS 6，Android 16），2026-11-01，无专用脚本，`--ref` 安全模式实测。
-- vivo V2309A（OriginOS 6，Android 16，`PD2309E_A_16.2.15.0.W10`，商店 V10.5.31.0），2026-11-03，社区实测（[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530)），专用脚本 `recipes/vivo-V2309A/`。
-- vivo V2303A（OriginOS 7，Android 17，`CP2A.260605.016`），2026-11-04，社区实测（[#579](https://github.com/rddmwmddr/android-ad-cleaner/issues/579)），专用脚本 `recipes/vivo-V2303A/`，维护方未在本机复跑。
+- vivo V2309A（OriginOS 6，Android 16，`PD2309E_A_16.2.15.0.W10`，商店 V10.5.31.0），2026-11-03，社区实测（[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530)），专用脚本 `recipes/vivo/V2309A/`。
+- vivo V2303A（OriginOS 7，Android 17，`CP2A.260605.016`），2026-11-04，社区实测（[#579](https://github.com/rddmwmddr/android-ad-cleaner/issues/579)），专用脚本 `recipes/vivo/V2303A/`，维护方未在本机复跑。
 
-iQOO 结构相近。当前源码有 `recipes/vivo-V2547DA/`、`recipes/vivo-V2547A/`、`recipes/vivo-V2545A/`、`recipes/vivo-V2309A/`、`recipes/vivo-V2303A/` 五份机型脚本，均已真机跑过（V2547DA 124 秒，V2547A 126 秒，V2545A 121 秒，V2309A 167 秒，整轮均通过；V2303A 只做了七段安全模式自检，整轮用时未测；其中 V2309A 与 V2303A 为社区实测、维护方未在本机复跑）；V2547DA 的商店段与齿轮判据在 2026-11-03 改动过（[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530)），齿轮落地校验与浏览器段的入口重写在 2026-11-07 又改过（[#575](https://github.com/rddmwmddr/android-ad-cleaner/issues/575)、[#753](https://github.com/rddmwmddr/android-ad-cleaner/issues/753)），OriginOS 6 变体这几处都没在真机上复测。V2547DA 另有 Android 17 变体 `recipes/vivo-V2547DA/recipe_android17.py`，系统版本对上 `PD2547D_A_17.1.10.2` 时自动选它（其余 17.x 小版本对不上，仍走 Android 16 脚本并进安全模式）；入口按 #220 的报告者实测写，2026-11-07 已在本机整段复测（见下文）。五份脚本对应不同机型与系统版本，入口差异见下文「OriginOS 7（Android 17）的不同之处」、「X Fold6 的差异」、「V2536A 的差异」、「V2309A 的差异」和「V2303A 的差异」；版本对不上时引擎会走安全模式。发布与验证范围见[归档记录](../归档/CHANGELOG-0.3.0及更早.md)。
+iQOO 结构相近。当前源码有 `recipes/vivo/V2547DA/`、`recipes/vivo/V2547A/`、`recipes/vivo/V2545A/`、`recipes/vivo/V2309A/`、`recipes/vivo/V2303A/` 五份机型脚本，均已真机跑过（V2547DA 124 秒，V2547A 126 秒，V2545A 121 秒，V2309A 167 秒，整轮均通过；V2303A 只做了七段安全模式自检，整轮用时未测；其中 V2309A 与 V2303A 为社区实测、维护方未在本机复跑）；V2547DA 的商店段与齿轮判据在 2026-11-03 改动过（[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530)），齿轮落地校验与浏览器段的入口重写在 2026-11-07 又改过（[#575](https://github.com/rddmwmddr/android-ad-cleaner/issues/575)、[#753](https://github.com/rddmwmddr/android-ad-cleaner/issues/753)），OriginOS 6 变体这几处都没在真机上复测。V2547DA 另有 Android 17 变体 `recipes/vivo/V2547DA/recipe_android17.py`，系统版本对上 `PD2547D_A_17.1.10.2` 时自动选它（其余 17.x 小版本对不上，仍走 Android 16 脚本并进安全模式）；入口按 #220 的报告者实测写，2026-11-07 已在本机整段复测（见下文）。五份脚本对应不同机型与系统版本，入口差异见下文「OriginOS 7（Android 17）的不同之处」、「X Fold6 的差异」、「V2536A 的差异」、「V2309A 的差异」和「V2303A 的差异」；版本对不上时引擎会走安全模式。发布与验证范围见[归档记录](../归档/CHANGELOG-0.3.0及更早.md)。
 符号：🔴 关掉　🟢 保留　⚠️ 注意
 
 ---
@@ -167,9 +167,9 @@ Failure [only root can delete system app for a particular user]
 
 ⚠️ 负一屏「热点资讯」页的 8 行开关，整行节点的标题全串成了页标题「热点资讯」；这一页还有 3 个单选钮
 （悬浮 / 经典 / 卡片形态）也是 checkable，按「找 checkable 节点」的通用写法会把它当开关一起拨掉。
-机型脚本 `recipes/vivo-V2547A/recipe.py` 里已按行还原标题、排除单选钮。
+机型脚本 `recipes/vivo/V2547A/recipe.py` 里已按行还原标题、排除单选钮。
 
-V2547DA 的 Android 17 变体（`recipes/vivo-V2547DA/recipe_android17.py`）2026-11-07 本机把系统广告、
+V2547DA 的 Android 17 变体（`recipes/vivo/V2547DA/recipe_android17.py`）2026-11-07 本机把系统广告、
 全局搜索、阅图锁屏三段改成直达，打不开再走菜单；整段 91 秒降到 62 秒。浏览器设置页在这台没有
 导出，仍走菜单，是这一轮最慢的一段。
 
@@ -191,7 +191,7 @@ V2547DA 的 Android 17 变体（`recipes/vivo-V2547DA/recipe_android17.py`）202
 
 ## V2324HA（iQOO，Android 16 / PD2324J_A_16.2.13.1.W10）差异
 
-2026-10-27 实测，机型脚本 `recipes/vivo-V2324HA/`，七段全通、重跑约 2.5 分钟。和上面 X300 Ultra 的路径不一样的地方：
+2026-10-27 实测，机型脚本 `recipes/vivo/V2324HA/`，七段全通、重跑约 2.5 分钟。和上面 X300 Ultra 的路径不一样的地方：
 
 | 位置 | 本机实际路径 | 备注 |
 |---|---|---|
@@ -204,7 +204,7 @@ V2547DA 的 Android 17 变体（`recipes/vivo-V2547DA/recipe_android17.py`）202
 | 天气 | `am start -n com.vivo.weather/.WeatherSettings` | 天气首页只有「更多」，没有「设置」文字，齿轮找不到 |
 | 快应用 | `com.vivo.hybrid` | 系统服务开关可关，`quickapp off` 备份原值后关闭并回读 |
 ## 补充：OriginOS 16 实测差异（V2361A，2026-10-26）
-机型脚本：`recipes/vivo-V2361A/`。以下差异来自 V2361A 真机逐页实测。
+机型脚本：`recipes/vivo/V2361A/`。以下差异来自 V2361A 真机逐页实测。
 | 位置 | V2547DA（OriginOS 6） | V2361A（OriginOS 16） |
 | 系统设置页 | 普通列表 | 顶部有**悬浮搜索框**（y≈360-460），翻页后第一行会被盖住，直接点会误触搜索 |
 | 开关控件 | 单个 Switch | 每行有**两个** Switch 节点：外层整行容器（clickable）、内层真开关。点外层会跳页不改状态 |
@@ -230,7 +230,7 @@ V2547DA 的 Android 17 变体（`recipes/vivo-V2547DA/recipe_android17.py`）202
 ## V1986A（iQOO Neo 系）差异：Funtouch OS 13.0 / Android 12
 
 2026-10-30 实测，构建 `PD1986_A_8.21.29`（`ro.vivo.os.name` 报 `Funtouch`，`ro.vivo.os.version` 13.0，Android 12）。
-机型脚本 `recipes/vivo-V1986A/`：三段（系统广告 / 阅图锁屏 / 应用商店），整轮重跑 55 秒。
+机型脚本 `recipes/vivo/V1986A/`：三段（系统广告 / 阅图锁屏 / 应用商店），整轮重跑 55 秒。
 
 ⚠️ **这台不是 OriginOS**：本文件上面按 OriginOS 写的路径都要先按本表核对，多数对得上，但锁屏和通知差得较多。
 
@@ -253,7 +253,7 @@ V2547DA 的 Android 17 变体（`recipes/vivo-V2547DA/recipe_android17.py`）202
 
 ## V2417A（OriginOS 6 / Android 16）差异
 
-2026-10-30 贡献者在 `PD2417D_A_16.2.14.1.W10` 真机逐页实测（社区实测，维护方未复跑），专用脚本为 `recipes/vivo-V2417A/recipe.py`。应用版本、验证范围及执行记录见[适配说明](../../recipes/vivo-V2417A/README.md)。
+2026-10-30 贡献者在 `PD2417D_A_16.2.14.1.W10` 真机逐页实测（社区实测，维护方未复跑），专用脚本为 `recipes/vivo/V2417A/recipe.py`。应用版本、验证范围及执行记录见[适配说明](../../recipes/vivo/V2417A/README.md)。
 
 | 位置 | 本机路径或差异 |
 |---|---|
@@ -272,7 +272,7 @@ V2547DA 的 Android 17 变体（`recipes/vivo-V2547DA/recipe_android17.py`）202
 
 ## X Fold6 的差异
 
-实测：V2545A，OriginOS 6 Fold，Android 16，`PD2545B_A_16.0.16.0.W10`，2026-10-26。机型脚本 `recipes/vivo-V2545A/`，7 段全跑通，121 秒。上面 1–10 节的开关本身和 X300 Ultra 一致，差别都在「怎么走到那个页面」。
+实测：V2545A，OriginOS 6 Fold，Android 16，`PD2545B_A_16.0.16.0.W10`，2026-10-26。机型脚本 `recipes/vivo/V2545A/`，7 段全跑通，121 秒。上面 1–10 节的开关本身和 X300 Ultra 一致，差别都在「怎么走到那个页面」。
 
 | 段落 | X300 Ultra（V2547DA） | X Fold6（V2545A） |
 |---|---|---|
@@ -304,7 +304,7 @@ V2547DA 的 Android 17 变体（`recipes/vivo-V2547DA/recipe_android17.py`）202
 
 ## V2309A 的差异
 
-实测：vivo V2309A，OriginOS 6 / Android 16，`PD2309E_A_16.2.15.0.W10`，商店 V10.5.31.0，2026-11-03（[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530)），社区实测，维护方未在本机复跑。专用脚本 `recipes/vivo-V2309A/`，七段整轮 167 秒（首次运行时开关已关，调整 0 项）；2026-11-03 从开启状态复跑，26 个点名开关逐个关闭、每页末尾回读核对，213 秒，紧接着的复跑轮调整 0 项、165 秒。上面 1–10 节的开关本身与 X300 Ultra 一致，差别都在「怎么走到那个页面」，脚本里各有一处对应写法：
+实测：vivo V2309A，OriginOS 6 / Android 16，`PD2309E_A_16.2.15.0.W10`，商店 V10.5.31.0，2026-11-03（[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530)），社区实测，维护方未在本机复跑。专用脚本 `recipes/vivo/V2309A/`，七段整轮 167 秒（首次运行时开关已关，调整 0 项）；2026-11-03 从开启状态复跑，26 个点名开关逐个关闭、每页末尾回读核对，213 秒，紧接着的复跑轮调整 0 项、165 秒。上面 1–10 节的开关本身与 X300 Ultra 一致，差别都在「怎么走到那个页面」，脚本里各有一处对应写法：
 
 | 位置 | 其它 vivo 机型 | V2309A |
 |---|---|---|
@@ -317,7 +317,7 @@ V2547DA 的 Android 17 变体（`recipes/vivo-V2547DA/recipe_android17.py`）202
 
 ## V2303A 的差异
 
-实测：vivo V2303A，OriginOS 7 / Android 17，`CP2A.260605.016`，2026-11-04（[#579](https://github.com/rddmwmddr/android-ad-cleaner/issues/579)），社区实测，维护方未在本机复跑；只做了七段安全模式自检（25 项关闭并回读），整轮用时未测。专用脚本 `recipes/vivo-V2303A/`，由 V2547DA 的 Android 17 变体改写。上面 1–10 节的开关本身与 X300 Ultra 一致，差别集中在「怎么走到设置里的那个页面」：
+实测：vivo V2303A，OriginOS 7 / Android 17，`CP2A.260605.016`，2026-11-04（[#579](https://github.com/rddmwmddr/android-ad-cleaner/issues/579)），社区实测，维护方未在本机复跑；只做了七段安全模式自检（25 项关闭并回读），整轮用时未测。专用脚本 `recipes/vivo/V2303A/`，由 V2547DA 的 Android 17 变体改写。上面 1–10 节的开关本身与 X300 Ultra 一致，差别集中在「怎么走到设置里的那个页面」：
 
 | 位置 | 其它 vivo 机型 | V2303A |
 |---|---|---|

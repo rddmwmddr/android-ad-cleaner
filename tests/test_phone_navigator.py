@@ -314,8 +314,8 @@ class TabTests(unittest.TestCase):
 
 
 # ---------- #575：vivo 机型脚本的 gear() 点完要校验落地 ----------
-GEAR_RECIPES = [ROOT / "recipes/vivo-V2547DA/recipe.py",
-                ROOT / "recipes/vivo-V2547DA/recipe_android17.py"]
+GEAR_RECIPES = [ROOT / "recipes/vivo/V2547DA/V2547DA.toml",
+                ROOT / "recipes/vivo/V2547DA/V2547DA-android17.toml"]
 
 MINE = "com.bbk.appstore/.MainActivity"
 VIVO_SETTINGS = "com.bbk.appstore/.ui.menu.AppstoreSettingsActivity"

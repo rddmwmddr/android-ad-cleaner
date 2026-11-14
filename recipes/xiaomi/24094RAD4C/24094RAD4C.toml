@@ -1,0 +1,103 @@
+# Redmi Note 14 5G（24094RAD4C，代号 beryl），HyperOS OS3.0.306.0.WOQCNXM / Android 16。2026-10-30 真机逐段核对：入口与 Redmi Note 14 Pro 的 OS3 脚本基本一致。
+# 本脚本只处理点名的广告/推荐开关；应用商店保持标准模式，自动更新和删除安装包保留，
+# 浏览器「小说」「我的网盘」等功能项保留，天气预警等安全通知也不在范围内。
+# 用法：python tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
+# 2026-11-14 转页面树（#1266）：系统广告、下载管理、主题、浏览器落成导航数据；应用商店的「个性化服务」
+# 按运行时读到的开关位置分岔，留在同名 `.py` 的 `code =`。
+model = "24094RAD4C"
+models = ["24094RAD4C"]
+build = "OS3.0.306.0"
+
+[[segment]]
+name = "系统广告"
+ops = [
+  # HyperOS 3：隐私页首屏没有「更多安全设置」，它在「安全」标签页下。
+  { kind = "shell", command = "am start -f 0x10008000 -a android.settings.SETTINGS" },
+  { kind = "sleep", seconds = 1.2 },
+  { kind = "if_entry", text = "隐私与安全", ops = [
+    { kind = "lib", name = "tap_tab", args = ["安全"] },
+    { kind = "if_entry", text = "更多安全设置", ops = [
+      { kind = "if_entry", text = "广告服务", ops = [
+        { kind = "off", only = ["个性化广告推荐"], page = "系统·广告服务" },
+      ] },
+    ] },
+  ] },
+]
+
+[[segment]]
+name = "应用商店"
+code = "step_store"
+
+[[segment]]
+name = "手机管家"
+ops = [{ kind = "lib", name = "security_center" }]
+
+[[segment]]
+name = "下载管理"
+ops = [
+  { kind = "start", pkg = "com.android.providers.downloads.ui" },
+  { kind = "require_lib", name = "gear", miss_print = "下载管理设置入口未找到", fail = true },
+  { kind = "if_entry", text = "信息流设置", ops = [
+    { kind = "lib", name = "close_with_plain_tap", args = [["资源推荐", "热榜推荐"], "下载管理·信息流"] },
+  ] },
+  { kind = "back", n = 3 },
+]
+
+[[segment]]
+name = "主题"
+ops = [
+  # 直达主题管理包的代理页（沿用 #730 的做法：它没有 LAUNCHER，monkey 拉不起来）；经主题商店冷启动
+  # 要过一道重定向过渡窗，前台校验容易误判，也可能续在上次留下的子页上（#906）。
+  # 落点被系统转去商店详情页或桌面时仍按跳过收尾。
+  { kind = "skip_unless_installed", command = "pm path com.android.thememanager", contains = "package:", text = "  · 本机没有主题管理包，跳过" },
+  { kind = "start_or_skip", pkg = "com.android.thememanager", activity = ".ThemeResourceProxyTabActivity", dead_ends = ["com.xiaomi.market", "com.miui.home"], reason = "主题页打不开" },
+  { kind = "sleep", seconds = 3 },
+  # 冷启动偶有可跳过的开屏广告。
+  { kind = "if_find", text = "跳过广告", ops = [
+    { kind = "tap", text = "跳过广告", scrolls = 0 },
+  ] },
+  # 导航失败以前与「本页没有目标开关」同形：进「我的」、进设置页、点名开关三步都校验，
+  # 0 个开关按失败报并带页面现场（#906）。
+  { kind = "require_lib", name = "wait_bottom_tab", args = ["我的"], miss_print = "主题底部「我的」标签没找到；", fail = true, evidence = true },
+  { kind = "dismiss" },
+  { kind = "require_lib", name = "gear", miss_print = "主题设置入口没找到；", fail = true, evidence = true },
+  { kind = "await_page" },
+  { kind = "off_required", only = ["每次联网时通知"], keep = ["自动更新"], page = "主题·设置", contains = true },
+  { kind = "if_entry", text = "隐私设置", ops = [
+    { kind = "off", only = ["个性化推荐"], page = "主题·隐私" },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "浏览器"
+ops = [
+  # 直达设置页，绕开首页导航；主页布局和功能入口按机主当前选择保留。
+  { kind = "shell", command = "am start -f 0x10008000 -n com.android.browser/.BrowserSettingsActivity" },
+  { kind = "sleep", seconds = 2 },
+  { kind = "dismiss" },
+  { kind = "if_entry", text = "隐私和安全", ops = [
+    { kind = "lib", name = "close_with_plain_tap", args = [["个性化内容推荐", "个性化广告推荐"], "浏览器·隐私和安全"] },
+    { kind = "back" },
+    { kind = "sleep", seconds = 1 },
+    { kind = "top", n = 8 },
+  ] },
+  { kind = "if_entry", text = "主页设置", ops = [
+    { kind = "off", only = ["宫格位推送"], page = "浏览器·主页设置" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "搜索设置", ops = [
+    { kind = "off", only = ["猜你想搜"], page = "浏览器·搜索设置" },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "全局搜索"
+ops = [{ kind = "lib", name = "global_search" }]
+
+[[segment]]
+name = "负一屏"
+ops = [{ kind = "lib", name = "negative_screen" }]

@@ -159,7 +159,7 @@ PMX110 / ColorOS 17 上逐个单独挂起实测（Issue #335，2026-10-30）。
 - 连不上 adb、`adb devices` 只显示 `offline`，USB 日志里有 `Error [31]` / `Failed to get BOS header`：是线或接口的问题，换线后连上。
 ### OPPO Find N5（PKH110 / ColorOS 17.0.0.103 / Android 17）
 
-实测日期：2026-10-29。机型脚本：`recipes/oppo-PKH110/recipe.py`，七段整段重跑 144 秒，二次重跑为幂等（新增关闭 0 项）。
+实测日期：2026-10-29。机型脚本：`recipes/oppo/PKH110/PKH110.toml`，七段整段重跑 144 秒，二次重跑为幂等（新增关闭 0 项）。
 
 | 位置 | 差异与处理 |
 |---|---|
@@ -179,7 +179,7 @@ PMX110 / ColorOS 17 上逐个单独挂起实测（Issue #335，2026-10-30）。
 
 ### realme GT Neo5 SE（RMX3700 / ColorOS 16.0.5.1300(CN01)）
 
-2026-10-30 在真机上逐段实测，机型脚本：`recipes/realme-RMX3700/`。这是仓库里第一个 realme 机型脚本。
+2026-10-30 在真机上逐段实测，机型脚本：`recipes/oppo/RMX3700/`。这是仓库里第一个 realme 机型脚本。
 
 | 位置 | 路径与处理 |
 |---|---|
@@ -204,7 +204,7 @@ PMX110 / ColorOS 17 上逐个单独挂起实测（Issue #335，2026-10-30）。
 
 ### realme 真我 GT5 Pro（RMX3888 / ColorOS 15.0.0.420(CN01) / Android 15）
 
-社区实测（[#1083](https://github.com/rddmwmddr/android-ad-cleaner/issues/1083)，2026-11-11），维护者没有这台手机。机型脚本：`recipes/realme-RMX3888/`，按报告者的落点写成、未在真机复跑。
+社区实测（[#1083](https://github.com/rddmwmddr/android-ad-cleaner/issues/1083)，2026-11-11），维护者没有这台手机。机型脚本：`recipes/oppo/RMX3888/`，按报告者的落点写成、未在真机复跑。
 
 同一型号还有一台 ColorOS 16.0.10.500 的（上面 [#271](https://github.com/rddmwmddr/android-ad-cleaner/issues/271) 那段），两台的商店与入口不一样：这台的软件商店**有**「服务管理」（46 项），16.0.10.500 那台没有。
 
@@ -262,7 +262,7 @@ PMX110 / ColorOS 17 上逐个单独挂起实测（Issue #335，2026-10-30）。
 
 ### OPPO Find X8s（PKT110 / ColorOS 17.0.0.102(CN01)）
 
-以下来自 2026-10-28 在 PKT110 真机上的逐段实测，机型脚本：`recipes/oppo-PKT110/`。ColorOS 17 与上面 ColorOS 16 的入口差别较大，**不要照搬 ColorOS 16 的路径**。
+以下来自 2026-10-28 在 PKT110 真机上的逐段实测，机型脚本：`recipes/oppo/PKT110/`。ColorOS 17 与上面 ColorOS 16 的入口差别较大，**不要照搬 ColorOS 16 的路径**。
 
 | 位置 | 差异与处理 |
 |---|---|
@@ -290,9 +290,9 @@ PMX110 / ColorOS 17 上逐个单独挂起实测（Issue #335，2026-10-30）。
 
 ### Find X10 Pro Max（PMX110 / ColorOS 17.0.0.116 / Android 17）
 
-2026-10-26 真机走通，机型脚本 `recipes/oppo-PMX110/recipe.py`（9 段，全跑约 4 分钟）。同品牌参考脚本 `oppo-PLP120`（ColorOS 16.0.9）在这台上 `--ref` 跑下来关了 0 个：入口名变了，下面按实际路径记。
+2026-10-26 真机走通，机型脚本 `recipes/oppo/PMX110/PMX110.toml`（9 段，全跑约 4 分钟）。同品牌参考脚本 `oppo-PLP120`（ColorOS 16.0.9）在这台上 `--ref` 跑下来关了 0 个：入口名变了，下面按实际路径记。
 
-2026-11-05 社区实测（`PMX110_17.0.0.116(CN01)`，维护方未在本机复跑）改写了脚本的开关口径与两处入口，下表已按新结论订正，完整范围见 [PMX110 实测记录](../../recipes/oppo-PMX110/README.md)。
+2026-11-05 社区实测（`PMX110_17.0.0.116(CN01)`，维护方未在本机复跑）改写了脚本的开关口径与两处入口，下表已按新结论订正，完整范围见 [PMX110 实测记录](../../recipes/oppo/PMX110/README.md)。
 
 | 位置 | 差异与处理 |
 |---|---|
@@ -307,7 +307,7 @@ PMX110 / ColorOS 17 上逐个单独挂起实测（Issue #335，2026-10-30）。
 | 小布建议 | 设置 → OPPO AI → 小布建议 → 内容资讯 → 资讯服务（二级页），保留商圈服务 |
 | 广告包 / 快应用 | `com.opos.ads`、`com.heytap.pictorial` 挂起，3 个快应用组件关闭；挂起不等于进程一定退出 |
 
-**2026-11-05 社区实测改写开关口径。** 机型脚本按 `PMX110_17.0.0.116(CN01)` 录制，`BUILD` 写到同代的 `PMX110_17.0.0`（其他 17.0.0.x 共用，同族机型也靠它当参考脚本）。以下是本轮改的四处与证据边界，完整说明见 [PMX110 实测记录](../../recipes/oppo-PMX110/README.md)。
+**2026-11-05 社区实测改写开关口径。** 机型脚本按 `PMX110_17.0.0.116(CN01)` 录制，`BUILD` 写到同代的 `PMX110_17.0.0`（其他 17.0.0.x 共用，同族机型也靠它当参考脚本）。以下是本轮改的四处与证据边界，完整说明见 [PMX110 实测记录](../../recipes/oppo/PMX110/README.md)。
 
 - **搜索数据源改回保留**：搜索范围只关个性化推荐与精选资讯，榜单 / 小说 / 购物不再动；消息管理整段不再进入，消息总开关保留（#598）。
 - **主题消息通知保留**：消息与广告只关开屏广告。营销消息改由 `chan-scan` / `chan-off` 在渠道级处理。
@@ -333,7 +333,7 @@ PMX110 / ColorOS 17 上逐个单独挂起实测（Issue #335，2026-10-30）。
 
 ### 一加 Ace 2 Pro（PJA110 / ColorOS 16.0.5.1201 / Android 16）
 
-2026-11-10 按 #911 的报告补变体脚本 `recipes/oneplus-PJA110/recipe_android16.py`。路径取自**同平台版本** `PHK110_16.0.5.1201`（一加 Ace 2）已实测的公开入口与 `tool/entries.py` 的 oppo 条目，**没有在 PJA110 上跑过**，合并不等于已走通；等报告者复测。
+2026-11-10 按 #911 的报告补变体脚本 `recipes/oppo/PJA110/PJA110-android16.toml`。路径取自**同平台版本** `PHK110_16.0.5.1201`（一加 Ace 2）已实测的公开入口与 `tool/entries.py` 的 oppo 条目，**没有在 PJA110 上跑过**，合并不等于已走通；等报告者复测。
 
 - **软件商店 / 浏览器**：认 `oppo.intent.action.APP_SETTINGS`（`am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p 包名`）直达设置页，不再走「我的 → 设置」三下连点；落地后同时核对前台 Activity 与页标题。商店落点 `com.heytap.market.mine.cn.setting.ui.SettingActivity`（注意 `.cn.` 段），页标题「应用与服务」；服务管理是 `ServeManagerActivity`。
 - **商店隐私入口**：「隐私」与「隐私授权管理」两种叫法都试——同平台的 ColorOS 16 机型上两种都出现过（Find N6 / Find X9 Pro 叫「隐私授权管理」，13T 叫「隐私」）。
@@ -344,7 +344,7 @@ PMX110 / ColorOS 17 上逐个单独挂起实测（Issue #335，2026-10-30）。
 
 ## 一加 13T（PKX110）
 实测日期：2026-10-28；系统：`PKX110_16.0.10.500(CN01)`，Android 16。
-机型脚本：`recipes/oneplus-PKX110/recipe.py`（广告跟踪、软件商店·服务管理、软件商店·个性化、小布建议四段实测通过；浏览器三段、小布建议幂等重跑均 completed）。
+机型脚本：`recipes/oppo/PKX110/PKX110.toml`（广告跟踪、软件商店·服务管理、软件商店·个性化、小布建议四段实测通过；浏览器三段、小布建议幂等重跑均 completed）。
 
 - **广告跟踪**：设置首页点「隐私」进入的是 `com.oplus.securitypermission` 的 `PrivacySettingsDashboardActivity`（不是标准 SubSettings）；「设备标识与广告」在 `OplusSettingsActivity$DevicesIdentifySettingsActivity`；OAID 列表本机 75 项，整页全关 101 秒，引擎翻页正常。
 - **软件商店**：`oppo.intent.action.APP_SETTINGS` 直达 SettingActivity（与 PHK110 一致），服务管理同 Activity；本机推广位约 47 项，除 PHK110 清单外新增：找游戏-休闲/小游戏/VIP、我的专区：账号会员徽章/主题商店/应用时刻/游戏VIP、小游戏二楼和专区、AI智能体、应用安全安全内容推荐等。个性化推荐开关在「隐私（PrivacyActivity）→ 个性化推荐（PersonalRecommendActivity）」二级页；设置页的「隐私」入口必须 exact 匹配，说明文字「…隐私数据」会被子串误中。
@@ -357,7 +357,7 @@ PMX110 / ColorOS 17 上逐个单独挂起实测（Issue #335，2026-10-30）。
 
 ### Android 15：PHK110_15.0.0.601(CN01)
 
-2026-10-29 手动操作实测；自动脚本 `recipes/oneplus-PHK110/recipe_android15.py` 根据此记录编写，尚未在真机整段运行验证。它仅在型号和完整系统版本匹配时运行，和 Android 16 版本分开选择。
+2026-10-29 手动操作实测；自动脚本 `recipes/oppo/PHK110/PHK110-android15.toml` 根据此记录编写，尚未在真机整段运行验证。它仅在型号和完整系统版本匹配时运行，和 Android 16 版本分开选择。
 
 - 系统「隐私 → 设备标识与广告 → 广告跟踪」：可逐应用关闭，不重置设备标识符；自动脚本暂不处理。
 - 软件商店：设置 → 隐私授权管理 → 个性化推荐，已关闭。应用更新及安全检测保留。
@@ -370,7 +370,7 @@ PMX110 / ColorOS 17 上逐个单独挂起实测（Issue #335，2026-10-30）。
 
 ### Android 16：PHK110_16.0.5.1201(CN01)
 实测日期：2026-10-25；系统：`PHK110_16.0.5.1201(CN01)`，Android 16。
-机型脚本：`recipes/oneplus-PHK110/recipe.py`，只运行与该版本匹配的五段：
+机型脚本：`recipes/oppo/PHK110/PHK110.toml`，只运行与该版本匹配的五段：
 首次人工路径操作之后，软件商店单段重跑 23 秒、五段整段重跑 77 秒；加入精确白名单及失败状态检查后，最终版整段重跑 85 秒、五段均 completed。均为已关闭状态下的幂等重跑，新增关闭项为 0，运行后 `finish` 将插电常亮恢复为 0。这不等于在恢复出厂或首次开启全部开关的手机上做过完整自动化验收。
 ```bash
 python3 tool/run.py -s <序列号> recipe 广告跟踪 软件商店 浏览器首页 浏览器广告 浏览器个性化
@@ -388,7 +388,7 @@ python3 tool/run.py -s <序列号> finish
 
 ## OPPO Find X9 Ultra（PMA110 / ColorOS 17）
 
-2026-10-29 真机逐页记录。系统 `PMA110_17.0.0.106(CN01)`，Android 17；专用脚本：[oppo-PMA110](../../recipes/oppo-PMA110/README.md)。与旧记录的 PMA120 / ColorOS 16 分开匹配，不互相作为型号别名。
+2026-10-29 真机逐页记录。系统 `PMA110_17.0.0.106(CN01)`，Android 17；专用脚本：[oppo-PMA110](../../recipes/oppo/PMA110/README.md)。与旧记录的 PMA120 / ColorOS 16 分开匹配，不互相作为型号别名。
 
 | 位置 | 本机差异与处理 |
 |---|---|
@@ -411,7 +411,7 @@ python3 tool/run.py -s <序列号> finish
 
 ## OPPO Find X9 Pro（PLG110 / ColorOS 16.0.10）
 
-2026-11-01 真机逐页记录。系统 `PLG110_16.0.10.501(CN01)`，Android 16；专用脚本：[oppo-PLG110](../../recipes/oppo-PLG110/README.md)。
+2026-11-01 真机逐页记录。系统 `PLG110_16.0.10.501(CN01)`，Android 16；专用脚本：[oppo-PLG110](../../recipes/oppo/PLG110/README.md)。
 
 | 位置 | 本机差异与处理 |
 |---|---|
@@ -436,7 +436,7 @@ python3 tool/run.py -s <序列号> finish
 ## 一加 Ace 6T（PLR110）
 
 实测日期：2026-10-31；系统：`PLR110_17.0.0.101`，Android 17。
-机型脚本：`recipes/oneplus-PLR110/recipe.py`。贡献者真机九段全跑 224 秒；本仓库没有该机型，未复测。
+机型脚本：`recipes/oppo/PLR110/PLR110.toml`。贡献者真机九段全跑 224 秒；本仓库没有该机型，未复测。
 
 与第 1–12 节的通用路径不同之处：
 
@@ -450,7 +450,7 @@ python3 tool/run.py -s <序列号> finish
 
 ### 一加 15T（PLZ110 / ColorOS 17.0.0.107(CN01)）
 
-2026-11-08 贡献者真机分段核对。专用脚本 `recipes/oneplus-PLZ110/recipe.py` 整轮未验证：复跑启动时 USB 断开，没有开始执行。
+2026-11-08 贡献者真机分段核对。专用脚本 `recipes/oppo/PLZ110/PLZ110.toml` 整轮未验证：复跑启动时 USB 断开，没有开始执行。
 
 - 软件商店 26.10.2_CN_dbd65ad：`APP_SETTINGS` 进入「应用与服务」，个性化推荐在「隐私授权管理 → 个性化推荐」。服务管理识别到脚本所列的 30 个推广位，分段执行后 29 项关闭，单独点名补关「应用安全安全内容推荐」后 30 项关闭；非目标开关回读未变。入口文案随商店 App 版本走，脚本先试「隐私」再退到本版实测的「隐私授权管理」，按 `PrivacyActivity` 判落点，点击被吞会重试（#907）。
 - 「应用安全」短保留词会遮住完整推广标题的问题由 #861 单独跟踪。本脚本沿用引擎现有判定，不包含本次补关的临时绕法；问题解决前，从开启状态运行商店段仍可能回读失败。
@@ -462,7 +462,7 @@ python3 tool/run.py -s <序列号> finish
 
 ### 一加 16（PYB110 / ColorOS 17.0.0.157(CN01) / Android 17）
 
-2026-11-12 维护者真机逐段核对。机型脚本：`recipes/oneplus-PYB110/recipe.py`，九段全跑 397 秒（17.0.0.155）、359 秒（17.0.0.157），两次均二次重跑幂等。
+2026-11-12 维护者真机逐段核对。机型脚本：`recipes/oppo/PYB110/PYB110.toml`，九段全跑 397 秒（17.0.0.155）、359 秒（17.0.0.157），两次均二次重跑幂等。
 
 - **广告跟踪**：设置 → 隐私与安全 → 设备标识与广告 → 广告跟踪（`OAIDActivity`），本机 64 项全开，右上角「更多选项」菜单里有「全部关闭」，一键关完整页。
 - **软件商店 26.8.60_CN_186188a**：「我的」页**没有「设置」文字行**，只有右上角齿轮；`oppo.intent.action.APP_SETTINGS` 直达 `SettingActivity` 可用。服务管理 46 项（比同代 30 多项那批多），脚本保留「帮助与客服」「应用安全」「我的专区」里的应用工具 / 存储空间清理 / 我的资产 / 安全守护 / 小i客服、「应用使用记录」「首页：AI搜索」，其余 36 项关闭。个性化推荐在「隐私 → 个性化推荐」二级页（`PersonalRecommendActivity`），「隐私」这一页本身没有开关。**本版设置页没有「消息管理」入口**（首启阶段读到过一行、关掉服务管理后不再出现，36 项全部打开也没回来），脚本按可选处理。

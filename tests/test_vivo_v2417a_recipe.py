@@ -17,13 +17,13 @@ from fixtures import load_recipe, phone_mock
 
 class VivoV2417ARecipeTests(unittest.TestCase):
     def load(self, phone, only=None):
-        scope, _ = load_recipe(phone, ROOT / "recipes/vivo-V2417A/recipe.py", only)
+        scope, _ = load_recipe(phone, ROOT / "recipes/vivo/V2417A/V2417A.toml", only)
         return scope
 
     def test_model_is_matched_without_reference_and_records_exact_build(self):
         path, reference = run.recipe_for("V2417A", "vivo")
         self.assertFalse(reference)
-        self.assertEqual(Path(path).parent.name, "vivo-V2417A")
+        self.assertEqual(Path(path).parent.name, "V2417A")
         meta = run.recipe_meta(path)
         self.assertEqual(meta["build"], "PD2417D_A_16.2.14.1.W10")
         self.assertEqual(meta["models"], ["V2417A"])
@@ -34,7 +34,7 @@ class VivoV2417ARecipeTests(unittest.TestCase):
         p.switches.return_value = [("天气服务异常提醒.有异常时提醒", True, (1, 2))]
         scope = self.load(p)
         with self.assertRaisesRegex(RuntimeError, "未识别全部目标"):
-            scope["close_named"](["天气服务"], "天气")
+            scope["close_named_vivo"](["天气服务"], "天气")
         p.off.assert_not_called()
 
     def test_unrelated_service_change_is_not_verified(self):
@@ -45,7 +45,7 @@ class VivoV2417ARecipeTests(unittest.TestCase):
         ]
         scope = self.load(p)
         with self.assertRaisesRegex(RuntimeError, "其他开关状态变化"):
-            scope["close_named"](["天气服务"], "天气")
+            scope["close_named_vivo"](["天气服务"], "天气")
         self.assertEqual(scope["VERIFIED_SWITCHES"], 0)
         self.assertEqual(p.off.call_args.kwargs["keep"], ["气象预警"])
 
@@ -54,7 +54,7 @@ class VivoV2417ARecipeTests(unittest.TestCase):
         p.switches.return_value = [("服务推荐.说明", True, (1, 2))]
         scope = self.load(p)
         with self.assertRaisesRegex(RuntimeError, "回读未确认"):
-            scope["close_named"](["服务推荐"], "负一屏")
+            scope["close_named_vivo"](["服务推荐"], "负一屏")
         self.assertEqual(scope["VERIFIED_SWITCHES"], 0)
 
     def test_real_engine_keeps_non_target_with_matching_prefix(self):
@@ -80,7 +80,7 @@ class VivoV2417ARecipeTests(unittest.TestCase):
         toggler.confirm = p.confirm          # 页面没有真弹窗：确认框仍由这条桩回答 None
         p.off.side_effect = lambda **kwargs: fast.Toggler.off(toggler, **kwargs)
         scope = self.load(p)
-        scope["close_named"](["个性化广告"], "系统广告")
+        scope["close_named_vivo"](["个性化广告"], "系统广告")
         self.assertEqual(states, {"个性化广告": False, "个性化广告推荐": True})
         p.click.assert_called_once_with(1, 600)
         p.off.assert_called_once()
@@ -122,11 +122,11 @@ class VivoV2417ARecipeTests(unittest.TestCase):
         scope = self.load(p)
         scope["ONLY"].clear()
         action = Mock(side_effect=RuntimeError("入口不符"))
-        scope["step"]("应用商店")(action)
+        scope["rt"].run_step("应用商店", action)
         self.assertEqual(scope["FAILED_STEPS"], ["应用商店"])
         lost = Mock(side_effect=adb_link.DeviceLost("断开"))
         with self.assertRaises(adb_link.DeviceLost):
-            scope["step"]("天气")(lost)
+            scope["rt"].run_step("天气", lost)
 
     def test_home_restoring_hiboard_opens_settings_without_swiping_again(self):
         p = phone_mock()

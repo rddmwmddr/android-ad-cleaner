@@ -1,0 +1,21 @@
+{
+ "script": "recipes/samsung/SM-N9760/SM-N9760.toml",
+ "scenarios": {
+  "present": [
+   ["广告", "locked", [], {}],
+   ["广告", "start", ["com.google.android.gms", ".adid.settings.AdsSettingsActivity"], {"expect": ["广告"]}],
+   ["广告", "await_page", [], {}],
+   ["广告", "switches", [], {}],
+   ["广告", "note_miss", ["停用广告个性化"], {}],
+   ["广告", "back", [], {}]
+  ],
+  "absent": [
+   ["广告", "locked", [], {}],
+   ["广告", "start", ["com.google.android.gms", ".adid.settings.AdsSettingsActivity"], {"expect": ["广告"]}],
+   ["广告", "await_page", [], {}],
+   ["广告", "switches", [], {}],
+   ["广告", "note_miss", ["停用广告个性化"], {}],
+   ["广告", "back", [], {}]
+  ]
+ }
+}

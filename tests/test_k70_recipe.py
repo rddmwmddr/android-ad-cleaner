@@ -13,13 +13,13 @@ from fixtures import load_recipe
 
 class K70RecipeTests(unittest.TestCase):
     def load(self, phone):
-        scope, _ = load_recipe(phone, ROOT / "recipes/redmi-23113RKC6C/recipe.py")
+        scope, _ = load_recipe(phone, ROOT / "recipes/xiaomi/23113RKC6C/23113RKC6C.toml")
         return scope
 
     def test_actual_model_selects_own_recipe_and_pins_recorded_build(self):
         path, reference = run.recipe_for("23113RKC6C", "Redmi")
         self.assertFalse(reference)
-        self.assertEqual(Path(path).parent.name, "redmi-23113RKC6C")
+        self.assertEqual(Path(path).parent.name, "23113RKC6C")
         self.assertEqual(run.recipe_meta(path)["build"], "OS3.0.307.0")
         self.assertEqual(run.recipe_meta(path)["steps"],
                          ["系统广告", "应用商店", "手机管家", "下载管理", "主题",
@@ -87,7 +87,7 @@ class K70ProRecipeTests(unittest.TestCase):
         phone.tap.return_value = True
         phone.switches.return_value = switches
         phone.scroll_more.return_value = False
-        scope, _ = load_recipe(phone, ROOT / "recipes/redmi-23117RK66C/recipe.py", ["应用商店"])
+        scope, _ = load_recipe(phone, ROOT / "recipes/xiaomi/23117RK66C/23117RK66C.toml", ["应用商店"])
         return phone, scope
 
     def test_store_missing_target_aborts_before_toggling_other_settings(self):

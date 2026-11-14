@@ -1,0 +1,109 @@
+# 魅族 21 Pro（Flyme 12.6.0.0A / Android 16）的页面树（catalog，#1262）。
+# 2026-10-30 真机分段验证：除浏览器、应用商店两段外其余目标已读到关闭；两段的启动落点与中间跳转在
+# #523 改过，尚未真机复测。不处理通知渠道、快应用或广告包；不改服务类通知与负一屏卡片。
+#
+# 家族库按这些常量选走法（#1246），缺省档与实现见 recipe_nav / recipe_strategies。
+model = "MEIZU 21 Pro"
+models = ["MEIZU 21 Pro"]
+build = "Flyme 12.6.0.0A"
+guard = "guard"
+detail = "page_summary"
+tail = "tail"
+
+[const]
+WAIT_PAGE_STYLE = "meizu"
+TAP_TEXT_STYLE = "meizu"
+GOTO_STYLE = "meizu"
+CLOSE_NAMED_STYLE = "meizu"
+
+[[segment]]
+name = "系统跟踪"
+ops = [
+  {kind = "shell", command = "am start --windowingMode 1 -f 0x10008000 -a android.settings.SETTINGS"},
+  {kind = "lib", name = "wait_page", args = ["com.android.settings/com.android.settings.homepage.SettingsHomepageActivity", "我的手机"]},
+  {kind = "lib", name = "goto", args = ["权限和隐私", "com.meizu.safe/com.meizu.safe.ui.permission.PermissionMainActivity", "权限和隐私", 8]},
+  {kind = "lib", name = "goto", args = ["应用跟踪控制", "com.flyme.secureservice/com.flyme.secureservice.openid.ui.OAIDSettingsActivity", "应用跟踪控制", 6]},
+  {kind = "lib", name = "close_named", args = [["允许应用跟踪"], "系统·应用跟踪", {expr = "focus"}]},
+]
+
+[[segment]]
+name = "全局搜索"
+ops = [
+  {kind = "code", name = "open_intent", args = ["com.meizu.net.search.setting", "com.meizu.net.search"]},
+  {kind = "lib", name = "wait_page", args = ["com.meizu.net.search/com.meizu.net.search.ui.module.activities.SearchPreferenceActivity", "全局搜索"]},
+  {kind = "lib", name = "close_named", args = [["插件显示热词", "精选内容推送"], "全局搜索", "com.meizu.net.search/com.meizu.net.search.ui.module.activities.SearchPreferenceActivity"]},
+  {kind = "lib", name = "goto", args = ["搜索项设置", "com.meizu.net.search/com.meizu.net.search.ui.module.activities.SubPreferenceActivity", "搜索项设置"]},
+  {kind = "lib", name = "close_named", args = [["精选内容"], "全局搜索·搜索项", {expr = "focus"}]},
+  {kind = "back"},
+  {kind = "lib", name = "wait_page", args = ["com.meizu.net.search/com.meizu.net.search.ui.module.activities.SearchPreferenceActivity", "全局搜索"]},
+  {kind = "lib", name = "goto", args = ["个性化推荐", "com.meizu.net.search/com.meizu.net.search.ui.module.activities.PersonalRecommendPreferenceActivity", "个性化推荐"]},
+  {kind = "lib", name = "close_named", args = [["个性化内容推荐", "个性化广告推荐"], "全局搜索·推荐", {expr = "focus"}]},
+]
+
+[[segment]]
+name = "浏览器"
+code = "step_browser"
+
+[[segment]]
+name = "应用商店"
+ops = [
+  {kind = "code", name = "open_app", args = ["com.meizu.mstore", "我的"]},
+  {kind = "lib", name = "wait_page", args = ["com.meizu.mstore/com.meizu.flyme.appcenter.activitys.AppMainActivity", "我的"]},
+  {kind = "require_unlocked", miss_print = "手机锁屏，请机主解锁"},
+  {kind = "lib", name = "assert_no_other_window", args = [{expr = "tree"}, "com.meizu.mstore"]},
+  {kind = "require_tab", name = "我的", miss_print = "应用商店底部没有「我的」标签"},
+  {kind = "lib", name = "wait_page", args = ["com.meizu.mstore/com.meizu.flyme.appcenter.activitys.AppMainActivity", "设置"]},
+  {kind = "lib", name = "goto", args = ["设置", "com.meizu.mstore/com.meizu.flyme.appcenter.activitys.AppSettingsPreferenceActivity", "应用更新通知"]},
+  {kind = "lib", name = "goto", args = ["个性化推荐", "com.meizu.cloud.app.settings.PersonalizedPreferenceActivity", "个性化推荐"]},
+  {kind = "lib", name = "close_named", args = [["个性化内容推荐", "个性化广告推荐"], "应用商店·推荐", "com.meizu.cloud.app.settings.PersonalizedPreferenceActivity"]},
+]
+
+[[segment]]
+name = "主题美化"
+ops = [
+  {kind = "code", name = "open_app", args = ["com.meizu.customizecenter", "主题"]},
+  {kind = "lib", name = "wait_page", args = ["com.meizu.customizecenter/com.meizu.customizecenter.frame.activity.CustomizeCenterActivity", "主题"]},
+  {kind = "code", name = "tap_id", args = ["com.meizu.customizecenter:id/account_avatar"]},
+  {kind = "lib", name = "wait_page", args = ["com.meizu.customizecenter/com.meizu.customizecenter.frame.modules.myAccount.view.AccountActivity", "设置"]},
+  {kind = "lib", name = "goto", args = ["设置", "com.meizu.customizecenter/com.meizu.customizecenter.frame.modules.settingactivity.view.SettingActivity", "主题字体动态壁纸更新通知"]},
+  {kind = "lib", name = "goto", args = ["个性化推荐", "com.meizu.customizecenter/com.meizu.customizecenter.frame.modules.privacysettingactivity.PersonalizedRecommendationActivity", "个性化推荐"]},
+  {kind = "lib", name = "close_named", args = [["个性化广告推荐"], "主题美化·推荐", "com.meizu.customizecenter/com.meizu.customizecenter.frame.modules.privacysettingactivity.PersonalizedRecommendationActivity"]},
+]
+
+[[segment]]
+name = "天气"
+ops = [
+  {kind = "code", name = "open_app", args = ["com.meizu.flyme.weather", "更多选项"]},
+  {kind = "lib", name = "wait_page", args = ["com.meizu.flyme.weather/com.hy.weather.mz.modules.home.WeatherMainActivity", "更多选项"]},
+  {kind = "lib", name = "tap_text", args = ["更多选项"]},
+  {kind = "lib", name = "tap_text", args = ["设置"]},
+  {kind = "lib", name = "wait_page", args = ["com.meizu.flyme.weather/com.hy.weather.mz.WeatherSettingActivity", "预警管理"]},
+  {kind = "lib", name = "goto", args = ["内容推荐", "com.meizu.flyme.weather/com.hy.weather.mz.WeatherPersonalizationSettingActivity", "内容推荐"]},
+  {kind = "lib", name = "close_named", args = [["本地资讯", "精选内容推送", "允许展示开屏推荐"], "天气·内容", "com.meizu.flyme.weather/com.hy.weather.mz.WeatherPersonalizationSettingActivity"]},
+  {kind = "back"},
+  {kind = "lib", name = "wait_page", args = ["com.meizu.flyme.weather/com.hy.weather.mz.WeatherSettingActivity", "预警管理"]},
+  {kind = "lib", name = "goto", args = ["个性化推荐", "com.meizu.flyme.weather/com.hy.weather.mz.RecommendSettingActivity", "个性化推荐"]},
+  {kind = "lib", name = "close_named", args = [["个性化内容推荐", "个性化广告推荐"], "天气·推荐", "com.meizu.flyme.weather/com.hy.weather.mz.RecommendSettingActivity"]},
+]
+
+[[segment]]
+name = "手机管家"
+ops = [
+  {kind = "shell", command = "am start --windowingMode 1 -f 0x10008000 -a android.settings.SETTINGS"},
+  {kind = "lib", name = "wait_page", args = ["com.android.settings/com.android.settings.homepage.SettingsHomepageActivity", "我的手机"]},
+  {kind = "lib", name = "goto", args = ["手机管家", "com.meizu.safe/com.meizu.safe.SecurityMainActivity", "设置", 8]},
+  {kind = "lib", name = "goto", args = ["设置", "com.meizu.safe/com.meizu.safe.MainSettingsActivity", "应用下载推荐"]},
+  {kind = "lib", name = "close_named", args = [["允许展示开屏推荐", "应用下载推荐"], "手机管家·内容", "com.meizu.safe/com.meizu.safe.MainSettingsActivity"]},
+  {kind = "lib", name = "goto", args = ["个性化推荐", "com.meizu.safe/com.meizu.safe.PersonalizedSettingsActivity", "个性化推荐", 4]},
+  {kind = "lib", name = "close_named", args = [["个性化广告推荐"], "手机管家·推荐", "com.meizu.safe/com.meizu.safe.PersonalizedSettingsActivity"]},
+]
+
+[[segment]]
+name = "锁屏画报"
+ops = [
+  {kind = "code", name = "open_intent", args = ["com.meizu.net.nativelockscreen.locksettingpage", "com.meizu.net.nativelockscreen"]},
+  {kind = "lib", name = "wait_page", args = ["com.meizu.net.nativelockscreen/com.meizu.net.lockscreenlibrary.view.LockScreenPosterSettingActivity", "锁屏画报"]},
+  {kind = "lib", name = "goto", args = ["设置", "com.meizu.net.nativelockscreen/com.meizu.net.lockscreenlibrary.view.settings.SettingsActivity", "个性化推荐"]},
+  {kind = "lib", name = "goto", args = ["个性化推荐", "com.meizu.net.nativelockscreen/com.meizu.net.lockscreenlibrary.view.settings.PersonalizedRecommendationsActivity", "个性化推荐"]},
+  {kind = "lib", name = "close_named", args = [["个性化内容推荐", "个性化广告推荐"], "锁屏画报·推荐", "com.meizu.net.nativelockscreen/com.meizu.net.lockscreenlibrary.view.settings.PersonalizedRecommendationsActivity"]},
+]

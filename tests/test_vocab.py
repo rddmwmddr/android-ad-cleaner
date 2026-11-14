@@ -23,72 +23,79 @@ CLUES = ROOT / "docs" / "清单" / "词条线索.md"
 
 # 解析不出的 only=，按脚本冻结。新脚本多了这种写法，先看能不能写成字面量或模块级常量，确实不能再改这里。
 UNRESOLVED_ONLY = {
-    "honor-CLE-AN00/recipe.py": 1,
-    "oneplus-PHK110/recipe.py": 1,
-    "oneplus-PKX110/recipe.py": 1,
-    "oppo-PKH110/recipe.py": 1,
-    "oppo-PLG110/recipe.py": 2,
-    "oppo-PLP120/recipe.py": 1,
-    "oppo-PMA110/recipe.py": 1,
-    "redmi-23049RAD8C/recipe.py": 1,
-    "redmi-25060RK16C/recipe.py": 1,
-    "vivo-V2303A/recipe.py": 1,
-    "vivo-V2547DA/recipe_android17.py": 4,
-    "xiaomi-2304FPN6DC/recipe.py": 1,
-    "xiaomi-24090RA29C/recipe.py": 1,
-    "xiaomi-2410CRP4CC/recipe.py": 1,
-    "xiaomi-24129PN74C/recipe_os4.py": 2,
-    "xiaomi-25102RKBEC/recipe.py": 1,
-    "xiaomi-2512BPNDAC/recipe.py": 1,
-    "xiaomi-M154FF/recipe.py": 1,
-    "xiaomi-M332BF/recipe.py": 1,
+    'honor/CLE-AN00/CLE-AN00.toml': 1,
+    'honor/WKL-AN20/WKL-AN20.toml': 1,
+    'meizu/MEIZU 21 Pro/MEIZU 21 Pro.toml': 1,
+    'oppo/PHK110/PHK110-android15.toml': 1,
+    'oppo/PJA110/PJA110-android16.toml': 1,
+    'oppo/PJA110/PJA110.toml': 1,
+    'oppo/PKH110/PKH110.toml': 1,
+    'oppo/PKT110/PKT110.toml': 2,
+    'oppo/PKX110/PKX110.toml': 1,
+    'oppo/PLG110/PLG110.toml': 3,
+    'oppo/PLP120/PLP120.toml': 1,
+    'oppo/PLZ110/PLZ110.toml': 2,
+    'oppo/PMA110/PMA110.toml': 2,
+    'oppo/PMX110/PMX110.toml': 2,
+    'vivo/V2303A/V2303A.toml': 1,
+    'vivo/V2417A/V2417A.toml': 1,
+    'vivo/V2547DA/V2547DA-android17.toml': 4,
+    'xiaomi/23117RK66C/23117RK66C.toml': 1,
+    'xiaomi/24129PN74C/24129PN74C-os4.toml': 2,
+    'xiaomi/24129PN74C/24129PN74C.toml': 1,
+    'xiaomi/M154FF/M154FF.toml': 1,
 }
 # close_named() 第一个参数解析不出的，和上面分开冻结，免得一个口径盖住另一个。
 UNRESOLVED_CLOSE = {
-    "oneplus-PJA110/recipe_android16.py": 1,
-    "oneplus-PLZ110/recipe.py": 2,
-    "oppo-PKT110/recipe.py": 3,
-    "oppo-PMX110/recipe.py": 2,
-    "redmi-23117RK66C/recipe.py": 1,
-    "vivo-V2417A/recipe.py": 1,
+    'oppo/PJA110/PJA110-android16.toml': 1,
+    'oppo/PKT110/PKT110.toml': 2,
+    'oppo/PLZ110/PLZ110.toml': 1,
+    'oppo/PMX110/PMX110.toml': 1,
+    'xiaomi/23117RK66C/23117RK66C.toml': 1,
 }
 # 解析不出的 keep=，同样按脚本冻结：它只影响同页保留项，读不出时那页的约束就整段丢了。
 UNRESOLVED_KEEP = {
-    "oneplus-PHK110/recipe.py": 1,
-    "oneplus-PKX110/recipe.py": 1,
-    "oneplus-PLZ110/recipe.py": 1,
-    "oppo-PKH110/recipe.py": 1,
-    "oppo-PLG110/recipe.py": 2,
-    "oppo-PMA110/recipe.py": 1,
-    "oppo-PMX110/recipe.py": 1,
-    "vivo-V2417A/recipe.py": 1,
+    'oppo/PHK110/PHK110-android15.toml': 1,
+    'oppo/PKH110/PKH110.toml': 1,
+    'oppo/PKX110/PKX110.toml': 1,
+    'oppo/PLG110/PLG110.toml': 2,
+    'oppo/PLZ110/PLZ110.toml': 1,
+    'oppo/PMA110/PMA110.toml': 1,
+    'oppo/PMX110/PMX110.toml': 1,
+    'vivo/V2417A/V2417A.toml': 1,
 }
 # 模块级字典里的说明文字，按脚本冻结。
 DICT_NOTES = {
-    "honor-WKL-AN20/recipe.py": 37,
+    "honor/WKL-AN20/WKL-AN20.toml": 37,
 }
 # 一条词条都读不出来的脚本（判据就是零词条）：开关点名散在自建函数里（vivo-V2547A 的 off()、
 # oneplus-PHK110 的 off_exact()、samsung-SM-N9760 的 protect()），或者名单运行时才算。
 SILENT = (
-    "oneplus-PHK110/recipe.py",
-    "oneplus-PHK110/recipe_android15.py",
-    "samsung-SM-N9760/recipe.py",
-    "vivo-V2547A/recipe.py",
+    'oppo/PHK110/PHK110-android15.toml',
+    'oppo/PHK110/PHK110.toml',
+    'samsung/SM-N9760/SM-N9760.toml',
+    'vivo/V2547A/V2547A.toml',
 )
 # 页面标签归不到分组的调用。多出来的先看能不能加进 vocab.PAGES。
 UNCLASSIFIED = {
-    ("oppo", "<page>"): 7,
-    ("oppo", "个性化管理"): 3,
-    ("oppo", "隐私"): 4,
+    ('honor', '<title>'): 1,
+    ('meizu', '<page>'): 3,
+    ('oppo', '<page>'): 27,
+    ('oppo', '<title>'): 2,
+    ('oppo', '个性化管理'): 3,
+    ('oppo', '隐私'): 4,
+    ('vivo', '<page>'): 1,
+    ('xiaomi', '<page>'): 6,
 }
 
 
 def recipes(**files):
-    """{"xiaomi-A1": 源码} → 临时 recipes 目录。"""
+    """{"xiaomi-A1": 源码} → 临时 recipes 目录（按家族/型号两层放，#1261）。"""
     tmp = tempfile.TemporaryDirectory()
     for name, src in files.items():
-        folder = Path(tmp.name, name)
-        folder.mkdir()
+        brand, _, model = name.partition("-")
+        folder = Path(tmp.name, vocab.FAMILY.get(brand.lower(), brand), model or name)
+        folder.mkdir(parents=True)
         folder.joinpath("recipe.py").write_text(textwrap.dedent(src), encoding="utf-8")
     return tmp
 
@@ -106,6 +113,10 @@ class RealRecipesTest(unittest.TestCase):
         for word in self.scan.words:
             if word.injected:
                 continue            # 词在注入段体里，出处是调用点；下面一条用例守它（#1209）
+            if word.script.endswith(".toml"):
+                # 数据形态：词条出处是合成的等价源码行号，不是 .toml 正文里的行；只校验文件在。
+                self.assertTrue((ROOT / "recipes" / word.script).is_file(), word.source)
+                continue
             lines = cache.setdefault(word.script, (ROOT / "recipes" / word.script).read_text(encoding="utf-8").splitlines())
             self.assertIn(word.text, lines[word.line - 1], word.source)
 
@@ -126,6 +137,17 @@ class RealRecipesTest(unittest.TestCase):
             self.assertIn(group, entries.ENTRIES[family], f"{family} {prefix}")
         placed = {(w.family, w.group) for w in self.scan.words if w.group}
         self.assertLessEqual(placed, {(f, g) for f, groups in entries.ENTRIES.items() for g in groups})
+
+    def test_close_listed_names_reach_the_scan(self):
+        """`close_listed` 的候选名单是「这一页要关的这些名字」，必须当字面量进词库（#1265）。
+
+        先证红：`_catalog_src` 不投影 `close_listed` 时，这 30 个名字既不进词条也不进未解析清单
+        （旧脚本里 `close_named(names, …)` 的 `names` 是运行期变量，词库读不出；改成数据后名字明明
+        是字面量，投影一断就两头落空）。这里按型号点名一个词，投影在就该读得到。"""
+        found = {(word.model, word.text) for word in self.scan.words}
+        for model in ("PLZ110", "PMX110"):
+            self.assertIn((model, "应用安全安全内容推荐"), found)
+            self.assertIn((model, "小游戏二楼和专区"), found)
 
     def test_unresolved_only_is_frozen_per_script(self):
         self.assertEqual(dict(Counter(c.script for c in self.scan.unresolved_only)), UNRESOLVED_ONLY)
@@ -314,7 +336,7 @@ class CloseNamedTest(unittest.TestCase):
 class RealHonorTest(unittest.TestCase):
     def test_the_words_that_caught_a_real_miss_are_in_the_vocabulary(self):
         # 真实发生过：CLE-AN00 的音乐段漏了这两个，是拿 WKL-AN20 的 close_named 词对照发现的
-        words = [w for w in vocab.scan(RECIPES).words if w.script.startswith("honor-WKL-AN20/")]
+        words = [w for w in vocab.scan(RECIPES).words if w.script.startswith("honor/WKL-AN20/")]
         self.assertIn(("音乐", "展示“摇一摇”类开屏广告"), {(w.group, w.text) for w in words})
         self.assertIn(("音乐", "个性化广告推荐"), {(w.group, w.text) for w in words})
 
@@ -353,7 +375,7 @@ class ParseTest(unittest.TestCase):
             p.off(only=HOT, page="搜索·首页")
         ''')
         self.assertEqual(found.words[0].line, 3)
-        self.assertEqual(found.words[0].source, "xiaomi-A1:3")
+        self.assertEqual(found.words[0].source, "xiaomi/A1:3")
 
     def test_loop_variables_and_computed_lists_are_unresolved(self):
         found = self.scan('''
@@ -438,6 +460,11 @@ class InjectedStepTest(unittest.TestCase):
 @step("下载管理")
 def _():
     downloads()
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from recipe_steps import downloads
 ''', '''\
 def downloads(p, g):
     def _():
@@ -445,9 +472,9 @@ def downloads(p, g):
     return _
 ''')
         self.assertEqual([(w.text, w.kind, w.source, w.injected) for w in found.words],
-                         [("广告推荐", vocab.OFF, "xiaomi-A1:3", True),
-                          ("开屏广告", vocab.OFF, "xiaomi-A1:3", True),
-                          ("仅 Wi-Fi 下载", vocab.KEEP, "xiaomi-A1:3", True)])
+                         [("广告推荐", vocab.OFF, "xiaomi/A1:3", True),
+                          ("开屏广告", vocab.OFF, "xiaomi/A1:3", True),
+                          ("仅 Wi-Fi 下载", vocab.KEEP, "xiaomi/A1:3", True)])
         self.assertEqual({(w.group, w.page) for w in found.words}, {("下载管理", "下载管理·设置")})
 
     def test_a_module_constant_reaches_the_implementation(self):
@@ -458,6 +485,11 @@ HOT = ["热点资讯", "热搜榜"]
 @step("负一屏")
 def _():
     downloads()
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from recipe_steps import downloads
 ''', '''\
 def downloads(p, g):
     def _():
@@ -465,13 +497,18 @@ def downloads(p, g):
     return _
 ''')
         self.assertEqual([(w.text, w.source) for w in found.words],
-                         [("热点资讯", "xiaomi-A1:5"), ("热搜榜", "xiaomi-A1:5")])
+                         [("热点资讯", "xiaomi/A1:5"), ("热搜榜", "xiaomi/A1:5")])
 
     def test_unresolved_and_page_wide_are_charged_to_the_caller(self):
         found = self.scan('''\
 @step("下载管理")
 def _():
     downloads()
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from recipe_steps import downloads
 ''', '''\
 def downloads(p, g):
     def _():
@@ -480,28 +517,78 @@ def downloads(p, g):
     return _
 ''')
         self.assertEqual([(c.script, c.line) for c in found.unresolved_only],
-                         [("xiaomi-A1/recipe.py", 3)])
+                         [("xiaomi/A1/recipe.py", 3)])
         self.assertEqual(found.whole_page, 1)
 
     def test_every_caller_is_credited(self):
-        src = '@step("下载管理")\ndef _():\n    downloads()\n'
+        src = ('@step("下载管理")\ndef _():\n    downloads()\n\n'
+               'from typing import TYPE_CHECKING\n\nif TYPE_CHECKING:\n'
+               '    from recipe_steps import downloads\n')
         impl = ('def downloads(p, g):\n    def _():\n'
                 '        p.off(only=["广告推荐"], page="下载管理·设置")\n    return _\n')
         tmp = recipes(**{"xiaomi-A1": src, "redmi-B2": src})
         self.addCleanup(tmp.cleanup)
         found = vocab.scan(tmp.name, injected={"downloads": impl})
         self.assertEqual({(w.model, w.source) for w in found.words},
-                         {("A1", "xiaomi-A1:3"), ("B2", "redmi-B2:3")})
+                         {("A1", "xiaomi/A1:3"), ("B2", "xiaomi/B2:3")})
 
-    def test_the_surface_only_adds_words_at_its_call_sites(self):
-        """注入面只添「词住在段体里」的那一份，脚本自己那份一个字不变（#1210）。
+    def test_the_surfaces_only_add_words_at_their_call_sites(self):
+        """两张注入面只添「词住在实现里」的那一份，脚本自己那份一个字不变（沿用 #1210；#1253 起两张表）。
 
-        关掉注入面读到的就是加接线之前的样子：两边词数相加必须等于全量，多算与漏算都在这里红。"""
-        without, default = vocab.scan(RECIPES, injected={}), vocab.scan(RECIPES)
+        关掉两张表读到的就是加接线之前的样子：两边词数相加必须等于全量，多算与漏算都在这里红。"""
+        without, default = vocab.scan(RECIPES, injected={}, strategies={}), vocab.scan(RECIPES)
         self.assertFalse(any(w.injected for w in without.words))
         added = [w for w in default.words if w.injected]
         self.assertTrue(added, "注入面一条词都没读到：接线断了")
         self.assertEqual(len(without.words) + len(added), len(default.words))
+
+
+class StrategySurfaceTest(unittest.TestCase):
+    """拨动策略那张注入面（#1253）：一份实现只算一次，没有调用点的记到导入行。"""
+
+    def scan(self, src, impl, folder="xiaomi-A1"):
+        tmp = recipes(**{folder: src})
+        self.addCleanup(tmp.cleanup)
+        return vocab.scan(tmp.name, injected={}, strategies={"downloads": impl})
+
+    def test_a_strategy_called_twice_is_charged_once(self):
+        """一份实现是模块里的一份：按调用点各扫一遍会把未解析与整页数乘起来。"""
+        found = self.scan('''\
+@step("下载管理")
+def _():
+    downloads()
+    downloads()
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from recipe_strategies import downloads
+''', '''\
+def downloads(p, g):
+    def _():
+        p.off(only=list(targets), page="下载管理·设置")
+        p.off(page="下载管理·设置")
+    return _
+''')
+        self.assertEqual([(c.script, c.line) for c in found.unresolved_only],
+                         [("xiaomi/A1/recipe.py", 3)])
+        self.assertEqual(found.whole_page, 1)
+
+    def test_an_imported_strategy_without_a_call_site_is_charged_to_the_import_line(self):
+        """库按名字回调的钩子与模块别名没有调用点：出处记脚本导入它的那一行。"""
+        found = self.scan('''\
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from recipe_strategies import downloads
+''', '''\
+def downloads(p, g):
+    def _():
+        p.off(only=["广告推荐"], page="下载管理·设置")
+    return _
+''')
+        self.assertEqual([(w.text, w.source, w.injected) for w in found.words],
+                         [("广告推荐", "xiaomi/A1:4", True)])
 
 
 class RenderTest(unittest.TestCase):
@@ -518,7 +605,7 @@ class RenderTest(unittest.TestCase):
         doc = self.render(**{"xiaomi-A1": 'p.off(only=["营销"], keep=["推送消息"], page="商店·通知设置")'})
         section = self.group(doc, "应用商店")
         self.assertIn("**同页保留项**", section)
-        self.assertIn("- 商店·通知设置 · 推送消息：`xiaomi-A1:1`", section)
+        self.assertIn("- 商店·通知设置 · 推送消息：`xiaomi/A1:1`", section)
 
     def test_same_word_on_two_pages_gets_two_reverse_rows(self):
         doc = self.render(**{"xiaomi-A1": 'p.off(only=["广告"], page="商店·甲")\np.off(keep=["广告"], only=["x"], page="商店·乙")'})
@@ -531,8 +618,8 @@ class RenderTest(unittest.TestCase):
                              "xiaomi-B2": 'p.off(only=["WiFi连接"], page="商店·甲")'})
         line = next(l for l in self.group(doc, "应用商店").splitlines() if "WiFi" in l)
         self.assertIn("WiFi 连接 / WiFi连接", line)
-        self.assertIn("xiaomi-A1:1", line)
-        self.assertIn("xiaomi-B2:1", line)
+        self.assertIn("xiaomi/A1:1", line)
+        self.assertIn("xiaomi/B2:1", line)
 
     def test_empty_group_still_has_a_section(self):
         doc = self.render(**{"xiaomi-A1": 'p.off(only=["广告"], page="商店·甲")'})
@@ -541,10 +628,10 @@ class RenderTest(unittest.TestCase):
     def test_non_default_file_is_named_in_the_source(self):
         tmp = recipes(**{"vivo-V1": 'p.off(only=["广告"], page="商店·甲")'})
         self.addCleanup(tmp.cleanup)
-        Path(tmp.name, "vivo-V1", "recipe_android17.py").write_text('p.off(only=["推荐"], page="商店·甲")', encoding="utf-8")
+        (Path(tmp.name, "vivo", "V1", "recipe_android17.py")).write_text('p.off(only=["推荐"], page="商店·甲")', encoding="utf-8")
         doc = vocab.render(tmp.name)
-        self.assertIn("`vivo-V1/recipe_android17.py:1`", doc)
-        self.assertIn("`vivo-V1:1`", doc)
+        self.assertIn("`vivo/V1/recipe_android17.py:1`", doc)
+        self.assertIn("`vivo/V1:1`", doc)
 
     def test_html_like_labels_are_in_code_so_markdown_keeps_them(self):
         doc = self.render(**{"xiaomi-A1": 'p.off(only=names, page=title)'})
@@ -619,7 +706,7 @@ class GapsTest(unittest.TestCase):
     def gaps(self, **files):
         tmp = recipes(**files)
         self.addCleanup(tmp.cleanup)
-        return vocab.gaps(tmp.name, "honor-A1")
+        return vocab.gaps(tmp.name, "honor/A1" )
 
     def test_peer_words_missing_from_this_script_are_listed_with_source_and_page(self):
         text = self.gaps(**{
@@ -628,7 +715,7 @@ class GapsTest(unittest.TestCase):
         })
         self.assertIn("## 音乐", text)
         self.assertIn("乙", text)
-        self.assertIn("honor-B2:1", text)
+        self.assertIn("honor/B2:1", text)
         self.assertIn("B2", text)
         self.assertIn("音乐·广告推荐", text)
         self.assertNotIn("甲", text)
@@ -663,8 +750,8 @@ class GapsTest(unittest.TestCase):
         tmp = recipes(**{"honor-A1": 'p.off(only=["甲"], page="音乐·页")',
                          "honor-B2": 'p.off(only=["甲", "乙"], page="音乐·页")'})
         self.addCleanup(tmp.cleanup)
-        exact = vocab.gaps(tmp.name, "honor-A1")
-        for variant in ("honor-A1/", "HONOR-a1"):
+        exact = vocab.gaps(tmp.name, "honor/A1" )
+        for variant in ("honor/A1/", "HONOR/A1"):
             self.assertEqual(vocab.gaps(tmp.name, variant), exact, variant)
 
     def test_script_with_no_readable_words_is_flagged(self):
@@ -676,16 +763,16 @@ class GapsTest(unittest.TestCase):
         text = self.gaps(**{"honor-A1": 'p.off(only=["甲"], page="音乐·页")',
                             "honor-B2": 'p.off(only=names, page="音乐·页")'})
         self.assertIn("没参与比对", text)
-        self.assertIn("`honor-B2/recipe.py:1`", text)
+        self.assertIn("`honor/B2/recipe.py:1`", text)
 
     def test_unknown_folder_and_brand_are_distinct_errors(self):
         tmp = recipes(**{"honor-A1": 'p.off(only=["甲"], page="音乐·页")',
                          "unknownbrand-A1": 'p.off(only=["甲"], page="音乐·页")'})
         self.addCleanup(tmp.cleanup)
         with self.assertRaises(FileNotFoundError):
-            vocab.gaps(tmp.name, "honor-NOPE")
+            vocab.gaps(tmp.name, "honor/NOPE" )
         with self.assertRaises(ValueError):
-            vocab.gaps(tmp.name, "unknownbrand-A1")
+            vocab.gaps(tmp.name, "unknownbrand/A1")
 
     def test_group_order_follows_the_entry_sheet_and_uncategorized_goes_last(self):
         text = self.gaps(**{

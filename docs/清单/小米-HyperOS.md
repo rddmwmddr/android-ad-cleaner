@@ -7,26 +7,26 @@
 |---|---|---|
 | Xiaomi 18 Pro Max（M154FF） | HyperOS OS4.0.24，Android 17 | 2026-10-22 实测；2026-10-25 九段脚本重跑通过 |
 | Xiaomi 18 Fold（2608BPX34C） | CP2A.260605.016，Android 17 | 2026-10-24 社区实测（[Issue #2](https://github.com/rddmwmddr/android-ad-cleaner/issues/2)） |
-| Xiaomi 17 Ultra（2512BPNDAC，标准版） | HyperOS OS4.0.5.0.XPACNXM，Android 17 | 2026-10-28 真机实测；专用脚本九段全通过（176 秒，`recipes/xiaomi-2512BPNDAC`） |
+| Xiaomi 17 Ultra（2512BPNDAC，标准版） | HyperOS OS4.0.5.0.XPACNXM，Android 17 | 2026-10-28 真机实测；专用脚本九段全通过（176 秒，`recipes/xiaomi/2512BPNDAC`） |
 | Xiaomi 17（25113PN0EC） | HyperOS 4，Android 17 | 2026-11-01 社区实测（[PR #400](https://github.com/rddmwmddr/android-ad-cleaner/pull/400)）；无专用脚本，差异见[文末](#xiaomi-1725113pn0ecos4的差异) |
 | Redmi Note 13（23124RA7EO，**海外版 / 俄区**） | HyperOS OS2.0.213.0.VNHRUXM，Android 15 | 2026-11-01 社区实测（[Issue #474](https://github.com/rddmwmddr/android-ad-cleaner/issues/474)，adb + 手动，未登录小米账号）；无专用脚本，差异见[文末](#海外版-hyperosredmi-note-1323124ra7eo的差异) |
-| Xiaomi 15（24129PN74C） | HyperOS OS4.0.0.22.XOCCNXM，Android 17 | 2026-10-29 真机实测；专用脚本九段全通过（164 秒，`recipes/xiaomi-24129PN74C/recipe_os4.py`） |
+| Xiaomi 15（24129PN74C） | HyperOS OS4.0.0.22.XOCCNXM，Android 17 | 2026-10-29 真机实测；专用脚本九段全通过（164 秒，`recipes/xiaomi/24129PN74C/24129PN74C-os4.toml`） |
 | Xiaomi Pad 7（2410CRP4CC） | HyperOS OS2.0.208.0.VOZCNXM，Android 15 | 2026-10-28 实测；四段脚本复跑通过，约 61 秒 |
-| REDMI K80 至尊版（25060RK16C） | HyperOS 2（BP2A.250605.031.A3），Android 16 | 2026-10-27 真机实测；专用脚本九段全通过并回读（recipes/redmi-25060RK16C） |
-| REDMI K80 Pro（24122RKC7C） | HyperOS OS3.0.304.0.WOMCNXM，Android 16 | 2026-10-29 真机实测；首轮借 K70 路径关 20 项，专用脚本九段复跑 172 秒、0 异常（`recipes/redmi-24122RKC7C`，见 [实测记录](../15-红米K80Pro实测.md)） |
+| REDMI K80 至尊版（25060RK16C） | HyperOS 2（BP2A.250605.031.A3），Android 16 | 2026-10-27 真机实测；专用脚本九段全通过并回读（recipes/xiaomi/25060RK16C） |
+| REDMI K80 Pro（24122RKC7C） | HyperOS OS3.0.304.0.WOMCNXM，Android 16 | 2026-10-29 真机实测；首轮借 K70 路径关 20 项，专用脚本九段复跑 172 秒、0 异常（`recipes/xiaomi/24122RKC7C`，见 [实测记录](../15-红米K80Pro实测.md)） |
 | REDMI K90 Pro Max（25102RKBEC） | HyperOS OS4.0.2.0.XPMCNXM，Android 17 | 2026-10-27 实测，九段机型脚本全通过（169 秒） |
 | REDMI K90 Ultra（M332BF） | HyperOS OS4.0.4.0.XHPCNXM，Android 17 | 2026-10-31 社区实测（[Issue #374](https://github.com/rddmwmddr/android-ad-cleaner/issues/374)）；专用脚本按报告者规格重写，待其用新版复测 |
-| REDMI K90（2510DRK44C） | HyperOS OS4.0.5.0.XPKCNXM，Android 17 | 2026-11-10 社区实测（[Issue #929](https://github.com/rddmwmddr/android-ad-cleaner/issues/929)）；与 18 Pro Max 共用 `recipes/xiaomi-M154FF`（本票登记），本仓库未在该机复跑。借参考脚本九段中八段跑通，**主题段需先挂起 `com.miui.systemAdSolution`**（挂起后补关 2 项，九段累计 18 项） |
+| REDMI K90（2510DRK44C） | HyperOS OS4.0.5.0.XPKCNXM，Android 17 | 2026-11-10 社区实测（[Issue #929](https://github.com/rddmwmddr/android-ad-cleaner/issues/929)）；与 18 Pro Max 共用 `recipes/xiaomi/M154FF`（本票登记），本仓库未在该机复跑。借参考脚本九段中八段跑通，**主题段需先挂起 `com.miui.systemAdSolution`**（挂起后补关 2 项，九段累计 18 项） |
 | MIX Flip 2（2505APX7BC） | HyperOS / Android 16，底包 `BP2A.250605.031.A3` | 2026-11-05 社区实测（合盖外屏，[Issue #832](https://github.com/rddmwmddr/android-ad-cleaner/issues/832)）；专用脚本按报告者实测路径写成，待其用新版复测 |
 | Redmi Note 12 Turbo（23049RAD8C） | HyperOS OS3.0.5.0.VMRCNXM，Android 15 | 2026-10-25 实测（九段脚本跑通，用时约 3.5 分钟） |
 | Redmi K70（23113RKC6C） | HyperOS OS3.0.307.0.WNKCNXM，Android 16 | 2026-10-26 无线+有线：9 段专用脚本；当前目标 20 项；本轮实测含已移除的小说 1 项；浏览器「最新资讯」disabled，未操作 |
 | Redmi K70 Pro（23117RK66C） | HyperOS OS3.0.306.0.WNMCNXM，Android 16 | 2026-10-29～30 实测；专用脚本与验证范围见 [K70 Pro 实测](../14-红米K70Pro实测.md) |
 | Redmi Note 14 5G（24094RAD4C） | HyperOS OS3.0.306.0.WOQCNXM，Android 16 | 2026-10-30 真机实测；专用八段脚本首轮关闭 20 项（记账修复前统计，不含普通点击关掉的 4 项），复跑 291 秒、21 项回读、调整 0 项 |
-| Xiaomi 13（2211133C） | HyperOS OS3.0.309.0.WMCCNXM，Android 16 | 2026-11-05 社区实测（[Issue #281](https://github.com/rddmwmddr/android-ad-cleaner/issues/281)）；无专用脚本，底包与 Xiaomi 15 相同但入口结构不同、不能直接套，版本没有对得上的同族脚本，客户端用固定参考 `recipes/xiaomi-M154FF`，差异见[文末](#xiaomi-132211133c的差异) |
+| Xiaomi 13（2211133C） | HyperOS OS3.0.309.0.WMCCNXM，Android 16 | 2026-11-05 社区实测（[Issue #281](https://github.com/rddmwmddr/android-ad-cleaner/issues/281)）；无专用脚本，底包与 Xiaomi 15 相同但入口结构不同、不能直接套，版本没有对得上的同族脚本，客户端用固定参考 `recipes/xiaomi/M154FF`，差异见[文末](#xiaomi-132211133c的差异) |
 | Xiaomi 13 Ultra（2304FPN6DC） | HyperOS OS3.0.308.0.WMACNXM，Android 16 | 2026-10-28 实测；九段脚本复跑通过，约 3 分 16 秒 |
-| Xiaomi 14 Pro（23116PN5BC） | HyperOS OS3.0.308.0.WNBCNXM，Android 16 | 2026-10-29 社区实测（[Issue #317](https://github.com/rddmwmddr/android-ad-cleaner/issues/317)）；与 13 Ultra 共用 `recipes/xiaomi-2304FPN6DC`，安全模式下九段跑通、每步回读，仅浏览器「搜索设置」未命中 |
+| Xiaomi 14 Pro（23116PN5BC） | HyperOS OS3.0.308.0.WNBCNXM，Android 16 | 2026-10-29 社区实测（[Issue #317](https://github.com/rddmwmddr/android-ad-cleaner/issues/317)）；与 13 Ultra 共用 `recipes/xiaomi/2304FPN6DC`，安全模式下九段跑通、每步回读，仅浏览器「搜索设置」未命中 |
 
-**Xiaomi 17 Ultra（2512BPNDAC）与 18 Pro Max / 18 Fold 的三处差异**：系统底包和它们相同（CP2A.260605.016），这台是**标准版，不是徕卡版**。① 「系统工具广告」是独立页面，要**在设置首页搜索「系统广告」**才能进，「隐私与安全 → 更多安全设置 → 广告服务」那条路径上只有「个性化广告推荐」；② 浏览器工具栏最右的「设置」按钮点进去是「页面布局」子页，主设置要走 底部「菜单」→ 弹窗右上角齿轮，「隐私和安全」在主设置页最底部（第 13 项之后，要滚）；③ 日历「用户体验计划」在设置页倒数第二项，右上「更多」对 uiautomator 的点击不响应，只能 `adb shell input tap`。机型脚本 `recipes/xiaomi-2512BPNDAC/` 已按这三点写。
+**Xiaomi 17 Ultra（2512BPNDAC）与 18 Pro Max / 18 Fold 的三处差异**：系统底包和它们相同（CP2A.260605.016），这台是**标准版，不是徕卡版**。① 「系统工具广告」是独立页面，要**在设置首页搜索「系统广告」**才能进，「隐私与安全 → 更多安全设置 → 广告服务」那条路径上只有「个性化广告推荐」；② 浏览器工具栏最右的「设置」按钮点进去是「页面布局」子页，主设置要走 底部「菜单」→ 弹窗右上角齿轮，「隐私和安全」在主设置页最底部（第 13 项之后，要滚）；③ 日历「用户体验计划」在设置页倒数第二项，右上「更多」对 uiautomator 的点击不响应，只能 `adb shell input tap`。机型脚本 `recipes/xiaomi/2512BPNDAC/` 已按这三点写。
 
 **Xiaomi 15（24129PN74C）与 17 Ultra 的三处差异**：系统底包同为 CP2A.260605.016（OS4.0 系列），拿 18 Pro Max 当参考脚本时九段里四段失败（[Issue #193](https://github.com/rddmwmddr/android-ad-cleaner/issues/193)），原因如下。
 
@@ -36,17 +36,17 @@
 
 ③ **浏览器**：工具栏最右的「设置」图标点进去是**首页编辑面板**（页面布局 / 快捷网址 / 全网热榜），不是设置。主设置要走 底部「菜单」→ 弹窗里同名那一行（头像 / 菜单编辑 / 分享 / 设置），「隐私和安全」在主设置页最底部要滚一段。底栏按钮是 ViewGroup，只认 80 毫秒短按，`input tap` 点了没反应。
 
-主题段与参考脚本一致：桌面入口在 `com.miui.themestore`，打开后转到 `com.android.thememanager`，这个跳转是正常的，不是被别的 App 顶掉。机型脚本不再经这个跳转，一律直达 `com.android.thememanager/.ThemeResourceProxyTabActivity`，进「我的」、齿轮与点名开关都校验落点，0 个开关按失败报（#906）。机型脚本 `recipes/xiaomi-24129PN74C/recipe_os4.py`（HyperOS 4 变体，系统版本对上时自动选它）已按上面三点写，九段实测重跑 164 秒。
+主题段与参考脚本一致：桌面入口在 `com.miui.themestore`，打开后转到 `com.android.thememanager`，这个跳转是正常的，不是被别的 App 顶掉。机型脚本不再经这个跳转，一律直达 `com.android.thememanager/.ThemeResourceProxyTabActivity`，进「我的」、齿轮与点名开关都校验落点，0 个开关按失败报（#906）。机型脚本 `recipes/xiaomi/24129PN74C/24129PN74C-os4.toml`（HyperOS 4 变体，系统版本对上时自动选它）已按上面三点写，九段实测重跑 164 秒。
 
-**K90 Pro Max 与上面两台的两处差异**：① 设置首页一屏放不下，「隐私与安全」在第二屏，要往下滑一段才看得到；②「隐私与安全」打开的是安全中心的 `PrivacySafetyActivity`，只有「隐私 / 安全」两个分栏、默认停在「隐私」，得先切到「安全」分栏，「更多安全设置」在这一页的最末尾。机型脚本 `recipes/xiaomi-25102RKBEC/` 已按这两点写。
+**K90 Pro Max 与上面两台的两处差异**：① 设置首页一屏放不下，「隐私与安全」在第二屏，要往下滑一段才看得到；②「隐私与安全」打开的是安全中心的 `PrivacySafetyActivity`，只有「隐私 / 安全」两个分栏、默认停在「隐私」，得先切到「安全」分栏，「更多安全设置」在这一页的最末尾。机型脚本 `recipes/xiaomi/25102RKBEC/` 已按这两点写。
 
-**K90 Ultra（M332BF，HyperOS OS4.0.4.0.XHPCNXM）与 18 Pro Max 的四处差异**（2026-10-31 社区实测，[Issue #374](https://github.com/rddmwmddr/android-ad-cleaner/issues/374)）：① 广告服务在「安全」分栏 →「更多安全设置」页底，直达 `com.android.settings/.ad.AdServiceSettings` 后这段从 50 秒降到 2 秒；② 这一页的开关说明行含「关闭后，广告数量不会因此减少……」，`p.start()` 启动后的弹窗清理会把它当 ✕ 点掉，等于自己拨一次开关，脚本改用 `am start` 直达；③ 主题商店的齿轮会先命中「设置壁纸」，脚本的 `gear()` 只认正好是「设置」；④ 浏览器主设置页是 `com.android.browser/.BrowserSettingsActivity`（工具栏齿轮进的是首页编辑面板），关「个性化内容推荐 / 个性化广告推荐」各弹一次「关闭提醒」，要点「确认关闭」。机型脚本 `recipes/xiaomi-M332BF/` 已按这四点写，本仓库未在该机复跑，待报告者用新版复测。
+**K90 Ultra（M332BF，HyperOS OS4.0.4.0.XHPCNXM）与 18 Pro Max 的四处差异**（2026-10-31 社区实测，[Issue #374](https://github.com/rddmwmddr/android-ad-cleaner/issues/374)）：① 广告服务在「安全」分栏 →「更多安全设置」页底，直达 `com.android.settings/.ad.AdServiceSettings` 后这段从 50 秒降到 2 秒；② 这一页的开关说明行含「关闭后，广告数量不会因此减少……」，`p.start()` 启动后的弹窗清理会把它当 ✕ 点掉，等于自己拨一次开关，脚本改用 `am start` 直达；③ 主题商店的齿轮会先命中「设置壁纸」，脚本的 `gear()` 只认正好是「设置」；④ 浏览器主设置页是 `com.android.browser/.BrowserSettingsActivity`（工具栏齿轮进的是首页编辑面板），关「个性化内容推荐 / 个性化广告推荐」各弹一次「关闭提醒」，要点「确认关闭」。机型脚本 `recipes/xiaomi/M332BF/` 已按这四点写，本仓库未在该机复跑，待报告者用新版复测。
 
-**MIX Flip 2（2505APX7BC）与同底包 24129PN74C 的四处差异**（2026-11-05 社区实测，[Issue #832](https://github.com/rddmwmddr/android-ad-cleaner/issues/832)；折叠屏，全程合盖用外屏 1224×2912）：借同底包的参考脚本跑通了系统广告、应用商店、手机管家、下载管理、全局搜索、负一屏六段，下面四段入口不同。① **主题**：「我的」页的「设置」是**文字按钮**，不是图标，进 `ThemePreferenceActivity`（隐私设置是 `PrivacySettingsActivity`）；② **浏览器**：底栏是 主页 / 视频 / AI搜索 / 免费小说 / 我的，**没有「菜单」**，设置入口在「我的」页里的 `BrowserSettingsActivity`，隐私项在「隐私 → 隐私和安全」下；③ **天气**：「更多设置」弹出的是 PopupWindow（`dump` 里前台读成 `PopupWindow:<id>`，判据别按包名），菜单里点「设置」进 `ActivitySet`；这一版**没有「用户体验计划」页**，整页只有提醒与单位类开关，一项都不动；④ **日历**：设置是**无文字图标**，直达 `.settings.CalendarActionbarSettingsActivity`，整页 7 个开关全是功能项，一项都不动。这台机的第 5 个底栏标签在 y≈94% 屏高，脚本一律用 `p.tab()`。机型脚本 `recipes/xiaomi-2505APX7BC/` 已按这四点写，本仓库未在该机复跑，待报告者用新版复测。它的 `BUILD` 置空：只录到底包、没记到 ROM 版本号，而底包跨机型共享、不进 `BUILD`（#942），所以它不仅不参与「录制版本相同」的挑选，也不会被任何同底包机型借用。
+**MIX Flip 2（2505APX7BC）与同底包 24129PN74C 的四处差异**（2026-11-05 社区实测，[Issue #832](https://github.com/rddmwmddr/android-ad-cleaner/issues/832)；折叠屏，全程合盖用外屏 1224×2912）：借同底包的参考脚本跑通了系统广告、应用商店、手机管家、下载管理、全局搜索、负一屏六段，下面四段入口不同。① **主题**：「我的」页的「设置」是**文字按钮**，不是图标，进 `ThemePreferenceActivity`（隐私设置是 `PrivacySettingsActivity`）；② **浏览器**：底栏是 主页 / 视频 / AI搜索 / 免费小说 / 我的，**没有「菜单」**，设置入口在「我的」页里的 `BrowserSettingsActivity`，隐私项在「隐私 → 隐私和安全」下；③ **天气**：「更多设置」弹出的是 PopupWindow（`dump` 里前台读成 `PopupWindow:<id>`，判据别按包名），菜单里点「设置」进 `ActivitySet`；这一版**没有「用户体验计划」页**，整页只有提醒与单位类开关，一项都不动；④ **日历**：设置是**无文字图标**，直达 `.settings.CalendarActionbarSettingsActivity`，整页 7 个开关全是功能项，一项都不动。这台机的第 5 个底栏标签在 y≈94% 屏高，脚本一律用 `p.tab()`。机型脚本 `recipes/xiaomi/2505APX7BC/` 已按这四点写，本仓库未在该机复跑，待报告者用新版复测。它的 `BUILD` 置空：只录到底包、没记到 ROM 版本号，而底包跨机型共享、不进 `BUILD`（#942），所以它不仅不参与「录制版本相同」的挑选，也不会被任何同底包机型借用。
 
 Xiaomi 18 Pro Max 和 18 Fold 的系统底包相同，差别在 App 版本：商店、浏览器、全局搜索、手机管家升级后入口变了。Redmi K70 是 HyperOS 3 / Android 16，入口单独记录。下面每一项都写了「旧版 / 新版」两种入口，按你手机上看到的选。
 
-**Xiaomi 18 Pro Max（M154FF，HyperOS 4.0.24）这五段有可直达的导出页**（全局搜索、手机管家本来就走直达，不在此列），2026-11-07 本机实测，机型脚本 `recipes/xiaomi-M154FF/` 已改成先直达、打不开再走菜单。下表「落点判据」是该页首屏能读到的字：
+**Xiaomi 18 Pro Max（M154FF，HyperOS 4.0.24）这五段有可直达的导出页**（全局搜索、手机管家本来就走直达，不在此列），2026-11-07 本机实测，机型脚本 `recipes/xiaomi/M154FF/` 已改成先直达、打不开再走菜单。下表「落点判据」是该页首屏能读到的字：
 
 | 分组 | 直达页面 | 落点判据 |
 |---|---|---|
@@ -64,13 +64,13 @@ Xiaomi Pad 7 是平板，设置首页左右分栏，差异单独列在文末的[
 
 REDMI K80 至尊版（HyperOS 2 / Android 16）结构差异：「隐私与安全」首页是权限中心，没有「更多安全设置」，广告服务用设置顶部搜索直达；商店冷启动可能落「福利推广页」，先点「回到首页」再走「我的」；主题商店直接拉 com.android.thememanager/.ThemeResourceProxyTabActivity 最稳（themestore 冷启动的重定向过渡窗会让引擎前台校验误判）；主题/商店底部标签的无障碍名带「未选中,」前缀，用 `p.tab()` 点（只认屏幕底部带，带内按精确 → 逗号末段等于 → 包含找）。
 
-13 Ultra 和 14 Pro 是 HyperOS 3，共用 `recipes/xiaomi-2304FPN6DC`，入口和 18 系列的 OS4 不完全一样，差异单独列在文末的[「13 Ultra 差异」](#xiaomi-13-ultraos30308的差异)。
+13 Ultra 和 14 Pro 是 HyperOS 3，共用 `recipes/xiaomi/2304FPN6DC`，入口和 18 系列的 OS4 不完全一样，差异单独列在文末的[「13 Ultra 差异」](#xiaomi-13-ultraos30308的差异)。
 
 ---
 
 ## Xiaomi 15（24129PN74C，HyperOS OS3.0.307.0.WOCCNXM / Android 16）的差异
 
-底包 `BP2A.250605.031.A3` 与 REDMI K80 至尊版完全一样，但**入口结构不同**，不能直接套 K80 脚本。2026-10-29 无线调试实测，机型脚本 `recipes/xiaomi-24129PN74C/recipe.py` 已按本机路径写（HyperOS 4 的手机自动改用同目录的 `recipe_os4.py`）。
+底包 `BP2A.250605.031.A3` 与 REDMI K80 至尊版完全一样，但**入口结构不同**，不能直接套 K80 脚本。2026-10-29 无线调试实测，机型脚本 `recipes/xiaomi/24129PN74C/24129PN74C.toml` 已按本机路径写（HyperOS 4 的手机自动改用同目录的 `24129PN74C-os4.toml`）。
 
 | 项 | 这台机的入口 |
 |---|---|
@@ -88,7 +88,7 @@ REDMI K80 至尊版（HyperOS 2 / Android 16）结构差异：「隐私与安全
 
 ## Xiaomi 13（2211133C）的差异
 
-HyperOS OS3.0.309.0.WMCCNXM / Android 16，2026-11-05 社区实测（[Issue #281](https://github.com/rddmwmddr/android-ad-cleaner/issues/281)）。没有专用脚本：除浏览器段外九段都是 0 项（出厂即关），为一段差异复刻一份脚本不划算。底包（`BP2A.250605.031.A3`）与 Xiaomi 15 完全相同，但入口结构不同、不能直接套；客户端只按 ROM 版本挑同族脚本（#942），仓库里没有录 `OS3.0.309.0` 且段数够的脚本，于是用固定参考 `recipes/xiaomi-M154FF`，不用 `--ref`。
+HyperOS OS3.0.309.0.WMCCNXM / Android 16，2026-11-05 社区实测（[Issue #281](https://github.com/rddmwmddr/android-ad-cleaner/issues/281)）。没有专用脚本：除浏览器段外九段都是 0 项（出厂即关），为一段差异复刻一份脚本不划算。底包（`BP2A.250605.031.A3`）与 Xiaomi 15 完全相同，但入口结构不同、不能直接套；客户端只按 ROM 版本挑同族脚本（#942），仓库里没有录 `OS3.0.309.0` 且段数够的脚本，于是用固定参考 `recipes/xiaomi/M154FF`，不用 `--ref`。
 
 | 项 | 这台机的入口 |
 |---|---|
@@ -263,7 +263,7 @@ adb -s S shell cmd connectivity set-package-networking-enabled true com.miui.sys
 - 天气、日历的「用户体验计划」本次未进入入口，待补。
 
 **Redmi Note 14 5G（24094RAD4C，HyperOS OS3.0.306.0 / Android 16，2026-10-30 实测）**：
-- 入口与上面的 Note 14 Pro 基本一致，专用脚本在 `recipes/redmi-24094RAD4C/`。
+- 入口与上面的 Note 14 Pro 基本一致，专用脚本在 `recipes/xiaomi/24094RAD4C/`。
 - 主题冷启动这次出现了「跳过广告 N 秒」开屏窗；脚本先识别并关闭该弹窗，再进入「我的 → 设置」。
 - 商店保留标准模式、自动升级和删除安装包；浏览器保留「小说」和「我的网盘」等功能入口。
 - 下载管理的「资源推荐」「热榜推荐」和浏览器的「个性化广告推荐」会吞掉引擎默认短按；脚本改用普通点击、确认后回读，其他开关状态变化则停止。

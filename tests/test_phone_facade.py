@@ -56,15 +56,16 @@ DATA = frozenset({
     "systemui_text", "vivo_seen",
 })
 
-# 脚本访问面的快照：`recipes/` 里出现过 `p.<名字>` 的 41 个唯一名字。新增或去掉一个名字都要
+# 脚本访问面的快照：`recipes/` 里出现过 `p.<名字>` 的 40 个唯一名字。新增或去掉一个名字都要
 # 在这里显式改一行——这正是「脚本访问面变了」。每个名字还必须是门面真实成员，见下面那条守卫。
 # `lost` 已不在快照里：读它的是注入面的 `opened()`（#1148），脚本源码不再出现 `p.lost`；
-# `say` 同理，随广告跟踪段搬进 `recipe_steps`（#1213）。门面是否还提供它们由成员守卫盯：
-# `lost` 在 `DATA`，`say` 在 `METHODS`。
+# `say` 同理，随广告跟踪段搬进 `recipe_steps`（沿用 #1213）。`page_text` 也是这一类：读它的是
+# `recipe_nav` 里 `tap` 的 exact 档（#1245），脚本本地那份已删。门面是否还提供它们由成员守卫盯：
+# `lost` 在 `DATA`，`say` / `page_text` 在 `METHODS`。
 SCRIPT_NAMES = frozenset({
     "app", "await_page", "back", "changed", "click", "confirm", "d", "dismiss", "enter",
     "entry", "expect_page", "find", "focus", "go", "H", "has_text", "in_settings_page",
-    "locked", "miss", "note_miss", "off", "on_screen", "page_evidence", "page_text",
+    "locked", "miss", "note_miss", "off", "on_screen", "page_evidence",
     "promoted", "safe_mode", "scroll", "scroll_more", "setting", "settle", "sig",
     "start", "switches", "systemui_text", "tab", "tap", "tap_icon", "texts", "top", "tree", "W",
 })
@@ -98,9 +99,18 @@ def assign(phone, name):
 
 
 def recipe_trees():
-    """`recipes/` 下每份脚本的 (相对路径, 语法树)。"""
+    """`recipes/` 下每份脚本的 (相对路径, 语法树)。catalog 的 `.toml` 先降成等价源码再解析（#1263）。"""
     for path in sorted(RECIPES.rglob("*.py")):
         yield str(path.relative_to(ROOT)), ast.parse(path.read_text(encoding="utf-8"))
+    import tomllib
+    import recipe_source
+    for path in sorted(RECIPES.rglob("*.toml")):
+        try:
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        src = recipe_source._catalog_src(data)
+        yield str(path.relative_to(ROOT)), ast.parse(src)
 
 
 def recipe_accesses():

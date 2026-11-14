@@ -134,7 +134,7 @@ def in_front(fn, package, action, stopped=None):
 
 
 def boot(base, data_dir, cache_dir, package="com.ahuamiao.adcleaner"):
-    """base：解出来的 aac/（tool、recipes、gui、images）；data_dir：备份与设置。"""
+    """base：解出来的 aac/（tool、recipe_lib、recipes、gui、images）；data_dir：备份与设置。"""
     global API
     os.environ.setdefault("HOME", data_dir)
     os.environ["TMPDIR"] = cache_dir

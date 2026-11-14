@@ -10,8 +10,8 @@
 
 机型脚本只解释一次：调用点与模块级常量由 `recipe_source` 的事实层给出（沿用 #1156 的分工），
 这里只做页面到分组的映射、方向判定与统计口径，不再自己 `ast.parse` 脚本。
-段体搬进注入面之后（#1209），脚本调了哪个段体就把那份实现也扫一遍：词条归调用它的每一个机型，
-出处写调用点。只扫段体那张表，导航助手的名单本来就在调用点的实参里。
+段体与拨动策略搬进注入面之后（段体沿用 #1209，#1253 起策略库也扫），脚本 import 了哪份实现就把那份也扫一遍：词条归
+调用它的每一个机型，出处写调用点。扫段体与策略两张表，导航助手的名单本来就在调用点的实参里。
 
   python3 tool/vocab.py > docs/清单/词库.md
   python3 tool/vocab.py gaps <目录名>            查漏：同家族别的机型关过、这份脚本没写的词条
@@ -41,6 +41,9 @@ PAGES = {
     ("xiaomi", "负一屏"): "负一屏",
     ("xiaomi", "日历"): "天气和日历",
     ("xiaomi", "天气"): "天气和日历",
+    # 天气 / 日历两段按包名各展开一份后，页面标签带包名前缀（#1267）。
+    ("xiaomi", "com.miui.weather2"): "天气和日历",
+    ("xiaomi", "com.android.calendar"): "天气和日历",
     ("oppo", "广告跟踪"): "广告跟踪",
     ("oppo", "下拉搜索"): "下拉搜索",
     ("oppo", "商店"): "软件商店",
@@ -132,18 +135,20 @@ class Word:
     family: str
     group: str | None           # None：页面标签归不到分组
     page: str
-    script: str                 # recipes/ 下的相对路径，比如 xiaomi-M154FF/recipe.py
+    script: str                 # recipes/ 下的相对路径，比如 xiaomi/M154FF/recipe.py
     line: int
     injected: bool = False      # 出处是调用点、词住在注入段体里（#1209）
 
     @property
     def model(self):
-        return self.script.split("/", 1)[0].split("-", 1)[-1]
+        parts = self.script.split("/")
+        return parts[1] if len(parts) > 1 else parts[0]
 
     @property
     def source(self):
-        """短写的出处：默认文件 recipe.py 不写文件名。"""
-        folder, name = self.script.split("/", 1)
+        """短写的出处：默认文件 recipe.py 不写文件名。目录是 `<家族>/<型号>`。"""
+        parts = self.script.split("/")
+        folder, name = "/".join(parts[:-1]), parts[-1]
         return f"{folder}:{self.line}" if name == "recipe.py" else f"{folder}/{name}:{self.line}"
 
 
@@ -204,8 +209,8 @@ def _keyword(call, name):
 
 
 def _positional(call, index):
-    """第几个位置实参（`close_named` 的名单与标签）；没写是 None。"""
-    found = [arg for arg in call.args if arg.keyword is None]
+    """第几个业务位置实参（`close_named` 的名单与标签）；注入调用的 (p, rt) 前缀先剥掉。"""
+    found = [arg for arg in recipe_source.business_args(call) if arg.keyword is None]
     return found[index] if index < len(found) else None
 
 
@@ -221,8 +226,12 @@ def _strings(arg):
 
 
 def _word_calls(facts):
-    """读词的两类调用，按行号排；同一行先 `p.off()` 再 `close_named()`（沿用旧口径）。"""
-    calls = [call for call in facts.calls if call.name in ("p.off", "close_named")]
+    """读词的两类调用，按行号排；同一行先 `p.off()` 再 `close_named()`（沿用旧口径）。
+
+    策略库把 `close_named` 拆成带后缀的注入名（`close_named_vivo` 等，见 #1253），它们都带开关
+    名单，按前缀一并认（#1263）；数据里写的就是真实名，不折回。"""
+    calls = [call for call in facts.calls
+             if call.name == "p.off" or call.name.startswith("close_named")]
     calls.sort(key=lambda call: (call.line, call.name != "p.off"))
     return calls
 
@@ -270,30 +279,73 @@ def _absorb(out, family, script, facts, call_site=None):
                                          tuple(dict.fromkeys(w.text for w in here))))
 
 
-def scan(recipes_dir, injected=None):
+def scan(recipes_dir, injected=None, strategies=None):
     """读所有机型脚本。认不出品牌的目录不进库（tests/test_entries.py 守着每个品牌都有家族）。
 
-    `injected` 是段体注入面的 {名字: 源码}，缺省取 `recipe_source.step_sources()`。脚本调了哪个
-    注入名，就把那份实现也扫一遍：词条归调用它的每一个机型，出处记调用点，未解析与整页同样算在
-    这份脚本头上（#1209）。空表时与加接线之前逐字相同。"""
+    `injected` / `strategies` 是段体库与策略库的 {名字: 源码}，缺省由
+    `recipe_source.library_sources()` 提供。脚本（或其例外函数）调到了哪个库实现，就把那份实现
+    扫一遍：词条归调用它的机型，出处记调用点，未解析与整页同样算在这份脚本头上（沿用 #1209、#1253）。
+    导航助手的开关名单在调用点的实参里，实现里没有词。
+
+    同一份实现一处只算一次：策略会被一个段调用好几次（`close_all` 出现两次），按名字去重；
+    实现里再调别的库实现逐层往下扫（段体调 `browser_settings_direct`）。"""
     out = Scan()
-    injected = recipe_source.step_sources() if injected is None else injected
+    if injected is None and strategies is None:
+        sources = recipe_source.library_sources()
+    else:
+        # 用例交来的是「只有这几份实现」：空表就是关掉实现扫描，用来量接线前后的差。
+        sources = {}
+        if injected:
+            sources.update({name: (recipe_source.STEPS_MODULE, source) for name, source in injected.items()})
+        if strategies:
+            sources.update({name: (recipe_source.STRATEGIES_MODULE, source)
+                            for name, source in strategies.items()})
     for script, facts in recipe_source.scan_dir(recipes_dir, FAMILY).items():
-        family = FAMILY[script.split("-", 1)[0].lower()]
+        family = FAMILY[script.split("/", 1)[0].lower()]
         before = len(out.words)
         out.notes += _notes(facts, script)
         _absorb(out, family, script, facts)
-        for name in sorted(injected):
-            calls = recipe_source.injected_calls(facts, name)
-            if not calls:
-                continue
-            # 段体无形参，实参不跨文件；只有模块常量住在脚本里，按名字交回去
-            impl = recipe_source.scan_source(injected[name], externals=facts.constants)
-            for call in calls:
-                _absorb(out, family, script, impl, call_site=call.line)
+        _absorb_implementations(out, family, script, facts, facts, sources, facts.constants, frozenset())
         if len(out.words) == before:
             out.silent.append(script)
+    # 同一份实现可能经多条调用链被扫到；台账按「哪一行有什么读不出」记账，同一
+    # (script, line, text) 只记一次（重复计数不增加信息，只让台账难读）。
+    out.unresolved_only = _dedupe_calls(out.unresolved_only)
+    out.unresolved_close = _dedupe_calls(out.unresolved_close)
+    out.unresolved_keep = _dedupe_calls(out.unresolved_keep)
     return out
+
+
+def _dedupe_calls(calls):
+    """同一实现经多条调用链被扫到时按 `(script, line, text)` 去重；同一行不同文本仍各记一条。"""
+    seen, kept = set(), []
+    for call in calls:
+        key = (call.script, call.line, call.text)
+        if key not in seen:
+            seen.add(key)
+            kept.append(call)
+    return kept
+
+
+def _absorb_implementations(out, family, script, current, caller, sources, constants, seen):
+    """库实现逐层往下扫：当前事实里调到的库实现各扫一次，词条归这份脚本。"""
+    used = dict.fromkeys(call.name for call in current.calls if call.injected and call.module)
+    if current is caller:
+        used.update(caller.import_lines)   # 脚本 import 过的实现算用过；递归层只看实际调用
+    for name in used:
+        if name in seen or name in caller.defines:
+            continue
+        entry = sources.get(name)
+        if entry is None:
+            continue
+        _module, source = entry
+        calls = tuple(call for call in current.calls if call.injected and call.name == name)
+        at = calls[0].line if calls else caller.import_lines.get(name)
+        if at is None:
+            continue
+        impl = recipe_source.scan_source(source, externals=constants)
+        _absorb(out, family, script, impl, call_site=at)
+        _absorb_implementations(out, family, script, impl, caller, sources, constants, seen | {name})
 
 
 def _spelled(words):
@@ -366,7 +418,7 @@ def render(recipes_dir):
              "「要开」是保护类开关：开头带否定词（`polarity.NEG_PREFIX`）且带广告词，引擎会把它拨到开，"
              "判定在 `polarity.want_state()`；不要把这类词条按普通广告开关处理。"
              "「不碰」是点了名、引擎却不会拨的行（既没否定词也没广告词），出现即说明那条点名没生效。", "",
-             "出处写成 `目录:行号`，指 `recipes/<目录>/recipe.py`；别的文件写全文件名。"
+             "出处写成 `目录:行号`，指 `recipes/<家族>/<型号>/recipe.py`；别的文件写全文件名。"
              f"这里读 `p.off()` 和 `close_named()`：共 {len(words)} 处词，另有 {found.whole_page} 处没有点名（整页全关，没有词）。", ""]
     for family, groups in ENTRIES.items():
         brands = "、".join(b for b, f in FAMILY.items() if f == family)
@@ -406,16 +458,16 @@ def render(recipes_dir):
 def gaps(recipes_dir, folder):
     """查漏：同家族别的机型关过、这份脚本没写的词条，按分组列出。
 
-    `folder` 是 recipes/ 下的目录名（`<品牌>-<型号>`）。只比要关的词条，按 key_of() 归一化后比对：
+    `folder` 是 recipes/ 下的相对目录名（`<家族>/<型号>`）。只比要关的词条，按 key_of() 归一化后比对：
     同页保留项和「要开」的保护类开关不在这台机上独立成立，同族叫法也可能整组不同。
     这是写脚本之后的自查清单，不是缺陷报告。
 
-    目录名按大小写不敏感匹配、容忍尾斜杠：`isdir` 在 macOS 上本来就大小写不敏感，
-    不归一化的话认得出目录、却按原样拼 `startswith` 前缀，这份脚本自己的词全被当成漏项。"""
+    目录名按大小写不敏感匹配、容忍尾斜杠：认得出目录、却按原样拼 `startswith` 前缀，
+    这份脚本自己的词会被当成漏项。"""
     folder = _folder_name(recipes_dir, folder)
-    family = FAMILY.get(folder.split("-", 1)[0].lower())
+    family = FAMILY.get(folder.split("/", 1)[0].lower())
     if not family:
-        raise ValueError(f"认不出 {folder} 的品牌：目录名要写成 <品牌>-<型号>")
+        raise ValueError(f"认不出 {folder} 的家族：目录名要写成 <家族>/<型号>")
     found = scan(recipes_dir)
     words = found.words
     mine = {key_of(word.text) for word in words if word.script.startswith(folder + "/")}
@@ -451,12 +503,21 @@ def gaps(recipes_dir, folder):
 
 
 def _folder_name(recipes_dir, folder):
-    """`recipes/` 下的真实目录名：容忍尾斜杠、路径分隔符与大小写差异。找不到就抛 FileNotFoundError。"""
-    wanted = folder.strip().replace(os.sep, "/").strip("/").lower()
-    for name in sorted(os.listdir(recipes_dir)):
-        if name.lower() == wanted and os.path.isdir(os.path.join(recipes_dir, name)):
-            return name
-    raise FileNotFoundError(f"recipes/ 下没有 {folder} 这个目录")
+    """`recipes/` 下的真实相对目录名（`<家族>/<型号>`）：容忍尾斜杠、路径分隔符与大小写差异。
+
+    逐段按大小写不敏感匹配实际目录名，返回**真实的**大小写形式——`startswith` 判据按原样拼前缀，
+    大写形式对不上会把这份脚本自己的词全当成漏项。找不到就抛 FileNotFoundError。"""
+    parts = [seg for seg in folder.strip().replace(os.sep, "/").split("/") if seg and seg != "."]
+    current = recipes_dir
+    actual: list[str] = []
+    for seg in parts:
+        match = next((name for name in sorted(os.listdir(current))
+                      if name.lower() == seg.lower() and os.path.isdir(os.path.join(current, name))), None)
+        if match is None:
+            raise FileNotFoundError(f"recipes/ 下没有 {folder} 这个目录")
+        actual.append(match)
+        current = os.path.join(current, match)
+    return "/".join(actual)
 
 
 def _recipes_dir():

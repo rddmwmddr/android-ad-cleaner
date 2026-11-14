@@ -1,0 +1,74 @@
+# 小米 HyperOS 4 机型脚本：REDMI K90 Ultra（M332BF）；路径来源：社区报告者 @Sin1ery 2026-10-31 实测（HyperOS OS4.0.4.0.XHPCNXM，Android 17，沿用 Issue #374）。
+# 脚本按那份报告里的四处差异重写，本仓库尚未在这台机器上复跑，合并后等报告者复测。
+# 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
+# 2026-11-14 转页面树（#1267）：应用商店的直达探路与「我的」页换页等待、主题的等待都要运行时
+# 读到的页面签名，两段留在同名 `.py` 的 `code =`；其余段落成导航数据。
+model = "M332BF"
+models = ["M332BF"]
+build = "OS4.0.4"
+
+[[segment]]
+name = "系统广告"
+ops = [
+  # 广告服务在「安全」分栏 →「更多安全设置」页底，直达 AdServiceSettings 从 50 秒降到 2 秒（#374）。
+  # 不走 p.start()：这一页的开关说明行是「关闭后，广告数量不会因此减少……」，
+  # 启动后的 dismiss() 会把整行 content-desc 当成弹窗 ✕ 点一下，等于替用户拨了一次开关。
+  { kind = "shell", command = "am start -f 0x10008000 -n com.android.settings/.ad.AdServiceSettings" },
+  { kind = "require_expect", calls = [{ args = ["个性化广告推荐", 3] }], miss_print = "广告服务页没有打开" },
+  { kind = "off", only = ["个性化广告推荐"], page = "系统·广告服务" },
+]
+
+[[segment]]
+name = "应用商店"
+code = "step_store"
+
+[[segment]]
+name = "手机管家"
+ops = [{ kind = "lib", name = "security_center" }]
+
+[[segment]]
+name = "下载管理"
+ops = [{ kind = "lib", name = "downloads_probe" }]
+
+[[segment]]
+name = "主题"
+code = "step_theme"
+
+[[segment]]
+name = "浏览器"
+ops = [
+  # 工具栏齿轮点进去是首页编辑面板（页面布局 / 快捷网址 / 全网热榜），主设置页是
+  # com.android.browser/.BrowserSettingsActivity（#374）。关「个性化内容推荐 / 个性化广告推荐」
+  # 各弹一次「关闭提醒」，必须点「确认关闭」，点「以后再说」等于没关；确认框由 p.off() 处理。
+  { kind = "start", pkg = "com.android.browser", activity = ".BrowserSettingsActivity", expect = "设置", budget = 2 },
+  { kind = "if_entry", text = "隐私和安全", ops = [
+    { kind = "off", only = ["个性化内容推荐", "个性化广告推荐"], page = "浏览器·隐私和安全" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "主页设置", ops = [
+    { kind = "off", only = ["宫格位推送"], page = "浏览器·主页设置" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "搜索设置", ops = [
+    { kind = "off", only = ["猜你想搜"], page = "浏览器·搜索设置" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "功能设置", ops = [
+    # 新版浏览器这三项不一定都在，有就关
+    { kind = "off", only = ["小说"], page = "浏览器·功能设置" },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "全局搜索"
+ops = [{ kind = "lib", name = "global_search" }]
+
+[[segment]]
+name = "负一屏"
+ops = [{ kind = "lib", name = "negative_screen" }]
+
+[[segment]]
+name = "天气和日历"
+ops = [{ kind = "lib", name = "weather_calendar_probe" }]

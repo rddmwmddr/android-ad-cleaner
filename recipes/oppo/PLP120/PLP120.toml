@@ -1,0 +1,70 @@
+# OPPO Find N6（PLP120，ColorOS 16.0.9 / ColorOS 17）的页面树（catalog，#1265）。
+# 路径 2026-10-22 实测，机型脚本整段跑待验证；2026-11-10 补 ColorOS 17（PLP120_17.0.0.109 / Android 17）
+# 的两段路径，未复测（沿用 #905）。
+# 广告跟踪（两次入口回退 + 整页全关）、软件商店、主题、视频四段已落数据；负一屏/下拉搜索/浏览器/
+# 游戏中心/小布建议留 `code=`（手势循环、运行期名单、多分支状态机，见各自例外函数）。
+model = "PLP120"
+models = ["PLP120"]
+build = "PLP120_16.0.9"
+
+[[segment]]
+name = "广告跟踪"
+ops = [
+  { kind = "skip_in_safe_mode" },
+  # 每个 App 一个开关、没有总开关；新装的 App 默认开。ColorOS 17 首页改叫「隐私与安全」（#165 社区实测）。
+  # 先试旧名，失败再试新名；两条都不通就正常收尾（`return`，不算失败）。
+  { kind = "if_lib", name = "settings_page", args = ["隐私", "设备标识与广告", "广告跟踪"], ops = [], else_ops = [{ kind = "miss_reset" }, { kind = "if_lib", name = "settings_page", args = ["隐私与安全", "设备标识与广告", "广告跟踪"], ops = [], else_ops = [{ kind = "return" }] }] },
+  { kind = "off", page = "广告跟踪", page_wide = true },
+]
+
+[[segment]]
+name = "负一屏"
+code = "step_negative_screen"
+
+[[segment]]
+name = "下拉搜索"
+code = "step_search"
+
+[[segment]]
+name = "软件商店"
+ops = [
+  { kind = "start", pkg = "com.heytap.market" },
+  { kind = "go", text = "我的", expect = "设置" },
+  { kind = "tap", text = "设置", exact = true, scrolls = 0 },
+  { kind = "if_tap", text = "隐私", exact = true, ops = [{ kind = "off", only = ["个性化推荐"], page = "商店·隐私" }, { kind = "back" }] },
+  { kind = "if_tap", text = "服务管理", exact = true, ops = [{ kind = "off", page = "商店·服务管理", page_wide = true, keep = ["帮助与客服", "应用安全", "应用工具", "存储空间清理", "我的资产", "安全守护", "小i客服", "应用使用记录", "首页 AI 搜索", "自动检测风险应用"] }, { kind = "back" }] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "浏览器"
+code = "step_browser"
+
+[[segment]]
+name = "主题"
+ops = [
+  { kind = "start", pkg = "com.heytap.themestore" },
+  { kind = "go", text = "我的", expect = "设置" },
+  { kind = "tap", text = "设置", exact = true, scrolls = 0 },
+  { kind = "if_tap", text = "服务管理", exact = true, ops = [{ kind = "if_tap", text = "消息与广告", exact = true, ops = [{ kind = "off", only = ["消息通知", "开屏广告"], page = "主题·消息与广告" }, { kind = "back", n = 2 }] }] },
+  { kind = "if_tap", text = "隐私", exact = true, ops = [{ kind = "if_tap", text = "个性化推荐设置", exact = true, ops = [{ kind = "off", only = ["个性化推荐"], page = "主题·个性化推荐" }, { kind = "back", n = 2 }] }] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "视频"
+ops = [
+  { kind = "start", pkg = "com.heytap.yoli" },
+  { kind = "go", text = "我的", expect = "设置" },
+  { kind = "tap", text = "设置", exact = true },
+  { kind = "if_tap", text = "个性化内容管理", exact = true, ops = [{ kind = "off", only = ["个性化推荐"], page = "视频·个性化" }] },
+  { kind = "back", n = 3 },
+]
+
+[[segment]]
+name = "游戏中心"
+code = "step_game_center"
+
+[[segment]]
+name = "小布建议"
+code = "step_assistant_advice"

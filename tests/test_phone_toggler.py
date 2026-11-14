@@ -5,7 +5,8 @@
 `test_switch_plan.py`（该拨哪些）、`test_off_readback.py`（回读结局）、
 `test_off_title_fallback.py`（点标题回退）、`test_main_switch_bar.py`（真开关藏在容器里）。
 
-门面把调用转给了谁由 `test_phone_facade.py` 钉，脚本前导的跳过出口由 `test_recipe_kit.py` 钉。
+门面把调用转给了谁由 `test_phone_facade.py` 钉；段级的跳过出口在 `tool/recipe_runtime.py` 的
+`Runtime` 上，数据与例外 `.py` 两侧的形状由 `test_catalog.py` 的 `PageWideTests` 钉。
 迁入的用例把原票号留在类或方法的 docstring 里，仍可 grep 回原票。
 """
 import sys

@@ -3,6 +3,9 @@
 守的是「脚本只被解释一次」这件事：实参切分（嵌套调用、含逗号字符串）、形参回填与
 「最后一次赋值不是字面量时不退回旧值」、`am start -n` 与 `am start -a … -p` 的三种包名写法、
 `p.setting` 两个实参、注入名归一，以及语法错直接抛。
+
+共享实现的归属跟 import 走（#1243）：`from X import n` 与 `import X` + `X.n(…)` 都解析到 X 里那份，
+两张注册表不再按名字合并；脚本本地同名 `def` 覆盖导入版，没有 import 的裸名字不算注入实现。
 """
 import sys
 import tempfile
@@ -169,64 +172,6 @@ class AmStartTest(unittest.TestCase):
                           "am start -a oppo.intent.action.APP_SETTINGS -p com.heytap.themestore"])
 
 
-class InjectedTest(unittest.TestCase):
-    """`g["X"](…)` 与裸名 `X(…)` 归一成同一个调用名，并标出它是执行作用域里的名字。"""
-
-    def test_injected_and_bare_names_share_one_call_name(self):
-        facts = scan('''
-            def _():
-                g["open_app_settings"]("com.heytap.market", ".SettingActivity", "软件商店")
-                tap("设置")
-                p.start("com.android.browser")
-        ''')
-        self.assertEqual([(call.name, call.injected) for call in facts.calls],
-                         [("open_app_settings", True), ("tap", True), ("p.start", False)])
-
-    def test_local_definitions_are_reported(self):
-        facts = scan('''
-            def _():
-                app_settings("com.heytap.market")
-
-            def app_settings(package):
-                p.start(package)
-        ''')
-        self.assertEqual(facts.defines, frozenset({"_", "app_settings"}))
-
-    def test_injection_surface_sources_are_named_by_injected_name(self):
-        sources = recipe_source.injected_sources()
-        self.assertIn("open_app_settings", sources)
-        self.assertIn("p.d.shell", [call.name for call in recipe_source.scan_source(
-            sources["open_app_settings"]).calls])
-
-    def test_bindings_fill_parameters_whose_call_sites_live_elsewhere(self):
-        source = recipe_source.injected_sources()["app_settings"]
-        self.assertEqual(recipe_source.scan_source(source).calls[0].args[0].values, ())
-        filled = recipe_source.scan_source(source, {0: ("com.heytap.market",)})
-        command = texts(filled.calls[0].args[0].values)
-        self.assertEqual(len(command), 1)
-        self.assertTrue(command[0].endswith("-p com.heytap.market"), command[0])
-
-    def test_externals_fill_names_that_live_in_the_calling_script(self):
-        """段体的模块常量住在调用脚本里，实现里只有 `g["HOT"]` 这个名字（#1209）。"""
-        impl = textwrap.dedent('''
-            def _():
-                p.off(only=g["HOT"], page="负一屏·设置")
-        ''')
-        bare = only(recipe_source.scan_source(impl).calls[0], "only")
-        self.assertEqual((bare.values, bare.resolved), ((), False))
-        externals = scan("HOT = ['热点资讯', '热搜榜']").constants
-        filled = only(recipe_source.scan_source(impl, externals=externals).calls[0], "only")
-        self.assertEqual(texts(filled.values), ["热点资讯", "热搜榜"])
-
-    def test_externals_also_fill_a_bare_name(self):
-        """实现里可能直接写名字而不走 `g[...]`：同一份外部值，两种取法都要读得出。"""
-        impl = textwrap.dedent('''
-            def _():
-                p.off(only=HOT, page="负一屏·设置")
-        ''')
-        externals = scan("HOT = ['热点资讯']").constants
-        self.assertEqual(texts(only(recipe_source.scan_source(impl, externals=externals)
-                                    .calls[0], "only").values), ["热点资讯"])
 
 
 class DictEntryTest(unittest.TestCase):
@@ -255,16 +200,16 @@ class DirectoryTest(unittest.TestCase):
 
     def test_scan_dir_reads_recipe_files_only(self):
         with tempfile.TemporaryDirectory() as root:
-            for name in ("xiaomi-M154FF/recipe.py", "xiaomi-M154FF/recipe_os4.py",
-                         "xiaomi-M154FF/notes.txt", "unknown-M1/recipe.py"):
+            for name in ("xiaomi/M154FF/recipe.py", "xiaomi/M154FF/recipe_os4.py",
+                         "xiaomi/M154FF/notes.txt", "unknown/M1/recipe.py"):
                 path = Path(root) / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("def _():\n    pass\n", encoding="utf-8")
             everything = recipe_source.scan_dir(root)
-            self.assertEqual(list(everything), ["unknown-M1/recipe.py",
-                                                "xiaomi-M154FF/recipe.py", "xiaomi-M154FF/recipe_os4.py"])
+            self.assertEqual(list(everything), ["unknown/M1/recipe.py",
+                                                "xiaomi/M154FF/recipe.py", "xiaomi/M154FF/recipe_os4.py"])
             known = recipe_source.scan_dir(root, {"xiaomi": "xiaomi"})
-            self.assertEqual(list(known), ["xiaomi-M154FF/recipe.py", "xiaomi-M154FF/recipe_os4.py"])
+            self.assertEqual(list(known), ["xiaomi/M154FF/recipe.py", "xiaomi/M154FF/recipe_os4.py"])
 
 
 class ErrorTest(unittest.TestCase):

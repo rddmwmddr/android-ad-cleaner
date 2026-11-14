@@ -17,13 +17,13 @@ from fixtures import load_recipe
 
 class VivoV1986ARecipeTests(unittest.TestCase):
     def load(self, phone):
-        scope, _ = load_recipe(phone, ROOT / "recipes/vivo-V1986A/recipe.py")
+        scope, _ = load_recipe(phone, ROOT / "recipes/vivo/V1986A/V1986A.toml")
         return scope
 
     def test_actual_model_selects_own_recipe_not_reference(self):
         path, reference = run.recipe_for("V1986A", "vivo")
         self.assertFalse(reference)
-        self.assertEqual(Path(path).parent.name, "vivo-V1986A")
+        self.assertEqual(Path(path).parent.name, "V1986A")
         self.assertEqual(run.recipe_meta(path)["build"], "PD1986_A_8")
         self.assertEqual(run.recipe_meta(path)["steps"], ["系统广告", "阅图锁屏", "应用商店"])
 

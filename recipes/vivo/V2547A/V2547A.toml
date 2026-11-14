@@ -1,0 +1,43 @@
+# vivo X300 Ultra（V2547A）页面树（catalog，#1263）。OriginOS 7 / Android 17，2026-10-25 真机 8 段整段跑通。
+# 这台 8 段都是过程段（goto / 循环 / confirm2 / resourceId 点击），走 code= 例外函数逐字保留。
+model = "V2547A"
+models = ["V2547A"]
+build = "PD2547B_A_17.1.10.2"
+
+[const]
+TAP_ROW_STYLE = "centre"
+TAP_TEXT_STYLE = "vivo"
+GOTO_STYLE = "vivo"
+BROWSER_FLOW = "vivo_menu"
+
+[[segment]]
+name = "广告与隐私"
+code = "step_ad_privacy"
+
+[[segment]]
+name = "负一屏"
+code = "step_negative"
+
+[[segment]]
+name = "全局搜索"
+code = "step_global_search"
+
+[[segment]]
+name = "应用商店"
+code = "step_store"
+
+[[segment]]
+name = "浏览器"
+code = "step_browser"
+
+[[segment]]
+name = "阅图锁屏"
+code = "step_lock_screen"
+
+[[segment]]
+name = "i管家"
+code = "step_i_manager"
+
+[[segment]]
+name = "天气"
+code = "step_weather"

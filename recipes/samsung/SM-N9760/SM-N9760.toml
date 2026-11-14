@@ -1,0 +1,18 @@
+# 三星 One UI 4 机型脚本：Galaxy Note10+ 5G（SM-N9760，国行）的页面树（catalog，#1262）。
+# 录制：2026-11-05，SP1A.210812.016.N9760ZCU6HZE1 / Android 12，1440×3040，简体中文。
+#
+# 只有一段「广告」：One UI 4 的系统设置里没有独立的广告入口，只能直达 GMS 的广告设置页。
+# 该页三项：重置广告 ID（动作项）、选择停用广告个性化功能（开关）、启用广告调试日志记录（开关）。
+# 「选择停用广告个性化功能」是保护类开关，要点整行标题而不是开关本体（off() 点了没反应），
+# 走本机例外函数 protect（knowledge 档，code=）。其余不可自动化面见 recipe.py 头注（现移到例外 .py）。
+model = "SM-N9760"
+models = ["SM-N9760"]
+build = "SP1A.210812.016.N9760ZCU6HZE1"
+
+[[segment]]
+name = "广告"
+ops = [
+  {kind = "start", pkg = "com.google.android.gms", activity = ".adid.settings.AdsSettingsActivity", expect = ["广告"]},
+  {kind = "code", name = "protect", args = ["停用广告个性化"]},
+  {kind = "back"},
+]

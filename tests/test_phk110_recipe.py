@@ -8,7 +8,7 @@ import unittest
 from fixtures import load_recipe, phone_stub
 
 ROOT = Path(__file__).resolve().parents[1]
-RECIPE = ROOT / "recipes/oneplus-PHK110/recipe.py"
+RECIPE = ROOT / "recipes/oppo/PHK110/PHK110.toml"
 
 
 def fake_shell(model, build, commands):
@@ -98,27 +98,25 @@ class RecipeSafetyTests(unittest.TestCase):
             self.assertFalse(function("ExampleActivity", "设置", timeout=0.01))
 
     def test_missing_switch_is_not_reported_completed(self):
-        function = load()["off_exact"]
+        """`off_exact` 现在是注入版（#1253）：闭包拿的是装载时的 Phone，桩要在装载前装好。"""
         phone = make_phone()
         phone.screen.tree = lambda: None
         phone.switches = lambda root=None: [("帮助与客服", True, (1000, 600))]
         phone.scroll_more = lambda: False
-        function.__globals__["p"] = phone
+        function = load(phone)["off_exact_paged"]
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertFalse(function(["开屏广告"], "test"))
 
     def test_failed_switch_is_not_reported_completed(self):
-        function = load()["off_exact"]
         phone = make_phone()
         phone.screen.tree = lambda: None
         phone.switches = lambda root=None: [("开屏广告", True, (1000, 600))]
         phone.off = lambda **kwargs: 0
-        function.__globals__["p"] = phone
+        function = load(phone)["off_exact_paged"]
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertFalse(function(["开屏广告"], "test"))
 
     def test_similar_unknown_service_is_explicitly_preserved(self):
-        function = load()["off_exact"]
         phone = make_phone()
         calls = []
         phone.screen.tree = lambda: None
@@ -127,7 +125,7 @@ class RecipeSafetyTests(unittest.TestCase):
             ("开屏广告权限提醒", True, (1000, 900)),
         ]
         phone.off = lambda **kwargs: calls.append(kwargs)
-        function.__globals__["p"] = phone
+        function = load(phone)["off_exact_paged"]
         self.assertTrue(function(["开屏广告"], "test"))
         self.assertEqual(calls[0]["only"], ["开屏广告"])
         self.assertIn("开屏广告权限提醒", calls[0]["keep"])

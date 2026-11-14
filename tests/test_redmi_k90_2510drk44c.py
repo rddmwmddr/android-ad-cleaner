@@ -5,6 +5,7 @@
 所以用例只护住三件事：选得到这份脚本、版本对得上、登记不改变开关决策。
 """
 import ast
+import tomllib
 import contextlib
 import io
 from pathlib import Path
@@ -16,13 +17,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 import run
 
-RECIPE = ROOT / "recipes/xiaomi-M154FF/recipe.py"
+RECIPE = ROOT / "recipes/xiaomi/M154FF/M154FF.toml"
 
 
 class RedmiK90BaseRecipeTests(unittest.TestCase):
     def test_this_model_selects_the_recipe_without_safe_mode(self):
         path, reference = run.recipe_for("2510DRK44C", "Redmi")
-        self.assertEqual(Path(path).parent.name, "xiaomi-M154FF")
+        self.assertEqual(Path(path).parent.name, "M154FF")
         self.assertFalse(reference)
 
     def test_registration_keeps_the_other_recorded_models(self):
@@ -71,17 +72,29 @@ class RedmiK90BaseRecipeTests(unittest.TestCase):
 
     def test_every_off_call_is_scoped_to_named_switches(self):
         """旧树也绿，守的是这份共享脚本的不变式，也是「登记等价于当本型号脚本跑」的前提：
-        每一处 `p.off()` 都点名开关，没有整页全关（缺 `only=` 或显式 `only=None`）。"""
-        src = RECIPE.read_text(encoding="utf-8")
-        unscoped = []
-        for n in ast.walk(ast.parse(src)):
+        每一处 `p.off()` 都点名开关，没有整页全关（数据里缺 `only` 或写了 `page_wide`）。"""
+        data = tomllib.loads(RECIPE.read_text(encoding="utf-8"))
+        unscoped = [op["page"] for segment in data["segment"] for op in _walk(segment.get("ops", []))
+                    if op.get("kind") in ("off", "off_required")
+                    and ("only" not in op or op.get("page_wide"))]
+        self.assertEqual(unscoped, [])
+        # 扫完数据，例外函数里那几段也要守同一件事（主题 / 下载管理在 code= 里）。
+        exception = (RECIPE.parent / (RECIPE.stem + ".py")).read_text(encoding="utf-8")
+        for n in ast.walk(ast.parse(exception)):
             if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
                     and n.func.attr == "off"):
                 continue
             only = next((k.value for k in n.keywords if k.arg == "only"), None)
-            if only is None or (isinstance(only, ast.Constant) and only.value is None):
-                unscoped.append(n.lineno)
-        self.assertEqual(unscoped, [])
+            self.assertIsNotNone(only, f"例外函数第 {n.lineno} 行的 off() 没有点名目标")
+            self.assertFalse(isinstance(only, ast.Constant) and only.value is None, n.lineno)
+
+
+def _walk(ops):
+    """展开带分支的 op（if_entry / if_lib_any …）里的子表。"""
+    for op in ops:
+        yield op
+        yield from _walk(op.get("ops", []))
+        yield from _walk(op.get("else_ops", []))
 
 
 if __name__ == "__main__":

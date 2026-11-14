@@ -1,0 +1,85 @@
+# OPPO Find X8s（PKT110），ColorOS 17.0.0.102(CN01) / Android 17 的页面树（catalog，#1264）。
+# 路径与开关来自 2026-10-28 在 PKT110 真机上逐段实测。
+# 不覆盖软件商店（ColorOS 17 的设置页里没有「隐私」「服务管理」，商店首页的推广位也关不掉），
+# 也不覆盖负一屏（速览）——那边没有「推荐服务」分组。详见 docs/清单/OPPO-ColorOS.md。
+model = "PKT110"
+models = ["PKT110"]
+build = "PKT110_17.0.0.102(CN01)"
+tail = "tail"
+
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py：点入口按精确文字、
+# 读开关只读首屏、关开关的页面要重进一次再回读。
+[const]
+TAP_STYLE = "exact"
+READ_SWITCHES_STYLE = "first"
+CLOSE_NAMED_STYLE = "reopen"
+
+[[segment]]
+name = "广告跟踪"
+code = "step_ad_tracking"
+
+[[segment]]
+name = "下拉搜索"
+code = "step_search"
+
+[[segment]]
+name = "浏览器"
+ops = [
+  { kind = "start", pkg = "com.heytap.browser" },
+  { kind = "shell", command = "am start -n com.heytap.browser/.settings.component.BrowserPreferencesPage" },
+  { kind = "sleep", seconds = 1.5 },
+  { kind = "require_focus", contains = "com.heytap.browser", miss_print = "浏览器设置页没有打开" },
+  { kind = "lib", name = "tap", args = ["隐私"] },
+  { kind = "if_tap", text = "广告管理", exact = true, scrolls = 0, ops = [
+    { kind = "lib", name = "close_named", args = [["开屏广告", "资讯列表广告"], "浏览器·广告管理"] },
+    { kind = "back" },
+  ] },
+  { kind = "lib", name = "tap", args = ["个性化管理"] },
+  { kind = "lib", name = "close_named", args = [["个性化广告推荐"], "浏览器·个性化管理"] },
+]
+
+[[segment]]
+name = "主题商店"
+code = "step_theme"
+
+[[segment]]
+name = "视频"
+ops = [
+  { kind = "start", pkg = "com.heytap.yoli" },
+  { kind = "enter", text = "我的" },
+  { kind = "enter", text = "设置" },
+  { kind = "enter", text = "个性化管理", scrolls = 6 },
+  { kind = "lib", name = "close_named", args = [["个性化广告推荐", "个性化内容推荐"], "视频·个性化管理"] },
+]
+
+[[segment]]
+name = "游戏中心"
+code = "step_game_center"
+
+[[segment]]
+name = "小布建议"
+ops = [
+  { kind = "shell", command = "am start -f 0x10008000 -a android.settings.SETTINGS" },
+  { kind = "sleep", seconds = 1.2 },
+  { kind = "lib", name = "tap", args = ["OPPO AI"], kwargs = { scrolls = 6 } },
+  { kind = "lib", name = "tap", args = ["小布建议"], kwargs = { scrolls = 6 } },
+  { kind = "lib", name = "tap", args = ["资讯服务"], kwargs = { scrolls = 8 } },
+  { kind = "lib", name = "close_named", args = [["资讯服务"], "小布建议·资讯服务"] },
+  { kind = "lib", name = "tap", args = ["视界日报"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "close_named", args = [["视界日报"], "小布建议·视界日报"] },
+  { kind = "back" },
+  { kind = "lib", name = "tap", args = ["小红书资讯"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "close_named", args = [["小红书资讯"], "小布建议·小红书资讯"] },
+]
+
+[[segment]]
+name = "应用建议"
+ops = [
+  { kind = "skip_in_safe_mode" },
+  { kind = "shell", command = "am start -f 0x10008000 -a android.settings.SETTINGS" },
+  { kind = "sleep", seconds = 1.2 },
+  { kind = "lib", name = "tap", args = ["OPPO AI"], kwargs = { scrolls = 6 } },
+  { kind = "lib", name = "tap", args = ["小布建议"], kwargs = { scrolls = 6 } },
+  { kind = "lib", name = "tap", args = ["应用建议"], kwargs = { scrolls = 10 } },
+  { kind = "lib", name = "close_all", args = ["应用建议"], kwargs = { max_screens = 40 } },
+]

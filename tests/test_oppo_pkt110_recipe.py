@@ -13,19 +13,19 @@ from fixtures import load_recipe
 
 class OppoPkt110RecipeTests(unittest.TestCase):
     def load(self, phone):
-        scope, _ = load_recipe(phone, ROOT / "recipes/oppo-PKT110/recipe.py")
+        scope, _ = load_recipe(phone, ROOT / "recipes/oppo/PKT110/PKT110.toml")
         return scope
 
     def test_actual_model_selects_own_recipe_and_pins_recorded_build(self):
         path, reference = run.recipe_for("PKT110", "OPPO")
         self.assertFalse(reference)
-        self.assertEqual(Path(path).parent.name, "oppo-PKT110")
+        self.assertEqual(Path(path).parent.name, "PKT110")
         self.assertEqual(run.recipe_meta(path)["build"], "PKT110_17.0.0.102(CN01)")
 
     def test_other_oppo_model_falls_back_to_reference_recipe(self):
         path, reference = run.recipe_for("PZZ999", "OPPO")      # 没有本型号脚本的 OPPO（PMX110 已由 #279 补上）
         self.assertTrue(reference)
-        self.assertEqual(Path(path).parent.name, "oppo-PLP120")
+        self.assertEqual(Path(path).parent.name, "PLP120")
 
     def test_missing_target_aborts_without_clicking_any_switch(self):
         p = Mock(); p.switches.return_value = [("WLAN 自动更新应用", True, (1, 2))]
@@ -108,10 +108,13 @@ class OppoPkt110RecipeTests(unittest.TestCase):
         self.assertEqual(scope["VERIFIED_SWITCHES"], 2)
 
     def test_recipe_never_suspends_disables_or_uninstalls_packages(self):
-        """挂起、停用、卸载和整包关通知都不该出现在机型脚本里（归档记录 0.2.6 记过问题写法）。"""
-        source = (ROOT / "recipes/oppo-PKT110/recipe.py").read_text(encoding="utf-8")
-        for forbidden in ("pm suspend", "pm uninstall", "pm disable-user", "pm revoke", "notif-off"):
-            self.assertNotIn(forbidden, source)
+        """挂起、停用、卸载和整包关通知都不该出现在机型脚本里（归档记录 0.2.6 记过问题写法）。
+
+        页面树把过程化的段搬进了同名例外 `.py`（#1264）：两处都要扫，判据才没被搬家绕过去。"""
+        for name in ("PKT110.toml", "PKT110.py"):
+            source = (ROOT / "recipes/oppo/PKT110" / name).read_text(encoding="utf-8")
+            for forbidden in ("pm suspend", "pm uninstall", "pm disable-user", "pm revoke", "notif-off"):
+                self.assertNotIn(forbidden, source, name)
 
 
 class OppoPkt110ParentChildTests(unittest.TestCase):
@@ -135,7 +138,7 @@ class OppoPkt110ParentChildTests(unittest.TestCase):
         return phone, state
 
     def load(self, phone):
-        scope, _ = load_recipe(phone, ROOT / "recipes/oppo-PKT110/recipe.py")
+        scope, _ = load_recipe(phone, ROOT / "recipes/oppo/PKT110/PKT110.toml")
         return scope
 
     def test_children_are_closed_before_the_parent(self):
@@ -173,7 +176,7 @@ class OppoPkt110ParentChildTests(unittest.TestCase):
 
     def load_only(self, phone, only):
         """按段名加载：ONLY 命中的段在装载时就执行，异常记进 FAILED_STEPS。"""
-        scope, _ = load_recipe(phone, ROOT / "recipes/oppo-PKT110/recipe.py", only)
+        scope, _ = load_recipe(phone, ROOT / "recipes/oppo/PKT110/PKT110.toml", only)
         return scope
 
     def test_game_center_falls_back_to_the_settings_icon(self):

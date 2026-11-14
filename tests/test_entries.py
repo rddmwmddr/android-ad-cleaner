@@ -9,12 +9,13 @@ import contextlib
 import io
 import re
 import sys
+import tomllib
 import types
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, call
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -25,6 +26,10 @@ import chan_fast  # noqa: E402
 import entries  # noqa: E402
 import fast  # noqa: E402
 import fixtures  # noqa: E402
+import recipe_meta  # noqa: E402
+import recipe_nav  # noqa: E402
+import recipe_strategies  # noqa: E402
+import recipe_steps  # noqa: E402
 import recipe_source  # noqa: E402
 import row  # noqa: E402
 from fast import ScreenLocked  # noqa: E402
@@ -142,8 +147,8 @@ class SourceTest(unittest.TestCase):
         """最后一次赋值不是字面量时不记出处：退回更早的旧值会把机型挂到别的包上。"""
         import tempfile
         with tempfile.TemporaryDirectory() as d:
-            model = Path(d) / "brand-model"
-            model.mkdir()
+            model = Path(d) / "brand" / "model"
+            model.mkdir(parents=True)
             (model / "recipe.py").write_text(
                 'package = "com.old"\npackage = helper()\ndef _():\n    p.start(package, ".B")\n',
                 encoding="utf-8")
@@ -153,8 +158,8 @@ class SourceTest(unittest.TestCase):
         """脚本定义了同名助手，注入面那份就不在场上：不扣减会把它记成用过别家的 Intent。"""
         import tempfile
         with tempfile.TemporaryDirectory() as d:
-            model = Path(d) / "brand-model"
-            model.mkdir()
+            model = Path(d) / "brand" / "model"
+            model.mkdir(parents=True)
             (model / "recipe.py").write_text(
                 'def app_settings(package, *markers):\n'
                 '    return package\n\n\n'
@@ -163,81 +168,16 @@ class SourceTest(unittest.TestCase):
                 encoding="utf-8")
             self.assertEqual(entries.used_by(d), {})
 
-    def test_navigation_implementations_ignore_caller_constants(self):
-        """`used_by()` 把调用脚本的常量一并传给每份注入实现：今天没有导航助手按名字取外部值，
-        所以传与不传必须逐字相同，否则这条接线会悄悄改变「用过的机型」（#1209）。"""
-        import recipe_source
-        import recipe_steps
-        constants = {"MARKET": ("com.example.market",), "HOT": ("热点资讯",)}
-        for name, impl in recipe_source.injected_sources().items():
-            if name in recipe_steps.STEPS:
-                continue
-            self.assertEqual(recipe_source.scan_source(impl, externals=constants).calls,
-                             recipe_source.scan_source(impl).calls, name)
 
-    def test_an_entry_inside_a_step_implementation_is_credited_to_the_caller(self):
-        """段体搬进注入面之后，实现里的拉起仍认得出属于哪个机型（#1209）。"""
-        import recipe_steps
-        import tempfile
-        with tempfile.TemporaryDirectory() as d:
-            model = Path(d) / "xiaomi-model"
-            model.mkdir()
-            (model / "recipe.py").write_text(
-                'MARKET = "com.example.market"\n\n\n'
-                '@step("商店")\n'
-                'def _():\n'
-                '    store()\n',
-                encoding="utf-8")
-            with patch.dict(recipe_steps.STEPS, {"store": _store_factory}):
-                used = entries.used_by(d)
-        self.assertEqual(used, {("direct", "com.example.market",
-                                 "com.example.market.Main"): {"model"}})
 
-    def test_an_entry_two_hops_down_is_credited_to_the_caller(self):
-        """段体调导航助手、入口写在助手实现里（#1212）：只看脚本那一层会把调段体的机型漏掉。"""
-        import recipe_nav
-        import recipe_steps
-        import tempfile
-        with tempfile.TemporaryDirectory() as d:
-            model = Path(d) / "oneplus-model"
-            model.mkdir()
-            (model / "recipe.py").write_text(
-                '@step("浏览器首页")\n'
-                'def _():\n'
-                '    browser_home()\n',
-                encoding="utf-8")
-            with patch.dict(recipe_steps.STEPS, {"browser_home": _browser_home_factory}), \
-                    patch.dict(recipe_nav.NAV, {"settings_direct": _settings_direct_factory}):
-                used = entries.used_by(d)
-        self.assertEqual(used, {("intent", "oppo.intent.action.APP_SETTINGS", "com.example.browser"):
-                                {"model"}})
 
-    def test_a_locally_defined_helper_two_hops_down_is_not_the_injected_one(self):
-        """脚本本地定义了段体要调的导航助手：注入版不在场上，第二层也不记出处（#1212）。"""
-        import recipe_nav
-        import recipe_steps
-        import tempfile
-        with tempfile.TemporaryDirectory() as d:
-            model = Path(d) / "oneplus-model"
-            model.mkdir()
-            (model / "recipe.py").write_text(
-                'def settings_direct():\n'
-                '    return False\n\n\n'
-                '@step("浏览器首页")\n'
-                'def _():\n'
-                '    browser_home()\n',
-                encoding="utf-8")
-            with patch.dict(recipe_steps.STEPS, {"browser_home": _browser_home_factory}), \
-                    patch.dict(recipe_nav.NAV, {"settings_direct": _settings_direct_factory}):
-                used = entries.used_by(d)
-        self.assertEqual(used, {})
 
     def test_open_app_settings_needs_two_arguments(self):
         """只传了包名的 open_app_settings 不算出处：把包名当成页面会给这台机凭空挂一条 Intent。"""
         import tempfile
         with tempfile.TemporaryDirectory() as d:
-            model = Path(d) / "brand-model"
-            model.mkdir()
+            model = Path(d) / "brand" / "model"
+            model.mkdir(parents=True)
             (model / "recipe.py").write_text(
                 'def open_app_settings(package):\n'
                 '    p.start(package, ".SettingsActivity")\n\n\n'
@@ -492,8 +432,8 @@ class ReachTest(unittest.TestCase):
 
 
 RECIPES_901 = {
-    "PMX110": ROOT / "recipes" / "oppo-PMX110" / "recipe.py",
-    "PLZ110": ROOT / "recipes" / "oneplus-PLZ110" / "recipe.py",
+    "PMX110": ROOT / "recipes" / "oppo/PMX110" / "PMX110.toml",
+    "PLZ110": ROOT / "recipes" / "oppo/PLZ110" / "PLZ110.toml",
 }
 LAUNCHER_901 = "com.android.launcher/com.android.launcher3.Launcher"
 ASSISTANT_SETTING_901 = "com.coloros.assistantscreen/setting.RecommendServiceSettingActivity"
@@ -556,13 +496,10 @@ def load_901(p, recipe):
 
 
 def action_901(scope, recipe, name):
-    """取真实分段的函数体，以便给它的协作者注入替身；不复制分段实现。"""
-    node = next(n for n in ast.parse(recipe.read_text(encoding="utf-8")).body
-                if isinstance(n, ast.FunctionDef) and n.decorator_list
-                and n.decorator_list[0].args[0].value == name)
-    node.decorator_list, node.name = [], "selected_action"
-    exec(compile(ast.Module(body=[node], type_ignores=[]), str(recipe), "exec"), scope)
-    return scope["selected_action"]
+    """取真实分段的 action，以便给它的协作者注入替身；不复制分段实现（#1265）。
+
+    `.py` 与页面树（`.toml`）的 `rt.steps` 都按段名挂着真正会跑的那一段，从那里取即可。"""
+    return next(item.action for item in scope["rt"].steps if item.name == name)
 
 
 class AssistantEntryTests(unittest.TestCase):
@@ -694,8 +631,10 @@ class AssistantEntryTests(unittest.TestCase):
                 p = phone_901()
                 p.tree.return_value = page_901(ICON_PAGE_901)
                 scope = load_901(p, recipe)
-                for helper in ("row", "close_named", "open_page", "hide_carousel"):
-                    scope[helper] = Mock()
+                close = Mock()
+                stub_scope(self, scope, row=Mock(), open_page=Mock(), hide_carousel=Mock())
+                fixtures.patch_library(self, {"strategies.close_named_optional": close})
+                scope["close_named"] = close
                 action_901(scope, recipe, "负一屏")()
                 self.assertEqual([c.args[0] for c in scope["row"].call_args_list],
                                  ["设置", "推荐服务"])
@@ -718,21 +657,21 @@ BASIC_460 = "com.android.browser/com.android.browser.basicmode.BasicModeSettingA
 HOME_460 = "com.android.browser/com.android.browser.MainActivity"
 # 先试直达设置页、落空后才裸拉起首页的那两份（#667、#912）
 FIRST_HOP = {
-    "xiaomi-M154FF": ".preferences.activity.CustomizationPreferenceActivity",
-    "xiaomi-24129PN74C": ".BrowserSettingsActivity",
+    "M154FF": ".preferences.activity.CustomizationPreferenceActivity",
+    "24129PN74C": ".BrowserSettingsActivity",
 }
 
 RECIPES_460 = (
-    (ROOT / "recipes/xiaomi-M154FF/recipe.py", ("com.android.browser",)),
-    (ROOT / "recipes/xiaomi-25102RKBEC/recipe.py", ("com.android.browser",)),
-    (ROOT / "recipes/redmi-25060RK16C/recipe.py", ("com.android.browser",)),
-    (ROOT / "recipes/xiaomi-24129PN74C/recipe.py", ("com.android.browser",)),
-    (ROOT / "recipes/redmi-23113RKC6C/recipe.py", ("com.android.browser",)),
-    (ROOT / "recipes/xiaomi-2512BPNDAC/recipe.py", ("com.android.browser",)),
-    (ROOT / "recipes/xiaomi-2505APX7BC/recipe.py", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/M154FF/M154FF.toml", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/25102RKBEC/25102RKBEC.toml", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/25060RK16C/25060RK16C.toml", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/23113RKC6C/23113RKC6C.toml", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/2512BPNDAC/2512BPNDAC.toml", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/2505APX7BC/2505APX7BC.toml", ("com.android.browser",)),
     # 这份不走 p.start：强停后用 monkey 拉起
-    (ROOT / "recipes/xiaomi-24129PN74C/recipe_os4.py", None),
-    (ROOT / "recipes/redmi-24122RKC7C/recipe.py", ("com.android.browser", ".BrowserActivity")),
+    (ROOT / "recipes/xiaomi/24129PN74C/24129PN74C-os4.toml", None),
+    (ROOT / "recipes/xiaomi/24122RKC7C/24122RKC7C.toml", ("com.android.browser", ".BrowserActivity")),
 )
 
 
@@ -747,7 +686,7 @@ class BrowserBasicModeTests(unittest.TestCase):
                 raise RuntimeError("启动后停在非预期页面")
 
         p = phone_mock()
-        if recipe.parent.name == "xiaomi-M154FF":
+        if recipe.parent.name == "M154FF":
             p.start.side_effect = start
         p.locked = lambda: False
         p.focus.return_value = focus
@@ -781,12 +720,12 @@ class BrowserBasicModeTests(unittest.TestCase):
         for recipe, start_args in RECIPES_460:
             with self.subTest(recipe=str(recipe)):
                 p, out = self.run_browser_step(recipe, HOME_460)
-                if recipe.parent.name == "xiaomi-M154FF":
+                if recipe.parent.name == "M154FF":
                     self.assertEqual([c.args for c in p.start.call_args_list],
-                                     [("com.android.browser", FIRST_HOP["xiaomi-M154FF"]),
+                                     [("com.android.browser", FIRST_HOP["M154FF"]),
                                       start_args])
                     self.assertIn("浏览器设置入口未找到", out)
-                elif start_args and recipe.parent.name != "xiaomi-24129PN74C":
+                elif start_args and recipe.parent.name != "24129PN74C":
                     p.start.assert_called_once_with(*start_args)
                 self.assertIn("== 浏览器", out)
                 self.assertNotIn("基本模式", out)
@@ -914,7 +853,7 @@ class BrowserEntryTests(unittest.TestCase):
         p.screen.focus.return_value = "com.android.browser/.MainActivity"
         p.in_settings_page.return_value = False
         p.screen.texts.return_value = []
-        scope, _ = load_recipe(p, ROOT / "recipes/xiaomi-M154FF/recipe.py")
+        scope, _ = load_recipe(p, ROOT / "recipes/xiaomi/M154FF/M154FF.toml")
         self.assertFalse(scope["browser_settings"]())
         p.back.assert_not_called()
 
@@ -955,10 +894,10 @@ class BrowserEntryTests(unittest.TestCase):
 #   两条时间轴：落到工具栏面板时不点任何开关并报出停在哪一页；正常进设置页时照常走到目标行。
 
 
-XIAOMI_586 = ROOT / "recipes/xiaomi-24129PN74C"
-RECIPES_586 = ("recipe.py", "recipe_os4.py")
-REDMI_K70_586 = ROOT / "recipes/redmi-23113RKC6C/recipe.py"
-XIAOMI_17U_586 = ROOT / "recipes/xiaomi-2512BPNDAC/recipe.py"
+XIAOMI_586 = ROOT / "recipes/xiaomi/24129PN74C"
+RECIPES_586 = ("24129PN74C.toml", "24129PN74C-os4.toml")
+REDMI_K70_586 = ROOT / "recipes/xiaomi/23113RKC6C/23113RKC6C.toml"
+XIAOMI_17U_586 = ROOT / "recipes/xiaomi/2512BPNDAC/2512BPNDAC.toml"
 
 BROWSER_586 = "com.android.browser/.BrowserActivity"
 BROWSER_SETTINGS_586 = "com.android.browser/.BrowserSettingsActivity"
@@ -1030,8 +969,8 @@ class XiaomiBrowserSettingsTests(unittest.TestCase):
         """正常路径：菜单 → 弹窗「设置」→ BrowserSettingsActivity，后面的行照常处理。"""
         expected = {
             # OS3 这份还要处理「显示猜你想搜模块」，也就是 #281 手动补上的那一项
-            "recipe.py": [ADS_586, call(only=["显示猜你想搜模块"], page="浏览器·搜索设置")],
-            "recipe_os4.py": [ADS_586],
+            "24129PN74C.toml": [ADS_586, call(only=["显示猜你想搜模块"], page="浏览器·搜索设置")],
+            "24129PN74C-os4.toml": [ADS_586],
         }
         for name in RECIPES_586:
             with self.subTest(recipe=name):
@@ -1122,8 +1061,8 @@ class Xiaomi17UltraBrowserSettingsTests(unittest.TestCase):
 #   #667：小米 M154FF、vivo V2547DA 的设置页能直达就直达，打不开才走菜单，断线不当成「这一档不通」。
 
 
-XIAOMI_667 = ROOT / "recipes" / "xiaomi-M154FF" / "recipe.py"
-VIVO_667 = ROOT / "recipes" / "vivo-V2547DA" / "recipe_android17.py"
+XIAOMI_667 = ROOT / "recipes" / "xiaomi/M154FF" / "M154FF.toml"
+VIVO_667 = ROOT / "recipes" / "vivo/V2547DA" / "V2547DA-android17.toml"
 
 
 def phone_667(start=None, lost=False):
@@ -1325,7 +1264,7 @@ class RecipeQuotingTest(unittest.TestCase):
 
     def test_no_recipe_quotes_the_page_name_before_start(self):
         offenders = []
-        for path in sorted((ROOT / "recipes").glob("*/recipe*.py")):
+        for path in fixtures.recipe_sources():
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Call):
@@ -1384,7 +1323,7 @@ def phone_286(taps=1):
 
 def load_step_286(p, only):
     """按段名加载并执行：返回 (scope, 标准输出)。"""
-    scope, out = load_recipe(p, ROOT / "recipes/oppo-PKT110/recipe.py", only)
+    scope, out = load_recipe(p, ROOT / "recipes/oppo/PKT110/PKT110.toml", only)
     return scope, out.getvalue()
 
 
@@ -1552,24 +1491,51 @@ ID_SECURITY_305 = ('<node class="android.widget.TextView"'
 GEAR_CENTER_305 = (995, 165)
 
 
-def gear_users_1210():
-    """注入面里真的用上齿轮的实现名（沿用 #1151 的「注入那份也算」口径）。
+def surface_sources():
+    """三个库的公开实现：{名字: 源码}（`__all__` 全局唯一，按名字查即可）。"""
+    return {name: source for name, (_module, source) in recipe_source.library_sources().items()}
 
-    判据走 `fixtures.normalize()`：`g["gear"]` 折回裸名、docstring 与注释都不剩，实现里提一句不算。"""
-    return {name for name, source in recipe_source.injected_sources().items()
-            if any((isinstance(node, ast.Name) and node.id == "gear")
-                   or (isinstance(node, ast.FunctionDef) and node.name == "gear")
-                   for node in ast.walk(ast.parse(fixtures.normalize(source))))}
+
+def gear_users_1210():
+    """注入面里真的用上齿轮的实现名（沿用 #1151 的「注入那份也算」口径），顺着调用收传递闭包。
+
+    判据走 `fixtures.normalize()`：`g["gear"]` 折回裸名、docstring 与注释都不剩，实现里提一句不算。
+    实现再调别的注入名也照算：`browser_settings` 只是分派，真正碰 `g["gear"]` 的是家族那一份（#1244），
+    不收传递闭包的话「用齿轮的脚本」会静默漏掉走浏览器入口的那几台。"""
+    calls, found = {}, set()
+    for name, source in surface_sources().items():
+        tree = ast.parse(fixtures.normalize(source))
+        calls[name] = {(node.func.id if isinstance(node.func, ast.Name) else node.func.attr)
+                       for node in ast.walk(tree) if isinstance(node, ast.Call)
+                       and isinstance(node.func, (ast.Name, ast.Attribute))}
+        if "gear" in calls[name] or any(isinstance(node, ast.FunctionDef) and node.name == "gear"
+                                        for node in ast.walk(tree)):
+            found.add(name)
+    changed = True
+    while changed:
+        changed = False
+        for name, named in calls.items():
+            if name not in found and named & found:
+                found.add(name)
+                changed = True
+    return found
 
 
 def hyperos_recipes_305():
-    """用了 gear() 的小米 / 红米机型脚本 —— 本地定义、注入助手与调用注入段体的都算（沿用 #1151 的口径）。
+    """用了齿轮的小米 / 红米活脚本 —— 本地定义、注入助手、转调注入段体与数据 op 都算（沿用 #1151 的口径）。
 
-    段体搬进注入面之后脚本正文里只剩 `theme()` 这类一行调用，按正文找 `gear(` 会把它们漏掉：
-    这一族用例照旧全绿，沿用 #305 的那批样本却再没有一条打到引擎那份实现。"""
+    段体搬进注入面之后脚本正文里只剩 `theme()` 这类一行调用，按正文找 `gear(` 会把它们漏掉；
+    转成页面树（`.toml`）后连正文都没有，所以数据 op 里的库名与例外 `.py` 的正文一起看（#1266）。"""
     gear_users = gear_users_1210()
-    for path in sorted(ROOT.glob("recipes/*/recipe*.py")):
-        if not path.parent.name.startswith(("xiaomi-", "redmi-")):
+    for path in xiaomi_recipe_files():
+        if path.suffix == ".toml":
+            names = {op.get("name") for segment in toml_data(path).get("segment", [])
+                     for op in walk_ops(segment.get("ops"))
+                     if op.get("kind") in {"lib", "require_lib", "if_lib"}}
+            companion = path.with_suffix(".py")
+            text = companion.read_text(encoding="utf-8") if companion.is_file() else ""
+            if "gear" in names or (names & gear_users) or "gear(" in text:
+                yield path
             continue
         text = path.read_text(encoding="utf-8")
         if "gear(" in text or any(f"{name}(" in text for name in gear_users):
@@ -1601,8 +1567,12 @@ class GearMatcherTests(unittest.TestCase):
         """样本按「用到 gear()」选，不按「本地定义」选（#1151）。
 
         搬进 `recipe_nav` 的六份脚本不再有本地 `def gear(`，按定义选样本时它们会静默掉出去，
-        这一族用例照旧全绿 —— 引擎那份实现就再没有一条 #305 样本打到它。"""
-        self.assertGreaterEqual(len(list(hyperos_recipes_305())), 15)
+        这一族用例照旧全绿 —— 引擎那份实现就再没有一条 #305 样本打到它。判据是「提到 gear 的活脚本
+        都在样本里」，不是拍一个总数下限（#1266）。"""
+        discovered = set(hyperos_recipes_305())
+        for path in xiaomi_recipe_files():
+            if "gear" in path.read_text(encoding="utf-8").lower():
+                self.assertIn(path, discovered, f"{path} 提到 gear 但没进样本集")
 
     def test_store_row_is_not_mistaken_for_settings(self):
         for path, phone in self.each(STORE_ROW_305 + GEAR_ICON_305):
@@ -1702,11 +1672,17 @@ class IconHitTests(unittest.TestCase):
 
 
 class ScriptsShareOnePredicateTests(unittest.TestCase):
-    """13 份小米 / 红米脚本不再各留一份 icon_hit，改用引擎这一份（#530）。"""
+    """13 份小米 / 红米脚本不再各留一份 icon_hit，改用引擎这一份（#530）。
+
+    `recipe*.py` 已随目录化删除，本机代码只剩各型号的例外 `.py`；扫描口径取
+    `fixtures.recipe_sources()`（`recipe*.py` + 同名例外 `.py`），扫 0 份就是这条守卫空转。
+    """
 
     def test_no_recipe_defines_its_own_icon_hit(self):
+        sources = fixtures.recipe_sources()
+        self.assertTrue(sources, "没扫到机型源码：`recipe_sources()` 的口径或数据搬家了")
         offenders = []
-        for path in sorted(ROOT.glob("recipes/*/recipe*.py")):
+        for path in sources:
             tree = ast.parse(path.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
                 if isinstance(node, ast.FunctionDef) and node.name == "icon_hit":
@@ -1714,8 +1690,8 @@ class ScriptsShareOnePredicateTests(unittest.TestCase):
         self.assertEqual(offenders, [], "脚本里还留着 icon_hit 的本地副本")
 
 
-VIVO_RECIPES_530 = (ROOT / "recipes/vivo-V2547DA/recipe.py",
-                ROOT / "recipes/vivo-V2547DA/recipe_android17.py")
+VIVO_RECIPES_530 = (ROOT / "recipes/vivo/V2547DA/V2547DA.toml",
+                ROOT / "recipes/vivo/V2547DA/V2547DA-android17.toml")
 
 
 def calls_on_p_530(tree, method):
@@ -1732,11 +1708,19 @@ class VivoStoreEntryTests(unittest.TestCase):
     """vivo 参考脚本的商店段改用引擎入口，不再按精确文字点底栏（#530）。"""
 
     def test_store_section_uses_the_bottom_tab_helper(self):
+        import tomllib
         for path in VIVO_RECIPES_530:
             with self.subTest(recipe=path.name):
-                tree = ast.parse(path.read_text(encoding="utf-8"))
-                names = [a.value for call in calls_on_p_530(tree, "tab")
-                         for a in call.args if isinstance(a, ast.Constant)]
+                data = tomllib.loads(path.read_text(encoding="utf-8"))
+                store = next(seg for seg in data["segment"] if seg["name"] == "应用商店")
+                if "code" in store:
+                    # 过程段在例外 .py 里：那里照旧该是 p.tab("我的")
+                    tree = ast.parse(path.with_suffix(".py").read_text(encoding="utf-8"))
+                    names = [a.value for call in calls_on_p_530(tree, "tab")
+                             for a in call.args if isinstance(a, ast.Constant)]
+                else:
+                    # 数据段：require_tab 就是引擎的底带 p.tab()（ADR-0012）
+                    names = [op.get("name") for op in store["ops"] if op.get("kind") == "require_tab"]
                 self.assertIn("我的", names, "商店段没改用 p.tab(\"我的\")")
 
 
@@ -1816,8 +1800,8 @@ class VivoGearTests(unittest.TestCase):
 #   直达不通时退回了原路径、断线不被吞成「入口改名」。真机上的落点仍要另验。
 
 
-PNM_796 = ROOT / "recipes" / "honor-PNM-AN10" / "recipe.py"
-PLR_796 = ROOT / "recipes" / "oneplus-PLR110" / "recipe.py"
+PNM_796 = ROOT / "recipes" / "honor/PNM-AN10" / "PNM-AN10.toml"
+PLR_796 = ROOT / "recipes" / "oppo/PLR110" / "PLR110.toml"
 
 HIBOARD_START_796 = "am start -f 0x10008000 -n com.hihonor.hiboard/com.hihonor.intelligent.LauncherActivity"
 SEARCH_SETTING_796 = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"
@@ -1974,11 +1958,11 @@ PRIVACY_933 = ("隐私", "隐私授权管理")
 MARKET_933 = "com.heytap.market/com.heytap.market.mine.cn.setting.ui."
 PRIVACY_PAGE_933 = MARKET_933 + "PrivacyActivity"
 RECIPES_933 = {
-    "PLG110": ROOT / "recipes/oppo-PLG110/recipe.py",
-    "PMA110": ROOT / "recipes/oppo-PMA110/recipe.py",
-    "PKX110": ROOT / "recipes/oneplus-PKX110/recipe.py",
-    "RMX3700": ROOT / "recipes/realme-RMX3700/recipe.py",
-    "PHK110": ROOT / "recipes/oneplus-PHK110/recipe_android15.py",
+    "PLG110": ROOT / "recipes/oppo/PLG110/PLG110.toml",
+    "PMA110": ROOT / "recipes/oppo/PMA110/PMA110.toml",
+    "PKX110": ROOT / "recipes/oppo/PKX110/PKX110.toml",
+    "RMX3700": ROOT / "recipes/oppo/RMX3700/RMX3700.toml",
+    "PHK110": ROOT / "recipes/oppo/PHK110/PHK110-android15.toml",
 }
 
 
@@ -1987,15 +1971,22 @@ def load_933(phone, recipe):
     return scope
 
 
-def action_933(scope, recipe, name):
-    """取真实分段的函数体，以便给它的协作者注入替身；不复制分段实现。"""
-    node = next(n for n in ast.parse(recipe.read_text(encoding="utf-8")).body
-                if isinstance(n, ast.FunctionDef) and n.decorator_list
-                and n.decorator_list[0].args[0].value == name)
-    node.decorator_list, node.name = [], "selected_action"
-    exec(compile(ast.Module(body=[node], type_ignores=[]), str(recipe), "exec"), scope)
-    return scope["selected_action"]
+def stub_scope(case, scope, **mocks):
+    """scope[name] 放同一份 Mock，同时换掉库模块与 LIBRARY 里的实现（统一接缝）。"""
+    targets = {}
+    for helper, mock in mocks.items():
+        scope[helper] = mock
+        for module_name, module in (("nav", recipe_nav), ("strategies", recipe_strategies),
+                                    ("steps", recipe_steps)):
+            if hasattr(module, helper):
+                targets[f"{module_name}.{helper}"] = mock
+                break
+    fixtures.patch_library(case, targets)
 
+
+def action_933(scope, recipe, name):
+    """取真实分段的 action：装载后的 `rt.steps` 就是真正会跑的那一段（#1265）。"""
+    return next(item.action for item in scope["rt"].steps if item.name == name)
 
 def tapping_phone_933(present):
     """只在 `present` 里的文案点得动的假手机。"""
@@ -2033,7 +2024,8 @@ class TapPageEntryTests(unittest.TestCase):
     def entry(self, recipe, present):
         p = tapping_phone_933(present)
         scope = load_933(p, recipe)
-        scope["wait_page"] = Mock()
+        self.wait_page = Mock()
+        fixtures.patch_library(self, {"nav.wait_page": self.wait_page})
         return p, scope
 
     def test_each_wording_opens_the_store_privacy_page(self):
@@ -2042,7 +2034,7 @@ class TapPageEntryTests(unittest.TestCase):
                 with self.subTest(recipe=name, wording=wording):
                     p, scope = self.entry(recipe, {wording})
                     scope["tap_page"](PRIVACY_933, PRIVACY_PAGE_933, scrolls=8)
-                    scope["wait_page"].assert_called_once_with(PRIVACY_PAGE_933, wording)
+                    self.wait_page.assert_called_once_with(PRIVACY_PAGE_933, wording)
                     p.note_miss.assert_not_called()
 
     def test_privacy_wording_wins_when_both_are_on_the_page(self):
@@ -2059,7 +2051,7 @@ class TapPageEntryTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "未找到入口「隐私」"):
                     scope["tap_page"](PRIVACY_933, PRIVACY_PAGE_933, scrolls=8)
                 p.note_miss.assert_called_once_with("隐私 / 隐私授权管理")
-                scope["wait_page"].assert_not_called()
+                self.wait_page.assert_not_called()
 
     def test_a_single_name_still_works_and_keeps_the_old_message(self):
         """这两份脚本的其余十来处入口仍是单字面量，行为与失败句不能跟着变。"""
@@ -2067,7 +2059,7 @@ class TapPageEntryTests(unittest.TestCase):
             with self.subTest(name):
                 p, scope = self.entry(recipe, {"搜索范围"})
                 scope["tap_page"]("搜索范围", MARKET_933 + "ServeManagerActivity")
-                scope["wait_page"].assert_called_once_with(MARKET_933 + "ServeManagerActivity", "搜索范围")
+                self.wait_page.assert_called_once_with(MARKET_933 + "ServeManagerActivity", "搜索范围")
                 p.tap.assert_called_once_with("搜索范围", exact=True, scrolls=4, quiet=False)
 
                 p, scope = self.entry(recipe, set())
@@ -2080,7 +2072,8 @@ class Pkx110EntryTests(unittest.TestCase):
     def entry(self, present):
         p = tapping_phone_933(present)
         scope = load_933(p, RECIPES_933["PKX110"])
-        scope["wait_page"] = Mock(return_value=True)
+        self.wait_page = Mock(return_value=True)
+        fixtures.patch_surface(self, "wait_page", self.wait_page)
         return p, scope
 
     def test_each_wording_opens_the_store_privacy_page(self):
@@ -2088,7 +2081,8 @@ class Pkx110EntryTests(unittest.TestCase):
             with self.subTest(wording):
                 p, scope = self.entry({wording})
                 self.assertTrue(scope["tap_page"](PRIVACY_933, PRIVACY_PAGE_933, PRIVACY_933))
-                scope["wait_page"].assert_called_once_with(PRIVACY_PAGE_933, PRIVACY_933)
+                self.wait_page.assert_called_once()
+                self.assertEqual(self.wait_page.call_args.args[2:], (PRIVACY_PAGE_933, PRIVACY_933))
                 p.note_miss.assert_not_called()
 
     def test_privacy_wording_wins_when_both_are_on_the_page(self):
@@ -2100,7 +2094,7 @@ class Pkx110EntryTests(unittest.TestCase):
         p, scope = self.entry(set())
         self.assertFalse(scope["tap_page"](PRIVACY_933, PRIVACY_PAGE_933, PRIVACY_933))
         p.note_miss.assert_called_once_with("隐私 / 隐私授权管理")
-        scope["wait_page"].assert_not_called()
+        self.wait_page.assert_not_called()
 
     def test_page_title_accepts_either_wording(self):
         for wording in PRIVACY_933:
@@ -2110,8 +2104,9 @@ class Pkx110EntryTests(unittest.TestCase):
 
     def test_failed_landing_is_not_retried_on_the_next_wording(self):
         """点开了但没落到隐私页：就此停段，不在别的页面上再点一次同名行。"""
-        p, scope = self.entry(set(PRIVACY_933))
-        scope["wait_page"] = Mock(return_value=False)
+        p = tapping_phone_933(set(PRIVACY_933))
+        scope = load_933(p, RECIPES_933["PKX110"])
+        fixtures.patch_surface(self, "wait_page", Mock(return_value=False))
         self.assertFalse(scope["tap_page"](PRIVACY_933, PRIVACY_PAGE_933, PRIVACY_933))
         p.tap.assert_called_once_with("隐私", exact=True, quiet=True)
 
@@ -2120,7 +2115,8 @@ class Phk110EntryTests(unittest.TestCase):
     def entry(self, present):
         p = tapping_phone_933(present)
         scope = load_933(p, RECIPES_933["PHK110"])
-        scope["page"] = Mock(return_value=True)
+        self.page = Mock(return_value=True)
+        fixtures.patch_surface(self, "page_activity", self.page)
         return p, scope
 
     def test_each_wording_opens_the_store_privacy_page(self):
@@ -2128,7 +2124,7 @@ class Phk110EntryTests(unittest.TestCase):
             with self.subTest(wording):
                 p, scope = self.entry({wording})
                 self.assertTrue(scope["navigate"](PRIVACY_933, "PrivacyActivity", PRIVACY_933))
-                scope["page"].assert_called_once_with("PrivacyActivity", PRIVACY_933)
+                self.assertEqual(self.page.call_args.args[2:], ("PrivacyActivity", PRIVACY_933))
                 p.note_miss.assert_not_called()
 
     def test_privacy_wording_wins_when_both_are_on_the_page(self):
@@ -2140,13 +2136,13 @@ class Phk110EntryTests(unittest.TestCase):
         p, scope = self.entry(set())
         self.assertFalse(scope["navigate"](PRIVACY_933, "PrivacyActivity", PRIVACY_933))
         p.note_miss.assert_called_once_with("隐私 / 隐私授权管理")
-        scope["page"].assert_not_called()
+        self.page.assert_not_called()
 
     def test_page_title_accepts_either_wording(self):
         for wording in PRIVACY_933:
             with self.subTest(wording):
                 scope = load_933(store_page_933(wording), RECIPES_933["PHK110"])
-                self.assertTrue(scope["page"]("PrivacyActivity", PRIVACY_933))
+                self.assertTrue(scope["page_activity"]("PrivacyActivity", PRIVACY_933))
 
 
 class Rmx3700EntryTests(unittest.TestCase):
@@ -2186,25 +2182,49 @@ class StoreSegmentTests(unittest.TestCase):
     """商店段把两种文案一起交给本脚本的入口方法 —— 撤掉实现这几条就红。"""
 
     def segment(self, name, step, **stubs):
-        scope = load_933(segment_phone_933(), RECIPES_933[name])
+        """装载真实机型脚本，只跑这一段；把它的协作者换成 Mock，断言段体交给了什么。
+
+        页面树（`.toml`）的段体已经是数据：按段名从装载后的 `rt` 取 action，不再从源码里抠函数体
+        （#1264）。仍是 `recipe.py` 的机型照旧走 `action_933()` 的那条 AST 路径。"""
+        recipe = RECIPES_933[name]
+        if recipe.suffix == ".toml":
+            scope, _ = load_recipe(segment_phone_933(), recipe)   # 装载但一段都不跑
+            targets = {}
+            for helper, value in stubs.items():
+                mock = Mock(return_value=value)
+                scope[helper] = mock
+                for module_name, module in (("nav", recipe_nav), ("strategies", recipe_strategies),
+                                            ("steps", recipe_steps)):
+                    if hasattr(module, helper):
+                        targets[f"{module_name}.{helper}"] = mock
+                        break
+            fixtures.patch_library(self, targets)
+            scope["ONLY"] = []                                     # 放开段过滤，下面只跑这一段
+            scope.pop("guard", None)                               # 只验段体：型号守卫不是这条用例的对象
+            action = next(item.action for item in scope["rt"].steps if item.name == step)
+            scope["rt"].run_step(step, action)
+            return scope
+        scope = load_933(segment_phone_933(), recipe)
         for helper, value in stubs.items():
             scope[helper] = Mock(return_value=value)
-        action_933(scope, RECIPES_933[name], step)()
+        action_933(scope, recipe, step)()
         return scope
 
+    # 页面树里的等价文案是 TOML 数组（转成 list）：按内容与顺序比，容器类型不是判据。
     def test_plg110_passes_both_wording(self):
         scope = self.segment("PLG110", "软件商店",
-                             app_settings=None, tap_page=None, close_named=None, read_switches={})
-        self.assertEqual(scope["tap_page"].call_args_list[0].args[0], PRIVACY_933)
+                             app_settings=None, tap_page=None, close_named_plain=None, read_switches={})
+        self.assertEqual(tuple(scope["tap_page"].call_args_list[0].args[0]), PRIVACY_933)
 
     def test_pma110_passes_both_wording(self):
-        scope = self.segment("PMA110", "软件商店", app_settings=None, tap_page=None, close_named=None)
-        self.assertEqual(scope["tap_page"].call_args_list[0].args[0], PRIVACY_933)
+        scope = self.segment("PMA110", "软件商店", app_settings=None, tap_page=None, close_named_plain=None)
+        # 页面树里的等价文案是 TOML 数组（转成 list）：按内容与顺序比，容器类型不是判据。
+        self.assertEqual(tuple(scope["tap_page"].call_args_list[0].args[0]), PRIVACY_933)
 
     def test_pkx110_passes_both_wording(self):
         scope = self.segment("PKX110", "软件商店·个性化",
-                             open_app_settings=True, tap_page=True, off_exact=True)
-        self.assertEqual(scope["tap_page"].call_args_list[0].args[0], PRIVACY_933)
+                             open_app_settings=True, tap_page=True, off_exact_paged=True)
+        self.assertEqual(tuple(scope["tap_page"].call_args_list[0].args[0]), PRIVACY_933)
 
     def test_rmx3700_passes_both_wording(self):
         scope = self.segment("RMX3700", "软件商店", tap_by_scroll=True, wait_page=True)
@@ -2212,17 +2232,17 @@ class StoreSegmentTests(unittest.TestCase):
 
     def test_phk110_passes_both_wording(self):
         scope = self.segment("PHK110", "软件商店个性化",
-                             open_settings=True, navigate=True, off_exact=True)
-        self.assertEqual(scope["navigate"].call_args_list[0].args[0], PRIVACY_933)
+                             open_settings=True, navigate=True, off_exact_paged=True)
+        self.assertEqual(tuple(scope["navigate"].call_args_list[0].args[0]), PRIVACY_933)
 
     def test_rmx3700_missing_row_keeps_the_original_line_and_the_scene(self):
         p = segment_phone_933()
         scope = load_933(p, RECIPES_933["RMX3700"])
-        scope["tap_by_scroll"] = Mock(return_value=False)
-        scope["wait_page"] = Mock(return_value=True)
+        fixtures.patch_library(self, {"nav.tap_by_scroll": Mock(return_value=False),
+                                      "nav.wait_page": Mock(return_value=True)})
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            action_933(scope, RECIPES_933["RMX3700"], "软件商店")()
+            next(item.action for item in scope["rt"].steps if item.name == "软件商店")()
         self.assertIn("没找到「隐私授权管理」", out.getvalue())
         p.note_miss.assert_called_once_with("隐私 / 隐私授权管理")
 
@@ -2239,7 +2259,7 @@ class StoreSegmentTests(unittest.TestCase):
 #   页面节点取自报告者贴的 dump（1080×2400）。
 
 
-RECIPE_912 = ROOT / "recipes/xiaomi-24129PN74C/recipe.py"
+RECIPE_912 = ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml"
 BROWSER_HOME_912 = "com.android.browser/com.android.browser.BrowserActivity"
 BROWSER_BASIC_912 = "com.android.browser/com.android.browser.basicmode.BasicModeSettingActivity"
 
@@ -2389,18 +2409,19 @@ class ThemeSettingsTests(ClockCase):
 
     def load(self):
         scope, _ = load_recipe(self.p, RECIPE_912)
-        scope["time"] = self.clock        # 脚本级等待也走同一只假钟
+        scope["rt"].clock = self.clock        # 脚本级等待也走同一只假钟
         return scope
 
     def test_my_tab_hits_the_bottom_bar_not_the_content_rows(self):
         scope = self.load()
-        scope["gear"] = Mock(return_value=True)
+        gear = Mock(return_value=True)
+        fixtures.patch_library(self, {"nav.gear": gear, "nav.settings_icon_visible": Mock(return_value=True)})
         with contextlib.redirect_stdout(io.StringIO()):
             scope["theme_settings"]()
         self.assertEqual(self.clicked, [MINE_TAB_CENTER_912])
         for center in CONTENT_CENTERS_912:
             self.assertNotIn(center, self.clicked)
-        scope["gear"].assert_called_once_with()
+        gear.assert_called_once_with()
 
     def test_settings_icon_showing_up_late_is_waited_for(self):
         """图标前一帧还不在树里：等它进树再交给 gear()，齿轮照样点得中。
@@ -2424,11 +2445,13 @@ class ThemeSettingsTests(ClockCase):
 
     def test_two_misses_report_the_page_evidence(self):
         scope = self.load()
-        scope["gear"] = Mock(return_value=False)
+        gear = Mock(return_value=False)
+        fixtures.patch_library(self, {"nav.gear": gear,
+                                      "nav.settings_icon_visible": Mock(return_value=True)})
         with contextlib.redirect_stdout(io.StringIO()):
             with self.assertRaisesRegex(RuntimeError, f"主题设置入口没找到；停在 {THEME_MINE_FOCUS_912}"):
                 scope["theme_settings"]()
-        self.assertEqual(scope["gear"].call_count, 2)
+        self.assertEqual(gear.call_count, 2)
 
 
 # ---------- 来源 tests/test_theme_entry_730.py ----------
@@ -2445,7 +2468,37 @@ SKIP_730 = "本机没有主题管理包，跳过"
 
 
 def recipes_730():
-    return sorted((ROOT / "recipes").glob("*/recipe*.py"))
+    """每份机型活脚本：`.py` 与已转页面树的 `.toml` 都算（#1266，别让转过的机型从守卫里消失）。"""
+    return sorted(Path(path) for path in recipe_meta.recipe_files(RECIPES))
+
+
+def trees_730(path):
+    """要检查的 AST 树：`.py` 是它自己，`.toml` 是同目录同名例外 `.py`（有才）。"""
+    if path.suffix == ".py":
+        return [ast.parse(path.read_text(encoding="utf-8"), filename=str(path))]
+    companion = path.with_suffix(".py")
+    return [ast.parse(companion.read_text(encoding="utf-8"), filename=str(companion))] \
+        if companion.is_file() else []
+
+
+def data_ops_730(path):
+    """`.toml` 的数据 op 列表；`.py` 给空。"""
+    if path.suffix != ".toml":
+        return []
+    return [op for segment in toml_data(path).get("segment", [])
+            for op in walk_ops(segment.get("ops"))]
+
+
+def data_monkey_shells_730(ops):
+    return [op for op in ops
+            if op.get("kind") == "shell" and "monkey" in op.get("command", "") and THEME in op.get("command", "")]
+
+
+def data_bare_starts_730(ops):
+    """数据里不带 activity 的 `start` / `start_or_skip`（引擎会退到 monkey）。"""
+    return [op for op in ops
+            if op.get("kind") in {"start", "start_or_skip"} and op.get("pkg") == THEME
+            and not op.get("activity")]
 
 
 def literal_730(node):
@@ -2494,9 +2547,12 @@ class ThemeEntryGuardTests(unittest.TestCase):
         for path in found:
             rel = path.relative_to(ROOT)
             with self.subTest(recipe=str(rel)):
-                tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-                self.assertEqual(monkey_shells_730(tree), [], f"{rel}: 用 monkey 拉起 {THEME}")
-                self.assertEqual(bare_starts_730(tree), [], f"{rel}: 不带 activity 的 Phone.start")
+                for tree in trees_730(path):
+                    self.assertEqual(monkey_shells_730(tree), [], f"{rel}: 用 monkey 拉起 {THEME}")
+                    self.assertEqual(bare_starts_730(tree), [], f"{rel}: 不带 activity 的 Phone.start")
+                ops = data_ops_730(path)
+                self.assertEqual(data_monkey_shells_730(ops), [], f"{rel}: 用 monkey 拉起 {THEME}")
+                self.assertEqual(data_bare_starts_730(ops), [], f"{rel}: 不带 activity 的 Phone.start")
 
 
 class ThemeFallbackBehaviourTests(unittest.TestCase):
@@ -2520,8 +2576,8 @@ class ThemeFallbackBehaviourTests(unittest.TestCase):
         return p, out.getvalue(), scope
 
     def test_installed_thememanager_is_launched_directly(self):
-        for path in (ROOT / "recipes/xiaomi-24129PN74C/recipe.py",
-                     ROOT / "recipes/xiaomi-24090RA29C/recipe.py"):
+        for path in (ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml",
+                     ROOT / "recipes/xiaomi/24090RA29C/24090RA29C.toml"):
             with self.subTest(recipe=path.parent.name):
                 p, _, _ = self.load(path, "", "package:/system/app/ThemeManager/ThemeManager.apk")
                 # 只比对拉起那一步：往后的「我的 → 齿轮」与开关校验由 #906 的用例守
@@ -2571,14 +2627,11 @@ def injected_step_1210(name):
 
     源码先过 `fixtures.normalize()`：`g["X"]` 折回 `X`，下面按裸名找 go / gear / require_switches 的守卫
     才认得出注入实现里那几个调用。"""
-    source = recipe_source.injected_sources().get(name)
+    source = surface_sources().get(name)
     if source is None:
         return None
-    factory = next((node for node in ast.parse(fixtures.normalize(source)).body
-                    if isinstance(node, ast.FunctionDef)), None)
-    if factory is None:
-        return None
-    return next((node for node in factory.body if isinstance(node, ast.FunctionDef)), None)
+    return next((node for node in ast.parse(fixtures.normalize(source)).body
+                 if isinstance(node, ast.FunctionDef)), None)
 
 
 def effective_step_body(node, defines=frozenset()):
@@ -2593,11 +2646,75 @@ def effective_step_body(node, defines=frozenset()):
     return node
 
 
-def theme_steps_906():
-    """[(路径, 段函数)]：所有带 `@step("主题")` 的小米 / 红米脚本段；段体搬进注入面的给实现本身。"""
+def xiaomi_recipe_files():
+    """小米 / 红米的活脚本：`.py` 与已转页面树的 `.toml` 都算（`recipe_meta` 的单一发现口径）。"""
+    return [Path(path) for path in recipe_meta.recipe_files(RECIPES)
+            if entries.family(Path(path).parent.parent.name) == "xiaomi"]
+
+
+def toml_data(path):
+    with open(path, "rb") as handle:
+        return tomllib.load(handle)
+
+
+def walk_ops(ops):
+    """数据 ops 的扁平展开（含 `ops` / `else_ops` 子表）。"""
+    for op in ops or []:
+        if not isinstance(op, dict):
+            continue
+        yield op
+        yield from walk_ops(op.get("ops"))
+        yield from walk_ops(op.get("else_ops"))
+
+
+def op_literals(ops):
+    """数据里出现的全部字符串字面量（递归进数组与表）。"""
+    found = set()
+
+    def walk(value):
+        if isinstance(value, str):
+            found.add(value)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+        elif isinstance(value, dict):
+            for item in value.values():
+                walk(item)
+
+    walk(ops)
+    return found
+
+
+def _function_node(source, name):
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == name:
+            return node
+    return None
+
+
+def theme_units_906():
+    """[(路径, 形态, 段体)]：每份小米 / 红米活脚本里的「主题」段（#1266，`.toml` 也扫）。
+
+    形态两种：`ast` 是段函数节点（`.py` 的 `@step`、`.toml` 的 `code=` 例外函数、转调单库实现）；
+    `ops` 是数据 op 列表。判据按形态各写一条，别只扫 `.py` 让转过的机型静默消失（沿用 #1264 的口径）。"""
     found = []
-    for path in sorted((ROOT / "recipes").glob("*/recipe*.py")):
-        if entries.family(path.parent.name.split("-", 1)[0]) != "xiaomi":
+    for path in xiaomi_recipe_files():
+        if path.suffix == ".toml":
+            segment = next((s for s in toml_data(path).get("segment", [])
+                            if s.get("name") == "主题"), None)
+            if segment is None:
+                continue
+            if "code" in segment:
+                companion = path.with_suffix(".py")
+                node = _function_node(companion.read_text(encoding="utf-8"), segment["code"])
+                found.append((path, "ast", node))
+            elif (len(segment.get("ops", [])) == 1
+                  and segment["ops"][0].get("kind") == "lib"
+                  and injected_step_1210(segment["ops"][0].get("name")) is not None):
+                found.append((path, "ast", injected_step_1210(segment["ops"][0]["name"])))
+            else:
+                found.append((path, "ops", segment.get("ops", [])))
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         defines = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
@@ -2607,8 +2724,13 @@ def theme_steps_906():
             for dec in node.decorator_list:
                 if (isinstance(dec, ast.Call) and getattr(dec.func, "id", "") == "step"
                         and dec.args and getattr(dec.args[0], "value", None) == "主题"):
-                    found.append((path, effective_step_body(node, defines)))
+                    found.append((path, "ast", effective_step_body(node, defines)))
     return found
+
+
+def theme_recipes_906():
+    """含「主题」段的小米 / 红米活脚本路径（`.py` 与 `.toml` 都算）。"""
+    return [path for path, _form, _body in theme_units_906()]
 
 
 def unconsumed_906(fn):
@@ -2631,37 +2753,78 @@ def unconsumed_906(fn):
         consumed = ((isinstance(parent, (ast.If, ast.While)) and cur is parent.test)
                     or isinstance(parent, (ast.Assign, ast.Return))
                     or (isinstance(parent, ast.Call)
-                        and getattr(parent.func, "id", "") in {"require", "close_named",
-                                                               "require_switches"}))
+                        and (getattr(parent.func, "id", "")
+                             or getattr(parent.func, "attr", "")) in {"require", "close_named",
+                                                                      "require_switches"}))
         if not consumed:
             bad.append(node.lineno)
     return bad
 
 
 def called_names_906(fn):
-    return {getattr(n.func, "id", "") for n in ast.walk(fn) if isinstance(n, ast.Call)}
+    """调用名（裸名或 `x.name` 的 attr）：`rt.require_switches` 与 `_close_named_fn` 都算。"""
+    names = set()
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Call) and isinstance(node.func, (ast.Name, ast.Attribute)):
+            names.add(getattr(node.func, "id", "") or getattr(node.func, "attr", ""))
+    return names
+
+
+def unconsumed_ops_906(ops):
+    """数据形态里返回值被丢掉的导航调用：裸 `lib go` / `lib gear`（`require_*` 才是消费形态）。"""
+    return [op for op in walk_ops(ops)
+            if op.get("kind") == "lib" and op.get("name") in {"go", "gear"}]
+
+
+def verifies_switches_906(ops):
+    """数据形态里点名开关被校验：`off_required` / `close_listed`，或调 `close_named` 的库。"""
+    for op in walk_ops(ops):
+        if op.get("kind") in {"off_required", "close_listed"}:
+            return True
+        if (op.get("kind") in {"lib", "require_lib", "if_lib"}
+                and str(op.get("name", "")).startswith("close_named")):
+            return True
+    return False
 
 
 class ThemeLandingGuardTests(unittest.TestCase):
+    def test_every_theme_recipe_is_discovered(self):
+        """发现口径：`.toml` 与 `.py` 两条路对「哪份脚本有主题段」要给同一个答案（#1266）。"""
+        units = theme_units_906()
+        self.assertTrue(units, "一份主题段都没扫到：发现口径坏了")
+        expected = {Path(path) for path in recipe_meta.recipe_files(RECIPES)
+                    if entries.family(Path(path).parent.parent.name) == "xiaomi"
+                    and "主题" in recipe_meta.recipe_meta(path)["steps"]}
+        self.assertEqual({path for path, _form, _body in units}, expected,
+                         "主题段的机型脚本发现口径不一致")
+
     def test_every_theme_step_consumes_go_and_gear(self):
-        steps = theme_steps_906()
-        self.assertGreaterEqual(len(steps), 15, "主题段的机型脚本少找了")
-        for path, fn in steps:
+        for path, form, body in theme_units_906():
             with self.subTest(recipe=str(path.relative_to(ROOT))):
-                self.assertEqual(unconsumed_906(fn), [], f"{path.name}: 丢了导航的返回值")
+                if form == "ast":
+                    self.assertEqual(unconsumed_906(body), [], f"{path.name}: 丢了导航的返回值")
+                else:
+                    self.assertEqual(unconsumed_ops_906(body), [], f"{path.name}: 丢了导航的返回值")
 
     def test_every_theme_step_verifies_the_named_switch(self):
-        for path, fn in theme_steps_906():
+        for path, form, body in theme_units_906():
             with self.subTest(recipe=str(path.relative_to(ROOT))):
-                self.assertTrue(called_names_906(fn) & {"require_switches", "close_named"},
-                                f"{path.name}: 点名开关没有校验")
+                if form == "ast":
+                    self.assertTrue(called_names_906(body) & {
+                        "require_switches", "close_named", "close_named_optional", "close_named_step", "off_exact_step"},
+                                    f"{path.name}: 点名开关没有校验")
+                else:
+                    self.assertTrue(verifies_switches_906(body), f"{path.name}: 点名开关没有校验")
 
     def test_theme_steps_launch_the_manager_directly(self):
         """#906：不再经主题商店冷启动。落点被系统转走时由 start_or_skip 收成跳过（#902）。"""
-        for path, fn in theme_steps_906():
+        for path, form, body in theme_units_906():
             with self.subTest(recipe=str(path.relative_to(ROOT))):
-                literals = {n.value for n in ast.walk(fn)
-                            if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+                if form == "ast":
+                    literals = {n.value for n in ast.walk(body)
+                                if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+                else:
+                    literals = op_literals(body)
                 self.assertNotIn(STORE_906, literals, f"{path.name}: 还在冷启动主题商店")
 
 
@@ -2698,7 +2861,7 @@ class ThemeSettingsLandingTests(unittest.TestCase):
         return p
 
     def test_zero_named_switches_fails_the_step_with_page_evidence(self):
-        for path, _ in theme_steps_906():
+        for path in theme_recipes_906():
             with self.subTest(recipe=str(path.relative_to(ROOT))):
                 p = self.phone(state={})
                 out = io.StringIO()
@@ -2712,7 +2875,7 @@ class ThemeSettingsLandingTests(unittest.TestCase):
                 self.assertIn("当次读到 0 个开关", text)
 
     def test_navigation_that_never_reaches_the_settings_page_fails_the_step(self):
-        for path, _ in theme_steps_906():
+        for path in theme_recipes_906():
             with self.subTest(recipe=str(path.relative_to(ROOT))):
                 p = self.phone(page=EMPTY_906, state={SWITCH_906: True}, nav=False)
                 out = io.StringIO()
@@ -2725,7 +2888,7 @@ class ThemeSettingsLandingTests(unittest.TestCase):
                 self.assertIn("当次读到 0 个开关", text)
 
     def test_navigation_to_the_settings_page_keeps_the_output_unchanged(self):
-        for path, _ in theme_steps_906():
+        for path in theme_recipes_906():
             with self.subTest(recipe=str(path.relative_to(ROOT))):
                 p = self.phone(state={SWITCH_906: True, PRIVACY_906: True})
                 out = io.StringIO()
@@ -2743,7 +2906,7 @@ class ThemeSettingsLandingTests(unittest.TestCase):
 class ThemeUnreachableStillSkippedTests(unittest.TestCase):
     def test_missing_thememanager_is_skipped_not_failed(self):
         """没有主题管理包的机器仍按跳过收尾，不算失败（#730 / #902 的口径不变）。"""
-        for path, _ in theme_steps_906():
+        for path in theme_recipes_906():
             with self.subTest(recipe=str(path.relative_to(ROOT))):
                 p = phone_mock()
                 p.locked = lambda: False
@@ -2780,20 +2943,8 @@ OTHER_902 = "com.miui.securitycenter/com.miui.securityscan.activity.MainActivity
 
 
 def theme_recipes_902():
-    """带 `@step("主题")` 的机型脚本：一份都不能漏，否则「所有共用这段入口的脚本一起改」就没守住。"""
-    found = []
-    for path in sorted((ROOT / "recipes").glob("*/recipe*.py")):
-        if entries.family(path.parent.name.split("-", 1)[0]) != "xiaomi":
-            continue
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for node in tree.body:
-            if not isinstance(node, ast.FunctionDef):
-                continue
-            for dec in node.decorator_list:
-                if (isinstance(dec, ast.Call) and getattr(dec.func, "id", "") == "step"
-                        and dec.args and getattr(dec.args[0], "value", None) == "主题"):
-                    found.append(path)
-    return found
+    """带「主题」段的小米 / 红米活脚本（`.py` 与 `.toml` 都算）：一份都不能漏。"""
+    return theme_recipes_906()
 
 
 class ThemeUnreachableTests(unittest.TestCase):
@@ -2828,7 +2979,7 @@ class ThemeUnreachableTests(unittest.TestCase):
 
     def test_store_detail_page_landing_is_skipped(self):
         """主题商店缺失 + 落在应用商店详情页：跳过，理由里带落点。"""
-        scope, out, _ = self.run_theme(ROOT / "recipes/xiaomi-24129PN74C/recipe.py", MARKET_902)
+        scope, out, _ = self.run_theme(ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml", MARKET_902)
         self.assertEqual(scope["SKIPPED_STEPS"], ["主题"])
         self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertIn("com.xiaomi.market", out)
@@ -2836,7 +2987,7 @@ class ThemeUnreachableTests(unittest.TestCase):
     def test_every_theme_recipe_skips_when_the_store_page_takes_over(self):
         """所有共这段入口的小米 / 红米脚本一起改：商店详情页落点哪一份都不能记成未完成。"""
         recipes = theme_recipes_902()
-        self.assertGreaterEqual(len(recipes), 15, "主题段的机型脚本少找了")
+        self.assertTrue(recipes, "一份主题段的机型脚本都没扫到：发现口径坏了")
         for path in recipes:
             with self.subTest(recipe=str(path.relative_to(ROOT))):
                 scope, out, _ = self.run_theme(path, MARKET_902)
@@ -2871,7 +3022,7 @@ class ThemeUnreachableTests(unittest.TestCase):
         p.d.shell.side_effect = self.manager_only()
         p.start.side_effect = RuntimeError(f"无法打开 {THEME_902}：** No activities found to run")
         out = io.StringIO()
-        scope, _ = load_recipe(p, ROOT / "recipes/xiaomi-24129PN74C/recipe.py", only="主题", out=out)
+        scope, _ = load_recipe(p, ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml", only="主题", out=out)
         self.assertEqual(scope["FAILED_STEPS"], ["主题"])
         self.assertEqual(scope["SKIPPED_STEPS"], [])
         self.assertIn("No activities found", out.getvalue())
@@ -2884,7 +3035,7 @@ class ThemeUnreachableTests(unittest.TestCase):
         p.d.shell.side_effect = self.manager_only()
         p.start.side_effect = adb_link.DeviceLost("device offline")
         with self.assertRaises(adb_link.DeviceLost):
-            load_recipe(p, ROOT / "recipes/xiaomi-24129PN74C/recipe.py", only="主题", out=io.StringIO())
+            load_recipe(p, ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml", only="主题", out=io.StringIO())
 
     def test_installed_store_does_not_change_the_launch(self):
         """主题商店在不在都直达代理页（#906），不再经商店冷启动过一次重定向过渡窗。

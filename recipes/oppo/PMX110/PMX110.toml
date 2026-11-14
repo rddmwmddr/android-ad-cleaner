@@ -1,0 +1,85 @@
+# OPPO Find X10 Pro Max（PMX110）：2026-11-05 逐页核对，ColorOS 17 / Android 17，实测版本；
+# PMX110_17.0.0.116(CN01)。BUILD 只写到 17.0.0：同代的 17.0.0.x 共用这份路径，其他 ColorOS 17
+# 机型也靠这个前缀把这份脚本当同族参考（#319 / #483）。
+# 只关点名的广告与推荐；搜索数据源、服务通知与消息总开关保留，营销由 chan-scan / chan-off
+# 在渠道级处理。通知渠道、组件挂起和快应用继续走 run.py 的独立确认流程。
+# 2026-11-10 负一屏入口改从内侧右滑、已在负一屏不再滑走、认不到入口时留页面现场（#901），未复测。
+# 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，按落在商店隐私页判，未复测（#907）。
+model = "PMX110"
+models = ["PMX110"]
+build = "PMX110_17.0.0"
+tail = "tail"
+
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+[const]
+# 共享段体的 close_named 走「允许缺项」那一档（这两台的旧别名，见 #1268）。
+CLOSE_NAMED_OPTIONAL = true
+READ_SWITCHES_STYLE = "title"
+HIDE_CAROUSEL_STYLE = "labels"
+BROWSER_FLOW = "prefs_start"
+
+[[segment]]
+name = "广告跟踪"
+code = "step_ad_tracking"
+
+[[segment]]
+name = "浏览器"
+ops = [
+  { kind = "lib", name = "browser_settings" },
+  { kind = "lib", name = "row", args = ["隐私"] },
+  { kind = "lib", name = "row", args = ["广告管理"] },
+  { kind = "lib", name = "close_named_optional", args = [["开屏广告", "资讯列表广告", "摇一摇广告"], "广告管理"] },
+  { kind = "back" },
+  { kind = "lib", name = "row", args = ["个性化管理"] },
+  # 「个性化内容推荐」在部分安装版本上没有这一行：有就关，没有就记未显示。
+  { kind = "lib", name = "close_named_optional", args = [["个性化广告推荐", "个性化内容推荐"], "个性化管理"], kwargs = { optional = ["个性化内容推荐"] } },
+]
+
+[[segment]]
+name = "软件商店"
+ops = [
+  { kind = "lib", name = "app_settings", args = ["com.heytap.market"] },
+  { kind = "lib", name = "row", args = [["隐私", "隐私授权管理"]], kwargs = { package = "com.heytap.market", activity = "PrivacyActivity" } },
+  { kind = "lib", name = "row", args = ["个性化推荐"] },
+  { kind = "lib", name = "close_named_optional", args = [["个性化推荐"], "个性化推荐"] },
+  { kind = "lib", name = "app_settings", args = ["com.heytap.market"] },
+  { kind = "lib", name = "row", args = ["服务管理"] },
+  # 服务管理按页上实有的行筛候选推广位再整表关；一个都没识别到就按失败收尾。
+  { kind = "close_listed", names = ["首页：悬浮活动图标", "首页：活动弹窗", "首页：顶部轮播卡片", "底部活动专区", "应用安全安全内容推荐", "游戏专区：重磅更新卡片", "游戏详情页：游戏活动卡片", "通过游戏助手打开领取游戏福利", "软件专区：福利", "软件专区：购物", "软件专区：快应用", "我的专区：签到按钮", "我的专区：账号会员徽章", "我的专区：应用时刻", "我的专区：积分商城", "我的专区：休闲一刻", "我的专区：安装有礼", "我的专区：福利中心", "我的专区：游戏VIP", "我的专区：金豆乐园", "更新&下载专区：底部弹窗推荐", "活动式详情页", "详情页：活动", "游戏详情页：游戏礼包", "手机管家：应用推荐", "文件管理：应用推荐", "游戏专区：活动集合", "详情页：限时活动", "小游戏二楼和专区", "福利专区"], page = "服务管理", miss_print = "服务管理未识别到已录制推广位" },
+]
+
+[[segment]]
+name = "下拉搜索"
+ops = [
+  { kind = "lib", name = "search_settings_direct" },
+]
+
+[[segment]]
+name = "负一屏"
+ops = [
+  { kind = "lib", name = "assistant_screen" },
+]
+
+[[segment]]
+name = "主题"
+ops = [
+  { kind = "lib", name = "theme_store_settings" },
+]
+
+[[segment]]
+name = "视频"
+ops = [
+  { kind = "lib", name = "video_direct" },
+]
+
+[[segment]]
+name = "游戏中心"
+ops = [
+  { kind = "lib", name = "game_center_direct" },
+]
+
+[[segment]]
+name = "小布建议"
+ops = [
+  { kind = "lib", name = "assistant_advice_rows" },
+]

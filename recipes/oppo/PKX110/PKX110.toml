@@ -1,0 +1,55 @@
+# 一加 13T（PKX110，ColorOS 16.0.10.500 / Android 16）的页面树（catalog，#1264）。
+# 路径实测：2026-10-28 现场探路（应用与服务、服务管理两页与 PHK110 同 Activity）。
+# 骨架取自 oneplus-PHK110（ColorOS 16）；入口差异参考 docs/清单/OPPO-ColorOS.md 的一加 Ace 5（PKG110）记录。
+# 2026-11-10 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，未复测（#933）。
+model = "PKX110"
+models = ["PKX110"]
+build = "PKX110_16.0.10"
+guard = "guard"
+tail = "tail"
+
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py：
+# 点一页入口时文案可以给一组等价叫法（tuple 档），缺省只认单个字符串。
+[const]
+TAP_PAGE_STYLE = "tuple"
+
+[[segment]]
+name = "广告跟踪"
+code = "step_ad_tracking"
+
+[[segment]]
+name = "软件商店·服务管理"
+ops = [
+  { kind = "lib", name = "store_promotions" },
+]
+
+[[segment]]
+name = "软件商店·个性化"
+ops = [
+  { kind = "if_lib", name = "open_app_settings", args = ["com.heytap.market", "com.heytap.market.mine.cn.setting.ui.SettingActivity", "应用与服务"], else_ops = [{ kind = "return", value = false }] },
+  { kind = "if_lib", name = "tap_page", args = [["隐私", "隐私授权管理"], "com.heytap.market.mine.cn.setting.ui.PrivacyActivity", ["隐私", "隐私授权管理"]], else_ops = [{ kind = "print", text = "  · 没找到商店「隐私」入口，跳过" }, { kind = "return", value = false }] },
+  { kind = "if_lib", name = "tap_page", args = ["个性化推荐", "com.heytap.market.mine.cn.setting.ui.PersonalRecommendActivity", "个性化推荐"], else_ops = [{ kind = "print", text = "  · 没找到「个性化推荐」子页，跳过" }, { kind = "return", value = false }] },
+  { kind = "return_lib", name = "off_exact_paged", args = [["个性化推荐"], "商店·个性化推荐"], kwargs = { max_screens = 2 } },
+]
+
+[[segment]]
+name = "浏览器首页"
+ops = [
+  { kind = "lib", name = "browser_home" },
+]
+
+[[segment]]
+name = "浏览器广告"
+ops = [
+  { kind = "lib", name = "browser_ads" },
+]
+
+[[segment]]
+name = "浏览器个性化"
+ops = [
+  { kind = "lib", name = "browser_personalized" },
+]
+
+[[segment]]
+name = "小布建议"
+code = "step_advice"

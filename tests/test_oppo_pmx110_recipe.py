@@ -5,7 +5,6 @@ chan-scan / chan-off 在渠道级处理。关闭前先读整页并核对目标�
 非目标未变。轮播推荐那一页的父容器会把两个选项的标签并成一段文字，按子串匹配会把
 「不显示」点到「显示」上（#280）。脚本按录制版本钉住 BUILD，不留 `recipe_<版本>.py` 变体。
 """
-import ast
 import contextlib
 import io
 from pathlib import Path
@@ -19,11 +18,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
+import fixtures
 from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock, phone_stub
 import fast
 import run
 
-RECIPE = ROOT / "recipes/oppo-PMX110/recipe.py"
+RECIPE = ROOT / "recipes/oppo/PMX110/PMX110.toml"
 RECORDED = "PMX110_17.0.0.116(CN01)"
 SEARCH_SETTINGS_FOCUS = ("com.heytap.quicksearchbox/"
                          "com.heytap.quicksearchbox.ui.activity.SearchSettingActivity")
@@ -31,19 +31,18 @@ SEARCH_HOME_FOCUS = ("com.heytap.quicksearchbox/"
                      "com.heytap.quicksearchbox.ui.activity.MultiSearchHomeActivity")
 
 
-def load(phone, only=("__no_steps__",), out=None):
+def load(phone, only=("__no_steps__",), out=None, case=None):
     scope, _ = load_recipe(phone, RECIPE, only, out)
+    if case is not None:
+        fixtures.bridge_scope(case, scope)
     return scope
 
 
 def action(scope, name):
-    """取真实分段的函数体，以便给它的协作者注入失败；不复制分段实现。"""
-    node = next(n for n in ast.parse(RECIPE.read_text(encoding="utf-8")).body
-                if isinstance(n, ast.FunctionDef) and n.decorator_list
-                and n.decorator_list[0].args[0].value == name)
-    node.decorator_list, node.name = [], "selected_action"
-    exec(compile(ast.Module(body=[node], type_ignores=[]), str(RECIPE), "exec"), scope)
-    return scope["selected_action"]
+    """取真实分段的 action：数据段是解释器包好的那段，`code=` 段直接取例外函数（#1265）。
+
+    这样给协作者注入失败时不必从源码里抠函数体——装载后的 `rt.steps` 就是真正会跑的那一段。"""
+    return next(item.action for item in scope["rt"].steps if item.name == name)
 
 
 def carousel_page():
@@ -91,22 +90,22 @@ class RecipeSelectionTests(unittest.TestCase):
 class CloseNamedTests(unittest.TestCase):
     def setUp(self):
         self.p = phone_mock(W=1272, H=2772)
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
 
     def close(self, before, after, names=("开屏广告",), **kwargs):
         self.scope["read_switches"] = Mock(side_effect=[before, after])
-        return self.scope["close_named"](names, "测试设置", **kwargs)
+        return self.scope["close_named_optional"](names, "测试设置", **kwargs)
 
     def test_missing_target_stops_before_any_switch_operation(self):
         self.scope["read_switches"] = Mock(return_value={"消息通知": True})
         with self.assertRaisesRegex(RuntimeError, "未识别全部目标"):
-            self.scope["close_named"](["开屏广告"], "测试设置")
+            self.scope["close_named_optional"](["开屏广告"], "测试设置")
         self.scope["read_switches"].assert_called_once_with("测试设置", 12)
         self.p.off.assert_not_called()
 
     def test_already_closed_targets_are_read_once_without_clicking(self):
         self.scope["read_switches"] = Mock(return_value={"开屏广告": False, "消息通知": True})
-        self.scope["close_named"](["开屏广告"], "测试设置")
+        self.scope["close_named_optional"](["开屏广告"], "测试设置")
         self.scope["read_switches"].assert_called_once_with("测试设置", 12)
         self.p.off.assert_not_called()
         self.assertEqual(self.scope["VERIFIED_SWITCHES"], 1)
@@ -164,7 +163,7 @@ class CloseNamedTests(unittest.TestCase):
             return next(values)
         self.scope["read_switches"] = Mock(side_effect=read)
         reopen = Mock(side_effect=lambda: events.append("重新进入"))
-        self.scope["close_named"](["个性化推荐设置"], "隐私", reopen=reopen)
+        self.scope["close_named_optional"](["个性化推荐设置"], "隐私", reopen=reopen)
         reopen.assert_called_once_with()
         self.assertEqual(self.scope["read_switches"].call_count, 2)
         self.assertEqual(events, ["读取", "重新进入", "读取"])
@@ -174,7 +173,7 @@ class ReadSwitchesTests(unittest.TestCase):
     def setUp(self):
         self.p = phone_mock(W=1272, H=2772)
         self.p.locked.return_value = False
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
         self.scope["page"] = Mock()
         self.scope["switch_top"] = Mock()
 
@@ -214,7 +213,7 @@ class SwitchTopTests(unittest.TestCase):
         p = phone_mock(W=1272, H=2772)
         p.locked.return_value = False
         p.switches.return_value = [("许可", False, (100, 500))]
-        scope = load(p)
+        scope = load(p, case=self)
         scope["switch_top"](80)
         p.top.assert_called_once_with(1)
         self.assertEqual(p.switches.call_count, 2)
@@ -226,7 +225,7 @@ class NavigationTests(unittest.TestCase):
         self.p.locked.return_value = False
         self.p.focus.return_value = "test/Settings"
         self.p.texts.return_value = []
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
 
     def test_denied_public_entry_stops_before_page_or_taps(self):
         self.p.d.shell.return_value = SimpleNamespace(exit_code=1, output="Permission Denial")
@@ -280,18 +279,18 @@ class SearchStepTests(unittest.TestCase):
         self.p = phone_mock(W=1080, H=2340)
         self.p.locked.return_value = False
         self.p.texts.return_value = []
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
 
     def test_search_never_touches_message_master_or_sources(self):
         self.scope["open_page"] = Mock()
         self.scope["row"] = Mock()
-        self.scope["close_named"] = Mock()
+        self.scope["close_named_optional"] = Mock()
         self.scope["read_switches"] = Mock(
             return_value={name: False for name in self.scope["SEARCH_CARDS"]})
         action(self.scope, "下拉搜索")()
         self.scope["open_page"].assert_called_once()
         self.scope["read_switches"].assert_called_once_with("首页卡片管理")
-        names = [name for c in self.scope["close_named"].call_args_list for name in c.args[0]]
+        names = [name for c in self.scope["close_named_optional"].call_args_list for name in c.args[0]]
         self.assertEqual(names, ["个性化推荐", "精选资讯", "未下载应用推荐", "应用建议小卡", "热搜应用",
                                  "精选推荐", "热搜榜单", "活动皮肤", "推荐卡片", "搜索框提示词", "个性化推荐"])
         self.assertEqual([c.args[0] for c in self.scope["row"].call_args_list],
@@ -304,10 +303,10 @@ class SearchStepTests(unittest.TestCase):
     def test_empty_card_page_is_reported_without_claiming_verified_items(self):
         self.scope["open_page"] = Mock()
         self.scope["row"] = Mock()
-        self.scope["close_named"] = Mock()
+        self.scope["close_named_optional"] = Mock()
         self.scope["read_switches"] = Mock(return_value={})
         action(self.scope, "下拉搜索")()
-        self.assertEqual([c.args[1] for c in self.scope["close_named"].call_args_list],
+        self.assertEqual([c.args[1] for c in self.scope["close_named_optional"].call_args_list],
                          ["搜索范围", "功能管理", "隐私"])
         self.assertEqual(len(self.scope["SKIPPED_ITEMS"]), 1)
         self.assertIn("7", self.scope["SKIPPED_ITEMS"][0])
@@ -316,7 +315,7 @@ class SearchStepTests(unittest.TestCase):
         self.p.d.shell.return_value = SimpleNamespace(exit_code=0, output="")
         self.p.focus.return_value = SEARCH_SETTINGS_FOCUS
         self.p.find.return_value = False
-        scope = load(self.p, only=("下拉搜索",))
+        scope = load(self.p, only=("下拉搜索",), case=self)
         self.assertEqual(scope["FAILED_STEPS"], ["下拉搜索"])
         self.p.off.assert_not_called()
 
@@ -324,7 +323,7 @@ class SearchStepTests(unittest.TestCase):
         self.p.d.shell.return_value = SimpleNamespace(exit_code=0, output="")
         self.p.focus.return_value = SEARCH_HOME_FOCUS
         self.p.find.return_value = True
-        scope = load(self.p, only=("下拉搜索",))
+        scope = load(self.p, only=("下拉搜索",), case=self)
         self.assertEqual(scope["FAILED_STEPS"], ["下拉搜索"])
         self.p.off.assert_not_called()
         self.p.click.assert_not_called()
@@ -348,7 +347,7 @@ class MarketPrivacyEntryTests(unittest.TestCase):
         self.p.texts.return_value = []
         self.p.settle.return_value = True
         self.p.scroll_more.return_value = False
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
 
     def market_page(self, *names):
         rows = "".join(
@@ -388,7 +387,7 @@ class MarketPrivacyEntryTests(unittest.TestCase):
                            focus=((0.0, self.SETTINGS),))
         lines = []
         phone.say = phone.conn.say = lambda *a, **k: lines.append(" ".join(str(x) for x in a))
-        scope = load(phone)
+        scope = load(phone, case=self)
         with self.assertRaisesRegex(RuntimeError, "没找到入口「隐私」，未继续本段"):
             scope["row"](self.NAMES, package="com.heytap.market", activity="PrivacyActivity")
         log = "\n".join(lines)
@@ -399,14 +398,14 @@ class MarketPrivacyEntryTests(unittest.TestCase):
     def test_failed_landing_ends_the_segment_without_touching_later_rows(self):
         self.scope["app_settings"] = Mock()
         self.scope["row"] = Mock(side_effect=RuntimeError("未进入目标设置页，未操作开关"))
-        self.scope["close_named"] = Mock()
+        self.scope["close_named_optional"] = Mock()
         self.scope["read_switches"] = Mock()
         with self.assertRaisesRegex(RuntimeError, "未进入目标设置页"):
             action(self.scope, "软件商店")()
         self.scope["row"].assert_called_once_with(
-            ("隐私", "隐私授权管理"), package="com.heytap.market", activity="PrivacyActivity")
+            ["隐私", "隐私授权管理"], package="com.heytap.market", activity="PrivacyActivity")
         self.scope["app_settings"].assert_called_once_with("com.heytap.market")
-        self.scope["close_named"].assert_not_called()
+        self.scope["close_named_optional"].assert_not_called()
         self.scope["read_switches"].assert_not_called()
 
 
@@ -415,23 +414,24 @@ class StoreThemeVideoTests(unittest.TestCase):
         self.p = phone_mock(W=1080, H=2340)
         self.p.locked.return_value = False
         self.p.texts.return_value = []
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
 
     def test_store_closes_named_promotions_only(self):
         self.scope["app_settings"] = Mock()
         self.scope["row"] = Mock()
         self.scope["read_switches"] = Mock(return_value={"首页：活动弹窗": True, "应用安全": True,
             "帮助与客服": True, "首页：AI搜索": True, "游戏专区：找游戏": True, "AI智能体": True})
-        self.scope["close_named"] = Mock()
+        self.scope["close_named_optional"] = Mock()
         action(self.scope, "软件商店")()
         self.scope["read_switches"].assert_called_once_with("服务管理")
         self.assertEqual(self.scope["app_settings"].call_args_list,
                          [call("com.heytap.market"), call("com.heytap.market")])
         self.assertEqual(self.scope["row"].call_args_list,
-                         [call(("隐私", "隐私授权管理"), package="com.heytap.market",
+                         # 页面树里的等价文案是 TOML 数组（转成 list）：按内容与顺序比，容器类型不是判据。
+                         [call(["隐私", "隐私授权管理"], package="com.heytap.market",
                                activity="PrivacyActivity"),
                           call("个性化推荐"), call("服务管理")])
-        self.assertEqual([c.args[0] for c in self.scope["close_named"].call_args_list],
+        self.assertEqual([c.args[0] for c in self.scope["close_named_optional"].call_args_list],
                          [["个性化推荐"], ["首页：活动弹窗"]])
 
     def menu(self, *screens):
@@ -482,7 +482,7 @@ class StoreThemeVideoTests(unittest.TestCase):
         self.scope["require_installed"] = Mock()
         self.scope["open_page"] = Mock()
         self.scope["row"] = Mock()
-        self.scope["close_named"] = Mock()
+        self.scope["close_named_optional"] = Mock()
         action(self.scope, "游戏中心")()
         self.assertIn("APP_SETTINGS -p com.nearme.gamecenter", self.scope["open_page"].call_args.args[0])
         self.assertEqual([c.args[0] for c in self.scope["row"].call_args_list], ["隐私开关设置", "个性化推荐管理"])
@@ -490,11 +490,11 @@ class StoreThemeVideoTests(unittest.TestCase):
     def test_theme_only_closes_the_ad_switch(self):
         self.scope["app_settings"] = Mock()
         self.scope["row"] = Mock()
-        self.scope["close_named"] = Mock()
+        self.scope["close_named_optional"] = Mock()
         action(self.scope, "主题")()
-        self.assertEqual([c.args[0] for c in self.scope["close_named"].call_args_list],
+        self.assertEqual([c.args[0] for c in self.scope["close_named_optional"].call_args_list],
                          [["开屏广告"], ["个性化推荐设置"]])
-        self.assertEqual([c.args[1] for c in self.scope["close_named"].call_args_list],
+        self.assertEqual([c.args[1] for c in self.scope["close_named_optional"].call_args_list],
                          ["消息与广告", "隐私"])
         self.assertEqual(self.scope["app_settings"].call_args_list,
                          [call("com.heytap.themestore"), call("com.heytap.themestore")])
@@ -502,14 +502,14 @@ class StoreThemeVideoTests(unittest.TestCase):
     def test_browser_treats_content_recommendation_as_optional(self):
         self.scope["browser_settings"] = Mock()
         self.scope["row"] = Mock()
-        self.scope["close_named"] = Mock()
+        self.scope["close_named_optional"] = Mock()
         action(self.scope, "浏览器")()
         self.assertEqual([c.args[0] for c in self.scope["row"].call_args_list],
                          ["隐私", "广告管理", "个性化管理"])
-        self.assertEqual([c.args[0] for c in self.scope["close_named"].call_args_list],
+        self.assertEqual([c.args[0] for c in self.scope["close_named_optional"].call_args_list],
                          [["开屏广告", "资讯列表广告", "摇一摇广告"],
                           ["个性化广告推荐", "个性化内容推荐"]])
-        self.assertEqual(self.scope["close_named"].call_args_list[1].kwargs,
+        self.assertEqual(self.scope["close_named_optional"].call_args_list[1].kwargs,
                          {"optional": ["个性化内容推荐"]})
 
     def test_video_missing_app_skips_without_launching(self):
@@ -526,7 +526,7 @@ class StoreThemeVideoTests(unittest.TestCase):
         self.p.focus.return_value = "com.heytap.yoli/com.heytap.yoli.mine.setting.SettingActivity"
         self.p.find.return_value = True
         self.scope["row"] = Mock()
-        self.scope["close_named"] = Mock()
+        self.scope["close_named_optional"] = Mock()
         action(self.scope, "视频")()
         launch = self.p.d.shell.call_args_list[1].args[0]
         self.assertIn("yoli://yoli.com/mine_act_lib_yoli/settings", launch)
@@ -550,7 +550,7 @@ class CarouselTests(unittest.TestCase):
         self.p.locked.return_value = False
         self.p.on_screen.return_value = True
         self.p.focus.return_value = "com.coloros.assistantscreen/setting.RecommendServiceSettingActivity"
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
         self.scope["read_switches"] = Mock(return_value={"推荐服务": True})
 
     def click_to(self, root, target_bounds):
@@ -647,15 +647,15 @@ class NegativeScreenTests(unittest.TestCase):
         </hierarchy>''')
         # 负一屏内嵌在桌面进程里，前台仍是 launcher（#901）
         p.focus.return_value = "com.android.launcher/com.android.launcher3.Launcher"
-        scope = load(p)
+        scope = load(p, case=self)
         scope["row"] = Mock()
         scope["hide_carousel"] = Mock(side_effect=RuntimeError("单选缺失"))
-        scope["close_named"] = Mock()
+        scope["close_named_optional"] = Mock()
         scope["open_page"] = Mock()
         with self.assertRaisesRegex(RuntimeError, "热点资讯已核对"):
             action(scope, "负一屏")()
         scope["hide_carousel"].assert_called_once_with()
-        scope["close_named"].assert_called_once_with(["热点资讯"], "热点资讯")
+        scope["close_named_optional"].assert_called_once_with(["热点资讯"], "热点资讯")
         self.assertEqual([c.args[0] for c in scope["row"].call_args_list], ["设置", "推荐服务"])
         self.assertIn("InfoFlowSettingActivity", scope["open_page"].call_args.args[0])    # 直达，不回设置页找（#650）
 
@@ -667,9 +667,9 @@ class GameCenterTests(unittest.TestCase):
         self.p.texts.return_value = []
         self.p.d.shell.return_value = SimpleNamespace(
             exit_code=0, output="package:/data/app/gamecenter/base.apk")
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
         self.scope["row"] = Mock()
-        self.scope["close_named"] = Mock()
+        self.scope["close_named_optional"] = Mock()
 
     def test_missing_app_skips_without_launching(self):
         self.p.d.shell.return_value = SimpleNamespace(exit_code=0, output="")
@@ -687,7 +687,7 @@ class GameCenterTests(unittest.TestCase):
         self.assertIn("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.nearme.gamecenter",
                       [c.args[0] for c in self.p.d.shell.call_args_list])
         self.assertEqual([c.args[0] for c in self.scope["row"].call_args_list], ["隐私开关设置", "个性化推荐管理"])
-        self.assertEqual(self.scope["close_named"].call_args_list, [call(["个性化推荐"], "个性化推荐管理")])
+        self.assertEqual(self.scope["close_named_optional"].call_args_list, [call(["个性化推荐"], "个性化推荐管理")])
 
     def test_denied_settings_entry_stops_before_rows(self):
         def shell(command):
@@ -698,7 +698,7 @@ class GameCenterTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "系统未允许"):
             action(self.scope, "游戏中心")()
         self.scope["row"].assert_not_called()
-        self.scope["close_named"].assert_not_called()
+        self.scope["close_named_optional"].assert_not_called()
 
 
 class AdTrackingFlowTests(unittest.TestCase):
@@ -714,7 +714,7 @@ class AdTrackingFlowTests(unittest.TestCase):
         self.p.tap = Mock(return_value=True)
         self.p.d.shell = Mock(side_effect=lambda cmd: SimpleNamespace(
             exit_code=0, output="PMX110" if cmd.startswith("getprop") else ""))
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
         self.scope["p"].setting = Mock()
         self.scope["menu_state"] = Mock()
         self.scope["close_all_listed"] = Mock()
@@ -787,7 +787,7 @@ class TrackingGuardTests(unittest.TestCase):
         self.p = phone_mock(W=1272, H=2772)
         self.p.locked.return_value = False
         self.p.texts.return_value = []
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
 
     def test_safe_mode_skips_before_navigation(self):
         self.p.safe_mode = True
@@ -809,15 +809,15 @@ class StepDecoratorTests(unittest.TestCase):
     def setUp(self):
         self.p = phone_mock(W=1272, H=2772)
         self.p.locked.return_value = False
-        self.scope = load(self.p)
+        self.scope = load(self.p, case=self)
 
     def test_lock_halts_remaining_segments(self):
         self.scope["ONLY"] = []
         self.p.locked.return_value = True
         work = Mock()
         with contextlib.redirect_stdout(io.StringIO()):
-            self.scope["step"]("第一段")(work)
-            self.scope["step"]("第二段")(work)
+            self.scope["rt"].run_step("第一段", work)
+            self.scope["rt"].run_step("第二段", work)
         work.assert_not_called()
         self.p.locked.assert_called_once_with()
         self.assertEqual(self.scope["FAILED_STEPS"], ["第一段", "第二段"])
@@ -827,10 +827,67 @@ class StepDecoratorTests(unittest.TestCase):
         work = Mock(side_effect=self.scope["adb_link"].DeviceLost("test disconnect"))
         with contextlib.redirect_stdout(io.StringIO()), \
                 self.assertRaises(self.scope["adb_link"].DeviceLost):
-            self.scope["step"]("断连")(work)
+            self.scope["rt"].run_step("断连", work)
         work.assert_called_once_with()
         self.assertEqual(self.scope["RESULTS"], [])
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CloseNamedVariantTests(unittest.TestCase):
+    """共享段体的 close_named 档位（#1268 修的生产 bug：OPPO 曾走了小米那一支）。"""
+
+    RECIPES = (RECIPE, ROOT / "recipes/oppo/PLZ110/PLZ110.toml")
+
+    def test_toml_declares_the_optional_variant(self):
+        import tomllib
+        for recipe in self.RECIPES:
+            with self.subTest(recipe=recipe.name):
+                const = tomllib.loads(recipe.read_text(encoding="utf-8"))["const"]
+                self.assertIs(const["CLOSE_NAMED_OPTIONAL"], True)
+
+    def test_shared_close_named_accepts_optional_kwargs(self):
+        from types import MappingProxyType
+        import recipe_runtime
+        import recipe_steps
+        rt = recipe_runtime.Runtime(Mock())
+        rt.constants = MappingProxyType({"CLOSE_NAMED_OPTIONAL": True})
+        seen = []
+        fixtures.patch_surface(self, "close_named_optional",
+                               lambda p, rt, *a, **k: seen.append((a, k)))
+        recipe_steps.close_named_step(Mock(), rt, ["甲"], "页",
+                                      dependent=["全部"], snapshot={"甲": True}, reopen=None)
+        self.assertEqual(seen, [((["甲"], "页"), {"dependent": ["全部"], "snapshot": {"甲": True},
+                                                "reopen": None})])
+
+    def test_shared_close_named_defaults_to_the_nav_dispatcher(self):
+        from types import MappingProxyType
+        import recipe_runtime
+        import recipe_steps
+        rt = recipe_runtime.Runtime(Mock())
+        rt.constants = MappingProxyType({})
+        seen = []
+        fixtures.patch_surface(self, "close_named",
+                               lambda p, rt, *a, **k: seen.append((a, k)))
+        recipe_steps.close_named_step(Mock(), rt, ["甲"], "页")
+        self.assertEqual(seen, [((["甲"], "页"), {})])
+
+
+class MenuStateSurfaceTests(unittest.TestCase):
+    """`menu_state` 返回模块里的 MenuState（#1268 修的生产 bug：曾误从 rt.constants 取）。"""
+
+    def test_menu_state_returns_the_module_namedtuple(self):
+        from types import MappingProxyType
+        import recipe_nav
+        import recipe_runtime
+        p = Mock()
+        p.texts.return_value = [("全部关闭 - 已停用", (0, 0), {})]
+        p.await_page = Mock()
+        rt = recipe_runtime.Runtime(p)
+        rt.constants = MappingProxyType({})
+        fixtures.patch_surface(self, "more_menu", lambda p, rt: None)
+        state = recipe_nav.menu_state(p, rt)
+        self.assertIsInstance(state, recipe_nav.MenuState)
+        self.assertTrue(state.close_all_disabled)

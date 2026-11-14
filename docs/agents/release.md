@@ -103,7 +103,7 @@ APK 由 owner 在 tag 的源码上构建并传到同一个 Release（发版动�
 打完 tag 就退出，不碰 Release。四步都在 `git worktree add` 出来的目录里做：主副本的当前分支随时被别的会话切走。
 
 0. **核对产品契约**：`git diff <上一版 tag>..<本次要打的提交> -- AGENTS.md`，§1 有没有变化——既看 `<!-- rule:product.* -->` 锚点集合，也看正文措辞和条数；实现侧动了挂包拒绝名单（`run.py` 的 `NEVER`）、极性词表（`polarity.NEG_PREFIX`）或 `off()` 的走向，同样算触碰。有变化就记下来交给 owner，写进 Release 正文的「其他」，说明用户侧 agent 以后该怎么做。放在最前面，因为它决定正文怎么写。 <!-- rule:doc.release.product-contract-check -->
-1. **跑验证**：`python -m unittest discover -s tests`（本机 `.venv`，3.13，与 Linux job 同一版）一套，加 `uvx ruff@0.17.3 check tool tests gui android/app/src/main/python android/smoke.py`，再加 `.venv/bin/pip install mypy==1.18.2 && .venv/bin/mypy`（引擎目录的类型检查，范围与宽松档在 `pyproject.toml`）。这里只跑这一次，数字怎么落到正文与 CHANGELOG，按「正文的格式」里那条用例数的约束办。两个安装包都是 3.12 产物，发版动作第 2 步那次构建会在 3.12 上再跑一遍套件（Windows 平台，POSIX-only 用例会 skip）。
+1. **跑验证**：`python -m unittest discover -s tests`（本机 `.venv`，3.13，与 Linux job 同一版）一套，加 `uvx ruff@0.17.3 check tool tests gui android/app/src/main/python android/smoke.py recipes recipe_lib`，再加 `.venv/bin/pip install mypy==1.18.2 && .venv/bin/mypy`（引擎目录的类型检查，范围与宽松档在 `pyproject.toml`）与 `.venv/bin/python tool/typecheck_recipes.py`（机型脚本的类型检查，逐份喂给同一个宽松档）。这里只跑这一次，数字怎么落到正文与 CHANGELOG，按「正文的格式」里那条用例数的约束办。两个安装包都是 3.12 产物，发版动作第 2 步那次构建会在 3.12 上再跑一遍套件（Windows 平台，POSIX-only 用例会 skip）。
 2. **收口**：确认这一版的每一笔都在 `## 未发布` 里、都是一行一条；把 `gui/app.py` 的 `VERSION` 改成新版本号（Windows 包名与 `gui/version.py` 都读它）；把 `## 未发布` 改名为 `## <版本> · <日期>`，在标题下补一行验证（回归项数 + 验证了什么 + 缺什么），再重开一个空的 `## 未发布`。回归项数写第 1 步 `discover` 的输出，不记基线 SHA——那个 tag 上重跑一遍就能得到同一个数。提 PR 合入 main。
 3. **打 tag**：`git tag -a v<x.y.z> <收口提交的 SHA> -m "<版本>"`，再 `git push origin v<x.y.z>`。显式给 SHA 而不是 `HEAD`：主副本的当前分支随时被别的会话切走，`HEAD` 不一定是刚收口的那一笔。推完把版本号与 tag 名交给 owner。
 

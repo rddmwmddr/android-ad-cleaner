@@ -1,0 +1,35 @@
+# 一加 Ace 2（PHK110，ColorOS 16 / Android 16）的页面树（catalog，#1264）。路径实测：2026-10-25。
+# 只收录已走通的系统广告跟踪、商店、浏览器设置；不挂包、不动通知渠道。
+model = "PHK110"
+models = ["PHK110"]
+build = "PHK110_16.0.5.1201"
+guard = "guard"
+tail = "tail"
+
+[[segment]]
+name = "广告跟踪"
+code = "step_ad_tracking"
+
+[[segment]]
+name = "软件商店"
+ops = [
+  { kind = "lib", name = "store_promotions" },
+]
+
+[[segment]]
+name = "浏览器首页"
+ops = [
+  { kind = "lib", name = "browser_home" },
+]
+
+[[segment]]
+name = "浏览器广告"
+ops = [
+  { kind = "lib", name = "browser_ads" },
+]
+
+[[segment]]
+name = "浏览器个性化"
+ops = [
+  { kind = "lib", name = "browser_personalized" },
+]

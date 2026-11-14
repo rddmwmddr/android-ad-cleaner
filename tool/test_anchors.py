@@ -50,15 +50,13 @@ ANCHORS = {
     "test_ui_session.py": "读屏服务占用、失败清理、跨进程互斥与失败后的收尾。",
     "test_never_suspend.py": "NEVER 保护集：挂了会坏功能的包，整批拒绝、不落一条命令到手机。",
     # 机型脚本的基础设施
-    "test_recipe_kit.py": "引擎注入的脚本前导：段包装、跳过出口、失败台账、锁屏中止、安全模式整页关闭与失败现场。",
     "test_recipe_loader.py": "机型脚本只有一个装载入口，测试不许自己 exec 一份脚本。",
     "test_recipe_meta_module.py": "配方元数据住中立模块：非 CLI 代码 import 它不背 CLI 副作用。",
     "test_recipe_variants.py": "同一型号按系统版本选脚本变体、变体要进安装包，以及没有本型号脚本时参考脚本按录制版本在同族里挑。",
     "test_recipe_setting_checked.py": "机型脚本必须消费 p.setting() 的返回值，不能空跑还记成功。",
-    "test_recipe_preamble_migration.py": "机型脚本不再自带前导：结构守卫与每份脚本的行为守卫。",
-    "test_recipe_nav.py": "公共导航的注入面：前导调用它、实现从执行作用域取前导名字、脚本不留逐字副本，以及调用序列对拍驱动自己管基线 worktree。",
-    "test_recipe_steps.py": "段体的注入面：前导调用它、实现从执行作用域取前导名字与模块常量、脚本不留逐字副本，以及事实层两张表的合并。",
+    "test_recipe_nav.py": "机型库的拆分守卫（例外 `.py` 的同名助手必须升格进 `recipe_lib`；`shared.py` 的实现必须被 ≥2 个家族使用），以及调用序列对拍驱动自己管基线 worktree。",
     "test_recipe_source.py": "脚本事实层：实参按语法切分、形参回填与读不出态、Intent 三种包名写法，以及语法错直接抛。",
+    "test_catalog.py": "catalog 内核：页面树数据经唯一装载入口跑出与旧脚本逐条相同的调用序列、校验器在装载期拒绝非法数据、only 两态与 page-wide 全关。",
     # 客户端、打包、更新与平台
     "test_backups.py": "备份目录的命名、扫描与 <型号>-gui 兜底。",
     "test_captures.py": "失败现场落盘：两处留现场写原文、没目录不写、归档名与体积报数。",
@@ -132,6 +130,9 @@ ANCHORS = {
     "test_release_regressions.py": "发布回归：横屏、部分失败、通知默认选择与发布资源边界。",
     "test_feedback_safety.py": "用户反馈里的安全项：无障碍排查只读、通知保护与旧清单还原。",
     "test_phone_host.py": "手机版宿主的说法：没有电脑和数据线时该怎么说、界面与诊断里残留的桌面说法，以及唯一的控制流例外（不写插电常亮）。",
+    "test_recipe_call_snapshots.py": "机型脚本的调用序列快照：47 份 × present / absent 两场景与入库数据逐条比对，段名归属与空转守卫。更新规则见 docs/agents/recipe-snapshots.md。",
+    "test_recipe_audit.py": "本机函数审计：段体不算本机函数、四档归属（含声明式钩子）的优先级与判据信号，以及 check 与 status-json 报的「本机策略：N 个」。",
+    "test_recipe_strategies.py": "拨动策略的注入面：前导调用它、脚本不留逐字副本，以及家族库按脚本常量选走法（齿轮 / 浏览器设置 / OPPO 系的页面等待、开关名单与整页点击）与认不出即报错。",
 }
 
 TEST_FILE = re.compile(r"^test_[A-Za-z0-9_]+\.py$")
@@ -152,14 +153,21 @@ def recipe_tokens(root):
     recipes = root / "recipes"
     if not recipes.is_dir():
         return frozenset(), frozenset(), ""
-    brands, models, texts = set(), set(), []
-    for folder in sorted(p for p in recipes.iterdir() if p.is_dir()):
-        brand, _, model = folder.name.partition("-")
-        brands.add(_normalize(brand))
-        if model:
-            models.add(_normalize(model))
-        for script in sorted(folder.glob("recipe*.py")):
-            texts.append(script.read_text(encoding="utf-8", errors="replace"))
+    import entries
+    # 目录是 `<家族>/<型号>`：品牌段从 FAMILY 的键取（oneplus / redmi / realme 等家族别名不在路径里），
+    # 型号段取第二层的目录名。
+    brands = {_normalize(brand) for brand in entries.FAMILY}
+    models, texts = set(), []
+    for family in sorted(p for p in recipes.iterdir() if p.is_dir()):
+        for folder in sorted(p for p in family.iterdir() if p.is_dir()):
+            models.add(_normalize(folder.name))
+            # 页面树（`.toml`）的头注与同目录例外 `.py` 也写着市场名；只读 `recipe*.py` 会让
+            # 转成数据的机型在锚点发现里静默消失（#1266）。
+            sources = sorted(folder.glob("recipe*.py")) + sorted(folder.glob("*.toml")) \
+                + sorted(path for path in folder.glob("*.py")
+                         if not path.name.startswith("recipe"))
+            for script in sources:
+                texts.append(script.read_text(encoding="utf-8", errors="replace"))
     return frozenset(brands), frozenset(models), _normalize(" ".join(texts))
 
 
