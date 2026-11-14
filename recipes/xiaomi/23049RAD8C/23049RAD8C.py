@@ -1,16 +1,18 @@
-# Redmi Note 12 Turbo（23049RAD8C，HyperOS 1 / OS3.0.5.0）机型脚本；适配机型：Redmi Note 12 Turbo（23049RAD8C）
-from recipe_kit import step
-# 路径来源：2026-10-25 实测（OS3.0.5.0.VMRCNXM，Android 15）
-# 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
-BUILD = "OS3.0.5.0"
-MODELS = ["23049RAD8C"]
-import time
+# Redmi Note 12 Turbo（23049RAD8C）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
+# 系统广告的 try/except 兜底、应用商店的运行时分岔与天气和日历的两条入口路径留在过程化实现里。
 from entries import THEME_DEAD_ENDS
 
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import SkipStep, maybe, p, rt
+    from recipe_nav import gear, tap_any
 
-@step("系统广告")
-def _():
-    # 1. 广告服务直达页
+# 热搜榜与 `recipe_steps.theme` 按名字从执行作用域取的模块常量。
+HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "知乎", "精选"]
+
+
+def step_system_ads(p, rt):
+    # 1. 广告服务直达页（拉不起来就算了，接着走设置搜索）
     try:
         p.start("com.android.settings", "com.android.settings.ad.AdServiceSettings")
         p.off(only=["个性化广告推荐"], page="系统·广告服务")
@@ -22,8 +24,7 @@ def _():
     p.off(only=["系统工具广告"], page="系统·系统工具广告")
 
 
-@step("应用商店")
-def _():
+def step_store(p, rt):
     # 直达设置页，避免从首页弹窗或“我的”页面图标迷路
     try:
         p.start("com.xiaomi.market", "com.xiaomi.market.ui.MarketPreferenceActivity")
@@ -47,48 +48,7 @@ def _():
     p.back(2)
 
 
-@step("手机管家")
-def _():
-    security_center()
-
-
-@step("下载管理")
-def _():
-    downloads()
-
-
-@step("主题")
-def _():
-    theme()
-
-
-@step("浏览器")
-def _():
-    # 直达设置页
-    p.start("com.android.browser", "com.android.browser.BrowserSettingsActivity")
-    if maybe("隐私和安全"):
-        p.off(only=["个性化内容推荐", "个性化广告推荐"], page="浏览器·隐私和安全"); p.back()
-    for page, only in [("主页设置", ["宫格位推送"]), ("搜索设置", ["猜你想搜"]), ("功能设置", ["小说"])]:
-        if maybe(page):
-            p.off(only=only, page=f"浏览器·{page}"); p.back()
-    p.back(2)
-
-
-HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "知乎", "精选"]
-
-
-@step("全局搜索")
-def _():
-    global_search()
-
-
-@step("负一屏")
-def _():
-    negative_screen()
-
-
-@step("天气和日历")
-def _():
+def step_weather_calendar(p, rt):
     # 1. 天气
     p.start("com.miui.weather2")
     if p.tap("更多设置", exact=True, scrolls=0) or gear():
@@ -111,9 +71,3 @@ def _():
         if maybe("用户体验计划"):
             p.off(only=["推荐", "广告", "个性化", "内容推广"], page="日历·用户体验计划"); p.back()
         p.back(2)
-
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import SkipStep, maybe, p
-    from recipe_nav import gear, tap_any
-    from recipe_steps import downloads, global_search, negative_screen, security_center, theme

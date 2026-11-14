@@ -9,6 +9,7 @@ import contextlib
 import io
 import re
 import sys
+import tomllib
 import types
 import unittest
 import xml.etree.ElementTree as ET
@@ -25,6 +26,7 @@ import chan_fast  # noqa: E402
 import entries  # noqa: E402
 import fast  # noqa: E402
 import fixtures  # noqa: E402
+import recipe_meta  # noqa: E402
 import recipe_source  # noqa: E402
 import row  # noqa: E402
 from fast import ScreenLocked  # noqa: E402
@@ -730,12 +732,12 @@ RECIPES_460 = (
     (ROOT / "recipes/xiaomi/25102RKBEC/recipe.py", ("com.android.browser",)),
     (ROOT / "recipes/xiaomi/25060RK16C/recipe.py", ("com.android.browser",)),
     (ROOT / "recipes/xiaomi/24129PN74C/recipe.py", ("com.android.browser",)),
-    (ROOT / "recipes/xiaomi/23113RKC6C/recipe.py", ("com.android.browser",)),
+    (ROOT / "recipes/xiaomi/23113RKC6C/23113RKC6C.toml", ("com.android.browser",)),
     (ROOT / "recipes/xiaomi/2512BPNDAC/recipe.py", ("com.android.browser",)),
     (ROOT / "recipes/xiaomi/2505APX7BC/recipe.py", ("com.android.browser",)),
     # 这份不走 p.start：强停后用 monkey 拉起
     (ROOT / "recipes/xiaomi/24129PN74C/recipe_os4.py", None),
-    (ROOT / "recipes/xiaomi/24122RKC7C/recipe.py", ("com.android.browser", ".BrowserActivity")),
+    (ROOT / "recipes/xiaomi/24122RKC7C/24122RKC7C.toml", ("com.android.browser", ".BrowserActivity")),
 )
 
 
@@ -960,7 +962,7 @@ class BrowserEntryTests(unittest.TestCase):
 
 XIAOMI_586 = ROOT / "recipes/xiaomi/24129PN74C"
 RECIPES_586 = ("recipe.py", "recipe_os4.py")
-REDMI_K70_586 = ROOT / "recipes/xiaomi/23113RKC6C/recipe.py"
+REDMI_K70_586 = ROOT / "recipes/xiaomi/23113RKC6C/23113RKC6C.toml"
 XIAOMI_17U_586 = ROOT / "recipes/xiaomi/2512BPNDAC/recipe.py"
 
 BROWSER_586 = "com.android.browser/.BrowserActivity"
@@ -1586,13 +1588,20 @@ def gear_users_1210():
 
 
 def hyperos_recipes_305():
-    """用了 gear() 的小米 / 红米机型脚本 —— 本地定义、注入助手与调用注入段体的都算（沿用 #1151 的口径）。
+    """用了齿轮的小米 / 红米活脚本 —— 本地定义、注入助手、转调注入段体与数据 op 都算（沿用 #1151 的口径）。
 
-    段体搬进注入面之后脚本正文里只剩 `theme()` 这类一行调用，按正文找 `gear(` 会把它们漏掉：
-    这一族用例照旧全绿，沿用 #305 的那批样本却再没有一条打到引擎那份实现。"""
+    段体搬进注入面之后脚本正文里只剩 `theme()` 这类一行调用，按正文找 `gear(` 会把它们漏掉；
+    转成页面树（`.toml`）后连正文都没有，所以数据 op 里的库名与例外 `.py` 的正文一起看（#1266）。"""
     gear_users = gear_users_1210()
-    for path in sorted(ROOT.glob("recipes/*/*/recipe*.py")):
-        if entries.family(path.parent.parent.name) != "xiaomi":
+    for path in xiaomi_recipe_files():
+        if path.suffix == ".toml":
+            names = {op.get("name") for segment in toml_data(path).get("segment", [])
+                     for op in walk_ops(segment.get("ops"))
+                     if op.get("kind") in {"lib", "require_lib", "if_lib"}}
+            companion = path.with_suffix(".py")
+            text = companion.read_text(encoding="utf-8") if companion.is_file() else ""
+            if "gear" in names or (names & gear_users) or "gear(" in text:
+                yield path
             continue
         text = path.read_text(encoding="utf-8")
         if "gear(" in text or any(f"{name}(" in text for name in gear_users):
@@ -1624,8 +1633,12 @@ class GearMatcherTests(unittest.TestCase):
         """样本按「用到 gear()」选，不按「本地定义」选（#1151）。
 
         搬进 `recipe_nav` 的六份脚本不再有本地 `def gear(`，按定义选样本时它们会静默掉出去，
-        这一族用例照旧全绿 —— 引擎那份实现就再没有一条 #305 样本打到它。"""
-        self.assertGreaterEqual(len(list(hyperos_recipes_305())), 15)
+        这一族用例照旧全绿 —— 引擎那份实现就再没有一条 #305 样本打到它。判据是「提到 gear 的活脚本
+        都在样本里」，不是拍一个总数下限（#1266）。"""
+        discovered = set(hyperos_recipes_305())
+        for path in xiaomi_recipe_files():
+            if "gear" in path.read_text(encoding="utf-8").lower():
+                self.assertIn(path, discovered, f"{path} 提到 gear 但没进样本集")
 
     def test_store_row_is_not_mistaken_for_settings(self):
         for path, phone in self.each(STORE_ROW_305 + GEAR_ICON_305):
@@ -2492,7 +2505,37 @@ SKIP_730 = "本机没有主题管理包，跳过"
 
 
 def recipes_730():
-    return sorted((ROOT / "recipes").glob("*/*/recipe*.py"))
+    """每份机型活脚本：`.py` 与已转页面树的 `.toml` 都算（#1266，别让转过的机型从守卫里消失）。"""
+    return sorted(Path(path) for path in recipe_meta.recipe_files(RECIPES))
+
+
+def trees_730(path):
+    """要检查的 AST 树：`.py` 是它自己，`.toml` 是同目录同名例外 `.py`（有才）。"""
+    if path.suffix == ".py":
+        return [ast.parse(path.read_text(encoding="utf-8"), filename=str(path))]
+    companion = path.with_suffix(".py")
+    return [ast.parse(companion.read_text(encoding="utf-8"), filename=str(companion))] \
+        if companion.is_file() else []
+
+
+def data_ops_730(path):
+    """`.toml` 的数据 op 列表；`.py` 给空。"""
+    if path.suffix != ".toml":
+        return []
+    return [op for segment in toml_data(path).get("segment", [])
+            for op in walk_ops(segment.get("ops"))]
+
+
+def data_monkey_shells_730(ops):
+    return [op for op in ops
+            if op.get("kind") == "shell" and "monkey" in op.get("command", "") and THEME in op.get("command", "")]
+
+
+def data_bare_starts_730(ops):
+    """数据里不带 activity 的 `start` / `start_or_skip`（引擎会退到 monkey）。"""
+    return [op for op in ops
+            if op.get("kind") in {"start", "start_or_skip"} and op.get("pkg") == THEME
+            and not op.get("activity")]
 
 
 def literal_730(node):
@@ -2541,9 +2584,12 @@ class ThemeEntryGuardTests(unittest.TestCase):
         for path in found:
             rel = path.relative_to(ROOT)
             with self.subTest(recipe=str(rel)):
-                tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-                self.assertEqual(monkey_shells_730(tree), [], f"{rel}: 用 monkey 拉起 {THEME}")
-                self.assertEqual(bare_starts_730(tree), [], f"{rel}: 不带 activity 的 Phone.start")
+                for tree in trees_730(path):
+                    self.assertEqual(monkey_shells_730(tree), [], f"{rel}: 用 monkey 拉起 {THEME}")
+                    self.assertEqual(bare_starts_730(tree), [], f"{rel}: 不带 activity 的 Phone.start")
+                ops = data_ops_730(path)
+                self.assertEqual(data_monkey_shells_730(ops), [], f"{rel}: 用 monkey 拉起 {THEME}")
+                self.assertEqual(data_bare_starts_730(ops), [], f"{rel}: 不带 activity 的 Phone.start")
 
 
 class ThemeFallbackBehaviourTests(unittest.TestCase):
@@ -2568,7 +2614,7 @@ class ThemeFallbackBehaviourTests(unittest.TestCase):
 
     def test_installed_thememanager_is_launched_directly(self):
         for path in (ROOT / "recipes/xiaomi/24129PN74C/recipe.py",
-                     ROOT / "recipes/xiaomi/24090RA29C/recipe.py"):
+                     ROOT / "recipes/xiaomi/24090RA29C/24090RA29C.toml"):
             with self.subTest(recipe=path.parent.name):
                 p, _, _ = self.load(path, "", "package:/system/app/ThemeManager/ThemeManager.apk")
                 # 只比对拉起那一步：往后的「我的 → 齿轮」与开关校验由 #906 的用例守
@@ -2640,11 +2686,75 @@ def effective_step_body(node, defines=frozenset()):
     return node
 
 
-def theme_steps_906():
-    """[(路径, 段函数)]：所有带 `@step("主题")` 的小米 / 红米脚本段；段体搬进注入面的给实现本身。"""
+def xiaomi_recipe_files():
+    """小米 / 红米的活脚本：`.py` 与已转页面树的 `.toml` 都算（`recipe_meta` 的单一发现口径）。"""
+    return [Path(path) for path in recipe_meta.recipe_files(RECIPES)
+            if entries.family(Path(path).parent.parent.name) == "xiaomi"]
+
+
+def toml_data(path):
+    with open(path, "rb") as handle:
+        return tomllib.load(handle)
+
+
+def walk_ops(ops):
+    """数据 ops 的扁平展开（含 `ops` / `else_ops` 子表）。"""
+    for op in ops or []:
+        if not isinstance(op, dict):
+            continue
+        yield op
+        yield from walk_ops(op.get("ops"))
+        yield from walk_ops(op.get("else_ops"))
+
+
+def op_literals(ops):
+    """数据里出现的全部字符串字面量（递归进数组与表）。"""
+    found = set()
+
+    def walk(value):
+        if isinstance(value, str):
+            found.add(value)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+        elif isinstance(value, dict):
+            for item in value.values():
+                walk(item)
+
+    walk(ops)
+    return found
+
+
+def _function_node(source, name):
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == name:
+            return node
+    return None
+
+
+def theme_units_906():
+    """[(路径, 形态, 段体)]：每份小米 / 红米活脚本里的「主题」段（#1266，`.toml` 也扫）。
+
+    形态两种：`ast` 是段函数节点（`.py` 的 `@step`、`.toml` 的 `code=` 例外函数、转调单库实现）；
+    `ops` 是数据 op 列表。判据按形态各写一条，别只扫 `.py` 让转过的机型静默消失（沿用 #1264 的口径）。"""
     found = []
-    for path in sorted((ROOT / "recipes").glob("*/*/recipe*.py")):
-        if entries.family(path.parent.parent.name) != "xiaomi":
+    for path in xiaomi_recipe_files():
+        if path.suffix == ".toml":
+            segment = next((s for s in toml_data(path).get("segment", [])
+                            if s.get("name") == "主题"), None)
+            if segment is None:
+                continue
+            if "code" in segment:
+                companion = path.with_suffix(".py")
+                node = _function_node(companion.read_text(encoding="utf-8"), segment["code"])
+                found.append((path, "ast", node))
+            elif (len(segment.get("ops", [])) == 1
+                  and segment["ops"][0].get("kind") == "lib"
+                  and injected_step_1210(segment["ops"][0].get("name")) is not None):
+                found.append((path, "ast", injected_step_1210(segment["ops"][0]["name"])))
+            else:
+                found.append((path, "ops", segment.get("ops", [])))
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         defines = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
@@ -2654,8 +2764,13 @@ def theme_steps_906():
             for dec in node.decorator_list:
                 if (isinstance(dec, ast.Call) and getattr(dec.func, "id", "") == "step"
                         and dec.args and getattr(dec.args[0], "value", None) == "主题"):
-                    found.append((path, effective_step_body(node, defines)))
+                    found.append((path, "ast", effective_step_body(node, defines)))
     return found
+
+
+def theme_recipes_906():
+    """含「主题」段的小米 / 红米活脚本路径（`.py` 与 `.toml` 都算）。"""
+    return [path for path, _form, _body in theme_units_906()]
 
 
 def unconsumed_906(fn):
@@ -2689,26 +2804,59 @@ def called_names_906(fn):
     return {getattr(n.func, "id", "") for n in ast.walk(fn) if isinstance(n, ast.Call)}
 
 
+def unconsumed_ops_906(ops):
+    """数据形态里返回值被丢掉的导航调用：裸 `lib go` / `lib gear`（`require_*` 才是消费形态）。"""
+    return [op for op in walk_ops(ops)
+            if op.get("kind") == "lib" and op.get("name") in {"go", "gear"}]
+
+
+def verifies_switches_906(ops):
+    """数据形态里点名开关被校验：`off_required` / `close_listed`，或调 `close_named` 的库。"""
+    for op in walk_ops(ops):
+        if op.get("kind") in {"off_required", "close_listed"}:
+            return True
+        if op.get("kind") in {"lib", "require_lib", "if_lib"} and op.get("name") == "close_named":
+            return True
+    return False
+
+
 class ThemeLandingGuardTests(unittest.TestCase):
+    def test_every_theme_recipe_is_discovered(self):
+        """发现口径：`.toml` 与 `.py` 两条路对「哪份脚本有主题段」要给同一个答案（#1266）。"""
+        units = theme_units_906()
+        self.assertTrue(units, "一份主题段都没扫到：发现口径坏了")
+        expected = {Path(path) for path in recipe_meta.recipe_files(RECIPES)
+                    if entries.family(Path(path).parent.parent.name) == "xiaomi"
+                    and "主题" in recipe_meta.recipe_meta(path)["steps"]}
+        self.assertEqual({path for path, _form, _body in units}, expected,
+                         "主题段的机型脚本发现口径不一致")
+
     def test_every_theme_step_consumes_go_and_gear(self):
-        steps = theme_steps_906()
-        self.assertGreaterEqual(len(steps), 15, "主题段的机型脚本少找了")
-        for path, fn in steps:
+        for path, form, body in theme_units_906():
             with self.subTest(recipe=str(path.relative_to(ROOT))):
-                self.assertEqual(unconsumed_906(fn), [], f"{path.name}: 丢了导航的返回值")
+                if form == "ast":
+                    self.assertEqual(unconsumed_906(body), [], f"{path.name}: 丢了导航的返回值")
+                else:
+                    self.assertEqual(unconsumed_ops_906(body), [], f"{path.name}: 丢了导航的返回值")
 
     def test_every_theme_step_verifies_the_named_switch(self):
-        for path, fn in theme_steps_906():
+        for path, form, body in theme_units_906():
             with self.subTest(recipe=str(path.relative_to(ROOT))):
-                self.assertTrue(called_names_906(fn) & {"require_switches", "close_named"},
-                                f"{path.name}: 点名开关没有校验")
+                if form == "ast":
+                    self.assertTrue(called_names_906(body) & {"require_switches", "close_named"},
+                                    f"{path.name}: 点名开关没有校验")
+                else:
+                    self.assertTrue(verifies_switches_906(body), f"{path.name}: 点名开关没有校验")
 
     def test_theme_steps_launch_the_manager_directly(self):
         """#906：不再经主题商店冷启动。落点被系统转走时由 start_or_skip 收成跳过（#902）。"""
-        for path, fn in theme_steps_906():
+        for path, form, body in theme_units_906():
             with self.subTest(recipe=str(path.relative_to(ROOT))):
-                literals = {n.value for n in ast.walk(fn)
-                            if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+                if form == "ast":
+                    literals = {n.value for n in ast.walk(body)
+                                if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+                else:
+                    literals = op_literals(body)
                 self.assertNotIn(STORE_906, literals, f"{path.name}: 还在冷启动主题商店")
 
 
@@ -2745,7 +2893,7 @@ class ThemeSettingsLandingTests(unittest.TestCase):
         return p
 
     def test_zero_named_switches_fails_the_step_with_page_evidence(self):
-        for path, _ in theme_steps_906():
+        for path in theme_recipes_906():
             with self.subTest(recipe=str(path.relative_to(ROOT))):
                 p = self.phone(state={})
                 out = io.StringIO()
@@ -2759,7 +2907,7 @@ class ThemeSettingsLandingTests(unittest.TestCase):
                 self.assertIn("当次读到 0 个开关", text)
 
     def test_navigation_that_never_reaches_the_settings_page_fails_the_step(self):
-        for path, _ in theme_steps_906():
+        for path in theme_recipes_906():
             with self.subTest(recipe=str(path.relative_to(ROOT))):
                 p = self.phone(page=EMPTY_906, state={SWITCH_906: True}, nav=False)
                 out = io.StringIO()
@@ -2772,7 +2920,7 @@ class ThemeSettingsLandingTests(unittest.TestCase):
                 self.assertIn("当次读到 0 个开关", text)
 
     def test_navigation_to_the_settings_page_keeps_the_output_unchanged(self):
-        for path, _ in theme_steps_906():
+        for path in theme_recipes_906():
             with self.subTest(recipe=str(path.relative_to(ROOT))):
                 p = self.phone(state={SWITCH_906: True, PRIVACY_906: True})
                 out = io.StringIO()
@@ -2790,7 +2938,7 @@ class ThemeSettingsLandingTests(unittest.TestCase):
 class ThemeUnreachableStillSkippedTests(unittest.TestCase):
     def test_missing_thememanager_is_skipped_not_failed(self):
         """没有主题管理包的机器仍按跳过收尾，不算失败（#730 / #902 的口径不变）。"""
-        for path, _ in theme_steps_906():
+        for path in theme_recipes_906():
             with self.subTest(recipe=str(path.relative_to(ROOT))):
                 p = phone_mock()
                 p.locked = lambda: False
@@ -2827,20 +2975,8 @@ OTHER_902 = "com.miui.securitycenter/com.miui.securityscan.activity.MainActivity
 
 
 def theme_recipes_902():
-    """带 `@step("主题")` 的机型脚本：一份都不能漏，否则「所有共用这段入口的脚本一起改」就没守住。"""
-    found = []
-    for path in sorted((ROOT / "recipes").glob("*/*/recipe*.py")):
-        if entries.family(path.parent.parent.name) != "xiaomi":
-            continue
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for node in tree.body:
-            if not isinstance(node, ast.FunctionDef):
-                continue
-            for dec in node.decorator_list:
-                if (isinstance(dec, ast.Call) and getattr(dec.func, "id", "") == "step"
-                        and dec.args and getattr(dec.args[0], "value", None) == "主题"):
-                    found.append(path)
-    return found
+    """带「主题」段的小米 / 红米活脚本（`.py` 与 `.toml` 都算）：一份都不能漏。"""
+    return theme_recipes_906()
 
 
 class ThemeUnreachableTests(unittest.TestCase):
@@ -2883,7 +3019,7 @@ class ThemeUnreachableTests(unittest.TestCase):
     def test_every_theme_recipe_skips_when_the_store_page_takes_over(self):
         """所有共这段入口的小米 / 红米脚本一起改：商店详情页落点哪一份都不能记成未完成。"""
         recipes = theme_recipes_902()
-        self.assertGreaterEqual(len(recipes), 15, "主题段的机型脚本少找了")
+        self.assertTrue(recipes, "一份主题段的机型脚本都没扫到：发现口径坏了")
         for path in recipes:
             with self.subTest(recipe=str(path.relative_to(ROOT))):
                 scope, out, _ = self.run_theme(path, MARKET_902)

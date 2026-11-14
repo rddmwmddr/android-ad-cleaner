@@ -257,7 +257,7 @@ class DriverTests(unittest.TestCase):
         import compare_recipe_calls as driver
         import fast
         calls = driver.run_script(fast, recipe_kit, fixtures,
-                                  ROOT / "recipes" / "xiaomi/24090RA29C" / "recipe.py", "present")
+                                  ROOT / "recipes" / "xiaomi/24090RA29C" / "24090RA29C.toml", "present")
         names = [call[1] for call in calls]
         self.assertIn("start", names)
         self.assertIn("entry", names)

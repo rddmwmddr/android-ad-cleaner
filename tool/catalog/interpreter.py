@@ -88,10 +88,19 @@ def _lib(op: Mapping, g: dict[str, Any]) -> None:
 
 
 def _require_lib(op: Mapping, g: dict[str, Any]) -> None:
-    """本机策略返回假时按「这一段没做成」早退：先打现场，再回退，再停（沿用脚本里的写法）。"""
-    result = g[op["name"]](*op.get("args", []), **op.get("kwargs", {}))
+    """本机策略返回假时按「这一段没做成」早退：先打现场，再回退，再停（沿用脚本里的写法）。
+
+    `fail=true` 改成按这一段失败收尾（旧脚本 `raise RuntimeError` 的出口，进失败段台账）；
+    `evidence=true` 把当次页面现场接在文案后面（`…；停在 …`）。"""
+    result = g[op["name"]](*[_arg(a, g) for a in op.get("args", [])],
+                           **{k: _arg(v, g) for k, v in op.get("kwargs", {}).items()})
     if not result:
-        print(op["miss_print"], flush=True)
+        message = op["miss_print"]
+        if op.get("evidence"):
+            message += g["p"].page_evidence()
+        if op.get("fail"):
+            raise RuntimeError(message)
+        print(message, flush=True)
         if op.get("miss_back"):
             g["p"].back(op["miss_back"])
         raise _Abort
@@ -134,6 +143,24 @@ def _start(op: Mapping, g: dict[str, Any]) -> None:
         if key in op:
             kwargs[key] = op[key]
     g["p"].start(*args, **kwargs)
+
+
+def _start_or_skip(op: Mapping, g: dict[str, Any]) -> None:
+    """`start_or_skip(pkg, activity, dead_ends=…, reason=…)`：落点被系统转去别处时按跳过收尾。"""
+    g["start_or_skip"](op["pkg"], op["activity"], dead_ends=_arg(op["dead_ends"], g),
+                       reason=op["reason"])
+
+
+def _skip_unless_installed(op: Mapping, g: dict[str, Any]) -> None:
+    """`if marker not in p.d.shell(command).output: print(text); return`：本机没装这个包就整段收尾（完成）。"""
+    output = g["p"].d.shell(op["command"]).output
+    if op["contains"] not in output:
+        print(op["text"], flush=True)
+        raise _Abort
+
+
+def _await_page(op: Mapping, g: dict[str, Any]) -> None:
+    g["p"].await_page()
 
 
 def _entry(op: Mapping, g: dict[str, Any]) -> None:
@@ -236,7 +263,8 @@ def _if_focus(op: Mapping, g: dict[str, Any]) -> None:
     match = op.get("match", "contains")
     hit = {"equals": where == op["text"],
            "starts": where.startswith(op["text"]),
-           "contains": op["text"] in where}[match]
+           "contains": op["text"] in where,
+           "icontains": op["text"].lower() in where.lower()}[match]
     _run(op.get("ops", []) if hit else op.get("else_ops", []), g)
 
 
@@ -270,14 +298,19 @@ def _require_unlocked(op: Mapping, g: dict[str, Any]) -> None:
         raise RuntimeError(op.get("miss_print", "手机锁屏，请机主解锁"))
 
 
+def _miss_message(op: Mapping, g: dict[str, Any]) -> str:
+    """失败文案：`evidence=true` 时接上当次页面现场（与旧脚本 `…；+ p.page_evidence()` 同形）。"""
+    return op["miss_print"] + g["p"].page_evidence() if op.get("evidence") else op["miss_print"]
+
+
 def _require_tab(op: Mapping, g: dict[str, Any]) -> None:
     if not g["p"].tab(op["name"]):
-        raise RuntimeError(op["miss_print"])
+        raise RuntimeError(_miss_message(op, g))
 
 
 def _require_go(op: Mapping, g: dict[str, Any]) -> None:
     if not g["p"].go(op["text"], op["expect"]):
-        raise RuntimeError(op["miss_print"])
+        raise RuntimeError(_miss_message(op, g))
 
 
 def _tap(op: Mapping, g: dict[str, Any]) -> None:
@@ -316,7 +349,7 @@ def _require_tap(op: Mapping, g: dict[str, Any]) -> None:
         if key in op:
             kwargs[key] = op[key]
     if not g["p"].tap(op["text"], **kwargs):
-        raise RuntimeError(op["miss_print"])
+        raise RuntimeError(_miss_message(op, g))
 
 
 def _close_listed(op: Mapping, g: dict[str, Any]) -> None:
@@ -327,6 +360,25 @@ def _close_listed(op: Mapping, g: dict[str, Any]) -> None:
     names = [name for name in op["names"] if name in available]
     g["require"](names, op["miss_print"])
     g["close_named"](names, op["page"], snapshot=available)
+
+
+def _off_required(op: Mapping, g: dict[str, Any]) -> None:
+    """跨两屏把这一页的开关读齐 → 回页顶 → 点名断言都在（缺了带现场失败）→ 点名关（#1266）。
+
+    与旧脚本逐字同形：`before = {}` / `for _ in range(2): …switches(); if not scroll_more(): break` /
+    `p.top(2)` / `require_switches(before, only, page, contains=…)` / `p.off(only=…, keep=…, page=…)`。"""
+    page = g["p"]
+    before: dict[str, Any] = {}
+    for _ in range(2):
+        before.update({title: on for title, on, _ in page.switches()})
+        if not page.scroll_more():
+            break
+    page.top(2)
+    g["require_switches"](before, list(op["only"]), op["page"], contains=op.get("contains", False))
+    kwargs: dict[str, Any] = {"only": list(op["only"]), "page": op["page"]}
+    if "keep" in op:
+        kwargs["keep"] = list(op["keep"])
+    page.off(**kwargs)
 
 
 def _require_focus(op: Mapping, g: dict[str, Any]) -> None:
@@ -388,6 +440,10 @@ _HANDLERS: dict[str, Callable[[Mapping, dict[str, Any]], None]] = {
     "off": _off,
     "close_all": _close_all,
     "start": _start,
+    "start_or_skip": _start_or_skip,
+    "skip_unless_installed": _skip_unless_installed,
+    "await_page": _await_page,
+    "off_required": _off_required,
     "entry": _entry,
     "enter": _enter,
     "if_focus": _if_focus,

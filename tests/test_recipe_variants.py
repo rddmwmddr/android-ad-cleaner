@@ -339,7 +339,7 @@ class RealXiaomiRecipeBuildTests(unittest.TestCase):
     """真实脚本的录制值要有区分力：回退成只剩大版本会让同族机型误借（#942）。"""
 
     def test_redmi_note_12_turbo_records_the_full_hyperos_version(self):
-        path = str(ROOT / "recipes/xiaomi/23049RAD8C/recipe.py")
+        path = str(ROOT / "recipes/xiaomi/23049RAD8C/23049RAD8C.toml")
         self.assertEqual(run.recipe_meta(path)["build"], "OS3.0.5.0")
 
 

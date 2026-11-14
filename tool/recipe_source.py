@@ -513,7 +513,7 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
             if not isinstance(op, Mapping):
                 continue
             kind = op.get("kind")
-            if kind == "off":
+            if kind in ("off", "off_required"):
                 args = ""
                 if "only" in op:
                     args += f"only={json.dumps(op['only'], ensure_ascii=False)}, "
@@ -527,6 +527,13 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
             elif kind == "start":
                 extra = f", {_s(op['activity'])}" if "activity" in op else ""
                 lines.append(f'p.start({_s(op["pkg"])}{extra})')
+            elif kind == "start_or_skip":
+                # 旧脚本的 `start_or_skip(...)` 不是 `p.start`，入口速查本来就不认它；照原样投影，
+                # 事实形状与转换前一致（#1266）。
+                lines.append(f'start_or_skip({_s(op["pkg"])}, {_s(op["activity"])})')
+            elif kind == "skip_unless_installed":
+                # `p.d.shell("pm path …")` 原样进事实层（不是 am start，不构成入口，只是不丢这条读）。
+                lines.append(f"p.d.shell({_s(op['command'])})")
             elif kind in ("entry", "require_entry"):
                 lines.append(f"p.entry({_s(op['text'])})")
             elif kind == "enter":
