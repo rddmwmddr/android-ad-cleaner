@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
+import fixtures
 from fixtures import load_recipe, phone_stub
 
 SETTING_FOCUS = "com.vivo.browser/com.vivo.browser.ui.module.setting.common.activity.SettingActivity"
@@ -47,6 +48,7 @@ class Vivo2417BrowserEntryTests(unittest.TestCase):
 
     def browser_step(self, p):
         scope, _ = load_recipe(p, ROOT / "recipes/vivo/V2417A/V2417A.toml")
+        fixtures.bridge_scope(self, scope)
         scope["tap"] = Mock(return_value=True)             # 首页设置/极简首页等子页入口
         scope["close_named_vivo"] = Mock(return_value=True)  # 本用例只验入口，不验开关
         return scope

@@ -201,7 +201,7 @@ class HonorMusicTests(unittest.TestCase):
                 p.enter.side_effect = error
                 scope = load(p)
                 with self.assertRaises(type(error)):
-                    scope["open_entry"]("更多设置")
+                    scope["open_entry"](p, scope["rt"], "更多设置")
                 p.note_miss.assert_not_called()
 
     def test_missing_third_party_entry_stops_before_the_second_page(self):

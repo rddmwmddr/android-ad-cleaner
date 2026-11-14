@@ -95,7 +95,7 @@ class K90UltraRecipeTests(unittest.TestCase):
         # 齿轮实现在家族库的注入面里（#1244），脚本只靠静态 import 声明它用哪个库。
         self.assertIn('p.find("设置", exact=True, edge_ok="tab")',
                       (ROOT / "tool/recipe_nav.py").read_text(encoding="utf-8"))
-        self.assertIn("from recipe_nav import", EXCEPTIONS.read_text(encoding="utf-8"))
+        self.assertIn("import recipe_nav as nav", EXCEPTIONS.read_text(encoding="utf-8"))
 
 
 def _walk(ops):

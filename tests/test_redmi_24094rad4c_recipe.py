@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import run
+import fixtures
 from fixtures import load_recipe
 
 
@@ -75,6 +76,7 @@ class Redmi24094RAD4CRecipeTests(unittest.TestCase):
     def test_theme_waits_for_the_bottom_tab_to_settle(self):
         p = Mock()
         scope, _ = load_recipe(p, self.path)
+        fixtures.bridge_scope(self, scope)
         scope["tap_bottom_tab"] = Mock(side_effect=[False, False, True])
         self.assertTrue(scope["wait_bottom_tab"]("我的"))
         self.assertEqual(scope["tap_bottom_tab"].call_count, 3)

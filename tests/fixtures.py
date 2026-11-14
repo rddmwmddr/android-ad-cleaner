@@ -813,8 +813,9 @@ def bridge_scope(case, scope, names=None):
         "browser_settings", "require_installed", "switch_top", "hide_carousel", "more_menu",
         "menu_state", "settings_page", "tap_page", "wait_page", "navigate", "tap_by_scroll",
         "settings_icon_visible", "gear", "theme_settings", "open_settings",
-        "close_all_listed", "system_settings", "assistant_settings", "settings_home",
+        "close_all_listed", "system_settings", "assistant_settings", "settings_home", "tap", "close_named_vivo",
         "open_app_settings", "close_named", "read_on_page", "tap_by_scroll", "scan_switches",
+        "tap_bottom_tab", "wait_bottom_tab", "close_with_plain_tap", "close_named_plain",
         "safe_switches", "store_personalization", "assistant_screen", "negative_screen")
     saved = []
     for name in names:

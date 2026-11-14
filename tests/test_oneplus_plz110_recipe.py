@@ -5,13 +5,14 @@
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, call
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tool'))
 from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock
 import fast
+import fixtures
 import run
 import recipe_nav
 import recipe_strategies
@@ -33,13 +34,10 @@ class Plz110RecipeTests(unittest.TestCase):
 
     def stub(self, scope, name, mock):
         """把库实现换成桩：例外函数与解释器按模块属性调用，scope 里只留同一份给断言。"""
-        for module in (recipe_nav, recipe_strategies, recipe_steps):
+        for module_name, module in (("nav", recipe_nav), ("strategies", recipe_strategies),
+                                    ("steps", recipe_steps)):
             if hasattr(module, name):
-                def wrapper(p, rt, *a, _m=mock, **k):
-                    return _m(*a, **k)
-                patcher = patch.object(module, name, wrapper)
-                patcher.start()
-                self.addCleanup(patcher.stop)
+                fixtures.patch_library(self, {f"{module_name}.{name}": mock})
                 break
         scope[name] = mock
         return mock

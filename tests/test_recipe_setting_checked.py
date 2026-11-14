@@ -240,6 +240,7 @@ class FallbackStaysSilent(unittest.TestCase):
         p = unlocked_phone()
         p.setting = lambda *a, **k: True
         scope, _ = load_recipe(p, recipe_of("oppo-PMX110"))
+        fixtures.bridge_scope(self, scope)
         scope["page"], scope["row"], scope["system_settings"] = Mock(), Mock(), Mock()
         scope["ad_id_page"]()
         scope["page"].assert_called_once_with("设备标识与广告")
@@ -249,6 +250,7 @@ class FallbackStaysSilent(unittest.TestCase):
         p = unlocked_phone()
         p.setting = lambda *a, **k: False
         scope, _ = load_recipe(p, recipe_of("oppo-PMX110"))
+        fixtures.bridge_scope(self, scope)
         scope["page"], scope["row"], scope["system_settings"] = Mock(), Mock(), Mock()
         scope["ad_id_page"]()
         scope["page"].assert_not_called()
