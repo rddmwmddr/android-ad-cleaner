@@ -53,7 +53,7 @@ UNRESOLVED_CLOSE = {
     "oppo/PLZ110/PLZ110.toml": 1,
     "oppo/PKT110/PKT110.toml": 3,
     "oppo/PMX110/PMX110.toml": 1,
-    "xiaomi/23117RK66C/recipe.py": 1,
+    "xiaomi/23117RK66C/23117RK66C.toml": 1,
 }
 # 解析不出的 keep=，同样按脚本冻结：它只影响同页保留项，读不出时那页的约束就整段丢了。
 UNRESOLVED_KEEP = {
