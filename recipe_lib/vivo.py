@@ -8,7 +8,7 @@ import time
 from wait import until
 from recipe_lib.shared import _style, browser_settings, maybe, read_switches, tap
 
-__all__ = ('browser_recommendations', 'browser_settings_vivo', 'by_desc', 'close_named_vivo', 'confirm2', 'dialog_open', 'global_search_ads', 'hiboar_panel', 'hiboard_panel', 'i_manager_ads', 'lock_screen_magazine', 'off', 'off_one', 'off_unnamed', 'result_xy', 'row_switch', 'rows', 'search_setting', 'setting_search', 'settings_home', 'store_personalization', 'switch_off', 'system_ads_branch', 'system_ads_chain', 'tap_row', 'weather_service')
+__all__ = ('browser_recommendations', 'browser_settings_vivo', 'by_desc', 'close_named_vivo', 'confirm2', 'dialog_open', 'global_search_ads', 'hiboard_panel_v2547a', 'hiboard_panel', 'i_manager_ads', 'lock_screen_magazine', 'off', 'off_one', 'off_unnamed', 'result_xy', 'row_switch', 'rows', 'search_setting', 'setting_search', 'settings_home', 'store_personalization', 'switch_off', 'system_ads_branch', 'system_ads_chain', 'tap_row', 'weather_service')
 
 # ---------- 词汇 ----------
 def settings_home(p, rt):
@@ -286,8 +286,8 @@ def hiboard_panel(p, rt):
     rt.require(p.go("设置", "更多设置"), "未进入负一屏设置")
     rt.require("com.vivo.hiboard.settings.AppletSettingActivity" in p.focus(), "负一屏设置页面不符")
 
-def hiboar_panel(p, rt):
-    """回到负一屏的设置面板（V2547A 的路径，名字按脚本原样保留）。
+def hiboard_panel_v2547a(p, rt):
+    """回到负一屏的设置面板（V2547A 的路径）。
 
     子页来来回回地 back 很容易多退一层回到负一屏主页，后面的项就全找不到了 ——
     所以每进一个子页之前都用 Activity 确认一次，不在面板上就重新滑进来。
