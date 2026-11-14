@@ -538,9 +538,12 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 lines.append(f"p.entry({_s(op['text'])})")
             elif kind == "enter":
                 lines.append(f"p.enter({_s(op['text'])})")
-            elif kind == "require_setting":
+            elif kind in ("require_setting", "if_setting"):
+                # 设置搜索直达是入口速查的一档（search），两支都一样要读出来（#1267）。
                 extra = f", {_s(op['entry'])}" if "entry" in op else ""
                 lines.append(f"p.setting({_s(op['kw'])}{extra})")
+                lower(op.get("ops", []))
+                lower(op.get("else_ops", []))
             elif kind == "shell":
                 # 不经门面的拉起串（`am start …`）也是入口，不降级的话入口速查会漏掉这台机（#1263）。
                 lines.append(f"p.d.shell({_s(op['command'])})")
@@ -552,11 +555,16 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 if "systemui_text" in op:
                     lines.append(f"p.systemui_text = {op['systemui_text']!r}")
                 lower(op.get("ops", []))
-            elif kind in ("if_find", "if_entry", "if_lib", "if_focus", "if_tap"):
+            elif kind in ("if_find", "if_entry", "if_lib", "if_lib_any", "if_focus", "if_tap"):
                 # 带条件分支的 op：两支里的 off / 入口调用一样要读出来，否则词与入口会静默丢（#1263）。
                 if kind == "if_lib":
                     args = ", ".join(_s(a) for a in op.get("args", []))
                     lines.append(f"{op['name']}({args})")
+                elif kind == "if_lib_any":
+                    # 短路的每个助手都调得到：漏一个，入口归属就少一条（#1267）。
+                    for call in op.get("calls", []):
+                        args = ", ".join(_s(a) for a in call.get("args", []))
+                        lines.append(f"{call['name']}({args})")
                 lower(op.get("ops", []))
                 lower(op.get("else_ops", []))
             elif kind in ("lib", "require_lib", "code", "return_lib"):
