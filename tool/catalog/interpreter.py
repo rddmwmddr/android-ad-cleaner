@@ -517,7 +517,7 @@ def _require_expect(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
         raise RuntimeError(_miss_message(op, p, g, where))
 
 
-_HANDLERS: dict[str, Callable[[Mapping, dict[str, Any]], None]] = {
+_HANDLERS: dict[str, Callable[[Mapping, Any, Any, dict[str, Any]], None]] = {
     "lib": _lib,
     "require_lib": _require_lib,
     "off": _off,

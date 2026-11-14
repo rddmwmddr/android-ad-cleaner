@@ -150,7 +150,7 @@ def step_browser_home(p, rt):
         left, top, right, bottom = bounds(choice)
         p.click((left + right) // 2, (top + bottom) // 2)
         time.sleep(.5)
-        rt.require(radio(nav.settle_pagele_page(p, rt, package, "简洁首页"), "简洁首页").get("checked") == "true",
+        rt.require(radio(p, rt, nav.settle_page(p, rt, package, "简洁首页"), "简洁首页").get("checked") == "true",
                 "回读未确认简洁首页")
         p.changed.append(("浏览器·模式选择", "简洁首页"))
 

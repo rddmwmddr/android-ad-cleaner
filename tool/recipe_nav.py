@@ -31,6 +31,7 @@ import functools
 import re
 import time
 from collections import namedtuple
+from collections.abc import Callable
 from typing import Any
 
 from wait import GiveUp, until
@@ -170,7 +171,8 @@ def gear_top(p, rt):
                 return True
         return False
     style = _style(rt, "GEAR_TOP_STYLE", ("text", "vivo"), "text")
-    return {"text": text_style, "vivo": vivo_style}[style]()
+    flows: dict[str, Callable[..., Any]] = {"text": text_style, "vivo": vivo_style}
+    return flows[style]()
 
 
 
@@ -1517,8 +1519,9 @@ def read_switches(p, rt, *args, **kwargs):
             return states
         raise RuntimeError("列表超过读取上限，未执行关闭")
     style = _style(rt, "READ_SWITCHES_STYLE", ("plain", "title", "first", "expect", "vivo"), "plain")
-    return {"plain": plain_style, "title": title_style, "first": first_style,
-            "expect": expect_style, "vivo": vivo_style}[style](*args, **kwargs)
+    flows: dict[str, Callable[..., Any]] = {"plain": plain_style, "title": title_style,
+                                            "first": first_style, "expect": expect_style, "vivo": vivo_style}
+    return flows[style](*args, **kwargs)
 
 
 
@@ -1583,8 +1586,9 @@ def close_named(p, rt, *args, **kwargs):
                      f"{page}：其他开关状态变化，请核对")
         rt.confirm(len(names))
     style = _style(rt, "CLOSE_NAMED_STYLE", ("plain", "basic", "vanish", "reopen", "meizu"), "plain")
-    return {"plain": plain_style, "basic": basic_style, "vanish": vanish_style,
-            "reopen": reopen_style, "meizu": meizu_style}[style](*args, **kwargs)
+    flows: dict[str, Callable[..., Any]] = {"plain": plain_style, "basic": basic_style,
+                                            "vanish": vanish_style, "reopen": reopen_style, "meizu": meizu_style}
+    return flows[style](*args, **kwargs)
 
 
 

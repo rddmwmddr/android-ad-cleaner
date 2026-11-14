@@ -35,9 +35,11 @@ disable_error_code = ["var-annotated"]
 # 不写 `strict = true`：实测 mypy 1.18.2 在 overrides 里把它当全局设置（全仓一起变严格），
 # per-module 只认逐项 flag。`warn_redundant_casts` 不是 per-module 可写项，
 # `warn_unused_configs` 只对全局有意义，两项只能留在缺省。
+# `recipe_steps` 已从严格档移除（#1268）：它不再是纯逻辑段体表，而是直接下发设备动作的库实现，
+# 与 `recipe_nav` / `recipe_strategies` 同类，按宽松档检查。
 [[tool.mypy.overrides]]
 module = ["polarity", "channel_policy", "host", "events", "recipe_meta", "recipe_source",
-          "recipe_steps", "reader", "plan", "summary", "coverage_note"]
+          "reader", "plan", "summary", "coverage_note"]
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
 disallow_untyped_calls = true

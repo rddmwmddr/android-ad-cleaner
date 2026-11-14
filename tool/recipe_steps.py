@@ -266,6 +266,14 @@ def browser_home(p, rt):
     return True
 
 
+
+
+def _off_exact_fn(rt):
+    """共享段体里的 off_exact 档位：默认 paged，PKH110 用允许缺项的那一档（#1268）。"""
+    if rt.constants.get("OFF_EXACT_OPTIONAL"):
+        return strategies.off_exact_paged_optional
+    return strategies.off_exact_paged
+
 def store_promotions(p, rt):
     if not nav.open_app_settings(p, rt, "com.heytap.market",
                                  "com.heytap.market.mine.cn.setting.ui.SettingActivity",
@@ -275,7 +283,7 @@ def store_promotions(p, rt):
                          "com.heytap.market.mine.cn.setting.ui.ServeManagerActivity", "服务管理"):
         return False
     p.top(n=12)
-    return strategies.off_exact(p, rt, rt.constants['STORE_PROMOTIONS'], "商店·推广入口")
+    return _off_exact_fn(rt)(p, rt, rt.constants['STORE_PROMOTIONS'], "商店·推广入口")
 
 
 def browser_ads(p, rt):
@@ -284,7 +292,7 @@ def browser_ads(p, rt):
     activity = "com.heytap.browser.settings.component.BrowserPreferenceActivity"
     if not nav.tap_page(p, rt, "隐私", activity, "隐私") or not nav.tap_page(p, rt, "广告管理", activity, "广告管理"):
         return False
-    completed = strategies.off_exact(p, rt, ["开屏广告", "资讯列表广告"], "浏览器·广告管理", max_screens=2)
+    completed = _off_exact_fn(rt)(p, rt, ["开屏广告", "资讯列表广告"], "浏览器·广告管理", max_screens=2)
     print("  · 摇一摇广告可能随上级开关灰置；不将 checked=true 的灰置项计作独立关闭")
     return completed
 
@@ -295,7 +303,7 @@ def browser_personalized(p, rt):
     activity = "com.heytap.browser.settings.component.BrowserPreferenceActivity"
     if not nav.tap_page(p, rt, "隐私", activity, "隐私") or not nav.tap_page(p, rt, "个性化管理", activity, "个性化管理"):
         return False
-    return strategies.off_exact(p, rt, ["个性化优惠推荐", "个性化广告推荐"], "浏览器·个性化管理", max_screens=2)
+    return _off_exact_fn(rt)(p, rt, ["个性化优惠推荐", "个性化广告推荐"], "浏览器·个性化管理", max_screens=2)
 
 
 
