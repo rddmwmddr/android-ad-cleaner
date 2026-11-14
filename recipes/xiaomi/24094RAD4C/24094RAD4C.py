@@ -2,7 +2,8 @@
 # 应用商店的「个性化服务」按运行时读到的开关位置分岔：新版本是子页入口、老版本开关就在本页。
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from recipe_kit import p, rt
+    from recipe_kit import maybe, p, rt
+    from recipe_nav import gear, tap_any, tap_bottom_tab
 
 # 热搜榜的候选开关名：`recipe_steps.global_search` 从执行作用域按名字取。
 HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "知乎", "精选"]

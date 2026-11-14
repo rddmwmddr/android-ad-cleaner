@@ -215,7 +215,7 @@ tier = "未记录"
 evidence = "未知"
 body_hash = "a2e91e3faa289d6f"
 
-["xiaomi/23049RAD8C/recipe.py"]
+["xiaomi/23049RAD8C/23049RAD8C.toml"]
 build = "OS3.0.5.0.VMRCNXM"
 date = "2026-10-25"
 by = "机主"
@@ -223,16 +223,16 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "237412fef62a60ac"
 
-["xiaomi/23113RKC6C/recipe.py"]
+["xiaomi/23113RKC6C/23113RKC6C.toml"]
 build = "OS3.0.307.0.WNKCNXM"
 date = "2026-10-26"
 by = "机主"
 tier = "部分"
 evidence = "机主自测"
-body_hash = "b551ba562e0f711c"
+body_hash = "34a76e1200676e9b"
 
 # 头注没写日期：整轮记录在 docs/14-红米K70Pro实测.md（10-30 九段 235 秒、退出码 0）。
-["xiaomi/23117RK66C/recipe.py"]
+["xiaomi/23117RK66C/23117RK66C.toml"]
 build = "OS3.0.306.0.WNMCNXM"
 date = "2026-10-30"
 by = "机主"
@@ -240,7 +240,7 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "4a838bcf77407410"
 
-["xiaomi/24094RAD4C/recipe.py"]
+["xiaomi/24094RAD4C/24094RAD4C.toml"]
 build = "OS3.0.306.0.WOQCNXM"
 date = "2026-10-30"
 by = "机主"
@@ -248,7 +248,7 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "8aaca2252904b87c"
 
-["xiaomi/24122RKC7C/recipe.py"]
+["xiaomi/24122RKC7C/24122RKC7C.toml"]
 build = "OS3.0.304.0.WOMCNXM"
 date = "2026-10-29"
 by = "机主"
@@ -359,7 +359,7 @@ evidence = "机主自测"
 body_hash = "b7d9a1180fff0c45"
 
 # 10-29 那次是 14 Pro 社区实测（Issue #317），头注没留验证人 ID。
-["xiaomi/2304FPN6DC/recipe.py"]
+["xiaomi/2304FPN6DC/2304FPN6DC.toml"]
 build = "OS3.0.308.0.WNBCNXM"
 date = "2026-10-29"
 by = ""
@@ -367,7 +367,7 @@ tier = "部分"
 evidence = "未知"
 body_hash = "3bca328ba9edc99b"
 
-["xiaomi/24090RA29C/recipe.py"]
+["xiaomi/24090RA29C/24090RA29C.toml"]
 build = "OS3.0.309.0.WOOCNXM"
 date = "2026-10-26"
 by = "机主"
@@ -375,7 +375,7 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "294dbb60b4b6637c"
 
-["xiaomi/2410CRP4CC/recipe.py"]
+["xiaomi/2410CRP4CC/2410CRP4CC.toml"]
 build = "OS2.0.208.0.VOZCNXM"
 date = "2026-10-28"
 by = "机主"

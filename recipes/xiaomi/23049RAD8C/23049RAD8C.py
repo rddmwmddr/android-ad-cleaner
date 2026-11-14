@@ -4,7 +4,8 @@ from entries import THEME_DEAD_ENDS
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from recipe_kit import p, rt
+    from recipe_kit import SkipStep, maybe, p, rt
+    from recipe_nav import gear, tap_any
 
 # 热搜榜与 `recipe_steps.theme` 按名字从执行作用域取的模块常量。
 HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "知乎", "精选"]

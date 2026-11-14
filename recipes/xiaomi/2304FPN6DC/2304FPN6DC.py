@@ -4,7 +4,8 @@ import time
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from recipe_kit import p, rt
+    from recipe_kit import maybe, p, rt
+    from recipe_nav import tap_any
 
 # 热搜榜的候选开关名：`step_global_search` 自己按它筛目标行。
 HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "知乎", "精选", "千问"]

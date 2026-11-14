@@ -1,5 +1,5 @@
 {
- "script": "recipes/xiaomi/23117RK66C/recipe.py",
+ "script": "recipes/xiaomi/23117RK66C/23117RK66C.toml",
  "scenarios": {
   "present": [
    ["系统广告", "locked", [], {}],

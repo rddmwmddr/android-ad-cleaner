@@ -2,7 +2,8 @@
 # 应用商店的「个性化服务」按运行时读到的开关位置分岔：新版本是子页入口、老版本开关就在本页。
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from recipe_kit import p, rt
+    from recipe_kit import maybe, p, rt
+    from recipe_nav import tap_any
 
 
 def step_store(p, rt):

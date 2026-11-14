@@ -2,7 +2,9 @@
 # 浏览器段带冷启动重试、齿轮 input-tap 兜底与前台复合断言，留在过程化实现里。
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from recipe_kit import p, rt
+    from recipe_kit import maybe, p, require, rt
+    from recipe_nav import browser_start, gear
+    from recipe_strategies import gear_tap
 
 # 热搜榜的候选开关名：`recipe_steps.global_search` 从执行作用域按名字取。
 HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "知乎", "精选"]

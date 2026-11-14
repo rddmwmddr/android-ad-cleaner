@@ -5,7 +5,8 @@ from entries import THEME_DEAD_ENDS
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from recipe_kit import p, rt
+    from recipe_kit import maybe, p, require_switches, rt, start_or_skip
+    from recipe_nav import gear
 
 # 热搜榜的候选开关名：`recipe_steps.global_search` 从执行作用域按名字取。
 HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "知乎", "精选"]

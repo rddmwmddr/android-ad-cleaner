@@ -2,7 +2,8 @@
 # 线性段落已转成数据；这里只留「全局搜索」里运行期算出来的榜单候选与收尾打印。
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from recipe_kit import p, rt
+    from recipe_kit import p, require, rt
+    from recipe_nav import close_named, enter
 
 # 热搜榜的候选开关名：每个子页都会命中其中的一部分。
 HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "知乎", "精选"]

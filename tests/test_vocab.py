@@ -30,13 +30,11 @@ UNRESOLVED_ONLY = {
     "oppo/PLG110/PLG110.toml": 2,
     "oppo/PLP120/PLP120.toml": 1,
     "oppo/PMA110/PMA110.toml": 1,
-    "xiaomi/23049RAD8C/recipe.py": 1,
+    # 23049RAD8C / 2304FPN6DC / 24090RA29C / 2410CRP4CC 的浏览器子页循环转成数据后按页展开，
+    # 每页的 only 都是字面量，这四处不再是未解析（#1266）。
     "xiaomi/25060RK16C/recipe.py": 1,
     "vivo/V2303A/V2303A.toml": 1,
     "vivo/V2547DA/V2547DA-android17.toml": 4,
-    "xiaomi/2304FPN6DC/recipe.py": 1,
-    "xiaomi/24090RA29C/recipe.py": 1,
-    "xiaomi/2410CRP4CC/recipe.py": 1,
     "xiaomi/24129PN74C/recipe_os4.py": 2,
     "xiaomi/25102RKBEC/recipe.py": 1,
     "xiaomi/2512BPNDAC/recipe.py": 1,

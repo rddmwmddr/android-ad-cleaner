@@ -165,7 +165,12 @@ def recipe_tokens(root):
     for family in sorted(p for p in recipes.iterdir() if p.is_dir()):
         for folder in sorted(p for p in family.iterdir() if p.is_dir()):
             models.add(_normalize(folder.name))
-            for script in sorted(folder.glob("recipe*.py")):
+            # 页面树（`.toml`）的头注与同目录例外 `.py` 也写着市场名；只读 `recipe*.py` 会让
+            # 转成数据的机型在锚点发现里静默消失（#1266）。
+            sources = sorted(folder.glob("recipe*.py")) + sorted(folder.glob("*.toml")) \
+                + sorted(path for path in folder.glob("*.py")
+                         if not path.name.startswith("recipe"))
+            for script in sources:
                 texts.append(script.read_text(encoding="utf-8", errors="replace"))
     return frozenset(brands), frozenset(models), _normalize(" ".join(texts))
 
