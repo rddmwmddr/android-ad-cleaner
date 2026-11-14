@@ -1115,7 +1115,7 @@ class OpenThenMenuTests(unittest.TestCase):
         p = phone_908()
         p.reader.shell = Mock(side_effect=absent_shell_908(commands))
         with patch.object(adb_link, "detached", return_value=False):
-            scope, out = load_recipe(p, ROOT / "recipes/xiaomi/M154FF/recipe.py", only="下载管理")
+            scope, out = load_recipe(p, ROOT / "recipes/xiaomi/M154FF/M154FF.toml", only="下载管理")
         self.assertEqual(scope["SKIPPED_STEPS"], ["下载管理"])
         self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertIn(f"本机没有安装 {DOWNLOAD_908}", out.getvalue())
@@ -1203,7 +1203,7 @@ class MissingSwitchEvidenceTests(unittest.TestCase):
     def test_empty_name_list_is_still_a_failure(self):
         """「整页开关」那条路（honor 的名单取页面上全部标题）一页空着同样是失败，空名单不许放行。"""
         p = phone_903(row_903("个性化推荐", 320))
-        scope, _ = load_recipe(p, ROOT / "recipes" / "xiaomi/24129PN74C" / "recipe.py")
+        scope, _ = load_recipe(p, ROOT / "recipes" / "xiaomi/24129PN74C" / "24129PN74C.toml")
         with self.assertRaises(RuntimeError) as caught:
             scope["require_switches"]({"个性化推荐": True}, [], "系统·广告服务")
         self.assertIn(f"系统·广告服务：{GUARD_903}", str(caught.exception))
@@ -1214,7 +1214,7 @@ class MissingSwitchEvidenceTests(unittest.TestCase):
         evidence = []
         real = p.page_evidence
         p.page_evidence = lambda *a, **k: evidence.append(a) or real(*a, **k)
-        scope, out = load_recipe(p, ROOT / "recipes" / "xiaomi/24129PN74C" / "recipe.py")
+        scope, out = load_recipe(p, ROOT / "recipes" / "xiaomi/24129PN74C" / "24129PN74C.toml")
         scope["close_named"](["个性化广告推荐"], "系统·广告服务")
         self.assertEqual(evidence, [])
         self.assertIn("回读确认 0 项", out.getvalue())          # 成功路径仍走原来的收尾
@@ -1222,7 +1222,7 @@ class MissingSwitchEvidenceTests(unittest.TestCase):
 
     def test_failure_still_records_the_step_and_the_exit_code(self):
         p = phone_903(row_903("个性化推荐", 320))
-        scope, _ = load_recipe(p, ROOT / "recipes" / "xiaomi/24129PN74C" / "recipe.py")
+        scope, _ = load_recipe(p, ROOT / "recipes" / "xiaomi/24129PN74C" / "24129PN74C.toml")
         scope["ONLY"] = []                  # 装载时一段没跑，这里手动跑一个伪造段
         printed = io.StringIO()
 

@@ -10,7 +10,7 @@
 | Xiaomi 17 Ultra（2512BPNDAC，标准版） | HyperOS OS4.0.5.0.XPACNXM，Android 17 | 2026-10-28 真机实测；专用脚本九段全通过（176 秒，`recipes/xiaomi/2512BPNDAC`） |
 | Xiaomi 17（25113PN0EC） | HyperOS 4，Android 17 | 2026-11-01 社区实测（[PR #400](https://github.com/rddmwmddr/android-ad-cleaner/pull/400)）；无专用脚本，差异见[文末](#xiaomi-1725113pn0ecos4的差异) |
 | Redmi Note 13（23124RA7EO，**海外版 / 俄区**） | HyperOS OS2.0.213.0.VNHRUXM，Android 15 | 2026-11-01 社区实测（[Issue #474](https://github.com/rddmwmddr/android-ad-cleaner/issues/474)，adb + 手动，未登录小米账号）；无专用脚本，差异见[文末](#海外版-hyperosredmi-note-1323124ra7eo的差异) |
-| Xiaomi 15（24129PN74C） | HyperOS OS4.0.0.22.XOCCNXM，Android 17 | 2026-10-29 真机实测；专用脚本九段全通过（164 秒，`recipes/xiaomi/24129PN74C/recipe_os4.py`） |
+| Xiaomi 15（24129PN74C） | HyperOS OS4.0.0.22.XOCCNXM，Android 17 | 2026-10-29 真机实测；专用脚本九段全通过（164 秒，`recipes/xiaomi/24129PN74C/24129PN74C-os4.toml`） |
 | Xiaomi Pad 7（2410CRP4CC） | HyperOS OS2.0.208.0.VOZCNXM，Android 15 | 2026-10-28 实测；四段脚本复跑通过，约 61 秒 |
 | REDMI K80 至尊版（25060RK16C） | HyperOS 2（BP2A.250605.031.A3），Android 16 | 2026-10-27 真机实测；专用脚本九段全通过并回读（recipes/xiaomi/25060RK16C） |
 | REDMI K80 Pro（24122RKC7C） | HyperOS OS3.0.304.0.WOMCNXM，Android 16 | 2026-10-29 真机实测；首轮借 K70 路径关 20 项，专用脚本九段复跑 172 秒、0 异常（`recipes/xiaomi/24122RKC7C`，见 [实测记录](../15-红米K80Pro实测.md)） |
@@ -36,7 +36,7 @@
 
 ③ **浏览器**：工具栏最右的「设置」图标点进去是**首页编辑面板**（页面布局 / 快捷网址 / 全网热榜），不是设置。主设置要走 底部「菜单」→ 弹窗里同名那一行（头像 / 菜单编辑 / 分享 / 设置），「隐私和安全」在主设置页最底部要滚一段。底栏按钮是 ViewGroup，只认 80 毫秒短按，`input tap` 点了没反应。
 
-主题段与参考脚本一致：桌面入口在 `com.miui.themestore`，打开后转到 `com.android.thememanager`，这个跳转是正常的，不是被别的 App 顶掉。机型脚本不再经这个跳转，一律直达 `com.android.thememanager/.ThemeResourceProxyTabActivity`，进「我的」、齿轮与点名开关都校验落点，0 个开关按失败报（#906）。机型脚本 `recipes/xiaomi/24129PN74C/recipe_os4.py`（HyperOS 4 变体，系统版本对上时自动选它）已按上面三点写，九段实测重跑 164 秒。
+主题段与参考脚本一致：桌面入口在 `com.miui.themestore`，打开后转到 `com.android.thememanager`，这个跳转是正常的，不是被别的 App 顶掉。机型脚本不再经这个跳转，一律直达 `com.android.thememanager/.ThemeResourceProxyTabActivity`，进「我的」、齿轮与点名开关都校验落点，0 个开关按失败报（#906）。机型脚本 `recipes/xiaomi/24129PN74C/24129PN74C-os4.toml`（HyperOS 4 变体，系统版本对上时自动选它）已按上面三点写，九段实测重跑 164 秒。
 
 **K90 Pro Max 与上面两台的两处差异**：① 设置首页一屏放不下，「隐私与安全」在第二屏，要往下滑一段才看得到；②「隐私与安全」打开的是安全中心的 `PrivacySafetyActivity`，只有「隐私 / 安全」两个分栏、默认停在「隐私」，得先切到「安全」分栏，「更多安全设置」在这一页的最末尾。机型脚本 `recipes/xiaomi/25102RKBEC/` 已按这两点写。
 
@@ -70,7 +70,7 @@ REDMI K80 至尊版（HyperOS 2 / Android 16）结构差异：「隐私与安全
 
 ## Xiaomi 15（24129PN74C，HyperOS OS3.0.307.0.WOCCNXM / Android 16）的差异
 
-底包 `BP2A.250605.031.A3` 与 REDMI K80 至尊版完全一样，但**入口结构不同**，不能直接套 K80 脚本。2026-10-29 无线调试实测，机型脚本 `recipes/xiaomi/24129PN74C/recipe.py` 已按本机路径写（HyperOS 4 的手机自动改用同目录的 `recipe_os4.py`）。
+底包 `BP2A.250605.031.A3` 与 REDMI K80 至尊版完全一样，但**入口结构不同**，不能直接套 K80 脚本。2026-10-29 无线调试实测，机型脚本 `recipes/xiaomi/24129PN74C/24129PN74C.toml` 已按本机路径写（HyperOS 4 的手机自动改用同目录的 `24129PN74C-os4.toml`）。
 
 | 项 | 这台机的入口 |
 |---|---|

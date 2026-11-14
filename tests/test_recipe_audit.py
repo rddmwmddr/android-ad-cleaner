@@ -268,14 +268,13 @@ class RunOutputTests(unittest.TestCase):
              patch.object(run, "sh", return_value=""), \
              patch.object(run, "fold_open", return_value=False), \
              patch.object(run, "input_blocked", return_value=False), \
-             patch.object(run.recipe_audit, "counts", return_value=COUNTS) as counts, \
+             patch.object(run.recipe_audit, "counts_for", return_value=COUNTS) as counts, \
              contextlib.redirect_stdout(out):
             self.assertEqual(run.cmd_status_json("S", []), 0)
         status = json.loads(out.getvalue().strip().splitlines()[-1])
         self.assertEqual(status["recipe_local"], COUNTS)
         # 数的是将要跑的那份脚本：读的是它的源码，不是缓存或另一份
-        counts.assert_called_once_with(Path(run.RECIPES, "xiaomi", "M154FF", "recipe.py")
-                                       .read_text(encoding="utf-8"))
+        counts.assert_called_once_with(str(Path(run.RECIPES, "xiaomi", "M154FF", "M154FF.toml")))
 
     def test_status_json_without_a_script_says_none(self):
         out = io.StringIO()
@@ -302,7 +301,7 @@ class RunOutputTests(unittest.TestCase):
              patch.object(run, "quickapps", return_value=[]), \
              patch.object(run, "sh", return_value=""), \
              patch.object(run, "suspended", return_value=False), \
-             patch.object(run.recipe_audit, "counts", return_value=COUNTS), \
+             patch.object(run.recipe_audit, "counts_for", return_value=COUNTS), \
              contextlib.redirect_stdout(out):
             self.assertEqual(run.cmd_check("S", []), 0)
         self.assertIn("本机策略：1 个；本机函数 3 个（引擎词汇 1、真机知识 1）", out.getvalue())
@@ -319,7 +318,7 @@ class RunOutputTests(unittest.TestCase):
              patch.object(run, "sh", return_value=""), \
              patch.object(run, "suspended", return_value=False), \
              patch.object(run, "fold_open", return_value=False), \
-             patch.object(run.recipe_audit, "counts", side_effect=SyntaxError("坏脚本")):
+             patch.object(run.recipe_audit, "counts_for", side_effect=SyntaxError("坏脚本")):
             with contextlib.redirect_stdout(status):
                 self.assertEqual(run.cmd_status_json("S", []), 0)
             with contextlib.redirect_stdout(listing):

@@ -5,6 +5,7 @@
 ## 未发布
 
 ### 内部
+- 小米乙批次 8 份脚本转页面树，新增 if_setting 等三条有界 op，零差异（#1267）
 - 小米甲批次 8 份机型脚本转页面树，新增 start_or_skip / off_required 等有界 op，零差异（#1266）
 - OPPO 乙批次 8 份机型脚本转页面树，新增 page / skip / fail 有界 op，调用序列零差异（#1265）
 - OPPO 甲批次 8 份脚本（6 个型号）转页面树，新增 enter / if_focus / if_tap 等有界 op，零差异（#1264）

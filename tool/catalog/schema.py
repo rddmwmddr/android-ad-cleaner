@@ -30,10 +30,12 @@ OP_KEYS = {
     "gated": frozenset({"kind", "entries", "scrolls", "ops"}),
     "require_entry": frozenset({"kind", "text", "scrolls", "miss_print", "miss_back"}),
     "require_lib": frozenset({"kind", "name", "args", "kwargs", "miss_print", "miss_back",
-                              "fail", "evidence"}),
-    "require_tab": frozenset({"kind", "name", "miss_print", "evidence"}),
-    "require_tap": frozenset({"kind", "text", "exact", "scrolls", "miss_print", "evidence"}),
-    "require_go": frozenset({"kind", "text", "expect", "miss_print", "evidence"}),
+                              "fail", "evidence", "at_focus"}),
+    "require_tab": frozenset({"kind", "name", "miss_print", "evidence", "at_focus"}),
+    "require_tap": frozenset({"kind", "text", "exact", "scrolls", "miss_print", "evidence",
+                              "at_focus"}),
+    "require_go": frozenset({"kind", "text", "expect", "miss_print", "evidence", "at_focus"}),
+    "require_expect": frozenset({"kind", "calls", "miss_print", "evidence", "at_focus"}),
     "require_unlocked": frozenset({"kind", "miss_print"}),
     "shell": frozenset({"kind", "command"}),
     "sleep": frozenset({"kind", "seconds"}),
@@ -48,16 +50,18 @@ OP_KEYS = {
     "require_setting": frozenset({"kind", "kw", "entry", "miss_print"}),
     "require_focus": frozenset({"kind", "contains", "miss_print"}),
     "require_find": frozenset({"kind", "text", "exact", "miss_print"}),
-    "if_find": frozenset({"kind", "text", "exact", "ops", "else_ops"}),
+    "if_find": frozenset({"kind", "text", "exact", "edge_ok", "nav", "ops", "else_ops"}),
     "if_entry": frozenset({"kind", "text", "scrolls", "ops", "else_ops"}),
     "if_lib": frozenset({"kind", "name", "args", "kwargs", "ops", "else_ops"}),
+    "if_lib_any": frozenset({"kind", "calls", "ops", "else_ops"}),
+    "if_setting": frozenset({"kind", "kw", "entry", "ops", "else_ops"}),
     "if_focus": frozenset({"kind", "text", "match", "ops", "else_ops"}),
     "if_tap": frozenset({"kind", "text", "exact", "scrolls", "ops", "else_ops"}),
     "back": frozenset({"kind", "n"}),
     "top": frozenset({"kind", "n"}),
     "page": frozenset({"kind", "args", "kwargs"}),
     "skip": frozenset({"kind", "text"}),
-    "fail": frozenset({"kind", "text"}),
+    "fail": frozenset({"kind", "text", "evidence"}),
     "scoped": frozenset({"kind", "systemui_text", "ops"}),
     "code": frozenset({"kind", "name", "args"}),
     "print": frozenset({"kind", "text"}),
@@ -169,6 +173,17 @@ def _validate_op(op: object, where: str) -> None:
     elif kind == "require_setting":
         _require(op, "kw", where)
         _require(op, "miss_print", where)
+    elif kind == "if_setting":
+        _require(op, "kw", where)
+        _validate_ops(op.get("ops", []), where)
+        _validate_ops(op.get("else_ops", []), where)
+    elif kind == "require_expect":
+        _validate_calls(op, where, ("args", "kwargs"), required="args")
+        _require(op, "miss_print", where)
+    elif kind == "if_lib_any":
+        _validate_calls(op, where, ("name", "method", "args", "kwargs"), required=("name", "method"))
+        _validate_ops(op.get("ops", []), where)
+        _validate_ops(op.get("else_ops", []), where)
     elif kind == "require_focus":
         _require(op, "contains", where)
         _require(op, "miss_print", where)
@@ -235,6 +250,34 @@ def _validate_off_required(op: Mapping, where: str) -> None:
     overlap = set(only) & set(op.get("keep", []))
     if overlap:
         raise SchemaError(f"{where} 的 off_required 里 only 与 keep 重叠：{sorted(overlap)}")
+
+
+def _validate_calls(op: Mapping, where: str, allowed: tuple, required: str | tuple) -> None:
+    """`calls` 表：短路 OR 的几次调用，每次只允许 `allowed` 里的键、必须给 `required`。
+
+    `required` 是元组时要求「恰好一个」：`if_lib_any` 的每次调用要么是注入助手（`name`），要么是
+    页面门面方法（`method`）——旧脚本的短路链两种都串过。`require_expect` 的每个调用要 `args`
+    （`p.expect_page` 的第一个实参）。实参逐条照原样下发，位置 / 关键字不合并。"""
+    calls = op.get("calls")
+    if "calls" not in op:
+        raise SchemaError(f"{where} 缺 calls")
+    if not isinstance(calls, list) or not calls:
+        raise SchemaError(f"{where} 的 calls 必须是非空的数组")
+    for index, call in enumerate(calls):
+        place = f"{where} 的第 {index + 1} 个 call"
+        if not isinstance(call, Mapping):
+            raise SchemaError(f"{place} 必须是表")
+        _reject_extra(call, frozenset(allowed), place)
+        if isinstance(required, tuple):
+            present = [key for key in required if key in call]
+            if len(present) != 1:
+                raise SchemaError(f"{place} 要给「{' / '.join(required)}」里的恰好一个")
+        elif required not in call:
+            raise SchemaError(f"{place} 缺 {required}")
+        if "args" in call and (not isinstance(call["args"], list) or not call["args"]):
+            raise SchemaError(f"{place} 的 args 必须是非空数组")
+        if required == "args" and not isinstance(call.get("args"), list):
+            raise SchemaError(f"{place} 的 args 必须是数组")
 
 
 def _require(op: Mapping, key: str, where: str) -> None:

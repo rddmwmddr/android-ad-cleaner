@@ -1,24 +1,21 @@
-# 小米 HyperOS 4 机型脚本：Xiaomi 18 Pro Max（M154FF）、Xiaomi 18 Fold（2608BPX34C）、REDMI K90（2510DRK44C）；路径来源：18 Pro Max 2026-10-22 实测（OS4.0.24）；18 Fold 2026-10-24 社区实测（沿用 Issue #2，CP2A.260605.016）。
-from recipe_kit import step
-# 三台系统底包相同（CP2A.260605.016），App 版本不同时页面不同：每一步都兼容新旧两种入口，找不到就跳过。
-# K90（OS4.0.5.0.XPKCNXM）按 2026-11-10 社区实测登记（Issue #929）：借这份脚本跑通九段中的八段，
-# 主题段要先挂起 com.miui.systemAdSolution；本仓库未在该机复跑。
-# 登记的含义是这台机先按本型号直选（recipe_for），不再转去按版本挑同族脚本——#969 修完也一样。
-# 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
-BUILD = "OS4.0"
-MODELS = ["M154FF", "2608BPX34C", "2510DRK44C"]
+# Xiaomi 18 Pro Max（M154FF）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
+# 系统广告 / 应用商店 / 浏览器用 `opened()` 的直达探路：拉起函数作为回调传进去，留在这里。
 import time
 from entries import THEME_DEAD_ENDS
 
-# 浏览器设置入口：先看工具栏齿轮，再点底部「我的」找齿轮。
-BROWSER_FLOW = "toolbar"
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from recipe_kit import maybe, p, rt
+    from recipe_nav import browser_settings, gear, opened, tap_any
+
+# 热搜榜的候选开关名：`recipe_steps.global_search` 从执行作用域按名字取。
+HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "知乎", "精选"]
 
 # 注入面的 opened() 从这里取 adb_link.DeviceLost
 import adb_link
 
 
-@step("系统广告")
-def _():
+def step_system_ads(p, rt):
     if opened(lambda: p.start("com.android.settings", ".ad.AdServiceSettings", expect="个性化广告推荐", budget=2)):
         p.off(only=["个性化广告推荐"], page="系统·广告服务")
         return
@@ -34,8 +31,7 @@ def _():
         p.off(only=["个性化广告推荐"], page="系统·广告服务")
 
 
-@step("应用商店")
-def _():
+def step_store(p, rt):
     if not opened(lambda: p.start("com.xiaomi.market", ".ui.MarketPreferenceActivity", expect="通知设置", budget=2)):
         p.start("com.xiaomi.market")
         p.go("我的", "设置")
@@ -56,23 +52,7 @@ def _():
     p.back(2)
 
 
-@step("手机管家")
-def _():
-    security_center()
-
-
-@step("下载管理")
-def _():
-    downloads_probe()
-
-
-@step("主题")
-def _():
-    theme()
-
-
-@step("浏览器")
-def _():
+def step_browser(p, rt):
     # 首页「默认 / 探索版 / 自定义主页」不改：自定义主页要填网址，按机主喜好
     # 设置页都有导出，直达：后台屏上首页的工具栏和底栏认不出来，走菜单会报「入口未找到」（#667）
     if opened(lambda: p.start("com.android.browser", ".preferences.activity.CustomizationPreferenceActivity", expect="个性化内容推荐", budget=2)):
@@ -94,26 +74,3 @@ def _():
             p.off(only=only, page=f"浏览器·{page}"); p.back()
     p.back(2)
 
-
-HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "知乎", "精选"]
-
-
-@step("全局搜索")
-def _():
-    global_search()
-
-
-@step("负一屏")
-def _():
-    negative_screen()
-
-
-@step("天气和日历")
-def _():
-    weather_calendar_probe()
-
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from recipe_kit import maybe, p
-    from recipe_nav import browser_settings, gear, opened, tap_any
-    from recipe_steps import downloads_probe, global_search, negative_screen, security_center, theme, weather_calendar_probe

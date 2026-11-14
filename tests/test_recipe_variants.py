@@ -27,9 +27,9 @@ class VariantTests(unittest.TestCase):
     def test_xiaomi_15_hyperos_3_and_4(self):
         # #312 是 HyperOS 3，#298 是 HyperOS 4：同一型号两份，按系统版本选
         self.assertEqual(self.pick("24129PN74C", "Xiaomi", "OS3.0.307.0.WOCCNXM", "BP2A.250605.031.A3"),
-                         "xiaomi/24129PN74C/recipe.py")
+                         "xiaomi/24129PN74C/24129PN74C.toml")
         self.assertEqual(self.pick("24129PN74C", "Xiaomi", "OS4.0.0.22.XOCCNXM", "CP2A.260605.016"),
-                         "xiaomi/24129PN74C/recipe_os4.py")
+                         "xiaomi/24129PN74C/24129PN74C-os4.toml")
 
     def test_oneplus_ace_2_android_15(self):
         self.assertEqual(self.pick("PHK110", "OnePlus", "", "PHK110_15.0.0.601(CN01)"), "oppo/PHK110/PHK110-android15.toml")

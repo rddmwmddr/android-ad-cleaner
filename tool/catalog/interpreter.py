@@ -94,10 +94,9 @@ def _require_lib(op: Mapping, g: dict[str, Any]) -> None:
     `evidence=true` 把当次页面现场接在文案后面（`…；停在 …`）。"""
     result = g[op["name"]](*[_arg(a, g) for a in op.get("args", [])],
                            **{k: _arg(v, g) for k, v in op.get("kwargs", {}).items()})
+    where = _focus_note(op, g)
     if not result:
-        message = op["miss_print"]
-        if op.get("evidence"):
-            message += g["p"].page_evidence()
+        message = _miss_message(op, g, where)
         if op.get("fail"):
             raise RuntimeError(message)
         print(message, flush=True)
@@ -236,8 +235,10 @@ def _fail(op: Mapping, g: dict[str, Any]) -> None:
     """这一段失败并带一句原因：走注入的 `require`（抛 RuntimeError），结局「未完成」且进失败段台账（#1265）。
 
     与 `return value=false` 的区别：后者只改分段结局、不进 `failed_steps`；旧脚本用 `raise` 的失败出口
-    要进台账（重试按失败段定位），用这条。"""
-    g["require"](False, op["text"])
+    要进台账（重试按失败段定位），用这条。`evidence=true` 接上页面现场，与
+    `raise RuntimeError("…；" + p.page_evidence())` 同形（只在真走到失败时读，#1267）。"""
+    text = op["text"] + g["p"].page_evidence() if op.get("evidence") else op["text"]
+    g["require"](False, text)
 
 
 def _print(op: Mapping, g: dict[str, Any]) -> None:
@@ -298,19 +299,39 @@ def _require_unlocked(op: Mapping, g: dict[str, Any]) -> None:
         raise RuntimeError(op.get("miss_print", "手机锁屏，请机主解锁"))
 
 
-def _miss_message(op: Mapping, g: dict[str, Any]) -> str:
-    """失败文案：`evidence=true` 时接上当次页面现场（与旧脚本 `…；+ p.page_evidence()` 同形）。"""
-    return op["miss_print"] + g["p"].page_evidence() if op.get("evidence") else op["miss_print"]
+def _focus_note(op: Mapping, g: dict[str, Any]) -> str | None:
+    """`at_focus=true` 时先读一次前台，返回它；不写则返回 None。
+
+    老脚本把现场写进 require 的**实参**（`require(cond, f"…；停在 {p.focus()}")`），前台是无论成败
+    都先读的。这里保持同样的时机：先读、再判定。"""
+    return g["p"].focus() if op.get("at_focus") else None
+
+
+def _miss_message(op: Mapping, g: dict[str, Any], where: str | None = None) -> str:
+    """失败文案的两种现场尾巴，与旧脚本两种写法对应。
+
+    `evidence=true` 接上 `p.page_evidence()`（`…；+ p.page_evidence()` 同形）；`at_focus` 的读数由
+    调用方先取好（`_focus_note`），成 `…；停在 <前台>`。两者都不写时只有文案。"""
+    message = op["miss_print"]
+    if op.get("evidence"):
+        message += g["p"].page_evidence()
+    if where is not None:
+        message += "；停在 " + where
+    return message
 
 
 def _require_tab(op: Mapping, g: dict[str, Any]) -> None:
-    if not g["p"].tab(op["name"]):
-        raise RuntimeError(_miss_message(op, g))
+    result = g["p"].tab(op["name"])
+    where = _focus_note(op, g)
+    if not result:
+        raise RuntimeError(_miss_message(op, g, where))
 
 
 def _require_go(op: Mapping, g: dict[str, Any]) -> None:
-    if not g["p"].go(op["text"], op["expect"]):
-        raise RuntimeError(_miss_message(op, g))
+    result = g["p"].go(op["text"], op["expect"])
+    where = _focus_note(op, g)
+    if not result:
+        raise RuntimeError(_miss_message(op, g, where))
 
 
 def _tap(op: Mapping, g: dict[str, Any]) -> None:
@@ -348,8 +369,10 @@ def _require_tap(op: Mapping, g: dict[str, Any]) -> None:
     for key in ("exact", "scrolls"):
         if key in op:
             kwargs[key] = op[key]
-    if not g["p"].tap(op["text"], **kwargs):
-        raise RuntimeError(_miss_message(op, g))
+    result = g["p"].tap(op["text"], **kwargs)
+    where = _focus_note(op, g)
+    if not result:
+        raise RuntimeError(_miss_message(op, g, where))
 
 
 def _close_listed(op: Mapping, g: dict[str, Any]) -> None:
@@ -395,10 +418,11 @@ def _require_find(op: Mapping, g: dict[str, Any]) -> None:
 
 
 def _if_find(op: Mapping, g: dict[str, Any]) -> None:
-    """`if p.find(text, exact=…): … else …`。"""
+    """`if p.find(text, exact=…[, edge_ok=…][, nav=…]): … else …`。"""
     kwargs: dict[str, Any] = {}
-    if "exact" in op:
-        kwargs["exact"] = op["exact"]
+    for key in ("exact", "edge_ok", "nav"):
+        if key in op:
+            kwargs[key] = op[key]
     if g["p"].find(op["text"], **kwargs):
         _run(op.get("ops", []), g)
     else:
@@ -432,6 +456,46 @@ def _if_lib(op: Mapping, g: dict[str, Any]) -> None:
         _run(op.get("ops", []), g)
     else:
         _run(op.get("else_ops", []), g)
+
+
+def _if_setting(op: Mapping, g: dict[str, Any]) -> None:
+    """`if p.setting(kw[, entry]): … else …`：设置搜索直达的成败决定走哪一支（#1267）。"""
+    args = [op["kw"]] + ([op["entry"]] if "entry" in op else [])
+    if g["p"].setting(*args):
+        _run(op.get("ops", []), g)
+    else:
+        _run(op.get("else_ops", []), g)
+
+
+def _if_lib_any(op: Mapping, g: dict[str, Any]) -> None:
+    """`<助手A>(…) or <助手B>(…)`：短路取第一个成功的助手（#1267）。
+
+    旧脚本用 `or` 串入口助手（`gear(toolbar_only=True) or gear()`），短路链里也会混门面的布尔方法
+    （`tab_bot("我的") or p.tap("我的", …)`）：第一个成真时后面的不调，调用序列与旧脚本逐条相同。"""
+    for call in op["calls"]:
+        target = getattr(g["p"], call["method"]) if "method" in call else g[call["name"]]
+        if target(*[_arg(a, g) for a in call.get("args", [])],
+                  **{k: _arg(v, g) for k, v in call.get("kwargs", {}).items()}):
+            _run(op.get("ops", []), g)
+            return
+    _run(op.get("else_ops", []), g)
+
+
+def _require_expect(op: Mapping, g: dict[str, Any]) -> None:
+    """`require(p.expect_page(…), 文案)`：几个调用短路 OR，全落空按这一段失败收尾（#1267）。
+
+    实参按数据里的形态原样下发（位置 / 关键字不合并）：旧脚本既有
+    `p.expect_page("x", 3)` 也有 `p.expect_page("x", timeout=3)`，两条都要逐条对上。"""
+    page = g["p"]
+    hit = False
+    for call in op["calls"]:
+        kwargs = {k: _arg(v, g) for k, v in call.get("kwargs", {}).items()}
+        if page.expect_page(*[_arg(a, g) for a in call["args"]], **kwargs):
+            hit = True
+            break
+    where = _focus_note(op, g)
+    if not hit:
+        raise RuntimeError(_miss_message(op, g, where))
 
 
 _HANDLERS: dict[str, Callable[[Mapping, dict[str, Any]], None]] = {
@@ -481,4 +545,7 @@ _HANDLERS: dict[str, Callable[[Mapping, dict[str, Any]], None]] = {
     "if_find": _if_find,
     "if_entry": _if_entry,
     "if_lib": _if_lib,
+    "if_lib_any": _if_lib_any,
+    "if_setting": _if_setting,
+    "require_expect": _require_expect,
 }

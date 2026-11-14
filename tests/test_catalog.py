@@ -362,6 +362,17 @@ class FailOpTests(unittest.TestCase):
         self.assertEqual(recipe.rt.failed_steps, ["a"])
         self.assertEqual(backs, [])
 
+    def test_evidence_appends_the_page_snapshot(self):
+        """`raise RuntimeError("…；" + p.page_evidence())`：现场只在真走到失败时读（#1267）。"""
+        toml = '[[segment]]\nname="a"\nops=[{kind="fail", text="未进入；", evidence=true}]\n'
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            reads = []
+            phone.page_evidence = lambda titles=(): reads.append(titles) or "EVIDENCE"
+            recipe.run()
+        self.assertEqual(reads, [()])
+        self.assertEqual(recipe.rt.failed_steps, ["a"])
+
 
 class RequireTapOpTests(unittest.TestCase):
     """`require_tap` op（#1265）：`require(p.tap(text, exact=…, scrolls=…), 文案)` 与 `if not p.tap(...): raise`
@@ -583,6 +594,185 @@ class IfFocusCaseInsensitiveTests(unittest.TestCase):
         self.assertEqual(self._run("com.android.browser/.BrowserActivity"), [1])
 
 
+class IfSettingOpTests(unittest.TestCase):
+    """`if_setting` op（#1267）：`if not p.setting("广告服务"): 深链兜底`。
+
+    设置搜索搜不到就走兜底拉起，搜到了走另一支；两支里还会有 shell / sleep / off。"""
+
+    TOML = ('[[segment]]\nname="a"\nops=[{kind="if_setting", kw="广告服务", else_ops=[{kind="back", n=2}],'
+            ' ops=[{kind="back", n=1}]}]\n')
+
+    def _run(self, found):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.TOML)
+            seen = []
+            phone.setting = lambda kw, entry=None: seen.append((kw, entry)) or found
+            backs = []
+            phone.back = lambda n=1: backs.append(n)
+            recipe.run()
+        return seen, backs
+
+    def test_present_takes_the_ops_branch(self):
+        self.assertEqual(self._run(True), ([("广告服务", None)], [1]))
+
+    def test_missing_takes_the_else_branch(self):
+        self.assertEqual(self._run(False), ([("广告服务", None)], [2]))
+
+    def test_entry_keyword_is_forwarded(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="if_setting", kw="广告服务", entry="隐私",'
+                ' ops=[{kind="back", n=1}]}]\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            seen = []
+            phone.setting = lambda kw, entry=None: seen.append((kw, entry)) or True
+            phone.back = lambda n=1: None
+            recipe.run()
+        self.assertEqual(seen, [("广告服务", "隐私")])
+
+
+class IfLibAnyOpTests(unittest.TestCase):
+    """`if_lib_any` op（#1267）：`gear(toolbar_only=True) or gear()`。
+
+    短路取第一个成功的助手：第一个成真就不再调第二个——旧脚本的 `or` 就是这个调用序列。"""
+
+    TOML = ('[[segment]]\nname="a"\nops=[{kind="if_lib_any", calls=[{name="gear", kwargs={toolbar_only=true}},'
+            ' {name="gear"}], ops=[{kind="back", n=1}], else_ops=[{kind="back", n=2}]}]\n')
+
+    def _run(self, first, second):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.TOML)
+            seen = []
+            phone.back = lambda n=1: seen.append(("back", n))
+            recipe.namespace.update({
+                "gear": lambda **kw: seen.append(("gear", kw)) or (first if "toolbar_only" in kw else second),
+            })
+            recipe.run()
+        return seen
+
+    def test_first_hit_short_circuits(self):
+        self.assertEqual(self._run(True, True), [("gear", {"toolbar_only": True}), ("back", 1)])
+
+    def test_second_hit_keeps_the_first_call(self):
+        self.assertEqual(self._run(False, True),
+                         [("gear", {"toolbar_only": True}), ("gear", {}), ("back", 1)])
+
+    def test_both_miss_takes_the_else_branch(self):
+        self.assertEqual(self._run(False, False),
+                         [("gear", {"toolbar_only": True}), ("gear", {}), ("back", 2)])
+
+    def test_a_page_method_can_stand_in_for_a_helper(self):
+        """`tab_bot("我的") or p.tap("我的", exact=True, scrolls=0)`：短路链里可以混门面方法。"""
+        toml = ('[[segment]]\nname="a"\nops=[{kind="if_lib_any", calls=[{name="tab_bot", args=["我的"]},'
+                ' {method="tap", args=["我的"], kwargs={exact=true, scrolls=0}}],'
+                ' ops=[{kind="back", n=1}], else_ops=[{kind="back", n=2}]}]\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            seen = []
+            phone.tap = lambda text, **kw: seen.append(("tap", text, kw)) or False
+            phone.back = lambda n=1: seen.append(("back", n))
+            recipe.namespace.update({"tab_bot": lambda name: seen.append(("tab_bot", name)) or False})
+            recipe.run()
+        self.assertEqual(seen, [("tab_bot", "我的"), ("tap", "我的", {"exact": True, "scrolls": 0}),
+                                ("back", 2)])
+
+
+class RequireExpectOpTests(unittest.TestCase):
+    """`require_expect` op（#1267）：`require(p.expect_page(…), …)` / `if not p.expect_page(…): raise`。
+
+    实参逐条照原样下发（位置 / 关键字不合并），`calls` 里几个就短路 OR 几个；全落空按这一段失败。"""
+
+    def _run(self, toml, results):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            seen = []
+            phone.expect_page = lambda *a, **k: seen.append((a, k)) or results.pop(0)
+            recipe.run()
+        return seen
+
+    def test_a_single_positional_timeout_is_forwarded_verbatim(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="require_expect", calls=[{args=["个性化广告推荐", 3]}],'
+                ' miss_print="广告服务页没有打开"}]\n')
+        self.assertEqual(self._run(toml, [True]), [(("个性化广告推荐", 3), {})])
+
+    def test_any_call_short_circuits(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="require_expect", calls=['
+                '{args=["每次联网时通知"], kwargs={timeout=3}}, {args=["自动更新"], kwargs={timeout=1}}],'
+                ' miss_print="主题设置页没有打开；", evidence=true}]\n')
+        self.assertEqual(self._run(toml, [False, True]),
+                         [(("每次联网时通知",), {"timeout": 3}), (("自动更新",), {"timeout": 1})])
+
+    def test_all_miss_fails_the_segment_with_the_evidence(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="require_expect", calls=[{args=["X"]}],'
+                ' miss_print="主题设置页没有打开；", evidence=true}]\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            phone.expect_page = lambda *a, **k: False
+            phone.page_evidence = lambda titles=(): "EVIDENCE"
+            recipe.run()
+        self.assertEqual(recipe.rt.failed_steps, ["a"])
+
+
+class AtFocusTests(unittest.TestCase):
+    """失败文案尾巴的另一种现场（#1267）：`f"…；停在 {p.focus()}"`。
+
+    与 `evidence`（`p.page_evidence()`）并列，`at_focus=true` 时读一次前台接在文案后面——那次读
+    也是脚本发出的调用，对拍要能对上。"""
+
+    def test_require_lib_at_focus_reads_the_foreground(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="require_lib", name="browser_settings",'
+                ' miss_print="浏览器设置入口没找到", fail=true, at_focus=true}]\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            reads = []
+            phone.focus = lambda *a, **k: reads.append(1) or "com.android.browser/.Main"
+            recipe.namespace.update({"browser_settings": lambda: False})
+            recipe.run()
+        self.assertEqual(reads, [1])
+        self.assertEqual(recipe.rt.failed_steps, ["a"])
+
+    def test_at_focus_reads_the_foreground_even_when_the_check_passes(self):
+        """现场是 require 的实参：老脚本无论成败都先读一次前台，对拍里那条调用不能少。"""
+        toml = ('[[segment]]\nname="a"\nops=[{kind="require_lib", name="browser_settings",'
+                ' miss_print="没找到", fail=true, at_focus=true}]\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            reads = []
+            phone.focus = lambda *a, **k: reads.append(1) or "com.android.browser/.Main"
+            recipe.namespace.update({"browser_settings": lambda: True})
+            recipe.run()
+        self.assertEqual(reads, [1])
+
+    def test_require_tab_at_focus_reads_the_foreground_on_miss(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="require_tab", name="我的",'
+                ' miss_print="没有「我的」", at_focus=true}]\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            reads = []
+            phone.tab = lambda name: False
+            phone.focus = lambda *a, **k: reads.append(1) or "x"
+            recipe.run()
+        self.assertEqual(reads, [1])
+
+
+class IfFindKwargsTests(unittest.TestCase):
+    """`if_find` 的 `edge_ok` / `nav`（#1267）：`if p.find("城市管理", exact=True, edge_ok="tab")`。
+
+    天气的新版入口是底部标签，旧 `if_find` 只会下发 `exact`，把这两个关键字丢掉就与旧脚本不是
+    同一条调用。"""
+
+    TOML = ('[[segment]]\nname="a"\nops=[{kind="if_find", text="城市管理", exact=true, edge_ok="tab",'
+            ' ops=[{kind="back", n=1}]}]\n')
+
+    def test_edge_ok_is_forwarded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.TOML)
+            seen = []
+            phone.find = lambda text, **kw: seen.append((text, kw)) or True
+            phone.back = lambda n=1: None
+            recipe.run()
+        self.assertEqual(seen, [("城市管理", {"exact": True, "edge_ok": "tab"})])
+
+
 class NewOpValidatorTests(unittest.TestCase):
     """新 op 的封闭清单（#1266）：缺键、名单外的键都在装载期报。"""
 
@@ -611,6 +801,67 @@ class NewOpValidatorTests(unittest.TestCase):
     def test_off_required_rejects_an_empty_only(self):
         op = {"kind": "off_required", "only": [], "page": "p"}
         self._bad({"segment": [{"name": "a", "ops": [op]}]}, "非空")
+
+    def test_if_setting_requires_the_keyword(self):
+        op = {"kind": "if_setting", "ops": []}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 kw")
+
+    def test_if_setting_rejects_an_unknown_key(self):
+        op = {"kind": "if_setting", "kw": "x", "surprise": 1}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
+
+    def test_if_lib_any_requires_a_non_empty_calls_list(self):
+        op = {"kind": "if_lib_any", "calls": []}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "calls 必须是非空的数组")
+
+    def test_if_lib_any_rejects_a_call_with_an_unknown_key(self):
+        op = {"kind": "if_lib_any", "calls": [{"name": "gear", "surprise": 1}]}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
+
+    def test_require_expect_requires_calls_and_the_message(self):
+        self._bad({"segment": [{"name": "a", "ops": [{"kind": "require_expect",
+                                                      "miss_print": "m"}]}]}, "缺 calls")
+        self._bad({"segment": [{"name": "a", "ops": [{"kind": "require_expect",
+                                                      "calls": [{"args": ["x"]}]}]}]}, "缺 miss_print")
+
+    def test_require_expect_rejects_an_empty_calls_list(self):
+        op = {"kind": "require_expect", "calls": [], "miss_print": "m"}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "非空")
+
+    def test_require_expect_rejects_an_unknown_key(self):
+        op = {"kind": "require_expect", "calls": [{"args": ["x"]}], "miss_print": "m", "surprise": 1}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
+
+    def test_if_find_accepts_the_scroll_and_nav_flags(self):
+        op = {"kind": "if_find", "text": "x", "exact": True, "edge_ok": "tab", "nav": True, "ops": []}
+        catalog.validate({"segment": [{"name": "a", "ops": [op]}]})
+
+    def test_if_find_rejects_a_key_outside_its_list(self):
+        op = {"kind": "if_find", "text": "x", "edge_ok": "tab", "surprise": 1}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
+
+
+class NewOpProjectionTests(unittest.TestCase):
+    """带「入口」的新 op 要同时进事实层（#1267）：漏一次，入口速查就没有这台机的设置搜索入口。"""
+
+    DATA = {"segment": [{"name": "a", "ops": [
+        {"kind": "if_setting", "kw": "广告服务", "else_ops": [
+            {"kind": "shell", "command": "am start -n com.android.settings/.ad.AdServiceSettings"}]},
+        {"kind": "if_lib_any", "calls": [{"name": "gear", "kwargs": {"toolbar_only": True}},
+                                         {"name": "gear"}], "ops": []}]}]}
+
+    def test_if_setting_and_if_lib_any_reach_the_lowered_source(self):
+        import recipe_source
+        lowered = recipe_source._catalog_src(self.DATA)
+        self.assertIn('p.setting("广告服务")', lowered)
+        self.assertIn('p.d.shell("am start -n com.android.settings/.ad.AdServiceSettings")', lowered)
+        self.assertEqual([line for line in lowered.splitlines() if line.startswith("gear(")],
+                         ["gear()", "gear()"])
+
+    def test_if_setting_names_resolve_into_the_entry_facts(self):
+        import recipe_source
+        facts = recipe_source.scan_catalog(self.DATA)
+        self.assertIn("p.setting", {call.name for call in facts.calls})
 
 
 class OffRequiredProjectionTests(unittest.TestCase):

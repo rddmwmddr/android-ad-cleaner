@@ -256,7 +256,10 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "32014e348e625ef6"
 
-["xiaomi/25060RK16C/recipe.py"]
+# 形态迁移于 #1267（小米乙批次转页面树）：本批 key 改 .toml，日期 / 验证人 / 档位照原样平移。
+# 这一批每份都至少留了一段 code= 例外函数（过程化段），转换不是逐字机械的，body_hash 故意不刷新——
+# verify_ledger 会把它们标成「待复核」，等真机复跑一次再照抄 --hash 的值。
+["xiaomi/25060RK16C/25060RK16C.toml"]
 build = "BP2A.250605.031.A3"
 date = "2026-10-27"
 by = "机主"
@@ -383,7 +386,10 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "42a43039e18b3981"
 
-["xiaomi/24129PN74C/recipe.py"]
+# 形态迁移于 #1267（小米乙批次转页面树）：本批 key 改 .toml，日期 / 验证人 / 档位照原样平移。
+# 这一批每份都至少留了一段 code= 例外函数（过程化段），转换不是逐字机械的，body_hash 故意不刷新——
+# verify_ledger 会把它们标成「待复核」，等真机复跑一次再照抄 --hash 的值。
+["xiaomi/24129PN74C/24129PN74C.toml"]
 build = "OS3.0.307.0.WOCCNXM"
 date = "2026-10-29"
 by = "机主"
@@ -391,7 +397,7 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "f03134d7d32bed9d"
 
-["xiaomi/24129PN74C/recipe_os4.py"]
+["xiaomi/24129PN74C/24129PN74C-os4.toml"]
 build = "OS4.0.0.22.XOCCNXM"
 date = "2026-10-29"
 by = "机主"
@@ -400,7 +406,7 @@ evidence = "机主自测"
 body_hash = "450849695fe3bb0d"
 
 # 社区实测，头注没留验证人 ID。
-["xiaomi/2505APX7BC/recipe.py"]
+["xiaomi/2505APX7BC/2505APX7BC.toml"]
 build = "BP2A.250605.031.A3"
 date = "2026-11-05"
 by = ""
@@ -408,7 +414,7 @@ tier = "部分"
 evidence = "未知"
 body_hash = "f2a708b7a8e2df92"
 
-["xiaomi/25102RKBEC/recipe.py"]
+["xiaomi/25102RKBEC/25102RKBEC.toml"]
 build = "OS4.0.2.0.XPMCNXM"
 date = "2026-10-27"
 by = "机主"
@@ -416,7 +422,7 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "0b4f93a3b8e7e42c"
 
-["xiaomi/2512BPNDAC/recipe.py"]
+["xiaomi/2512BPNDAC/2512BPNDAC.toml"]
 build = "OS4.0.5.0.XPACNXM"
 date = "2026-10-28"
 by = "机主"
@@ -425,7 +431,7 @@ evidence = "机主自测"
 body_hash = "7e1fa02ca356f80c"
 
 # 头注还停在 10-22 录制与 10-24 的 18 Fold 社区记录；同目录 README 与机型表记 11-07 本机整轮复测。
-["xiaomi/M154FF/recipe.py"]
+["xiaomi/M154FF/M154FF.toml"]
 build = "OS4.0.24"
 date = "2026-11-07"
 by = "机主"
@@ -433,7 +439,7 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "a1284e48c1ef40c2"
 
-["xiaomi/M332BF/recipe.py"]
+["xiaomi/M332BF/M332BF.toml"]
 build = "OS4.0.4.0.XHPCNXM"
 date = "2026-10-31"
 by = "@Sin1ery"

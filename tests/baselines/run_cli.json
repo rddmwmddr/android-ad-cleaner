@@ -1,9 +1,9 @@
 {
   "provenance": {
-    "baseline": "0dcdd16",
+    "baseline": "01a7b02",
     "how": "git archive <sha> | tar -x -C /tmp/aac-base && .venv/bin/python tests/make_run_cli_baseline.py /tmp/aac-base <sha>",
     "cases": 29,
-    "note": "#1252: check / devices 改打印脚本身份（目录名），status-json 的 recipe 改身份并新增 recipe_path"
+    "note": "#1267: 小米乙批转页面树，机型脚本文件名从 recipe.py / recipe_os4.py 变成 <型号>.toml / <型号>-os4.toml"
   },
   "cases": {
     "devices-有设备": {
@@ -44,7 +44,7 @@
     "recipe-没有机型脚本": {
       "rc": 1,
       "stdout": "",
-      "stderr": "这个型号没有机型脚本。同品牌有参考脚本 recipes/xiaomi/M154FF/recipe.py，加 --ref 试用。写法见 docs/04-给新机型写脚本.md\n"
+      "stderr": "这个型号没有机型脚本。同品牌有参考脚本 recipes/xiaomi/M154FF/M154FF.toml，加 --ref 试用。写法见 docs/04-给新机型写脚本.md\n"
     },
     "suspend-成功": {
       "rc": 0,
@@ -123,7 +123,7 @@
     },
     "status-json-成功": {
       "rc": 0,
-      "stdout": "{\"info\": {\"brand\": \"Xiaomi\", \"model\": \"M154FF\", \"name\": \"Xiaomi 13\", \"build\": \"OS1.0.1.0\", \"os\": \"OS1.0.1.0\", \"android\": \"13\"}, \"locked\": false, \"recipe\": \"M154FF\", \"recipe_path\": \"recipes/xiaomi/M154FF/recipe.py\", \"recipe_ref\": false, \"recipe_build\": \"OS4.0\", \"recipe_ok\": false, \"steps\": [\"系统广告\", \"应用商店\", \"手机管家\", \"下载管理\", \"主题\", \"浏览器\", \"全局搜索\", \"负一屏\", \"天气和日历\"], \"recipe_coverage\": \"<LEDGER>\", \"recipe_evidence\": \"<LEDGER>\", \"recipe_verified\": \"<LEDGER>\", \"recipe_local\": \"<LOCAL>\", \"ads\": [{\"pkg\": \"com.miui.systemAdSolution\", \"suspended\": false, \"default_on\": true}], \"quickapps\": [], \"stay_on\": \"0\", \"dev\": false, \"backup\": null, \"fold_open\": false, \"input_blocked\": false}\n",
+      "stdout": "{\"info\": {\"brand\": \"Xiaomi\", \"model\": \"M154FF\", \"name\": \"Xiaomi 13\", \"build\": \"OS1.0.1.0\", \"os\": \"OS1.0.1.0\", \"android\": \"13\"}, \"locked\": false, \"recipe\": \"M154FF\", \"recipe_path\": \"recipes/xiaomi/M154FF/M154FF.toml\", \"recipe_ref\": false, \"recipe_build\": \"OS4.0\", \"recipe_ok\": false, \"steps\": [\"系统广告\", \"应用商店\", \"手机管家\", \"下载管理\", \"主题\", \"浏览器\", \"全局搜索\", \"负一屏\", \"天气和日历\"], \"recipe_coverage\": \"<LEDGER>\", \"recipe_evidence\": \"<LEDGER>\", \"recipe_verified\": \"<LEDGER>\", \"recipe_local\": \"<LOCAL>\", \"ads\": [{\"pkg\": \"com.miui.systemAdSolution\", \"suspended\": false, \"default_on\": true}], \"quickapps\": [], \"stay_on\": \"0\", \"dev\": false, \"backup\": null, \"fold_open\": false, \"input_blocked\": false}\n",
       "stderr": ""
     },
     "status-json-断线": {
