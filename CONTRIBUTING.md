@@ -49,7 +49,7 @@ git commit -s -m "fix(chan_fast): keep the channel page open when a row vanishes
 
 ```bash
 .venv/bin/python -m unittest discover -s tests
-uvx ruff@0.17.3 check tool tests gui android/app/src/main/python android/smoke.py recipes
+uvx ruff@0.17.3 check tool tests gui android/app/src/main/python android/smoke.py recipes recipe_lib
 .venv/bin/pip install mypy==1.18.2 && .venv/bin/mypy && .venv/bin/python tool/typecheck_recipes.py
 ```
 

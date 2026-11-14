@@ -1,0 +1,96 @@
+# 荣耀 WKL-AN20，MagicOS 11 / Android 17 的页面树（catalog，#1262）。路径逐项实测：2026-10-28。
+# 整轮待真机复测；音乐须先由机主打开「更多设置」，再单段运行。不含通知渠道、挂包或 Scene 激活。
+# 线性段是数据；过程化的段（safe_ui 坐标手势、settle_page+radio 单选组、条件分支）走 code= 例外函数。
+model = "WKL-AN20"
+models = ["WKL-AN20"]
+build = "WKL-AN20 11.0.0.111(SP7C00E110R101P7)"
+guard = "guard"
+wrap = "safe_ui"
+tail = "tail"
+
+[const]
+TAP_STYLE = "honor"
+APP_SETTINGS_STYLE = "honor"
+BROWSER_FLOW = "honor_plain"
+
+[[segment]]
+name = "广告跟踪"
+code = "step_ad_tracking"
+
+[[segment]]
+name = "智能推荐服务"
+ops = [
+  {kind = "start", pkg = "com.hihonor.id", activity = ".oaid.ui.IntelligentRecommendActivity"},
+  {kind = "lib", name = "close_named_honor", args = [["智能推荐服务"], "广告与隐私·智能推荐服务", "com.hihonor.id", "智能推荐服务"]},
+]
+
+[[segment]]
+name = "系统管家"
+ops = [
+  {kind = "start", pkg = "com.hihonor.systemmanager", activity = ".mainscreen.SettingActivity"},
+  {kind = "lib", name = "close_named_honor", args = [["应用推荐"], "系统管家·设置", "com.hihonor.systemmanager", "设置"]},
+]
+
+[[segment]]
+name = "应用市场"
+ops = [
+  {kind = "lib", name = "app_settings", args = ["com.hihonor.appmarket", "内容推荐服务", "消息通知管理"]},
+  {kind = "lib", name = "tap", args = ["内容推荐服务"]},
+  {kind = "lib", name = "close_named_honor", args = [["营销服务推荐", "个性化服务推荐"], "市场·内容推荐服务", "com.hihonor.appmarket", "内容推荐服务"]},
+  {kind = "back"},
+  {kind = "lib", name = "tap", args = ["消息通知管理"]},
+  {kind = "lib", name = "close_named_honor", args = [["消息通知"], "市场·消息通知管理", "com.hihonor.appmarket", "消息通知管理"]},
+  {kind = "back"},
+  {kind = "lib", name = "tap", args = ["消息中心提醒"]},
+  {kind = "lib", name = "close_named_honor", args = [["活动福利", "游戏动态"], "市场·消息中心提醒", "com.hihonor.appmarket", "消息中心提醒"]},
+  {kind = "back"},
+  {kind = "lib", name = "tap", args = ["热门推荐管理"]},
+  {kind = "lib", name = "close_named_honor", args = [["热门推荐管理"], "市场·热门推荐管理", "com.hihonor.appmarket", "热门推荐管理"]},
+]
+
+[[segment]]
+name = "浏览器首页"
+code = "step_browser_home"
+
+[[segment]]
+name = "浏览器推荐"
+code = "step_browser_recs"
+
+[[segment]]
+name = "视频"
+ops = [
+  {kind = "start", pkg = "com.hihonor.youku.video", activity = "com.youku.android.youkusetting.activity.SettingsActivity"},
+  {kind = "lib", name = "tap", args = ["其他设置"]},
+  {kind = "lib", name = "close_named_honor", args = [["个性化内容", "个性化广告", "允许视频采集OAID推荐广告"], "视频·其他设置", "com.hihonor.youku.video", "其他设置"]},
+]
+
+[[segment]]
+name = "搜索"
+code = "step_search"
+
+[[segment]]
+name = "负一屏"
+code = "step_negative"
+
+[[segment]]
+name = "阅读"
+code = "step_reader"
+
+[[segment]]
+name = "主题"
+ops = [
+  {kind = "lib", name = "app_settings", args = ["com.hihonor.android.thememanager", "个性化服务", "通知"]},
+  {kind = "lib", name = "tap", args = ["个性化服务"], kwargs = {scrolls = 0}},
+  {kind = "lib", name = "close_named_honor", args = [["个性化内容", "个性化广告"], "主题·个性化服务", "com.hihonor.android.thememanager", "个性化服务"]},
+  {kind = "back"},
+  {kind = "lib", name = "tap", args = ["通知"], kwargs = {scrolls = 0}},
+  {kind = "lib", name = "close_named_honor", args = [["消息通知", "短信", "邮件"], "主题·内容推荐和活动通知", "com.hihonor.android.thememanager", "通知"]},
+]
+
+[[segment]]
+name = "魔法画报"
+code = "step_magazine"
+
+[[segment]]
+name = "音乐"
+code = "step_music"

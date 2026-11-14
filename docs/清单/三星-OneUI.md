@@ -1,6 +1,6 @@
 # 三星 One UI 手动清单
 
-以下路径在三星 Galaxy Note10+ 5G（型号 `SM-N9760`、Android 12 / One UI 4、固件 `SP1A.210812.016.N9760ZCU6HZE1`、国行、简体中文）上于 2026-11-05 逐项核对。机型脚本 `recipes/samsung-SM-N9760/recipe.py` 只含「广告」一段，下表其余路径按手动执行。
+以下路径在三星 Galaxy Note10+ 5G（型号 `SM-N9760`、Android 12 / One UI 4、固件 `SP1A.210812.016.N9760ZCU6HZE1`、国行、简体中文）上于 2026-11-05 逐项核对。机型脚本 `recipes/samsung/SM-N9760/SM-N9760.toml` 只含「广告」一段，下表其余路径按手动执行。
 
 | 位置 | 操作 | 保留 |
 |---|---|---|

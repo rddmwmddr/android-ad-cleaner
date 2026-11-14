@@ -1,0 +1,103 @@
+# vivo（iQOO）V2324HA 页面树（catalog，#1263）。路径 2026-10-27 手动实测。
+model = "V2324HA"
+models = ["V2324HA"]
+build = "PD2324J_A_16"
+
+[const]
+GEAR_STYLE = "vivo_desc"
+
+[[segment]]
+name = "系统广告"
+ops = [{ kind = "lib", name = "system_ads_branch" }]
+
+[[segment]]
+name = "全局搜索"
+ops = [
+  { kind = "lib", name = "settings_home" },
+  { kind = "gated", entries = ["系统管理与升级", "全局搜索"], ops = [
+    { kind = "gated", entries = ["首页展示内容"], ops = [
+      { kind = "off", only = ["搜索框推荐词", "推荐卡片"], page = "全局搜索·首页展示内容" },
+      { kind = "back" },
+    ]},
+    { kind = "gated", entries = ["推荐热搜榜单"], ops = [
+      { kind = "off", only = ["热门搜索"], page = "全局搜索·热搜榜单" },
+      { kind = "back" },
+    ]},
+    { kind = "gated", entries = ["个性化内容"], ops = [
+      { kind = "off", only = ["广告个性化"], page = "全局搜索·个性化内容" },
+      { kind = "back" },
+    ]},
+  ]},
+]
+
+[[segment]]
+name = "阅图锁屏"
+ops = [{ kind = "lib", name = "lock_screen_magazine" }]
+
+[[segment]]
+name = "应用商店"
+ops = [
+  { kind = "start", pkg = "com.bbk.appstore" },
+  { kind = "go", text = "我的", expect = "设置" },
+  { kind = "lib", name = "gear" },
+  { kind = "gated", entries = ["关于"], ops = [
+    { kind = "gated", entries = ["个性化推荐"], ops = [
+      { kind = "off", only = ["个性化推荐", "个性化广告推荐"], page = "商店·个性化推荐" },
+      { kind = "back" },
+    ]},
+    { kind = "gated", entries = ["服务管理"], ops = [
+      { kind = "off", only = ["签到有礼", "顶部轮播图", "顶部栏目", "开屏", "摇一摇", "悬浮窗", "限时推广"], keep = ["管理页-我的服务", "空间清理"], page = "商店·服务管理" },
+      { kind = "back" },
+    ]},
+    { kind = "back" },
+  ]},
+  { kind = "gated", entries = ["应用商店提醒类型"], ops = [
+    { kind = "off", only = ["资讯活动提醒", "积分过期提醒", "应用管理提醒"], page = "商店·提醒类型" },
+    { kind = "back" },
+  ]},
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "浏览器"
+ops = [
+  { kind = "start", pkg = "com.vivo.browser" },
+  { kind = "gated", entries = ["菜单"], scrolls = 0, ops = [{ kind = "entry", text = "设置", scrolls = 0 }] },
+  { kind = "gated", entries = ["首页设置"], ops = [
+    { kind = "entry", text = "极简首页", scrolls = 0 },
+    { kind = "off", only = ["首页上滑展示资讯"], page = "浏览器·首页设置" },
+    { kind = "back" },
+  ]},
+  { kind = "gated", entries = ["隐私权限设置"], ops = [
+    { kind = "off", only = ["个性化内容", "第三方应用来源个性化推荐", "个性化广告推荐"], page = "浏览器·隐私" },
+    { kind = "back" },
+  ]},
+  { kind = "gated", entries = ["网页浏览设置"], ops = [
+    { kind = "off", only = ["网页下载相关推荐"], page = "浏览器·网页浏览" },
+    { kind = "back" },
+  ]},
+  { kind = "gated", entries = ["更多设置"], ops = [
+    { kind = "off", only = ["WiFi 连接跳转新闻资讯", "跳转新闻资讯"], page = "浏览器·更多设置" },
+    { kind = "back" },
+  ]},
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "i管家"
+ops = [
+  { kind = "start", pkg = "com.iqoo.secure" },
+  { kind = "lib", name = "gear" },
+  { kind = "gated", entries = ["关于", "个性化设置"], ops = [
+    { kind = "off", only = ["应用个性化推荐"], page = "i管家·个性化设置" },
+  ]},
+  { kind = "back", n = 3 },
+]
+
+[[segment]]
+name = "天气"
+ops = [
+  { kind = "start", pkg = "com.vivo.weather", activity = ".WeatherSettings" },
+  { kind = "off", only = ["天气服务"], keep = ["气象预警", "异常天气", "地震预警"], page = "天气·设置" },
+  { kind = "back", n = 2 },
+]

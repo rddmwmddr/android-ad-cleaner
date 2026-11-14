@@ -1,0 +1,44 @@
+# OPPO Find N5（PKH110，ColorOS 17.0.0.103）的页面树（catalog，#1264）。路径实测：2026-10-29。
+# 只收录已走通的系统广告跟踪、商店、浏览器、主题、下拉搜索；不挂包、不动通知渠道。
+# 广告跟踪（逐页等列表）、浏览器与主题（条件分支 + 逐项精确标题）走 code= 例外函数。
+model = "PKH110"
+models = ["PKH110"]
+build = "PKH110_17.0.0.103"
+guard = "guard"
+tail = "tail"
+
+[const]
+# 共享段体 store_promotions 的 off_exact 走「允许本机没有这一项」那一档（#1268）。
+OFF_EXACT_OPTIONAL = true
+
+[[segment]]
+name = "广告跟踪"
+code = "step_ad_tracking"
+
+[[segment]]
+name = "软件商店"
+ops = [
+  { kind = "lib", name = "store_promotions" },
+]
+
+[[segment]]
+name = "浏览器首页"
+ops = [
+  { kind = "lib", name = "browser_home" },
+]
+
+[[segment]]
+name = "浏览器广告"
+code = "step_browser_ads"
+
+[[segment]]
+name = "浏览器个性化"
+code = "step_browser_personalized"
+
+[[segment]]
+name = "主题商店"
+code = "step_theme"
+
+[[segment]]
+name = "下拉搜索"
+code = "step_search"

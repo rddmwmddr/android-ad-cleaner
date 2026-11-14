@@ -10,8 +10,8 @@ sys.path.insert(0, str(ROOT / "tests"))
 import run
 from fixtures import load_recipe, phone_mock
 
-VARIANT = ROOT / "recipes/oneplus-PJA110/recipe_android16.py"
-OLD = ROOT / "recipes/oneplus-PJA110/recipe.py"
+VARIANT = ROOT / "recipes/oppo/PJA110/PJA110-android16.toml"
+OLD = ROOT / "recipes/oppo/PJA110/PJA110.toml"
 MARKET = "com.heytap.market/com.heytap.market.mine.cn.setting.ui.SettingActivity"
 MARKET_MAIN = "com.heytap.market/com.heytap.market.activity.MainActivity"
 BROWSER = "com.heytap.browser/com.heytap.browser.settings.component.BrowserPreferencesPage"
@@ -39,8 +39,8 @@ class VersionTests(unittest.TestCase):
     def test_android16_build_selects_variant_and_14_keeps_original(self):
         new = {"build": "PJA110_16.0.5.1201(CN01)", "os": ""}
         old = {"build": "PJA110_14.0.0.812", "os": ""}
-        self.assertEqual(Path(run.recipe_for("PJA110", "OnePlus", new)[0]).name, "recipe_android16.py")
-        self.assertEqual(Path(run.recipe_for("PJA110", "OnePlus", old)[0]).name, "recipe.py")
+        self.assertEqual(Path(run.recipe_for("PJA110", "OnePlus", new)[0]).name, "PJA110-android16.toml")
+        self.assertEqual(Path(run.recipe_for("PJA110", "OnePlus", old)[0]).name, "PJA110.toml")
         self.assertEqual(run.recipe_meta(VARIANT)["build"], "PJA110_16.0.5.1201")
         self.assertEqual(run.recipe_meta(OLD)["build"], "PJA110_14.0.0.812")
 

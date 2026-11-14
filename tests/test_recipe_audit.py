@@ -71,11 +71,12 @@ def _():
 
 
 def fake_tree(root):
-    """三份假脚本：同家族的两台 + 另一家族的一台。返回 recipes 目录。"""
+    """三份假脚本：同家族的两台 + 另一家族的一台。返回 recipes 目录（按家族/型号两层，#1261）。"""
     recipes = Path(root, "recipes")
-    for folder, source in (("xiaomi-FAKEA", RECIPE), ("redmi-FAKEB", OTHERS), ("vivo-FAKEC", EMPTY)):
-        (recipes / folder).mkdir(parents=True)
-        (recipes / folder / "recipe.py").write_text(source, encoding="utf-8")
+    for family, model, source in (("xiaomi", "FAKEA", RECIPE), ("xiaomi", "FAKEB", OTHERS),
+                                  ("vivo", "FAKEC", EMPTY)):
+        (recipes / family / model).mkdir(parents=True)
+        (recipes / family / model / "recipe.py").write_text(source, encoding="utf-8")
     return recipes
 
 
@@ -150,7 +151,7 @@ class AuditTests(unittest.TestCase):
     def test_totals_and_models_per_name(self):
         report = recipe_audit.audit(str(self.recipes))
         self.assertEqual([script.script for script in report.scripts],
-                         ["redmi-FAKEB/recipe.py", "vivo-FAKEC/recipe.py", "xiaomi-FAKEA/recipe.py"])
+                         ["vivo/FAKEC/recipe.py", "xiaomi/FAKEA/recipe.py", "xiaomi/FAKEB/recipe.py"])
         self.assertEqual(report.counts(),
                          {"scripts": 3, "total": 4, "strategy": 1, "vocabulary": 2, "knowledge": 1,
                           "hook": 0})
@@ -161,8 +162,8 @@ class AuditTests(unittest.TestCase):
     def test_family_comes_from_the_brand_segment(self):
         report = recipe_audit.audit(str(self.recipes))
         self.assertEqual({script.script: script.family for script in report.scripts},
-                         {"xiaomi-FAKEA/recipe.py": "xiaomi", "redmi-FAKEB/recipe.py": "xiaomi",
-                          "vivo-FAKEC/recipe.py": "vivo"})
+                         {"xiaomi/FAKEA/recipe.py": "xiaomi", "xiaomi/FAKEB/recipe.py": "xiaomi",
+                          "vivo/FAKEC/recipe.py": "vivo"})
 
     def test_filters_pick_family_model_and_tier(self):
         report = recipe_audit.audit(str(self.recipes))
@@ -267,14 +268,13 @@ class RunOutputTests(unittest.TestCase):
              patch.object(run, "sh", return_value=""), \
              patch.object(run, "fold_open", return_value=False), \
              patch.object(run, "input_blocked", return_value=False), \
-             patch.object(run.recipe_audit, "counts", return_value=COUNTS) as counts, \
+             patch.object(run.recipe_audit, "counts_for", return_value=COUNTS) as counts, \
              contextlib.redirect_stdout(out):
             self.assertEqual(run.cmd_status_json("S", []), 0)
         status = json.loads(out.getvalue().strip().splitlines()[-1])
         self.assertEqual(status["recipe_local"], COUNTS)
         # 数的是将要跑的那份脚本：读的是它的源码，不是缓存或另一份
-        counts.assert_called_once_with(Path(run.RECIPES, "xiaomi-M154FF", "recipe.py")
-                                       .read_text(encoding="utf-8"))
+        counts.assert_called_once_with(str(Path(run.RECIPES, "xiaomi", "M154FF", "M154FF.toml")))
 
     def test_status_json_without_a_script_says_none(self):
         out = io.StringIO()
@@ -301,7 +301,7 @@ class RunOutputTests(unittest.TestCase):
              patch.object(run, "quickapps", return_value=[]), \
              patch.object(run, "sh", return_value=""), \
              patch.object(run, "suspended", return_value=False), \
-             patch.object(run.recipe_audit, "counts", return_value=COUNTS), \
+             patch.object(run.recipe_audit, "counts_for", return_value=COUNTS), \
              contextlib.redirect_stdout(out):
             self.assertEqual(run.cmd_check("S", []), 0)
         self.assertIn("本机策略：1 个；本机函数 3 个（引擎词汇 1、真机知识 1）", out.getvalue())
@@ -318,7 +318,7 @@ class RunOutputTests(unittest.TestCase):
              patch.object(run, "sh", return_value=""), \
              patch.object(run, "suspended", return_value=False), \
              patch.object(run, "fold_open", return_value=False), \
-             patch.object(run.recipe_audit, "counts", side_effect=SyntaxError("坏脚本")):
+             patch.object(run.recipe_audit, "counts_for", side_effect=SyntaxError("坏脚本")):
             with contextlib.redirect_stdout(status):
                 self.assertEqual(run.cmd_status_json("S", []), 0)
             with contextlib.redirect_stdout(listing):

@@ -1,0 +1,110 @@
+# OPPO Find X9 Ultra（PMA110），ColorOS 17.0.0.106(CN01) / Android 17 的页面树（catalog，#1265）。
+# 2026-10-29 真机逐页记录；仅收录本机已识别的开关，不包含包操作和通知渠道。
+# 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，未复测（#933）。
+# 浏览器 / 下拉搜索 / 软件商店 / 视频 / 负一屏五段已落数据：长 Activity 前缀按字面量拼进实参。
+# 广告跟踪（运行期读名单再整表关）、主题商店（`reopen=` 回调重进）、小布建议（`require(p.tap)`）
+# 留 `code=`，见同名例外函数。
+model = "PMA110"
+models = ["PMA110"]
+build = "PMA110_17.0.0.106(CN01)"
+tail = "tail"
+
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+[const]
+WAIT_PAGE_STYLE = "strict"
+TAP_PAGE_STYLE = "raise"
+READ_SWITCHES_STYLE = "expect"
+OPEN_PAGE_STYLE = "shell"
+APP_SETTINGS_STYLE = "shell"
+SYSTEM_SETTINGS_STYLE = "shell"
+BROWSER_FLOW = "prefs_shell"
+
+[[segment]]
+name = "广告跟踪"
+code = "step_ad_tracking"
+
+[[segment]]
+name = "浏览器"
+ops = [
+  { kind = "print", text = "  将关闭个性化搜索/优惠推荐、开屏/资讯列表广告。" },
+  { kind = "lib", name = "browser_settings" },
+  { kind = "lib", name = "tap_page", args = ["隐私", "com.heytap.browser/com.heytap.browser.settings.component.BrowserPreferenceActivity"], kwargs = { scrolls = 4 } },
+  { kind = "lib", name = "close_named_plain", args = [["个性化搜索推荐", "个性化优惠推荐"], "浏览器·隐私", "com.heytap.browser/com.heytap.browser.settings.component.BrowserPreferenceActivity", "隐私", 2] },
+  { kind = "lib", name = "tap_page", args = ["广告管理", "com.heytap.browser/com.heytap.browser.settings.component.BrowserPreferenceActivity"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "close_named_plain", args = [["开屏广告", "资讯列表广告"], "浏览器·广告管理", "com.heytap.browser/com.heytap.browser.settings.component.BrowserPreferenceActivity", "广告管理", 2] },
+  { kind = "print", text = "  · 不单独点击灰置的摇一摇项；未验证简洁首页，不改布局。" },
+]
+
+[[segment]]
+name = "下拉搜索"
+ops = [
+  { kind = "print", text = "  将关闭个性化推荐、精选资讯、搜索框提示词；保留消息总开关与搜索数据源。" },
+  { kind = "lib", name = "open_page", args = ["am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.SearchSettingActivity", "搜索设置"] },
+  { kind = "lib", name = "tap_page", args = ["搜索范围", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.SearchSourceActivity"], kwargs = { scrolls = 0 } },
+  # 「全部」是聚合状态；两个子项关掉时它会随之变化，不直接拨它。
+  { kind = "lib", name = "close_named_plain", args = [["个性化推荐", "精选资讯"], "下拉搜索·搜索范围", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.SearchSourceActivity", "搜索范围", 6], kwargs = { dependent = ["全部"] } },
+  { kind = "back" },
+  { kind = "lib", name = "tap_page", args = ["功能管理", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.SearchFunctionManagerActivity"], kwargs = { scrolls = 2 } },
+  { kind = "lib", name = "close_named_plain", args = [["搜索框提示词"], "下拉搜索·功能管理", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.SearchFunctionManagerActivity", "功能管理", 2] },
+  { kind = "back" },
+  { kind = "lib", name = "tap_page", args = ["隐私", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.PrivacySettingsActivity"], kwargs = { scrolls = 4 } },
+  { kind = "lib", name = "close_named_plain", args = [["个性化推荐"], "下拉搜索·隐私", "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity.PrivacySettingsActivity", "隐私", 2] },
+]
+
+[[segment]]
+name = "软件商店"
+ops = [
+  { kind = "print", text = "  将关闭个性化推荐；保留下载、更新、应用安全与全部服务模式。" },
+  { kind = "lib", name = "app_settings", args = ["com.heytap.market", "com.heytap.market/com.heytap.market.mine.cn.setting.ui.SettingActivity", "软件商店"] },
+  { kind = "lib", name = "tap_page", args = [["隐私", "隐私授权管理"], "com.heytap.market/com.heytap.market.mine.cn.setting.ui.PrivacyActivity"], kwargs = { scrolls = 8 } },
+  { kind = "lib", name = "tap_page", args = ["个性化推荐", "com.heytap.market/com.heytap.market.mine.cn.setting.ui.PersonalRecommendActivity"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "close_named_plain", args = [["个性化推荐"], "软件商店·个性化推荐", "com.heytap.market/com.heytap.market.mine.cn.setting.ui.PersonalRecommendActivity", "个性化推荐", 4] },
+]
+
+[[segment]]
+name = "主题商店"
+code = "step_theme"
+
+[[segment]]
+name = "视频"
+ops = [
+  { kind = "print", text = "  将关闭 OPPO 视频个性化推荐；保留在线播放和下载设置。" },
+  { kind = "start", pkg = "com.heytap.yoli" },
+  { kind = "require_go", text = "我的", expect = "设置", miss_print = "未找到视频设置入口" },
+  { kind = "lib", name = "tap_page", args = ["设置", "com.heytap.yoli/com.heytap.yoli.mine.setting.SettingActivity"], kwargs = { scrolls = 0, exact = false } },
+  { kind = "lib", name = "tap_page", args = ["个性化内容管理", "com.heytap.yoli/com.heytap.yoli.mine.setting.PersonalizedContentManageActivity"], kwargs = { scrolls = 3 } },
+  { kind = "lib", name = "close_named_plain", args = [["个性化推荐"], "OPPO视频·个性化内容管理", "com.heytap.yoli/com.heytap.yoli.mine.setting.PersonalizedContentManageActivity", "个性化内容管理", 2] },
+]
+
+[[segment]]
+name = "小布建议"
+ops = [
+  { kind = "print", text = "  将关闭资讯服务、视界日报、小红书资讯；保留出行、快递、日程等服务。" },
+  { kind = "lib", name = "system_settings" },
+  # OPPO AI 首页 Activity 随版本变化，先点「OPPO AI」这一行，点不到就整段失败。
+  { kind = "require_tap", text = "OPPO AI", exact = true, scrolls = 6, miss_print = "未找到 OPPO AI" },
+  { kind = "lib", name = "tap_page", args = ["小布建议", "com.oplus.pantanal.ums/com.oplus.advice.settings.ui.AdviceSettingActivity"], kwargs = { scrolls = 5 } },
+  { kind = "lib", name = "tap_page", args = ["资讯服务", "com.oplus.pantanal.ums/com.oplus.advice.settings.ui.detail.SceneServiceActivity"], kwargs = { title = "服务设置", scrolls = 8 } },
+  { kind = "lib", name = "close_named_plain", args = [["资讯服务"], "小布建议·资讯服务", "com.oplus.pantanal.ums/com.oplus.advice.settings.ui.detail.SceneServiceActivity", "服务设置", 2] },
+  { kind = "lib", name = "tap_page", args = ["视界日报", "com.oplus.pantanal.ums/com.oplus.advice.settings.ui.detail.AdviceDetailActivity"], kwargs = { title = "服务设置", scrolls = 0 } },
+  { kind = "lib", name = "close_named_plain", args = [["视界日报"], "小布建议·视界日报", "com.oplus.pantanal.ums/com.oplus.advice.settings.ui.detail.AdviceDetailActivity", "服务设置", 2] },
+  { kind = "back" },
+  { kind = "lib", name = "tap_page", args = ["小红书资讯", "com.oplus.pantanal.ums/com.oplus.advice.settings.ui.detail.AdviceDetailActivity"], kwargs = { title = "服务设置", scrolls = 0 } },
+  { kind = "lib", name = "close_named_plain", args = [["小红书资讯"], "小布建议·小红书资讯", "com.oplus.pantanal.ums/com.oplus.advice.settings.ui.detail.AdviceDetailActivity", "服务设置", 2] },
+]
+
+[[segment]]
+name = "负一屏"
+ops = [
+  { kind = "print", text = "  将关闭热点资讯及其个性化推荐，轮播改为不显示；保留功能卡片和推荐服务总开关。" },
+  { kind = "lib", name = "assistant_settings" },
+  { kind = "lib", name = "tap_page", args = ["热点资讯", "com.coloros.assistantscreen/com.oplus.assistantscreen.card.infoflow.setting.activity.InfoFlowSettingActivity"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "close_named_plain", args = [["热点资讯"], "负一屏·热点资讯", "com.coloros.assistantscreen/com.oplus.assistantscreen.card.infoflow.setting.activity.InfoFlowSettingActivity", "热点资讯", 2] },
+  { kind = "back" },
+  { kind = "lib", name = "tap_page", args = ["推荐服务", "com.coloros.assistantscreen/com.oplus.assistantscreen.setting.recommendservice.RecommendServiceSettingActivity"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "hide_carousel" },
+  { kind = "back" },
+  { kind = "lib", name = "tap_page", args = ["隐私", "com.coloros.assistantscreen/com.oplus.assistantscreen.setting.activity.PrivacyActivity"], kwargs = { scrolls = 4 } },
+  { kind = "lib", name = "tap_page", args = ["个性化推荐", "com.coloros.assistantscreen/com.oplus.assistantscreen.setting.activity.PersonalRecommendManageActivity"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "close_named_plain", args = [["热点资讯"], "负一屏·个性化推荐", "com.coloros.assistantscreen/com.oplus.assistantscreen.setting.activity.PersonalRecommendManageActivity", "个性化推荐", 2] },
+]

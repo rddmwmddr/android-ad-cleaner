@@ -1,24 +1,23 @@
 {
   "provenance": {
-    "baseline": "4624d57 + #942 的 BUILD 提示文案改动",
+    "baseline": "HEAD",
     "how": "git archive <sha> | tar -x -C /tmp/aac-adapt-base && .venv/bin/python tests/make_adapt_cli_baseline.py /tmp/aac-adapt-base <sha>",
-    "cases": 19,
-    "note": "#942 有意改了 gen 的 BUILD 提示（小米系别填 Android 底包）；未知子命令的文案随 #690 增加 survey 一项，其余用例仍与 #708 的基线逐字相同"
+    "cases": 19
   },
   "cases": {
     "gen-成功": {
       "rc": 0,
-      "stdout": "⚠ 这些是保护类开关（打开才是保护），没有写进草稿：限制广告跟踪\n草稿已生成：草稿-PJA110.py（2 段，2 个开关，均为待验证）\nBUILD 为空：自检时不比对系统版本；转正式脚本前请填上录制版本（小米系填 ro.mi.os.version.incremental，别填 ro.build.display.id 的 Android 底包）\n下一步：python3 tool/run.py -s <序列号> adapt check 草稿-PJA110.py\n自检通过也不等于适配完成：请人工在手机上核对每一步，再决定是否转为正式机型脚本。\n",
+      "stdout": "⚠ 这些是保护类开关（打开才是保护），没有写进草稿：限制广告跟踪\n草稿已生成：草稿-PJA110.toml（2 段，2 个开关，均为待验证）\nBUILD 为空：自检时不比对系统版本；转正式脚本前请填上录制版本（小米系填 ro.mi.os.version.incremental，别填 ro.build.display.id 的 Android 底包）\n下一步：python3 tool/run.py -s <序列号> adapt check 草稿-PJA110.toml\n自检通过也不等于适配完成：请人工在手机上核对每一步，再决定是否转为正式机型脚本。\n",
       "stderr": ""
     },
     "gen-型号认不出": {
       "rc": 0,
-      "stdout": "⚠ 这些是保护类开关（打开才是保护），没有写进草稿：限制广告跟踪\n草稿已生成：草稿.py（2 段，2 个开关，均为待验证）\n没能从文件名认出型号，MODELS 为空；补型号用 --model，或直接把文件名改成 探路-<型号>.tsv\nBUILD 为空：自检时不比对系统版本；转正式脚本前请填上录制版本（小米系填 ro.mi.os.version.incremental，别填 ro.build.display.id 的 Android 底包）\n下一步：python3 tool/run.py -s <序列号> adapt check 草稿.py\n自检通过也不等于适配完成：请人工在手机上核对每一步，再决定是否转为正式机型脚本。\n",
+      "stdout": "⚠ 这些是保护类开关（打开才是保护），没有写进草稿：限制广告跟踪\n草稿已生成：草稿.toml（2 段，2 个开关，均为待验证）\n没能从文件名认出型号，MODELS 为空；补型号用 --model，或直接把文件名改成 探路-<型号>.tsv\nBUILD 为空：自检时不比对系统版本；转正式脚本前请填上录制版本（小米系填 ro.mi.os.version.incremental，别填 ro.build.display.id 的 Android 底包）\n下一步：python3 tool/run.py -s <序列号> adapt check 草稿.toml\n自检通过也不等于适配完成：请人工在手机上核对每一步，再决定是否转为正式机型脚本。\n",
       "stderr": ""
     },
     "gen-勾选清单": {
       "rc": 0,
-      "stdout": "草稿已生成：草稿-PLP120.py（1 段，1 个开关，均为待验证）\n下一步：python3 tool/run.py -s <序列号> adapt check 草稿-PLP120.py\n自检通过也不等于适配完成：请人工在手机上核对每一步，再决定是否转为正式机型脚本。\n",
+      "stdout": "草稿已生成：草稿-PLP120.toml（1 段，1 个开关，均为待验证）\n下一步：python3 tool/run.py -s <序列号> adapt check 草稿-PLP120.toml\n自检通过也不等于适配完成：请人工在手机上核对每一步，再决定是否转为正式机型脚本。\n",
       "stderr": ""
     },
     "gen-选项缺值": {
@@ -29,7 +28,7 @@
     "gen-不认识的选项": {
       "rc": 1,
       "stdout": "",
-      "stderr": "不认识的选项 --bogus。用法：run.py adapt gen <探路-型号.tsv> [-o 输出.py] [--pick 清单.txt] [--model 型号] [--build 录制版本]\n"
+      "stderr": "不认识的选项 --bogus。用法：run.py adapt gen <探路-型号.tsv> [-o 输出.toml] [--pick 清单.txt] [--model 型号] [--build 录制版本]\n"
     },
     "gen-两个TSV": {
       "rc": 1,
@@ -39,7 +38,7 @@
     "gen-没有给TSV": {
       "rc": 1,
       "stdout": "",
-      "stderr": "用法：run.py adapt gen <探路-型号.tsv> [-o 输出.py] [--pick 清单.txt] [--model 型号] [--build 录制版本]\n"
+      "stderr": "用法：run.py adapt gen <探路-型号.tsv> [-o 输出.toml] [--pick 清单.txt] [--model 型号] [--build 录制版本]\n"
     },
     "gen-找不到TSV": {
       "rc": 1,
@@ -64,17 +63,17 @@
     "gen-写不出": {
       "rc": 1,
       "stdout": "⚠ 这些是保护类开关（打开才是保护），没有写进草稿：限制广告跟踪\n",
-      "stderr": "写不出 无此目录/草稿.py：[Errno 2] <OSERR>: '无此目录/草稿.py'\n"
+      "stderr": "写不出 无此目录/草稿.toml：[Errno 2] <OSERR>: '无此目录/草稿.toml'\n"
     },
     "check-缺参数": {
       "rc": 1,
       "stdout": "",
-      "stderr": "用法：run.py adapt check -s <序列号> <草稿.py> [段名 …]\n"
+      "stderr": "用法：run.py adapt check -s <序列号> <草稿.toml> [段名 …]\n"
     },
     "check-参数顺序错": {
       "rc": 1,
       "stdout": "",
-      "stderr": "用法：run.py adapt check -s <序列号> <草稿.py> [段名 …]\n"
+      "stderr": "用法：run.py adapt check -s <序列号> <草稿.toml> [段名 …]\n"
     },
     "check-找不到草稿": {
       "rc": 1,

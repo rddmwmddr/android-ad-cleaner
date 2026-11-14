@@ -92,7 +92,7 @@ class LocalFunction:
 
 @dataclass(frozen=True)
 class Script:
-    """一份机型脚本（`recipes/<品牌>-<型号>/recipe*.py`）与它的本机函数。"""
+    """一份机型脚本（`recipes/<家族>/<型号>/recipe*.py`）与它的本机函数。"""
     script: str             # recipes 下的相对路径
     family: str
     model: str
@@ -165,7 +165,8 @@ def classify(src: str) -> tuple[LocalFunction, ...]:
         body_calls[call.function].append(call.name)
     out = []
     for name, line in definitions(src):
-        calls = tuple(sorted(set(body_calls.get(name, ()))))
+        # 出口现在是 rt 上的方法：`rt.require_switches` 与裸名同档
+        calls = tuple(sorted({call.removeprefix("rt.") for call in body_calls.get(name, ())}))
         tier, signals = (HOOK, ()) if name in HOOK_NAMES else tier_of(calls)
         out.append(LocalFunction(name, line, tier, signals, calls))
     return tuple(out)
@@ -180,20 +181,57 @@ def counts(src: str) -> dict[str, int]:
     return out
 
 
+def counts_for(path: str) -> dict[str, int]:
+    """一份机型脚本（`.py` 或 catalog `.toml`）的本机函数计数，口径同 `audit()`。
+
+    `.toml` 的助手在同目录同名的 `.py` 例外里；段 `code=` 指向的函数等同旧 `@step` 段体，不计入。
+    没有例外文件就是 0 个本机函数（不是「读不到」）。"""
+    if not str(path).endswith(".toml"):
+        with open(path, encoding="utf-8") as handle:
+            return counts(handle.read())
+    import tomllib
+    with open(path, "rb") as handle:
+        data = tomllib.load(handle)
+    codes = {segment["code"] for segment in data.get("segment", []) if "code" in segment}
+    companion = str(path)[:-len(".toml")] + ".py"
+    if not os.path.isfile(companion):
+        return {"total": 0, **{tier: 0 for tier in TIERS}}
+    with open(companion, encoding="utf-8") as handle:
+        functions = [f for f in classify(handle.read()) if f.name not in codes]
+    out = {"total": len(functions), **{tier: 0 for tier in TIERS}}
+    for function in functions:
+        out[function.tier] += 1
+    return out
+
+
 def _place(script: str) -> tuple[str, str]:
-    """`xiaomi-M154FF/recipe.py` → (家族, 型号)。家族按品牌段查 `entries.FAMILY`，认不出时留空。"""
-    folder = script.split("/", 1)[0]
-    brand, _, model = folder.partition("-")
-    return FAMILY.get(brand.lower(), ""), model or folder
+    """`xiaomi/M154FF/recipe.py` → (家族, 型号)。路径第一段就是家族（`recipes/<家族>/<型号>`），认不出时留空。"""
+    parts = script.split("/")
+    family, model = parts[0], parts[1] if len(parts) > 1 else parts[0]
+    return FAMILY.get(family.lower(), ""), model
 
 
 def audit(recipes_dir: str) -> Report:
     """扫整个 `recipes/`：每份脚本的本机函数，加上「同名函数出现在几台机型」。"""
-    family_of, model_of, functions_of = {}, {}, {}
+    family_of, model_of = {}, {}
+    functions_of: dict[str, tuple] = {}
     for script in recipe_source.scan_dir(recipes_dir):
         family, model = _place(script)
-        with open(os.path.join(recipes_dir, script), encoding="utf-8") as handle:
-            functions = classify(handle.read())
+        path = os.path.join(recipes_dir, script)
+        seg_codes = set()
+        if script.endswith(".toml"):
+            # catalog 机型：本机函数在同目录同名的 `.py` 例外里；没有例外就没有本机函数。
+            import tomllib
+            with open(path, "rb") as handle:
+                data = tomllib.load(handle)
+            # 段 `code=` 指向的函数等同旧 `@step` 段体，不是本机助手，不计入（与原口径一致）。
+            seg_codes = {seg["code"] for seg in data.get("segment", []) if "code" in seg}
+            path = path[:-len(".toml")] + ".py"
+            if not os.path.isfile(path):
+                family_of[script], model_of[script], functions_of[script] = family, model, ()
+                continue
+        with open(path, encoding="utf-8") as handle:
+            functions = tuple(f for f in classify(handle.read()) if f.name not in seg_codes)
         family_of[script], model_of[script], functions_of[script] = family, model, functions
     reuse = defaultdict(set)
     for script, functions in functions_of.items():

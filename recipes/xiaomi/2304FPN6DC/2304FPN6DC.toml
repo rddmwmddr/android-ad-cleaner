@@ -1,0 +1,115 @@
+# 小米 HyperOS 3 机型脚本：Xiaomi 13 Ultra（2304FPN6DC）、Xiaomi 14 Pro（23116PN5BC）；路径来源：2026-10-27 实机录制（OS3.0.308.0.WMACNXM / Android 16）。
+# 14 Pro 2026-10-29 社区实测（OS3.0.308.0.WNBCNXM / Android 16，Issue #317）：九段跑通、每步回读，
+# 只有浏览器「搜索设置」一页没命中目标开关。
+# 与 18 系列（OS4）的差异：系统广告的「更多安全设置」在「隐私与安全 → 安全」页里；
+# 浏览器个性化推荐是独立 Activity；手机管家没有独立「隐私设置」入口项，需滚到页面底部。
+# 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
+# 2026-11-14 转页面树（#1266）：手机管家、主题、浏览器、天气和日历落成导航数据；系统广告的重试轮、
+# 商店的运行时分岔与全局搜索的榜单候选留在同名 `.py` 的 `code =`。
+model = "2304FPN6DC"
+models = ["2304FPN6DC", "23116PN5BC"]
+build = "OS3.0.308"
+
+[[segment]]
+name = "系统广告"
+code = "step_system_ads"
+
+[[segment]]
+name = "应用商店"
+code = "step_store"
+
+[[segment]]
+name = "手机管家"
+ops = [
+  { kind = "start", pkg = "com.miui.securitycenter", activity = "com.miui.securityscan.ui.settings.SettingsActivity" },
+  # 12.8.7：垃圾清理页里直接有「内容推荐设置 → 推荐内容」
+  { kind = "if_entry", text = "垃圾清理", ops = [
+    { kind = "off", only = ["推荐内容"], page = "管家·垃圾清理" },
+    { kind = "back" },
+  ] },
+  # 「隐私设置」在设置页最底部，排在「关于」前面
+  { kind = "if_entry", text = "隐私设置", ops = [
+    { kind = "off", only = ["个性化推荐"], page = "管家·隐私" },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "下载管理"
+ops = [{ kind = "lib", name = "downloads" }]
+
+[[segment]]
+name = "主题"
+ops = [
+  # HyperOS 3 的 13 Ultra 只有 thememanager，没有 themestore；直达代理页这一步两条都省（#906）
+  { kind = "skip_unless_installed", command = "pm path com.android.thememanager", contains = "package:", text = "  · 本机没有主题管理包，跳过" },
+  { kind = "start_or_skip", pkg = "com.android.thememanager", activity = ".ThemeResourceProxyTabActivity", dead_ends = ["com.xiaomi.market", "com.miui.home"], reason = "主题页打不开" },
+  # 导航失败以前与「本页没有目标开关」同形：进「我的」、进设置页、点名开关三步都校验，
+  # 0 个开关按失败报并带页面现场（#906）。
+  { kind = "require_tab", name = "我的", miss_print = "主题底部「我的」未找到；", evidence = true },
+  { kind = "require_lib", name = "gear", miss_print = "主题设置入口没找到；", fail = true, evidence = true },
+  { kind = "await_page" },
+  { kind = "off_required", only = ["每次联网时通知"], keep = ["自动更新"], page = "主题·设置", contains = true },
+  { kind = "if_entry", text = "隐私设置", ops = [
+    { kind = "off", only = ["个性化推荐"], page = "主题·隐私" },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "浏览器"
+ops = [
+  # 个性化推荐在独立 Activity，直接拉起最稳；老版本没有这个页面时整段快速跳过
+  { kind = "start", pkg = "com.android.browser", activity = ".preferences.activity.CustomizationPreferenceActivity" },
+  { kind = "off", only = ["个性化内容推荐", "个性化广告推荐"], page = "浏览器·个性化推荐" },
+  { kind = "back", n = 2 },
+  { kind = "start", pkg = "com.android.browser", activity = ".BrowserSettingsActivity" },
+  { kind = "if_entry", text = "主页设置", ops = [
+    { kind = "off", only = ["宫格位推送"], page = "浏览器·主页设置" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "搜索设置", ops = [
+    { kind = "off", only = ["猜你想搜"], page = "浏览器·搜索设置" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "功能设置", ops = [
+    { kind = "off", only = ["小说"], page = "浏览器·功能设置" },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "全局搜索"
+code = "step_global_search"
+
+[[segment]]
+name = "负一屏"
+ops = [{ kind = "lib", name = "negative_screen" }]
+
+[[segment]]
+name = "天气和日历"
+ops = [
+  # 天气 18.x：右上「更多设置 → 设置 → 用户体验计划」；日历 18.x 设置里已没有用户体验计划。
+  { kind = "start", pkg = "com.miui.weather2" },
+  { kind = "if_entry", text = "更多设置", scrolls = 3, ops = [
+    { kind = "entry", text = "设置", scrolls = 0 },
+  ] },
+  { kind = "if_entry", text = "用户体验计划", ops = [
+    { kind = "off", only = ["推荐", "广告", "个性化", "内容推广", "天气视频卡片"], page = "天气·用户体验计划" },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 3 },
+  { kind = "start", pkg = "com.android.calendar" },
+  # 右上按钮先弹菜单，再点菜单里的「设置」。
+  { kind = "if_entry", text = "设置", scrolls = 0, ops = [
+    { kind = "entry", text = "设置", scrolls = 0 },
+  ] },
+  { kind = "if_entry", text = "用户体验计划", ops = [
+    { kind = "off", only = ["推荐", "广告", "个性化", "内容推广"], page = "日历·用户体验计划" },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 3 },
+]

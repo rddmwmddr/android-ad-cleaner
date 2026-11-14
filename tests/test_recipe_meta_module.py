@@ -63,31 +63,28 @@ class ImportPurityTests(unittest.TestCase):
 
 
 class ParseTests(unittest.TestCase):
-    """解析结果仍是系统 build、机型列表、段名三样，与搬运前逐字相同。"""
+    """解析结果仍是系统 build、机型列表、段名三样。"""
 
     def parse(self, src):
         with tempfile.TemporaryDirectory() as d:
-            path = Path(d, "recipe.py")
+            path = Path(d, "recipe.toml")
             path.write_text(src, encoding="utf-8")
             return recipe_meta.recipe_meta(path)
 
     def test_three_declared_fields(self):
         self.assertEqual(self.parse(
-            'BUILD = "PMX110_17.0.0.116(CN01)"\n'
-            'MODELS = ["PMX110", "PMX110T"]\n'
-            '@step("商店")\n'
-            '@step("主题")\n'), {
+            'model = "PMX110"\n'
+            'models = ["PMX110", "PMX110T"]\n'
+            'build = "PMX110_17.0.0.116(CN01)"\n'
+            '[[segment]]\nname = "商店"\nops = []\n'
+            '[[segment]]\nname = "主题"\nops = []\n'), {
             "build": "PMX110_17.0.0.116(CN01)",
             "models": ["PMX110", "PMX110T"],
             "steps": ["商店", "主题"],
         })
 
     def test_missing_declarations_are_empty_not_errors(self):
-        self.assertEqual(self.parse('print("hi")\n'), {"build": "", "models": [], "steps": []})
-
-    def test_only_line_initial_step_decorators_count(self):
-        # 迁移前就是 `^@step`：段包装里的同名调用、缩进的注释行都不算段名
-        self.assertEqual(self.parse('@step("真段")\n    @step("缩进的不算")\n')["steps"], ["真段"])
+        self.assertEqual(self.parse('model = "x"\n'), {"build": "", "models": [], "steps": []})
 
 
 class SingleDefinitionTests(unittest.TestCase):

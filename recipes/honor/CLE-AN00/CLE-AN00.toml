@@ -1,0 +1,77 @@
+# 荣耀 Magic V Flip2（CLE-AN00，MagicOS 10 / Android 16）的页面树（catalog，#1262）。路径 2026-11-07 逐段实测。
+# 线性段是数据；过程化的段（坐标、选择器、dumpsys、条件分支）走 code= 例外函数。
+model = "CLE-AN00"
+models = ["CLE-AN00"]
+build = "CLE-AN00 10.0.0"
+
+[const]
+ENTER_STYLE = "honor"
+MY_TAB_STYLE = "honor"
+
+[[segment]]
+name = "广告跟踪"
+code = "step_ad_tracking"
+
+[[segment]]
+name = "智能推荐服务"
+ops = [
+  {kind = "start", pkg = "com.hihonor.id", activity = ".oaid.ui.IntelligentRecommendActivity", settle = 0.5},
+  {kind = "off", only = ["智能推荐服务"], page = "广告与隐私·智能推荐服务"},
+]
+
+[[segment]]
+name = "YOYO"
+ops = [
+  {kind = "require_setting", kw = "新闻资讯", miss_print = "设置里搜不到「新闻资讯」"},
+  {kind = "off", only = ["新闻资讯"], page = "YOYO 建议"},
+]
+
+[[segment]]
+name = "搜索"
+code = "step_search"
+
+[[segment]]
+name = "负一屏"
+code = "step_negative"
+
+[[segment]]
+name = "市场"
+code = "step_market"
+
+[[segment]]
+name = "浏览器"
+code = "step_browser"
+
+[[segment]]
+name = "主题"
+code = "step_theme"
+
+[[segment]]
+name = "视频"
+ops = [
+  {kind = "start", pkg = "com.hihonor.youku.video", activity = "com.youku.android.youkusetting.activity.SettingsActivity"},
+  {kind = "lib", name = "no_agreement", args = ["视频"]},
+  {kind = "lib", name = "enter", args = ["其他设置"]},
+  {kind = "off", only = ["个性化内容", "个性化广告", "允许视频采集OAID推荐广告"], page = "视频·其他设置"},
+  {kind = "back", n = 2},
+]
+
+[[segment]]
+name = "系统管家"
+ops = [
+  {kind = "start", pkg = "com.hihonor.systemmanager", activity = ".mainscreen.SettingActivity", expect = "应用推荐"},
+  {kind = "off", only = ["应用推荐"], page = "系统管家·设置"},
+  {kind = "back"},
+]
+
+[[segment]]
+name = "音乐"
+code = "step_music"
+
+[[segment]]
+name = "阅读"
+code = "step_reader"
+
+[[segment]]
+name = "魔法画报"
+code = "step_magazine"

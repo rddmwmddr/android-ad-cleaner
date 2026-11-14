@@ -16,7 +16,7 @@ from fixtures import load_recipe, phone_mock
 from recipe_kit import MissingPackage
 from recipe_meta import recipe_meta
 
-RECIPE = ROOT / "recipes/realme-RMX3888/recipe.py"
+RECIPE = ROOT / "recipes/oppo/RMX3888/RMX3888.toml"
 SETTINGS = "com.android.settings"
 MARKET = "com.heytap.market"
 BROWSER = "com.heytap.browser"

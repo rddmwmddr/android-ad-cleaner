@@ -11,7 +11,8 @@
   fast.py -s SERIAL run 机型脚本.py         跑一个品牌机型脚本
 在脚本里：from fast import Phone
 """
-import os, re, sys, time
+import tomllib
+import os, sys, time
 # 显式 re-export：测试与机型脚本用 `fast.ET.fromstring` 解析 dump（模块级名字原地不动）。
 from xml.etree import ElementTree as ET  # noqa: F401 - 显式 re-export：`fast.ET` 是模块级名字
 from stdio import use_utf8_console
@@ -595,14 +596,16 @@ def execute(p, cmd, rest):
         rest = [x for x in rest if x != "--ref"]
         if not p.wait_unlocked():
             print("✗ 手机一直锁屏，本步骤没有执行。请解锁手机、保持亮屏后重试"); sys.exit(2)
-        with open(rest[0], encoding="utf-8") as f:
-            src = f.read()
+        # 数据是 `.toml`（#1268）：记录版本从顶层 `build` 读；`.py` 脚本已不再装载。
+        recorded = ""
+        if str(rest[0]).lower().endswith(".toml"):
+            with open(rest[0], "rb") as f:
+                recorded = str(tomllib.load(f).get("build", ""))
         build = p.d.shell("getprop ro.build.display.id").output.strip()
         osv = p.d.shell("getprop ro.mi.os.version.incremental").output.strip()     # 小米：HyperOS 版本号
-        m = re.search(r'^BUILD\s*=\s*"([^"]+)"', src, re.M)
-        if m and not (build.startswith(m.group(1)) or osv.startswith(m.group(1))):
+        if recorded and not (build.startswith(recorded) or osv.startswith(recorded)):
             p.safe_mode = True
-            print(f"⚠ 机型脚本是按 {m.group(1)} 录的，这台是 {osv or build}：用安全模式跑（只关点名的开关），没找到的段会快速跳过")
+            print(f"⚠ 机型脚本是按 {recorded} 录的，这台是 {osv or build}：用安全模式跑（只关点名的开关），没找到的段会快速跳过")
         t = time.time()
         try:
             recipe = recipe_loader.run(rest[0], p, only=rest[1:])

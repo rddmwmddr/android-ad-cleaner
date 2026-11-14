@@ -12,14 +12,11 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 
-import recipe_nav  # noqa: E402
 import recipe_source  # noqa: E402
-import recipe_steps  # noqa: E402
 
 
 def scan(src):
@@ -175,168 +172,6 @@ class AmStartTest(unittest.TestCase):
                           "am start -a oppo.intent.action.APP_SETTINGS -p com.heytap.themestore"])
 
 
-class InjectedTest(unittest.TestCase):
-    """`g["X"](…)` 与裸名 `X(…)` 归一成同一个调用名，并标出它是执行作用域里的名字。"""
-
-    def test_injected_and_bare_names_share_one_call_name(self):
-        facts = scan('''
-            def _():
-                g["open_app_settings"]("com.heytap.market", ".SettingActivity", "软件商店")
-                tap("设置")
-                p.start("com.android.browser")
-        ''')
-        self.assertEqual([(call.name, call.injected) for call in facts.calls],
-                         [("open_app_settings", True), ("tap", True), ("p.start", False)])
-
-    def test_local_definitions_are_reported(self):
-        facts = scan('''
-            def _():
-                app_settings("com.heytap.market")
-
-            def app_settings(package):
-                p.start(package)
-        ''')
-        self.assertEqual(facts.defines, frozenset({"_", "app_settings"}))
-
-    def test_injection_surface_sources_are_named_by_injected_name(self):
-        sources = {name: source for table in recipe_source.surface_sources().values()
-                   for name, source in table.items()}
-        self.assertIn("open_app_settings", sources)
-        self.assertIn("p.d.shell", [call.name for call in recipe_source.scan_source(
-            sources["open_app_settings"]).calls])
-
-    def test_bindings_fill_parameters_whose_call_sites_live_elsewhere(self):
-        source = recipe_source.surface_sources()[recipe_source.NAV_MODULE]["app_settings"]
-        self.assertEqual(recipe_source.scan_source(source).calls[0].args[0].values, ())
-        filled = recipe_source.scan_source(source, {0: ("com.heytap.market",)})
-        command = texts(filled.calls[0].args[0].values)
-        self.assertEqual(len(command), 1)
-        self.assertTrue(command[0].endswith("-p com.heytap.market"), command[0])
-
-    def test_externals_fill_names_that_live_in_the_calling_script(self):
-        """段体的模块常量住在调用脚本里，实现里只有 `g["HOT"]` 这个名字（#1209）。"""
-        impl = textwrap.dedent('''
-            def _():
-                p.off(only=g["HOT"], page="负一屏·设置")
-        ''')
-        bare = only(recipe_source.scan_source(impl).calls[0], "only")
-        self.assertEqual((bare.values, bare.resolved), ((), False))
-        externals = scan("HOT = ['热点资讯', '热搜榜']").constants
-        filled = only(recipe_source.scan_source(impl, externals=externals).calls[0], "only")
-        self.assertEqual(texts(filled.values), ["热点资讯", "热搜榜"])
-
-    def test_externals_also_fill_a_bare_name(self):
-        """实现里可能直接写名字而不走 `g[...]`：同一份外部值，两种取法都要读得出。"""
-        impl = textwrap.dedent('''
-            def _():
-                p.off(only=HOT, page="负一屏·设置")
-        ''')
-        externals = scan("HOT = ['热点资讯']").constants
-        self.assertEqual(texts(only(recipe_source.scan_source(impl, externals=externals)
-                                    .calls[0], "only").values), ["热点资讯"])
-
-
-class ImportTest(unittest.TestCase):
-    """共享实现的归属跟 import 走（#1243）：脚本从哪里导入就是唯一判据，两张表不按名字合并。"""
-
-    def test_a_script_can_import_two_implementations_from_their_own_modules(self):
-        facts = scan('''
-            def _():
-                gear()
-                downloads()
-
-            if TYPE_CHECKING:
-                from recipe_nav import gear
-                from recipe_steps import downloads
-        ''')
-        surface = recipe_source.surface_sources()
-        self.assertEqual(recipe_source.imported_sources(facts, surface),
-                         {"gear": ("recipe_nav", surface["recipe_nav"]["gear"]),
-                          "downloads": ("recipe_steps", surface["recipe_steps"]["downloads"])})
-        self.assertEqual([call.module for call in recipe_source.injected_calls(facts, "gear", "recipe_nav")],
-                         ["recipe_nav"])
-        self.assertEqual([call.module for call in recipe_source.injected_calls(facts, "downloads", "recipe_steps")],
-                         ["recipe_steps"])
-
-    def test_a_local_definition_wins_over_the_imported_one(self):
-        """脚本本地同名 `def` 覆盖导入版：本地那份先执行、盖住执行作用域里的实现（沿用 #1153 的口径）。"""
-        facts = scan('''
-            def _():
-                gear()
-
-            def gear():
-                return True
-
-            if TYPE_CHECKING:
-                from recipe_nav import gear
-        ''')
-        self.assertEqual(recipe_source.imported_sources(facts, recipe_source.surface_sources()), {})
-        self.assertEqual(recipe_source.injected_calls(facts, "gear", "recipe_nav"), ())
-
-    def test_a_name_in_both_tables_resolves_to_the_imported_one(self):
-        """两张表同名时按 import 说的那张解析：按名字合并会静默用另一张表的实现（#1243 要修的这一条）。"""
-        def nav_factory(p, g):
-            def shared():
-                p.start("com.nav", ".Nav")
-            return shared
-
-        def steps_factory(p, g):
-            def shared():
-                p.off(only=["段体词"], page="下载管理·设置")
-            return shared
-
-        from_nav = scan("from recipe_nav import shared\n\n\ndef _():\n    shared()\n")
-        from_steps = scan("from recipe_steps import shared\n\n\ndef _():\n    shared()\n")
-        with patch.dict(recipe_nav.NAV, {"shared": nav_factory}), \
-                patch.dict(recipe_steps.STEPS, {"shared": steps_factory}):
-            surface = recipe_source.surface_sources()
-        self.assertEqual(sorted(surface), ["recipe_nav", "recipe_steps", "recipe_strategies"])
-        self.assertEqual(recipe_source.imported_sources(from_nav, surface)["shared"][0], "recipe_nav")
-        self.assertIn("com.nav", recipe_source.imported_sources(from_nav, surface)["shared"][1])
-        self.assertEqual(recipe_source.imported_sources(from_steps, surface)["shared"][0], "recipe_steps")
-        self.assertIn("段体词", recipe_source.imported_sources(from_steps, surface)["shared"][1])
-        self.assertEqual(recipe_source.injected_calls(from_nav, "shared", "recipe_steps"), ())
-        self.assertEqual(len(recipe_source.injected_calls(from_steps, "shared", "recipe_steps")), 1)
-
-    def test_a_module_import_and_attribute_call_resolve_like_a_from_import(self):
-        facts = scan('''
-            import recipe_nav
-
-            def _():
-                recipe_nav.gear()
-        ''')
-        self.assertEqual(facts.imports["recipe_nav"], "recipe_nav")
-        self.assertEqual([(call.name, call.module) for call in facts.calls],
-                         [("gear", "recipe_nav")])
-        self.assertEqual(len(recipe_source.injected_calls(facts, "gear", "recipe_nav")), 1)
-        self.assertEqual(recipe_source.imported_sources(facts, recipe_source.surface_sources())["gear"][0],
-                         "recipe_nav")
-
-    def test_an_aliased_import_keeps_the_module_it_came_from(self):
-        facts = scan('''
-            from recipe_steps import downloads as pull
-
-            def _():
-                pull()
-        ''')
-        self.assertEqual(facts.imports["pull"], "recipe_steps")
-        self.assertEqual([call.name for call in recipe_source.injected_calls(facts, "pull", "recipe_steps")],
-                         ["pull"])
-
-    def test_a_bare_name_without_an_import_is_not_an_implementation(self):
-        """没有 import 的裸名字不再算注入实现：它可能是前导注入的名字，也可能是写错了。"""
-        facts = scan("def _():\n    gear()\n")
-        self.assertEqual(recipe_source.injected_calls(facts, "gear", "recipe_nav"), ())
-        self.assertEqual(recipe_source.imported_sources(facts, recipe_source.surface_sources()), {})
-
-    def test_an_import_inside_a_function_does_not_count(self):
-        """函数体里的局部导入只在那一个函数里可见，不是这份源码的声明。"""
-        facts = scan('''
-            def _():
-                from recipe_nav import gear
-                gear()
-        ''')
-        self.assertEqual(recipe_source.imported_sources(facts, recipe_source.surface_sources()), {})
 
 
 class DictEntryTest(unittest.TestCase):
@@ -365,16 +200,16 @@ class DirectoryTest(unittest.TestCase):
 
     def test_scan_dir_reads_recipe_files_only(self):
         with tempfile.TemporaryDirectory() as root:
-            for name in ("xiaomi-M154FF/recipe.py", "xiaomi-M154FF/recipe_os4.py",
-                         "xiaomi-M154FF/notes.txt", "unknown-M1/recipe.py"):
+            for name in ("xiaomi/M154FF/recipe.py", "xiaomi/M154FF/recipe_os4.py",
+                         "xiaomi/M154FF/notes.txt", "unknown/M1/recipe.py"):
                 path = Path(root) / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("def _():\n    pass\n", encoding="utf-8")
             everything = recipe_source.scan_dir(root)
-            self.assertEqual(list(everything), ["unknown-M1/recipe.py",
-                                                "xiaomi-M154FF/recipe.py", "xiaomi-M154FF/recipe_os4.py"])
+            self.assertEqual(list(everything), ["unknown/M1/recipe.py",
+                                                "xiaomi/M154FF/recipe.py", "xiaomi/M154FF/recipe_os4.py"])
             known = recipe_source.scan_dir(root, {"xiaomi": "xiaomi"})
-            self.assertEqual(list(known), ["xiaomi-M154FF/recipe.py", "xiaomi-M154FF/recipe_os4.py"])
+            self.assertEqual(list(known), ["xiaomi/M154FF/recipe.py", "xiaomi/M154FF/recipe_os4.py"])
 
 
 class ErrorTest(unittest.TestCase):

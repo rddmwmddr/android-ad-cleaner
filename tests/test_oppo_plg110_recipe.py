@@ -9,9 +9,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import run
+import fixtures
 from fixtures import load_recipe
 
-RECIPE = ROOT / "recipes/oppo-PLG110/recipe.py"
+RECIPE = ROOT / "recipes/oppo/PLG110/PLG110.toml"
 
 
 def load(phone, only=None):
@@ -32,13 +33,17 @@ class Plg110RecipeTests(unittest.TestCase):
     def setUp(self):
         self.p = Mock()
         self.p.changed = []
+        self.p.locked.return_value = False
         self.scope = load(self.p)
+        self.read_switches = Mock()
+        fixtures.patch_surface(self, "read_switches",
+                               lambda p, rt, *a, **k: self.read_switches(*a, **k))
 
     def states(self, before, after):
-        self.scope["read_switches"] = Mock(side_effect=[before, after])
+        self.read_switches = Mock(side_effect=[before, after])
 
     def close(self, names, **kwargs):
-        return self.scope["close_named"](names, "测试设置", "test/Settings", "测试设置", **kwargs)
+        return self.scope["close_named_expect"](names, "测试设置", "test/Settings", "测试设置", **kwargs)
 
     def test_model_uses_its_own_versioned_recipe(self):
         path, reference = run.recipe_for("PLG110", "OPPO")
@@ -48,7 +53,7 @@ class Plg110RecipeTests(unittest.TestCase):
         self.assertEqual(len(run.recipe_meta(path)["steps"]), 9)
 
     def test_missing_target_prevents_all_switch_changes(self):
-        self.scope["read_switches"] = Mock(return_value={"应用安全": True})
+        self.read_switches = Mock(return_value={"应用安全": True})
         with self.assertRaisesRegex(RuntimeError, "未识别全部目标"):
             self.close(["个性化推荐"])
         self.p.off.assert_not_called()

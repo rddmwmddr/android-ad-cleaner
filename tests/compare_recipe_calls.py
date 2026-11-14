@@ -38,7 +38,7 @@ import json
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -47,6 +47,7 @@ TESTS = Path(__file__).resolve().parent
 ROOT = TESTS.parent
 sys.path.insert(0, str(TESTS))
 sys.path.insert(0, str(ROOT / "tool"))
+sys.path.insert(0, str(ROOT))  # recipe_lib 在仓库根
 import fixtures  # noqa: E402
 from stdio import use_utf8_console  # noqa: E402  出口取当前副本的，不对拍基线那一份
 
@@ -185,8 +186,13 @@ def fake_until(clock):
     bound = functools.partial(wait.until, now=clock.time, sleep=clock.sleep)
     # 直接 `from wait import until` 的模块持有另一份绑定：只换 `wait.until` 换不到它，
     # 那些调用仍用定义时绑死的真时钟，采样轮数随机器快慢变（Windows CI 因此多出两轮）。
-    import recipe_nav
-    with patch.object(wait, "until", bound), patch.object(recipe_nav, "until", bound):
+    # #1269 拆库后这些绑定在 `recipe_lib` 各模块里，逐一替换。
+    import recipe_lib
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(wait, "until", bound))
+        for module in recipe_lib.MODULES:
+            if hasattr(module, "until"):
+                stack.enter_context(patch.object(module, "until", bound))
         yield
 
 
@@ -201,10 +207,18 @@ def run_script(fast, recipe_kit, fixtures, path, scenario):
 
 
 def scripts(root=ROOT):
-    """当前树里的机型脚本，按相对路径排序：`recipes/<目录名>/<脚本名>.py`。"""
+    """当前树里的机型脚本，按相对路径排序：`recipe*.py` 加 catalog 的 `<型号>.toml`。
+
+    一个型号目录要么是 `.py`（迁移期仍是活的）、要么是 `<型号>.toml`（已转页面树）；同目录两者都在时
+    `.py` 优先（迁移期的等价副本，如 V1986A），不让一份机型记两遍（#1262）。"""
     root = Path(root).resolve()
-    return [path.relative_to(root).as_posix()
-            for path in sorted((root / "recipes").rglob("recipe*.py"))]
+    found = [path.relative_to(root).as_posix()
+             for path in sorted((root / "recipes").rglob("recipe*.py"))]
+    for toml in sorted((root / "recipes").glob("*/*/*.toml")):
+        if any(toml.parent.glob("recipe*.py")):
+            continue
+        found.append(toml.relative_to(root).as_posix())
+    return sorted(found)
 
 
 def dump(root):
@@ -233,9 +247,9 @@ def collect(root):
 
 
 def snapshot_name(script):
-    """`recipes/<目录名>/<脚本名>.py` → `<目录名>__<脚本名>.json`。"""
-    folder, name = Path(script).parts[-2:]
-    return f"{folder}__{Path(name).stem}.json"
+    """`recipes/<家族>/<型号>/<脚本名>.py` → `<家族>__<型号>__<脚本名>.json`。"""
+    family, model, name = Path(script).parts[-3:]
+    return f"{family}__{model}__{Path(name).stem}.json"
 
 
 def snapshot_text(script, scenarios):

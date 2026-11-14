@@ -1,0 +1,50 @@
+# 小米 HyperOS 2 平板机型脚本：Xiaomi Pad 7（2410CRP4CC）；路径来源：2026-10-28 实机录制（OS2.0.208.0.VOZCNXM / Android 15，3200×2136 横屏）。
+# 平板设置是左右分栏，左侧菜单要单独滚动；脚本改用直达 Activity，避免滚错栏位。
+# 本版本已实测没有可关项的入口：手机管家、下载管理、主题、全局搜索、天气。
+# 日历首次启动要求本人同意隐私协议，脚本不代为同意，因此未纳入。
+# 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
+# 2026-11-14 转页面树（#1266）：系统广告与浏览器两段落成导航数据；应用商店的「个性化服务」按运行时读到的
+# 开关位置分岔（子页 / 本页），留在同名 `.py` 的 `code =`。
+model = "2410CRP4CC"
+models = ["2410CRP4CC"]
+build = "OS2.0.208"
+
+[[segment]]
+name = "系统广告"
+ops = [
+  # 平板设置首页是左右分栏，左侧菜单需要单独滚动；直达广告服务页最稳
+  { kind = "start", pkg = "com.android.settings", activity = ".ad.AdServiceSettings" },
+  { kind = "off", only = ["个性化广告推荐"], page = "系统·广告服务" },
+]
+
+[[segment]]
+name = "应用商店"
+code = "step_store"
+
+[[segment]]
+name = "浏览器"
+ops = [
+  # 个性化推荐设置是独立 Activity，平板和手机都在这个页面
+  { kind = "start", pkg = "com.android.browser", activity = ".preferences.activity.CustomizationPreferenceActivity" },
+  { kind = "off", only = ["个性化内容推荐", "个性化广告推荐"], page = "浏览器·个性化推荐" },
+  { kind = "back", n = 2 },
+  { kind = "start", pkg = "com.android.browser", activity = ".BrowserSettingsActivity" },
+  { kind = "if_entry", text = "主页设置", ops = [
+    { kind = "off", only = ["宫格位推送"], page = "浏览器·主页设置" },
+    { kind = "back" },
+  ] },
+  # 平板版没有「猜你想搜」「小说」，保留这两段兼容以后版本
+  { kind = "if_entry", text = "搜索设置", ops = [
+    { kind = "off", only = ["猜你想搜"], page = "浏览器·搜索设置" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "功能设置", ops = [
+    { kind = "off", only = ["小说"], page = "浏览器·功能设置" },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "负一屏"
+ops = [{ kind = "lib", name = "negative_screen" }]

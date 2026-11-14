@@ -1,0 +1,65 @@
+# 一加 15T（PLZ110），2026-11-08 真机核对；系统 PLZ110_17.0.0.107(CN01) / Android 17，仅记录本机走通的路径。
+# 浏览器原已停用，跳过且不启用；系统广告跟踪未验证，不纳入。通知渠道、广告组件及快应用仍由 run.py 独立确认。
+# 2026-11-10 负一屏入口改从内侧右滑、已在负一屏不再滑走、认不到入口时留页面现场（#901），未复测。
+# 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，按落在商店隐私页判，未复测（#907）。
+model = "PLZ110"
+models = ["PLZ110"]
+build = "PLZ110_17.0.0.107(CN01)"
+tail = "tail"
+
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+[const]
+# 共享段体的 close_named 走「允许缺项」那一档（这两台的旧别名，见 #1268）。
+CLOSE_NAMED_OPTIONAL = true
+READ_SWITCHES_STYLE = "title"
+HIDE_CAROUSEL_STYLE = "labels"
+
+[[segment]]
+name = "软件商店"
+ops = [
+  { kind = "lib", name = "app_settings", args = ["com.heytap.market"] },
+  # 本版商店叫「隐私授权管理」，同族另有叫「隐私」的（#907）。tries 保住「点击被弹窗动画吞掉就再点」。
+  { kind = "lib", name = "row", args = [["隐私", "隐私授权管理"]], kwargs = { package = "com.heytap.market", activity = "PrivacyActivity", tries = 3 } },
+  { kind = "lib", name = "row", args = ["个性化推荐"], kwargs = { package = "com.heytap.market", activity = "PersonalRecommendActivity" } },
+  { kind = "lib", name = "close_named_optional", args = [["个性化推荐"], "个性化推荐"] },
+  { kind = "lib", name = "app_settings", args = ["com.heytap.market"] },
+  { kind = "lib", name = "row", args = ["服务管理"] },
+  # 服务管理按页上实有的行筛候选推广位再整表关；一个都没识别到就按失败收尾。
+  { kind = "close_listed", names = ["首页：悬浮活动图标", "首页：活动弹窗", "首页：顶部轮播卡片", "底部活动专区", "应用安全安全内容推荐", "游戏专区：重磅更新卡片", "游戏详情页：游戏活动卡片", "通过游戏助手打开领取游戏福利", "软件专区：福利", "软件专区：购物", "软件专区：快应用", "我的专区：签到按钮", "我的专区：账号会员徽章", "我的专区：应用时刻", "我的专区：积分商城", "我的专区：休闲一刻", "我的专区：安装有礼", "我的专区：福利中心", "我的专区：游戏VIP", "我的专区：金豆乐园", "更新&下载专区：底部弹窗推荐", "活动式详情页", "详情页：活动", "游戏详情页：游戏礼包", "手机管家：应用推荐", "文件管理：应用推荐", "游戏专区：活动集合", "详情页：限时活动", "小游戏二楼和专区", "福利专区"], page = "服务管理", miss_print = "服务管理未识别到已录制推广位" },
+]
+
+[[segment]]
+name = "下拉搜索"
+ops = [
+  { kind = "lib", name = "search_settings_direct" },
+]
+
+[[segment]]
+name = "负一屏"
+ops = [
+  { kind = "lib", name = "assistant_screen" },
+]
+
+[[segment]]
+name = "主题"
+ops = [
+  { kind = "lib", name = "theme_store_settings" },
+]
+
+[[segment]]
+name = "视频"
+ops = [
+  { kind = "lib", name = "video_direct" },
+]
+
+[[segment]]
+name = "游戏中心"
+ops = [
+  { kind = "lib", name = "game_center_direct" },
+]
+
+[[segment]]
+name = "小布建议"
+ops = [
+  { kind = "lib", name = "assistant_advice_rows" },
+]

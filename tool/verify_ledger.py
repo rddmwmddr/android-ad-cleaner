@@ -26,6 +26,7 @@
 """
 import ast
 import hashlib
+import json
 import os
 import sys
 import tomllib
@@ -125,12 +126,18 @@ def _step_name(node):
 
 
 def step_bodies(path):
-    """脚本里每个 `@step` 段的 (段名, 归一后段体)，按段名排序。
+    """脚本里每个段的 (段名, 归一后段体)，按段名排序。
 
     段体取函数正文并去掉 docstring，再按 AST 结构序列化：注释与折行不在 AST 里，装饰器也不进
     段体，所以改注释 / 折行 / 装饰器、挪函数位置、改函数名都不改这段文本。段名参与拼接，所以重命名
     段会算改（段名出现在用户日志里）。按段名排序，段的先后不影响结果。
-    """
+    catalog 数据（`.toml`）没有 `@step`：段体取每个 `[[segment]]` 归一后的数据（键排序的 JSON），
+    段名取 `name`，判据仍是「段名 + 段体内容变没变」。"""
+    if str(path).endswith(".toml"):
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+        return sorted((segment.get("name", ""), json.dumps(segment, ensure_ascii=False, sort_keys=True))
+                      for segment in data.get("segment", []))
     with open(path, encoding="utf-8") as f:
         tree = ast.parse(f.read(), filename=str(path))
     out = []

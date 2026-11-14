@@ -53,7 +53,7 @@ class CoverageTests(unittest.TestCase):
 
     def test_the_calls_carry_the_segment_they_came_from(self):
         """段名来自前导的 `step`：那一层换掉时归属会全部掉到空串，这条用例先红。"""
-        calls = current()["recipes/xiaomi-24090RA29C/recipe.py"]["present"]
+        calls = current()["recipes/xiaomi/24090RA29C/24090RA29C.toml"]["present"]
         segments = [call[0] for call in calls]
         self.assertIn("系统广告", segments)
         self.assertEqual(segments.count(""), 0, "每条调用都该落在某个段里")

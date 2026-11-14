@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 from fixtures import load_recipe, phone_mock
 
-RECIPE = ROOT / "recipes/oppo-PLP120/recipe.py"
+RECIPE = ROOT / "recipes/oppo/PLP120/PLP120.toml"
 SEARCH_PACKAGE = "com.heytap.quicksearchbox"
 SETTINGS_FOCUS = f"{SEARCH_PACKAGE}/{SEARCH_PACKAGE}.ui.activity.SearchSettingActivity"
 HOME_FOCUS = f"{SEARCH_PACKAGE}/{SEARCH_PACKAGE}.ui.activity.SearchHomeActivity"

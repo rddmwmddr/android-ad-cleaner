@@ -19,7 +19,7 @@ import fixtures
 from fast import plan_switches
 from fixtures import fake_phone, load_recipe, phone_mock
 
-RECIPE = ROOT / "recipes/vivo-V2547DA/recipe_android17.py"
+RECIPE = ROOT / "recipes/vivo/V2547DA/V2547DA-android17.toml"
 
 
 def personal_recommend_page(w, h):

@@ -1,0 +1,128 @@
+# 小米 HyperOS / Android 16 机型脚本：Xiaomi MIX Flip 2（2505APX7BC）；路径来源：2026-11-05 社区实测，HyperOS / Android 16，底包 BP2A.250605.031.A3，全程合盖用外屏（1224×2912）。
+# 同底包的 xiaomi-24129PN74C 在这台上跑通了六个段（系统广告、应用商店、手机管家、下载管理、
+# 全局搜索、负一屏），主题 / 浏览器 / 天气 / 日历的入口不同，本脚本按这台实测重写：
+#  · 主题：「设置」在「我的」页是文字按钮，不是图标；入口是 ThemePreferenceActivity。
+#  · 浏览器：底栏是 主页/视频/AI搜索/免费小说/我的，没有「菜单」；设置入口在「我的」页。
+#  · 天气：「更多设置」弹出 PopupWindow（前台读成 PopupWindow:<id>，不能按包名判断），
+#    菜单里点「设置」进 ActivitySet。这一版没有「用户体验计划」页。
+#  · 日历：设置是无文字图标，直达 CalendarActionbarSettingsActivity。
+# 这台机的底栏标签在第 5 个位置（y≈94% 屏高），用 p.tab() 点；p.tap() 会先命中内容区同名文字。
+# 本仓库没有这台机器，未在真机上复跑。
+#
+# BUILD 置空：只录到 Android 16 的底包，没记到 ROM 版本号。底包跨机型共享、不能进 BUILD（#942）；
+# 没标录制版本的脚本不参与同版本挑选，选脚本只按型号，不受此影响。
+#
+# 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
+# 2026-11-14 转页面树（#1267）：应用商店的「个性化服务」按运行时读到的开关位置分岔、天气的
+# PopupWindow 菜单按坐标点，两段留在同名 `.py` 的 `code =`；其余段落成导航数据。
+model = "2505APX7BC"
+models = ["2505APX7BC"]
+build = ""
+
+# 这台机的齿轮点完要认出设置页（点开的是弹窗或别的页就退回来，沿用 #331 / #407）；
+# 浏览器底栏没有「菜单」，设置入口在「我的」页里。
+[const]
+GEAR_STYLE = "checked"
+BROWSER_FLOW = "mine"
+
+[[segment]]
+name = "系统广告"
+ops = [
+  # 同底包的 24129PN74C 走设置搜索「广告服务」，这台实测可用；搜不到时用深链兜底。
+  { kind = "if_setting", kw = "广告服务", else_ops = [
+    { kind = "shell", command = "am start -f 0x10008000 -n com.android.settings/.ad.AdServiceSettings" },
+    { kind = "sleep", seconds = 1.5 },
+  ] },
+  # 两条路都收敛到同一个判据：页面上要有这个开关，否则本段 0 项却算成功
+  { kind = "require_expect", calls = [{ args = ["个性化广告推荐"], kwargs = { timeout = 3 } }], miss_print = "广告服务页没有打开", at_focus = true },
+  { kind = "off", only = ["个性化广告推荐"], page = "系统·广告服务" },
+  { kind = "back" },
+]
+
+[[segment]]
+name = "应用商店"
+code = "step_store"
+
+[[segment]]
+name = "手机管家"
+ops = [{ kind = "lib", name = "security_center" }]
+
+[[segment]]
+name = "下载管理"
+ops = [{ kind = "lib", name = "downloads_tap" }]
+
+[[segment]]
+name = "主题"
+ops = [
+  # 直达主题管理包的代理页（沿用 #730 的做法：它没有 LAUNCHER，monkey 拉不起来）；经主题商店冷启动
+  # 还要过一道重定向过渡窗，前台校验容易误判（#906）。落点被系统转走时仍按跳过收尾。
+  { kind = "skip_unless_installed", command = "pm path com.android.thememanager", contains = "package:", text = "  · 本机没有主题管理包，跳过" },
+  { kind = "start_or_skip", pkg = "com.android.thememanager", activity = ".ThemeResourceProxyTabActivity", dead_ends = ["com.xiaomi.market", "com.miui.home"], reason = "主题页打不开" },
+  { kind = "sleep", seconds = 2 },
+  { kind = "require_tab", name = "我的", miss_print = "主题底部「我的」标签没找到；", evidence = true },
+  { kind = "sleep", seconds = 1 },
+  # 「设置」在这台是「我的」页上的文字按钮（精确匹配不会命中「设置壁纸」），图标形态也认
+  { kind = "require_tap", text = "设置", exact = true, scrolls = 0, miss_print = "主题「我的」页没有「设置」；", evidence = true },
+  # 落点判据用页面上的项：比只看 Activity 名更严，这一页没画出这些项就不算进去
+  { kind = "require_expect", calls = [{ args = ["每次联网时通知"], kwargs = { timeout = 3 } }, { args = ["自动更新"], kwargs = { timeout = 1 } }], miss_print = "主题设置页没有打开；", evidence = true },
+  { kind = "await_page" },
+  { kind = "off_required", only = ["每次联网时通知"], keep = ["自动更新"], page = "主题·设置", contains = true },
+  { kind = "if_entry", text = "隐私设置", ops = [
+    { kind = "off", only = ["个性化推荐"], page = "主题·隐私" },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "浏览器"
+ops = [
+  # 底栏没有「菜单」：入口是底部「我的」→ 设置（BrowserSettingsActivity）。首页布局按机主喜好，不改。
+  { kind = "start", pkg = "com.android.browser" },
+  { kind = "if_focus", text = "basicmode", match = "icontains", ops = [
+    # 拒绝浏览器协议后落到基本模式设置页，设置入口都不在这条路径上，找下去只会空转报错（#414、#460）
+    { kind = "print", text = "  · 浏览器处在基本模式，设置入口不在这条路径上，本段跳过" },
+    { kind = "return" },
+  ] },
+  { kind = "sleep", seconds = 2 },
+  { kind = "require_lib", name = "browser_settings", miss_print = "浏览器设置入口没找到", fail = true, at_focus = true },
+  # 票面路径是两层：「隐私」→「隐私和安全」；有版本把这一页平铺在设置页首层。
+  { kind = "if_entry", text = "隐私", scrolls = 12, ops = [
+    { kind = "if_entry", text = "隐私和安全", ops = [
+      { kind = "off", only = ["个性化内容推荐", "个性化广告推荐"], page = "浏览器·隐私和安全" },
+      { kind = "back" },
+    ] },
+    { kind = "back" },
+  ], else_ops = [
+    { kind = "if_entry", text = "隐私和安全", scrolls = 2, ops = [
+      { kind = "off", only = ["个性化内容推荐", "个性化广告推荐"], page = "浏览器·隐私和安全" },
+      { kind = "back" },
+    ] },
+  ] },
+  { kind = "if_entry", text = "主页设置", ops = [
+    { kind = "off", only = ["宫格位推送"], page = "浏览器·主页设置" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "搜索设置", ops = [
+    # 扫一扫、AI搜索、搜索历史、搜索引擎切换栏是搜索功能项，保留
+    { kind = "off", only = ["显示猜你想搜模块"], keep = ["扫一扫", "AI搜索", "搜索历史", "搜索引擎切换栏"], page = "浏览器·搜索设置" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "功能设置", ops = [
+    { kind = "off", only = ["小说"], keep = ["我的网盘"], page = "浏览器·功能设置" },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "全局搜索"
+ops = [{ kind = "lib", name = "global_search" }]
+
+[[segment]]
+name = "负一屏"
+ops = [{ kind = "lib", name = "negative_screen" }]
+
+[[segment]]
+name = "天气和日历"
+code = "step_weather_calendar"

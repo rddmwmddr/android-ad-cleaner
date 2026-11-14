@@ -1,0 +1,66 @@
+# Redmi K80 Pro（24122RKC7C，代号 miro），HyperOS OS3.0.304.0.WOMCNXM / Android 16 / Build BP2A.250605.031.A3。2026-10-29 真机实测：USB 有线，1080×2400、密度 450、ROTATION_0。
+# 入口来源：先按同品牌 Redmi K70 脚本（OS3.0.307.0）安全模式跑通 9 段、关 20 项，
+#   再按本机入口补两处差异，专用脚本复跑 9 段（0 调整、0 步骤异常）。
+# 与 K70 的两处差异：
+#   ① 主题商店冷启动（com.miui.themestore）会跳到 com.android.thememanager，引擎的前台校验会停段；
+#      直达 com.android.thememanager/.ThemeResourceProxyTabActivity 最稳。
+#   ② 浏览器「设置」是顶部右侧的齿轮 ImageView（文字就是「设置」），冷启动偶发被过渡窗拦一次；
+#      这里先 force-stop 再直达 BrowserActivity，重试一次，齿轮点不动时用 input tap 兜底。
+# 浏览器「小说」「最新资讯」按 K70 的结论不动：小说是功能入口不是广告开关，最新资讯在本机是 disabled。
+# 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
+# 2026-11-14 转页面树（#1266）：主题段落成导航数据；浏览器段带冷启动重试、齿轮兜底与前台复合断言，
+# 留在同名 `.py` 的 `code =`。
+model = "24122RKC7C"
+models = ["24122RKC7C"]
+build = "OS3.0.304.0"
+tail = "tail"
+
+[[segment]]
+name = "系统广告"
+ops = [{ kind = "lib", name = "system_ads_security" }]
+
+[[segment]]
+name = "应用商店"
+ops = [{ kind = "lib", name = "store" }]
+
+[[segment]]
+name = "手机管家"
+ops = [{ kind = "lib", name = "security_center" }]
+
+[[segment]]
+name = "下载管理"
+ops = [{ kind = "lib", name = "downloads" }]
+
+[[segment]]
+name = "主题"
+ops = [
+  # 主题商店冷启动会跳到 thememanager，引擎的前台校验会停段；直达代理标签页最稳。
+  { kind = "skip_unless_installed", command = "pm path com.android.thememanager", contains = "package:", text = "  · 本机没有主题管理包，跳过" },
+  { kind = "start_or_skip", pkg = "com.android.thememanager", activity = ".ThemeResourceProxyTabActivity", dead_ends = ["com.xiaomi.market", "com.miui.home"], reason = "主题页打不开" },
+  # 导航失败不能与「本页没有目标开关」同形：三步都校验，报错带页面现场（#906）。
+  { kind = "require_tap", text = "我的", exact = true, scrolls = 0, miss_print = "未找到主题「我的」；", evidence = true },
+  { kind = "require_lib", name = "gear", miss_print = "主题设置入口没找到；", fail = true, evidence = true },
+  { kind = "await_page" },
+  { kind = "off_required", only = ["每次联网时通知"], keep = ["自动更新"], page = "主题·设置", contains = true },
+  { kind = "if_entry", text = "隐私设置", ops = [
+    { kind = "off", only = ["个性化推荐"], page = "主题·隐私" },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "浏览器"
+code = "step_browser"
+
+[[segment]]
+name = "全局搜索"
+ops = [{ kind = "lib", name = "global_search" }]
+
+[[segment]]
+name = "负一屏"
+ops = [{ kind = "lib", name = "negative_screen" }]
+
+[[segment]]
+name = "天气和日历"
+ops = [{ kind = "lib", name = "weather_calendar_tap" }]

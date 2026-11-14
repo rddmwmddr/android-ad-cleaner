@@ -1,0 +1,113 @@
+# 小米 HyperOS 4 机型脚本：REDMI K90 Pro Max（25102RKBEC / myron）；路径来源：2026-10-27 实机实测（OS4.0.2.0.XPMCNXM / Android 17）。
+#
+# 与 xiaomi-M154FF 的关键差异（照 M154FF 跑会跳过「系统广告」这一步）：
+#   1. 设置首页要往下滑一段才看得到「隐私与安全」；
+#   2. 点「隐私与安全」打开的是安全中心的 PrivacySafetyActivity，不是系统设置的子页。
+#      它只有「隐私 / 安全」两个分栏，默认停在「隐私」——那页全是权限记录，没有安全设置；
+#   3. 切到「安全」分栏后内容很长，「更多安全设置」在整页最末尾，要滚到底。
+#   4. 「主题」这段要求先挂起 com.miui.systemAdSolution：这台打开主题商店的瞬间，
+#      广告组件会弹出开屏窗抢走焦点，脚本按约定判定「离开前台」整段跳过。
+#      挂起命令（可还原）：python3 tool/run.py -s 序列号 suspend com.miui.systemAdSolution
+#
+# 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
+# 2026-11-14 转页面树（#1267）：系统广告的分栏判定与手机管家的逐屏下翻留在同名 `.py` 的 `code =`；
+# 其余段落成导航数据。
+model = "25102RKBEC"
+models = ["25102RKBEC"]
+build = "OS4.0"
+
+# 浏览器设置入口：先看工具栏齿轮，再点底部「我的」找齿轮。
+[const]
+BROWSER_FLOW = "toolbar"
+
+[[segment]]
+name = "系统广告"
+code = "step_system_ads"
+
+[[segment]]
+name = "应用商店"
+ops = [{ kind = "lib", name = "store_mode" }]
+
+[[segment]]
+name = "手机管家"
+code = "step_security_center"
+
+[[segment]]
+name = "下载管理"
+ops = [{ kind = "lib", name = "downloads" }]
+
+[[segment]]
+name = "主题"
+ops = [{ kind = "lib", name = "theme" }]
+
+[[segment]]
+name = "浏览器"
+ops = [
+  # 首页「默认 / 探索版 / 自定义主页」不改：自定义主页要填网址，按机主喜好
+  # 紧跟「主题」段连跑时会失败：退出主题商店的那一下会跟浏览器的冷启动抢焦点，
+  # 脚本判定「离开前台」整段停（单独跑这段从来不出问题）。先回桌面、等稳了再拉。
+  { kind = "shell", command = "input keyevent KEYCODE_HOME" },
+  { kind = "sleep", seconds = 2 },
+  { kind = "start", pkg = "com.android.browser" },
+  { kind = "if_focus", text = "basicmode", match = "icontains", ops = [
+    # 拒绝浏览器协议后落到基本模式设置页，设置入口都不在这条路径上，找下去只会空转报错（#414、#460）
+    { kind = "print", text = "  · 浏览器处在基本模式，设置入口不在这条路径上，本段跳过" },
+    { kind = "return" },
+  ] },
+  { kind = "require_lib", name = "browser_settings", miss_print = "浏览器设置入口未找到；未点击正文中的文字", fail = true },
+  { kind = "if_entry", text = "隐私和安全", ops = [
+    { kind = "off", only = ["个性化内容推荐", "个性化广告推荐"], page = "浏览器·隐私和安全" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "主页设置", ops = [
+    { kind = "off", only = ["宫格位推送"], page = "浏览器·主页设置" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "搜索设置", ops = [
+    { kind = "off", only = ["猜你想搜"], page = "浏览器·搜索设置" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "功能设置", ops = [
+    # 新版浏览器这三项都没有，有就关
+    { kind = "off", only = ["小说"], page = "浏览器·功能设置" },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "全局搜索"
+ops = [{ kind = "lib", name = "global_search" }]
+
+[[segment]]
+name = "负一屏"
+ops = [{ kind = "lib", name = "negative_screen" }]
+
+[[segment]]
+name = "天气和日历"
+ops = [
+  # 两个 App 同一套走法，按包名各展开一份：天气多了「城市管理」，页面标签带包名前缀。
+  { kind = "start", pkg = "com.miui.weather2" },
+  { kind = "if_find", text = "城市管理", exact = true, edge_ok = "tab", ops = [
+    { kind = "tap", text = "城市管理", exact = true, scrolls = 0 },
+  ] },
+  { kind = "if_lib", name = "gear", ops = [
+    { kind = "if_entry", text = "用户体验计划", ops = [
+      { kind = "off", only = ["推荐", "广告", "个性化", "内容推广", "天气视频卡片"], page = "com.miui.weather2·用户体验计划" },
+      { kind = "back" },
+    ] },
+    { kind = "back", n = 3 },
+  ], else_ops = [
+    { kind = "print", text = "  · 本版本没有可识别的设置菜单，跳过" },
+  ] },
+  { kind = "start", pkg = "com.android.calendar" },
+  { kind = "if_lib", name = "gear", ops = [
+    { kind = "if_entry", text = "用户体验计划", ops = [
+      { kind = "off", only = ["推荐", "广告", "个性化", "内容推广", "天气视频卡片"], page = "com.android.calendar·用户体验计划" },
+      { kind = "back" },
+    ] },
+    { kind = "back", n = 3 },
+  ], else_ops = [
+    { kind = "print", text = "  · 本版本没有可识别的设置菜单，跳过" },
+  ] },
+]

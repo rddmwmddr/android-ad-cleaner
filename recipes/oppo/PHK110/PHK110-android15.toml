@@ -1,0 +1,69 @@
+# 一加 Ace 2（PHK110），Android 15 的页面树（catalog，#1264）。2026-10-29 手动路径实测，
+# 自动脚本尚未在真机整段验证。不修改通知、挂起包、快应用、系统广告跟踪或服务类开关。
+# 2026-11-10 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，未复测（#933）。
+model = "PHK110"
+models = ["PHK110"]
+build = "PHK110_15.0.0.601(CN01)"
+guard = "guard"
+tail = "tail"
+
+# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py：设置页走公开 Intent，
+# 下拉搜索走 scheme + 落点断言。
+[const]
+OPEN_SETTINGS_STYLE = "intent"
+SEARCH_SETTINGS_STYLE = "page"
+
+[[segment]]
+name = "搜索卡片"
+ops = [
+  { kind = "if_lib", name = "search_settings", else_ops = [{ kind = "return", value = false }] },
+  { kind = "if_lib", name = "navigate", args = ["首页卡片管理", "SearchModuleManagerActivity", "首页卡片管理"], else_ops = [{ kind = "return", value = false }] },
+  { kind = "return_lib", name = "off_exact_paged", args = [["未下载应用推荐", "应用建议小卡", "热搜应用", "精选推荐", "热搜榜单", "活动皮肤", "推荐卡片"], "SearchModuleManagerActivity", "首页卡片管理"] },
+]
+
+[[segment]]
+name = "搜索提示词"
+ops = [
+  { kind = "if_lib", name = "search_settings", else_ops = [{ kind = "return", value = false }] },
+  { kind = "if_lib", name = "navigate", args = ["功能管理", "SearchFunctionManagerActivity", "功能管理"], else_ops = [{ kind = "return", value = false }] },
+  { kind = "return_lib", name = "off_exact_paged", args = [["搜索框提示词"], "SearchFunctionManagerActivity", "功能管理"] },
+]
+
+[[segment]]
+name = "搜索个性化"
+ops = [
+  { kind = "if_lib", name = "search_settings", else_ops = [{ kind = "return", value = false }] },
+  { kind = "if_lib", name = "navigate", args = ["隐私", "PrivacySettingsActivity", "隐私"], else_ops = [{ kind = "return", value = false }] },
+  { kind = "return_lib", name = "off_exact_paged", args = [["个性化推荐"], "PrivacySettingsActivity", "隐私"] },
+]
+
+[[segment]]
+name = "软件商店个性化"
+ops = [
+  { kind = "if_lib", name = "open_settings", args = ["com.heytap.market", "SettingActivity", "软件商店"], else_ops = [{ kind = "return", value = false }] },
+  { kind = "if_lib", name = "navigate", args = [["隐私", "隐私授权管理"], "PrivacyActivity", ["隐私", "隐私授权管理"]], else_ops = [{ kind = "return", value = false }] },
+  { kind = "if_lib", name = "navigate", args = ["个性化推荐", "PersonalRecommendActivity", "个性化推荐"], else_ops = [{ kind = "return", value = false }] },
+  { kind = "return_lib", name = "off_exact_paged", args = [["个性化推荐"], "PersonalRecommendActivity", "个性化推荐"] },
+]
+
+[[segment]]
+name = "浏览器广告"
+ops = [
+  { kind = "if_lib", name = "browser", else_ops = [{ kind = "return", value = false }] },
+  { kind = "if_lib", name = "navigate", args = ["隐私", "BrowserPreferenceActivity", "隐私"], else_ops = [{ kind = "return", value = false }] },
+  { kind = "if_lib", name = "navigate", args = ["广告管理", "BrowserPreferenceActivity", "广告管理"], else_ops = [{ kind = "return", value = false }] },
+  { kind = "return_lib", name = "off_exact_paged", args = [["开屏广告", "资讯列表广告"], "BrowserPreferenceActivity", "广告管理"] },
+]
+
+[[segment]]
+name = "浏览器个性化"
+ops = [
+  { kind = "if_lib", name = "browser", else_ops = [{ kind = "return", value = false }] },
+  { kind = "if_lib", name = "navigate", args = ["隐私", "BrowserPreferenceActivity", "隐私"], else_ops = [{ kind = "return", value = false }] },
+  { kind = "if_lib", name = "navigate", args = ["个性化管理", "BrowserPreferenceActivity", "个性化管理"], else_ops = [{ kind = "return", value = false }] },
+  { kind = "return_lib", name = "off_exact_paged", args = [["个性化搜索推荐", "个性化优惠推荐", "个性化广告推荐"], "BrowserPreferenceActivity", "个性化管理"] },
+]
+
+[[segment]]
+name = "浏览器首页"
+code = "step_browser_home"

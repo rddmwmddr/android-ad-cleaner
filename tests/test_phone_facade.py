@@ -99,9 +99,18 @@ def assign(phone, name):
 
 
 def recipe_trees():
-    """`recipes/` 下每份脚本的 (相对路径, 语法树)。"""
+    """`recipes/` 下每份脚本的 (相对路径, 语法树)。catalog 的 `.toml` 先降成等价源码再解析（#1263）。"""
     for path in sorted(RECIPES.rglob("*.py")):
         yield str(path.relative_to(ROOT)), ast.parse(path.read_text(encoding="utf-8"))
+    import tomllib
+    import recipe_source
+    for path in sorted(RECIPES.rglob("*.toml")):
+        try:
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        src = recipe_source._catalog_src(data)
+        yield str(path.relative_to(ROOT)), ast.parse(src)
 
 
 def recipe_accesses():

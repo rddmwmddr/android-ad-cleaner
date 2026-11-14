@@ -5,77 +5,40 @@
 本地同名 `def` 不许再留与注入版逐字相同的副本。走法分派用假手机断言「选了哪一份」与
 「认不出的值当场报错」——静默回退会点错入口，比报错更难查。
 """
-import ast
-import inspect
 import sys
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-import fixtures  # noqa: E402
-import recipe_kit  # noqa: E402
-import recipe_nav  # noqa: E402
-import recipe_strategies  # noqa: E402
-from fixtures import normalize, phone_mock  # noqa: E402
-
-RECIPES = tuple(sorted((ROOT / "recipes").rglob("recipe*.py")))
+from fixtures import phone_mock  # noqa: E402
 
 GEAR_NODE = ('<hierarchy rotation="0"><node class="android.widget.ImageView" text="设置"'
              ' clickable="true" bounds="[900,100][1020,220]"/></hierarchy>')
 
 
 def scope(**constants):
-    """一次装载的执行作用域：`preamble()` 注入的两个协作者与三张注入面，外加脚本常量。"""
+    """一次执行的视图：假手机 + `rt`（带脚本常量）+ 按执行绑好的库函数。"""
+    import functools
+    from types import MappingProxyType
+    import catalog.interpreter as interpreter
+    import recipe_runtime
     phone = phone_mock(W=1080, H=2400)
     phone.d = Mock()
     phone.tree.return_value = ET.fromstring('<hierarchy rotation="0"></hierarchy>')
     phone.on_screen.return_value = True
-    g = {"time": fixtures.RecipeClock()}
-    recipe_kit.preamble(phone, g)
-    g.update(constants)
+    rt = recipe_runtime.Runtime(phone)
+    rt.constants = MappingProxyType(dict(constants))
+    g = {"time": rt.clock, "rt": rt, "p": phone}
+    for name, fn in interpreter.LIBRARY.items():
+        g[name] = functools.partial(fn, phone, rt)
     return phone, g
 
 
-def injected_sources():
-    """注入面此刻写进执行作用域的 {名字: 归一后的源码}（两个模块都算）。"""
-    _phone, g = scope()
-    return {name: normalize(inspect.getsource(g[name]))
-            for name in (*recipe_strategies.STRATEGIES, *recipe_nav.NAV)}
-
-
-class WiringTests(unittest.TestCase):
-    def test_the_preamble_installs_the_strategy_surface(self):
-        phone, g = phone_mock(), {}
-        with patch.object(recipe_strategies, "install", wraps=recipe_strategies.install) as install:
-            recipe_kit.preamble(phone, g)
-        self.assertEqual(install.call_count, 1)
-        self.assertEqual(install.call_args.args, (phone, g))
-
-    def test_the_strategies_reach_the_scope_under_their_registered_names(self):
-        _phone, g = scope()
-        self.assertLessEqual(set(recipe_strategies.STRATEGIES), set(g))
-
-
-class NoCopyTests(unittest.TestCase):
-    def test_no_script_keeps_a_byte_identical_copy(self):
-        """脚本里与注入面逐字相同的模块级函数即红：搬进库里就要删掉本地那份（沿用 #1150 的口径）。"""
-        injected = injected_sources()
-        offenders = {}
-        for path in RECIPES:
-            source = path.read_text(encoding="utf-8")
-            local = {node.name: normalize(ast.get_source_segment(source, node) or "")
-                     for node in ast.parse(source, str(path)).body
-                     if isinstance(node, ast.FunctionDef)}
-            dup = sorted(name for name, text in local.items()
-                         if name in injected and text == injected[name])
-            if dup:
-                offenders[path.relative_to(ROOT).as_posix()] = dup
-        self.assertEqual(offenders, {})
 
 
 class GearStyleTests(unittest.TestCase):
@@ -108,22 +71,6 @@ class BrowserFlowTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "BROWSER_FLOW"):
             g["browser_settings"]()
 
-    def test_the_default_flow_keeps_the_vivo_page_for_unmigrated_families(self):
-        """没写常量时走 vivo 那一套：未迁移家族的脚本行为不变（#1244 的形状约束）。"""
-        _phone, g = scope()
-        called = []
-        g["browser_settings_vivo"] = lambda: called.append("vivo")
-        g["browser_settings_xiaomi"] = lambda: called.append("xiaomi")
-        g["browser_settings"]()
-        self.assertEqual(called, ["vivo"])
-
-
-class FamilyStyleTests(unittest.TestCase):
-    """OPPO 系的走法表（#1245）：缺省档保留旧行为，认不出的常量在调用那一刻报错。
-
-    这几个名字的注入实现横跨两个家族（小米那份住在 `recipe_nav`），所以缺省一档必须仍是旧行为 ——
-    静默回退会点到别的页，比报错更难查（沿用 #819 的口径）。
-    """
 
     def test_an_unknown_wait_page_style_fails_instead_of_falling_back(self):
         _phone, g = scope(WAIT_PAGE_STYLE="typo")

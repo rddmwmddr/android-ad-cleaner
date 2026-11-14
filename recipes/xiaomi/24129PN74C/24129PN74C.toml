@@ -1,0 +1,154 @@
+# Xiaomi 15（24129PN74C），HyperOS OS3.0.307.0.WOCCNXM / Android 16，底包 BP2A.250605.031.A3。2026-10-29 无线调试实测：底包与 recipes/xiaomi/25060RK16C 完全一致，
+# 但浏览器和商店的入口结构不同，按本机实测路径写。
+#
+# 本机实测到的入口（与 M154FF / K80 脚本的差异）：
+#  · 系统广告：设置里搜不到「更多安全设置」，「隐私与安全」是权限中心没有那一项。
+#    可用路径：设置搜索「广告服务」→ 结果页 → 或深链 com.android.settings/.ad.AdServiceSettings。
+#    实测「个性化广告推荐」出厂就是关的（核对 1 项、调整 0 项）。
+#  · 应用商店：底部「我的」→ 顶部「设置」→ 滚到底。这版没有「隐私设置/个性化服务」，
+#    也没有「秒装」；「其他功能」只是分类标题不是入口。设置页可见的是
+#    通知设置、极速下载、模式切换、自动升级、WLAN 加速。
+#  · 浏览器 20.29.1031010：底栏是 主页/视频/AI搜索/菜单/我的，入口是
+#    底部「菜单」→ 弹窗右上「设置」（不是底栏「我的」）；底栏没有「菜单」的机型
+#    （MIX Flip 2）在「我的」页里找设置（#833）。两条入口都对时序敏感，先试直达设置页
+#    `com.android.browser/.BrowserSettingsActivity`，通不过才走这两条（#912）。
+#    「隐私和安全」在设置页最底部，要滚 8 屏才看得到，脚本用 scroll_more 往下翻。
+#    实测默认开着的广告项只有「显示猜你想搜模块」（搜索设置）和「运营任务」（功能设置）；
+#    「个性化内容推荐」「个性化广告推荐」「小说」「宫格位推送」出厂就是关的。
+#  · 下载管理：右上「更多」按钮 → 弹窗里的「设置」→ 信息流设置。
+#    实测「资源推荐」「热榜推荐」出厂就是关的。
+#  · 手机管家：垃圾清理设置里「推荐内容」出厂就是关的；「个性化推荐」在隐私设置里，实测已关。
+#  · 主题：每次联网时通知实测已关；隐私设置「个性化推荐」出厂就是关的。
+#
+# 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
+# BUILD 写 ROM 版本、不写底包：底包被多台同代小米机共用，写进 BUILD 会让它们都被选到这份脚本（#942）。
+# 2026-11-14 转页面树（#1267）：除应用商店外全部落数据；应用商店的「个性化服务」按运行时读到的
+# 开关位置分岔（子页 / 本页），留在同名 `.py` 的 `code =`。
+model = "24129PN74C"
+models = ["24129PN74C"]
+build = "OS3.0.307.0"
+tail = "tail"
+
+# 本机的齿轮入口点完要认出设置页（日历的齿轮开的是 PopupWindow，沿用 #407）；
+# 浏览器入口是底栏「菜单」→ 弹窗「设置」，回退到「我的」+齿轮（沿用 #833）。
+[const]
+GEAR_STYLE = "checked"
+BROWSER_FLOW = "menu"
+
+[[segment]]
+name = "系统广告"
+ops = [
+  # 本机「隐私与安全」是权限中心，没有「更多安全设置」。用设置搜索直达「广告服务」，搜不到走深链。
+  { kind = "if_setting", kw = "广告服务", else_ops = [
+    { kind = "shell", command = "am start -f 0x10008000 -n com.android.settings/.ad.AdServiceSettings" },
+    { kind = "sleep", seconds = 1.5 },
+  ] },
+  { kind = "lib", name = "close_named", args = [["个性化广告推荐"], "系统·广告服务"] },
+  { kind = "back" },
+]
+
+[[segment]]
+name = "应用商店"
+code = "step_store"
+
+[[segment]]
+name = "手机管家"
+ops = [{ kind = "lib", name = "security_center" }]
+
+[[segment]]
+name = "下载管理"
+ops = [{ kind = "lib", name = "downloads_tap" }]
+
+[[segment]]
+name = "主题"
+ops = [
+  # 直达主题管理包的代理页（沿用 #730 的做法：它没有 LAUNCHER，monkey 拉不起来）；经主题商店冷启动
+  # 要过一道重定向过渡窗，前台校验容易误判，也可能续在上次留下的子页上（#906）。
+  # 落点被系统转去商店详情页或桌面时仍按跳过收尾。
+  { kind = "skip_unless_installed", command = "pm path com.android.thememanager", contains = "package:", text = "  · 本机没有主题管理包，跳过" },
+  { kind = "start_or_skip", pkg = "com.android.thememanager", activity = ".ThemeResourceProxyTabActivity", dead_ends = ["com.xiaomi.market", "com.miui.home"], reason = "主题页打不开" },
+  # 导航失败以前与「本页没有目标开关」同形：进「我的」、进设置页、点名开关三步都校验，
+  # 0 个开关按失败报并带页面现场（#906）。
+  { kind = "lib", name = "theme_settings" },
+  { kind = "await_page" },
+  { kind = "off_required", only = ["每次联网时通知"], keep = ["自动更新"], page = "主题·设置", contains = true },
+  { kind = "if_entry", text = "隐私设置", ops = [
+    { kind = "off", only = ["个性化推荐"], page = "主题·隐私" },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "浏览器"
+ops = [
+  # 入口顺序：直达设置页 → 底部「菜单」→ 弹窗「设置」→ 底栏「我的」→ 齿轮（#912；后两档沿用 #833）。
+  # 基本模式的机型直达会落到 BasicModeSettingActivity，落点校验判不过，仍走到下面的跳过（#414）。
+  { kind = "if_lib", name = "direct_settings", else_ops = [
+    { kind = "start", pkg = "com.android.browser" },
+    # 拒绝浏览器协议后落到基本模式设置页，设置入口都不在这条路径上，找下去只会空转报错（#414、#460）
+    { kind = "if_focus", text = "basicmode", match = "icontains", ops = [
+      { kind = "print", text = "  · 浏览器处在基本模式，设置入口不在这条路径上，本段跳过" },
+      { kind = "return" },
+    ] },
+    { kind = "sleep", seconds = 2 },
+    { kind = "lib", name = "browser_settings" },
+  ] },
+  # 「隐私和安全」在设置页最底部（实测要滚 8 屏），往下翻着找。
+  { kind = "if_entry", text = "隐私和安全", scrolls = 12, ops = [
+    { kind = "off", only = ["个性化内容推荐", "个性化广告推荐"], page = "浏览器·隐私和安全" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "主页设置", ops = [
+    { kind = "off", only = ["宫格位推送"], page = "浏览器·主页设置" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "搜索设置", ops = [
+    # 扫一扫、搜索历史、书签、最常访问是功能项，保留。
+    { kind = "off", only = ["显示猜你想搜模块"], page = "浏览器·搜索设置" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "功能设置", ops = [
+    # 「运营任务」= 做任务得金币挣红包，纯营销；「我的网盘」是用户功能，保留。
+    { kind = "off", only = ["运营任务", "小说"], keep = ["我的网盘"], page = "浏览器·功能设置" },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "全局搜索"
+ops = [{ kind = "lib", name = "global_search" }]
+
+[[segment]]
+name = "负一屏"
+ops = [{ kind = "lib", name = "negative_screen" }]
+
+[[segment]]
+name = "天气和日历"
+ops = [
+  # 2026-10-29 实测：天气有「用户体验计划」，里面「天气视频卡片」默认开着。
+  # 日历的齿轮打开的是 PopupWindow（#407 真机焦点），不是设置页，gear() 校验落点后跳过。
+  { kind = "start", pkg = "com.miui.weather2" },
+  { kind = "sleep", seconds = 2 },
+  { kind = "if_lib_any", calls = [{ name = "gear", kwargs = { toolbar_only = true } }, { name = "gear" }], ops = [
+    { kind = "if_entry", text = "用户体验计划", ops = [
+      { kind = "off", only = ["推荐", "广告", "个性化", "内容推广", "天气视频卡片"], page = "天气·用户体验计划" },
+      { kind = "back" },
+    ] },
+    { kind = "back", n = 3 },
+  ], else_ops = [
+    { kind = "print", text = "  · 天气没有可识别的设置入口，跳过" },
+  ] },
+  { kind = "start", pkg = "com.android.calendar" },
+  { kind = "sleep", seconds = 2 },
+  { kind = "if_lib_any", calls = [{ name = "gear", kwargs = { toolbar_only = true } }, { name = "gear" }], ops = [
+    { kind = "if_entry", text = "用户体验计划", ops = [
+      { kind = "off", only = ["推荐", "广告", "个性化", "内容推广"], page = "日历·用户体验计划" },
+      { kind = "back" },
+    ] },
+    { kind = "back", n = 3 },
+  ], else_ops = [
+    { kind = "print", text = "  · 日历没有可识别的设置入口，跳过" },
+  ] },
+]

@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 import run
 from fixtures import load_recipe, phone_mock
 
-RECIPE = ROOT / "recipes/vivo-V2303A/recipe.py"
+RECIPE = ROOT / "recipes/vivo/V2303A/V2303A.toml"
 
 
 def make_phone(**fields):
@@ -36,7 +36,7 @@ class VivoV2303ARecipeTests(unittest.TestCase):
     def test_model_is_matched_without_reference_and_records_build(self):
         path, reference = run.recipe_for("V2303A", "vivo")
         self.assertFalse(reference)
-        self.assertEqual(Path(path).parent.name, "vivo-V2303A")
+        self.assertEqual(Path(path).parent.name, "V2303A")
         meta = run.recipe_meta(path)
         self.assertEqual(meta["build"], "CP2A.260605.016")
         self.assertEqual(meta["models"], ["V2303A"])

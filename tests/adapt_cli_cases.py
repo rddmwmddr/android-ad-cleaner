@@ -27,12 +27,12 @@ def case(name, argv, seed=None, expect=()):
 CASES = [
     # ---------- gen：生成草稿（不碰手机） ----------
     case("gen-成功", ["gen", "探路-PJA110.tsv"], {"探路-PJA110.tsv": TSV},
-         expect=["草稿已生成：草稿-PJA110.py", "BUILD 为空", "均为待验证"]),
+         expect=["草稿已生成：草稿-PJA110.toml", "BUILD 为空", "均为待验证"]),
     case("gen-型号认不出", ["gen", "探路.tsv"], {"探路.tsv": TSV},
-         expect=["草稿已生成：草稿.py", "没能从文件名认出型号"]),
+         expect=["草稿已生成：草稿.toml", "没能从文件名认出型号"]),
     case("gen-勾选清单", ["gen", "空白.tsv", "--pick", "清单.txt", "--model", "PLP120", "--build", "PLP120_16.0.9"],
          {"空白.tsv": UNPICKED_TSV, "清单.txt": "# 人工确认\n个性化推荐\n"},
-         expect=["草稿已生成：草稿-PLP120.py"]),
+         expect=["草稿已生成：草稿-PLP120.toml"]),
     case("gen-选项缺值", ["gen", "探路.tsv", "-o"], {"探路.tsv": TSV},
          expect=["选项 -o 后面要跟值"]),
     case("gen-不认识的选项", ["gen", "--bogus"], expect=["不认识的选项 --bogus"]),
@@ -45,8 +45,8 @@ CASES = [
          expect=["没有勾选任何开关"]),
     case("gen-找不到勾选清单", ["gen", "探路.tsv", "--pick", "无.txt"], {"探路.tsv": TSV},
          expect=["找不到勾选清单 无.txt"]),
-    case("gen-写不出", ["gen", "探路.tsv", "-o", "无此目录/草稿.py"], {"探路.tsv": TSV},
-         expect=["写不出 无此目录/草稿.py"]),
+    case("gen-写不出", ["gen", "探路.tsv", "-o", "无此目录/草稿.toml"], {"探路.tsv": TSV},
+         expect=["写不出 无此目录/草稿.toml"]),
     # ---------- check：Phone 之前的参数校验 ----------
     case("check-缺参数", ["check"], expect=["用法：run.py adapt check -s"]),
     case("check-参数顺序错", ["check", "S", "草稿.py"], expect=["用法：run.py adapt check -s"]),

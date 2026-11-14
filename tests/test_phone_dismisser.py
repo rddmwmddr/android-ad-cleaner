@@ -239,10 +239,10 @@ class PromotedClickTests(unittest.TestCase):
 # - 脚本靠 tap(scrolls=0) 的等待循环找菜单项，而这个循环本身就在调 dismiss()。
 #
 # 四个同形脚本（V2547DA、Android 17 变体、V2309A、V2303A）的浏览器段入口一起改。
-BROWSER_RECIPES = [ROOT / "recipes/vivo-V2547DA/recipe.py",
-                   ROOT / "recipes/vivo-V2547DA/recipe_android17.py",
-                   ROOT / "recipes/vivo-V2309A/recipe.py",
-                   ROOT / "recipes/vivo-V2303A/recipe.py"]
+BROWSER_RECIPES = [ROOT / "recipes/vivo/V2547DA/V2547DA.toml",
+                   ROOT / "recipes/vivo/V2547DA/V2547DA-android17.toml",
+                   ROOT / "recipes/vivo/V2309A/V2309A.toml",
+                   ROOT / "recipes/vivo/V2303A/V2303A.toml"]
 
 # vivo 浏览器右上菜单弹层：右上角是浮层自己的返回键（desc「返回」，id 里带 cancel），
 # 下面才是「设置」那一行。

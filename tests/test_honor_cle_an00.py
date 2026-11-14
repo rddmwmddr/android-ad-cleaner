@@ -9,7 +9,7 @@ from fixtures import load_recipe, phone_mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 
-RECIPE = ROOT / "recipes" / "honor-CLE-AN00" / "recipe.py"
+RECIPE = ROOT / "recipes" / "honor/CLE-AN00" / "CLE-AN00.toml"
 
 
 def phone(**over):

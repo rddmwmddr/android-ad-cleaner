@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
+import fixtures
 from fixtures import load_recipe, phone_stub
 
 SETTING_FOCUS = "com.vivo.browser/com.vivo.browser.ui.module.setting.common.activity.SettingActivity"
@@ -46,16 +47,22 @@ class Vivo2417BrowserEntryTests(unittest.TestCase):
         return p
 
     def browser_step(self, p):
-        scope, _ = load_recipe(p, ROOT / "recipes/vivo-V2417A/recipe.py")
-        scope["tap"] = Mock(return_value=True)          # 首页设置/极简首页等子页入口
-        scope["close_named"] = Mock(return_value=True)  # 本用例只验入口，不验开关
+        scope, _ = load_recipe(p, ROOT / "recipes/vivo/V2417A/V2417A.toml")
+        fixtures.bridge_scope(self, scope)
+        scope["tap"] = Mock(return_value=True)             # 首页设置/极简首页等子页入口
+        scope["close_named_vivo"] = Mock(return_value=True)  # 本用例只验入口，不验开关
         return scope
+
+    def run_browser(self, scope):
+        """跑「浏览器」这一段（数据形态下段是一段 action，不再是模块函数 `browser`）。"""
+        action = next(s.action for s in scope["rt"].steps if s.name == "浏览器")
+        action()
 
     def test_old_browser_still_uses_the_menu_entry(self):
         """31.1.3.1：「菜单」在，就照老路径点，不该多此一举去翻「我的」。"""
         p = self.phone(has_menu=True)
         with contextlib.redirect_stdout(io.StringIO()):
-            self.browser_step(p)["browser"]()
+            self.run_browser(self.browser_step(p))
         self.assertEqual(p.entry.call_args_list, [call("菜单", scrolls=0)])
         self.assertEqual(p.go.call_args_list, [call("设置", "首页设置")])
 
@@ -63,7 +70,7 @@ class Vivo2417BrowserEntryTests(unittest.TestCase):
         """31.3.0.0：底部没有「菜单」，改点「我的」直到「设置」出现，再进设置主页。"""
         p = self.phone(has_menu=False)
         with contextlib.redirect_stdout(io.StringIO()):
-            self.browser_step(p)["browser"]()
+            self.run_browser(self.browser_step(p))
         self.assertEqual(p.entry.call_args_list, [call("菜单", scrolls=0)])
         self.assertEqual(p.go.call_args_list, [call("我的", "设置"), call("设置", "首页设置")])
 
@@ -74,9 +81,9 @@ class Vivo2417BrowserEntryTests(unittest.TestCase):
         scope = self.browser_step(p)
         with contextlib.redirect_stdout(io.StringIO()):
             with self.assertRaisesRegex(RuntimeError, "未打开浏览器设置入口"):
-                scope["browser"]()
+                self.run_browser(scope)
         scope["tap"].assert_not_called()
-        scope["close_named"].assert_not_called()
+        scope["close_named_vivo"].assert_not_called()
 
     def test_the_mine_page_settings_icon_is_found_by_its_content_desc(self):
         """「设置」只写在 content-desc 上：`find` 要能按文字命中它，`tap_icon` 反而不该命中。"""

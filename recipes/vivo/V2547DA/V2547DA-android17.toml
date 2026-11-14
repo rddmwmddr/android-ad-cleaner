@@ -1,0 +1,36 @@
+# vivo V2547DA（卫星通信版）Android 17 变体页面树（catalog，#1263）。系统版本对上 17.1.10.2 时由 run.recipe_for 选这份。
+# 与主本差别只在直达优先（opened(...)）的几段，是过程段，走 code= 例外函数。
+model = "V2547DA"
+models = ["V2547DA"]
+build = "PD2547D_A_17.1.10.2"
+
+[const]
+GEAR_STYLE = "vivo_landing"
+
+[[segment]]
+name = "系统广告"
+code = "step_system_ads"
+
+[[segment]]
+name = "全局搜索"
+code = "step_global_search"
+
+[[segment]]
+name = "阅图锁屏"
+code = "step_lock_screen"
+
+[[segment]]
+name = "应用商店"
+code = "step_store"
+
+[[segment]]
+name = "浏览器"
+ops = [{ kind = "lib", name = "browser_recommendations" }]
+
+[[segment]]
+name = "i管家"
+ops = [{ kind = "lib", name = "i_manager_ads" }]
+
+[[segment]]
+name = "天气"
+ops = [{ kind = "lib", name = "weather_service" }]

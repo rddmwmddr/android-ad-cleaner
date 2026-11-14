@@ -25,7 +25,7 @@ jobs:
       - name: 静态检查（语法 / 未定义名 / bugbear 形状约束）
         run: |
           pip install ruff==0.17.3
-          ruff check tool tests gui android/app/src/main/python android/smoke.py recipes
+          ruff check tool tests gui android/app/src/main/python android/smoke.py recipes recipe_lib
   # 类型检查单独一个 job：红了就是类型问题，不与「用例挂了」混在一起。扫描范围（`tool/`）与宽松档
   # 参数都在 pyproject.toml 的 `[tool.mypy]` 里，所以这里只有一条不带参数的 `mypy`；机型脚本由
   # tool/typecheck_recipes.py 逐份喂给同一个宽松档（43 份都叫 recipe.py，一次扫会撞模块名）。只跑 Linux：

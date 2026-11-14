@@ -1,0 +1,103 @@
+# Redmi K70 Pro（23117RK66C），HyperOS OS3.0.306.0.WNMCNXM / Android 16。入口与核对范围见 docs/14-红米K70Pro实测.md；包安装状态和联网规则不由机型脚本改动。
+# 2026-11-14 转页面树（#1266）：线性段落数据；全局搜索的候选榜单是运行期算出来的集合，留在同名 `.py` 的 `code =`。
+model = "23117RK66C"
+models = ["23117RK66C"]
+build = "OS3.0.306.0.WNMCNXM"
+tail = "tail"
+
+[[segment]]
+name = "系统广告"
+ops = [
+  { kind = "start", pkg = "com.android.settings", activity = ".ad.AdServiceSettings" },
+  { kind = "lib", name = "close_named", args = [["个性化广告推荐"], "系统·广告服务"] },
+]
+
+[[segment]]
+name = "应用商店"
+ops = [
+  # 首页的「我的」标签文字在本版本点击后不切页，设置 Activity 已在本机验证。
+  { kind = "start", pkg = "com.xiaomi.market", activity = ".ui.MarketPreferenceActivity" },
+  { kind = "lib", name = "enter", args = ["隐私设置"] },
+  { kind = "lib", name = "enter", args = ["个性化服务"] },
+  { kind = "lib", name = "close_named", args = [["个性化服务"], "商店·个性化服务"] },
+  # 通知子页不允许外部 Activity 启动，必须从商店设置内进入。
+  { kind = "back", n = 2 },
+  { kind = "top", n = 2 },
+  { kind = "lib", name = "enter", args = ["通知设置"] },
+  { kind = "lib", name = "close_named", args = [["新手帮助"], "商店·通知设置"] },
+]
+
+[[segment]]
+name = "手机管家"
+ops = [
+  { kind = "start", pkg = "com.miui.securitycenter", activity = "com.miui.securityscan.ui.settings.SettingsActivity" },
+  { kind = "lib", name = "enter", args = ["隐私设置"] },
+  { kind = "lib", name = "close_named", args = [["个性化推荐"], "管家·隐私"] },
+  { kind = "back" },
+  { kind = "lib", name = "enter", args = ["垃圾清理"] },
+  { kind = "lib", name = "close_named", args = [["推荐内容"], "管家·垃圾清理"] },
+]
+
+[[segment]]
+name = "下载管理"
+ops = [
+  { kind = "start", pkg = "com.android.providers.downloads.ui" },
+  { kind = "require_lib", name = "gear", miss_print = "下载管理设置入口未找到", fail = true },
+  { kind = "lib", name = "enter", args = ["信息流设置"] },
+  { kind = "lib", name = "close_named", args = [["资源推荐", "热榜推荐"], "下载管理·信息流"] },
+]
+
+[[segment]]
+name = "主题"
+ops = [
+  # 从壳包启动会复用上次设置页，显式重建主题首页以支持连续复跑。
+  { kind = "skip_unless_installed", command = "pm path com.android.thememanager", contains = "package:", text = "  · 本机没有主题管理包，跳过" },
+  { kind = "start_or_skip", pkg = "com.android.thememanager", activity = ".ThemeResourceProxyTabActivity", dead_ends = ["com.xiaomi.market", "com.miui.home"], reason = "主题页打不开" },
+  # 导航失败不能与「本页没有目标开关」同形：三步都校验，报错带页面现场（#906）。
+  { kind = "require_go", text = "我的", expect = "设置", miss_print = "未进入主题「我的」；", evidence = true },
+  { kind = "require_lib", name = "gear", miss_print = "主题设置入口没找到；", fail = true, evidence = true },
+  { kind = "lib", name = "close_named", args = [["每次联网时通知"], "主题·设置"] },
+  { kind = "lib", name = "enter", args = ["隐私设置"] },
+  { kind = "lib", name = "close_named", args = [["个性化推荐"], "主题·隐私"] },
+]
+
+[[segment]]
+name = "浏览器"
+ops = [
+  { kind = "start", pkg = "com.android.browser", activity = ".preferences.activity.CustomizationPreferenceActivity" },
+  { kind = "lib", name = "close_named", args = [["个性化内容推荐", "个性化广告推荐"], "浏览器·个性化推荐"] },
+  { kind = "start", pkg = "com.android.browser", activity = ".BrowserSettingsActivity" },
+  { kind = "lib", name = "enter", args = ["主页设置"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "close_named", args = [["宫格位推送"], "浏览器·主页设置"] },
+  { kind = "back" },
+  { kind = "lib", name = "enter", args = ["搜索设置"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "close_named", args = [["显示猜你想搜模块"], "浏览器·搜索设置"] },
+]
+
+[[segment]]
+name = "全局搜索"
+code = "step_global_search"
+
+[[segment]]
+name = "负一屏"
+ops = [
+  { kind = "start", pkg = "com.miui.personalassistant", activity = ".settings.PASettingActivity" },
+  { kind = "lib", name = "close_named", args = [["推荐卡片", "热门活动"], "负一屏·设置"] },
+  { kind = "lib", name = "enter", args = ["隐私设置"] },
+  { kind = "lib", name = "close_named", args = [["个性化推荐"], "负一屏·隐私"] },
+]
+
+[[segment]]
+name = "天气和日历"
+ops = [
+  { kind = "start", pkg = "com.miui.weather2" },
+  { kind = "lib", name = "enter", args = ["更多设置"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "enter", args = ["设置"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "enter", args = ["用户体验计划"] },
+  { kind = "lib", name = "close_named", args = [["天气视频卡片", "内容推广"], "天气·用户体验计划"] },
+  { kind = "start", pkg = "com.android.calendar" },
+  { kind = "lib", name = "enter", args = ["设置"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "enter", args = ["设置"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "enter", args = ["用户体验计划"] },
+  { kind = "lib", name = "close_named", args = [["内容推广"], "日历·用户体验计划"] },
+]
