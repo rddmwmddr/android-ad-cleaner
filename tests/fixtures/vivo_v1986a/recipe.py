@@ -15,7 +15,7 @@ from recipe_kit import step
 # ────────────────────────────────────────────────────────────────────────────
 BUILD = "PD1986_A_8"
 MODELS = ["V1986A"]
-# 家族库按这些常量选走法（#1246），缺省档与实现见 recipe_lib/vivo.py。
+# 家族库按这些常量选走法（#1246），缺省档与实现见 recipe_lib/。
 TAP_ROW_STYLE = "subtitle"
 MY_TAB_STYLE = "vivo"
 import time  # noqa: F401 - 基线副本，保持与旧脚本逐字一致

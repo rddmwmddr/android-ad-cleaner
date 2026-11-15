@@ -6,7 +6,7 @@ models = ["PJA110"]
 build = "PJA110_14.0.0.812"
 tail = "tail"
 
-# 家族库按这些常量选走法（#1245），缺省档见 recipe_lib/oppo.py。这一版两档都不是缺省档：
+# 家族库按这些常量选走法（#1245），缺省档见 recipe_lib/。这一版两档都不是缺省档：
 # 关开关走 basic（标题在开关行外），设置页走 launch（切「我的」后首下点击会被动画吞掉，沿用 #286）。
 [const]
 CLOSE_NAMED_STYLE = "basic"
