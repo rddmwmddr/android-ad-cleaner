@@ -34,6 +34,9 @@ mypy 解析 `from recipe_nav import <名字>` 时看的是源模块的 `__all__`
 `title_key` / `verify` / `_labelled`）留在 `__all__` 里、**不进** `LIBRARY`：把助手补进某个模块的
 `__all__` 会把数据可点名的集合从 140 改成 150。
 
+修订（#1363）：`search_more` / `ad_tracking_close_paged` 升格进家族库后，上面两个计数随库增长漂移；
+数字以 `recipe_lib.LIBRARY` / `__all__` / `HELPERS` 的实算为准，正文与 `ARCHITECTURE.md` 不再抄死数。
+
 ### 三个面是兼容壳，不删
 
 各剩 docstring + `sys.path` 垫片 + `from recipe_lib import *` + `__all__` 转发。不删是因为

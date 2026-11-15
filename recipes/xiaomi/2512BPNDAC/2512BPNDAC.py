@@ -1,5 +1,5 @@
 # Xiaomi 17 Ultra（2512BPNDAC）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
-# 系统广告的两条搜索各自记失败再一起报、商店的「个性化服务」按运行时读到的开关位置分岔。
+# 系统广告的两条搜索各自记失败再一起报。
 
 
 # 热搜榜的候选开关名：`recipe_steps.global_search` 从执行作用域按名字取。
@@ -24,27 +24,3 @@ def step_system_ads(p, rt):
         missed.append("系统广告")
     if missed:
         raise RuntimeError("没搜到" + "、".join(f"「{name}」" for name in missed))
-
-
-def step_store(p, rt):
-    p.start("com.xiaomi.market")
-    if not nav.bottom_tab(p, rt, "我的"):
-        p.go("我的", "设置")
-    nav.gear(p, rt)
-    if nav.tap_low(p, rt, "隐私设置") or nav.tap_low(p, rt, "隐私"):
-        # 4.129.s.00 的「个性化服务」是子页入口，开关在下一层。
-        nested = not any("个性化服务" in t for t, _, _ in p.switches())
-        if not nested or nav.maybe(p, rt, "个性化服务"):
-            p.off(only=["个性化服务"], page="商店·个性化服务")
-            if nested:
-                p.back()
-        p.back()
-    # 「模式切换 → 极简模式」这版商店有，但切换后商店只剩搜索、安装、更新，界面变化明显，
-    # 不属于「关广告开关」，脚本不自动切。需要的话手动切。
-    if p.find("模式切换", exact=True):
-        print("  · 有「模式切换 → 极简模式」，界面变化明显，未自动切换")
-    if nav.maybe(p, rt, "通知设置"):
-        # 只关「新手帮助」。不碰「推送消息」：它是父开关，关了会连点赞、评论消息一起关。
-        p.off(only=["新手帮助"], keep=["推送消息", "应用更新"], page="商店·通知设置"); p.back()
-    p.back(2)
-

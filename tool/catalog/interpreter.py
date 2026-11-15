@@ -8,7 +8,7 @@
 只把「该调哪个 p 方法、带哪些实参」按数据的书写顺序发出去，不碰这些算法本身。
 
 库调用按名字解析：`lib` / `require_lib` / `if_lib` / `return_lib` 查本模块的 `LIBRARY`
-（`recipe_lib.LIBRARY`：家族 `__all__` 的 140 个名字），查不到再查本机例外命名空间；实现是普通函数，
+（`recipe_lib.LIBRARY`：家族 `__all__` 的名字），查不到再查本机例外命名空间；实现是普通函数，
 收 `(p, rt, …)`，调用序列与旧脚本逐条相同。
 """
 import os as _os, sys as _sys
@@ -369,10 +369,15 @@ def _miss_message(op: Mapping, p: Any, g: dict[str, Any], where: str | None = No
 
 
 def _require_tab(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
+    """`settle` 给换页慢的机型留更长的等待：`sig` → `tab` → `settle(sig, n)` 与旧脚本同形，
+    签名在点之前读，点不到时不 settle 直接报。"""
+    before = p.sig() if "settle" in op else None
     result = p.tab(op["name"])
     where = _focus_note(op, p, rt, g)
     if not result:
         raise RuntimeError(_miss_message(op, p, g, where))
+    if before is not None:
+        p.settle(before, op["settle"])
 
 
 def _require_go(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:

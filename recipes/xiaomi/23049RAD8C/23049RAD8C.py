@@ -1,5 +1,5 @@
 # Redmi Note 12 Turbo（23049RAD8C）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
-# 系统广告的 try/except 兜底、应用商店的运行时分岔与天气和日历的两条入口路径留在过程化实现里。
+# 系统广告的 try/except 兜底与天气和日历的两条入口路径留在过程化实现里。
 from entries import THEME_DEAD_ENDS
 import recipe_nav as nav
 import recipe_steps as steps
@@ -21,30 +21,6 @@ def step_system_ads(p, rt):
     if not p.setting("系统广告"):
         raise RuntimeError("没搜到「系统广告」")
     p.off(only=["系统工具广告"], page="系统·系统工具广告")
-
-
-def step_store(p, rt):
-    # 直达设置页，避免从首页弹窗或“我的”页面图标迷路
-    try:
-        p.start("com.xiaomi.market", "com.xiaomi.market.ui.MarketPreferenceActivity")
-    except SkipStep:
-        raise                     # App 本机没装：放行，由段包装记跳过，别退到「我的 → 设置」再空跑（#908）
-    except Exception:
-        p.start("com.xiaomi.market")
-        p.go("我的", "设置")
-        nav.gear(p, rt)
-    if nav.tap_any(p, rt, "隐私设置", "隐私"):
-        nested = not any("个性化服务" in t for t, _, _ in p.switches())
-        if not nested or nav.maybe(p, rt, "个性化服务"):
-            p.off(only=["个性化服务"], page="商店·个性化服务")
-            if nested:
-                p.back()
-        p.back()
-    if nav.maybe(p, rt, "模式切换"):
-        p.tap("极简模式", exact=True, scrolls=0); p.confirm(); p.back()
-    if nav.maybe(p, rt, "通知设置"):
-        p.off(only=["新手帮助"], keep=["推送消息", "应用更新"], page="商店·通知设置"); p.back()
-    p.back(2)
 
 
 def step_weather_calendar(p, rt):
