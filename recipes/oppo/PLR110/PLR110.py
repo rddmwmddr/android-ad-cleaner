@@ -1,6 +1,8 @@
 # 一加 Ace 6T（PLR110，ColorOS 17）的本机例外函数（catalog 的 `code=`，影随同名 `.toml`）。
-# 只剩负一屏：滑动循环 + 先探测是否已在速览 + 轮播单选的 checked 状态重查，是真正的状态机。
+# 只剩负一屏：先探测是否已在速览 + 轮播单选的 checked 状态重查，是真正的状态机。
 import time
+
+import recipe_nav as nav
 
 
 BUILD = "PLR110_17.0.0.101"
@@ -13,14 +15,7 @@ SEARCH_TITLES = {"搜索范围", "首页卡片管理", "功能管理", "账号�
 
 def step_negative_screen(p, rt):
     # ColorOS 17：速览内嵌在桌面进程里，焦点仍是 launcher，按页面内容判断进没进
-    p.d.shell("input keyevent HOME"); time.sleep(0.6); p.d.shell("input keyevent HOME"); time.sleep(0.6)
-    entered = False
-    for _ in range(3):
-        p.d.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250"); time.sleep(1.2)
-        if p.find("我的服务") or p.find("添加卡片", exact=True):
-            entered = True
-            break
-    if not entered:
+    if not nav.assistant_swipe_in(p, rt, "我的服务", "添加卡片"):
         print("  ✗ 右滑没进速览（负一屏）")
         return
     # 左上角入口这版叫「我的」，不叫「头像」
