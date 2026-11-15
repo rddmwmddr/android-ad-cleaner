@@ -443,9 +443,9 @@ def assistant_swipe_in(p, rt, text=None, exact_text=None):
     """两次 HOME 回默认桌面，再从左侧右滑进负一屏，最多三次；进去了返回真。
 
     ColorOS 15 的速览是独立窗口，看前台名里有没有 `assistantscreen` 就够了；ColorOS 17 把它内嵌
-    进桌面进程、焦点一直停在 launcher，只能按首页文案判（#901 是同一件事的另一面），文案由数据
-    传进来：`text` 按包含比、`exact_text` 按精确比——首页还有同名的按钮。两次 HOME 是因为多主页
-    时一次会停在中途，而 HOME 也可能正好落在负一屏。"""
+    进桌面进程、焦点一直停在 launcher，只能按首页文案判（沿用 #901 对同一条判据的结论），文案由
+    数据传进来：`text` 按包含比、`exact_text` 按精确比——首页还有同名的按钮。两次 HOME 是因为
+    多主页时一次会停在中途，而 HOME 也可能正好落在负一屏。"""
     p.d.shell("input keyevent HOME")
     rt.clock.sleep(0.6)
     p.d.shell("input keyevent HOME")
