@@ -73,4 +73,4 @@ python3 tool/run.py -s <序列号> finish
 自定义主页），「宫格位推送」「猜你想搜」「小说」新版没有就跳过；负一屏保留搜索框与出行助手；
 天气和日历只动「用户体验计划」那一页。
 
-落点判据与试过但没用上的 Activity 记在 [docs/清单/小米-HyperOS.md](../../docs/清单/小米-HyperOS.md)。
+落点判据与试过但没用上的 Activity 记在 [docs/清单/小米-HyperOS.md](../../../docs/清单/小米-HyperOS.md)。
