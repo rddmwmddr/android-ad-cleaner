@@ -286,7 +286,8 @@ def scan(recipes_dir, injected=None, strategies=None):
     导航助手的开关名单在调用点的实参里，实现里没有词。
 
     同一份实现一处只算一次：策略会被一个段调用好几次（`close_all` 出现两次），按名字去重；
-    实现里再调别的库实现逐层往下扫（段体调 `browser_settings_direct`）。"""
+    实现里再调别的库实现时逐层往下扫（段体调 `browser_settings_direct`），下扫口径在
+    `recipe_source.library_hits()`，这里只做「实现事实 → 词条」的投影。"""
     out = Scan()
     if injected is None and strategies is None:
         sources = recipe_source.library_sources()
@@ -303,7 +304,8 @@ def scan(recipes_dir, injected=None, strategies=None):
         before = len(out.words)
         out.notes += _notes(facts, script)
         _absorb(out, family, script, facts)
-        _absorb_implementations(out, family, script, facts, facts, sources, facts.constants, frozenset())
+        for hit in recipe_source.library_hits(facts, sources):
+            _absorb(out, family, script, hit.facts, call_site=hit.call_site)
         if len(out.words) == before:
             out.silent.append(script)
     # 同一份实现可能经多条调用链被扫到；台账按「哪一行有什么读不出」记账，同一
@@ -323,27 +325,6 @@ def _dedupe_calls(calls):
             seen.add(key)
             kept.append(call)
     return kept
-
-
-def _absorb_implementations(out, family, script, current, caller, sources, constants, seen):
-    """库实现逐层往下扫：当前事实里调到的库实现各扫一次，词条归这份脚本。"""
-    used = dict.fromkeys(call.name for call in current.calls if call.injected and call.module)
-    if current is caller:
-        used.update(caller.import_lines)   # 脚本 import 过的实现算用过；递归层只看实际调用
-    for name in used:
-        if name in seen or name in caller.defines:
-            continue
-        entry = sources.get(name)
-        if entry is None:
-            continue
-        _module, source = entry
-        calls = tuple(call for call in current.calls if call.injected and call.name == name)
-        at = calls[0].line if calls else caller.import_lines.get(name)
-        if at is None:
-            continue
-        impl = recipe_source.scan_source(source, externals=constants)
-        _absorb(out, family, script, impl, call_site=at)
-        _absorb_implementations(out, family, script, impl, caller, sources, constants, seen | {name})
 
 
 def _spelled(words):
