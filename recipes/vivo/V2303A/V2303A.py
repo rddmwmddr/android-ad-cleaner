@@ -1,4 +1,4 @@
-# V2303A 本机例外函数（catalog，#1263）：全局搜索的多页循环是过程段。
+# V2303A 本机例外函数（catalog，沿用 #1263 的页面树）：全局搜索的多页循环是过程段。
 # 由 catalog.loader 装进执行作用域（preamble 已注入 maybe / SkipStep / time）。
 
 

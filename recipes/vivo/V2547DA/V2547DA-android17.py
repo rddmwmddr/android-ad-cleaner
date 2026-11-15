@@ -1,4 +1,4 @@
-# V2547DA Android 17 变体的本机例外函数（catalog，#1263）：阅图锁屏是直达优先（opened(...)）的过程段。
+# V2547DA Android 17 变体的本机例外函数（catalog，沿用 #1263 的页面树）：阅图锁屏是直达优先（opened(...)）的过程段。
 # 由 catalog.loader 装进执行作用域（preamble 已注入 opened / settings_home / maybe）。
 import recipe_nav as nav
 
