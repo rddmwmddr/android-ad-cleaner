@@ -212,6 +212,13 @@ class DirectoryTest(unittest.TestCase):
             self.assertEqual(list(known), ["xiaomi/M154FF/recipe.py", "xiaomi/M154FF/recipe_os4.py"])
 
 
+class LibrarySourcesTest(unittest.TestCase):
+    """库实现表是进程内常量：`inspect.getsource` 很慢，一次全量回归会调上千次（#1307）。"""
+
+    def test_second_call_reuses_the_scanned_table(self):
+        self.assertIs(recipe_source.library_sources(), recipe_source.library_sources())
+
+
 class ErrorTest(unittest.TestCase):
     """语法错一律抛，不做容错返回：静默少几台机型比崩掉更糟。"""
 

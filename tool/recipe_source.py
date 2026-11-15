@@ -24,6 +24,7 @@ r"""机型脚本的「事实」层：一份源码里发生了哪些调用。纯 
 空间只补库里没有的名字。
 """
 import ast
+import functools
 import glob
 import json
 import os
@@ -620,13 +621,16 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
     return "\n".join(lines) or "pass"
 
 
+@functools.lru_cache(maxsize=None)
 def library_sources() -> dict[str, tuple[str, str]]:
     """机型库数据可调用的实现：{名字: (归属模块, 源码)}。
 
     名字全局唯一，直接定位实现，不再按脚本 import 做归属解析（#1268）。#1269 拆库后实现按家族住在
     `recipe_lib/<家族>.py` / `recipe_lib/shared.py`，`tool/recipe_nav.py` 等三个只做重导出；这里经
     重导出面拿到函数对象，归属写它真正的 `__module__`（`recipe_lib.shared` 等）。
-    词库与入口速查拿它扫实现里的字面量。延迟 import：只有调用它时才加载库。"""
+    词库与入口速查拿它扫实现里的字面量。结果是进程内常量，缓存起来：`inspect.getsource` 很慢，
+    一次全量回归会调上千次（#1307）。返回值按只读共享，调用方改了它这份缓存就脏了。
+    延迟 import：只有调用它时才加载库。"""
     import inspect
     import recipe_nav
     import recipe_strategies
