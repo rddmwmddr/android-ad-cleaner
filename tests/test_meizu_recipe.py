@@ -37,14 +37,6 @@ class MeizuRecipeTests(unittest.TestCase):
         scope, _ = load_recipe(phone, RECIPE, only, out)
         return scope
 
-    def test_model_selects_exact_recipe(self):
-        path, reference = run.recipe_for("MEIZU 21 Pro", "meizu")
-        self.assertFalse(reference)
-        self.assertEqual(Path(path), RECIPE)
-        meta = run.recipe_meta(path)
-        self.assertEqual(meta["build"], "Flyme 12.6.0.0A")
-        self.assertIn("锁屏画报", meta["steps"])
-
     def test_version_mismatch_aborts_before_navigation(self):
         p = self.phone()
         p.d.shell.side_effect = [Mock(output="MEIZU 21 Pro"), Mock(output="Flyme 12.6.1.0A")]
@@ -229,15 +221,33 @@ class MeizuRecipeTests(unittest.TestCase):
         self.assertEqual(p.changed, [])
 
 
-class MeizuFamilyTests(unittest.TestCase):
-    """魅族要像另外四族一样，没有本型号脚本时兜底到同品牌参考（#379）。"""
+class RecipeSelectionTests(unittest.TestCase):
+    """型号 → 脚本的选择协议：本型号直达，缺脚本时兜底到同品牌固定参考（#379）。"""
 
-    def test_other_meizu_models_fall_back_to_the_21_pro_recipe(self):
-        for brand in ("MEIZU", "meizu", "Meizu"):
-            with self.subTest(brand=brand):
-                path, reference = run.recipe_for("MEIZU 22", brand)
-                self.assertTrue(reference)
-                self.assertEqual(Path(path), RECIPE)
+    # model, family, 是否参考, 脚本（相对 recipes/）, 记录版本（None = 该行不验）, 段名（None = 该行不验）
+    CASES = [
+        ("MEIZU 21 Pro", "meizu", False, "meizu/MEIZU 21 Pro/MEIZU 21 Pro.toml", "Flyme 12.6.0.0A", "锁屏画报"),
+        ("MEIZU 22", "MEIZU", True, "meizu/MEIZU 21 Pro/MEIZU 21 Pro.toml", None, None),
+        ("MEIZU 22", "meizu", True, "meizu/MEIZU 21 Pro/MEIZU 21 Pro.toml", None, None),
+        ("MEIZU 22", "Meizu", True, "meizu/MEIZU 21 Pro/MEIZU 21 Pro.toml", None, None),
+        ("ZZZ0000", "POCO", True, "xiaomi/M154FF/M154FF.toml", None, None),
+        ("ZZZ0000", "Redmi", True, "xiaomi/M154FF/M154FF.toml", None, None),
+        ("ZZZ0000", "OnePlus", True, "oppo/PLP120/PLP120.toml", None, None),
+        ("ZZZ0000", "realme", True, "oppo/PLP120/PLP120.toml", None, None),
+        ("ZZZ0000", "iQOO", True, "vivo/V2547DA/V2547DA.toml", None, None),
+        ("ZZZ0000", "HONOR", True, "honor/PNM-AN10/PNM-AN10.toml", None, None),
+    ]
+
+    def test_model_resolves_to_its_own_recipe_or_the_family_reference(self):
+        for model, family, reference, rel, build, step in self.CASES:
+            with self.subTest(model=model, family=family):
+                path, is_reference = run.recipe_for(model, family)
+                self.assertEqual(bool(is_reference), reference)
+                self.assertEqual(Path(path), ROOT / "recipes" / rel)
+                if build:
+                    meta = run.recipe_meta(path)
+                    self.assertEqual(meta["build"], build)
+                    self.assertIn(step, meta["steps"])
 
     def test_reference_is_pinned_not_the_first_directory(self):
         # REFERENCE 必须显式指定：社区再提一份魅族脚本，别的魅族机型用的参考不能跟着变
@@ -249,16 +259,6 @@ class MeizuFamilyTests(unittest.TestCase):
                 path, reference = run.recipe_for("MEIZU 22", "MEIZU")
                 self.assertTrue(reference)
                 self.assertEqual(Path(path).parent.name, "MEIZU 21 Pro")
-
-    def test_other_families_still_resolve_to_their_reference(self):
-        cases = [("POCO", "M154FF"), ("Redmi", "M154FF"),
-                 ("OnePlus", "PLP120"), ("realme", "PLP120"),
-                 ("iQOO", "V2547DA"), ("HONOR", "PNM-AN10")]
-        for brand, expected in cases:
-            with self.subTest(brand=brand):
-                path, reference = run.recipe_for("ZZZ0000", brand)
-                self.assertTrue(reference)
-                self.assertEqual(Path(path).parent.name, expected)
 
 
 if __name__ == "__main__":
