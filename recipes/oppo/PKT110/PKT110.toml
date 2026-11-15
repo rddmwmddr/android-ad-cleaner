@@ -7,7 +7,7 @@ models = ["PKT110"]
 build = "PKT110_17.0.0.102(CN01)"
 tail = "tail"
 
-# 家族库按这些常量选走法（#1245），缺省档见 recipe_lib/oppo.py：点入口按精确文字、
+# 家族库按这些常量选走法（#1245），缺省档见 recipe_lib/：点入口按精确文字、
 # 读开关只读首屏、关开关的页面要重进一次再回读。
 [const]
 TAP_STYLE = "exact"

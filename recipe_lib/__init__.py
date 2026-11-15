@@ -3,7 +3,7 @@
 一个家族一个文件（`huawei` / `samsung` 目前没有实现，就不建文件）；文件内分「词汇 / 策略」两节。
 归属按家族数算：只被一个家族用到的进 `recipe_lib/<家族>.py`，被 ≥2 个家族用到的进 `shared.py`。
 
-名字集合是显式三层：家族 `__all__` 并集 140 个是「数据 `lib:` 能点名」的词汇，`LIBRARY` 就是这
+名字集合是显式三层：六个模块的 `__all__` 并集 140 个是「数据 `lib:` 能点名」的词汇，`LIBRARY` 就是这
 140 个；`__all__` 再加 10 个面助手，共 150 个是「能从稳定 import 面取到」的名字。
 `tool/recipe_nav.py` / `recipe_strategies.py` / `recipe_steps.py` 只剩转发，真身都在这里。
 """

@@ -62,8 +62,8 @@ class CatalogScope(dict):
         """测试读库助手用的视图：数据可点名的实现 + 面助手，都直接在 `recipe_lib` 上取（ADR-0040）。"""
         import functools
         fn = interpreter.LIBRARY.get(key)
-        if fn is None and not key.startswith("__"):
-            fn = getattr(recipe_lib, key, None)
+        if fn is None and key in recipe_lib.__all__:
+            fn = getattr(recipe_lib, key)
         if fn is None:
             raise KeyError(key)
         if isinstance(fn, type):                 # MenuState 这类 namedtuple

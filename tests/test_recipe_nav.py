@@ -152,7 +152,7 @@ SURFACES = (recipe_nav, recipe_strategies, recipe_steps)
 
 
 def family_names():
-    """六个家族 `__all__` 的并集：数据 `lib:` 能点名的 140 个名字。"""
+    """六个模块（五个家族文件 + `shared.py`）的 `__all__` 合起来：数据 `lib:` 能点名的 140 个名字。"""
     names = set()
     for module in recipe_lib.MODULES:
         names |= set(module.__all__)
@@ -160,7 +160,7 @@ def family_names():
 
 
 class SurfaceTests(unittest.TestCase):
-    """库名字表的三个分区（ADR-0040）：owner 只在 `recipe_lib/__init__.py`，三个面是兼容壳。
+    """库名字表的四个分区（ADR-0040）：owner 只在 `recipe_lib/__init__.py`，三个面是兼容壳。
 
     1. `recipe_lib.__all__` 是「面能取到」的全部名字，必须恰好等于家族 `__all__` 并集 ∪
        `HELPERS`，且没有重复项——家族加了名字却漏镜像时当场红，不必等某台机型的入口速查
@@ -169,6 +169,8 @@ class SurfaceTests(unittest.TestCase):
        多出一批点得到、却没人该用的名字。
     3. 三个兼容面导出的集合必须全等且等于 owner 的 `__all__`——谁在壳里手写一份名单，
        下一次改 owner 时就会悄悄分叉。
+    4. `LIBRARY` 里的每个实现必须是 owner 导出的**同一个对象**——跨家族重名时 `LIBRARY`
+       按 `MODULES` 顺序派生会静默覆盖、显式 import 仍绑先写的那个，前三条都抓不到这种分歧。
     """
 
     def test_owner_all_is_the_family_union_plus_helpers(self):
@@ -185,6 +187,10 @@ class SurfaceTests(unittest.TestCase):
         for module in SURFACES:
             self.assertEqual(set(module.__all__), owner, module.__name__)
         self.assertEqual(len({frozenset(module.__all__) for module in SURFACES}), 1)
+
+    def test_library_binds_the_same_object_the_owner_exports(self):
+        for name in recipe_lib.LIBRARY:
+            self.assertIs(recipe_lib.LIBRARY[name], getattr(recipe_lib, name), name)
 
 
 DRIVER = ROOT / "tests" / "compare_recipe_calls.py"
