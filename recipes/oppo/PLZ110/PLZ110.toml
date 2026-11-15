@@ -7,7 +7,7 @@ models = ["PLZ110"]
 build = "PLZ110_17.0.0.107(CN01)"
 tail = "tail"
 
-# 家族库按这些常量选走法（#1245），缺省档见 recipe_lib/。
+# 家族库按这些常量选走法（沿用 #1245），缺省档见 recipe_lib/。
 [const]
 # 共享段体的 close_named 走「允许缺项」那一档（这两台的旧别名，见 #1268）。
 CLOSE_NAMED_OPTIONAL = true

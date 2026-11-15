@@ -1,4 +1,4 @@
-"""recipe_nav 是 `recipe_lib` 的稳定 import 面（#1269 拆库、#1344 收名字表）：只剩转发。
+"""recipe_nav 是 `recipe_lib` 的稳定 import 面（沿用 #1269 拆库、#1344 收名字表）：只剩转发。
 
 名字的唯一 owner 是 `recipe_lib/__init__.py`；机型例外 `.py` 与事实层仍从这里取名字，所以这个模块
 要留着。别往这里加实现或名单——加了就与 owner 分叉，`tests/test_recipe_nav.py` 的 `SurfaceTests` 会红。"""
