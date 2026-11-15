@@ -129,6 +129,7 @@ class StoreSegmentTests(unittest.TestCase):
         p.tab.assert_not_called()
 
     def test_a_skip_is_recorded_as_skipped_instead_of_retrying_the_fallback(self):
+        """旧树也绿，守的是不回退：SkipStep 早已单列，约定跳过不许被当成「这一页打不开」再走回退。"""
         p = make_phone()
         p.start.side_effect = SkipStep("本机没装商店")
         scope = load(p, only=["应用商店"])

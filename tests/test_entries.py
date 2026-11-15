@@ -1994,7 +1994,11 @@ class PnmAdTrackingEntryTests(unittest.TestCase):
         p.setting.assert_not_called()
 
     def test_ad_tracking_does_not_swallow_a_locked_screen(self):
-        """锁屏同理：上抛给上层停段，不静默换入口。"""
+        """锁屏同理：上抛给上层停段，不静默换入口。
+
+        这条是人为让 `p.start` 抛 `ScreenLocked` 的守卫，不是生产路径：当前 `p.start` 落点不对时抛的
+        是普通 `RuntimeError`，锁屏只在 `rt.page` 与段前检查里抛，`opened()` 的 `ScreenLocked` 分支是
+        给将来会抛它的调用方留的。"""
         p = phone_796()
         p.start.side_effect = ScreenLocked("手机锁屏")
         scope, _ = load_796(p, PNM_796, "广告跟踪")
@@ -2868,6 +2872,37 @@ def verifies_switches_906(ops):
                 and str(op.get("name", "")).startswith("close_named")):
             return True
     return False
+
+
+def _walk_toml_ops(value):
+    """一份 catalog 数据里所有 op 表（含 `ops` / `else_ops` 与实参回调块）。"""
+    if isinstance(value, dict):
+        if "kind" in value:
+            yield value
+        for inner in value.values():
+            yield from _walk_toml_ops(inner)
+    elif isinstance(value, list):
+        for inner in value:
+            yield from _walk_toml_ops(inner)
+
+
+class ThemeDeadEndsSingleSourceTests(unittest.TestCase):
+    """`THEME_DEAD_ENDS` 的唯一 owner 是 `tool/entries.py`，十份小米数据里抄的是同一份值。
+
+    旧树也绿，守的是单一来源不漂移：改了库常量而数据没跟着改（或反过来），这里报红。"""
+
+    def test_xiaomi_start_or_skip_dead_ends_match_the_library_constant(self):
+        found = []
+        for path in sorted(Path(RECIPES).glob("xiaomi/**/*.toml")):
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+            for op in _walk_toml_ops(data):
+                if op.get("kind") == "start_or_skip" and "dead_ends" in op:
+                    found.append((path, frozenset(op["dead_ends"])))
+        self.assertTrue(found, "一份小米 start_or_skip 的 dead_ends 都没扫到：发现口径坏了")
+        for path, dead_ends in found:
+            with self.subTest(recipe=str(path.relative_to(ROOT))):
+                self.assertEqual(dead_ends, entries.THEME_DEAD_ENDS,
+                                 "数据里的 dead_ends 与 entries.THEME_DEAD_ENDS 不一致")
 
 
 class ThemeLandingGuardTests(unittest.TestCase):

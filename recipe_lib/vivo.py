@@ -9,6 +9,7 @@ import adb_link
 from wait import until
 from recipe_runtime import SkipStep
 from recipe_lib.shared import _style, browser_settings, maybe, opened, read_switches, tap
+from phone.errors import ScreenLocked
 from row import bounds, icon_hit
 
 __all__ = ('browser_recommendations', 'browser_settings_vivo', 'by_desc', 'close_named_vivo', 'confirm2', 'dialog_open', 'global_search_ads', 'global_search_entry', 'hiboard_panel_v2547a', 'hiboard_panel', 'i_manager_ads', 'lock_screen_magazine', 'off', 'off_one', 'off_unnamed', 'result_xy', 'row_switch', 'rows', 'search_setting', 'setting_search', 'settings_home', 'store_personalization', 'store_settings_direct', 'switch_off', 'system_ads_branch', 'system_ads_chain', 'tap_row', 'weather_service')
@@ -409,12 +410,13 @@ def store_settings_direct(p, rt, pkg, activity, marker):
     """商店设置页能按 Activity 直达就直达：落点对得上返回真（V2303A / V2547DA，Android 17）。
 
     「我的」页没有能读到的齿轮入口，只能直达（沿用 #220）。直达抛错时不中断，由调用方按
-    「我的 → 设置」回退；断线与约定跳过照常上抛——两者都是 RuntimeError 的子类，不单列出来会被
-    当成「这一页打不开」，掉线在回退路径上再空跑一次、跳过也会说成失败（沿用 #293 / #908）。
+    「我的 → 设置」回退；断线 / 锁屏 / 约定跳过照常上抛——三者都是 RuntimeError 的子类，不单列出来
+    会被当成「这一页打不开」，掉线在回退路径上再空跑一次、跳过也会说成失败（沿用 #293 / #908）。
     包名与页面名由数据传进来：`tool/entries.py` 按调用点的这两个实参认入口速查。"""
     try:
         p.start(pkg, activity)
-    except (adb_link.DeviceLost, SkipStep):
+    # 沿用 #293：断线 / 锁屏 / 跳过都不算「这页打不开」，与同家族 `global_search_entry` 一致。
+    except (adb_link.DeviceLost, SkipStep, ScreenLocked):
         raise
     except RuntimeError as e:
         print(f"  · 直达商店设置页失败（{e}），改走「我的 → 设置」")

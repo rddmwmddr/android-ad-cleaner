@@ -286,6 +286,21 @@ class LoadTimeNameTests(unittest.TestCase):
                      ' calls=[{method="tap", args=["我的"]}], ops=[], else_ops=[]}]\n')
         self.assertEqual([step.name for step in recipe.steps], ["a"])
 
+    def test_a_name_inside_a_callback_argument_block_is_rejected(self):
+        """实参里的再入块（`close_named(..., reopen={ops = [...]})`）点错名字，装载期就报（#1371）。"""
+        message = self._bad(
+            '[[segment]]\nname="a"\nops=[{kind="lib", name="close_named", args=[["行"]],'
+            ' kwargs={reopen={ops=[{kind="lib", name="no_such_helper"}]}}}]\n',
+            "'no_such_helper'")
+        self.assertIn("第 1 个 op 的实参块 第 1 个 op", message)
+
+    def test_a_correct_name_inside_a_callback_argument_block_is_accepted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="lib", name="close_named", args=[["行"]],'
+                     ' kwargs={reopen={ops=[{kind="lib", name="close_named", args=[["行"]]}]}}}]\n')
+        self.assertEqual([step.name for step in recipe.steps], ["a"])
+
     def test_names_from_the_exception_module_are_legal(self):
         with tempfile.TemporaryDirectory() as tmp:
             recipe, _phone, _calls = _load_tmp(
