@@ -2,6 +2,7 @@
 # 路径与开关来自 2026-10-28 在 PKT110 真机上逐段实测。
 # 不覆盖软件商店（ColorOS 17 的设置页里没有「隐私」「服务管理」，商店首页的推广位也关不掉），
 # 也不覆盖负一屏（速览）——那边没有「推荐服务」分组。详见 docs/清单/OPPO-ColorOS.md。
+# 2026-11-15：广告跟踪、下拉搜索、游戏中心三段落成数据，只剩主题商店一段例外（回调当实参）。
 model = "PKT110"
 models = ["PKT110"]
 build = "PKT110_17.0.0.102(CN01)"
@@ -16,11 +17,54 @@ CLOSE_NAMED_STYLE = "reopen"
 
 [[segment]]
 name = "广告跟踪"
-code = "step_ad_tracking"
+ops = [
+  { kind = "skip_in_safe_mode" },
+  { kind = "shell", command = "am start -f 0x10008000 -a android.settings.SETTINGS" },
+  { kind = "sleep", seconds = 1.2 },
+  { kind = "miss_reset" },
+  # 17 把入口改名叫「隐私与安全」：先试新名字，免得在旧名字上白翻一轮、还打印一行失败（沿用 #292）。
+  { kind = "if_tap", text = "隐私与安全", exact = true, else_ops = [
+    { kind = "miss_reset" },
+    { kind = "lib", name = "tap", args = ["隐私"] },
+  ] },
+  { kind = "lib", name = "tap", args = ["设备标识与广告"] },
+  { kind = "lib", name = "tap", args = ["广告跟踪"] },
+  { kind = "sleep", seconds = 1 },
+  # 每个 App 一个开关、没有总开关，本机 96 个 App，分五屏。
+  { kind = "lib", name = "close_all", args = ["广告跟踪"], kwargs = { max_screens = 40 } },
+]
 
 [[segment]]
 name = "下拉搜索"
-code = "step_search"
+ops = [
+  { kind = "shell", command = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'" },
+  { kind = "sleep", seconds = 1.5 },
+  { kind = "require_focus", contains = "com.heytap.quicksearchbox", miss_print = "全局搜索设置页没有打开" },
+  { kind = "lib", name = "tap", args = ["首页卡片管理"] },
+  { kind = "require_focus", contains = "SearchModuleManagerActivity", miss_print = "首页卡片管理页没有打开" },
+  { kind = "if_lib", name = "wait_switches", ops = [
+    # 「未下载应用推荐」「应用建议小卡」是「应用建议」的子项：父开关一关，这两行就没了。
+    { kind = "lib", name = "close_group", args = [["未下载应用推荐", "应用建议小卡"], "应用建议", "下拉搜索·首页卡片管理"], kwargs = { max_screens = 3 } },
+    # 「便捷服务」是用户常用的快捷入口，不是广告位，保持不动。
+    { kind = "lib", name = "close_named", args = [["热搜应用", "精选推荐", "热搜榜单", "活动皮肤", "推荐卡片"], "下拉搜索·首页卡片管理"], kwargs = { max_screens = 3 } },
+  ], else_ops = [
+    # 推荐卡片全部关掉之后，这一页就不再列出任何卡片（2026-10-28 实测）。
+    { kind = "print", text = "  · 首页卡片管理：这页没有列出卡片，没有可关的开关" },
+  ] },
+  { kind = "back" },
+  { kind = "lib", name = "tap", args = ["搜索范围"] },
+  # 搜索结果里带出来的推荐源。「榜单」「小红书」「购物」这些是内容源不是广告位，保持不动。
+  { kind = "lib", name = "close_named", args = [["个性化推荐", "精选资讯", "搜索建议"], "下拉搜索·搜索范围"], kwargs = { max_screens = 6 } },
+  { kind = "back" },
+  { kind = "lib", name = "tap", args = ["功能管理"] },
+  { kind = "lib", name = "close_named", args = [["搜索框提示词"], "下拉搜索·功能管理"], kwargs = { max_screens = 2 } },
+  { kind = "back" },
+  { kind = "lib", name = "tap", args = ["消息管理"] },
+  { kind = "lib", name = "close_named", args = [["消息通知"], "下拉搜索·消息管理"], kwargs = { max_screens = 2 } },
+  { kind = "back" },
+  { kind = "lib", name = "tap", args = ["隐私"] },
+  { kind = "lib", name = "close_named", args = [["个性化推荐"], "下拉搜索·隐私"], kwargs = { max_screens = 2 } },
+]
 
 [[segment]]
 name = "浏览器"
@@ -54,7 +98,24 @@ ops = [
 
 [[segment]]
 name = "游戏中心"
-code = "step_game_center"
+ops = [
+  { kind = "start", pkg = "com.nearme.gamecenter" },
+  # 底栏点下去被开屏动画吞掉时页面不换，p.tap 照样返回成功，接着就整段失败；换页要确认（沿用 #286）。
+  { kind = "enter", text = "我的" },
+  { kind = "sleep", seconds = 1.2 },
+  # dismiss() 遇到带滚动列表的页面就不点文字按钮，「页面升级」弹窗的「我知道了」只能点名点。
+  { kind = "if_find", text = "我知道了", exact = true, ops = [
+    { kind = "tap", text = "我知道了", exact = true, scrolls = 0 },
+    { kind = "sleep", seconds = 1.2 },
+  ], else_ops = [
+    { kind = "dismiss" },
+  ] },
+  # 「设置」在 14.43.3 上是「我的」页右上角的齿轮图标，没有文字（沿用 #292）；旧版是「设置,有新通知」文字行。
+  { kind = "require_lib", name = "open_settings", args = [["隐私开关设置", "隐私"]], miss_print = "没找到设置入口：右上角图标都点过", fail = true },
+  { kind = "lib", name = "tap", args = ["隐私开关设置"] },
+  { kind = "lib", name = "tap", args = ["个性化推荐管理"] },
+  { kind = "lib", name = "close_named", args = [["个性化推荐"], "游戏中心·个性化推荐"] },
+]
 
 [[segment]]
 name = "小布建议"

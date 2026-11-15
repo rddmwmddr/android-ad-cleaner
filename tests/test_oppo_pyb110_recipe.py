@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import fast  # noqa: E402
-from fixtures import Clock, clocked, load_recipe, phone_mock, phone_stub  # noqa: E402
+from fixtures import Clock, clocked, keep_list, load_recipe, phone_mock, phone_stub  # noqa: E402
 
 RECIPE = ROOT / "recipes/oppo/PYB110/PYB110.toml"
 # 首次运行停在推荐流首页时当次读到的页面文字，失败时要原样带出来。
@@ -44,7 +44,7 @@ class StoreStepTests(unittest.TestCase):
         self.p.entry.return_value = False
         self.store()
         self.assertEqual(self.p.off.call_args_list, [
-            call(keep=self.scope["STORE_KEEP"], page="商店·服务管理"),
+            call(keep=keep_list(RECIPE, "软件商店"), page="商店·服务管理"),
             call(only=["个性化推荐"], page="商店·个性化推荐"),
         ])
 

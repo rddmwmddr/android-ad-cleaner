@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from fixtures import load_recipe, phone_mock
+from fixtures import keep_list, load_recipe, phone_mock
 from recipe_kit import MissingPackage
 from recipe_meta import recipe_meta
 
@@ -44,6 +44,7 @@ def run(phone, step):
     return scope, out.getvalue()
 
 
+
 class MetaTests(unittest.TestCase):
     def test_meta_declares_the_model_the_build_and_nine_steps(self):
         meta = recipe_meta(RECIPE)
@@ -52,8 +53,7 @@ class MetaTests(unittest.TestCase):
         self.assertEqual(meta["steps"], STEPS)
 
     def test_store_keep_holds_features_and_not_promotions(self):
-        scope = load_recipe(make_phone(), RECIPE, None)[0]
-        keep = scope["STORE_KEEP"]
+        keep = keep_list(RECIPE, "软件商店")
         for name in ("帮助与客服", "应用安全", "我的专区：应用工具", "应用使用记录", "首页：AI搜索"):
             self.assertIn(name, keep)
         for name in ("首页：活动弹窗", "软件专区：福利", "游戏专区：活动集合"):

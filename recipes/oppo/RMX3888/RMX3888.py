@@ -1,9 +1,6 @@
 # realme 真我 GT5 Pro（RMX3888，ColorOS 15）的本机例外函数（catalog 的 `code=`，影随同名 `.toml`）。
-# 剩五段在这里：负一屏（只余读完入口行之后的收窄）、软件商店（多层嵌套 + 无 `require_tap`）、
-# 主题（try/except 只认「无法打开」）、视频（`require(p.tap)` 的报错出口）、游戏中心（`tap_icon` +
-# 复合条件）。其余四段已落数据，负一屏的右滑入口也收进了家族库。
-import time
-
+# 只剩两段在这里：负一屏（读完入口行之后的收窄，两个读数要留到后面用）、主题（try/except 只认
+# 「无法打开」这条异常文本）。其余七段已落数据，负一屏的右滑入口也收进了家族库。
 import adb_link
 from fast import ScreenLocked
 import recipe_nav as nav
@@ -14,11 +11,9 @@ BUILD = "RMX3888_15.0.0.420"
 MODELS = ["RMX3888"]
 
 SETTINGS = "com.android.settings"
-MARKET = "com.heytap.market"
 BROWSER = "com.heytap.browser"
 THEME = "com.oplus.themestore"
 VIDEO = "com.heytap.yoli"
-GAME = "com.nearme.gamecenter"
 SEARCH = "com.heytap.quicksearchbox"
 # SearchSettingActivity 没导出（`am start -n` 会被系统拒绝），只能走应用自己的 scheme。
 # 前提是 com.heytap.quicksearchbox 没被挂起：一挂，这个 scheme 落到系统的「应用已被暂停」页。
@@ -26,10 +21,6 @@ SEARCH_SETTING = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://
 # 搜索范围：只关推荐位。「榜单」「小红书」「购物」「小说」「视频」是内容源，「本机应用」「设置」
 # 这类是数据源，关掉会搜不到东西。
 SEARCH_SOURCES = ["个性化推荐", "精选资讯"]
-# 商店「服务管理」里只保留功能项，其余推广入口全关（本机 46 项）。
-STORE_KEEP = ["帮助与客服", "应用安全", "我的专区：应用工具", "我的专区：存储空间清理",
-              "我的专区：我的资产", "我的专区：安全守护", "我的专区：小i客服",
-              "应用使用记录", "首页：AI搜索"]
 
 
 def step_negative_screen_tail(p, rt):
@@ -63,32 +54,6 @@ def step_negative_screen_tail(p, rt):
     p.back(2)
 
 
-def step_store(p, rt):
-    p.start(MARKET)
-    if not p.tab("我的"):
-        raise RuntimeError("商店里没找到底部「我的」")
-    time.sleep(1.0)
-    if not p.tap("设置", exact=True, scrolls=0):
-        raise RuntimeError("商店「我的」页没找到「设置」")
-    rt.page("设置", MARKET, "SettingActivity")
-    if p.tap("服务管理", exact=True):
-        p.off(keep=STORE_KEEP, page="商店·服务管理")
-        p.back()
-    # 个性化推荐是入口行，开关在下一层的 PersonalRecommendActivity，不是就地开关。
-    if nav.store_privacy(p, rt):
-        if p.tap("个性化推荐", exact=True):
-            rt.page("个性化推荐", MARKET, "PersonalRecommendActivity")
-            p.off(only=["个性化推荐"], page="商店·个性化推荐")
-            p.back()
-        else:
-            print("  · 隐私页没有「个性化推荐」入口", flush=True)
-        p.back(2)
-    else:
-        p.note_miss("隐私")
-        print("  · 商店里没找到「隐私 / 隐私授权管理」", flush=True)
-    p.back(2)
-
-
 def step_theme(p, rt):
     # 包名不是同族的 com.heytap.themestore，而且没有启动界面：resolve-activity 返回
     # No activity found，拉起命令只会报「无法打开」。本机这一段做不了，按跳过收尾。
@@ -112,16 +77,3 @@ def step_theme(p, rt):
         p.off(only=["个性化推荐"], page="主题·个性化推荐")
         p.back()
     p.back(2)
-
-
-def step_game_center(p, rt):
-    # 本机未安装：p.start 抛 MissingPackage，段包装按跳过记账。装上之后走同族旧版路径。
-    p.start(GAME)
-    if not p.tab("我的"):
-        raise RuntimeError("游戏中心没找到底部「我的」")
-    time.sleep(1.0)
-    if not p.tap("设置", exact=True, scrolls=0) and not p.tap_icon(["隐私开关设置", "隐私"]):
-        raise RuntimeError("游戏中心没找到设置入口")
-    if p.tap("隐私开关设置", exact=True) and p.tap("个性化推荐管理", exact=True):
-        p.off(only=["个性化推荐"], page="游戏中心·个性化推荐管理")
-    p.back(4)

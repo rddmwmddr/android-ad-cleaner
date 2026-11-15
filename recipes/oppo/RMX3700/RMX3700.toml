@@ -50,7 +50,50 @@ ops = [
 
 [[segment]]
 name = "软件商店"
-code = "step_store"
+ops = [
+  { kind = "start", pkg = "com.heytap.market" },
+  { kind = "tap", text = "我的", exact = true, scrolls = 0 },
+  { kind = "sleep", seconds = 1.2 },
+  { kind = "if_tap", text = "设置", exact = true, scrolls = 0, else_ops = [
+    { kind = "print", text = "  ! 商店里没找到「设置」" },
+    { kind = "return", value = false },
+  ] },
+  { kind = "sleep", seconds = 1.5 },
+  { kind = "return_lib", name = "wait_page", args = ["com.heytap.market.mine.cn.setting.ui.SettingActivity", "设置"] },
+  # 服务管理：46 项推广/服务入口，只保留 STORE_KEEP 里的服务类。
+  { kind = "if_lib", name = "tap_by_scroll", args = ["服务管理"], ops = [
+    { kind = "if_lib", name = "wait_page", args = ["com.heytap.market.mine.cn.setting.ui.ServeManagerActivity", "服务管理"], ops = [
+      { kind = "off", keep = ["帮助与客服", "应用安全", "我的专区：应用工具", "我的专区：存储空间清理", "我的专区：我的资产", "我的专区：安全守护", "我的专区：小i客服", "应用使用记录", "首页：AI搜索"], page = "商店·服务管理", page_wide = true },
+    ], else_ops = [
+      { kind = "print", text = "  ! 没到「服务管理」页" },
+    ] },
+    { kind = "back" },
+    { kind = "sleep", seconds = 1.2 },
+  ] },
+  # 个性化推荐不在「隐私」页，在「账号与隐私 → 隐私授权管理 → 个性化推荐」。
+  # 商店 App 自己升级，这一行在有的版本里叫「隐私」（沿用 #933）；两页都可以当落点判。
+  { kind = "lib", name = "tap_by_scroll", args = ["账号与隐私"] },
+  { kind = "if_lib", name = "tap_by_scroll", args = [["隐私", "隐私授权管理"]], ops = [
+    { kind = "if_lib", name = "wait_page", args = ["com.heytap.market.mine.cn.setting.ui.PrivacyActivity", ["隐私", "隐私授权管理"]], ops = [
+      { kind = "if_lib", name = "tap_by_scroll", args = ["个性化推荐"], ops = [
+        { kind = "if_lib", name = "wait_page", args = ["com.heytap.market.mine.cn.setting.ui.PersonalRecommendActivity", "个性化推荐"], ops = [
+          { kind = "off", only = ["个性化推荐"], page = "商店·个性化推荐" },
+        ], else_ops = [
+          { kind = "print", text = "  ! 没到「个性化推荐」页" },
+        ] },
+      ], else_ops = [
+        { kind = "print", text = "  ! 没找到「个性化推荐」" },
+      ] },
+    ], else_ops = [
+      { kind = "print", text = "  ! 没到「隐私授权管理」页" },
+    ] },
+    { kind = "back" },
+    { kind = "sleep", seconds = 1.0 },
+  ], else_ops = [
+    { kind = "note_miss", text = "隐私 / 隐私授权管理" },
+    { kind = "print", text = "  ! 没找到「隐私授权管理」" },
+  ] },
+]
 
 [[segment]]
 name = "浏览器"
