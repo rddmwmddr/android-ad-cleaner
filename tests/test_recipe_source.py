@@ -7,16 +7,19 @@
 共享实现的归属跟 import 走（#1243）：`from X import n` 与 `import X` + `X.n(…)` 都解析到 X 里那份，
 两张注册表不再按名字合并；脚本本地同名 `def` 覆盖导入版，没有 import 的裸名字不算注入实现。
 """
+import ast
 import sys
 import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 
 import recipe_source  # noqa: E402
+from recipe_source import Item  # noqa: E402
 
 
 def scan(src):
@@ -217,6 +220,42 @@ class LibrarySourcesTest(unittest.TestCase):
 
     def test_second_call_reuses_the_scanned_table(self):
         self.assertIs(recipe_source.library_sources(), recipe_source.library_sources())
+
+
+class ScanCacheTest(unittest.TestCase):
+    """同一份源码只解析一次（#1321）：`tests.test_vocab` 单跑时 `scan_source` 被调 13,116 次，
+    不同源码只有 282 份。`bindings` / `externals` 是 dict，缓存键得先收成可哈希的形状；
+    两条 `test_distinct_*` 在加缓存之前也是绿的，守的是缓存键不漏字段。"""
+
+    SRC = 'NAMES = ["广告"]\n\ndef _():\n    p.off(only=NAMES, page="广告管理")\n'
+
+    def test_repeated_scans_parse_the_source_once(self):
+        src = 'p.off(only=["广告"], page="广告管理")\n'
+        recipe_source.scan_source(src)   # 预热：先吃掉可能还没缓存的那一次
+        with mock.patch.object(recipe_source.ast, "parse", wraps=ast.parse) as parse:
+            for _ in range(5):
+                recipe_source.scan_source(src)
+        self.assertEqual(parse.call_count, 0)
+
+    def test_cached_scan_returns_the_same_object(self):
+        first = recipe_source.scan_source(self.SRC)
+        self.assertIs(first, recipe_source.scan_source(self.SRC))
+
+    def test_distinct_externals_do_not_share_a_cache_entry(self):
+        src = "def _():\n    p.off(only=rt.constants['HOT'], page=\"广告\")\n"
+        first = recipe_source.scan_source(src, externals={"HOT": (Item("热词一", 1),)})
+        second = recipe_source.scan_source(src, externals={"HOT": (Item("热词二", 1),)})
+        self.assertIsNot(first, second)
+        self.assertEqual(texts(only(calls(first, "p.off")[0], "only").values), ["热词一"])
+        self.assertEqual(texts(only(calls(second, "p.off")[0], "only").values), ["热词二"])
+
+    def test_distinct_bindings_do_not_share_a_cache_entry(self):
+        src = "def _fn(one):\n    p.off(only=one, page=\"广告\")\n"
+        first = recipe_source.scan_source(src, bindings={0: ["热词一"]})
+        second = recipe_source.scan_source(src, bindings={0: ["热词二"]})
+        self.assertIsNot(first, second)
+        self.assertEqual(texts(only(calls(first, "p.off")[0], "only").values), ["热词一"])
+        self.assertEqual(texts(only(calls(second, "p.off")[0], "only").values), ["热词二"])
 
 
 class ErrorTest(unittest.TestCase):
