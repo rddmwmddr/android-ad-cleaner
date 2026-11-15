@@ -340,10 +340,15 @@ def _miss_message(op: Mapping, p: Any, g: dict[str, Any], where: str | None = No
 
 
 def _require_tab(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
+    """`settle` 给换页慢的机型留更长的等待：`sig` → `tab` → `settle(sig, n)` 与旧脚本同形，
+    签名在点之前读，点不到时不 settle 直接报。"""
+    before = p.sig() if "settle" in op else None
     result = p.tab(op["name"])
     where = _focus_note(op, p, rt, g)
     if not result:
         raise RuntimeError(_miss_message(op, p, g, where))
+    if before is not None:
+        p.settle(before, op["settle"])
 
 
 def _require_go(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:

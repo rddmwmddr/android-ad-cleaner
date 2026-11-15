@@ -1,5 +1,5 @@
 # Xiaomi MIX Flip 2（2505APX7BC）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
-# 应用商店的「个性化服务」按运行时读到的开关位置分岔；天气的设置藏在 PopupWindow 菜单里，按坐标点。
+# 天气的设置藏在 PopupWindow 菜单里，按坐标点。
 import time
 import recipe_nav as nav
 import recipe_steps as steps
@@ -7,31 +7,6 @@ import recipe_steps as steps
 
 # 热搜榜的候选开关名：`recipe_steps.global_search` 从执行作用域按名字取。
 HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "知乎", "精选"]
-
-
-def step_store(p, rt):
-    # 冷启动可能落「福利推广页」→ 先回首页。「我的」用 p.tab()：底部带过滤把内容区同名文字挡在外面（#386）。
-    p.start("com.xiaomi.market")
-    time.sleep(2.5)
-    if p.find("回到首页", exact=True):
-        p.tap("回到首页", exact=True, scrolls=0)
-        time.sleep(2)
-    rt.require(p.tab("我的"), "商店底部「我的」标签没找到")
-    time.sleep(1.5)
-    rt.require(p.tap("设置", exact=True, scrolls=4), "商店设置图标没找到")
-    time.sleep(1)
-    if nav.maybe(p, rt, "隐私设置"):
-        nested = not any("个性化服务" in t for t, _, _ in p.switches())
-        if not nested or nav.maybe(p, rt, "个性化服务"):
-            p.off(only=["个性化服务", "个性化推荐"], page="商店·个性化服务")
-            if nested:
-                p.back()
-        p.back()
-    if nav.maybe(p, rt, "通知设置"):
-        # 只关「新手帮助」。不碰「推送消息」：它是父开关，关了会连点赞/评论消息一起关。
-        p.off(only=["新手帮助"], keep=["推送消息", "应用更新"], page="商店·通知设置")
-        p.back()
-    p.back(2)
 
 
 def step_weather_calendar(p, rt):
