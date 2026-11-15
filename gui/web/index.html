@@ -127,6 +127,12 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const main = () => $("#main");
 
+/* 周期性刷新只换内容、不换节点：每 2 秒重建一次，会连用户刚展开的 <details> 和点击落点一起扔掉（#1292）。 */
+function paint(el, html){
+  if (!el || el.__html === html) return;
+  el.__html = html;
+  el.innerHTML = html;
+}
 function setStep(n){
   S.step = n;
   document.querySelectorAll(".step").forEach(e => {
@@ -208,12 +214,16 @@ async function refreshHarmonyDevices(){
     const result = await api.harmony('devices');
     if (S.step !== 1 || epoch !== harmonyEpoch || !$('#harmonydevbox')) return;
     harmonyDevices = result.list || [];
-    const box = $('#harmonydevbox');
-    if (result.error){ box.innerHTML = `<div class="note warn">${esc(result.error)}</div>`; return; }
-    if (!harmonyDevices.length){ box.innerHTML = `<details class="card"><summary>连接鸿蒙手机</summary><p>在手机「设置 → 关于本机」连点版本号，打开开发者选项和 USB 调试，再用可传数据的数据线连接电脑。信任弹窗需要你在手机上确认。</p></details>`; return; }
-    box.innerHTML = harmonyDevices.map((d, i) => `<div class="dev"><div class="ico">📱</div><div class="meta"><b>${esc(d.name || d.model || '鸿蒙手机')}</b><small>${esc(d.model)} · ${esc(d.serial)}</small><span class="tag info">鸿蒙</span> ${d.state === 'Connected' ? d.supported ? '<span class="tag ok">已连接</span>' : '<span class="tag warn">此系统版本暂不支持</span>' : '<span class="tag warn">请在手机上确认信任，或重新插线</span>'}</div>${d.state === 'Connected' && d.supported ? `<button class="btn" onclick="pickHarmony(${i})">用这台</button>` : ''}</div>`).join('');
+    const box = $('#harmonydevbox'), help = $('#harmonyhelp');
+    /* 说明那段 <details> 常驻在连接页模板里，刷新只切它的显隐与设备列表的内容，不重建它自己（#1292）。 */
+    if (result.error){ paint(box, `<div class="note warn">${esc(result.error)}</div>`); if (help) help.classList.add('hide'); return; }
+    paint(box, harmonyDevices.map((d, i) => `<div class="dev"><div class="ico">📱</div><div class="meta"><b>${esc(d.name || d.model || '鸿蒙手机')}</b><small>${esc(d.model)} · ${esc(d.serial)}</small><span class="tag info">鸿蒙</span> ${d.state === 'Connected' ? d.supported ? '<span class="tag ok">已连接</span>' : '<span class="tag warn">此系统版本暂不支持</span>' : '<span class="tag warn">请在手机上确认信任，或重新插线</span>'}</div>${d.state === 'Connected' && d.supported ? `<button class="btn" onclick="pickHarmony(${i})">用这台</button>` : ''}</div>`).join(''));
+    if (help) help.classList.toggle('hide', harmonyDevices.length > 0);
   } catch (_) {
-    if (epoch === harmonyEpoch && $('#harmonydevbox')) $('#harmonydevbox').innerHTML = '<div class="note warn">鸿蒙设备检测失败，请重新插线后重试。</div>';
+    if (epoch === harmonyEpoch){
+      paint($('#harmonydevbox'), '<div class="note warn">鸿蒙设备检测失败，请重新插线后重试。</div>');
+      const help = $('#harmonyhelp'); if (help) help.classList.add('hide');
+    }
   } finally { harmonyListing = false; }
 }
 function pickHarmony(index){
@@ -303,10 +313,10 @@ const TUT = [
   ["dev-4-on.png", "④ 确认最上方的总开关是开着的"],
   ["dev-5-usb.png", "⑤ 打开「USB 调试」。小米还要打开「USB 调试（安全设置）」"],
 ];
-let pollDev = null;
+let pollDev = null, tutSeen = false;
 function showConnect(){
   setStep(1); clearInterval(pollDev); clearInterval(pollHarmony); harmonyEpoch++;
-  S.deviceKind = "android"; S.serial = null;
+  S.deviceKind = "android"; S.serial = null; tutSeen = false;
   main().innerHTML = `
     <h1>连接手机</h1>
     <p class="lead">用数据线把手机连到这台电脑。手机要打开开发者模式和 USB 调试。</p>
@@ -316,6 +326,10 @@ function showConnect(){
     <div id="adbbox"></div>
     <div id="devbox"></div>
     <div id="harmonydevbox"></div>
+    <details class="card hide" id="harmonyhelp">
+      <summary>连接鸿蒙手机</summary>
+      <p>在手机「设置 → 关于本机」连点版本号，打开开发者选项和 USB 调试，再用可传数据的数据线连接电脑。信任弹窗需要你在手机上确认。</p>
+    </details>
     <details class="card" id="tutbox">
       <summary>还没打开 USB 调试？看图文教程</summary>
       <div class="tut" style="margin-top:14px">${TUT.map(([f,c]) => `<figure><img src="img/${f}" alt=""><figcaption>${c}</figcaption></figure>`).join("")}</div>
@@ -376,25 +390,27 @@ async function refreshDevices(){
   if (S.step !== 1) return;
   const r = await api.devices();
   const box = $("#devbox"); if (!box) return;
-  if (r.error && r.error !== "no-adb"){ box.innerHTML = `<div class="note bad">${esc(r.error)}</div>`; return; }
+  if (r.error && r.error !== "no-adb"){ paint(box, `<div class="note bad">${esc(r.error)}</div>`); return; }
   if (!r.list.length){
     if (!S.usbAt || Date.now() - S.usbAt > 8000){     // 只读设备管理器，较慢，8 秒查一次
       S.usbAt = Date.now();
       api.usb_hint().then(h => { S.usbHint = h; const el = $("#usbhint"); if (el){ el.textContent = h; el.classList.toggle("hide", !h); } });
     }
-    box.innerHTML = `<div class="card"><div class="row"><span class="spin"></span><span>正在等待手机……插上数据线后这里会出现你的手机。</span></div>
+    paint(box, `<div class="card"><div class="row"><span class="spin"></span><span>正在等待手机……插上数据线后这里会出现你的手机。</span></div>
       <div id="usbhint" class="note warn ${S.usbHint ? "" : "hide"}" style="margin-top:12px">${esc(S.usbHint || "")}</div>
-      <p class="lead" style="margin:12px 0 0">一直没有出现：换可传数据的数据线，确认 USB 调试授权；退出电脑上的手机助手类软件和安卓模拟器。荣耀 / 华为还要打开「仅充电模式下允许 ADB 调试」；三星在 Windows 上要装三星 USB 驱动。纯血鸿蒙手机会单独列在下方的鸿蒙设备中。</p></div>`;
-    $("#tutbox").open = true; return;
+      <p class="lead" style="margin:12px 0 0">一直没有出现：换可传数据的数据线，确认 USB 调试授权；退出电脑上的手机助手类软件和安卓模拟器。荣耀 / 华为还要打开「仅充电模式下允许 ADB 调试」；三星在 Windows 上要装三星 USB 驱动。纯血鸿蒙手机会单独列在下方的鸿蒙设备中。</p></div>`);
+    /* 教程默认展开只在第一次落到「没有设备」时给一次；之后展开与收起都由用户点击决定（#1292）。 */
+    if (!tutSeen){ tutSeen = true; $("#tutbox").open = true; }
+    return;
   }
   S.usbHint = "";
-  box.innerHTML = r.list.map(d => {
+  paint(box, r.list.map(d => {
     let tag, btn = "";
     if (d.state === "device"){ tag = `<span class="tag ok">已连接</span>`; btn = `<button class="btn" onclick='pick(${JSON.stringify(d)})'>用这台</button>`; }
     else if (d.state === "unauthorized") tag = `<span class="tag warn">等待授权</span> <small>请在手机弹窗上勾「始终允许」，点「允许」</small>`;
     else tag = `<span class="tag bad">${esc(d.state)}</span> <small>重新插拔数据线</small>`;
     return `<div class="dev"><div class="ico">📱</div><div class="meta"><b>${esc(d.name || (d.brand + " " + d.model) || d.serial)}</b><small>${esc(d.model)} · ${esc(d.serial)}</small><div style="margin-top:4px">${tag}</div></div>${btn}</div>`;
-  }).join("");
+  }).join(""));
 }
 function pick(d){ S.deviceKind = "android"; harmonyEpoch++; clearInterval(pollDev); S.serial = d.serial; S.dev = d; S.chans = null; S.chanNotes = []; showDetect(); }
 
