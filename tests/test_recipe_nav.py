@@ -152,7 +152,7 @@ SURFACES = (recipe_nav, recipe_strategies, recipe_steps)
 
 
 def family_names():
-    """六个模块（五个家族文件 + `shared.py`）的 `__all__` 合起来：数据 `lib:` 能点名的 146 个名字。"""
+    """六个模块（五个家族文件 + `shared.py`）的 `__all__` 合起来：数据 `lib:` 能点名的那些名字。"""
     names = set()
     for module in recipe_lib.MODULES:
         names |= set(module.__all__)

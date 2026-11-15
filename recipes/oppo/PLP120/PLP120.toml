@@ -63,8 +63,42 @@ ops = [
 
 [[segment]]
 name = "游戏中心"
-code = "step_game_center"
+ops = [
+  # 直达失败才走「我的 → 设置」；这一档也决定最后退回几次（#1373）。
+  {kind = "let", name = "direct", lib = "game_settings_direct"},
+  {kind = "if_var", name = "direct", ops = [], else_ops = [{kind = "lib", name = "game_settings_via_mine"}]},
+  {kind = "enter", text = "隐私开关设置", scrolls = 6},
+  {kind = "enter", text = "个性化推荐管理", scrolls = 4},
+  # 先等开关画出来再读，读数交给点名核对：缺一项就整段不动。
+  {kind = "let", name = "switches", lib = "read_on_page", args = ["个性化推荐管理", "com.nearme.gamecenter"]},
+  {kind = "require_switches", before = {expr = "var", name = "switches"}, names = ["个性化推荐"], title = "个性化推荐管理"},
+  {kind = "off", only = ["个性化推荐"], page = "游戏中心·个性化推荐"},
+  {kind = "if_var", name = "direct", ops = [{kind = "back", n = 3}], else_ops = [{kind = "back", n = 4}]},
+]
 
 [[segment]]
 name = "小布建议"
-code = "step_assistant_advice"
+ops = [
+  # ColorOS 17：「内容资讯」是点不动的分组标题，入口是它下面那行「资讯服务」，开关在二级页
+  # （PMX110，沿用 #905）；ColorOS 16 仍是点「内容资讯」进列表页。库里读不到开关时返回 None，
+  # 读到了返回 {标题: 状态}——按「不是 None」分岔，空表也算读到了（#1373）。这一页还有快递、
+  # 航班、日程提醒与商圈服务，保持不动。
+  {kind = "lib", name = "enter_settings", args = ["OPPO AI", "小布建议"]},
+  {kind = "page", args = ["小布建议", "com.android.settings"]},
+  {kind = "let", name = "switches", lib = "open_switch_page", args = ["资讯服务", "资讯服务", "com.android.settings"]},
+  {kind = "if_var", name = "switches", not_none = true, ops = [
+    {kind = "require_switches", before = {expr = "var", name = "switches"}, names = ["资讯服务"], title = "资讯服务"},
+    {kind = "off", only = ["资讯服务"], page = "小布建议·资讯服务"},
+    {kind = "return"},
+  ], else_ops = [
+    # 旧版本这一页的标题没有实测记录，两种叫法都认。
+    {kind = "let", name = "switches", lib = "open_switch_page", args = ["内容资讯", ["内容资讯", "资讯服务"], "com.android.settings"]},
+    {kind = "if_var", name = "switches", not_none = true, ops = [
+      {kind = "require_switches", before = {expr = "var", name = "switches"}, names = ["资讯服务"], title = "内容资讯"},
+      {kind = "off", only = ["资讯服务"], page = "小布建议·内容资讯"},
+      {kind = "return"},
+    ], else_ops = [
+      {kind = "fail", text = "小布建议：「资讯服务」与「内容资讯」两条入口都没进去"},
+    ]},
+  ]},
+]

@@ -148,6 +148,43 @@ def _validate_gesture(op: Mapping, where: str) -> None:
         raise SchemaError(f"{where} 的 ms 要是正的整数毫秒")
 
 
+def _validate_let(op: Mapping, where: str) -> None:
+    """`let` 把库助手的返回值绑成段内名字（#1373）：`name` 是绑定的名字，`lib` 是要调的实现。
+
+    `lib` 与 `lib` op 的 `name` 是同一个集合（装载器在 `_check_names` 里核对）；两者都要非空，
+    绑定的名字与实现名重名由装载器按库名表拒绝。"""
+    for key in ("name", "lib"):
+        if not isinstance(op[key], str) or not op[key]:
+            raise SchemaError(f"{where} 的 {key} 必须是非空字符串")
+
+
+def _validate_if_var(op: Mapping, where: str) -> None:
+    """`if_var` 按绑定的名字分岔（#1373）：不写 `not_none` 按真假值，写了按「不是 None」。
+
+    `not_none` 只有 true / false 两态；写 false 与不写同义（显式写出「按真假值」）。"""
+    if not isinstance(op["name"], str) or not op["name"]:
+        raise SchemaError(f"{where} 的 name 必须是非空字符串")
+    if "not_none" in op and not isinstance(op["not_none"], bool):
+        raise SchemaError(f"{where} 的 not_none 只能是 true / false")
+
+
+def _validate_require_switches(op: Mapping, where: str) -> None:
+    """`require_switches` 把段内读到的开关表交给点名核对（#1373）：`before` 只收 `{expr = "var"}`。
+
+    直接写一张字面量开关表在数据里没有意义（状态是运行期读出来的）；缺一项就整段不动那条出口
+    归 `Runtime.require_switches()`，这里只判定数据写得出一个读得到的名字。"""
+    before = op["before"]
+    if (not isinstance(before, Mapping) or before.get("expr") != "var"
+            or not isinstance(before.get("name"), str) or not before.get("name")):
+        raise SchemaError(f'{where} 的 before 要写成 {{expr = "var", name = "…"}}')
+    names = op["names"]
+    if (not isinstance(names, list) or not names
+            or not all(isinstance(name, str) and name for name in names)):
+        raise SchemaError(f"{where} 的 names 必须是非空的字符串数组")
+    if not isinstance(op["title"], str) or not op["title"]:
+        raise SchemaError(f"{where} 的 title 必须是非空字符串")
+
+
 # `calls` 表的两处用法：各自允许哪些键、每次调用必须给哪个键，仍与 `_validate_calls` 同源。
 def _validate_expect(op: Mapping[str, Any], where: str) -> None:
     """`require_expect`：先给 `calls` 表定形，再要一句 `miss_print`——原先分派就是这个先后。
@@ -170,6 +207,10 @@ def _keys(names: str) -> frozenset[str]:
 # 每种 op 一条记录。加一种 op 只改这里一条，加一条降级分支（事实层）或让它的 `no_fact=True`。
 OPS: dict[str, OpSpec] = {
     "lib": OpSpec(_keys("kind name args kwargs"), required=("name",)),
+    "let": OpSpec(_keys("kind name lib args kwargs"), required=("name", "lib"), check=_validate_let),
+    "require_switches": OpSpec(_keys("kind before names title"),
+                               required=("before", "names", "title"),
+                               check=_validate_require_switches, no_fact=True),
     "off": OpSpec(_keys("kind only only_code keep page max_screens page_wide"),
                   required=("page",),
                   word_keys=(("only", "literal"), ("only_code", "strategy"), ("keep", "literal")),
@@ -230,6 +271,8 @@ OPS: dict[str, OpSpec] = {
                        nested=("ops", "else_ops")),
     "if_lib": OpSpec(_keys("kind name args kwargs ops else_ops"), required=("name",),
                      nested=("ops", "else_ops")),
+    "if_var": OpSpec(_keys("kind name not_none ops else_ops"), required=("name",),
+                     nested=("ops", "else_ops"), check=_validate_if_var),
     "if_lib_any": OpSpec(_keys("kind calls ops else_ops"), nested=("ops", "else_ops"),
                          check=_validate_any_calls),
     "if_setting": OpSpec(_keys("kind kw entry ops else_ops"), required=("kw",),

@@ -84,30 +84,6 @@ def step_ad_tracking(p, rt):
     print("  · 广告跟踪：这一屏已全部关闭")
 
 
-def step_search(p, rt):
-    p.start("com.hihonor.search", ".feature.mainpage.presentation.page.HomeActivity", expect="更多")
-
-    def more():
-        for t, (l, tp, r, b), _n in p.texts():
-            if t == "更多" and tp > p.H * 0.3:
-                return (l + r) // 2, (tp + b) // 2
-        return None
-
-    xy = more()
-    if not xy:
-        p.d.press("back"); time.sleep(0.5)
-        xy = more()
-    if not xy:
-        raise RuntimeError("搜索框旁的「更多」没找到")
-    p.click(*xy); time.sleep(0.6)
-    nav.enter(p, rt, "设置", scrolls=0)
-    nav.enter(p, rt, "首页显示")
-    p.off(only=["热搜榜", "热搜词推荐"], page="搜索·首页显示")
-    p.back()
-    nav.enter(p, rt, "个性化管理")
-    p.off(only=["个性化推荐", "个性化广告"], page="搜索·个性化管理")
-
-
 def step_negative(p, rt):
     p.d.shell("am start -f 0x10008000 -n com.hihonor.hiboard/com.hihonor.intelligent.LauncherActivity")
     time.sleep(2)
