@@ -4,8 +4,8 @@
 # 主题段要先挂起 com.miui.systemAdSolution；本仓库未在该机复跑。
 # 登记的含义是这台机先按本型号直选（recipe_for），不再转去按版本挑同族脚本——#969 修完也一样。
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
-# 2026-11-14 转页面树（#1267）：系统广告 / 应用商店 / 浏览器三段用 `opened()` 的直达探路（回调把
-# 拉起函数当参数传），留在同名 `.py` 的 `code =`；其余段按名字调共享段体。
+# 2026-11-14 转页面树：商店段用家族库的 `direct_page` 直达探路并落成数据；系统广告 / 浏览器两段用
+# `opened()` 的直达探路（回调把拉起函数当参数传），留在同名 `.py` 的 `code =`；其余段按名字调共享段体。
 model = "M154FF"
 models = ["M154FF", "2608BPX34C", "2510DRK44C"]
 build = "OS4.0"
@@ -20,7 +20,32 @@ code = "step_system_ads"
 
 [[segment]]
 name = "应用商店"
-code = "step_store"
+ops = [
+  {kind = "if_lib", name = "direct_page", args = ["com.xiaomi.market", ".ui.MarketPreferenceActivity"], kwargs = {expect = "通知设置"}, else_ops = [
+    {kind = "start", pkg = "com.xiaomi.market"},
+    {kind = "go", text = "我的", expect = "设置"},
+    {kind = "lib", name = "gear"},
+  ]},
+  {kind = "if_lib", name = "tap_any", args = ["隐私设置", "隐私"], ops = [
+    # 「个性化服务」在新版本是子页入口、老版本开关就在本页：按运行时读到的位置分岔。
+    {kind = "if_lib", name = "store_privacy_nested", ops = [
+      {kind = "if_lib", name = "store_privacy_sub", ops = [
+        {kind = "off", only = ["个性化服务"], page = "商店·个性化服务"},
+        {kind = "back"},
+      ]},
+    ], else_ops = [
+      {kind = "off", only = ["个性化服务"], page = "商店·个性化服务"},
+    ]},
+    {kind = "back"},
+  ]},
+  {kind = "lib", name = "store_mode_step"},
+  {kind = "if_entry", text = "通知设置", ops = [
+    # 只关「新手帮助」。不碰「推送消息」：它是父开关，关了会连点赞/评论消息一起关。
+    {kind = "off", only = ["新手帮助"], keep = ["推送消息", "应用更新"], page = "商店·通知设置"},
+    {kind = "back"},
+  ]},
+  {kind = "back", n = 2},
+]
 
 [[segment]]
 name = "手机管家"

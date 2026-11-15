@@ -196,7 +196,7 @@ OPS: dict[str, OpSpec] = {
                             required=("text", "miss_print")),
     "require_lib": OpSpec(_keys("kind name args kwargs miss_print miss_back fail evidence at_focus"),
                           required=("name", "miss_print")),
-    "require_tab": OpSpec(_keys("kind name miss_print evidence at_focus"),
+    "require_tab": OpSpec(_keys("kind name settle miss_print evidence at_focus"),
                           required=("name", "miss_print"), no_fact=True),
     "require_tap": OpSpec(_keys("kind text exact scrolls miss_print evidence at_focus"),
                           required=("text", "miss_print"), no_fact=True),

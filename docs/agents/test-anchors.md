@@ -67,6 +67,7 @@
 | `test_recipe_nav.py` | 机型库的拆分守卫（例外 `.py` 的同名助手必须升格进 `recipe_lib`；`shared.py` 的实现必须被 ≥2 个家族使用）、名字表 owner 与三个兼容壳的一致守卫（`SurfaceTests`），以及调用序列对拍驱动自己管基线 worktree。 |
 | `test_recipe_source.py` | 脚本事实层：实参按语法切分、形参回填与读不出态、Intent 三种包名写法、语法错直接抛，以及库实现表与源码扫描结果在进程内缓存。 |
 | `test_catalog.py` | catalog 内核：页面树数据经唯一装载入口跑出与旧脚本逐条相同的调用序列、装载期拒绝非法数据与写错的点名、only 两态与 page-wide 全关。 |
+| `test_xiaomi_store_recipe.py` | 小米各机型的应用商店段：入口形态（回到首页 / 直达偏好页 / 底栏标签 / 顶栏齿轮）与收尾次序各一条，入口成功的那条路快照走不到。 |
 | `test_backups.py` | 备份目录的命名、扫描与 <型号>-gui 兜底。 |
 | `test_captures.py` | 失败现场落盘：两处留现场写原文、没目录不写、归档名与体积报数。 |
 | `test_error_report.py` | 错误上报：内容脱敏、预览与发送一致、限频、安装编号与服务器回应。 |

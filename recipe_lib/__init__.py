@@ -1,10 +1,10 @@
-"""机型库：140 个库实现名字的唯一 owner（ADR-0040）。
+"""机型库：144 个库实现名字的唯一 owner（ADR-0040）。
 
 一个家族一个文件（`huawei` / `samsung` 目前没有实现，就不建文件）；文件内分「词汇 / 策略」两节。
 归属按家族数算：只被一个家族用到的进 `recipe_lib/<家族>.py`，被 ≥2 个家族用到的进 `shared.py`。
 
-名字集合是显式三层：六个模块的 `__all__` 并集 140 个是「数据 `lib:` 能点名」的词汇，`LIBRARY` 就是这
-140 个；`__all__` 再加 10 个面助手，共 150 个是「能从稳定 import 面取到」的名字。
+名字集合是显式三层：六个模块的 `__all__` 并集 144 个是「数据 `lib:` 能点名」的词汇，`LIBRARY` 就是这
+144 个；`__all__` 再加 10 个面助手，共 154 个是「能从稳定 import 面取到」的名字。
 `tool/recipe_nav.py` / `recipe_strategies.py` / `recipe_steps.py` 只剩转发，真身都在这里。
 """
 
@@ -17,7 +17,8 @@ from . import meizu
 
 from .shared import (
     app_settings as app_settings, browser_settings as browser_settings, close_named as close_named,
-    enter as enter, gear as gear, gear_top as gear_top, goto as goto, my_tab as my_tab,
+    enter as enter, gear as gear, gear_top as gear_top, goto as goto,
+    my_tab as my_tab,
     open_page as open_page, open_settings as open_settings, opened as opened,
     page_activity as page_activity, read_switches as read_switches,
     switch_signature as switch_signature, switch_top as switch_top, tap as tap,
@@ -26,13 +27,16 @@ from .shared import (
 )
 from .xiaomi import (
     bottom_tab as bottom_tab, browser_settings_xiaomi as browser_settings_xiaomi,
+    direct_page as direct_page,
     browser_start as browser_start, by_id as by_id, close_with_plain_tap as close_with_plain_tap,
     direct_settings as direct_settings, downloads as downloads, downloads_probe as downloads_probe,
     downloads_tap as downloads_tap, gear_tap as gear_tap, global_search as global_search,
     menu_settings as menu_settings, mine_settings as mine_settings,
     negative_screen as negative_screen, popup_row as popup_row, security_center as security_center,
     security_tab as security_tab, settings_icon_visible as settings_icon_visible, store as store,
-    store_mode as store_mode, system_ads_security as system_ads_security, tab as tab,
+    store_mode as store_mode, store_mode_step as store_mode_step,
+    store_privacy_nested as store_privacy_nested, store_privacy_sub as store_privacy_sub,
+    system_ads_security as system_ads_security, tab as tab,
     tab_bot as tab_bot, tap_any as tap_any, tap_bottom_tab as tap_bottom_tab, tap_low as tap_low,
     tap_tab as tap_tab, theme as theme, theme_settings as theme_settings,
     wait_bottom_tab as wait_bottom_tab, weather_calendar_probe as weather_calendar_probe,
@@ -114,7 +118,8 @@ __all__ = (
     "close_all_listed", "close_group", "close_named", "close_named_expect", "close_named_honor",
     "close_named_optional", "close_named_plain", "close_named_step", "close_named_vivo",
     "close_rows", "close_titles", "close_with_plain_tap", "confirm2", "dialog_open",
-    "direct_settings", "downloads", "downloads_probe", "downloads_tap", "enter", "enter_privacy",
+    "direct_page", "direct_settings", "downloads", "downloads_probe", "downloads_tap", "enter",
+    "enter_privacy",
     "enter_settings", "game_center_direct", "game_center_taps", "game_settings_direct",
     "game_settings_entry", "game_settings_via_mine", "gear", "gear_tap", "gear_top",
     "global_search", "global_search_ads", "goto", "has_row", "hiboard_panel",
@@ -127,8 +132,9 @@ __all__ = (
     "require_installed", "result_xy", "row", "row_switch", "rows", "safe_switches", "scan_switches",
     "search_setting", "search_settings", "search_settings_direct", "search_settings_ready",
     "search_settings_swipe", "security_center", "security_tab", "setting_search", "settings_home",
-    "settings_icon_visible", "settings_page", "settle_page", "store", "store_mode",
-    "store_personalization", "store_privacy", "store_promotions", "switch_off", "switch_signature",
+    "settings_icon_visible", "settings_page", "settle_page", "store", "store_mode", "store_mode_step",
+    "store_personalization", "store_privacy", "store_privacy_nested", "store_privacy_sub",
+    "store_promotions", "switch_off", "switch_signature",
     "switch_top", "system_ads_branch", "system_ads_chain", "system_ads_security", "system_settings",
     "tab", "tab_bot", "tap", "tap_any", "tap_bottom_tab", "tap_by_scroll", "tap_low", "tap_page",
     "tap_row", "tap_tab", "tap_text", "theme", "theme_settings", "theme_shop_settings",
