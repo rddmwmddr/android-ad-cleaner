@@ -31,7 +31,7 @@ ops = [
     { kind = "off", only = ["搜索框推荐词", "推荐卡片"], page = "全局搜索·首页展示内容" },
     { kind = "back" },
   ]},
-  # Android 17 上没有「推荐热搜榜单」这个入口（#220）。这一页只有几行，看一眼就够，不滚也不等。
+  # Android 17 上没有「推荐热搜榜单」这个入口（沿用 #220）。这一页只有几行，看一眼就够，不滚也不等。
   { kind = "if_find", text = "推荐热搜榜单", exact = true, ops = [
     { kind = "if_entry", text = "推荐热搜榜单", scrolls = 0, ops = [
       { kind = "off", only = ["热门搜索"], page = "全局搜索·热搜榜单" },

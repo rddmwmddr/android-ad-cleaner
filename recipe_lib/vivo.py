@@ -663,7 +663,7 @@ def global_search_entry(p, rt, pkg=None, activity=None, expect=None):
     """全局搜索的设置页：给了包名与页面名就先试直达（Android 17 变体），不通再走设置菜单。
 
     到了返回真；两级都认不出返回假，由调用方收段。直达绕过「系统管理与升级」这一层，
-    那层在 Android 17 上换过名字（#220）。"""
+    那层在 Android 17 上换过名字（沿用 #220 的记录）。"""
     if pkg and opened(p, rt, lambda: p.start(pkg, activity, expect=expect, budget=2)):
         return True
     settings_home(p, rt)
