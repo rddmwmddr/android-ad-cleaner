@@ -109,25 +109,25 @@ since = "b17d420"
 [[rule]]
 id = "dev.ruff.bugbear-rules"
 source = "CLAUDE.md#开发"
-check = "ci:lint"
+check = "test:test_doc_consistency::ConfigRuleTests.test_dev_ruff_bugbear_rules"
 status = "enforced"
-why = "只查 F/E9 时，闭包捕获循环变量（B023）与 zip 静默截断（B905）只能靠人读，状态机里会表现为「重试沿用上一轮坐标」这类错误。规则集收进 pyproject.toml 后命令里不再有 --select，加规则只改配置一处；静态检查拆成独立 lint job，红了不与用例失败混在一起（#993、#994）。"
+why = "只查 F/E9 时，闭包捕获循环变量（B023）与 zip 静默截断（B905）只能靠人读，状态机里会表现为「重试沿用上一轮坐标」这类错误。规则集收进 pyproject.toml 后命令里不再有 --select，加规则只改配置一处；静态检查拆成独立 lint job，红了不与用例失败混在一起（#993、#994）。`lint` job 绿只说明命令跑过了，把 `select` 里的 `B` 删掉它照样绿，所以守卫直接读 pyproject 的 `select`（#1300）。"
 expires_if = "静态检查不再跑 ruff，或规则集重新回到命令行参数里时删。"
 
 [[rule]]
 id = "dev.types.narrow-scope-in-config"
 source = "CLAUDE.md#开发"
-check = "ci:types"
+check = "test:test_doc_consistency::ConfigRuleTests.test_dev_types_narrow_scope_in_config"
 status = "enforced"
-why = "类型错误此前只能靠人读：`None` 上取属性、传错参数类型都要等真机走到那条分支才炸，审查 agent 每轮在用 token 替代机器本该做的事。扫描范围与宽松档参数收进 pyproject.toml，命令不带参数，没有第二份口径；类型检查拆成独立 types job，红了不与用例失败混在一起（沿用 #993、#996）。`recipes/` 从 #1247 起也查：机型目录出一份活脚本（`.toml` 页面树，走 catalog 校验器）加同目录例外 `.py`，例外函数是普通模块、名字全走顶部 import；`.py` 同名，一次扫会撞模块名，所以由 `tool/typecheck_recipes.py` 逐份喂给同一个宽松档（`python -m mypy`，`MYPYPATH=tool`），范围与参数仍只来自 pyproject。不做全量注解：这个仓库的 bug 主要是「静默成功 / 静默跳过」，全量注解的收益不确定，代价是撞上它赖以灵活的假对象与注入作用域。"
+why = "类型错误此前只能靠人读：`None` 上取属性、传错参数类型都要等真机走到那条分支才炸，审查 agent 每轮在用 token 替代机器本该做的事。扫描范围与宽松档参数收进 pyproject.toml，命令不带参数，没有第二份口径；类型检查拆成独立 types job，红了不与用例失败混在一起（沿用 #993、#996）。`recipes/` 从 #1247 起也查：机型目录出一份活脚本（`.toml` 页面树，走 catalog 校验器）加同目录例外 `.py`，例外函数是普通模块、名字全走顶部 import；`.py` 同名，一次扫会撞模块名，所以由 `tool/typecheck_recipes.py` 逐份喂给同一个宽松档（`python -m mypy`，`MYPYPATH=tool`），范围与参数仍只来自 pyproject。不做全量注解：这个仓库的 bug 主要是「静默成功 / 静默跳过」，全量注解的收益不确定，代价是撞上它赖以灵活的假对象与注入作用域。`types` job 绿同样只说明 mypy 跑过了，守卫读 `[tool.mypy]` 的 `files`、`python_version`、宽松档两项，并与 `.python-version` 对拍（#1300）。"
 expires_if = "类型检查不再跑 mypy，或扫描范围重新回到命令行参数里时删。"
 
 [[rule]]
 id = "dev.types.strict-on-pure-modules"
 source = "CLAUDE.md#开发"
-check = "none"
-status = "manual"
-why = "宽松档只查函数体内的表达式：一个没写返回类型的函数被调用方按返回值用时不会红，把 `str | None` 传给只收 `str` 的正则 `search()` 也要等真机走到那条分支。这十个模块不碰设备、不碰手机界面、不依赖假对象，注解补完能让调用方一起被查；其余引擎目录带假对象，全仓开严格档会撞上它们赖以灵活的形状（沿用 #997）。mypy 在 overrides 里把 `strict = true` 当全局设置，所以名单里是逐项 flag；整块删掉这些 override 时 mypy 仍绿（宽松档不要求注解），没有能返红的守卫，所以只记 manual。"
+check = "test:test_doc_consistency::ConfigRuleTests.test_dev_types_strict_on_pure_modules"
+status = "enforced"
+why = "宽松档只查函数体内的表达式：一个没写返回类型的函数被调用方按返回值用时不会红，把 `str | None` 传给只收 `str` 的正则 `search()` 也要等真机走到那条分支。这十个模块不碰设备、不碰手机界面、不依赖假对象，注解补完能让调用方一起被查；其余引擎目录带假对象，全仓开严格档会撞上它们赖以灵活的形状（沿用 #997）。mypy 在 overrides 里把 `strict = true` 当全局设置，所以名单里是逐项 flag；整块删掉这些 override 时 mypy 仍绿（宽松档不要求注解），所以守卫读 `[[tool.mypy.overrides]]` 的 `module` 与 CLAUDE.md 那行的名单对拍，集合相等、正文的中文数字也一起核（#1300）。"
 expires_if = "这几类模块开始依赖假对象或注入作用域、严格档保持不住绿时删；或全仓改成严格档时并进 dev.types.narrow-scope-in-config。"
 
 [[rule]]
@@ -157,9 +157,9 @@ expires_if = "工具脚本层不再有跨脚本共用的外部命令约束（比
 [[rule]]
 id = "dev.coverage.two-platform-merge"
 source = "CLAUDE.md#开发"
-check = "ci:coverage"
+check = "test:test_doc_consistency::ConfigRuleTests.test_dev_coverage_two_platform_merge"
 status = "enforced"
-why = "覆盖率与 ruff 相反，结论依平台而变：`gui/app.py` 的 Windows 剪贴板分支在 Linux 上永远 0 覆盖，Windows job 又 skip 掉 POSIX-only 用例，任何单平台数字都低估。`coverage` job 只保证两份数据合得上（日志里的 `Combined 2 files`）与报告产出，不保证数字本身，也不设阈值——omit 清单与阈值都是判断题，硬编码进 CI 会长期误伤 Windows-only 分支（#858）。"
+why = "覆盖率与 ruff 相反，结论依平台而变：`gui/app.py` 的 Windows 剪贴板分支在 Linux 上永远 0 覆盖，Windows job 又 skip 掉 POSIX-only 用例，任何单平台数字都低估。`coverage` job 只保证两份数据合得上（日志里的 `Combined 2 files`）与报告产出，不保证数字本身，也不设阈值——omit 清单与阈值都是判断题，硬编码进 CI 会长期误伤 Windows-only 分支（#858）。所以判据落在 `.coveragerc` 本身：`branch`、`source`、`relative_files` 与 `omit` 每一项的存在性各一条断言，改坏一处即红，不靠 job 绿（#1300）。"
 expires_if = "Phase 2 上了 diff coverage 或门禁、这条要换成带判据的守卫时重写；只剩一个平台的 CI 时删。"
 
 [[rule]]

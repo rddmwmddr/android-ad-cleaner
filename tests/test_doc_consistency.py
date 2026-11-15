@@ -1,4 +1,5 @@
-"""文档与单一来源一致：ADR 字段表（#467）、品牌连点表（#654）、官网共享样式（#653）、教程截图 alt（#655）、站点与侧栏图标同源（#669）、ADR 索引（#624）、静态检查目标（#624）、手机版措辞的宿主边界（#732）、adapt 的 -s 写法（#740）、Windows USB 提示三分支（#785）、贡献入口不复述规则（#851）、agent 手册的挂起顺序（#981）。"""
+"""文档与单一来源一致：ADR 字段表（#467）、品牌连点表（#654）、官网共享样式（#653）、教程截图 alt（#655）、站点与侧栏图标同源（#669）、ADR 索引（#624）、静态检查目标（#624）、手机版措辞的宿主边界（#732）、adapt 的 -s 写法（#740）、Windows USB 提示三分支（#785）、贡献入口不复述规则（#851）、agent 手册的挂起顺序（#981）、配置类四条规则与 pyproject / .coveragerc 对拍（#1300）。"""
+import configparser
 import re
 import sys
 import tomllib
@@ -7,6 +8,7 @@ from dataclasses import fields
 from pathlib import Path
 
 from gui import app, standalone
+from test_rules_registry import ANCHOR as RULE_ANCHOR  # 同一份锚点口径，别再抄一份
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -120,8 +122,89 @@ class LintCommandTests(unittest.TestCase):
         self.assertEqual(len(ci), 1,
                          "CI 应当恰好一条 ruff 命令（平台无关，只在 lint job 跑），读到 %d 条" % len(ci))
         self.assertEqual(ci, [expected[0]])
-        select = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["ruff"]["lint"]["select"]
-        self.assertIn("B", select, "pyproject.toml 的 select 要含 B：删掉它 lint job 仍绿，bugbear 会静默失效")
+
+
+def chinese_number(value):
+    """1–99 的中文写法：「严格档只给十个纯逻辑模块」那句里的数字要与名单长度对拍。"""
+    digits = "零一二三四五六七八九"
+    if value < 10:
+        return digits[value]
+    tens, ones = divmod(value, 10)
+    return ("" if tens == 1 else digits[tens]) + "十" + (digits[ones] if ones else "")
+
+
+class ConfigRuleTests(unittest.TestCase):
+    """CLAUDE.md 里四条「配置即判据」的规则与真实配置文件对拍（#1300）。
+
+    这四条原先的 `check` 都指向 CI job，而 job 绿只说明命令跑过了：把 pyproject.toml 的
+    `select`、`files` 或 `.coveragerc` 的 `branch` 改坏，`lint` / `types` / `coverage`
+    三个 job 照样绿。四条都是守卫用例：旧树也绿，守的是不回退。"""
+
+    def setUp(self):
+        self.claude = CLAUDE.read_text(encoding="utf-8")
+        self.pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        self.mypy = self.pyproject["tool"]["mypy"]
+
+    def line(self, rule_id):
+        lines = [line for line in self.claude.splitlines()
+                 if (found := RULE_ANCHOR.search(line)) and found.group(1) == rule_id]
+        self.assertEqual(len(lines), 1, f"CLAUDE.md 里要有且只有一行挂 rule:{rule_id}")
+        return lines[0]
+
+    def test_dev_ruff_bugbear_rules(self):
+        select = self.pyproject["tool"]["ruff"]["lint"]["select"]
+        self.assertEqual(select, ["F", "E9", "B"],
+                         "pyproject.toml 的 select 是规则集的唯一定义处：删任一档，那一类错误静默失效")
+        self.assertIn("`B`", self.line("dev.ruff.bugbear-rules"),
+                      "CLAUDE.md 那一行仍要说明 B（bugbear）类已启用")
+
+    def test_dev_types_narrow_scope_in_config(self):
+        self.assertEqual(self.mypy["files"], ["tool"],
+                         "mypy 的扫描范围要留在 pyproject.toml 且只扫 tool/，命令里不带路径")
+        self.assertEqual(self.mypy["python_version"],
+                         (ROOT / ".python-version").read_text(encoding="utf-8").strip(),
+                         "python_version 要与 .python-version 同版，换一版结论不等价")
+        self.assertIs(self.mypy["check_untyped_defs"], True,
+                      "宽松档就是 check_untyped_defs，删掉它类型检查会大面积静默")
+        self.assertEqual(self.mypy["disable_error_code"], ["var-annotated"],
+                         "宽松档只关 var-annotated（空容器补注解），别的压制一律不做")
+        line = self.line("dev.types.narrow-scope-in-config")
+        self.assertIn("`[tool.mypy]`", line, "CLAUDE.md 那一行仍要说范围与宽松档参数在 pyproject.toml")
+        self.assertIn("`files` 是 `tool/`", line, "CLAUDE.md 那一行仍要写明扫描范围是 tool/")
+
+    def test_dev_types_strict_on_pure_modules(self):
+        line = self.line("dev.types.strict-on-pure-modules")
+        strict = [entry for entry in self.mypy["overrides"]
+                  if "disallow_untyped_defs" in entry]
+        self.assertEqual(len(strict), 1,
+                         "pyproject.toml 里应恰好有一组严格档 overrides（带 disallow_untyped_defs）")
+        entry = strict[0]
+        self.assertNotIn("strict", entry,
+                         "overrides 里写 strict = true 会被 mypy 当全局设置，只能逐项列 flag")
+        names = re.findall(r"`([a-z][a-z0-9_]*)`", line.partition("：")[2].split("，")[0])
+        self.assertTrue(names, "CLAUDE.md 那一行没读出严格档名单，守卫会空转")
+        self.assertIn(f"只给{chinese_number(len(names))}个", line,
+                      f"名单有 {len(names)} 个模块，正文的中文数字要对上")
+        self.assertEqual(sorted(names), sorted(entry["module"]),
+                         "严格档名单与 CLAUDE.md 不一致：增删模块要两处一起改")
+
+    def test_dev_coverage_two_platform_merge(self):
+        config = configparser.ConfigParser()
+        config.read(ROOT / ".coveragerc", encoding="utf-8")
+        run = config["run"]
+        self.assertEqual(run["branch"], "True", "branch = True 才能看见没走到的分支")
+        self.assertEqual(run["source"].split(), ["tool", "gui"], "source 只能是 tool 与 gui")
+        self.assertEqual(run["relative_files"], "True",
+                         "relative_files = True 是两份数据跨平台合并的前提")
+        omit = [item.strip() for item in run["omit"].splitlines() if item.strip()]
+        self.assertTrue(omit, "omit 没读到，守卫会空转")
+        missing = [item for item in omit if not (ROOT / item).is_file()]
+        self.assertEqual(missing, [], "omit 里的每一项都要真实存在：删文件时一并删这一行")
+        self.assertNotIn("fail_under", config["report"],
+                         "覆盖率不设阈值：加了 fail_under 会长期误伤只在 Windows 走到的分支")
+        line = self.line("dev.coverage.two-platform-merge")
+        self.assertIn("`branch=True`", line, "CLAUDE.md 那一行要与 .coveragerc 的 branch 一致")
+        self.assertIn("`source=tool,gui`", line, "CLAUDE.md 那一行要与 .coveragerc 的 source 一致")
 
 
 class BrandTapsDocTests(unittest.TestCase):
