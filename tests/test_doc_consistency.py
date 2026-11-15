@@ -11,6 +11,7 @@ from gui import app, standalone
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 import channel_policy as policy
+import gen_adr_index as adr_index
 import gen_brand_taps as gen
 import gen_site_css as site_css
 import release_assets
@@ -18,11 +19,13 @@ import release_meta
 import run
 
 ADR = ROOT / "docs/adr/0006-channel-classification.md"
+ADR_INDEX = ROOT / "docs/adr/README.md"
 CLAUDE = ROOT / "CLAUDE.md"
 CONTRIBUTING = ROOT / "CONTRIBUTING.md"
 REPEAT_WINDOW = 40
 ENTRY_DOCS = ("CLAUDE.md", "CODING_STANDARDS.md", "docs/agents/", "CONTEXT.md", "AGENTS.md")
 ADR_NAME = re.compile(r"^(\d{4})-[a-z0-9-]+\.md$")
+ADR_ROW = re.compile(r"^- \[(\d{4})\]\(([^)]+)\) — (.*)$")
 BRAND_TAP_TARGETS = {"html", "readme", "dev_doc"}
 TUTORIAL_PAGE = ROOT / "android-tutorial.html"
 TUTORIAL_README = ROOT / "docs/手机版教程/README.md"
@@ -50,22 +53,38 @@ class JudgementDocTests(unittest.TestCase):
 
 
 class AdrIndexTests(unittest.TestCase):
-    """`docs/adr/` 的每一份都被 CLAUDE.md 的 ADR 列表收录（#624）。"""
+    """`docs/adr/` 的每一份都被 `docs/adr/README.md` 的索引收录，索引里也没有别的编号（#1299，沿用 #624）。
 
-    def test_every_adr_is_listed_in_claude_md(self):
-        files = sorted(p.name for p in (ROOT / "docs/adr").glob("*.md"))
-        self.assertTrue(files, "docs/adr 里没有 ADR，守卫会空转")
-        matched = [(name, ADR_NAME.match(name)) for name in files]
-        bad = [name for name, m in matched if m is None]
-        self.assertEqual(bad, [], "ADR 文件名应是 NNNN-slug.md：" + "、".join(bad))
-        lines = [line for line in CLAUDE.read_text(encoding="utf-8").splitlines()
-                 if "模块边界的决定写进" in line]
-        self.assertEqual(len(lines), 1,
-                         "CLAUDE.md 里该有一行讲 ADR 列表（含「模块边界的决定写进」），读到 %d 行" % len(lines))
-        listed = set(re.findall(r"`(\d{4})`", lines[0]))
-        self.assertTrue(listed, "那一行里没读到 ADR 编号，守卫会空转")
-        missing = [name for name, m in matched if m.group(1) not in listed]
-        self.assertEqual(missing, [], "这些 ADR 没被 CLAUDE.md 的 ADR 列表收录：" + "、".join(missing))
+    索引从 CLAUDE.md 搬过来是为了让每个会话的启动上下文不再背一整份标题清单；搬过来之后
+    多一条反向判据：索引里出现的编号必须真有那一份文件，否则清单会单向腐烂。
+    """
+
+    def test_index_lists_every_adr_and_nothing_else(self):
+        names = sorted(p.name for p in (ROOT / "docs/adr").glob("*.md") if p.name != ADR_INDEX.name)
+        self.assertTrue(names, "docs/adr 里没有 ADR，守卫会空转")
+        bad = [name for name in names if ADR_NAME.match(name) is None]
+        self.assertEqual(bad, [], "ADR 文件名应是 NNNN-slug.md（不合名的会被索引跳过）：" + "、".join(bad))
+        numbers = [ADR_NAME.match(name).group(1) for name in names]
+        dup = sorted({number for number in numbers if numbers.count(number) > 1})
+        self.assertEqual(dup, [], "两份 ADR 用了同一个编号（并行会话抢号），重编号再跑生成器："
+                         + "、".join(dup))
+        rows = [ADR_ROW.match(line) for line in ADR_INDEX.read_text(encoding="utf-8").splitlines()]
+        listed = [(m.group(1), m.group(2), m.group(3)) for m in rows if m]
+        self.assertTrue(listed, "docs/adr/README.md 里没读到索引行，守卫会空转")
+        expected = [(e.number, e.filename, e.title) for e in adr_index.entries()]
+        missing = sorted(set(expected) - set(listed))
+        extra = sorted(set(listed) - set(expected))
+        self.assertEqual(missing, [], "这些 ADR 没被索引收录（或标题与一级标题不符，跑 "
+                         "`python tool/gen_adr_index.py`）：" + "、".join(
+                             f"{number} {filename}" for number, filename, _ in missing))
+        self.assertEqual(extra, [], "索引里有不存在的条目（或标题已改，跑 "
+                         "`python tool/gen_adr_index.py`）：" + "、".join(
+                             f"{number} {filename}" for number, filename, _ in extra))
+
+    def test_claude_md_points_at_the_index(self):
+        """索引搬出启动上下文之后，这一条指针是 agent 找到它的唯一入口。"""
+        self.assertIn("docs/adr/README.md", CLAUDE.read_text(encoding="utf-8"),
+                      "CLAUDE.md 要留一条指向 docs/adr/README.md 的指针")
 
 
 RUFF_CMD = re.compile(r"ruff[@\w.]* check (.+)")

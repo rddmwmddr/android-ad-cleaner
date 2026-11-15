@@ -88,6 +88,7 @@
 | `huawei_channels.py` | 华为 ALN-AL00 的清单式渠道处理，需人工审核清单，客户端不自动跑 |
 | `gen_brand_taps.py` | 从 `docs/手机版教程/brand-taps.json` 渲染连点表 |
 | `gen_site_css.py` | 把仓库根 `site.css` 渲染进官网两页的共享样式块 |
+| `gen_adr_index.py` | 从 `docs/adr/` 渲染编号 + 一级标题到 `docs/adr/README.md`，供 `CLAUDE.md` 只留一条指针（#1299） |
 | `verify_ledger.py` | 配方验证台账：读 `recipes/verified.toml`，每个配方文件一行、按距今天数降序，覆盖度与证据来源是两个维度（`entry()` 也供 `run.py` 的 `status-json` 取这三样），缺记录的条目 `entry()` 给「未记录 / 未知」、CLI 行只打「未记录」，段体正文改过标「待复核」（比记录里的 `body_hash` 与脚本现算的值；`--hash` 只打印刷新基线用的当前值），记录 build 对不上脚本 `BUILD` 的打「build 不符」（沿用 #916、#917、#918 的台账口径，沿用 #1124 的证据来源拆档，沿用 #1242 把判据从提交日期换成段体哈希） |
 | `check_dco.py` | PR 的 DCO 校验：逐个非 merge 提交比对 `Signed-off-by` 与作者邮箱（#848） |
 | `check_conventional.py` | PR 的提交主题校验：`type(scope): subject`，类型清单 `TYPES` 也在这里（#849） |

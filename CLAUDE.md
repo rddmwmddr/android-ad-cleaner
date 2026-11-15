@@ -64,7 +64,7 @@ GitHub Issues（`gh` CLI）：开工第一条命令是 `python3 tool/claim.py <�
 
 ### Triage labels
 
-标签名即角色名；另加 `waiting-for-verify`（已修、等真机复测）与 `in-progress`（已认领、正在改）两个状态标签，以及两个修饰符：`stale`（`needs-info` 票停摆，不是角色、也不构成关票依据）与 `blocked-on-device`（卡在一台维护者没有的机器上，复测队列与停摆扫描都不把它当交付项）。见 `docs/agents/triage-labels.md`。
+标签名即角色名，另加 `waiting-for-verify` / `in-progress` 两个状态标签与 `stale` / `blocked-on-device` 两个修饰符：各自的含义、与角色的关系、加摘时机见 [docs/agents/triage-labels.md](docs/agents/triage-labels.md)。
 
 ### Code review
 
@@ -72,4 +72,4 @@ GitHub Issues（`gh` CLI）：开工第一条命令是 `python3 tool/claim.py <�
 
 ### Domain docs
 
-single-context：根目录 `CONTEXT.md` + `docs/adr/`。见 `docs/agents/domain.md`。`CONTEXT.md` 只放术语表（命令 / 脚本 / 清单与词库 / 执行 / 连接 / 事件 / 等待 / 通知 / Issue 状态 / 规则 / 文档十一组定义）；模块边界的决定写进 `docs/adr/`（现有 `0001` 手机连接、`0002` Phone 状态、`0003` 客户端 import 与依赖、`0004` 引擎状态事件、`0005` 命令与退出码、`0006` 渠道判定、`0007` 渠道到达、`0008` 拨动计划、`0009` 引擎载荷通道、`0010` 执行状态、`0011` Api 拆分、`0012` 底部标签、`0013` 设置入口、`0014` 手机 shell 通道、`0015` 配对码识别、`0016` 设置搜索直达、`0017` 前端测试基座、`0018` 手机版界面、`0019` 手机版执行宿主、`0020` 不做读写拆分、`0021` 回读结局、`0022` 启动前台归属、`0023` 没执行的项进结果、`0024` 落点回退、`0025` 官网共享样式、`0026` 结果页重试、`0027` 守护模式、`0028` 两个 agent 受众、`0029` 前导注入、`0030` 应用内更新、`0031` 鸿蒙桌面接入、`0032` 参考脚本同池选型、`0033` Phone 按阶段拆模块、`0034` 脚本事实层、`0035` 段体注入、`0036` 工具层 gh 会话、`0037` 声明式段与单一装载器、`0038` 机型脚本目录化（catalog）、`0039` 启动索引与函数级细节）。**整体形状看 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**：三个宿主、四条跨边界契约、模块清单；机制与取舍仍在 ADR 里，总览不复述。
+single-context：根目录 `CONTEXT.md` + `docs/adr/`。见 `docs/agents/domain.md`。`CONTEXT.md` 只放术语表（命令 / 脚本 / 清单与词库 / 执行 / 连接 / 事件 / 等待 / 通知 / Issue 状态 / 规则 / 文档十一组定义）；模块边界的决定写进 `docs/adr/`（编号与标题见 [docs/adr/README.md](docs/adr/README.md)）。**整体形状看 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**：三个宿主、四条跨边界契约、模块清单；机制与取舍仍在 ADR 里，总览不复述。

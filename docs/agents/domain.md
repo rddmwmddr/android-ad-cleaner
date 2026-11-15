@@ -46,7 +46,7 @@ If the concept you need isn't in the glossary yet, that's a signal — either yo
 
 ## Numbering a new ADR
 
-Take the next number from `ls docs/adr/` (highest existing + 1), not from the ADR list in `CLAUDE.md`. That list can lag the directory, and a parallel session may have already taken the number you had in mind. #447 wrote `0009-execution-state.md` because the list stopped at `0007`, only to find `0009-engine-payload-channel.md` already there at rebase — it had to be renamed to `0010` and every reference updated. <!-- rule:domain.adr-number-from-directory -->
+Take the next number from `ls docs/adr/` (highest existing + 1), not from the index in `README.md`. That index only catches up when the generator runs, and a parallel session may have already taken the number you had in mind. #447 wrote `0009-execution-state.md` because the list stopped at `0007`, only to find `0009-engine-payload-channel.md` already there at rebase — it had to be renamed to `0010` and every reference updated. <!-- rule:domain.adr-number-from-directory -->
 
 ## Flag ADR conflicts
 
