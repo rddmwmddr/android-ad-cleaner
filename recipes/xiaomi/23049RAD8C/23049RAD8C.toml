@@ -111,7 +111,7 @@ ops = [
     ] },
   ] },
   { kind = "back", n = 2 },
-  # 日历：直达「用户体验计划」子页；这一页没导出就退回菜单路径。没装日历按跳过收尾（#908）。
+  # 日历：直达「用户体验计划」子页；这一页没导出就退回菜单路径。没装日历按跳过收尾（沿用 #908）。
   { kind = "if_lib", name = "direct_page", args = ["com.android.calendar", ".settings.UserExperienceActionBarActivity"], ops = [
     { kind = "off", only = ["推荐", "广告", "个性化", "内容推广"], page = "日历·用户体验计划" },
     { kind = "back", n = 2 },
