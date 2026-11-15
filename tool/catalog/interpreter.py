@@ -84,18 +84,25 @@ def _run_op(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
 
 
 def _arg(value: Any, p: Any, rt: Any, g: dict[str, Any]) -> Any:
-    """实参里的动态取值：`{expr = "focus"}` → `p.focus()`，`{expr = "tree"}` → `p.tree()`。
+    """实参里的两种表形态，其余一律按字面量传（字符串 / 数字 / 列表）。
 
-    段体常把当前前台 / 页面树当实参传给库助手（`close_named(..., p.focus())`）。这些读也是一次
-    `p.*` 调用、进调用序列，所以必须照原样求值、不能换成字面量，否则对拍就少了那一条。除表形态外
-    一律按字面量传（字符串 / 数字 / 列表）。"""
-    if isinstance(value, Mapping) and "expr" in value:
-        name = value["expr"]
-        if name == "focus":
-            return p.focus()
-        if name == "tree":
-            return p.tree()
-        raise KeyError(f"未知的实参表达式 expr={name!r}")
+    `{expr = "focus"}` / `{expr = "tree"}` 是「把当前前台 / 页面树当实参传」：这些读也是一次
+    `p.*` 调用、进调用序列，所以必须照原样求值，不能换成字面量，否则对拍就少了那一条。
+
+    `{ops = [...]}` 是回调实参：库助手在两步之间要「重进一次页面」才好回读，比如
+    `close_named(..., reopen=…)`。数据写一串 ops，这里包成闭包传下去——调用时序仍由库实现决定，
+    解释器只负责把它翻译成一次 `_run`。"""
+    if isinstance(value, Mapping):
+        if "expr" in value:
+            name = value["expr"]
+            if name == "focus":
+                return p.focus()
+            if name == "tree":
+                return p.tree()
+            raise KeyError(f"未知的实参表达式 expr={name!r}")
+        if "ops" in value:
+            block = value["ops"]
+            return lambda: _run(block, p, rt, g)
     return value
 
 

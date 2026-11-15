@@ -138,6 +138,7 @@ def _validate_op(op: object, where: str) -> None:
     if kind not in OP_KINDS:
         raise SchemaError(f"{where} 的 kind={kind!r} 不在白名单里：{sorted(OP_KINDS)}")
     _reject_extra(op, OP_KEYS[kind], where)
+    _validate_arg_blocks(op, where)
     if kind == "off":
         _validate_off(op, where)
     elif kind == "off_required":
@@ -240,6 +241,21 @@ def _validate_op(op: object, where: str) -> None:
         _validate_ops(op.get("ops", []), where)
     elif kind == "return" and "value" in op and not isinstance(op["value"], bool):
         raise SchemaError(f"{where} 的 value 只能是 true / false（段的结局）")
+
+
+def _validate_arg_blocks(op: Mapping, where: str) -> None:
+    """实参里的 `{ops = [...]}`：回调实参用的子段表（`close_named(..., reopen=…)`）。
+
+    实参内容对 schema 一般是不透明的（标题、Activity、超时秒数），只有带 `ops` 的表是数据再入，
+    所以它按同一条白名单校验——不校验的话，嵌套里的错键要等到真机跑到那一步才发现。"""
+    args, kwargs = op.get("args"), op.get("kwargs")
+    values = (args if isinstance(args, list) else []) + (
+        list(kwargs.values()) if isinstance(kwargs, Mapping) else [])
+    for value in values:
+        if isinstance(value, Mapping) and "ops" in value:
+            place = f"{where} 的实参块"
+            _reject_extra(value, frozenset({"ops"}), place)
+            _validate_ops(value["ops"], place)
 
 
 def _validate_off(op: Mapping, where: str) -> None:

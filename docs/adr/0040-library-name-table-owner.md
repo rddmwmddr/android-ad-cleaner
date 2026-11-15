@@ -34,6 +34,12 @@ mypy 解析 `from recipe_nav import <名字>` 时看的是源模块的 `__all__`
 `title_key` / `verify` / `_labelled`）留在 `__all__` 里、**不进** `LIBRARY`：把助手补进某个模块的
 `__all__` 会把数据可点名的集合从 140 改成 150。
 
+修订（#1337）：`settle_page` 提进数据词汇，面助手剩 9 个。它是「等落点稳定」的策略，不是面助手——
+旧脚本里 `nav.settle_page(...)` 就是普通一步调用，数据应当能点名它。判据不是「助手一律不进」而是
+「只读前台 / 页面树的面才留在 `__all__` 外」：`maybe` / `labels` 那一类拿的是别的实现已经读出来的
+对象，`settle_page` 自己走读屏与等待，与 `wait_page` 同一档。上面三个数字此后随库增长漂移，以
+`recipe_lib.LIBRARY` / `__all__` / `HELPERS` 的实算为准。
+
 ### 三个面是兼容壳，不删
 
 各剩 docstring + `sys.path` 垫片 + `from recipe_lib import *` + `__all__` 转发。不删是因为

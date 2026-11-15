@@ -483,6 +483,45 @@ class EnterOpTests(unittest.TestCase):
         self.assertEqual(seen, [("隐私", 4)])
 
 
+class CallbackArgTests(unittest.TestCase):
+    """`lib` 实参里的 `{ops = [...]}`（#1337）：回调实参，对应 `close_named(..., reopen=…)`。
+
+    有的页点完开关会弹确认框、确认后退回上一级，库要在这两步之间重进一次页面才好回读。那段重进
+    原本是 `.py` 里的一个闭包，数据表达不了；现在数据写一串 ops，解释器包成可调用对象传下去，
+    时序仍由库实现决定。"""
+
+    TOML = ('[[segment]]\nname="a"\nops=[{kind="lib", name="revisit",'
+            ' kwargs={reopen={ops=[{kind="back", n=2}, {kind="enter", text="隐私"}]}}}]\n')
+
+    def test_the_block_runs_when_the_library_calls_it(self):
+        seen = []
+
+        def revisit(p, rt, reopen=None):
+            seen.append("before")
+            reopen()
+            seen.append("after")
+
+        patch_library(self, revisit=revisit)
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.TOML)
+            backs, enters = [], []
+            phone.back = lambda n=1: backs.append(n)
+            phone.enter = lambda text, scrolls=6: enters.append((text, scrolls))
+            recipe.run()
+        self.assertEqual(seen, ["before", "after"], "reopen 没被当成可调用实参传下去")
+        self.assertEqual(backs, [2], "块里的 back 没走")
+        self.assertEqual(enters, [("隐私", 6)], "块里的 op 没按数据顺序走")
+
+    def test_a_wrong_key_inside_the_block_is_rejected(self):
+        """块里的 op 与顶层 op 同一份白名单：错键装载期就报，不等真机走到那一步。"""
+        bad = ('[[segment]]\nname="a"\nops=[{kind="lib", name="revisit",'
+               ' kwargs={reopen={ops=[{kind="back", nope=1}]}}}]\n')
+        patch_library(self, revisit=lambda p, rt, reopen=None: None)
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(catalog.SchemaError):
+                _load_tmp(tmp, bad)
+
+
 class IfFocusOpTests(unittest.TestCase):
     """`if_focus` op（#1264）：按前台窗口判走哪一支，`match` 明写比法（equals / starts / contains）。"""
 

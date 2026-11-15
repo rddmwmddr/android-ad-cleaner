@@ -11,7 +11,7 @@ from recipe_lib.shared import tap
 from row import bounds
 
 __all__ = ('baidu_browser', 'browser_gear', 'close_named_honor', 'launch', 'no_agreement',
-           'scan_switches', 'search_more', 'wait_home')
+           'scan_switches', 'search_more', 'settle_page', 'wait_home')
 
 # ---------- 词汇 ----------
 def launch(p, rt, activity, app):
