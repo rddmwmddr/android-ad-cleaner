@@ -70,6 +70,19 @@ OP_KEYS = {
 }
 OP_KINDS = frozenset(OP_KEYS)
 
+# 不产出词条 / 入口事实的 op：事实层（`recipe_source._catalog_src`）见到这些 kind 直接跳过。
+# 加一种 op 时，要么在事实层给它一条降级分支（产出词条 / 入口），要么登记进这里（它本来就不产出
+# 事实）；两样都没做，投影函数末尾的总 `else` 会在装载期外点名它——不让数据静默少一条记录。
+# 这些 kind 的允许键都不含 `ops` / `else_ops`：跳过就不往里递归，带子 op 的 kind 必须走降级分支。
+NO_FACT_KINDS = frozenset({
+    # 只影响控制流、不点名开关也不开入口
+    "await_page", "require_tab", "require_go", "require_expect", "require_unlocked",
+    "require_focus", "require_find", "back", "top", "miss_reset", "dismiss",
+    "skip_in_safe_mode", "sleep", "press", "app_stop", "note_miss", "tap", "go", "print", "return",
+    # 落点 / 跳过 / 失败出口：本来自 `p.start` / shell / `open_app_settings`，这里只是核对与收场
+    "page", "skip", "fail", "require_tap",
+})
+
 # `if_focus` 的比法：前台窗口原文与数据里的 text 怎么比。缺省 contains（与 `require_focus` 同档）。
 FOCUS_MATCHES = frozenset({"equals", "starts", "contains", "icontains"})
 

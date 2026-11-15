@@ -1279,5 +1279,101 @@ class GenTests(unittest.TestCase):
         self.assertEqual(kinds, ["start", "entry", "entry", "off"])
 
 
+class OpKindDeclarationTests(unittest.TestCase):
+    """#1354：op 的种类名单是一份可断言的声明，新增 kind 漏登记即红。
+
+    一种 kind 的知识今天散在四张名单里：`OP_KEYS`（允许键）、`_HANDLERS`（处理器）、事实层的降级
+    分支与不产出事实的那一份。前两张与事实层之间没有任何守卫——漏 handler 要等真机走到那条 op 才
+    `KeyError`，漏事实层登记会让词库与入口速查静默少一条记录。四条用例各守一个分区，红了就能定位
+    是哪张名单漂了。判据只看声明与 `scan_catalog` 的公开行为，不 import 投影函数的私有分支。
+    """
+
+    # 事实类条件分支（if_find / if_entry / if_focus / if_tap）靠子 op 产出事实；给一个稳定产出
+    # `p.d.shell` 的子 op，占位 op 才判得出「这个 kind 会不会产出事实」。
+    _SUB_OP = {"kind": "shell", "command": "x"}
+
+    def _probe_value(self, key):
+        """按允许键的键名造值：不给每种 kind 写「最小合法 op」表（那又是一份会漂的名单）。
+
+        新键需要新类型时测试会红（该 kind 落到不产出事实那一侧），不是静默。"""
+        if key in ("name", "only_code"):
+            return "x"                      # 合法标识符：lib 名 / 本机策略名
+        if key == "calls":
+            return [{"name": "x"}]          # if_lib_any 的短路调用至少要一个助手名
+        if key in ("ops", "else_ops"):
+            return [dict(self._SUB_OP)]
+        if key in ("args", "entries", "names", "keep", "only"):
+            return ["x"]                    # 列表型键：gated 的 entries / close_listed 的 names 要非空
+        return "x"
+
+    def probe_op(self, kind):
+        """一个 kind 的占位 op：键取 `OP_KEYS[kind]`，值按 `_probe_value` 给。"""
+        from catalog.schema import OP_KEYS
+        op = {"kind": kind}
+        for key in OP_KEYS[kind]:
+            if key == "kind":
+                continue
+            op[key] = self._probe_value(key)
+        return op
+
+    def _data(self, kind):
+        return {"segment": [{"name": "a", "ops": [self.probe_op(kind)]}]}
+
+    def test_every_declared_kind_has_a_handler(self):
+        """`OP_KEYS` 与 `_HANDLERS` 的键集合逐项相等：加一种 op 只改一处，另一处静默漏掉。
+
+        旧树也绿（基线两张表本来就相等），守的是不回退：任一侧新增 kind 漏改另一侧即红。"""
+        from catalog.schema import OP_KEYS
+        import catalog.interpreter as interpreter
+        self.assertTrue(OP_KEYS, "OP_KEYS 是空的，这条守卫会空转")
+        self.assertEqual(set(OP_KEYS), set(interpreter._HANDLERS),
+                         "OP_KEYS 与 _HANDLERS 必须逐项相等：漏 handler 要等真机走到那条 op 才 KeyError")
+
+    def test_no_fact_kinds_are_declared_kinds(self):
+        """不产出事实的 kind 必须是已登记的种类：集合里塞一个没进 `OP_KEYS` 的名字即红。"""
+        from catalog.schema import NO_FACT_KINDS, OP_KINDS
+        self.assertTrue(NO_FACT_KINDS, "NO_FACT_KINDS 是空的，这条守卫会空转")
+        self.assertLessEqual(set(NO_FACT_KINDS), set(OP_KINDS),
+                             "NO_FACT_KINDS 里出现了没登记进 OP_KEYS 的 kind")
+
+    def test_unregistered_kind_raises(self):
+        """未登记的 kind 让投影函数报错，不静默丢数据。
+
+        这条才把 `_catalog_src` 末尾的 `else: raise` 钉住：改回静默跳过它立刻红（基线就是这么
+        穿透的，那 20 种 kind 靠隐式落到循环末尾什么也不做）。文案要点名这个 kind 并给出两条出路。"""
+        import recipe_source
+        data = {"segment": [{"name": "a", "ops": [{"kind": "not_a_registered_kind"}]}]}
+        with self.assertRaises(RuntimeError) as caught:
+            recipe_source.scan_catalog(data)
+        self.assertIn("not_a_registered_kind", str(caught.exception))
+        self.assertIn("NO_FACT_KINDS", str(caught.exception))
+
+    def test_every_kind_projects_without_raising(self):
+        """逐 kind 造占位 op 喂事实层都不抛。
+
+        旧树也绿——基线里没登记事实层的 kind 靠末尾无 `else` 静默穿透，照样不抛；守的是不回退：
+        新增 kind 若既没降级分支也不在 `NO_FACT_KINDS`，这条会红。把 `else: raise` 本身钉住的是
+        `test_unregistered_kind_raises`。"""
+        from catalog.schema import OP_KINDS
+        import recipe_source
+        for kind in sorted(OP_KINDS):
+            with self.subTest(kind):
+                recipe_source.scan_catalog(self._data(kind))
+
+    def test_fact_kinds_produce_facts_and_no_fact_kinds_do_not(self):
+        """不产出事实集合里的 kind 产出为空，其余各自产出非空事实。
+
+        判据只看 `scan_catalog` 的调用点数量：不比对降级出的源码行，也不认分支顺序。"""
+        from catalog.schema import NO_FACT_KINDS, OP_KINDS
+        import recipe_source
+        for kind in sorted(OP_KINDS):
+            with self.subTest(kind):
+                facts = recipe_source.scan_catalog(self._data(kind))
+                if kind in NO_FACT_KINDS:
+                    self.assertFalse(facts.calls, f"{kind} 在 NO_FACT_KINDS 里却产出了事实：{facts.calls}")
+                else:
+                    self.assertTrue(facts.calls, f"{kind} 不在 NO_FACT_KINDS 里却没产出事实")
+
+
 if __name__ == "__main__":
     unittest.main()
