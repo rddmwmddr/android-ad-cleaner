@@ -222,7 +222,7 @@ class MeizuRecipeTests(unittest.TestCase):
 
 
 class RecipeSelectionTests(unittest.TestCase):
-    """型号 → 脚本的选择协议：本型号直达，缺脚本时兜底到同品牌固定参考（#379）。"""
+    """型号 → 脚本的选择协议：本型号直达，缺脚本时兜底到同品牌固定参考（沿用 #379 的做法）。"""
 
     # model, family, 是否参考, 脚本（相对 recipes/）, 记录版本（None = 该行不验）, 段名（None = 该行不验）
     CASES = [
