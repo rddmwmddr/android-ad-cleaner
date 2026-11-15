@@ -196,6 +196,67 @@ class StoreSegmentTests(unittest.TestCase):
         self.assertIn("未完成：商店设置入口没有找到", out.getvalue())
 
 
+class Os4StoreTests(unittest.TestCase):
+    """HyperOS 4 变体的商店段（#1337）：底栏标签交给 `p.tab`，不再自己等那一行画出来。
+
+    这台机的底栏读作「我的，有新消息」，`p.tab` 按「逗号末段等于」认，省掉旧脚本里 24 次探测 +
+    精确/包含两档重试。快照停在空页面的 `tab` 那一步，所以入口成功的那条路只能靠这里守。
+    """
+
+    def run_os4(self, **answers):
+        import catalog.interpreter as interpreter
+        phone = phone_mock(W=1080, H=2400)
+        phone.locked.return_value = False
+        phone.tab.return_value = True
+        phone.entry.return_value = True
+        phone.off.return_value = 0
+        values = {"gear_top": True, "store_privacy_nested": True, "store_privacy_sub": True}
+        values.update(answers)
+
+        with patch.dict(interpreter.LIBRARY,
+                        {name: (lambda p, rt, *a, _v=value, **k: _v) for name, value in values.items()}):
+            _scope, out = load_recipe(phone, ROOT / "recipes/xiaomi/24129PN74C/24129PN74C-os4.toml", ["应用商店"])
+        return phone, out
+
+    def test_the_bottom_tab_is_tapped_by_p_tab_and_both_pages_closed(self):
+        phone, _out = self.run_os4()
+        phone.tab.assert_called_once_with("我的")
+        phone.find.assert_not_called()          # 不再自己探测「我的，有新消息」
+        self.assertEqual([item.kwargs["page"] for item in phone.off.call_args_list],
+                         ["商店·个性化服务", "商店·通知设置"])
+        self.assertEqual(phone.off.call_args_list[1].kwargs["keep"],
+                         ["应用更新通知", "点赞消息", "评论消息"])
+        # 子页退一次、隐私页退一次、通知设置退一次，收尾退两次
+        self.assertEqual(backs(phone), [(), (), (), (2,)])
+
+    def test_a_store_with_the_switch_on_the_privacy_page_does_not_descend(self):
+        phone, _out = self.run_os4(store_privacy_nested=False)
+        self.assertEqual([item.kwargs["page"] for item in phone.off.call_args_list],
+                         ["商店·个性化服务", "商店·通知设置"])
+        self.assertEqual(backs(phone), [(), (), (2,)])
+
+    def test_a_missing_bottom_tab_ends_the_segment_before_the_gear(self):
+        import catalog.interpreter as interpreter
+        phone = phone_mock(W=1080, H=2400)
+        phone.locked.return_value = False
+        phone.tab.return_value = False
+        with patch.dict(interpreter.LIBRARY, {"gear_top": lambda p, rt: True}):
+            scope, out = load_recipe(phone, ROOT / "recipes/xiaomi/24129PN74C/24129PN74C-os4.toml", ["应用商店"])
+        self.assertEqual(scope["FAILED_STEPS"], ["应用商店"])
+        self.assertIn("商店底部「我的」标签没找到", out.getvalue())
+        phone.off.assert_not_called()
+
+    def test_a_blocked_gear_ends_the_segment_as_unfinished(self):
+        import catalog.interpreter as interpreter
+        phone = phone_mock(W=1080, H=2400)
+        phone.locked.return_value = False
+        phone.tab.return_value = True
+        with patch.dict(interpreter.LIBRARY, {"gear_top": lambda p, rt: False}):
+            scope, out = load_recipe(phone, ROOT / "recipes/xiaomi/24129PN74C/24129PN74C-os4.toml", ["应用商店"])
+        self.assertEqual(scope["FAILED_STEPS"], ["应用商店"])
+        self.assertIn("商店「我的」页右上角齿轮未找到", out.getvalue())
+
+
 class StoreTailTests(unittest.TestCase):
     """收尾两块共用的走法：「个性化服务」在不在子页，以及「模式切换」的门槛。"""
 

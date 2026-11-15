@@ -25,6 +25,7 @@
 - 小米系统广告两段转数据：`store_direct` 改名 `direct_page`，菜单走法升格 `system_ads_menu`（#1337）
 - OPPO 负一屏的右滑入口升格 `assistant_swipe_in`，PYB110 / RMX3888 两段转数据（#1337）
 - 直达优先的三段走法升格 `direct_page` / `global_search_entry`，vivo 七段转数据（#1337）
+- 小米 15 的 OS4 商店段冷启动改走 `p.tab`，不再自己等底栏「我的，有新消息」（#1337）
 - `docs/09` 与 `verified.toml` 里的 V2547DA 旧脚本名、M154FF README 死链改到现行文件（#1339）
 - `ScreenLocked` 定义搬进 `phone/errors.py`，库层与运行时不再经 `fast` 取名字（#1335）
 - vivo V2547DA 适配说明改按主本 / 变体叙述，旧 `.py` 文件名与死链改到现行文件（#1336）
