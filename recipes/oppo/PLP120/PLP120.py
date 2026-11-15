@@ -1,8 +1,8 @@
 # OPPO Find N6（PLP120，ColorOS 16 / 17）的本机例外函数（catalog 的 `code=`，影随同名 `.toml`）。
 # 共享库的 search_settings / enter_settings / game_settings_direct / game_settings_via_mine /
 # open_switch_page / page / read_on_page 与 require_switches 由装载器注入执行作用域。
-# 只剩五段在这里：负一屏（手势循环）、下拉搜索（运行期名单）、浏览器（多分支状态机）、
-# 游戏中心（运行期 direct 分支）、小布建议（两次入口状态机）。其余四段已落数据（见 `.toml`）。
+# 只剩四段在这里：负一屏（手势循环）、下拉搜索（运行期名单）、游戏中心（运行期 direct 分支）、
+# 小布建议（两次入口状态机）。其余五段（含浏览器）已落数据（见 `.toml`）。
 import time
 
 import adb_link
@@ -63,28 +63,6 @@ def step_search(p, rt):
         p.miss = 0                     # ColorOS 17：「账号与隐私」只是分组标题，直接找「隐私」
     if p.tap("隐私", exact=True):
         p.off(only=["个性化推荐"], page="下拉搜索·隐私")
-        p.back(2)
-    p.back(2)
-
-
-def step_browser(p, rt):
-    p.start("com.heytap.browser")
-    if p.find("我的", exact=True, edge_ok="tab"):          # X9 Ultra：底部「我的」→ 设置
-        p.go("我的", "设置"); p.tap("设置", exact=True, scrolls=0)
-    elif p.find("菜单") or p.find("更多"):                 # Find N6：底部 ☰ → 齿轮
-        p.tap("菜单", scrolls=0) or p.tap("更多", scrolls=0)
-        p.tap("设置", scrolls=0)
-    else:
-        # 首页切成「简洁」后没有「我的」和菜单（ColorOS 17，#165）：浏览器在前台时直达设置页；带清栈参数会立刻退出
-        p.d.shell("am start -n com.heytap.browser/.settings.component.BrowserPreferencesPage"); time.sleep(1.2)
-        if "com.heytap.browser" not in p.focus():
-            print("  ✗ 浏览器设置页没有打开"); return
-    if p.tap("主页设置", exact=True):
-        if p.tap("页面布局", exact=True):
-            p.tap("简洁", exact=True, scrolls=0); p.back()
-        p.back()
-    if p.tap("隐私", exact=True) and p.tap("广告管理", exact=True):
-        p.off(only=["开屏广告", "资讯列表广告", "摇一摇"], page="浏览器·广告管理")
         p.back(2)
     p.back(2)
 
