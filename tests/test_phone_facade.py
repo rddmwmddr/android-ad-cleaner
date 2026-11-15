@@ -60,21 +60,23 @@ DATA = frozenset({
 # 在这里显式改一行——这正是「脚本访问面变了」。每个名字还必须是门面真实成员，见下面那条守卫。
 # `lost` 已不在快照里：读它的是注入面的 `opened()`（#1148），脚本源码不再出现 `p.lost`；
 # `say` 同理，随广告跟踪段搬进 `recipe_steps`（沿用 #1213）。`page_text` 也是这一类：读它的是
-# `recipe_nav` 里 `tap` 的 exact 档（#1245），脚本本地那份已删。门面是否还提供它们由成员守卫盯：
-# `lost` 在 `DATA`，`say` / `page_text` 在 `METHODS`。
+# `recipe_nav` 里 `tap` 的 exact 档（#1245），脚本本地那份已删。`app` / `promoted` 同样如此：
+# 写它们的是 `recipe_lib/honor.py` 的 `launch`（CLE-AN00 浏览器 / 主题搬过去之后，#1337）。
+# 门面是否还提供它们由成员守卫盯：`lost` / `app` / `promoted` 在 `DATA`，`say` / `page_text` 在 `METHODS`。
 SCRIPT_NAMES = frozenset({
-    "app", "await_page", "back", "changed", "click", "confirm", "d", "dismiss", "enter",
+    "await_page", "back", "changed", "click", "confirm", "d", "dismiss", "enter",
     "entry", "expect_page", "find", "focus", "go", "H", "has_text", "in_settings_page",
     "locked", "miss", "note_miss", "off", "on_screen", "page_evidence",
-    "promoted", "safe_mode", "scroll", "scroll_more", "setting", "settle", "sig",
+    "safe_mode", "scroll", "scroll_more", "setting", "settle", "sig",
     "start", "switches", "systemui_text", "tab", "tap", "tap_icon", "texts", "top", "tree", "W",
 })
 
-# 今天每一条公开成员都可写。脚本确实这样用的有 6 个：`p.miss = 0`、`p.app = pkg`，
-# 以及 `honor-WKL-AN20` 把 `p.click` / `p.scroll` / `p.confirm` / `p.switches` 换成本地读法；
-# `p.promoted.clear()` 与 `p.changed.append(...)` 直接改集合本体。
+# 今天每一条公开成员都可写。脚本确实这样用的有 5 个：`p.miss = 0`，
+# 以及 `honor-WKL-AN20` 把 `p.click` / `p.scroll` / `p.confirm` / `p.switches` 换成本地读法，
+# `p.changed.append(...)` 直接改集合本体。`p.app` / `p.promoted` 在 #1337 随 CLE-AN00 的
+# 浏览器 / 主题搬进 `recipe_lib/honor.py` 的 `launch`，不再是脚本侧的写入。
 # 其中任何一条变成只读属性即红——只读转发会让脚本静默失效。
-WRITTEN_BY_SCRIPTS = frozenset({"miss", "app", "click", "scroll", "confirm", "switches"})
+WRITTEN_BY_SCRIPTS = frozenset({"miss", "click", "scroll", "confirm", "switches"})
 
 
 def facade():

@@ -92,13 +92,37 @@ ops = [
 
 [[segment]]
 name = "浏览器"
-# 裁决：「坐标算法」+ 循环。等首页渲染，再按控件 bounds 找右上角的设置齿轮
-code = "step_browser"
+# 三个助手（`launch` / `wait_home` / `browser_gear`）已升格荣耀家族库，本段是纯数据。
+ops = [
+  {kind = "lib", name = "launch", args = ["com.hihonor.baidu.browser/com.baidu.searchbox.SplashActivity", "浏览器"]},
+  {kind = "lib", name = "wait_home", args = ["浏览器"]},
+  {kind = "dismiss"},
+  {kind = "lib", name = "my_tab", args = ["浏览器"]},
+  {kind = "lib", name = "browser_gear"},
+  {kind = "off", only = ["搜索下一条推荐"], page = "浏览器·设置"},
+  {kind = "top"},
+  {kind = "lib", name = "enter", args = ["消息设置"]},
+  {kind = "off", only = ["新闻热点", "兴趣推送"], page = "浏览器·消息设置"},
+  {kind = "back"},
+  {kind = "sleep", seconds = 0.5},
+  {kind = "print", text = "  · 「隐私设置 → 广告设置」是网页，要关请手动打开「不看程序化广告」「不看个性化广告」"},
+  {kind = "back", n = 2},
+]
 
 [[segment]]
 name = "主题"
-# 裁决：「循环」。`launch` / `wait_home` 按前台包名轮询等首页
-code = "step_theme"
+ops = [
+  {kind = "lib", name = "launch", args = ["com.hihonor.android.thememanager/.PageActivity", "主题"]},
+  {kind = "lib", name = "wait_home", args = ["主题"]},
+  {kind = "lib", name = "my_tab", args = ["主题"]},
+  {kind = "lib", name = "enter", args = ["设置"], kwargs = {scrolls = 2}},
+  {kind = "lib", name = "enter", args = ["通知"]},
+  {kind = "off", only = ["消息通知", "短信", "邮件"], page = "主题·通知"},
+  {kind = "back"},
+  {kind = "lib", name = "enter", args = ["个性化服务"]},
+  {kind = "off", only = ["个性化内容", "个性化广告"], page = "主题·个性化服务"},
+  {kind = "back", n = 3},
+]
 
 [[segment]]
 name = "视频"

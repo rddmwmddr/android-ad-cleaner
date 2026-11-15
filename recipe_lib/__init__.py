@@ -91,9 +91,10 @@ from .vivo import (
     title_key as title_key, verify as verify,
 )
 from .honor import (
-    baidu_browser as baidu_browser, close_named_honor as close_named_honor,
-    no_agreement as no_agreement, scan_switches as scan_switches, labels as labels, search_more as search_more,
-    settle_page as settle_page,
+    baidu_browser as baidu_browser, browser_gear as browser_gear,
+    close_named_honor as close_named_honor, launch as launch,
+    no_agreement as no_agreement, scan_switches as scan_switches, labels as labels,
+    search_more as search_more, settle_page as settle_page, wait_home as wait_home,
 )
 from .meizu import (
     assert_no_other_window as assert_no_other_window, safe_switches as safe_switches,
@@ -116,7 +117,7 @@ __all__ = (
     "app_settings", "assert_no_other_window", "assistant_advice_rows", "assistant_advice_search", "assistant_icon",
     "assistant_screen", "assistant_settings", "assistant_swipe_in", "at_assistant", "baidu_browser",
     "bottom_tab",
-    "browser_ads", "browser_home", "browser_personalized", "browser_recommendations",
+    "browser_ads", "browser_gear", "browser_home", "browser_personalized", "browser_recommendations",
     "browser_settings", "browser_settings_direct", "browser_settings_vivo",
     "browser_settings_xiaomi", "browser_start", "by_desc", "by_id", "carousel_choices", "close_all",
     "close_all_listed", "close_group", "close_named", "close_named_expect", "close_named_honor",
@@ -127,7 +128,8 @@ __all__ = (
     "enter_settings", "game_center_direct", "game_center_taps", "game_settings_direct",
     "game_settings_entry", "game_settings_via_mine", "gear", "gear_tap", "gear_top",
     "global_search", "global_search_ads", "global_search_entry", "goto", "has_row", "hiboard_panel",
-    "hiboard_panel_v2547a", "hide_carousel", "i_manager_ads", "labels", "lock_screen_magazine",
+    "hiboard_panel_v2547a", "hide_carousel", "i_manager_ads", "labels", "launch",
+    "lock_screen_magazine",
     "maybe", "menu_settings", "menu_state", "mine_settings", "mine_tab_low", "more_menu", "my_tab", "navigate",
     "negative_screen", "no_agreement", "off", "off_exact", "off_exact_paged",
     "off_exact_paged_optional", "off_exact_step", "off_one", "off_unnamed", "open_app_settings",
@@ -142,7 +144,7 @@ __all__ = (
     "system_settings",
     "tab", "tab_bot", "tap", "tap_any", "tap_bottom_tab", "tap_by_scroll", "tap_low", "tap_page",
     "tap_row", "tap_tab", "tap_text", "theme", "theme_settings", "theme_shop_settings",
-    "theme_store_settings", "title_key", "verify", "video_direct", "wait_bottom_tab", "wait_page",
-    "wait_search_settings", "wait_switches", "weather_calendar_probe", "weather_calendar_tap",
+    "theme_store_settings", "title_key", "verify", "video_direct", "wait_bottom_tab", "wait_home",
+    "wait_page", "wait_search_settings", "wait_switches", "weather_calendar_probe", "weather_calendar_tap",
     "weather_service",
 )

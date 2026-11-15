@@ -1,10 +1,8 @@
 # 荣耀 Magic V Flip2（CLE-AN00，MagicOS 10 / Android 16）的本机例外函数（catalog 的 `code=`，影随同名 `.toml`）。
 # 共享库的 enter / my_tab / skip / skip_in_safe_mode 由装载器注入执行作用域。这里留的是过程化的段
-# （坐标、选择器、dumpsys、条件分支）与它们用到的助手，逐字保留原实现。
-import re
+# （坐标、手势循环、dumpsys、播放状态）与它们用到的助手，逐字保留原实现。
 import time
 
-from fast import bounds
 import recipe_nav as nav
 
 
@@ -22,35 +20,7 @@ def wait_open(p, rt, pkg, app):
     raise RuntimeError(f"{app}没有打开")
 
 
-def launch(p, rt, activity, app):
-    pkg = activity.split("/", 1)[0]
-    p.app = pkg
-    p.promoted.clear()
-    p.d.shell(f"am start -f 0x10008000 -n {activity}")
-    wait_open(p, rt, pkg, app)
 
-
-def wait_home(p, rt, app):
-    for _ in range(10):
-        nav.no_agreement(p, rt, app)
-        if p.find("我的", edge_ok="tab"):
-            break
-        time.sleep(0.5)
-    for _ in range(4):
-        time.sleep(0.5)
-        nav.no_agreement(p, rt, app)
-
-
-def browser_gear(p, rt):
-    for _ in range(12):
-        icons = [n for n in p.tree().iter("node") if n.get("clickable") == "true" and p.on_screen(n)
-                 and bounds(n)[3] < p.H * 0.15 and bounds(n)[0] > p.W * 0.5
-                 and re.search(r"设置|setting", (n.get("content-desc") or "") + (n.get("resource-id") or ""), re.I)]
-        if len(icons) == 1:
-            l, t, r, b = bounds(icons[0]); p.click((l + r) // 2, (t + b) // 2); time.sleep(1.2)
-            return
-        time.sleep(0.4)
-    raise RuntimeError("浏览器设置齿轮没找到")
 
 
 def music_playing(p, rt):
@@ -108,32 +78,6 @@ def step_negative(p, rt):
 
 
 
-def step_browser(p, rt):
-    launch(p, rt, "com.hihonor.baidu.browser/com.baidu.searchbox.SplashActivity", "浏览器")
-    wait_home(p, rt, "浏览器")
-    p.dismiss()
-    nav.my_tab(p, rt, "浏览器")
-    browser_gear(p, rt)
-    p.off(only=["搜索下一条推荐"], page="浏览器·设置")
-    p.top()
-    nav.enter(p, rt, "消息设置")
-    p.off(only=["新闻热点", "兴趣推送"], page="浏览器·消息设置")
-    p.back(); time.sleep(0.5)
-    print("  · 「隐私设置 → 广告设置」是网页，要关请手动打开「不看程序化广告」「不看个性化广告」")
-    p.back(2)
-
-
-def step_theme(p, rt):
-    launch(p, rt, "com.hihonor.android.thememanager/.PageActivity", "主题")
-    wait_home(p, rt, "主题")
-    nav.my_tab(p, rt, "主题")
-    nav.enter(p, rt, "设置", scrolls=2)
-    nav.enter(p, rt, "通知")
-    p.off(only=["消息通知", "短信", "邮件"], page="主题·通知")
-    p.back()
-    nav.enter(p, rt, "个性化服务")
-    p.off(only=["个性化内容", "个性化广告"], page="主题·个性化服务")
-    p.back(3)
 
 
 def step_music(p, rt):
