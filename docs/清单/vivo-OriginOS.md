@@ -10,7 +10,7 @@
 - vivo V2309A（OriginOS 6，Android 16，`PD2309E_A_16.2.15.0.W10`，商店 V10.5.31.0），2026-11-03，社区实测（[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530)），专用脚本 `recipes/vivo/V2309A/`。
 - vivo V2303A（OriginOS 7，Android 17，`CP2A.260605.016`），2026-11-04，社区实测（[#579](https://github.com/rddmwmddr/android-ad-cleaner/issues/579)），专用脚本 `recipes/vivo/V2303A/`，维护方未在本机复跑。
 
-iQOO 结构相近。当前源码有 `recipes/vivo/V2547DA/`、`recipes/vivo/V2547A/`、`recipes/vivo/V2545A/`、`recipes/vivo/V2309A/`、`recipes/vivo/V2303A/` 五份机型脚本，均已真机跑过（V2547DA 124 秒，V2547A 126 秒，V2545A 121 秒，V2309A 167 秒，整轮均通过；V2303A 只做了七段安全模式自检，整轮用时未测；其中 V2309A 与 V2303A 为社区实测、维护方未在本机复跑）；V2547DA 的商店段与齿轮判据在 2026-11-03 改动过（[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530)），齿轮落地校验与浏览器段的入口重写在 2026-11-07 又改过（[#575](https://github.com/rddmwmddr/android-ad-cleaner/issues/575)、[#753](https://github.com/rddmwmddr/android-ad-cleaner/issues/753)），OriginOS 6 变体这几处都没在真机上复测。V2547DA 另有 Android 17 变体 `recipes/vivo/V2547DA/recipe_android17.py`，系统版本对上 `PD2547D_A_17.1.10.2` 时自动选它（其余 17.x 小版本对不上，仍走 Android 16 脚本并进安全模式）；入口按 #220 的报告者实测写，2026-11-07 已在本机整段复测（见下文）。五份脚本对应不同机型与系统版本，入口差异见下文「OriginOS 7（Android 17）的不同之处」、「X Fold6 的差异」、「V2536A 的差异」、「V2309A 的差异」和「V2303A 的差异」；版本对不上时引擎会走安全模式。发布与验证范围见[归档记录](../归档/CHANGELOG-0.3.0及更早.md)。
+iQOO 结构相近。当前源码有 `recipes/vivo/V2547DA/`、`recipes/vivo/V2547A/`、`recipes/vivo/V2545A/`、`recipes/vivo/V2309A/`、`recipes/vivo/V2303A/` 五份机型脚本，均已真机跑过（V2547DA 124 秒，V2547A 126 秒，V2545A 121 秒，V2309A 167 秒，整轮均通过；V2303A 只做了七段安全模式自检，整轮用时未测；其中 V2309A 与 V2303A 为社区实测、维护方未在本机复跑）；V2547DA 的商店段与齿轮判据在 2026-11-03 改动过（[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530)），齿轮落地校验与浏览器段的入口重写在 2026-11-07 又改过（[#575](https://github.com/rddmwmddr/android-ad-cleaner/issues/575)、[#753](https://github.com/rddmwmddr/android-ad-cleaner/issues/753)），OriginOS 6 变体这几处都没在真机上复测。V2547DA 另有 Android 17 变体 `recipes/vivo/V2547DA/V2547DA-android17.toml`，系统版本对上 `PD2547D_A_17.1.10.2` 时自动选它（其余 17.x 小版本对不上，仍走 Android 16 脚本并进安全模式）；入口按 #220 的报告者实测写，2026-11-07 已在本机整段复测（见下文）。五份脚本对应不同机型与系统版本，入口差异见下文「OriginOS 7（Android 17）的不同之处」、「X Fold6 的差异」、「V2536A 的差异」、「V2309A 的差异」和「V2303A 的差异」；版本对不上时引擎会走安全模式。发布与验证范围见[归档记录](../归档/CHANGELOG-0.3.0及更早.md)。
 符号：🔴 关掉　🟢 保留　⚠️ 注意
 
 ---
@@ -167,9 +167,9 @@ Failure [only root can delete system app for a particular user]
 
 ⚠️ 负一屏「热点资讯」页的 8 行开关，整行节点的标题全串成了页标题「热点资讯」；这一页还有 3 个单选钮
 （悬浮 / 经典 / 卡片形态）也是 checkable，按「找 checkable 节点」的通用写法会把它当开关一起拨掉。
-机型脚本 `recipes/vivo/V2547A/recipe.py` 里已按行还原标题、排除单选钮。
+机型脚本 `recipes/vivo/V2547A/V2547A.py` 里已按行还原标题、排除单选钮。
 
-V2547DA 的 Android 17 变体（`recipes/vivo/V2547DA/recipe_android17.py`）2026-11-07 本机把系统广告、
+V2547DA 的 Android 17 变体（`recipes/vivo/V2547DA/V2547DA-android17.py`）2026-11-07 本机把系统广告、
 全局搜索、阅图锁屏三段改成直达，打不开再走菜单；整段 91 秒降到 62 秒。浏览器设置页在这台没有
 导出，仍走菜单，是这一轮最慢的一段。
 
@@ -253,7 +253,7 @@ V2547DA 的 Android 17 变体（`recipes/vivo/V2547DA/recipe_android17.py`）202
 
 ## V2417A（OriginOS 6 / Android 16）差异
 
-2026-10-30 贡献者在 `PD2417D_A_16.2.14.1.W10` 真机逐页实测（社区实测，维护方未复跑），专用脚本为 `recipes/vivo/V2417A/recipe.py`。应用版本、验证范围及执行记录见[适配说明](../../recipes/vivo/V2417A/README.md)。
+2026-10-30 贡献者在 `PD2417D_A_16.2.14.1.W10` 真机逐页实测（社区实测，维护方未复跑），专用脚本为 `recipes/vivo/V2417A/V2417A.toml`。应用版本、验证范围及执行记录见[适配说明](../../recipes/vivo/V2417A/README.md)。
 
 | 位置 | 本机路径或差异 |
 |---|---|

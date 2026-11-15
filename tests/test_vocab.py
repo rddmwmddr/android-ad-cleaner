@@ -375,7 +375,7 @@ class ParseTest(unittest.TestCase):
             p.off(only=HOT, page="搜索·首页")
         ''')
         self.assertEqual(found.words[0].line, 3)
-        self.assertEqual(found.words[0].source, "xiaomi/A1:3")
+        self.assertEqual(found.words[0].source, "xiaomi/A1/recipe.py:3")
 
     def test_loop_variables_and_computed_lists_are_unresolved(self):
         found = self.scan('''
@@ -472,9 +472,9 @@ def downloads(p, g):
     return _
 ''')
         self.assertEqual([(w.text, w.kind, w.source, w.injected) for w in found.words],
-                         [("广告推荐", vocab.OFF, "xiaomi/A1:3", True),
-                          ("开屏广告", vocab.OFF, "xiaomi/A1:3", True),
-                          ("仅 Wi-Fi 下载", vocab.KEEP, "xiaomi/A1:3", True)])
+                         [("广告推荐", vocab.OFF, "xiaomi/A1/recipe.py:3", True),
+                          ("开屏广告", vocab.OFF, "xiaomi/A1/recipe.py:3", True),
+                          ("仅 Wi-Fi 下载", vocab.KEEP, "xiaomi/A1/recipe.py:3", True)])
         self.assertEqual({(w.group, w.page) for w in found.words}, {("下载管理", "下载管理·设置")})
 
     def test_a_module_constant_reaches_the_implementation(self):
@@ -497,7 +497,7 @@ def downloads(p, g):
     return _
 ''')
         self.assertEqual([(w.text, w.source) for w in found.words],
-                         [("热点资讯", "xiaomi/A1:5"), ("热搜榜", "xiaomi/A1:5")])
+                         [("热点资讯", "xiaomi/A1/recipe.py:5"), ("热搜榜", "xiaomi/A1/recipe.py:5")])
 
     def test_unresolved_and_page_wide_are_charged_to_the_caller(self):
         found = self.scan('''\
@@ -530,7 +530,7 @@ def downloads(p, g):
         self.addCleanup(tmp.cleanup)
         found = vocab.scan(tmp.name, injected={"downloads": impl})
         self.assertEqual({(w.model, w.source) for w in found.words},
-                         {("A1", "xiaomi/A1:3"), ("B2", "xiaomi/B2:3")})
+                         {("A1", "xiaomi/A1/recipe.py:3"), ("B2", "xiaomi/B2/recipe.py:3")})
 
     def test_the_surfaces_only_add_words_at_their_call_sites(self):
         """两张注入面只添「词住在实现里」的那一份，脚本自己那份一个字不变（沿用 #1210；#1253 起两张表）。
@@ -588,7 +588,7 @@ def downloads(p, g):
     return _
 ''')
         self.assertEqual([(w.text, w.source, w.injected) for w in found.words],
-                         [("广告推荐", "xiaomi/A1:4", True)])
+                         [("广告推荐", "xiaomi/A1/recipe.py:4", True)])
 
 
 class RenderTest(unittest.TestCase):
@@ -605,7 +605,7 @@ class RenderTest(unittest.TestCase):
         doc = self.render(**{"xiaomi-A1": 'p.off(only=["营销"], keep=["推送消息"], page="商店·通知设置")'})
         section = self.group(doc, "应用商店")
         self.assertIn("**同页保留项**", section)
-        self.assertIn("- 商店·通知设置 · 推送消息：`xiaomi/A1:1`", section)
+        self.assertIn("- 商店·通知设置 · 推送消息：`xiaomi/A1/recipe.py:1`", section)
 
     def test_same_word_on_two_pages_gets_two_reverse_rows(self):
         doc = self.render(**{"xiaomi-A1": 'p.off(only=["广告"], page="商店·甲")\np.off(keep=["广告"], only=["x"], page="商店·乙")'})
@@ -618,20 +618,20 @@ class RenderTest(unittest.TestCase):
                              "xiaomi-B2": 'p.off(only=["WiFi连接"], page="商店·甲")'})
         line = next(l for l in self.group(doc, "应用商店").splitlines() if "WiFi" in l)
         self.assertIn("WiFi 连接 / WiFi连接", line)
-        self.assertIn("xiaomi/A1:1", line)
-        self.assertIn("xiaomi/B2:1", line)
+        self.assertIn("xiaomi/A1/recipe.py:1", line)
+        self.assertIn("xiaomi/B2/recipe.py:1", line)
 
     def test_empty_group_still_has_a_section(self):
         doc = self.render(**{"xiaomi-A1": 'p.off(only=["广告"], page="商店·甲")'})
         self.assertIn("暂无词条", self.group(doc, "负一屏"))
 
-    def test_non_default_file_is_named_in_the_source(self):
+    def test_variant_script_is_scanned_and_named_in_full(self):
         tmp = recipes(**{"vivo-V1": 'p.off(only=["广告"], page="商店·甲")'})
         self.addCleanup(tmp.cleanup)
         (Path(tmp.name, "vivo", "V1", "recipe_android17.py")).write_text('p.off(only=["推荐"], page="商店·甲")', encoding="utf-8")
         doc = vocab.render(tmp.name)
+        self.assertIn("`vivo/V1/recipe.py:1`", doc)
         self.assertIn("`vivo/V1/recipe_android17.py:1`", doc)
-        self.assertIn("`vivo/V1:1`", doc)
 
     def test_html_like_labels_are_in_code_so_markdown_keeps_them(self):
         doc = self.render(**{"xiaomi-A1": 'p.off(only=names, page=title)'})
@@ -715,7 +715,7 @@ class GapsTest(unittest.TestCase):
         })
         self.assertIn("## 音乐", text)
         self.assertIn("乙", text)
-        self.assertIn("honor/B2:1", text)
+        self.assertIn("honor/B2/recipe.py:1", text)
         self.assertIn("B2", text)
         self.assertIn("音乐·广告推荐", text)
         self.assertNotIn("甲", text)

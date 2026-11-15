@@ -146,10 +146,8 @@ class Word:
 
     @property
     def source(self):
-        """短写的出处：默认文件 recipe.py 不写文件名。目录是 `<家族>/<型号>`。"""
-        parts = self.script.split("/")
-        folder, name = "/".join(parts[:-1]), parts[-1]
-        return f"{folder}:{self.line}" if name == "recipe.py" else f"{folder}/{name}:{self.line}"
+        """出处：`recipes/` 下的相对路径加行号。"""
+        return f"{self.script}:{self.line}"
 
 
 @dataclass(frozen=True)
@@ -418,7 +416,7 @@ def render(recipes_dir):
              "「要开」是保护类开关：开头带否定词（`polarity.NEG_PREFIX`）且带广告词，引擎会把它拨到开，"
              "判定在 `polarity.want_state()`；不要把这类词条按普通广告开关处理。"
              "「不碰」是点了名、引擎却不会拨的行（既没否定词也没广告词），出现即说明那条点名没生效。", "",
-             "出处写成 `目录:行号`，指 `recipes/<家族>/<型号>/recipe.py`；别的文件写全文件名。"
+             "出处写成 `recipes/` 下的相对路径加行号；行号只是定位，catalog 机型由数据合成源码后重新编号。"
              f"这里读 `p.off()` 和 `close_named()`：共 {len(words)} 处词，另有 {found.whole_page} 处没有点名（整页全关，没有词）。", ""]
     for family, groups in ENTRIES.items():
         brands = "、".join(b for b, f in FAMILY.items() if f == family)
