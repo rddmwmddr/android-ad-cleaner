@@ -1211,6 +1211,14 @@ why = "库按家族拆开后（#1269），归属判据按**家族数**算（家�
 expires_if = "若机型库改成按机型（而不是按家族）归属、改回单一模块，或 `shared.py` 被别的共享形态取代 / 引入新的名称注入机制时重议。"
 
 [[rule]]
+id = "dev.recipe.lib-not-import-fast"
+source = "docs/ARCHITECTURE.md#函数级细节"
+check = "test:test_rules_guards::RecipeLibGuards.test_library_layer_does_not_import_the_facade"
+status = "enforced"
+why = "`tool/fast.py` 同时是门面、引擎名词的集散地与异常类的老家：`ScreenLocked` 原先定义在门面里，库层与运行时写成函数内 `from fast import …`，`recipe_runtime` 还靠这句绕开它与 `recipe_kit` 的环边——「库不依赖引擎」只能读代码确认，而把 `LIBRARY` 搬进 `recipe_lib` 时那条休眠的环会真的活过来。判据是名字的归属而不是处数：`bounds` / `icon_hit` 属 `row`、`want_state` 属 `polarity`、`ScreenLocked` 属 `phone.errors`（#1335 已把异常定义搬进 `phone/errors.py`、库层改成模块级直取，这条守卫挡的是回退）。"
+expires_if = "`fast` 不再是引擎唯一的出口模块（门面与 re-export 一并收掉）时删——那时没有门面可经。"
+
+[[rule]]
 id = "doc.pr.docs-and-generator-in-sync"
 source = "docs/agents/issue-tracker.md#Pull requests as a triage surface"
 check = "test:test_adapt_cli::DraftGenTests.test_docs_04_shows_the_same_skeleton"

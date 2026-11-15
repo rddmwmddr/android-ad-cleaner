@@ -13,6 +13,8 @@ from wait import GiveUp
 from wait import until
 import adb_link
 from recipe_runtime import SkipStep
+from phone.errors import ScreenLocked
+from row import bounds, icon_hit
 
 __all__ = ('app_settings', 'browser_settings', 'close_named', 'enter', 'gear', 'gear_top', 'goto', 'my_tab', 'open_page', 'open_settings', 'opened', 'page_activity', 'read_switches', 'switch_signature', 'switch_top', 'tap', 'tap_text', 'wait_page', 'wait_switches')
 
@@ -31,8 +33,6 @@ def _style(rt, constant, choices, default):
 def gear(p, rt, toolbar_only=False):
     vivo_styles = {name: functools.partial(fn, p, rt) for name, fn in _VIVO_GEAR_FACTORIES.items()}
     def icon_style(toolbar_only):
-        from fast import bounds, icon_hit
-
         for n in p.tree().iter("node"):
             l, t, r, b = bounds(n)
             icon = "ImageView" in n.get("class", "") and r-l < p.W * 0.25 and b-t < p.H * 0.15
@@ -44,7 +44,6 @@ def gear(p, rt, toolbar_only=False):
         # 下载管理、天气和日历的齿轮藏在右上「更多」菜单里。
         for n in p.tree().iter("node"):
             key = (n.get("content-desc") or "") + " " + (n.get("resource-id") or "")
-            from fast import bounds
             l, t, r, b = bounds(n)
             if any(k in key.lower() for k in ("更多", "more", "menu")) and n.get("clickable") == "true" and p.on_screen(n) and b < p.H * 0.22:
                 p.click((l + r) // 2, (t + b) // 2); rt.clock.sleep(0.5)
@@ -53,8 +52,6 @@ def gear(p, rt, toolbar_only=False):
                 break
         return False
     def text_style(toolbar_only):
-        from fast import bounds, icon_hit
-
         for n in p.tree().iter("node"):
             l, t, r, b = bounds(n)
             if icon_hit(n) and (n.get("clickable") == "true" or "ImageView" in n.get("class", "")) and p.on_screen(n) and (not toolbar_only or b < p.H * 0.23):
@@ -105,7 +102,6 @@ def gear_top(p, rt):
         应用商店「我的」页有一条「去功能设置里重新开启」，含「设置」二字且可点，通用 gear() 会先命中它，
         点开的是手机清理的功能页——这就是沿用 #193 那组记录里商店四个入口全部找不到的真正原因。
         """
-        from fast import bounds
         for n in p.tree().iter("node"):
             t = (n.get("text") or n.get("content-desc") or "").strip()
             if t != "设置" or n.get("clickable") != "true" or not p.on_screen(n):
@@ -172,7 +168,6 @@ def wait_page(p, rt, activity, title=None, timeout=None):
         return False
     def raise_style(activity, title=None, timeout=None):
         """只在实际 Activity、标题及可见文字稳定后继续；不在账号页读开关或截图。"""
-        from fast import ScreenLocked
 
         timeout = 6 if timeout is None else timeout
         end, previous = rt.clock.monotonic() + timeout, None
@@ -194,7 +189,6 @@ def wait_page(p, rt, activity, title=None, timeout=None):
         raise RuntimeError(f"未确认页面{target}（当前：{p.focus()}），不操作开关")
     def strict_style(activity, title, timeout=None):
         """与 raise 同形，标题必给、失败句不带当前前台（PMA110 的录制口径）。"""
-        from fast import ScreenLocked
 
         timeout = 6 if timeout is None else timeout
         end, previous = rt.clock.monotonic() + timeout, None
@@ -337,7 +331,6 @@ def read_switches(p, rt, *args, **kwargs):
     plain_style = functools.partial(_xiaomi_read_switches, p, rt)
     vivo_style = functools.partial(_vivo_read_switches_style, p, rt)
     def title_style(title, max_screens=12):
-        from fast import ScreenLocked
 
         rt.page(title)
         where = p.focus()

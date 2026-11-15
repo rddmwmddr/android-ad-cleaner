@@ -15,6 +15,7 @@ from types import MappingProxyType
 from typing import Any
 
 import adb_link
+from phone.errors import ScreenLocked
 
 # 每个段的结局用这四个词记一条（机型脚本的分段结果台账）
 DONE, SKIPPED, FAILED, NOT_RUN = "完成", "跳过", "未完成", "未执行"
@@ -182,7 +183,6 @@ class Runtime:
         等待由引擎负责；页面即使已经站稳也必须过这三段，旧页不能当成目标页。
         `title` 给一组时任一出现即算到页；`package` / `activity` 按 `包名/Activity` 判。
         """
-        from fast import ScreenLocked
         p = self.p
         p.await_page(budget=6)
         where = p.focus()
@@ -270,7 +270,6 @@ class Runtime:
             print(f"\n== {name}", flush=True)
             print("  · 未执行：前一段中止了整批", flush=True)
             return action
-        from fast import ScreenLocked      # fast 在顶部 import recipe_kit，取在调用时才不绕进循环
         namespace = self.namespace or {}
         # 脚本可以换掉跳过异常类（只换类、仍用引擎的段包装）：抛的和接的必须是同一个类。
         skip_class: type[BaseException] = namespace.get("SkipStep") or SkipStep

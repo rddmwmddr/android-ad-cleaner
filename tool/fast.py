@@ -70,8 +70,8 @@ from phone.dismisser import DISMISS as DISMISS, UPDATE_TITLE as UPDATE_TITLE
 from phone.dismisser import Dismisser
 
 
-class ScreenLocked(RuntimeError):
-    """手机锁屏了：调用方等机主解锁，或停下整批，不逐项报同一个原因。"""
+# 显式 re-export：`ScreenLocked` 的定义已搬进 tool/phone/errors.py，这里只留对外名字（ADR-0033 的冻结面）。
+from phone.errors import ScreenLocked as ScreenLocked
 
 
 # 启动与落点已随 `start()` 搬进 tool/phone/launcher.py（#1041），这里显式 re-export：
