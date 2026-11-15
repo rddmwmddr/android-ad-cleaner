@@ -1,18 +1,19 @@
 """这台机该跑哪份机型脚本：型号直选、同版本变体、同族参考与版本核心比较的唯一 owner。
 
-对外只有 `recipe_for()` 一个入口：型号 + 品牌 + 设备版本 → `(路径, 是否参考)`。`run.py` 的四条
-命令只是消费者，各传一次 `root=`；测试要对着假 `recipes` 树跑时同样传 `root=`，不改模块全局。
+`recipe_for()` 是选脚本的唯一入口：型号 + 品牌 + 设备版本 → `(路径, 是否参考)`。`REFERENCE` /
+`build_ok` / `version_match` / `version_core` 同样是公开面，`run.py` 的命令与测试从这里取它们；
+其中 `build_ok` 与 `version_match` 对「录制版本没标」的结论刻意相反，别合并成一个。
 """
 import glob
 import os
 import re
-from typing import Mapping
+from collections.abc import Mapping
 
 from entries import FAMILY      # 品牌族只此一份；广告包、参考脚本与版本比较都按它归
 from recipe_meta import recipe_meta
 
-# 没给 root= 时的仓库根：`tool/` 的上一级。与 `run.py` 的 `ROOT` 同一公式，所以不传 root
-# 的调用逐字同行为。
+# 没给 root= 时的仓库根：`tool/` 的上一级。它要与 `run.py` 的 `ROOT` 算出同一个目录——不传
+# root 的调用（测试、诊断）与各命令必须看到同一棵树。
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # 没有本型号脚本时用的同品牌参考脚本。以前取目录名排第一的那份，社区每加一个机型，
@@ -141,9 +142,8 @@ def recipe_for(model: str, brand: str = "", device_info: Mapping[str, str] | Non
                root: str | os.PathLike[str] | None = None) -> tuple[str | None, bool]:
     """返回 (路径, 是否参考)。先找本型号（目录名或脚本里的 MODELS）；没有就找同家族别的机型，作参考。
 
-    `root` 是仓库根（含 `recipes/` 的那一层）；不给时用模块自己的 `REPO_ROOT`，所以老调用
-    `recipe_for(model, brand)` 逐字同行为。它是 keyword-only：位置参数会让品牌写成第三位时
-    把型号静默当成树根。
+    `root` 是仓库根（含 `recipes/` 的那一层），不给时用 `REPO_ROOT`。它是 keyword-only：
+    放开成位置参数的话，品牌写错到第三位就会让型号被静默当成树根。
     """
     where = REPO_ROOT if root is None else root
     allr = _recipe_files(where)
