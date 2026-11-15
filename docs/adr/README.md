@@ -43,3 +43,4 @@
 - [0037](0037-recipe-declarative-loader.md) — 机型脚本按模块装载：声明式段、单一装载器与这次执行
 - [0038](0038-recipe-catalog.md) — 机型脚本的终态：页面树数据 + 运行时 + 家族策略 + 本机例外
 - [0039](0039-claude-md-startup-index.md) — `CLAUDE.md` 是启动索引：函数级细节归 `docs/ARCHITECTURE.md`
+- [0040](0040-library-name-table-owner.md) — `recipe_lib` 是库名字表的唯一 owner：三个稳定 import 面只是兼容壳

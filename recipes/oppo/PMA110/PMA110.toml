@@ -9,7 +9,7 @@ models = ["PMA110"]
 build = "PMA110_17.0.0.106(CN01)"
 tail = "tail"
 
-# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+# 家族库按这些常量选走法（沿用 #1245），缺省档见 recipe_lib/。
 [const]
 WAIT_PAGE_STYLE = "strict"
 TAP_PAGE_STYLE = "raise"

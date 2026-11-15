@@ -17,6 +17,9 @@ import recipe_runtime
 from recipe_runtime import Step
 
 from . import interpreter, schema
+# `recipe_lib` 与 `tool/` 平级，宿主只把 `tool/` 放进 `sys.path`；可达性靠 `interpreter` 顶部那三行
+# 垫片（它先被导入），这里不另抄一份（ADR-0040）。
+import recipe_lib
 
 
 class CatalogScope(dict):
@@ -56,18 +59,11 @@ class CatalogScope(dict):
         return self._library_view(key)
 
     def _library_view(self, key):
-        """测试读库助手用的视图：`__all__` 里的实现 + 提升进库的本机助手。"""
+        """测试读库助手用的视图：数据可点名的实现 + 面助手，都直接在 `recipe_lib` 上取（ADR-0040）。"""
         import functools
-        import recipe_nav
-        import recipe_steps
-        import recipe_strategies
         fn = interpreter.LIBRARY.get(key)
-        if fn is None:
-            for module in (recipe_nav, recipe_strategies, recipe_steps):
-                value = getattr(module, key, None)
-                if value is not None and not key.startswith("__"):
-                    fn = value
-                    break
+        if fn is None and key in recipe_lib.__all__:
+            fn = getattr(recipe_lib, key)
         if fn is None:
             raise KeyError(key)
         if isinstance(fn, type):                 # MenuState 这类 namedtuple

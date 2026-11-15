@@ -10,6 +10,7 @@ import tempfile
 import tomllib
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
@@ -38,6 +39,48 @@ def patch_library(case, **fns):
             else:
                 interpreter.LIBRARY[name] = value
     case.addCleanup(restore)
+
+
+class LibraryViewTests(unittest.TestCase):
+    """`scope[...]` 的库视图（#1345）：五种结局直接落在库上，不再按顺序游三个兼容面。
+
+    `MenuState` 是类型，`title_key` / `_labelled` 是纯函数不绑协作者，`labels` 只绑 `p`，其余绑
+    `(p, rt)`。视图只给测试读库助手（解释器自己查 `interpreter.LIBRARY`），所以这里读到的就是
+    「这名字该是什么」的全部判据——换了查找路径，这五种结局不许跟着变。
+    """
+
+    def setUp(self):
+        import recipe_lib
+        self.recipe_lib = recipe_lib
+        self.phone = fixtures.fake_phone(clock=fixtures.Clock(), fast_mod=fast)
+        self.scope = catalog.load(ROOT / DATA, self.phone, only=[]).namespace
+
+    def test_the_menu_state_type_comes_back_unbound(self):
+        self.assertIs(self.scope["MenuState"], self.recipe_lib.MenuState)
+        self.assertEqual(tuple(self.scope["MenuState"](True, False)), (True, False))
+
+    def test_pure_helpers_come_back_unbound(self):
+        self.assertIs(self.scope["title_key"], self.recipe_lib.title_key)
+        self.assertEqual(self.scope["title_key"]("设置.已开启"), "设置")
+        self.assertIs(self.scope["_labelled"], self.recipe_lib._labelled)
+        self.assertTrue(self.scope["_labelled"]("全部关闭 - 已停用", "全部关闭"))
+        self.assertFalse(self.scope["_labelled"]("全部关闭服务", "全部关闭"))
+
+    def test_labels_binds_only_the_phone(self):
+        self.phone.texts = Mock(return_value=[("甲", "1", (0, 0)), ("乙", "2", (0, 1))])
+        self.assertEqual(self.scope["labels"](), {"甲", "乙"})
+
+    def test_library_implementations_bind_phone_and_runtime(self):
+        stub = Mock(return_value={"甲": True})
+        patch_library(self, read_switches=stub)
+        self.assertEqual(self.scope["read_switches"]("设置页"), {"甲": True})
+        self.assertEqual(stub.call_args.args, (self.phone, self.scope["rt"], "设置页"))
+
+    def test_an_unknown_name_is_a_key_error(self):
+        with self.assertRaises(KeyError):
+            self.scope["no_such_library_name"]
+        with self.assertRaises(KeyError):      # 兼容壳的垫片内部名不是库名，别在这里冒出来
+            self.scope["_root"]
 
 
 class ValidatorTests(unittest.TestCase):
@@ -1180,7 +1223,7 @@ class ReaderTests(unittest.TestCase):
             self.assertTrue(typecheck_recipes._check_catalog(str(bad))[0])
 
     def test_every_toml_lib_call_resolves_to_an_implementation(self):
-        """`.toml` 里每个 lib / require_lib 名都要在库的 `__all__` 里（入口归属的根因守护）。
+        """`.toml` 里每个 lib / require_lib 名都要在 `LIBRARY`（数据可点名的集合）里（入口归属的根因守护）。
 
         数据显式点名实现，名字解析不到时入口速查会把这台机从「用过的机型」里静默删掉
         （`com.iqoo.secure` / `com.vivo.weather` 那次）。覆盖全部已转型号，不是抽查一份。"""

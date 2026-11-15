@@ -17,8 +17,8 @@ r"""机型脚本的「事实」层：一份源码里发生了哪些调用。纯 
 - f-string 不解析：`f"am start … {activity}"` 现在算不上入口，这里也不让它算上；页面标签仍按
   `{变量}` 的写法渲染（那是标签的写法，不是值）。
 
-库实现的归属按名字查，不按脚本的 import 解析（#1268）：`library_sources()` 从 `recipe_nav` /
-`recipe_strategies` / `recipe_steps` 三个稳定 import 面取实现，归属写函数真正的 `__module__`
+库实现的归属按名字查，不按脚本的 import 解析（沿用 #1268）：`library_sources()` 直接问
+`recipe_lib`（名字表的唯一 owner，ADR-0040）要实现，归属写函数真正的 `__module__`
 （`recipe_lib.<家族>` / `recipe_lib.shared`）；数据里的 `lib` 名由 `_lib_modules()` 在这张表里
 唯一定位。没有按 import 归属的三张注册表，也没有同名覆盖：装载时库名先进 `LIBRARY`，例外命名
 空间只补库里没有的名字。
@@ -28,15 +28,22 @@ import functools
 import glob
 import json
 import os
+import sys
 import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+# `recipe_lib` 与 `tool/` 平级，宿主只把 `tool/` 放进 `sys.path`（ADR-0040）。
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
 _Function = ast.FunctionDef | ast.AsyncFunctionDef
 _Position = tuple[int, int]
 
-# 三个稳定 import 面（#1243、#1269）：实现住在 `recipe_lib`，这三个模块只做重导出，事实层经它们取名字。
+# 三个稳定 import 面（沿用 #1243、#1269）：实现住在 `recipe_lib`，这三个模块只做重导出。事实层不经它们取
+# 实现，只靠这张表认出脚本里 `nav.gear(…)` 这种经别名写的调用（ADR-0040）。
 NAV_MODULE = "recipe_nav"
 STRATEGIES_MODULE = "recipe_strategies"
 STEPS_MODULE = "recipe_steps"
@@ -649,21 +656,18 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
 def library_sources() -> dict[str, tuple[str, str]]:
     """机型库数据可调用的实现：{名字: (归属模块, 源码)}。
 
-    名字全局唯一，直接定位实现，不再按脚本 import 做归属解析（#1268）。#1269 拆库后实现按家族住在
-    `recipe_lib/<家族>.py` / `recipe_lib/shared.py`，`tool/recipe_nav.py` 等三个只做重导出；这里经
-    重导出面拿到函数对象，归属写它真正的 `__module__`（`recipe_lib.shared` 等）。
+    名字全局唯一，直接定位实现，不再按脚本 import 做归属解析（沿用 #1268）。实现按家族住在
+    `recipe_lib/<家族>.py` / `recipe_lib/shared.py`，`LIBRARY` 就是那 140 个数据可点名的名字
+    （ADR-0040）；归属写函数真正的 `__module__`（`recipe_lib.shared` 等）。
     词库与入口速查拿它扫实现里的字面量。结果是进程内常量，缓存起来：`inspect.getsource` 很慢，
     一次全量回归会调上千次（#1307）。返回值按只读共享，调用方改了它这份缓存就脏了。
     延迟 import：只有调用它时才加载库。"""
     import inspect
-    import recipe_nav
-    import recipe_strategies
-    import recipe_steps
+    import recipe_lib
     found: dict[str, tuple[str, str]] = {}
-    for module in (recipe_nav, recipe_strategies, recipe_steps):
-        for name in module.__all__:
-            function = getattr(module, name)
-            found[name] = (function.__module__, inspect.getsource(function))
+    for name in sorted(recipe_lib.LIBRARY):
+        function = recipe_lib.LIBRARY[name]
+        found[name] = (function.__module__, inspect.getsource(function))
     # 实现之间用裸名字互调；`inspect.getsource` 只有函数体、没有模块头。补一组
     # `from recipe_lib.<模块> import <名字>`，事实层才给裸调用记上归属模块（`Call.module`）——
     # 词库的逐层下扫按「有归属的注入调用」筛，缺了它整条实现链会被静默跳过（#1269）。
@@ -676,7 +680,7 @@ def library_sources() -> dict[str, tuple[str, str]]:
 
 
 def _lib_modules() -> dict[str, str]:
-    """数据 `lib` 名 → 归属模块。三个库的 `__all__` 全局唯一（#1268：没有同名覆盖）。"""
+    """数据 `lib` 名 → 归属模块。`LIBRARY` 的名字全局唯一（沿用 #1268：没有同名覆盖，ADR-0040）。"""
     return {name: module for name, (module, _source) in library_sources().items()}
 
 

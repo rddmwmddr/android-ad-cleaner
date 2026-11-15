@@ -7,21 +7,23 @@
 `p.entry()` / `p.start()`（内部都是 `wait.until`），入口回落走 `entries.reach`（经库保留）。解释器
 只把「该调哪个 p 方法、带哪些实参」按数据的书写顺序发出去，不碰这些算法本身。
 
-库调用按名字解析：`lib` / `require_lib` / `if_lib` / `return_lib` 查本模块的 `LIBRARY`（三个库的
-`__all__`），查不到再查本机例外命名空间；实现是普通函数，收 `(p, rt, …)`，调用序列与旧脚本逐条相同。
+库调用按名字解析：`lib` / `require_lib` / `if_lib` / `return_lib` 查本模块的 `LIBRARY`
+（`recipe_lib.LIBRARY`：家族 `__all__` 的 140 个名字），查不到再查本机例外命名空间；实现是普通函数，
+收 `(p, rt, …)`，调用序列与旧脚本逐条相同。
 """
+import os as _os, sys as _sys
 from collections.abc import Callable, Mapping
 from typing import Any
 
-import recipe_nav
-import recipe_strategies
-import recipe_steps
+# `recipe_lib` 与 `tool/` 平级，宿主只把 `tool/` 放进 `sys.path`（ADR-0040）。
+_root = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+if _root not in _sys.path:
+    _sys.path.insert(0, _root)
+import recipe_lib
 
-# 数据可调用的实现：三个库的 `__all__`。`lib` / `require_lib` / `if_lib` / `return_lib` 按名字查这张表。
-LIBRARY: dict[str, Callable[..., Any]] = {}
-for _module in (recipe_nav, recipe_strategies, recipe_steps):
-    for _name in _module.__all__:
-        LIBRARY[_name] = getattr(_module, _name)
+# 数据可调用的实现：owner 表的拷贝，不是共享引用——`tests/fixtures.py` 的打桩助手与
+# `tests/test_catalog.py` 会就地改这张表再 `addCleanup` 还原，共享引用会让漏还原的用例污染 owner。
+LIBRARY: dict[str, Callable[..., Any]] = dict(recipe_lib.LIBRARY)
 
 
 def _resolve(name: str, g: dict[str, Any]) -> Callable[..., Any]:

@@ -6,7 +6,7 @@ import recipe_nav as nav
 
 
 BUILD = "RMX3700_16.0.5.1300"
-# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+# 家族库按这些常量选走法（沿用 #1245），缺省档见 recipe_lib/oppo.py。
 WAIT_PAGE_TIMEOUT = 8
 
 # 商店「服务管理」是「关掉后隐藏对应服务入口」的开关。服务类入口要留，推广入口才关。

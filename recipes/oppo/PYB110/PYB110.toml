@@ -10,7 +10,7 @@ model = "PYB110"
 models = ["PYB110"]
 build = "PYB110_17.0.0"
 
-# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+# 家族库按这些常量选走法（沿用 #1245），缺省档见 recipe_lib/oppo.py。
 [const]
 SEARCH_SETTINGS_STYLE = "swipe_strict"
 

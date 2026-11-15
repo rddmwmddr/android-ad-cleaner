@@ -27,7 +27,10 @@ sys.path.insert(0, str(ROOT))          # recipe_lib 在仓库根
 import entries  # noqa: E402
 import recipe_audit  # noqa: E402
 import recipe_lib  # noqa: E402
+import recipe_nav  # noqa: E402
 import recipe_source  # noqa: E402
+import recipe_steps  # noqa: E402
+import recipe_strategies  # noqa: E402
 
 RECIPES = ROOT / "recipes"
 FAMILIES = set(entries.LABEL)
@@ -143,6 +146,51 @@ class SharedLibraryTests(unittest.TestCase):
                      for name in sorted(names)
                      if home[name][0] is None and len(usage[name]) < 2]
         self.assertEqual(offenders, [])
+
+
+SURFACES = (recipe_nav, recipe_strategies, recipe_steps)
+
+
+def family_names():
+    """六个模块（五个家族文件 + `shared.py`）的 `__all__` 合起来：数据 `lib:` 能点名的 140 个名字。"""
+    names = set()
+    for module in recipe_lib.MODULES:
+        names |= set(module.__all__)
+    return names
+
+
+class SurfaceTests(unittest.TestCase):
+    """库名字表的四个分区（ADR-0040）：owner 只在 `recipe_lib/__init__.py`，三个面是兼容壳。
+
+    1. `recipe_lib.__all__` 是「面能取到」的全部名字，必须恰好等于家族 `__all__` 并集 ∪
+       `HELPERS`，且没有重复项——家族加了名字却漏镜像时当场红，不必等某台机型的入口速查
+       静默少一条。
+    2. `LIBRARY` 是数据 `lib:` 能点名的词汇，必须恰好等于家族并集；面助手混进来会让数据
+       多出一批点得到、却没人该用的名字。
+    3. 三个兼容面导出的集合必须全等且等于 owner 的 `__all__`——谁在壳里手写一份名单，
+       下一次改 owner 时就会悄悄分叉。
+    4. `LIBRARY` 里的每个实现必须是 owner 导出的**同一个对象**——跨家族重名时 `LIBRARY`
+       按 `MODULES` 顺序派生会静默覆盖、显式 import 仍绑先写的那个，前三条都抓不到这种分歧。
+    """
+
+    def test_owner_all_is_the_family_union_plus_helpers(self):
+        expected = family_names() | set(recipe_lib.HELPERS)
+        self.assertEqual(set(recipe_lib.__all__), expected)
+        self.assertEqual(len(recipe_lib.__all__), len(expected))   # 重复项也算漂移
+
+    def test_library_holds_only_the_data_vocabulary(self):
+        self.assertEqual(set(recipe_lib.LIBRARY), family_names())
+        self.assertEqual(set(recipe_lib.LIBRARY) & set(recipe_lib.HELPERS), set())
+
+    def test_surfaces_re_export_the_owner_list(self):
+        owner = set(recipe_lib.__all__)
+        for module in SURFACES:
+            self.assertEqual(set(module.__all__), owner, module.__name__)
+        self.assertEqual(len({frozenset(module.__all__) for module in SURFACES}), 1)
+
+    def test_library_binds_the_same_object_the_owner_exports(self):
+        for name in recipe_lib.LIBRARY:
+            self.assertIs(recipe_lib.LIBRARY[name], getattr(recipe_lib, name), name)
 
 
 DRIVER = ROOT / "tests" / "compare_recipe_calls.py"
