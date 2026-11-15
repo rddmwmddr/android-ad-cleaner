@@ -1215,8 +1215,8 @@ id = "dev.catalog.op-kinds-declared-once"
 source = "docs/ARCHITECTURE.md#函数级细节"
 check = "test:test_catalog::OpKindDeclarationTests.test_every_declared_kind_has_a_handler"
 status = "enforced"
-why = "一种 op 的知识原先分散在四张名单里（`OP_KEYS` / `_HANDLERS` / 事实层的降级分支 / 末尾那条 `elif …: pass`），其中三张之间没有任何守卫：漏 handler 要等真机走到那条 op 才 `KeyError`，漏事实层登记会让词库与入口速查静默少一条记录。本仓最主要的 bug 形态就是「静默成功 / 静默跳过」，这里正是一例（#1354）。四条用例各守一个分区（两表相等、不产出集合 ⊆ 种类、逐 kind 投影不抛、事实类产出非空），全部用行为探测而不扫源码字面量，投影函数将来改成表驱动也不会假红。"
-expires_if = "catalog 的 op 种类收成一份声明、`NO_FACT_KINDS` 与降级分支不再分家时删。"
+why = "一种 op 的知识原先分散在四张名单里（`OP_KEYS` / `_HANDLERS` / 事实层的降级分支 / 末尾那条 `elif …: pass`），其中三张之间没有任何守卫：漏 handler 要等真机走到那条 op 才 `KeyError`，漏事实层登记会让词库与入口速查静默少一条记录。本仓最主要的 bug 形态就是「静默成功 / 静默跳过」，这里正是一例（#1354）。#1357 沿用这四个分区，把允许键、必填键、子 op 键、不产出事实与词条来源收成 `OPS` 里的一条 `OpSpec`，处理器表与降级分支仍是显式代码，所以「声明 ≡ 代码」仍需守卫。六条用例各守一个分区（声明与处理器表相等、子 ops 声明 ≡ 允许键里的 ops/else_ops、词条键 ⊆ 允许键、未登记 kind 投影报错、逐 kind 投影不抛、事实类产出非空），全部用行为探测而不扫源码字面量，投影函数将来改成表驱动也不会假红。"
+expires_if = "处理器表与事实层的降级分支也并进 `OPS`、声明与代码不再分家时删（`OPS` 本身已是一份声明，见 #1357）。"
 
 [[rule]]
 id = "dev.lib.single-walk"
