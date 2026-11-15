@@ -10,7 +10,7 @@ from recipe_runtime import SkipStep
 from recipe_lib.shared import _style, close_named_step, gear, maybe, opened, read_switches
 from row import bounds, icon_hit
 
-__all__ = ('bottom_tab', 'browser_settings_xiaomi', 'browser_start', 'by_id', 'close_with_plain_tap', 'direct_settings', 'downloads', 'downloads_probe', 'downloads_tap', 'gear_tap', 'global_search', 'menu_settings', 'mine_settings', 'negative_screen', 'popup_row', 'security_center', 'security_tab', 'settings_icon_visible', 'store', 'store_mode', 'store_mode_step', 'store_privacy_nested', 'store_privacy_sub', 'system_ads_security', 'tab', 'tab_bot', 'tap_any', 'tap_bottom_tab', 'tap_low', 'tap_tab', 'theme', 'theme_settings', 'wait_bottom_tab', 'weather_calendar_probe', 'weather_calendar_tap')
+__all__ = ('bottom_tab', 'browser_settings_xiaomi', 'browser_start', 'by_id', 'close_with_plain_tap', 'direct_settings', 'downloads', 'downloads_probe', 'downloads_tap', 'gear_tap', 'global_search', 'menu_settings', 'mine_settings', 'mine_tab_low', 'negative_screen', 'popup_row', 'security_center', 'security_tab', 'settings_icon_visible', 'store', 'store_mode', 'store_mode_step', 'store_privacy_nested', 'store_privacy_sub', 'system_ads_menu', 'system_ads_security', 'tab', 'tab_bot', 'tap_any', 'tap_bottom_tab', 'tap_low', 'tap_tab', 'theme', 'theme_settings', 'wait_bottom_tab', 'weather_calendar_probe', 'weather_calendar_tap')
 
 # ---------- 词汇 ----------
 def tap_any(p, rt, *names, scrolls=6):
@@ -93,12 +93,8 @@ def browser_settings_xiaomi(p, rt):
                 return True
             if p.focus() != before:
                 p.back()
-        for text, (l, t, r, b), _node in p.texts():
-            if text == "我的" and t >= p.H * 0.65:
-                before = p.sig()
-                p.click((l + r) // 2, (t + b) // 2)
-                p.settle(before, 1.5)
-                return gear(p, rt)
+        if mine_tab_low(p, rt):
+            return gear(p, rt)
         return False
     def menu_flow():
         """底栏「菜单」→ 弹窗「设置」；底栏没有「菜单」的机型在「我的」页里找设置（沿用 #833）。
@@ -192,6 +188,18 @@ def bottom_tab(p, rt, name='我的'):
     for t, (l, top, r, b), _n in p.texts():
         if t.strip() == name and top > p.H * 0.85:
             p.click((l + r) // 2, (top + b) // 2); rt.clock.sleep(2.5)
+            return True
+    return False
+
+def mine_tab_low(p, rt, name='我的'):
+    """点下半屏（65% 屏高以下）的「我的」：底栏不在最下面那道带（`p.H * 0.85`）时 `p.tab()` 够不着。
+
+    内容区里也常有一行同名文字，所以只认这一条带、按读到的位置点；点完等页面换掉（首页要画几秒）。"""
+    for text, (l, t, r, b), _node in p.texts():
+        if text == name and t >= p.H * 0.65:
+            before = p.sig()
+            p.click((l + r) // 2, (t + b) // 2)
+            p.settle(before, 1.5)
             return True
     return False
 
@@ -542,3 +550,26 @@ def system_ads_security(p, rt):
     rt.require(p.tap("更多安全设置", exact=True, scrolls=6), "未找到「更多安全设置」")
     rt.require(p.tap("广告服务", exact=True, scrolls=6), "未找到「广告服务」")
     close_named_step(p, rt, ["个性化广告推荐"], "系统·广告服务")
+
+def system_ads_menu(p, rt, security_tab_first=False):
+    """按「设置 → 隐私与安全 → 更多安全设置 → 广告服务」走一遍，到得了广告服务页才算成。
+
+    与 `system_ads_security` 是两条路：那条每一步都硬校验（点不到就整段失败），这条是软失败，
+    调用方按返回值决定还动不动开关。`security_tab_first` 给隐私页首屏没有「更多安全设置」的机型：
+    它要先把顶部的「安全」标签切过去，切完页面还要再画几秒，所以按页里的内容轮询三次、没画出来
+    就再点一次；其余机型先按文字翻「更多安全设置」，翻不到才去切标签。"""
+    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
+    rt.clock.sleep(1.2)
+    if not maybe(p, rt, "隐私与安全"):
+        return False
+    if security_tab_first:
+        for _ in range(3):
+            if p.find("设备安全") or p.find("人身安全"):
+                break
+            p.tap("安全", exact=True, scrolls=0)
+            rt.clock.sleep(0.5)
+        if not maybe(p, rt, "更多安全设置"):
+            return False
+    elif not maybe(p, rt, "更多安全设置") and maybe(p, rt, "安全", scrolls=3):
+        maybe(p, rt, "更多安全设置")
+    return maybe(p, rt, "广告服务")

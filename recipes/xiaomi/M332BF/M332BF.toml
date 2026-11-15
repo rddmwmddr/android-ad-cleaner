@@ -1,8 +1,8 @@
 # 小米 HyperOS 4 机型脚本：REDMI K90 Ultra（M332BF）；路径来源：社区报告者 @Sin1ery 2026-10-31 实测（HyperOS OS4.0.4.0.XHPCNXM，Android 17，沿用 Issue #374）。
 # 脚本按那份报告里的四处差异重写，本仓库尚未在这台机器上复跑，合并后等报告者复测。
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
-# 2026-11-14 转页面树：商店段的直达探路与「我的」页换页等待落成数据（换页等待走 `require_tab` 的
-# `settle`）；主题的等待仍要运行时读到的页面签名，留在同名 `.py` 的 `code =`；其余段落成导航数据。
+# 2026-11-14 转页面树：段落成导航数据；应用商店与主题「我的」页的换页等待走
+# `require_tab` 的 `settle`（按运行时读到的页面签名等）。
 model = "M332BF"
 models = ["M332BF"]
 build = "OS4.0.4"
@@ -58,7 +58,22 @@ ops = [{ kind = "lib", name = "downloads_probe" }]
 
 [[segment]]
 name = "主题"
-code = "step_theme"
+ops = [
+  # 直达主题管理包的代理页（沿用 #730 的做法：它没有 LAUNCHER，monkey 拉不起来）；经主题商店冷启动
+  # 还要过一道重定向过渡窗，前台校验容易误判（沿用 #906）。落点被系统转走时仍按跳过收尾。
+  { kind = "skip_unless_installed", command = "pm path com.android.thememanager", contains = "package:", text = "  · 本机没有主题管理包，跳过" },
+  { kind = "start_or_skip", pkg = "com.android.thememanager", activity = ".ThemeResourceProxyTabActivity", dead_ends = ["com.xiaomi.market", "com.miui.home"], reason = "主题页打不开" },
+  # 这台机换页慢：点完「我的」再等 2 秒。
+  { kind = "require_tab", name = "我的", settle = 2, miss_print = "主题底部「我的」标签没找到；", evidence = true },
+  { kind = "require_lib", name = "gear", miss_print = "主题设置入口没找到；", fail = true, evidence = true },
+  { kind = "await_page" },
+  { kind = "off_required", only = ["每次联网时通知"], keep = ["自动更新"], page = "主题·设置", contains = true },
+  { kind = "if_entry", text = "隐私设置", ops = [
+    { kind = "off", only = ["个性化推荐"], page = "主题·隐私" },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 2 },
+]
 
 [[segment]]
 name = "浏览器"
