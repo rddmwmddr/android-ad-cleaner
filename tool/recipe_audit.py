@@ -49,8 +49,8 @@ TIERS = (STRATEGY, VOCABULARY, KNOWLEDGE, HOOK)
 TIER_LABEL = {STRATEGY: "拨动策略", VOCABULARY: "引擎词汇", KNOWLEDGE: "真机型知识",
               HOOK: "声明式钩子"}
 
-# 四个可选的脚本侧钩子（`tool/catalog/loader.py` 按名字绑进例外函数的命名空间）：收尾打印、
-# 段入口守卫、段内包装、失败摘要。按名字判，不看函数体调了什么——它们不是算法，也不是页面知识（#1244）。
+# 四个可选的脚本侧钩子（`tool/catalog/loader.py` 按名字绑进例外命名空间）：收尾打印、段入口守卫、段内包装、
+# 失败摘要。按名字判，不看函数体调了什么——它们不是算法，也不是页面知识（#1244）。
 HOOK_NAMES = frozenset({"tail", "guard", "wrap", "detail"})
 
 # 拨动策略的信号：关开关的算法会碰到的东西（点名、读回、确认、改动台账）。
