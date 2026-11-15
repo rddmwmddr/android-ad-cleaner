@@ -1,6 +1,6 @@
 # vivo V2547DA（卫星通信版）Android 17 变体页面树（catalog，#1263）。系统版本对上 17.1.10.2 时由 run.recipe_for 选这份。
-# 与主本差别只在直达优先（`direct_page` / `global_search_entry`）的几段；系统广告 / 全局搜索 / 应用商店
-# 三段是导航数据，阅图锁屏仍是过程段，走 code= 例外函数。
+# 与主本差别只在直达优先（`direct_page` / `global_search_entry`）的几段；全部七段都是数据，
+# 本机没有 code= 例外函数。
 model = "V2547DA"
 models = ["V2547DA"]
 build = "PD2547D_A_17.1.10.2"
@@ -47,7 +47,15 @@ ops = [
 
 [[segment]]
 name = "阅图锁屏"
-code = "step_lock_screen"
+ops = [
+  # 阅图锁屏页是独立 Activity，直达最稳；没导出这一页的版本退回 设置 → 桌面、锁屏与壁纸 → 锁屏设置。
+  { kind = "if_lib", name = "direct_page", args = ["com.vivo.magazine", ".ui.MagazineSettings"], kwargs = { expect = "锁屏横滑进入阅图" }, ops = [
+    { kind = "off", only = ["阅图锁屏", "锁屏横滑进入阅图"], page = "阅图锁屏" },
+    { kind = "return" },
+  ], else_ops = [
+    { kind = "lib", name = "lock_screen_magazine" },
+  ]},
+]
 
 [[segment]]
 name = "应用商店"
