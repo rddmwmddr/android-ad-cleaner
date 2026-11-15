@@ -1280,7 +1280,7 @@ class GenTests(unittest.TestCase):
 
 
 class OpKindDeclarationTests(unittest.TestCase):
-    """#1354 / #1357：一种 op 的词汇是 `OPS` 里的一条记录，新增 kind 漏登记即红。
+    """#1357：一种 op 的词汇是 `OPS` 里的一条记录，新增 kind 漏登记即红（沿用 #1354 的分区）。
 
     允许键、必填键、子 op 键、不产出事实、抽词条的键都在同一条 `OpSpec` 上，代码里剩下的三张
     名单（`_HANDLERS` 处理器、事实层降级分支、装载期点名核对）与声明之间没有任何守卫——漏 handler
