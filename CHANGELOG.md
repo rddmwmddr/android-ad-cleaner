@@ -12,6 +12,7 @@
 - 一加 16 商店段的「消息管理」探测只翻前两屏，常态下省约 40 秒（#1281）
 
 ### 内部
+- OPPO 四台十一段（浏览器 / 主题 / 搜索 / 商店 / 游戏中心）转页面树，`keep` 名单落进数据（#1368）
 - 荣耀 `search_more` 与 OPPO `ad_tracking_close_paged` 升格家族库，五段转数据（#1363）
 - 小米十一段「应用商店」转页面树，`require_tab` 加可选键 `settle`（#1364）
 - catalog 新增 `tap_id` / `gesture` 两条 op，PNM-AN10 音乐与 PJA110 下拉搜索转数据（#1362）

@@ -2281,7 +2281,9 @@ class StoreSegmentTests(unittest.TestCase):
 
     def test_rmx3700_passes_both_wording(self):
         scope = self.segment("RMX3700", "软件商店", tap_by_scroll=True, wait_page=True)
-        self.assertIn(PRIVACY_933, [c.args[0] for c in scope["tap_by_scroll"].call_args_list])
+        passed = [c.args[0] for c in scope["tap_by_scroll"].call_args_list]
+        # 页面树里写的是 TOML 数组（list），与别处那条一样按内容比。
+        self.assertIn(list(PRIVACY_933), passed)
 
     def test_phk110_passes_both_wording(self):
         scope = self.segment("PHK110", "软件商店个性化",

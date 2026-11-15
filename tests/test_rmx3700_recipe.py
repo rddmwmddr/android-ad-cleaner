@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import unittest
 
-from fixtures import load_recipe, phone_stub
+from fixtures import keep_list, load_recipe, phone_stub
 
 ROOT = Path(__file__).resolve().parents[1]
 RECIPE = ROOT / "recipes/oppo/RMX3700/RMX3700.toml"
@@ -62,7 +62,7 @@ class RecipeSafetyTests(unittest.TestCase):
         self.assertEqual(result["FAILED_STEPS"], ["软件商店"])
 
     def test_store_keep_holds_protected_features(self):
-        keep = load()["STORE_KEEP"]
+        keep = keep_list(RECIPE, "软件商店")
         for name in ["帮助与客服", "应用安全", "我的专区：应用工具",
                      "我的专区：存储空间清理", "我的专区：我的资产", "我的专区：安全守护",
                      "我的专区：小i客服", "应用使用记录", "首页：AI搜索"]:
