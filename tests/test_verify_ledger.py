@@ -426,7 +426,7 @@ ops = [{ kind = "start", pkg = "com.xiaomi.market" }]
         self.assertNotEqual(before, verify_ledger.body_hash(self.dir / "A.toml"))
 
     def test_comments_and_docstrings_in_the_exception_do_not_change_the_hash(self):
-        """与 `.py` 机型脚本同档的归一：注释、docstring 不是行为，改它不该翻成待复核。
+        """注释与 docstring 不是行为，改它不该翻成待复核。
 
         旧树也绿（那时例外 `.py` 根本不参与哈希），守的是不回退。"""
         self.write(self.TOML, "A.toml")
@@ -441,23 +441,6 @@ def step_ads(p, rt):
     p.off(only=["个性化广告推荐"], page="广告跟踪")
 ''', "A.py")
         self.assertEqual(before, verify_ledger.body_hash(self.dir / "A.toml"))
-
-    def test_a_py_only_script_still_hashes_its_step_bodies_only(self):
-        """旧形态的 `.py` 脚本没有同名例外这一项：模块级常量改不改都不动哈希（沿用 #1242 的口径）。
-
-        旧树也绿，守的是不回退——`_exception_body()` 认后缀时不能把自己算进去。"""
-        script = '''from recipe_runtime import step
-
-SETTINGS = "com.android.settings/.Settings"
-
-
-@step("广告")
-def ads(p, rt):
-    p.off(only=["个性化广告推荐"], page="广告")
-'''
-        self.assertEqual(self.hash_of(script, "X.py"),
-                         self.hash_of(script.replace("com.android.settings", "com.x"), "X.py"))
-
 
 class RealRecipesContractTest(unittest.TestCase):
     """真实仓库的数据契约，无注入点：每份配方都有条目、记录的 build 对得上脚本 BUILD、

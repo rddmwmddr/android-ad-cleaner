@@ -497,11 +497,9 @@ def scan_source(src: str, bindings: Mapping[int, Sequence[str]] | None = None,
 def scan_dir(recipes_dir: str, families: Mapping[str, str] | None = None) -> dict[str, Facts]:
     """一个脚本目录的事实：{相对路径: 事实}，按路径排序。
 
-    每个型号目录（`recipes/<家族>/<型号>/`）只出**一份**事实，两条来源：
-    - 有 `recipe*.py`（含 `recipe_android15.py` 这类变体）时读这些源码（迁移期 `.py` 仍是活的，
-      `.toml` 只是同目录的等价副本，例如 `V1986A`）；
-    - 没有 `recipe*.py`、只有 `<型号>.toml` 时读 catalog 数据（`scan_catalog`，含同目录
-      `<型号>.py` 例外函数）。这样转成数据之后脚本不会从词库 / 入口速查里消失（#1270）。
+    每个型号目录（`recipes/<家族>/<型号>/`）只出**一份**事实。现行的来源是 `<型号>.toml`（catalog
+    数据，含同目录 `<型号>.py` 例外函数），这样转成数据之后脚本不会从词库 / 入口速查里消失
+    （沿用 #1270 的口径）。仓库里已经没有 `recipe*.py`：那一支只为还没转的目录留着，属迁移期兼容。
 
     `families` 给定时只收家族认得出的脚本（词库的入口）；不给就全收（入口速查）。遍历口径
     （目录切分、文件名、家族过滤）只在这里写一次，两个消费方不再各写一份 glob。

@@ -35,7 +35,7 @@ from phone.session import ChannelSession, LaunchSession, LostNote
 import adb_link
 import backups
 import events
-# 显式 re-export：测试与机型脚本拿 `fast.recipe_kit` 取注入面（`preamble` 的调用点已收进装载器）。
+# 显式 re-export：`recipe_kit` 现在只是引擎名词的转发层，`from fast import recipe_kit` 的老调用点不必改。
 import recipe_kit as recipe_kit
 import recipe_loader
 import wait

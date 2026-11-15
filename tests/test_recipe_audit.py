@@ -3,7 +3,7 @@
 
 三档归属只看函数体自己调了哪些名字（直接调用）：拨动策略 > 引擎词汇 > 真机型知识。用例分四层：
 
-1. 判据本身：`definitions()` 只收模块级、`@step` 段体不算；`tier_of()` 的优先级与命中的信号。
+1. 判据本身：`definitions()` 只收模块级；`tier_of()` 的优先级与命中的信号。
 2. 一份源码与一个配方目录的计数：`counts()` / `audit()`，含「同名函数出现在几台机型」。
 3. CLI：过滤、退出码，以及**不写任何文件**。
 4. `run.py` 的出口：`check` 的那一行与 `status-json` 的 `recipe_local`——数字来自同一个 `counts()`。
@@ -26,19 +26,10 @@ sys.path.insert(0, str(ROOT / "tool"))
 import recipe_audit  # noqa: E402
 import run  # noqa: E402
 
-# 三档各一个本机函数，外加两个 `@step` 段体：一个叫 `_`（现在的写法），一个叫别的名字
-# （vivo-V2417A 就是这样），两者都只有装饰器能认出来。
+# 三档各一个本机函数。
 RECIPE = '''"""假机型脚本：只给审计用例用。"""
 BUILD = "OS9.9"
 MODELS = ["FAKEA"]
-
-@step("系统广告")
-def _():
-    p.off(only=["广告"])
-
-@step("浏览器")
-def browser():
-    p.start("com.example.browser")
 
 def open_settings():
     """引擎词汇：导航与落点。"""
@@ -55,18 +46,13 @@ def build_id():
 '''
 
 OTHERS = '''"""假机型脚本：与 FAKEA 定义同名的 open_settings，用来验「涉及机型数」。"""
-@step("系统广告")
-def _():
-    p.off()
 
 def open_settings():
     p.tap(p.find("设置"))
 '''
 
-EMPTY = '''"""假机型脚本：只有段体，没有本机函数。"""
-@step("系统广告")
-def _():
-    p.off()
+EMPTY = '''"""假机型脚本：没有本机函数，只有模块级常量。"""
+BUILD = "OS9.9"
 '''
 
 
@@ -81,13 +67,9 @@ def fake_tree(root):
 
 
 class DefinitionsTests(unittest.TestCase):
-    def test_step_bodies_are_not_local_functions(self):
-        """段体是脚本的段落，不是一份实现：`@step` 挂了段名的都不算，叫 `_` 与否都一样。"""
-        names = [name for name, _line in recipe_audit.definitions(RECIPE)]
-        self.assertEqual(names, ["open_settings", "close_exact", "build_id"])
-
     def test_line_is_the_definition_line(self):
         lines = dict(recipe_audit.definitions(RECIPE))
+        self.assertEqual(sorted(lines), ["build_id", "close_exact", "open_settings"])
         self.assertEqual(lines["close_exact"], RECIPE.splitlines().index("def close_exact():") + 1)
 
     def test_nested_definitions_are_not_module_level(self):

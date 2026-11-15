@@ -86,7 +86,11 @@ def select_rows(rows, pick_titles=()):
 # ---------- 生成草稿 ----------
 
 def step_name(pkg, page):
-    """@step("...") 里不能出现引号/反斜杠/换行：recipe_meta 按这个字面格式解析步骤名。"""
+    """段名 `<包名> · <页面>`：去掉引号、反斜杠与换行，保证它是个单行、可逐字比对的标签。
+
+    段名会原样进日志行与客户端重试用的失败段清单（`failed_steps`）；掐字符的口径在注入面时代
+    定的，生成器换成 catalog 草案之后没跟着放宽。
+    """
     name = f"{pkg} · {page}"
     for bad in ('"', "\\", "\r", "\n"):
         name = name.replace(bad, "")

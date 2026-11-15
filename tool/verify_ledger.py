@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """配方验证台账：每份机型脚本最后一次真机验证。
 
-数据在 recipes/verified.toml，key 是相对 recipes/ 的路径——`recipe.py` 与变体
-（`recipe_android15.py` 这类）各记一条，不是目录级。一条记录六样：完整系统 build 串、
-验证日期、验证人、覆盖度（`tier`）、证据来源（`evidence`）、段体哈希（`body_hash`）。
+数据在 recipes/verified.toml，key 是相对 recipes/ 的路径——每份页面树数据各记一条，不是目录级。
+一条记录六样：完整系统 build 串、验证日期、验证人、覆盖度（`tier`）、证据来源（`evidence`）、
+段体哈希（`body_hash`）。
 覆盖度与证据来源是两个正交维度：前者是「跑到什么程度」，后者是「凭什么算跑过」（沿用 #1124）。
 
   python3 tool/verify_ledger.py       每个配方文件一行，按距今天数降序；末行三档分布
@@ -13,15 +13,13 @@
                                       真机验证或发版后照抄进 recipes/verified.toml
 
 记录的段体哈希与脚本现在算出来的对不上时标「待复核」：判据是段体内容改过没有，不是文件改过
-没有（沿用 #916 的台账；判据从提交日期换成哈希见 #1242）。段体哈希把段体解析成 AST，去掉注释
-与 docstring，再序列化后拼起来取 sha256 前 16 位；段名参与拼接，所以改段名也会标「待复核」。
+没有（沿用 #916 的台账；判据从提交日期换成哈希见 #1242）。段体归一后拼起来取 sha256 前 16 位；
+段名参与拼接，所以改段名也会标「待复核」。
 
-两种形态各算各的。`.py` 机型脚本只取 `@step(...)` 段体，注释、折行、函数顺序与装饰器都不进，
-把模块级助手搬进库因此不算改。页面树数据取每个 `[[segment]]` 的归一 JSON（键顺序与段的先后不
-影响），再整份拼上同名例外 `.py` 的模块体——`code=` 的那些段就住在那儿，按整文件算而不按段
-收窄：`code=` 函数还会调用同文件的助手、读模块级常量，按段收窄得把解释器的名字解析再复刻
-一遍，漏一个就是又一次「改过看不出来」。整文件那头顺序也算，所以挪函数、把助手搬进 `recipe_lib`
-都会翻成待复核（#1276）。
+段体取每个 `[[segment]]` 的归一 JSON（键顺序与段的先后不影响），再整份拼上同名例外 `.py` 的
+模块体——`code=` 的那些段就住在那儿，按整文件算而不按段收窄：`code=` 函数还会调用同文件的助手、
+读模块级常量，按段收窄得把解释器的名字解析再复刻一遍，漏一个就是又一次「改过看不出来」。整文件
+那头顺序也算，所以挪函数、把助手搬进 `recipe_lib` 都会翻成待复核（沿用 #1276 的判据）。
 
 旧记录没有哈希时无从比较，不标「待复核」——那是「尚未建立基线」，不是「改过」。
 
@@ -55,7 +53,7 @@ HASH_LEN = 16               # sha256 前 16 个十六进制字符：够区分，
 @dataclass(frozen=True)
 class Row:
     """一份配方在台账里的样子。没有记录时覆盖度是「未记录」、证据来源是「未知」，其余字段为空。"""
-    path: str                   # 相对 recipes/ 的路径，如 xiaomi-M154FF/recipe.py
+    path: str                   # 相对 recipes/ 的路径，如 xiaomi/M154FF/M154FF.toml
     build: str                  # 记录的完整系统 build 串
     date: str                   # YYYY-MM-DD
     verifier: str               # @login 或 机主
@@ -102,74 +100,27 @@ class _DocstringFree(ast.NodeTransformer):
     visit_ClassDef = _strip
 
 
-def _canonical(node):
-    """把 AST 子树序列化成一行：按字段名与字段值递归展开，空列表等空字段也照样写出。
-
-    不用 `ast.dump()`：它在不同解释器版本下对空字段的取舍不一样（Windows job 跑 3.12、Linux
-    与打包跑 3.13），那样同一份脚本会算出两个哈希，台账在 CI 上就会随平台翻成待复核。
-    """
-    if isinstance(node, ast.AST):
-        fields = ",".join(f"{name}={_canonical(value)}" for name, value in ast.iter_fields(node))
-        return f"{type(node).__name__}({fields})"
-    if isinstance(node, list):
-        return "[" + ",".join(_canonical(item) for item in node) + "]"
-    return repr(node)
-
-
-def _step_name(node):
-    """`@step("段名")` 里的段名；不是 `step` 装饰器时返回 None。
-
-    参数不是字符串字面量时按装饰器表达式本身取名，让这一段仍参与哈希，而不是被悄悄漏掉。
-    """
-    for dec in node.decorator_list:
-        if not (isinstance(dec, ast.Call) and isinstance(dec.func, ast.Name) and dec.func.id == "step"):
-            continue
-        arg = dec.args[0] if dec.args else None
-        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-            return arg.value
-        return f"<{ast.unparse(dec)}>"
-    return None
-
-
 def step_bodies(path):
-    """脚本里每个段的 (段名, 归一后段体)，按段名排序。
+    """数据里每个段的 (段名, 归一后段体)，按段名排序。
 
-    段体取函数正文并去掉 docstring，再按 AST 结构序列化：注释与折行不在 AST 里，装饰器也不进
-    段体，所以改注释 / 折行 / 装饰器、挪函数位置、改函数名都不改这段文本。段名参与拼接，所以重命名
-    段会算改（段名出现在用户日志里）。按段名排序，段的先后不影响结果。
-    catalog 数据（`.toml`）没有 `@step`：段体取每个 `[[segment]]` 归一后的数据（键排序的 JSON），
-    段名取 `name`，判据仍是「段名 + 段体内容变没变」。"""
-    if str(path).endswith(".toml"):
-        with open(path, "rb") as f:
-            data = tomllib.load(f)
-        return sorted((segment.get("name", ""), json.dumps(segment, ensure_ascii=False, sort_keys=True))
-                      for segment in data.get("segment", []))
-    with open(path, encoding="utf-8") as f:
-        tree = ast.parse(f.read(), filename=str(path))
-    out = []
-    for node in tree.body:
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        name = _step_name(node)
-        if name is None:
-            continue
-        body = _DocstringFree().visit(ast.Module(body=list(node.body), type_ignores=[]))
-        out.append((name, _canonical(body)))
-    return sorted(out)
+    段体取每个 `[[segment]]` 归一后的数据（键排序的 JSON），段名取 `name`：键顺序与段的先后都不
+    影响，判据是「段名 + 段体内容变没变」，段名出现在用户日志里，所以重命名段会算改。
+    `.py` 机型脚本已随注入面删除，这里只收页面树数据（ADR-0038）。"""
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    return sorted((segment.get("name", ""), json.dumps(segment, ensure_ascii=False, sort_keys=True))
+                  for segment in data.get("segment", []))
 
 
 def _exception_body(path):
-    """同名例外 `.py` 归一后的模块体；页面树数据没有这份文件时是 None。
+    """同名例外 `.py` 归一后的模块体；没有这份文件时是 None。
 
-    找法与装载器一致（`.toml` 换后缀）。只有页面树数据才有这一项：旧形态的 `.py` 机型脚本换后缀
-    还是它自己，拿自己跟自己拼会把模块级常量也算进段体哈希。
+    找法与装载器一致（`.toml` 换后缀）。
 
-    走 `ast.unparse` 而不复用 `_canonical`：后者按字段名逐项展开，CPython 给节点加字段就整批改
-    哈希（3.15 给 `Import` 加了 `is_lazy`，同一份树在 3.13 与 3.15 上 47 行里有 44 行不同），而
-    `--hash` 是照抄进台账的基线。`unparse` 由语义重生成源码，3.11–3.15 上 42 份逐字节相同。
+    走 `ast.unparse` 而不按字段名逐项展开：CPython 给节点加字段就会整批改哈希（3.15 给 `Import`
+    加了 `is_lazy`，同一份树在 3.13 与 3.15 上 47 行里有 44 行不同），而 `--hash` 是照抄进台账的
+    基线。`unparse` 由语义重生成源码，3.11–3.15 上 42 份逐字节相同。
     """
-    if not str(path).endswith(".toml"):
-        return None
     companion = os.path.splitext(os.fspath(path))[0] + ".py"
     if not os.path.isfile(companion):
         return None
