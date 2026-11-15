@@ -63,6 +63,8 @@ def segment_action(segment: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> Call
     ops = segment.get("ops", [])
 
     def run_ops() -> Any:
+        # 本段变量（`let` 绑定）：每跑一次换一张新表，段与段、轮与轮之间互不可见（#1373）。
+        rt.bindings = {}
         try:
             _run(ops, p, rt, g)
         except _Abort as stop:
@@ -84,19 +86,46 @@ def _run_op(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
 
 
 def _arg(value: Any, p: Any, rt: Any, g: dict[str, Any]) -> Any:
-    """实参里的动态取值：`{expr = "focus"}` → `p.focus()`，`{expr = "tree"}` → `p.tree()`。
+    """实参里的动态取值：`{expr = "focus"}` → `p.focus()`，`{expr = "tree"}` → `p.tree()`，
+    `{expr = "var", name = "…"}` → 本段 `let` 绑定的值（#1373）。
 
     段体常把当前前台 / 页面树当实参传给库助手（`close_named(..., p.focus())`）。这些读也是一次
-    `p.*` 调用、进调用序列，所以必须照原样求值、不能换成字面量，否则对拍就少了那一条。除表形态外
-    一律按字面量传（字符串 / 数字 / 列表）。"""
+    `p.*` 调用、进调用序列，所以必须照原样求值、不能换成字面量，否则对拍就少了那一条。绑定的名字
+    只在段内、只在绑定它的那条 op 之后可见，装载器按这两个条件核对（`loader._check_bindings`）。
+    除表形态外一律按字面量传（字符串 / 数字 / 列表）。"""
     if isinstance(value, Mapping) and "expr" in value:
         name = value["expr"]
         if name == "focus":
             return p.focus()
         if name == "tree":
             return p.tree()
+        if name == "var":
+            return rt.bindings[value["name"]]
         raise KeyError(f"未知的实参表达式 expr={name!r}")
     return value
+
+
+def _let(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
+    """`let`：调一次库助手，把返回值绑成段内名字，后面的 op 用 `{expr = "var"}` 取它当实参（#1373）。"""
+    rt.bindings[op["name"]] = _resolve(op["lib"], g)(
+        p, rt, *[_arg(a, p, rt, g) for a in op.get("args", [])],
+        **{k: _arg(v, p, rt, g) for k, v in op.get("kwargs", {}).items()})
+
+
+def _if_var(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
+    """`if_var`：按绑定的名字分岔（#1373）。
+
+    缺省按真假值（与 `if_lib` 同档）；`not_none = true` 时 `ops` 走「不是 None」那一支——旧脚本
+    `if switches is not None:` 与 `if not direct:` 是两条不同的判据，`if_lib` 的假值分岔分不开
+    「库返回了空值」与「库返回了 None」。"""
+    value = rt.bindings[op["name"]]
+    hit = value is not None if op.get("not_none") else bool(value)
+    _run(op.get("ops", []) if hit else op.get("else_ops", []), p, rt, g)
+
+
+def _require_switches(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
+    """把段内读到的开关表交给 `Runtime.require_switches()` 点名核对（#1373）：缺一项整段不动。"""
+    rt.require_switches(_arg(op["before"], p, rt, g), list(op["names"]), op["title"])
 
 
 def _lib(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
@@ -608,4 +637,7 @@ _HANDLERS: dict[str, Callable[[Mapping, Any, Any, dict[str, Any]], None]] = {
     "if_lib_any": _if_lib_any,
     "if_setting": _if_setting,
     "require_expect": _require_expect,
+    "let": _let,
+    "if_var": _if_var,
+    "require_switches": _require_switches,
 }

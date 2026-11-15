@@ -124,6 +124,9 @@ class Runtime:
         self.constants: Mapping[str, Any] = MappingProxyType({})
         # 本机助手跨函数传的「刚确认落到的包名」（魅族 `wait_page` 写、`tap_id` 读）。
         self.target = ""
+        # 本段的变量绑定：`let` 写、实参里的 `{expr = "var"}` 读。解释器每跑一段前换成新的表，
+        # 段与段、轮与轮之间互不可见——它不是例外命名空间 `namespace` 那本跨段的账。
+        self.bindings: dict[str, Any] = {}
 
     @property
     def verified(self) -> int:

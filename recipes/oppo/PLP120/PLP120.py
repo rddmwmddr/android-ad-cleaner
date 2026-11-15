@@ -1,18 +1,18 @@
 # OPPO Find N6（PLP120，ColorOS 16 / 17）的本机例外函数（catalog 的 `code=`，影随同名 `.toml`）。
-# 共享库的 search_settings / enter_settings / game_settings_direct / game_settings_via_mine /
-# open_switch_page / page / read_on_page 与 require_switches 由装载器注入执行作用域。
-# 只剩五段在这里：负一屏（手势循环）、下拉搜索（运行期名单）、浏览器（多分支状态机）、
-# 游戏中心（运行期 direct 分支）、小布建议（两次入口状态机）。其余四段已落数据（见 `.toml`）。
+# 共享库的 search_settings / open_switch_page / page / read_on_page 与 require_switches 由装载器
+# 注入执行作用域。只剩三段在这里：负一屏（手势循环）、下拉搜索（运行期名单）、浏览器（多分支
+# 状态机）。其余六段已落数据（见 `.toml`）。
 import time
 
 import adb_link
 from fast import ScreenLocked
 import recipe_nav as nav
-import recipe_strategies as strategies
 
 
 BUILD = "PLP120_16.0.9"
 
+# 游戏中心与系统设置两个包名：家族库经 `rt.constants` 取它们（`game_settings_direct` 等），
+# 数据段里则写成字面量。
 GAME = "com.nearme.gamecenter"
 SETTINGS = "com.android.settings"
 
@@ -90,34 +90,3 @@ def step_browser(p, rt):
         p.off(only=["开屏广告", "资讯列表广告", "摇一摇"], page="浏览器·广告管理")
         p.back(2)
     p.back(2)
-
-
-def step_game_center(p, rt):
-    direct = nav.game_settings_direct(p, rt)
-    if not direct:
-        nav.game_settings_via_mine(p, rt)
-    p.enter("隐私开关设置", scrolls=6)
-    p.enter("个性化推荐管理", scrolls=4)
-    rt.require_switches(strategies.read_on_page(p, rt, "个性化推荐管理", GAME), ["个性化推荐"], "个性化推荐管理")
-    p.off(only=["个性化推荐"], page="游戏中心·个性化推荐")
-    p.back(3 if direct else 4)
-
-
-def step_assistant_advice(p, rt):
-    # ColorOS 17：「内容资讯」是点不动的分组标题，入口是它下面那行「资讯服务」，开关在二级页
-    # （PMX110 / #905）。ColorOS 16 仍是点「内容资讯」进列表页、在那页上关。
-    # 这一页还有快递、航班、日程提醒与商圈服务，保持不动。
-    nav.enter_settings(p, rt, "OPPO AI", "小布建议")
-    rt.page("小布建议", SETTINGS)
-    switches = nav.open_switch_page(p, rt, "资讯服务", "资讯服务", SETTINGS)
-    if switches is not None:
-        rt.require_switches(switches, ["资讯服务"], "资讯服务")
-        p.off(only=["资讯服务"], page="小布建议·资讯服务")
-        return
-    # 旧版本这一页的标题没有实测记录，两种叫法都认。
-    switches = nav.open_switch_page(p, rt, "内容资讯", ["内容资讯", "资讯服务"], SETTINGS)
-    if switches is not None:
-        rt.require_switches(switches, ["资讯服务"], "内容资讯")
-        p.off(only=["资讯服务"], page="小布建议·内容资讯")
-        return
-    raise RuntimeError("小布建议：「资讯服务」与「内容资讯」两条入口都没进去")

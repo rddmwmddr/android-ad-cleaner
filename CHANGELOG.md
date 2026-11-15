@@ -12,6 +12,7 @@
 - 一加 16 商店段的「消息管理」探测只翻前两屏，常态下省约 40 秒（#1281）
 
 ### 内部
+- catalog 新增 `let` / `if_var` / `require_switches` 三条 op，三段转数据（#1373）
 - catalog 新增 `tap_id` / `gesture` 两条 op，PNM-AN10 音乐与 PJA110 下拉搜索转数据（#1362）
 - catalog 各 op 的允许键、必填键、子 ops 与词条来源收成 `OPS` 里的一条记录（#1357）
 - catalog 不产出事实的 op 种类收成 `NO_FACT_KINDS` 声明，投影函数遇未登记 kind 直接报错（#1354）
