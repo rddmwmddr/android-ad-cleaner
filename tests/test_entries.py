@@ -172,6 +172,59 @@ class SourceTest(unittest.TestCase):
 
 
 
+    def _one_script(self, src, brand="oppo", model="T1"):
+        """临时 recipes 目录里只有一份脚本：`<家族>/<型号>/recipe.py`。"""
+        import textwrap
+        import tempfile
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        folder = Path(tmp.name) / brand / model
+        folder.mkdir(parents=True)
+        (folder / "recipe.py").write_text(textwrap.dedent(src), encoding="utf-8")
+        return tmp.name
+
+    def test_a_two_level_chain_credits_the_script(self):
+        """#1352 旧树也绿，守的是不回退：直达只在第二层实现里（脚本 → browser_recommendations
+        → browser_settings 的 p.start），只扫一层就漏掉它。"""
+        d = self._one_script('''\
+            from typing import TYPE_CHECKING
+
+            if TYPE_CHECKING:
+                from recipe_lib.vivo import browser_recommendations
+
+            BROWSER_PKG = "com.example.browser"
+
+
+            def _(p, rt):
+                browser_recommendations(p, rt)
+            ''')
+        self.assertEqual(entries.used_by(d),
+                         {("direct", "com.example.browser",
+                           "com.example.browser.settings.component.BrowserPreferencesPage"): {"T1"}})
+
+    def test_an_imported_implementation_without_a_call_is_credited(self):
+        """#1352 脚本 import 了实现却没调用时，入口速查也按同一份并集口径算出这台机（今天只有词库这么做）。"""
+        d = self._one_script('''\
+            from typing import TYPE_CHECKING
+
+            if TYPE_CHECKING:
+                from recipe_lib.oppo import browser_settings_direct
+            ''')
+        used = entries.used_by(d)
+        self.assertEqual(used.get(("intent", entries.APP_SETTINGS_ACTION, "com.heytap.browser")),
+                         {"T1"})
+
+    def test_a_nested_local_helper_is_not_the_library_one(self):
+        """#1352 PKT110 在段函数里定义了嵌套同名本地函数：模块级同名定义由 defines 拦住，嵌套的
+        不会，得靠「这个调用没有归属模块」筛掉，否则库里那份会被白扫一遍。"""
+        d = self._one_script('''\
+            def step(p, rt):
+                def negative_screen(p, rt):
+                    return None
+                negative_screen(p, rt)
+            ''', brand="xiaomi")
+        self.assertEqual(entries.used_by(d), {})
+
     def test_open_app_settings_needs_two_arguments(self):
         """只传了包名的 open_app_settings 不算出处：把包名当成页面会给这台机凭空挂一条 Intent。"""
         import tempfile

@@ -591,6 +591,53 @@ def downloads(p, g):
                          [("广告推荐", "xiaomi/A1/recipe.py:4", True)])
 
 
+class ImplementationChainTest(unittest.TestCase):
+    """实现里再调实现（#1352）：两层链路与「一份实现经两条链」的记账口径。"""
+
+    def test_a_two_level_chain_charges_the_inner_implementation(self):
+        """#1352 旧树也绿，守的是不回退：脚本 → close_group → close_named，第二层实现里的点名
+        读不出，仍记在这份脚本头上；下扫断在哪一层，台账就在那里少一条。"""
+        tmp = recipes(**{"oppo-T1": '''\
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from recipe_lib.oppo import close_group
+
+
+def _(p, rt):
+    close_group(p, rt, ["应用建议小卡"], "应用建议", "下拉搜索·首页卡片管理")
+'''})
+        self.addCleanup(tmp.cleanup)
+        found = vocab.scan(tmp.name)
+        self.assertEqual([(c.script, c.text) for c in found.unresolved_only],
+                         [("oppo/T1/recipe.py", "names")])
+
+    def test_one_implementation_on_two_chains_is_charged_once_per_chain(self):
+        """#1352 a 与 b 各调一次 c，两处调用行不同：台账按「脚本 + 行 + 文本」各记一条。
+        改成「每份脚本里每份实现只扫一次」会只剩一条，把一条链的出处吞掉。"""
+        tmp = recipes(**{"xiaomi-A1": '''\
+@step("下载管理")
+def _():
+    a()
+    b()
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from recipe_steps import a, b
+'''})
+        self.addCleanup(tmp.cleanup)
+        found = vocab.scan(tmp.name, injected={
+            "a": "from recipe_steps import c\n\ndef a(p, g):\n    c(p, g)\n",
+            "b": "from recipe_steps import c\n\ndef b(p, g):\n    x = 1\n    c(p, g)\n",
+            "c": ('def c(p, g):\n    def _():\n'
+                  '        p.off(only=list(targets), page="下载管理·设置")\n    return _\n'),
+        })
+        self.assertEqual([(c.script, c.line, c.text) for c in found.unresolved_only],
+                         [("xiaomi/A1/recipe.py", 4, "list(targets)"),
+                          ("xiaomi/A1/recipe.py", 5, "list(targets)")])
+
+
 class RenderTest(unittest.TestCase):
     def render(self, **files):
         tmp = recipes(**files)

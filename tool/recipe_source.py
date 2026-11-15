@@ -30,7 +30,7 @@ import json
 import os
 import sys
 import tomllib
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -677,6 +677,76 @@ def library_sources() -> dict[str, tuple[str, str]]:
     prefix = "\n".join(f"from {owner} import {', '.join(sorted(names))}"
                        for owner, names in sorted(by_module.items())) + "\n"
     return {name: (owner, prefix + source) for name, (owner, source) in found.items()}
+
+
+@dataclass(frozen=True)
+class ImplHit:
+    """逐层下扫的一次命中：这一层调到了哪份库实现、实现的源码事实、以及调用它的那一行。
+
+    `facts` 是连同调用点实参一起扫出来的实现事实，消费方只做自己的投影；`call_site` 取这个名字
+    在这一层的第一个调用行，脚本层没有调用点时退到导入行。"""
+    name: str
+    module: str
+    facts: Facts
+    call_site: int
+
+
+def library_hits(facts: Facts, sources: Mapping[str, tuple[str, str]]) -> Iterator[ImplHit]:
+    """库实现逐层往下扫：`facts` 里调到的库实现，扫它的源码并按调用点把实参合回去，逐条产出。
+
+    `sources` 是 {名字: (归属模块, 源码)}，由消费方显式传入（`library_sources()` 那张表，或测试
+    注入的几份实现）——事实层不替消费方决定用哪张表。
+
+    口径是词库与入口速查取并集后定下的那一条（#1352）：只认有归属模块（`Call.module`）的调用，
+    脚本里嵌套定义的本地同名函数只要没被导入过，就命中不了库里那份；`sources` 里每份实现的源码要
+    自带归属导入（`library_sources()` 会补，自定义的表自己补），否则第二层起被静默筛掉；脚本这一层
+    import 过但没调用的实现也算——库按名字回调的钩子没有调用点，它一旦产出入口就记在这台机头上；
+    实参按位置回填（`_bindings`）。表里查不到、或记不出调用行的实现不进遍历。
+
+    `seen` 沿一条链传，防同一份实现绕圈；每份脚本各走一遍完整链，不做跨脚本缓存——源码解析已有
+    进程内缓存，再按脚本去重要求调用行也一致，等于把链上「同一实现经两条链各记一次」的规定推翻。"""
+    yield from _walk_hits(facts, facts, sources, frozenset())
+
+
+def _walk_hits(current: Facts, caller: Facts, sources: Mapping[str, tuple[str, str]],
+               seen: frozenset[str]) -> Iterator[ImplHit]:
+    """先序深度优先：`current` 是这一层的事实，`caller` 始终是调用脚本（本地定义与常量都在它那儿）。"""
+    names = dict.fromkeys(call.name for call in current.calls if call.injected and call.module)
+    if current is caller:
+        names.update(caller.import_lines)   # 脚本 import 过的实现算用过；递归层只看实际调用
+    for name in names:
+        if name in seen or name in caller.defines:
+            continue
+        entry = sources.get(name)
+        if entry is None:
+            continue
+        module, source = entry
+        calls = tuple(call for call in current.calls
+                      if call.injected and call.module and call.name == name)
+        call_site = calls[0].line if calls else caller.import_lines.get(name)
+        if call_site is None:
+            continue
+        # 没有可回填的实参时传 None：空 mapping 在 `scan_source` 的缓存键里与 None 不是同一条，
+        # 「实现 × 脚本」的组合会凭空多出一份缓存条目（沿用 #1321 的缓存口径）。
+        impl = scan_source(source, _bindings(calls) or None, externals=caller.constants)
+        yield ImplHit(name, module, impl, call_site)
+        yield from _walk_hits(impl, caller, sources, seen | {name})
+
+
+def _bindings(calls: Sequence[Call]) -> dict[int, tuple[str, ...]]:
+    """这一层调注入实现时按位置传的实参：实参在调用方，形参在被调的实现里，按位置把两侧合起来。
+
+    只收这一层自己写死的实参：形参（`param` 不为 None）与解析不出的一律回填不了。
+
+    键是业务实参的位置（`business_args()` 已剥掉 `(p, rt)` 前缀），而 `_values()` 查这份表用的是
+    实现里含 `p` / `rt` 的原始形参序号：带前缀的实现整体偏两位。搬家之前就是这样，#1352 只搬不改
+    ——现有输出靠「带前缀的偏两位、不带前缀的恰好对齐」两拨抵消才成立，改口径会动入口速查的机型。"""
+    out: dict[int, list[str]] = {}
+    for call in calls:
+        for index, arg in enumerate(arg for arg in business_args(call) if arg.keyword is None):
+            if arg.param is None and arg.values:
+                out.setdefault(index, []).extend(item.text for item in arg.values)
+    return {index: tuple(texts) for index, texts in out.items()}
 
 
 def _lib_modules() -> dict[str, str]:

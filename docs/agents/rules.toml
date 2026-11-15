@@ -1211,6 +1211,14 @@ why = "库按家族拆开后（#1269），归属判据按**家族数**算（家�
 expires_if = "若机型库改成按机型（而不是按家族）归属、改回单一模块，或 `shared.py` 被别的共享形态取代 / 引入新的名称注入机制时重议。"
 
 [[rule]]
+id = "dev.lib.single-walk"
+source = "docs/ARCHITECTURE.md#函数级细节"
+check = "code:tool/recipe_source.py:library_hits"
+status = "code"
+why = "「这份脚本经共享库实现还能关到哪些名字、用到哪些入口」原先在词库与入口速查各写一份递归，同源而不同步：一份按调用有没有归属模块筛、另一份不筛；一份把 import 过但没调用的实现也算上、另一份不算。不筛的那一侧让 PKT110 把段函数里嵌套同名本地函数的库版白扫了一遍（#1352）。收进 `library_hits()` 之后改下扫口径只改一处，两份生成物的逐字断言仍守输出。"
+expires_if = "库实现不再按名字表定位、或两个消费方都不再需要下扫时删。"
+
+[[rule]]
 id = "dev.recipe.lib-not-import-fast"
 source = "docs/ARCHITECTURE.md#函数级细节"
 check = "test:test_rules_guards::RecipeLibGuards.test_library_layer_does_not_import_the_facade"

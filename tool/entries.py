@@ -352,16 +352,6 @@ def _scan_entries(facts, model, found):
                 _scan_command(item.text, model, found)
 
 
-def _bindings(calls):
-    """脚本调注入助手时按位置传的实参：实参在脚本里、形参在实现里，事实层按位置把两侧合起来。"""
-    out = {}
-    for call in calls:
-        for index, arg in enumerate(arg for arg in recipe_source.business_args(call) if arg.keyword is None):
-            if arg.param is None and arg.values:
-                out.setdefault(index, []).extend(item.text for item in arg.values)
-    return {index: tuple(texts) for index, texts in out.items()}
-
-
 def used_by(recipes_dir):
     """{("direct", 包名, 完整页面名) 或 ("intent", 动作, 包名) 或 ("search", 关键词, 结果): {机型型号}}，
     从机型脚本源码现算。
@@ -373,12 +363,8 @@ def used_by(recipes_dir):
     经 `open_app_settings(包名, 页面, …)` 打开的那一类同样是直达（它包着 APP_SETTINGS 的 Intent）。
 
     共享实现（`recipe_lib/`）里的入口
-    也要算到调用它的机型：脚本本身或实现里按名字调用库函数时，事实层按 `Call.module` 逐层往下扫，
-    否则「用过的机型」会静默漏掉（沿用 #1153、#1212）。实现之间是普通函数调用（同模块裸名 /
-    跨模块 `nav.x`），不再有 import 归属表。
-    包名这类实参仍在脚本里（`app_settings(MARKET)`），形参在实现里，按位置把两侧合起来才还原得出
-    包名（沿用 #1154 的做法）；模块常量以 `externals` 交回去——实现里写成 `rt.constants['X']`（#1209）。
-    脚本本地同名定义优先，不扫库版。
+    也要算到调用它的机型（沿用 #1153、#1212）：底下几层由事实层的 `library_hits()` 逐层扫出来
+    （哪些实现、实参怎么回填、本地同名定义算谁的，口径都在那里），这里只管「一份事实里哪些算入口」。
 
     命令串只从调用的实参里取：变量、拼接与模板常量都还原得到，没被任何调用引用的字符串常量不算
     出处；语法错的脚本经事实层直接抛 `SyntaxError`，不再静默少算（沿用 #1195 的口径）。
@@ -390,27 +376,9 @@ def used_by(recipes_dir):
     for rel, facts in recipe_source.scan_dir(recipes_dir).items():
         model = rel.split("/")[1]
         _scan_entries(facts, model, found)
-        _scan_implementations(facts, facts, model, found, sources, facts.constants, frozenset())
+        for hit in recipe_source.library_hits(facts, sources):
+            _scan_entries(hit.facts, model, found)
     return found
-
-
-def _scan_implementations(current, caller, model, found, sources, constants, seen):
-    """库实现逐层往下扫：当前事实里调到的库实现，扫它的源码并按调用点把实参合回去。
-
-    `current` 是这一层的事实（脚本本身或上一层实现），`caller` 是调用脚本的事实（模块常量与本地定义
-    都在它那儿）。同名实现按名字只扫一次；`seen` 沿一条链传，防绕圈。"""
-    names = dict.fromkeys(call.name for call in current.calls if call.injected)
-    for name in names:
-        if name in seen or name in caller.defines:
-            continue
-        entry = sources.get(name)
-        if entry is None:
-            continue
-        _module, source = entry
-        calls = tuple(call for call in current.calls if call.injected and call.name == name)
-        impl = recipe_source.scan_source(source, _bindings(calls), externals=constants)
-        _scan_entries(impl, model, found)
-        _scan_implementations(impl, caller, model, found, sources, constants, seen | {name})
 
 
 def open_direct(p, d, settle=1.2):
