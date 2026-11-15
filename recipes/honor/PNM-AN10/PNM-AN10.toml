@@ -58,6 +58,7 @@ ops = [
 
 [[segment]]
 name = "负一屏"
+# 裁决：「循环」。`press home` 后右滑最多三次找「头像」
 code = "step_negative"
 
 [[segment]]
@@ -72,10 +73,12 @@ ops = [
 
 [[segment]]
 name = "市场"
+# 裁决：缺能力。只差 `p.confirm()` 与本地 `dismiss` 的三轮点名，两处都只 1 台机型，不新增 op
 code = "step_market"
 
 [[segment]]
 name = "浏览器"
+# 裁决：缺能力。旧写法是 `browser_settings(...) is False` 才收段，库在空页面这一支返回 `None`，`if_lib` 的假值分岔语义不同
 code = "step_browser"
 
 [[segment]]
@@ -157,4 +160,5 @@ ops = [
 
 [[segment]]
 name = "魔法画报"
+# 裁决：「坐标算法」。按行序取最后一行「魔法画报」的坐标点中心
 code = "step_magazine"

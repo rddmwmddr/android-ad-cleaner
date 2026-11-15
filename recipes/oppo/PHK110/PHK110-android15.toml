@@ -66,4 +66,5 @@ ops = [
 
 [[segment]]
 name = "浏览器首页"
+# 裁决：缺能力 + 读态早退。改完主页样式要记进 `p.changed` 台账（台账不写进数据），每一步失败都提前 `return False`；只此一台
 code = "step_browser_home"

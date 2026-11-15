@@ -50,6 +50,7 @@ ops = [{ kind = "lib", name = "store_mode" }]
 
 [[segment]]
 name = "手机管家"
+# 裁决：「循环」。翻最多八次找贴底的「隐私设置」（贴底行会被 find 的边缘判据滤掉）
 code = "step_security_center"
 
 [[segment]]

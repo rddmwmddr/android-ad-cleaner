@@ -19,6 +19,7 @@ ops = [
 
 [[segment]]
 name = "负一屏"
+# 裁决：「坐标算法」。按 content-desc 含「头像」的节点 bounds 点中心
 code = "step_negative_screen"
 
 [[segment]]

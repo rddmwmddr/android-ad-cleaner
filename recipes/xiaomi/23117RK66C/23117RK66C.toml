@@ -76,6 +76,7 @@ ops = [
 
 [[segment]]
 name = "全局搜索"
+# 裁决：「循环」。榜单子页按屏上读到的分类现算再逐个进
 code = "step_global_search"
 
 [[segment]]

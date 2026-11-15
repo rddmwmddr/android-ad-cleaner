@@ -15,6 +15,8 @@ BROWSER_FLOW = "honor_plain"
 
 [[segment]]
 name = "广告跟踪"
+# 裁决：缺能力。卡在 `close_named_honor(…, None, …)`：名单写 None 表示整页全关，TOML 没有 null，
+# 这个值传不进 `args`（`settle_page` 本身已进数据词汇）
 code = "step_ad_tracking"
 
 [[segment]]
@@ -50,6 +52,7 @@ ops = [
 
 [[segment]]
 name = "浏览器首页"
+# 裁决：「坐标算法」+ 回读。按 RadioButton 的 bounds 点中心，再读 `checked` 确认
 code = "step_browser_home"
 
 [[segment]]
@@ -78,10 +81,13 @@ ops = [
 
 [[segment]]
 name = "搜索"
+# 裁决：缺能力 + 「坐标算法」。桌面下滑是 `p.d.swipe` 的绝对坐标手势；数据里的 `gesture` 走
+# `input swipe`，比例相同但另一条下发路径，换过去真机行为不一致
 code = "step_search"
 
 [[segment]]
 name = "负一屏"
+# 裁决：「循环」。右滑最多三次，要看当前是否已进面板再决定划不划
 code = "step_negative"
 
 [[segment]]
@@ -121,4 +127,6 @@ ops = [
 
 [[segment]]
 name = "音乐"
+# 裁决：缺能力。按 `rt.only` 的段过滤分岔（只有单跑这一段才做得成），数据没有这个 op；
+# 只此一台机型，按 ADR-0038 的「≥2 机型用法」不新增
 code = "step_music"
