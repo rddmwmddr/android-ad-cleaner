@@ -13,7 +13,19 @@ OFF_EXACT_OPTIONAL = true
 
 [[segment]]
 name = "广告跟踪"
-code = "step_ad_tracking"
+ops = [
+  {kind = "skip_in_safe_mode"},
+  {kind = "shell", command = "am start -f 0x10008000 -a android.settings.SETTINGS"},
+  {kind = "sleep", seconds = 1.5},
+  {kind = "if_tap", text = "隐私与安全", scrolls = 3, else_ops = [
+    {kind = "print", text = "  ✗ 没找到「隐私与安全」"},
+    {kind = "return", value = false},
+  ]},
+  {kind = "sleep", seconds = 1.5},
+  {kind = "return_lib", name = "tap_page", args = ["设备标识与广告", "DevicesIdentifySettingsActivity", "设备标识与广告"]},
+  {kind = "return_lib", name = "tap_page", args = ["广告跟踪", "OAIDActivity", "广告跟踪"]},
+  {kind = "return_lib", name = "ad_tracking_close_paged"},
+]
 
 [[segment]]
 name = "软件商店"

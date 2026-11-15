@@ -44,7 +44,7 @@ OP_KEYS = {
     "note_miss": frozenset({"kind", "text"}),
     "miss_reset": frozenset({"kind"}),
     "tap": frozenset({"kind", "text", "exact", "scrolls", "kwargs"}),
-    "tap_id": frozenset({"kind", "resource_id", "text", "miss_print"}),
+    "tap_id": frozenset({"kind", "resource_id", "text", "optional", "miss_print"}),
     "gesture": frozenset({"kind", "start", "end", "ms"}),
     "go": frozenset({"kind", "text", "expect"}),
     "dismiss": frozenset({"kind"}),

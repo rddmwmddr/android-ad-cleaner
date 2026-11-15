@@ -35,31 +35,6 @@ def guard(p, rt):
         rt.skip("型号或系统版本不同，跳过；请重新核对页面")
 
 
-def step_ad_tracking(p, rt):
-    # 2026-10-28 实测：隐私页在 com.oplus.securitypermission，设备标识与广告在 OplusSettingsActivity$DevicesIdentifySettingsActivity。
-    rt.skip_in_safe_mode()
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
-    if not nav.tap_page(p, rt, "隐私", "com.oplusos.securitypermission.privacy.PrivacySettingsDashboardActivity", "隐私"):
-        return False
-    if not nav.tap_page(p, rt, "设备标识与广告", "OplusSettingsActivity$DevicesIdentifySettingsActivity", "设备标识与广告"):
-        return False
-    if not p.find("重置设备标识符", exact=True):
-        return False
-    if not nav.tap_page(p, rt, "广告跟踪", "com.oplus.settings.feature.notification.oaid.OAIDActivity", "广告跟踪"):
-        return False
-    # 等应用列表真正加载，不能把只有标题的空白加载页视为完成。
-    for _ in range(30):
-        if p.switches():
-            break
-        time.sleep(0.2)
-    if not p.switches():
-        print("  ✗ 广告跟踪列表未加载")
-        return False
-    p.top(n=16)
-    p.off(page="广告跟踪", max_screens=40)
-    return True
-
-
 def step_advice(p, rt):
     # 2026-10-28 实测：设置首页 → OPPO AI（com.oplus.pantanal.ums/com.ums.aisetting.AISettingActivity）
     # → 小布建议（AdviceSettingActivity）。资讯服务是行状态（已卸载/已开启），不是本页开关，

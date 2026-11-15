@@ -40,7 +40,7 @@ from .xiaomi import (
 )
 from .oppo import (
     ad_id_page as ad_id_page, ad_tracking_close_all as ad_tracking_close_all,
-    assistant_advice_rows as assistant_advice_rows,
+    ad_tracking_close_paged as ad_tracking_close_paged, assistant_advice_rows as assistant_advice_rows,
     assistant_advice_search as assistant_advice_search, assistant_icon as assistant_icon,
     assistant_screen as assistant_screen, assistant_settings as assistant_settings,
     at_assistant as at_assistant, browser_ads as browser_ads, browser_home as browser_home,
@@ -105,8 +105,8 @@ HELPERS = (
 
 # 字面量：mypy 要靠它解析 `from recipe_nav import <名字>`，算出来的并集不算（ADR-0040）。
 __all__ = (
-    "MenuState", "_labelled", "ad_id_page", "ad_tracking_close_all", "app_settings",
-    "assert_no_other_window", "assistant_advice_rows", "assistant_advice_search", "assistant_icon",
+    "MenuState", "_labelled", "ad_id_page", "ad_tracking_close_all", "ad_tracking_close_paged",
+    "app_settings", "assert_no_other_window", "assistant_advice_rows", "assistant_advice_search", "assistant_icon",
     "assistant_screen", "assistant_settings", "at_assistant", "baidu_browser", "bottom_tab",
     "browser_ads", "browser_home", "browser_personalized", "browser_recommendations",
     "browser_settings", "browser_settings_direct", "browser_settings_vivo",

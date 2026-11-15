@@ -8,7 +8,15 @@ tail = "tail"
 
 [[segment]]
 name = "广告跟踪"
-code = "step_ad_tracking"
+ops = [
+  {kind = "skip_in_safe_mode"},
+  {kind = "require_setting", kw = "设备标识与广告", miss_print = "没搜到「设备标识与广告」"},
+  {kind = "tap_id", resource_id = "android:id/title", text = "设备标识与广告", optional = true},
+  {kind = "return_lib", name = "wait_page", args = ["com.android.settings.SubSettings", "设备标识与广告"]},
+  {kind = "if_find", text = "重置设备标识符", exact = true, else_ops = [{kind = "return", value = false}]},
+  {kind = "return_lib", name = "tap_page", args = ["广告跟踪", "com.oplus.settings.feature.notification.oaid.OAIDActivity", "广告跟踪"]},
+  {kind = "return_lib", name = "ad_tracking_close_paged"},
+]
 
 [[segment]]
 name = "软件商店"

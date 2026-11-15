@@ -612,6 +612,18 @@ class TapIdOpTests(unittest.TestCase):
         self.assertEqual(recipe.rt.results, [("a", "未完成")])
         self.assertNotIn("没找到", out.getvalue())
 
+    def test_optional_keeps_going_when_the_node_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="tap_id", resource_id="com.x:id/none",'
+                     ' optional=true}, {kind="back", n=2}]\n')
+            backs = []
+            phone.back = lambda n=1: backs.append(n)
+            with contextlib.redirect_stdout(io.StringIO()):
+                recipe.run()
+        self.assertEqual(backs, [2], "optional 点不到之后剩下的 op 要照常走完")
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+
     def test_miss_print_ends_the_segment_without_touching_the_rest(self):
         with tempfile.TemporaryDirectory() as tmp:
             recipe, phone, _calls = _load_tmp(
