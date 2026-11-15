@@ -90,5 +90,47 @@ class VivoV2303ARecipeTests(unittest.TestCase):
         self.assertIn("✗ 未完成：没搜到「全局搜索」", out.getvalue())
 
 
+def store_phone(**fields):
+    """商店段用的假手机：直达成功（落点片段对得上）、三个入口都在。"""
+    p = make_phone(**fields)
+    p.entry.side_effect = lambda name, scrolls=6: name in ("关于", "个性化推荐", "服务管理")
+    p.switches.return_value = []
+    p.focus.return_value = "com.bbk.appstore/.ui.menu.AppstoreSettingsActivity"
+    return p
+
+
+class VivoV2303AStoreTests(unittest.TestCase):
+    """应用商店（沿用 #220）：「我的」页没有能读到的齿轮入口，设置页只能按 Activity 直达。"""
+
+    def test_the_settings_activity_is_opened_directly(self):
+        p = store_phone()
+        load(p, only=["应用商店"])
+        self.assertEqual(p.start.call_args_list[0].args,
+                         ("com.bbk.appstore", ".ui.menu.AppstoreSettingsActivity"))
+        p.tab.assert_not_called()
+        self.assertEqual([c.kwargs["page"] for c in p.off.call_args_list],
+                         ["商店·个性化推荐", "商店·服务管理"])
+        self.assertEqual([c.args for c in p.top.call_args_list], [()])   # 不带实参
+        self.assertEqual([c.args for c in p.back.call_args_list], [(), (), (), (2,)])
+
+    def test_an_unreachable_activity_falls_back_to_the_my_page(self):
+        p = store_phone()
+        p.start.side_effect = [RuntimeError("Error type 3"), None]
+        _, out = load_recipe(p, RECIPE, only=["应用商店"])
+        self.assertIn("直达商店设置页失败", out.getvalue())
+        self.assertEqual(p.start.call_args_list[1].args, ("com.bbk.appstore",))
+        self.assertEqual(p.start.call_args_list[1].kwargs, {"expect": ["我的"]})
+        p.tab.assert_called_once_with("我的")
+
+    def test_a_lost_connection_is_not_treated_as_an_unreachable_page(self):
+        """DeviceLost 也是 RuntimeError：当成「这一页打不开」会在回退路径上再空跑一次（沿用 #293 / #908）。"""
+        import adb_link
+        p = store_phone()
+        p.start.side_effect = adb_link.DeviceLost("断了")
+        with self.assertRaises(adb_link.DeviceLost):
+            load(p, only=["应用商店"])
+        p.tab.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

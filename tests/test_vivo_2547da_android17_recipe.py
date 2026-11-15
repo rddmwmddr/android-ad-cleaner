@@ -176,7 +176,8 @@ class Android17RecipeTests(unittest.TestCase):
         p.start = Mock(side_effect=[RuntimeError("Error type 3: Activity class does not exist"), None])
         self.load(p, ["应用商店"])
         self.assertEqual(p.start.call_args_list[1].args, ("com.bbk.appstore",))
-        self.assertEqual(p.start.call_args_list[1].kwargs, {"expect": ("我的",)})
+        # 数据里的名单是数组（`expect_page` 对元组与列表同一条判据）
+        self.assertEqual(p.start.call_args_list[1].kwargs, {"expect": ["我的"]})
         p.tab.assert_any_call("我的")
 
 

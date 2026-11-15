@@ -1772,8 +1772,9 @@ class VivoStoreEntryTests(unittest.TestCase):
                     names = [a.value for call in calls_on_p_530(tree, "tab")
                              for a in call.args if isinstance(a, ast.Constant)]
                 else:
-                    # 数据段：require_tab 就是引擎的底带 p.tab()（ADR-0012）
-                    names = [op.get("name") for op in store["ops"] if op.get("kind") == "require_tab"]
+                    # 数据段：require_tab 就是引擎的底带 p.tab()（ADR-0012）；直达不通才走它，所以在 if_lib 里
+                    names = [op.get("name") for op in walk_ops(store["ops"])
+                             if op.get("kind") == "require_tab"]
                 self.assertIn("我的", names, "商店段没改用 p.tab(\"我的\")")
 
 

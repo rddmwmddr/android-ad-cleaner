@@ -1,5 +1,6 @@
 # vivo V2547DA（卫星通信版）Android 17 变体页面树（catalog，#1263）。系统版本对上 17.1.10.2 时由 run.recipe_for 选这份。
-# 与主本差别只在直达优先（opened(...)）的几段，是过程段，走 code= 例外函数。
+# 与主本差别只在直达优先（opened(...)）的几段，是过程段，走 code= 例外函数；应用商店的设置页
+# 直达与「我的 → 设置」兜底是导航数据。
 model = "V2547DA"
 models = ["V2547DA"]
 build = "PD2547D_A_17.1.10.2"
@@ -21,7 +22,31 @@ code = "step_lock_screen"
 
 [[segment]]
 name = "应用商店"
-code = "step_store"
+ops = [
+  # 「我的」页没有能读到的齿轮入口，设置页只能按 Activity 直达（沿用 #220）；不通再走「我的 → 设置」。
+  { kind = "if_lib", name = "store_settings_direct", args = ["com.bbk.appstore", ".ui.menu.AppstoreSettingsActivity", "AppstoreSettingsActivity"], else_ops = [
+    { kind = "start", pkg = "com.bbk.appstore", expect = ["我的"] },
+    { kind = "require_tab", name = "我的", miss_print = "商店底部「我的」标签没找到" },
+    { kind = "sleep", seconds = 0.8 },
+    { kind = "lib", name = "gear" },
+  ]},
+  { kind = "if_entry", text = "关于", ops = [
+    { kind = "if_entry", text = "个性化推荐", ops = [
+      { kind = "off", only = ["个性化推荐", "个性化广告推荐"], page = "商店·个性化推荐" },
+      # off 会往下翻；这一页的开关在上面时别错过
+      { kind = "top" },
+      { kind = "lib", name = "off_unnamed", args = ["商店·个性化推荐"] },
+      { kind = "back" },
+      { kind = "sleep", seconds = 0.5 },
+    ]},
+    { kind = "if_entry", text = "服务管理", ops = [
+      { kind = "off", only = ["签到有礼", "顶部轮播图", "顶部栏目", "开屏", "摇一摇", "悬浮窗", "限时推广"], keep = ["我的服务", "空间清理"], page = "商店·服务管理" },
+      { kind = "back" },
+    ]},
+    { kind = "back" },
+  ]},
+  { kind = "back", n = 2 },
+]
 
 [[segment]]
 name = "浏览器"

@@ -21,6 +21,7 @@
 - 荣耀搜索「更多」的坐标定位升格 `search_more`，CLE-AN00 / PNM-AN10 两段转成数据（#1337）
 - 小米商店的嵌套隐私页与偏好页直达升格三个库实现，八段转成数据（#1337）
 - 小米主题两段转成数据：下半屏「我的」升格 `mine_tab_low`，`require_tab` 加 `settle`（#1337）
+- vivo 商店设置页直达升格 `store_settings_direct`，V2303A / V2547DA 安卓 17 变体两段转数据（#1337）
 - `docs/09` 与 `verified.toml` 里的 V2547DA 旧脚本名、M154FF README 死链改到现行文件（#1339）
 - `ScreenLocked` 定义搬进 `phone/errors.py`，库层与运行时不再经 `fast` 取名字（#1335）
 - vivo V2547DA 适配说明改按主本 / 变体叙述，旧 `.py` 文件名与死链改到现行文件（#1336）
