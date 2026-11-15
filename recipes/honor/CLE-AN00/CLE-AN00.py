@@ -1,6 +1,6 @@
 # 荣耀 Magic V Flip2（CLE-AN00，MagicOS 10 / Android 16）的本机例外函数（catalog 的 `code=`，影随同名 `.toml`）。
-# 共享库的 enter / my_tab / skip / skip_in_safe_mode 由装载器注入执行作用域。线性段已转数据；这里留
-# 过程化的段（坐标、选择器、dumpsys、条件分支）与助手，逐字保留原实现。
+# 共享库的 enter / my_tab / skip / skip_in_safe_mode 由装载器注入执行作用域。这里留的是过程化的段
+# （坐标、选择器、dumpsys、条件分支）与它们用到的助手，逐字保留原实现。
 import re
 import time
 
@@ -66,22 +66,21 @@ def hush_music(p, rt, listening):
     return True
 
 
-def step_ad_tracking(p, rt):
-    rt.skip_in_safe_mode()
-    p.start("com.hihonor.id", ".oaid.ui.AdvertisingPrivacyActivity", expect="应用广告跟踪管理")
-    nav.enter(p, rt, "更多选项", scrolls=0)
-    if p.find("显示系统程序", exact=True):
-        p.tap("显示系统程序", exact=True, scrolls=0); time.sleep(0.8)
-        nav.enter(p, rt, "更多选项", scrolls=0)
+def close_all_here(p, rt):
+    """点这一屏的「全部关闭」；没有这个按钮就退回上一页。"""
     if p.tap("全部关闭", exact=True, scrolls=0):
         p.confirm()
     else:
         p.back()
-    time.sleep(0.8)
+
+
+def assert_none_left(p, rt):
+    """回读断言：这一屏不该再有开着的开关。编排语义，不进数据（ADR-0038）。"""
     left = sum(1 for _, on, *_ in p.switches() if on)
     if left:
         raise RuntimeError(f"「全部关闭」后这一屏还有 {left} 个开着")
     print("  · 广告跟踪：这一屏已全部关闭")
+
 
 
 def step_negative(p, rt):
@@ -107,26 +106,6 @@ def step_negative(p, rt):
     p.off(only=["资讯精选"], page="负一屏·资讯服务")
     p.back(3)
 
-
-def step_market(p, rt):
-    p.start("com.hihonor.appmarket")
-    nav.no_agreement(p, rt, "应用市场")
-    if p.find("基本服务", exact=True, edge_ok="tab") and not p.find("我的", edge_ok="tab"):
-        p.dismiss(); time.sleep(1.5)
-    if p.find("基本服务", exact=True, edge_ok="tab") and not p.find("我的", edge_ok="tab"):
-        rt.skip("已是基本服务模式，没有推荐，也没有设置入口")
-    nav.my_tab(p, rt, "市场")
-    nav.enter(p, rt, "设置", scrolls=0)
-    nav.enter(p, rt, "内容推荐服务")
-    for name in ("营销服务推荐", "个性化服务推荐", "热门推荐管理"):
-        p.off(only=[name], page="市场·内容推荐服务")
-    p.back()
-    nav.enter(p, rt, "消息通知管理")
-    p.off(only=["消息通知"], keep=["应用更新通知"], page="市场·消息通知管理")
-    p.back()
-    nav.enter(p, rt, "消息中心提醒")
-    p.off(only=["活动福利", "游戏动态"], keep=["系统通知", "互动"], page="市场·消息中心提醒")
-    p.back(2)
 
 
 def step_browser(p, rt):
@@ -184,18 +163,6 @@ def step_music(p, rt):
     finally:
         hush_music(p, rt, listening)
 
-
-def step_reader(p, rt):
-    p.start("com.hihonor.dz.reader")
-    time.sleep(1); p.dismiss()
-    nav.no_agreement(p, rt, "阅读")
-    nav.my_tab(p, rt, "阅读")
-    p.dismiss()
-    if not (p.tap("更多设置", exact=True, scrolls=4) or p.tap("设置", exact=True, scrolls=4)):
-        raise RuntimeError("阅读设置入口没找到")
-    nav.enter(p, rt, "广告推荐服务", scrolls=2)
-    p.off(only=["个性化广告"], page="阅读·广告推荐服务")
-    p.back(2)
 
 
 def step_magazine(p, rt):
