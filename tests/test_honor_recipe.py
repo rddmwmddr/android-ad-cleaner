@@ -170,7 +170,7 @@ class HonorThemeTests(unittest.TestCase):
 class HonorMusicTests(unittest.TestCase):
     def music_phone(self):
         p = phone()
-        p.d = MagicMock()          # resourceId(...)[2].click() 要能下标
+        p.d = MagicMock()          # `tap_id` 走 p.d(**选择器).click()
         return p
 
     def test_music_entries_are_opened_with_page_change_confirmation(self):
@@ -183,6 +183,16 @@ class HonorMusicTests(unittest.TestCase):
         self.assertEqual([c.kwargs.get("only") for c in p.off.call_args_list], [["朋友页显示推荐动态"], None])
         self.assertEqual([c.kwargs.get("page") for c in p.off.call_args_list],
                          ["音乐·消息和隐私", "音乐·第三方推送（活动、中奖信息）"])
+
+    def test_music_taps_the_drawer_and_settings_gear_by_selector(self):
+        """「音乐」段的两个入口靠 u2 选择器直点：先按文字开抽屉，再按资源 id 开设置（#1362）。
+
+        段体从 `code=` 搬进数据，调用不变：旧树也绿，守的是 `tap_id` 的选择器与顺序不回退。"""
+        p = self.music_phone()
+        load(p, ["音乐"])
+        self.assertEqual([c.kwargs for c in p.d.call_args_list],
+                         [{"text": "我的"}, {"resourceId": "com.hihonor.cloudmusic:id/ic_setting"}])
+        self.assertEqual(p.d.return_value.click.call_count, 2)
 
     def test_missing_privacy_menu_skips_the_section_without_blind_scrolling(self):
         """「更多设置」页里没有该菜单时：留下停在哪一页就跳过，脚本自己不另起一套盲点。"""
