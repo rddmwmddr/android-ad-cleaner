@@ -34,10 +34,12 @@ mypy 解析 `from recipe_nav import <名字>` 时看的是源模块的 `__all__`
 `verify` / `_labelled`）。面助手留在 `__all__` 里、**不进** `LIBRARY`：把助手补进某个模块的
 `__all__` 会把数据可点名的词汇也扩一格。
 
-修订（#1363）：`search_more` / `ad_tracking_close_paged` 升格进家族库后，这一层的计数随库增长漂移；
-数字以 `recipe_lib.LIBRARY` / `__all__` / `HELPERS` 的实算为准，正文与 `ARCHITECTURE.md` 不再抄死数。
+### 增补（#1363 / #1371）：计数以实算为准，面助手与数据词汇的分界
 
-修订（#1371）：面助手与数据词汇的分界判据是「是不是只读前台 / 页面树给段体用」——`settle_page`
+`search_more` / `ad_tracking_close_paged` 升格进家族库后，这一层的计数随库增长漂移；数字以
+`recipe_lib.LIBRARY` / `__all__` / `HELPERS` 的实算为准，正文与 `ARCHITECTURE.md` 不再抄死数。
+
+面助手与数据词汇的分界判据是「是不是只读前台 / 页面树给段体用」——`settle_page`
 自己走读屏与等待，与 `wait_page` 同档，所以从 `HELPERS` 移进 honor 家族词汇，阅读那段才能把
 「点下一行之前先等版面定下来」写进数据。留在 `HELPERS` 的是只做投影 / 断言的那几个
 （`labels` / `title_key` / `verify` / `_labelled` …），它们不自己读屏；`MenuState` 是类型不是调用，

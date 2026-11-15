@@ -485,8 +485,12 @@ def tap(p, rt, name, scrolls=None):
 
 def opened(p, rt, start, dead_ends=None):
     """试一条直达页面：到了返回真。别的系统版本可能没有这一页，返回假由调用方收场；
-    断线 / 锁屏 / 约定跳过照常上抛——跑到一半掉线时 Phone 只置 lost、抛的是普通 RuntimeError
-    （沿用 #293 的做法），锁屏同理不能当成「这条路不通」换个入口接着做（#1372）。
+    断线与约定跳过照常上抛——跑到一半掉线时 Phone 只置 lost、抛的是普通 RuntimeError
+    （沿用 #293 的做法）。
+
+    `ScreenLocked` 也一并放行，但这一支是给将来会抛它的调用方留的：当前 `p.start` 落点不对时抛的
+    是普通 `RuntimeError`，锁屏只在 `rt.page` 与段前检查里抛，这里不能当成「这条路不通」换个入口
+    接着做（#1372）。
 
     `dead_ends` 给「这条路在这台机上不通」的报错文案片段，按**包含**匹配：引擎的拉起报错是
     包名加原始输出（`无法打开 com.x：… No activities found …`、`… 没有进入前台（停在 …）`），
@@ -495,7 +499,8 @@ def opened(p, rt, start, dead_ends=None):
         start()
         return True
     except (adb_link.DeviceLost, SkipStep, ScreenLocked):
-        # 跳过（App 本机没装 / 按约定不跑）不是「这条路不通」：放行，由段包装记跳过（沿用 #908 的做法）
+        # 跳过（App 本机没装 / 按约定不跑）不是「这条路不通」：放行，由段包装记跳过（沿用 #908 的做法）。
+        # `ScreenLocked` 现为防御性分支：`p.start` 不抛它，见 docstring。
         raise
     except RuntimeError as e:
         if p.lost:

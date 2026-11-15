@@ -154,6 +154,14 @@ def _named(ops, where):
         for key in ("ops", "else_ops"):
             if key in op:
                 yield from _named(op[key], f"{place} 的 {key} ")
+        # 实参里的回调块（`close_named(..., reopen={ops = [...]})`）：块里的 op 与顶层同规则，写错的
+        # 名字同样在装载期报（#1371 的再入，schema 已按同一条白名单校验过形状）。
+        args, kwargs = op.get("args"), op.get("kwargs")
+        values = (args if isinstance(args, list) else []) + (
+            list(kwargs.values()) if isinstance(kwargs, Mapping) else [])
+        for value in values:
+            if isinstance(value, Mapping) and "ops" in value:
+                yield from _named(value["ops"], f"{place} 的实参块 ")
 
 
 def _legal_names(g) -> set[str]:
