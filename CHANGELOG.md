@@ -13,6 +13,7 @@
 
 ### 内部
 - 四条规则注册项补上能返红的守卫，`check` 不再只指向 CI job（#1300）
+- 冻结 `PROSE_ONLY_BOUND`：没有守卫的规则（manual / advisory / dead）71 条只许降（#1303）
 - `docs/adr/` 四份 ADR 删掉与交付事实漂移的「状态」行（#1325）
 - `CLAUDE.md` 的 ADR 编号枚举与 Triage 标签段移出启动路径，索引改由 `docs/adr/README.md` 承载（#1299）
 - `CLAUDE.md` 折叠 29 处同文本链接，`recipe_lib/` 两条导航行并作一条（#1327）
