@@ -10,7 +10,7 @@ from recipe_runtime import SkipStep
 from recipe_lib.shared import _style, close_named_step, gear, maybe, opened, read_switches
 from row import bounds, icon_hit
 
-__all__ = ('bottom_tab', 'browser_settings_xiaomi', 'browser_start', 'by_id', 'close_with_plain_tap', 'direct_page', 'direct_settings', 'downloads', 'downloads_probe', 'downloads_tap', 'gear_tap', 'global_search', 'menu_settings', 'mine_settings', 'mine_tab_low', 'negative_screen', 'popup_row', 'security_center', 'security_tab', 'settings_icon_visible', 'store', 'store_mode', 'store_mode_step', 'store_privacy_nested', 'store_privacy_sub', 'system_ads_menu', 'system_ads_security', 'tab', 'tab_bot', 'tap_any', 'tap_bottom_tab', 'tap_low', 'tap_tab', 'theme', 'theme_settings', 'wait_bottom_tab', 'weather_calendar_probe', 'weather_calendar_tap')
+__all__ = ('bottom_tab', 'browser_settings_xiaomi', 'browser_start', 'by_id', 'close_with_plain_tap', 'direct_settings', 'downloads', 'downloads_probe', 'downloads_tap', 'gear_tap', 'global_search', 'menu_settings', 'mine_settings', 'mine_tab_low', 'negative_screen', 'popup_row', 'security_center', 'security_tab', 'settings_icon_visible', 'store', 'store_mode', 'store_mode_step', 'store_privacy_nested', 'store_privacy_sub', 'system_ads_menu', 'system_ads_security', 'tab', 'tab_bot', 'tap_any', 'tap_bottom_tab', 'tap_low', 'tap_tab', 'theme', 'theme_settings', 'wait_bottom_tab', 'weather_calendar_probe', 'weather_calendar_tap')
 
 # ---------- 词汇 ----------
 def tap_any(p, rt, *names, scrolls=6):
@@ -506,15 +506,6 @@ def store_mode_step(p, rt):
     """商店「模式切换 → 极简模式」（M154FF / 23049RAD8C）：新版商店没有这一项。"""
     if maybe(p, rt, "模式切换"):
         p.tap("极简模式", exact=True, scrolls=0); p.confirm(); p.back()
-
-def direct_page(p, rt, pkg, activity, expect=None):
-    """设置页能直达就直达（商店设置 / 系统广告服务）：到了返回真。
-
-    直达不通返回假，由调用方按菜单路径回退；断线 / 约定跳过照常上抛（沿用 #293 / #908）。
-    包名与页面名由数据传进来：`tool/entries.py` 按调用点的这两个实参认入口速查，写死在这里它看不见。"""
-    if expect:
-        return opened(p, rt, lambda: p.start(pkg, activity, expect=expect, budget=2))
-    return opened(p, rt, lambda: p.start(pkg, activity))
 
 def store(p, rt):
     p.start("com.xiaomi.market")

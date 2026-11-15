@@ -298,7 +298,7 @@ _AM_PAGE = re.compile(r"am start\b[^\n]*?-n\s+([\w.]+)/([\w.$]+)")
 _AM_INTENT = re.compile(r"am start\b[^\n]*?-a\s+([\w.]+)[^\n]*?-p\s+([\w.]+)")
 # 拉起入口的调用名：Phone.start 与按 (包名, 页面名) 收实参的助手（沿用 #902、#1337）。
 _START_CALLS = frozenset({"p.start", "start_or_skip", "rt.start_or_skip", "direct_page",
-                          "store_settings_direct"})
+                          "global_search_entry", "store_settings_direct"})
 
 
 def _value(arg):

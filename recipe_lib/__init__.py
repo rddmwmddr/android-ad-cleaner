@@ -17,7 +17,8 @@ from . import meizu
 
 from .shared import (
     app_settings as app_settings, browser_settings as browser_settings, close_named as close_named,
-    enter as enter, gear as gear, gear_top as gear_top, goto as goto, my_tab as my_tab,
+    direct_page as direct_page, enter as enter, gear as gear, gear_top as gear_top, goto as goto,
+    my_tab as my_tab,
     open_page as open_page, open_settings as open_settings, opened as opened,
     page_activity as page_activity, read_switches as read_switches,
     switch_signature as switch_signature, switch_top as switch_top, tap as tap,
@@ -27,7 +28,7 @@ from .shared import (
 from .xiaomi import (
     bottom_tab as bottom_tab, browser_settings_xiaomi as browser_settings_xiaomi,
     browser_start as browser_start, by_id as by_id, close_with_plain_tap as close_with_plain_tap,
-    direct_page as direct_page, direct_settings as direct_settings, downloads as downloads,
+    direct_settings as direct_settings, downloads as downloads,
     downloads_probe as downloads_probe, downloads_tap as downloads_tap, gear_tap as gear_tap,
     global_search as global_search, menu_settings as menu_settings, mine_settings as mine_settings,
     mine_tab_low as mine_tab_low, negative_screen as negative_screen, popup_row as popup_row,
@@ -78,7 +79,8 @@ from .vivo import (
     browser_recommendations as browser_recommendations,
     browser_settings_vivo as browser_settings_vivo, by_desc as by_desc,
     close_named_vivo as close_named_vivo, confirm2 as confirm2, dialog_open as dialog_open,
-    global_search_ads as global_search_ads, hiboard_panel_v2547a as hiboard_panel_v2547a,
+    global_search_ads as global_search_ads, global_search_entry as global_search_entry,
+    hiboard_panel_v2547a as hiboard_panel_v2547a,
     hiboard_panel as hiboard_panel, i_manager_ads as i_manager_ads,
     lock_screen_magazine as lock_screen_magazine, off as off, off_one as off_one,
     off_unnamed as off_unnamed, result_xy as result_xy, row_switch as row_switch, rows as rows,
@@ -99,7 +101,7 @@ from .meizu import (
 
 MODULES = (shared, xiaomi, oppo, vivo, honor, meizu)
 
-# 数据可点名的 140 个名字：家族 `__all__` 的并集，派生不手抄。
+# 数据可点名的名字：家族 `__all__` 的并集，派生不手抄。
 LIBRARY = {name: getattr(module, name) for module in MODULES for name in module.__all__}
 
 # 稳定 import 面能取到、但数据 `lib:` 不许点名的 10 个助手。
@@ -124,7 +126,7 @@ __all__ = (
     "enter_privacy",
     "enter_settings", "game_center_direct", "game_center_taps", "game_settings_direct",
     "game_settings_entry", "game_settings_via_mine", "gear", "gear_tap", "gear_top",
-    "global_search", "global_search_ads", "goto", "has_row", "hiboard_panel",
+    "global_search", "global_search_ads", "global_search_entry", "goto", "has_row", "hiboard_panel",
     "hiboard_panel_v2547a", "hide_carousel", "i_manager_ads", "labels", "lock_screen_magazine",
     "maybe", "menu_settings", "menu_state", "mine_settings", "mine_tab_low", "more_menu", "my_tab", "navigate",
     "negative_screen", "no_agreement", "off", "off_exact", "off_exact_paged",

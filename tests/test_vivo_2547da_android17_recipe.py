@@ -10,7 +10,7 @@ import sys
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -179,6 +179,73 @@ class Android17RecipeTests(unittest.TestCase):
         # 数据里的名单是数组（`expect_page` 对元组与列表同一条判据）
         self.assertEqual(p.start.call_args_list[1].kwargs, {"expect": ["我的"]})
         p.tab.assert_any_call("我的")
+
+
+def run_segment(segment, **answers):
+    """跑一段：库调用换成桩，`answers` 给它们各自的返回值（缺省一律算成）。"""
+    import catalog.interpreter as interpreter
+    phone = phone_mock(W=1260, H=2800)
+    phone.locked.return_value = False
+    phone.off.return_value = 0
+    phone.entry.return_value = True
+    phone.focus.return_value = "com.android.settings/.Settings"
+    calls = []
+    defaults = {"direct_page": True, "global_search_entry": True,
+                "system_ads_branch": True, "lock_screen_magazine": True}
+
+    def recorder(name):
+        def call(p, rt, *args, **kwargs):
+            calls.append((name, args, kwargs))
+            return answers.get(name, defaults[name])
+        return call
+
+    with patch.dict(interpreter.LIBRARY, {name: recorder(name) for name in defaults}):
+        _scope, out = load_recipe(phone, RECIPE, [segment])
+    return phone, calls, out
+
+
+class DirectFirstSegmentTests(unittest.TestCase):
+    """三段「直达优先」转成数据（#1337）：直达通了走直达那支，不通才交给菜单走法。"""
+
+    def test_system_ads_closes_on_the_direct_page_and_stops(self):
+        phone, calls, _out = run_segment("系统广告")
+        self.assertEqual([call[0] for call in calls], ["direct_page"])
+        self.assertEqual(calls[0][1], ("com.android.settings", ".Settings$AdAndPrivacyActivityForOsTwo"))
+        self.assertEqual(calls[0][2], {"expect": "智能推荐服务"})
+        self.assertEqual([call.kwargs["page"] for call in phone.off.call_args_list], ["系统·广告与隐私"])
+        phone.d.shell.assert_not_called()          # 没有退回菜单路径
+
+    def test_system_ads_falls_back_to_the_menu_path(self):
+        phone, calls, _out = run_segment("系统广告", direct_page=False)
+        self.assertEqual([call[0] for call in calls], ["direct_page", "system_ads_branch"])
+        phone.off.assert_not_called()
+
+    def test_global_search_visits_its_pages_without_the_menu(self):
+        phone, calls, _out = run_segment("全局搜索")
+        self.assertEqual(calls[0][0], "global_search_entry")
+        self.assertEqual(calls[0][1], ("com.vivo.globalsearch", ".view.SearchSettingsActivity",
+                                       "首页展示内容"))
+        self.assertEqual([call.kwargs["page"] for call in phone.off.call_args_list],
+                         ["全局搜索·首页展示内容", "全局搜索·热搜榜单", "全局搜索·个性化内容"])
+        phone.d.shell.assert_not_called()
+
+    def test_global_search_stops_when_neither_entry_opens(self):
+        phone, _calls, _out = run_segment("全局搜索", global_search_entry=False)
+        phone.off.assert_not_called()
+        phone.entry.assert_not_called()
+        phone.back.assert_not_called()
+
+    def test_lock_screen_closes_on_the_direct_page_and_stops(self):
+        phone, calls, _out = run_segment("阅图锁屏")
+        self.assertEqual(calls[0][1], ("com.vivo.magazine", ".ui.MagazineSettings"))
+        self.assertEqual(calls[0][2], {"expect": "锁屏横滑进入阅图"})
+        self.assertEqual([call.kwargs["page"] for call in phone.off.call_args_list], ["阅图锁屏"])
+        phone.d.shell.assert_not_called()
+
+    def test_lock_screen_falls_back_to_the_menu_path(self):
+        phone, calls, _out = run_segment("阅图锁屏", direct_page=False)
+        self.assertEqual([call[0] for call in calls], ["direct_page", "lock_screen_magazine"])
+        phone.off.assert_not_called()
 
 
 if __name__ == "__main__":

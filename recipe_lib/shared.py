@@ -16,7 +16,7 @@ from recipe_runtime import SkipStep
 from phone.errors import ScreenLocked
 from row import bounds, icon_hit
 
-__all__ = ('app_settings', 'browser_settings', 'close_named', 'enter', 'gear', 'gear_top', 'goto', 'my_tab', 'open_page', 'open_settings', 'opened', 'page_activity', 'read_switches', 'switch_signature', 'switch_top', 'tap', 'tap_text', 'wait_page', 'wait_switches')
+__all__ = ('app_settings', 'browser_settings', 'close_named', 'direct_page', 'enter', 'gear', 'gear_top', 'goto', 'my_tab', 'open_page', 'open_settings', 'opened', 'page_activity', 'read_switches', 'switch_signature', 'switch_top', 'tap', 'tap_text', 'wait_page', 'wait_switches')
 
 # ---------- 词汇 ----------
 def _style(rt, constant, choices, default):
@@ -497,6 +497,15 @@ def opened(p, rt, start):
             raise
         print(f"  · 直达不通（{e}），走菜单")
         return False
+
+def direct_page(p, rt, pkg, activity, expect=None):
+    """设置页能直达就直达（商店设置 / 系统广告服务 / 全局搜索 / 阅图锁屏）：到了返回真。
+
+    直达不通返回假，由调用方按菜单路径回退；断线 / 约定跳过照常上抛（沿用 #293 / #908）。
+    包名与页面名由数据传进来：`tool/entries.py` 按调用点的这两个实参认入口速查，写死在这里它看不见。"""
+    if expect:
+        return opened(p, rt, lambda: p.start(pkg, activity, expect=expect, budget=2))
+    return opened(p, rt, lambda: p.start(pkg, activity))
 
 def my_tab(p, rt, *args, **kwargs):
     honor_style = functools.partial(_honor_my_tab, p, rt)
