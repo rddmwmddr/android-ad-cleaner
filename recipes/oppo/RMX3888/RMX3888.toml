@@ -16,8 +16,8 @@
 #   · `com.heytap.yoli` 只有本地视频播放器（`LocalVideosListActivity`），没有在线内容与「我的」页。
 #   · 游戏中心 `com.nearme.gamecenter` 确实未安装。
 #   · 设置里的小布建议入口叫「AI」（`com.coloros.sceneservice`），不叫「OPPO AI」；总开关默认已关。
-# 七段已落数据（#1368 把软件商店、游戏中心两段也搬了进来）；剩下负一屏（读完入口行之后的收窄）
-# 与主题（try/except 只认「无法打开」这条异常文本）两段留 `code=`。
+# 八段已落数据（#1368 把软件商店、游戏中心两段搬了进来，#1372 把主题段也搬了进来：直达不通的
+# 判据「只认无法打开」写在 `dead_ends` 里）；剩下负一屏（读完入口行之后的收窄）一段留 `code=`。
 model = "RMX3888"
 models = ["RMX3888"]
 build = "RMX3888_15.0.0.420"
@@ -105,7 +105,29 @@ ops = [
 
 [[segment]]
 name = "主题"
-code = "step_theme"
+ops = [
+  # 包名不是同族的 com.heytap.themestore，而且没有启动界面：`resolve-activity` 返回
+  # No activity found，拉起命令只会报「无法打开」。只认这一段文案算死路，其余拉起失败仍记未完成。
+  { kind = "if_lib", name = "direct_start", args = ["com.oplus.themestore"], kwargs = { dead_ends = ["无法打开"] }, ops = [
+    { kind = "go", text = "我的", expect = "设置" },
+    { kind = "tap", text = "设置", exact = true, scrolls = 0 },
+    { kind = "if_tap", text = "服务管理", exact = true, ops = [
+      { kind = "if_tap", text = "消息与广告", exact = true, ops = [
+        # 消息通知是服务通知，保留；只关开屏广告。
+        { kind = "off", only = ["开屏广告"], page = "主题·消息与广告" },
+        { kind = "back" },
+      ] },
+      { kind = "back" },
+    ] },
+    { kind = "if_tap", text = "隐私", exact = true, ops = [
+      { kind = "off", only = ["个性化推荐"], page = "主题·个性化推荐" },
+      { kind = "back" },
+    ] },
+    { kind = "back", n = 2 },
+  ], else_ops = [
+    { kind = "skip", text = "主题商店（com.oplus.themestore）没有启动界面，本机做不了这一段" },
+  ] },
+]
 
 [[segment]]
 name = "视频"

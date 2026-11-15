@@ -10,7 +10,30 @@ OPEN_SETTINGS_STYLE = "honor"
 
 [[segment]]
 name = "广告跟踪"
-code = "step_ad_tracking"
+ops = [
+  {kind = "skip_in_safe_mode"},
+  # 直达广告与隐私页；不通（任何非断线 / 锁屏的拉起失败）先退回设置搜索，搜索再不通才走三级菜单。
+  {kind = "if_lib", name = "direct_start", args = ["com.hihonor.id", ".oaid.ui.AdvertisingPrivacyActivity"], kwargs = { expect = "应用广告跟踪管理" }, ops = [], else_ops = [
+    {kind = "if_setting", kw = "广告", entry = "广告与隐私", ops = [], else_ops = [
+      {kind = "shell", command = "am start -f 0x10008000 -a android.settings.SETTINGS"},
+      {kind = "sleep", seconds = 1.2},
+      {kind = "miss_reset"},
+      # 三级菜单任一级点不到即整段失败（旧码是一条短路 `and` 之后 raise）。
+      {kind = "require_tap", text = "隐私和安全", exact = true, miss_print = "没找到「广告与隐私」入口"},
+      {kind = "require_tap", text = "其他隐私和安全功能", exact = true, miss_print = "没找到「广告与隐私」入口"},
+      {kind = "require_tap", text = "广告与隐私", exact = true, miss_print = "没找到「广告与隐私」入口"},
+    ]},
+  ]},
+  {kind = "tap", text = "更多选项", scrolls = 0},
+  {kind = "if_find", text = "显示系统程序", exact = true, ops = [
+    {kind = "tap", text = "显示系统程序", exact = true, scrolls = 0},
+    {kind = "tap", text = "更多选项", scrolls = 0},
+  ]},
+  # 点「全部关闭」与收掉确认框是编排语义，留在本机例外函数里（ADR-0038，沿用 CLE-AN00 的写法）。
+  {kind = "code", name = "close_all_oaid"},
+  {kind = "start", pkg = "com.hihonor.id", activity = ".oaid.ui.IntelligentRecommendActivity", settle = 0.5},
+  {kind = "off", page = "广告与隐私·智能推荐服务", page_wide = true},
+]
 
 [[segment]]
 name = "YOYO"
