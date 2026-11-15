@@ -87,11 +87,13 @@ def _run_op(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
 
 def _arg(value: Any, p: Any, rt: Any, g: dict[str, Any]) -> Any:
     """实参里的动态取值：`{expr = "focus"}` → `p.focus()`，`{expr = "tree"}` → `p.tree()`，
-    `{expr = "var", name = "…"}` → 本段 `let` 绑定的值（#1373）。
+    `{expr = "var", name = "…"}` → 本段 `let` 绑定的值（#1373）；`{ops = [...]}` → 一条回调（#1371）。
 
     段体常把当前前台 / 页面树当实参传给库助手（`close_named(..., p.focus())`）。这些读也是一次
     `p.*` 调用、进调用序列，所以必须照原样求值、不能换成字面量，否则对拍就少了那一条。绑定的名字
     只在段内、只在绑定它的那条 op 之后可见，装载器按这两个条件核对（`loader._check_bindings`）。
+    `{ops = [...]}` 包成闭包传下去：库在两步之间要重进一次页才好回读（`close_named(...,
+    reopen=…)`），什么时候调由库实现决定，解释器只负责把它翻成一次 `_run`。
     除表形态外一律按字面量传（字符串 / 数字 / 列表）。"""
     if isinstance(value, Mapping) and "expr" in value:
         name = value["expr"]
@@ -102,6 +104,9 @@ def _arg(value: Any, p: Any, rt: Any, g: dict[str, Any]) -> Any:
         if name == "var":
             return rt.bindings[value["name"]]
         raise KeyError(f"未知的实参表达式 expr={name!r}")
+    if isinstance(value, Mapping) and "ops" in value:
+        block = value["ops"]
+        return lambda: _run(block, p, rt, g)
     return value
 
 

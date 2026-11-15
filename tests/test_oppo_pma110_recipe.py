@@ -169,5 +169,40 @@ class Pma110RecipeTests(unittest.TestCase):
         self.p.click.assert_not_called()
 
 
+class Pma110ThemeReopenTests(unittest.TestCase):
+    """主题商店的 `reopen=` 回调（#1371）：这一段转成数据后，「确认后退回设置」那两步写在
+    `close_named_plain` 的实参块里，由库在关完、回读之前调。
+
+    调用序列快照看不到这里（空假页面上 `close_named_plain` 在回读前就停了），所以判据只能是
+    「库真收到了可调用对象，且它跑的是重进隐私页那两步」。旧树也绿，守的是转数据后不回退。
+    """
+
+    def test_the_privacy_page_is_reopened_through_the_library_callback(self):
+        p = fixtures.phone_mock()
+        p.locked.return_value = False
+        calls = []
+
+        def app_settings(phone, rt, package, activity, title):
+            calls.append(("app_settings", title))
+
+        def tap_page(phone, rt, text, activity, **kwargs):
+            calls.append(("tap_page", text))
+
+        def close_named_plain(phone, rt, names, title, *rest, reopen=None, **kwargs):
+            calls.append(("close", title, callable(reopen)))
+            if reopen is not None:
+                reopen()
+
+        fixtures.patch_surface(self, "app_settings", app_settings)
+        fixtures.patch_surface(self, "tap_page", tap_page)
+        fixtures.patch_surface(self, "close_named_plain", close_named_plain)
+        fixtures.load_recipe(p, RECIPE, ["主题商店"])
+
+        self.assertIn(("close", "主题商店·隐私", True), calls)
+        # 隐私页进两次：一次直接进，一次是确认后退回、回读前的重进。
+        self.assertEqual([call for call in calls if call == ("tap_page", "隐私")],
+                         [("tap_page", "隐私"), ("tap_page", "隐私")])
+
+
 if __name__ == "__main__":
     unittest.main()

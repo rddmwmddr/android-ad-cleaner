@@ -185,6 +185,22 @@ def _validate_require_switches(op: Mapping, where: str) -> None:
         raise SchemaError(f"{where} 的 title 必须是非空字符串")
 
 
+def _validate_arg_blocks(op: Mapping, where: str) -> None:
+    """实参里的 `{ops = [...]}`：库在两步之间回调的子段表（`close_named(..., reopen=…)`，#1371）。
+
+    实参内容对 schema 一般是不透明的（标题、Activity、超时秒数），只有带 `ops` 的表是数据再入，
+    所以它按同一条白名单校验——块里的 op 与顶层 op 共用 `OPS`，不校验的话嵌套里的错键要等真机跑
+    到那一步才发现。"""
+    args, kwargs = op.get("args"), op.get("kwargs")
+    values = (args if isinstance(args, list) else []) + (
+        list(kwargs.values()) if isinstance(kwargs, Mapping) else [])
+    for value in values:
+        if isinstance(value, Mapping) and "ops" in value:
+            place = f"{where} 的实参块"
+            _reject_extra(value, frozenset({"ops"}), place)
+            _validate_ops(value["ops"], place)
+
+
 # `calls` 表的两处用法：各自允许哪些键、每次调用必须给哪个键，仍与 `_validate_calls` 同源。
 def _validate_expect(op: Mapping[str, Any], where: str) -> None:
     """`require_expect`：先给 `calls` 表定形，再要一句 `miss_print`——原先分派就是这个先后。
@@ -341,7 +357,7 @@ def _validate_ops(ops: object, where: str) -> None:
 
 
 def _validate_op(op: object, where: str) -> None:
-    """一条 op：查记录、查键、查必填、跑形状校验、递归子 op——顺序即报错顺序。"""
+    """一条 op：查记录、查键、查必填、跑形状校验、查实参块、递归子 op——顺序即报错顺序。"""
     if not isinstance(op, Mapping):
         raise SchemaError(f"{where} 必须是表")
     kind = op.get("kind")
@@ -353,6 +369,7 @@ def _validate_op(op: object, where: str) -> None:
         _require(op, key, where)
     if spec.check is not None:
         spec.check(op, where)
+    _validate_arg_blocks(op, where)
     for key in spec.nested:
         _validate_ops(op.get(key, []), where)
 

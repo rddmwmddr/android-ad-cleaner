@@ -5,8 +5,8 @@
 ## 问题
 
 同一份 interface 被叙述了三遍。`tool/recipe_nav.py` / `recipe_strategies.py` / `recipe_steps.py`
-除第 1 行 docstring 外逐字相同：同样 31 行显式 re-export、同样 140 名 `__all__`，各约 9.5 KB。
-真正拥有这批名字的是 `recipe_lib/` 里五个家族文件与跨家族的 `shared.py`（`MODULES` 六项）的 `__all__`（合计 140、无重名），而
+除第 1 行 docstring 外逐字相同：同样 31 行显式 re-export、同样一份 `__all__`，各约 9.5 KB。
+真正拥有这批名字的是 `recipe_lib/` 里五个家族文件与跨家族的 `shared.py`（`MODULES` 六项）的 `__all__`（家族之间无重名），而
 `catalog.interpreter.LIBRARY` 只是把三个面做并集算出来，自己不陈述任何一个名字。同一批名字还要
 再建两份表：`recipe_source.library_sources()` 与 `catalog.loader.CatalogScope._library_view()`。
 改一个库实现的名字要在家族模块与三个面里各改一遍；最近 300 条提交里这三个面被改 57 次。
@@ -17,7 +17,7 @@
 
 四样东西都在那里：今天三份面里那 31 行显式 re-export 块（搬一次）、
 `LIBRARY = {name: getattr(module, name) for module in MODULES for name in module.__all__}`（派生，不手抄）、
-`HELPERS`（10 个面助手的具名元组）、字面量 `__all__`（150）。
+`HELPERS`（面助手的具名元组）、字面量 `__all__`。
 
 ### `__all__` 必须是字面量
 
@@ -28,14 +28,20 @@ mypy 解析 `from recipe_nav import <名字>` 时看的是源模块的 `__all__`
 
 ### 三层命名集合不许混
 
-六个模块的 `__all__` 并集 **140** 是「数据 `lib:` 能点名」的词汇 → `LIBRARY` 就是这 140 个 →
-`__all__` **150** 是「能从稳定 import 面取到」的名字。10 个面助手（`maybe` / `labels` /
-`settle_page` / `MenuState` / `close_named_step` / `off_exact_step` / `require_installed` /
-`title_key` / `verify` / `_labelled`）留在 `__all__` 里、**不进** `LIBRARY`：把助手补进某个模块的
-`__all__` 会把数据可点名的集合从 140 改成 150。
+六个模块的 `__all__` 并集是「数据 `lib:` 能点名」的词汇 → `LIBRARY` 就是它 →
+`__all__` 是「能从稳定 import 面取到」的名字，多出 `HELPERS` 那一批面助手（`maybe` / `labels` /
+`MenuState` / `close_named_step` / `off_exact_step` / `require_installed` / `title_key` /
+`verify` / `_labelled`）。面助手留在 `__all__` 里、**不进** `LIBRARY`：把助手补进某个模块的
+`__all__` 会把数据可点名的词汇也扩一格。
 
-修订（#1363）：`search_more` / `ad_tracking_close_paged` 升格进家族库后，上面两个计数随库增长漂移；
+修订（#1363）：`search_more` / `ad_tracking_close_paged` 升格进家族库后，这一层的计数随库增长漂移；
 数字以 `recipe_lib.LIBRARY` / `__all__` / `HELPERS` 的实算为准，正文与 `ARCHITECTURE.md` 不再抄死数。
+
+修订（#1371）：面助手与数据词汇的分界判据是「是不是只读前台 / 页面树给段体用」——`settle_page`
+自己走读屏与等待，与 `wait_page` 同档，所以从 `HELPERS` 移进 honor 家族词汇，阅读那段才能把
+「点下一行之前先等版面定下来」写进数据。留在 `HELPERS` 的是只做投影 / 断言的那几个
+（`labels` / `title_key` / `verify` / `_labelled` …），它们不自己读屏；`MenuState` 是类型不是调用，
+一并留在原处。
 
 ### 三个面是兼容壳，不删
 
