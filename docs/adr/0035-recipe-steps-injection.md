@@ -53,4 +53,4 @@
 - `recipe_source.Facts` 多一个 `constants` 字段（模块级字符串与纯字符串列表），只给 `externals` 用；`_Source.constants` 仍是本文件内取值的那一份，两者行号口径不同，不合并。
 - `recipe_steps` 进 mypy 严格档：纯逻辑、不碰设备、不依赖假对象，注解能一路追到调用方。
 - 段体名是注入面的新名字，不存在 ADR-0029 里「脚本本地同名定义会覆盖注入版」的那条约束；同族同段名的 7 组各给一个能看出差异的注入名（`downloads` / `downloads_probe` / `downloads_tap`）。
-- `docs/ARCHITECTURE.md` 的模块清单加入 `recipe_steps.py`；`CLAUDE.md` 的规则 `dev.steps.injection-surface` 与 `docs/agents/rules.toml` 的登记同时写。
+- `docs/ARCHITECTURE.md` 的模块清单加入 `recipe_steps.py`；`CLAUDE.md` 的规则（当时叫 `dev.steps.injection-surface`，已在 #1298 并入 `dev.recipes.shared-sections`）与 `docs/agents/rules.toml` 的登记同时写。
