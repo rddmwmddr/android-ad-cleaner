@@ -1245,6 +1245,21 @@ class XiaomiTest(unittest.TestCase):
         p.off.assert_called_once()
         self.assertEqual(p.off.call_args.kwargs["page"], "com.android.calendar·用户体验计划")
 
+    def test_a_calendar_page_that_never_opens_falls_back_to_the_menu(self):
+        # 23049RAD8C：日历的用户体验计划页没导出时裸拉起首页、再从齿轮进去——天气那条路照常走。
+        p = phone_667(fail_direct_667)
+        p.find.return_value = None
+        p.tree.return_value.iter.return_value = []
+        p.entry.return_value = True
+        p.tap.return_value = True
+        scope, _ = load_recipe(p, ROOT / "recipes/xiaomi/23049RAD8C/23049RAD8C.toml", only="天气和日历")
+        self.assertEqual(started_667(p), [("com.miui.weather2",),
+                                          ("com.android.calendar", ".settings.UserExperienceActionBarActivity"),
+                                          ("com.android.calendar",)])
+        self.assertEqual([c.kwargs["page"] for c in p.off.call_args_list],
+                         ["天气·用户体验计划", "日历·用户体验计划"])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+
 
 class VivoTest(unittest.TestCase):
     def run_step(self, name, p):

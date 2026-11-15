@@ -1,7 +1,8 @@
-"""小米系统广告两段转成数据（#1337）：一台要先切「安全」标签，一台先试直达再退回菜单。
+"""小米系统广告四段转成数据（#1337）：一台要先切「安全」标签，一台先试直达再退回菜单，
+另两台按菜单路径进「隐私与安全」页。
 
-快照跑在空页面上，两段都在「隐私与安全」那一步就断了；入口成功那条路、标签的重试轮、
-以及「直达不通 → 菜单」与「两条都不通」两个出口都在这里补。
+快照跑在空页面上，几段都在「隐私与安全」那一步就断了；入口成功那条路、标签的重试轮、
+「直达不通 → 菜单」与「两条都不通」两个出口，以及设置搜索搜不到那条失败都在这里补。
 """
 from pathlib import Path
 import sys
@@ -76,6 +77,82 @@ class AdsSegmentTests(unittest.TestCase):
         self.assertEqual(events, ["direct_page", "system_ads_menu"])
         phone.off.assert_not_called()
         self.assertEqual(scope["FAILED_STEPS"], [])
+
+
+class SettingsPathTests(unittest.TestCase):
+    """23049RAD8C 与 25102RKBEC：一段先直达广告服务页，一段按菜单路径切「安全」分栏。"""
+
+    def walk(self, machine, *, direct=True, entries=(), finds=(), setting=True):
+        import catalog.interpreter as interpreter
+        phone = phone_mock(W=1080, H=2400)
+        phone.locked.return_value = False
+        phone.entry.side_effect = list(entries)
+        phone.find.side_effect = lambda text, **kwargs: text in finds
+        phone.setting.return_value = setting
+        events = []
+
+        def off(*, only, **kwargs):
+            events.append(("off", list(only)))
+
+        def direct_page(p, rt, pkg, activity, **kwargs):
+            events.append(("direct_page", pkg, activity))
+            return direct
+
+        def tab(p, rt, name):
+            events.append(("tab", name))
+            return True
+
+        phone.off.side_effect = off
+        with patch.dict(interpreter.LIBRARY, {"tab": tab, "direct_page": direct_page}):
+            scope, out = load_recipe(phone, ROOT / f"recipes/xiaomi/{machine}/{machine}.toml", ["系统广告"])
+        return phone, events, scope, out
+
+    def test_the_direct_page_closes_both_switches(self):
+        # 23049RAD8C：「广告服务」直达页与「系统广告」搜索各自管一个总闸。
+        _phone, events, scope, _out = self.walk("23049RAD8C")
+        self.assertEqual(events, [("direct_page", "com.android.settings", "com.android.settings.ad.AdServiceSettings"),
+                                  ("off", ["个性化广告推荐"]),
+                                  ("off", ["系统工具广告"])])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+
+    def test_a_missing_direct_page_still_runs_the_settings_search(self):
+        _phone, events, scope, _out = self.walk("23049RAD8C", direct=False)
+        self.assertEqual(events, [("direct_page", "com.android.settings", "com.android.settings.ad.AdServiceSettings"),
+                                  ("off", ["系统工具广告"])])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+
+    def test_a_settings_search_that_misses_fails_the_segment(self):
+        _phone, events, scope, out = self.walk("23049RAD8C", setting=False)
+        self.assertEqual(events, [("direct_page", "com.android.settings", "com.android.settings.ad.AdServiceSettings"),
+                                  ("off", ["个性化广告推荐"])])
+        self.assertEqual(scope["FAILED_STEPS"], ["系统广告"])
+        self.assertIn("没搜到「系统广告」", out.getvalue())
+
+    def test_the_second_column_is_only_entered_when_the_page_lacks_the_entry(self):
+        # 25102RKBEC：隐私与安全页默认停在「隐私」分栏，页上没有「更多安全设置」才去切「安全」。
+        _phone, events, scope, _out = self.walk("25102RKBEC", entries=[True, True, True],
+                                                finds={"隐私与安全"})
+        self.assertEqual(events, [("tab", "安全"), ("off", ["个性化广告推荐"])])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+
+    def test_a_page_that_already_shows_the_entry_keeps_its_column(self):
+        _phone, events, scope, _out = self.walk("25102RKBEC", entries=[True, True, True],
+                                                finds={"隐私与安全", "更多安全设置"})
+        self.assertEqual(events, [("off", ["个性化广告推荐"])])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+
+    def test_a_missing_first_entry_ends_the_segment_without_touching_switches(self):
+        phone, events, scope, out = self.walk("25102RKBEC", entries=[False])
+        self.assertEqual(events, [])
+        phone.off.assert_not_called()
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        self.assertIn("隐私与安全", out.getvalue())
+
+    def test_the_long_column_is_scrolled_further_than_the_first_screen(self):
+        phone, _events, _scope, _out = self.walk("25102RKBEC", entries=[True, True, True])
+        self.assertEqual([item.args for item in phone.entry.call_args_list],
+                         [("隐私与安全",), ("更多安全设置",), ("广告服务",)])
+        self.assertEqual([item.kwargs["scrolls"] for item in phone.entry.call_args_list], [8, 10, 4])
 
 
 class SystemAdsMenuTests(unittest.TestCase):
