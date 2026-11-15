@@ -1223,7 +1223,7 @@ class ReaderTests(unittest.TestCase):
             self.assertTrue(typecheck_recipes._check_catalog(str(bad))[0])
 
     def test_every_toml_lib_call_resolves_to_an_implementation(self):
-        """`.toml` 里每个 lib / require_lib 名都要在库的 `__all__` 里（入口归属的根因守护）。
+        """`.toml` 里每个 lib / require_lib 名都要在 `LIBRARY`（数据可点名的集合）里（入口归属的根因守护）。
 
         数据显式点名实现，名字解析不到时入口速查会把这台机从「用过的机型」里静默删掉
         （`com.iqoo.secure` / `com.vivo.weather` 那次）。覆盖全部已转型号，不是抽查一份。"""

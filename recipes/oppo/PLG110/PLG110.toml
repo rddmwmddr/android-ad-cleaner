@@ -6,7 +6,7 @@ models = ["PLG110"]
 build = "PLG110_16.0.10"
 tail = "tail"
 
-# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。这一版的设置页与命令串都走 shell，
+# 家族库按这些常量选走法（#1245），缺省档见 recipe_lib/oppo.py。这一版的设置页与命令串都走 shell，
 # 页面确认失败即报错，读开关按 expect 名单收窄。
 [const]
 WAIT_PAGE_STYLE = "raise"

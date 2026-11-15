@@ -372,7 +372,7 @@ def used_by(recipes_dir):
     `am start -a <action> -p <包名>` 这类公开 Intent 入口单记一档（#956）；
     经 `open_app_settings(包名, 页面, …)` 打开的那一类同样是直达（它包着 APP_SETTINGS 的 Intent）。
 
-    共享实现（`tool/recipe_nav.py` / `tool/recipe_strategies.py` / `tool/recipe_steps.py`）里的入口
+    共享实现（`recipe_lib/`）里的入口
     也要算到调用它的机型：脚本本身或实现里按名字调用库函数时，事实层按 `Call.module` 逐层往下扫，
     否则「用过的机型」会静默漏掉（沿用 #1153、#1212）。实现之间是普通函数调用（同模块裸名 /
     跨模块 `nav.x`），不再有 import 归属表。
