@@ -1,4 +1,4 @@
-"""规则注册表的五条不变式（#842、#845、#1302）：`source` 指得到真实出处、`check` 与 `status` 配得上且解析得到真实守卫、
+"""规则注册表的五条不变式（前四条沿用 #842、#845 的做法，第五条见 #1302）：`source` 指得到真实出处、`check` 与 `status` 配得上且解析得到真实守卫、
 正文锚点与注册表条目双向一致、锚点落在 `source` 点名的那一小节里、`code:` 规则点名的符号在实现里只定义一次。
 五条各是一个用例，单条不变式失败不影响另外四条；注册表整体读不出（TOML 语法或字段表）时五条一并报，消息带条目标识。
 另有一个用例是另一把锁（#1303）：没有守卫的规则条数只许降。
@@ -174,7 +174,7 @@ def workflow_jobs(path):
 def top_level_defs(path):
     """Python 文件里模块层定义的名字与行号：`def` / `async def` / `class` / 赋值 / 带值的 `AnnAssign`。只读 AST，不执行。
 
-    这是 `code:<路径>:<名字>` 与唯一性计数共用的口径：一处符号若耦合了另一种写法，两边会各数各的。"""
+    裸注解（`X: int` 没有值）不绑定模块属性，不算定义。`code:<路径>:<名字>` 与唯一性计数共用这一份口径。"""
     tree = ast.parse(path.read_text(encoding="utf-8"))
     found = []
     for node in module_level(tree.body):
@@ -182,7 +182,8 @@ def top_level_defs(path):
             found.append((node.name, node.lineno))
         elif isinstance(node, ast.Assign):
             found.extend((target.id, node.lineno) for target in node.targets if isinstance(target, ast.Name))
-        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) \
+                and node.value is not None:
             found.append((node.target.id, node.lineno))
     return found
 
@@ -190,6 +191,17 @@ def top_level_defs(path):
 def top_level_names(path):
     """Python 文件里模块层可被 `code:<路径>:<名字>` 点到的名字。"""
     return {name for name, _ in top_level_defs(path)}
+
+
+def code_target(check):
+    """`code:<路径>:<名字>` 拆成 (路径, 名字)；不是这个形态返回 None。"""
+    kind, sep, target = check.partition(":")
+    if kind != "code" or not sep:
+        return None
+    path, sep, name = target.partition(":")
+    if not sep or not path or not name:
+        return None
+    return path, name
 
 
 def check_problem(check, status):
@@ -221,9 +233,10 @@ def check_problem(check, status):
                 return None
         return f".github/workflows/ 里没有 job {target}"
     if kind == "code":
-        name, sep, attr = target.partition(":")
-        if not sep or not name or not attr:
+        named = code_target(check)
+        if named is None:
             return f"check={check!r} 要写成 `code:<路径>:<名字>`"
+        name, attr = named
         path = ROOT / name
         if not path.is_file():
             return f"{name} 不存在"
@@ -250,56 +263,48 @@ CODE_SYMBOL_EXEMPT = {
 }
 
 
-def code_symbol_places(scope=CODE_SCOPE, root=ROOT):
-    """{符号: [(相对路径, 行号)]}：扫描范围里每个符号的模块层定义处。"""
+def code_symbol_places():
+    """{符号: [(相对路径, 行号)]}：`CODE_SCOPE` 三个目录下每个符号的模块层定义处。"""
     index = {}
-    for folder in scope:
-        for path in sorted((root / folder).rglob("*.py")):
-            where = path.relative_to(root).as_posix()
+    for folder in CODE_SCOPE:
+        for path in sorted((ROOT / folder).rglob("*.py")):
+            where = path.relative_to(ROOT).as_posix()
             for name, lineno in top_level_defs(path):
                 index.setdefault(name, []).append((where, lineno))
     return index
 
 
 def code_symbol_problems(rows, index, exempt):
-    """第五条不变式：`code:` 规则点名的符号在 `index` 里恰好由点名的那一处定义。
-
-    `index` 是 `{符号: [(相对路径, 行号)]}`，`exempt` 是 `{(符号, 相对路径): 理由}`。
-    返回问题清单：点名的路径里没有它、同一文件里定义了两次、点在别处却没豁免、豁免对不上任何重复。
-    拆成纯函数是为了让反例用例喂它合成数据，不必改真实仓库。
-    """
-    targets = []
+    """`index` 与 `exempt` 的形态见模块 docstring，返回问题清单。拆成纯函数是为了让反例用例喂合成数据。"""
+    rules_of, declared = {}, {}
     for row in rows:
         if row.get("status") != "code":
             continue
-        kind, sep, target = row["check"].partition(":")
-        if kind != "code" or not sep:
-            continue                                # check 的写法由第四条不变式报
-        path, sep, name = target.partition(":")
-        if not sep or not path or not name:
-            continue
-        targets.append((row["id"], name, path))
-
-    problems, rules_of, declared = [], {}, {}
-    for rule_id, name, path in targets:
-        rules_of.setdefault(name, []).append(rule_id)
+        named = code_target(row.get("check", ""))
+        if named is None:
+            continue                                # check 的写法由第二条不变式报
+        path, name = named
+        rules_of.setdefault(name, []).append(row["id"])
         declared.setdefault(name, set()).add(path)
-    for name, paths in declared.items():
+
+    problems = []
+    for name, paths in sorted(declared.items()):
+        owners = "、".join(rules_of[name])
         places = index.get(name, [])
         where = "、".join(f"{path}:{lineno}" for path, lineno in places) or "一处都没有"
-        owners = "、".join(rules_of[name])
         for path in sorted(paths):
             if not any(place_path == path for place_path, _ in places):
-                problems.append(f"{name}（{owners}）：点名的 {path} 里没有模块层定义；"
-                                f"现在定义在 {where}")
-        for path, lineno in places:
-            if path in paths:
-                if sum(1 for place_path, _ in places if place_path == path) > 1:
-                    problems.append(f"{name}（{owners}）：{path} 里定义了不止一次")
-                continue
-            if (name, path) not in exempt:
-                problems.append(f"{name}（{owners}）：{path}:{lineno} 也定义了一份，"
-                                f"「只在那里定义」不成立；同名不同义才进 CODE_SYMBOL_EXEMPT")
+                problems.append(f"{name}（{owners}）：点名的 {path} 里没有模块层定义；现在定义在 {where}")
+        counted = {}
+        for path, _ in places:
+            counted[path] = counted.get(path, 0) + 1
+        for path in sorted(path for path, times in counted.items() if times > 1):
+            problems.append(f"{name}（{owners}）：{path} 里定义了不止一次")
+        # 两条规则点名同一个符号的不同路径时，两处都是「点名的定义处」，唯一性同样不成立。
+        extra = sorted(path for path in counted if (name, path) not in exempt)
+        if len(extra) > 1:
+            problems.append(f"{name}（{owners}）：除豁免外有 {len(extra)} 处定义（{'、'.join(extra)}），"
+                            f"「只在那里定义」不成立；同名不同义才进 CODE_SYMBOL_EXEMPT")
     for (name, path) in sorted(exempt):
         places = index.get(name, [])
         if name not in declared:
@@ -421,24 +426,28 @@ class RulesRegistryTests(unittest.TestCase):
 
     def test_the_uniqueness_check_can_fail(self):
         """反例：判据对合成数据的每一种结局都给出预期的判断，不靠真实仓库恰好合规。"""
-        rows = [{"id": "dev.demo.one-place", "status": "code", "check": "code:tool/demo.py:Widget"}]
+        one = [{"id": "dev.demo.one-place", "status": "code", "check": "code:tool/demo.py:Widget"}]
+        split = [{"id": "dev.demo.a", "status": "code", "check": "code:tool/demo.py:Widget"},
+                 {"id": "dev.demo.b", "status": "code", "check": "code:gui/other.py:Widget"}]
         only = {"Widget": [("tool/demo.py", 3)]}
         twice = {"Widget": [("tool/demo.py", 3), ("gui/other.py", 9)]}
         cases = [
-            ("同一处定义", only, {}, []),
-            ("第二处没有豁免", twice, {}, ["gui/other.py:9 也定义了一份"]),
-            ("第二处有豁免", twice, {("Widget", "gui/other.py"): "另一个东西"}, []),
-            ("点名的路径里没有它", {"Other": [("tool/demo.py", 3)]}, {}, ["点名的 tool/demo.py 里没有模块层定义"]),
-            ("同一文件里定义了两次", {"Widget": [("tool/demo.py", 3), ("tool/demo.py", 20)]}, {},
+            ("同一处定义", one, only, {}, []),
+            ("第二处没有豁免", one, twice, {}, ["除豁免外有 2 处定义"]),
+            ("第二处有豁免", one, twice, {("Widget", "gui/other.py"): "另一个东西"}, []),
+            ("点名的路径里没有它", one, {"Other": [("tool/demo.py", 3)]}, {},
+             ["点名的 tool/demo.py 里没有模块层定义"]),
+            ("同一文件里定义了两次", one, {"Widget": [("tool/demo.py", 3), ("tool/demo.py", 20)]}, {},
              ["定义了不止一次"]),
-            ("豁免空转：没有规则点名它", only, {("Gadget", "gui/other.py"): "x"},
+            ("两条规则点名不同的路径", split, twice, {}, ["除豁免外有 2 处定义"]),
+            ("豁免空转：没有规则点名它", one, only, {("Gadget", "gui/other.py"): "x"},
              ["没有 `code:` 规则点名这个符号"]),
-            ("豁免空转：那里已经不再定义", twice, {("Widget", "tool/gone.py"): "x"},
+            ("豁免空转：那里已经不再定义", one, twice, {("Widget", "tool/gone.py"): "x"},
              ["那里已经不再定义 Widget"]),
-            ("豁免指向点名的那一处", twice, {("Widget", "tool/demo.py"): "x"},
+            ("豁免指向点名的那一处", one, twice, {("Widget", "tool/demo.py"): "x"},
              ["不是多出来的那一处"]),
         ]
-        for label, index, exempt, expected in cases:
+        for label, rows, index, exempt, expected in cases:
             with self.subTest(label):
                 problems = code_symbol_problems(rows, index, exempt)
                 if not expected:
