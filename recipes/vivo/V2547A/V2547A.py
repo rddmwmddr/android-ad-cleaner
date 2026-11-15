@@ -16,7 +16,7 @@ BUILD = "PD2547B_A_17.1.10.2"          # ro.build.display.id 的开头；对不�
 import re
 import time
 
-# 家族库按这些常量选走法（#1246），缺省档与实现见 tool/recipe_nav.py 与 tool/recipe_strategies.py。
+# 家族库按这些常量选走法（#1246），缺省档与实现见 recipe_lib/vivo.py。
 TAP_ROW_STYLE = "centre"
 TAP_TEXT_STYLE = "vivo"
 GOTO_STYLE = "vivo"

@@ -6,7 +6,7 @@ model = "PLR110"
 models = ["PLR110"]
 build = "PLR110_17.0.0.101"
 
-# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+# 家族库按这些常量选走法（#1245），缺省档见 recipe_lib/oppo.py。
 [const]
 SEARCH_SETTINGS_STYLE = "swipe"
 

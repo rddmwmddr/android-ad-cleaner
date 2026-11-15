@@ -29,7 +29,7 @@ build = "RMX3700_16.0.5.1300"
 guard = "guard"
 tail = "tail"
 
-# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py。
+# 家族库按这些常量选走法（#1245），缺省档见 recipe_lib/oppo.py。
 [const]
 SETTINGS_PAGE_STYLE = "scroll"
 

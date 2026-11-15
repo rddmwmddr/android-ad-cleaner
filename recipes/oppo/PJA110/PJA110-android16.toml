@@ -6,7 +6,7 @@ models = ["PJA110"]
 build = "PJA110_16.0.5.1201"
 tail = "tail"
 
-# 家族库按这些常量选走法（#1245），缺省档见 tool/recipe_nav.py：设置页走公开 Intent（两个 App 都认），
+# 家族库按这些常量选走法（#1245），缺省档见 recipe_lib/oppo.py：设置页走公开 Intent（两个 App 都认），
 # 关开关走 vanish（关掉的项连同整行一起消失）。
 [const]
 OPEN_SETTINGS_STYLE = "shell"
