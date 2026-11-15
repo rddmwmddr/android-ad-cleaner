@@ -42,7 +42,8 @@ if _ROOT not in sys.path:
 _Function = ast.FunctionDef | ast.AsyncFunctionDef
 _Position = tuple[int, int]
 
-# 三个稳定 import 面（#1243、#1269）：实现住在 `recipe_lib`，这三个模块只做重导出，事实层经它们取名字。
+# 三个稳定 import 面（#1243、#1269）：实现住在 `recipe_lib`，这三个模块只做重导出。事实层不经它们取
+# 实现，只靠这张表认出脚本里 `nav.gear(…)` 这种经别名写的调用（ADR-0040）。
 NAV_MODULE = "recipe_nav"
 STRATEGIES_MODULE = "recipe_strategies"
 STEPS_MODULE = "recipe_steps"
@@ -679,7 +680,7 @@ def library_sources() -> dict[str, tuple[str, str]]:
 
 
 def _lib_modules() -> dict[str, str]:
-    """数据 `lib` 名 → 归属模块。三个库的 `__all__` 全局唯一（#1268：没有同名覆盖）。"""
+    """数据 `lib` 名 → 归属模块。`LIBRARY` 的名字全局唯一（#1268：没有同名覆盖，ADR-0040）。"""
     return {name: module for name, (module, _source) in library_sources().items()}
 
 

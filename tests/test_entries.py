@@ -1492,7 +1492,7 @@ GEAR_CENTER_305 = (995, 165)
 
 
 def surface_sources():
-    """三个库的公开实现：{名字: 源码}（`__all__` 全局唯一，按名字查即可）。"""
+    """数据可点名的库实现：{名字: 源码}（名字全局唯一，按名字查即可）。"""
     return {name: source for name, (_module, source) in recipe_source.library_sources().items()}
 
 
