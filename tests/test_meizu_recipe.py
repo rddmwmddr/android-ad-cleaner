@@ -255,10 +255,9 @@ class RecipeSelectionTests(unittest.TestCase):
             for name in ("MEIZU 20", "MEIZU 21 Pro"):
                 Path(root, "recipes", "meizu", name).mkdir(parents=True)
                 Path(root, "recipes", "meizu", name, "recipe.py").write_text('BUILD = "Flyme 12.6.0.0A"\n', encoding="utf-8")
-            with patch.object(run, "ROOT", root):
-                path, reference = run.recipe_for("MEIZU 22", "MEIZU")
-                self.assertTrue(reference)
-                self.assertEqual(Path(path).parent.name, "MEIZU 21 Pro")
+            path, reference = run.recipe_for("MEIZU 22", "MEIZU", root=root)
+            self.assertTrue(reference)
+            self.assertEqual(Path(path).parent.name, "MEIZU 21 Pro")
 
 
 if __name__ == "__main__":

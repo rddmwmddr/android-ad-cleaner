@@ -204,6 +204,14 @@ why = "退出码语义分散会让客户端分不清「没执行」与「失败�
 expires_if = "命令入口改成注册表驱动的插件、退出码统一在平台层给出时删。"
 
 [[rule]]
+id = "dev.recipes.pick-single-owner"
+source = "docs/ARCHITECTURE.md#函数级细节"
+check = "code:tool/recipe_pick.py:recipe_for"
+status = "code"
+why = "「这台机跑哪份脚本」是全仓最热的一段判断（#319 / #942 / #969 / #1263 / #1264 都在改它），曾与 adb、备份、挂起、快应用共处 1119 行的 run.py：想复用它只能从命令层切，测试注入假树只能 patch 模块全局，读代码的人分不清「选脚本」与「执行命令」。"
+expires_if = "选脚本下沉进 catalog 运行时、由数据声明目标机型、不再按目录与版本挑时删。"
+
+[[rule]]
 id = "dev.row.single-definition"
 source = "docs/ARCHITECTURE.md#函数级细节"
 check = "code:tool/row.py:line"

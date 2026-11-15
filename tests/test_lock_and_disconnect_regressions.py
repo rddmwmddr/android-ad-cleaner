@@ -263,12 +263,11 @@ class ReferenceRecipeTests(unittest.TestCase):
                                   ("vivo", "V2324HA"), ("vivo", "V2547DA")):
                 Path(root, "recipes", family, model).mkdir(parents=True)
                 Path(root, "recipes", family, model, "recipe.py").write_text('BUILD = "x"\n', encoding="utf-8")
-            with patch.object(run, "ROOT", root):
-                path, reference = run.recipe_for("NEWMODEL1", "Redmi")
-                self.assertTrue(reference)
-                self.assertEqual(Path(path).parent.name, "M154FF")
-                self.assertEqual(Path(run.recipe_for("NEWMODEL2", "iQOO")[0]).parent.name, "V2547DA")
-                self.assertEqual(run.recipe_for("24090RA29C", "Redmi"), (str(Path(root, "recipes", "xiaomi/24090RA29C", "recipe.py")), False))
+            path, reference = run.recipe_for("NEWMODEL1", "Redmi", root=root)
+            self.assertTrue(reference)
+            self.assertEqual(Path(path).parent.name, "M154FF")
+            self.assertEqual(Path(run.recipe_for("NEWMODEL2", "iQOO", root=root)[0]).parent.name, "V2547DA")
+            self.assertEqual(run.recipe_for("24090RA29C", "Redmi", root=root), (str(Path(root, "recipes", "xiaomi/24090RA29C", "recipe.py")), False))
 
     def test_reference_prefers_the_main_toml_over_a_version_variant(self):
         """主本优先于变体：`-android17` 这类变体按字母序排在 `.` 前面，取 `sorted()[0]` 会选错。
@@ -281,8 +280,7 @@ class ReferenceRecipeTests(unittest.TestCase):
             here.mkdir(parents=True)
             (here / "V2547DA.toml").write_text('build = "16"\n', encoding="utf-8")
             (here / "V2547DA-android17.toml").write_text('build = "17.1.10.2"\n', encoding="utf-8")
-            with patch.object(run, "ROOT", root):
-                path, reference = run.recipe_for("ZZZ0000", "iQOO")
+            path, reference = run.recipe_for("ZZZ0000", "iQOO", root=root)
         self.assertTrue(reference)
         self.assertEqual(Path(path).name, "V2547DA.toml")
 
@@ -291,10 +289,9 @@ class ReferenceRecipeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             Path(root, "recipes", "samsung/SM-N9760").mkdir(parents=True)
             Path(root, "recipes", "samsung/SM-N9760", "recipe.py").write_text('BUILD = "x"\nMODELS = ["SM-N9760"]\n', encoding="utf-8")
-            with patch.object(run, "ROOT", root):
-                path, reference = run.recipe_for("SM-S9280", "samsung")
-                self.assertTrue(reference)
-                self.assertEqual(Path(path).parent.name, "SM-N9760")
+            path, reference = run.recipe_for("SM-S9280", "samsung", root=root)
+            self.assertTrue(reference)
+            self.assertEqual(Path(path).parent.name, "SM-N9760")
 
 
 class ScrubTests(unittest.TestCase):

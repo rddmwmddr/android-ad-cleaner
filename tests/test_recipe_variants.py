@@ -121,8 +121,8 @@ class XiaomiFamilyTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def pick(self, build, brand="Xiaomi", os_=None):
-        with patch.object(run, "ROOT", self.root):
-            return run.recipe_for("ZZZ0000", brand, {"build": build, "os": build if os_ is None else os_})
+        return run.recipe_for("ZZZ0000", brand, {"build": build, "os": build if os_ is None else os_},
+                              root=self.root)
 
     def test_picks_the_script_recorded_on_the_same_version(self):
         path, reference = self.pick("OS3.0.308.0.WNBCNXM")
@@ -166,8 +166,7 @@ class XiaomiFamilyTests(unittest.TestCase):
         self.assertEqual(Path(self.pick("OS4.0.5.0")[0]).parent.name, "M154FF")
 
     def test_no_device_info_means_no_version_picking(self):
-        with patch.object(run, "ROOT", self.root):
-            path, reference = run.recipe_for("ZZZ0000", "Xiaomi")
+        path, reference = run.recipe_for("ZZZ0000", "Xiaomi", root=self.root)
         self.assertEqual(Path(path).parent.name, "M154FF")
         self.assertTrue(reference)
 
@@ -235,8 +234,7 @@ class OppoFamilyTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def pick(self, build, brand="OnePlus"):
-        with patch.object(run, "ROOT", self.root):
-            return run.recipe_for("ZZZ0000", brand, {"build": build, "os": ""})
+        return run.recipe_for("ZZZ0000", brand, {"build": build, "os": ""}, root=self.root)
 
     def test_a_narrower_script_does_not_replace_the_wider_reference(self):
         path, reference = self.pick("PJX110_16.0.5.1201(CN01)")
@@ -267,8 +265,7 @@ class VivoFamilyTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def pick(self, build):
-        with patch.object(run, "ROOT", self.root):
-            return run.recipe_for("ZZZ0000", "iQOO", {"build": build, "os": ""})
+        return run.recipe_for("ZZZ0000", "iQOO", {"build": build, "os": ""}, root=self.root)
 
     def test_compares_the_version_after_the_underscore(self):
         path, reference = self.pick("PD9999_A_17.1.10.2")
@@ -336,8 +333,7 @@ class HonorFamilyTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def pick(self, build):
-        with patch.object(run, "ROOT", self.root):
-            return run.recipe_for("ZZZ0000", "HONOR", {"build": build, "os": ""})
+        return run.recipe_for("ZZZ0000", "HONOR", {"build": build, "os": ""}, root=self.root)
 
     def test_compares_after_the_model_prefix(self):
         path, reference = self.pick("WKL-AN20 11.0.0.111(SP7C00E110R101P7)")
@@ -361,8 +357,7 @@ class MeizuFamilyTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def pick(self, build):
-        with patch.object(run, "ROOT", self.root):
-            return run.recipe_for("ZZZ0000", "MEIZU", {"build": build, "os": ""})
+        return run.recipe_for("ZZZ0000", "MEIZU", {"build": build, "os": ""}, root=self.root)
 
     def test_compares_the_version_after_the_flyme_prefix(self):
         path, reference = self.pick("M621Q Flyme 13.0.0.0A")

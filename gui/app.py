@@ -1623,7 +1623,7 @@ class Api:
             nm = i.get("name") or i.get("model")
             if not nm.upper().startswith((i.get("brand") or "").upper()):
                 nm = f"{i.get('brand')} {nm}"
-            # 借用同品牌参考脚本时 recipe_ok 恒为假（run.py 的 `(not ref) and build_ok(...)`），
+            # 借用同品牌参考脚本时 recipe_ok 恒为假（`status-json` 的 `(not ref) and build_ok(...)`），
             # 检测页与手机版都先看 recipe_ref 再谈版本：这里同样分三档（#778）。
             recipe = st.get("recipe")
             if not recipe:
