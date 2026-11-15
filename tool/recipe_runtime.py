@@ -38,7 +38,7 @@ class MissingPackage(SkipStep):
 
 
 class DuplicateStep(RuntimeError):
-    """同一个脚本里两个 `@step` 用了同一个段名：失败段与客户端重试都按段名定位，必须唯一。"""
+    """同一份数据里两个段用了同一个段名：失败段与客户端重试都按段名定位，必须唯一。"""
 
 
 @dataclass(frozen=True)

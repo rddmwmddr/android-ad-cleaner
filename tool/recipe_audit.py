@@ -21,8 +21,8 @@
 `STRATEGY_SIGNALS` / `VOCABULARY_SIGNALS`，是一组调用名，不是一张按函数名写的名册；钩子那张
 `HOOK_NAMES` 是唯一按名字判的一档。
 
-`@step` 段体不算本机函数：它们是脚本的段落，不是一份实现（由装载器收集）。「涉及机型数」是
-**同名函数**出现在几个型号上：≥2 说明同一份实现被复制到了别的机型，收进共享库还是参数化由人判断。
+「涉及机型数」是**同名函数**出现在几个型号上：≥2 说明同一份实现被复制到了别的机型，收进共享库
+还是参数化由人判断。
 
   python3 tool/recipe_audit.py                       全部：合计、按家族、逐脚本
   python3 tool/recipe_audit.py --summary             只打合计与按家族
@@ -49,8 +49,8 @@ TIERS = (STRATEGY, VOCABULARY, KNOWLEDGE, HOOK)
 TIER_LABEL = {STRATEGY: "拨动策略", VOCABULARY: "引擎词汇", KNOWLEDGE: "真机型知识",
               HOOK: "声明式钩子"}
 
-# 四个可选的脚本侧钩子（`recipe_kit.preamble` 的 docstring）：收尾打印、段入口守卫、段内包装、
-# 失败摘要。按名字判，不看函数体调了什么——它们不是算法，也不是页面知识（#1244）。
+# 四个可选的脚本侧钩子（`tool/catalog/loader.py` 按名字绑进例外函数的命名空间）：收尾打印、
+# 段入口守卫、段内包装、失败摘要。按名字判，不看函数体调了什么——它们不是算法，也不是页面知识（#1244）。
 HOOK_NAMES = frozenset({"tail", "guard", "wrap", "detail"})
 
 # 拨动策略的信号：关开关的算法会碰到的东西（点名、读回、确认、改动台账）。
@@ -75,9 +75,6 @@ VOCABULARY_SIGNALS = frozenset({
     "wait_page", "enter", "page", "open_page",
 })
 
-_STEP = "step"          # `@step("段名")`：段体，不是本机助手
-
-
 @dataclass(frozen=True)
 class LocalFunction:
     """一份脚本里的一个本机模块级函数：名字、行号、归属、判据信号、函数体调过的名字、
@@ -92,7 +89,7 @@ class LocalFunction:
 
 @dataclass(frozen=True)
 class Script:
-    """一份机型脚本（`recipes/<家族>/<型号>/recipe*.py`）与它的本机函数。"""
+    """一份机型脚本（`recipes/<家族>/<型号>/<型号>.toml`，本机函数在同目录同名 `.py` 例外里）。"""
     script: str             # recipes 下的相对路径
     family: str
     model: str
@@ -130,19 +127,12 @@ class Report:
         return out
 
 
-def _is_step(node: ast.expr) -> bool:
-    """`@step` 或 `@step("段名")`：段体由装载器收集，不算本机函数。"""
-    target = node.func if isinstance(node, ast.Call) else node
-    return isinstance(target, ast.Name) and target.id == _STEP
-
-
 def definitions(src: str) -> tuple[tuple[str, int], ...]:
-    """模块级的 (函数名, 行号)，`@step` 段体除外。命名空间里嵌套的定义不算「本机函数」——
-    脚本调用的是模块级那一份，嵌套的多半是闭包里的临时实现。"""
+    """模块级的 (函数名, 行号)。命名空间里嵌套的定义不算「本机函数」——脚本调用的是模块级那一份，
+    嵌套的多半是闭包里的临时实现。"""
     tree = ast.parse(src)
     return tuple((node.name, node.lineno) for node in tree.body
-                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-                 and not any(_is_step(decorator) for decorator in node.decorator_list))
+                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)))
 
 
 def tier_of(calls: Iterable[str]) -> tuple[str, tuple[str, ...]]:
@@ -158,7 +148,7 @@ def tier_of(calls: Iterable[str]) -> tuple[str, tuple[str, ...]]:
 def classify(src: str) -> tuple[LocalFunction, ...]:
     """一份脚本源码的本机函数：按定义顺序，`models` 留空（那是整个 `recipes/` 的账）。
 
-    `@step` 段体不算；四个声明式钩子按名字先判成 `hook`，其余才看函数体调了什么。"""
+    四个声明式钩子按名字先判成 `hook`，其余才看函数体调了什么。"""
     facts = recipe_source.scan_source(src)
     body_calls = defaultdict(list)
     for call in facts.calls:
@@ -184,7 +174,7 @@ def counts(src: str) -> dict[str, int]:
 def counts_for(path: str) -> dict[str, int]:
     """一份机型脚本（`.py` 或 catalog `.toml`）的本机函数计数，口径同 `audit()`。
 
-    `.toml` 的助手在同目录同名的 `.py` 例外里；段 `code=` 指向的函数等同旧 `@step` 段体，不计入。
+    `.toml` 的助手在同目录同名的 `.py` 例外里；段 `code=` 指向的函数是那一段的实现，不算本机助手。
     没有例外文件就是 0 个本机函数（不是「读不到」）。"""
     if not str(path).endswith(".toml"):
         with open(path, encoding="utf-8") as handle:
@@ -205,7 +195,7 @@ def counts_for(path: str) -> dict[str, int]:
 
 
 def _place(script: str) -> tuple[str, str]:
-    """`xiaomi/M154FF/recipe.py` → (家族, 型号)。路径第一段就是家族（`recipes/<家族>/<型号>`），认不出时留空。"""
+    """`xiaomi/M154FF/M154FF.toml` → (家族, 型号)。路径第一段就是家族（`recipes/<家族>/<型号>`），认不出时留空。"""
     parts = script.split("/")
     family, model = parts[0], parts[1] if len(parts) > 1 else parts[0]
     return FAMILY.get(family.lower(), ""), model
@@ -224,7 +214,7 @@ def audit(recipes_dir: str) -> Report:
             import tomllib
             with open(path, "rb") as handle:
                 data = tomllib.load(handle)
-            # 段 `code=` 指向的函数等同旧 `@step` 段体，不是本机助手，不计入（与原口径一致）。
+            # 段 `code=` 指向的函数是那一段的实现，不是本机助手，不计入。
             seg_codes = {seg["code"] for seg in data.get("segment", []) if "code" in seg}
             path = path[:-len(".toml")] + ".py"
             if not os.path.isfile(path):

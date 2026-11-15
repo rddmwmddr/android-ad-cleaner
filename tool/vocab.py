@@ -96,7 +96,7 @@ FALLBACK = {
     ("oppo", "功能管理"): "下拉搜索",
     ("oppo", "消息管理"): "下拉搜索",
     ("oppo", "应用建议"): "小布建议",        # 小布建议 → 其他 → 应用建议
-    # PMX110 的无前缀标签，看过所在的 @step。「个性化管理」「隐私」在多个段里都用，归不准，留在未归类
+    # PMX110 的无前缀标签，看过所在的段。「个性化管理」「隐私」在多个段里都用，归不准，留在未归类
     ("oppo", "广告管理"): "浏览器",
     ("oppo", "个性化推荐"): "软件商店",
     ("oppo", "服务管理"): "软件商店",
@@ -135,7 +135,7 @@ class Word:
     family: str
     group: str | None           # None：页面标签归不到分组
     page: str
-    script: str                 # recipes/ 下的相对路径，比如 xiaomi/M154FF/recipe.py
+    script: str                 # recipes/ 下的相对路径，比如 xiaomi/M154FF/M154FF.toml
     line: int
     injected: bool = False      # 出处是调用点、词住在注入段体里（#1209）
 
