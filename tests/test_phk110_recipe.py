@@ -131,5 +131,32 @@ class RecipeSafetyTests(unittest.TestCase):
         self.assertIn("开屏广告权限提醒", calls[0]["keep"])
 
 
+class AdTrackingPagedTests(unittest.TestCase):
+    """`ad_tracking_close_paged`（#1363）：等列表真正加载再回页顶整页关，加载不出来不空跑。"""
+
+    def test_list_that_never_loads_is_not_reported_completed(self):
+        phone = make_phone()
+        phone.switches = lambda root=None: []
+        top, off = [], []
+        phone.top = lambda *args, **kwargs: top.append((args, kwargs))
+        phone.off = lambda **kwargs: off.append(kwargs)
+        function = load(phone)["ad_tracking_close_paged"]
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertFalse(function())
+        self.assertIn("列表未加载", out.getvalue())
+        self.assertEqual((top, off), ([], []))
+
+    def test_loaded_list_starts_from_the_top_of_forty_screens(self):
+        phone = make_phone()
+        phone.switches = lambda root=None: [("广告", True, (0, 0))]
+        top, off = [], []
+        phone.top = lambda *args, **kwargs: top.append((args, kwargs))
+        phone.off = lambda **kwargs: off.append(kwargs) or 1
+        function = load(phone)["ad_tracking_close_paged"]
+        self.assertTrue(function())
+        self.assertEqual(top, [((), {"n": 16})])
+        self.assertEqual(off, [{"page": "广告跟踪", "max_screens": 40}])
+
+
 if __name__ == "__main__":
     unittest.main()

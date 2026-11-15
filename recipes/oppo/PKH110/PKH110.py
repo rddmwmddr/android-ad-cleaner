@@ -1,6 +1,6 @@
 # OPPO Find N5（PKH110，ColorOS 17.0.0.103）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
 # 共享库的 tap_page / close_titles / off_exact_paged_optional 与 require / skip 由装载器注入执行作用域。
-# 段体的条件分支、逐项精确标题与等待循环留下，逐字保留原实现；线性的两段已转成数据。
+# 广告跟踪已转成数据；条件分支、逐项精确标题与等待循环的段仍走 code= 例外函数。
 import time
 import recipe_nav as nav
 import recipe_strategies as strategies
@@ -29,33 +29,6 @@ def guard(p, rt):
     build = p.d.shell("getprop ro.build.display.id").output.strip()
     if model not in MODELS or not build.startswith(BUILD):
         rt.skip("型号或系统版本不同，跳过；请重新核对页面")
-
-
-def step_ad_tracking(p, rt):
-    # ColorOS 17：「隐私」已并入「隐私与安全」。设置搜索能搜到「设备标识与广告」但点搜索结果不跳转，
-    # 因此走面板路径；该页 Activity 为 OplusSettingsActivity$DevicesIdentifySettingsActivity。
-    rt.skip_in_safe_mode()
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
-    time.sleep(1.5)
-    if not p.tap("隐私与安全", scrolls=3):
-        print("  ✗ 没找到「隐私与安全」")
-        return False
-    time.sleep(1.5)
-    if not nav.tap_page(p, rt, "设备标识与广告", "DevicesIdentifySettingsActivity", "设备标识与广告"):
-        return False
-    if not nav.tap_page(p, rt, "广告跟踪", "OAIDActivity", "广告跟踪"):
-        return False
-    # 等应用列表真正加载，不能把只有标题的空白加载页视为完成。
-    for _ in range(30):
-        if p.switches():
-            break
-        time.sleep(0.2)
-    if not p.switches():
-        print("  ✗ 广告跟踪列表未加载")
-        return False
-    p.top(n=16)
-    p.off(page="广告跟踪", max_screens=40)
-    return True
 
 
 def step_browser_ads(p, rt):
