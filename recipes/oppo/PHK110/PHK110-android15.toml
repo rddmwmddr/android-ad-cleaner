@@ -66,4 +66,5 @@ ops = [
 
 [[segment]]
 name = "浏览器首页"
+# 裁决：「坐标算法」+ 台账。按 RadioButton 的 bounds 点中心，并把改动记进 `p.changed`
 code = "step_browser_home"

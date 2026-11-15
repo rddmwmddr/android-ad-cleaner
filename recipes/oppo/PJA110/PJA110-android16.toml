@@ -16,6 +16,7 @@ SETTINGS_REFUSED = ["Error", "Exception", "Permission Denial"]
 
 [[segment]]
 name = "下拉搜索"
+# 裁决：「坐标算法」。按 `texts()` 里搜索首页底部「设置」的坐标点
 code = "step_search"
 
 [[segment]]
@@ -29,6 +30,7 @@ ops = [
 
 [[segment]]
 name = "商店推广位"
+# 裁决：「按读到的开关收窄名单」。读回服务管理这一页，只关名单里真有的那些，缺的逐条打印
 code = "step_store_promotions"
 
 [[segment]]

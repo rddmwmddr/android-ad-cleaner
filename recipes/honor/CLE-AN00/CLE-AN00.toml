@@ -54,6 +54,7 @@ ops = [
 
 [[segment]]
 name = "负一屏"
+# 裁决：「循环」。右滑最多三次直到读到「头像」，读不到按跳过收尾
 code = "step_negative"
 
 [[segment]]
@@ -143,6 +144,7 @@ ops = [
 
 [[segment]]
 name = "音乐"
+# 裁决：「循环」。先查播放状态，打开后十轮里反复静音，`finally` 再静音一次
 code = "step_music"
 
 [[segment]]
@@ -168,4 +170,5 @@ ops = [
 
 [[segment]]
 name = "魔法画报"
+# 裁决：「坐标算法」。从 `texts()` 里取「魔法画报」那一行的坐标点中心
 code = "step_magazine"

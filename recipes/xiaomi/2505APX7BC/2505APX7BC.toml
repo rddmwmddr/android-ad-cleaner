@@ -154,4 +154,5 @@ ops = [{ kind = "lib", name = "negative_screen" }]
 
 [[segment]]
 name = "天气和日历"
+# 裁决：「坐标算法」。天气的设置藏在「更多设置」弹出的 PopupWindow 菜单里，要靠 `popup_row` 读到的坐标点；落点核对又要 `sig` / `settle` / `focus` 三样一起判
 code = "step_weather_calendar"

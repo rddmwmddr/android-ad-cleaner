@@ -17,6 +17,7 @@ ops = [
 
 [[segment]]
 name = "全局搜索"
+# 裁决：「循环」+「按读到的状态收窄」。三组（入口, 开关）逐个进，单页异常吞掉继续
 code = "step_global_search"
 
 [[segment]]

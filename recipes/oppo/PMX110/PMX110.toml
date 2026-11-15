@@ -20,6 +20,7 @@ BROWSER_FLOW = "prefs_start"
 
 [[segment]]
 name = "广告跟踪"
+# 裁决：「多层嵌套」。菜单「全部关闭」+ `menu_state` 状态机 + 收尾恢复「显示系统应用」
 code = "step_ad_tracking"
 
 [[segment]]
