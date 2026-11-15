@@ -1,11 +1,13 @@
 """规则注册表的四条不变式（#842、#845）：`source` 指得到真实出处、`check` 与 `status` 配得上且解析得到真实守卫、
 正文锚点与注册表条目双向一致、锚点落在 `source` 点名的那一小节里。四条各是一个用例，
 单条不变式失败不影响另外三条；注册表整体读不出（TOML 语法或字段表）时四条一并报，消息带条目标识。
+最后一个用例是另一把锁（#1303）：没有守卫的规则条数只许降。
 """
 import ast
 import re
 import tomllib
 import unittest
+from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +23,11 @@ ID = re.compile(r"^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$")
 DOMAINS = {"dev", "doc", "domain"}
 STATUSES = {"enforced", "manual", "advisory", "dead", "code"}
 UNGUARDED = {"manual", "advisory", "dead"}
+# 没有守卫的规则条数上限，只许降（#1303）。口径是 UNGUARDED，含 dead：dead 是待删的存量，
+# 仍是一笔只能靠人记着的债，漏掉它就能靠「把一条 manual 标成 dead」白换一个名额。
+# 涨一个必须在这里改数字：那是一次公开的「我又欠了一条只能靠人记着的规则」，评审要看见。
+# 守卫化一条（status 改 enforced / code）是还债，改完把这里的数字一起下调。
+PROSE_ONLY_BOUND = 71          # manual 59 + advisory 12，dead 0，注册表共 148 条
 REQUIRED = ("id", "source", "check", "status", "why", "expires_if")
 OPTIONAL = ("since",)
 
@@ -294,6 +301,19 @@ class RulesRegistryTests(unittest.TestCase):
                         f"{row['id']}: 锚点在 {name}:{lineno}，那一行属于「{owners.get(lineno)}」，"
                         f"source 却写「{heading}」")
         self.assertEqual(problems, [], "锚点要落在 source 点名的那一小节里：\n" + "\n".join(problems))
+
+    def test_prose_only_rule_count_only_shrinks(self):
+        rows = self.rows()
+        unguarded = [row for row in rows if row["status"] in UNGUARDED]
+        counts = Counter(row["status"] for row in unguarded)
+        self.assertLessEqual(
+            len(unguarded), PROSE_ONLY_BOUND,
+            f"没有守卫的规则 {len(unguarded)} 条，上限 {PROSE_ONLY_BOUND}"
+            f"（manual {counts['manual']} + advisory {counts['advisory']}"
+            f" + dead {counts['dead']}）。"
+            "新增一条 manual / advisory / dead 要先还一条债：把一条旧的守卫化"
+            "（status 改 enforced / code，check 指到真实守卫）或删掉一条旧的。"
+            "两样都不做就动 PROSE_ONLY_BOUND：那是一次公开的记录，评审要看见。")
 
 
 if __name__ == "__main__":
