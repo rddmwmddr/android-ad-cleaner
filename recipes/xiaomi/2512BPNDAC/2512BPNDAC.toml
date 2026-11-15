@@ -23,6 +23,7 @@ MENU_STYLE = "ids"
 
 [[segment]]
 name = "系统广告"
+# 裁决：缺能力。两条设置搜索各自记失败、收尾合并成一条报错，要跨 op 的累加状态
 code = "step_system_ads"
 
 [[segment]]

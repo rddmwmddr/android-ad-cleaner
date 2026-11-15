@@ -21,6 +21,7 @@ BROWSER_FLOW = "prefs_shell"
 
 [[segment]]
 name = "广告跟踪"
+# 裁决：「按读到的开关收窄名单」。读回 60 屏开关，整表关再回读核对
 code = "step_ad_tracking"
 
 [[segment]]
@@ -63,6 +64,7 @@ ops = [
 
 [[segment]]
 name = "主题商店"
+# 裁决：缺能力。`close_named_plain(..., reopen=回调)` 把函数当实参传
 code = "step_theme"
 
 [[segment]]

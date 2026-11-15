@@ -19,11 +19,36 @@ ops = [
 
 [[segment]]
 name = "负一屏"
+# 裁决：「坐标算法」。按 content-desc 含「头像」的节点 bounds 点中心
 code = "step_negative_screen"
 
 [[segment]]
 name = "下拉搜索"
-code = "step_search"
+ops = [
+  { kind = "if_lib", name = "search_settings", else_ops = [
+    { kind = "print", text = "  · 跳过：没有认出全局搜索设置页（入口不可用或被系统限制）" },
+    { kind = "return" },
+  ] },
+  { kind = "if_tap", text = "搜索范围", exact = true, ops = [
+    # 安全模式下只关推荐位：ColorOS 17 上榜单 / 小说 / 购物是内容源，关掉会搜不到东西。
+    { kind = "off", only_code = "search_sources", page = "下拉搜索·搜索范围" },
+    { kind = "back" },
+  ] },
+  { kind = "if_tap", text = "功能管理", exact = true, ops = [
+    { kind = "off", only = ["搜索框提示词"], page = "下拉搜索·功能管理" },
+    { kind = "back" },
+  ] },
+  { kind = "miss_reset" },
+  { kind = "if_tap", text = "账号与隐私", exact = true, else_ops = [
+    # ColorOS 17：「账号与隐私」只是分组标题，直接找「隐私」。
+    { kind = "miss_reset" },
+  ] },
+  { kind = "if_tap", text = "隐私", exact = true, ops = [
+    { kind = "off", only = ["个性化推荐"], page = "下拉搜索·隐私" },
+    { kind = "back", n = 2 },
+  ] },
+  { kind = "back", n = 2 },
+]
 
 [[segment]]
 name = "软件商店"
@@ -106,8 +131,10 @@ ops = [
 
 [[segment]]
 name = "游戏中心"
+# 裁决：缺能力。`read_on_page` 先等开关画出来再读，读数还要交给 `require_switches`
 code = "step_game_center"
 
 [[segment]]
 name = "小布建议"
+# 裁决：缺能力。`open_switch_page` 的返回值决定走哪一支
 code = "step_assistant_advice"

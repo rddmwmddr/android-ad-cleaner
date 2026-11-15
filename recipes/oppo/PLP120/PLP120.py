@@ -1,8 +1,8 @@
 # OPPO Find N6（PLP120，ColorOS 16 / 17）的本机例外函数（catalog 的 `code=`，影随同名 `.toml`）。
 # 共享库的 search_settings / enter_settings / game_settings_direct / game_settings_via_mine /
 # open_switch_page / page / read_on_page 与 require_switches 由装载器注入执行作用域。
-# 只剩四段在这里：负一屏（手势循环）、下拉搜索（运行期名单）、游戏中心（运行期 direct 分支）、
-# 小布建议（两次入口状态机）。其余五段（含浏览器）已落数据（见 `.toml`）。
+# 只剩四段在这里：负一屏（手势循环）、游戏中心（运行期 direct 分支）、小布建议（两次入口
+# 状态机），以及下拉搜索要用的 `search_sources` 名单。其余六段已落数据（见 `.toml`）。
 import time
 
 import adb_link
@@ -47,24 +47,6 @@ def search_sources(p, rt):
         return ["个性化推荐", "精选资讯"]
     return ["榜单", "小说", "购物", "个性化推荐", "精选资讯"]
 
-
-def step_search(p, rt):
-    if not nav.search_settings(p, rt):
-        print("  · 跳过：没有认出全局搜索设置页（入口不可用或被系统限制）", flush=True)
-        return
-    if p.tap("搜索范围", exact=True):
-        p.off(only=search_sources(p, rt), page="下拉搜索·搜索范围")
-        p.back()
-    if p.tap("功能管理", exact=True):
-        p.off(only=["搜索框提示词"], page="下拉搜索·功能管理")
-        p.back()
-    p.miss = 0
-    if not p.tap("账号与隐私", exact=True):
-        p.miss = 0                     # ColorOS 17：「账号与隐私」只是分组标题，直接找「隐私」
-    if p.tap("隐私", exact=True):
-        p.off(only=["个性化推荐"], page="下拉搜索·隐私")
-        p.back(2)
-    p.back(2)
 
 
 def step_game_center(p, rt):

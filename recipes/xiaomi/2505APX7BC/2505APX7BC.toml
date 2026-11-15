@@ -154,4 +154,5 @@ ops = [{ kind = "lib", name = "negative_screen" }]
 
 [[segment]]
 name = "天气和日历"
+# 裁决：待升格。与 23049RAD8C 同形（天气「更多设置 → 菜单 → 设置」+ 日历直达），归小米家族库
 code = "step_weather_calendar"

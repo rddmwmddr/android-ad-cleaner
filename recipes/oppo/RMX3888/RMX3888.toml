@@ -105,6 +105,7 @@ ops = [
 
 [[segment]]
 name = "主题"
+# 裁决：缺能力。`except RuntimeError` 里按「无法打开」文本决定跳过，`start_or_skip` 只认落点
 code = "step_theme"
 
 [[segment]]

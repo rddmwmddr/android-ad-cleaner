@@ -179,6 +179,7 @@ ops = [
 
 [[segment]]
 name = "i管家"
+# 裁决：「循环」。三轮点「设置」并确认落到 `MainSettings`
 code = "step_i_manager"
 
 [[segment]]

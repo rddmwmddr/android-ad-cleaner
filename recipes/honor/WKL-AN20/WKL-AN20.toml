@@ -15,6 +15,7 @@ BROWSER_FLOW = "honor_plain"
 
 [[segment]]
 name = "广告跟踪"
+# 裁决：缺能力。要用 `settle_page`（落点稳定后才用坐标），它在 HELPERS 里、数据不许点名
 code = "step_ad_tracking"
 
 [[segment]]
@@ -50,10 +51,12 @@ ops = [
 
 [[segment]]
 name = "浏览器首页"
+# 裁决：「坐标算法」+ 回读。按 RadioButton 的 bounds 点中心，再读 `checked` 确认
 code = "step_browser_home"
 
 [[segment]]
 name = "浏览器推荐"
+# 裁决：缺能力。`browser_settings` 的返回值要当后面几步的实参，数据传不下去
 code = "step_browser_recs"
 
 [[segment]]
@@ -66,14 +69,17 @@ ops = [
 
 [[segment]]
 name = "搜索"
+# 裁决：「坐标算法」+ 缺能力。桌面下滑手势进搜索，再靠 `settle_page` 等落点稳定
 code = "step_search"
 
 [[segment]]
 name = "负一屏"
+# 裁决：「循环」+ 缺能力。右滑最多三次，进面板后要 `settle_page` 等落点稳定
 code = "step_negative"
 
 [[segment]]
 name = "阅读"
+# 裁决：缺能力。要 `settle_page`
 code = "step_reader"
 
 [[segment]]
@@ -89,8 +95,10 @@ ops = [
 
 [[segment]]
 name = "魔法画报"
+# 裁决：缺能力。要 `settle_page`
 code = "step_magazine"
 
 [[segment]]
 name = "音乐"
+# 裁决：缺能力。按 `rt.only` 的段过滤分岔（只有单跑这一段才做得成），数据没有这个 op
 code = "step_music"

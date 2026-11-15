@@ -16,6 +16,7 @@ BROWSER_FLOW = "toolbar"
 
 [[segment]]
 name = "系统广告"
+# 裁决：待升格。系统广告两路兜底（设置搜索不通退菜单），与 M154FF / 23049RAD8C 同类
 code = "step_system_ads"
 
 [[segment]]

@@ -84,6 +84,7 @@ ops = [
 
 [[segment]]
 name = "主题商店"
+# 裁决：缺能力。`close_named(..., reopen=回调)` 把函数当实参传
 code = "step_theme"
 
 [[segment]]

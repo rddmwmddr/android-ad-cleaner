@@ -51,6 +51,7 @@ ops = [
 
 [[segment]]
 name = "浏览器"
+# 裁决：缺能力。一处断言读两次 `p.focus()`（包名 + 页面名），数据里一条 op 只读一次
 code = "step_browser"
 
 [[segment]]
