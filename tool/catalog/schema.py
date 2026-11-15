@@ -44,6 +44,8 @@ OP_KEYS = {
     "note_miss": frozenset({"kind", "text"}),
     "miss_reset": frozenset({"kind"}),
     "tap": frozenset({"kind", "text", "exact", "scrolls", "kwargs"}),
+    "tap_id": frozenset({"kind", "resource_id", "text", "miss_print"}),
+    "gesture": frozenset({"kind", "start", "end", "ms"}),
     "go": frozenset({"kind", "text", "expect"}),
     "dismiss": frozenset({"kind"}),
     "skip_in_safe_mode": frozenset({"kind"}),
@@ -180,6 +182,11 @@ def _validate_op(op: object, where: str) -> None:
         _require(op, "text", where)
     elif kind == "tap":
         _require(op, "text", where)
+    elif kind == "tap_id":
+        if "resource_id" not in op and "text" not in op:
+            raise SchemaError(f"{where} 的 tap_id 至少要有 resource_id 或 text")
+    elif kind == "gesture":
+        _validate_gesture(op, where)
     elif kind == "go":
         _require(op, "text", where)
         _require(op, "expect", where)
@@ -263,6 +270,22 @@ def _validate_off_required(op: Mapping, where: str) -> None:
     overlap = set(only) & set(op.get("keep", []))
     if overlap:
         raise SchemaError(f"{where} 的 off_required 里 only 与 keep 重叠：{sorted(overlap)}")
+
+
+def _validate_gesture(op: Mapping, where: str) -> None:
+    """`gesture` 的两端各是 `[x, y]`，按屏宽 / 屏高的比例给；`ms` 是 swipe 的毫秒数。
+
+    只收比例：按读到的控件位置现算的坐标属 docs/04 的「坐标算法」，留在例外 `.py` 里。"""
+    for key in ("start", "end"):
+        _require(op, key, where)
+        point = op[key]
+        if (not isinstance(point, list) or len(point) != 2
+                or not all(isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v <= 1
+                           for v in point)):
+            raise SchemaError(f"{where} 的 {key} 要是两个 0–1 的比例 [x, y]")
+    _require(op, "ms", where)
+    if not isinstance(op["ms"], int) or isinstance(op["ms"], bool) or op["ms"] <= 0:
+        raise SchemaError(f"{where} 的 ms 要是正的整数毫秒")
 
 
 def _validate_calls(op: Mapping, where: str, allowed: tuple, required: str | tuple) -> None:

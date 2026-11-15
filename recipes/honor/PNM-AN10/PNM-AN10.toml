@@ -1,5 +1,5 @@
 # 荣耀 PNM-AN10（MagicOS 10）的页面树（catalog，#1262）。2026-10-23 实测通过。
-# 线性段是数据；过程化的段（坐标、选择器、dumpsys、条件分支）走 code= 例外函数。
+# 线性段是数据；过程化的段（坐标、dumpsys、条件分支）走 code= 例外函数。
 model = "PNM-AN10"
 models = ["PNM-AN10"]
 build = ""
@@ -70,7 +70,26 @@ ops = [
 
 [[segment]]
 name = "音乐"
-code = "step_music"
+ops = [
+  {kind = "app_stop", pkg = "com.hihonor.cloudmusic"},
+  {kind = "start", pkg = "com.hihonor.cloudmusic"},
+  {kind = "sleep", seconds = 1},
+  {kind = "dismiss"},
+  {kind = "tap_id", text = "我的"},
+  {kind = "sleep", seconds = 1},
+  {kind = "dismiss"},
+  {kind = "tap_id", resource_id = "com.hihonor.cloudmusic:id/ic_setting"},
+  {kind = "sleep", seconds = 1.2},
+  {kind = "if_lib", name = "open_entry", args = ["更多设置"], ops = [
+    {kind = "if_lib", name = "open_entry", args = ["消息和隐私设置"], kwargs = {scrolls = 6}, ops = [
+      {kind = "off", only = ["朋友页显示推荐动态"], page = "音乐·消息和隐私"},
+      {kind = "if_lib", name = "open_entry", args = ["第三方推送服务开关"], kwargs = {scrolls = 6}, ops = [
+        {kind = "off", page = "音乐·第三方推送（活动、中奖信息）", page_wide = true},
+        {kind = "back", n = 3},
+      ], else_ops = [{kind = "return"}]},
+    ], else_ops = [{kind = "return"}]},
+  ], else_ops = [{kind = "return"}]},
+]
 
 [[segment]]
 name = "阅读"

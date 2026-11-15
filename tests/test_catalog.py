@@ -5,11 +5,14 @@
 机制），以及数据经校验器后的接受 / 报错。不看解释器内部函数，也不看数据文件内部结构。
 """
 import ast
+import contextlib
+import io
 import sys
 import tempfile
 import tomllib
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -156,6 +159,17 @@ class ValidatorTests(unittest.TestCase):
     def test_rejects_close_listed_with_an_unknown_key(self):
         op = {"kind": "close_listed", "names": ["a"], "page": "p", "miss_print": "y", "surprise": 1}
         self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
+
+    def test_rejects_tap_id_without_a_selector(self):
+        self._bad({"segment": [{"name": "a", "ops": [{"kind": "tap_id"}]}]}, "resource_id 或 text")
+
+    def test_rejects_gesture_with_a_point_out_of_range(self):
+        op = {"kind": "gesture", "start": [0.5, 1.2], "end": [0.5, 0.7], "ms": 300}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "0–1 的比例")
+
+    def test_rejects_gesture_without_ms(self):
+        op = {"kind": "gesture", "start": [0.5, 0.3], "end": [0.5, 0.7]}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 ms")
 
     def test_accepts_the_shipped_data(self):
         import tomllib
@@ -526,6 +540,120 @@ class IfTapOpTests(unittest.TestCase):
 
     def test_else_branch_runs_when_the_tap_misses(self):
         self.assertEqual(self._run(False)[1], [1])
+
+
+class TapIdOpTests(unittest.TestCase):
+    """`tap_id` op（#1337）：按 u2 选择器（资源 id / 文字）直点一个控件，文字点不准的入口走它。
+
+    读屏库在页面上找不到控件时抛 not-found：带 `miss_print` 的段打印一句就停（这一段算完成），
+    不带就照原样上抛（这一段按未完成收场）。"""
+
+    class Reader:
+        """只够这一段用的读屏替身：选择器交给 `select`，锁屏检查用的 shell 一律空输出。"""
+
+        def __init__(self, select):
+            self._select = select
+
+        def __call__(self, **selectors):
+            return self._select(selectors)
+
+        def shell(self, command, timeout=None):
+            return SimpleNamespace(output="", exit_code=0)
+
+    def _tap(self, toml):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            seen, clicks = [], []
+
+            class Target:
+                def click(self):
+                    clicks.append(True)
+
+            phone.d = self.Reader(lambda selectors: seen.append(selectors) or Target())
+            recipe.run()
+        return seen, clicks, recipe.rt.results
+
+    def test_resource_id_and_text_are_both_handed_to_the_selector(self):
+        seen, clicks, results = self._tap(
+            '[[segment]]\nname="a"\nops=[{kind="tap_id",'
+            ' resource_id="com.x:id/gear", text="设置"}]\n')
+        self.assertEqual(seen, [{"resourceId": "com.x:id/gear", "text": "设置"}])
+        self.assertEqual(clicks, [True])
+        self.assertEqual(results, [("a", "完成")])
+
+    def test_a_text_only_selector_still_taps(self):
+        seen, clicks, _results = self._tap(
+            '[[segment]]\nname="a"\nops=[{kind="tap_id", text="我的"}]\n')
+        self.assertEqual(seen, [{"text": "我的"}])
+        self.assertEqual(clicks, [True])
+
+    def test_a_missing_node_fails_the_segment_without_miss_print(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="tap_id", resource_id="com.x:id/none"}]\n')
+            with contextlib.redirect_stdout(io.StringIO()):
+                recipe.run()
+        self.assertEqual(recipe.rt.results, [("a", "未完成")])
+
+    def test_miss_print_only_swallows_the_not_found_case(self):
+        """只把「控件不在」收成停段：别的失败（读屏掉了、点按被拒）照旧上抛，这一段记未完成。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="tap_id", resource_id="com.x:id/x",'
+                     ' miss_print="  ✗ 没找到"}]\n')
+
+            class Target:
+                def click(self):
+                    raise RuntimeError("读屏失败了")
+
+            phone.d = self.Reader(lambda _selectors: Target())
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                recipe.run()
+        self.assertEqual(recipe.rt.results, [("a", "未完成")])
+        self.assertNotIn("没找到", out.getvalue())
+
+    def test_miss_print_ends_the_segment_without_touching_the_rest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="tap_id", resource_id="com.x:id/none",'
+                     ' miss_print="  ✗ 没找到右上角的更多按钮"}, {kind="back", n=2}]\n')
+            backs = []
+            phone.back = lambda n=1: backs.append(n)
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                recipe.run()
+        self.assertEqual(backs, [], "点不到之后剩下的 op 不该再跑")
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+        self.assertIn("没找到右上角的更多按钮", out.getvalue())
+
+
+class GestureOpTests(unittest.TestCase):
+    """`gesture` op（#1337）：两端按屏宽 / 屏高的比例现算，下发一条 `input swipe`。"""
+
+    def _commands(self, toml, size=(1080, 2340)):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            phone.W, phone.H = size
+            shells = []
+
+            def shell(command):
+                shells.append(command)
+                return SimpleNamespace(output="", exit_code=0)
+
+            phone.d.shell = shell
+            recipe.run()
+        return [command for command in shells if command.startswith("input swipe")]
+
+    def test_a_vertical_swipe_takes_its_y_from_the_height(self):
+        self.assertEqual(
+            self._commands('[[segment]]\nname="a"\nops=[{kind="gesture",'
+                           ' start=[0.5, 0.3], end=[0.5, 0.7], ms=300}]\n'),
+            ["input swipe 540 702 540 1638 300"])
+
+    def test_a_horizontal_swipe_takes_its_x_from_the_width(self):
+        self.assertEqual(
+            self._commands('[[segment]]\nname="a"\nops=[{kind="gesture",'
+                           ' start=[0.25, 0.5], end=[0.75, 0.5], ms=250}]\n'),
+            ["input swipe 270 1170 810 1170 250"])
 
 
 class ReturnOutcomeTests(unittest.TestCase):

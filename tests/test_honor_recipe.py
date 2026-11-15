@@ -170,7 +170,7 @@ class HonorThemeTests(unittest.TestCase):
 class HonorMusicTests(unittest.TestCase):
     def music_phone(self):
         p = phone()
-        p.d = MagicMock()          # resourceId(...)[2].click() 要能下标
+        p.d = MagicMock()          # `tap_id` 走 p.d(**选择器).click()
         return p
 
     def test_music_entries_are_opened_with_page_change_confirmation(self):

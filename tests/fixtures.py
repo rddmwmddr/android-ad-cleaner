@@ -260,7 +260,11 @@ class Device:
         self.closed = True
 
     def __call__(self, **selectors):
-        return SimpleNamespace(selector=None)
+        """空页面上任何选择器都找不到：点按抛读屏库的 not-found，与真机走同一条判断。"""
+        def click(*args, **kwargs):
+            from fast import u2
+            raise u2.exceptions.UiObjectNotFoundError({"code": -32002, "data": str(selectors)})
+        return SimpleNamespace(selector=None, click=click)
 
 
 def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
