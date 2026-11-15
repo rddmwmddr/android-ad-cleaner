@@ -53,7 +53,7 @@ from stdio import use_utf8_console  # noqa: E402  出口取当前副本的，不
 
 use_utf8_console()
 
-# 43 份 `recipe.py` 加 4 份变体、两个场景实测约 1.3 万条调用；低于这个数说明记录或装载退化了
+# 43 份 `<型号>.toml` 加 4 份变体、两个场景实测约 1.3 万条调用；低于这个数说明记录或装载退化了
 MIN_CALLS = 4000
 SCENARIOS = ("present", "absent")
 SNAPSHOTS = TESTS / "snapshots" / "recipe_calls"

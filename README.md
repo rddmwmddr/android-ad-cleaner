@@ -274,7 +274,7 @@ tool/
   explore.py         新机型探路（实验）
 gui/                 桌面客户端（pywebview 界面 + PyInstaller 打包）
 android/             手机版 APK（引擎与桌面版同一份，界面是 Compose）
-recipes/<家族>/<型号>/recipe.py   各机型的机型脚本
+recipes/<家族>/<型号>/<型号>.toml   各机型的机型脚本
 images/              文档配图
 tests/               不连接手机的引擎回归测试
 ```
