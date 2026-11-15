@@ -656,6 +656,31 @@ class GestureOpTests(unittest.TestCase):
             ["input swipe 270 1170 810 1170 250"])
 
 
+class PrintOpTests(unittest.TestCase):
+    """`print` op（#1337）：`focus = true` 把当前前台窗口接在文案后面，替掉段体里的 f-string。"""
+
+    def _run(self, toml, focus=""):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            reads = []
+            phone.focus = lambda *a, **k: reads.append(True) or focus
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                recipe.run()
+        return out.getvalue(), reads
+
+    def test_focus_appends_the_foreground_window(self):
+        out, reads = self._run(
+            '[[segment]]\nname="a"\nops=[{kind="print", text="  · 商店设置页 ", focus=true}]\n',
+            "com.bbk.appstore/.Settings")
+        self.assertIn("  · 商店设置页 com.bbk.appstore/.Settings", out)
+        self.assertEqual(len(reads), 1)
+
+    def test_a_plain_print_does_not_read_the_foreground(self):
+        out, reads = self._run('[[segment]]\nname="a"\nops=[{kind="print", text="  · 好了"}]\n')
+        self.assertIn("  · 好了", out)
+        self.assertEqual(reads, [])
+
+
 class ReturnOutcomeTests(unittest.TestCase):
     """段的结局（#1264）：`return` 带 `value` 时整段按它记，`return_lib` 按库调用的返回值记。
 

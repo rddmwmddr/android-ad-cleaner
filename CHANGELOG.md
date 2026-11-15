@@ -16,6 +16,7 @@
 - 词库与入口速查的两份库实现下扫合并成事实层的 `library_hits()`，生成物逐字不变（#1352）
 - `recipe_lib/__init__.py` 成为 140 个库实现名字的唯一 owner，三个 import 面退成兼容壳（#1344、ADR-0040）
 - 新增 `tap_id` / `gesture` 两条 op，PNM-AN10 音乐与 PJA110 下拉搜索转成数据，零差异（#1337）
+- `print` 加 `focus` 键，V2547A 商店 / 浏览器 / 阅图锁屏 / 天气四段转成数据，零差异（#1337）
 - `docs/09` 与 `verified.toml` 里的 V2547DA 旧脚本名、M154FF README 死链改到现行文件（#1339）
 - `ScreenLocked` 定义搬进 `phone/errors.py`，库层与运行时不再经 `fast` 取名字（#1335）
 - vivo V2547DA 适配说明改按主本 / 变体叙述，旧 `.py` 文件名与死链改到现行文件（#1336）

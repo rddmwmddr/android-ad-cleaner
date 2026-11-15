@@ -66,7 +66,7 @@ OP_KEYS = {
     "fail": frozenset({"kind", "text", "evidence"}),
     "scoped": frozenset({"kind", "systemui_text", "ops"}),
     "code": frozenset({"kind", "name", "args"}),
-    "print": frozenset({"kind", "text"}),
+    "print": frozenset({"kind", "text", "focus"}),
     "return": frozenset({"kind", "value"}),
     "return_lib": frozenset({"kind", "name", "args", "kwargs"}),
 }

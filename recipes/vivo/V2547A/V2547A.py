@@ -1,5 +1,5 @@
-# V2547A 的本机例外函数（catalog 的 `code=`，影随 `V2547A.toml`）。本机 8 段都是过程段
-# （goto / 循环 / confirm2 / resourceId 点击），逐字保留原实现；线性助手照留。
+# V2547A 的本机例外函数（catalog 的 `code=`，影随 `V2547A.toml`）。剩下四段是过程段
+# （坐标、循环、按行读屏），逐字保留原实现；商店 / 浏览器 / 阅图锁屏 / 天气四段已是数据。
 # vivo X300 Ultra（V2547A，OriginOS 7，Android 17）机型脚本；2026-10-25 在真机逐页实测，8 段整段跑通，重跑 126 秒。
 import recipe_nav as nav
 import recipe_strategies as strategies
@@ -83,60 +83,6 @@ def step_global_search(p, rt):
     p.back(1)
 
 
-def step_store(p, rt):
-    p.start("com.bbk.appstore", settle=1.0)
-    if not nav.tap_text(p, rt, "我的"):
-        print("  ✗ 没找到「我的」"); return
-    if not nav.tap_text(p, rt, "设置"):
-        print("  ✗ 「我的」页没找到设置"); return
-    print(f"  · 商店设置页 {p.focus()}")
-    if nav.goto(p, rt, "关于"):
-        if nav.goto(p, rt, "个性化推荐"):
-            strategies.off(p, rt, only=["个性化推荐"], page="商店·个性化推荐")
-            p.back(1); time.sleep(0.8)
-        p.top()
-        if nav.goto(p, rt, "服务管理", scrolls=2):
-            # 这一页用白名单：「我的服务」「空间清理」要留着
-            strategies.off(p, rt, only=["签到有礼", "顶部轮播图", "顶部栏目", "开屏", "摇一摇", "悬浮窗", "限时推广"],
-                keep=["我的服务", "空间清理"], page="商店·服务管理")
-            p.back(1); time.sleep(0.8)
-        p.back(1)
-    p.back(3)
-
-
-def step_browser(p, rt):
-    p.start("com.vivo.browser", settle=1.5)
-    if not nav.browser_settings(p, rt):
-        print("  ✗ 没进到浏览器设置"); return
-    print(f"  · 浏览器设置页 {p.focus()}")
-    if nav.goto(p, rt, "首页设置"):
-        if p.tap("极简首页", exact=True, scrolls=0):    # 三选一的卡片，不能点行中间
-            strategies.confirm2(p, rt)
-            print("  · 首页切成极简首页")
-        p.back(1); time.sleep(0.6); p.top()
-    for name, words in (("网页浏览设置", ["网页下载相关推荐"]),
-                        ("更多设置", ["WiFi连接跳转新闻资讯"]),        # 在设置页中段
-                        ("隐私权限设置", ["个性化内容", "第三方应用来源个性化推荐", "个性化广告推荐"])):
-        p.top()                                   # 每次都从顶部开始翻，位置才可预期
-        if nav.goto(p, rt, name, scrolls=10):
-            strategies.off(p, rt, only=words, page=f"浏览器·{name}")
-            p.back(1); time.sleep(0.6)
-    p.back(3)
-
-
-def step_lock_screen(p, rt):
-    if not nav.search_setting(p, rt, "阅图锁屏"):
-        print("  ✗ 没进到阅图锁屏"); return
-    if "MagazineSettings" not in p.focus():        # 万一停在搜索结果页，再点一次结果
-        p.tap("阅图锁屏", exact=True, scrolls=4)
-        time.sleep(1.5)
-    print(f"  · 阅图锁屏页 {p.focus()}")
-    strategies.off(p, rt, only=["阅图锁屏", "锁屏横滑进入阅图"],
-        keep=["锁屏底部壁纸", "移动网络自动更新"], page="系统·阅图锁屏")
-    # 锁屏壁纸保持原样
-    p.back(2)
-
-
 def step_i_manager(p, rt):
     p.start("com.iqoo.secure", settle=2.0)
     time.sleep(1.2)                            # 首屏有体检动画，动画期间点设置会被吞
@@ -155,20 +101,3 @@ def step_i_manager(p, rt):
             p.back(1)
         p.back(1)
     p.back(2)
-
-
-def step_weather(p, rt):
-    p.start("com.vivo.weather", settle=1.2)
-    # 页面上也有个「更多」文字（展开按钮），右上角才是菜单，按 resourceId 点
-    try:
-        p.d(resourceId="com.vivo.weather:id/more_btn").click()
-    except Exception:
-        print("  ✗ 没找到天气右上角的更多按钮"); return
-    time.sleep(1.3)
-    if not nav.tap_text(p, rt, "设置"):
-        print("  ✗ 天气菜单里没找到设置"); return
-    print(f"  · 天气设置页 {p.focus()}")
-    strategies.off(p, rt, only=["天气服务"], keep=["气象预警", "异常天气", "地震预警"], page="天气·设置")
-    # 气象预警、异常天气、地震预警、提醒城市都保留
-    p.back(2)
-
