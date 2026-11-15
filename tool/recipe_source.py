@@ -727,7 +727,7 @@ def _walk_hits(current: Facts, caller: Facts, sources: Mapping[str, tuple[str, s
         if call_site is None:
             continue
         # 没有可回填的实参时传 None：空 mapping 在 `scan_source` 的缓存键里与 None 不是同一条，
-        # 「实现 × 脚本」的组合会凭空多出一份缓存条目（#1321 的缓存只在入参相同时命中）。
+        # 「实现 × 脚本」的组合会凭空多出一份缓存条目（沿用 #1321 的缓存口径）。
         impl = scan_source(source, _bindings(calls) or None, externals=caller.constants)
         yield ImplHit(name, module, impl, call_site)
         yield from _walk_hits(impl, caller, sources, seen | {name})
