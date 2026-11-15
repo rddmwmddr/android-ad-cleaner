@@ -23,7 +23,6 @@ CLUES = ROOT / "docs" / "清单" / "词条线索.md"
 
 # 解析不出的 only=，按脚本冻结。新脚本多了这种写法，先看能不能写成字面量或模块级常量，确实不能再改这里。
 UNRESOLVED_ONLY = {
-    'honor/CLE-AN00/CLE-AN00.toml': 1,
     'honor/WKL-AN20/WKL-AN20.toml': 1,
     'meizu/MEIZU 21 Pro/MEIZU 21 Pro.toml': 1,
     'oppo/PHK110/PHK110-android15.toml': 1,

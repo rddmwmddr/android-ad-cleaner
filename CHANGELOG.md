@@ -12,6 +12,7 @@
 - 一加 16 商店段的「消息管理」探测只翻前两屏，常态下省约 40 秒（#1281）
 
 ### 内部
+- 荣耀 CLE-AN00 五段与 PNM-AN10 主题转数据，三个浏览器助手升格家族库（#1370）
 - 荣耀 `search_more` 与 OPPO `ad_tracking_close_paged` 升格家族库，五段转数据（#1363）
 - 小米十一段「应用商店」转页面树，`require_tab` 加可选键 `settle`（#1364）
 - catalog 新增 `let` / `if_var` / `require_switches` 三条 op，三段转数据（#1373）
