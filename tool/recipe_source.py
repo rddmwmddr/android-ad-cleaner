@@ -97,7 +97,10 @@ class Facts:
     常量（单串与列表）——扫库实现时，调用方把 `constants` 交回 `scan_source(externals=…)`，
     实现里按名字取的值才读得出——以及导入的名字与归属模块（`{名字: 模块}`，含 `if TYPE_CHECKING:`
     块；`import X` 记成 `{X: X}`，`import X as Y` 记成 `{Y: X}`，消费方按它解析共享实现的归属）
-    与导入行号（`{名字: 行号}`，没有调用点可写出处时词库退到这一行，#1253）。"""
+    与导入行号（`{名字: 行号}`，没有调用点可写出处时词库退到这一行，#1253）。
+
+    `scan_source` 的返回值进程内按只读共享（#1321）：构造新对象用 `dataclasses.replace()`，不要原地改
+    字段——`constants` / `imports` / `import_lines` 是可变映射，改了会把缓存条目一起改脏。"""
     calls: tuple[Call, ...]
     defines: frozenset[str]
     dict_entries: tuple[DictEntry, ...] = ()
@@ -464,7 +467,30 @@ def scan_source(src: str, bindings: Mapping[int, Sequence[str]] | None = None,
 
     `externals` 是另一份源码（调用方）的模块级常量 `{名字: (Item, …)}`：段体搬进注入面之后，
     它依赖的字面量仍住在脚本里，实现里只有 `g["HOT"]` 这样的名字（沿用 #1149 的段体口径，#1209）。缺省不查，
-    行为与加这个参数之前逐字相同。"""
+    行为与加这个参数之前逐字相同。
+
+    同一份源码只解析一次：调用方在「实现 × 脚本」的组合上反复扫同一份源码（#1321），这里按
+    整个入参三元组记忆化，返回的 `Facts` 按只读共享（见 `Facts` 的说明）。两个映射都进缓存键，
+    所以键要同类可比较、值里的元素要可哈希（`str` 与 `Item` 本来就满足）；语法错不缓存，每次重新抛。"""
+    return _scan_cached(src, _freeze(bindings), _freeze(externals))
+
+
+def _freeze(values: Mapping[Any, Sequence[Any]] | None) -> tuple[Any, ...] | None:
+    """`bindings` / `externals` 是 dict，`lru_cache` 只认可哈希实参：先收成排好序的元组（#1321）。"""
+    if values is None:
+        return None
+    return tuple(sorted((key, tuple(items)) for key, items in values.items()))
+
+
+@functools.lru_cache(maxsize=None)
+def _scan_cached(src: str, bindings: tuple[Any, ...] | None,
+                 externals: tuple[Any, ...] | None) -> Facts:
+    return _scan_source(src, None if bindings is None else dict(bindings),
+                        None if externals is None else dict(externals))
+
+
+def _scan_source(src: str, bindings: Mapping[int, Sequence[str]] | None,
+                 externals: Mapping[str, Sequence[Item]] | None) -> Facts:
     tree = ast.parse(src)
     source = _Source(tree, bindings, externals)
     calls = []

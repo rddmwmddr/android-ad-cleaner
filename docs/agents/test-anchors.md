@@ -65,7 +65,7 @@
 | `test_recipe_variants.py` | 同一型号按系统版本选脚本变体、变体要进安装包，以及没有本型号脚本时参考脚本按录制版本在同族里挑。 |
 | `test_recipe_setting_checked.py` | 机型脚本必须消费 p.setting() 的返回值，不能空跑还记成功。 |
 | `test_recipe_nav.py` | 机型库的拆分守卫（例外 `.py` 的同名助手必须升格进 `recipe_lib`；`shared.py` 的实现必须被 ≥2 个家族使用），以及调用序列对拍驱动自己管基线 worktree。 |
-| `test_recipe_source.py` | 脚本事实层：实参按语法切分、形参回填与读不出态、Intent 三种包名写法、语法错直接抛，以及库实现表在进程内缓存。 |
+| `test_recipe_source.py` | 脚本事实层：实参按语法切分、形参回填与读不出态、Intent 三种包名写法、语法错直接抛，以及库实现表与源码扫描结果在进程内缓存。 |
 | `test_catalog.py` | catalog 内核：页面树数据经唯一装载入口跑出与旧脚本逐条相同的调用序列、装载期拒绝非法数据与写错的点名、only 两态与 page-wide 全关。 |
 | `test_backups.py` | 备份目录的命名、扫描与 <型号>-gui 兜底。 |
 | `test_captures.py` | 失败现场落盘：两处留现场写原文、没目录不写、归档名与体积报数。 |
