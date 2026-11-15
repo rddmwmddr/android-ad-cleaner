@@ -763,7 +763,7 @@ id = "domain.adr-number-from-directory"
 source = "docs/agents/domain.md#Numbering a new ADR"
 check = "none"
 status = "manual"
-why = "CLAUDE.md 的 ADR 列表会落后于目录，并行会话还会抢号：#447 按列表写了 0009，rebase 时发现 0009 已被占用，只能改成 0010 并重写所有引用。"
+why = "`docs/adr/README.md` 的索引要跑生成器才跟上目录，并行会话还会抢号：#447 按当时的列表写了 0009，rebase 时发现 0009 已被占用，只能改成 0010 并重写所有引用。"
 expires_if = "ADR 改由工具按合并顺序分配编号时删。"
 
 [[rule]]
