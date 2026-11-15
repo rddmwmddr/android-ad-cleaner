@@ -43,11 +43,11 @@ from .xiaomi import (
 )
 from .oppo import (
     ad_id_page as ad_id_page, ad_tracking_close_all as ad_tracking_close_all,
-    ad_tracking_close_paged as ad_tracking_close_paged,
-    assistant_advice_rows as assistant_advice_rows,
+    ad_tracking_close_paged as ad_tracking_close_paged, assistant_advice_rows as assistant_advice_rows,
     assistant_advice_search as assistant_advice_search, assistant_icon as assistant_icon,
     assistant_screen as assistant_screen, assistant_settings as assistant_settings,
-    at_assistant as at_assistant, browser_ads as browser_ads, browser_home as browser_home,
+    assistant_swipe_in as assistant_swipe_in, at_assistant as at_assistant, browser_ads as browser_ads,
+    browser_home as browser_home,
     browser_personalized as browser_personalized,
     browser_settings_direct as browser_settings_direct, carousel_choices as carousel_choices,
     close_all as close_all, close_all_listed as close_all_listed, close_group as close_group,
@@ -112,9 +112,9 @@ HELPERS = (
 # 字面量：mypy 要靠它解析 `from recipe_nav import <名字>`，算出来的并集不算（ADR-0040）。
 __all__ = (
     "MenuState", "_labelled", "ad_id_page", "ad_tracking_close_all", "ad_tracking_close_paged",
-    "app_settings",
-    "assert_no_other_window", "assistant_advice_rows", "assistant_advice_search", "assistant_icon",
-    "assistant_screen", "assistant_settings", "at_assistant", "baidu_browser", "bottom_tab",
+    "app_settings", "assert_no_other_window", "assistant_advice_rows", "assistant_advice_search", "assistant_icon",
+    "assistant_screen", "assistant_settings", "assistant_swipe_in", "at_assistant", "baidu_browser",
+    "bottom_tab",
     "browser_ads", "browser_home", "browser_personalized", "browser_recommendations",
     "browser_settings", "browser_settings_direct", "browser_settings_vivo",
     "browser_settings_xiaomi", "browser_start", "by_desc", "by_id", "carousel_choices", "close_all",

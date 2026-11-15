@@ -16,9 +16,8 @@
 #   · `com.heytap.yoli` 只有本地视频播放器（`LocalVideosListActivity`），没有在线内容与「我的」页。
 #   · 游戏中心 `com.nearme.gamecenter` 确实未安装。
 #   · 设置里的小布建议入口叫「AI」（`com.coloros.sceneservice`），不叫「OPPO AI」；总开关默认已关。
-# 广告跟踪 / 下拉搜索 / 浏览器 / 小布建议四段已落数据（落点断言 + 一层条件分支）；负一屏（手势状态机）、
-# 软件商店（多层嵌套的条件树）、主题（try/except 只认「无法打开」）、视频（`require(p.tap)`）、
-# 游戏中心（`tap_icon` + 复合条件）留 `code=`。
+# 七段已落数据（#1368 把软件商店、游戏中心两段也搬了进来）；剩下负一屏（读完入口行之后的收窄）
+# 与主题（try/except 只认「无法打开」这条异常文本）两段留 `code=`。
 model = "RMX3888"
 models = ["RMX3888"]
 build = "RMX3888_15.0.0.420"
@@ -36,7 +35,12 @@ ops = [
 
 [[segment]]
 name = "负一屏"
-code = "step_negative_screen"
+ops = [
+  # 速览是独立窗口，右滑进去按前台名判（家族库 assistant_swipe_in）。
+  { kind = "require_lib", name = "assistant_swipe_in", miss_print = "右滑没进负一屏（速览），本段没做成", fail = true },
+  # 剩下的要按读到的入口行决定关不关，两个读数还要留到后面用，数据表达不了。
+  { kind = "code", name = "step_negative_screen_tail" },
+]
 
 [[segment]]
 name = "下拉搜索"
@@ -57,7 +61,33 @@ ops = [
 
 [[segment]]
 name = "软件商店"
-code = "step_store"
+ops = [
+  { kind = "start", pkg = "com.heytap.market" },
+  { kind = "require_tab", name = "我的", miss_print = "商店里没找到底部「我的」" },
+  { kind = "sleep", seconds = 1.0 },
+  { kind = "require_tap", text = "设置", exact = true, scrolls = 0, miss_print = "商店「我的」页没找到「设置」" },
+  { kind = "page", args = ["设置", "com.heytap.market", "SettingActivity"] },
+  # 服务管理 46 项推广/服务入口，只保留点名的那几个功能项（`keep` 之外全关）。
+  { kind = "if_tap", text = "服务管理", exact = true, ops = [
+    { kind = "off", keep = ["帮助与客服", "应用安全", "我的专区：应用工具", "我的专区：存储空间清理", "我的专区：我的资产", "我的专区：安全守护", "我的专区：小i客服", "应用使用记录", "首页：AI搜索"], page = "商店·服务管理", page_wide = true },
+    { kind = "back" },
+  ] },
+  # 个性化推荐是入口行，开关在下一层的 PersonalRecommendActivity，不是就地开关。
+  { kind = "if_lib", name = "store_privacy", ops = [
+    { kind = "if_tap", text = "个性化推荐", exact = true, ops = [
+      { kind = "page", args = ["个性化推荐", "com.heytap.market", "PersonalRecommendActivity"] },
+      { kind = "off", only = ["个性化推荐"], page = "商店·个性化推荐" },
+      { kind = "back" },
+    ], else_ops = [
+      { kind = "print", text = "  · 隐私页没有「个性化推荐」入口" },
+    ] },
+    { kind = "back", n = 2 },
+  ], else_ops = [
+    { kind = "note_miss", text = "隐私" },
+    { kind = "print", text = "  · 商店里没找到「隐私 / 隐私授权管理」" },
+  ] },
+  { kind = "back", n = 2 },
+]
 
 [[segment]]
 name = "浏览器"
@@ -90,7 +120,24 @@ ops = [
 
 [[segment]]
 name = "游戏中心"
-code = "step_game_center"
+ops = [
+  # 本机未安装：拉不起来按跳过记账；装上之后走同族旧版路径。
+  { kind = "start", pkg = "com.nearme.gamecenter" },
+  { kind = "require_tab", name = "我的", miss_print = "游戏中心没找到底部「我的」" },
+  { kind = "sleep", seconds = 1.0 },
+  { kind = "if_lib_any", calls = [
+    { method = "tap", args = ["设置"], kwargs = { exact = true, scrolls = 0 } },
+    { method = "tap_icon", args = [["隐私开关设置", "隐私"]] },
+  ], else_ops = [
+    { kind = "fail", text = "游戏中心没找到设置入口" },
+  ] },
+  { kind = "if_tap", text = "隐私开关设置", exact = true, ops = [
+    { kind = "if_tap", text = "个性化推荐管理", exact = true, ops = [
+      { kind = "off", only = ["个性化推荐"], page = "游戏中心·个性化推荐管理" },
+    ] },
+  ] },
+  { kind = "back", n = 4 },
+]
 
 [[segment]]
 name = "小布建议"
