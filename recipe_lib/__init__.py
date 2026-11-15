@@ -17,7 +17,8 @@ from . import meizu
 
 from .shared import (
     app_settings as app_settings, browser_settings as browser_settings, close_named as close_named,
-    direct_page as direct_page, enter as enter, gear as gear, gear_top as gear_top, goto as goto,
+    direct_page as direct_page, direct_start as direct_start, enter as enter, gear as gear,
+    gear_top as gear_top, goto as goto,
     my_tab as my_tab,
     open_page as open_page, open_settings as open_settings, opened as opened,
     page_activity as page_activity, read_switches as read_switches,
@@ -122,7 +123,8 @@ __all__ = (
     "close_all_listed", "close_group", "close_named", "close_named_expect", "close_named_honor",
     "close_named_optional", "close_named_plain", "close_named_step", "close_named_vivo",
     "close_rows", "close_titles", "close_with_plain_tap", "confirm2", "dialog_open",
-    "direct_page", "direct_settings", "downloads", "downloads_probe", "downloads_tap", "enter",
+    "direct_page", "direct_settings", "direct_start", "downloads", "downloads_probe",
+    "downloads_tap", "enter",
     "enter_privacy",
     "enter_settings", "game_center_direct", "game_center_taps", "game_settings_direct",
     "game_settings_entry", "game_settings_via_mine", "gear", "gear_tap", "gear_top",

@@ -1,7 +1,7 @@
 # 荣耀 PNM-AN10（MagicOS 10）的本机例外函数（catalog 的 `code=`，影随同名 `.toml`）。
 # 共享库的 browser_settings / SkipStep 由装载器注入执行作用域。
-# 线性段已转成 `.toml` 数据；这里只留过程化的段（坐标、dumpsys、条件分支）与三个助手
-# （`dismiss` / `dismiss_no` / `open_entry`，其中 `open_entry` 由数据的「音乐」段按名字调用）。
+# 线性段已转成 `.toml` 数据；这里只留过程化的段（坐标、dumpsys、条件分支）与四个助手
+# （`dismiss` / `dismiss_no` / `open_entry` / `close_all_oaid`，后两个由数据按名字调用）。
 import adb_link
 import time
 from fast import ScreenLocked
@@ -44,27 +44,12 @@ def open_entry(p, rt, text, scrolls=0):
     return True
 
 
-def step_ad_tracking(p, rt):
-    rt.skip_in_safe_mode()
-    try:
-        p.start("com.hihonor.id", ".oaid.ui.AdvertisingPrivacyActivity", expect="应用广告跟踪管理")
-    except (adb_link.DeviceLost, ScreenLocked, SkipStep):
-        raise
-    except RuntimeError:
-        if not p.setting("广告", "广告与隐私"):
-            p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
-            p.miss = 0
-            if not (p.tap("隐私和安全", exact=True) and p.tap("其他隐私和安全功能", exact=True)
-                    and p.tap("广告与隐私", exact=True)):
-                raise RuntimeError("没找到「广告与隐私」入口") from None
-    p.tap("更多选项", scrolls=0)
-    if p.find("显示系统程序", exact=True):
-        p.tap("显示系统程序", exact=True, scrolls=0)
-        p.tap("更多选项", scrolls=0)
+def close_all_oaid(p, rt):
+    """点这一页的「全部关闭」并把确认框收掉；编排语义，留在本机例外函数里（ADR-0038）。
+
+    与 CLE-AN00 的同名走法不同：本机的列表页一定有这个按钮，点不到也不退回上一页。"""
     p.tap("全部关闭", exact=True, scrolls=0)
     p.confirm()
-    p.start("com.hihonor.id", ".oaid.ui.IntelligentRecommendActivity", settle=0.5)
-    p.off(page="广告与隐私·智能推荐服务")
 
 
 def step_negative(p, rt):

@@ -1,10 +1,7 @@
 # realme 真我 GT5 Pro（RMX3888，ColorOS 15）的本机例外函数（catalog 的 `code=`，影随同名 `.toml`）。
-# 只剩两段在这里：负一屏（读完入口行之后的收窄，两个读数要留到后面用）、主题（try/except 只认
-# 「无法打开」这条异常文本）。其余七段已落数据（#1368），右滑入口也收进了家族库。
-import adb_link
-from fast import ScreenLocked
+# 只剩负一屏一段在这里（读完入口行之后的收窄，两个读数要留到后面用）。其余八段已落数据：
+# 七段在 #1368，主题段在 #1372——「直达不通」的判据（只认「无法打开」）写进数据的 `dead_ends`。
 import recipe_nav as nav
-from recipe_runtime import SkipStep
 
 
 BUILD = "RMX3888_15.0.0.420"
@@ -12,7 +9,6 @@ MODELS = ["RMX3888"]
 
 SETTINGS = "com.android.settings"
 BROWSER = "com.heytap.browser"
-THEME = "com.oplus.themestore"
 VIDEO = "com.heytap.yoli"
 SEARCH = "com.heytap.quicksearchbox"
 # SearchSettingActivity 没导出（`am start -n` 会被系统拒绝），只能走应用自己的 scheme。
@@ -51,29 +47,4 @@ def step_negative_screen_tail(p, rt):
             else:
                 print("  · 「推荐服务」下没有「轮播推荐」", flush=True)
             p.back()
-    p.back(2)
-
-
-def step_theme(p, rt):
-    # 包名不是同族的 com.heytap.themestore，而且没有启动界面：resolve-activity 返回
-    # No activity found，拉起命令只会报「无法打开」。本机这一段做不了，按跳过收尾。
-    try:
-        p.start(THEME)
-    except (adb_link.DeviceLost, ScreenLocked, SkipStep):
-        raise
-    except RuntimeError as error:
-        if "无法打开" not in str(error):
-            raise
-        rt.skip(f"主题商店（{THEME}）没有启动界面，本机做不了这一段")
-    p.go("我的", "设置")
-    p.tap("设置", exact=True, scrolls=0)
-    if p.tap("服务管理", exact=True):
-        if p.tap("消息与广告", exact=True):
-            # 消息通知是服务通知，保留；只关开屏广告。
-            p.off(only=["开屏广告"], page="主题·消息与广告")
-            p.back()
-        p.back()
-    if p.tap("隐私", exact=True):
-        p.off(only=["个性化推荐"], page="主题·个性化推荐")
-        p.back()
     p.back(2)
