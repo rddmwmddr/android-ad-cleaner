@@ -1,5 +1,6 @@
 # vivo X300 Ultra（V2547A）页面树（catalog，#1263）。OriginOS 7 / Android 17，2026-10-25 真机 8 段整段跑通。
-# 这台 8 段都是过程段（goto / 循环 / confirm2 / resourceId 点击），走 code= 例外函数逐字保留。
+# 应用商店的入口与逐页开关是导航数据，其余七段仍是过程段（goto / 循环 / confirm2 / resourceId 点击），
+# 走 code= 例外函数逐字保留。
 model = "V2547A"
 models = ["V2547A"]
 build = "PD2547B_A_17.1.10.2"
@@ -24,7 +25,36 @@ code = "step_global_search"
 
 [[segment]]
 name = "应用商店"
-code = "step_store"
+ops = [
+  {kind = "start", pkg = "com.bbk.appstore", settle = 1.0},
+  {kind = "if_lib", name = "tap_text", args = ["我的"], else_ops = [
+    {kind = "print", text = "  ✗ 没找到「我的」"},
+    {kind = "return"},
+  ], ops = [
+    {kind = "if_lib", name = "tap_text", args = ["设置"], else_ops = [
+      {kind = "print", text = "  ✗ 「我的」页没找到设置"},
+      {kind = "return"},
+    ], ops = [
+      {kind = "print", text = "  · 商店设置页 ", focus = true},
+      {kind = "if_lib", name = "goto", args = ["关于"], ops = [
+        {kind = "if_lib", name = "goto", args = ["个性化推荐"], ops = [
+          {kind = "lib", name = "off", kwargs = {only = ["个性化推荐"], page = "商店·个性化推荐"}},
+          {kind = "back", n = 1},
+          {kind = "sleep", seconds = 0.8},
+        ]},
+        {kind = "top"},
+        {kind = "if_lib", name = "goto", args = ["服务管理"], kwargs = {scrolls = 2}, ops = [
+          # 这一页用白名单：「我的服务」「空间清理」要留着
+          {kind = "lib", name = "off", kwargs = {only = ["签到有礼", "顶部轮播图", "顶部栏目", "开屏", "摇一摇", "悬浮窗", "限时推广"], keep = ["我的服务", "空间清理"], page = "商店·服务管理"}},
+          {kind = "back", n = 1},
+          {kind = "sleep", seconds = 0.8},
+        ]},
+        {kind = "back", n = 1},
+      ]},
+      {kind = "back", n = 3},
+    ]},
+  ]},
+]
 
 [[segment]]
 name = "浏览器"

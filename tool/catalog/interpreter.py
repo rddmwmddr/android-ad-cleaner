@@ -261,7 +261,11 @@ def _back(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
 
 
 def _top(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
-    p.top(op.get("n"))
+    """不写 `n` 就调不带实参的 `p.top()`：调用序列与段体逐条对齐（同 `_back`）。"""
+    if "n" in op:
+        p.top(op["n"])
+    else:
+        p.top()
 
 
 def _code(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
@@ -290,7 +294,9 @@ def _fail(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
 
 
 def _print(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
-    print(op["text"], flush=True)
+    """打一句人话；`focus=true` 把当前前台窗口接在后面（段体里 `print(f"  · 设置页 {p.focus()}")`）。"""
+    text = op["text"] + p.focus() if op.get("focus") else op["text"]
+    print(text, flush=True)
 
 
 def _return(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:

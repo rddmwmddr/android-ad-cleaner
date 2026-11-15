@@ -1757,6 +1757,15 @@ def calls_on_p_530(tree, method):
             and n.func.value.id == "p"]
 
 
+def _nested_ops(ops):
+    """按书写顺序摊平 `ops` / `else_ops`：条件分支里的入口也算这一段用到的入口。"""
+    for op in ops:
+        yield op
+        for key in ("ops", "else_ops"):
+            if key in op:
+                yield from _nested_ops(op[key])
+
+
 class VivoStoreEntryTests(unittest.TestCase):
     """vivo 参考脚本的商店段改用引擎入口，不再按精确文字点底栏（#530）。"""
 
@@ -1772,8 +1781,10 @@ class VivoStoreEntryTests(unittest.TestCase):
                     names = [a.value for call in calls_on_p_530(tree, "tab")
                              for a in call.args if isinstance(a, ast.Constant)]
                 else:
-                    # 数据段：require_tab 就是引擎的底带 p.tab()（ADR-0012）
-                    names = [op.get("name") for op in store["ops"] if op.get("kind") == "require_tab"]
+                    # 数据段：require_tab 就是引擎的底带 p.tab()（ADR-0012）。直达不通后的
+                    # 「我的 → 设置」回退写在 else_ops 里，所以要连嵌套子 op 一起看。
+                    names = [op.get("name") for op in _nested_ops(store["ops"])
+                             if op.get("kind") == "require_tab"]
                 self.assertIn("我的", names, "商店段没改用 p.tab(\"我的\")")
 
 
