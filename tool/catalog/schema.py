@@ -81,6 +81,8 @@ NO_FACT_KINDS = frozenset({
     "await_page", "require_tab", "require_go", "require_expect", "require_unlocked",
     "require_focus", "require_find", "back", "top", "miss_reset", "dismiss",
     "skip_in_safe_mode", "sleep", "press", "app_stop", "note_miss", "tap", "go", "print", "return",
+    # 点一个控件 / 划一道手势：既不是开关也不开入口（#1337）
+    "tap_id", "gesture",
     # 落点 / 跳过 / 失败出口：本来自 `p.start` / shell / `open_app_settings`，这里只是核对与收场
     "page", "skip", "fail", "require_tap",
 })
