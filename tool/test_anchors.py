@@ -76,6 +76,7 @@ ANCHORS = {
     "test_declared_fields.py": "构造处声明过的字段要直接读，不再 getattr 兜底。",
     # tests/ 自身的守卫
     "test_test_collection.py": "用例只在 tests/ 下定义，且每个测试文件都落到已声明的锚点。",
+    "test_glob_scan.py": "发现式 glob 的反空转：发现集为空时与「全仓合规」不可区分，每个模式对真实仓库求值一次，0 份即红。",
     "test_rules_guards.py": "规则守卫：文档内容、注册表、引擎结构与流程条目各自的机械判据。",
     "test_rules_registry.py": "规则注册表的四条不变式，锚点与登记双向一致。",
     "test_doc_consistency.py": "文档与单一来源一致：ADR 字段表、品牌连点表、共享样式与教程截图。",
