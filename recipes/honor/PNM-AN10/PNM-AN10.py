@@ -1,5 +1,5 @@
 # 荣耀 PNM-AN10（MagicOS 10）的本机例外函数（catalog 的 `code=`，影随同名 `.toml`）。
-# 共享库的 browser_settings / open_settings / skip_in_safe_mode / SkipStep 由装载器注入执行作用域。
+# 共享库的 browser_settings / SkipStep 由装载器注入执行作用域。
 # 线性段已转成 `.toml` 数据；这里只留过程化的段（坐标、dumpsys、条件分支）与三个助手
 # （`dismiss` / `dismiss_no` / `open_entry`，其中 `open_entry` 由数据的「音乐」段按名字调用）。
 import adb_link
@@ -127,24 +127,6 @@ def step_browser(p, rt):
     p.back()
     p.tap("互动广告管理", exact=True, scrolls=0)
     p.off(page="浏览器·互动广告")
-    p.back(3)
-
-
-def step_theme(p, rt):
-    rt.skip_in_safe_mode()
-    p.start("com.hihonor.android.thememanager")
-    p.dismiss()
-    if not p.tab("我的"):
-        p.tap("我的", exact=True, scrolls=0)
-    p.dismiss()
-    if not nav.open_settings(p, rt, ("个性化服务", "通知")):
-        p.note_miss("设置")
-        return
-    p.enter("通知")
-    p.off(page="主题·通知")
-    p.back()
-    p.enter("个性化服务")
-    p.off(page="主题·个性化服务")
     p.back(3)
 
 

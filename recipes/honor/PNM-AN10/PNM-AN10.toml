@@ -57,7 +57,27 @@ code = "step_browser"
 
 [[segment]]
 name = "主题"
-code = "step_theme"
+ops = [
+  {kind = "skip_in_safe_mode"},
+  {kind = "start", pkg = "com.hihonor.android.thememanager"},
+  {kind = "dismiss"},
+  # 底栏「我的」优先按标签点，点不到再按文字点。
+  {kind = "if_lib_any", calls = [{method = "tab", args = ["我的"]}], else_ops = [
+    {kind = "tap", text = "我的", exact = true, scrolls = 0},
+  ]},
+  {kind = "dismiss"},
+  # 这一行会读成「设置,有1条新通知」，交给家族库的三级走法；认不出就记一笔并收段。
+  {kind = "if_lib", name = "open_settings", args = [["个性化服务", "通知"]], else_ops = [
+    {kind = "note_miss", text = "设置"},
+    {kind = "return"},
+  ]},
+  {kind = "enter", text = "通知"},
+  {kind = "off", page = "主题·通知", page_wide = true},
+  {kind = "back"},
+  {kind = "enter", text = "个性化服务"},
+  {kind = "off", page = "主题·个性化服务", page_wide = true},
+  {kind = "back", n = 3},
+]
 
 [[segment]]
 name = "视频"
