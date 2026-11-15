@@ -1,10 +1,10 @@
-"""机型库：144 个库实现名字的唯一 owner（ADR-0040）。
+"""机型库：146 个库实现名字的唯一 owner（ADR-0040）。
 
 一个家族一个文件（`huawei` / `samsung` 目前没有实现，就不建文件）；文件内分「词汇 / 策略」两节。
 归属按家族数算：只被一个家族用到的进 `recipe_lib/<家族>.py`，被 ≥2 个家族用到的进 `shared.py`。
 
-名字集合是显式三层：六个模块的 `__all__` 并集 144 个是「数据 `lib:` 能点名」的词汇，`LIBRARY` 就是这
-144 个；`__all__` 再加 10 个面助手，共 154 个是「能从稳定 import 面取到」的名字。
+名字集合是显式三层：六个模块的 `__all__` 并集 146 个是「数据 `lib:` 能点名」的词汇，`LIBRARY` 就是这
+146 个；`__all__` 再加 10 个面助手，共 156 个是「能从稳定 import 面取到」的名字。
 `tool/recipe_nav.py` / `recipe_strategies.py` / `recipe_steps.py` 只剩转发，真身都在这里。
 """
 
@@ -17,7 +17,7 @@ from . import meizu
 
 from .shared import (
     app_settings as app_settings, browser_settings as browser_settings, close_named as close_named,
-    enter as enter, gear as gear, gear_top as gear_top, goto as goto,
+    direct_page as direct_page, enter as enter, gear as gear, gear_top as gear_top, goto as goto,
     my_tab as my_tab,
     open_page as open_page, open_settings as open_settings, opened as opened,
     page_activity as page_activity, read_switches as read_switches,
@@ -27,7 +27,6 @@ from .shared import (
 )
 from .xiaomi import (
     bottom_tab as bottom_tab, browser_settings_xiaomi as browser_settings_xiaomi,
-    direct_page as direct_page,
     browser_start as browser_start, by_id as by_id, close_with_plain_tap as close_with_plain_tap,
     direct_settings as direct_settings, downloads as downloads, downloads_probe as downloads_probe,
     downloads_tap as downloads_tap, gear_tap as gear_tap, global_search as global_search,
@@ -77,12 +76,14 @@ from .vivo import (
     browser_recommendations as browser_recommendations,
     browser_settings_vivo as browser_settings_vivo, by_desc as by_desc,
     close_named_vivo as close_named_vivo, confirm2 as confirm2, dialog_open as dialog_open,
-    global_search_ads as global_search_ads, hiboard_panel_v2547a as hiboard_panel_v2547a,
+    global_search_ads as global_search_ads, global_search_entry as global_search_entry,
+    hiboard_panel_v2547a as hiboard_panel_v2547a,
     hiboard_panel as hiboard_panel, i_manager_ads as i_manager_ads,
     lock_screen_magazine as lock_screen_magazine, off as off, off_one as off_one,
     off_unnamed as off_unnamed, result_xy as result_xy, row_switch as row_switch, rows as rows,
     search_setting as search_setting, setting_search as setting_search,
     settings_home as settings_home, store_personalization as store_personalization,
+    store_settings_direct as store_settings_direct,
     switch_off as switch_off, system_ads_branch as system_ads_branch,
     system_ads_chain as system_ads_chain, tap_row as tap_row, weather_service as weather_service,
     title_key as title_key, verify as verify,
@@ -98,7 +99,7 @@ from .meizu import (
 
 MODULES = (shared, xiaomi, oppo, vivo, honor, meizu)
 
-# 数据可点名的 140 个名字：家族 `__all__` 的并集，派生不手抄。
+# 数据可点名的 146 个名字：家族 `__all__` 的并集，派生不手抄。
 LIBRARY = {name: getattr(module, name) for module in MODULES for name in module.__all__}
 
 # 稳定 import 面能取到、但数据 `lib:` 不许点名的 10 个助手。
@@ -122,7 +123,7 @@ __all__ = (
     "enter_privacy",
     "enter_settings", "game_center_direct", "game_center_taps", "game_settings_direct",
     "game_settings_entry", "game_settings_via_mine", "gear", "gear_tap", "gear_top",
-    "global_search", "global_search_ads", "goto", "has_row", "hiboard_panel",
+    "global_search", "global_search_ads", "global_search_entry", "goto", "has_row", "hiboard_panel",
     "hiboard_panel_v2547a", "hide_carousel", "i_manager_ads", "labels", "lock_screen_magazine",
     "maybe", "menu_settings", "menu_state", "mine_settings", "more_menu", "my_tab", "navigate",
     "negative_screen", "no_agreement", "off", "off_exact", "off_exact_paged",
@@ -134,7 +135,7 @@ __all__ = (
     "search_settings_swipe", "security_center", "security_tab", "setting_search", "settings_home",
     "settings_icon_visible", "settings_page", "settle_page", "store", "store_mode", "store_mode_step",
     "store_personalization", "store_privacy", "store_privacy_nested", "store_privacy_sub",
-    "store_promotions", "switch_off", "switch_signature",
+    "store_promotions", "store_settings_direct", "switch_off", "switch_signature",
     "switch_top", "system_ads_branch", "system_ads_chain", "system_ads_security", "system_settings",
     "tab", "tab_bot", "tap", "tap_any", "tap_bottom_tab", "tap_by_scroll", "tap_low", "tap_page",
     "tap_row", "tap_tab", "tap_text", "theme", "theme_settings", "theme_shop_settings",

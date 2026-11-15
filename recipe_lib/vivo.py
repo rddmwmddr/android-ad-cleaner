@@ -5,11 +5,13 @@
 """
 
 import time
+import adb_link
 from wait import until
-from recipe_lib.shared import _style, browser_settings, maybe, read_switches, tap
+from recipe_runtime import SkipStep
+from recipe_lib.shared import _style, browser_settings, maybe, opened, read_switches, tap
 from row import bounds, icon_hit
 
-__all__ = ('browser_recommendations', 'browser_settings_vivo', 'by_desc', 'close_named_vivo', 'confirm2', 'dialog_open', 'global_search_ads', 'hiboard_panel_v2547a', 'hiboard_panel', 'i_manager_ads', 'lock_screen_magazine', 'off', 'off_one', 'off_unnamed', 'result_xy', 'row_switch', 'rows', 'search_setting', 'setting_search', 'settings_home', 'store_personalization', 'switch_off', 'system_ads_branch', 'system_ads_chain', 'tap_row', 'weather_service')
+__all__ = ('browser_recommendations', 'browser_settings_vivo', 'by_desc', 'close_named_vivo', 'confirm2', 'dialog_open', 'global_search_ads', 'global_search_entry', 'hiboard_panel_v2547a', 'hiboard_panel', 'i_manager_ads', 'lock_screen_magazine', 'off', 'off_one', 'off_unnamed', 'result_xy', 'row_switch', 'rows', 'search_setting', 'setting_search', 'settings_home', 'store_personalization', 'store_settings_direct', 'switch_off', 'system_ads_branch', 'system_ads_chain', 'tap_row', 'weather_service')
 
 # ---------- 词汇 ----------
 def settings_home(p, rt):
@@ -403,6 +405,22 @@ def setting_search(p, rt, keyword, result):
         print(f"  设置搜索「{keyword}」没走通：{e}")
         return False
 
+def store_settings_direct(p, rt, pkg, activity, marker):
+    """商店设置页能按 Activity 直达就直达：落点对得上返回真（V2303A / V2547DA，Android 17）。
+
+    「我的」页没有能读到的齿轮入口，只能直达（沿用 #220）。直达抛错时不中断，由调用方按
+    「我的 → 设置」回退；断线与约定跳过照常上抛——两者都是 RuntimeError 的子类，不单列出来会被
+    当成「这一页打不开」，掉线在回退路径上再空跑一次、跳过也会说成失败（沿用 #293 / #908）。
+    包名与页面名由数据传进来：`tool/entries.py` 按调用点的这两个实参认入口速查。"""
+    try:
+        p.start(pkg, activity)
+    except (adb_link.DeviceLost, SkipStep):
+        raise
+    except RuntimeError as e:
+        print(f"  · 直达商店设置页失败（{e}），改走「我的 → 设置」")
+        return False
+    return marker in p.focus()
+
 def store_personalization(p, rt):
     """两行标题会随状态变化；逐行点，处理确认框后用稳定标题回读。"""
     page = "商店·个性化推荐"
@@ -624,17 +642,32 @@ def lock_screen_magazine(p, rt):
         p.off(only=["阅图锁屏", "锁屏横滑进入阅图"], page="阅图锁屏")
 
 def system_ads_branch(p, rt):
-    """系统设置里的「广告与隐私」：首屏入口读作「安全」或「安全与隐私」两种都认。"""
+    """系统设置里的「广告与隐私」：首屏入口读作「安全」或「安全与隐私」两种都认。
+
+    返回「走到了广告与隐私页并关过一轮」：调用方据此决定还要不要再走设置搜索（V2545A）。
+    与关掉几项无关——出厂就全关时也是走通了这条路，不该再搜一次。"""
     settings_home(p, rt)
     if maybe(p, rt, "安全") or maybe(p, rt, "安全与隐私"):
         if maybe(p, rt, "更多安全设置") and maybe(p, rt, "广告与隐私"):
             p.off(only=["个性化广告", "个性化推荐", "智能推荐服务"], page="系统·广告与隐私")
+            return True
+    return False
 
 def system_ads_chain(p, rt):
     """系统设置里的「广告与隐私」：一路串联认「安全 → 更多安全设置 → 广告与隐私」。"""
     settings_home(p, rt)
     if maybe(p, rt, "安全") and maybe(p, rt, "更多安全设置") and maybe(p, rt, "广告与隐私"):
         p.off(only=["个性化广告", "个性化推荐", "智能推荐服务"], page="系统·广告与隐私")
+
+def global_search_entry(p, rt, pkg=None, activity=None, expect=None):
+    """全局搜索的设置页：给了包名与页面名就先试直达（Android 17 变体），不通再走设置菜单。
+
+    到了返回真；两级都认不出返回假，由调用方收段。直达绕过「系统管理与升级」这一层，
+    那层在 Android 17 上换过名字（沿用 #220 的记录）。"""
+    if pkg and opened(p, rt, lambda: p.start(pkg, activity, expect=expect, budget=2)):
+        return True
+    settings_home(p, rt)
+    return bool(maybe(p, rt, "系统管理与升级") and maybe(p, rt, "全局搜索"))
 
 def global_search_ads(p, rt):
     """系统管理与升级 → 全局搜索 的三个子页；历史记录与应用建议保留。"""

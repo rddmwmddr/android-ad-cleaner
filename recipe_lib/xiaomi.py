@@ -10,7 +10,7 @@ from recipe_runtime import SkipStep
 from recipe_lib.shared import _style, close_named_step, gear, maybe, opened, read_switches
 from row import bounds, icon_hit
 
-__all__ = ('bottom_tab', 'browser_settings_xiaomi', 'browser_start', 'by_id', 'close_with_plain_tap', 'direct_page', 'direct_settings', 'downloads', 'downloads_probe', 'downloads_tap', 'gear_tap', 'global_search', 'menu_settings', 'mine_settings', 'negative_screen', 'popup_row', 'security_center', 'security_tab', 'settings_icon_visible', 'store', 'store_mode', 'store_mode_step', 'store_privacy_nested', 'store_privacy_sub', 'system_ads_security', 'tab', 'tab_bot', 'tap_any', 'tap_bottom_tab', 'tap_low', 'tap_tab', 'theme', 'theme_settings', 'wait_bottom_tab', 'weather_calendar_probe', 'weather_calendar_tap')
+__all__ = ('bottom_tab', 'browser_settings_xiaomi', 'browser_start', 'by_id', 'close_with_plain_tap', 'direct_settings', 'downloads', 'downloads_probe', 'downloads_tap', 'gear_tap', 'global_search', 'menu_settings', 'mine_settings', 'negative_screen', 'popup_row', 'security_center', 'security_tab', 'settings_icon_visible', 'store', 'store_mode', 'store_mode_step', 'store_privacy_nested', 'store_privacy_sub', 'system_ads_security', 'tab', 'tab_bot', 'tap_any', 'tap_bottom_tab', 'tap_low', 'tap_tab', 'theme', 'theme_settings', 'wait_bottom_tab', 'weather_calendar_probe', 'weather_calendar_tap')
 
 # ---------- 词汇 ----------
 def tap_any(p, rt, *names, scrolls=6):
@@ -482,15 +482,6 @@ def weather_calendar_probe(p, rt):
             p.off(only=["推荐", "广告", "个性化", "内容推广", "天气视频卡片"],
                   page=f"{pkg}·用户体验计划"); p.back()
         p.back(3)
-
-def direct_page(p, rt, pkg, activity, expect=None):
-    """设置页能直达就直达（商店偏好页 / 系统广告服务）：到了返回真。
-
-    直达不通返回假，由调用方按菜单路径回退；断线 / 约定跳过照常上抛（沿用 #293 / #908）。
-    包名与页面名由数据传进来：`tool/entries.py` 按调用点的这两个实参认入口速查，写死在这里它看不见。"""
-    if expect:
-        return opened(p, rt, lambda: p.start(pkg, activity, expect=expect, budget=2))
-    return opened(p, rt, lambda: p.start(pkg, activity))
 
 def store_privacy_nested(p, rt):
     """商店「隐私设置」页的「个性化服务」是不是子页入口：开关不在本页就是（#1364）。

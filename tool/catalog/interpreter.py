@@ -8,7 +8,7 @@
 只把「该调哪个 p 方法、带哪些实参」按数据的书写顺序发出去，不碰这些算法本身。
 
 库调用按名字解析：`lib` / `require_lib` / `if_lib` / `return_lib` 查本模块的 `LIBRARY`
-（`recipe_lib.LIBRARY`：家族 `__all__` 的 140 个名字），查不到再查本机例外命名空间；实现是普通函数，
+（`recipe_lib.LIBRARY`：家族 `__all__` 的 146 个名字），查不到再查本机例外命名空间；实现是普通函数，
 收 `(p, rt, …)`，调用序列与旧脚本逐条相同。
 """
 import os as _os, sys as _sys
@@ -232,7 +232,11 @@ def _back(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
 
 
 def _top(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
-    p.top(op.get("n"))
+    """不写 `n` 就调不带实参的 `p.top()`：调用序列与段体逐条对齐（同 `_back`）。"""
+    if "n" in op:
+        p.top(op["n"])
+    else:
+        p.top()
 
 
 def _code(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
@@ -261,7 +265,9 @@ def _fail(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
 
 
 def _print(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
-    print(op["text"], flush=True)
+    """打一句人话；`focus=true` 把当前前台窗口接在后面（段体里 `print(f"  · 设置页 {p.focus()}")`）。"""
+    text = op["text"] + p.focus() if op.get("focus") else op["text"]
+    print(text, flush=True)
 
 
 def _return(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:

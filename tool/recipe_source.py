@@ -665,7 +665,7 @@ def library_sources() -> dict[str, tuple[str, str]]:
     """机型库数据可调用的实现：{名字: (归属模块, 源码)}。
 
     名字全局唯一，直接定位实现，不再按脚本 import 做归属解析（沿用 #1268）。实现按家族住在
-    `recipe_lib/<家族>.py` / `recipe_lib/shared.py`，`LIBRARY` 就是那 140 个数据可点名的名字
+    `recipe_lib/<家族>.py` / `recipe_lib/shared.py`，`LIBRARY` 就是那 146 个数据可点名的名字
     （ADR-0040）；归属写函数真正的 `__module__`（`recipe_lib.shared` 等）。
     词库与入口速查拿它扫实现里的字面量。结果是进程内常量，缓存起来：`inspect.getsource` 很慢，
     一次全量回归会调上千次（#1307）。返回值按只读共享，调用方改了它这份缓存就脏了。
