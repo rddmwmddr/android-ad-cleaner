@@ -69,16 +69,19 @@ class MixFlip2RecipeTests(unittest.TestCase):
 
     def test_bottom_tabs_go_through_tab_not_go_or_tap(self):
         # 这台的第 5 个底栏标签在 y≈94% 屏高；p.tap() 会先命中内容区同名文字（#305 / #386）。
-        # 数据里走 `require_tab`（门面的 p.tab）；例外函数里点「我的」也只调 p.tab。
+        # 主题段与商店段都要到「我的」页，两处都走 `require_tab`（门面的 p.tab）。
         data = tomllib.loads(self.source)
         tabs = [op for segment in data["segment"] for op in segment.get("ops", [])
                 if op.get("kind") == "require_tab" and op.get("name") == "我的"]
-        self.assertEqual(len(tabs), 1, "主题段要到「我的」页：数据里应有 require_tab")
+        self.assertEqual(len(tabs), 2, "主题段与商店段都要到「我的」页：数据里应有 require_tab")
+        elsewhere = [op for segment in data["segment"] for op in segment.get("ops", [])
+                     if op.get("kind") in {"go", "tap"} and op.get("text") == "我的"]
+        self.assertEqual(elsewhere, [], "点「我的」不走 p.go / p.tap")
         called = {n.func.attr for n in ast.walk(ast.parse(EXCEPTIONS.read_text(encoding="utf-8")))
                   if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
                   and n.func.attr in {"tab", "go", "tap", "entry"}
                   and any(isinstance(a, ast.Constant) and a.value == "我的" for a in n.args)}
-        self.assertEqual(called, {"tab"})
+        self.assertEqual(called, set(), "商店段转数据后，例外函数里不再点「我的」")
 
     def test_browser_opens_settings_from_my_tab_and_does_not_touch_the_menu(self):
         # 这台底栏是 主页/视频/AI搜索/免费小说/我的，没有「菜单」（票面实测）
