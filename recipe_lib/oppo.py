@@ -227,14 +227,15 @@ def game_settings_direct(p, rt):
         return False
     return True
 
-def game_settings_entry(p, rt):
+def game_settings_entry(p, rt, package=None):
     from fast import ScreenLocked
     """「我的」页的「设置」：旧版是文字行（可能读作「设置,有1条新通知」），新版是右上角没有
-    文字的齿轮（沿用 #292）。文字行点进了别的页就退回来改用齿轮，不把落点押在包含匹配上。"""
+    文字的齿轮（沿用 #292）。文字行点进了别的页就退回来改用齿轮，不把落点押在包含匹配上。
+    `package` 缺省取脚本常量 `GAME`；同一个 App 有两份入口的机型（游戏中心）传自己的包名。"""
     where = p.focus()
     try:
         p.enter("设置", scrolls=0)
-        rt.page("隐私开关设置", rt.constants['GAME'])
+        rt.page("隐私开关设置", package or rt.constants['GAME'])
         return
     except (adb_link.DeviceLost, ScreenLocked, SkipStep):
         raise
@@ -245,9 +246,10 @@ def game_settings_entry(p, rt):
     if not p.tap_icon(["隐私开关设置", "隐私"]):
         raise RuntimeError("没找到设置入口：文字与右上角图标都试过")
 
-def game_settings_via_mine(p, rt):
+def game_settings_via_mine(p, rt, package=None):
     """我的 → 设置；首次进入的「页面升级」弹窗盖住这一页，先关掉。"""
-    p.start(rt.constants['GAME'])
+    package = package or rt.constants['GAME']
+    p.start(package)
     p.enter("我的")
     rt.clock.sleep(1.2)
     # 「页面升级」弹窗里带滚动列表，dismiss() 不点文字按钮，只能点名点（PKT110）。
@@ -255,7 +257,7 @@ def game_settings_via_mine(p, rt):
         p.tap("我知道了", exact=True, scrolls=0); rt.clock.sleep(1.2)
     else:
         p.dismiss()
-    game_settings_entry(p, rt)
+    game_settings_entry(p, rt, package)
 
 def system_settings(p, rt):
     def fields_style():
@@ -1027,14 +1029,9 @@ def search_settings_swipe(p, rt):
     p.back(2)
 
 def game_center_taps(p, rt):
-    p.start("com.nearme.gamecenter")
-    if not p.tap("我的", exact=True, scrolls=0):
-        raise RuntimeError("没找到底部「我的」")
-    rt.clock.sleep(1.2)
-    p.dismiss()
-    # 14.43.3：「设置」是「我的」页里带新通知标记的文字行（非右上角齿轮）
-    if not p.tap("设置", exact=False, scrolls=0) and not p.tap_icon(["隐私开关设置", "隐私"]):
-        raise RuntimeError("没找到设置入口")
+    # 首次运行（广告全开）时开屏浮层更长，底栏点击被吞掉后 p.tap 照样返回成功，整段就停在
+    # 推荐流首页上找「设置」（#1235）。「我的」与设置页的落点都交给同 App 已有的校验，不另写。
+    game_settings_via_mine(p, rt, "com.nearme.gamecenter")
     if p.tap("隐私开关设置", exact=True) and p.tap("个性化推荐管理", exact=True):
         p.off(only=["个性化推荐"], page="游戏中心·个性化推荐管理")
     p.back(4)
