@@ -618,7 +618,8 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 if "systemui_text" in op:
                     lines.append(f"p.systemui_text = {op['systemui_text']!r}")
                 lower(op.get("ops", []))
-            elif kind in ("if_find", "if_entry", "if_lib", "if_lib_any", "if_focus", "if_tap"):
+            elif kind in ("if_find", "if_entry", "if_lib", "if_lib_any", "if_focus", "if_tap",
+                          "if_var"):
                 # 带条件分支的 op：两支里的 off / 入口调用一样要读出来，否则词与入口会静默丢（#1263）。
                 if kind == "if_lib":
                     args = ", ".join(_s(a) for a in op.get("args", []))
@@ -633,10 +634,12 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                             lines.append(f"{call['name']}(p, rt, {args})" if args else f"{call['name']}(p, rt)")
                 lower(op.get("ops", []))
                 lower(op.get("else_ops", []))
-            elif kind in ("lib", "require_lib", "code", "return_lib"):
-                # 用数据里写得出的真实名字（不折回 close_named），归属才查得准（#1263）。
+            elif kind in ("lib", "require_lib", "code", "return_lib", "let"):
+                # 用数据里写得出的真实名字（不折回 close_named），归属才查得准（#1263）。`let` 点名的
+                # 实现写在 `lib` 上，`name` 是它绑定的段内名字（#1373）——绑定的名字不进事实层。
+                called = op["lib"] if kind == "let" else op["name"]
                 args = ", ".join(_s(a) for a in op.get("args", []))
-                lines.append(f"{op['name']}(p, rt, {args})" if args else f"{op['name']}(p, rt)")
+                lines.append(f"{called}(p, rt, {args})" if args else f"{called}(p, rt)")
             elif kind == "close_listed":
                 # 候选名单是「这一页要关掉这些名字」，按 `close_named(名单, 页)` 投影进事实层：
                 # 词库按 close 那一类读得出这些字面量（旧脚本里 `names` 是运行期变量，读不出，#1265）。

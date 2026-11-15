@@ -54,7 +54,19 @@ code = "step_browser_home"
 
 [[segment]]
 name = "浏览器推荐"
-code = "step_browser_recs"
+ops = [
+  # 设置页的包名由库现取一次，后面三次关单都拿它当实参（`let` + `{expr = "var"}`，#1373）。
+  {kind = "let", name = "package", lib = "browser_settings"},
+  {kind = "lib", name = "tap", args = ["消息通知"]},
+  {kind = "lib", name = "close_named_honor", args = [["精彩推荐", "每日推送", "新闻热点", "兴趣推送"], "浏览器·消息通知", {expr = "var", name = "package"}, "消息通知"]},
+  {kind = "back"},
+  {kind = "lib", name = "tap", args = ["隐私管理"]},
+  {kind = "lib", name = "tap", args = ["个性化推荐"], kwargs = {scrolls = 0}},
+  {kind = "lib", name = "close_named_honor", args = [["个性化内容"], "浏览器·个性化推荐", {expr = "var", name = "package"}, "个性化推荐"]},
+  {kind = "back"},
+  {kind = "lib", name = "tap", args = ["互动广告管理"], kwargs = {scrolls = 0}},
+  {kind = "lib", name = "close_named_honor", args = [["个性化广告", "允许摇一摇进入广告"], "浏览器·互动广告", {expr = "var", name = "package"}, "互动广告管理"]},
+]
 
 [[segment]]
 name = "视频"
