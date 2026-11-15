@@ -1,5 +1,5 @@
 # Xiaomi 18 Pro Max（M154FF）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
-# 系统广告 / 应用商店 / 浏览器用 `opened()` 的直达探路：拉起函数作为回调传进去，留在这里。
+# 系统广告 / 浏览器用 `opened()` 的直达探路：拉起函数作为回调传进去，留在这里。
 import time
 from entries import THEME_DEAD_ENDS
 
@@ -27,27 +27,6 @@ def step_system_ads(p, rt):
             nav.maybe(p, rt, "更多安全设置")
     if nav.maybe(p, rt, "广告服务"):
         p.off(only=["个性化广告推荐"], page="系统·广告服务")
-
-
-def step_store(p, rt):
-    if not nav.opened(p, rt, lambda: p.start("com.xiaomi.market", ".ui.MarketPreferenceActivity", expect="通知设置", budget=2)):
-        p.start("com.xiaomi.market")
-        p.go("我的", "设置")
-        nav.gear(p, rt)
-    if nav.tap_any(p, rt, "隐私设置", "隐私"):
-        # 4.129.s.00 的「个性化服务」是子页入口，开关在下一层。
-        nested = not any("个性化服务" in t for t, _, _ in p.switches())
-        if not nested or nav.maybe(p, rt, "个性化服务"):
-            p.off(only=["个性化服务"], page="商店·个性化服务")
-            if nested:
-                p.back()
-        p.back()
-    if nav.maybe(p, rt, "模式切换"):                       # 新版商店没有这一项
-        p.tap("极简模式", exact=True, scrolls=0); p.confirm(); p.back()
-    if nav.maybe(p, rt, "通知设置"):
-        # 只关「新手帮助」。不碰「推送消息」：它是父开关，关了会连「点赞消息」「评论消息」一起关（Issue #2）
-        p.off(only=["新手帮助"], keep=["推送消息", "应用更新"], page="商店·通知设置"); p.back()
-    p.back(2)
 
 
 def step_browser(p, rt):

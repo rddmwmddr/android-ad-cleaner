@@ -296,8 +296,8 @@ def source_key(d):
 # `.format(…)`）由事实层先把字符串还原出来，这里只认还原后的整条命令。
 _AM_PAGE = re.compile(r"am start\b[^\n]*?-n\s+([\w.]+)/([\w.$]+)")
 _AM_INTENT = re.compile(r"am start\b[^\n]*?-a\s+([\w.]+)[^\n]*?-p\s+([\w.]+)")
-# 拉起入口的调用名：Phone.start 与共享的 start_or_skip 助手（沿用 #902）。
-_START_CALLS = frozenset({"p.start", "start_or_skip", "rt.start_or_skip"})
+# 拉起入口的调用名：Phone.start 与两个按 (包名, 页面名) 收实参的助手（沿用 #902、#1337）。
+_START_CALLS = frozenset({"p.start", "start_or_skip", "rt.start_or_skip", "store_direct"})
 
 
 def _value(arg):

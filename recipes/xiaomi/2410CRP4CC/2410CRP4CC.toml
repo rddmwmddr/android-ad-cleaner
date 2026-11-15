@@ -3,8 +3,7 @@
 # 本版本已实测没有可关项的入口：手机管家、下载管理、主题、全局搜索、天气。
 # 日历首次启动要求本人同意隐私协议，脚本不代为同意，因此未纳入。
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
-# 2026-11-14 转页面树（#1266）：系统广告与浏览器两段落成导航数据；应用商店的「个性化服务」按运行时读到的
-# 开关位置分岔（子页 / 本页），留在同名 `.py` 的 `code =`。
+# 2026-11-14 转页面树：系统广告、浏览器、应用商店三段落成导航数据。
 model = "2410CRP4CC"
 models = ["2410CRP4CC"]
 build = "OS2.0.208"
@@ -19,7 +18,30 @@ ops = [
 
 [[segment]]
 name = "应用商店"
-code = "step_store"
+ops = [
+  # 平板商店从 MarketTabActivity 直接进，避开冷启动时的 FloatWebActivity 空白页。
+  {kind = "start", pkg = "com.xiaomi.market", activity = ".ui.MarketTabActivity"},
+  {kind = "require_tap", text = "我的", exact = true, scrolls = 0, miss_print = "应用商店顶部「我的」未找到"},
+  {kind = "require_entry", text = "设置", scrolls = 8, miss_print = "应用商店设置入口未找到"},
+  {kind = "if_entry", text = "通知设置", ops = [
+    # 只关「新手帮助」。不碰「推送消息」：它是父开关，关了会连点赞/评论消息一起关。
+    {kind = "off", only = ["新手帮助"], keep = ["推送消息", "应用更新"], page = "商店·通知设置"},
+    {kind = "back"},
+  ]},
+  {kind = "if_lib", name = "tap_any", args = ["隐私设置", "隐私"], ops = [
+    # 「个性化服务」在新版本是子页入口、老版本开关就在本页：按运行时读到的位置分岔。
+    {kind = "if_lib", name = "store_privacy_nested", ops = [
+      {kind = "if_lib", name = "store_privacy_sub", ops = [
+        {kind = "off", only = ["个性化服务"], page = "商店·个性化服务"},
+        {kind = "back"},
+      ]},
+    ], else_ops = [
+      {kind = "off", only = ["个性化服务"], page = "商店·个性化服务"},
+    ]},
+    {kind = "back"},
+  ]},
+  {kind = "back", n = 2},
+]
 
 [[segment]]
 name = "浏览器"

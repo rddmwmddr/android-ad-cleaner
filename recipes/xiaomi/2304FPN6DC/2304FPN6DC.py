@@ -1,5 +1,5 @@
 # Xiaomi 13 Ultra / 14 Pro（2304FPN6DC / 23116PN5BC）的本机例外函数（catalog 的 `code=`，影随同名 `.toml`）。
-# 系统广告的重试轮、应用商店的运行时分岔与全局搜索的榜单候选留在过程化实现里。
+# 系统广告的重试轮与全局搜索的榜单候选留在过程化实现里。
 import time
 import recipe_nav as nav
 
@@ -22,26 +22,6 @@ def step_system_ads(p, rt):
     if nav.maybe(p, rt, "更多安全设置"):
         if nav.maybe(p, rt, "广告服务"):
             p.off(only=["个性化广告推荐"], page="系统·广告服务")
-
-
-def step_store(p, rt):
-    p.start("com.xiaomi.market")
-    if not p.tab("我的"):
-        raise RuntimeError("应用商店底部「我的」未找到")
-    if not nav.maybe(p, rt, "设置", scrolls=10):
-        raise RuntimeError("应用商店设置入口未找到")
-    if nav.maybe(p, rt, "通知设置"):
-        # 只关「新手帮助」。不碰「推送消息」「应用更新通知」（Issue #2）
-        p.off(only=["新手帮助"], keep=["推送消息", "应用更新"], page="商店·通知设置"); p.back()
-    if nav.tap_any(p, rt, "隐私设置", "隐私"):
-        # 4.129.s.00 之后「个性化服务」是子页入口，开关在下一层；老版本开关就在本页
-        nested = not any("个性化服务" in t for t, _, _ in p.switches())
-        if not nested or nav.maybe(p, rt, "个性化服务"):
-            p.off(only=["个性化服务"], page="商店·个性化服务")
-            if nested:
-                p.back()
-        p.back()
-    p.back(2)
 
 
 def step_global_search(p, rt):

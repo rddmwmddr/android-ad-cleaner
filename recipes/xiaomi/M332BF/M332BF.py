@@ -22,9 +22,8 @@ def step_store(p, rt):
         p.settle(before, 2)
         nav.gear(p, rt)
     if nav.tap_any(p, rt, "隐私设置", "隐私"):
-        # 「个性化服务」是子页入口，开关在下一层（#374）。
-        nested = not any("个性化服务" in t for t, _, _ in p.switches())
-        if not nested or nav.maybe(p, rt, "个性化服务"):
+        nested = nav.store_privacy_nested(p, rt)
+        if not nested or nav.store_privacy_sub(p, rt):
             p.off(only=["个性化服务"], page="商店·个性化服务")
             if nested:
                 p.back()

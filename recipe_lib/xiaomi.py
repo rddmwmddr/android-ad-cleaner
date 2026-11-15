@@ -10,7 +10,7 @@ from recipe_runtime import SkipStep
 from recipe_lib.shared import _style, close_named_step, gear, maybe, opened, read_switches
 from row import bounds, icon_hit
 
-__all__ = ('bottom_tab', 'browser_settings_xiaomi', 'browser_start', 'by_id', 'close_with_plain_tap', 'direct_settings', 'downloads', 'downloads_probe', 'downloads_tap', 'gear_tap', 'global_search', 'menu_settings', 'mine_settings', 'negative_screen', 'popup_row', 'security_center', 'security_tab', 'settings_icon_visible', 'store', 'store_mode', 'system_ads_security', 'tab', 'tab_bot', 'tap_any', 'tap_bottom_tab', 'tap_low', 'tap_tab', 'theme', 'theme_settings', 'wait_bottom_tab', 'weather_calendar_probe', 'weather_calendar_tap')
+__all__ = ('bottom_tab', 'browser_settings_xiaomi', 'browser_start', 'by_id', 'close_with_plain_tap', 'direct_settings', 'downloads', 'downloads_probe', 'downloads_tap', 'gear_tap', 'global_search', 'menu_settings', 'mine_settings', 'negative_screen', 'popup_row', 'security_center', 'security_tab', 'settings_icon_visible', 'store', 'store_direct', 'store_mode', 'store_mode_step', 'store_privacy_nested', 'store_privacy_sub', 'system_ads_security', 'tab', 'tab_bot', 'tap_any', 'tap_bottom_tab', 'tap_low', 'tap_tab', 'theme', 'theme_settings', 'wait_bottom_tab', 'weather_calendar_probe', 'weather_calendar_tap')
 
 # ---------- 词汇 ----------
 def tap_any(p, rt, *names, scrolls=6):
@@ -483,14 +483,38 @@ def weather_calendar_probe(p, rt):
                   page=f"{pkg}·用户体验计划"); p.back()
         p.back(3)
 
+def store_privacy_nested(p, rt):
+    """商店「隐私设置」页的「个性化服务」是不是子页入口：开关不在本页就是（#1337）。
+
+    4.129.s.00 之后它是子页入口、开关在下一层，更早的版本开关就在本页。点名的开关名单留在
+    数据 / 调用点的 `p.off(only=…)` 里，这里只回答「要不要多进一层」。"""
+    return not any("个性化服务" in t for t, _, _ in p.switches())
+
+def store_privacy_sub(p, rt):
+    """点「隐私设置」页里的「个性化服务」子页入口（上一条判为子页时才调）。"""
+    return maybe(p, rt, "个性化服务")
+
+def store_mode_step(p, rt):
+    """商店「模式切换 → 极简模式」（M154FF / 23049RAD8C）：新版商店没有这一项。"""
+    if maybe(p, rt, "模式切换"):
+        p.tap("极简模式", exact=True, scrolls=0); p.confirm(); p.back()
+
+def store_direct(p, rt, pkg, activity, expect=None):
+    """商店设置页能直达就直达（M154FF / 23049RAD8C / M332BF）：到了返回真。
+
+    直达不通返回假，由调用方按「我的 → 设置」回退；断线 / 约定跳过照常上抛（沿用 #293 / #908）。
+    包名与页面名由数据传进来：`tool/entries.py` 按调用点的这两个实参认入口速查，写死在这里它看不见。"""
+    if expect:
+        return opened(p, rt, lambda: p.start(pkg, activity, expect=expect, budget=2))
+    return opened(p, rt, lambda: p.start(pkg, activity))
+
 def store(p, rt):
     p.start("com.xiaomi.market")
     p.go("我的", "设置")
     gear(p, rt)
     if tap_any(p, rt, "隐私设置", "隐私"):
-        # 「个性化服务」可能是子页入口，开关在下一层。
-        nested = not any("个性化服务" in t for t, _, _ in p.switches())
-        if not nested or maybe(p, rt, "个性化服务"):
+        nested = store_privacy_nested(p, rt)
+        if not nested or store_privacy_sub(p, rt):
             p.off(only=["个性化服务", "个性化推荐"], page="商店·个性化服务")
             if nested:
                 p.back()
@@ -505,15 +529,13 @@ def store_mode(p, rt):
     p.go("我的", "设置")
     gear(p, rt)
     if tap_any(p, rt, "隐私设置", "隐私"):
-        # 「个性化服务」可能是子页入口，开关在下一层。
-        nested = not any("个性化服务" in t for t, _, _ in p.switches())
-        if not nested or maybe(p, rt, "个性化服务"):
+        nested = store_privacy_nested(p, rt)
+        if not nested or store_privacy_sub(p, rt):
             p.off(only=["个性化服务"], page="商店·个性化服务")
             if nested:
                 p.back()
         p.back()
-    if maybe(p, rt, "模式切换"):                        # 新版商店没有这一项
-        p.tap("极简模式", exact=True, scrolls=0); p.confirm(); p.back()
+    store_mode_step(p, rt)
     if maybe(p, rt, "通知设置"):
         # 只关「新手帮助」。不碰「推送消息」：它是父开关，关了会连点赞/评论消息一起关
         p.off(only=["新手帮助"], keep=["推送消息", "应用更新"], page="商店·通知设置"); p.back()

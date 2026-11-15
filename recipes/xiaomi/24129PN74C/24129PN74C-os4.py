@@ -25,8 +25,8 @@ def step_store(p, rt):
     if not nav.gear_top(p, rt):
         raise RuntimeError("商店「我的」页右上角齿轮未找到")
     if nav.maybe(p, rt, "隐私设置") or nav.maybe(p, rt, "隐私"):
-        nested = not any("个性化服务" in t for t, _, _ in p.switches())
-        if not nested or nav.maybe(p, rt, "个性化服务"):
+        nested = nav.store_privacy_nested(p, rt)
+        if not nested or nav.store_privacy_sub(p, rt):
             p.off(only=["个性化服务"], page="商店·个性化服务")
             if nested:
                 p.back()

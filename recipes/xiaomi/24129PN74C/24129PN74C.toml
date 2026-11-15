@@ -22,8 +22,7 @@
 #
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 # BUILD 写 ROM 版本、不写底包：底包被多台同代小米机共用，写进 BUILD 会让它们都被选到这份脚本（#942）。
-# 2026-11-14 转页面树（#1267）：除应用商店外全部落数据；应用商店的「个性化服务」按运行时读到的
-# 开关位置分岔（子页 / 本页），留在同名 `.py` 的 `code =`。
+# 2026-11-14 转页面树：全部段落成数据；「个性化服务」的嵌套分岔由家族库的 `store_personalized` 管。
 model = "24129PN74C"
 models = ["24129PN74C"]
 build = "OS3.0.307.0"
@@ -49,7 +48,39 @@ ops = [
 
 [[segment]]
 name = "应用商店"
-code = "step_store"
+ops = [
+  {kind = "start", pkg = "com.xiaomi.market"},
+  {kind = "sleep", seconds = 2.5},
+  # 冷启动落「福利推广页」→ 先回首页。「我的」用 p.tab()：底部带过滤把内容区里同名的文字挡在外面（沿用 #386）。
+  {kind = "if_find", text = "回到首页", exact = true, ops = [
+    {kind = "tap", text = "回到首页", exact = true, scrolls = 0},
+    {kind = "sleep", seconds = 2},
+  ]},
+  {kind = "require_tab", name = "我的", miss_print = "商店底部「我的」标签没找到"},
+  {kind = "sleep", seconds = 2},
+  {kind = "require_tap", text = "设置", exact = true, scrolls = 4, miss_print = "商店设置图标没找到"},
+  {kind = "sleep", seconds = 1},
+  # 本版没有「隐私设置/个性化服务」和「秒装」，有就关，没有就跳过。
+  {kind = "if_entry", text = "隐私设置", ops = [
+    # 「个性化服务」在新版本是子页入口、老版本开关就在本页：按运行时读到的位置分岔。
+    {kind = "if_lib", name = "store_privacy_nested", ops = [
+      {kind = "if_lib", name = "store_privacy_sub", ops = [
+        {kind = "off", only = ["个性化服务", "个性化推荐"], page = "商店·个性化服务"},
+        {kind = "back"},
+      ]},
+    ], else_ops = [
+      {kind = "off", only = ["个性化服务", "个性化推荐"], page = "商店·个性化服务"},
+    ]},
+    {kind = "back"},
+  ]},
+  {kind = "if_entry", text = "通知设置", ops = [
+    # 只关「新手帮助」。不碰「推送消息」：它是父开关，关了会连点赞/评论消息一起关。
+    {kind = "off", only = ["新手帮助"], keep = ["推送消息", "应用更新"], page = "商店·通知设置"},
+    {kind = "back"},
+  ]},
+  # 模式切换：保持标准模式，不切极简。
+  {kind = "back", n = 2},
+]
 
 [[segment]]
 name = "手机管家"
