@@ -229,7 +229,7 @@
 
 **执行 agent** — 在用户电脑或手机上替用户操作手机的 AI 智能体（WorkBuddy、Claude Code、Codex、Trae、Cursor 等）。操作手册是 `AGENTS.md`，受产品契约约束：不卸载、不 root、不替用户同意协议。
 
-**维护 agent** — 改本仓库的 AI 智能体。规则入口是 `CLAUDE.md`，判断标准是 `CODING_STANDARDS.md`，流程在 `docs/agents/`。维护规范不约束执行 agent；产品契约约束的是产品的行为，维护 agent 改到实现它的代码时照样要读 `AGENTS.md` §1。两类读者同在一个仓库里，靠指针分清（[ADR-0028](docs/adr/0028-agent-audience-boundary.md)）。
+**维护 agent** — 改本仓库的 AI 智能体。规则入口是 `CLAUDE.md`，判断标准是 `CODING_STANDARDS.md`，流程在 `docs/agents/`，`tool/` 与 `gui/` 的函数级归属在 `docs/ARCHITECTURE.md` 的「函数级细节」（[ADR-0039](docs/adr/0039-claude-md-startup-index.md)）。维护规范不约束执行 agent；产品契约约束的是产品的行为，维护 agent 改到实现它的代码时照样要读 `AGENTS.md` §1。两类读者同在一个仓库里，靠指针分清（[ADR-0028](docs/adr/0028-agent-audience-boundary.md)）。
 
 ## 文档
 

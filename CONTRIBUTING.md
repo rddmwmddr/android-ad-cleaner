@@ -68,6 +68,7 @@ uvx ruff@0.17.3 check tool tests gui android/app/src/main/python android/smoke.p
 | 想知道什么 | 看哪里 |
 |---|---|
 | 维护指令、执行口径 | [CLAUDE.md](CLAUDE.md) |
+| 模块归属、函数级细节 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | 审查判据 | [CODING_STANDARDS.md](CODING_STANDARDS.md) |
 | 流程（票、标签、发版、审查） | [docs/agents/](docs/agents/) |
 | 术语表 | [CONTEXT.md](CONTEXT.md) |

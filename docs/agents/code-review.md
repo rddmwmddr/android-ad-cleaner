@@ -18,7 +18,7 @@
 
 默认三轴： <!-- rule:doc.review.default-three-axes -->
 
-- **规范**：`CLAUDE.md` 与 `CODING_STANDARDS.md`，只报文档明确点名的条目。
+- **规范**：`CLAUDE.md`、`CODING_STANDARDS.md` 与 `docs/ARCHITECTURE.md` 的「函数级细节」一节，只报文档明确点名的条目。
 - **bug 扫描**：只看 diff 本身，找会导致功能错误的改动。
 - **历史意图**：用 `git log -L` / `git blame` 看被改区域的历史提交，判断是否破坏当年保护的行为。
 
