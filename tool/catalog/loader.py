@@ -10,6 +10,7 @@ exec 进一个 dict 供 `code=` 与钩子按名字取）、按段登记 action�
 """
 import difflib
 import tomllib
+from collections.abc import Mapping
 from pathlib import Path
 from types import MappingProxyType
 
@@ -135,12 +136,15 @@ _NAMED_OPS = frozenset({"lib", "require_lib", "if_lib", "return_lib", "code"})
 def _named(ops, where):
     """(位置, 名字)：嵌套 `ops` / `else_ops` 一起走，位置是下标链。
 
-    `if_lib_any` 里带 `method` 的调用是 Phone 门面方法名（另一套集合，属门面），不在这里校验。"""
+    `let` 点名的实现写在 `lib` 上（`name` 是它绑定的名字）；`if_lib_any` 里带 `method` 的调用是
+    Phone 门面方法名（另一套集合，属门面），不在这里校验。"""
     for index, op in enumerate(ops):
         place = f"{where}第 {index + 1} 个 op"
         kind = op.get("kind")
         if kind in _NAMED_OPS:
             yield place, op["name"]
+        elif kind == "let":
+            yield place, op["lib"]
         elif kind == "off" and "only_code" in op:
             yield place, op["only_code"]
         elif kind == "if_lib_any":
@@ -152,14 +156,19 @@ def _named(ops, where):
                 yield from _named(op[key], f"{place} 的 {key} ")
 
 
-def _check_names(data, g) -> None:
+def _legal_names(g) -> set[str]:
+    """数据可点名的实现集合：`interpreter.LIBRARY` 的键 ∪ 例外模块命名空间的可调用名字。
+
+    `_resolve` 与 `code=` 都从这两处取，而点名的实现拿到就调，常量与导入的模块指过去只会
+    `TypeError`，所以「合法」按 callable 判。"""
+    return set(interpreter.LIBRARY) | {
+        name for name, value in g.items() if callable(value) and not name.startswith("__")}
+
+
+def _check_names(data, legal) -> None:
     """把数据点名的名字对一遍库与本机例外函数：写错一个名字在这里就报，不等真机跑到那一段。
 
-    合法集合是 `interpreter.LIBRARY` 的键 ∪ 例外模块命名空间的可调用名字——`_resolve` 与 `code=` 都从
-    这两处取，而 `lib` 的名字拿到就调，常量与导入的模块指过去只会得到 `TypeError`。报错带段名、
-    下标链与相近候选（`difflib`，与 `tool/test_anchors.py` 同一手法）。"""
-    legal = set(interpreter.LIBRARY) | {
-        name for name, value in g.items() if callable(value) and not name.startswith("__")}
+    报错带段名、下标链与相近候选（`difflib`，与 `tool/test_anchors.py` 同一手法）。"""
     ordered = sorted(legal)
     for index, segment in enumerate(data["segment"]):
         where = f"第 {index + 1} 段「{segment['name']}」"
@@ -171,6 +180,53 @@ def _check_names(data, g) -> None:
             hint = f"；相近的名字：{'、'.join(close)}" if close else ""
             raise schema.SchemaError(
                 f"{place} 点名的 {name!r} 既不在库里，也不是本机例外函数{hint}")
+
+
+def _var_refs(value) -> list[str]:
+    """一张表 / 一组表里所有 `{expr = "var", name = …}` 引用到的名字。"""
+    if isinstance(value, Mapping):
+        if value.get("expr") == "var":
+            return [value["name"]]
+        return [name for inner in value.values() for name in _var_refs(inner)]
+    if isinstance(value, list):
+        return [name for inner in value for name in _var_refs(inner)]
+    return []
+
+
+def _check_block(ops, where, outer, legal) -> None:
+    """一块 op（段体，或某一支的 `ops` / `else_ops`）：按书写顺序核对引用与绑定。
+
+    引用只认「这块或外层已经绑过的名字」；分支里绑的名字出了分支就看不见——运行期那一支没走时
+    名字根本不存在，装载期放过它就等于把 `KeyError` 推迟到真机上。"""
+    bound = set(outer)
+    for index, op in enumerate(ops):
+        place = f"{where}第 {index + 1} 个 op"
+        # `if_var` 的 `name` 也是一个变量引用（它读那个绑定的值），其余引用都写在表形态的实参里。
+        refs = [name for key, value in op.items() if key not in ("ops", "else_ops")
+                for name in _var_refs(value)]
+        if op.get("kind") == "if_var":
+            refs.append(op["name"])
+        for name in refs:
+            if name in bound:
+                continue
+            known = (f"本段这一处已绑定的是 {sorted(bound)}" if bound
+                     else "本段还没有绑定任何名字（先写一条 let）")
+            raise schema.SchemaError(f"{place} 引用的名字 {name!r} 在这里还没有绑定；{known}")
+        if op.get("kind") == "let":
+            if op["name"] in legal:
+                raise schema.SchemaError(
+                    f"{place} 绑定的名字 {op['name']!r} 与库 / 本机实现同名，读的人分不清；换一个名字")
+            bound.add(op["name"])
+        for key in ("ops", "else_ops"):
+            if key in op:
+                _check_block(op[key], f"{place} 的 {key} ", bound, legal)
+
+
+def _check_bindings(data, legal) -> None:
+    """段内变量（#1373）：绑定的名字只在段内、只在绑定它的那条 op 之后可见，引用未绑定的名字装载期报。"""
+    for index, segment in enumerate(data["segment"]):
+        if "ops" in segment:
+            _check_block(segment["ops"], f"第 {index + 1} 段「{segment['name']}」", set(), legal)
 
 
 def load(path, p, only=(), clock=None, namespace=None) -> LoadedCatalog:
@@ -199,7 +255,9 @@ def load(path, p, only=(), clock=None, namespace=None) -> LoadedCatalog:
         if hook in data:
             g[hook] = g[data[hook]]
 
-    _check_names(data, g)
+    legal = _legal_names(g)
+    _check_names(data, legal)
+    _check_bindings(data, legal)
 
     for index, segment in enumerate(data["segment"]):
         rt.steps.append(Step(segment["name"], interpreter.segment_action(segment, p, rt, g), index))
