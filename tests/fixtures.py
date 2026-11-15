@@ -460,7 +460,7 @@ def phone_mock(fast_mod=None, **fields):
 def normalize(source):
     """折成「代码逐字」：注释、docstring、空行、折行与函数签名上的注解都不影响判等，`g["X"]` 折回 `X`。
 
-    注入面（`recipe_nav` / `recipe_steps`）的实现住在工厂里、脚本副本在顶层，缩进不同；注释与
+    库实现（`recipe_lib/`）住在库里、脚本副本在顶层，缩进不同；注释与
     文档串各写各的，但都不改行为，逐字判据只认代码本身。`global X` 是本地定义留下的产物，
     改走注入之后不再需要，一起丢掉。`recipe_steps` 在 mypy 严格档的名单里，实现上的签名注解
     是那份要求的产物，脚本副本不写，同样不改行为。函数体里的变量注解（`AnnAssign`）不剥：

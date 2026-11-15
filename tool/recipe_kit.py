@@ -1,7 +1,7 @@
 """机型脚本运行时的显式 re-export（#1268 拆除注入面之后只剩这一层）。
 
 `preamble()` / `install()` / `@step` 与执行作用域都已删除：例外函数是普通模块级函数，收 `(p, rt)`；
-库实现住在 `recipe_nav` / `recipe_strategies` / `recipe_steps`，由 `tool/catalog` 按名字分派。
+库实现住在 `recipe_lib/`，由 `tool/catalog` 按名字分派。
 本模块只保留引擎名词的 re-export，`fast.recipe_kit` 与既有 import 不需要跟着改名。
 """
 from recipe_runtime import DONE as DONE, FAILED as FAILED, NOT_RUN as NOT_RUN, SKIPPED as SKIPPED
