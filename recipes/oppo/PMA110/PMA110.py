@@ -1,6 +1,6 @@
 # OPPO Find X9 Ultra（PMA110，ColorOS 17）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
-# 剩三段在这里：广告跟踪（读回名单再整表关 + 回读核对）、主题商店（`reopen=` 回调重进）、
-# 小布建议（`require(p.tap(...))` 的报错出口）。其余五段（长 Activity 前缀的串联调用）已落数据。
+# 剩两段在这里：广告跟踪（读回名单再整表关 + 回读核对）、小布建议（`require(p.tap(...))` 的报错出口）。
+# 其余六段已落数据（长 Activity 前缀按字面量拼进实参，主题商店的 `reopen=` 写成实参块）。
 import time
 
 # bounds 只给注入面的 carousel_choices 取（它按执行作用域解析这个名字）
@@ -21,7 +21,6 @@ BROWSER = "com.heytap.browser/com.heytap.browser.settings.component."
 BROWSER_PREFS = "com.heytap.browser/.settings.component.BrowserPreferencesPage"
 SEARCH = "com.heytap.quicksearchbox/com.heytap.quicksearchbox.ui.activity."
 MARKET = "com.heytap.market/com.heytap.market.mine.cn.setting.ui."
-THEME = "com.heytap.themestore/com.nearme.themespace.activities."
 VIDEO = "com.heytap.yoli/com.heytap.yoli.mine.setting."
 ADVICE = "com.oplus.pantanal.ums/com.oplus.advice.settings.ui."
 ASSISTANT = "com.coloros.assistantscreen/com.oplus.assistantscreen."
@@ -49,24 +48,6 @@ def step_ad_tracking(p, rt):
         rt.require(set(before) <= set(current) and not any(current.values()), "广告跟踪回读未确认全部关闭")
     rt.confirm(len(before))
     print(f"  · 广告跟踪：回读确认 {len(before)} 个应用关闭", flush=True)
-
-
-def step_theme(p, rt):
-    print("  将关闭开屏广告、锁屏左滑精选、个性化推荐；保留消息总开关与锁屏相机。", flush=True)
-    nav.app_settings(p, rt, "com.heytap.themestore", THEME + "SettingActivity", "主题商店")
-    nav.tap_page(p, rt, "服务管理", THEME + "SettingServiceManagerActivity", scrolls=0)
-    activity = THEME + "MessageAndRecommendationSettingActivity"
-    nav.tap_page(p, rt, "消息与广告", activity, scrolls=0)
-    strategies.close_named_plain(p, rt, ["开屏广告"], "主题商店·消息与广告", activity, "消息与广告", 2)
-    p.back()
-    strategies.close_named_plain(p, rt, ["锁屏左滑查看精选内容"], "主题商店·服务管理", THEME + "SettingServiceManagerActivity", "服务管理", 2)
-
-    def privacy():
-        nav.app_settings(p, rt, "com.heytap.themestore", THEME + "SettingActivity", "主题商店")
-        nav.tap_page(p, rt, "隐私", THEME + "PrivacyActivity", scrolls=2)
-
-    privacy()
-    strategies.close_named_plain(p, rt, ["个性化推荐设置"], "主题商店·隐私", THEME + "PrivacyActivity", "隐私", 2, reopen=privacy)
 
 
 def tail(p, rt):

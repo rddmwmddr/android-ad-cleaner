@@ -169,5 +169,45 @@ class Pma110RecipeTests(unittest.TestCase):
         self.p.click.assert_not_called()
 
 
+class ThemeStoreReopenTests(unittest.TestCase):
+    """主题商店（#1337）：进隐私页那两步要在「关完、回读前」再来一遍。
+
+    那两步原本是本机 `.py` 里的一个闭包，现在写成 `close_named_plain` 的 `reopen` 实参块。空假页面
+    在第一次 `app_settings` 就退出了，调用序列对拍看不到这一段的后半，只能在这里守。
+    """
+
+    def test_the_privacy_page_is_entered_again_before_readback(self):
+        seen = []
+
+        def app_settings(package, activity=None, title=None):
+            seen.append(("app_settings", activity))
+
+        def tap_page(text, activity=None, **kwargs):
+            seen.append(("tap_page", text))
+            return True
+
+        def close_named_plain(names, page, activity=None, title=None, max_screens=1,
+                              reopen=None, **kwargs):
+            seen.append(("close", page))
+            if reopen:
+                reopen()
+
+        # `patch_library` 会把 `(p, rt)` 前缀剥掉，桩收到的是业务实参。
+        fixtures.patch_library(self, {
+            "nav.app_settings": app_settings,
+            "nav.tap_page": tap_page,
+            "nav.close_named_plain": close_named_plain,
+        })
+        phone = Mock()
+        phone.locked.return_value = False
+        load(phone, ["主题商店"])
+        self.assertEqual([step[0] for step in seen],
+                         ["app_settings", "tap_page", "tap_page", "close", "close",
+                          "app_settings", "tap_page", "close", "app_settings", "tap_page"],
+                         "主题商店的跳转顺序变了：隐私页要进一次、关完再重进一次")
+        self.assertEqual([step[1] for step in seen if step[0] == "tap_page"],
+                         ["服务管理", "消息与广告", "隐私", "隐私"])
+
+
 if __name__ == "__main__":
     unittest.main()
