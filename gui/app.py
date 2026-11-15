@@ -524,50 +524,23 @@ def os_name():
 NOWIN = 0x08000000 if IS_WIN else 0     # Windows：子进程不弹黑色控制台窗口
 
 
-# Windows 上插着、但 adb 看不到的手机：按 USB 厂商号认品牌，给对应的驱动 / 开关提示（#57 #58 #65 #118 等）。
-USB_VENDORS = {"04E8": "三星", "12D1": "华为", "339B": "荣耀", "2717": "小米", "22D9": "OPPO / 一加 / realme",
-               "2A70": "一加", "2D95": "vivo / iQOO", "18D1": "Google", "2A45": "魅族", "19D2": "中兴 / 努比亚",
-               "22B8": "摩托罗拉", "0B05": "华硕", "17EF": "联想", "05C6": "高通方案"}
-DRIVER_HINT = {
-    "三星": "Windows 要先装三星官方的 Samsung Android USB Driver，装好后重新插线。",
-    "华为": "开发者选项里同时打开「仅充电模式下允许 ADB 调试」。驱动可装华为手机助手获取，装好后退出手机助手再用本工具。"
-            "已升级 HarmonyOS NEXT（5.0 及以上，原生鸿蒙）的机型不支持 adb。",
-    "荣耀": "开发者选项里同时打开「仅充电模式下允许 ADB 调试」。驱动可装荣耀手机助手获取，装好后退出手机助手再用本工具。",
-}
-# adb 在 Windows 上只按 android_winusb.inf 里登记的这个 GUID 枚举 USB 接口；手机只登记了厂商
-# 自己的 GUID 时，接口状态正常、`adb devices` 却静默为 0 台（#702）。
-ADB_INTERFACE_GUID = "f72fe0d4-cbcb-407d-8814-9ed673d0dd6b"
-USB_GUID_UNREADABLE = "-"   # PowerShell 与 usb_parse() 之间的约定：注册表没读到
-
-
+# 诊断文本（措辞、排版、脱敏）与 USB 的解析都在 tool/diagnostics.py（#1376）。这四个名字留在
+# 本模块是因为 tests/ 直接按 `app.<名字>` 取用，`Api.usb_hint()` 也走这里；跑本机命令的两个外壳
+# （usb_phones / other_adb）同理留在这里——那边不碰 subprocess、没有平台分支，才进得了 mypy 严格档。
 def usb_hw_id(instance_id):
-    """InstanceId 里认得出设备的那一段：`USB\\VID_xxxx&PID_xxxx` 加可选的 `&MI_xx`，
-    最后一个反斜杠之后的设备序列号丢掉（诊断「序列号一律替换」的口径不能破）。认不出格式返回空。"""
-    parts = (instance_id or "").split("\\")
-    prefix = "\\".join(parts[:2])
-    return prefix if re.fullmatch(r"USB\\VID_[0-9A-F]{4}&PID_[0-9A-F]{4}(&MI_[0-9A-F]{2})?", prefix, re.I) else ""
+    return _tool("diagnostics").usb_hw_id(instance_id)
 
 
 def usb_parse(out):
-    """把 Get-PnpDevice 那段输出解析成设备表：品牌、设备名、状态、是不是调试接口、硬件 ID、
-    登记的 device interface GUID 元组。末字段是 `-` 或整段缺失时算没读到（None），
-    空字段算读到了但一个都没登记（空元组）。"""
-    found = []
-    for line in out.splitlines():
-        parts = line.split("|")
-        m = re.match(r"USB\\VID_([0-9A-F]{4})", parts[0], re.I)
-        if not m:
-            continue
-        name = parts[1] if len(parts) > 1 else ""
-        status = parts[2] if len(parts) > 2 else ""
-        cls = parts[3] if len(parts) > 3 else ""
-        raw = parts[4] if len(parts) > 4 else USB_GUID_UNREADABLE
-        adb = bool(re.search(r"adb|android", name + " " + cls, re.I))
-        guids = None if raw.strip() == USB_GUID_UNREADABLE else tuple(
-            g.strip() for g in raw.split(",") if g.strip())
-        found.append((USB_VENDORS.get(m.group(1).upper(), "安卓"), name, status, adb,
-                      usb_hw_id(parts[0]), guids))
-    return found
+    return _tool("diagnostics").usb_parse(out)
+
+
+def usb_facts(found, limit=5):
+    return _tool("diagnostics").usb_facts(found, limit)
+
+
+def usb_hint(found):
+    return _tool("diagnostics").usb_hint(found)
 
 
 def usb_phones():
@@ -575,72 +548,20 @@ def usb_phones():
     返回 [(品牌, 设备名, 状态, 是否 ADB 接口, 硬件 ID, 登记的 GUID 元组或 None)]；查不到返回空。"""
     if not IS_WIN:
         return []
-    script = ("[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-PnpDevice -PresentOnly | Where-Object { $_.InstanceId -match '^USB\\\\VID_(" + "|".join(USB_VENDORS) + ")' } | "
+    diag = _tool("diagnostics")
+    script = ("[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-PnpDevice -PresentOnly | Where-Object { $_.InstanceId -match '^USB\\\\VID_(" + "|".join(diag.USB_VENDORS) + ")' } | "
               "ForEach-Object { $k = 'HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\' + $_.InstanceId + '\\Device Parameters'; "
-              "$g = '" + USB_GUID_UNREADABLE + "'; if (Test-Path $k -ErrorAction SilentlyContinue) { "
+              "$g = '" + diag.USB_GUID_UNREADABLE + "'; if (Test-Path $k -ErrorAction SilentlyContinue) { "
               "try { $p = Get-ItemProperty -Path $k -ErrorAction Stop; "
               "$g = (@($p.DeviceInterfaceGUID, $p.DeviceInterfaceGUIDs) | Where-Object { $_ } | Select-Object -Unique) -join ',' } "
-              "catch { $g = '" + USB_GUID_UNREADABLE + "' } }; "
+              "catch { $g = '" + diag.USB_GUID_UNREADABLE + "' } }; "
               "$_.InstanceId + '|' + $_.FriendlyName + '|' + $_.Status + '|' + $_.Class + '|' + $g }")
     try:
         out = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, text=True,
                              encoding="utf-8", errors="replace", timeout=8, creationflags=NOWIN).stdout
     except (OSError, subprocess.TimeoutExpired):
         return []
-    return usb_parse(out)
-
-
-def usb_guid_note(guids):
-    """这个接口登记的 device interface GUID 里有没有 adb 要的那个；没有时把它实际登记的 GUID 说出来。"""
-    if ADB_INTERFACE_GUID in {g.strip().strip("{}").lower() for g in guids}:
-        return "已登记 adb 需要的 device interface GUID"
-    registered = "、".join(g for g in guids if g.strip())
-    trail = f"（实际登记的 GUID：{registered}）" if registered else "，也没有登记任何 GUID"
-    return "未登记 adb 需要的 device interface GUID" + trail
-
-
-def usb_facts(found, limit=5):
-    """把命中的设备逐台说成诊断行：品牌、设备名、状态、是不是调试接口、硬件 ID。
-    只截断设备台数，不替用户判断哪台是手机；带调试接口的排前面，先被截掉的是别的外设（#673）。
-    调试接口后面再跟一行它登记的 device interface GUID，所以输出最多两倍 limit 行；读不到就不写（#702）。"""
-    ordered = [f for f in found if f[3]] + [f for f in found if not f[3]]
-    lines = []
-    for brand, name, status, adb, hw, guids in ordered[:limit]:
-        lines.append(f"{brand} {name}（{status}，{'调试接口' if adb else '非调试接口'}）硬件 ID：{hw or '未识别'}")
-        if adb and guids is not None:
-            lines.append(f"{brand} {name} {usb_guid_note(guids)}")
-    return lines
-
-
-def usb_hint(found):
-    """把设备管理器的结果说成一句人话；没有手机设备时返回空。"""
-    if not found:
-        return ""
-    # 品牌只从带调试接口的设备里取：电脑上还插着别的东西时，列表第一台可能根本不是用户的手机（#357）。
-    adb = [f for f in found if f[3]]
-    picked = adb or found
-    brands = list(dict.fromkeys(f[0] for f in picked))
-    if len(brands) > 1:
-        # 多台手机同时插着：不猜哪台是用户的，逐台说状态，让用户自己只留一台。
-        lines = []
-        for b in brands:
-            items = [f for f in picked if f[0] == b and f[3]]
-            if not items:
-                lines.append(f"{b}（没有调试接口）")
-            elif any(f[2].upper() != "OK" for f in items):
-                lines.append(f"{b}（调试接口的驱动没有装好）")
-            else:
-                lines.append(f"{b}（调试接口在，但 adb 没连上）")
-        return ("电脑识别到多台手机：" + "、".join(lines)
-                + "。只留要处理的那一台插着，重新插线后再检测。")
-    brand = brands[0]
-    if adb and any(f[2].upper() != "OK" for f in adb):
-        head = f"电脑识别到{brand}手机的调试接口，但驱动没有装好。"
-    elif adb:
-        head = f"电脑识别到{brand}手机的调试接口，但 adb 没连上：请退出手机助手类软件和模拟器后重新插线。"
-    else:
-        head = f"电脑识别到{brand}手机，但没有调试接口：手机上的「USB 调试」还没打开，或没点「允许 USB 调试」。"
-    return head + DRIVER_HINT.get(brand, "")
+    return diag.usb_parse(out)
 
 
 def other_adb():
@@ -1189,6 +1110,22 @@ OLD_INSTALL_NOTE = (
 OLD_INSTALL_MARK = "old_install_noticed"
 
 
+class _DiagnosticsProbe:
+    """`tool/diagnostics.py` 的 `Probe` 实现：两个跑本机命令的查询留在这里，那边就不碰 `subprocess`。"""
+
+    def __init__(self, api):
+        self.api = api
+
+    def adb_version(self):
+        try:
+            return self.api._adb("version", timeout=8).splitlines()[0] if self.api.adb else "没有 adb"
+        except Exception as e:
+            return f"adb 出错：{e}"
+
+    def usb_devices(self):
+        return usb_phones()
+
+
 class Api:
     def __init__(self, data_dir, adb=None, runner=None):
         self.data = ClientData(data_dir)
@@ -1598,75 +1535,36 @@ class Api:
 
     # ----- 反馈 -----
     def diagnostics(self):
-        """反馈附带的诊断信息。序列号替换成 <序列号>；不含应用列表和通知内容。"""
-        lines = [f"- 客户端：{APP_NAME} {VERSION}（{'打包版' if FROZEN else '源码'}）",
-                 f"- 电脑：{os_name()}（{platform.machine()}）"]
-        try:
-            v = self._adb("version", timeout=8).splitlines()[0] if self.adb else "没有 adb"
-        except Exception as e:
-            v = f"adb 出错：{e}"
-        lines.append(f"- adb：{v}")
-        st, serial = self.last_status, (self.job.serial if self.job else None)
-        rows = [l.split()[1] for l in self.last_devices.splitlines()[1:] if len(l.split()) > 1]
-        lines.append(f"- adb 设备：{len(rows)} 台" + (f"（{'、'.join(rows)}）" if rows else ""))
-        others = [o for o in other_adb() if not self.adb or os.path.normcase(o) != os.path.normcase(self.adb)]
-        if others:
-            lines.append(f"- 其他正在运行的 adb：{'；'.join(others)}")
-        if not rows:
-            found = usb_phones()
-            hint = usb_hint(found)
-            if hint:
-                lines.append(f"- USB：{hint}")
-            lines += [f"- USB 设备：{line}" for line in usb_facts(found)]
-        if st and "info" in st:
-            i = st["info"]
-            nm = i.get("name") or i.get("model")
-            if not nm.upper().startswith((i.get("brand") or "").upper()):
-                nm = f"{i.get('brand')} {nm}"
-            # 借用同品牌参考脚本时 recipe_ok 恒为假（`status-json` 的 `(not ref) and build_ok(...)`），
-            # 检测页与手机版都先看 recipe_ref 再谈版本：这里同样分三档（#778）。
-            recipe = st.get("recipe")
-            if not recipe:
-                script = "无"
-            elif st.get("recipe_ref"):
-                script = f"{recipe}（同品牌参考脚本，录制版本 {st.get('recipe_build') or '未标'}）"
-            else:
-                # 没标录制版本就无从比对，别写成「一致」（#942）。
-                rb = st.get("recipe_build")
-                script = f"{recipe}（录制版本 {rb}，{'一致' if st.get('recipe_ok') else '不一致'}）" if rb \
-                    else f"{recipe}（录制版本 未标）"
-            lines += [f"- 手机：{nm}（{i.get('model')}）",
-                      f"- 系统：{i.get('os') or i.get('build')}（{i.get('build')}），Android {i.get('android')}",
-                      f"- 机型脚本：{script}",
-                      f"- 折叠屏展开：{'是' if st.get('fold_open') else '否'}；锁屏：{'是' if st.get('locked') else '否'}"
-                      + (TAP_REFUSED if st.get("input_blocked") else "")]
-        else:
-            lines.append("- 手机：还没检测")
-        if self.last_scan_notes:
-            # 用户报「候选比预期少」时，判据就是这几条排除计数（#521）。
-            lines.append("- 通知扫描附注：" + "；".join(self.last_scan_notes))
+        """反馈附带的诊断信息。措辞、排版与脱敏在 `tool/diagnostics.py`（#1376）；
+        这里只把状态整理成普通映射、注入两个本机查询。"""
+        return _tool("diagnostics").diagnostics(self._diagnostics_state(), self._diagnostics_probe())
+
+    def _diagnostics_state(self):
+        """诊断文本要的全部输入，按产生者整理：字段从 `Api` 取，执行快照在锁内取一次（ADR-0010）。"""
+        rows = tuple(line.split()[1] for line in self.last_devices.splitlines()[1:] if len(line.split()) > 1)
+        return {"app": APP_NAME, "version": VERSION, "frozen": FROZEN,
+                "os": os_name(), "machine": platform.machine(),
+                "adb": self.adb, "other_adb": other_adb(), "devices": rows,
+                "status": self.last_status, "scan_notes": list(self.last_scan_notes),
+                "job": self._diagnostics_job(), "last_error": self.last_error,
+                "tap_refused": TAP_REFUSED, "home": os.path.expanduser("~")}
+
+    def _diagnostics_job(self):
+        """执行快照里诊断要的三样：序列号、每条已预渲染跳过原因的结果行、末 60 行日志。"""
         j = self.job
-        if j:
-            snap = j.snapshot(0)
-            lines.append("\n**执行结果**\n")
-            for r in snap["results"]:
-                if r.get("skipped"):
-                    reason = skip_reason(r)
-                    state = f"跳过（{reason}）" if reason else "跳过"
-                else:
-                    state = "成功" if r["rc"] == 0 else "失败（退出码 %s）" % r["rc"]
-                lines.append(f"- {r['title']}：{state}，{r['sec']} 秒")
-            tail = [l for l in snap["lines"] if l.strip()][-60:]
-            log = "\n".join(tail)
-            if serial:
-                log = log.replace(serial, "<序列号>")
-            lines.append("\n<details><summary>最近的日志</summary>\n\n```text\n" + log + "\n```\n</details>")
-        if self.last_error:
-            detail = self.last_error["detail"].replace("```", "~~~")
-            lines.append(f"\n<details><summary>最近失败的完整诊断：{self.last_error['operation']}</summary>\n\n```text\n{detail}\n```\n</details>")
-        report = "\n".join(lines)
-        home = os.path.expanduser("~")
-        return report.replace(home, "<用户目录>").replace(home.replace("\\", "\\\\"), "<用户目录>")
+        if not j:
+            return None
+        snap = j.snapshot(0)
+        results = []
+        for r in snap["results"]:
+            skipped = bool(r.get("skipped"))
+            results.append({"title": r["title"], "rc": r["rc"], "sec": r["sec"], "skipped": skipped,
+                            "reason": skip_reason(r) if skipped else ""})
+        return {"serial": j.serial, "results": results,
+                "log": [line for line in snap["lines"] if line.strip()][-60:]}
+
+    def _diagnostics_probe(self):
+        return _DiagnosticsProbe(self)
 
     # ----- 错误日志上报 -----
     def report_payload(self):

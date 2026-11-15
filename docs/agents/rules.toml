@@ -453,6 +453,14 @@ why = "数据目录与备份目录各自硬编码，会让升级、卸载与备�
 expires_if = "客户端改由平台 API 提供数据目录时删。"
 
 [[rule]]
+id = "dev.client.diagnostics-owner"
+source = "docs/ARCHITECTURE.md#函数级细节"
+check = "code:tool/diagnostics.py:diagnostics"
+status = "code"
+why = "这段给用户看的文本散在 1808 行的窗口桥文件里时，测一句措辞要构造整个 `Api` 并桩 `adb` 与 `Dispatcher`，加一条诊断行也要在 62 个成员里找位置（#1376）。收进一个模块后整段输出可按 state 直接断言，措辞集中一处；跑本机命令与平台分支留在 `gui/app.py`，所以那边也没有理由再拼一份。"
+expires_if = "客户端不再产出这段诊断文本（例如改由引擎侧统一生成）时删。"
+
+[[rule]]
 id = "dev.windows.startup-verdicts"
 source = "docs/ARCHITECTURE.md#函数级细节"
 check = "test:test_win_preflight::StartupAdviceTests.test_motw_wins_over_the_load_branch_when_both_apply"

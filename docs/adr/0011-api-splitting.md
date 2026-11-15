@@ -89,3 +89,13 @@
 - **退役前实跑证据**（2026-11-13，`--baseline b1f4919`）：20 条场景与守卫全部命中，37 处字段差异逐条都可归到之后的预期变更——`results[].kind` / `results[].failed_steps` 来自 #638 的段级重试（ADR-0026），上报日志里 `[页面骨架]` → `[诊断载荷]` 来自 #939 的落点现场，`client_version` 随发版从 0.3.0 前进到 0.4.3；另有 2 条签名差异（`_log` / `_event` 多出 `job=None`，来自 #452 的竞态修复）、1 个本决策有意移除的 `_fetch`、20 个后续新增的 `Api` 方法。没有一条指向拆类本身。
 - **接替者只有结构层**：`tests/test_api_structure.py` 钉住窗口桥方法名与参数列表、三个类体互不引用，不比较下载 / 上报 / 执行的输出。行为层的对拍从此不常备，这是明确接受的空缺，不是遗漏。
 - **取回方式**：`git show f2a9122:tests/compare_api.py > tests/compare_api.py`——`f2a9122` 是删除前最后一版（比 #651 的 `342d105` 多一次 ruff 的 `zip(strict=False)` 修正）。取回后须把 `--baseline` 重钉到当前要证明的那次改动之前的固定 SHA，并重新满足 [CODING_STANDARDS.md](../../CODING_STANDARDS.md) 的「对拍要能证伪」：守卫要走得到目标分支，差异要能归到本次改动。
+
+## 增补：诊断文本改归 `tool/`（#1376）
+
+本文「Considered Options」里那句「`diagnostics()` 同时读 `last_status` / `last_error` / `job` / `adb`，本质是协调者，留在门面」只说了半件事，容易读成「诊断文本也归门面」。现在的答案是：**协调仍是门面的活，它协调出来的那段文本归 `tool/`**。
+
+- 搬家边界的判据一句话：跑本机命令的、被手机版换掉措辞的、属执行域的一律留在 `gui/app.py`。搬走的是 `usb_hw_id` / `usb_parse` / `usb_guid_note` / `usb_facts` / `usb_hint` 五个纯函数、四个 USB 常量与 70 行拼串；留下的是 `usb_phones()`（PowerShell 枚举）、`other_adb()`（PowerShell / `ps`）、`os_name()`（手机版把整个函数换成「安卓手机版（Shizuku）」）、`skip_reason()`（排程与断线重试也在用）。`Api` 只新增三个不进桥面的私有方法：`_diagnostics_state` 整理普通映射 `state`、`_diagnostics_job` 取锁内快照、`_diagnostics_probe` 给出 `Probe` 实现（具体类是模块层的 `_DiagnosticsProbe`）。
+- **状态归属不变**：`state` 是门面按本决策「谁产生谁拥有」拼出来的只读值，`job` 的快照仍在锁内取（ADR-0010 的「执行中读全量结果」语义未变），`skip_reason()` 仍在门面侧预渲染进 `results`。`tool/diagnostics.py` 不认识 `Job`，也不认识 `adb devices` 的输出格式。
+- **`Probe` 两个方法都必须惰性**：`usb_devices()` 只在「adb 看到 0 台」的分支被调用（PowerShell 最坏 8 秒），所以不能预先填进 `state`。这也让 `tool/diagnostics.py` 里没有 `subprocess`、没有平台分支，因此它进 mypy 严格档名单（第 12 个）。
+- **兼容面零改动**：`usb_hw_id` / `usb_parse` / `usb_facts` / `usb_hint` 四个纯函数在 `gui/app.py` 保留同名包装（经 `_tool()` 惰性加载，`tests/` 与 `Api.usb_hint()` 按 `app.<名字>` 取用）；`usb_guid_note` 只有模块内部的 `usb_facts` 调用，没有留壳。`Api.usb_hint()` 与 `Api.diagnostics()` 的桥签名一字不变，`tests/test_api_structure.py` 的 `BRIDGE` 表与 `gui/web/index.html` 的调用都不受影响。
+- **证据**：同一份 `Api` 装置喂给基线 `origin/main @ 67ce5e07` 的 `Api.diagnostics()` 与新的 `diagnostics(state, probe)`，32 组 state（adb 三态、设备 0 / 1 / 多台、其他 adb 空与非空、无设备时 USB 三态、`last_status` 的脚本四档与 `input_blocked` 与「设备名不带品牌前缀」、job 的成败与跳过、附注、`last_error`、脱敏两条）逐字零差异；入库的 `tests/test_diagnostics.py` 按同一批 state 断言整段输出。
