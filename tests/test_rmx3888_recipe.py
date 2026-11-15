@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from fixtures import load_recipe, phone_mock
+from fixtures import keep_list, load_recipe, phone_mock
 from recipe_kit import MissingPackage
 from recipe_meta import recipe_meta
 
@@ -52,8 +52,7 @@ class MetaTests(unittest.TestCase):
         self.assertEqual(meta["steps"], STEPS)
 
     def test_store_keep_holds_features_and_not_promotions(self):
-        scope = load_recipe(make_phone(), RECIPE, None)[0]
-        keep = scope["STORE_KEEP"]
+        keep = keep_list(RECIPE, "软件商店")
         for name in ("帮助与客服", "应用安全", "我的专区：应用工具", "应用使用记录", "首页：AI搜索"):
             self.assertIn(name, keep)
         for name in ("首页：活动弹窗", "软件专区：福利", "游戏专区：活动集合"):
@@ -94,6 +93,17 @@ class AdTrackingTests(unittest.TestCase):
 
 class NegativeScreenTests(unittest.TestCase):
     FOCUS = "com.coloros.assistantscreen/com.oplus.assistantscreen.AssistantScreenActivity"
+
+    def test_a_swipe_that_never_reaches_the_layer_fails_the_segment(self):
+        """右滑三次都停在桌面就整段失败，不能留在桌面上继续找「我的」入口。
+
+        入口现在由家族库 `assistant_swipe_in` 走、失败由数据的 `require_lib … fail=true` 收尾；
+        旧树也绿，守的是这段表达不回退（重新写成静默继续）。"""
+        p = make_phone("com.android.launcher/.Launcher")
+        scope, printed = run(p, "负一屏")
+        self.assertEqual(scope["FAILED_STEPS"], ["负一屏"])
+        self.assertIn("右滑没进负一屏", printed)
+        p.off.assert_not_called()
 
     def test_skips_when_the_layer_has_no_recommendation_rows(self):
         """本机这一层两个入口都没有：按跳过收尾并说明原因，不静默空跑。"""

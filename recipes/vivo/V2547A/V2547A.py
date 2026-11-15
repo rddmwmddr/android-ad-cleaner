@@ -1,5 +1,5 @@
-# V2547A 的本机例外函数（catalog 的 `code=`，影随 `V2547A.toml`）。本机 8 段都是过程段
-# （goto / 循环 / confirm2 / resourceId 点击），逐字保留原实现；线性助手照留。
+# V2547A 的本机例外函数（catalog 的 `code=`，影随 `V2547A.toml`）。应用商店段已转成数据，
+# 其余七段是过程段（goto / 循环 / confirm2 / resourceId 点击），逐字保留原实现。
 # vivo X300 Ultra（V2547A，OriginOS 7，Android 17）机型脚本；2026-10-25 在真机逐页实测，8 段整段跑通，重跑 126 秒。
 import recipe_nav as nav
 import recipe_strategies as strategies
@@ -81,27 +81,6 @@ def step_global_search(p, rt):
         p.back(1)
     # 「搜索项」是搜索范围本身，不动
     p.back(1)
-
-
-def step_store(p, rt):
-    p.start("com.bbk.appstore", settle=1.0)
-    if not nav.tap_text(p, rt, "我的"):
-        print("  ✗ 没找到「我的」"); return
-    if not nav.tap_text(p, rt, "设置"):
-        print("  ✗ 「我的」页没找到设置"); return
-    print(f"  · 商店设置页 {p.focus()}")
-    if nav.goto(p, rt, "关于"):
-        if nav.goto(p, rt, "个性化推荐"):
-            strategies.off(p, rt, only=["个性化推荐"], page="商店·个性化推荐")
-            p.back(1); time.sleep(0.8)
-        p.top()
-        if nav.goto(p, rt, "服务管理", scrolls=2):
-            # 这一页用白名单：「我的服务」「空间清理」要留着
-            strategies.off(p, rt, only=["签到有礼", "顶部轮播图", "顶部栏目", "开屏", "摇一摇", "悬浮窗", "限时推广"],
-                keep=["我的服务", "空间清理"], page="商店·服务管理")
-            p.back(1); time.sleep(0.8)
-        p.back(1)
-    p.back(3)
 
 
 def step_browser(p, rt):

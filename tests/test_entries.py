@@ -1757,6 +1757,15 @@ def calls_on_p_530(tree, method):
             and n.func.value.id == "p"]
 
 
+def _nested_ops(ops):
+    """按书写顺序摊平 `ops` / `else_ops`：条件分支里的入口也算这一段用到的入口。"""
+    for op in ops:
+        yield op
+        for key in ("ops", "else_ops"):
+            if key in op:
+                yield from _nested_ops(op[key])
+
+
 class VivoStoreEntryTests(unittest.TestCase):
     """vivo 参考脚本的商店段改用引擎入口，不再按精确文字点底栏（#530）。"""
 
@@ -1772,8 +1781,10 @@ class VivoStoreEntryTests(unittest.TestCase):
                     names = [a.value for call in calls_on_p_530(tree, "tab")
                              for a in call.args if isinstance(a, ast.Constant)]
                 else:
-                    # 数据段：require_tab 就是引擎的底带 p.tab()（ADR-0012）
-                    names = [op.get("name") for op in store["ops"] if op.get("kind") == "require_tab"]
+                    # 数据段：require_tab 就是引擎的底带 p.tab()（ADR-0012）。直达不通后的
+                    # 「我的 → 设置」回退写在 else_ops 里，所以要连嵌套子 op 一起看。
+                    names = [op.get("name") for op in _nested_ops(store["ops"])
+                             if op.get("kind") == "require_tab"]
                 self.assertIn("我的", names, "商店段没改用 p.tab(\"我的\")")
 
 
@@ -2281,7 +2292,9 @@ class StoreSegmentTests(unittest.TestCase):
 
     def test_rmx3700_passes_both_wording(self):
         scope = self.segment("RMX3700", "软件商店", tap_by_scroll=True, wait_page=True)
-        self.assertIn(PRIVACY_933, [c.args[0] for c in scope["tap_by_scroll"].call_args_list])
+        passed = [c.args[0] for c in scope["tap_by_scroll"].call_args_list]
+        # 页面树里写的是 TOML 数组（list），与别处那条一样按内容比。
+        self.assertIn(list(PRIVACY_933), passed)
 
     def test_phk110_passes_both_wording(self):
         scope = self.segment("PHK110", "软件商店个性化",

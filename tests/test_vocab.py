@@ -38,7 +38,7 @@ UNRESOLVED_ONLY = {
     'oppo/PMX110/PMX110.toml': 2,
     'vivo/V2303A/V2303A.toml': 1,
     'vivo/V2417A/V2417A.toml': 1,
-    'vivo/V2547DA/V2547DA-android17.toml': 4,
+    'vivo/V2547DA/V2547DA-android17.toml': 2,
     'xiaomi/23117RK66C/23117RK66C.toml': 1,
     'xiaomi/24129PN74C/24129PN74C-os4.toml': 2,
     'xiaomi/24129PN74C/24129PN74C.toml': 1,
