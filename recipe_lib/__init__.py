@@ -4,7 +4,8 @@
 归属按家族数算：只被一个家族用到的进 `recipe_lib/<家族>.py`，被 ≥2 个家族用到的进 `shared.py`。
 
 名字集合是显式三层：六个模块的 `__all__` 并集是「数据 `lib:` 能点名」的词汇，`LIBRARY` 就是它；
-`__all__` 再加 10 个面助手，才轮到「能从稳定 import 面取到」的名字。
+`__all__` 再加 `HELPERS` 里的面助手，才轮到「能从稳定 import 面取到」的名字。三层各有多少个以
+实算为准（`tests/test_recipe_nav.py::SurfaceTests`），别在文档里抄死数。
 `tool/recipe_nav.py` / `recipe_strategies.py` / `recipe_steps.py` 只剩转发，真身都在这里。
 """
 
@@ -105,9 +106,10 @@ MODULES = (shared, xiaomi, oppo, vivo, honor, meizu)
 # 数据可点名的名字：家族 `__all__` 的并集，派生不手抄。
 LIBRARY = {name: getattr(module, name) for module in MODULES for name in module.__all__}
 
-# 稳定 import 面能取到、但数据 `lib:` 不许点名的 10 个助手。
+# 稳定 import 面能取到、但数据 `lib:` 不许点名的面助手：判据是「只读前台 / 页面树给段体用」
+# （不自己走读屏与等待）。`settle_page` 自己走读屏与等待，与 `wait_page` 同档，已在家族词汇里（#1371）。
 HELPERS = (
-    "maybe", "labels", "settle_page", "MenuState", "close_named_step", "off_exact_step",
+    "maybe", "labels", "MenuState", "close_named_step", "off_exact_step",
     "require_installed", "title_key", "verify", "_labelled",
 )
 
