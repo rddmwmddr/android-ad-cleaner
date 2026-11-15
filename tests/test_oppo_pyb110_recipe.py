@@ -6,6 +6,9 @@
 同一份文件的游戏中心段：首次运行（广告全开）时开屏浮层更长，底栏点击被吞掉后 `p.tap`
 照样返回成功，整段就停在推荐流首页上找「设置」（#1235）。`Phone.enter` 转发给真的
 `Navigator`，动作原语与观测基座按需换成桩。
+
+负一屏段转成数据之后：快照停在「右滑没进速览」那一条出口，进得去之后的两条子路径与
+「我的」入口缺失只能靠这里守；右滑入口本身收在家族库 `assistant_swipe_in`，两档判据各一条。
 """
 from pathlib import Path
 import sys
@@ -117,3 +120,80 @@ class GameCenterTabTests(unittest.TestCase):
         self.game_center()
         self.p.dismiss.assert_called_once()
         self.assertNotIn("我知道了", [c.args[0] for c in self.p.tap.call_args_list])
+
+
+class NegativeScreenTests(unittest.TestCase):
+    """负一屏段转数据之后的三条出口：右滑进不去、没有「我的」入口、两个子页都不在。"""
+
+    def setUp(self):
+        self.p = phone_mock(W=1272, H=2772)
+        self.p.locked.return_value = False
+        self.p.find.return_value = True          # 右滑一次就认到首页的「我的服务」
+        self.p.go.return_value = True
+        self.p.tap.return_value = True
+
+    def run_segment(self):
+        return load_recipe(self.p, RECIPE, ["负一屏"])
+
+    def test_the_recommendation_switches_are_closed_under_privacy(self):
+        scope, _out = self.run_segment()
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        self.assertEqual(self.p.off.call_args_list, [
+            call(only=["最新服务资讯通知"], page="负一屏·消息管理"),
+            call(only=["热点资讯"], page="负一屏·个性化推荐"),
+        ])
+        self.assertEqual([item.args for item in self.p.back.call_args_list], [(), (), (), (3,)])
+
+    def test_a_swipe_that_never_lands_fails_the_segment(self):
+        self.p.find.return_value = False
+        scope, out = self.run_segment()
+        self.assertEqual(scope["FAILED_STEPS"], ["负一屏"])
+        self.assertIn("右滑没进速览（负一屏）", out.getvalue())
+        self.p.off.assert_not_called()
+
+    def test_a_missing_mine_entry_fails_the_segment(self):
+        self.p.go.return_value = False
+        scope, out = self.run_segment()
+        self.assertEqual(scope["FAILED_STEPS"], ["负一屏"])
+        self.assertIn("没找到「我的」入口", out.getvalue())
+
+    def test_without_the_two_sub_pages_no_switch_is_touched(self):
+        self.p.tap.return_value = False
+        scope, _out = self.run_segment()
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        self.p.off.assert_not_called()
+        self.assertEqual([item.args for item in self.p.back.call_args_list], [(3,)])
+
+
+class SwipeInTests(unittest.TestCase):
+    """`assistant_swipe_in`：两档「算不算进去了」，以及三次就放弃。"""
+
+    def test_the_text_mode_swipes_until_the_home_rows_show_up(self):
+        import recipe_lib.oppo as oppo
+        p = phone_mock(W=1080, H=2400)
+        p.find.side_effect = [False, False, True]     # 第二轮读到「我的服务」
+        self.assertTrue(oppo.assistant_swipe_in(p, Mock(), "我的服务", "添加卡片"))
+        self.assertEqual([item.args[0] for item in p.d.shell.call_args_list[:2]],
+                         ["input keyevent HOME"] * 2)
+        self.assertEqual(len([item for item in p.d.shell.call_args_list
+                              if "input swipe" in item.args[0]]), 2)
+        p.find.assert_any_call("我的服务")             # 一条按包含比
+        p.find.assert_any_call("添加卡片", exact=True)  # 一条按精确比
+
+    def test_three_swipes_without_a_hit_give_up(self):
+        import recipe_lib.oppo as oppo
+        p = phone_mock(W=1080, H=2400)
+        p.find.return_value = False
+        self.assertFalse(oppo.assistant_swipe_in(p, Mock(), "我的服务", "添加卡片"))
+        self.assertEqual(len([item for item in p.d.shell.call_args_list
+                              if "input swipe" in item.args[0]]), 3)
+
+    def test_without_texts_the_foreground_window_name_decides(self):
+        import recipe_lib.oppo as oppo
+        p = phone_mock(W=1080, H=2400)
+        p.focus.side_effect = ["com.android.launcher/.Launcher",
+                               "com.coloros.assistantscreen/.AssistantScreenActivity"]
+        self.assertTrue(oppo.assistant_swipe_in(p, Mock()))
+        self.assertEqual(len([item for item in p.d.shell.call_args_list
+                              if "input swipe" in item.args[0]]), 2)
+        p.find.assert_not_called()

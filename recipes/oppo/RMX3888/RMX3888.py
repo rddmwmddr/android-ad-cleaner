@@ -1,6 +1,7 @@
 # realme 真我 GT5 Pro（RMX3888，ColorOS 15）的本机例外函数（catalog 的 `code=`，影随同名 `.toml`）。
-# 剩五段在这里：负一屏（滑动状态机）、软件商店（多层嵌套 + 无 `require_tap`）、主题（try/except 只认
-# 「无法打开」）、视频（`require(p.tap)` 的报错出口）、游戏中心（`tap_icon` + 复合条件）。其余四段已落数据。
+# 剩五段在这里：负一屏（只余读完入口行之后的收窄）、软件商店（多层嵌套 + 无 `require_tap`）、
+# 主题（try/except 只认「无法打开」）、视频（`require(p.tap)` 的报错出口）、游戏中心（`tap_icon` +
+# 复合条件）。其余四段已落数据，负一屏的右滑入口也收进了家族库。
 import time
 
 import adb_link
@@ -31,18 +32,8 @@ STORE_KEEP = ["帮助与客服", "应用安全", "我的专区：应用工具", 
               "应用使用记录", "首页：AI搜索"]
 
 
-def step_negative_screen(p, rt):
+def step_negative_screen_tail(p, rt):
     # 本机这一层没有「推荐服务 → 轮播推荐」，也没有「搜索框提示词」：两处默认已关，没有可关的项。
-    p.d.shell("input keyevent HOME"); time.sleep(0.6)
-    p.d.shell("input keyevent HOME"); time.sleep(0.6)
-    entered = False
-    for _ in range(3):
-        p.d.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250"); time.sleep(1.2)
-        if "assistantscreen" in p.focus():
-            entered = True
-            break
-    if not entered:
-        raise RuntimeError("右滑没进负一屏（速览），本段没做成")
     if not nav.maybe(p, rt, "我的") and not nav.maybe(p, rt, "头像"):
         raise RuntimeError("负一屏里没找到「我的」或头像入口")
     if not p.tap("设置", exact=True, scrolls=0):

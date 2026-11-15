@@ -78,7 +78,28 @@ ops = [
 
 [[segment]]
 name = "负一屏"
-code = "step_negative_screen"
+ops = [
+  # 速览内嵌在桌面进程里，右滑进去只能按首页文案判（家族库 assistant_swipe_in）。
+  { kind = "require_lib", name = "assistant_swipe_in", kwargs = { text = "我的服务", exact_text = "添加卡片" }, miss_print = "右滑没进速览（负一屏）；", fail = true },
+  # 左上角入口这版叫「我的」，不叫「头像」
+  { kind = "require_go", text = "我的", expect = "设置", miss_print = "没找到「我的」入口" },
+  { kind = "tap", text = "设置", exact = true, scrolls = 0 },
+  # 这台机（速览 17.0.48）没有「推荐服务 / 轮播推荐」入口，也没有「搜索框提示词」：
+  # 个性化开关挪到了「隐私 → 个性化推荐」，模块分成 快捷服务 / 卡片服务 / 热点资讯
+  { kind = "if_tap", text = "消息管理", exact = true, ops = [
+    # 快递取件、赛事提醒这类服务通知是功能项，只关服务资讯推荐
+    { kind = "off", only = ["最新服务资讯通知"], page = "负一屏·消息管理" },
+    { kind = "back" },
+  ] },
+  { kind = "if_tap", text = "隐私", exact = true, ops = [
+    { kind = "if_tap", text = "个性化推荐", exact = true, ops = [
+      { kind = "off", only = ["热点资讯"], page = "负一屏·个性化推荐" },
+      { kind = "back" },
+    ] },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 3 },
+]
 
 [[segment]]
 name = "下拉搜索"

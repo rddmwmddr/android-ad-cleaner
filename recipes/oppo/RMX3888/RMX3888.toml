@@ -36,7 +36,12 @@ ops = [
 
 [[segment]]
 name = "负一屏"
-code = "step_negative_screen"
+ops = [
+  # 速览是独立窗口，右滑进去按前台名判（家族库 assistant_swipe_in）。
+  { kind = "require_lib", name = "assistant_swipe_in", miss_print = "右滑没进负一屏（速览），本段没做成", fail = true },
+  # 剩下的要按读到的入口行决定关不关，两个读数还要留到后面用，数据表达不了。
+  { kind = "code", name = "step_negative_screen_tail" },
+]
 
 [[segment]]
 name = "下拉搜索"

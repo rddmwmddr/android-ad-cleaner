@@ -18,11 +18,8 @@ SETTINGS = "com.android.settings"
 
 
 def step_negative_screen(p, rt):
-    p.d.shell("input keyevent HOME"); time.sleep(0.6); p.d.shell("input keyevent HOME"); time.sleep(0.6)
-    for _ in range(3):
-        p.d.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250"); time.sleep(1.2)
-        if "assistantscreen" in p.focus():
-            break
+    # 进没进都不中断：这一段后面按页面读到的头像与开关走，不靠这个结果
+    nav.assistant_swipe_in(p, rt)
     # 左上头像 → 设置
     av = [n for n in p.tree().iter("node") if "头像" in (n.get("content-desc") or "") + (n.get("text") or "")]
     if av:

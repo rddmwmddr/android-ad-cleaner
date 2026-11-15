@@ -1,5 +1,5 @@
 # 一加 16（PYB110，ColorOS 17）的本机例外函数（catalog 的 `code=`，影随同名 `.toml`）。
-# 线性段已转数据，这里只留需要条件分支与手势坐标的两段。
+# 只剩商店段：设置页靠公开 Intent 拉起，「消息管理」是条件入口，探测后要从页顶重来。
 import time
 import recipe_nav as nav
 
@@ -45,31 +45,3 @@ def step_store(p, rt):
         p.back()
     p.back(2)
 
-
-def step_negative_screen(p, rt):
-    # ColorOS 17：速览内嵌在桌面进程里，焦点仍是 launcher，按页面内容判断进没进
-    p.d.shell("input keyevent HOME"); time.sleep(0.6); p.d.shell("input keyevent HOME"); time.sleep(0.6)
-    entered = False
-    for _ in range(3):
-        p.d.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250"); time.sleep(1.2)
-        if p.find("我的服务") or p.find("添加卡片", exact=True):
-            entered = True
-            break
-    if not entered:
-        raise RuntimeError("右滑没进速览（负一屏）")
-    # 左上角入口这版叫「我的」，不叫「头像」
-    if not p.go("我的", "设置"):
-        raise RuntimeError("没找到「我的」入口")
-    p.tap("设置", exact=True, scrolls=0)
-    # 这台机（速览 17.0.48）没有「推荐服务 / 轮播推荐」入口，也没有「搜索框提示词」：
-    # 个性化开关挪到了「隐私 → 个性化推荐」，模块分成 快捷服务 / 卡片服务 / 热点资讯
-    if p.tap("消息管理", exact=True):
-        # 快递取件、赛事提醒这类服务通知是功能项，只关服务资讯推荐
-        p.off(only=["最新服务资讯通知"], page="负一屏·消息管理")
-        p.back()
-    if p.tap("隐私", exact=True):
-        if p.tap("个性化推荐", exact=True):
-            p.off(only=["热点资讯"], page="负一屏·个性化推荐")
-            p.back()
-        p.back()
-    p.back(3)
