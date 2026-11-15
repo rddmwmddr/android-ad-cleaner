@@ -144,6 +144,91 @@ def _load_tmp(tmp, toml_text, py_text=None):
     return recipe, phone, calls
 
 
+class LoadTimeNameTests(unittest.TestCase):
+    """装载期名字校验（#1289）：数据点名的库名 / 本机函数名写错在装载期就报，不等真机跑到那一段。"""
+
+    def _bad(self, toml_text, *needles, py_text=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(catalog.SchemaError) as caught:
+                _load_tmp(tmp, toml_text, py_text)
+        message = str(caught.exception)
+        for needle in needles:
+            self.assertIn(needle, message)
+        return message
+
+    def test_a_misspelled_lib_name_is_rejected_and_suggests_the_close_one(self):
+        self._bad('[[segment]]\nname="a"\nops=[{kind="lib", name="close_named_honr"}]\n',
+                  "第 1 段「a」", "'close_named_honr'", "close_named_honor")
+
+    def test_a_missing_require_lib_name_is_rejected(self):
+        self._bad('[[segment]]\nname="a"\nops=[{kind="require_lib", name="no_such_helper",'
+                  ' miss_print="x"}]\n', "'no_such_helper'")
+
+    def test_a_missing_if_lib_name_is_rejected(self):
+        self._bad('[[segment]]\nname="a"\nops=[{kind="if_lib", name="no_such_helper",'
+                  ' ops=[{kind="back"}], else_ops=[{kind="back"}]}]\n', "'no_such_helper'")
+
+    def test_a_missing_return_lib_name_is_rejected(self):
+        self._bad('[[segment]]\nname="a"\nops=[{kind="return_lib", name="no_such_helper"}]\n',
+                  "'no_such_helper'")
+
+    def test_a_missing_segment_code_is_rejected(self):
+        self._bad('[[segment]]\nname="a"\ncode="local_missing"\n',
+                  "第 1 段「a」", "'local_missing'")
+
+    def test_a_missing_only_code_strategy_is_rejected(self):
+        self._bad('[[segment]]\nname="a"\nops=[{kind="off", page="p", only_code="no_such"}]\n',
+                  "'no_such'")
+
+    def test_a_missing_code_op_name_is_rejected(self):
+        """op 级的 `code` 也走 `g[name]`（`interpreter._code`），与段级 `code=` 同一个命名空间。"""
+        self._bad('[[segment]]\nname="a"\nops=[{kind="code", name="local_missing"}]\n',
+                  "'local_missing'")
+
+    def test_a_constant_in_the_exception_module_is_not_a_name(self):
+        """合法的是可调用名字：命名空间里的常量被 `lib` 点名时拿到就调，会在运行时 TypeError。"""
+        self._bad('[[segment]]\nname="a"\nops=[{kind="lib", name="NO"}]\n',
+                  "'NO'", py_text="NO = 1\n")
+
+    def test_a_nested_op_reports_the_index_chain(self):
+        message = self._bad(
+            '[[segment]]\nname="a"\nops=[{kind="back"}, {kind="if_lib", name="tap_row",'
+            ' ops=[{kind="back"}, {kind="lib", name="no_such_helper"}], else_ops=[]}]\n',
+            "'no_such_helper'")
+        self.assertIn("第 2 个 op 的 ops 第 2 个 op", message)
+
+    def test_an_else_ops_op_reports_the_index_chain(self):
+        message = self._bad(
+            '[[segment]]\nname="a"\nops=[{kind="if_focus", text="com.x/", ops=[{kind="back"}],'
+            ' else_ops=[{kind="back"}, {kind="lib", name="no_such_helper"}]}]\n',
+            "'no_such_helper'")
+        self.assertIn("第 1 个 op 的 else_ops 第 2 个 op", message)
+
+    def test_an_if_lib_any_name_call_is_checked(self):
+        self._bad('[[segment]]\nname="a"\nops=[{kind="if_lib_any", calls=[{name="no_such_helper"}],'
+                  ' ops=[], else_ops=[]}]\n', "'no_such_helper'")
+
+    def test_an_if_lib_any_method_call_is_a_facade_method_not_a_library_name(self):
+        """带 `method` 的调用是 Phone 门面方法（另一套集合，属门面），不按库名校验。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="if_lib_any",'
+                     ' calls=[{method="tap", args=["我的"]}], ops=[], else_ops=[]}]\n')
+        self.assertEqual([step.name for step in recipe.steps], ["a"])
+
+    def test_names_from_the_exception_module_are_legal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="lib", name="local_x"}]\n',
+                "def local_x(p, rt):\n    pass\n")
+        self.assertEqual([step.name for step in recipe.steps], ["a"])
+
+    def test_a_name_without_a_close_match_reports_without_inventing_one(self):
+        message = self._bad('[[segment]]\nname="a"\nops=[{kind="lib", name="zzzqqqxxx"}]\n',
+                            "'zzzqqqxxx'")
+        self.assertNotIn("相近的名字", message, "没有近似名时不该硬凑候选")
+
+
 class OnlySourceTests(unittest.TestCase):
     """`only` 两态：内联字面量，或 `only_code` 指向本机策略；两者都下发给 `p.off(only=…)`，都算「点名」。"""
 

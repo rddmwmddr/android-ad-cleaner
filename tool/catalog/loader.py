@@ -8,6 +8,7 @@
 exec 进一个 dict 供 `code=` 与钩子按名字取）、按段登记 action。真正的执行在 `LoadedCatalog.run()`
 里，段一律经 `Runtime.run_step`，段归属不断。
 """
+import difflib
 import tomllib
 from pathlib import Path
 from types import MappingProxyType
@@ -130,6 +131,52 @@ def _exception_source(toml: Path) -> tuple[str, str] | None:
     return None
 
 
+# 按名字点名实现的 op：`lib` / `require_lib` / `if_lib` / `return_lib` / `code` 的 `name`、`off` 的
+# `only_code`、段级 `code`。名字写错在装载期报（ADR-0037 的承诺，#1289）。
+_NAMED_OPS = frozenset({"lib", "require_lib", "if_lib", "return_lib", "code"})
+
+
+def _named(ops, where):
+    """(位置, 名字)：嵌套 `ops` / `else_ops` 一起走，位置是下标链。
+
+    `if_lib_any` 里带 `method` 的调用是 Phone 门面方法名（另一套集合，属门面），不在这里校验。"""
+    for index, op in enumerate(ops):
+        place = f"{where}第 {index + 1} 个 op"
+        kind = op.get("kind")
+        if kind in _NAMED_OPS:
+            yield place, op["name"]
+        elif kind == "off" and "only_code" in op:
+            yield place, op["only_code"]
+        elif kind == "if_lib_any":
+            for number, call in enumerate(op["calls"], 1):
+                if "method" not in call:
+                    yield f"{place} 的第 {number} 个 call", call["name"]
+        for key in ("ops", "else_ops"):
+            if key in op:
+                yield from _named(op[key], f"{place} 的 {key} ")
+
+
+def _check_names(data, g) -> None:
+    """把数据点名的名字对一遍库与本机例外函数：写错一个名字在这里就报，不等真机跑到那一段。
+
+    合法集合是 `interpreter.LIBRARY` 的键 ∪ 例外模块命名空间的可调用名字——`_resolve` 与 `code=` 都从
+    这两处取，而 `lib` 的名字拿到就调，常量与导入的模块指过去只会得到 `TypeError`。报错带段名、
+    下标链与相近候选（`difflib`，与 `tool/test_anchors.py` 同一手法）。"""
+    legal = set(interpreter.LIBRARY) | {
+        name for name, value in g.items() if callable(value) and not name.startswith("__")}
+    ordered = sorted(legal)
+    for index, segment in enumerate(data["segment"]):
+        where = f"第 {index + 1} 段「{segment['name']}」"
+        wanted = [(where, segment["code"])] if "code" in segment else list(_named(segment["ops"], where))
+        for place, name in wanted:
+            if name in legal:
+                continue
+            close = difflib.get_close_matches(name, ordered, n=3)
+            hint = f"；相近的名字：{'、'.join(close)}" if close else ""
+            raise schema.SchemaError(
+                f"{place} 点名的 {name!r} 既不在库里，也不是本机例外函数{hint}")
+
+
 def load(path, p, only=(), clock=None, namespace=None) -> LoadedCatalog:
     """装载一份 catalog 数据（不执行任何段）。`only` 为空表示「全部段」。"""
     toml = _toml_path(path)
@@ -155,6 +202,8 @@ def load(path, p, only=(), clock=None, namespace=None) -> LoadedCatalog:
     for hook in ("tail", "guard", "detail", "wrap"):
         if hook in data:
             g[hook] = g[data[hook]]
+
+    _check_names(data, g)
 
     for index, segment in enumerate(data["segment"]):
         rt.steps.append(Step(segment["name"], interpreter.segment_action(segment, p, rt, g), index))
