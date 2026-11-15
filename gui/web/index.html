@@ -220,7 +220,10 @@ async function refreshHarmonyDevices(){
     paint(box, harmonyDevices.map((d, i) => `<div class="dev"><div class="ico">📱</div><div class="meta"><b>${esc(d.name || d.model || '鸿蒙手机')}</b><small>${esc(d.model)} · ${esc(d.serial)}</small><span class="tag info">鸿蒙</span> ${d.state === 'Connected' ? d.supported ? '<span class="tag ok">已连接</span>' : '<span class="tag warn">此系统版本暂不支持</span>' : '<span class="tag warn">请在手机上确认信任，或重新插线</span>'}</div>${d.state === 'Connected' && d.supported ? `<button class="btn" onclick="pickHarmony(${i})">用这台</button>` : ''}</div>`).join(''));
     if (help) help.classList.toggle('hide', harmonyDevices.length > 0);
   } catch (_) {
-    if (epoch === harmonyEpoch) paint($('#harmonydevbox'), '<div class="note warn">鸿蒙设备检测失败，请重新插线后重试。</div>');
+    if (epoch === harmonyEpoch){
+      paint($('#harmonydevbox'), '<div class="note warn">鸿蒙设备检测失败，请重新插线后重试。</div>');
+      const help = $('#harmonyhelp'); if (help) help.classList.add('hide');
+    }
   } finally { harmonyListing = false; }
 }
 function pickHarmony(index){
@@ -388,7 +391,6 @@ async function refreshDevices(){
   const r = await api.devices();
   const box = $("#devbox"); if (!box) return;
   if (r.error && r.error !== "no-adb"){ paint(box, `<div class="note bad">${esc(r.error)}</div>`); return; }
-  const firstLook = !tutSeen; tutSeen = true;
   if (!r.list.length){
     if (!S.usbAt || Date.now() - S.usbAt > 8000){     // 只读设备管理器，较慢，8 秒查一次
       S.usbAt = Date.now();
@@ -397,8 +399,8 @@ async function refreshDevices(){
     paint(box, `<div class="card"><div class="row"><span class="spin"></span><span>正在等待手机……插上数据线后这里会出现你的手机。</span></div>
       <div id="usbhint" class="note warn ${S.usbHint ? "" : "hide"}" style="margin-top:12px">${esc(S.usbHint || "")}</div>
       <p class="lead" style="margin:12px 0 0">一直没有出现：换可传数据的数据线，确认 USB 调试授权；退出电脑上的手机助手类软件和安卓模拟器。荣耀 / 华为还要打开「仅充电模式下允许 ADB 调试」；三星在 Windows 上要装三星 USB 驱动。纯血鸿蒙手机会单独列在下方的鸿蒙设备中。</p></div>`);
-    /* 教程默认展开只在第一次刷新时给一次；之后无论刷新多少轮，展开与收起都由用户点击决定（#1292）。 */
-    if (firstLook) $("#tutbox").open = true;
+    /* 教程默认展开只在第一次落到「没有设备」时给一次；之后展开与收起都由用户点击决定（#1292）。 */
+    if (!tutSeen){ tutSeen = true; $("#tutbox").open = true; }
     return;
   }
   S.usbHint = "";
