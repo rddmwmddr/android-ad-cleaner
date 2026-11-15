@@ -1,27 +1,10 @@
 # Xiaomi 13 Ultra / 14 Pro（2304FPN6DC / 23116PN5BC）的本机例外函数（catalog 的 `code=`，影随同名 `.toml`）。
-# 系统广告的重试轮与全局搜索的榜单候选留在过程化实现里。
-import time
+# 全局搜索的榜单候选留在过程化实现里。
 import recipe_nav as nav
 
 
 # 热搜榜的候选开关名：`step_global_search` 自己按它筛目标行。
 HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "知乎", "精选", "千问"]
-
-
-def step_system_ads(p, rt):
-    # 不用设置搜索：HyperOS 搜索框用 setText 输入中文会卡住、一直打「%」。按菜单路径点进去
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
-    if not nav.maybe(p, rt, "隐私与安全"):
-        return
-    # 13 Ultra（OS3.0.308）：隐私与安全默认停在「隐私」，要切到顶部的「安全」页
-    for _ in range(3):
-        if p.find("设备安全") or p.find("人身安全"):
-            break
-        p.tap("安全", exact=True, scrolls=0)
-        time.sleep(0.5)
-    if nav.maybe(p, rt, "更多安全设置"):
-        if nav.maybe(p, rt, "广告服务"):
-            p.off(only=["个性化广告推荐"], page="系统·广告服务")
 
 
 def step_global_search(p, rt):

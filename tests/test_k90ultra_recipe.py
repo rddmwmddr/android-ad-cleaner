@@ -80,10 +80,10 @@ class K90UltraRecipeTests(unittest.TestCase):
         named = {(op["page"], tuple(op["only"]), tuple(op.get("keep", []))) for op in offs}
         self.assertIn(("系统·广告服务", ("个性化广告推荐",), ()), named)
         self.assertIn(("浏览器·隐私和安全", ("个性化内容推荐", "个性化广告推荐"), ()), named)
-        # 主题段整段留在例外函数里：那一条 off 的 only / keep 在源码里点名。
-        source = EXCEPTIONS.read_text(encoding="utf-8")
-        self.assertIn('p.off(only=["每次联网时通知"], keep=["自动更新"], page="主题·设置")', source)
-        calls = [n for n in ast.walk(ast.parse(source))
+        self.assertIn(("主题·设置", ("每次联网时通知",), ("自动更新",)), named)
+        self.assertIn(("主题·隐私", ("个性化推荐",), ()), named)
+        # 例外函数里也不许出现不带名单的 off()。
+        calls = [n for n in ast.walk(ast.parse(EXCEPTIONS.read_text(encoding="utf-8")))
                  if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
                  and n.func.attr == "off"]
         for call in calls:
@@ -96,7 +96,11 @@ class K90UltraRecipeTests(unittest.TestCase):
         self.assertIn('p.find("设置", exact=True, edge_ok="tab")',
                       "\n".join(path.read_text(encoding="utf-8")
                                 for path in sorted((ROOT / "recipe_lib").glob("*.py"))))
-        self.assertIn("import recipe_nav as nav", EXCEPTIONS.read_text(encoding="utf-8"))
+        theme = next(segment for segment in tomllib.loads(self.source)["segment"]
+                     if segment["name"] == "主题")
+        gears = [op for op in _walk(theme["ops"]) if op.get("name") == "gear"]
+        self.assertTrue(gears, "主题段的设置入口要走家族库的 gear")
+        self.assertTrue(all(op.get("fail") for op in gears), "齿轮点不到要按这一段失败收尾")
 
 
 def _walk(ops):
