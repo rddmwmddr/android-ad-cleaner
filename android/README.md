@@ -79,7 +79,7 @@ adb shell am start -n com.ahuamiao.adcleaner/.MainActivity --es demo home [--es 
 - `aac_android/screen.py` 把发往手机的命令改到这块屏：`am start` 加 `--display` 并另开一份任务（主屏开着同一个 App 时不把它搬走），`input` 加 `-d`，HOME、点亮屏幕、收起通知栏不发（只会作用到主屏），截图用它在 SurfaceFlinger 里的编号。查前台只看这块屏；这块屏带着 `ALWAYS_UNLOCKED` 时锁屏直接按未锁处理，`Vd` 降到没有这个标记的档位就按它那段照实读。
 - `u2.py` 按屏号读屏（命令服务只回这块屏的窗口）；点按走 `input -d`；选择器在拿到的页面上自己匹配；写字走 App 设的剪贴板 + 粘贴键，引擎本来就有这条回落。
 - 建不了屏（安卓 12 以下、系统不给 shell 建屏）就退回主屏模式。后台模式跑完不抢前台，按结果发通知（做完了 / 已停止 / 失败）。
-- 靠桌面手势进入的入口（OPPO / vivo 负一屏）在后台屏上走不通，照常报「没找到」。
+- 靠桌面手势进入的入口（OPPO / vivo 负一屏）在后台屏上走不通，照常报「没找到」。别试着在那块屏上另起一份桌面来绕过：一加 16 / ColorOS 17 实测，`am start -f 0x18000000 --display N -n <桌面>` 之后主屏的桌面会连着坏掉——负一屏滑不出来、点图标没反应，要 `am force-stop com.android.launcher` 或重启才恢复（#1283）。
 
 ## 构建
 
