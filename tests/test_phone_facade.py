@@ -60,9 +60,9 @@ DATA = frozenset({
 # 在这里显式改一行——这正是「脚本访问面变了」。每个名字还必须是门面真实成员，见下面那条守卫。
 # `lost` 已不在快照里：读它的是注入面的 `opened()`（#1148），脚本源码不再出现 `p.lost`；
 # `say` 同理，随广告跟踪段搬进 `recipe_steps`（沿用 #1213）。`page_text` 也是这一类：读它的是
-# `recipe_nav` 里 `tap` 的 exact 档（#1245），脚本本地那份已删。`app` / `promoted` 同样如此：
-# 写它们的是 `recipe_lib/honor.py` 的 `launch`（CLE-AN00 浏览器 / 主题搬过去之后，#1337）。
-# 门面是否还提供它们由成员守卫盯：`lost` / `app` / `promoted` 在 `DATA`，`say` / `page_text` 在 `METHODS`。
+# `recipe_nav` 里 `tap` 的 exact 档（#1245），脚本本地那份已删。门面是否还提供它们由成员守卫盯：
+# `lost` 在 `DATA`，`say` / `page_text` 在 `METHODS`。
+# `app` / `promoted` 同样如此：写它们的是 `recipe_lib/honor.py` 的 `launch`（#1337），两者仍在 `DATA`。
 SCRIPT_NAMES = frozenset({
     "await_page", "back", "changed", "click", "confirm", "d", "dismiss", "enter",
     "entry", "expect_page", "find", "focus", "go", "H", "has_text", "in_settings_page",
