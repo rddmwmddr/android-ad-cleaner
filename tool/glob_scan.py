@@ -1,17 +1,20 @@
 """发现式 glob 的反空转守卫（#1280）。
 
 `for x in <发现>: ...` 后面接 `assertEqual(offenders, [])`，在发现集为空时与「全仓合规」
-不可区分。B 段（#1238）把 `recipes/<家族>/<型号>/recipe*.py` 搬成 `<型号>.toml` 之后，
+不可区分。机型脚本从 `recipes/<家族>/<型号>/recipe*.py` 改成同目录的 `<型号>.toml` 之后，
 三处守卫的发现模式匹配 0 份、断言恒真，CI 全绿而没有人看着它们保护的东西。
 
 判据：把 `tests/` 与 `tool/` 里每一处对仓库目录做发现的 glob / rglob **对真实仓库求值一次**，
 匹配 0 份即报红。基路径与模式从同一文件的模块常量、函数内局部常量、字面量循环变量与
 `形参 or 默认值` 还原；还原不出来（形参、运行时数据目录、f-string、生成器表达式）的调用
 不在判据范围内，记进 `Report.skipped`，不报红——它们指向的不是仓库现状，求值没有意义。
+循环变量按名字取全文件并集，同名变量在一处是字面量、另一处是动态值时会一并按字面量求值
+（方向是可能的误报，不是静默放过）。
 
-豁免只在「这个模式就该匹配 0 份」时使用，键是 (文件相对路径, 模式)，理由写在 `EXEMPT` 里。
-`tests/test_glob_scan.py` 的 `ExemptionTests` 要求每条豁免仍对得上一个真的空匹配：模式不再
-为空就该把它从清单里删掉，不让清单腐烂成第二层静默。
+豁免只在「这个模式就该匹配 0 份」时使用，键是 (文件相对路径, 相对仓库根的模式)，理由写在
+`EXEMPT` 里——两处都是相对路径，换 worktree 或换 CI 机器时不用改。`tests/test_glob_scan.py`
+的 `ExemptionTests` 要求每条豁免仍对得上一个真的空匹配：模式不再为空就该把它从清单里删掉，
+不让清单腐烂成第二层静默。
 """
 import ast
 import glob as globmod
@@ -22,11 +25,11 @@ from pathlib import Path
 
 FOLDERS = ("tests", "tool")
 
-# {(文件相对路径, 模式): 为什么这个模式本来就该匹配 0 份}
+# {(文件相对路径, 相对仓库根的模式): 为什么这个模式本来就该匹配 0 份}
 EXEMPT: dict[tuple[str, str], str] = {
-    ("tests/fixtures.py", "*/*/recipe*.py"):
-        "迁移期兼容：全仓 47 份机型脚本已转成页面树，旧的 `recipe*.py` 一份不剩；"
-        "这一支留着认还没转的目录，现行的发现口径是同函数的 `*/*/*.toml`。",
+    ("tests/fixtures.py", "recipes/*/*/recipe*.py"):
+        "迁移期兼容：机型脚本已全部转成页面树，旧的 `recipe*.py` 一份不剩；"
+        "这一支留着认还没转的目录，现行的发现口径是同函数的 `recipes/*/*/*.toml`。",
 }
 
 _GLOB_FUNCS = ("glob", "iglob")
@@ -35,12 +38,13 @@ _OS_PATH_FUNCS = ("join", "dirname", "abspath", "normpath", "fspath")
 
 @dataclass(frozen=True)
 class Idle:
-    """一处匹配 0 份的发现式扫描。"""
+    """一处匹配 0 份的发现式扫描。`key` 是它相对仓库根的模式，与 `EXEMPT` 的键同名。"""
     where: str
     lineno: int
     how: str
     pattern: str
     base: str
+    key: str
 
 
 @dataclass(frozen=True)
@@ -85,7 +89,7 @@ def _scan_file(path, root, report):
     module_env = _module_constants(tree)
     loops = _loop_values(tree)
     funcs = _function_constants(tree)
-    for call, receiver, how, arg in _glob_calls(tree):
+    for call, receiver, how, arg, recursive in _glob_calls(tree):
         # 调用点所在函数（由内向外）的局部常量叠在模块常量之上；
         # `recipe_sources()` 的 `root = Path(folder or ROOT) / "recipes"` 是这一档。
         env = dict(module_env)
@@ -102,7 +106,7 @@ def _scan_file(path, root, report):
             continue
         if receiver is None:
             for pattern in sorted(patterns):
-                _check_full_pattern(call, how, pattern, root, path, report)
+                _check_full_pattern(call, how, pattern, root, path, report, recursive)
             continue
         bases = _evaluate(receiver, ctx)
         if bases is _UNKNOWN:
@@ -120,22 +124,30 @@ def _scan_file(path, root, report):
             report.cover(where, pattern)
             if any(True for _ in hits):
                 continue
-            if (where, pattern) in EXEMPT:
+            key = _repo_relative(str(base / pattern), root)
+            if (where, key) in EXEMPT:
                 continue
-            report.offenders.append(Idle(where, call.lineno, how, pattern, str(base)))
+            report.offenders.append(Idle(where, call.lineno, how, pattern, str(base), key))
 
 
-def _check_full_pattern(call, how, full, root, path, report):
+def _check_full_pattern(call, how, full, root, path, report, recursive):
     where = path.relative_to(root).as_posix()
     if not _inside_text(full, root):
         report.skipped.append(Skipped(where, call.lineno, how, f"模式 {full} 不在仓库内"))
         return
-    report.cover(where, full)
-    if globmod.glob(full, recursive=True):
+    key = _repo_relative(full, root)
+    report.cover(where, key)
+    # 必须照调用点的实参求值：`glob.glob` 的 `recursive` 默认是 False，`**` 只等价一层。
+    if globmod.glob(full, recursive=recursive):
         return
-    if (where, full) in EXEMPT:
+    if (where, key) in EXEMPT:
         return
-    report.offenders.append(Idle(where, call.lineno, how, full, ""))
+    report.offenders.append(Idle(where, call.lineno, how, full, "", key))
+
+
+def _repo_relative(pattern, root):
+    """把模式换回相对仓库根的写法，豁免键才不会写死本机路径。"""
+    return os.path.relpath(pattern, str(root)).replace(os.sep, "/")
 
 
 def _inside(path, root):
@@ -147,7 +159,7 @@ def _inside_text(text, root):
 
 
 def _glob_calls(tree):
-    """[(调用节点, 接收者或 None, 'glob'/'rglob', 模式实参)]。"""
+    """[(调用节点, 接收者或 None, 'glob'/'rglob', 模式实参, 是否递归)]。"""
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -158,9 +170,17 @@ def _glob_calls(tree):
         # `glob.glob(...)` / `glob.iglob(...)`：模块函数，第一个实参就是完整模式。
         # 这一档必须先判，否则 `glob.glob(...)` 会被下面的方法档抓成「接收者叫 glob」。
         if isinstance(func.value, ast.Name) and func.value.id == "glob" and func.attr in _GLOB_FUNCS:
-            yield node, None, func.attr, arg
+            yield node, None, func.attr, arg, _recursive_flag(node)
         elif func.attr in ("glob", "rglob"):
-            yield node, func.value, func.attr, arg
+            yield node, func.value, func.attr, arg, True
+
+
+def _recursive_flag(node):
+    """`glob.glob(..., recursive=...)` 的实参；省掉或不是字面量 `True` 就按默认的 False。"""
+    for keyword in node.keywords:
+        if keyword.arg == "recursive":
+            return isinstance(keyword.value, ast.Constant) and keyword.value.value is True
+    return False
 
 
 def _module_constants(tree):
@@ -275,8 +295,12 @@ def _evaluate(node, ctx):
 
 def _evaluate_call(node, ctx):
     func = node.func
-    if isinstance(func, ast.Name) and func.id in ("Path", "str") and node.args:
+    if isinstance(func, ast.Name) and func.id == "str" and node.args:
         return _evaluate(node.args[0], ctx)
+    if isinstance(func, ast.Name) and func.id == "Path" and node.args:
+        # `Path(ROOT, "tests")` 与 `Path(ROOT / "tests")` 等价，只取第一个实参会把基路径
+        # 读成仓库根。
+        return _combine_chain(node.args, ctx, lambda parts: Path(*parts))
     if isinstance(func, ast.Attribute) and func.attr == "resolve" and not node.args:
         base = _evaluate(func.value, ctx)
         if base is _UNKNOWN:
@@ -306,5 +330,15 @@ def _combine(left_node, right_node, ctx, build):
         return _UNKNOWN
     try:
         return {str(build(litem, ritem)) for litem, ritem in product(sorted(left), sorted(right))}
+    except (TypeError, ValueError):
+        return _UNKNOWN
+
+
+def _combine_chain(nodes, ctx, build):
+    parts = [_evaluate(node, ctx) for node in nodes]
+    if not parts or any(part is _UNKNOWN for part in parts):
+        return _UNKNOWN
+    try:
+        return {str(build(combo)) for combo in product(*[sorted(part) for part in parts])}
     except (TypeError, ValueError):
         return _UNKNOWN

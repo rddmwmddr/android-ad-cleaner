@@ -98,6 +98,45 @@ class ScanTests(unittest.TestCase):
             self.assertEqual(report.offenders, [])
             self.assertEqual([s.where for s in report.skipped], ["tool/probe.py"])
 
+    def test_a_double_star_without_recursive_is_not_counted_as_a_match(self):
+        """`glob.glob` 的 `recursive` 默认是 False，`**` 只等价一层。扫描器必须照实参求值，
+        否则运行期 0 份、扫描器却算命中，正是本票要防的那个方向。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "tool/probe.py", PREAMBLE
+                  + "import glob, os\n"
+                    "hits = glob.glob(os.path.join(ROOT, 'tests', '**', '*.py'))\n")
+            write(tmp, "tests/a/b/c.py", "x = 1\n")
+            report = glob_scan.scan(tmp)
+            self.assertEqual([f.key for f in report.offenders], ["tests/**/*.py"])
+
+    def test_a_double_star_with_recursive_true_is_evaluated_recursively(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "tool/probe.py", PREAMBLE
+                  + "import glob, os\n"
+                    "hits = glob.glob(os.path.join(ROOT, 'tests', '**', '*.py'), recursive=True)\n")
+            write(tmp, "tests/a/b/c.py", "x = 1\n")
+            self.assertEqual(glob_scan.scan(tmp).offenders, [])
+
+    def test_path_with_several_arguments_is_joined_not_truncated(self):
+        """`Path(ROOT, 'tests')` 等价于 `Path(ROOT / 'tests')`；只取第一个实参会在仓库根上求值。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "tool/probe.py", PREAMBLE
+                  + "hits = list(Path(ROOT, 'tests').glob('*.toml'))\n")
+            write(tmp, "tests/a.toml", "")
+            self.assertEqual(glob_scan.scan(tmp).offenders, [])
+
+    def test_offender_keys_are_repo_relative_for_both_call_styles(self):
+        """豁免键不能写死本机路径：方法档与模块档都换回相对仓库根的写法。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "tool/probe.py", PREAMBLE
+                  + "import glob, os\n"
+                    "a = list((ROOT / 'recipes').glob('gone*.py'))\n"
+                    "b = glob.glob(os.path.join(ROOT, 'recipes', 'gone*.toml'))\n")
+            (Path(tmp) / "recipes").mkdir()
+            keys = sorted(f.key for f in glob_scan.scan(tmp).offenders)
+            self.assertEqual(keys, ["recipes/gone*.py", "recipes/gone*.toml"])
+            self.assertNotIn(str(Path(tmp).resolve()), " ".join(keys))
+
 
 class ExemptionTests(unittest.TestCase):
     """豁免只在「这个模式就该匹配 0 份」时使用，而且清单自己要防腐烂。"""
@@ -106,14 +145,15 @@ class ExemptionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             write(tmp, "tool/probe.py", PREAMBLE + "hits = list((ROOT / 'recipes').glob('gone*.py'))\n")
             (Path(tmp) / "recipes").mkdir()
-            with patch.dict(glob_scan.EXEMPT, {("tool/probe.py", "gone*.py"): "负例夹具"}, clear=True):
+            with patch.dict(glob_scan.EXEMPT, {("tool/probe.py", "recipes/gone*.py"): "负例夹具"},
+                            clear=True):
                 self.assertEqual(glob_scan.scan(tmp).offenders, [])
 
     def test_every_exemption_still_matches_nothing_on_the_real_repo(self):
         """把豁免拿掉再跑一遍：每条豁免都必须落在一个真的空匹配上，否则它就烂了。"""
         with patch.dict(glob_scan.EXEMPT, {}, clear=True):
             bare = glob_scan.scan(ROOT)
-        stale_keys = [(f.where, f.pattern) for f in bare.offenders]
+        stale_keys = [(f.where, f.key) for f in bare.offenders]
         for key in glob_scan.EXEMPT:
             self.assertIn(key, stale_keys, f"{key} 已经不再空转，把它从 EXEMPT 里删掉")
 
