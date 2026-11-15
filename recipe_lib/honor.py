@@ -8,7 +8,7 @@ from polarity import want_state
 from recipe_lib.shared import tap
 from row import bounds
 
-__all__ = ('baidu_browser', 'close_named_honor', 'no_agreement', 'scan_switches')
+__all__ = ('baidu_browser', 'close_named_honor', 'no_agreement', 'scan_switches', 'search_more')
 
 # ---------- 词汇 ----------
 def _honor_my_tab(p, rt, app):
@@ -164,3 +164,24 @@ def close_named_honor(p, rt, names, title, package, marker, max_screens=6, drawn
         print(f"  · {title}：已回读 {len(wanted)} 项", flush=True)
     finally:
         p.switches = native
+
+def search_more(p, rt, miss_print):
+    """点搜索框旁的「更多」：按读到的位置现算坐标（页面顶部那个「更多」是别的东西）。
+
+    只有 tp > 0.3H 的那个才算；第一次没读到先按一次返回键再读（开屏推广页会盖住它），
+    两次都没有按这一段失败，文案由调用方给。"""
+    def more_at():
+        for t, (l, tp, r, b), _n in p.texts():
+            if t == "更多" and tp > p.H * 0.3:
+                return (l + r) // 2, (tp + b) // 2
+        return None
+
+    xy = more_at()
+    if not xy:
+        p.d.press("back")
+        rt.clock.sleep(0.5)
+        xy = more_at()
+    if not xy:
+        raise RuntimeError(miss_print)
+    p.click(*xy)
+    rt.clock.sleep(0.6)

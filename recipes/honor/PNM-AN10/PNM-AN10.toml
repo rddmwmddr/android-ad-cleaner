@@ -22,7 +22,16 @@ ops = [
 
 [[segment]]
 name = "搜索"
-code = "step_search"
+ops = [
+  {kind = "start", pkg = "com.hihonor.search", activity = ".feature.mainpage.presentation.page.HomeActivity", expect = "更多"},
+  {kind = "lib", name = "search_more", args = ["找不到搜索框旁的「更多」"]},
+  {kind = "tap", text = "设置", exact = true, scrolls = 0},
+  {kind = "tap", text = "首页显示", exact = true},
+  {kind = "off", only = ["热搜榜", "热搜词推荐"], page = "搜索·首页显示"},
+  {kind = "back"},
+  {kind = "tap", text = "个性化管理", exact = true},
+  {kind = "off", page = "搜索·个性化管理", page_wide = true},
+]
 
 [[segment]]
 name = "负一屏"

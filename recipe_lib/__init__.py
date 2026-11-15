@@ -85,7 +85,7 @@ from .vivo import (
 )
 from .honor import (
     baidu_browser as baidu_browser, close_named_honor as close_named_honor,
-    no_agreement as no_agreement, scan_switches as scan_switches, labels as labels,
+    no_agreement as no_agreement, scan_switches as scan_switches, labels as labels, search_more as search_more,
     settle_page as settle_page,
 )
 from .meizu import (
@@ -124,7 +124,7 @@ __all__ = (
     "off_exact_paged_optional", "off_exact_step", "off_one", "off_unnamed", "open_app_settings",
     "open_page", "open_search_setting", "open_search_settings", "open_search_sub", "open_settings",
     "open_switch_page", "opened", "page_activity", "popup_row", "read_on_page", "read_switches",
-    "require_installed", "result_xy", "row", "row_switch", "rows", "safe_switches", "scan_switches",
+    "require_installed", "result_xy", "row", "row_switch", "rows", "safe_switches", "scan_switches", "search_more",
     "search_setting", "search_settings", "search_settings_direct", "search_settings_ready",
     "search_settings_swipe", "security_center", "security_tab", "setting_search", "settings_home",
     "settings_icon_visible", "settings_page", "settle_page", "store", "store_mode",

@@ -18,6 +18,7 @@
 - 新增 `tap_id` / `gesture` 两条 op，PNM-AN10 音乐与 PJA110 下拉搜索转成数据，零差异（#1337）
 - `print` 加 `focus` 键，V2547A 商店 / 浏览器 / 阅图锁屏 / 天气四段转成数据，零差异（#1337）
 - 广告跟踪收尾升格 `ad_tracking_close_paged`，PHK110 / PKH110 / PKX110 三段转成数据（#1337）
+- 荣耀搜索「更多」的坐标定位升格 `search_more`，CLE-AN00 / PNM-AN10 两段转成数据（#1337）
 - `docs/09` 与 `verified.toml` 里的 V2547DA 旧脚本名、M154FF README 死链改到现行文件（#1339）
 - `ScreenLocked` 定义搬进 `phone/errors.py`，库层与运行时不再经 `fast` 取名字（#1335）
 - vivo V2547DA 适配说明改按主本 / 变体叙述，旧 `.py` 文件名与死链改到现行文件（#1336）
