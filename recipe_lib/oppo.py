@@ -7,6 +7,7 @@
 from collections import namedtuple
 import adb_link
 from recipe_runtime import SkipStep
+from phone.errors import ScreenLocked
 from row import bounds
 from recipe_lib.shared import _style, app_settings, close_named, close_named_step, maybe, open_page, page_activity, read_switches, wait_page, wait_switches
 
@@ -211,7 +212,6 @@ def open_search_settings(p, rt):
     return p.focus().endswith("SearchSettingActivity")
 
 def game_settings_direct(p, rt):
-    from fast import ScreenLocked
     """ColorOS 17 的游戏中心设置页认 APP_SETTINGS 动作，直达（PMX110，沿用 #650）。
     旧版本不认这个动作时落不到设置页，返回假交给「我的 → 设置」兜底。"""
     result = p.d.shell("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + rt.constants['GAME'])
@@ -228,7 +228,6 @@ def game_settings_direct(p, rt):
     return True
 
 def game_settings_entry(p, rt, package=None):
-    from fast import ScreenLocked
     """「我的」页的「设置」：旧版是文字行（可能读作「设置,有1条新通知」），新版是右上角没有
     文字的齿轮（沿用 #292）。文字行点进了别的页就退回来改用齿轮，不把落点押在包含匹配上。
     `package` 缺省取脚本常量 `GAME`；同一个 App 有两份入口的机型（游戏中心）传自己的包名。"""
@@ -272,7 +271,6 @@ def open_switch_page(p, rt, name, titles, package):
     """点开入口 → 确认落在目标页 → 读出开关；任一步不通就退回原页并返回空，把兜底留给调用方。
     `p.enter` 只认「页面变了」，点进别的页也算换页，所以落点必须再校验一次（沿用 #286）。
     断线、锁屏与按约定跳过照常上抛，交给段包装收场。"""
-    from fast import ScreenLocked
     where = p.focus()
     try:
         p.enter(name, scrolls=8)
@@ -901,7 +899,6 @@ def browser_personalized(p, rt):
     return off_exact_step(p, rt, ["个性化优惠推荐", "个性化广告推荐"], "浏览器·个性化管理", max_screens=2)
 
 def assistant_screen(p, rt):
-    from fast import ScreenLocked
     l, t, r, b = bounds(assistant_icon(p, rt))
     before = p.sig()
     p.click((l + r) // 2, (t + b) // 2)

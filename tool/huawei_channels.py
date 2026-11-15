@@ -17,7 +17,8 @@ import time
 import adb_link
 from chan_fast import ShellPhone, parse, truncated
 from channel_policy import protected_channel
-from fast import Phone, ScreenLocked
+from fast import Phone
+from phone.errors import ScreenLocked
 from row import bounds
 import wait
 

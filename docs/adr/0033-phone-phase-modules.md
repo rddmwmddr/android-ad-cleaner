@@ -127,3 +127,20 @@ ADR-0002 与 ADR-0020 都提过同一句否决：只在 `Phone` 内部拆，只�
 - 真机不是必要证据：本次不改配方、不改门面行为，合入即关。
 - 门面上的转发属性会成为新的「看起来像普通字段」的东西，但它们有显式的写者与读者
   （会话对象），这是与今天的差别所在。
+
+## 增补：`ScreenLocked` 的定义搬进 `phone/errors.py`（#1335）
+
+`ScreenLocked` 原先定义在门面里，语义上却是手机状态，与传输错误（`adb_link.DeviceLost`）、
+阶段约定（`recipe_runtime.SkipStep`）都不是一类东西；定义搬进 `tool/phone/errors.py` 后，
+库层不必再经门面取它。`fast` 保留显式 re-export，`recipes/` 与 `tests/` 的
+`from fast import ScreenLocked` 一行不改——本文的冻结面说的是**对外名字不动**，不是「定义不许搬家」。
+
+同一轮把库层的函数内 `from fast import …` 全部改成模块级、从真身取：`bounds` / `icon_hit` 取 `row`、
+`want_state` 取 `polarity`、`ScreenLocked` 取 `phone.errors`，`Phone.switches(p, root)` 换成
+`p.screen.switches(root)`（后者本来只是一行转发）。`recipe_runtime` 里「取在调用时才不绕进循环」那句
+注释随之消失——唯一真实的环边 `recipe_runtime → fast`（`fast` 顶部 import `recipe_kit`，`recipe_kit`
+顶部 import `recipe_runtime`）是被这条引用撑着的，引用一改它就断了。
+
+守卫是 `tests/test_rules_guards.py` 的 `RecipeLibGuards`：扫 `recipe_lib/*.py` 与
+`tool/recipe_runtime.py`，出现任何 `import fast` 即红，函数内的也算（搬之前正是函数内写法，
+只看模块级等于不设防）。`recipes/` 不在扫描面内，那是本文冻结的对外面。

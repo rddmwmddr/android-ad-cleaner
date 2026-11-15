@@ -7,6 +7,7 @@
 import time
 from wait import until
 from recipe_lib.shared import _style, browser_settings, maybe, read_switches, tap
+from row import bounds, icon_hit
 
 __all__ = ('browser_recommendations', 'browser_settings_vivo', 'by_desc', 'close_named_vivo', 'confirm2', 'dialog_open', 'global_search_ads', 'hiboard_panel_v2547a', 'hiboard_panel', 'i_manager_ads', 'lock_screen_magazine', 'off', 'off_one', 'off_unnamed', 'result_xy', 'row_switch', 'rows', 'search_setting', 'setting_search', 'settings_home', 'store_personalization', 'switch_off', 'system_ads_branch', 'system_ads_chain', 'tap_row', 'weather_service')
 
@@ -78,7 +79,6 @@ def off_unnamed(p, rt, page):
     return done
 
 def _vivo_gear(p, rt):
-    from fast import bounds, icon_hit
     for n in p.tree().iter("node"):
         l, t, r, b = bounds(n)
         icon = "ImageView" in n.get("class", "") and r - l < p.W * 0.25 and b - t < p.H * 0.15
@@ -91,14 +91,11 @@ def _vivo_gear_desc(p, rt):
     for n in p.tree().iter("node"):
         d = (n.get("content-desc") or "") + (n.get("resource-id") or "")
         if any(k in d.lower() for k in ("设置", "setting")) and n.get("clickable") == "true" and p.on_screen(n):
-            from fast import bounds
             l, t, r, b = bounds(n); p.click((l + r) // 2, (t + b) // 2); rt.clock.sleep(1)
             return True
     return p.tap("设置", exact=True, scrolls=0)
 
 def _vivo_gear_landing(p, rt):
-    from fast import bounds, icon_hit
-
     def landed(focus0):
         if p.focus() == focus0:
             return False                    # 点击被吞：页面没换，不能当成进了设置页
@@ -128,7 +125,6 @@ def _vivo_gear_top_style(p, rt):
     「去功能设置里重新开启」的说明行不会被点到，所以不用再按位置收一次。齿轮名字不是恰好
     「设置」（比如「更多设置」）的机型会在这里漏掉。
     """
-    from fast import bounds, icon_hit
     for n in p.tree().iter("node"):
         if n.get("clickable") != "true" or not p.on_screen(n):
             continue
@@ -153,7 +149,6 @@ def tap_row(p, rt, *args, **kwargs):
 
         商店设置页点左侧标题文字不跳转（V1986A 同此），要点行中间（沿用 #530）。
         """
-        from fast import bounds
         for _ in range(scrolls + 1):
             root = p.tree()
             parent = {c: par for par in root.iter("node") for c in par}
@@ -204,7 +199,6 @@ def tap_row(p, rt, *args, **kwargs):
 
 def by_desc(p, rt, kw, wait=1.2):
     """底部 tab、右上齿轮这类入口只有 content-desc，没有文字。"""
-    from fast import bounds
     for n in p.tree().iter("node"):
         if kw in (n.get("content-desc") or "") and n.get("clickable") == "true" and p.on_screen(n):
             l, t, r, b = bounds(n)
@@ -370,7 +364,6 @@ def row_switch(p, rt, title):
     """商店的开关标题在开关行外，只能按同一行的 Switch 节点配对；找不到返回 None。
 
     整行容器和真开关都会被算进来，取树里最后一个（内层真开关）。"""
-    from fast import bounds
     root = p.tree()
     rows = [bounds(n) for n in root.iter("node") if (n.get("text") or "").strip() == title]
     hit = None

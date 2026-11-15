@@ -1,7 +1,7 @@
 """规则守卫：文档内容类四条（`DocGuards`）、注册表类一条（`RegistryGuards`）、引擎结构类两条（`EngineGuards`）、
-手机版界面一条（`AndroidGuards`）、流程 / CI 类三条（`CiGuards`）、夹具装配类两条（`FixtureGuards`）、
-桩与断言两条（`StubGuards`）、发版产物一条（`ReleaseGuards`）、标准流一条（`StdioGuards`）与
-`gh` 会话一条（`GhGuards`），沿用 #1000、#1002 的做法。
+库依赖方向一条（`RecipeLibGuards`）、手机版界面一条（`AndroidGuards`）、流程 / CI 类三条（`CiGuards`）、
+夹具装配类两条（`FixtureGuards`）、桩与断言两条（`StubGuards`）、发版产物一条（`ReleaseGuards`）、
+标准流一条（`StdioGuards`）与 `gh` 会话一条（`GhGuards`），沿用 #1000、#1002 的做法。
 
 `DocGuards`：CHANGELOG 条目一行一个票号、文档里的代码位置用符号名、指到的 `.py` 路径要存在、
 上报服务地址与凭据不写进仓库。`RegistryGuards`：无锚点的顶层列表项按文档冻结上限。
@@ -537,6 +537,38 @@ class EngineGuards(unittest.TestCase):
                 problems.append(f"aac_android/{name} 少了 {'、'.join(absent)}")
         self.assertEqual(problems, [], "替换层少了文件或导出名，手机会在打包后才暴露：\n"
                          + "\n".join(problems))
+
+
+def facade_imports(path):
+    """这份源码里 import 引擎门面的每一处 `(行号, 写法)`；函数内的也算，AST 不看缩进。"""
+    hits = []
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.ImportFrom) and node.module == "fast":
+            hits.append((node.lineno, "from fast import " + ", ".join(a.name for a in node.names)))
+        elif isinstance(node, ast.Import):
+            hits += [(node.lineno, f"import {alias.name}") for alias in node.names
+                     if alias.name == "fast"]
+    return hits
+
+
+class RecipeLibGuards(unittest.TestCase):
+    """库层与运行时只向下依赖工具层，不经引擎门面取名字（#1335）。
+
+    函数内写法也扫：搬之前正是函数内 `from fast import …`，只看模块级等于不设防。
+    `recipes/` 不在扫描面内——机型脚本的 `from fast import …` 是 ADR-0033 冻结的对外面。
+    """
+
+    def test_library_layer_does_not_import_the_facade(self):
+        sources = sorted((ROOT / "recipe_lib").glob("*.py")) + [ROOT / "tool" / "recipe_runtime.py"]
+        hits, scanned = [], 0
+        for path in sources:
+            self.assertTrue(path.is_file(), f"{rel(path)} 不在，这条守卫会空转")
+            scanned += 1
+            hits += [f"{rel(path)}:{line}  {text}" for line, text in facade_imports(path)]
+        self.assertGreaterEqual(scanned, 2, "扫描面空了，这条守卫会空转")
+        self.assertEqual(hits, [], "库层不许经引擎门面取名字，改成从真身取：`bounds` / `icon_hit` ← `row`、"
+                         "`want_state` ← `polarity`、`ScreenLocked` ← `phone.errors`，整页开关用 "
+                         "`p.screen.switches(root)`：\n" + "\n".join(hits))
 
 
 TESTS = ROOT / "tests"

@@ -15,7 +15,8 @@ from stdio import use_utf8_console
 
 use_utf8_console()
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fast import Phone, ScreenLocked, pause_point
+from fast import Phone, pause_point
+from phone.errors import ScreenLocked
 from row import PATH_DEPTH, SAME_LINE, bounds, disabled_at as row_disabled_at, link, named_nodes, own, skeleton
 from channel_policy import classify, protected_channel
 from troubleshooting import ON_PHONE, XIAOMI_INPUT

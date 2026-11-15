@@ -8,6 +8,7 @@ from wait import until
 from entries import reach
 from recipe_runtime import SkipStep
 from recipe_lib.shared import _style, close_named_step, gear, maybe, opened, read_switches
+from row import bounds, icon_hit
 
 __all__ = ('bottom_tab', 'browser_settings_xiaomi', 'browser_start', 'by_id', 'close_with_plain_tap', 'direct_settings', 'downloads', 'downloads_probe', 'downloads_tap', 'gear_tap', 'global_search', 'menu_settings', 'mine_settings', 'negative_screen', 'popup_row', 'security_center', 'security_tab', 'settings_icon_visible', 'store', 'store_mode', 'system_ads_security', 'tab', 'tab_bot', 'tap_any', 'tap_bottom_tab', 'tap_low', 'tap_tab', 'theme', 'theme_settings', 'wait_bottom_tab', 'weather_calendar_probe', 'weather_calendar_tap')
 
@@ -155,7 +156,6 @@ def tab(p, rt, name):
 
 def tab_bot(p, rt, name):
     """按屏幕底部 1/10 区域找标签（主题商店无障碍名带「未选中,」前缀，exact 文本够不着）。"""
-    from fast import bounds
     for n in p.tree().iter("node"):
         d = (n.get("content-desc") or "") + (n.get("text") or "")
         if (d == name or d.endswith("," + name) or d.endswith("，" + name)) and p.on_screen(n):
@@ -167,7 +167,6 @@ def tab_bot(p, rt, name):
 
 def tap_bottom_tab(p, rt, name):
     """按屏幕底部标签栏找入口，避开内容区里同名的普通文字。"""
-    from fast import bounds
     for n in p.tree().iter("node"):
         d = (n.get("content-desc") or "") + (n.get("text") or "")
         if not d or name not in d:
@@ -198,7 +197,6 @@ def bottom_tab(p, rt, name='我的'):
 
 def by_id(p, rt, rid, wait=1.5):
     """按 resource-id 点控件：这台浏览器工具栏和弹窗里各有一个叫「设置」的图标，按文字会点错。"""
-    from fast import bounds
     t0 = rt.clock.time()
     while rt.clock.time() - t0 < wait:
         for n in p.tree().iter("node"):
@@ -222,7 +220,6 @@ def settings_icon_visible(p, rt):
     """「设置」入口进了界面树且可见：只等它出现，点不点得中由 gear() 再判。
 
     判据是 icon_hit()（与 gear() 同一份），但不管可点性与位置——这两条留给 gear()。"""
-    from fast import icon_hit
     return any(icon_hit(n) and p.on_screen(n) for n in p.tree().iter("node"))
 
 def theme_settings(p, rt, tries=2):
@@ -305,7 +302,6 @@ def tap_tab(p, rt, name):
         if n.get("clickable") != "true":
             continue
         label = (n.get("text") or "") + (n.get("content-desc") or "")
-        from fast import bounds
         l, t, r, b = bounds(n)
         if name in label and t < p.H * 0.3 and p.on_screen(n):
             p.click((l + r) // 2, (t + b) // 2); rt.clock.sleep(1)
@@ -340,7 +336,6 @@ def close_with_plain_tap(p, rt, names, page):
 
 def gear_tap(p, rt, pkg, activity):
     """齿轮用引擎短按点不动时的兜底：同一次读屏里找到齿轮，改用 input tap（80 毫秒短按有的 App 会吞）。"""
-    from fast import bounds
     for n in p.tree().iter("node"):
         text = (n.get("text") or "").strip()
         desc = (n.get("content-desc") or "").strip()

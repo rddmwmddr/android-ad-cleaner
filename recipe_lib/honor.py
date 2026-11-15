@@ -4,7 +4,9 @@
 跨家族用到的实现不放在这里，见 `recipe_lib/shared.py`。
 """
 
+from polarity import want_state
 from recipe_lib.shared import tap
+from row import bounds
 
 __all__ = ('baidu_browser', 'close_named_honor', 'no_agreement', 'scan_switches')
 
@@ -88,8 +90,6 @@ def baidu_browser(p, rt):
     「广告设置」是网页，读不到开关；其中「不看程序化广告」「不看个性化广告」要打开，请手动处理。"""
     import re
 
-    from fast import bounds
-
     p.start("com.hihonor.baidu.browser")
     p.dismiss()
     for text, (l, t, r, b), _ in p.texts():
@@ -127,7 +127,6 @@ def scan_switches(p, rt, max_screens):
 
 def close_named_honor(p, rt, names, title, package, marker, max_screens=6, drawn=False):
     """精确标题白名单；操作前完整扫描，操作后核对目标及其他开关。"""
-    from fast import Phone, want_state
 
     # 回读确认数由引擎经 rt 记录
     settle_page(p, rt, package, marker)
@@ -141,7 +140,7 @@ def close_named_honor(p, rt, names, title, package, marker, max_screens=6, drawn
         if drawn:
             rt.require(package == "com.hihonor.dz.reader" and marker == "广告推荐服务",
                          "此页不允许自绘开关截图")
-            return Phone.switches(p, root)
+            return p.screen.switches(root)
         return native(root)
 
     p.switches = read
