@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 from fixtures import load_recipe, phone_mock
 
 LIBRARY_NAMES = ("store_privacy_nested", "store_privacy_sub", "store_mode_step",
-                 "store_direct", "tap_any", "gear", "bottom_tab", "tap_bottom_tab", "tap_low")
+                 "direct_page", "tap_any", "gear", "bottom_tab", "tap_bottom_tab", "tap_low")
 
 
 def run(machine, answers=None, found=(), segment="应用商店"):
@@ -131,7 +131,7 @@ class StoreSegmentTests(unittest.TestCase):
         for machine in ("M154FF", "23049RAD8C"):
             with self.subTest(machine=machine):
                 _calls, events, phone, _scope, _out = run(machine)
-                self.assertEqual(events, ["store_direct", "tap_any", "store_privacy_nested",
+                self.assertEqual(events, ["direct_page", "tap_any", "store_privacy_nested",
                                           "store_privacy_sub", ("off", ["个性化服务"]),
                                           "store_mode_step", ("off", ["新手帮助"])])
                 self.assertEqual(phone.go.call_args_list, [])
@@ -139,19 +139,19 @@ class StoreSegmentTests(unittest.TestCase):
 
     def test_a_slow_machine_settles_on_the_signature_after_the_store_tab(self):
         # M332BF：底栏点完按点之前读到的签名再等 2 秒（这台机换页慢），其余与上面两台同形。
-        calls, events, phone, _scope, _out = run("M332BF", answers={"store_direct": False})
-        self.assertEqual(calls[0], ("store_direct", ("com.xiaomi.market", ".ui.MarketPreferenceActivity"),
+        calls, events, phone, _scope, _out = run("M332BF", answers={"direct_page": False})
+        self.assertEqual(calls[0], ("direct_page", ("com.xiaomi.market", ".ui.MarketPreferenceActivity"),
                                     {"expect": "通知设置"}))
         self.assertEqual(phone.tab.call_args_list, [call("我的")])
         self.assertEqual(phone.settle.call_args_list, [call(phone.sig.return_value, 2)])
-        self.assertEqual(events, ["store_direct", "gear", "tap_any", "store_privacy_nested",
+        self.assertEqual(events, ["direct_page", "gear", "tap_any", "store_privacy_nested",
                                   "store_privacy_sub", ("off", ["个性化服务"]),
                                   ("off", ["新手帮助"])])
         self.assertEqual(backs(phone), [(), (), (), (2,)])
 
     def test_a_slow_machine_that_reaches_the_preferences_page_skips_the_tab_entirely(self):
         _calls, events, phone, _scope, _out = run("M332BF")
-        self.assertEqual(events, ["store_direct", "tap_any", "store_privacy_nested",
+        self.assertEqual(events, ["direct_page", "tap_any", "store_privacy_nested",
                                   "store_privacy_sub", ("off", ["个性化服务"]),
                                   ("off", ["新手帮助"])])
         self.assertEqual(phone.tab.call_args_list, [])
@@ -164,11 +164,11 @@ class StoreSegmentTests(unittest.TestCase):
                 ("23049RAD8C", "com.xiaomi.market.ui.MarketPreferenceActivity", {})):
             with self.subTest(machine=machine):
                 calls, events, phone, _scope, _out = run(machine,
-                                                         answers={"store_direct": False})
-                self.assertEqual(calls[0], ("store_direct", ("com.xiaomi.market", activity), kwargs))
+                                                         answers={"direct_page": False})
+                self.assertEqual(calls[0], ("direct_page", ("com.xiaomi.market", activity), kwargs))
                 self.assertEqual(phone.start.call_args_list, [call("com.xiaomi.market")])
                 self.assertEqual(phone.go.call_args_list, [call("我的", "设置")])
-                self.assertEqual(events, ["store_direct", "gear", "tap_any",
+                self.assertEqual(events, ["direct_page", "gear", "tap_any",
                                           "store_privacy_nested", "store_privacy_sub",
                                           ("off", ["个性化服务"]), "store_mode_step",
                                           ("off", ["新手帮助"])])

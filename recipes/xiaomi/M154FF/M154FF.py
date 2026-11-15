@@ -1,32 +1,12 @@
 # Xiaomi 18 Pro Max（M154FF）的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
-# 系统广告 / 浏览器用 `opened()` 的直达探路：拉起函数作为回调传进去，留在这里。
-import time
+# 浏览器段的直达探路用 `opened()`：拉起函数作为回调传进去，留在这里。
 from entries import THEME_DEAD_ENDS
 
 
 # 热搜榜的候选开关名：`recipe_steps.global_search` 从执行作用域按名字取。
 HOT = ["推荐", "微博", "资讯", "全网", "影视", "音乐", "小说", "知乎", "精选"]
 
-# 注入面的 opened() 从这里取 adb_link.DeviceLost
-import adb_link
 import recipe_nav as nav
-import recipe_steps as steps
-
-
-def step_system_ads(p, rt):
-    if nav.opened(p, rt, lambda: p.start("com.android.settings", ".ad.AdServiceSettings", expect="个性化广告推荐", budget=2)):
-        p.off(only=["个性化广告推荐"], page="系统·广告服务")
-        return
-    # 不用设置搜索：HyperOS 搜索框用 setText 输入中文会卡住、一直打「%」。按菜单路径点进去
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
-    if not nav.maybe(p, rt, "隐私与安全"):
-        return
-    # 18 Pro Max（OS4.0.24）：隐私与安全 → 更多安全设置；18 Fold：隐私与安全 → 安全 → 更多安全设置
-    if not nav.maybe(p, rt, "更多安全设置"):
-        if nav.maybe(p, rt, "安全", scrolls=3):
-            nav.maybe(p, rt, "更多安全设置")
-    if nav.maybe(p, rt, "广告服务"):
-        p.off(only=["个性化广告推荐"], page="系统·广告服务")
 
 
 def step_browser(p, rt):

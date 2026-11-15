@@ -22,7 +22,7 @@ ops = [
 name = "应用商店"
 ops = [
   # 偏好页直达（带落点核对）；不通就回「我的 → 设置」。
-  {kind = "if_lib", name = "store_direct", args = ["com.xiaomi.market", ".ui.MarketPreferenceActivity"], kwargs = {expect = "通知设置"}, else_ops = [
+  {kind = "if_lib", name = "direct_page", args = ["com.xiaomi.market", ".ui.MarketPreferenceActivity"], kwargs = {expect = "通知设置"}, else_ops = [
     {kind = "start", pkg = "com.xiaomi.market"},
     # 底栏用 p.tab：内容区有叫「我的」的游戏（沿用 #386）。这台机换页慢，点完再等 2 秒。
     {kind = "require_tab", name = "我的", settle = 2, miss_print = "商店底部「我的」标签没找到"},

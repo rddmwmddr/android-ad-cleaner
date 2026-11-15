@@ -10,7 +10,7 @@ from recipe_runtime import SkipStep
 from recipe_lib.shared import _style, close_named_step, gear, maybe, opened, read_switches
 from row import bounds, icon_hit
 
-__all__ = ('bottom_tab', 'browser_settings_xiaomi', 'browser_start', 'by_id', 'close_with_plain_tap', 'direct_settings', 'downloads', 'downloads_probe', 'downloads_tap', 'gear_tap', 'global_search', 'menu_settings', 'mine_settings', 'mine_tab_low', 'negative_screen', 'popup_row', 'security_center', 'security_tab', 'settings_icon_visible', 'store', 'store_direct', 'store_mode', 'store_mode_step', 'store_privacy_nested', 'store_privacy_sub', 'system_ads_security', 'tab', 'tab_bot', 'tap_any', 'tap_bottom_tab', 'tap_low', 'tap_tab', 'theme', 'theme_settings', 'wait_bottom_tab', 'weather_calendar_probe', 'weather_calendar_tap')
+__all__ = ('bottom_tab', 'browser_settings_xiaomi', 'browser_start', 'by_id', 'close_with_plain_tap', 'direct_page', 'direct_settings', 'downloads', 'downloads_probe', 'downloads_tap', 'gear_tap', 'global_search', 'menu_settings', 'mine_settings', 'mine_tab_low', 'negative_screen', 'popup_row', 'security_center', 'security_tab', 'settings_icon_visible', 'store', 'store_mode', 'store_mode_step', 'store_privacy_nested', 'store_privacy_sub', 'system_ads_menu', 'system_ads_security', 'tab', 'tab_bot', 'tap_any', 'tap_bottom_tab', 'tap_low', 'tap_tab', 'theme', 'theme_settings', 'wait_bottom_tab', 'weather_calendar_probe', 'weather_calendar_tap')
 
 # ---------- 词汇 ----------
 def tap_any(p, rt, *names, scrolls=6):
@@ -507,10 +507,10 @@ def store_mode_step(p, rt):
     if maybe(p, rt, "模式切换"):
         p.tap("极简模式", exact=True, scrolls=0); p.confirm(); p.back()
 
-def store_direct(p, rt, pkg, activity, expect=None):
-    """商店设置页能直达就直达（M154FF / 23049RAD8C / M332BF）：到了返回真。
+def direct_page(p, rt, pkg, activity, expect=None):
+    """设置页能直达就直达（商店设置 / 系统广告服务）：到了返回真。
 
-    直达不通返回假，由调用方按「我的 → 设置」回退；断线 / 约定跳过照常上抛（沿用 #293 / #908）。
+    直达不通返回假，由调用方按菜单路径回退；断线 / 约定跳过照常上抛（沿用 #293 / #908）。
     包名与页面名由数据传进来：`tool/entries.py` 按调用点的这两个实参认入口速查，写死在这里它看不见。"""
     if expect:
         return opened(p, rt, lambda: p.start(pkg, activity, expect=expect, budget=2))
@@ -557,3 +557,26 @@ def system_ads_security(p, rt):
     rt.require(p.tap("更多安全设置", exact=True, scrolls=6), "未找到「更多安全设置」")
     rt.require(p.tap("广告服务", exact=True, scrolls=6), "未找到「广告服务」")
     close_named_step(p, rt, ["个性化广告推荐"], "系统·广告服务")
+
+def system_ads_menu(p, rt, security_tab_first=False):
+    """按「设置 → 隐私与安全 → 更多安全设置 → 广告服务」走一遍，到得了广告服务页才算成。
+
+    与 `system_ads_security` 是两条路：那条每一步都硬校验（点不到就整段失败），这条是软失败，
+    调用方按返回值决定还动不动开关。`security_tab_first` 给隐私页首屏没有「更多安全设置」的机型：
+    它要先把顶部的「安全」标签切过去，切完页面还要再画几秒，所以按页里的内容轮询三次、没画出来
+    就再点一次；其余机型先按文字翻「更多安全设置」，翻不到才去切标签。"""
+    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
+    rt.clock.sleep(1.2)
+    if not maybe(p, rt, "隐私与安全"):
+        return False
+    if security_tab_first:
+        for _ in range(3):
+            if p.find("设备安全") or p.find("人身安全"):
+                break
+            p.tap("安全", exact=True, scrolls=0)
+            rt.clock.sleep(0.5)
+        if not maybe(p, rt, "更多安全设置"):
+            return False
+    elif not maybe(p, rt, "更多安全设置") and maybe(p, rt, "安全", scrolls=3):
+        maybe(p, rt, "更多安全设置")
+    return maybe(p, rt, "广告服务")

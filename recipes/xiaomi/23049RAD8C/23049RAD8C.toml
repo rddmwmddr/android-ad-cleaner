@@ -14,8 +14,8 @@ code = "step_system_ads"
 [[segment]]
 name = "应用商店"
 ops = [
-  # 直达设置页，避免从首页弹窗或「我的」页面图标迷路；App 本机没装时由 store_direct 放行成跳过。
-  {kind = "if_lib", name = "store_direct", args = ["com.xiaomi.market", "com.xiaomi.market.ui.MarketPreferenceActivity"], else_ops = [
+  # 直达设置页，避免从首页弹窗或「我的」页面图标迷路；App 本机没装时由 direct_page 放行成跳过。
+  {kind = "if_lib", name = "direct_page", args = ["com.xiaomi.market", "com.xiaomi.market.ui.MarketPreferenceActivity"], else_ops = [
     {kind = "start", pkg = "com.xiaomi.market"},
     {kind = "go", text = "我的", expect = "设置"},
     {kind = "lib", name = "gear"},
