@@ -216,5 +216,65 @@ class HonorWKLRecipeTests(unittest.TestCase):
         self.assertEqual(scope["radio"](p, scope["rt"], root, "简洁首页").get("checked"), "false")
 
 
+class WklDataSegmentTests(unittest.TestCase):
+    """阅读 / 魔法画报转成数据之后的行为（#1371）。
+
+    调用序列快照对这两段是盲的（空假页面上读屏与等待都提前收场），所以判据只能落在「库收到了什么、
+    按什么顺序」：阅读要先 settle 版面再点那一行；魔法画报已在画报页时不再点一次。旧树也绿，守的是
+    转数据后不回退。
+    """
+
+    RECIPE = ROOT / "recipes/honor/WKL-AN20/WKL-AN20.toml"
+
+    def record(self, *names):
+        calls = []
+
+        def make(name):
+            def stub(phone, rt, *args, **kwargs):
+                calls.append((name, args, kwargs))
+            return stub
+
+        for name in names:
+            fixtures.patch_surface(self, name, make(name))
+        return calls
+
+    def phone(self, focus=""):
+        """型号 / 版本核对通过的可编排设备：`guard` 每个段各读一次 getprop。"""
+        p = Mock()
+        p.locked.return_value = False
+        p.d.shell.side_effect = [Mock(output="WKL-AN20"),
+                                 Mock(output="WKL-AN20 11.0.0.111(SP7C00E110R101P7)")]
+        p.go.return_value = True
+        p.setting.return_value = True
+        p.focus.return_value = focus
+        return p
+
+    def test_the_reader_settles_the_drawn_switch_page_before_tapping_the_row(self):
+        calls = self.record("tap", "settle_page", "close_named_honor")
+        load_recipe(self.phone(), self.RECIPE, ["阅读"])
+        self.assertEqual(calls, [
+            ("tap", ("更多设置",), {}),
+            ("settle_page", ("com.hihonor.dz.reader", "广告推荐服务"), {}),
+            # 点这一行之前不翻页，关单走自绘开关的截图读数（`drawn`）。
+            ("tap", ("广告推荐服务",), {"scrolls": 0}),
+            ("close_named_honor", (["个性化广告"], "阅读·广告推荐服务",
+                                   "com.hihonor.dz.reader", "广告推荐服务"), {"drawn": True}),
+        ])
+
+    def test_the_magazine_page_is_not_tapped_when_settings_search_already_landed_on_it(self):
+        calls = self.record("tap", "close_named_honor")
+        load_recipe(self.phone(focus="com.hihonor.magazine/.MainActivity"), self.RECIPE, ["魔法画报"])
+        self.assertEqual([call[0] for call in calls], ["close_named_honor"])
+
+    def test_the_magazine_entry_is_tapped_when_the_front_page_is_something_else(self):
+        calls = self.record("tap", "close_named_honor")
+        load_recipe(self.phone(focus="com.hihonor.magazine2/.MainActivity"), self.RECIPE, ["魔法画报"])
+        self.assertEqual(calls, [
+            ("tap", ("魔法画报",), {"scrolls": 0}),
+            ("close_named_honor", (["锁屏壁纸轮播", "锁屏进入魔法画报", "数据流量自动更新"],
+                                   "魔法画报", "com.hihonor.magazine", "魔法画报"), {}),
+        ])
+
+
 if __name__ == "__main__":
     unittest.main()

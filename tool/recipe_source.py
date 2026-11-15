@@ -573,6 +573,18 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
     from catalog.schema import NO_FACT_KINDS      # 延迟 import：只在投影时加载，import 本模块不被牵连
     lines: list[str] = []
 
+    def lower_args(op: Mapping[str, Any]) -> None:
+        """实参里的 `{ops = [...]}`（`close_named(..., reopen=…)` 的回调块）照样要读（#1371）。
+
+        重进页面的那几步本身就是入口事实（`am start` / `p.enter`）；不走进这块，这台机的入口速查
+        与词库会静默少几条。"""
+        args, kwargs = op.get("args"), op.get("kwargs")
+        values = (args if isinstance(args, list) else []) + (
+            list(kwargs.values()) if isinstance(kwargs, Mapping) else [])
+        for value in values:
+            if isinstance(value, Mapping) and "ops" in value:
+                lower(value["ops"])
+
     def lower(ops: Sequence[Any]) -> None:
         for op in ops:
             if not isinstance(op, Mapping):
@@ -624,6 +636,7 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 if kind == "if_lib":
                     args = ", ".join(_s(a) for a in op.get("args", []))
                     lines.append(f"{op['name']}(p, rt, {args})" if args else f"{op['name']}(p, rt)")
+                    lower_args(op)
                 elif kind == "if_lib_any":
                     # 短路的每个助手都调得到：漏一个，入口归属就少一条（#1267）。
                     for call in op.get("calls", []):
@@ -632,6 +645,7 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                             lines.append(f"p.{call['method']}({args})")
                         else:
                             lines.append(f"{call['name']}(p, rt, {args})" if args else f"{call['name']}(p, rt)")
+                        lower_args(call)
                 lower(op.get("ops", []))
                 lower(op.get("else_ops", []))
             elif kind in ("lib", "require_lib", "code", "return_lib", "let"):
@@ -640,6 +654,7 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 called = op["lib"] if kind == "let" else op["name"]
                 args = ", ".join(_s(a) for a in op.get("args", []))
                 lines.append(f"{called}(p, rt, {args})" if args else f"{called}(p, rt)")
+                lower_args(op)
             elif kind == "close_listed":
                 # 候选名单是「这一页要关掉这些名字」，按 `close_named(名单, 页)` 投影进事实层：
                 # 词库按 close 那一类读得出这些字面量（旧脚本里 `names` 是运行期变量，读不出，#1265）。

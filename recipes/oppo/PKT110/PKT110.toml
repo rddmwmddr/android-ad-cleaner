@@ -2,7 +2,7 @@
 # 路径与开关来自 2026-10-28 在 PKT110 真机上逐段实测。
 # 不覆盖软件商店（ColorOS 17 的设置页里没有「隐私」「服务管理」，商店首页的推广位也关不掉），
 # 也不覆盖负一屏（速览）——那边没有「推荐服务」分组。详见 docs/清单/OPPO-ColorOS.md。
-# 2026-11-16：广告跟踪、下拉搜索、游戏中心三段落成数据（#1368），只剩主题商店一段例外（回调当实参）。
+# 2026-11-16：广告跟踪、下拉搜索、游戏中心三段落成数据（#1368），主题商店随后也落成数据（#1371）。
 model = "PKT110"
 models = ["PKT110"]
 build = "PKT110_17.0.0.102(CN01)"
@@ -86,7 +86,31 @@ ops = [
 
 [[segment]]
 name = "主题商店"
-code = "step_theme"
+# 首页的「检测到新版本」弹窗盖住底部标签栏，关弹窗的动画会把紧跟着的点击吞掉，所以每一跳都用
+# 会确认换页的 `enter`（沿用 #286）。
+# 进隐私页那四步写了两遍：一次直接进，一次是 `close_named` 的回调实参。数据不能引用块，
+# 改一处要同步另一处。
+ops = [
+  { kind = "start", pkg = "com.heytap.themestore" },
+  { kind = "enter", text = "我的" },
+  { kind = "require_lib", name = "open_settings", fail = true, miss_print = "没找到「设置」入口：文字与右上角图标都试过" },
+  { kind = "enter", text = "服务管理" },
+  { kind = "enter", text = "消息与广告" },
+  { kind = "lib", name = "close_named", args = [["消息通知", "开屏广告"], "主题·消息与广告"] },
+  { kind = "back", n = 2 },
+  { kind = "start", pkg = "com.heytap.themestore" },
+  { kind = "enter", text = "我的" },
+  { kind = "require_lib", name = "open_settings", fail = true, miss_print = "没找到「设置」入口：文字与右上角图标都试过" },
+  { kind = "enter", text = "隐私" },
+  # 「个性化推荐设置」点下去先弹确认框、确认后退回「设置」，回读前要重进一次——那段重进写成
+  # `reopen` 的实参块，库在关完、回读之前调它（CLOSE_NAMED_STYLE = "reopen"）。
+  { kind = "lib", name = "close_named", args = [["个性化推荐设置"], "主题·个性化推荐"], kwargs = { reopen = { ops = [
+    { kind = "start", pkg = "com.heytap.themestore" },
+    { kind = "enter", text = "我的" },
+    { kind = "require_lib", name = "open_settings", fail = true, miss_print = "没找到「设置」入口：文字与右上角图标都试过" },
+    { kind = "enter", text = "隐私" },
+  ] } } },
+]
 
 [[segment]]
 name = "视频"

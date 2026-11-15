@@ -41,7 +41,6 @@ UNRESOLVED_ONLY = {
     'xiaomi/23117RK66C/23117RK66C.toml': 1,
     'xiaomi/24129PN74C/24129PN74C-os4.toml': 2,
     'xiaomi/24129PN74C/24129PN74C.toml': 1,
-    'xiaomi/M154FF/M154FF.toml': 1,
 }
 # close_named() 第一个参数解析不出的，和上面分开冻结，免得一个口径盖住另一个。
 UNRESOLVED_CLOSE = {

@@ -4,7 +4,8 @@
 归属按家族数算：只被一个家族用到的进 `recipe_lib/<家族>.py`，被 ≥2 个家族用到的进 `shared.py`。
 
 名字集合是显式三层：六个模块的 `__all__` 并集是「数据 `lib:` 能点名」的词汇，`LIBRARY` 就是它；
-`__all__` 再加 10 个面助手，才轮到「能从稳定 import 面取到」的名字。
+`__all__` 再加 `HELPERS` 里的面助手，才轮到「能从稳定 import 面取到」的名字。三层各有多少个以
+实算为准（`tests/test_recipe_nav.py::SurfaceTests`），别在文档里抄死数。
 `tool/recipe_nav.py` / `recipe_strategies.py` / `recipe_steps.py` 只剩转发，真身都在这里。
 """
 
@@ -32,11 +33,12 @@ from .xiaomi import (
     direct_settings as direct_settings, downloads as downloads, downloads_probe as downloads_probe,
     downloads_tap as downloads_tap, gear_tap as gear_tap, global_search as global_search,
     menu_settings as menu_settings, mine_settings as mine_settings,
-    negative_screen as negative_screen, popup_row as popup_row, security_center as security_center,
-    security_tab as security_tab, settings_icon_visible as settings_icon_visible, store as store,
+    mine_tab_low as mine_tab_low, negative_screen as negative_screen, popup_row as popup_row,
+    security_center as security_center, security_tab as security_tab,
+    settings_icon_visible as settings_icon_visible, store as store,
     store_mode as store_mode, store_mode_step as store_mode_step,
     store_privacy_nested as store_privacy_nested, store_privacy_sub as store_privacy_sub,
-    system_ads_security as system_ads_security, tab as tab,
+    system_ads_menu as system_ads_menu, system_ads_security as system_ads_security, tab as tab,
     tab_bot as tab_bot, tap_any as tap_any, tap_bottom_tab as tap_bottom_tab, tap_low as tap_low,
     tap_tab as tap_tab, theme as theme, theme_settings as theme_settings,
     wait_bottom_tab as wait_bottom_tab, weather_calendar_probe as weather_calendar_probe,
@@ -105,9 +107,10 @@ MODULES = (shared, xiaomi, oppo, vivo, honor, meizu)
 # 数据可点名的名字：家族 `__all__` 的并集，派生不手抄。
 LIBRARY = {name: getattr(module, name) for module in MODULES for name in module.__all__}
 
-# 稳定 import 面能取到、但数据 `lib:` 不许点名的 10 个助手。
+# 稳定 import 面能取到、但数据 `lib:` 不许点名的面助手：判据是「只读前台 / 页面树给段体用」
+# （不自己走读屏与等待）。`settle_page` 自己走读屏与等待，与 `wait_page` 同档，已在家族词汇里（#1371）。
 HELPERS = (
-    "maybe", "labels", "settle_page", "MenuState", "close_named_step", "off_exact_step",
+    "maybe", "labels", "MenuState", "close_named_step", "off_exact_step",
     "require_installed", "title_key", "verify", "_labelled",
 )
 
@@ -130,7 +133,8 @@ __all__ = (
     "game_settings_entry", "game_settings_via_mine", "gear", "gear_tap", "gear_top",
     "global_search", "global_search_ads", "global_search_entry", "goto", "has_row", "hiboard_panel",
     "hiboard_panel_v2547a", "hide_carousel", "i_manager_ads", "labels", "launch", "lock_screen_magazine",
-    "maybe", "menu_settings", "menu_state", "mine_settings", "more_menu", "my_tab", "navigate",
+    "maybe", "menu_settings", "menu_state", "mine_settings", "mine_tab_low", "more_menu", "my_tab",
+    "navigate",
     "negative_screen", "no_agreement", "off", "off_exact", "off_exact_paged",
     "off_exact_paged_optional", "off_exact_step", "off_one", "off_unnamed", "open_app_settings",
     "open_page", "open_search_setting", "open_search_settings", "open_search_sub", "open_settings",
@@ -141,7 +145,8 @@ __all__ = (
     "settings_icon_visible", "settings_page", "settle_page", "store", "store_mode", "store_mode_step",
     "store_personalization", "store_privacy", "store_privacy_nested", "store_privacy_sub",
     "store_promotions", "store_settings_direct", "switch_off", "switch_signature",
-    "switch_top", "system_ads_branch", "system_ads_chain", "system_ads_security", "system_settings",
+    "switch_top", "system_ads_branch", "system_ads_chain", "system_ads_menu", "system_ads_security",
+    "system_settings",
     "tab", "tab_bot", "tap", "tap_any", "tap_bottom_tab", "tap_by_scroll", "tap_low", "tap_page",
     "tap_row", "tap_tab", "tap_text", "theme", "theme_settings", "theme_shop_settings",
     "theme_store_settings", "title_key", "verify", "video_direct", "wait_bottom_tab", "wait_home",

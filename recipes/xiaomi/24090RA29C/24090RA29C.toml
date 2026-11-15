@@ -3,7 +3,7 @@
 # 主题、浏览器的设置是无文字齿轮（content-desc=设置），首页「我的」是底部标签。
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 # 2026-11-14 转页面树（#1266）：系统广告与浏览器落成导航数据；主题段按文字坐标点「我的」标签，
-# 留在同名 `.py` 的 `code =`。
+# 那一步是家族库的 `mine_tab_low`，其余照旧落成导航数据。
 model = "24090RA29C"
 models = ["24090RA29C"]
 build = "OS3.0.309.0"
@@ -40,7 +40,25 @@ ops = [{ kind = "lib", name = "downloads" }]
 
 [[segment]]
 name = "主题"
-code = "step_theme"
+ops = [
+  # 主题管理包没有 LAUNCHER，直达代理页最稳（沿用 #730）；经主题商店冷启动要过一道重定向过渡窗，
+  # 前台校验容易误判（沿用 #906）。落点被系统转走时仍按跳过收尾。
+  { kind = "skip_unless_installed", command = "pm path com.android.thememanager", contains = "package:", text = "  · 本机没有主题管理包，跳过" },
+  { kind = "start_or_skip", pkg = "com.android.thememanager", activity = ".ThemeResourceProxyTabActivity", dead_ends = ["com.xiaomi.market", "com.miui.home"], reason = "主题页打不开" },
+  { kind = "sleep", seconds = 3 },
+  { kind = "dismiss" },
+  # 「我的」在 65% 屏高以下，p.tab() 只认最下面那道带：按读到的位置点。
+  { kind = "require_lib", name = "mine_tab_low", miss_print = "主题「我的」标签没找到；", fail = true, evidence = true },
+  { kind = "dismiss" },
+  { kind = "require_lib", name = "gear", miss_print = "主题设置入口没找到；", fail = true, evidence = true },
+  { kind = "await_page" },
+  { kind = "off_required", only = ["每次联网时通知"], keep = ["自动更新"], page = "主题·设置", contains = true },
+  { kind = "if_entry", text = "隐私设置", ops = [
+    { kind = "off", only = ["个性化推荐"], page = "主题·隐私" },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 2 },
+]
 
 [[segment]]
 name = "浏览器"

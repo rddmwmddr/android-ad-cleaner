@@ -821,6 +821,52 @@ class IfVarOpTests(unittest.TestCase):
         self.assertEqual(self._branches(toml, None), [1])
 
 
+class LibArgOpsBlockTests(unittest.TestCase):
+    """`lib` 实参里的 `{ops = [...]}`（#1371）：一串 op 包成可调用对象传给库，由库决定什么时候调
+    （`close_named(..., reopen=…)` 在关完、回读前重进一次页）。
+
+    判据只看「库收到了什么、块什么时候跑」：解释器不预先求值，时序仍归库实现。"""
+
+    TOML = ('[[segment]]\nname="a"\nops=['
+            '{kind="lib", name="closer", args=["页"], kwargs={reopen={ops=['
+            '{kind="enter", text="我的"},'
+            '{kind="back", n=2}]}}}]\n')
+
+    def _run(self, closer):
+        seen = []
+
+        def library_closer(p, rt, page, reopen=None):
+            closer(seen, page, reopen)
+
+        patch_library(self, closer=library_closer)
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.TOML)
+            phone.enter = lambda text, **kw: seen.append(("enter", text))
+            phone.back = lambda n=1: seen.append(("back", n))
+            recipe.run()
+        return seen
+
+    def test_the_block_runs_only_when_the_library_calls_it(self):
+        def closer(seen, page, reopen):
+            seen.append(("closer", page, callable(reopen)))
+            reopen()
+
+        self.assertEqual(self._run(closer),
+                         [("closer", "页", True), ("enter", "我的"), ("back", 2)])
+
+    def test_a_library_that_ignores_the_block_leaves_it_unrun(self):
+        """解释器不预先求值：没有回升调的段不该多出那几步调用（时序归库）。"""
+        self.assertEqual(self._run(lambda seen, page, reopen: None), [])
+
+    def test_a_bad_op_inside_the_block_is_rejected_at_load_time(self):
+        toml = ('[[segment]]\nname="a"\nops=['
+                '{kind="lib", name="close_named", kwargs={reopen={ops=[{kind="no_such_kind"}]}}}]\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(catalog.SchemaError) as caught:
+                _load_tmp(tmp, toml)
+        self.assertIn("实参块", str(caught.exception))
+
+
 class RequireSwitchesOpTests(unittest.TestCase):
     """`require_switches` op（#1373）：把读到的开关表原样交给 `rt.require_switches(…)` 点名核对，
     缺一项就整段不动——与旧脚本里 `rt.require_switches(switches, ["X"], "页")` 同一条出口。"""
@@ -1492,6 +1538,60 @@ class OffRequiredProjectionTests(unittest.TestCase):
         lowered = recipe_source._catalog_src(self.DATA)
         self.assertIn('only=["每次联网时通知"]', lowered)
         self.assertIn('keep=["自动更新"]', lowered)
+
+
+class LibArgOpsProjectionTests(unittest.TestCase):
+    """实参块里的 op 也要进事实层（#1371）：块里的 `enter` / `am start` 不投影，这台机的设置入口
+    就从入口速查里静默消失（重进页的那一段恰恰是入口所在）。"""
+
+    DATA = {"segment": [{"name": "a", "ops": [
+        {"kind": "lib", "name": "close_named", "args": [["个性化推荐设置"], "主题·个性化推荐"],
+         "kwargs": {"reopen": {"ops": [
+             {"kind": "start", "pkg": "com.heytap.themestore"},
+             {"kind": "enter", "text": "我的"},
+             {"kind": "shell", "command": "am start -n com.heytap.themestore/.Setting"}]}}}]}]}
+
+    def test_the_block_reaches_the_lowered_source(self):
+        import recipe_source
+        lowered = recipe_source._catalog_src(self.DATA)
+        self.assertIn('p.start("com.heytap.themestore")', lowered)
+        self.assertIn('p.enter("我的")', lowered)
+        self.assertIn('p.d.shell("am start -n com.heytap.themestore/.Setting")', lowered)
+
+    def test_the_block_names_resolve_into_the_entry_facts(self):
+        import recipe_source
+        names = {call.name for call in recipe_source.scan_catalog(self.DATA).calls}
+        self.assertIn("p.enter", names)
+        self.assertIn("p.d.shell", names)
+
+
+class SettlePageVocabularyTests(unittest.TestCase):
+    """`settle_page` 进数据词汇（#1371，ADR-0040 记修订）。
+
+    判据是「只读前台 / 页面树的面才留在 `__all__` 外」：它自己走读屏与等待，与 `wait_page` 同档，
+    所以数据该能点名。阅读那一段就靠它：自绘开关页在点下一行之前要等版面定下来。"""
+
+    TOML = ('[[segment]]\nname="a"\nops=['
+            '{kind="lib", name="settle_page", args=["com.hihonor.dz.reader", "广告推荐服务"]}]\n')
+
+    def test_the_data_name_resolves_to_the_library_implementation(self):
+        import recipe_lib
+        self.assertIn("settle_page", recipe_lib.LIBRARY)
+        self.assertNotIn("settle_page", recipe_lib.HELPERS)
+
+    def test_the_loader_accepts_the_data_name(self):
+        """装载期按 `LIBRARY` 核对点名的实现：不在词汇里就报错，等不到真机。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(tmp, self.TOML)
+            self.assertEqual([step.name for step in recipe.steps], ["a"])
+
+    def test_a_segment_reaches_settle_page_with_its_markers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(tmp, self.TOML)
+            seen = []
+            patch_library(self, settle_page=lambda p, rt, package, *markers: seen.append((package, markers)))
+            recipe.run()
+        self.assertEqual(seen, [("com.hihonor.dz.reader", ("广告推荐服务",))])
 
 
 class LetOpProjectionTests(unittest.TestCase):
