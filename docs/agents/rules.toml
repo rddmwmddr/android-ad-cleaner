@@ -196,7 +196,7 @@ expires_if = "社区判据改为 issue 模板里的结构化字段时删。"
 
 [[rule]]
 id = "dev.commands.single-dispatch"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "code:tool/run.py:dispatch"
 status = "code"
 why = "退出码语义分散会让客户端分不清「没执行」与「失败」（ADR-0005）；#708 之后 adapt 的三条子命令也靠返回码，把 sys.exit 加回 helper 就把它埋进调用栈。"
@@ -204,7 +204,7 @@ expires_if = "命令入口改成注册表驱动的插件、退出码统一在平
 
 [[rule]]
 id = "dev.row.single-definition"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "code:tool/row.py:line"
 status = "code"
 why = "「哪一行是开关、哪一个才是它的本体」曾散在 off()、fast.switches()、chan_fast 与机型脚本各一份，灰开关与双列布局被点错（#480、#486、#530）；按名字筛候选行的前置过滤也曾在 _recognise_inline 与 _enter_app_page 各写一份（#1120）；icon_hit 的本地副本已有 tests/test_entries.py 的 IconHitTests 守着，其余只认这一份。"
@@ -212,7 +212,7 @@ expires_if = "读屏直接返回结构化的控件归属、不再从 bounds 推�
 
 [[rule]]
 id = "dev.entries.source-and-family"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "test:test_entries::SourceTest.test_every_entry_has_a_source"
 status = "enforced"
 why = "入口没有出处就指向不存在的页面，还会给出用不了的「可提速提示」；品牌家族建第二份表会让广告包、参考脚本与版本比较各算各的。"
@@ -220,7 +220,7 @@ expires_if = "入口改由运行时探测、不再维护静态表时删。"
 
 [[rule]]
 id = "dev.polarity.word-lists"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "code:tool/polarity.py:NEG_PREFIX"
 status = "code"
 why = "否定词与广告 / 追踪词决定开关该开还是该关（ADR-0008）；`tool/fast.py` 只是 re-export，第二份词表会让引擎与词库给出相反方向。"
@@ -228,7 +228,7 @@ expires_if = "方向改由脚本逐条显式声明、不再按文字推断时删
 
 [[rule]]
 id = "doc.vocab.generated-from-recipes"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "test:test_vocab::RealRecipesTest.test_doc_is_in_sync"
 status = "enforced"
 why = "词库与同页保留项从机型脚本现算，手写第二份会在脚本改动后漂移；方向取自 polarity 而不是调用名，读不出来的脚本单列而不是丢弃（#681）。"
@@ -236,7 +236,7 @@ expires_if = "词库不再作为清单交付、或脚本不再用 p.off() / clos
 
 [[rule]]
 id = "dev.navigation.raise-vs-false"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "none"
 status = "manual"
 why = "`setting` 失败只返回 False，没有兜底的段会空跑却按成功记（#776）；选错导航方法会点错地方。"
@@ -244,7 +244,7 @@ expires_if = "导航方法统一成一种失败语义（全部抛异常或全部
 
 [[rule]]
 id = "dev.adapt.serial-subcommands"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "test:test_doc_consistency::AdaptCommandDocTests.test_frozen_word_list_matches_the_dispatcher"
 status = "enforced"
 why = "`-s 序列号 adapt gen` 与未知子命令曾静默打印帮助并按成功退出，用户以为跑完了（#708）。"
@@ -268,7 +268,7 @@ expires_if = "官网改由构建产物生成、可以引外链时删。"
 
 [[rule]]
 id = "dev.switches.plan-and-readback"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "code:tool/phone/toggler.py:plan_switches"
 status = "code"
 why = "目标选择、屏带过滤与 checked / kept / disabled 分散会让灰开关被当成没拨动（ADR-0008、ADR-0021）；off() 只做点击 → 回读 → 重试 → 报告，两个纯函数给出补点落点与回读结论。"
@@ -276,7 +276,7 @@ expires_if = "拨动计划与回读合并成一个对象、调用方不再各自
 
 [[rule]]
 id = "dev.switches.missing-target-evidence"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "code:tool/recipe_runtime.py:Runtime"
 status = "code"
 why = "点名开关没出现时只报一句「未识别全部目标开关，未操作」，9 份 HyperOS 3.0 上报分不清是改名、页面空着还是根本没进页面（#903）；守卫原本在 14 处脚本里各写一份，补证据要改 14 遍，漏一处输出又分叉。同一个前导里的 `page()` 是同一类失败的另一种问法（到了但页面不对，包名 / Activity / 标题），OPPO 与一加两份复制品同样只报一句话（#939）。"
@@ -284,7 +284,7 @@ expires_if = "开关名单断言并入引擎、机型脚本不再各自核对页
 
 [[rule]]
 id = "dev.steps.injection-surface"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "none"
 status = "manual"
 why = "注入面已拆除（#1268），库也在 #1269 按家族拆开：实现住在 `recipe_lib/<家族>.py` / `shared.py`，是普通函数，收 `(p, rt, …)`，数据用 `lib`/`code` 按名字点名；`tool/recipe_nav.py` 等三个只是重导出面。没有执行作用域、没有工厂闭包、没有同名覆盖。事实层退化为字面量提取器（`library_sources()` + `scan_source`），不再做 import 归属解析。这条没有返红的守卫，靠审查：往库里加实现时写进 `recipe_lib` 的普通函数与 `__all__`，别再引入第二套名字注入。"
@@ -292,7 +292,7 @@ expires_if = "机型库若改回单一模块或引入新的名称注入机制时
 
 [[rule]]
 id = "dev.launch.foreground-ownership"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "test:test_phone_launcher::LaunchForegroundTests.test_one_frame_in_another_app_is_not_leaving"
 status = "enforced"
 why = "空焦点曾被判成「离开了目标 App」，启动段直接停段（#581、#193）；只有确认落在目标 App 时才读页面文字、关弹窗（ADR-0022）。"
@@ -300,7 +300,7 @@ expires_if = "启动归属改由系统事件而不是逐帧焦点判定时删。
 
 [[rule]]
 id = "dev.wait.single-loop"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "code:tool/wait.py:until"
 status = "code"
 why = "settle / setting / ChannelPage.refresh / off / confirm 五个消费点各写一份轮询，会各自长出不同的超时与站稳判定。全仓 AST 禁令会误报 14 处，所以没有行为守卫；`code:` 只钉住 `until()` 是唯一的轮询入口，另起一份循环仍抓不到。"
@@ -308,7 +308,7 @@ expires_if = "等待能力移进读屏库、调用方不再自己轮询时删。
 
 [[rule]]
 id = "dev.channels.page-entry"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "code:tool/chan_fast.py:ChannelPage"
 status = "code"
 why = "直达 / 转应用通知页 / 内联行 / 同名放弃四类曾散在脚本里判断，同名渠道被点错（ADR-0007）；四个一行前向壳不该长逻辑。"
@@ -316,7 +316,7 @@ expires_if = "渠道页改由结构化接口而不是读屏文字定位时删。
 
 [[rule]]
 id = "dev.events.vocabulary"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "test:test_events::EmitTests.test_the_vocabulary_is_still_the_same_six"
 status = "enforced"
 why = "客户端按中文文案判状态会随措辞改动而失败（ADR-0004）；六个 kind 是引擎与客户端之间唯一的契约面。"
@@ -324,7 +324,7 @@ expires_if = "引擎与客户端改走同一进程内的对象、不再有事件
 
 [[rule]]
 id = "dev.host.wording"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "code:tool/host.py:ON_PHONE"
 status = "code"
 why = "同一句诊断在电脑上要说「点一下手机」、在手机版要说「点一下屏幕」（#747、ADR-0019 增补段）；按宿主分叉的只该是措辞，别把判定也分叉。"
@@ -332,7 +332,7 @@ expires_if = "手机版与桌面版合并成一个宿主时删。"
 
 [[rule]]
 id = "dev.channels.classification"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "code:tool/channel_policy.py:classify"
 status = "code"
 why = "营销 / 服务 / 受保护七组判定散开会让扫描与拨动给出相反结论（ADR-0006）；前台服务的证据字段 Android 14 起改名，两个都要认（#459）。"
@@ -340,7 +340,7 @@ expires_if = "渠道判定改成服务端规则、或机型脚本各自声明时
 
 [[rule]]
 id = "dev.navigation.bottom-tab"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "code:tool/phone/navigator.py:Navigator"
 status = "code"
 why = "底部标签要在屏底带内按三层匹配找，退化成全屏文字匹配会点到同名列表项（ADR-0012）；它不重试不确认，需要文字确认的导航仍用 go()。"
@@ -348,7 +348,7 @@ expires_if = "界面提供结构化的底部导航节点、不再靠文字匹配
 
 [[rule]]
 id = "dev.ui.result-line-routing"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "test:test_rules_guards::EngineGuards.test_ui_result_line_routing"
 status = "enforced"
 why = "机器行进 results[].tail 会被当成结果摘要显示给用户；摘要口径由 tests/summary_cases.json 钉住，_log() 的取舍与 tail 的边界没有守卫。守卫（沿用 #1002）拿同一份样例带机器行喂 tool/summary.py 的 summarize()——两个宿主调的就是这一份（#1189）——摘要里出现 `#aac:` 就红；网页版只剩「按后端字段渲染」的断言，不再有自己的摘要实现。上游 `_log()` 漏不漏它看不见，只证明摘要函数自己剥得掉。"
@@ -356,7 +356,7 @@ expires_if = "摘要不再解析 tail 末行（引擎直接给结构化结局）
 
 [[rule]]
 id = "dev.ui.not-run-rows"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "test:test_plan::PlanTasksTests.test_channels_are_told_apart_unchecked_from_none_found"
 status = "enforced"
 why = "没勾的项曾从结果里整行消失，用户以为跑漏了（#577、ADR-0023）；三档原因取自 Api 的检测与扫描结果，不从 plan 的空字段反推。"
@@ -364,7 +364,7 @@ expires_if = "结果页改由 plan 直接带 skip_reason 渲染时删。"
 
 [[rule]]
 id = "dev.ui.retry-plan"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "test:test_result_retry::RetryableTests.test_only_step_the_device_failed_at_is_retryable"
 status = "enforced"
 why = "把「没执行」与「用户停止」的步骤也算进重试，会让它们变成失败并重复拨开关；广告开关步整段重跑则会重存快照、重拨已关的项（#638、ADR-0026）。"
@@ -372,7 +372,7 @@ expires_if = "客户端不再提供重试、或引擎自己按段续跑时删。
 
 [[rule]]
 id = "dev.android.screen-state"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "test:test_rules_guards::AndroidGuards.test_screen_is_only_written_by_show"
 status = "enforced"
 why = "页面流程只有一个 Screen 状态，切换都经过 AppModel 的方法（ADR-0018）；判断逻辑放 view.py 才好用 Python 测，写进 Kotlin 就只能靠手点。另一半「判断逻辑该放 view.py」评的是代码该放哪，静态扫描给不出结论，仍是 manual。"
@@ -380,7 +380,7 @@ expires_if = "手机版换成非 Compose 的界面栈时删。"
 
 [[rule]]
 id = "dev.android.replacement-layer"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "test:test_rules_guards::EngineGuards.test_android_replacement_layer"
 status = "enforced"
 why = "adb.py 按 adb 语义回答、bridge.py 是 shell 门面、inproc.py 在本进程跑脚本、u2.py 顶掉 uiautomator2（ADR-0019）；替换层与桌面依赖不一致时，引擎到手机上才第一次跑起来就红。守卫（#1002）查四个文件在不在、模块层公开名字少没少；正文第二句「新增读屏能力要先加进 u2.py 与 tool/reader.py 两边」它看不见，名字在而语义不对、或 APK 根本起不来也看不见（本仓库没有 JDK / Android SDK）。"
@@ -412,7 +412,7 @@ expires_if = "读屏与等待全部走可注入的时钟、不再有真实超时
 
 [[rule]]
 id = "dev.reader.unified-adapter"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "code:tool/reader.py:Reader"
 status = "code"
 why = "机型脚本与测试直接用 `Phone.d`（历史别名），新增读屏能力只加进 Reader 才两处同时可用。"
@@ -452,7 +452,7 @@ expires_if = "客户端改由平台 API 提供数据目录时删。"
 
 [[rule]]
 id = "dev.windows.startup-verdicts"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "test:test_win_preflight::StartupAdviceTests.test_motw_wins_over_the_load_branch_when_both_apply"
 status = "enforced"
 why = "启动失败有三种来源（缺 WebView2、MOTW、原文拒载），顺序错了会把带 MOTW 的 dll 报成「需要重装运行时」（#597、#811、ADR-0003）；判据只在 winpreflight.py。"
@@ -460,7 +460,7 @@ expires_if = "Windows 安装包不再用 pywebview 与托管的 dll 时删。"
 
 [[rule]]
 id = "dev.windows.old-install-notice"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "test:test_win_preflight::OldInstallTests.test_an_old_install_next_to_a_portable_copy_is_reported"
 status = "enforced"
 why = "免安装版与安装版共用同一个 AppId，便携版完全在注册表之外，旧名「安卓去广告」的安装会一直留着（#814、#872）；判定要看四处键与当前 exe 目录，漏一处会漏提示，少比较一次目录会在新版已顶掉旧版时误提示。"
@@ -1202,7 +1202,7 @@ expires_if = "开了 Dependabot（版本更新或安全更新），或依赖不�
 
 [[rule]]
 id = "dev.recipes.module-body-shape"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "none"
 status = "manual"
 why = "机型脚本的数据形态是 `.toml` 页面树，唯一装载点是 `tool/catalog`（#1268）。同目录例外 `.py` 只是普通模块：函数收 `(p, rt, …)`、顶部显式 import 库，装载器把它 exec 进一个普通命名空间供 `code=` 与钩子按名字取。导入不产生设备动作；别再往里写注入、执行式段或模块级动作。"
@@ -1210,7 +1210,7 @@ expires_if = "例外函数进一步数据化、不再需要 exec 命名空间时
 
 [[rule]]
 id = "dev.recipes.shared-sections"
-source = "CLAUDE.md#开发"
+source = "docs/ARCHITECTURE.md#函数级细节"
 check = "test:test_recipe_nav::SharedLibraryTests.test_shared_impls_are_used_by_at_least_two_families"
 status = "enforced"
 why = "库按家族拆开后（#1269），归属判据按**家族数**算（家族取自 `entries.FAMILY`）：只被一个家族用到的进 `recipe_lib/<家族>.py`，被 ≥2 个家族用到的进 `recipe_lib/shared.py`，家族文件允许单脚本变体。两条机械守卫在 `tests/test_recipe_nav.py`：反向 `SharedLibraryTests` 要求 `shared.py` 的每个实现被 ≥2 个家族使用（按实际调用点与调用图算，分派器不把调用方的家族传给家族实现）；正向 `PromotionTests` 要求例外 `.py` 里的同名助手出现在 ≥2 台机型（或本地重定义了库实现）时必须升格进 `recipe_lib`。"

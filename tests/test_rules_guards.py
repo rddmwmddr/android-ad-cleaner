@@ -388,6 +388,9 @@ UNANCHORED_BOUND = {
     "CLAUDE.md": 4,
     "CODING_STANDARDS.md": 9,
     "CONTEXT.md": 0,
+    # #1320 起 27 条函数级规则搬进总览的「函数级细节」，这一节里的条目都挂锚点；这里冻的是
+    # 「## 四」「## 五」原有的 8 条流程叙述——它们不是要追的规则，是这个总览自己的正文。
+    "docs/ARCHITECTURE.md": 8,
     "docs/04-给新机型写脚本.md": 11,
     "docs/agents/code-review.md": 3,
     "docs/agents/domain.md": 2,

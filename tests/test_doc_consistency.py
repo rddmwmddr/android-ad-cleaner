@@ -331,10 +331,14 @@ class TutorialAltTests(unittest.TestCase):
 
 
 class HostWordingDocTests(unittest.TestCase):
-    """引擎照宿主取词之后，讲宿主边界的文档要跟着说，否则后来人按总览会把 `tool/host.py` 当成异物（#732）。"""
+    """引擎照宿主取词之后，讲宿主边界的文档要跟着说，否则后来人按总览会把 `tool/host.py` 当成异物（#732）。
+
+    `CLAUDE.md` 不在名单里：#1320 把它讲宿主取词的那一条搬进了 `docs/ARCHITECTURE.md` 的
+    「函数级细节」，它自己不再讲这件事，也就没有「跟着说」的义务。
+    """
 
     NAMING = ("docs/adr/0019-phone-second-execution-host.md", "docs/ARCHITECTURE.md", "CONTEXT.md",
-              "CLAUDE.md", "android/README.md")
+              "android/README.md")
 
     def test_docs_name_the_wording_seam(self):
         for name in self.NAMING:
