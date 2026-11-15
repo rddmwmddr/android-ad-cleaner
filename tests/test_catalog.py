@@ -985,6 +985,43 @@ class RequireFailTests(unittest.TestCase):
         self.assertEqual(recipe.rt.results, [("a", "完成")])
         self.assertEqual(recipe.rt.failed_steps, [])
 
+    def test_require_tab_settle_waits_on_the_signature_read_before_the_tap(self):
+        """`settle`：`sig` → `tab` → `settle(sig, n)`，与换页慢的机型脚本同形（#1337）。"""
+        toml = ('[[segment]]\nname="a"\nops=[{kind="require_tab", name="我的", settle=2,'
+                ' miss_print="…"}]\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            seen = []
+            phone.sig = lambda: "SIG"
+            phone.tab = lambda name: seen.append(("tab", name)) or True
+            phone.settle = lambda before, budget: seen.append(("settle", before, budget))
+            recipe.run()
+        self.assertEqual(seen, [("tab", "我的"), ("settle", "SIG", 2)])
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+
+    def test_require_tab_without_settle_reads_no_signature(self):
+        toml = '[[segment]]\nname="a"\nops=[{kind="require_tab", name="我的", miss_print="…"}]\n'
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            signatures = []
+            phone.sig = lambda: signatures.append(1) or "SIG"
+            phone.tab = lambda name: True
+            recipe.run()
+        self.assertEqual(signatures, [])
+
+    def test_require_tab_settle_is_skipped_when_the_tab_is_missing(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="require_tab", name="我的", settle=2,'
+                ' miss_print="主题底部「我的」未找到；"}]\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            settled = []
+            phone.sig = lambda: "SIG"
+            phone.tab = lambda name: False
+            phone.settle = lambda before, budget: settled.append((before, budget))
+            recipe.run()
+        self.assertEqual(settled, [])
+        self.assertEqual(recipe.rt.failed_steps, ["a"])
+
     def test_require_tab_evidence_calls_page_evidence_on_miss(self):
         toml = ('[[segment]]\nname="a"\nops=[{kind="require_tab", name="我的",'
                 ' miss_print="主题底部「我的」未找到；", evidence=true}]\n')

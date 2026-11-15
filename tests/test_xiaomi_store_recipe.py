@@ -137,6 +137,26 @@ class StoreSegmentTests(unittest.TestCase):
                 self.assertEqual(phone.go.call_args_list, [])
                 self.assertEqual(backs(phone), [(), (), (), (2,)])
 
+    def test_a_slow_machine_settles_on_the_signature_after_the_store_tab(self):
+        # M332BF：底栏点完按点之前读到的签名再等 2 秒（这台机换页慢），其余与上面两台同形。
+        calls, events, phone, _scope, _out = run("M332BF", answers={"store_direct": False})
+        self.assertEqual(calls[0], ("store_direct", ("com.xiaomi.market", ".ui.MarketPreferenceActivity"),
+                                    {"expect": "通知设置"}))
+        self.assertEqual(phone.tab.call_args_list, [call("我的")])
+        self.assertEqual(phone.settle.call_args_list, [call(phone.sig.return_value, 2)])
+        self.assertEqual(events, ["store_direct", "gear", "tap_any", "store_privacy_nested",
+                                  "store_privacy_sub", ("off", ["个性化服务"]),
+                                  ("off", ["新手帮助"])])
+        self.assertEqual(backs(phone), [(), (), (), (2,)])
+
+    def test_a_slow_machine_that_reaches_the_preferences_page_skips_the_tab_entirely(self):
+        _calls, events, phone, _scope, _out = run("M332BF")
+        self.assertEqual(events, ["store_direct", "tap_any", "store_privacy_nested",
+                                  "store_privacy_sub", ("off", ["个性化服务"]),
+                                  ("off", ["新手帮助"])])
+        self.assertEqual(phone.tab.call_args_list, [])
+        self.assertEqual(phone.sig.call_count, 0)
+
     def test_a_missing_preferences_activity_falls_back_to_the_menu_path(self):
         # 直达不通时走 我的 → 设置 → 齿轮；两台的回退一模一样，只有直达的实参不同。
         for machine, activity, kwargs in (

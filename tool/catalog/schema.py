@@ -31,7 +31,7 @@ OP_KEYS = {
     "require_entry": frozenset({"kind", "text", "scrolls", "miss_print", "miss_back"}),
     "require_lib": frozenset({"kind", "name", "args", "kwargs", "miss_print", "miss_back",
                               "fail", "evidence", "at_focus"}),
-    "require_tab": frozenset({"kind", "name", "miss_print", "evidence", "at_focus"}),
+    "require_tab": frozenset({"kind", "name", "miss_print", "evidence", "at_focus", "settle"}),
     "require_tap": frozenset({"kind", "text", "exact", "scrolls", "miss_print", "evidence",
                               "at_focus"}),
     "require_go": frozenset({"kind", "text", "expect", "miss_print", "evidence", "at_focus"}),
