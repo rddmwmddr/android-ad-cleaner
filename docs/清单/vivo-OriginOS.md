@@ -167,9 +167,9 @@ Failure [only root can delete system app for a particular user]
 
 ⚠️ 负一屏「热点资讯」页的 8 行开关，整行节点的标题全串成了页标题「热点资讯」；这一页还有 3 个单选钮
 （悬浮 / 经典 / 卡片形态）也是 checkable，按「找 checkable 节点」的通用写法会把它当开关一起拨掉。
-机型脚本 `recipes/vivo/V2547A/V2547A.py` 里已按行还原标题、排除单选钮。
+家族库 `recipe_lib/vivo.py` 的 `rows()` 已按行还原标题、排除单选钮。
 
-V2547DA 的 Android 17 变体（`recipes/vivo/V2547DA/V2547DA-android17.py`）2026-11-07 本机把系统广告、
+V2547DA 的 Android 17 变体（`recipes/vivo/V2547DA/V2547DA-android17.toml`）2026-11-07 本机把系统广告、
 全局搜索、阅图锁屏三段改成直达，打不开再走菜单；整段 91 秒降到 62 秒。浏览器设置页在这台没有
 导出，仍走菜单，是这一轮最慢的一段。
 

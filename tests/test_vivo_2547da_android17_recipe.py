@@ -192,7 +192,7 @@ def run(segment, answers=None):
     p.back.return_value = None
     p.entry.return_value = True
     p.find.return_value = True
-    names = ("direct_page", "system_ads_branch", "global_search_entry")
+    names = ("direct_page", "system_ads_branch", "global_search_entry", "lock_screen_magazine")
     calls = []
     values = {name: True for name in names}
     values.update(answers or {})
@@ -210,7 +210,7 @@ def run(segment, answers=None):
 
 
 class DirectFirstSegmentTests(unittest.TestCase):
-    """直达优先的三段（#1365）：快照的空页面上直达一律落空，走到的只有菜单那条路。"""
+    """直达优先的四段（#1366；系统广告 / 全局搜索 / 应用商店沿用 #1365）：直达通了走直达那一支，不通才交给菜单走法。"""
 
     def test_the_ad_page_is_opened_directly_and_the_menu_branch_is_skipped(self):
         calls, _p, scope, _out = run("系统广告")
@@ -241,6 +241,22 @@ class DirectFirstSegmentTests(unittest.TestCase):
         calls, _p, scope, _out = run("全局搜索", {"global_search_entry": False})
         self.assertEqual([name for name, _args, _kwargs in calls], ["global_search_entry"])
         self.assertEqual(scope["FAILED_STEPS"], [])
+
+    def test_the_lock_screen_page_is_opened_directly_and_closed(self):
+        # 阅图锁屏页是独立 Activity，直达最稳（#1366）
+        calls, _p, scope, _out = run("阅图锁屏")
+        self.assertEqual(calls, [
+            ("direct_page", ("com.vivo.magazine", ".ui.MagazineSettings"),
+             {"expect": "锁屏横滑进入阅图"}),
+            ("off", (), {"only": ["阅图锁屏", "锁屏横滑进入阅图"], "page": "阅图锁屏"}),
+        ])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+
+    def test_a_missing_lock_screen_page_falls_back_to_the_settings_menu(self):
+        # 没导出这一页的版本退回 设置 → 桌面、锁屏与壁纸 → 锁屏设置
+        calls, _p, _scope, _out = run("阅图锁屏", {"direct_page": False})
+        self.assertEqual([name for name, _args, _kwargs in calls],
+                         ["direct_page", "lock_screen_magazine"])
 
 
 if __name__ == "__main__":
