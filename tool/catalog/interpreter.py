@@ -371,6 +371,41 @@ def _go(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
     p.go(op["text"], op["expect"])
 
 
+def _tap_id(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
+    """按 u2 选择器（资源 id / 文字）直点一个控件：文字点不准时的「按 id 点」（#1362）。
+
+    选择器找不到控件时读屏库抛 not-found，三种收场：`optional` 当没这回事继续走；
+    带 `miss_print` 的段打一句、这一段到此为止（与 `require_entry` 同档）；都不写就照原样上抛，
+    这一段按未完成收场。"""
+    selectors: dict[str, Any] = {}
+    if "resource_id" in op:
+        selectors["resourceId"] = op["resource_id"]
+    if "text" in op:
+        selectors["text"] = op["text"]
+    target = p.d(**selectors)
+    if not op.get("optional") and "miss_print" not in op:
+        target.click()
+        return
+    from fast import u2          # 顶层导入会把 adbutils / uiautomator2 拖进只装载数据的调用方
+    try:
+        target.click()
+    except u2.exceptions.UiObjectNotFoundError:
+        if op.get("optional"):
+            return
+        print(op["miss_print"], flush=True)
+        raise _Abort from None
+
+
+def _gesture(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
+    """纯相对坐标手势：两端按屏宽 / 屏高的比例现算（截断取整），下发一条 `input swipe`（#1362）。
+
+    只收比例。按读到的控件位置现算坐标属「坐标算法」，仍在例外 `.py` 里。"""
+    start, end = op["start"], op["end"]
+    x1, y1 = int(p.W * start[0]), int(p.H * start[1])
+    x2, y2 = int(p.W * end[0]), int(p.H * end[1])
+    p.d.shell(f"input swipe {x1} {y1} {x2} {y2} {op['ms']}")
+
+
 def _dismiss(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
     p.dismiss()
 
@@ -564,6 +599,8 @@ _HANDLERS: dict[str, Callable[[Mapping, Any, Any, dict[str, Any]], None]] = {
     "close_listed": _close_listed,
     "require_go": _require_go,
     "tap": _tap,
+    "tap_id": _tap_id,
+    "gesture": _gesture,
     "go": _go,
     "dismiss": _dismiss,
     "skip_in_safe_mode": _skip_in_safe_mode,

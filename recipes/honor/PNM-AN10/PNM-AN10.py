@@ -1,6 +1,7 @@
 # 荣耀 PNM-AN10（MagicOS 10）的本机例外函数（catalog 的 `code=`，影随同名 `.toml`）。
 # 共享库的 browser_settings / open_settings / skip_in_safe_mode / SkipStep 由装载器注入执行作用域。
-# 线性段已转成 `.toml` 数据；这里只留过程化的段（坐标、选择器、dumpsys、条件分支）与两个助手。
+# 线性段已转成 `.toml` 数据；这里只留过程化的段（坐标、dumpsys、条件分支）与三个助手
+# （`dismiss` / `dismiss_no` / `open_entry`，其中 `open_entry` 由数据的「音乐」段按名字调用）。
 import adb_link
 import time
 from fast import ScreenLocked
@@ -166,23 +167,6 @@ def step_theme(p, rt):
     p.back()
     p.enter("个性化服务")
     p.off(page="主题·个性化服务")
-    p.back(3)
-
-
-def step_music(p, rt):
-    p.d.app_stop("com.hihonor.cloudmusic")
-    p.start("com.hihonor.cloudmusic")
-    time.sleep(1); p.dismiss()
-    p.d(text="我的").click(); time.sleep(1); p.dismiss()
-    p.d(resourceId="com.hihonor.cloudmusic:id/ic_setting").click(); time.sleep(1.2)
-    if not open_entry(p, rt, "更多设置"):
-        return
-    if not open_entry(p, rt, "消息和隐私设置", scrolls=6):
-        return
-    p.off(only=["朋友页显示推荐动态"], page="音乐·消息和隐私")
-    if not open_entry(p, rt, "第三方推送服务开关", scrolls=6):
-        return
-    p.off(page="音乐·第三方推送（活动、中奖信息）")
     p.back(3)
 
 

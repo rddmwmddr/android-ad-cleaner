@@ -128,6 +128,26 @@ def _validate_return(op: Mapping, where: str) -> None:
         raise SchemaError(f"{where} 的 value 只能是 true / false（段的结局）")
 
 
+def _validate_tap_id(op: Mapping, where: str) -> None:
+    """`tap_id` 按 u2 选择器点一个控件：资源 id 与文字至少要给一个，两个都空等于没得点。"""
+    if "resource_id" not in op and "text" not in op:
+        raise SchemaError(f"{where} 的 tap_id 至少要有 resource_id 或 text")
+
+
+def _validate_gesture(op: Mapping, where: str) -> None:
+    """`gesture` 的两端各是 `[x, y]`，按屏宽 / 屏高的比例给；`ms` 是 swipe 的毫秒数。
+
+    只收比例：按读到的控件位置现算的坐标属 docs/04 的「坐标算法」，留在例外 `.py` 里。"""
+    for key in ("start", "end"):
+        point = op[key]
+        if (not isinstance(point, list) or len(point) != 2
+                or not all(isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v <= 1
+                           for v in point)):
+            raise SchemaError(f"{where} 的 {key} 要是两个 0–1 的比例 [x, y]")
+    if not isinstance(op["ms"], int) or isinstance(op["ms"], bool) or op["ms"] <= 0:
+        raise SchemaError(f"{where} 的 ms 要是正的整数毫秒")
+
+
 # `calls` 表的两处用法：各自允许哪些键、每次调用必须给哪个键，仍与 `_validate_calls` 同源。
 def _validate_expect(op: Mapping[str, Any], where: str) -> None:
     """`require_expect`：先给 `calls` 表定形，再要一句 `miss_print`——原先分派就是这个先后。
@@ -192,6 +212,10 @@ OPS: dict[str, OpSpec] = {
     "note_miss": OpSpec(_keys("kind text"), required=("text",), no_fact=True),
     "miss_reset": OpSpec(_keys("kind"), no_fact=True),
     "tap": OpSpec(_keys("kind text exact scrolls kwargs"), required=("text",), no_fact=True),
+    "tap_id": OpSpec(_keys("kind resource_id text optional miss_print"), check=_validate_tap_id,
+                     no_fact=True),
+    "gesture": OpSpec(_keys("kind start end ms"), required=("start", "end", "ms"),
+                      check=_validate_gesture, no_fact=True),
     "go": OpSpec(_keys("kind text expect"), required=("text", "expect"), no_fact=True),
     "dismiss": OpSpec(_keys("kind"), no_fact=True),
     "skip_in_safe_mode": OpSpec(_keys("kind"), no_fact=True),
