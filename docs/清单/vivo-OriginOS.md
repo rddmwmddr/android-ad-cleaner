@@ -167,7 +167,7 @@ Failure [only root can delete system app for a particular user]
 
 ⚠️ 负一屏「热点资讯」页的 8 行开关，整行节点的标题全串成了页标题「热点资讯」；这一页还有 3 个单选钮
 （悬浮 / 经典 / 卡片形态）也是 checkable，按「找 checkable 节点」的通用写法会把它当开关一起拨掉。
-机型脚本 `recipes/vivo/V2547A/recipe.py` 里已按行还原标题、排除单选钮。
+机型脚本 `recipes/vivo/V2547A/V2547A.py` 里已按行还原标题、排除单选钮。
 
 V2547DA 的 Android 17 变体（`recipes/vivo/V2547DA/recipe_android17.py`）2026-11-07 本机把系统广告、
 全局搜索、阅图锁屏三段改成直达，打不开再走菜单；整段 91 秒降到 62 秒。浏览器设置页在这台没有
@@ -253,7 +253,7 @@ V2547DA 的 Android 17 变体（`recipes/vivo/V2547DA/recipe_android17.py`）202
 
 ## V2417A（OriginOS 6 / Android 16）差异
 
-2026-10-30 贡献者在 `PD2417D_A_16.2.14.1.W10` 真机逐页实测（社区实测，维护方未复跑），专用脚本为 `recipes/vivo/V2417A/recipe.py`。应用版本、验证范围及执行记录见[适配说明](../../recipes/vivo/V2417A/README.md)。
+2026-10-30 贡献者在 `PD2417D_A_16.2.14.1.W10` 真机逐页实测（社区实测，维护方未复跑），专用脚本为 `recipes/vivo/V2417A/V2417A.toml`。应用版本、验证范围及执行记录见[适配说明](../../recipes/vivo/V2417A/README.md)。
 
 | 位置 | 本机路径或差异 |
 |---|---|
