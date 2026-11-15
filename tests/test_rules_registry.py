@@ -1,7 +1,15 @@
-"""规则注册表的四条不变式（#842、#845）：`source` 指得到真实出处、`check` 与 `status` 配得上且解析得到真实守卫、
-正文锚点与注册表条目双向一致、锚点落在 `source` 点名的那一小节里。四条各是一个用例，
-单条不变式失败不影响另外三条；注册表整体读不出（TOML 语法或字段表）时四条一并报，消息带条目标识。
-最后一个用例是另一把锁（#1303）：没有守卫的规则条数只许降。
+"""规则注册表的五条不变式（#842、#845、#1302）：`source` 指得到真实出处、`check` 与 `status` 配得上且解析得到真实守卫、
+正文锚点与注册表条目双向一致、锚点落在 `source` 点名的那一小节里、`code:` 规则点名的符号在实现里只定义一次。
+五条各是一个用例，单条不变式失败不影响另外四条；注册表整体读不出（TOML 语法或字段表）时五条一并报，消息带条目标识。
+另有一个用例是另一把锁（#1303）：没有守卫的规则条数只许降。
+
+第五条的口径：`status = "code"` 的规则说的是「这件事只在那一处实现，别处不要另写一份」，而 `check` 只证明符号存在。
+所以对每条 `code:` 规则点名的符号，在 `tool/` `gui/` `recipe_lib/` 三个目录下按模块层定义计数——
+`def` / `async def` / `class` / 赋值 / 带值的 `AnnAssign`，穿过 `if` / `try` / `with` / `for` / `while` / `match`
+的块（与 `top_level_names()` 同一口径），只计裸名目标；`import` / `from … import` 的重导出不算定义，
+`tool/fast.py` 的 `Screen` 与 `NEG_PREFIX` 就是这一档。
+点名的路径里必须有它，其余每一处同名定义都要在 `CODE_SYMBOL_EXEMPT` 里有理由——同名不同义才豁免，
+「这是同一个概念的另一份实现」不豁免，那是要开票修掉的复制。
 """
 import ast
 import re
@@ -115,7 +123,9 @@ def module_level(body):
                 yield from module_level(handler.body)
             yield from module_level(node.orelse)
             yield from module_level(node.finalbody)
-        elif isinstance(node, (ast.With, ast.AsyncWith, ast.For, ast.AsyncFor, ast.While)):
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            yield from module_level(node.body)            # with 没有 orelse
+        elif isinstance(node, (ast.For, ast.AsyncFor, ast.While)):
             yield from module_level(node.body)
             yield from module_level(node.orelse)
         elif isinstance(node, ast.Match):
@@ -161,18 +171,25 @@ def workflow_jobs(path):
     return jobs
 
 
-def top_level_names(path):
-    """Python 文件里模块层可被 `code:<路径>:<名字>` 点到的名字。只读 AST，不执行。"""
+def top_level_defs(path):
+    """Python 文件里模块层定义的名字与行号：`def` / `async def` / `class` / 赋值 / 带值的 `AnnAssign`。只读 AST，不执行。
+
+    这是 `code:<路径>:<名字>` 与唯一性计数共用的口径：一处符号若耦合了另一种写法，两边会各数各的。"""
     tree = ast.parse(path.read_text(encoding="utf-8"))
-    names = set()
+    found = []
     for node in module_level(tree.body):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            names.add(node.name)
+            found.append((node.name, node.lineno))
         elif isinstance(node, ast.Assign):
-            names.update(target.id for target in node.targets if isinstance(target, ast.Name))
+            found.extend((target.id, node.lineno) for target in node.targets if isinstance(target, ast.Name))
         elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            names.add(node.target.id)
-    return names
+            found.append((node.target.id, node.lineno))
+    return found
+
+
+def top_level_names(path):
+    """Python 文件里模块层可被 `code:<路径>:<名字>` 点到的名字。"""
+    return {name for name, _ in top_level_defs(path)}
 
 
 def check_problem(check, status):
@@ -214,6 +231,84 @@ def check_problem(check, status):
             return f"{name} 里没有模块层的名字 {attr}"
         return None
     return f"check={check!r} 的前缀 {kind!r} 不认识"
+
+
+CODE_SCOPE = ("tool", "gui", "recipe_lib")
+
+# {(符号, 相对路径): 为什么这一处与规则点名的那一处不是同一个概念}
+# 键指向「多出来的那一处」，规则点名的那一处不进这张表。
+CODE_SYMBOL_EXEMPT = {
+    ("classify", "tool/recipe_audit.py"):
+        "同一份脚本源码的「本机函数分级」，与 `tool/channel_policy.py` 的渠道判定只是重名（#1302 票面实测）。",
+    ("dispatch", "gui/launch.py"):
+        "客户端启动去向的判定（cli / help / usage / window，返回字符串），"
+        "与 `tool/run.py` 的命令分派（退出码只在出口，ADR-0005）不是一件事。",
+    ("Screen", "gui/harmony_engine.py"):
+        "鸿蒙桌面引擎的界面树裁剪（hdc 通道，只留可见层），"
+        "与 `tool/phone/screen.py` 的读屏模型（adb + uiautomator2 的当前这一屏）是两套引擎各自的实现；"
+        "同类豁免见 `tests/test_rules_guards.py` 对鸿蒙引擎自己 `Phone` 类的处理。",
+}
+
+
+def code_symbol_places(scope=CODE_SCOPE, root=ROOT):
+    """{符号: [(相对路径, 行号)]}：扫描范围里每个符号的模块层定义处。"""
+    index = {}
+    for folder in scope:
+        for path in sorted((root / folder).rglob("*.py")):
+            where = path.relative_to(root).as_posix()
+            for name, lineno in top_level_defs(path):
+                index.setdefault(name, []).append((where, lineno))
+    return index
+
+
+def code_symbol_problems(rows, index, exempt):
+    """第五条不变式：`code:` 规则点名的符号在 `index` 里恰好由点名的那一处定义。
+
+    `index` 是 `{符号: [(相对路径, 行号)]}`，`exempt` 是 `{(符号, 相对路径): 理由}`。
+    返回问题清单：点名的路径里没有它、同一文件里定义了两次、点在别处却没豁免、豁免对不上任何重复。
+    拆成纯函数是为了让反例用例喂它合成数据，不必改真实仓库。
+    """
+    targets = []
+    for row in rows:
+        if row.get("status") != "code":
+            continue
+        kind, sep, target = row["check"].partition(":")
+        if kind != "code" or not sep:
+            continue                                # check 的写法由第四条不变式报
+        path, sep, name = target.partition(":")
+        if not sep or not path or not name:
+            continue
+        targets.append((row["id"], name, path))
+
+    problems, rules_of, declared = [], {}, {}
+    for rule_id, name, path in targets:
+        rules_of.setdefault(name, []).append(rule_id)
+        declared.setdefault(name, set()).add(path)
+    for name, paths in declared.items():
+        places = index.get(name, [])
+        where = "、".join(f"{path}:{lineno}" for path, lineno in places) or "一处都没有"
+        owners = "、".join(rules_of[name])
+        for path in sorted(paths):
+            if not any(place_path == path for place_path, _ in places):
+                problems.append(f"{name}（{owners}）：点名的 {path} 里没有模块层定义；"
+                                f"现在定义在 {where}")
+        for path, lineno in places:
+            if path in paths:
+                if sum(1 for place_path, _ in places if place_path == path) > 1:
+                    problems.append(f"{name}（{owners}）：{path} 里定义了不止一次")
+                continue
+            if (name, path) not in exempt:
+                problems.append(f"{name}（{owners}）：{path}:{lineno} 也定义了一份，"
+                                f"「只在那里定义」不成立；同名不同义才进 CODE_SYMBOL_EXEMPT")
+    for (name, path) in sorted(exempt):
+        places = index.get(name, [])
+        if name not in declared:
+            problems.append(f"豁免 {name} @ {path}：没有 `code:` 规则点名这个符号，这条豁免是空转的")
+        elif not any(place_path == path for place_path, _ in places):
+            problems.append(f"豁免 {name} @ {path}：那里已经不再定义 {name}，该从 CODE_SYMBOL_EXEMPT 里删掉")
+        elif path in declared[name]:
+            problems.append(f"豁免 {name} @ {path}：那是规则点名的定义处，不是多出来的那一处")
+    return problems
 
 
 class RulesRegistryTests(unittest.TestCase):
@@ -315,6 +410,43 @@ class RulesRegistryTests(unittest.TestCase):
             "（status 改 enforced / code，check 指到真实守卫）或删掉一条旧的。"
             "两样都不做就动 PROSE_ONLY_BOUND：那是一次公开的记录，评审要看见。")
 
+    def test_every_code_symbol_is_defined_once(self):
+        rows = self.rows()
+        self.assertTrue([row for row in rows if row["status"] == "code"],
+                        "一条 code 规则都没有，这条守卫会空转")
+        index = code_symbol_places()
+        self.assertTrue(index, f"{'、'.join(CODE_SCOPE)} 下一个模块层定义都没扫到，这条守卫会空转")
+        problems = code_symbol_problems(rows, index, CODE_SYMBOL_EXEMPT)
+        self.assertEqual(problems, [], "`code:` 规则点名的符号要只在一处定义：\n" + "\n".join(problems))
+
+    def test_the_uniqueness_check_can_fail(self):
+        """反例：判据对合成数据的每一种结局都给出预期的判断，不靠真实仓库恰好合规。"""
+        rows = [{"id": "dev.demo.one-place", "status": "code", "check": "code:tool/demo.py:Widget"}]
+        only = {"Widget": [("tool/demo.py", 3)]}
+        twice = {"Widget": [("tool/demo.py", 3), ("gui/other.py", 9)]}
+        cases = [
+            ("同一处定义", only, {}, []),
+            ("第二处没有豁免", twice, {}, ["gui/other.py:9 也定义了一份"]),
+            ("第二处有豁免", twice, {("Widget", "gui/other.py"): "另一个东西"}, []),
+            ("点名的路径里没有它", {"Other": [("tool/demo.py", 3)]}, {}, ["点名的 tool/demo.py 里没有模块层定义"]),
+            ("同一文件里定义了两次", {"Widget": [("tool/demo.py", 3), ("tool/demo.py", 20)]}, {},
+             ["定义了不止一次"]),
+            ("豁免空转：没有规则点名它", only, {("Gadget", "gui/other.py"): "x"},
+             ["没有 `code:` 规则点名这个符号"]),
+            ("豁免空转：那里已经不再定义", twice, {("Widget", "tool/gone.py"): "x"},
+             ["那里已经不再定义 Widget"]),
+            ("豁免指向点名的那一处", twice, {("Widget", "tool/demo.py"): "x"},
+             ["不是多出来的那一处"]),
+        ]
+        for label, index, exempt, expected in cases:
+            with self.subTest(label):
+                problems = code_symbol_problems(rows, index, exempt)
+                if not expected:
+                    self.assertEqual(problems, [], label)
+                    continue
+                self.assertTrue(problems, f"{label}：判据该报却没报")
+                self.assertTrue(any(fragment in problem for problem in problems for fragment in expected),
+                                f"{label}：报出的问题里没有 {expected}，实际是 {problems}")
 
 if __name__ == "__main__":
     unittest.main()

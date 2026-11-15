@@ -1,7 +1,8 @@
 # 维护规则的注册表。规则正文留在各文档里，这里只做索引，不复述正文。
 # 每条在正文对应行的行尾挂 `<!-- rule:<id> -->` 锚点（ADR-0028），
-# `tests/test_rules_registry.py` 守四条不变式：source 指得到真实出处、enforced 的 check 解析得到真实守卫、
-# 锚点与条目双向一致、锚点落在 source 点名的那一小节里。`AGENTS.md` 的产品契约不进这张表，由发版 checklist 对照。
+# `tests/test_rules_registry.py` 守五条不变式：source 指得到真实出处、enforced 的 check 解析得到真实守卫、
+# 锚点与条目双向一致、锚点落在 source 点名的那一小节里、code 规则点名的符号在 tool/ gui/ recipe_lib/ 的模块层
+# 只定义一次（同名不同义进该文件的豁免表）。`AGENTS.md` 的产品契约不进这张表，由发版 checklist 对照。
 #
 # 字段（除 since 外必填）：
 #   id          `域.对象.断言`，域取 dev | doc | domain
