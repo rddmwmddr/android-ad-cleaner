@@ -7,7 +7,7 @@ build = "PHK110_15.0.0.601(CN01)"
 guard = "guard"
 tail = "tail"
 
-# 家族库按这些常量选走法（#1245），缺省档见 recipe_lib/：设置页走公开 Intent，
+# 家族库按这些常量选走法（沿用 #1245），缺省档见 recipe_lib/：设置页走公开 Intent，
 # 下拉搜索走 scheme + 落点断言。
 [const]
 OPEN_SETTINGS_STYLE = "intent"

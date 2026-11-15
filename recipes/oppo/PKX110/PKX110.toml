@@ -8,7 +8,7 @@ build = "PKX110_16.0.10"
 guard = "guard"
 tail = "tail"
 
-# 家族库按这些常量选走法（#1245），缺省档见 recipe_lib/oppo.py：
+# 家族库按这些常量选走法（沿用 #1245），缺省档见 recipe_lib/oppo.py：
 # 点一页入口时文案可以给一组等价叫法（tuple 档），缺省只认单个字符串。
 [const]
 TAP_PAGE_STYLE = "tuple"
