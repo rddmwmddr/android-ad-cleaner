@@ -567,7 +567,9 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
 
     只关心事实层会读的调用：`p.off`（含 only/keep/page）、`p.start`、`p.entry`（maybe）、
     库调用（`lib` / `require_lib` / `code` 的裸名）。整页关闭 `close_all` 降成不带 only 的
-    `p.off`，与旧脚本「整页关闭」同一个事实形状。`back` / `top` / `print` / `return` 不产生事实。"""
+    `p.off`，与旧脚本「整页关闭」同一个事实形状。不产出事实的 kind 名单只有一份，在
+    `catalog.schema.NO_FACT_KINDS`；不在那份名单里又没降级分支的 kind 一律报错，不给静默穿透。"""
+    from catalog.schema import NO_FACT_KINDS      # 延迟 import：只在投影时加载，import 本模块不被牵连
     lines: list[str] = []
 
     def lower(ops: Sequence[Any]) -> None:
@@ -639,10 +641,14 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 # 词库按 close 那一类读得出这些字面量（旧脚本里 `names` 是运行期变量，读不出，#1265）。
                 names = ", ".join(_s(name) for name in op.get("names", []))
                 lines.append(f"close_named(p, rt, [{names}], {_s(op['page'])})")
-            elif kind in ("page", "skip", "fail", "require_tap"):
-                # 落点断言 / 跳过 / 失败出口 / 必需点按不带词条与入口事实：入口本来自 `p.start` / shell /
-                # `open_app_settings`，`page` 只是核对。与 `back` / `top` / `print` 同档（#1265）。
-                pass
+            elif kind in NO_FACT_KINDS:
+                # 落点断言 / 跳过 / 失败出口 / 控制流这类 op 本来就不带词条与入口事实（名单在
+                # `catalog.schema`，与 `OP_KEYS` 同屏）。名单是显式声明，不是兜底穿透。
+                continue
+            else:
+                raise RuntimeError(
+                    f"catalog 事实层不认识 kind={kind!r}：给它加一条降级分支（产出词条 / 入口事实），"
+                    "或把它登记进 catalog.schema 的 NO_FACT_KINDS（这个 op 本来就不产出事实）")
 
     for segment in data.get("segment", []):
         if "code" in segment:
