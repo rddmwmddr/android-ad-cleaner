@@ -71,7 +71,8 @@ class RecipeSelectionTests(unittest.TestCase):
         path, ref = run.recipe_for("PMX110", "OPPO", {"build": RECORDED, "os": ""})
         self.assertEqual(Path(path), RECIPE)
         self.assertFalse(ref)
-        self.assertEqual(sorted(p.name for p in RECIPE.parent.glob("recipe_*.py")), [])
+        # 目录里只有这一份页面树：变体写成 `<型号>-*.toml`，同样会被这条抓到。
+        self.assertEqual(sorted(p.name for p in RECIPE.parent.glob("*.toml")), ["PMX110.toml"])
 
     def test_build_stays_at_the_generation_so_siblings_can_borrow_it(self):
         """BUILD 写细到 17.0.0.116，同族的 ColorOS 17 机型就借不到这份脚本（#319 / #483）。"""
