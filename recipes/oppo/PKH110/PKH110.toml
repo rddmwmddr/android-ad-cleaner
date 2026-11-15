@@ -1,6 +1,6 @@
 # OPPO Find N5（PKH110，ColorOS 17.0.0.103）的页面树（catalog，#1264）。路径实测：2026-10-29。
 # 只收录已走通的系统广告跟踪、商店、浏览器、主题、下拉搜索；不挂包、不动通知渠道。
-# 广告跟踪（逐页等列表）、浏览器与主题（条件分支 + 逐项精确标题）走 code= 例外函数。
+# 浏览器与主题（条件分支 + 逐项精确标题）走 code= 例外函数。
 model = "PKH110"
 models = ["PKH110"]
 build = "PKH110_17.0.0.103"
@@ -13,7 +13,20 @@ OFF_EXACT_OPTIONAL = true
 
 [[segment]]
 name = "广告跟踪"
-code = "step_ad_tracking"
+ops = [
+  {kind = "skip_in_safe_mode"},
+  {kind = "shell", command = "am start -f 0x10008000 -a android.settings.SETTINGS"},
+  {kind = "sleep", seconds = 1.5},
+  # ColorOS 17：「隐私」已并入「隐私与安全」；设置搜索点结果不跳转，只能走面板路径。
+  {kind = "if_tap", text = "隐私与安全", scrolls = 3, else_ops = [
+    {kind = "print", text = "  ✗ 没找到「隐私与安全」"},
+    {kind = "return", value = false},
+  ]},
+  {kind = "sleep", seconds = 1.5},
+  {kind = "return_lib", name = "tap_page", args = ["设备标识与广告", "DevicesIdentifySettingsActivity", "设备标识与广告"]},
+  {kind = "return_lib", name = "tap_page", args = ["广告跟踪", "OAIDActivity", "广告跟踪"]},
+  {kind = "return_lib", name = "ad_tracking_close_paged"},
+]
 
 [[segment]]
 name = "软件商店"

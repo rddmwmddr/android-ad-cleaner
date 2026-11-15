@@ -1,10 +1,10 @@
-"""机型库：140 个库实现名字的唯一 owner（ADR-0040）。
+"""机型库：库实现名字的唯一 owner（ADR-0040）。
 
 一个家族一个文件（`huawei` / `samsung` 目前没有实现，就不建文件）；文件内分「词汇 / 策略」两节。
 归属按家族数算：只被一个家族用到的进 `recipe_lib/<家族>.py`，被 ≥2 个家族用到的进 `shared.py`。
 
-名字集合是显式三层：六个模块的 `__all__` 并集 140 个是「数据 `lib:` 能点名」的词汇，`LIBRARY` 就是这
-140 个；`__all__` 再加 10 个面助手，共 150 个是「能从稳定 import 面取到」的名字。
+名字集合是显式三层：六个模块的 `__all__` 并集是「数据 `lib:` 能点名」的词汇，`LIBRARY` 就是它；
+`__all__` 再加 10 个面助手，才轮到「能从稳定 import 面取到」的名字。
 `tool/recipe_nav.py` / `recipe_strategies.py` / `recipe_steps.py` 只剩转发，真身都在这里。
 """
 
@@ -40,6 +40,7 @@ from .xiaomi import (
 )
 from .oppo import (
     ad_id_page as ad_id_page, ad_tracking_close_all as ad_tracking_close_all,
+    ad_tracking_close_paged as ad_tracking_close_paged,
     assistant_advice_rows as assistant_advice_rows,
     assistant_advice_search as assistant_advice_search, assistant_icon as assistant_icon,
     assistant_screen as assistant_screen, assistant_settings as assistant_settings,
@@ -86,7 +87,7 @@ from .vivo import (
 from .honor import (
     baidu_browser as baidu_browser, close_named_honor as close_named_honor,
     no_agreement as no_agreement, scan_switches as scan_switches, labels as labels,
-    settle_page as settle_page,
+    search_more as search_more, settle_page as settle_page,
 )
 from .meizu import (
     assert_no_other_window as assert_no_other_window, safe_switches as safe_switches,
@@ -94,7 +95,7 @@ from .meizu import (
 
 MODULES = (shared, xiaomi, oppo, vivo, honor, meizu)
 
-# 数据可点名的 140 个名字：家族 `__all__` 的并集，派生不手抄。
+# 数据可点名的名字：家族 `__all__` 的并集，派生不手抄。
 LIBRARY = {name: getattr(module, name) for module in MODULES for name in module.__all__}
 
 # 稳定 import 面能取到、但数据 `lib:` 不许点名的 10 个助手。
@@ -105,7 +106,8 @@ HELPERS = (
 
 # 字面量：mypy 要靠它解析 `from recipe_nav import <名字>`，算出来的并集不算（ADR-0040）。
 __all__ = (
-    "MenuState", "_labelled", "ad_id_page", "ad_tracking_close_all", "app_settings",
+    "MenuState", "_labelled", "ad_id_page", "ad_tracking_close_all", "ad_tracking_close_paged",
+    "app_settings",
     "assert_no_other_window", "assistant_advice_rows", "assistant_advice_search", "assistant_icon",
     "assistant_screen", "assistant_settings", "at_assistant", "baidu_browser", "bottom_tab",
     "browser_ads", "browser_home", "browser_personalized", "browser_recommendations",
@@ -125,7 +127,7 @@ __all__ = (
     "open_page", "open_search_setting", "open_search_settings", "open_search_sub", "open_settings",
     "open_switch_page", "opened", "page_activity", "popup_row", "read_on_page", "read_switches",
     "require_installed", "result_xy", "row", "row_switch", "rows", "safe_switches", "scan_switches",
-    "search_setting", "search_settings", "search_settings_direct", "search_settings_ready",
+    "search_more", "search_setting", "search_settings", "search_settings_direct", "search_settings_ready",
     "search_settings_swipe", "security_center", "security_tab", "setting_search", "settings_home",
     "settings_icon_visible", "settings_page", "settle_page", "store", "store_mode",
     "store_personalization", "store_privacy", "store_promotions", "switch_off", "switch_signature",

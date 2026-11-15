@@ -8,7 +8,7 @@
 只把「该调哪个 p 方法、带哪些实参」按数据的书写顺序发出去，不碰这些算法本身。
 
 库调用按名字解析：`lib` / `require_lib` / `if_lib` / `return_lib` 查本模块的 `LIBRARY`
-（`recipe_lib.LIBRARY`：家族 `__all__` 的 140 个名字），查不到再查本机例外命名空间；实现是普通函数，
+（`recipe_lib.LIBRARY`：家族 `__all__` 的名字），查不到再查本机例外命名空间；实现是普通函数，
 收 `(p, rt, …)`，调用序列与旧脚本逐条相同。
 """
 import os as _os, sys as _sys
