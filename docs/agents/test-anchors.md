@@ -88,6 +88,7 @@
 | `test_runtime_symbols.py` | 跨运行时符号：tool/ 在电脑与手机版跑两套依赖，静态引用的名字要真的存在。 |
 | `test_declared_fields.py` | 构造处声明过的字段要直接读，不再 getattr 兜底。 |
 | `test_test_collection.py` | 用例只在 tests/ 下定义，且每个测试文件都落到已声明的锚点。 |
+| `test_family.py` | 族容器本身：case id 快照、结构句柄、产出与缺口四件校验，以及必须附理由的快照更新入口。 |
 | `test_glob_scan.py` | 发现式 glob 的反空转：发现集为空时与「全仓合规」不可区分，每个模式对真实仓库求值一次，0 份即红。 |
 | `test_rules_guards.py` | 规则守卫：文档内容、注册表、引擎结构与流程条目各自的机械判据。 |
 | `test_rules_registry.py` | 规则注册表的五条不变式，锚点与登记双向一致，`code:` 规则点名的符号只在一处定义。 |
