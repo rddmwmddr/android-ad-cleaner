@@ -59,9 +59,30 @@ FORBIDDEN_IN = {
 }
 
 
+CLASS_FILES = {
+    "Api": "app.py",
+    "AdbDownloader": "app.py",
+    "Dispatcher": "app.py",
+    "Reporter": "reporter.py",
+}
+
+
+def body_of(rel):
+    return ast.parse((ROOT / "gui" / rel).read_text(encoding="utf-8")).body
+
+
 def classes():
-    tree = ast.parse((ROOT / "gui" / "app.py").read_text(encoding="utf-8"))
-    return {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
+    """类名 → 它的 ClassDef。块搬出 `gui/app.py` 之后仍按这张表取，别去猜文件在哪。
+
+    缺一个就报错：三条边界断言都以这三块为前提，静默少一块会让它们空转。
+    """
+    found = {}
+    for name, rel in CLASS_FILES.items():
+        node = next((node for node in body_of(rel) if isinstance(node, ast.ClassDef) and node.name == name), None)
+        if node is None:
+            raise AssertionError(f"gui/{rel} 里找不到类 {name}：这张表要跟着搬家一起改")
+        found[name] = node
+    return found
 
 
 class BridgeTests(unittest.TestCase):
