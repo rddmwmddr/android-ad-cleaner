@@ -1,4 +1,4 @@
-"""复测队列核对与写回（tool/followup.py）：报出标签与队列的差异，`--write` 把表补到一致（#988、#989）。"""
+"""复测队列核对与写回（devtools/followup.py）：报出标签与队列的差异，`--write` 把表补到一致（#988、#989）。"""
 import contextlib
 import io
 import json
@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 
 import fixtures  # noqa: E402
-import followup  # noqa: E402
+from devtools import followup  # noqa: E402
 
 HEADER = "| Issue | 报告者 | 机型 / 系统 | 修复（进入的版本） | 要观察的输出 |"
 RULE = "| ----- | --- | --- | --- | --- |"

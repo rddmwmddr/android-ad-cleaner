@@ -1,4 +1,4 @@
-"""needs-info 停摆机制（tool/stale.py）：判定与阈值覆盖（#977）、写入与幂等（#978）。"""
+"""needs-info 停摆机制（devtools/stale.py）：判定与阈值覆盖（#977）、写入与幂等（#978）。"""
 import io
 import json
 import sys
@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 
 import fixtures  # noqa: E402
-import stale  # noqa: E402
+from devtools import stale  # noqa: E402
 
 NOW = datetime(2026, 11, 10, 12, 0, tzinfo=timezone.utc)
 REPORTER = "reporter"

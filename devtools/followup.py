@@ -2,8 +2,8 @@
 
 用法：
 
-    python3 tool/followup.py            # 只读：打印差异，一个字节都不写
-    python3 tool/followup.py --write    # 把表补到与标签一致，写完再核对一遍
+    python3 devtools/followup.py            # 只读：打印差异，一个字节都不写
+    python3 devtools/followup.py --write    # 把表补到与标签一致，写完再核对一遍
 
 两类差异：**缺行**（标签里有、主表里没有）与**过期行**（主表里有、标签里没有，已关闭或已摘标）。
 
@@ -28,7 +28,12 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from gh import GhError, json_of, runner_for
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))   # stdio 留在引擎目录
+
+try:
+    from .gh import GhError, json_of, runner_for
+except ImportError:             # 直接跑文件时 sys.path[0] 就是 devtools/
+    from gh import GhError, json_of, runner_for
 
 from stdio import use_utf8_console
 
@@ -41,7 +46,7 @@ ISSUE_COLUMN = "Issue"
 LIMIT = 1000
 TIMEOUT = 120
 PLACEHOLDER = "—"
-USAGE = "用法：python3 tool/followup.py [--write]"
+USAGE = "用法：python3 devtools/followup.py [--write]"
 DOC = Path(__file__).resolve().parents[1] / "docs" / "agents" / "release-followup.md"
 
 EXIT_OK, EXIT_DIFF, EXIT_UNREADABLE = 0, 1, 2

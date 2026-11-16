@@ -1,4 +1,4 @@
-"""CI 的测试结果表格（tool/unittest_summary.py，#875）：列取错或漏算跳过数，summary 会静默给出错数字。"""
+"""CI 的测试结果表格（devtools/unittest_summary.py，#875）：列取错或漏算跳过数，summary 会静默给出错数字。"""
 import sys
 import unittest
 from pathlib import Path
@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 
-import unittest_summary  # noqa: E402
+from devtools import unittest_summary  # noqa: E402
 
 OK = "----------------------------------------------------------------------\nRan 12 tests in 3.456s\n\nOK\n"
 SKIPPED = "Ran 2004 tests in 36.206s\n\nOK (skipped=2)\n"

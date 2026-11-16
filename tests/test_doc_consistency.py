@@ -13,12 +13,11 @@ from test_rules_registry import ANCHOR as RULE_ANCHOR  # 同一份锚点口径�
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 import channel_policy as policy
-import gen_adr_index as adr_index
-import gen_brand_taps as gen
-import gen_site_css as site_css
-import release_assets
-import release_meta
 import run
+from devtools import gen_adr_index as adr_index
+from devtools import gen_brand_taps as gen
+from devtools import gen_site_css as site_css
+from devtools import release_assets, release_meta
 
 ADR = ROOT / "docs/adr/0006-channel-classification.md"
 ADR_INDEX = ROOT / "docs/adr/README.md"
@@ -77,10 +76,10 @@ class AdrIndexTests(unittest.TestCase):
         missing = sorted(set(expected) - set(listed))
         extra = sorted(set(listed) - set(expected))
         self.assertEqual(missing, [], "这些 ADR 没被索引收录（或标题与一级标题不符，跑 "
-                         "`python tool/gen_adr_index.py`）：" + "、".join(
+                         "`python devtools/gen_adr_index.py`）：" + "、".join(
                              f"{number} {filename}" for number, filename, _ in missing))
         self.assertEqual(extra, [], "索引里有不存在的条目（或标题已改，跑 "
-                         "`python tool/gen_adr_index.py`）：" + "、".join(
+                         "`python devtools/gen_adr_index.py`）：" + "、".join(
                              f"{number} {filename}" for number, filename, _ in extra))
 
     def test_claude_md_points_at_the_index(self):
@@ -223,7 +222,7 @@ class BrandTapsDocTests(unittest.TestCase):
             gen.check_markers(text, len(rendered[key]), path.name)
             self.assertEqual(gen.replace_regions(text, rendered[key]), text,
                              f"{path.name} 的品牌表与 docs/手机版教程/brand-taps.json 不一致："
-                             "只改 JSON 一处后跑 python tool/gen_brand_taps.py")
+                             "只改 JSON 一处后跑 python devtools/gen_brand_taps.py")
 
     def test_marker_count_mismatch_raises(self):
         text = gen.TARGETS["readme"].read_text(encoding="utf-8")
@@ -269,7 +268,7 @@ class SiteCssTests(unittest.TestCase):
                 text = path.read_text(encoding="utf-8")
                 site_css.check_markers(text, path.name)
                 self.assertEqual(site_css.replace_region(text, css), text,
-                                 f"{path.name} 的共享样式与 site.css 不一致：跑 python tool/gen_site_css.py")
+                                 f"{path.name} 的共享样式与 site.css 不一致：跑 python devtools/gen_site_css.py")
 
     def test_appearance_rules_live_only_in_the_shared_block(self):
         """旧树也绿，守的是共享规则不在页面里留副本：标记区外逐字相同的声明会盖掉 site.css 的改动。"""

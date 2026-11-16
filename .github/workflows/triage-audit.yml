@@ -1,8 +1,8 @@
 # open 票标签集的四条集合判据每日只读审计（#1019）。只读：不写标签、不评论、不关票。
-# 判据正文在 docs/agents/triage-labels.md，tool/triage_audit.py 是它的机械镜像。
+# 判据正文在 docs/agents/triage-labels.md，devtools/triage_audit.py 是它的机械镜像。
 # 本地复现：
-#   python3 tool/triage_audit.py
-#   python3 tool/triage_audit.py --input /tmp/aac-open-labels.json
+#   python3 devtools/triage_audit.py
+#   python3 devtools/triage_audit.py --input /tmp/aac-open-labels.json
 # 退出码：0 全绿；1 有违规（逐票逐条列出）；2 取数失败或参数不合规——两者都不当成违规，
 # 网络抖动不该让作业变红，那会把红信号贬值。
 name: triage-audit
@@ -34,7 +34,7 @@ jobs:
           # 红只留给真实违规，取数失败（2）不把作业标红，否则一次网络抖动就让红信号贬值。
           # 不用 `| tee`：那要靠 pipefail 才能留住退出码，而留着 2 又会把作业染红。
           set +e
-          python3 tool/triage_audit.py > "$RUNNER_TEMP/triage-audit.log" 2>&1
+          python3 devtools/triage_audit.py > "$RUNNER_TEMP/triage-audit.log" 2>&1
           status=$?
           cat "$RUNNER_TEMP/triage-audit.log"
           cat "$RUNNER_TEMP/triage-audit.log" >> "$GITHUB_STEP_SUMMARY"

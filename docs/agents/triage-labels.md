@@ -21,11 +21,11 @@ The repo adds four labels the five roles do not cover:
 
 `waiting-for-verify` outranks the five roles above — an issue carrying it must not also carry `ready-for-agent`, `ready-for-human`, or `needs-info`. It closes on evidence rather than on waiting, at tiers that differ by what can be checked; what closes it and what the closing comment must cite are in [issue-tracker.md](issue-tracker.md) 的「票的生命周期」. The checks owed at each release are listed in [release-followup.md](release-followup.md). <!-- rule:doc.triage.waiting-for-verify-outranks -->
 
-`in-progress` is a claim, not a role: it stays out of the five-role set and must not coexist with `waiting-for-verify`. The claim itself is recorded as a comment on the issue — `python3 tool/claim.py <N>` writes it — and the label is only the visible signal. When to add it, when it ends, and what to restore when a claim is abandoned are in [issue-tracker.md](issue-tracker.md) 的「票的生命周期」. <!-- rule:doc.triage.in-progress-is-a-claim -->
+`in-progress` is a claim, not a role: it stays out of the five-role set and must not coexist with `waiting-for-verify`. The claim itself is recorded as a comment on the issue — `python3 devtools/claim.py <N>` writes it — and the label is only the visible signal. When to add it, when it ends, and what to restore when a claim is abandoned are in [issue-tracker.md](issue-tracker.md) 的「票的生命周期」. <!-- rule:doc.triage.in-progress-is-a-claim -->
 
 `stale` 是修饰符，不是第六个角色：它和角色标签并存，不改变票属于哪个角色，也不构成关票依据——关不关仍由维护者按现有信息判断。加标与摘标的时机、认领时的处置只在 [issue-tracker.md](issue-tracker.md) 的「票的生命周期」里定义。 <!-- rule:doc.triage.stale-is-a-modifier -->
 
-`blocked-on-device` 同样是修饰符，靠人工判断：triage 或复查时判一次，票上出现新证据（有人贴 dump、报告者回话、用例落地）就摘掉，不做自动判定。它记的是「这张票卡在一台我们没有的机器上」这一 GitHub 上可见的状态；[docs/09](../09-社区问题处理.md) 的「待真机确认」表记的是 GitHub 上看不到的判据与缺口，两层不重复。复测队列（`tool/followup.py`）不把带这个标签的票当成交付项——不补缺行、不催，已有行留着不删；每日停摆扫描（`tool/stale.py`）也不把它判成停摆。 <!-- rule:doc.triage.blocked-on-device -->
+`blocked-on-device` 同样是修饰符，靠人工判断：triage 或复查时判一次，票上出现新证据（有人贴 dump、报告者回话、用例落地）就摘掉，不做自动判定。它记的是「这张票卡在一台我们没有的机器上」这一 GitHub 上可见的状态；[docs/09](../09-社区问题处理.md) 的「待真机确认」表记的是 GitHub 上看不到的判据与缺口，两层不重复。复测队列（`devtools/followup.py`）不把带这个标签的票当成交付项——不补缺行、不催，已有行留着不删；每日停摆扫描（`devtools/stale.py`）也不把它判成停摆。 <!-- rule:doc.triage.blocked-on-device -->
 
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table. <!-- rule:doc.triage.five-roles-map -->
 
@@ -37,7 +37,7 @@ When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the 
 
 ## 标签登记
 
-上面两表与「分类标签」一节提到的标签收在这一张表里，`tool/triage_audit.py` 的 `KNOWN` 与它逐项对拍，脚本只是镜像。最后七个沿用 GitHub 的默认标签，不算分类 —— `documentation` 也一样。`/wayfinder` 建的票带 `wayfinder:*`，第一次出现时登记进来。
+上面两表与「分类标签」一节提到的标签收在这一张表里，`devtools/triage_audit.py` 的 `KNOWN` 与它逐项对拍，脚本只是镜像。最后七个沿用 GitHub 的默认标签，不算分类 —— `documentation` 也一样。`/wayfinder` 建的票带 `wayfinder:*`，第一次出现时登记进来。
 
 | Label                 | 归属                                        |
 | --------------------- | ------------------------------------------- |

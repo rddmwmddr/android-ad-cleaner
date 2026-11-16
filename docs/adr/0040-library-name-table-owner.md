@@ -23,7 +23,7 @@
 
 mypy 解析 `from recipe_nav import <名字>` 时看的是源模块的 `__all__`：owner 的 `__all__` 是计算值时，
 面里的 `from recipe_lib import *` 让 mypy 认不出 `recipe_nav.tap_row`（`attr-defined`），
-`tool/typecheck_recipes.py` 会红。字面量 + owner 里逐个显式 import 才恢复。失效条件：mypy 能静态求值
+`devtools/typecheck_recipes.py` 会红。字面量 + owner 里逐个显式 import 才恢复。失效条件：mypy 能静态求值
 计算值 `__all__`，或 recipes 的例外 `.py` 不再直接 `from <面> import <名字>`。
 
 ### 三层命名集合不许混

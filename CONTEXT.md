@@ -12,7 +12,7 @@
 
 **handler** — 一条命令在进程内的入口：给序列号和这条命令剩下的参数，回一个退出码。和「命令」的区别是：命令是用户敲的那个词，handler 是它在进程里的那一段；一条命令恰好一个 handler。它不解析命令行，也不退出进程——那两件事只发生在总入口。
 
-**退出码** — 一条命令对外报的成败，也是客户端判断「这一步成不成」的唯一依据：0 是成功；1 是失败，失败原因以人话写在 stderr 上。0 与 1 之外的值只出现在两类场合：这条命令只是转发另一条命令（`ui-check`、`recipe`、`chan-off` / `chan-on`、`chan-scan` 把子进程的码原样透出），或维护侧脚本有自己的语义（`tool/claim.py` 的 2 是票被别人认领、3 是 `gh` 调用失败，见 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md)）。
+**退出码** — 一条命令对外报的成败，也是客户端判断「这一步成不成」的唯一依据：0 是成功；1 是失败，失败原因以人话写在 stderr 上。0 与 1 之外的值只出现在两类场合：这条命令只是转发另一条命令（`ui-check`、`recipe`、`chan-off` / `chan-on`、`chan-scan` 把子进程的码原样透出），或维护侧脚本有自己的语义（`devtools/claim.py` 的 2 是票被别人认领、3 是 `gh` 调用失败，见 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md)）。
 
 ## 脚本
 
@@ -49,6 +49,8 @@
 **验证记录** — `recipes/verified.toml` 里的一条，六样：真机上的系统 build 串、验证日期、验证人、**覆盖度**（`全部` / `部分` / `未记录`）、**证据来源**、**段体哈希**（`body_hash`，段体归一后的摘要：`.toml` 取每段规范化后的数据、再整份拼上同名例外 `.py` 的模块体，用来判这次改动有没有动过段体）。按配方文件记，`<型号>-<变体>.toml` 这类变体各一条，不是目录级。build 写设备实际报出来的串，能认出完整串就写全、认不出时才写**录制版本**本身；记录与数据声明的 `build` 对不上时不再算验过，要重新验一次。覆盖度是「未记录」时日期与验证人留空。每份配方都必须有条目，内容可以是「未记录」。引擎把覆盖度、证据来源与验证日期经 `status-json` 带出（`recipe_coverage` / `recipe_evidence` / `recipe_verified`），客户端只透传。结果页是否据此多一行提示由 `tool/coverage_note.py` 判（两个宿主同一份，措辞按宿主分叉，见 ADR-0010 的增补（沿用 #1188））。
 
 **底部标签** — App 底部导航栏上的入口（`我的`、`首页`）。读屏读到的文字不一定正好是这两个字：主题商店读作 `未选中,我的`，HyperOS 4 的商店读作 `我的，有新消息`。代码里是 `Navigator.tab()`（`p.tab()` 经门面转发）：只在屏底 15% 带内找，带内按「精确 → 逗号末段等于 → 包含」递进，找不到返回 `False`（ADR-0012）。需要文字确认落点的普通导航仍用 `Navigator.go()`。
+
+**出厂引擎 / 仓库工具链** — `tool/` 是出厂引擎：随 APK 发到手机上，手机版与桌面版同一份。`devtools/` 是仓库工具链：只在 CI 与本机跑，不随包——提交 / 票号 / DCO 校验、triage 与停摆扫描、发版对账、文档生成、认领与复测队列这些都在这一类里。边界由目录表达（`syncEngine` 是整目录 glob，`tool/` 下新放一个脚本它就自动进包），不靠名字白名单；两份冻结名单与守卫在 `tests/test_tool_package.py`（[ADR-0041](docs/adr/0041-tool-engine-devtools-seam.md)）。
 
 ## 清单与词库
 
@@ -207,13 +209,13 @@
 
 **`waiting-for-verify`** — 修复已合进 `main`，但**没有任何已发布版本包含它**，或已发布但没在报告者真机上确认。它的互斥标签在 [docs/agents/triage-labels.md](docs/agents/triage-labels.md) 里定义，凭证据关票的判据在 [issue-tracker.md](docs/agents/issue-tracker.md) 的「票的生命周期」，每版欠的复测在 [release-followup.md](docs/agents/release-followup.md)。
 
-**`in-progress`** — 已认领，有人正在改。认领记录是票下的一条评论（`python3 tool/claim.py` 写），标签只是可见信号；认领、摘标与弃单的时机只在 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md) 的「票的生命周期」里定义。
+**`in-progress`** — 已认领，有人正在改。认领记录是票下的一条评论（`python3 devtools/claim.py` 写），标签只是可见信号；认领、摘标与弃单的时机只在 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md) 的「票的生命周期」里定义。
 
 **`out-of-scope`** — 明确拒绝的需求，理由写在 `.out-of-scope/<概念>.md`。和 `wontfix` 的区别：`wontfix` 是这次不做，`out-of-scope` 是**这个方向不做**，理由要能被后来者读懂，同一个需求再出现时直接引用而不是重新论证。
 
 文件都在 `.out-of-scope/` 目录下，一份概念一份，文件名即概念名；该目录就是清单，新增时不必改这里。
 
-**`stale`** — 修饰符，不是状态：`needs-info` 的票在报告者那边停摆时由 `python3 tool/stale.py` 每日扫描打上，报告者回话后摘掉。它不改变票的角色，也不构成关票依据。加标条件与认领时的处置只在 [issue-tracker.md](docs/agents/issue-tracker.md) 的「票的生命周期」里定义，标签语义见 [docs/agents/triage-labels.md](docs/agents/triage-labels.md)。
+**`stale`** — 修饰符，不是状态：`needs-info` 的票在报告者那边停摆时由 `python3 devtools/stale.py` 每日扫描打上，报告者回话后摘掉。它不改变票的角色，也不构成关票依据。加标条件与认领时的处置只在 [issue-tracker.md](docs/agents/issue-tracker.md) 的「票的生命周期」里定义，标签语义见 [docs/agents/triage-labels.md](docs/agents/triage-labels.md)。
 
 **`blocked-on-device`** — 修饰符，不是状态：证据要一台维护者没有的机器，只能等。人工打标、有新证据就摘；复测队列不把它当交付项，停摆扫描也不判它停摆。语义与判定只在 [docs/agents/triage-labels.md](docs/agents/triage-labels.md)。
 

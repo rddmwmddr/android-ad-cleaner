@@ -9,8 +9,8 @@
 1. 取出当前队列，并核对它与 GitHub 标签一致： <!-- rule:doc.release.followup-queue -->
 
    ```bash
-   python3 tool/followup.py            # 只读：只报差异，一个字节都不写
-   python3 tool/followup.py --write    # 把表补到与标签一致
+   python3 devtools/followup.py            # 只读：只报差异，一个字节都不写
+   python3 devtools/followup.py --write    # 把表补到与标签一致
    ```
 
    只读时报出两类差异：**缺行**（标签里有、`## 当前队列` 的表里没有）与**过期行**（表里有、标签里没有，已关闭或已摘标）。退出码 `0` 一致、`1` 有差异、`2` 读不到标签或表格结构认不出。

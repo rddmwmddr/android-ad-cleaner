@@ -1,4 +1,4 @@
-"""发版元数据从 Release 事实生成（`tool/release_meta.py`，#1135，沿用 #1134）。
+"""发版元数据从 Release 事实生成（`devtools/release_meta.py`，#1135，沿用 #1134）。
 
 只测外部行为：命令的退出码与输出、生成的清单与页面文本、写盘结果。不联网、不需要 `gh`，
 `fetch` / `upload` / `draft` / `published` 与写后自检的 `verify` 都由用例注入。
@@ -14,7 +14,7 @@ from string import Template
 from unittest import mock
 
 from fixtures import FakeRunner
-from tool import release_assets, release_meta
+from devtools import release_assets, release_meta
 
 VERSION = "1.2.3"
 RELEASED = "2026-11-12"

@@ -1,4 +1,4 @@
-"""DCO 校验（tool/check_dco.py）：`base..head` 里每个非 merge 提交都要带与作者邮箱一致的 Signed-off-by（#848）。"""
+"""DCO 校验（devtools/check_dco.py）：`base..head` 里每个非 merge 提交都要带与作者邮箱一致的 Signed-off-by（#848）。"""
 import sys
 import unittest
 from pathlib import Path
@@ -6,10 +6,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 
-import check_dco  # noqa: E402
 import fixtures  # noqa: E402
+from devtools import check_dco  # noqa: E402
 
-SCRIPT = ROOT / "tool" / "check_dco.py"
+SCRIPT = ROOT / "devtools" / "check_dco.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "commit-checks.yml"
 SIGNED = "Signed-off-by: Rikki <rikki@example.com>"
 
@@ -139,7 +139,7 @@ class WorkflowTest(unittest.TestCase):
         self.assertIn("\n  dco:\n", self.text)
 
     def test_dco_job_runs_the_script(self):
-        self.assertIn("python3 tool/check_dco.py", self.step("校验 DCO"))
+        self.assertIn("python3 devtools/check_dco.py", self.step("校验 DCO"))
 
     def test_job_checks_the_pull_request_range(self):
         step = self.step("校验 DCO")

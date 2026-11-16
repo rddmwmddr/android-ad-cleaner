@@ -2,9 +2,9 @@
 
 用法：
 
-    python3 tool/release_assets.py          # 比 index.html 的 REL.version 那个 tag，只比文件名
-    python3 tool/release_assets.py v0.4.0   # 比指定的 tag
-    python3 tool/release_assets.py --sha    # 文件名、大小、sha 三类都比
+    python3 devtools/release_assets.py          # 比 index.html 的 REL.version 那个 tag，只比文件名
+    python3 devtools/release_assets.py v0.4.0   # 比指定的 tag
+    python3 devtools/release_assets.py --sha    # 文件名、大小、sha 三类都比
 
 `REL.files` 每条的 `id` 是下载卡片的身份，`file` 是 Release 里的附件名；两边任一侧改了名字
 而另一侧没跟上，用户点下载就是 404。`--sha` 再加比大小与 sha：页面上写的是给人看的校验值，
@@ -14,7 +14,7 @@
 `tests/test_rules_guards.py` 的 `ReleaseGuards` 里，不需要 GitHub 凭据。
 
 `fetch_release()` 是取数底座：一次 `gh release view` 给全部附件的 `Asset`（名字、大小、
-摘要），`fetch_assets()` 只是它的名字投影；生成校验清单与回填页面的 `tool/release_meta.py`
+摘要），`fetch_assets()` 只是它的名字投影；生成校验清单与回填页面的 `devtools/release_meta.py`
 也消费它。
 
 `read_entries()` 给页面条目的完整字段（版本、id、文件名、大小、sha），`read_page()` 是它的
@@ -31,9 +31,13 @@ from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import NamedTuple
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))   # 直接跑脚本与作为 tool.<模块> import 两种都认
-from gh import GhError, json_of, runner_for                # noqa: E402
-from stdio import use_utf8_console                         # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))   # stdio 留在引擎目录
+
+try:
+    from .gh import GhError, json_of, runner_for
+except ImportError:             # 直接跑文件时 sys.path[0] 就是 devtools/
+    from gh import GhError, json_of, runner_for
+from stdio import use_utf8_console
 
 use_utf8_console()
 
@@ -50,7 +54,7 @@ ENTRY_SHA = re.compile(r'\bsha:\s*"([^"]+)"')
 # Release 里不属于下载卡片的附件：校验清单随版本走，页面上没有它的入口。
 EXTRA_ASSETS = frozenset({"SHA256SUMS.txt"})
 
-USAGE = ("用法：python3 tool/release_assets.py [tag] [--sha]\n"
+USAGE = ("用法：python3 devtools/release_assets.py [tag] [--sha]\n"
          "  不带 --sha 只比文件名；带 --sha 再比大小与 sha。留空 tag 取页面 REL.version。")
 
 EXIT_OK, EXIT_MISMATCH, EXIT_UNREACHABLE = 0, 1, 2

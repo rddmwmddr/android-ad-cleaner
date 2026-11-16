@@ -2,11 +2,11 @@
 
 用法：
 
-    python3 tool/release_meta.py sums v0.4.4               # 在当刻目录写 SHA256SUMS.txt
-    python3 tool/release_meta.py sums v0.4.4 --upload      # 再传进 Release 草稿并回读核对
-    python3 tool/release_meta.py sums v0.4.4 --from-files <安装包所在目录>
-    python3 tool/release_meta.py page v0.4.4               # 只校验能不能回填（不写盘）
-    python3 tool/release_meta.py page v0.4.4 --write       # 回填 index.html 的 REL 与两页图标地址
+    python3 devtools/release_meta.py sums v0.4.4               # 在当刻目录写 SHA256SUMS.txt
+    python3 devtools/release_meta.py sums v0.4.4 --upload      # 再传进 Release 草稿并回读核对
+    python3 devtools/release_meta.py sums v0.4.4 --from-files <安装包所在目录>
+    python3 devtools/release_meta.py page v0.4.4               # 只校验能不能回填（不写盘）
+    python3 devtools/release_meta.py page v0.4.4 --write       # 回填 index.html 的 REL 与两页图标地址
 
 清单条目是 `<sha256>  <文件名>`（两个空格），顺序与下载卡片的 id 顺序一致，不含清单文件自身。
 摘要取自 Release 的资产；缺摘要、或某个卡片 id 匹配不到附件时整份拒绝，不留下半份文件。
@@ -30,13 +30,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import NamedTuple
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))   # 直接跑脚本与作为 tool.<模块> import 两种都认
-from gh import GhError, call, runner_for                   # noqa: E402
-# 两页的清单只认 gen_site_css.TARGETS：图标缓存键跟 REL.version 走，页面集合不另列一份。
-from gen_site_css import TARGETS as SITE_PAGES             # noqa: E402
-from release_assets import (BLOCK, Entry, fetch_release, human_size, map_entries,  # noqa: E402
-                            read_entries)
-from stdio import use_utf8_console                         # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))   # stdio 留在引擎目录
+
+try:
+    from .gh import GhError, call, runner_for
+    # 两页的清单只认 gen_site_css.TARGETS：图标缓存键跟 REL.version 走，页面集合不另列一份。
+    from .gen_site_css import TARGETS as SITE_PAGES
+    from .release_assets import BLOCK, Entry, fetch_release, human_size, map_entries, read_entries
+except ImportError:             # 直接跑文件时 sys.path[0] 就是 devtools/
+    from gh import GhError, call, runner_for
+    from gen_site_css import TARGETS as SITE_PAGES
+    from release_assets import BLOCK, Entry, fetch_release, human_size, map_entries, read_entries
+from stdio import use_utf8_console
 
 use_utf8_console()
 
@@ -54,8 +59,8 @@ SUFFIXES = (
 MANIFEST = "SHA256SUMS.txt"
 # REL 块只在首页；其余页面只拿图标缓存键。
 REL_PAGE = "home"
-USAGE = ("用法：python3 tool/release_meta.py sums <tag> [--upload] [--from-files <目录>]\n"
-         "      python3 tool/release_meta.py page <tag> [--write] [--gitee]")
+USAGE = ("用法：python3 devtools/release_meta.py sums <tag> [--upload] [--from-files <目录>]\n"
+         "      python3 devtools/release_meta.py page <tag> [--write] [--gitee]")
 
 EXIT_OK, EXIT_REFUSED, EXIT_UNREACHABLE = 0, 1, 2
 

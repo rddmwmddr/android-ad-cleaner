@@ -1,4 +1,4 @@
-"""Conventional Commits 校验（tool/check_conventional.py）：`base..head` 里每个非 merge 提交的主题都要带合规前缀（#849）。"""
+"""Conventional Commits 校验（devtools/check_conventional.py）：`base..head` 里每个非 merge 提交的主题都要带合规前缀（#849）。"""
 import re
 import sys
 import unittest
@@ -7,10 +7,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 
-import check_conventional  # noqa: E402
 import fixtures  # noqa: E402
+from devtools import check_conventional  # noqa: E402
 
-SCRIPT = ROOT / "tool" / "check_conventional.py"
+SCRIPT = ROOT / "devtools" / "check_conventional.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "commit-checks.yml"
 CLAUDE_MD = ROOT / "CLAUDE.md"
 ANCHOR = "rule:dev.git.conventional-commits"
@@ -147,7 +147,7 @@ class WorkflowTest(unittest.TestCase):
         self.assertIn("\n  conventional:\n", self.text)
 
     def test_job_runs_the_script(self):
-        self.assertIn("python3 tool/check_conventional.py", self.job("conventional"))
+        self.assertIn("python3 devtools/check_conventional.py", self.job("conventional"))
 
     def test_job_checks_the_pull_request_range(self):
         # 只判 PR 范围：main 上的历史提交不在这一步里，也不许为此重写历史。

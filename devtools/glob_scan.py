@@ -4,8 +4,8 @@
 不可区分。机型脚本从 `recipes/<家族>/<型号>/recipe*.py` 改成同目录的 `<型号>.toml` 之后，
 三处守卫的发现模式匹配 0 份、断言恒真，CI 全绿而没有人看着它们保护的东西。
 
-判据：把 `tests/` 与 `tool/` 里每一处对仓库目录做发现的 glob / rglob **对真实仓库求值一次**，
-匹配 0 份即报红。基路径与模式从同一文件的模块常量、函数内局部常量、字面量循环变量与
+判据：把 `tests/`、`tool/` 与 `devtools/` 里每一处对仓库目录做发现的 glob / rglob
+**对真实仓库求值一次**，匹配 0 份即报红。基路径与模式从同一文件的模块常量、函数内局部常量、字面量循环变量与
 `形参 or 默认值` 还原；还原不出来（形参、运行时数据目录、f-string、生成器表达式）的调用
 不在判据范围内，记进 `Report.skipped`，不报红——它们指向的不是仓库现状，求值没有意义。
 循环变量按名字取全文件并集，同名变量在一处是字面量、另一处是动态值时会一并按字面量求值
@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from itertools import product
 from pathlib import Path
 
-FOLDERS = ("tests", "tool")
+FOLDERS = ("tests", "tool", "devtools")
 
 # {(文件相对路径, 相对仓库根的模式): 为什么这个模式本来就该匹配 0 份}
 EXEMPT: dict[tuple[str, str], str] = {

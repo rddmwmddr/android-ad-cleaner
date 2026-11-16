@@ -2,7 +2,7 @@
 
 `for x in <发现>: ...` + `assertEqual(offenders, [])` 在发现集为空时与「全仓合规」不可区分：
 B 段把 `recipe*.py` 换成 `<型号>.toml` 之后，三处守卫静默空转，CI 全绿而它们保护的东西
-一件都没人看着。判据正文与豁免清单在 `tool/glob_scan.py`。
+一件都没人看着。判据正文与豁免清单在 `devtools/glob_scan.py`。
 """
 import sys
 import tempfile
@@ -13,7 +13,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 
-import glob_scan  # noqa: E402
+from devtools import glob_scan  # noqa: E402
 
 # 探针文件替身：与真实测试同一副骨架（ROOT 由 __file__ 推），后面接一段发现式扫描。
 PREAMBLE = "from pathlib import Path\nROOT = Path(__file__).resolve().parents[1]\n"
@@ -171,17 +171,17 @@ class RepoTests(unittest.TestCase):
         for where in ("tests/test_source_text.py",
                       "tests/test_subprocess_text_mode.py",
                       "tests/fixtures.py",
-                      "tool/typecheck_recipes.py"):
+                      "devtools/typecheck_recipes.py"):
             self.assertIn(where, covered)
 
     def test_a_broken_pattern_in_a_real_guard_is_reported(self):
         """把真实仓库里一个有效模式改坏（gui → gone），守卫必须把它报出来。"""
         text = (ROOT / "tests" / "test_source_text.py").read_text(encoding="utf-8")
-        broken = text.replace('("tool", "gui", "tests")', '("tool", "gone", "tests")')
+        broken = text.replace('("tool", "devtools", "gui", "tests")', '("tool", "devtools", "gone", "tests")')
         self.assertNotEqual(broken, text, "锚点改了：这条用例要跟着换一份真实的全仓扫描")
         with tempfile.TemporaryDirectory() as tmp:
             write(tmp, "tests/test_source_text.py", broken)
-            for folder in ("tool", "gui", "tests"):
+            for folder in ("tool", "devtools", "gui", "tests"):
                 (Path(tmp) / folder).mkdir(exist_ok=True)
             write(tmp, "tests/sample.py", "x = 1\n")
             report = glob_scan.scan(tmp)

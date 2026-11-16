@@ -69,7 +69,7 @@ vivo / 荣耀 / 魅族 / 三星（15 份脚本，#1246）按同一形状收口�
 
 - `adapt gen` 的草稿不再是没有 import 头的特例：它带上 `from recipe_kit import step` 与文件末尾的 `if TYPE_CHECKING:` 块，与正式脚本同形，因此能被 `recipe_loader.load()` 直接装载（`adapt check` 走的仍是同一个装载器，上面 Decision 里「草稿没有 import 头」那句只描述当时的生成物）。
 - 注入名在类型层面可见：`recipe_kit` / `recipe_nav` / `recipe_strategies` / `recipe_steps` 各有一个模块级 `__getattr__`，`if TYPE_CHECKING:` 块里的 import 因此认得出来，运行时照旧由执行作用域提供。
-- `recipes/` 进静态检查：ruff 的 F401 在 `pyproject.toml` 按文件整类关掉（注入面按名字取用是假阳性）；mypy 由 `tool/typecheck_recipes.py` 逐份喂给同一个宽松档（43 份都叫 `recipe.py`，一次扫会撞模块名）。
+- `recipes/` 进静态检查：ruff 的 F401 在 `pyproject.toml` 按文件整类关掉（注入面按名字取用是假阳性）；mypy 由 `devtools/typecheck_recipes.py` 逐份喂给同一个宽松档（43 份都叫 `recipe.py`，一次扫会撞模块名）。
 - 共享分节的归属规则落成机器判据：`recipe_nav.SHARED` / `recipe_strategies.SHARED` 列出的注入名必须被 ≥2 个家族使用，见规则 `dev.recipes.shared-sections`；家族分节允许单脚本变体。
 
 ### 增补（#1253）：词库扩到策略库

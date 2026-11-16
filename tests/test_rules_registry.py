@@ -4,7 +4,7 @@
 另有一个用例是另一把锁（#1303）：没有守卫的规则条数只许降。
 
 第五条的口径：`status = "code"` 的规则说的是「这件事只在那一处实现，别处不要另写一份」，而 `check` 只证明符号存在。
-所以对每条 `code:` 规则点名的符号，在 `tool/` `gui/` `recipe_lib/` 三个目录下按模块层定义计数——
+所以对每条 `code:` 规则点名的符号，在 `tool/` `devtools/` `gui/` `recipe_lib/` 四个目录下按模块层定义计数——
 `def` / `async def` / `class` / 赋值 / 带值的 `AnnAssign`，穿过 `if` / `try` / `with` / `for` / `while` / `match`
 的块（与 `top_level_names()` 同一口径），只计裸名目标；`import` / `from … import` 的重导出不算定义，
 `tool/fast.py` 的 `Screen` 与 `NEG_PREFIX` 就是这一档。
@@ -35,7 +35,7 @@ UNGUARDED = {"manual", "advisory", "dead"}
 # 仍是一笔只能靠人记着的债，漏掉它就能靠「把一条 manual 标成 dead」白换一个名额。
 # 涨一个必须在这里改数字：那是一次公开的「我又欠了一条只能靠人记着的规则」，评审要看见。
 # 守卫化一条（status 改 enforced / code）是还债，改完把这里的数字一起下调。
-PROSE_ONLY_BOUND = 71          # manual 59 + advisory 12，dead 0，注册表共 153 条
+PROSE_ONLY_BOUND = 71          # manual 59 + advisory 12，dead 0，注册表共 155 条
 REQUIRED = ("id", "source", "check", "status", "why", "expires_if")
 OPTIONAL = ("since",)
 
@@ -246,7 +246,7 @@ def check_problem(check, status):
     return f"check={check!r} 的前缀 {kind!r} 不认识"
 
 
-CODE_SCOPE = ("tool", "gui", "recipe_lib")
+CODE_SCOPE = ("tool", "devtools", "gui", "recipe_lib")
 
 # {(符号, 相对路径): 为什么这一处与规则点名的那一处不是同一个概念}
 # 键指向「多出来的那一处」，规则点名的那一处不进这张表。
@@ -264,7 +264,7 @@ CODE_SYMBOL_EXEMPT = {
 
 
 def code_symbol_places():
-    """{符号: [(相对路径, 行号)]}：`CODE_SCOPE` 三个目录下每个符号的模块层定义处。"""
+    """{符号: [(相对路径, 行号)]}：`CODE_SCOPE` 四个目录下每个符号的模块层定义处。"""
     index = {}
     for folder in CODE_SCOPE:
         for path in sorted((ROOT / folder).rglob("*.py")):

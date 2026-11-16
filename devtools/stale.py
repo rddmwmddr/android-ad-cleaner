@@ -2,9 +2,9 @@
 
 用法：
 
-    python3 tool/stale.py
-    python3 tool/stale.py --dry-run
-    python3 tool/stale.py --dry-run --days 12
+    python3 devtools/stale.py
+    python3 devtools/stale.py --dry-run
+    python3 devtools/stale.py --dry-run --days 12
 
 判据（父票 #976）：最后一条评论不是报告者发的、且距今已满 N 天 → 加标；报告者回话后 → 摘标；
 一条评论都没有时从票的 `createdAt` 起算。带 `in-progress` / `waiting-for-verify` /
@@ -22,8 +22,14 @@
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 
-from gh import GhError, call, json_of, runner_for
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))   # stdio 留在引擎目录
+
+try:
+    from .gh import GhError, call, json_of, runner_for
+except ImportError:             # 直接跑文件时 sys.path[0] 就是 devtools/
+    from gh import GhError, call, json_of, runner_for
 
 from stdio import use_utf8_console
 
@@ -45,7 +51,7 @@ EXIT_OK, EXIT_USAGE, EXIT_GH, EXIT_WRITE = 0, 1, 2, 3
 # 评论文案只在这里拼：不 @ 任何人，也不给关票的承诺——是否关票由维护者按现有信息判断。
 REPLY_HINT = "补齐后直接在本票回复；如果确实拿不到，说一声，我们会按现有信息评估后关票。"
 
-USAGE = """用法：python3 tool/stale.py [--dry-run] [--days N]
+USAGE = """用法：python3 devtools/stale.py [--dry-run] [--days N]
 
   --dry-run   只打印，不产生任何写操作
   --days N    阈值天数，默认 14；历史回放时用 12"""

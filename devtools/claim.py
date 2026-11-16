@@ -2,9 +2,9 @@
 
 用法：
 
-    python3 tool/claim.py 932
-    python3 tool/claim.py 932 --release
-    python3 tool/claim.py 932 --abandon [--restore ready-for-agent]
+    python3 devtools/claim.py 932
+    python3 devtools/claim.py 932 --release
+    python3 devtools/claim.py 932 --abandon [--restore ready-for-agent]
 
 身份是 `sha1(<主机名>\0<worktree 绝对路径>)` 的前 8 位：同一 worktree 里恢复的会话仍认得出自己，
 不同会话必然不同。主机名只进哈希，评论里只留那 8 位——公开 issue 上不出现本机主机名与目录。
@@ -23,10 +23,16 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 
-from gh import GhError, call, json_of, runner_for
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))   # stdio 留在引擎目录
 
-from stale import STALE_LABEL     # 停摆标记只此一份；认领时要摘掉（#978）
+try:
+    from .gh import GhError, call, json_of, runner_for
+    from .stale import STALE_LABEL     # 停摆标记只此一份；认领时要摘掉（#978）
+except ImportError:             # 直接跑文件时 sys.path[0] 就是 devtools/
+    from gh import GhError, call, json_of, runner_for
+    from stale import STALE_LABEL
 
 from stdio import use_utf8_console
 
@@ -41,7 +47,7 @@ ROLE_LABELS = ("ready-for-agent", "ready-for-human", "needs-triage")
 LABEL_KEY = "原标签："
 RESTORE_KEY = "恢复："
 EMPTY_LABELS = "（无）"
-COMMAND = "python3 tool/claim.py"
+COMMAND = "python3 devtools/claim.py"
 STAMP = "%Y-%m-%d %H:%M"
 
 EXIT_OK, EXIT_REFUSED, EXIT_TAKEN, EXIT_GH = 0, 1, 2, 3

@@ -2,7 +2,7 @@
 
 用法（本地与 CI 是同一条命令）：
 
-    python3 tool/check_dco.py origin/main..HEAD
+    python3 devtools/check_dco.py origin/main..HEAD
 
 只判参数给的那段范围，不判历史：PR 的范围由 workflow 传 `pull_request.base.sha..pull_request.head.sha`。
 merge 提交整条跳过——GitHub 网页 / API 合并产生的合并提交不带 signoff，那是已知例外，不是违规。
@@ -12,8 +12,14 @@ merge 提交整条跳过——GitHub 网页 / API 合并产生的合并提交不
 import re
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
-from commits import Commit, read_commits
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))   # stdio 留在引擎目录
+
+try:
+    from .commits import Commit, read_commits
+except ImportError:             # 直接跑文件时 sys.path[0] 就是 devtools/
+    from commits import Commit, read_commits
 from stdio import use_utf8_console
 
 use_utf8_console()
@@ -52,7 +58,7 @@ def violations(commits):
 
 def main(argv):
     if len(argv) != 1:
-        print("用法：python3 tool/check_dco.py <base>..<head>", file=sys.stderr)
+        print("用法：python3 devtools/check_dco.py <base>..<head>", file=sys.stderr)
         return 2
     try:
         found = violations(read_commits(argv[0]))
