@@ -6,7 +6,12 @@
 
 日志尾部认不出 `Ran N tests` 与 `OK` / `FAILED` 时不抛异常，只输出一句说明：summary 写不出来
 不该让测试 job 变红。日志按 utf-8 读、坏字节替换，Windows 上 cp1252 混进来的字节不会炸。
+
+另附一节「测试规模」（#1394），三项都由 AST 现算、不读 git 历史或存档：用例数是 `tests/**/*.py`
+里 AST 的 `def test_*` / `async def test_*` 定义个数，文件数是这些 `.py` 文件的个数，行数是这些
+文件行数之和。`tests/` 读不到或解析失败同样只输出一句说明，不让 job 变红。
 """
+import ast
 import re
 import sys
 from pathlib import Path
@@ -34,10 +39,48 @@ def parse(text):
     return int(ran.group(1)), ran.group(2), count("failures"), count("errors"), count("skipped")
 
 
-def render(label, text, sha=""):
+def suite_size(root=None):
+    """(用例数, 文件数, 行数)；`tests/` 读不到或解析失败时返回 None。
+
+    `root` 缺省取仓库根（本文件在 `devtools/` 下），不依赖 cwd；单测注入临时目录构造。"""
+    base = Path(root) if root is not None else Path(__file__).resolve().parents[1]
+    tests = base / "tests"
+    if not tests.is_dir():
+        return None
+    cases = files = lines = 0
+    try:
+        for path in sorted(tests.rglob("*.py")):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            files += 1
+            lines += len(text.splitlines())
+            for node in ast.walk(ast.parse(text, filename=str(path))):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_"):
+                    cases += 1
+    except (OSError, SyntaxError, ValueError):
+        return None
+    return cases, files, lines
+
+
+def size_section(root=None):
+    size = suite_size(root)
+    if size is None:
+        return ("### 测试规模\n\n"
+                "统计不出 `tests/` 下的用例数、文件数与行数（读不到 `tests/` 或文件解析失败）。\n")
+    cases, files, lines = size
+    return "\n".join([
+        "### 测试规模",
+        "",
+        "| 用例数 | 文件数 | 行数 |",
+        "|---:|---:|---:|",
+        f"| {cases} | {files} | {lines} |",
+    ]) + "\n"
+
+
+def render(label, text, sha="", root=None):
     parsed = parse(text)
+    size = size_section(root)
     if parsed is None:
-        return f"### 测试结果（{label}）\n\n日志里没找到 `Ran N tests` 与 `OK` / `FAILED` 汇总行。\n"
+        return f"### 测试结果（{label}）\n\n日志里没找到 `Ran N tests` 与 `OK` / `FAILED` 汇总行。\n\n{size}"
     total, seconds, failures, errors, skipped = parsed
     passed = total - failures - errors - skipped
     mark = "✅ Pass" if not failures and not errors else "❌ Fail"
@@ -50,7 +93,7 @@ def render(label, text, sha=""):
     ]
     if sha:
         lines += ["", f"提交 `{sha}`"]
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines) + "\n\n" + size
 
 
 def main(argv):
