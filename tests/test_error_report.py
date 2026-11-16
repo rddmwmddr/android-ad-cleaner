@@ -8,7 +8,7 @@ from unittest.mock import patch
 import urllib.error
 
 from fixtures import job_stub
-from gui import app
+from gui import app, reporter
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -111,6 +111,59 @@ class ReportTests(unittest.TestCase):
         reply = lambda *a, **k: Response(b'{"status":"duplicate"}')
         with patch.object(self.app.urllib.request, "urlopen", side_effect=reply):
             self.assertEqual(self.api.send_report(self.api.report_payload()), {"ok": True, "duplicate": True})
+
+
+class ReporterInjectionTests(unittest.TestCase):
+    """上报块从 `gui/app.py` 搬出去之后，常量与协作者由构造方给（#1384）。
+
+    版本号、上报地址、空报告文案、限频、宿主措辞与排查提示都不该再读 `gui/app.py` 的模块全局：
+    换成一组不像真值的输入，就能看出它们是不是真的从构造参数来。
+    """
+
+    class Help:
+        UI_RECOVERY = "关掉读屏占用再试"
+
+        @staticmethod
+        def is_ui_connection_error(detail):
+            return "UIAUTOMATION_BUSY" in detail
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.reporter = reporter.Reporter(
+            app.ClientData(self.dir.name), version="9.9.9",
+            report_url="https://example.invalid/aac-report", empty_report="空报告（试验）",
+            limit=1, os_name=lambda: "试验机", help_of=lambda: self.Help)
+
+    def view(self, **fields):
+        return {"serial": None, "lines": [], "results": [], "payloads": [], **fields}
+
+    def test_the_empty_report_sentence_comes_from_the_constructor(self):
+        self.assertEqual(self.reporter.send_report({"steps": [], "log": "  "}),
+                         {"error": "空报告（试验）"})
+
+    def test_the_version_and_the_platform_words_come_from_the_constructor(self):
+        payload = self.reporter.report_payload({"info": {"brand": "X"}}, self.view())
+        self.assertEqual(payload["client_version"], "9.9.9")
+        self.assertTrue(payload["platform"].startswith("试验机（"), payload["platform"])
+
+    def test_sending_uses_the_constructor_url_and_hourly_limit(self):
+        payload = self.reporter.report_payload({"info": {}}, self.view(lines=["▶ 收尾"]))
+        seen = []
+
+        def fake(request, timeout):
+            seen.append(request.full_url)
+            return Response(json.dumps({"status": "ok", "id": "x"}).encode())
+        with patch.object(reporter.urllib.request, "urlopen", side_effect=fake):
+            self.assertTrue(self.reporter.send_report(payload)["ok"])
+            second = self.reporter.send_report(payload)
+        self.assertEqual(seen, ["https://example.invalid/aac-report"])
+        self.assertIn("最多上报 1 次", second["error"])
+
+    def test_the_recovery_sentence_comes_from_the_injected_help(self):
+        result = self.reporter.remember_error("读屏检查", None, "boom: UIAUTOMATION_BUSY")
+        self.assertEqual(result["recovery"], self.Help.UI_RECOVERY)
+        self.assertTrue(result["error"].startswith(self.Help.UI_RECOVERY))
 
 
 SERVER = ROOT / ".private/aac-report"      # 服务端代码只在维护者本机，不进仓库
