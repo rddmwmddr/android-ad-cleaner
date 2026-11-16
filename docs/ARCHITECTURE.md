@@ -20,7 +20,7 @@
 | 契约 | 边界 | 谁消费 | 决定 |
 |---|---|---|---|
 | 命令与退出码 | 客户端 → 引擎 | `gui/app.py` 的 `Task` / `Job` | 一条命令一个 `cmd_*(serial, rest) -> int`，`sys.exit` 只在入口一处，转发型命令透出子进程码（[ADR-0005](adr/0005-run-command-handlers.md)） |
-| 引擎输出的三态 | 引擎 → 客户端 | `gui/app.py` 的 `_log()`；手机版 `aac_android/view.py` | 人话行进界面；`#aac:event` 只改状态、不进日志；`#aac:payload` 只进上报（[ADR-0004](adr/0004-engine-state-events.md)、[ADR-0009](adr/0009-engine-payload-channel.md)） |
+| 引擎输出的三态 | 引擎 → 客户端 | `gui/dispatcher.py` 的 `_log()`；手机版 `aac_android/view.py` | 人话行进界面；`#aac:event` 只改状态、不进日志；`#aac:payload` 只进上报（[ADR-0004](adr/0004-engine-state-events.md)、[ADR-0009](adr/0009-engine-payload-channel.md)） |
 | 窗口桥 | 前端 → 客户端 | `gui/web/`；手机版改由 Compose 直接调 Python（[ADR-0018](adr/0018-android-compose-ui.md)） | `Api` 上的方法名与参数是前端唯一契约，内部的下载 / 上报 / 调度怎么分家都可以变（[ADR-0011](adr/0011-api-splitting.md)） |
 | 读屏 adapter | 引擎 → 手机 | `tool/fast.py` 的 `Phone` | `Phone.reader` 是引擎看手机的唯一接口；桌面是 uiautomator2，手机是 `aac_android/u2.py`（[ADR-0001](adr/0001-phone-connection-module.md)、[ADR-0002](adr/0002-phone-state-interface.md)、[ADR-0019](adr/0019-phone-second-execution-host.md)） |
 
@@ -97,7 +97,7 @@
 
 `commits.py` 不是命令：它是上面几条 PR 校验共用的 `base..head` 读取与 UTF-8 控制台，沿用 #848、#849 起的那份设计。
 
-客户端侧：`gui/app.py` 是主体（`ClientData` / `AdbDownloader` / `Reporter` / `Dispatcher` / `Api`），`gui/launch.py` 是入口与打包冒烟，`gui/web/` 是桌面版的界面，`gui/winpreflight.py` 归因 Windows 启动失败，`gui/dotnet_config.py` 在打包时写随包的 `<exe>.config`。
+客户端侧：`gui/app.py` 是窗口桥与装配（`Api` / `ClientData` / `AdbDownloader`），其余各块按 owner 分住——`gui/toolpath.py` 是 `gui/` 到 `tool/` 的惰性加载，`gui/tasks.py` 是计划侧（`Task` … `retry_plan`，身份词表在 `tool/plan.py` 的 `StepKind`），`gui/dispatcher.py` 是执行编排（`Dispatcher` / `Job`），`gui/reporter.py` 是错误上报（`Reporter` / `scrub`），`gui/startup.py` 是启动失败文案与写剪贴板；`gui/launch.py` 是入口与打包冒烟，`gui/web/` 是桌面版的界面，`gui/winpreflight.py` 归因 Windows 启动失败，`gui/dotnet_config.py` 在打包时写随包的 `<exe>.config`。
 
 ### 函数级细节
 
@@ -114,8 +114,8 @@
 - 找「渠道怎么判营销 / 服务 / 受保护」先看 `tool/channel_policy.py` 的 `classify()`：七组判定只在那里定义（[ADR-0006](adr/0006-channel-classification.md)）；`chan_fast` 的扫描分支与 `gui/app.py` 的 `chan_scan()` 都消费它，不要另写词表。前台服务的证据来自渠道行（Android 14 起字段改名，两个都认，见 `FG_SERVICE_MARKS`；`parse()` 用 `foreground` out 参数带回），不在通知记录段。 <!-- rule:dev.channels.classification -->
 - 找「开关所属的行」先看 `tool/row.py`：`line` 定界、`own` 收窄多开关容器、`title_of` 给行标题、`title_hit` 给标题文字的落点（`off()` 回退用）、`dedupe` 同一水平带、`control` 开关本体（卡片整体 checkable 时取内层 Switch）。`tool/phone/screen.py` 的 `switches()` 消费 `dedupe` / `control`，`chan_fast.py` 共用 `SAME_LINE` 与 `own`，按名字筛候选文字节点共用 `named_nodes`（其顶部带阈值取 `TOP_BAND`）；`disabled_at` 判开关是不是灰的，`off()` 与 `chan_fast` 共用它，不要另写一份。设置入口（齿轮）的判据是 `icon_hit`，机型脚本从 `fast` 取这一份。 <!-- rule:dev.row.single-definition -->
 - 找「等页面认得出」先看 `tool/wait.py`：`settle` / `setting` / `ChannelPage.refresh` / `off` / `confirm` 都消费 `until()`，不要另写轮询循环；「等机主解锁」的文案、轮询间隔、站稳时间与默认预算只在 `wait_unlocked()` 里，两处调用点（`run.py` 起脚本之前、`Phone`）只传锁屏判据与亮屏命令。 <!-- rule:dev.wait.single-loop -->
-- 找「引擎报给客户端的状态」先看 `tool/events.py`：六个 kind 与事件行格式只在那里定义（[ADR-0004](adr/0004-engine-state-events.md)），引擎侧 `emit()`、`gui/app.py` 的 `_log()` 都走它；`failed_steps` 是唯一带载荷的 kind，客户端用 `parse_data()` 取整份字典，其余仍用 `parse()` 取 kind，不要按中文文案判断状态。 <!-- rule:dev.events.vocabulary -->
-- 改「一行输出怎么进界面」先看两处：`gui/app.py` 的 `_log()` 决定它进 `Job.lines` 还是只当事件；`tool/summary.py` 的 `summarize()` 在认不出模式时直接取 `results[].tail` 末行——`tail` 是第二个落点，机器行不能进。两个宿主调同一份，结果行带 `summary` 字段、界面只显示它，桌面与手机版不再各写一份摘要。验证档位提示同理：说不说的判据与按宿主分叉的措辞在 `tool/coverage_note.py`（措辞表在 `tool/host.py`），快照带 `coverage_note` 字段。 <!-- rule:dev.ui.result-line-routing -->
+- 找「引擎报给客户端的状态」先看 `tool/events.py`：六个 kind 与事件行格式只在那里定义（[ADR-0004](adr/0004-engine-state-events.md)），引擎侧 `emit()`、`gui/dispatcher.py` 的 `_log()` 都走它；`failed_steps` 是唯一带载荷的 kind，客户端用 `parse_data()` 取整份字典，其余仍用 `parse()` 取 kind，不要按中文文案判断状态。 <!-- rule:dev.events.vocabulary -->
+- 改「一行输出怎么进界面」先看两处：`gui/dispatcher.py` 的 `_log()` 决定它进 `Job.lines` 还是只当事件；`tool/summary.py` 的 `summarize()` 在认不出模式时直接取 `results[].tail` 末行——`tail` 是第二个落点，机器行不能进。两个宿主调同一份，结果行带 `summary` 字段、界面只显示它，桌面与手机版不再各写一份摘要。验证档位提示同理：说不说的判据与按宿主分叉的措辞在 `tool/coverage_note.py`（措辞表在 `tool/host.py`），快照带 `coverage_note` 字段。 <!-- rule:dev.ui.result-line-routing -->
 - 找「没勾的项为什么出现在结果里」先看 `gui/tasks.py` 的 `plan_tasks()`：计划本身（八个键与默认值）是 `tool/plan.py` 的 `Plan`，`plan_tasks()` 第一行把传进来的字典或对象收成它；勾了的排 `Task`，没勾的排一条 `skip_reason` 非空的，由 `not_run_result()` 记成 `rc=0` + `skipped` 的结果行（[ADR-0023](adr/0023-not-run-steps-in-results.md)）；原因分三档——没勾、这台机本来就没有或之前已做、通知没扫成，取自 `Api._offered()`（`last_status` + `last_chans`）。真因故障跳过的行仍是 `rc≠0`，别把它并进这一档。 <!-- rule:dev.ui.not-run-rows -->
 - 找「哪一步还能重试、重试重跑什么」先看 `gui/tasks.py` 的 `retryable()` / `retry_plan()`：可重试 = `rc≠0` 且没 `stopped`，广告开关步只取结果行里的 `failed_steps` 段名（[ADR-0026](adr/0026-retry-failed-steps.md)）。重试轮重建的也是 `Plan`（`tool/plan.py`），不再手工拼字典。合并按 `Task.kind` 就地覆盖，两个宿主读同一个 `poll()` 的 `retry` 计数，别在前端或 `view.py` 再算一份；段名来自引擎的 `failed_steps` 事件（[ADR-0004](adr/0004-engine-state-events.md) 增补段）。 <!-- rule:dev.ui.retry-plan -->
 - 找「这一步是什么身份」先看 `tool/plan.py` 的 `StepKind`：`backup` / `ads` / `recipe` / `channels` / `quickapp` / `finish` 六个成员只在那里声明，`plan_tasks()` 排任务、`retry_plan()` 的对齐键与 `tool/coverage_note.py` 判「有没有脚本那一行」都取它的成员，别处别再写字面量；计划侧那九个符号（`Task` … `retry_plan`）住 `gui/tasks.py`，`gui/app.py` 只留显式 re-export（[ADR-0011](adr/0011-api-splitting.md) 的增补段）。 <!-- rule:dev.client.step-kind-single-owner -->
