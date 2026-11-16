@@ -24,6 +24,8 @@ sys.path.insert(0, str(ROOT / "tests"))
 import adb_link  # noqa: E402
 import chan_fast  # noqa: E402
 import entries  # noqa: E402
+import entries_family  # noqa: E402
+import family  # noqa: E402
 import fast  # noqa: E402
 import fixtures  # noqa: E402
 import recipe_meta  # noqa: E402
@@ -71,22 +73,23 @@ class SourceTest(unittest.TestCase):
 
     def test_every_entry_has_a_source(self):
         used = entries.used_by(RECIPES)
-        for fam, groups in entries.ENTRIES.items():
-            for name, e in groups.items():
-                self.assertTrue(e.menu, f"{fam}·{name} 缺菜单路径")
-                for d in e.direct:
-                    if d.action:
-                        self.assertTrue(d.activity, f"{fam}·{name} 的 Intent 档缺落点页面")
-                        self.assertTrue(("intent", d.action, d.pkg) in used
-                                        or (d.action in DOCS and d.pkg in DOCS),
-                                        f"{fam}·{name} 的 Intent 入口 {d.action}（{d.pkg}）没有出处")
-                        continue
-                    key = ("direct", d.pkg, entries.full(d.pkg, d.activity))
-                    self.assertTrue(key in used or d.activity.lstrip(".") in DOCS,
-                                    f"{fam}·{name} 直达 {key} 没有出处")
-                for s in e.search:
-                    self.assertTrue(("search", s.keyword, s.result) in used or f"搜索「{s.keyword}」" in DOCS
-                                    or f"搜「{s.keyword}」" in DOCS, f"{fam}·{name} 搜索「{s.keyword}」没有出处")
+        for case in entries_family.CASES:
+            fam, name = case["family"], case["group"]
+            e = entries.ENTRIES[fam][name]
+            self.assertTrue(e.menu, f"{fam}·{name} 缺菜单路径")
+            for d in e.direct:
+                if d.action:
+                    self.assertTrue(d.activity, f"{fam}·{name} 的 Intent 档缺落点页面")
+                    self.assertTrue(("intent", d.action, d.pkg) in used
+                                    or (d.action in DOCS and d.pkg in DOCS),
+                                    f"{fam}·{name} 的 Intent 入口 {d.action}（{d.pkg}）没有出处")
+                    continue
+                key = ("direct", d.pkg, entries.full(d.pkg, d.activity))
+                self.assertTrue(key in used or d.activity.lstrip(".") in DOCS,
+                                f"{fam}·{name} 直达 {key} 没有出处")
+            for s in e.search:
+                self.assertTrue(("search", s.keyword, s.result) in used or f"搜索「{s.keyword}」" in DOCS
+                                or f"搜「{s.keyword}」" in DOCS, f"{fam}·{name} 搜索「{s.keyword}」没有出处")
 
     def test_every_brand_in_recipes_has_a_family_table(self):
         """脚本里出现过的品牌都要查得到。三星进目录时就是漏了这一步（#605）。"""
@@ -249,6 +252,16 @@ class SourceTest(unittest.TestCase):
         doc = (ROOT / "docs" / "清单" / "入口速查.md").read_text(encoding="utf-8")
         self.assertEqual(doc, entries.markdown(RECIPES),
                          "改了 tool/entries.py 或机型脚本后重新生成：python3 tool/entries.py > docs/清单/入口速查.md")
+
+
+class EntriesFamilyTests(unittest.TestCase):
+    """族自己的两条守卫（#1401）：句柄与入口表对得上，case 行是纯数据。"""
+
+    def test_snapshot_and_handles_agree(self):
+        self.assertEqual(entries_family.FAMILY.violations(), [])
+
+    def test_case_rows_are_pure_data(self):
+        self.assertEqual(family.pure_data_violations(entries_family), [])
 
 
 class FakeReader:
