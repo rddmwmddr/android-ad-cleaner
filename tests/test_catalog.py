@@ -133,6 +133,10 @@ class ValidatorTests(unittest.TestCase):
         op = {"kind": "skip"}
         self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 text")
 
+    def test_rejects_print_without_text(self):
+        op = {"kind": "print"}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 text")
+
     def test_rejects_skip_with_an_unknown_key(self):
         op = {"kind": "skip", "text": "x", "surprise": 1}
         self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
