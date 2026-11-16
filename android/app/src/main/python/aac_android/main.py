@@ -150,9 +150,10 @@ def boot(base, data_dir, cache_dir, package="com.ahuamiao.adcleaner"):
     os.makedirs(os.path.join(base, "images"), exist_ok=True)   # Api.env() 要列这个目录；手机版不带教程图
     view.BASE = base
 
+    import toolpath                   # gui/ 到 tool/ 的惰性加载出口，要在 import app 之前配好（#1381）
+    toolpath.configure(base)
     import app
     app.BASE = base
-    app.TOOL = os.path.join(base, "tool")
     app.play_sound = lambda path: native.chime(path)
     app.Api.copy_text = lambda self, text: (native.copy(text), True)[1]
     app.Api.open_url = lambda self, url: native.openUrl(url)
