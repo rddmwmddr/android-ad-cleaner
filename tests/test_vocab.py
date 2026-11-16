@@ -816,6 +816,15 @@ class VocabFamilyTests(unittest.TestCase):
     def test_case_rows_are_plain_literals(self):
         self.assertEqual(pure_data_violations(vocab_family), [])
 
+    def test_every_id_is_the_canonical_spelling(self):
+        """`id` 是手写的，重复了 `kind` 与脚本 / 标签字段：改字段不改 id 今天没有守卫。"""
+        for case in vocab_family.CASES:
+            if "script" in case:
+                want = f"{case['kind']}/{case['script']}"
+            else:
+                want = f"{case['kind']}/{case['family']}/{case['text']}"
+            self.assertEqual(case["id"], want, case["id"])
+
 
 if __name__ == "__main__":
     unittest.main()

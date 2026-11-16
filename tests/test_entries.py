@@ -263,6 +263,11 @@ class EntriesFamilyTests(unittest.TestCase):
     def test_case_rows_are_pure_data(self):
         self.assertEqual(family.pure_data_violations(entries_family), [])
 
+    def test_every_id_is_the_canonical_spelling(self):
+        """`id` 是手写的，重复了 `family` / `group` 两个字段：改字段不改 id 今天没有守卫。"""
+        for case in entries_family.CASES:
+            self.assertEqual(case["id"], f"{case['family']}/{case['group']}", case["id"])
+
 
 class FakeReader:
     """读屏替身：按命令回前台与页面文字。`lands` 是这台「手机」进得去的包名/页面，
