@@ -105,6 +105,26 @@ class BridgeTests(unittest.TestCase):
         self.assertIn("self.harmony_bridge", assigned)
 
 
+class ReExportTests(unittest.TestCase):
+    """搬出 `gui/app.py` 的块仍按 `app.<名字>` 取得到，且是同一个对象（#1382）。
+
+    `tests/`、手机版与打包脚本大量按 `app.<名字>` 取用；搬走之后少一个名字，那些地方就是
+    AttributeError，而它们大多不在回归的覆盖面上。`startup_failed` 是转发壳（要多传 `APP_NAME`），
+    在这里只核它还在、签名没变。
+    """
+
+    def test_the_startup_names_are_the_same_objects(self):
+        from gui import startup
+        for name in ("version_key", "startup_advice", "_attribution", "win_clipboard",
+                     "COPIED_NOTE", "MANUAL_COPY_NOTE"):
+            with self.subTest(name=name):
+                self.assertIs(getattr(app, name), getattr(startup, name), f"app.{name} 没有 re-export")
+
+    def test_startup_failed_keeps_its_signature(self):
+        self.assertEqual(tuple(inspect.signature(app.startup_failed).parameters),
+                         ("error", "preflight", "notify", "open_url", "clipboard"))
+
+
 class BoundaryTests(unittest.TestCase):
     def test_blocks_do_not_name_each_other(self):
         found = classes()
@@ -142,15 +162,16 @@ class BoundaryTests(unittest.TestCase):
 
 
 class DispatcherSeamTests(unittest.TestCase):
-    """宿主相关的三个钩子由构造方给（#1383）：执行编排块不认识 `gui/app.py` 的模块全局。
+    """执行编排的协作者全部由构造方给（#1383）：块里不认识 `gui/app.py` 的模块全局。
 
     铃声、断线措辞、adb 存活探测都传取值函数进来——手机版在 `boot()` 里换掉它们、测试在构造之后
-    patch 它们，两种都要落到搬走之后的那份实现上。
+    patch 它们，两种都要落到搬走之后的那份实现上。三样 `tool/` 模块（`summary` / `coverage_note` /
+    `plan_of`）同样是构造参数，块里不自己加载。
     """
 
     def test_the_host_hooks_come_from_the_constructor(self):
         from fixtures import FakeProc, FakeRunner, job_stub
-        from gui import dispatcher, tasks
+        from gui import dispatcher, tasks, toolpath
 
         rings, probes = [], []
         directory = tempfile.TemporaryDirectory()
@@ -160,7 +181,10 @@ class DispatcherSeamTests(unittest.TestCase):
                                       lambda: None, lambda operation, serial, detail: "",
                                       chime=lambda: rings.append(1),
                                       link_lost=lambda: "注入的断线措辞",
-                                      adb_present=lambda adb, serial: probes.append(serial) or False)
+                                      adb_present=lambda adb, serial: probes.append(serial) or False,
+                                      summary=toolpath.tool("summary"),
+                                      coverage_note=toolpath.tool("coverage_note"),
+                                      plan_of=lambda: toolpath.tool("plan"))
         block.job = job_stub(serial="SER")
         block._work([tasks.Task("广告开关", "run.py", ["-s", "SER", "recipe"]),
                      tasks.Task("收尾", "run.py", ["-s", "SER", "finish"], always_run=True)])

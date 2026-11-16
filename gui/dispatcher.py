@@ -2,7 +2,8 @@
 
 搬出 `gui/app.py` 之前这一段与窗口桥、USB 诊断、上报并列。协作者全部由构造注入：`runner_of` /
 `backups_of` / `data` / `adb_of` / `on_error` 是数据侧的取值函数，`chime` / `link_lost` /
-`adb_present` 是宿主相关的三个钩子（手机版在 `aac_android.main.boot()` 里换掉它们）。
+`adb_present` 是宿主相关的三个钩子（手机版在 `aac_android.main.boot()` 里换掉它们），
+`summary` / `coverage_note` / `plan_of` 是三样 `tool/` 模块（前两个是模块本身，`plan_of` 是取值函数）。
 本模块不认识 `gui/app.py`，也不读它的模块全局。
 """
 import os
@@ -19,6 +20,11 @@ except ImportError:
     from tasks import not_run_result, plan_tasks, retryable, runs_after_stop, step_result
 
 
+def _plan():
+    """`tool/plan.py`。直接构造 `Job` 的通路（用例、手机版）不经 `Dispatcher`，没人注入它。"""
+    return toolpath.tool("plan")
+
+
 class Job:
     """一次执行的状态（ADR-0010）。工作线程写，HTTP 线程经 snapshot() 读一致视图。
 
@@ -27,7 +33,7 @@ class Job:
     仍是整场的（#638）。"""
 
     def __init__(self, serial="", model="", total=0, t0=None, plan=None, recipe_coverage="",
-                 base_results=(), base_lines=(), base_payloads=()):
+                 base_results=(), base_lines=(), base_payloads=(), plan_of=_plan):
         self.lock = threading.RLock()
         self.running = True
         self.recipe_coverage = recipe_coverage   # 这次所用机型脚本的验证档位，两个来源见 Dispatcher.start
@@ -36,7 +42,7 @@ class Job:
         self.total = total
         self.title = ""
         self.results = list(base_results)
-        self.plan = toolpath.tool("plan").Plan.from_json(plan) if plan else None
+        self.plan = plan_of().Plan.from_json(plan) if plan else None
         self.failed_steps = []          # 本步骤里引擎报的未完成段名
         self.proc = None
         self.cancel = False
@@ -102,10 +108,12 @@ class Dispatcher:
     `adb_of()` / `runner_of()` / `backups_of()` 在真正要用时取值：下载后 adb 路径会变，
     门面上的 runner / backups 也允许被调用方整体替换，两处必须读同一份。
     `chime()` / `link_lost()` / `adb_present(adb, serial)` 同样按调用时取：手机版整段换掉它们的说法，
-    测试也会在构造之后换掉它们（#1383）。
+    测试也会在构造之后换掉它们（#1383）。`summary` / `coverage_note` 是 `tool/` 模块本体、
+    `plan_of()` 返回 `tool/plan.py`，三样都由构造方给，本模块不自己加载。
     """
 
-    def __init__(self, runner_of, backups_of, data, adb_of, on_error, chime, link_lost, adb_present):
+    def __init__(self, runner_of, backups_of, data, adb_of, on_error, chime, link_lost, adb_present,
+                 *, summary, coverage_note, plan_of):
         self.runner_of = runner_of
         self.backups_of = backups_of
         self.data = data
@@ -115,8 +123,9 @@ class Dispatcher:
         self.link_lost = link_lost
         self.adb_present = adb_present
         # 结果摘要与验证档位提示（#1189 #1188）：构造时取一次，别在 poll 的轮询热路径上现取
-        self.summary = toolpath.tool("summary")
-        self.coverage_note = toolpath.tool("coverage_note")
+        self.summary = summary
+        self.coverage_note = coverage_note
+        self.plan_of = plan_of
         self.job = None
         self.lock = threading.Lock()
         self.side = ""                  # 正在跑的旁路操作（还原），与执行互斥（#662）
@@ -158,7 +167,7 @@ class Dispatcher:
         recipe_coverage: 这份机型脚本的验证档位，两个调用点各给各的：`Api.start()` 从 status-json 取，
         `Api.retry()` 沿用上一轮快照的值；都不在这里算（#1129）。
         三个 base_*: 重试轮从上一轮接管的快照（#638）；首次执行都是空的。"""
-        plan = toolpath.tool("plan").Plan.from_json(plan)
+        plan = self.plan_of().Plan.from_json(plan)
         with self.lock:
             if self.job and self.job.running:
                 return {"error": "已有任务在运行"}
@@ -167,7 +176,7 @@ class Dispatcher:
             tasks = plan_tasks(serial, plan, offered)
             total = sum(1 for t in tasks if not t.skip_reason)
             self.job = Job(serial=serial, model=plan.model, total=total, plan=plan,
-                           recipe_coverage=recipe_coverage,
+                           recipe_coverage=recipe_coverage, plan_of=self.plan_of,
                            base_results=base_results, base_lines=base_lines,
                            base_payloads=base_payloads)
         threading.Thread(target=self._work, args=(tasks,), daemon=True).start()

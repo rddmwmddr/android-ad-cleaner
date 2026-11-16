@@ -27,6 +27,7 @@ except ImportError:
 # Api.copy_text）照旧，`startup_failed` 另有一个转发壳（弹窗标题要用本模块的 APP_NAME）。
 version_key = startup.version_key
 startup_advice = startup.startup_advice
+_attribution = startup._attribution
 win_clipboard = startup.win_clipboard
 COPIED_NOTE = startup.COPIED_NOTE
 MANUAL_COPY_NOTE = startup.MANUAL_COPY_NOTE
@@ -432,7 +433,9 @@ class Api:
         self.dispatcher = Dispatcher(lambda: self.runner, lambda: self.backups, self.data,
                                      lambda: self.adb, self._on_error,
                                      chime=lambda: chime(), link_lost=lambda: LINK_LOST,
-                                     adb_present=lambda adb, serial: adb_present(adb, serial))
+                                     adb_present=lambda adb, serial: adb_present(adb, serial),
+                                     summary=_tool("summary"), coverage_note=_tool("coverage_note"),
+                                     plan_of=lambda: _tool("plan"))
         update_root = Path(self.data.updates)
         self.updater = updates.Updates(VERSION, update_root, update_install.DesktopInstaller(update_root),
                                        source=self.data.setting("update_source", "gitee"),
