@@ -105,6 +105,16 @@ class RoundTripTests(unittest.TestCase):
         self.assertEqual(p.steps, ["桌面", "商店"])
 
 
+class StepKindTests(unittest.TestCase):
+    """「这一步是什么身份」只有一份声明（#1386）：增删一种步骤必须显式改这条用例。"""
+
+    def test_the_vocabulary_is_frozen(self):
+        self.assertEqual({member.name for member in plan_module.StepKind},
+                         {"BACKUP", "ADS", "RECIPE", "CHANNELS", "QUICKAPP", "FINISH"})
+        self.assertEqual({str(member) for member in plan_module.StepKind},
+                         {"backup", "ads", "recipe", "channels", "quickapp", "finish"})
+
+
 # ---------- 后并入的票号文件：按规格排任务、执行与重试 ----------
 # ---------- 来源 tests/test_always_run_1104.py ----------
 #   #1104：停止后仍要跑的步骤由构造处声明，不再按「收尾」这个标题认。
@@ -284,6 +294,26 @@ class PlanTasksTests(unittest.TestCase):
     def test_without_a_detection_nothing_is_claimed(self):
         # 没有检测结果就不知道选择页摆过什么，不能凭空说「没勾」
         self.assertEqual([t.title for t in app.plan_tasks("S", {"backup": False})], ["收尾"])
+
+    def test_every_planned_row_carries_a_vocabulary_member(self):
+        """六条分支各出一条，身份全取自 `StepKind`（#1386）：漏一条分支时这里点得出是哪条。"""
+        plan = {"backup": True, "ads": ["com.x"], "steps": ["桌面"],
+                "channels": [{"pkg": "p", "id": "1", "name": "活动"}], "quickapp": True, "finish": True}
+        tasks = app.plan_tasks("S", plan, offered_577(steps=("桌面",), ads=[{"pkg": "com.x"}],
+                                                     quickapps=[{"name": "x"}], channels=[{"pkg": "p"}]))
+        self.assertEqual([str(t.kind) for t in tasks],
+                         ["backup", "ads", "recipe", "channels", "quickapp", "finish"])
+        for task in tasks:
+            with self.subTest(kind=task.kind):
+                self.assertIsInstance(task.kind, plan_module.StepKind)
+
+    def test_every_not_run_row_carries_a_vocabulary_member(self):
+        """「跳过」行同样按身份对齐：它们也参与 `kind` 的就地覆盖（#1386）。"""
+        tasks = app.plan_tasks("S", {"backup": False}, offered_577())
+        self.assertEqual(len(tasks), 5, "五条跳过 / 收尾行都要出现，这条守卫别空转")
+        for task in tasks:
+            with self.subTest(kind=task.kind):
+                self.assertIsInstance(task.kind, plan_module.StepKind)
 
 
 class WorkTests(unittest.TestCase):
