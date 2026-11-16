@@ -20,6 +20,10 @@
 - mutmut 把 cwd 切到 `mutants/` 再跑 pytest，而测试要读仓库根的 `recipes/`、`docs/` 等
   数据目录，所以它们得进 `also_copy`。
 - 缓存落在工作目录的 `mutants/` 下，跟着 `.mutmut/` 一起忽略，不在仓库根留下痕迹。
+
+与覆盖率的分工是两层，缺一层就漏一类问题：覆盖率回答「新增代码有没有被执行到」，没测的代码
+生成不出可杀的 mutant；mutation 回答「执行到的代码有没有断言守得住」，空覆盖只有它看得见。
+PR 判据是两条都过，等价变异体是 mutation 侧唯一的豁免。
 """
 import json
 import subprocess
