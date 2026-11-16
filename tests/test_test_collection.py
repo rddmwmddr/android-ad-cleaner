@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 
-import test_anchors  # noqa: E402
+from devtools import test_anchors  # noqa: E402
 
 # 隐藏目录（.git / .venv / .private / .worktrees …）一律不扫，剩下这两个是可见的
 SKIP_DIRS = {"node_modules", "build"}

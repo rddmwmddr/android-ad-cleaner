@@ -176,7 +176,7 @@ def _legal_names(g) -> set[str]:
 def _check_names(data, legal) -> None:
     """把数据点名的名字对一遍库与本机例外函数：写错一个名字在这里就报，不等真机跑到那一段。
 
-    报错带段名、下标链与相近候选（`difflib`，与 `tool/test_anchors.py` 同一手法）。"""
+    报错带段名、下标链与相近候选（`difflib`，与 `devtools/test_anchors.py` 同一手法）。"""
     ordered = sorted(legal)
     for index, segment in enumerate(data["segment"]):
         where = f"第 {index + 1} 段「{segment['name']}」"

@@ -1826,7 +1826,7 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual(meta["steps"], ["系统广告", "阅图锁屏", "应用商店"])
 
     def test_typecheck_validates_toml_data(self):
-        import typecheck_recipes
+        from devtools import typecheck_recipes
         with tempfile.TemporaryDirectory() as tmp:
             good = Path(tmp) / "good.toml"
             good.write_text((ROOT / DATA).read_text(encoding="utf-8"), encoding="utf-8")

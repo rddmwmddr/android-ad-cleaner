@@ -1,4 +1,4 @@
-"""新写的行里挂的票号要与这次 PR 有关（tool/check_comment_tickets.py，#1001）。"""
+"""新写的行里挂的票号要与这次 PR 有关（devtools/check_comment_tickets.py，#1001）。"""
 import re
 import sys
 import unittest
@@ -7,10 +7,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 
-import check_comment_tickets  # noqa: E402
 import fixtures  # noqa: E402
+from devtools import check_comment_tickets  # noqa: E402
 
-SCRIPT = ROOT / "tool" / "check_comment_tickets.py"
+SCRIPT = ROOT / "devtools" / "check_comment_tickets.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "ticket-checks.yml"
 
 # 用例里构造的票号是数据、不是引用：写成字面量会被本 PR 的 comment-tickets job 自己抓到，
@@ -170,7 +170,7 @@ class WorkflowTest(unittest.TestCase):
         self.assertIn("\n  comment-tickets:\n", self.text)
 
     def test_job_runs_the_script(self):
-        self.assertIn("python3 tool/check_comment_tickets.py", self.job("comment-tickets"))
+        self.assertIn("python3 devtools/check_comment_tickets.py", self.job("comment-tickets"))
 
     def test_job_checks_the_pull_request_range(self):
         job = self.job("comment-tickets")

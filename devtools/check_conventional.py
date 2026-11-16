@@ -2,7 +2,7 @@
 
 用法（本地与 CI 是同一条命令）：
 
-    python3 tool/check_conventional.py origin/main..HEAD
+    python3 devtools/check_conventional.py origin/main..HEAD
 
 规则只约束主题行：`type(scope): subject`，`type` 取自下面的 TYPES，`scope` 只允许 `[a-z0-9_-]`，
 破坏性改动在冒号前加 `!`。这条规则此前只在本机 commit-msg 钩子里执行，换个提交环境就失效。
@@ -15,6 +15,9 @@
 import re
 import sys
 from dataclasses import dataclass
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))   # stdio 留在引擎目录
 
 from commits import Commit, read_commits
 from stdio import use_utf8_console
@@ -59,7 +62,7 @@ def violations(commits):
 
 def main(argv):
     if len(argv) != 1:
-        print("用法：python3 tool/check_conventional.py <base>..<head>", file=sys.stderr)
+        print("用法：python3 devtools/check_conventional.py <base>..<head>", file=sys.stderr)
         return 2
     try:
         found = violations(read_commits(argv[0]))

@@ -1,4 +1,4 @@
-<!-- 由 tool/gen_adr_index.py 生成：加 ADR 时写文件再跑一次，不要手改这张表。 -->
+<!-- 由 devtools/gen_adr_index.py 生成：加 ADR 时写文件再跑一次，不要手改这张表。 -->
 
 # ADR 索引
 

@@ -2,7 +2,7 @@
 
 用法（本地与 CI 是同一条命令）：
 
-    python3 tool/check_ticket_ref.py <分支名> <PR 文本文件>
+    python3 devtools/check_ticket_ref.py <分支名> <PR 文本文件>
 
 分支名要匹配「`-<票号>` 结尾」（约定见 `docs/agents/issue-tracker.md`），PR 文本里要有
 `Refs #N` 或 `Closes #N`，且 N 与分支名里的数字一致。文本文件是 PR 标题与正文拼起来的那份：
@@ -12,6 +12,9 @@
 """
 import re
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))   # stdio 留在引擎目录
 
 from stdio import use_utf8_console
 
@@ -48,7 +51,7 @@ def problems(branch, text):
 
 def main(argv):
     if len(argv) != 2:
-        print("用法：python3 tool/check_ticket_ref.py <分支名> <PR 文本文件>", file=sys.stderr)
+        print("用法：python3 devtools/check_ticket_ref.py <分支名> <PR 文本文件>", file=sys.stderr)
         return 2
     branch, path = argv
     try:

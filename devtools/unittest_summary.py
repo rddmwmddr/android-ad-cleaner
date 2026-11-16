@@ -2,7 +2,7 @@
 
 用法（输出 markdown 到 stdout，由 workflow 追加进 `$GITHUB_STEP_SUMMARY`）：
 
-    python3 tool/unittest_summary.py unittest.log "Linux / 3.13" abc1234
+    python3 devtools/unittest_summary.py unittest.log "Linux / 3.13" abc1234
 
 日志尾部认不出 `Ran N tests` 与 `OK` / `FAILED` 时不抛异常，只输出一句说明：summary 写不出来
 不该让测试 job 变红。日志按 utf-8 读、坏字节替换，Windows 上 cp1252 混进来的字节不会炸。
@@ -10,6 +10,8 @@
 import re
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))   # stdio 留在引擎目录
 
 from stdio import use_utf8_console
 
@@ -54,7 +56,7 @@ def render(label, text, sha=""):
 def main(argv):
     use_utf8_console()
     if len(argv) < 2:
-        print("用法：python3 tool/unittest_summary.py <日志> [标签] [提交短哈希]", file=sys.stderr)
+        print("用法：python3 devtools/unittest_summary.py <日志> [标签] [提交短哈希]", file=sys.stderr)
         return 2
     label = argv[2] if len(argv) > 2 else "unittest"
     sha = argv[3] if len(argv) > 3 else ""

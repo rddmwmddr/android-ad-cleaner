@@ -1,4 +1,4 @@
-"""开工认领（tool/claim.py）：一条命令写认领评论 + 摘待办标签，仲裁只看票下的评论（#932）。"""
+"""开工认领（devtools/claim.py）：一条命令写认领评论 + 摘待办标签，仲裁只看票下的评论（#932）。"""
 import copy
 import json
 import sys
@@ -10,8 +10,8 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 
-import claim  # noqa: E402
 import fixtures  # noqa: E402
+from devtools import claim  # noqa: E402
 
 HOST = "box"
 WORKTREE = "/Volumes/wt/932"
@@ -355,7 +355,7 @@ class PinnedContractTests(unittest.TestCase):
     def test_the_command_and_its_exit_codes_are_pinned(self):
         self.assertEqual(
             (claim.EXIT_OK, claim.EXIT_REFUSED, claim.EXIT_TAKEN, claim.EXIT_GH), (0, 1, 2, 3))
-        self.assertEqual(claim.COMMAND, "python3 tool/claim.py")
+        self.assertEqual(claim.COMMAND, "python3 devtools/claim.py")
         text = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
         self.assertIn(claim.COMMAND, text)
 

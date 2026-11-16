@@ -2,11 +2,11 @@
 
 `tests/` 下的每个 `test_*.py` 只有两种合法归属：一个已声明的**锚点**，或某份机型脚本的**专用测试**。两者之外的新文件即红。
 
-守卫是 [tool/test_anchors.py](../../tool/test_anchors.py) 的 `violations(root)`：对给定根目录求值的纯函数，反例用临时目录构造，不依赖真实仓库状态。[tests/test_test_collection.py](../../tests/test_test_collection.py) 在回归里代跑它，本地也可以 `python3 tool/test_anchors.py` 直接跑一遍（退出码 0 全绿、1 有违规）。
+守卫是 [devtools/test_anchors.py](../../devtools/test_anchors.py) 的 `violations(root)`：对给定根目录求值的纯函数，反例用临时目录构造，不依赖真实仓库状态。[tests/test_test_collection.py](../../tests/test_test_collection.py) 在回归里代跑它，本地也可以 `python3 devtools/test_anchors.py` 直接跑一遍（退出码 0 全绿、1 有违规）。
 
 ## 两种归属
 
-**锚点**：登记在下面的 `## 锚点登记` 表与 `tool/test_anchors.py` 的 `ANCHORS` 里，两边逐字对拍——改一处漏掉另一处即红。每个锚点带一句 why，说的是这个文件在守什么；半年后判断「这个文件该不该留」靠的就是它。
+**锚点**：登记在下面的 `## 锚点登记` 表与 `devtools/test_anchors.py` 的 `ANCHORS` 里，两边逐字对拍——改一处漏掉另一处即红。每个锚点带一句 why，说的是这个文件在守什么；半年后判断「这个文件该不该留」靠的就是它。
 
 **机型脚本的专用测试**：文件名点名了 `recipes/` 下的某份脚本就自动合规，不逐个登记。点名的形式有三种：目录名的品牌段（`test_honor_recipe.py`）、型号段（`test_rmx3888_recipe.py`）、或脚本头注里的市场名（`test_k70_recipe.py`，对应 `recipes/xiaomi/23113RKC6C`）。给新机型写脚本时，按脚本目录给测试文件命名即可。
 
@@ -125,7 +125,7 @@
 | `test_verify_ledger.py` | 配方验证台账：每个配方文件一行、缺记录显示未记录，以及 status-json 带出的覆盖度、证据来源与验证日期。 |
 | `test_unittest_summary.py` | CI 的测试结果表格：列取错或漏算跳过数即红。 |
 | `test_release_assets.py` | 下载页 REL 与 Release 附件的对账。 |
-| `test_release_meta.py` | 发版校验清单从 Release 事实生成（tool/release_meta.py）：退出码、清单文本与写盘。 |
+| `test_release_meta.py` | 发版校验清单从 Release 事实生成（devtools/release_meta.py）：退出码、清单文本与写盘。 |
 | `test_followup.py` | 复测队列核对与写回：报出标签与队列的差异。 |
 | `test_download_page_gitee.py` | 国内下载走 Gitee：取包、核 SHA256、匿名下载回验。 |
 | `test_download_page_rows.py` | 下载页与网盘说明的行：手机版 APK 单独成行、说明里写「不用连电脑」并带校验值，页面 id 写错要在上传前停下。 |

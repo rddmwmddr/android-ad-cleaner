@@ -1,4 +1,4 @@
-"""下载页 REL 与 Release 附件的对账（`tool/release_assets.py`，#1136，沿用 #1003）。
+"""下载页 REL 与 Release 附件的对账（`devtools/release_assets.py`，#1136，沿用 #1003）。
 
 静态那一半（`REL.files` 的 id 冻结、file 里的版本号）在 `tests/test_rules_guards.py` 的
 `ReleaseGuards`；这里只测解析、比对与退出码，不联网、不需要 `gh`。
@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 from fixtures import FakeRunner
-from tool import release_assets
+from devtools import release_assets
 
 PAGE = """const REL = {{
   version: "1.2.3",

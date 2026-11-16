@@ -1,4 +1,4 @@
-"""分支名与 PR 正文指到同一张票（tool/check_ticket_ref.py，#1001）。"""
+"""分支名与 PR 正文指到同一张票（devtools/check_ticket_ref.py，#1001）。"""
 import re
 import sys
 import unittest
@@ -7,10 +7,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 
-import check_ticket_ref  # noqa: E402
 import fixtures  # noqa: E402
+from devtools import check_ticket_ref  # noqa: E402
 
-SCRIPT = ROOT / "tool" / "check_ticket_ref.py"
+SCRIPT = ROOT / "devtools" / "check_ticket_ref.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "ticket-checks.yml"
 
 # 用例里构造的票号是数据、不是引用：写成字面量会被本 PR 的 comment-tickets job 自己抓到，
@@ -120,7 +120,7 @@ class WorkflowTest(unittest.TestCase):
         self.assertIn("\n  ticket-ref:\n", self.text)
 
     def test_job_runs_the_script(self):
-        self.assertIn("python3 tool/check_ticket_ref.py", self.job("ticket-ref"))
+        self.assertIn("python3 devtools/check_ticket_ref.py", self.job("ticket-ref"))
 
     def test_job_reads_the_branch_and_the_pull_request_text(self):
         job = self.job("ticket-ref")

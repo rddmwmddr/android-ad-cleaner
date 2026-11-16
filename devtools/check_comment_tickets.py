@@ -2,7 +2,7 @@
 
 用法（本地与 CI 是同一条命令）：
 
-    python3 tool/check_comment_tickets.py <base>..<head> <PR 文本文件>
+    python3 devtools/check_comment_tickets.py <base>..<head> <PR 文本文件>
 
 取 `git diff` 的新增行，抽出其中的 `#<数字>`；每个都要出现在 PR 标题或正文引用的票号里。
 只为 `base..head` 判，main 上的历史不因这条检查翻旧账。
@@ -14,6 +14,9 @@
 """
 import re
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))   # stdio 留在引擎目录
 
 from commits import git
 from stdio import use_utf8_console
@@ -78,7 +81,7 @@ def problems(rev_range, pr_text, run=git):
 
 def main(argv):
     if len(argv) != 2:
-        print("用法：python3 tool/check_comment_tickets.py <base>..<head> <PR 文本文件>", file=sys.stderr)
+        print("用法：python3 devtools/check_comment_tickets.py <base>..<head> <PR 文本文件>", file=sys.stderr)
         return 2
     rev_range, path = argv
     try:

@@ -21,7 +21,7 @@
 调的就是这一份（#1189）。网页版只剩「按后端字段渲染」的断言，跑真实的 `gui/web/index.html`
 （ADR-0017）。不需要 Android 设备或 JDK。
 
-发版产物那一条读 `index.html` 的源码：解析只走 `tool/release_assets.py`（定时 job 用同一份），
+发版产物那一条读 `index.html` 的源码：解析只走 `devtools/release_assets.py`（定时 job 用同一份），
 不联网、不需要 GitHub 凭据；与真实 Release 的名字、大小、sha 比对在 `.github/workflows/release-assets.yml`。
 """
 import ast
@@ -39,7 +39,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from aac_android import view  # noqa: E402
 from test_rules_registry import ANCHOR as RULE_ANCHOR  # noqa: E402  同一份锚点口径，别再抄一份
 from test_rules_registry import read_rows, top_level_names  # noqa: E402
-from tool import events, release_assets, summary  # noqa: E402
+from devtools import release_assets  # noqa: E402
+from tool import events, summary  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -62,7 +63,7 @@ DOC_SKIP = ("docs/清单/", "docs/adr/", "docs/归档/")
 LINE_REF = re.compile(r"[\w./-]*?\.py:\d+")
 BASELINE = re.compile(r"\b[0-9a-f]{6,40}\b")
 # 左边界：`mytool/run.py` 不能按 `tool/run.py` 核对，那会把坏引用报成好路径。
-PATH_REF = re.compile(r"(?<![\w/])(?:tool|gui|tests|recipes)/[\w./-]*?\.py")
+PATH_REF = re.compile(r"(?<![\w/])(?:tool|devtools|gui|tests|recipes)/[\w./-]*?\.py")
 
 # 上报服务的值形态：连接串、库地址、密钥。`service_role` 这个裸词不查——
 # 它也是 Postgres 的角色名（`tests/test_error_report.py` 的 `revoke ... from service_role`），
@@ -938,7 +939,7 @@ class ReleaseGuards(unittest.TestCase):
         旧树也绿，守的是不回退：id 改名、或升级 `REL.version` 时漏改某一条的 `file`，
         用户点下载就是 404，而页面脚本不报错。清单的增删要同时改卡片、手机端高亮与
         `gui/baidu_rows.py` 的 SETUP / CHECK。与真实 Release 附件名的比对不在这里——
-        `tool/release_assets.py` 做那一半，由 `.github/workflows/release-assets.yml` 每周跑。
+        `devtools/release_assets.py` 做那一半，由 `.github/workflows/release-assets.yml` 每周跑。
         """
         version, entries = release_assets.read_page((ROOT / "index.html").read_text(encoding="utf-8"))
         self.assertTrue(version and entries, "index.html 里读不到 REL，这条守卫会空转")
@@ -984,16 +985,16 @@ class StdioGuards(unittest.TestCase):
                          "别再各写一份：「改一处漏十二处」就是从那里来的：\n" + "\n".join(hits))
 
 
-# 工具层起 `gh` 进程只许在会话模块里（#1219，ADR-0036）。守卫只扫 `tool/`，两种引号都认：
+# 工具层起 `gh` 进程只许在会话模块里（#1219，ADR-0036）。工具层是 `devtools/`（#1391），两种引号都认：
 # 只认双引号的话，写 `subprocess.run(['gh', ...])` 就绕过去了。
 GH_NEEDLES = ('"gh"', "'gh'")
 GH_RUNNER_DEF = "def runner_for"
-GH_HOME = "tool/gh.py"
+GH_HOME = "devtools/gh.py"
 
 
 class GhGuards(unittest.TestCase):
     def test_gh_process_spawned_in_one_place(self):
-        """除 `tool/gh.py` 外，工具层不许自己起 `gh` 进程，也不许再定义一份默认执行器。
+        """除 `devtools/gh.py` 外，工具层不许自己起 `gh` 进程，也不许再定义一份默认执行器。
 
         守的是不回退：把任意一处已迁移的脚本改回自带执行器（`subprocess.run(["gh", …])`
         或一份本地 `runner_for`）即红。语义由 `tests/test_gh.py` 守，这里只看调用点有没有
@@ -1001,7 +1002,7 @@ class GhGuards(unittest.TestCase):
         """
         self.assertTrue((ROOT / GH_HOME).is_file(), f"{GH_HOME} 不在，这条守卫会空转")
         hits, scanned = [], 0
-        for path in sorted((ROOT / "tool").rglob("*.py")):
+        for path in sorted((ROOT / "devtools").rglob("*.py")):
             scanned += 1
             if rel(path) == GH_HOME:
                 continue
@@ -1009,8 +1010,8 @@ class GhGuards(unittest.TestCase):
                     path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
                 if any(needle in line for needle in GH_NEEDLES) or GH_RUNNER_DEF in line:
                     hits.append(f"{rel(path)}:{lineno}")
-        self.assertGreater(scanned, 0, "tool/ 下一个 .py 都没扫到，这条守卫会空转")
-        self.assertEqual(hits, [], "`gh` 只经 tool/gh.py 起进程（runner_for / call / json_of），"
+        self.assertGreater(scanned, 0, "devtools/ 下一个 .py 都没扫到，这条守卫会空转")
+        self.assertEqual(hits, [], "`gh` 只经 devtools/gh.py 起进程（runner_for / call / json_of），"
                          "别再各写一份执行器：\n" + "\n".join(hits))
 
 
