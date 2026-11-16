@@ -5,30 +5,37 @@
 后台：tool/run.py、tool/fast.py、tool/chan_fast.py，以子进程运行，日志实时回传界面。
 打包后没有独立的 Python，子进程用「本程序 --cli 脚本名 参数…」的方式启动。
 """
-import hashlib, importlib, json, os, platform, re, runpy, subprocess, sys, threading, time, urllib.error, urllib.request, uuid, zipfile
+import hashlib, json, os, platform, re, runpy, subprocess, sys, threading, time, urllib.error, urllib.request, uuid, zipfile
 from pathlib import Path
 
 try:                                # 当包导入（测试）；直接跑脚本、打包时它是顶层模块
-    from . import winpreflight, updates, update_install, harmony_bridge
+    from . import winpreflight, updates, update_install, harmony_bridge, toolpath
 except ImportError:
-    import winpreflight, updates, update_install, harmony_bridge
+    import winpreflight, updates, update_install, harmony_bridge, toolpath
 
 APP_NAME = "肉呆去广告"
 VERSION = "0.4.4"
 FROZEN = getattr(sys, "frozen", False)
-BASE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-TOOL = os.path.join(BASE, "tool")
 IS_WIN = platform.system() == "Windows"
+
+# 手机版在 import 本模块之前就 configure 过了，这里只给桌面入口的默认值
+if not toolpath.BASE:
+    toolpath.configure(getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+
+def __getattr__(name):
+    """BASE / TOOL 的落地在 gui/toolpath.py；这里只转发，别在别处再算一份。"""
+    if name in ("BASE", "TOOL"):
+        return getattr(toolpath, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _tool(name):
-    """tool/ 是命令行脚本目录，不在包里：真要用某个工具模块时才把它加进 sys.path。
+    """tool/ 是命令行脚本目录，不在包里：真要用某个工具模块时才把它加进 sys.path（只走 toolpath）。
 
     import 这个客户端本身不碰 sys.path、也不加载 tool/ 下的文件，测试用正常 import 拉起来。
     """
-    if TOOL not in sys.path:
-        sys.path.insert(0, TOOL)
-    return importlib.import_module(name)
+    return toolpath.tool(name)
 
 
 def data_dir():
@@ -136,12 +143,12 @@ def _fix_stdio():
 
 
 def cli_main():
-    sys.path.insert(0, TOOL)
+    sys.path.insert(0, toolpath.TOOL)
     _fix_stdio()
     script, args = sys.argv[2], sys.argv[3:]
-    sys.argv = [os.path.join(TOOL, script)] + args
+    sys.argv = [os.path.join(toolpath.TOOL, script)] + args
     try:
-        runpy.run_path(os.path.join(TOOL, script), run_name="__main__")
+        runpy.run_path(os.path.join(toolpath.TOOL, script), run_name="__main__")
     except Exception:
         # 保留完整原因；避免异常逸出 PyInstaller 后只剩「Failed to execute script launch」。
         import traceback
@@ -255,7 +262,7 @@ def chime():
     if os.environ.get("AAC_NO_SOUND") or now - _last_chime[0] < CHIME_GAP:
         return                          # AAC_NO_SOUND：回归测试不出声
     _last_chime[0] = now
-    path = os.path.join(BASE, "gui", "web", "chime.wav")
+    path = os.path.join(toolpath.BASE, "gui", "web", "chime.wav")
     try:
         play_sound(path)
     except Exception:
@@ -284,7 +291,7 @@ def cmd_for(script, *args):
         cli = os.path.join(os.path.dirname(sys.executable), "aac-cli.exe")
         exe = cli if IS_WIN and os.path.exists(cli) else sys.executable     # Windows 用命令行版，输出不丢
         return [exe, "--cli", script, *args]
-    return [sys.executable, "-u", os.path.join(TOOL, script), *args]
+    return [sys.executable, "-u", os.path.join(toolpath.TOOL, script), *args]
 
 
 class Runner:
@@ -1193,7 +1200,7 @@ class Api:
         update_install.confirm_started(self.data.updates, VERSION, sys.executable)
         return {"adb": self.adb, "data": self.data.root, "version": VERSION, "os": platform.system(),
                 "harmony": self.harmony_bridge.enabled,
-                "images": [f for f in sorted(os.listdir(os.path.join(BASE, "images"))) if f.startswith("dev-")]}
+                "images": [f for f in sorted(os.listdir(os.path.join(toolpath.BASE, "images"))) if f.startswith("dev-")]}
 
     def harmony(self, action, serial="", mode="clean", segments=None):
         """鸿蒙窗口桥只转发；装配与状态在 `harmony_bridge.HarmonyBridge`（#898）。"""
@@ -1684,7 +1691,7 @@ def startup_failed(error, preflight=None, notify=None, open_url=None, clipboard=
     preflight = preflight or winpreflight
     notify = notify or (lambda text: ctypes.windll.user32.MessageBoxW(0, text, APP_NAME, 0x40))
     clipboard = clipboard or win_clipboard
-    verdict = (preflight.webview2_state(), preflight.blocked_files(BASE), error,
+    verdict = (preflight.webview2_state(), preflight.blocked_files(toolpath.BASE), error,
                preflight.load_rejected(error))
     text, open_site = startup_advice(*verdict, copied=True)
     try:
