@@ -97,7 +97,7 @@
 
 `commits.py` 不是命令：它是上面几条 PR 校验共用的 `base..head` 读取与 UTF-8 控制台，沿用 #848、#849 起的那份设计。
 
-客户端侧：`gui/app.py` 是窗口桥与装配（`Api` / `ClientData` / `AdbDownloader`），其余各块按 owner 分住——`gui/toolpath.py` 是 `gui/` 到 `tool/` 的惰性加载，`gui/tasks.py` 是计划侧（`Task` … `retry_plan`，身份词表在 `tool/plan.py` 的 `StepKind`），`gui/dispatcher.py` 是执行编排（`Dispatcher` / `Job`），`gui/reporter.py` 是错误上报（`Reporter` / `scrub`），`gui/startup.py` 是启动失败文案与写剪贴板；`gui/launch.py` 是入口与打包冒烟，`gui/web/` 是桌面版的界面，`gui/winpreflight.py` 归因 Windows 启动失败，`gui/dotnet_config.py` 在打包时写随包的 `<exe>.config`。
+客户端侧：`gui/app.py` 是窗口桥与装配（`Api` / `ClientData`，adb 的那几张源表也留在这里当单一来源），其余各块按 owner 分住——`gui/toolpath.py` 是 `gui/` 到 `tool/` 的惰性加载，`gui/tasks.py` 是计划侧（`Task` … `retry_plan`，身份词表在 `tool/plan.py` 的 `StepKind`），`gui/dispatcher.py` 是执行编排（`Dispatcher` / `Job`），`gui/reporter.py` 是错误上报（`Reporter` / `scrub`），`gui/adb.py` 是 adb 路径解析、下载器与存活探测（`AdbDownloader`），`gui/startup.py` 是启动失败文案与写剪贴板；`gui/launch.py` 是入口与打包冒烟，`gui/web/` 是桌面版的界面，`gui/winpreflight.py` 归因 Windows 启动失败，`gui/dotnet_config.py` 在打包时写随包的 `<exe>.config`。
 
 ### 函数级细节
 
