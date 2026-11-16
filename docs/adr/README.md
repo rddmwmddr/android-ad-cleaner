@@ -45,3 +45,4 @@
 - [0039](0039-claude-md-startup-index.md) — `CLAUDE.md` 是启动索引：函数级细节归 `docs/ARCHITECTURE.md`
 - [0040](0040-library-name-table-owner.md) — `recipe_lib` 是库名字表的唯一 owner：三个稳定 import 面只是兼容壳
 - [0041](0041-tool-engine-devtools-seam.md) — `tool/` 是出厂引擎、`devtools/` 是仓库工具链：边界由目录本身表达
+- [0042](0042-family-carried-test-cases.md) — 测试用例由「族」承载：让删除成为可判定动作
