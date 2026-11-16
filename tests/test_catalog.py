@@ -105,7 +105,11 @@ class ValidatorTests(unittest.TestCase):
 
 
 class CatalogFamilyTests(unittest.TestCase):
-    """族自己的守卫（沿用 #1398，结构反推 #1399）：句柄、产出、gap 跟快照与 `OPS` 对得上，case 行是纯数据。"""
+    """族自己的守卫（沿用 #1398，结构反推 #1399）：句柄、产出、gap 跟快照与 `OPS` 对得上，case 行是纯数据。
+
+    catalog 的 `id`（如 `skip-missing-text`）是手写的一句描述，不是任何字段的拼接——行里只有
+    `data` 与 `needle`，没有可重建 id 的短句柄，所以这里不加「id 等于字段拼法」的断言；
+    vocab / entries / channel_policy 三族各自有那一条（#1393 审查）。"""
 
     def test_snapshot_handles_and_outputs_agree(self):
         self.assertEqual(catalog_family.FAMILY.violations(), [])

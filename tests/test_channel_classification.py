@@ -150,10 +150,15 @@ CORPUS = CURATED + TERM_CASES
 
 class BaselineEquivalenceTests(unittest.TestCase):
     def test_every_baseline_term_has_a_case(self):
-        # 计数交叉核对：TERM_CASES 由 CASES 按 table 过滤得来，这里再与冻结基线元组各算一次。
+        # 用例名承诺「每个基线条目都有 case」，所以逐组比集合，不比长度：等量替换（删一个词元、
+        # 加另一个）长度不变却能过。基线元组独立于 CASES 冻结，比集合仍然是两份来源的对照。
         # 真正的删词检测在族侧：快照 ids 比对抓「删了一条 case」，句柄校验抓「实现里删了词元」。
-        self.assertEqual(len(TERM_CASES),
-                         len(BASE_KW_TERMS) + len(BASE_SKIP_TERMS) + len(BASE_SERVICE_TERMS))
+        for table, baseline in (("kw", BASE_KW_TERMS), ("skip", BASE_SKIP_TERMS),
+                                ("service", BASE_SERVICE_TERMS)):
+            with self.subTest(table=table):
+                self.assertEqual({case["term"] for case in CASES if case["table"] == table},
+                                 set(baseline))
+        self.assertEqual(len(CORPUS), 150)      # 46 条人工样例 + 104 条词元样例，口径不变
 
     def test_new_judgement_matches_frozen_baseline(self):
         for pkg, cid, name, app in CORPUS:
@@ -172,6 +177,11 @@ class ChannelPolicyFamilyTests(unittest.TestCase):
 
     def test_family_rows_are_pure_data(self):
         self.assertEqual(pure_data_violations(channel_policy_family), [])
+
+    def test_every_id_is_the_canonical_spelling(self):
+        """`id` 是手写的，重复了 `(table, term)` 两个字段：改字段不改 id 今天没有守卫。"""
+        for case in CASES:
+            self.assertEqual(case["id"], f"{case['table']}/{case['term']}", case["id"])
 
 
 class SerializationEdgeTests(unittest.TestCase):

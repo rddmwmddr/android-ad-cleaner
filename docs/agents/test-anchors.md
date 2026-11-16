@@ -38,8 +38,9 @@
 
 两条硬约束：
 
-- 族模块放 `tests/` **顶层**、用非 `test_` 前缀：子目录里的 `test_*.py` 会被 `discover` 收到却不受锚点守卫约束，族模块别放进去。快照在 `tests/snapshots/<族名>.json`，更新必须 `--update --reason "…"`。
+- 族模块放 `tests/` **顶层**、用非 `test_` 前缀：子目录里的 `test_*.py` 会被 `discover` 收到却不受锚点守卫约束，族模块别放进去。快照在 `tests/snapshots/<族名>.json`，更新必须 `--update --reason "…"`，且 `--reason` 要带一个票号引用（如 `seed (#1395)`）——对不上一张票的更新直接被拒（退出码 2）。
 - 句柄必须**从 case 的构造内容派生**，不写手写字符串字面量——手写句柄等于给结构造第二个 owner。
+- 登记是手写元组，发现是自动的：`tests/test_family.py` 的 `FAMILIES` 要列全四个族，`test_every_family_module_is_registered` 拿 `tests/*_family.py` 双向核对——新族漏登记，它会静默逃出 `dev.tests.family-carries-cases` 的检查。
 
 ## 锚点登记
 
