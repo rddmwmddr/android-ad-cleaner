@@ -1,7 +1,7 @@
 # 维护规则的注册表。规则正文留在各文档里，这里只做索引，不复述正文。
 # 每条在正文对应行的行尾挂 `<!-- rule:<id> -->` 锚点（ADR-0028），
 # `tests/test_rules_registry.py` 守五条不变式：source 指得到真实出处、enforced 的 check 解析得到真实守卫、
-# 锚点与条目双向一致、锚点落在 source 点名的那一小节里、code 规则点名的符号在 tool/ gui/ recipe_lib/ 的模块层
+# 锚点与条目双向一致、锚点落在 source 点名的那一小节里、code 规则点名的符号在 tool/ devtools/ gui/ recipe_lib/ 的模块层
 # 只定义一次（同名不同义进该文件的豁免表）。`AGENTS.md` 的产品契约不进这张表，由发版 checklist 对照。
 #
 # 字段（除 since 外必填）：
@@ -505,7 +505,7 @@ id = "doc.refs.cleanup-on-move"
 source = "CODING_STANDARDS.md#文档指向代码位置用符号名，行号必须带基线"
 check = "test:test_rules_guards::DocGuards.test_doc_refs_cleanup_on_move"
 status = "enforced"
-why = "VIVO_MARKETING 迁到 channel_policy.py 后，docs/09 与测试注释仍指 chan_fast.py 与 gui/app.py，读者按旧路径找不到定义。守卫只核对文档里 `tool/` `gui/` `tests/` `recipes/` 下路径是否存在：符号搬进另一个仍然存在的文件、以及测试注释里的旧路径仍靠 grep 与评审。"
+why = "VIVO_MARKETING 迁到 channel_policy.py 后，docs/09 与测试注释仍指 chan_fast.py 与 gui/app.py，读者按旧路径找不到定义。守卫只核对文档里 `tool/` `devtools/` `gui/` `tests/` `recipes/` 下路径是否存在：符号搬进另一个仍然存在的文件、以及测试注释里的旧路径仍靠 grep 与评审。"
 expires_if = "文档里的代码引用改由机器生成、移动符号时自动重写时删。"
 
 [[rule]]

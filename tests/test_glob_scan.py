@@ -177,11 +177,11 @@ class RepoTests(unittest.TestCase):
     def test_a_broken_pattern_in_a_real_guard_is_reported(self):
         """把真实仓库里一个有效模式改坏（gui → gone），守卫必须把它报出来。"""
         text = (ROOT / "tests" / "test_source_text.py").read_text(encoding="utf-8")
-        broken = text.replace('("tool", "gui", "tests")', '("tool", "gone", "tests")')
+        broken = text.replace('("tool", "devtools", "gui", "tests")', '("tool", "devtools", "gone", "tests")')
         self.assertNotEqual(broken, text, "锚点改了：这条用例要跟着换一份真实的全仓扫描")
         with tempfile.TemporaryDirectory() as tmp:
             write(tmp, "tests/test_source_text.py", broken)
-            for folder in ("tool", "gui", "tests"):
+            for folder in ("tool", "devtools", "gui", "tests"):
                 (Path(tmp) / folder).mkdir(exist_ok=True)
             write(tmp, "tests/sample.py", "x = 1\n")
             report = glob_scan.scan(tmp)

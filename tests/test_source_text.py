@@ -20,7 +20,7 @@ FORBIDDEN = {
 class SourceTextTests(unittest.TestCase):
     def test_source_has_no_raw_zero_width_characters(self):
         hits = []
-        for folder in ("tool", "gui", "tests"):
+        for folder in ("tool", "devtools", "gui", "tests"):
             for path in sorted((ROOT / folder).rglob("*.py")):
                 for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
                     for char, label in FORBIDDEN.items():
@@ -32,7 +32,7 @@ class SourceTextTests(unittest.TestCase):
     def test_baselines_are_pinned_to_a_commit(self):
         """并行会话随时推进 main，浮动引用会让「改动前」悄悄变成另一份代码。"""
         paths = [ROOT / name for name in PRESCRIPTIVE]
-        paths += [p for folder in ("tool", "gui", "tests") for p in sorted((ROOT / folder).rglob("*.py"))]
+        paths += [p for folder in ("tool", "devtools", "gui", "tests") for p in sorted((ROOT / folder).rglob("*.py"))]
         hits = []
         for path in paths:
             for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):

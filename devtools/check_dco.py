@@ -16,7 +16,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))   # stdio 留在引擎目录
 
-from commits import Commit, read_commits
+try:
+    from .commits import Commit, read_commits
+except ImportError:             # 直接跑文件时 sys.path[0] 就是 devtools/
+    from commits import Commit, read_commits
 from stdio import use_utf8_console
 
 use_utf8_console()

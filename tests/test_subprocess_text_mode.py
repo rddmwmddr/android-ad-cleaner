@@ -31,7 +31,7 @@ def missing_decoder(source):
 class TextModeTests(unittest.TestCase):
     def test_every_text_mode_spawn_declares_encoding_and_errors(self):
         offenders = []
-        for folder in ("tool", "gui", "tests"):
+        for folder in ("tool", "devtools", "gui", "tests"):
             for path in sorted((ROOT / folder).rglob("*.py")):
                 for line in missing_decoder(path.read_text(encoding="utf-8")):
                     offenders.append(f"{path.relative_to(ROOT).as_posix()}:{line}")
