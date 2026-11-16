@@ -465,7 +465,7 @@ id = "dev.client.step-kind-single-owner"
 source = "docs/ARCHITECTURE.md#函数级细节"
 check = "code:tool/plan.py:StepKind"
 status = "code"
-why = "「这一步是什么身份」原先散在 plan_tasks() 的 10 处 Task(...)、5 处 not_run(kind=…)、retry_plan() 的 6 个对齐键与 coverage_note 的字符串比较里，增删一种步骤没有单一改动点，拼错一处只有真机跑到那条重试路径才现形（#1386）。收成 StepKind 之后跨 gui/ 与 tool/ 是同一个词，`code:` 唯一性检查也盯着它别再长出第二份。"
+why = "「这一步是什么身份」原先散在 plan_tasks() 的 6 处 Task(...)、4 处 not_run(kind=…)（kind= 共 10 处）、retry_plan() 的 6 个对齐键与 coverage_note 的字符串比较里，增删一种步骤没有单一改动点，拼错一处只有真机跑到那条重试路径才现形（#1386）。收成 StepKind 之后跨 gui/ 与 tool/ 是同一个词，`code:` 唯一性检查也盯着它别再长出第二份。"
 expires_if = "步骤身份不再由客户端排程给出（例如改由引擎按脚本段自称）时删。"
 
 [[rule]]
