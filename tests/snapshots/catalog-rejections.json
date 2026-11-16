@@ -1,5 +1,5 @@
 {
-  "reason": "catalog family: cover every op with a required key (#1399)",
+  "reason": "sync with main: print op now requires text (#1359)",
   "ids": [
     "app-stop-missing-pkg",
     "close-all-missing-page",
@@ -41,6 +41,7 @@
     "page-extra-key",
     "page-missing-args",
     "press-missing-key",
+    "print-missing-text",
     "require-entry-missing-miss-print",
     "require-entry-missing-text",
     "require-find-missing-miss-print",
@@ -123,6 +124,7 @@
     "page-extra-key": "第 1 段「a」 第 1 个 op 出现名单外的键：['surprise']；允许的是 ['args', 'kind', 'kwargs']",
     "page-missing-args": "第 1 段「a」 第 1 个 op 缺 args",
     "press-missing-key": "第 1 段「a」 第 1 个 op 缺 key",
+    "print-missing-text": "第 1 段「a」 第 1 个 op 缺 text",
     "require-entry-missing-miss-print": "第 1 段「a」 第 1 个 op 缺 miss_print",
     "require-entry-missing-text": "第 1 段「a」 第 1 个 op 缺 text",
     "require-find-missing-miss-print": "第 1 段「a」 第 1 个 op 缺 miss_print",

@@ -85,6 +85,11 @@ CASES = [
         "needle": "缺 text",
     },
     {
+        "id": "print-missing-text",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "print"}]}]},
+        "needle": "缺 text",
+    },
+    {
         "id": "skip-extra-key",
         "data": {"segment": [{"name": "a", "ops": [
             {"kind": "skip", "text": "x", "surprise": 1},
