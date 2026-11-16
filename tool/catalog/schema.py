@@ -304,7 +304,7 @@ OPS: dict[str, OpSpec] = {
     "fail": OpSpec(_keys("kind text evidence"), required=("text",), no_fact=True),
     "scoped": OpSpec(_keys("kind systemui_text ops"), nested=("ops",)),
     "code": OpSpec(_keys("kind name args"), required=("name",)),
-    "print": OpSpec(_keys("kind text focus"), no_fact=True),
+    "print": OpSpec(_keys("kind text focus"), required=("text",), no_fact=True),
     "return": OpSpec(_keys("kind value"), check=_validate_return, no_fact=True),
     "return_lib": OpSpec(_keys("kind name args kwargs"), required=("name",)),
 }
