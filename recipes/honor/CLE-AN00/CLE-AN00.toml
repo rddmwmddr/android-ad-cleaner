@@ -10,7 +10,20 @@ MY_TAB_STYLE = "honor"
 
 [[segment]]
 name = "广告跟踪"
-code = "step_ad_tracking"
+ops = [
+  {kind = "skip_in_safe_mode"},
+  {kind = "start", pkg = "com.hihonor.id", activity = ".oaid.ui.AdvertisingPrivacyActivity", expect = "应用广告跟踪管理"},
+  {kind = "lib", name = "enter", args = ["更多选项"], kwargs = {scrolls = 0}},
+  {kind = "if_find", text = "显示系统程序", exact = true, ops = [
+    {kind = "tap", text = "显示系统程序", exact = true, scrolls = 0},
+    {kind = "sleep", seconds = 0.8},
+    {kind = "lib", name = "enter", args = ["更多选项"], kwargs = {scrolls = 0}},
+  ]},
+  # 点「全部关闭」与回读断言都是编排语义，留在本机例外函数里（ADR-0038）。
+  {kind = "code", name = "close_all_here"},
+  {kind = "sleep", seconds = 0.8},
+  {kind = "code", name = "assert_none_left"},
+]
 
 [[segment]]
 name = "智能推荐服务"
@@ -28,23 +41,88 @@ ops = [
 
 [[segment]]
 name = "搜索"
-code = "step_search"
+ops = [
+  {kind = "start", pkg = "com.hihonor.search", activity = ".feature.mainpage.presentation.page.HomeActivity", expect = "更多"},
+  {kind = "lib", name = "search_more", args = ["搜索框旁的「更多」没找到"]},
+  {kind = "lib", name = "enter", args = ["设置"], kwargs = {scrolls = 0}},
+  {kind = "lib", name = "enter", args = ["首页显示"]},
+  {kind = "off", only = ["热搜榜", "热搜词推荐"], page = "搜索·首页显示"},
+  {kind = "back"},
+  {kind = "lib", name = "enter", args = ["个性化管理"]},
+  {kind = "off", only = ["个性化推荐", "个性化广告"], page = "搜索·个性化管理"},
+]
 
 [[segment]]
 name = "负一屏"
+# 裁决：「循环」。右滑最多三次直到读到「头像」，读不到按跳过收尾
 code = "step_negative"
 
 [[segment]]
 name = "市场"
-code = "step_market"
+ops = [
+  {kind = "start", pkg = "com.hihonor.appmarket"},
+  {kind = "lib", name = "no_agreement", args = ["应用市场"]},
+  # 基本服务模式下没有推荐、也没有设置入口：先关一次开屏浮层再判，浮层挡住底栏时「我的」读不到。
+  {kind = "if_find", text = "基本服务", exact = true, edge_ok = "tab", ops = [
+    {kind = "if_find", text = "我的", edge_ok = "tab", else_ops = [
+      {kind = "dismiss"},
+      {kind = "sleep", seconds = 1.5},
+    ]},
+  ]},
+  {kind = "if_find", text = "基本服务", exact = true, edge_ok = "tab", ops = [
+    {kind = "if_find", text = "我的", edge_ok = "tab", else_ops = [
+      {kind = "skip", text = "已是基本服务模式，没有推荐，也没有设置入口"},
+    ]},
+  ]},
+  {kind = "lib", name = "my_tab", args = ["市场"]},
+  {kind = "lib", name = "enter", args = ["设置"], kwargs = {scrolls = 0}},
+  {kind = "lib", name = "enter", args = ["内容推荐服务"]},
+  # 三条分开写：旧脚本就是逐个 off，不是一次点名三行。
+  {kind = "off", only = ["营销服务推荐"], page = "市场·内容推荐服务"},
+  {kind = "off", only = ["个性化服务推荐"], page = "市场·内容推荐服务"},
+  {kind = "off", only = ["热门推荐管理"], page = "市场·内容推荐服务"},
+  {kind = "back"},
+  {kind = "lib", name = "enter", args = ["消息通知管理"]},
+  {kind = "off", only = ["消息通知"], keep = ["应用更新通知"], page = "市场·消息通知管理"},
+  {kind = "back"},
+  {kind = "lib", name = "enter", args = ["消息中心提醒"]},
+  {kind = "off", only = ["活动福利", "游戏动态"], keep = ["系统通知", "互动"], page = "市场·消息中心提醒"},
+  {kind = "back", n = 2},
+]
 
 [[segment]]
 name = "浏览器"
-code = "step_browser"
+# 拉起 / 等首页 / 点设置齿轮三个助手已升格荣耀家族库，本段是纯数据。
+ops = [
+  {kind = "lib", name = "launch", args = ["com.hihonor.baidu.browser/com.baidu.searchbox.SplashActivity", "浏览器"]},
+  {kind = "lib", name = "wait_home", args = ["浏览器"]},
+  {kind = "dismiss"},
+  {kind = "lib", name = "my_tab", args = ["浏览器"]},
+  {kind = "lib", name = "browser_gear"},
+  {kind = "off", only = ["搜索下一条推荐"], page = "浏览器·设置"},
+  {kind = "top"},
+  {kind = "lib", name = "enter", args = ["消息设置"]},
+  {kind = "off", only = ["新闻热点", "兴趣推送"], page = "浏览器·消息设置"},
+  {kind = "back"},
+  {kind = "sleep", seconds = 0.5},
+  {kind = "print", text = "  · 「隐私设置 → 广告设置」是网页，要关请手动打开「不看程序化广告」「不看个性化广告」"},
+  {kind = "back", n = 2},
+]
 
 [[segment]]
 name = "主题"
-code = "step_theme"
+ops = [
+  {kind = "lib", name = "launch", args = ["com.hihonor.android.thememanager/.PageActivity", "主题"]},
+  {kind = "lib", name = "wait_home", args = ["主题"]},
+  {kind = "lib", name = "my_tab", args = ["主题"]},
+  {kind = "lib", name = "enter", args = ["设置"], kwargs = {scrolls = 2}},
+  {kind = "lib", name = "enter", args = ["通知"]},
+  {kind = "off", only = ["消息通知", "短信", "邮件"], page = "主题·通知"},
+  {kind = "back"},
+  {kind = "lib", name = "enter", args = ["个性化服务"]},
+  {kind = "off", only = ["个性化内容", "个性化广告"], page = "主题·个性化服务"},
+  {kind = "back", n = 3},
+]
 
 [[segment]]
 name = "视频"
@@ -66,12 +144,31 @@ ops = [
 
 [[segment]]
 name = "音乐"
+# 裁决：「循环」。先查播放状态，打开后十轮里反复静音，`finally` 再静音一次
 code = "step_music"
 
 [[segment]]
 name = "阅读"
-code = "step_reader"
+ops = [
+  {kind = "start", pkg = "com.hihonor.dz.reader"},
+  {kind = "sleep", seconds = 1},
+  {kind = "dismiss"},
+  {kind = "lib", name = "no_agreement", args = ["阅读"]},
+  {kind = "lib", name = "my_tab", args = ["阅读"]},
+  {kind = "dismiss"},
+  # 两个叫法只出现一个，点到哪个算哪个。
+  {kind = "if_lib_any", calls = [
+    {method = "tap", args = ["更多设置"], kwargs = {exact = true, scrolls = 4}},
+    {method = "tap", args = ["设置"], kwargs = {exact = true, scrolls = 4}},
+  ], else_ops = [
+    {kind = "fail", text = "阅读设置入口没找到"},
+  ]},
+  {kind = "lib", name = "enter", args = ["广告推荐服务"], kwargs = {scrolls = 2}},
+  {kind = "off", only = ["个性化广告"], page = "阅读·广告推荐服务"},
+  {kind = "back", n = 2},
+]
 
 [[segment]]
 name = "魔法画报"
+# 裁决：「坐标算法」。从 `texts()` 里取「魔法画报」那一行的坐标点中心
 code = "step_magazine"

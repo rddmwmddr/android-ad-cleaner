@@ -4,8 +4,10 @@
 # 主题段要先挂起 com.miui.systemAdSolution；本仓库未在该机复跑。
 # 登记的含义是这台机先按本型号直选（recipe_for），不再转去按版本挑同族脚本——#969 修完也一样。
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
-# 2026-11-14 转页面树（#1267）：系统广告 / 应用商店 / 浏览器三段用 `opened()` 的直达探路（回调把
-# 拉起函数当参数传），留在同名 `.py` 的 `code =`；其余段按名字调共享段体。
+# 2026-11-14 转页面树：商店与系统广告都用家族库的 `direct_page` 直达探路，浏览器段仍留在同名
+# `.py` 的 `code =`；其余段按名字调共享段体。
+# 2026-11-15：浏览器段落成数据（直达 `direct_page` + 菜单兜底 + `require_lib` 报入口未找到），
+# 本机例外函数一个也不剩，`.py` 只剩模块级常量。
 model = "M154FF"
 models = ["M154FF", "2608BPX34C", "2510DRK44C"]
 build = "OS4.0"
@@ -16,11 +18,47 @@ BROWSER_FLOW = "toolbar"
 
 [[segment]]
 name = "系统广告"
-code = "step_system_ads"
+ops = [
+  # 广告服务页是独立 Activity，直达最稳；老版本没导出这一页时退回设置菜单。
+  {kind = "if_lib", name = "direct_page", args = ["com.android.settings", ".ad.AdServiceSettings"], kwargs = {expect = "个性化广告推荐"}, ops = [
+    {kind = "off", only = ["个性化广告推荐"], page = "系统·广告服务"},
+    {kind = "return"},
+  ], else_ops = [
+    # 不用设置搜索：HyperOS 搜索框用 setText 输入中文会卡住、一直打「%」。
+    {kind = "if_lib", name = "system_ads_menu", ops = [
+      {kind = "off", only = ["个性化广告推荐"], page = "系统·广告服务"},
+    ]},
+  ]},
+]
 
 [[segment]]
 name = "应用商店"
-code = "step_store"
+ops = [
+  {kind = "if_lib", name = "direct_page", args = ["com.xiaomi.market", ".ui.MarketPreferenceActivity"], kwargs = {expect = "通知设置"}, else_ops = [
+    {kind = "start", pkg = "com.xiaomi.market"},
+    {kind = "go", text = "我的", expect = "设置"},
+    {kind = "lib", name = "gear"},
+  ]},
+  {kind = "if_lib", name = "tap_any", args = ["隐私设置", "隐私"], ops = [
+    # 「个性化服务」在新版本是子页入口、老版本开关就在本页：按运行时读到的位置分岔。
+    {kind = "if_lib", name = "store_privacy_nested", ops = [
+      {kind = "if_lib", name = "store_privacy_sub", ops = [
+        {kind = "off", only = ["个性化服务"], page = "商店·个性化服务"},
+        {kind = "back"},
+      ]},
+    ], else_ops = [
+      {kind = "off", only = ["个性化服务"], page = "商店·个性化服务"},
+    ]},
+    {kind = "back"},
+  ]},
+  {kind = "lib", name = "store_mode_step"},
+  {kind = "if_entry", text = "通知设置", ops = [
+    # 只关「新手帮助」。不碰「推送消息」：它是父开关，关了会连点赞/评论消息一起关。
+    {kind = "off", only = ["新手帮助"], keep = ["推送消息", "应用更新"], page = "商店·通知设置"},
+    {kind = "back"},
+  ]},
+  {kind = "back", n = 2},
+]
 
 [[segment]]
 name = "手机管家"
@@ -36,7 +74,41 @@ ops = [{ kind = "lib", name = "theme" }]
 
 [[segment]]
 name = "浏览器"
-code = "step_browser"
+ops = [
+  # 首页「默认 / 探索版 / 自定义主页」不改：自定义主页要填网址，按机主喜好。
+  # 设置页都有导出，直达：后台屏上首页的工具栏和底栏认不出来，走菜单会报「入口未找到」（沿用 #667）。
+  { kind = "if_lib", name = "direct_page", args = ["com.android.browser", ".preferences.activity.CustomizationPreferenceActivity"], kwargs = { expect = "个性化内容推荐" }, ops = [
+    { kind = "off", only = ["个性化内容推荐", "个性化广告推荐"], page = "浏览器·个性化推荐" },
+    # 子项页老版本可能没导出：打不开只跳过下面三项，不让整段报未完成。
+    { kind = "lib", name = "direct_page", args = ["com.android.browser", ".BrowserSettingsActivity"] },
+  ], else_ops = [
+    { kind = "start", pkg = "com.android.browser" },
+    # 拒绝浏览器协议后落到基本模式设置页，四个设置入口都不在这条路径上，找下去只会报「入口未找到」（沿用 #414）。
+    { kind = "if_focus", text = "basicmode", match = "icontains", ops = [
+      { kind = "print", text = "  · 浏览器处在基本模式，设置入口不在这条路径上，本段跳过" },
+      { kind = "return" },
+    ] },
+    { kind = "require_lib", name = "browser_settings", miss_print = "浏览器设置入口未找到；未点击正文中的文字", fail = true },
+    { kind = "if_entry", text = "隐私和安全", ops = [
+      { kind = "off", only = ["个性化内容推荐", "个性化广告推荐"], page = "浏览器·隐私和安全" },
+      { kind = "back" },
+    ] },
+  ] },
+  # 这三项在旧版浏览器里有、新版没有，有就关。
+  { kind = "if_entry", text = "主页设置", ops = [
+    { kind = "off", only = ["宫格位推送"], page = "浏览器·主页设置" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "搜索设置", ops = [
+    { kind = "off", only = ["猜你想搜"], page = "浏览器·搜索设置" },
+    { kind = "back" },
+  ] },
+  { kind = "if_entry", text = "功能设置", ops = [
+    { kind = "off", only = ["小说"], page = "浏览器·功能设置" },
+    { kind = "back" },
+  ] },
+  { kind = "back", n = 2 },
+]
 
 [[segment]]
 name = "全局搜索"

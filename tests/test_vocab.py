@@ -23,7 +23,6 @@ CLUES = ROOT / "docs" / "清单" / "词条线索.md"
 
 # 解析不出的 only=，按脚本冻结。新脚本多了这种写法，先看能不能写成字面量或模块级常量，确实不能再改这里。
 UNRESOLVED_ONLY = {
-    'honor/CLE-AN00/CLE-AN00.toml': 1,
     'honor/WKL-AN20/WKL-AN20.toml': 1,
     'meizu/MEIZU 21 Pro/MEIZU 21 Pro.toml': 1,
     'oppo/PHK110/PHK110-android15.toml': 1,
@@ -39,11 +38,9 @@ UNRESOLVED_ONLY = {
     'oppo/PMX110/PMX110.toml': 2,
     'vivo/V2303A/V2303A.toml': 1,
     'vivo/V2417A/V2417A.toml': 1,
-    'vivo/V2547DA/V2547DA-android17.toml': 4,
     'xiaomi/23117RK66C/23117RK66C.toml': 1,
     'xiaomi/24129PN74C/24129PN74C-os4.toml': 2,
     'xiaomi/24129PN74C/24129PN74C.toml': 1,
-    'xiaomi/M154FF/M154FF.toml': 1,
 }
 # close_named() 第一个参数解析不出的，和上面分开冻结，免得一个口径盖住另一个。
 UNRESOLVED_CLOSE = {

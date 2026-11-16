@@ -2,6 +2,7 @@
 
 Android 17 上从设置首页逐层翻页会滑出设置页、触发保护性中止；这台改成搜关键词直达。
 全局搜索的三个子页各自重新搜一次回主页，单页失败只跳过该页。
+应用商店段的入口与逐页开关转成数据后（#1365），断线 / 约定跳过不再被「这一页打不开」的兜底吞掉。
 """
 from pathlib import Path
 import sys
@@ -11,10 +12,13 @@ from xml.etree import ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
+import adb_link
 import run
 from fixtures import load_recipe, phone_mock
+from recipe_runtime import SkipStep
 
 RECIPE = ROOT / "recipes/vivo/V2303A/V2303A.toml"
+STORE_SETTINGS = "com.bbk.appstore/.ui.menu.AppstoreSettingsActivity"
 
 
 def make_phone(**fields):
@@ -88,6 +92,50 @@ class VivoV2303ARecipeTests(unittest.TestCase):
         self.assertEqual(p.setting.call_count, 1)
         self.assertEqual(scope["FAILED_STEPS"], ["全局搜索"])
         self.assertIn("✗ 未完成：没搜到「全局搜索」", out.getvalue())
+
+
+class StoreSegmentTests(unittest.TestCase):
+    """应用商店段（#1365）：设置页先按 Activity 直达，「我的 → 设置」只是兜底。
+
+    空页面快照上 `p.start` 一律成功，走不到「这一页打不开」那一支，所以入口成功的那条路
+    与断线 / 跳过的分流只能在这里守。
+    """
+
+    def test_the_settings_activity_is_opened_directly_and_the_menu_path_is_skipped(self):
+        p = make_phone()
+        p.focus.return_value = STORE_SETTINGS
+        load(p, only=["应用商店"])
+        self.assertEqual(p.start.call_args_list[0].args,
+                         ("com.bbk.appstore", ".ui.menu.AppstoreSettingsActivity"))
+        self.assertEqual(p.start.call_count, 1)
+        p.tab.assert_not_called()
+
+    def test_a_missing_activity_falls_back_to_the_my_tab_and_the_gear(self):
+        p = make_phone()
+        p.start.side_effect = [RuntimeError("Error type 3: Activity class does not exist"), None]
+        load(p, only=["应用商店"])
+        self.assertEqual(p.start.call_args_list[1].args, ("com.bbk.appstore",))
+        self.assertEqual(p.start.call_args_list[1].kwargs, {"expect": ["我的"]})
+        p.tab.assert_any_call("我的")
+
+    def test_a_lost_device_is_not_taken_for_a_missing_page(self):
+        """断线是 RuntimeError 的子类：旧写法只单列 SkipStep，于是掉线被当成「这一页打不开」，
+        在回退路径上再空跑一次启动。这里断言它整轮上抛、回退一步都不走。"""
+        p = make_phone()
+        p.start.side_effect = adb_link.DeviceLost("connection reset")
+        with self.assertRaises(adb_link.DeviceLost):
+            load(p, only=["应用商店"])
+        self.assertEqual(p.start.call_count, 1)
+        p.tab.assert_not_called()
+
+    def test_a_skip_is_recorded_as_skipped_instead_of_retrying_the_fallback(self):
+        """旧树也绿，守的是不回退：SkipStep 早已单列，约定跳过不许被当成「这一页打不开」再走回退。"""
+        p = make_phone()
+        p.start.side_effect = SkipStep("本机没装商店")
+        scope = load(p, only=["应用商店"])
+        self.assertEqual(scope["SKIPPED_STEPS"], ["应用商店"])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        self.assertEqual(p.start.call_count, 1)
 
 
 if __name__ == "__main__":

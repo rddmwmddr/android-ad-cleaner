@@ -12,6 +12,8 @@
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
 # 2026-11-14 转页面树（#1267）：系统广告的分栏判定与手机管家的逐屏下翻留在同名 `.py` 的 `code =`；
 # 其余段落成导航数据。
+# 2026-11-15：系统广告的分栏判定落成数据（`if_find` 套一层判「有没有更多安全设置」，没有才切分栏），
+# 只剩手机管家的逐屏下翻仍是 `code =`。
 model = "25102RKBEC"
 models = ["25102RKBEC"]
 build = "OS4.0"
@@ -22,7 +24,25 @@ BROWSER_FLOW = "toolbar"
 
 [[segment]]
 name = "系统广告"
-code = "step_system_ads"
+ops = [
+  # 不用设置搜索：HyperOS 搜索框用 setText 输入中文会卡住、一直打「%」。按菜单路径点进去。
+  { kind = "shell", command = "am start -f 0x10008000 -a android.settings.SETTINGS" },
+  { kind = "sleep", seconds = 1.2 },
+  # 这台设置首页一屏放不下，「隐私与安全」在第二屏。
+  { kind = "require_entry", text = "隐私与安全", scrolls = 8, miss_print = "  ✗ 设置首页没翻到「隐私与安全」，本段收手" },
+  # 点进去是安全中心「隐私与安全」页（PrivacySafetyActivity），默认停在「隐私」分栏：
+  # 页上还没有「更多安全设置」才需要切到「安全」。
+  { kind = "if_find", text = "隐私与安全", ops = [
+    { kind = "if_find", text = "更多安全设置", ops = [], else_ops = [
+      { kind = "lib", name = "tab", args = ["安全"] },
+    ] },
+  ] },
+  # 「安全」分栏很长，「更多安全设置」在整页最末尾。
+  { kind = "require_entry", text = "更多安全设置", scrolls = 10, miss_print = "  ✗ 「隐私与安全」页没翻到「更多安全设置」，本段收手" },
+  { kind = "if_entry", text = "广告服务", scrolls = 4, ops = [
+    { kind = "off", only = ["个性化广告推荐"], page = "系统·广告服务" },
+  ] },
+]
 
 [[segment]]
 name = "应用商店"
@@ -30,6 +50,7 @@ ops = [{ kind = "lib", name = "store_mode" }]
 
 [[segment]]
 name = "手机管家"
+# 裁决：「循环」。翻最多八次找贴底的「隐私设置」（贴底行会被 find 的边缘判据滤掉）
 code = "step_security_center"
 
 [[segment]]

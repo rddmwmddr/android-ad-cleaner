@@ -23,6 +23,7 @@ import sys
 import tempfile
 import textwrap
 import time as _time
+import tomllib
 from collections import namedtuple
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -260,7 +261,11 @@ class Device:
         self.closed = True
 
     def __call__(self, **selectors):
-        return SimpleNamespace(selector=None)
+        """空页面上任何选择器都找不到：点按抛读屏库的 not-found，与真机走同一条判断。"""
+        def click(*args, **kwargs):
+            from fast import u2
+            raise u2.exceptions.UiObjectNotFoundError({"code": -32002, "data": str(selectors)})
+        return SimpleNamespace(selector=None, click=click)
 
 
 def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
@@ -535,10 +540,28 @@ def load_recipe(phone, path, only=None, out=None, **extra):
 
 
 def _only_list(only):
-    """段名过滤：None → 哨兵（不跑任何段），单个字符串 → 一项，其余照抄。"""
+    """段名过滤（`only`）：None → 哨兵（不跑任何段），单个字符串 → 一项，其余照抄。"""
     if only is None:
         return ["__no_steps__"]
     return [only] if isinstance(only, str) else list(only)
+
+
+def keep_list(path, segment_name):
+    """`.toml` 里某一段所有 `off(keep=…)` 的保留名单（含嵌套的 `ops` / `else_ops`，按出现顺序）。
+
+    「关掉除这些之外的」这份知识落进数据之后，用例从这里读，别在测试里另抄一份名单。
+    """
+    with open(path, "rb") as handle:
+        data = tomllib.load(handle)
+
+    def walk(ops):
+        for op in ops:
+            yield from op.get("keep", [])
+            yield from walk(op.get("ops", []))
+            yield from walk(op.get("else_ops", []))
+
+    segment = next(item for item in data["segment"] if item["name"] == segment_name)
+    return list(walk(segment.get("ops", [])))
 
 
 _BASE_OWNED_ = {

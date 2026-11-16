@@ -1,8 +1,8 @@
 # OPPO Find N6（PLP120，ColorOS 16.0.9 / ColorOS 17）的页面树（catalog，#1265）。
 # 路径 2026-10-22 实测，机型脚本整段跑待验证；2026-11-10 补 ColorOS 17（PLP120_17.0.0.109 / Android 17）
 # 的两段路径，未复测（沿用 #905）。
-# 广告跟踪（两次入口回退 + 整页全关）、软件商店、主题、视频四段已落数据；负一屏/下拉搜索/浏览器/
-# 游戏中心/小布建议留 `code=`（手势循环、运行期名单、多分支状态机，见各自例外函数）。
+# 八段已落数据（广告跟踪的两次入口回退 + 整页全关、软件商店、主题、视频、下拉搜索、浏览器、
+# 游戏中心、小布建议）；只剩负一屏是 `code=`（坐标算法，见例外函数）。
 model = "PLP120"
 models = ["PLP120"]
 build = "PLP120_16.0.9"
@@ -19,11 +19,36 @@ ops = [
 
 [[segment]]
 name = "负一屏"
+# 裁决：「坐标算法」。按 content-desc 含「头像」的节点 bounds 点中心
 code = "step_negative_screen"
 
 [[segment]]
 name = "下拉搜索"
-code = "step_search"
+ops = [
+  { kind = "if_lib", name = "search_settings", else_ops = [
+    { kind = "print", text = "  · 跳过：没有认出全局搜索设置页（入口不可用或被系统限制）" },
+    { kind = "return" },
+  ] },
+  { kind = "if_tap", text = "搜索范围", exact = true, ops = [
+    # 安全模式下只关推荐位：ColorOS 17 上榜单 / 小说 / 购物是内容源，关掉会搜不到东西。
+    { kind = "off", only_code = "search_sources", page = "下拉搜索·搜索范围" },
+    { kind = "back" },
+  ] },
+  { kind = "if_tap", text = "功能管理", exact = true, ops = [
+    { kind = "off", only = ["搜索框提示词"], page = "下拉搜索·功能管理" },
+    { kind = "back" },
+  ] },
+  { kind = "miss_reset" },
+  { kind = "if_tap", text = "账号与隐私", exact = true, else_ops = [
+    # ColorOS 17：「账号与隐私」只是分组标题，直接找「隐私」。
+    { kind = "miss_reset" },
+  ] },
+  { kind = "if_tap", text = "隐私", exact = true, ops = [
+    { kind = "off", only = ["个性化推荐"], page = "下拉搜索·隐私" },
+    { kind = "back", n = 2 },
+  ] },
+  { kind = "back", n = 2 },
+]
 
 [[segment]]
 name = "软件商店"
@@ -38,7 +63,50 @@ ops = [
 
 [[segment]]
 name = "浏览器"
-code = "step_browser"
+ops = [
+  { kind = "start", pkg = "com.heytap.browser" },
+  # 三条入口各是一档：底栏「我的」→ 设置（X9 Ultra）、底栏 ☰ → 齿轮（Find N6）、都没有就直达设置页。
+  { kind = "if_find", text = "我的", exact = true, edge_ok = "tab", ops = [
+    { kind = "go", text = "我的", expect = "设置" },
+    { kind = "tap", text = "设置", exact = true, scrolls = 0 },
+  ], else_ops = [
+    { kind = "if_lib_any", calls = [
+      { method = "find", args = ["菜单"] },
+      { method = "find", args = ["更多"] },
+    ], ops = [
+      # 两个按钮在各机型上只出现一个，点到哪个算哪个（旧写法是 `p.tap(a) or p.tap(b)`）。
+      { kind = "if_lib_any", calls = [
+        { method = "tap", args = ["菜单"], kwargs = { scrolls = 0 } },
+        { method = "tap", args = ["更多"], kwargs = { scrolls = 0 } },
+      ] },
+      { kind = "tap", text = "设置", scrolls = 0 },
+    ], else_ops = [
+      # 首页切成「简洁」后没有「我的」和菜单（ColorOS 17，沿用 #165）：浏览器在前台时直达设置页；
+      # 带清栈参数会立刻退出，所以只用最朴素的一条 am start。
+      { kind = "shell", command = "am start -n com.heytap.browser/.settings.component.BrowserPreferencesPage" },
+      { kind = "sleep", seconds = 1.2 },
+      { kind = "if_focus", text = "com.heytap.browser", else_ops = [
+        { kind = "print", text = "  ✗ 浏览器设置页没有打开" },
+        { kind = "return" },
+      ] },
+    ] },
+  ] },
+  # 主页布局切「简洁」是顺手做的：切了首页就少一屏推荐位。
+  { kind = "if_tap", text = "主页设置", exact = true, ops = [
+    { kind = "if_tap", text = "页面布局", exact = true, ops = [
+      { kind = "tap", text = "简洁", exact = true, scrolls = 0 },
+      { kind = "back" },
+    ] },
+    { kind = "back" },
+  ] },
+  { kind = "if_tap", text = "隐私", exact = true, ops = [
+    { kind = "if_tap", text = "广告管理", exact = true, ops = [
+      { kind = "off", only = ["开屏广告", "资讯列表广告", "摇一摇"], page = "浏览器·广告管理" },
+      { kind = "back", n = 2 },
+    ] },
+  ] },
+  { kind = "back", n = 2 },
+]
 
 [[segment]]
 name = "主题"
@@ -63,8 +131,42 @@ ops = [
 
 [[segment]]
 name = "游戏中心"
-code = "step_game_center"
+ops = [
+  # 直达失败才走「我的 → 设置」；这一档也决定最后退回几次（#1373）。
+  {kind = "let", name = "direct", lib = "game_settings_direct"},
+  {kind = "if_var", name = "direct", ops = [], else_ops = [{kind = "lib", name = "game_settings_via_mine"}]},
+  {kind = "enter", text = "隐私开关设置", scrolls = 6},
+  {kind = "enter", text = "个性化推荐管理", scrolls = 4},
+  # 先等开关画出来再读，读数交给点名核对：缺一项就整段不动。
+  {kind = "let", name = "switches", lib = "read_on_page", args = ["个性化推荐管理", "com.nearme.gamecenter"]},
+  {kind = "require_switches", before = {expr = "var", name = "switches"}, names = ["个性化推荐"], title = "个性化推荐管理"},
+  {kind = "off", only = ["个性化推荐"], page = "游戏中心·个性化推荐"},
+  {kind = "if_var", name = "direct", ops = [{kind = "back", n = 3}], else_ops = [{kind = "back", n = 4}]},
+]
 
 [[segment]]
 name = "小布建议"
-code = "step_assistant_advice"
+ops = [
+  # ColorOS 17：「内容资讯」是点不动的分组标题，入口是它下面那行「资讯服务」，开关在二级页
+  # （PMX110，沿用 #905）；ColorOS 16 仍是点「内容资讯」进列表页。库里读不到开关时返回 None，
+  # 读到了返回 {标题: 状态}——按「不是 None」分岔，空表也算读到了（#1373）。这一页还有快递、
+  # 航班、日程提醒与商圈服务，保持不动。
+  {kind = "lib", name = "enter_settings", args = ["OPPO AI", "小布建议"]},
+  {kind = "page", args = ["小布建议", "com.android.settings"]},
+  {kind = "let", name = "switches", lib = "open_switch_page", args = ["资讯服务", "资讯服务", "com.android.settings"]},
+  {kind = "if_var", name = "switches", not_none = true, ops = [
+    {kind = "require_switches", before = {expr = "var", name = "switches"}, names = ["资讯服务"], title = "资讯服务"},
+    {kind = "off", only = ["资讯服务"], page = "小布建议·资讯服务"},
+    {kind = "return"},
+  ], else_ops = [
+    # 旧版本这一页的标题没有实测记录，两种叫法都认。
+    {kind = "let", name = "switches", lib = "open_switch_page", args = ["内容资讯", ["内容资讯", "资讯服务"], "com.android.settings"]},
+    {kind = "if_var", name = "switches", not_none = true, ops = [
+      {kind = "require_switches", before = {expr = "var", name = "switches"}, names = ["资讯服务"], title = "内容资讯"},
+      {kind = "off", only = ["资讯服务"], page = "小布建议·内容资讯"},
+      {kind = "return"},
+    ], else_ops = [
+      {kind = "fail", text = "小布建议：「资讯服务」与「内容资讯」两条入口都没进去"},
+    ]},
+  ]},
+]

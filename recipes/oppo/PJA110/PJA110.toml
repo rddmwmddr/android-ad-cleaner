@@ -1,6 +1,6 @@
 # 一加 Ace 2 Pro（PJA110，ColorOS 14.0.0.812 / Android 14）的页面树（catalog，#1264）。
 # 路径来自 2026-10-25 实测：仅覆盖下拉搜索、商店、浏览器；本机联网后验证 9 项，失败会回读并返回非零。
-# 「下拉搜索」的手势坐标算不出来（按 p.W / p.H 现算），走 code= 例外函数；其余三段是线性数据。
+# 四段都是线性数据：下拉搜索是 home / 下滑手势 / back 三步，手势按屏宽屏高的比例写在数据里。
 model = "PJA110"
 models = ["PJA110"]
 build = "PJA110_14.0.0.812"
@@ -15,7 +15,20 @@ START_ACTIVITIES = { "com.heytap.browser" = "com.android.browser.BrowserActivity
 
 [[segment]]
 name = "下拉搜索"
-code = "step_search"
+ops = [
+  { kind = "shell", command = "input keyevent HOME" },
+  { kind = "sleep", seconds = 0.6 },
+  { kind = "gesture", start = [0.5, 0.3], end = [0.5, 0.7], ms = 300 },
+  { kind = "sleep", seconds = 1 },
+  { kind = "shell", command = "input keyevent BACK" },
+  { kind = "sleep", seconds = 0.4 },
+  { kind = "if_focus", match = "starts", text = "com.heytap.quicksearchbox/", ops = [
+    { kind = "lib", name = "tap", args = ["设置"] },
+    { kind = "lib", name = "tap", args = ["账号与隐私"] },
+    { kind = "lib", name = "tap", args = ["隐私"] },
+    { kind = "lib", name = "close_named", args = [["个性化推荐"], "下拉搜索·隐私"] },
+  ], else_ops = [{ kind = "fail", text = "未进入下拉搜索" }] },
+]
 
 [[segment]]
 name = "软件商店"

@@ -1,19 +1,53 @@
 # Redmi Note 12 Turbo（23049RAD8C，HyperOS 1 / OS3.0.5.0）机型脚本；适配机型：Redmi Note 12 Turbo（23049RAD8C）
 # 路径来源：2026-10-25 实测（OS3.0.5.0.VMRCNXM，Android 15）
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
-# 2026-11-14 转页面树（#1266）：浏览器段落成导航数据，其余按名字调共享段体；系统广告 / 应用商店 /
-# 天气和日历里的 try/except 兜底与运行时分岔留在同名 `.py` 的 `code =`。
+# 2026-11-14 转页面树：浏览器、应用商店落成导航数据，其余按名字调共享段体。
+# 2026-11-15：系统广告与天气和日历的直达兜底改成 `direct_page`，九段全部是数据，本机没有 `code =` 例外函数。
 model = "23049RAD8C"
 models = ["23049RAD8C"]
 build = "OS3.0.5.0"
 
 [[segment]]
 name = "系统广告"
-code = "step_system_ads"
+ops = [
+  # 广告服务是独立 Activity，能直达就直达；拉不起来（这一页没导出）就接着走设置搜索。
+  { kind = "if_lib", name = "direct_page", args = ["com.android.settings", "com.android.settings.ad.AdServiceSettings"], ops = [
+    { kind = "off", only = ["个性化广告推荐"], page = "系统·广告服务" },
+  ] },
+  # 「系统工具广告」是天气、日历、音乐等系统工具里广告的总闸，在另一个页面上。
+  { kind = "require_setting", kw = "系统广告", miss_print = "没搜到「系统广告」" },
+  { kind = "off", only = ["系统工具广告"], page = "系统·系统工具广告" },
+]
 
 [[segment]]
 name = "应用商店"
-code = "step_store"
+ops = [
+  # 直达设置页，避免从首页弹窗或「我的」页面图标迷路；App 本机没装时由 direct_page 放行成跳过。
+  {kind = "if_lib", name = "direct_page", args = ["com.xiaomi.market", "com.xiaomi.market.ui.MarketPreferenceActivity"], else_ops = [
+    {kind = "start", pkg = "com.xiaomi.market"},
+    {kind = "go", text = "我的", expect = "设置"},
+    {kind = "lib", name = "gear"},
+  ]},
+  {kind = "if_lib", name = "tap_any", args = ["隐私设置", "隐私"], ops = [
+    # 「个性化服务」在新版本是子页入口、老版本开关就在本页：按运行时读到的位置分岔。
+    {kind = "if_lib", name = "store_privacy_nested", ops = [
+      {kind = "if_lib", name = "store_privacy_sub", ops = [
+        {kind = "off", only = ["个性化服务"], page = "商店·个性化服务"},
+        {kind = "back"},
+      ]},
+    ], else_ops = [
+      {kind = "off", only = ["个性化服务"], page = "商店·个性化服务"},
+    ]},
+    {kind = "back"},
+  ]},
+  {kind = "lib", name = "store_mode_step"},
+  {kind = "if_entry", text = "通知设置", ops = [
+    # 只关「新手帮助」。不碰「推送消息」：它是父开关，关了会连点赞/评论消息一起关。
+    {kind = "off", only = ["新手帮助"], keep = ["推送消息", "应用更新"], page = "商店·通知设置"},
+    {kind = "back"},
+  ]},
+  {kind = "back", n = 2},
+]
 
 [[segment]]
 name = "手机管家"
@@ -61,4 +95,33 @@ ops = [{ kind = "lib", name = "negative_screen" }]
 
 [[segment]]
 name = "天气和日历"
-code = "step_weather_calendar"
+ops = [
+  # 天气：先试底栏的「更多设置」，没有就点齿轮；进到设置页再找「用户体验计划」。
+  { kind = "start", pkg = "com.miui.weather2" },
+  { kind = "if_lib_any", calls = [
+    { method = "tap", args = ["更多设置"], kwargs = { exact = true, scrolls = 0 } },
+    { name = "gear" },
+  ], ops = [
+    { kind = "if_tap", text = "设置", exact = true, scrolls = 0, ops = [
+      { kind = "if_entry", text = "用户体验计划", ops = [
+        { kind = "off", only = ["推荐", "广告", "个性化", "内容推广", "天气视频卡片"], page = "天气·用户体验计划" },
+        { kind = "back" },
+      ] },
+      { kind = "back" },
+    ] },
+  ] },
+  { kind = "back", n = 2 },
+  # 日历：直达「用户体验计划」子页；这一页没导出就退回菜单路径。没装日历按跳过收尾（沿用 #908）。
+  { kind = "if_lib", name = "direct_page", args = ["com.android.calendar", ".settings.UserExperienceActionBarActivity"], ops = [
+    { kind = "off", only = ["推荐", "广告", "个性化", "内容推广"], page = "日历·用户体验计划" },
+    { kind = "back", n = 2 },
+  ], else_ops = [
+    { kind = "start", pkg = "com.android.calendar" },
+    { kind = "lib", name = "gear" },
+    { kind = "if_entry", text = "用户体验计划", ops = [
+      { kind = "off", only = ["推荐", "广告", "个性化", "内容推广"], page = "日历·用户体验计划" },
+      { kind = "back" },
+    ] },
+    { kind = "back", n = 2 },
+  ] },
+]

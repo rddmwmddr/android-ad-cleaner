@@ -8,7 +8,7 @@
 只把「该调哪个 p 方法、带哪些实参」按数据的书写顺序发出去，不碰这些算法本身。
 
 库调用按名字解析：`lib` / `require_lib` / `if_lib` / `return_lib` 查本模块的 `LIBRARY`
-（`recipe_lib.LIBRARY`：家族 `__all__` 的 140 个名字），查不到再查本机例外命名空间；实现是普通函数，
+（`recipe_lib.LIBRARY`：家族 `__all__` 的名字），查不到再查本机例外命名空间；实现是普通函数，
 收 `(p, rt, …)`，调用序列与旧脚本逐条相同。
 """
 import os as _os, sys as _sys
@@ -63,6 +63,8 @@ def segment_action(segment: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> Call
     ops = segment.get("ops", [])
 
     def run_ops() -> Any:
+        # 本段变量（`let` 绑定）：每跑一次换一张新表，段与段、轮与轮之间互不可见（#1373）。
+        rt.bindings = {}
         try:
             _run(ops, p, rt, g)
         except _Abort as stop:
@@ -84,19 +86,51 @@ def _run_op(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
 
 
 def _arg(value: Any, p: Any, rt: Any, g: dict[str, Any]) -> Any:
-    """实参里的动态取值：`{expr = "focus"}` → `p.focus()`，`{expr = "tree"}` → `p.tree()`。
+    """实参里的动态取值：`{expr = "focus"}` → `p.focus()`，`{expr = "tree"}` → `p.tree()`，
+    `{expr = "var", name = "…"}` → 本段 `let` 绑定的值（#1373）；`{ops = [...]}` → 一条回调（#1371）。
 
     段体常把当前前台 / 页面树当实参传给库助手（`close_named(..., p.focus())`）。这些读也是一次
-    `p.*` 调用、进调用序列，所以必须照原样求值、不能换成字面量，否则对拍就少了那一条。除表形态外
-    一律按字面量传（字符串 / 数字 / 列表）。"""
+    `p.*` 调用、进调用序列，所以必须照原样求值、不能换成字面量，否则对拍就少了那一条。绑定的名字
+    只在段内、只在绑定它的那条 op 之后可见，装载器按这两个条件核对（`loader._check_bindings`）。
+    `{ops = [...]}` 包成闭包传下去：库在两步之间要重进一次页才好回读（`close_named(...,
+    reopen=…)`），什么时候调由库实现决定，解释器只负责把它翻成一次 `_run`。
+    除表形态外一律按字面量传（字符串 / 数字 / 列表）。"""
     if isinstance(value, Mapping) and "expr" in value:
         name = value["expr"]
         if name == "focus":
             return p.focus()
         if name == "tree":
             return p.tree()
+        if name == "var":
+            return rt.bindings[value["name"]]
         raise KeyError(f"未知的实参表达式 expr={name!r}")
+    if isinstance(value, Mapping) and "ops" in value:
+        block = value["ops"]
+        return lambda: _run(block, p, rt, g)
     return value
+
+
+def _let(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
+    """`let`：调一次库助手，把返回值绑成段内名字，后面的 op 用 `{expr = "var"}` 取它当实参（#1373）。"""
+    rt.bindings[op["name"]] = _resolve(op["lib"], g)(
+        p, rt, *[_arg(a, p, rt, g) for a in op.get("args", [])],
+        **{k: _arg(v, p, rt, g) for k, v in op.get("kwargs", {}).items()})
+
+
+def _if_var(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
+    """`if_var`：按绑定的名字分岔（#1373）。
+
+    缺省按真假值（与 `if_lib` 同档）；`not_none = true` 时 `ops` 走「不是 None」那一支——旧脚本
+    `if switches is not None:` 与 `if not direct:` 是两条不同的判据，`if_lib` 的假值分岔分不开
+    「库返回了空值」与「库返回了 None」。"""
+    value = rt.bindings[op["name"]]
+    hit = value is not None if op.get("not_none") else bool(value)
+    _run(op.get("ops", []) if hit else op.get("else_ops", []), p, rt, g)
+
+
+def _require_switches(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
+    """把段内读到的开关表交给 `Runtime.require_switches()` 点名核对（#1373）：缺一项整段不动。"""
+    rt.require_switches(_arg(op["before"], p, rt, g), list(op["names"]), op["title"])
 
 
 def _lib(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
@@ -232,7 +266,11 @@ def _back(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
 
 
 def _top(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
-    p.top(op.get("n"))
+    """不写 `n` 就调不带实参的 `p.top()`：调用序列与段体逐条对齐（同 `_back`）。"""
+    if "n" in op:
+        p.top(op["n"])
+    else:
+        p.top()
 
 
 def _code(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
@@ -261,7 +299,9 @@ def _fail(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
 
 
 def _print(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
-    print(op["text"], flush=True)
+    """打一句人话；`focus=true` 把当前前台窗口接在后面（段体里 `print(f"  · 设置页 {p.focus()}")`）。"""
+    text = op["text"] + p.focus() if op.get("focus") else op["text"]
+    print(text, flush=True)
 
 
 def _return(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
@@ -340,10 +380,15 @@ def _miss_message(op: Mapping, p: Any, g: dict[str, Any], where: str | None = No
 
 
 def _require_tab(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
+    """`settle` 给换页慢的机型留更长的等待：`sig` → `tab` → `settle(sig, n)` 与旧脚本同形，
+    签名在点之前读，点不到时不 settle 直接报。"""
+    before = p.sig() if "settle" in op else None
     result = p.tab(op["name"])
     where = _focus_note(op, p, rt, g)
     if not result:
         raise RuntimeError(_miss_message(op, p, g, where))
+    if before is not None:
+        p.settle(before, op["settle"])
 
 
 def _require_go(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
@@ -364,6 +409,41 @@ def _tap(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
 
 def _go(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
     p.go(op["text"], op["expect"])
+
+
+def _tap_id(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
+    """按 u2 选择器（资源 id / 文字）直点一个控件：文字点不准时的「按 id 点」（#1362）。
+
+    选择器找不到控件时读屏库抛 not-found，三种收场：`optional` 当没这回事继续走；
+    带 `miss_print` 的段打一句、这一段到此为止（与 `require_entry` 同档）；都不写就照原样上抛，
+    这一段按未完成收场。"""
+    selectors: dict[str, Any] = {}
+    if "resource_id" in op:
+        selectors["resourceId"] = op["resource_id"]
+    if "text" in op:
+        selectors["text"] = op["text"]
+    target = p.d(**selectors)
+    if not op.get("optional") and "miss_print" not in op:
+        target.click()
+        return
+    from fast import u2          # 顶层导入会把 adbutils / uiautomator2 拖进只装载数据的调用方
+    try:
+        target.click()
+    except u2.exceptions.UiObjectNotFoundError:
+        if op.get("optional"):
+            return
+        print(op["miss_print"], flush=True)
+        raise _Abort from None
+
+
+def _gesture(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
+    """纯相对坐标手势：两端按屏宽 / 屏高的比例现算（截断取整），下发一条 `input swipe`（#1362）。
+
+    只收比例。按读到的控件位置现算坐标属「坐标算法」，仍在例外 `.py` 里。"""
+    start, end = op["start"], op["end"]
+    x1, y1 = int(p.W * start[0]), int(p.H * start[1])
+    x2, y2 = int(p.W * end[0]), int(p.H * end[1])
+    p.d.shell(f"input swipe {x1} {y1} {x2} {y2} {op['ms']}")
 
 
 def _dismiss(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
@@ -559,6 +639,8 @@ _HANDLERS: dict[str, Callable[[Mapping, Any, Any, dict[str, Any]], None]] = {
     "close_listed": _close_listed,
     "require_go": _require_go,
     "tap": _tap,
+    "tap_id": _tap_id,
+    "gesture": _gesture,
     "go": _go,
     "dismiss": _dismiss,
     "skip_in_safe_mode": _skip_in_safe_mode,
@@ -571,4 +653,7 @@ _HANDLERS: dict[str, Callable[[Mapping, Any, Any, dict[str, Any]], None]] = {
     "if_lib_any": _if_lib_any,
     "if_setting": _if_setting,
     "require_expect": _require_expect,
+    "let": _let,
+    "if_var": _if_var,
+    "require_switches": _require_switches,
 }

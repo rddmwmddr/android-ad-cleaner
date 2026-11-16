@@ -4,13 +4,55 @@
 跨家族用到的实现不放在这里，见 `recipe_lib/shared.py`。
 """
 
+import re
+
 from polarity import want_state
 from recipe_lib.shared import tap
 from row import bounds
 
-__all__ = ('baidu_browser', 'close_named_honor', 'no_agreement', 'scan_switches')
+__all__ = ('baidu_browser', 'browser_gear', 'close_named_honor', 'launch', 'no_agreement',
+           'scan_switches', 'search_more', 'settle_page', 'wait_home')
 
 # ---------- 词汇 ----------
+def launch(p, rt, activity, app):
+    """按 Activity 拉起 App 并等首页画出来（CLE-AN00 的浏览器 / 主题）。"""
+    pkg = activity.split("/", 1)[0]
+    p.app = pkg
+    p.promoted.clear()
+    p.d.shell(f"am start -f 0x10008000 -n {activity}")
+    for _ in range(20):
+        if p.focus().split("/", 1)[0] == pkg and p.has_text():
+            return
+        rt.clock.sleep(0.5)
+    raise RuntimeError(f"{app}没有打开")
+
+def wait_home(p, rt, app):
+    """等首页的底栏「我的」出现：协议框不关、只跳过（CLE-AN00）。"""
+    for _ in range(10):
+        no_agreement(p, rt, app)
+        if p.find("我的", edge_ok="tab"):
+            break
+        rt.clock.sleep(0.5)
+    for _ in range(4):
+        rt.clock.sleep(0.5)
+        no_agreement(p, rt, app)
+
+def browser_gear(p, rt):
+    """点右上角那个「设置」齿轮：按控件 bounds 现算中心点（CLE-AN00 的浏览器）。"""
+    for _ in range(12):
+        icons = [n for n in p.tree().iter("node")
+                 if n.get("clickable") == "true" and p.on_screen(n)
+                 and bounds(n)[3] < p.H * 0.15 and bounds(n)[0] > p.W * 0.5
+                 and re.search(r"设置|setting",
+                               (n.get("content-desc") or "") + (n.get("resource-id") or ""), re.I)]
+        if len(icons) == 1:
+            left, top, right, bottom = bounds(icons[0])
+            p.click((left + right) // 2, (top + bottom) // 2)
+            rt.clock.sleep(1.2)
+            return
+        rt.clock.sleep(0.4)
+    raise RuntimeError("浏览器设置齿轮没找到")
+
 def _honor_my_tab(p, rt, app):
     """底栏可能被晚到的弹窗盖住（阅读开屏广告之后才弹「发现新版本」）：关掉再找。
 
@@ -164,3 +206,24 @@ def close_named_honor(p, rt, names, title, package, marker, max_screens=6, drawn
         print(f"  · {title}：已回读 {len(wanted)} 项", flush=True)
     finally:
         p.switches = native
+
+def search_more(p, rt, miss_print):
+    """点搜索框旁的「更多」：按读到的位置现算坐标（页面顶部那个「更多」是别的东西，#1363）。
+
+    只有 tp > 0.3H 的那个才算；第一次没读到先按一次返回键再读（开屏推广页会盖住它），
+    两次都没有按这一段失败，文案由调用方给。"""
+    def more_at():
+        for t, (l, tp, r, b), _n in p.texts():
+            if t == "更多" and tp > p.H * 0.3:
+                return (l + r) // 2, (tp + b) // 2
+        return None
+
+    xy = more_at()
+    if not xy:
+        p.d.press("back")
+        rt.clock.sleep(0.5)
+        xy = more_at()
+    if not xy:
+        raise RuntimeError(miss_print)
+    p.click(*xy)
+    rt.clock.sleep(0.6)

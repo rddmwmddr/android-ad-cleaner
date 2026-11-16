@@ -4,19 +4,46 @@
 # 与 18 系列（OS4）的差异：系统广告的「更多安全设置」在「隐私与安全 → 安全」页里；
 # 浏览器个性化推荐是独立 Activity；手机管家没有独立「隐私设置」入口项，需滚到页面底部。
 # 用法：python3 tool/run.py -s 序列号 recipe [段名…]   不带段名=全跑
-# 2026-11-14 转页面树（#1266）：手机管家、主题、浏览器、天气和日历落成导航数据；系统广告的重试轮、
-# 商店的运行时分岔与全局搜索的榜单候选留在同名 `.py` 的 `code =`。
+# 2026-11-14 转页面树：手机管家、主题、浏览器、天气、日历、应用商店落成导航数据；全局搜索的榜单
+# 候选留在同名 `.py` 的 `code =`。
 model = "2304FPN6DC"
 models = ["2304FPN6DC", "23116PN5BC"]
 build = "OS3.0.308"
 
 [[segment]]
 name = "系统广告"
-code = "step_system_ads"
+ops = [
+  # 这台机隐私页首屏没有「更多安全设置」，要先切顶部的「安全」标签（见开头与 18 系列的差异）。
+  {kind = "if_lib", name = "system_ads_menu", kwargs = {security_tab_first = true}, ops = [
+    {kind = "off", only = ["个性化广告推荐"], page = "系统·广告服务"},
+  ]},
+]
 
 [[segment]]
 name = "应用商店"
-code = "step_store"
+ops = [
+  {kind = "start", pkg = "com.xiaomi.market"},
+  {kind = "require_tab", name = "我的", miss_print = "应用商店底部「我的」未找到"},
+  {kind = "require_entry", text = "设置", scrolls = 10, miss_print = "应用商店设置入口未找到"},
+  {kind = "if_entry", text = "通知设置", ops = [
+    # 只关「新手帮助」。不碰「推送消息」：它是父开关，关了会连点赞/评论消息一起关。
+    {kind = "off", only = ["新手帮助"], keep = ["推送消息", "应用更新"], page = "商店·通知设置"},
+    {kind = "back"},
+  ]},
+  {kind = "if_lib", name = "tap_any", args = ["隐私设置", "隐私"], ops = [
+    # 「个性化服务」在新版本是子页入口、老版本开关就在本页：按运行时读到的位置分岔。
+    {kind = "if_lib", name = "store_privacy_nested", ops = [
+      {kind = "if_lib", name = "store_privacy_sub", ops = [
+        {kind = "off", only = ["个性化服务"], page = "商店·个性化服务"},
+        {kind = "back"},
+      ]},
+    ], else_ops = [
+      {kind = "off", only = ["个性化服务"], page = "商店·个性化服务"},
+    ]},
+    {kind = "back"},
+  ]},
+  {kind = "back", n = 2},
+]
 
 [[segment]]
 name = "手机管家"
@@ -83,6 +110,7 @@ ops = [
 
 [[segment]]
 name = "全局搜索"
+# 裁决：「循环」。榜单子页按屏上读到的分类现算再逐个进
 code = "step_global_search"
 
 [[segment]]

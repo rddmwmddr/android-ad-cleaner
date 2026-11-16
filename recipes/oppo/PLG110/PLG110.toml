@@ -18,10 +18,12 @@ SYSTEM_SETTINGS_STYLE = "shell"
 
 [[segment]]
 name = "广告跟踪"
+# 裁决：「按读到的开关收窄名单」。读回 60 屏开关，整表关再回读核对
 code = "step_ad_tracking"
 
 [[segment]]
 name = "软件商店"
+# 裁决：「按读到的开关收窄名单」。服务管理这页只关名单里真有的那些，其余保留
 code = "step_store"
 
 [[segment]]
@@ -81,10 +83,12 @@ ops = [
 
 [[segment]]
 name = "游戏中心"
+# 裁决：「循环」。双层循环逐个点名开屏与引导弹窗
 code = "step_game_center"
 
 [[segment]]
 name = "小布建议"
+# 裁决：「按读到的状态收窄」。相邻两行配对判断「资讯服务 未开启」
 code = "step_advice"
 
 [[segment]]

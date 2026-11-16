@@ -10,7 +10,7 @@ import sys
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -176,8 +176,87 @@ class Android17RecipeTests(unittest.TestCase):
         p.start = Mock(side_effect=[RuntimeError("Error type 3: Activity class does not exist"), None])
         self.load(p, ["应用商店"])
         self.assertEqual(p.start.call_args_list[1].args, ("com.bbk.appstore",))
-        self.assertEqual(p.start.call_args_list[1].kwargs, {"expect": ("我的",)})
+        self.assertEqual(p.start.call_args_list[1].kwargs, {"expect": ["我的"]})
         p.tab.assert_any_call("我的")
+
+
+AD_PAGE_SWITCHES = ["个性化广告", "个性化推荐", "智能推荐服务"]
+
+
+def run(segment, answers=None):
+    """跑一段数据：库助手换成桩，`answers` 给返回值；`off` 也记进 calls，按真实顺序排。"""
+    import catalog.interpreter as interpreter
+    p = phone_mock(W=1080, H=2400)
+    p.locked.return_value = False
+    p.focus.return_value = "com.vivo.settings/.Settings"
+    p.back.return_value = None
+    p.entry.return_value = True
+    p.find.return_value = True
+    names = ("direct_page", "system_ads_branch", "global_search_entry", "lock_screen_magazine")
+    calls = []
+    values = {name: True for name in names}
+    values.update(answers or {})
+
+    def recorder(name):
+        def record(phone, rt, *args, **kwargs):
+            calls.append((name, args, kwargs))
+            return values[name]
+        return record
+
+    p.off.side_effect = lambda **kwargs: calls.append(("off", (), kwargs)) or 0
+    with patch.dict(interpreter.LIBRARY, {name: recorder(name) for name in names}):
+        scope, out = load_recipe(p, RECIPE, [segment])
+    return calls, p, scope, out
+
+
+class DirectFirstSegmentTests(unittest.TestCase):
+    """直达优先的四段（#1366；系统广告 / 全局搜索 / 应用商店沿用 #1365）：直达通了走直达那一支，不通才交给菜单走法。"""
+
+    def test_the_ad_page_is_opened_directly_and_the_menu_branch_is_skipped(self):
+        calls, _p, scope, _out = run("系统广告")
+        self.assertEqual(calls, [
+            ("direct_page", ("com.android.settings", ".Settings$AdAndPrivacyActivityForOsTwo"),
+             {"expect": "智能推荐服务"}),
+            ("off", (), {"only": AD_PAGE_SWITCHES, "page": "系统·广告与隐私"}),
+        ])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+
+    def test_a_missing_ad_page_falls_back_to_the_settings_menu(self):
+        calls, _p, _scope, _out = run("系统广告", {"direct_page": False})
+        self.assertEqual([name for name, _args, _kwargs in calls],
+                         ["direct_page", "system_ads_branch"])
+
+    def test_the_search_settings_page_is_opened_directly_and_its_three_subpages_are_closed(self):
+        calls, _p, scope, _out = run("全局搜索")
+        self.assertEqual(calls, [
+            ("global_search_entry", ("com.vivo.globalsearch", ".view.SearchSettingsActivity",
+                                     "首页展示内容"), {}),
+            ("off", (), {"only": ["搜索框推荐词", "推荐卡片"], "page": "全局搜索·首页展示内容"}),
+            ("off", (), {"only": ["热门搜索"], "page": "全局搜索·热搜榜单"}),
+            ("off", (), {"only": ["广告个性化"], "page": "全局搜索·个性化内容"}),
+        ])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+
+    def test_neither_the_direct_page_nor_the_menu_being_found_ends_the_segment(self):
+        calls, _p, scope, _out = run("全局搜索", {"global_search_entry": False})
+        self.assertEqual([name for name, _args, _kwargs in calls], ["global_search_entry"])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+
+    def test_the_lock_screen_page_is_opened_directly_and_closed(self):
+        # 阅图锁屏页是独立 Activity，直达最稳（#1366）
+        calls, _p, scope, _out = run("阅图锁屏")
+        self.assertEqual(calls, [
+            ("direct_page", ("com.vivo.magazine", ".ui.MagazineSettings"),
+             {"expect": "锁屏横滑进入阅图"}),
+            ("off", (), {"only": ["阅图锁屏", "锁屏横滑进入阅图"], "page": "阅图锁屏"}),
+        ])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+
+    def test_a_missing_lock_screen_page_falls_back_to_the_settings_menu(self):
+        # 没导出这一页的版本退回 设置 → 桌面、锁屏与壁纸 → 锁屏设置
+        calls, _p, _scope, _out = run("阅图锁屏", {"direct_page": False})
+        self.assertEqual([name for name, _args, _kwargs in calls],
+                         ["direct_page", "lock_screen_magazine"])
 
 
 if __name__ == "__main__":

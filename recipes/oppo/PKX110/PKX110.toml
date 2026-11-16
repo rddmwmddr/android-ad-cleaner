@@ -15,7 +15,16 @@ TAP_PAGE_STYLE = "tuple"
 
 [[segment]]
 name = "广告跟踪"
-code = "step_ad_tracking"
+ops = [
+  {kind = "skip_in_safe_mode"},
+  {kind = "shell", command = "am start -f 0x10008000 -a android.settings.SETTINGS"},
+  {kind = "sleep", seconds = 1.2},
+  {kind = "return_lib", name = "tap_page", args = ["隐私", "com.oplusos.securitypermission.privacy.PrivacySettingsDashboardActivity", "隐私"]},
+  {kind = "return_lib", name = "tap_page", args = ["设备标识与广告", "OplusSettingsActivity$DevicesIdentifySettingsActivity", "设备标识与广告"]},
+  {kind = "if_find", text = "重置设备标识符", exact = true, else_ops = [{kind = "return", value = false}]},
+  {kind = "return_lib", name = "tap_page", args = ["广告跟踪", "com.oplus.settings.feature.notification.oaid.OAIDActivity", "广告跟踪"]},
+  {kind = "return_lib", name = "ad_tracking_close_paged"},
+]
 
 [[segment]]
 name = "软件商店·服务管理"
@@ -52,4 +61,5 @@ ops = [
 
 [[segment]]
 name = "小布建议"
+# 裁决：「按读到的状态收窄」。相邻两行配对判断「资讯服务 已卸载 / 未开启」
 code = "step_advice"

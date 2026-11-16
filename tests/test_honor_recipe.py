@@ -2,8 +2,10 @@
 
 假页面只断言「点了哪个节点、落点验过没有、失败时有没有乱点」，不断言打印的中文文案。
 """
+import io
 from pathlib import Path
 import sys
+import tomllib
 import unittest
 from unittest.mock import MagicMock, Mock
 
@@ -20,6 +22,13 @@ RECIPE = ROOT / "recipes/honor/PNM-AN10/PNM-AN10.toml"
 def load(phone, only=("__no_steps__",)):
     scope, _ = load_recipe(phone, RECIPE, only)
     return scope
+
+
+def load_out(phone, only=("__no_steps__",)):
+    """跑完指定段，连打印一起交回来（跳过的原因、失败出口的文案都在输出里）。"""
+    out = io.StringIO()
+    scope, _ = load_recipe(phone, RECIPE, only, out=out)
+    return scope, out.getvalue()
 
 
 def phone():
@@ -167,10 +176,118 @@ class HonorThemeTests(unittest.TestCase):
                          ["主题·通知", "主题·个性化服务"])
 
 
+class HonorAdTrackingTests(unittest.TestCase):
+    """「广告跟踪」段（#1372）：直达广告与隐私页，不通才退回设置搜索与三层菜单。
+
+    段体从 `code=` 搬进数据之后，这几条钉的是「走哪一支、按什么顺序、哪一步算失败」；
+    旧树也绿（`step_ad_tracking` 同一套顺序），守的是搬家过程中调用顺序与实参没变。"""
+
+    PKG = "com.hihonor.id"
+    PAGE = ".oaid.ui.AdvertisingPrivacyActivity"
+
+    def tracking_phone(self, **over):
+        p = phone()
+        p.start.return_value = None
+        p.setting.return_value = False
+        p.tap.return_value = True
+        p.find.return_value = None
+        for key, value in over.items():
+            setattr(p, key, value)
+        return p
+
+    def direct_fails(self, pkg, activity=None, **kw):
+        """只有直达广告与隐私页这一条失败；同段后面拉智能推荐服务页照常。"""
+        if activity == self.PAGE:
+            raise RuntimeError("启动后停在非预期页面")
+
+    def timeline(self, p):
+        """把 shell 与点按记进同一条时间线（两处替身各记各的，看不出先后）。"""
+        order = []
+
+        def tapped(text, **kw):
+            order.append(("tap", text))
+            return True
+
+        def shelled(command, **kw):
+            order.append(("shell", command))
+
+        p.tap.side_effect = tapped
+        p.d.shell.side_effect = shelled
+        return order
+
+    def test_the_direct_page_is_used_first_and_the_menu_is_not_walked(self):
+        p = self.tracking_phone()
+        scope, _out = load_out(p, ["广告跟踪"])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        p.start.assert_any_call(self.PKG, self.PAGE, expect="应用广告跟踪管理")
+        p.setting.assert_not_called()
+        p.d.shell.assert_not_called()
+        self.assertEqual([c.args[0] for c in p.tap.call_args_list],
+                         ["更多选项", "全部关闭"])
+
+    def test_a_dead_direct_page_falls_back_to_the_settings_search_only(self):
+        """直达不通、设置搜索命中：不进三级菜单，直接接后半段。"""
+        p = self.tracking_phone()
+        p.start.side_effect = self.direct_fails
+        p.setting.return_value = True
+        scope, _out = load_out(p, ["广告跟踪"])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        p.setting.assert_called_once_with("广告", "广告与隐私")
+        p.d.shell.assert_not_called()
+        self.assertEqual([c.args[0] for c in p.tap.call_args_list],
+                         ["更多选项", "全部关闭"])
+
+    def test_a_failed_search_walks_the_three_level_menu_in_order(self):
+        """直达与设置搜索都不通：拉起设置页、清落空计数，再按三个精确点按进「广告与隐私」。"""
+        p = self.tracking_phone()
+        p.start.side_effect = self.direct_fails
+        order = self.timeline(p)
+        scope, _out = load_out(p, ["广告跟踪"])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        self.assertEqual(order[:4], [
+            ("shell", "am start -f 0x10008000 -a android.settings.SETTINGS"),
+            ("tap", "隐私和安全"), ("tap", "其他隐私和安全功能"), ("tap", "广告与隐私")])
+        self.assertTrue(all(c.kwargs == {"exact": True} for c in p.tap.call_args_list[:3]))
+        self.assertEqual([c.args[0] for c in p.tap.call_args_list[3:]],
+                         ["更多选项", "全部关闭"])
+
+    def test_a_missing_menu_entry_fails_the_segment_and_stops_tapping(self):
+        """三级菜单第一下就点不到：整段记未完成，后面两级不再点（与旧码的短路 `and` 同形）。"""
+        p = self.tracking_phone()
+        p.start.side_effect = self.direct_fails
+        p.tap.side_effect = lambda text, **kw: text != "隐私和安全"
+        scope, printed = load_out(p, ["广告跟踪"])
+        self.assertEqual(scope["FAILED_STEPS"], ["广告跟踪"])
+        self.assertIn("没找到「广告与隐私」入口", printed)
+        self.assertEqual([c.args[0] for c in p.tap.call_args_list], ["隐私和安全"])
+        p.off.assert_not_called()
+
+    def test_safe_mode_skips_before_touching_the_phone(self):
+        p = self.tracking_phone()
+        p.safe_mode = True
+        scope, printed = load_out(p, ["广告跟踪"])
+        self.assertEqual(scope["SKIPPED_STEPS"], ["广告跟踪"])
+        self.assertIn("安全模式", printed)
+        p.start.assert_not_called()
+        p.d.shell.assert_not_called()
+
+    def test_the_segment_is_page_tree_data(self):
+        """段体从 `code=` 搬进页面树（#1372）；旧树这一段还是 `code = "step_ad_tracking"`。"""
+        data = tomllib.loads(RECIPE.read_text(encoding="utf-8"))
+        segment = next(s for s in data["segment"] if s["name"] == "广告跟踪")
+        self.assertNotIn("code", segment)
+        self.assertEqual(segment["ops"][0], {"kind": "skip_in_safe_mode"})
+        direct = next(op for op in segment["ops"] if op.get("name") == "direct_start")
+        self.assertEqual(direct["kind"], "if_lib")
+        self.assertEqual(direct["args"], [self.PKG, self.PAGE])
+        # 直达不通那一支先试设置搜索，搜索也不通才走三级菜单。
+        self.assertEqual(direct["else_ops"][0]["kind"], "if_setting")
+
+
 class HonorMusicTests(unittest.TestCase):
     def music_phone(self):
         p = phone()
-        p.d = MagicMock()          # resourceId(...)[2].click() 要能下标
+        p.d = MagicMock()          # `tap_id` 走 p.d(**选择器).click()
         return p
 
     def test_music_entries_are_opened_with_page_change_confirmation(self):
@@ -183,6 +300,16 @@ class HonorMusicTests(unittest.TestCase):
         self.assertEqual([c.kwargs.get("only") for c in p.off.call_args_list], [["朋友页显示推荐动态"], None])
         self.assertEqual([c.kwargs.get("page") for c in p.off.call_args_list],
                          ["音乐·消息和隐私", "音乐·第三方推送（活动、中奖信息）"])
+
+    def test_music_taps_the_drawer_and_settings_gear_by_selector(self):
+        """「音乐」段的两个入口靠 u2 选择器直点：先按文字开抽屉，再按资源 id 开设置（#1362）。
+
+        段体从 `code=` 搬进数据，调用不变：旧树也绿，守的是 `tap_id` 的选择器与顺序不回退。"""
+        p = self.music_phone()
+        load(p, ["音乐"])
+        self.assertEqual([c.kwargs for c in p.d.call_args_list],
+                         [{"text": "我的"}, {"resourceId": "com.hihonor.cloudmusic:id/ic_setting"}])
+        self.assertEqual(p.d.return_value.click.call_count, 2)
 
     def test_missing_privacy_menu_skips_the_section_without_blind_scrolling(self):
         """「更多设置」页里没有该菜单时：留下停在哪一页就跳过，脚本自己不另起一套盲点。"""

@@ -573,6 +573,18 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
     from catalog.schema import NO_FACT_KINDS      # 延迟 import：只在投影时加载，import 本模块不被牵连
     lines: list[str] = []
 
+    def lower_args(op: Mapping[str, Any]) -> None:
+        """实参里的 `{ops = [...]}`（`close_named(..., reopen=…)` 的回调块）照样要读（#1371）。
+
+        重进页面的那几步本身就是入口事实（`am start` / `p.enter`）；不走进这块，这台机的入口速查
+        与词库会静默少几条。"""
+        args, kwargs = op.get("args"), op.get("kwargs")
+        values = (args if isinstance(args, list) else []) + (
+            list(kwargs.values()) if isinstance(kwargs, Mapping) else [])
+        for value in values:
+            if isinstance(value, Mapping) and "ops" in value:
+                lower(value["ops"])
+
     def lower(ops: Sequence[Any]) -> None:
         for op in ops:
             if not isinstance(op, Mapping):
@@ -618,11 +630,13 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 if "systemui_text" in op:
                     lines.append(f"p.systemui_text = {op['systemui_text']!r}")
                 lower(op.get("ops", []))
-            elif kind in ("if_find", "if_entry", "if_lib", "if_lib_any", "if_focus", "if_tap"):
+            elif kind in ("if_find", "if_entry", "if_lib", "if_lib_any", "if_focus", "if_tap",
+                          "if_var"):
                 # 带条件分支的 op：两支里的 off / 入口调用一样要读出来，否则词与入口会静默丢（#1263）。
                 if kind == "if_lib":
                     args = ", ".join(_s(a) for a in op.get("args", []))
                     lines.append(f"{op['name']}(p, rt, {args})" if args else f"{op['name']}(p, rt)")
+                    lower_args(op)
                 elif kind == "if_lib_any":
                     # 短路的每个助手都调得到：漏一个，入口归属就少一条（#1267）。
                     for call in op.get("calls", []):
@@ -631,12 +645,16 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                             lines.append(f"p.{call['method']}({args})")
                         else:
                             lines.append(f"{call['name']}(p, rt, {args})" if args else f"{call['name']}(p, rt)")
+                        lower_args(call)
                 lower(op.get("ops", []))
                 lower(op.get("else_ops", []))
-            elif kind in ("lib", "require_lib", "code", "return_lib"):
-                # 用数据里写得出的真实名字（不折回 close_named），归属才查得准（#1263）。
+            elif kind in ("lib", "require_lib", "code", "return_lib", "let"):
+                # 用数据里写得出的真实名字（不折回 close_named），归属才查得准（沿用 #1263）。`let` 点名的
+                # 实现写在 `lib` 上，`name` 是它绑定的段内名字（#1373）——绑定的名字不进事实层。
+                called = op["lib"] if kind == "let" else op["name"]
                 args = ", ".join(_s(a) for a in op.get("args", []))
-                lines.append(f"{op['name']}(p, rt, {args})" if args else f"{op['name']}(p, rt)")
+                lines.append(f"{called}(p, rt, {args})" if args else f"{called}(p, rt)")
+                lower_args(op)
             elif kind == "close_listed":
                 # 候选名单是「这一页要关掉这些名字」，按 `close_named(名单, 页)` 投影进事实层：
                 # 词库按 close 那一类读得出这些字面量（旧脚本里 `names` 是运行期变量，读不出，#1265）。
@@ -665,7 +683,7 @@ def library_sources() -> dict[str, tuple[str, str]]:
     """机型库数据可调用的实现：{名字: (归属模块, 源码)}。
 
     名字全局唯一，直接定位实现，不再按脚本 import 做归属解析（沿用 #1268）。实现按家族住在
-    `recipe_lib/<家族>.py` / `recipe_lib/shared.py`，`LIBRARY` 就是那 140 个数据可点名的名字
+    `recipe_lib/<家族>.py` / `recipe_lib/shared.py`，`LIBRARY` 就是那些数据可点名的名字
     （ADR-0040）；归属写函数真正的 `__module__`（`recipe_lib.shared` 等）。
     词库与入口速查拿它扫实现里的字面量。结果是进程内常量，缓存起来：`inspect.getsource` 很慢，
     一次全量回归会调上千次（#1307）。返回值按只读共享，调用方改了它这份缓存就脏了。

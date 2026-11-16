@@ -332,6 +332,14 @@ class SearchTest(unittest.TestCase):
         self.assertEqual(scope["FAILED_STEPS"], [])
         p.d.press.assert_called_once_with("back")
 
+    def test_missing_more_fails_with_the_message_the_data_gives(self):
+        """旧树也绿，守的是不回退：两处都读不到「更多」时这一段按失败收场，文案来自数据。"""
+        p = phone()
+        p.texts.return_value = []
+        scope, out = run(p, "搜索")
+        self.assertEqual(scope["FAILED_STEPS"], ["搜索"])
+        self.assertIn("搜索框旁的「更多」没找到", out)
+
 
 class MinusOneTest(unittest.TestCase):
     def test_background_screen_skips_with_manual_steps(self):

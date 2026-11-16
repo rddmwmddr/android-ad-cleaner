@@ -42,6 +42,7 @@ ops = [
 
 [[segment]]
 name = "浏览器"
+# 裁决：「按读到的状态收窄」。读回文字判断主页是标准版还是极简版，切换后再回读
 code = "step_browser"
 
 [[segment]]

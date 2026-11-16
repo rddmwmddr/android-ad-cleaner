@@ -1,6 +1,7 @@
 # 荣耀 PNM-AN10（MagicOS 10）的本机例外函数（catalog 的 `code=`，影随同名 `.toml`）。
-# 共享库的 browser_settings / open_settings / skip_in_safe_mode / SkipStep 由装载器注入执行作用域。
-# 线性段已转成 `.toml` 数据；这里只留过程化的段（坐标、选择器、dumpsys、条件分支）与两个助手。
+# 共享库的 browser_settings / SkipStep 由装载器注入执行作用域。
+# 线性段已转成 `.toml` 数据；这里只留过程化的段（坐标、dumpsys、条件分支）与四个助手
+# （`dismiss` / `dismiss_no` / `open_entry` / `close_all_oaid`，后两个由数据按名字调用）。
 import adb_link
 import time
 from fast import ScreenLocked
@@ -43,51 +44,12 @@ def open_entry(p, rt, text, scrolls=0):
     return True
 
 
-def step_ad_tracking(p, rt):
-    rt.skip_in_safe_mode()
-    try:
-        p.start("com.hihonor.id", ".oaid.ui.AdvertisingPrivacyActivity", expect="应用广告跟踪管理")
-    except (adb_link.DeviceLost, ScreenLocked, SkipStep):
-        raise
-    except RuntimeError:
-        if not p.setting("广告", "广告与隐私"):
-            p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
-            p.miss = 0
-            if not (p.tap("隐私和安全", exact=True) and p.tap("其他隐私和安全功能", exact=True)
-                    and p.tap("广告与隐私", exact=True)):
-                raise RuntimeError("没找到「广告与隐私」入口") from None
-    p.tap("更多选项", scrolls=0)
-    if p.find("显示系统程序", exact=True):
-        p.tap("显示系统程序", exact=True, scrolls=0)
-        p.tap("更多选项", scrolls=0)
+def close_all_oaid(p, rt):
+    """点这一页的「全部关闭」并把确认框收掉；编排语义，留在本机例外函数里（ADR-0038）。
+
+    与 CLE-AN00 的同名走法不同：本机的列表页一定有这个按钮，点不到也不退回上一页。"""
     p.tap("全部关闭", exact=True, scrolls=0)
     p.confirm()
-    p.start("com.hihonor.id", ".oaid.ui.IntelligentRecommendActivity", settle=0.5)
-    p.off(page="广告与隐私·智能推荐服务")
-
-
-def step_search(p, rt):
-    p.start("com.hihonor.search", ".feature.mainpage.presentation.page.HomeActivity", expect="更多")
-
-    def more_at():
-        for t, (l, tp, r, b), _n in p.texts():
-            if t == "更多" and tp > p.H * 0.3:
-                return (l + r) // 2, (tp + b) // 2
-        return None
-
-    xy = more_at()
-    if not xy:
-        p.d.press("back"); time.sleep(0.5)
-        xy = more_at()
-    if not xy:
-        raise RuntimeError("找不到搜索框旁的「更多」")
-    p.click(*xy); time.sleep(0.6)
-    p.tap("设置", exact=True, scrolls=0)
-    p.tap("首页显示", exact=True)
-    p.off(only=["热搜榜", "热搜词推荐"], page="搜索·首页显示")
-    p.back()
-    p.tap("个性化管理", exact=True)
-    p.off(page="搜索·个性化管理")
 
 
 def step_negative(p, rt):
@@ -148,41 +110,6 @@ def step_browser(p, rt):
     p.back()
     p.tap("互动广告管理", exact=True, scrolls=0)
     p.off(page="浏览器·互动广告")
-    p.back(3)
-
-
-def step_theme(p, rt):
-    rt.skip_in_safe_mode()
-    p.start("com.hihonor.android.thememanager")
-    p.dismiss()
-    if not p.tab("我的"):
-        p.tap("我的", exact=True, scrolls=0)
-    p.dismiss()
-    if not nav.open_settings(p, rt, ("个性化服务", "通知")):
-        p.note_miss("设置")
-        return
-    p.enter("通知")
-    p.off(page="主题·通知")
-    p.back()
-    p.enter("个性化服务")
-    p.off(page="主题·个性化服务")
-    p.back(3)
-
-
-def step_music(p, rt):
-    p.d.app_stop("com.hihonor.cloudmusic")
-    p.start("com.hihonor.cloudmusic")
-    time.sleep(1); p.dismiss()
-    p.d(text="我的").click(); time.sleep(1); p.dismiss()
-    p.d(resourceId="com.hihonor.cloudmusic:id/ic_setting").click(); time.sleep(1.2)
-    if not open_entry(p, rt, "更多设置"):
-        return
-    if not open_entry(p, rt, "消息和隐私设置", scrolls=6):
-        return
-    p.off(only=["朋友页显示推荐动态"], page="音乐·消息和隐私")
-    if not open_entry(p, rt, "第三方推送服务开关", scrolls=6):
-        return
-    p.off(page="音乐·第三方推送（活动、中奖信息）")
     p.back(3)
 
 

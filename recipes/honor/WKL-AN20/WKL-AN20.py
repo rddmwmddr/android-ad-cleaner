@@ -1,7 +1,7 @@
 # 荣耀 WKL-AN20 的本机例外函数与钩子（catalog 的 `code=`，影随同名 `.toml`）。
 # 共享库的 tap / app_settings / browser_settings / close_named / require / skip 由装载器注入执行作用域。
-# 线性段已转成 `.toml` 数据；这里只留过程化的段（safe_ui 坐标手势、settle_page+radio 单选组、
-# 条件分支）与模块级钩子，逐字保留原实现。
+# 线性段已转成 `.toml` 数据；这里只留过程化的段（safe_ui 坐标手势、radio 单选组）与模块级钩子，
+# 逐字保留原实现。
 import copy
 from contextlib import contextmanager
 import time
@@ -155,19 +155,6 @@ def step_browser_home(p, rt):
         p.changed.append(("浏览器·模式选择", "简洁首页"))
 
 
-def step_browser_recs(p, rt):
-    package = nav.browser_settings(p, rt)
-    nav.tap(p, rt, "消息通知")
-    strategies.close_named_honor(p, rt, ["精彩推荐", "每日推送", "新闻热点", "兴趣推送"], "浏览器·消息通知", package, "消息通知")
-    p.back()
-    nav.tap(p, rt, "隐私管理")
-    nav.tap(p, rt, "个性化推荐", scrolls=0)
-    strategies.close_named_honor(p, rt, ["个性化内容"], "浏览器·个性化推荐", package, "个性化推荐")
-    p.back()
-    nav.tap(p, rt, "互动广告管理", scrolls=0)
-    strategies.close_named_honor(p, rt, ["个性化广告", "允许摇一摇进入广告"], "浏览器·互动广告", package, "互动广告管理")
-
-
 def step_search(p, rt):
     p.d.press("home")
     time.sleep(.5)
@@ -200,24 +187,6 @@ def step_negative(p, rt):
     p.back()
     nav.tap(p, rt, "资讯服务", scrolls=0)
     strategies.close_named_honor(p, rt, ["资讯精选"], "负一屏·资讯服务", package, "资讯服务")
-
-
-def step_reader(p, rt):
-    package = "com.hihonor.dz.reader"
-    p.start(package)
-    rt.require(p.go("我的", "更多设置"), "未找到阅读设置入口")
-    nav.tap(p, rt, "更多设置")
-    nav.settle_page(p, rt, package, "广告推荐服务")
-    nav.tap(p, rt, "广告推荐服务", scrolls=0)
-    strategies.close_named_honor(p, rt, ["个性化广告"], "阅读·广告推荐服务", package, "广告推荐服务", drawn=True)
-
-
-def step_magazine(p, rt):
-    rt.require(p.setting("画报", "魔法画报"), "未搜到魔法画报")
-    if p.focus().split("/", 1)[0] != "com.hihonor.magazine":
-        nav.tap(p, rt, "魔法画报", scrolls=0)
-    strategies.close_named_honor(p, rt, ["锁屏壁纸轮播", "锁屏进入魔法画报", "数据流量自动更新"],
-                "魔法画报", "com.hihonor.magazine", "魔法画报")
 
 
 def step_music(p, rt):

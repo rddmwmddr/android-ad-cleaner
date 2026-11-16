@@ -1,5 +1,5 @@
 # vivo X300 Ultra（V2547A）页面树（catalog，#1263）。OriginOS 7 / Android 17，2026-10-25 真机 8 段整段跑通。
-# 这台 8 段都是过程段（goto / 循环 / confirm2 / resourceId 点击），走 code= 例外函数逐字保留。
+# 只剩 i管家一段（点「设置」的重试循环）走 code= 例外函数，其余七段都是数据。
 model = "V2547A"
 models = ["V2547A"]
 build = "PD2547B_A_17.1.10.2"
@@ -12,32 +12,195 @@ BROWSER_FLOW = "vivo_menu"
 
 [[segment]]
 name = "广告与隐私"
-code = "step_ad_privacy"
+ops = [
+  {kind = "if_lib", name = "search_setting", args = ["广告与隐私"], else_ops = [
+    {kind = "print", text = "  ✗ 没进到广告与隐私"},
+    {kind = "return"},
+  ], ops = [
+    {kind = "print", text = "  · 广告与隐私"},
+    # 「生活服务」推送建议不在本机型清单范围内，不动。
+    {kind = "lib", name = "off", kwargs = {only = ["个性化广告", "个性化推荐", "智能推荐服务"], page = "系统·广告与隐私"}},
+    {kind = "back", n = 1},
+  ]},
+]
 
 [[segment]]
 name = "负一屏"
-code = "step_negative"
+ops = [
+  {kind = "if_lib", name = "hiboard_panel_v2547a", else_ops = [
+    {kind = "print", text = "  ✗ 没滑到负一屏（桌面可能没开负一屏），跳过"},
+    {kind = "return"},
+  ], ops = [
+    {kind = "print", text = "  · 负一屏设置面板"},
+    {kind = "if_lib", name = "goto", args = ["更多设置"], ops = [
+      {kind = "if_lib", name = "goto", args = ["个性化推荐"], ops = [
+        {kind = "lib", name = "off", kwargs = {only = ["服务推荐", "资讯推荐"], page = "负一屏·个性化推荐"}},
+      ]},
+    ]},
+    # ⚠ 便捷生活里的「推荐服务」不要关：那 10 个图标（扫码、手电筒、计算器）都靠它补位，关了整块变空。
+    # 两个子页各自先回一次面板：回不去就收手，后面的名字也别再试（旧写法是 break）。
+    # 热点资讯页的标题会串成页标题，rows() 已按行还原真实标题；
+    # 悬浮/经典/卡片形态是单选钮，rows() 也排除了，不会被当开关拨。
+    {kind = "if_lib", name = "hiboard_panel_v2547a", else_ops = [
+      {kind = "print", text = "  ✗ 回不到负一屏设置面板"},
+    ], ops = [
+      {kind = "top"},
+      {kind = "if_lib", name = "goto", args = ["内容精选"], kwargs = {scrolls = 6}, ops = [
+        {kind = "lib", name = "off", kwargs = {only = ["内容精选"], page = "负一屏·内容精选"}},
+      ]},
+      {kind = "if_lib", name = "hiboard_panel_v2547a", else_ops = [
+        {kind = "print", text = "  ✗ 回不到负一屏设置面板"},
+      ], ops = [
+        {kind = "top"},
+        {kind = "if_lib", name = "goto", args = ["热点资讯"], kwargs = {scrolls = 6}, ops = [
+          {kind = "lib", name = "off", kwargs = {only = ["热点资讯"], page = "负一屏·热点资讯"}},
+        ]},
+      ]},
+    ]},
+    # 小V建议（航班、快递提醒）保留不动。
+    {kind = "back", n = 3},
+  ]},
+]
 
 [[segment]]
 name = "全局搜索"
-code = "step_global_search"
+ops = [
+  {kind = "start", pkg = "com.vivo.globalsearch", activity = ".view.SearchSettingsActivity", settle = 0.8},
+  {kind = "if_focus", text = "globalsearch", match = "contains", else_ops = [
+    {kind = "print", text = "  ✗ 没拉起全局搜索设置"},
+    {kind = "return"},
+  ], ops = [
+    {kind = "if_lib", name = "goto", args = ["首页展示内容"], ops = [
+      {kind = "lib", name = "off", kwargs = {only = ["搜索框推荐词", "推荐卡片"], page = "搜索·首页展示内容"}},
+      {kind = "if_lib", name = "goto", args = ["推荐热搜榜单"], kwargs = {scrolls = 4}, ops = [
+        {kind = "lib", name = "off", kwargs = {only = ["热门搜索"], page = "搜索·推荐热搜榜单"}},
+        {kind = "back", n = 1},
+      ]},
+      {kind = "back", n = 1},
+    ]},
+    {kind = "top"},
+    # 「搜索项」是搜索范围本身，不动；应用建议、搜索结果个性化保留。
+    {kind = "if_lib", name = "goto", args = ["个性化内容"], ops = [
+      {kind = "lib", name = "off", kwargs = {only = ["广告个性化"], page = "搜索·个性化内容"}},
+      {kind = "back", n = 1},
+    ]},
+    {kind = "back", n = 1},
+  ]},
+]
 
 [[segment]]
 name = "应用商店"
-code = "step_store"
+ops = [
+  {kind = "start", pkg = "com.bbk.appstore", settle = 1.0},
+  {kind = "if_lib", name = "tap_text", args = ["我的"], else_ops = [
+    {kind = "print", text = "  ✗ 没找到「我的」"},
+    {kind = "return"},
+  ], ops = [
+    {kind = "if_lib", name = "tap_text", args = ["设置"], else_ops = [
+      {kind = "print", text = "  ✗ 「我的」页没找到设置"},
+      {kind = "return"},
+    ], ops = [
+      {kind = "print", text = "  · 商店设置页 ", focus = true},
+      {kind = "if_lib", name = "goto", args = ["关于"], ops = [
+        {kind = "if_lib", name = "goto", args = ["个性化推荐"], ops = [
+          {kind = "lib", name = "off", kwargs = {only = ["个性化推荐"], page = "商店·个性化推荐"}},
+          {kind = "back", n = 1},
+          {kind = "sleep", seconds = 0.8},
+        ]},
+        {kind = "top"},
+        {kind = "if_lib", name = "goto", args = ["服务管理"], kwargs = {scrolls = 2}, ops = [
+          # 这一页用白名单：「我的服务」「空间清理」要留着
+          {kind = "lib", name = "off", kwargs = {only = ["签到有礼", "顶部轮播图", "顶部栏目", "开屏", "摇一摇", "悬浮窗", "限时推广"], keep = ["我的服务", "空间清理"], page = "商店·服务管理"}},
+          {kind = "back", n = 1},
+          {kind = "sleep", seconds = 0.8},
+        ]},
+        {kind = "back", n = 1},
+      ]},
+      {kind = "back", n = 3},
+    ]},
+  ]},
+]
 
 [[segment]]
 name = "浏览器"
-code = "step_browser"
+ops = [
+  {kind = "start", pkg = "com.vivo.browser", settle = 1.5},
+  {kind = "if_lib", name = "browser_settings", else_ops = [
+    {kind = "print", text = "  ✗ 没进到浏览器设置"},
+    {kind = "return"},
+  ], ops = [
+    {kind = "print", text = "  · 浏览器设置页 ", focus = true},
+    {kind = "if_lib", name = "goto", args = ["首页设置"], ops = [
+      # 三选一的卡片，不能点行中间
+      {kind = "if_tap", text = "极简首页", exact = true, scrolls = 0, ops = [
+        {kind = "lib", name = "confirm2"},
+        {kind = "print", text = "  · 首页切成极简首页"},
+      ]},
+      {kind = "back", n = 1},
+      {kind = "sleep", seconds = 0.6},
+      {kind = "top"},
+    ]},
+    # 每次都从顶部开始翻，位置才可预期（「更多设置」在设置页中段）。
+    {kind = "top"},
+    {kind = "if_lib", name = "goto", args = ["网页浏览设置"], kwargs = {scrolls = 10}, ops = [
+      {kind = "lib", name = "off", kwargs = {only = ["网页下载相关推荐"], page = "浏览器·网页浏览设置"}},
+      {kind = "back", n = 1},
+      {kind = "sleep", seconds = 0.6},
+    ]},
+    {kind = "top"},
+    {kind = "if_lib", name = "goto", args = ["更多设置"], kwargs = {scrolls = 10}, ops = [
+      {kind = "lib", name = "off", kwargs = {only = ["WiFi连接跳转新闻资讯"], page = "浏览器·更多设置"}},
+      {kind = "back", n = 1},
+      {kind = "sleep", seconds = 0.6},
+    ]},
+    {kind = "top"},
+    {kind = "if_lib", name = "goto", args = ["隐私权限设置"], kwargs = {scrolls = 10}, ops = [
+      {kind = "lib", name = "off", kwargs = {only = ["个性化内容", "第三方应用来源个性化推荐", "个性化广告推荐"], page = "浏览器·隐私权限设置"}},
+      {kind = "back", n = 1},
+      {kind = "sleep", seconds = 0.6},
+    ]},
+    {kind = "back", n = 3},
+  ]},
+]
 
 [[segment]]
 name = "阅图锁屏"
-code = "step_lock_screen"
+ops = [
+  {kind = "if_lib", name = "search_setting", args = ["阅图锁屏"], else_ops = [
+    {kind = "print", text = "  ✗ 没进到阅图锁屏"},
+    {kind = "return"},
+  ], ops = [
+    # 万一停在搜索结果页，再点一次结果
+    {kind = "if_focus", text = "MagazineSettings", match = "contains", else_ops = [
+      {kind = "tap", text = "阅图锁屏", exact = true, scrolls = 4},
+      {kind = "sleep", seconds = 1.5},
+    ]},
+    {kind = "print", text = "  · 阅图锁屏页 ", focus = true},
+    # 锁屏壁纸保持原样
+    {kind = "lib", name = "off", kwargs = {only = ["阅图锁屏", "锁屏横滑进入阅图"], keep = ["锁屏底部壁纸", "移动网络自动更新"], page = "系统·阅图锁屏"}},
+    {kind = "back", n = 2},
+  ]},
+]
 
 [[segment]]
 name = "i管家"
+# 裁决：「循环」。三轮点「设置」并确认落到 `MainSettings`
 code = "step_i_manager"
 
 [[segment]]
 name = "天气"
-code = "step_weather"
+ops = [
+  {kind = "start", pkg = "com.vivo.weather", settle = 1.2},
+  # 页面上也有个「更多」文字（展开按钮），右上角才是菜单，按 resourceId 点
+  {kind = "tap_id", resource_id = "com.vivo.weather:id/more_btn", miss_print = "  ✗ 没找到天气右上角的更多按钮"},
+  {kind = "sleep", seconds = 1.3},
+  {kind = "if_lib", name = "tap_text", args = ["设置"], else_ops = [
+    {kind = "print", text = "  ✗ 天气菜单里没找到设置"},
+    {kind = "return"},
+  ], ops = [
+    {kind = "print", text = "  · 天气设置页 ", focus = true},
+    # 气象预警、异常天气、地震预警、提醒城市都保留
+    {kind = "lib", name = "off", kwargs = {only = ["天气服务"], keep = ["气象预警", "异常天气", "地震预警"], page = "天气·设置"}},
+    {kind = "back", n = 2},
+  ]},
+]

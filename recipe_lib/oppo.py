@@ -11,7 +11,7 @@ from phone.errors import ScreenLocked
 from row import bounds
 from recipe_lib.shared import _style, app_settings, close_named, close_named_step, maybe, open_page, page_activity, read_switches, wait_page, wait_switches
 
-__all__ = ('ad_id_page', 'ad_tracking_close_all', 'assistant_advice_rows', 'assistant_advice_search', 'assistant_icon', 'assistant_screen', 'assistant_settings', 'at_assistant', 'browser_ads', 'browser_home', 'browser_personalized', 'browser_settings_direct', 'carousel_choices', 'close_all', 'close_all_listed', 'close_group', 'close_named_expect', 'close_named_optional', 'close_named_plain', 'close_rows', 'close_titles', 'enter_privacy', 'enter_settings', 'game_center_direct', 'game_center_taps', 'game_settings_direct', 'game_settings_entry', 'game_settings_via_mine', 'has_row', 'hide_carousel', 'menu_state', 'more_menu', 'navigate', 'off_exact', 'off_exact_paged', 'off_exact_paged_optional', 'open_app_settings', 'open_search_setting', 'open_search_settings', 'open_search_sub', 'open_switch_page', 'read_on_page', 'row', 'search_settings', 'search_settings_direct', 'search_settings_ready', 'search_settings_swipe', 'settings_page', 'store_privacy', 'store_promotions', 'system_settings', 'tap_by_scroll', 'tap_page', 'theme_shop_settings', 'theme_store_settings', 'video_direct', 'wait_search_settings')
+__all__ = ('ad_id_page', 'ad_tracking_close_all', 'ad_tracking_close_paged', 'assistant_advice_rows', 'assistant_advice_search', 'assistant_icon', 'assistant_screen', 'assistant_settings', 'assistant_swipe_in', 'at_assistant', 'browser_ads', 'browser_home', 'browser_personalized', 'browser_settings_direct', 'carousel_choices', 'close_all', 'close_all_listed', 'close_group', 'close_named_expect', 'close_named_optional', 'close_named_plain', 'close_rows', 'close_titles', 'enter_privacy', 'enter_settings', 'game_center_direct', 'game_center_taps', 'game_settings_direct', 'game_settings_entry', 'game_settings_via_mine', 'has_row', 'hide_carousel', 'menu_state', 'more_menu', 'navigate', 'off_exact', 'off_exact_paged', 'off_exact_paged_optional', 'open_app_settings', 'open_search_setting', 'open_search_settings', 'open_search_sub', 'open_switch_page', 'read_on_page', 'row', 'search_settings', 'search_settings_direct', 'search_settings_ready', 'search_settings_swipe', 'settings_page', 'store_privacy', 'store_promotions', 'system_settings', 'tap_by_scroll', 'tap_page', 'theme_shop_settings', 'theme_store_settings', 'video_direct', 'wait_search_settings')
 
 # ---------- 词汇 ----------
 def wait_search_settings(p, rt, tries=30):
@@ -438,6 +438,27 @@ def at_assistant(p, rt):
     if any(n.get("resource-id", "").endswith("head_icon") for n in root.iter("node")):
         return True
     return rt.constants['ASSISTANT_HOME'] <= {t for t, _, _ in p.texts(root)}
+
+def assistant_swipe_in(p, rt, text=None, exact_text=None):
+    """两次 HOME 回默认桌面，再从左侧右滑进负一屏，最多三次；进去了返回真。
+
+    ColorOS 15 的速览是独立窗口，看前台名里有没有 `assistantscreen` 就够了；ColorOS 17 把它内嵌
+    进桌面进程、焦点一直停在 launcher，只能按首页文案判（沿用 #901 对同一条判据的结论），文案由
+    数据传进来：`text` 按包含比、`exact_text` 按精确比——首页还有同名的按钮。两次 HOME 是因为
+    多主页时一次会停在中途，而 HOME 也可能正好落在负一屏。"""
+    p.d.shell("input keyevent HOME")
+    rt.clock.sleep(0.6)
+    p.d.shell("input keyevent HOME")
+    rt.clock.sleep(0.6)
+    for _ in range(3):
+        p.d.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250")
+        rt.clock.sleep(1.2)
+        if text:
+            if p.find(text) or p.find(exact_text, exact=True):
+                return True
+        elif "assistantscreen" in p.focus():
+            return True
+    return False
 
 def assistant_icon(p, rt):
     """回默认桌面、从左侧内侧右滑进负一屏，返回唯一的头像入口。
@@ -1006,6 +1027,21 @@ def ad_tracking_close_all(p, rt):
             p.back()                          # 菜单开了但没点成：收起后退回逐个关
     p.miss = 0
     p.off(page="广告跟踪", max_screens=40)
+
+def ad_tracking_close_paged(p, rt):
+    """等广告跟踪列表真正加载（只有标题的空白加载页不算）→ 回页顶 → 整页关 40 屏（#1363）。
+
+    列表一直没加载出来按未完成收场：这时候整页关只会空跑一遍。"""
+    for _ in range(30):
+        if p.switches():
+            break
+        rt.clock.sleep(0.2)
+    if not p.switches():
+        print("  ✗ 广告跟踪列表未加载", flush=True)
+        return False
+    p.top(n=16)
+    p.off(page="广告跟踪", max_screens=40)
+    return True
 
 def search_settings_swipe(p, rt):
     if not search_settings(p, rt):

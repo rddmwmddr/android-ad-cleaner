@@ -10,7 +10,30 @@ OPEN_SETTINGS_STYLE = "honor"
 
 [[segment]]
 name = "广告跟踪"
-code = "step_ad_tracking"
+ops = [
+  {kind = "skip_in_safe_mode"},
+  # 直达广告与隐私页；不通（任何非断线 / 锁屏的拉起失败）先退回设置搜索，搜索再不通才走三级菜单。
+  {kind = "if_lib", name = "direct_start", args = ["com.hihonor.id", ".oaid.ui.AdvertisingPrivacyActivity"], kwargs = { expect = "应用广告跟踪管理" }, ops = [], else_ops = [
+    {kind = "if_setting", kw = "广告", entry = "广告与隐私", ops = [], else_ops = [
+      {kind = "shell", command = "am start -f 0x10008000 -a android.settings.SETTINGS"},
+      {kind = "sleep", seconds = 1.2},
+      {kind = "miss_reset"},
+      # 三级菜单任一级点不到即整段失败（旧码是一条短路 `and` 之后 raise）。
+      {kind = "require_tap", text = "隐私和安全", exact = true, miss_print = "没找到「广告与隐私」入口"},
+      {kind = "require_tap", text = "其他隐私和安全功能", exact = true, miss_print = "没找到「广告与隐私」入口"},
+      {kind = "require_tap", text = "广告与隐私", exact = true, miss_print = "没找到「广告与隐私」入口"},
+    ]},
+  ]},
+  {kind = "tap", text = "更多选项", scrolls = 0},
+  {kind = "if_find", text = "显示系统程序", exact = true, ops = [
+    {kind = "tap", text = "显示系统程序", exact = true, scrolls = 0},
+    {kind = "tap", text = "更多选项", scrolls = 0},
+  ]},
+  # 点「全部关闭」与收掉确认框是编排语义，留在本机例外函数里（ADR-0038，沿用 CLE-AN00 的写法）。
+  {kind = "code", name = "close_all_oaid"},
+  {kind = "start", pkg = "com.hihonor.id", activity = ".oaid.ui.IntelligentRecommendActivity", settle = 0.5},
+  {kind = "off", page = "广告与隐私·智能推荐服务", page_wide = true},
+]
 
 [[segment]]
 name = "YOYO"
@@ -22,10 +45,20 @@ ops = [
 
 [[segment]]
 name = "搜索"
-code = "step_search"
+ops = [
+  {kind = "start", pkg = "com.hihonor.search", activity = ".feature.mainpage.presentation.page.HomeActivity", expect = "更多"},
+  {kind = "lib", name = "search_more", args = ["找不到搜索框旁的「更多」"]},
+  {kind = "tap", text = "设置", exact = true, scrolls = 0},
+  {kind = "tap", text = "首页显示", exact = true},
+  {kind = "off", only = ["热搜榜", "热搜词推荐"], page = "搜索·首页显示"},
+  {kind = "back"},
+  {kind = "tap", text = "个性化管理", exact = true},
+  {kind = "off", page = "搜索·个性化管理", page_wide = true},
+]
 
 [[segment]]
 name = "负一屏"
+# 裁决：「循环」。`press home` 后右滑最多三次找「头像」
 code = "step_negative"
 
 [[segment]]
@@ -40,15 +73,37 @@ ops = [
 
 [[segment]]
 name = "市场"
+# 裁决：缺能力。只差 `p.confirm()` 与本地 `dismiss` 的三轮点名，两处都只 1 台机型，不新增 op
 code = "step_market"
 
 [[segment]]
 name = "浏览器"
+# 裁决：缺能力。旧写法是 `browser_settings(...) is False` 才收段，库在空页面这一支返回 `None`，`if_lib` 的假值分岔语义不同
 code = "step_browser"
 
 [[segment]]
 name = "主题"
-code = "step_theme"
+ops = [
+  {kind = "skip_in_safe_mode"},
+  {kind = "start", pkg = "com.hihonor.android.thememanager"},
+  {kind = "dismiss"},
+  # 底栏「我的」优先按标签点，点不到再按文字点。
+  {kind = "if_lib_any", calls = [{method = "tab", args = ["我的"]}], else_ops = [
+    {kind = "tap", text = "我的", exact = true, scrolls = 0},
+  ]},
+  {kind = "dismiss"},
+  # 这一行会读成「设置,有1条新通知」，交给家族库的三级走法；认不出就记一笔并收段。
+  {kind = "if_lib", name = "open_settings", args = [["个性化服务", "通知"]], else_ops = [
+    {kind = "note_miss", text = "设置"},
+    {kind = "return"},
+  ]},
+  {kind = "enter", text = "通知"},
+  {kind = "off", page = "主题·通知", page_wide = true},
+  {kind = "back"},
+  {kind = "enter", text = "个性化服务"},
+  {kind = "off", page = "主题·个性化服务", page_wide = true},
+  {kind = "back", n = 3},
+]
 
 [[segment]]
 name = "视频"
@@ -70,7 +125,26 @@ ops = [
 
 [[segment]]
 name = "音乐"
-code = "step_music"
+ops = [
+  { kind = "app_stop", pkg = "com.hihonor.cloudmusic" },
+  { kind = "start", pkg = "com.hihonor.cloudmusic" },
+  { kind = "sleep", seconds = 1 },
+  { kind = "dismiss" },
+  { kind = "tap_id", text = "我的" },
+  { kind = "sleep", seconds = 1 },
+  { kind = "dismiss" },
+  { kind = "tap_id", resource_id = "com.hihonor.cloudmusic:id/ic_setting" },
+  { kind = "sleep", seconds = 1.2 },
+  { kind = "if_lib", name = "open_entry", args = ["更多设置"], ops = [
+    { kind = "if_lib", name = "open_entry", args = ["消息和隐私设置"], kwargs = { scrolls = 6 }, ops = [
+      { kind = "off", only = ["朋友页显示推荐动态"], page = "音乐·消息和隐私" },
+      { kind = "if_lib", name = "open_entry", args = ["第三方推送服务开关"], kwargs = { scrolls = 6 }, ops = [
+        { kind = "off", page = "音乐·第三方推送（活动、中奖信息）", page_wide = true },
+        { kind = "back", n = 3 },
+      ], else_ops = [{ kind = "return" }] },
+    ], else_ops = [{ kind = "return" }] },
+  ], else_ops = [{ kind = "return" }] },
+]
 
 [[segment]]
 name = "阅读"
@@ -86,4 +160,5 @@ ops = [
 
 [[segment]]
 name = "魔法画报"
+# 裁决：「坐标算法」。按行序取最后一行「魔法画报」的坐标点中心
 code = "step_magazine"

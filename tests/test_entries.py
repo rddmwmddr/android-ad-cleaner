@@ -1245,6 +1245,23 @@ class XiaomiTest(unittest.TestCase):
         p.off.assert_called_once()
         self.assertEqual(p.off.call_args.kwargs["page"], "com.android.calendar·用户体验计划")
 
+    def test_the_calendar_page_that_never_opens_falls_back_to_the_menu(self):
+        """23049RAD8C：日历的用户体验计划页没导出时裸拉起首页、再从齿轮进去——天气那条路照常走。
+
+        旧树也绿（老 `.py` 的 `except Exception` 也走这条回退），守的是转成数据后不回退。"""
+        p = phone_667(fail_direct_667)
+        p.find.return_value = None
+        p.tree.return_value.iter.return_value = []
+        p.entry.return_value = True
+        p.tap.return_value = True
+        scope, _ = load_recipe(p, ROOT / "recipes/xiaomi/23049RAD8C/23049RAD8C.toml", only="天气和日历")
+        self.assertEqual(started_667(p), [("com.miui.weather2",),
+                                          ("com.android.calendar", ".settings.UserExperienceActionBarActivity"),
+                                          ("com.android.calendar",)])
+        self.assertEqual([c.kwargs["page"] for c in p.off.call_args_list],
+                         ["天气·用户体验计划", "日历·用户体验计划"])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+
 
 class VivoTest(unittest.TestCase):
     def run_step(self, name, p):
@@ -1757,6 +1774,15 @@ def calls_on_p_530(tree, method):
             and n.func.value.id == "p"]
 
 
+def _nested_ops(ops):
+    """按书写顺序摊平 `ops` / `else_ops`：条件分支里的入口也算这一段用到的入口。"""
+    for op in ops:
+        yield op
+        for key in ("ops", "else_ops"):
+            if key in op:
+                yield from _nested_ops(op[key])
+
+
 class VivoStoreEntryTests(unittest.TestCase):
     """vivo 参考脚本的商店段改用引擎入口，不再按精确文字点底栏（#530）。"""
 
@@ -1772,8 +1798,10 @@ class VivoStoreEntryTests(unittest.TestCase):
                     names = [a.value for call in calls_on_p_530(tree, "tab")
                              for a in call.args if isinstance(a, ast.Constant)]
                 else:
-                    # 数据段：require_tab 就是引擎的底带 p.tab()（ADR-0012）
-                    names = [op.get("name") for op in store["ops"] if op.get("kind") == "require_tab"]
+                    # 数据段：require_tab 就是引擎的底带 p.tab()（ADR-0012）。直达不通后的
+                    # 「我的 → 设置」回退写在 else_ops 里，所以要连嵌套子 op 一起看。
+                    names = [op.get("name") for op in _nested_ops(store["ops"])
+                             if op.get("kind") == "require_tab"]
                 self.assertIn("我的", names, "商店段没改用 p.tab(\"我的\")")
 
 
@@ -1966,7 +1994,11 @@ class PnmAdTrackingEntryTests(unittest.TestCase):
         p.setting.assert_not_called()
 
     def test_ad_tracking_does_not_swallow_a_locked_screen(self):
-        """锁屏同理：上抛给上层停段，不静默换入口。"""
+        """锁屏同理：上抛给上层停段，不静默换入口。
+
+        这条是人为让 `p.start` 抛 `ScreenLocked` 的守卫，不是生产路径：当前 `p.start` 落点不对时抛的
+        是普通 `RuntimeError`，锁屏只在 `rt.page` 与段前检查里抛，`opened()` 的 `ScreenLocked` 分支是
+        给将来会抛它的调用方留的。"""
         p = phone_796()
         p.start.side_effect = ScreenLocked("手机锁屏")
         scope, _ = load_796(p, PNM_796, "广告跟踪")
@@ -2281,7 +2313,9 @@ class StoreSegmentTests(unittest.TestCase):
 
     def test_rmx3700_passes_both_wording(self):
         scope = self.segment("RMX3700", "软件商店", tap_by_scroll=True, wait_page=True)
-        self.assertIn(PRIVACY_933, [c.args[0] for c in scope["tap_by_scroll"].call_args_list])
+        passed = [c.args[0] for c in scope["tap_by_scroll"].call_args_list]
+        # 页面树里写的是 TOML 数组（list），与别处那条一样按内容比。
+        self.assertIn(list(PRIVACY_933), passed)
 
     def test_phk110_passes_both_wording(self):
         scope = self.segment("PHK110", "软件商店个性化",
@@ -2838,6 +2872,37 @@ def verifies_switches_906(ops):
                 and str(op.get("name", "")).startswith("close_named")):
             return True
     return False
+
+
+def _walk_toml_ops(value):
+    """一份 catalog 数据里所有 op 表（含 `ops` / `else_ops` 与实参回调块）。"""
+    if isinstance(value, dict):
+        if "kind" in value:
+            yield value
+        for inner in value.values():
+            yield from _walk_toml_ops(inner)
+    elif isinstance(value, list):
+        for inner in value:
+            yield from _walk_toml_ops(inner)
+
+
+class ThemeDeadEndsSingleSourceTests(unittest.TestCase):
+    """`THEME_DEAD_ENDS` 的唯一 owner 是 `tool/entries.py`，十份小米数据里抄的是同一份值。
+
+    旧树也绿，守的是单一来源不漂移：改了库常量而数据没跟着改（或反过来），这里报红。"""
+
+    def test_xiaomi_start_or_skip_dead_ends_match_the_library_constant(self):
+        found = []
+        for path in sorted(Path(RECIPES).glob("xiaomi/**/*.toml")):
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+            for op in _walk_toml_ops(data):
+                if op.get("kind") == "start_or_skip" and "dead_ends" in op:
+                    found.append((path, frozenset(op["dead_ends"])))
+        self.assertTrue(found, "一份小米 start_or_skip 的 dead_ends 都没扫到：发现口径坏了")
+        for path, dead_ends in found:
+            with self.subTest(recipe=str(path.relative_to(ROOT))):
+                self.assertEqual(dead_ends, entries.THEME_DEAD_ENDS,
+                                 "数据里的 dead_ends 与 entries.THEME_DEAD_ENDS 不一致")
 
 
 class ThemeLandingGuardTests(unittest.TestCase):

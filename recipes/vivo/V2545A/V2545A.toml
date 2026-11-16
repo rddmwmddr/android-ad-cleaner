@@ -8,7 +8,14 @@ GEAR_STYLE = "vivo_desc"
 
 [[segment]]
 name = "系统广告"
-code = "step_system_ads"
+ops = [
+  # 两路兜底：先走「安全 / 安全与隐私 → 更多安全设置 → 广告与隐私」，走不通再按关键词搜「广告」。
+  { kind = "if_lib", name = "system_ads_branch", else_ops = [
+    { kind = "if_lib", name = "setting_search", args = ["广告", "广告与隐私"], ops = [
+      { kind = "off", only = ["个性化广告", "个性化推荐", "智能推荐服务"], page = "系统·广告与隐私（搜索）" },
+    ]},
+  ]},
+]
 
 [[segment]]
 name = "全局搜索"

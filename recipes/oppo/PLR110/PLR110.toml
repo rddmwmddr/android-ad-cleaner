@@ -82,6 +82,7 @@ ops = [
 
 [[segment]]
 name = "负一屏"
+# 裁决：「按读到的状态收窄」。轮播单选的 `checked` 要重查三次，选中与否决定点不点
 code = "step_negative_screen"
 
 [[segment]]

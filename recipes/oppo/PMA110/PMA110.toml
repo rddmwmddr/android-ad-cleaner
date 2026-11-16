@@ -1,9 +1,9 @@
 # OPPO Find X9 Ultra（PMA110），ColorOS 17.0.0.106(CN01) / Android 17 的页面树（catalog，#1265）。
 # 2026-10-29 真机逐页记录；仅收录本机已识别的开关，不包含包操作和通知渠道。
 # 软件商店隐私入口接受「隐私」与「隐私授权管理」两种叫法，未复测（#933）。
-# 浏览器 / 下拉搜索 / 软件商店 / 视频 / 负一屏五段已落数据：长 Activity 前缀按字面量拼进实参。
-# 广告跟踪（运行期读名单再整表关）、主题商店（`reopen=` 回调重进）、小布建议（`require(p.tap)`）
-# 留 `code=`，见同名例外函数。
+# 浏览器 / 下拉搜索 / 软件商店 / 视频 / 负一屏 / 主题商店六段已落数据：长 Activity 前缀按字面量
+# 拼进实参；`reopen=` 的回调写成实参里的 ops 块（#1371）。
+# 广告跟踪（运行期读名单再整表关）、小布建议（`require(p.tap)`）留 `code=`，见同名例外函数。
 model = "PMA110"
 models = ["PMA110"]
 build = "PMA110_17.0.0.106(CN01)"
@@ -21,6 +21,7 @@ BROWSER_FLOW = "prefs_shell"
 
 [[segment]]
 name = "广告跟踪"
+# 裁决：「按读到的开关收窄名单」。读回 60 屏开关，整表关再回读核对
 code = "step_ad_tracking"
 
 [[segment]]
@@ -63,7 +64,24 @@ ops = [
 
 [[segment]]
 name = "主题商店"
-code = "step_theme"
+# 进隐私页那两步写了两遍：一次直接进，一次是 `close_named_plain` 的回调实参
+# （「个性化推荐设置」点下去弹确认框，确认后退回「设置」，回读前要重进一次）。数据不能引用块，
+# 改一处要同步另一处。
+ops = [
+  { kind = "print", text = "  将关闭开屏广告、锁屏左滑精选、个性化推荐；保留消息总开关与锁屏相机。" },
+  { kind = "lib", name = "app_settings", args = ["com.heytap.themestore", "com.heytap.themestore/com.nearme.themespace.activities.SettingActivity", "主题商店"] },
+  { kind = "lib", name = "tap_page", args = ["服务管理", "com.heytap.themestore/com.nearme.themespace.activities.SettingServiceManagerActivity"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "tap_page", args = ["消息与广告", "com.heytap.themestore/com.nearme.themespace.activities.MessageAndRecommendationSettingActivity"], kwargs = { scrolls = 0 } },
+  { kind = "lib", name = "close_named_plain", args = [["开屏广告"], "主题商店·消息与广告", "com.heytap.themestore/com.nearme.themespace.activities.MessageAndRecommendationSettingActivity", "消息与广告", 2] },
+  { kind = "back" },
+  { kind = "lib", name = "close_named_plain", args = [["锁屏左滑查看精选内容"], "主题商店·服务管理", "com.heytap.themestore/com.nearme.themespace.activities.SettingServiceManagerActivity", "服务管理", 2] },
+  { kind = "lib", name = "app_settings", args = ["com.heytap.themestore", "com.heytap.themestore/com.nearme.themespace.activities.SettingActivity", "主题商店"] },
+  { kind = "lib", name = "tap_page", args = ["隐私", "com.heytap.themestore/com.nearme.themespace.activities.PrivacyActivity"], kwargs = { scrolls = 2 } },
+  { kind = "lib", name = "close_named_plain", args = [["个性化推荐设置"], "主题商店·隐私", "com.heytap.themestore/com.nearme.themespace.activities.PrivacyActivity", "隐私", 2], kwargs = { reopen = { ops = [
+    { kind = "lib", name = "app_settings", args = ["com.heytap.themestore", "com.heytap.themestore/com.nearme.themespace.activities.SettingActivity", "主题商店"] },
+    { kind = "lib", name = "tap_page", args = ["隐私", "com.heytap.themestore/com.nearme.themespace.activities.PrivacyActivity"], kwargs = { scrolls = 2 } },
+  ] } } },
+]
 
 [[segment]]
 name = "视频"

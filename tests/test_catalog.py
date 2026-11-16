@@ -5,12 +5,15 @@
 机制），以及数据经校验器后的接受 / 报错。不看解释器内部函数，也不看数据文件内部结构。
 """
 import ast
+import contextlib
+import io
 import sys
 import tempfile
 import tomllib
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
@@ -21,6 +24,7 @@ import fixtures  # noqa: E402
 fixtures.load_tool()
 import catalog  # noqa: E402
 import fast  # noqa: E402
+import recipe_runtime  # noqa: E402
 
 SCRIPT = "tests/fixtures/vivo_v1986a/recipe.py"
 DATA = "recipes/vivo/V1986A/V1986A.toml"
@@ -157,6 +161,29 @@ class ValidatorTests(unittest.TestCase):
         op = {"kind": "close_listed", "names": ["a"], "page": "p", "miss_print": "y", "surprise": 1}
         self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
 
+    def test_rejects_tap_id_without_a_selector(self):
+        self._bad({"segment": [{"name": "a", "ops": [{"kind": "tap_id"}]}]}, "resource_id 或 text")
+
+    def test_rejects_tap_id_with_an_unknown_key(self):
+        op = {"kind": "tap_id", "text": "x", "surprise": 1}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
+
+    def test_rejects_gesture_without_ms(self):
+        op = {"kind": "gesture", "start": [0.5, 0.3], "end": [0.5, 0.7]}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 ms")
+
+    def test_rejects_gesture_with_a_point_out_of_range(self):
+        op = {"kind": "gesture", "start": [0.5, 1.2], "end": [0.5, 0.7], "ms": 300}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "0–1 的比例")
+
+    def test_rejects_gesture_with_a_non_positive_ms(self):
+        op = {"kind": "gesture", "start": [0.5, 0.3], "end": [0.5, 0.7], "ms": 0}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "正的整数毫秒")
+
+    def test_rejects_gesture_with_an_unknown_key(self):
+        op = {"kind": "gesture", "start": [0.5, 0.3], "end": [0.5, 0.7], "ms": 300, "surprise": 1}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
+
     def test_accepts_the_shipped_data(self):
         import tomllib
         catalog.validate(tomllib.loads((ROOT / DATA).read_text(encoding="utf-8")))
@@ -259,6 +286,21 @@ class LoadTimeNameTests(unittest.TestCase):
                      ' calls=[{method="tap", args=["我的"]}], ops=[], else_ops=[]}]\n')
         self.assertEqual([step.name for step in recipe.steps], ["a"])
 
+    def test_a_name_inside_a_callback_argument_block_is_rejected(self):
+        """实参里的再入块（`close_named(..., reopen={ops = [...]})`）点错名字，装载期就报（#1371）。"""
+        message = self._bad(
+            '[[segment]]\nname="a"\nops=[{kind="lib", name="close_named", args=[["行"]],'
+            ' kwargs={reopen={ops=[{kind="lib", name="no_such_helper"}]}}}]\n',
+            "'no_such_helper'")
+        self.assertIn("第 1 个 op 的实参块 第 1 个 op", message)
+
+    def test_a_correct_name_inside_a_callback_argument_block_is_accepted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="lib", name="close_named", args=[["行"]],'
+                     ' kwargs={reopen={ops=[{kind="lib", name="close_named", args=[["行"]]}]}}}]\n')
+        self.assertEqual([step.name for step in recipe.steps], ["a"])
+
     def test_names_from_the_exception_module_are_legal(self):
         with tempfile.TemporaryDirectory() as tmp:
             recipe, _phone, _calls = _load_tmp(
@@ -270,6 +312,62 @@ class LoadTimeNameTests(unittest.TestCase):
         message = self._bad('[[segment]]\nname="a"\nops=[{kind="lib", name="zzzqqqxxx"}]\n',
                             "'zzzqqqxxx'")
         self.assertNotIn("相近的名字", message, "没有近似名时不该硬凑候选")
+
+
+class BindingLoadTimeTests(unittest.TestCase):
+    """段内变量在装载期核对（#1373）：库名写错、绑的名字与库重名、引用未绑定的名字，都当场报。
+
+    可见性只有两条：绑定的名字只在本段内，且只在绑定它的那条 op 之后；子分支里绑的出了分支看不见。"""
+
+    def _bad(self, toml_text, *needles, py_text=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(catalog.SchemaError) as caught:
+                _load_tmp(tmp, toml_text, py_text)
+        message = str(caught.exception)
+        for needle in needles:
+            self.assertIn(needle, message)
+        return message
+
+    def test_a_misspelled_let_lib_is_rejected_and_suggests_the_close_one(self):
+        self._bad('[[segment]]\nname="a"\nops=[{kind="let", name="pkg", lib="close_named_honr"}]\n',
+                  "第 1 段「a」", "'close_named_honr'", "close_named_honor")
+
+    def test_a_binding_that_shadows_a_library_name_is_rejected(self):
+        message = self._bad(
+            '[[segment]]\nname="a"\nops=[{kind="let", name="tap", lib="browser_settings"}]\n',
+            "'tap'", "与库 / 本机实现同名")
+        self.assertIn("换一个名字", message)
+
+    def test_a_reference_to_an_unbound_name_is_rejected(self):
+        self._bad('[[segment]]\nname="a"\nops=[{kind="lib", name="tap",'
+                  ' args=[{expr="var", name="pkg"}]}]\n', "'pkg'", "第 1 个 op")
+
+    def test_a_name_bound_in_the_previous_segment_is_not_visible(self):
+        self._bad('[[segment]]\nname="a"\nops=[{kind="let", name="pkg", lib="browser_settings"}]\n'
+                  '[[segment]]\nname="b"\nops=[{kind="lib", name="tap",'
+                  ' args=[{expr="var", name="pkg"}]}]\n',
+                  "第 2 段「b」", "'pkg'")
+
+    def test_a_name_bound_in_a_branch_is_not_visible_after_it(self):
+        self._bad('[[segment]]\nname="a"\nops=[{kind="if_tap", text="X",'
+                  ' ops=[{kind="let", name="pkg", lib="browser_settings"}]},'
+                  '{kind="lib", name="tap", args=[{expr="var", name="pkg"}]}]\n',
+                  "第 2 个 op", "'pkg'")
+
+    def test_an_if_var_on_an_unbound_name_is_rejected(self):
+        self._bad('[[segment]]\nname="a"\nops=[{kind="if_var", name="v", ops=[]}]\n', "'v'")
+
+    def test_require_switches_on_an_unbound_name_is_rejected(self):
+        self._bad('[[segment]]\nname="a"\nops=[{kind="require_switches",'
+                  ' before={expr="var", name="switches"}, names=["X"], title="X"}]\n', "'switches'")
+
+    def test_a_bound_name_is_visible_inside_a_nested_branch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="let", name="pkg", lib="browser_settings"},'
+                     '{kind="if_tap", text="X", ops=[{kind="lib", name="tap",'
+                     ' args=[{expr="var", name="pkg"}]}]}]\n')
+        self.assertEqual([step.name for step in recipe.steps], ["a"])
 
 
 class OnlySourceTests(unittest.TestCase):
@@ -526,6 +624,290 @@ class IfTapOpTests(unittest.TestCase):
 
     def test_else_branch_runs_when_the_tap_misses(self):
         self.assertEqual(self._run(False)[1], [1])
+
+
+class TapIdOpTests(unittest.TestCase):
+    """`tap_id` op（#1362）：按 u2 选择器（资源 id / 文字）直点一个控件，文字点不准的入口走它。
+
+    读屏库在页面上找不到控件时抛 not-found：带 `miss_print` 的段打印一句就停（这一段算完成），
+    `optional` 当没这回事继续走，都不写就照原样上抛（这一段按未完成收场）。"""
+
+    class Reader:
+        """只够这一段用的读屏替身：选择器交给 `select`，锁屏检查用的 shell 一律空输出。"""
+
+        def __init__(self, select):
+            self._select = select
+
+        def __call__(self, **selectors):
+            return self._select(selectors)
+
+        def shell(self, command, timeout=None):
+            return SimpleNamespace(output="", exit_code=0)
+
+    def _tap(self, toml):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            seen, clicks = [], []
+
+            class Target:
+                def click(self):
+                    clicks.append(True)
+
+            phone.d = self.Reader(lambda selectors: seen.append(selectors) or Target())
+            recipe.run()
+        return seen, clicks, recipe.rt.results
+
+    def test_resource_id_and_text_are_both_handed_to_the_selector(self):
+        seen, clicks, results = self._tap(
+            '[[segment]]\nname="a"\nops=[{kind="tap_id",'
+            ' resource_id="com.x:id/gear", text="设置"}]\n')
+        self.assertEqual(seen, [{"resourceId": "com.x:id/gear", "text": "设置"}])
+        self.assertEqual(clicks, [True])
+        self.assertEqual(results, [("a", "完成")])
+
+    def test_a_text_only_selector_still_taps(self):
+        seen, clicks, _results = self._tap(
+            '[[segment]]\nname="a"\nops=[{kind="tap_id", text="我的"}]\n')
+        self.assertEqual(seen, [{"text": "我的"}])
+        self.assertEqual(clicks, [True])
+
+    def test_a_missing_node_fails_the_segment_without_miss_print(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="tap_id", resource_id="com.x:id/none"}]\n')
+            with contextlib.redirect_stdout(io.StringIO()):
+                recipe.run()
+        self.assertEqual(recipe.rt.results, [("a", "未完成")])
+
+    def test_miss_print_only_swallows_the_not_found_case(self):
+        """只把「控件不在」收成停段：别的失败（读屏掉了、点按被拒）照旧上抛，这一段记未完成。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="tap_id", resource_id="com.x:id/x",'
+                     ' miss_print="  ✗ 没找到"}]\n')
+
+            class Target:
+                def click(self):
+                    raise RuntimeError("读屏失败了")
+
+            phone.d = self.Reader(lambda _selectors: Target())
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                recipe.run()
+        self.assertEqual(recipe.rt.results, [("a", "未完成")])
+        self.assertNotIn("没找到", out.getvalue())
+
+    def test_optional_keeps_going_when_the_node_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="tap_id", resource_id="com.x:id/none",'
+                     ' optional=true}, {kind="back", n=2}]\n')
+            backs = []
+            phone.back = lambda n=1: backs.append(n)
+            with contextlib.redirect_stdout(io.StringIO()):
+                recipe.run()
+        self.assertEqual(backs, [2], "optional 点不到之后剩下的 op 要照常走完")
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+
+    def test_miss_print_ends_the_segment_without_touching_the_rest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="tap_id", resource_id="com.x:id/none",'
+                     ' miss_print="  ✗ 没找到右上角的更多按钮"}, {kind="back", n=2}]\n')
+            backs = []
+            phone.back = lambda n=1: backs.append(n)
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                recipe.run()
+        self.assertEqual(backs, [], "点不到之后剩下的 op 不该再跑")
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+        self.assertIn("没找到右上角的更多按钮", out.getvalue())
+
+
+class GestureOpTests(unittest.TestCase):
+    """`gesture` op（#1362）：两端按屏宽 / 屏高的比例现算，下发一条 `input swipe`。"""
+
+    def _commands(self, toml, size=(1080, 2340)):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            phone.W, phone.H = size
+            shells = []
+
+            def shell(command):
+                shells.append(command)
+                return SimpleNamespace(output="", exit_code=0)
+
+            phone.d.shell = shell
+            recipe.run()
+        return [command for command in shells if command.startswith("input swipe")]
+
+    def test_a_vertical_swipe_takes_its_y_from_the_height(self):
+        self.assertEqual(
+            self._commands('[[segment]]\nname="a"\nops=[{kind="gesture",'
+                           ' start=[0.5, 0.3], end=[0.5, 0.7], ms=300}]\n'),
+            ["input swipe 540 702 540 1638 300"])
+
+    def test_a_horizontal_swipe_takes_its_x_from_the_width(self):
+        self.assertEqual(
+            self._commands('[[segment]]\nname="a"\nops=[{kind="gesture",'
+                           ' start=[0.25, 0.5], end=[0.75, 0.5], ms=250}]\n'),
+            ["input swipe 270 1170 810 1170 250"])
+
+
+class LetOpTests(unittest.TestCase):
+    """`let` op（#1373）：把库助手的返回值绑成段内名字，后面的 op 用 `{expr = "var"}` 取它当实参。
+
+    判据只看「库收到了什么」：绑定的名字本身不是词条、不是入口事实，看得见的只有那几次调用。"""
+
+    def _run(self, toml, **fns):
+        # 桩要在装载前装好：装载期核对点名的实现时读的是同一张 `LIBRARY`。
+        seen = []
+        patch_library(self, **{name: fn(seen) for name, fn in fns.items()})
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(tmp, toml)
+            recipe.run()
+        return seen
+
+    def test_the_bound_value_reaches_the_next_call_as_a_positional_arg(self):
+        toml = ('[[segment]]\nname="a"\nops=['
+                '{kind="let", name="pkg", lib="pick_package"},'
+                '{kind="lib", name="record", args=["标题", {expr="var", name="pkg"}]}]\n')
+        seen = self._run(toml, pick_package=lambda seen: lambda p, rt: seen.append(("pick",)) or "com.x",
+                         record=lambda seen: lambda p, rt, *a: seen.append(("record", a)))
+        self.assertEqual(seen, [("pick",), ("record", ("标题", "com.x"))])
+
+    def test_the_bound_value_reaches_a_keyword_arg(self):
+        toml = ('[[segment]]\nname="a"\nops=['
+                '{kind="let", name="pkg", lib="pick_package"},'
+                '{kind="lib", name="record", kwargs={package={expr="var", name="pkg"}}}]\n')
+        seen = self._run(toml, pick_package=lambda seen: lambda p, rt: "com.x",
+                         record=lambda seen: lambda p, rt, **kw: seen.append(kw))
+        self.assertEqual(seen, [{"package": "com.x"}])
+
+    def test_a_later_let_rebinds_the_name_for_the_following_ops(self):
+        toml = ('[[segment]]\nname="a"\nops=['
+                '{kind="let", name="pkg", lib="pick_package"},'
+                '{kind="lib", name="record", args=[{expr="var", name="pkg"}]},'
+                '{kind="let", name="pkg", lib="pick_other"},'
+                '{kind="lib", name="record", args=[{expr="var", name="pkg"}]}]\n')
+        seen = self._run(toml, pick_package=lambda seen: lambda p, rt: "first",
+                         pick_other=lambda seen: lambda p, rt: "second",
+                         record=lambda seen: lambda p, rt, *a: seen.append(a[0]))
+        self.assertEqual(seen, ["first", "second"])
+
+
+class IfVarOpTests(unittest.TestCase):
+    """`if_var` op（#1373）：按绑定的名字分岔。缺省与 `if_lib` 同档按真假值，`not_none = true` 时
+    按「不是 None」分岔——后者才分得开「库返回了空值」与「库返回了 None」这两件事。"""
+
+    def _branches(self, toml, value):
+        patch_library(self, pick=lambda p, rt: value)
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            backs = []
+            phone.back = lambda n=1: backs.append(n)
+            recipe.run()
+        return backs
+
+    TOML = ('[[segment]]\nname="a"\nops=['
+            '{kind="let", name="v", lib="pick"},'
+            '{kind="if_var", name="v", ops=[{kind="back", n=2}], else_ops=[{kind="back", n=1}]}]\n')
+
+    def test_the_true_branch_runs_for_a_truthy_value(self):
+        self.assertEqual(self._branches(self.TOML, {"资讯服务": True}), [2])
+
+    def test_the_else_branch_runs_for_a_falsey_value(self):
+        self.assertEqual(self._branches(self.TOML, {}), [1])
+
+    def test_the_else_branch_runs_for_none_by_truthiness(self):
+        self.assertEqual(self._branches(self.TOML, None), [1])
+
+    def test_not_none_takes_the_first_branch_for_an_empty_value(self):
+        """空值不是 None：`if switches is not None:` 走的是「读到了」这一支。"""
+        toml = ('[[segment]]\nname="a"\nops=['
+                '{kind="let", name="v", lib="pick"},'
+                '{kind="if_var", name="v", not_none=true, ops=[{kind="back", n=2}],'
+                ' else_ops=[{kind="back", n=1}]}]\n')
+        self.assertEqual(self._branches(toml, {}), [2])
+
+    def test_not_none_takes_the_else_branch_for_none(self):
+        toml = ('[[segment]]\nname="a"\nops=['
+                '{kind="let", name="v", lib="pick"},'
+                '{kind="if_var", name="v", not_none=true, ops=[{kind="back", n=2}],'
+                ' else_ops=[{kind="back", n=1}]}]\n')
+        self.assertEqual(self._branches(toml, None), [1])
+
+
+class LibArgOpsBlockTests(unittest.TestCase):
+    """`lib` 实参里的 `{ops = [...]}`（#1371）：一串 op 包成可调用对象传给库，由库决定什么时候调
+    （`close_named(..., reopen=…)` 在关完、回读前重进一次页）。
+
+    判据只看「库收到了什么、块什么时候跑」：解释器不预先求值，时序仍归库实现。"""
+
+    TOML = ('[[segment]]\nname="a"\nops=['
+            '{kind="lib", name="closer", args=["页"], kwargs={reopen={ops=['
+            '{kind="enter", text="我的"},'
+            '{kind="back", n=2}]}}}]\n')
+
+    def _run(self, closer):
+        seen = []
+
+        def library_closer(p, rt, page, reopen=None):
+            closer(seen, page, reopen)
+
+        patch_library(self, closer=library_closer)
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.TOML)
+            phone.enter = lambda text, **kw: seen.append(("enter", text))
+            phone.back = lambda n=1: seen.append(("back", n))
+            recipe.run()
+        return seen
+
+    def test_the_block_runs_only_when_the_library_calls_it(self):
+        def closer(seen, page, reopen):
+            seen.append(("closer", page, callable(reopen)))
+            reopen()
+
+        self.assertEqual(self._run(closer),
+                         [("closer", "页", True), ("enter", "我的"), ("back", 2)])
+
+    def test_a_library_that_ignores_the_block_leaves_it_unrun(self):
+        """解释器不预先求值：没有回升调的段不该多出那几步调用（时序归库）。"""
+        self.assertEqual(self._run(lambda seen, page, reopen: None), [])
+
+    def test_a_bad_op_inside_the_block_is_rejected_at_load_time(self):
+        toml = ('[[segment]]\nname="a"\nops=['
+                '{kind="lib", name="close_named", kwargs={reopen={ops=[{kind="no_such_kind"}]}}}]\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(catalog.SchemaError) as caught:
+                _load_tmp(tmp, toml)
+        self.assertIn("实参块", str(caught.exception))
+
+
+class RequireSwitchesOpTests(unittest.TestCase):
+    """`require_switches` op（#1373）：把读到的开关表原样交给 `rt.require_switches(…)` 点名核对，
+    缺一项就整段不动——与旧脚本里 `rt.require_switches(switches, ["X"], "页")` 同一条出口。"""
+
+    TOML = ('[[segment]]\nname="a"\nops=['
+            '{kind="let", name="switches", lib="pick"},'
+            '{kind="require_switches", before={expr="var", name="switches"},'
+            ' names=["资讯服务"], title="资讯服务"}]\n')
+
+    def _run(self, switches):
+        patch_library(self, pick=lambda p, rt: switches)
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.TOML)
+            phone.page_evidence = lambda titles=(): "EVIDENCE"
+            recipe.run()
+        return recipe.rt.failed_steps
+
+    def test_the_read_switches_are_checked_by_name(self):
+        self.assertEqual(self._run({"资讯服务": True}), [])
+
+    def test_a_missing_name_fails_the_segment_with_the_page_evidence(self):
+        self.assertEqual(self._run({"别的开关": True}), ["a"])
+
+    def test_an_empty_page_fails_the_segment(self):
+        """名单为空也算没识别到（`rt.require_switches` 的既有判据）。"""
+        self.assertEqual(self._run({}), ["a"])
 
 
 class ReturnOutcomeTests(unittest.TestCase):
@@ -1102,6 +1484,31 @@ class NewOpValidatorTests(unittest.TestCase):
         op = {"kind": "if_find", "text": "x", "edge_ok": "tab", "surprise": 1}
         self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
 
+    def test_let_requires_the_binding_and_the_implementation(self):
+        self._bad({"segment": [{"name": "a", "ops": [{"kind": "let", "name": "pkg"}]}]}, "缺 lib")
+        self._bad({"segment": [{"name": "a", "ops": [{"kind": "let", "lib": "browser_settings"}]}]},
+                  "缺 name")
+
+    def test_let_rejects_an_empty_name_and_an_unknown_key(self):
+        self._bad({"segment": [{"name": "a", "ops": [{"kind": "let", "name": "", "lib": "x"}]}]},
+                  "非空字符串")
+        self._bad({"segment": [{"name": "a", "ops": [{"kind": "let", "name": "n", "lib": "x",
+                                                      "surprise": 1}]}]}, "名单外的键")
+
+    def test_if_var_rejects_a_non_boolean_not_none(self):
+        self._bad({"segment": [{"name": "a", "ops": [{"kind": "if_var", "name": "v",
+                                                      "not_none": "yes"}]}]}, "只能是 true / false")
+
+    def test_require_switches_before_must_be_a_bound_name(self):
+        op = {"kind": "require_switches", "before": {"资讯服务": True}, "names": ["资讯服务"],
+              "title": "资讯服务"}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, 'expr = "var"')
+
+    def test_require_switches_requires_non_empty_names(self):
+        op = {"kind": "require_switches", "before": {"expr": "var", "name": "v"}, "names": [],
+              "title": "t"}
+        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "非空的字符串数组")
+
 
 class NewOpProjectionTests(unittest.TestCase):
     """带「入口」的新 op 要同时进事实层（#1267）：漏一次，入口速查就没有这台机的设置搜索入口。"""
@@ -1146,6 +1553,212 @@ class OffRequiredProjectionTests(unittest.TestCase):
         lowered = recipe_source._catalog_src(self.DATA)
         self.assertIn('only=["每次联网时通知"]', lowered)
         self.assertIn('keep=["自动更新"]', lowered)
+
+
+class LibArgOpsProjectionTests(unittest.TestCase):
+    """实参块里的 op 也要进事实层（#1371）：块里的 `enter` / `am start` 不投影，这台机的设置入口
+    就从入口速查里静默消失（重进页的那一段恰恰是入口所在）。"""
+
+    DATA = {"segment": [{"name": "a", "ops": [
+        {"kind": "lib", "name": "close_named", "args": [["个性化推荐设置"], "主题·个性化推荐"],
+         "kwargs": {"reopen": {"ops": [
+             {"kind": "start", "pkg": "com.heytap.themestore"},
+             {"kind": "enter", "text": "我的"},
+             {"kind": "shell", "command": "am start -n com.heytap.themestore/.Setting"}]}}}]}]}
+
+    def test_the_block_reaches_the_lowered_source(self):
+        import recipe_source
+        lowered = recipe_source._catalog_src(self.DATA)
+        self.assertIn('p.start("com.heytap.themestore")', lowered)
+        self.assertIn('p.enter("我的")', lowered)
+        self.assertIn('p.d.shell("am start -n com.heytap.themestore/.Setting")', lowered)
+
+    def test_the_block_names_resolve_into_the_entry_facts(self):
+        import recipe_source
+        names = {call.name for call in recipe_source.scan_catalog(self.DATA).calls}
+        self.assertIn("p.enter", names)
+        self.assertIn("p.d.shell", names)
+
+
+class SettlePageVocabularyTests(unittest.TestCase):
+    """`settle_page` 进数据词汇（#1371，ADR-0040 记修订）。
+
+    判据是「只读前台 / 页面树的面才留在 `__all__` 外」：它自己走读屏与等待，与 `wait_page` 同档，
+    所以数据该能点名。阅读那一段就靠它：自绘开关页在点下一行之前要等版面定下来。"""
+
+    TOML = ('[[segment]]\nname="a"\nops=['
+            '{kind="lib", name="settle_page", args=["com.hihonor.dz.reader", "广告推荐服务"]}]\n')
+
+    def test_the_data_name_resolves_to_the_library_implementation(self):
+        import recipe_lib
+        self.assertIn("settle_page", recipe_lib.LIBRARY)
+        self.assertNotIn("settle_page", recipe_lib.HELPERS)
+
+    def test_the_loader_accepts_the_data_name(self):
+        """装载期按 `LIBRARY` 核对点名的实现：不在词汇里就报错，等不到真机。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(tmp, self.TOML)
+            self.assertEqual([step.name for step in recipe.steps], ["a"])
+
+    def test_a_segment_reaches_settle_page_with_its_markers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(tmp, self.TOML)
+            seen = []
+            patch_library(self, settle_page=lambda p, rt, package, *markers: seen.append((package, markers)))
+            recipe.run()
+        self.assertEqual(seen, [("com.hihonor.dz.reader", ("广告推荐服务",))])
+
+
+class LetOpProjectionTests(unittest.TestCase):
+    """`let` 的实现在事实层里照 `lib` 一样投影（#1373）：入口归属靠库实现下扫，漏一次这台机就从入口
+    速查里消失；绑定的名字本身不是词条也不是入口，`require_switches` 也不产出事实。"""
+
+    DATA = {"segment": [{"name": "a", "ops": [
+        {"kind": "let", "name": "pkg", "lib": "browser_settings"},
+        {"kind": "require_switches", "before": {"expr": "var", "name": "pkg"},
+         "names": ["资讯服务"], "title": "资讯服务"}]}]}
+
+    def test_the_lib_call_is_projected_and_the_binding_is_not(self):
+        import recipe_source
+        self.assertEqual([call.name for call in recipe_source.scan_catalog(self.DATA).calls],
+                         ["browser_settings"])
+
+
+def _load_model(relative_path, only):
+    """装载 `recipes/` 下的一份数据、只跑点名的段；库实现由调用方用 `patch_library` 换成桩。"""
+    clock = fixtures.Clock()
+    phone = fixtures.fake_phone(clock=clock, fast_mod=fast)
+    return catalog.load(ROOT / relative_path, phone, only=only, clock=clock), phone
+
+
+class BrowserRecsBindingTests(unittest.TestCase):
+    """WKL-AN20「浏览器推荐」转数据（#1373）：`browser_settings` 的返回值当后面三次关单的实参。
+
+    空假页面上这三步一步都走不到（`close_named_honor` 先要认页），对拍对它是盲的——这里逐条断言
+    库收到的实参：绑定丢了、上一次库、只绑不传，三种都会红。"""
+
+    PATH = "recipes/honor/WKL-AN20/WKL-AN20.toml"
+
+    def _run(self, package):
+        seen = []
+        patch_library(
+            self, browser_settings=lambda p, rt: seen.append(("browser_settings",)) or package,
+            tap=lambda p, rt, text, **kw: seen.append(("tap", text, kw)),
+            close_named_honor=lambda p, rt, names, title, pkg, marker, **kw:
+                seen.append(("close", names, title, pkg, marker)))
+        recipe, phone = _load_model(self.PATH, ["浏览器推荐"])
+        phone.back = lambda n=1: seen.append(("back", n))
+        # 这份数据的 guard 钩子先核对型号与系统版本，对不上整份跳过。
+        phone.d.shell = lambda command: SimpleNamespace(
+            output={"getprop ro.product.model": "WKL-AN20",
+                    "getprop ro.build.display.id": "WKL-AN20 11.0.0.111(SP7C00E110R101P7)"}.get(command, ""),
+            exit_code=0)
+        recipe.run()
+        return seen
+
+    def test_the_package_comes_from_the_one_browser_settings_call(self):
+        seen = self._run("com.hihonor.browser")
+        self.assertEqual([item for item in seen if item[0] == "browser_settings"],
+                         [("browser_settings",)])
+        self.assertEqual([item[3] for item in seen if item[0] == "close"],
+                         ["com.hihonor.browser"] * 3)
+
+    def test_the_three_sections_are_closed_in_order(self):
+        seen = self._run("com.hihonor.browser")
+        self.assertEqual([item[2] for item in seen if item[0] == "close"],
+                         ["浏览器·消息通知", "浏览器·个性化推荐", "浏览器·互动广告"])
+        self.assertEqual([item[1] for item in seen if item[0] == "tap"],
+                         ["消息通知", "隐私管理", "个性化推荐", "互动广告管理"])
+
+    def test_the_bound_package_keeps_whatever_the_helper_returned(self):
+        """绑定的是库的返回值本身，不看真假：换了包名（或空值）也照样传下去。"""
+        seen = self._run("")
+        self.assertEqual([item[3] for item in seen if item[0] == "close"], [""] * 3)
+
+
+class AssistantAdviceBindingTests(unittest.TestCase):
+    """PLP120「小布建议」转数据（#1373）：`open_switch_page` 的返回值决定走哪一支，两支都提前收段。
+
+    ColorOS 17 的入口是「资讯服务」，旧版本是「内容资讯」；库读不到时返回 `None`，读到了返回
+    `{标题: 状态}`（可能是空表）。`if_lib` 的假值分岔会把空表与 `None` 并成一档，这里按
+    「不是 None」分岔，两种返回值各断言一次。"""
+
+    PATH = "recipes/oppo/PLP120/PLP120.toml"
+
+    def _run(self, switches):
+        seen = []
+        patch_library(
+            self, enter_settings=lambda p, rt, *a: seen.append(("enter_settings", a)),
+            open_switch_page=lambda p, rt, name, titles, package:
+                seen.append(("open", name, titles, package)) or switches)
+        recipe, phone = _load_model(self.PATH, ["小布建议"])
+        phone.off = lambda **kw: seen.append(("off", kw))
+        # 落点校验归 `Runtime.page()`（另有 PageOpTests），这里只断言它仍被要求做一次。
+        with patch.object(recipe_runtime.Runtime, "page",
+                          lambda self, *a: seen.append(("page", a))):
+            recipe.run()
+        return seen, recipe.rt
+
+    def test_the_first_entry_wins_when_it_returns_switches(self):
+        seen, rt = self._run({"资讯服务": True})
+        self.assertEqual([item for item in seen if item[0] == "page"],
+                         [("page", ("小布建议", "com.android.settings"))])
+        self.assertEqual([item[1] for item in seen if item[0] == "open"], ["资讯服务"])
+        self.assertEqual([item[1] for item in seen if item[0] == "off"],
+                         [{"only": ["资讯服务"], "page": "小布建议·资讯服务"}])
+        self.assertEqual(rt.results, [("小布建议", "完成")])
+
+    def test_an_empty_read_still_counts_as_landing_on_the_page(self):
+        """空表不是 None：`if switches is not None:` 走「读到了」那一支，随后的点名核对按失败收场。"""
+        seen, rt = self._run({})
+        self.assertEqual([item[1] for item in seen if item[0] == "open"], ["资讯服务"])
+        self.assertEqual(rt.results, [("小布建议", "未完成")])
+
+    def test_none_falls_through_to_the_second_entry(self):
+        seen, rt = self._run(None)
+        self.assertEqual([item[1] for item in seen if item[0] == "open"], ["资讯服务", "内容资讯"])
+        self.assertEqual([item[2] for item in seen if item[0] == "open"],
+                         ["资讯服务", ["内容资讯", "资讯服务"]])
+        self.assertEqual(rt.results, [("小布建议", "未完成")])
+
+
+class GameCenterBindingTests(unittest.TestCase):
+    """PLP120「游戏中心」转数据（#1373）：`read_on_page` 等开关画出来再读，读数交给点名核对；
+    `game_settings_direct` 的真假决定走不走「我的 → 设置」，也决定最后退回几次。"""
+
+    PATH = "recipes/oppo/PLP120/PLP120.toml"
+
+    def _run(self, direct):
+        seen = []
+        patch_library(
+            self, game_settings_direct=lambda p, rt: seen.append(("direct",)) or direct,
+            game_settings_via_mine=lambda p, rt: seen.append(("via_mine",)),
+            read_on_page=lambda p, rt, titles, package:
+                seen.append(("read", titles, package)) or {"个性化推荐": True})
+        recipe, phone = _load_model(self.PATH, ["游戏中心"])
+        phone.enter = lambda text, scrolls=6: seen.append(("enter", text, scrolls))
+        phone.off = lambda **kw: seen.append(("off", kw))
+        phone.back = lambda n=1: seen.append(("back", n))
+        recipe.run()
+        return seen
+
+    def test_the_direct_landing_skips_the_mine_route_and_goes_back_three(self):
+        seen = self._run(True)
+        self.assertNotIn("via_mine", [item[0] for item in seen])  # 直达成功就不走「我的 → 设置」
+        self.assertEqual([item for item in seen if item[0] == "read"],
+                         [("read", "个性化推荐管理", "com.nearme.gamecenter")])
+        self.assertEqual(seen[-1], ("back", 3))
+
+    def test_a_failed_direct_landing_takes_the_mine_route_and_goes_back_four(self):
+        seen = self._run(False)
+        self.assertIn(("via_mine",), seen)
+        self.assertEqual(seen[-1], ("back", 4))
+
+    def test_the_read_switches_are_checked_before_closing(self):
+        seen = self._run(True)
+        self.assertEqual([item for item in seen if item[0] in ("read", "off")],
+                         [("read", "个性化推荐管理", "com.nearme.gamecenter"),
+                          ("off", {"only": ["个性化推荐"], "page": "游戏中心·个性化推荐"})])
 
 
 class NameSourceBaselineTests(unittest.TestCase):
@@ -1226,7 +1839,8 @@ class ReaderTests(unittest.TestCase):
         """`.toml` 里每个 lib / require_lib 名都要在 `LIBRARY`（数据可点名的集合）里（入口归属的根因守护）。
 
         数据显式点名实现，名字解析不到时入口速查会把这台机从「用过的机型」里静默删掉
-        （`com.iqoo.secure` / `com.vivo.weather` 那次）。覆盖全部已转型号，不是抽查一份。"""
+        （`com.iqoo.secure` / `com.vivo.weather` 那次）。`let` 点名的实现写在 `lib` 上，同一个集合。
+        覆盖全部已转型号，不是抽查一份。"""
         import tomllib
         import recipe_source
 
@@ -1236,6 +1850,8 @@ class ReaderTests(unittest.TestCase):
             for op in ops:
                 if op.get("kind") in ("lib", "require_lib") and "name" in op:
                     yield op["name"]
+                elif op.get("kind") == "let" and "lib" in op:
+                    yield op["lib"]
                 yield from lib_names(op.get("ops") or [])
                 yield from lib_names(op.get("else_ops") or [])
 

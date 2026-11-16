@@ -5,6 +5,7 @@
 """
 import io
 import sys
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -12,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from fixtures import load_recipe, phone_mock
+from fixtures import keep_list, load_recipe, phone_mock
 from recipe_kit import MissingPackage
 from recipe_meta import recipe_meta
 
@@ -52,8 +53,7 @@ class MetaTests(unittest.TestCase):
         self.assertEqual(meta["steps"], STEPS)
 
     def test_store_keep_holds_features_and_not_promotions(self):
-        scope = load_recipe(make_phone(), RECIPE, None)[0]
-        keep = scope["STORE_KEEP"]
+        keep = keep_list(RECIPE, "软件商店")
         for name in ("帮助与客服", "应用安全", "我的专区：应用工具", "应用使用记录", "首页：AI搜索"):
             self.assertIn(name, keep)
         for name in ("首页：活动弹窗", "软件专区：福利", "游戏专区：活动集合"):
@@ -94,6 +94,17 @@ class AdTrackingTests(unittest.TestCase):
 
 class NegativeScreenTests(unittest.TestCase):
     FOCUS = "com.coloros.assistantscreen/com.oplus.assistantscreen.AssistantScreenActivity"
+
+    def test_a_swipe_that_never_reaches_the_layer_fails_the_segment(self):
+        """右滑三次都停在桌面就整段失败，不能留在桌面上继续找「我的」入口。
+
+        入口现在由家族库 `assistant_swipe_in` 走、失败由数据的 `require_lib … fail=true` 收尾；
+        旧树也绿，守的是这段表达不回退（重新写成静默继续）。"""
+        p = make_phone("com.android.launcher/.Launcher")
+        scope, printed = run(p, "负一屏")
+        self.assertEqual(scope["FAILED_STEPS"], ["负一屏"])
+        self.assertIn("右滑没进负一屏", printed)
+        p.off.assert_not_called()
 
     def test_skips_when_the_layer_has_no_recommendation_rows(self):
         """本机这一层两个入口都没有：按跳过收尾并说明原因，不静默空跑。"""
@@ -202,6 +213,48 @@ class ThemeTests(unittest.TestCase):
         self.assertEqual(scope["FAILED_STEPS"], ["主题"])
         self.assertEqual(scope["SKIPPED_STEPS"], [])
         self.assertIn("没有进入前台", printed)
+
+    def test_the_dead_end_matches_anywhere_in_the_engine_message(self):
+        """死路判据按**包含**匹配，不要求全等：引擎的报错是包名加 monkey 原文，判据只能是一段文案。
+
+        #1372 把这一段搬进数据之后，尺子从「`"无法打开" not in str(error)`」换成
+        `direct_start` 的 `dead_ends`；旧树也绿，守的是这条判据的边界不回退成全等匹配。"""
+        p = make_phone()
+        p.start.side_effect = RuntimeError("拉起 com.oplus.themestore 失败：无法打开（No activities found）")
+        scope, printed = run(p, "主题")
+        self.assertEqual(scope["SKIPPED_STEPS"], ["主题"])
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        self.assertIn("没有启动界面", printed)
+
+    def test_a_near_miss_message_is_not_a_dead_end(self):
+        """「无法启动」不是这把尺子上的话：只认数据里写的那一段，别的拉起失败仍记未完成。"""
+        p = make_phone()
+        p.start.side_effect = RuntimeError("com.oplus.themestore 无法启动：SecurityException")
+        scope, _printed = run(p, "主题")
+        self.assertEqual(scope["FAILED_STEPS"], ["主题"])
+        self.assertEqual(scope["SKIPPED_STEPS"], [])
+
+    def test_the_segment_is_page_tree_data_and_names_the_dead_end(self):
+        """段体从 `code=` 搬进页面树：直达不通的判据由 `direct_start` 的 `dead_ends` 写在数据里。
+
+        旧树这一段还是 `code = "step_theme"`，这条在旧树是红的。"""
+        data = tomllib.loads(RECIPE.read_text(encoding="utf-8"))
+        segment = next(s for s in data["segment"] if s["name"] == "主题")
+        self.assertNotIn("code", segment)
+        direct = next(op for op in segment["ops"] if op.get("name") == "direct_start")
+        self.assertEqual(direct["kind"], "if_lib")
+        self.assertEqual(direct["args"], ["com.oplus.themestore"])
+        self.assertEqual(direct["kwargs"]["dead_ends"], ["无法打开"])
+        self.assertEqual([op["kind"] for op in direct["else_ops"]], ["skip"])
+
+    def test_the_theme_walk_still_runs_on_the_direct_path(self):
+        """直达成功那一支照旧走完：点进「服务管理」与「隐私」，关掉点名的两个开关。"""
+        p = make_phone()
+        scope, _ = run(p, "主题")
+        self.assertEqual(scope["FAILED_STEPS"], [])
+        self.assertEqual([c.kwargs["page"] for c in p.off.call_args_list],
+                         ["主题·消息与广告", "主题·个性化推荐"])
+        p.go.assert_called_once_with("我的", "设置")
 
 
 class SearchTests(unittest.TestCase):

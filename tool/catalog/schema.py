@@ -128,6 +128,79 @@ def _validate_return(op: Mapping, where: str) -> None:
         raise SchemaError(f"{where} 的 value 只能是 true / false（段的结局）")
 
 
+def _validate_tap_id(op: Mapping, where: str) -> None:
+    """`tap_id` 按 u2 选择器点一个控件：资源 id 与文字至少要给一个，两个都空等于没得点。"""
+    if "resource_id" not in op and "text" not in op:
+        raise SchemaError(f"{where} 的 tap_id 至少要有 resource_id 或 text")
+
+
+def _validate_gesture(op: Mapping, where: str) -> None:
+    """`gesture` 的两端各是 `[x, y]`，按屏宽 / 屏高的比例给；`ms` 是 swipe 的毫秒数。
+
+    只收比例：按读到的控件位置现算的坐标属 docs/04 的「坐标算法」，留在例外 `.py` 里。"""
+    for key in ("start", "end"):
+        point = op[key]
+        if (not isinstance(point, list) or len(point) != 2
+                or not all(isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v <= 1
+                           for v in point)):
+            raise SchemaError(f"{where} 的 {key} 要是两个 0–1 的比例 [x, y]")
+    if not isinstance(op["ms"], int) or isinstance(op["ms"], bool) or op["ms"] <= 0:
+        raise SchemaError(f"{where} 的 ms 要是正的整数毫秒")
+
+
+def _validate_let(op: Mapping, where: str) -> None:
+    """`let` 把库助手的返回值绑成段内名字（#1373）：`name` 是绑定的名字，`lib` 是要调的实现。
+
+    `lib` 与 `lib` op 的 `name` 是同一个集合（装载器在 `_check_names` 里核对）；两者都要非空，
+    绑定的名字与实现名重名由装载器按库名表拒绝。"""
+    for key in ("name", "lib"):
+        if not isinstance(op[key], str) or not op[key]:
+            raise SchemaError(f"{where} 的 {key} 必须是非空字符串")
+
+
+def _validate_if_var(op: Mapping, where: str) -> None:
+    """`if_var` 按绑定的名字分岔（#1373）：不写 `not_none` 按真假值，写了按「不是 None」。
+
+    `not_none` 只有 true / false 两态；写 false 与不写同义（显式写出「按真假值」）。"""
+    if not isinstance(op["name"], str) or not op["name"]:
+        raise SchemaError(f"{where} 的 name 必须是非空字符串")
+    if "not_none" in op and not isinstance(op["not_none"], bool):
+        raise SchemaError(f"{where} 的 not_none 只能是 true / false")
+
+
+def _validate_require_switches(op: Mapping, where: str) -> None:
+    """`require_switches` 把段内读到的开关表交给点名核对（#1373）：`before` 只收 `{expr = "var"}`。
+
+    直接写一张字面量开关表在数据里没有意义（状态是运行期读出来的）；缺一项就整段不动那条出口
+    归 `Runtime.require_switches()`，这里只判定数据写得出一个读得到的名字。"""
+    before = op["before"]
+    if (not isinstance(before, Mapping) or before.get("expr") != "var"
+            or not isinstance(before.get("name"), str) or not before.get("name")):
+        raise SchemaError(f'{where} 的 before 要写成 {{expr = "var", name = "…"}}')
+    names = op["names"]
+    if (not isinstance(names, list) or not names
+            or not all(isinstance(name, str) and name for name in names)):
+        raise SchemaError(f"{where} 的 names 必须是非空的字符串数组")
+    if not isinstance(op["title"], str) or not op["title"]:
+        raise SchemaError(f"{where} 的 title 必须是非空字符串")
+
+
+def _validate_arg_blocks(op: Mapping, where: str) -> None:
+    """实参里的 `{ops = [...]}`：库在两步之间回调的子段表（`close_named(..., reopen=…)`，#1371）。
+
+    实参内容对 schema 一般是不透明的（标题、Activity、超时秒数），只有带 `ops` 的表是数据再入，
+    所以它按同一条白名单校验——块里的 op 与顶层 op 共用 `OPS`，不校验的话嵌套里的错键要等真机跑
+    到那一步才发现。"""
+    args, kwargs = op.get("args"), op.get("kwargs")
+    values = (args if isinstance(args, list) else []) + (
+        list(kwargs.values()) if isinstance(kwargs, Mapping) else [])
+    for value in values:
+        if isinstance(value, Mapping) and "ops" in value:
+            place = f"{where} 的实参块"
+            _reject_extra(value, frozenset({"ops"}), place)
+            _validate_ops(value["ops"], place)
+
+
 # `calls` 表的两处用法：各自允许哪些键、每次调用必须给哪个键，仍与 `_validate_calls` 同源。
 def _validate_expect(op: Mapping[str, Any], where: str) -> None:
     """`require_expect`：先给 `calls` 表定形，再要一句 `miss_print`——原先分派就是这个先后。
@@ -150,6 +223,10 @@ def _keys(names: str) -> frozenset[str]:
 # 每种 op 一条记录。加一种 op 只改这里一条，加一条降级分支（事实层）或让它的 `no_fact=True`。
 OPS: dict[str, OpSpec] = {
     "lib": OpSpec(_keys("kind name args kwargs"), required=("name",)),
+    "let": OpSpec(_keys("kind name lib args kwargs"), required=("name", "lib"), check=_validate_let),
+    "require_switches": OpSpec(_keys("kind before names title"),
+                               required=("before", "names", "title"),
+                               check=_validate_require_switches, no_fact=True),
     "off": OpSpec(_keys("kind only only_code keep page max_screens page_wide"),
                   required=("page",),
                   word_keys=(("only", "literal"), ("only_code", "strategy"), ("keep", "literal")),
@@ -176,7 +253,7 @@ OPS: dict[str, OpSpec] = {
                             required=("text", "miss_print")),
     "require_lib": OpSpec(_keys("kind name args kwargs miss_print miss_back fail evidence at_focus"),
                           required=("name", "miss_print")),
-    "require_tab": OpSpec(_keys("kind name miss_print evidence at_focus"),
+    "require_tab": OpSpec(_keys("kind name settle miss_print evidence at_focus"),
                           required=("name", "miss_print"), no_fact=True),
     "require_tap": OpSpec(_keys("kind text exact scrolls miss_print evidence at_focus"),
                           required=("text", "miss_print"), no_fact=True),
@@ -192,6 +269,10 @@ OPS: dict[str, OpSpec] = {
     "note_miss": OpSpec(_keys("kind text"), required=("text",), no_fact=True),
     "miss_reset": OpSpec(_keys("kind"), no_fact=True),
     "tap": OpSpec(_keys("kind text exact scrolls kwargs"), required=("text",), no_fact=True),
+    "tap_id": OpSpec(_keys("kind resource_id text optional miss_print"), check=_validate_tap_id,
+                     no_fact=True),
+    "gesture": OpSpec(_keys("kind start end ms"), required=("start", "end", "ms"),
+                      check=_validate_gesture, no_fact=True),
     "go": OpSpec(_keys("kind text expect"), required=("text", "expect"), no_fact=True),
     "dismiss": OpSpec(_keys("kind"), no_fact=True),
     "skip_in_safe_mode": OpSpec(_keys("kind"), no_fact=True),
@@ -206,6 +287,8 @@ OPS: dict[str, OpSpec] = {
                        nested=("ops", "else_ops")),
     "if_lib": OpSpec(_keys("kind name args kwargs ops else_ops"), required=("name",),
                      nested=("ops", "else_ops")),
+    "if_var": OpSpec(_keys("kind name not_none ops else_ops"), required=("name",),
+                     nested=("ops", "else_ops"), check=_validate_if_var),
     "if_lib_any": OpSpec(_keys("kind calls ops else_ops"), nested=("ops", "else_ops"),
                          check=_validate_any_calls),
     "if_setting": OpSpec(_keys("kind kw entry ops else_ops"), required=("kw",),
@@ -221,7 +304,7 @@ OPS: dict[str, OpSpec] = {
     "fail": OpSpec(_keys("kind text evidence"), required=("text",), no_fact=True),
     "scoped": OpSpec(_keys("kind systemui_text ops"), nested=("ops",)),
     "code": OpSpec(_keys("kind name args"), required=("name",)),
-    "print": OpSpec(_keys("kind text"), no_fact=True),
+    "print": OpSpec(_keys("kind text focus"), no_fact=True),
     "return": OpSpec(_keys("kind value"), check=_validate_return, no_fact=True),
     "return_lib": OpSpec(_keys("kind name args kwargs"), required=("name",)),
 }
@@ -274,7 +357,7 @@ def _validate_ops(ops: object, where: str) -> None:
 
 
 def _validate_op(op: object, where: str) -> None:
-    """一条 op：查记录、查键、查必填、跑形状校验、递归子 op——顺序即报错顺序。"""
+    """一条 op：查记录、查键、查必填、跑形状校验、查实参块、递归子 op——顺序即报错顺序。"""
     if not isinstance(op, Mapping):
         raise SchemaError(f"{where} 必须是表")
     kind = op.get("kind")
@@ -286,6 +369,7 @@ def _validate_op(op: object, where: str) -> None:
         _require(op, key, where)
     if spec.check is not None:
         spec.check(op, where)
+    _validate_arg_blocks(op, where)
     for key in spec.nested:
         _validate_ops(op.get(key, []), where)
 
