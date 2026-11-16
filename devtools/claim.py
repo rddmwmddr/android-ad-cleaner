@@ -27,9 +27,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))   # stdio 留在引擎目录
 
-from gh import GhError, call, json_of, runner_for
-
-from stale import STALE_LABEL     # 停摆标记只此一份；认领时要摘掉（#978）
+try:
+    from .gh import GhError, call, json_of, runner_for
+    from .stale import STALE_LABEL     # 停摆标记只此一份；认领时要摘掉（#978）
+except ImportError:             # 直接跑文件时 sys.path[0] 就是 devtools/
+    from gh import GhError, call, json_of, runner_for
+    from stale import STALE_LABEL
 
 from stdio import use_utf8_console
 

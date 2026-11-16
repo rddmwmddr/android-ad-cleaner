@@ -331,7 +331,7 @@ class DocGuards(unittest.TestCase):
         self.assertEqual(hits, [], "文档里的行号要带基线，或改用符号名：\n" + "\n".join(hits))
 
     def test_doc_refs_cleanup_on_move(self):
-        """文档里写的 `tool/` `gui/` `tests/` `recipes/` 下的 `.py` 路径必须真的存在。
+        """文档里写的 `tool/` `devtools/` `gui/` `tests/` `recipes/` 下的 `.py` 路径必须真的存在。
 
         守的是「路径没了」这一半：符号搬进另一个仍然存在的文件（`VIVO_MARKETING` 那种）
         与测试注释里的旧路径都看不见，仍靠 grep 与评审。跳过范围与上一条相同：

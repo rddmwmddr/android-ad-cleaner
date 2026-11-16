@@ -71,6 +71,15 @@ class ToolPackageSeamTests(unittest.TestCase):
             missing, [],
             f"名单里这些引擎模块在 tool/ 下不存在：{'、'.join(missing)}。删掉登记或恢复文件。")
 
+        # `syncEngine` 与 `gui.bundle_data` 都是整目录递归收，子目录里的新文件一样会进包。
+        subdirs = {path.relative_to(ROOT / "tool").parts[0]
+                   for path in (ROOT / "tool").rglob("*.py")
+                   if len(path.relative_to(ROOT / "tool").parts) > 1}
+        self.assertEqual(
+            subdirs, set(ENGINE_PACKAGES),
+            f"tool/ 下出现名单外的子目录：{'、'.join(sorted(subdirs - set(ENGINE_PACKAGES)))}。"
+            "整目录 glob 会把它一起收进 APK；登记成引擎子包并同时改 ADR-0041，或搬到 devtools/。")
+
         self.assertTrue(
             (ROOT / "devtools" / "__init__.py").is_file(),
             "devtools/ 必须是真包（有 __init__.py），否则 `from devtools.claim import …` 立不住。")

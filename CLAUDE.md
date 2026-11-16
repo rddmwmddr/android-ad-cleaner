@@ -6,7 +6,7 @@
 
 ## 开发
 
-改 `tool/` / `gui/` / `android/` / `recipe_lib/` 里某个模块之前，先看 `docs/ARCHITECTURE.md` 的「函数级细节」一节：哪个函数管什么、哪些不许另写一份都在那里。**这一行指针不可删**（[ADR-0039](docs/adr/0039-claude-md-startup-index.md)）。
+改 `tool/` / `devtools/` / `gui/` / `android/` / `recipe_lib/` 里某个模块之前，先看 `docs/ARCHITECTURE.md` 的「函数级细节」一节：哪个函数管什么、哪些不许另写一份都在那里。**这一行指针不可删**（[ADR-0039](docs/adr/0039-claude-md-startup-index.md)）。
 
 - 找「某条维护规则有没有守卫」先看 `docs/agents/rules.toml`：规则正文留在文档里，注册表每条给 `id` / `source` / `check` / `status` / `why` / `expires_if`（可选 `since`），正文对应行的行尾挂 `<!-- rule:<id> -->` 锚点。新增或删除规则时两处一起改，`tests/test_rules_registry.py` 守双向一致，没挂锚点的新条目由 `tests/test_rules_guards.py` 按文档冻结上限挡，没有守卫的规则（`manual` / `advisory` / `dead`）条数由 `tests/test_rules_registry.py` 的 `PROSE_ONLY_BOUND` 冻结、只许降，涨一条要在那里改数字并说明为什么不能守卫化旧的；规则的理由只写在注册表的 `why` 里，正文不复述理由——判断与反例仍留在正文。 <!-- rule:doc.rules.registry-indexes-prose -->
 - 回归：`python -m unittest discover -s tests`；本机用仓库根的 `.venv/bin/python`（系统 python 缺 adbutils，会报一串 ModuleNotFoundError）。只装 `requirements.txt` 就够，不需要 pywebview / pillow。并行会话在各自的 worktree 里干活时，那个目录没有 `.venv`，用主副本 `.venv/bin/python` 的绝对路径；Read/Edit 也一律用该 worktree 的绝对路径；`node_modules` 同样没有，跑之前先 `npm ci`（热缓存亚秒级），缺 jsdom 时 `test_web_client` 要等整轮跑完才红。只跑一个文件时加 `PYTHONPATH=tests`：`PYTHONPATH=tests python -m unittest tests.test_row`（`tests/` 里的用例按顶层模块 import `fixtures`）。 <!-- rule:dev.tests.regression-command -->

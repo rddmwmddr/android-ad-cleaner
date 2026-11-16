@@ -30,15 +30,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import NamedTuple
 
-# 直接跑脚本时 sys.path[0] 就是 devtools/，包导入时同包兄弟要靠这一行；stdio 仍在引擎目录。
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from gh import GhError, call, runner_for                   # noqa: E402
-# 两页的清单只认 gen_site_css.TARGETS：图标缓存键跟 REL.version 走，页面集合不另列一份。
-from gen_site_css import TARGETS as SITE_PAGES             # noqa: E402
-from release_assets import (BLOCK, Entry, fetch_release, human_size, map_entries,  # noqa: E402
-                            read_entries)
-from stdio import use_utf8_console                         # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))   # stdio 留在引擎目录
+
+try:
+    from .gh import GhError, call, runner_for
+    # 两页的清单只认 gen_site_css.TARGETS：图标缓存键跟 REL.version 走，页面集合不另列一份。
+    from .gen_site_css import TARGETS as SITE_PAGES
+    from .release_assets import BLOCK, Entry, fetch_release, human_size, map_entries, read_entries
+except ImportError:             # 直接跑文件时 sys.path[0] 就是 devtools/
+    from gh import GhError, call, runner_for
+    from gen_site_css import TARGETS as SITE_PAGES
+    from release_assets import BLOCK, Entry, fetch_release, human_size, map_entries, read_entries
+from stdio import use_utf8_console
 
 use_utf8_console()
 
