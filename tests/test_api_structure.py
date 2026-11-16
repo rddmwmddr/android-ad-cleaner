@@ -62,7 +62,7 @@ FORBIDDEN_IN = {
 CLASS_FILES = {
     "Api": "app.py",
     "AdbDownloader": "app.py",
-    "Dispatcher": "app.py",
+    "Dispatcher": "dispatcher.py",
     "Reporter": "reporter.py",
 }
 
@@ -139,6 +139,34 @@ class BoundaryTests(unittest.TestCase):
                         and isinstance(node.args[1], ast.Constant):
                     self.assertNotIn(node.args[1].value, BLOCKS,
                                      f"{name} 用 getattr 绕到了 {node.args[1].value}")
+
+
+class DispatcherSeamTests(unittest.TestCase):
+    """宿主相关的三个钩子由构造方给（#1383）：执行编排块不认识 `gui/app.py` 的模块全局。
+
+    铃声、断线措辞、adb 存活探测都传取值函数进来——手机版在 `boot()` 里换掉它们、测试在构造之后
+    patch 它们，两种都要落到搬走之后的那份实现上。
+    """
+
+    def test_the_host_hooks_come_from_the_constructor(self):
+        from fixtures import FakeProc, FakeRunner, job_stub
+        from gui import dispatcher, tasks
+
+        rings, probes = [], []
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        runner = FakeRunner(spawns=[FakeProc('#aac:event {"kind": "link_lost"}\n读屏断了\n', rc=1)])
+        block = dispatcher.Dispatcher(lambda: runner, lambda: None, app.ClientData(directory.name),
+                                      lambda: None, lambda operation, serial, detail: "",
+                                      chime=lambda: rings.append(1),
+                                      link_lost=lambda: "注入的断线措辞",
+                                      adb_present=lambda adb, serial: probes.append(serial) or False)
+        block.job = job_stub(serial="SER")
+        block._work([tasks.Task("广告开关", "run.py", ["-s", "SER", "recipe"]),
+                     tasks.Task("收尾", "run.py", ["-s", "SER", "finish"], always_run=True)])
+        self.assertEqual(block.job.results[1]["tail"], ["注入的断线措辞"])
+        self.assertEqual(probes, ["SER"])
+        self.assertTrue(rings, "执行结束的提示音要走注入的那个")
 
 
 class ClipboardWiringTests(unittest.TestCase):
