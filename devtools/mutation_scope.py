@@ -5,8 +5,13 @@ mutmut 3.x 的 runner 绑定 pytest，本仓的 unittest 用例靠 pytest 原生
 owner」手写，不做动态依赖分析：`polarity` 被 `row` 转手带进几乎所有用例，按 import 反推等于
 不筛选，而 unittest + 假对象环境下按运行时调用图反推也不可靠。
 
-选择窄是有意的。漏掉的覆盖会在清理该模块时以「存活」露出来，那时把杀死它的测试文件补进
-这一行——补一行的成本远低于每次都收集全量。键是相对仓库根的模块路径，值是 pytest 目标。
+选择窄是有意的。漏掉的覆盖会在清理该模块时以「存活」或「无测试」露出来，那时把杀死它的
+测试文件补进这一行——补一行的成本远低于每次都收集全量。键是相对仓库根的模块路径，值是 pytest
+目标。
+
+选文件时避开**起子进程 import 引擎模块**的用例（`python -c "import recipe_meta"`、调 CLI 读
+stdout 那一类）：变异副本里没有 `tool/`，只有 `src/`，子进程拿到的是空输出或 ModuleNotFound，
+整轮会在收集期报错。`test_phone_host.py` 与 `test_recipe_meta_module.py` 都因此换成了别的锚点。
 """
 from collections.abc import Iterable, Sequence
 
@@ -14,9 +19,9 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
     "tool/catalog/schema.py": ("tests/test_catalog.py",),
     "tool/polarity.py": ("tests/test_regressions.py",),
     "tool/channel_policy.py": ("tests/test_channel_classification.py",),
-    "tool/host.py": ("tests/test_phone_host.py",),
+    "tool/host.py": ("tests/test_coverage_note.py", "tests/test_phone_interface.py"),
     "tool/events.py": ("tests/test_events.py", "tests/test_engine_events.py"),
-    "tool/recipe_meta.py": ("tests/test_recipe_meta_module.py",),
+    "tool/recipe_meta.py": ("tests/test_entries.py", "tests/test_catalog.py"),
     "tool/recipe_source.py": ("tests/test_recipe_source.py",),
     "tool/recipe_pick.py": ("tests/test_recipe_variants.py",),
     "tool/reader.py": ("tests/test_phone_interface.py",),

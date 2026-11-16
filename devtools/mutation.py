@@ -30,17 +30,30 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from collections.abc import Sequence
 
 try:
     from . import mutation_scope
 except ImportError:             # 直接跑文件时 sys.path[0] 就是 devtools/
     import mutation_scope
 
-WORKDIR = Path(".mutmut") / "work"
+# 一个模块组一个工作目录：mutmut 用 mtime 判「这份副本还没变异」，共用目录时上一轮拷成
+# 普通副本的文件会被当成都已变异，直接跑出 0 个 mutant。
+WORKDIR = Path(".mutmut")
 # 工作目录里指向仓库根的符号链接：mutmut 只认识 cwd 下的相对路径。
-LINKS = ("tool", "tests", "recipes", "docs", "devtools", "recipe_lib")
+LINKS = {
+    "tool": "tool",
+    "tests": "tests",
+    "recipes": "recipes",
+    "docs": "docs",
+    "devtools": "devtools",
+    "recipe_lib": "recipe_lib",
+    "gui": "gui",
+    # 手机版替换层不在仓库根，单独挂一下：`tests/test_summary.py` 这类用例会 import 它
+    "aac_android": "android/app/src/main/python/aac_android",
+}
 # 变异副本里跑测试要读到的东西。`mutants/` 下的测试会以它为根，缺一项就在收集期报错。
-ALSO_COPY = ["recipe_lib", "recipes", "docs", "devtools"]
+ALSO_COPY = ["recipe_lib", "recipes", "docs", "devtools", "gui", "aac_android"]
 CONFIG = """\
 # devtools/mutation.py 生成，改那里。
 [tool.mutmut]
@@ -66,11 +79,19 @@ def write_config(workdir: Path, modules: list[str]) -> None:
     (workdir / "pyproject.toml").write_text(text, encoding="utf-8")
 
 
+def workdir_for(modules: Sequence[str]) -> Path:
+    """一个模块组一个工作目录：`tool/catalog/schema.py` → `.mutmut/catalog_schema`。"""
+    slug = "-".join(
+        module.removeprefix("tool/").removesuffix(".py").replace("/", "_") for module in modules
+    )
+    return WORKDIR / slug
+
+
 def link_sources(workdir: Path) -> None:
     """在工作目录里放好 `src -> tool` 与测试 / 数据目录的链接。"""
     workdir.mkdir(parents=True, exist_ok=True)
-    for name in LINKS:
-        _link(workdir / name, Path("..") / ".." / name)
+    for name, target in LINKS.items():
+        _link(workdir / name, Path("..") / ".." / target)
     _link(workdir / "src", Path("..") / ".." / "tool")
 
 
@@ -192,14 +213,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"不在映射表里：{' '.join(missing)}", file=sys.stderr)
         return 2
 
-    link_sources(WORKDIR)
-    write_config(WORKDIR, modules)
-    code = run(WORKDIR)
+    workdir = workdir_for(modules)
+    link_sources(workdir)
+    write_config(workdir, modules)
+    code = run(workdir)
     if code != 0:
         return code
 
-    counts = stats(WORKDIR)
-    alive = survivors(WORKDIR)
+    counts = stats(workdir)
+    alive = survivors(workdir)
     print(
         f"共 {counts['total']} 个 mutant：杀死 {counts['killed']}、存活 {counts['survived']}、"
         f"pragma 跳过 {counts['skipped']}、超时 {counts['timeout']}、无测试 {counts['no_tests']}"
