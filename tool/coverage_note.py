@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from typing import Any
 
 import host
+from plan import StepKind
 
 
 def note(run: Mapping[str, Any], on_phone: bool) -> str:
@@ -19,6 +20,6 @@ def note(run: Mapping[str, Any], on_phone: bool) -> str:
     `on_phone` 只影响措辞：桌面宿主传 `False`，手机版的 `view.poll()` 传 `True`。
     """
     results = run.get("results") or []
-    if not any(r.get("kind") == "recipe" and not r.get("skipped") for r in results):
+    if not any(r.get("kind") == StepKind.RECIPE and not r.get("skipped") for r in results):
         return ""
     return host.coverage_notes(on_phone).get(run.get("recipe_coverage") or "", "")

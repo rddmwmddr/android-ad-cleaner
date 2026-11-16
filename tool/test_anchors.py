@@ -94,7 +94,7 @@ ANCHORS = {
     "test_android_version.py": "单键 getprop 读不到版本时按分区属性回退。",
     "test_android_smoke.py": "真机冒烟：出包、装机、启动、执行、还原三段各自出结论。",
     "test_api_structure.py": "窗口桥契约与客户端三块的责任边界。",
-    "test_gui_import.py": "import gui.app 不许有副作用：不建目录、不改 sys.path、不加载 tool/。",
+    "test_gui_import.py": "import gui.app 不许有副作用：不建目录、不改 sys.path、不加载 tool/；`gui/toolpath.py` 是那份惰性加载的唯一出口，configure 之前加载要报可读的错。",
     "test_job.py": "一次执行的状态收成 Job，poll 只读锁内快照。",
     "test_job_races.py": "一次执行的发布点竞态：停止落在启动与登记之间仍要杀进程、running=false 的快照已带收尾行、旧执行的收尾行不串进新 Job。",
     "test_dispatcher_exclusion.py": "客户端调度器的互斥：还原、安装更新、执行与读屏检查谁在等谁，锁在别人手里时立刻回一句；停止与暂停必须等锁，判断落在临界区内。",

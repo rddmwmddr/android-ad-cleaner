@@ -5,30 +5,57 @@
 后台：tool/run.py、tool/fast.py、tool/chan_fast.py，以子进程运行，日志实时回传界面。
 打包后没有独立的 Python，子进程用「本程序 --cli 脚本名 参数…」的方式启动。
 """
-import hashlib, importlib, json, os, platform, re, runpy, subprocess, sys, threading, time, urllib.error, urllib.request, uuid, zipfile
+import json, os, platform, re, runpy, subprocess, sys, threading, time, urllib.error, urllib.request
 from pathlib import Path
 
 try:                                # 当包导入（测试）；直接跑脚本、打包时它是顶层模块
-    from . import winpreflight, updates, update_install, harmony_bridge
+    from . import winpreflight, updates, update_install, harmony_bridge, toolpath, startup
+    # adb 那一域的实现都搬进了 gui/adb.py（#1385）。显式 re-export：`app.<名字>` 仍可直取，
+    # 本模块自己的调用也走这几个名字（多处桩打在 app 上，比如 Dispatcher 用的 adb_present）。
+    from .adb import (AdbDownloader, adb_ok, adb_exe,  # noqa: F401 - 显式 re-export：tests 按 app.adb_exe 取用
+                      find_adb, adb_from_input, adb_source, adb_present)
+    from .reporter import Reporter
+    from .reporter import scrub  # noqa: F401 - 显式 re-export：tests 按 `app.scrub` 取用脱敏口径
 except ImportError:
-    import winpreflight, updates, update_install, harmony_bridge
+    import winpreflight, updates, update_install, harmony_bridge, toolpath, startup
+    from adb import (AdbDownloader, adb_ok, adb_exe,  # noqa: F401 - 同上；打包件里 gui/ 在 sys.path 上
+                     find_adb, adb_from_input, adb_source, adb_present)
+    from reporter import Reporter
+    from reporter import scrub  # noqa: F401 - 同上；打包件里 gui/ 在 sys.path 上
+
+# 启动建议与写剪贴板的实现在 gui/startup.py；这几个名字按 `app.<名字>` 取用的地方（tests/、
+# Api.copy_text）照旧，`startup_failed` 另有一个转发壳（弹窗标题要用本模块的 APP_NAME）。
+version_key = startup.version_key
+startup_advice = startup.startup_advice
+_attribution = startup._attribution
+win_clipboard = startup.win_clipboard
+COPIED_NOTE = startup.COPIED_NOTE
+MANUAL_COPY_NOTE = startup.MANUAL_COPY_NOTE
+
 
 APP_NAME = "肉呆去广告"
 VERSION = "0.4.4"
 FROZEN = getattr(sys, "frozen", False)
-BASE = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-TOOL = os.path.join(BASE, "tool")
 IS_WIN = platform.system() == "Windows"
+
+# 手机版在 import 本模块之前就 configure 过了，这里只给桌面入口的默认值
+if not toolpath.BASE:
+    toolpath.configure(getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+
+def __getattr__(name):
+    """BASE / TOOL 的落地在 gui/toolpath.py；这里只转发，别在别处再算一份。"""
+    if name in ("BASE", "TOOL"):
+        return getattr(toolpath, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _tool(name):
-    """tool/ 是命令行脚本目录，不在包里：真要用某个工具模块时才把它加进 sys.path。
+    """tool/ 是命令行脚本目录，不在包里：真要用某个工具模块时才把它加进 sys.path（只走 toolpath）。
 
     import 这个客户端本身不碰 sys.path、也不加载 tool/ 下的文件，测试用正常 import 拉起来。
     """
-    if TOOL not in sys.path:
-        sys.path.insert(0, TOOL)
-    return importlib.import_module(name)
+    return toolpath.tool(name)
 
 
 def data_dir():
@@ -136,12 +163,12 @@ def _fix_stdio():
 
 
 def cli_main():
-    sys.path.insert(0, TOOL)
+    sys.path.insert(0, toolpath.TOOL)
     _fix_stdio()
     script, args = sys.argv[2], sys.argv[3:]
-    sys.argv = [os.path.join(TOOL, script)] + args
+    sys.argv = [os.path.join(toolpath.TOOL, script)] + args
     try:
-        runpy.run_path(os.path.join(TOOL, script), run_name="__main__")
+        runpy.run_path(os.path.join(toolpath.TOOL, script), run_name="__main__")
     except Exception:
         # 保留完整原因；避免异常逸出 PyInstaller 后只剩「Failed to execute script launch」。
         import traceback
@@ -152,6 +179,7 @@ def cli_main():
 # ---------- adb ----------
 # adb 下载（#273：从 Google 下载失败）。固定版本先从官网、再从腾讯云镜像下，都核对 SHA-256；
 # 校验值按 Google 官方清单 repository2-3.xml 的 SHA-1 核过（2026-10-29，两处文件一致）。都失败再从官网下最新版。
+# 发现与下载的实现都在 gui/adb.py（#1385）；这几张表留在本模块当单一来源，构造 `AdbDownloader` 时传进去。
 ADB_VERSION = "37.0.1"
 ADB_PINNED = {
     "Windows": ("platform-tools_r37.0.1-win.zip", "45f4d63113e895ebde0c90f194099a4676b6ac653bd28d54314a9e022bbc1a99"),
@@ -165,71 +193,13 @@ ADB_LATEST = {
     "Windows": "https://dl.google.com/android/repository/platform-tools-latest-windows.zip",
     "Linux": "https://dl.google.com/android/repository/platform-tools-latest-linux.zip",
 }
-
-
-def adb_ok(path):
-    """只用 1.0.41 及以上的 adb。手机助手自带的 1.0.32 等旧版会让挂起、快应用等命令失败，
-    和新版同时运行还会互相顶掉服务（#25 #75）。"""
-    try:
-        out = _tool("adb_link").invoke(path, "version", timeout=8)
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    m = re.search(r"version 1\.0\.(\d+)", out)
-    return bool(m) and int(m.group(1)) >= 41
-
-
-def adb_exe():
-    return "adb.exe" if IS_WIN else "adb"
-
-
 ADB_VERSION_HINT = "跑不出 Android Debug Bridge 的版本号，或者版本太旧（需要 1.0.41 及以上）"
-
-
-def find_adb(platform_tools, manual=None):
-    """手动指定的 adb 排第一：用户填了就是要它压过客户端下载的那份和其他来源（#311）。
-    不存在或版本不够的候选由 adb_candidates / adb_ok 跳过，于是自动回退到后面的来源。"""
-    last = (os.path.join(os.environ.get("LOCALAPPDATA", ""), "Android", "Sdk", "platform-tools", "adb.exe"),
-            "/opt/homebrew/bin/adb", "/usr/local/bin/adb")
-    first = tuple(p for p in (manual, os.path.join(platform_tools, adb_exe())) if p)
-    for c in _tool("adb_link").adb_candidates(first=first, last=last):
-        if adb_ok(c):
-            return c
-    return None
-
-
-def adb_from_input(text):
-    """手填或文件对话框给的路径 → adb 可执行文件。目录补上 adb / adb.exe，去掉粘贴时带进来的引号。"""
-    path = (text or "").strip().strip("\"'")
-    if not path:
-        return ""
-    path = os.path.abspath(os.path.expanduser(path))
-    if os.path.isdir(path):
-        path = os.path.join(path, adb_exe())
-    return path
-
-
-def adb_source(adb, manual, platform_tools):
-    """当前生效的这份 adb 从哪来：manual / downloaded / system / none。"""
-    if not adb:
-        return "none"
-    if manual and os.path.normcase(adb) == os.path.normcase(manual):
-        return "manual"
-    if os.path.normcase(adb) == os.path.normcase(os.path.join(platform_tools, adb_exe())):
-        return "downloaded"
-    return "system"
 
 
 def client_api():
     """入口（窗口与截图脚本）共用的构造：数据目录建好，adb 按既定顺序找，手填的那份排第一。"""
     data = ClientData(data_dir()).ensure()
     return Api(data.root, adb=find_adb(data.platform_tools, manual=data.setting("adb")))
-
-
-def adb_present(adb, serial):
-    """手机此刻是否连着（adb 状态为 device）；先给它 10 秒回来。"""
-    if not adb:
-        return False
-    return _tool("adb_link").Connection(serial, adb=adb).alive(wait=10)
 
 
 CHIME_GAP = 3       # 秒：几件事挤在一起时只响一次
@@ -255,7 +225,7 @@ def chime():
     if os.environ.get("AAC_NO_SOUND") or now - _last_chime[0] < CHIME_GAP:
         return                          # AAC_NO_SOUND：回归测试不出声
     _last_chime[0] = now
-    path = os.path.join(BASE, "gui", "web", "chime.wav")
+    path = os.path.join(toolpath.BASE, "gui", "web", "chime.wav")
     try:
         play_sound(path)
     except Exception:
@@ -284,7 +254,7 @@ def cmd_for(script, *args):
         cli = os.path.join(os.path.dirname(sys.executable), "aac-cli.exe")
         exe = cli if IS_WIN and os.path.exists(cli) else sys.executable     # Windows 用命令行版，输出不丢
         return [exe, "--cli", script, *args]
-    return [sys.executable, "-u", os.path.join(TOOL, script), *args]
+    return [sys.executable, "-u", os.path.join(toolpath.TOOL, script), *args]
 
 
 class Runner:
@@ -305,212 +275,22 @@ class Runner:
                                 creationflags=NOWIN, bufsize=1)
 
 
-class Task:
-    """一个步骤。uses_ui：这一步要连读屏，前一步因读屏被占用失败时跳过它。
-    channels 非 None 表示这一步是关营销通知：运行前把勾选的渠道写进 channels.tsv，
-    args 由 `_work()` 换成 `-s <序列号> off <清单>`。
-    skip_reason 非空表示这一步这次不跑：照样占结果里的一行，说明为什么（#577）。
-    kind 是这一步的固定身份（backup / recipe / channels / quickapp / ads / finish），
-    重试与多轮结果合并都按它对齐，不认标题（#638；标题里的「（3 / 9 段）」会变）。
-    always_run 表示用户点「停止」之后这一步仍要跑完（收尾把手机改回不持续亮屏）。"""
-
-    def __init__(self, title, script, args=(), uses_ui=False, channels=None, skip_reason="", kind="",
-                 always_run=False):
-        self.title, self.script, self.args = title, script, args
-        self.uses_ui, self.channels = uses_ui, channels
-        self.skip_reason, self.kind = skip_reason, kind
-        self.always_run = always_run
+# 计划侧（#1386）：这 9 个名字住 `gui/tasks.py`，这里只留显式 re-export，`tests/` 与手机版照旧按
+# `app.<名字>` 取用。身份词表在 `tool/plan.py` 的 `StepKind`。
+try:
+    from .tasks import (UNCHECKED, Task, not_run, not_run_result, plan_tasks,  # noqa: F401 - 显式 re-export
+                        retry_plan, retryable, runs_after_stop, step_result)
+except ImportError:
+    from tasks import (UNCHECKED, Task, not_run, not_run_result, plan_tasks,  # noqa: F401 - 显式 re-export
+                       retry_plan, retryable, runs_after_stop, step_result)
 
 
-def runs_after_stop(task):
-    """停止后仍要跑的一步。由构造处声明（#1104）：改标题文案不再影响它跑不跑。"""
-    return task.always_run
-
-
-UNCHECKED = "未勾选，本次没有执行"
-
-
-def not_run(title, reason, kind=""):
-    """这次不跑的步骤：不碰手机，只在结果里留一行（#577）。"""
-    return Task(title, "", skip_reason=reason, kind=kind)
-
-
-def step_result(task, **fields):
-    """结果里的一行：标题与 kind 从任务上取，其余字段各有各的。合并多轮结果时按 kind 对齐（#638）。"""
-    return {"title": task.title, "kind": task.kind, **fields}
-
-
-def not_run_result(job, task):
-    """没执行的项进结果：rc=0 表示这一步没出错，界面按「跳过」显示、上报也写「跳过」；
-    原因放 tail，摘要函数认不出模式时直接拿它当摘要。诊断里由 `skip_reason()` 压成一句。"""
-    job.add_result(step_result(task, rc=0, skipped=True, sec=0, tail=[task.skip_reason]))
-
-
-def plan_tasks(serial, plan, offered=None):
-    """这次排哪些任务。勾了的照旧起脚本；没勾的留一行「跳过」并说明原因（#577）。
-
-    `plan` 是前端发来的计划字典，或已经收好的 `Plan`（#1106；键与默认值在 `tool/plan.py`）。
-    `offered` 是选择页上摆出来的项（调用方从检测结果与上一次通知扫描里取），用来区分
-    「用户没勾」和「这台机本来就没有」；给 None 时不知道摆过什么，就不留这些行。"""
-    plan = _tool("plan").Plan.from_json(plan)
-    tasks = []
-    if plan.backup:
-        tasks.append(Task("存改动前的快照", "run.py", ["-s", serial, "backup"], kind="backup"))
-    # msa 没挂起时它的开屏窗会抢走主题段的前台，所以挂起排在广告段之前（#968）
-    ads = list(plan.ads)
-    if ads:
-        tasks.append(Task("挂起广告组件", "run.py", ["-s", serial, "suspend", *ads], kind="ads"))
-    elif offered is not None:
-        seen = offered.get("ads") or []
-        tasks.append(not_run("挂起广告组件",
-                             "没有已知的广告组件" if not seen
-                             else "广告组件已经挂起" if all(a.get("suspended") for a in seen)
-                             else UNCHECKED,
-                             kind="ads"))
-    steps = list(plan.steps)
-    if steps:
-        title = "关闭各 App 里的广告开关"
-        total = len(offered.get("steps") or []) if offered else 0
-        if total > len(steps):
-            title += f"（{len(steps)} / {total} 段）"
-        tasks.append(Task(title, "run.py",
-                          ["-s", serial, "recipe", *steps, *(["--ref"] if plan.ref else [])],
-                          uses_ui=True, kind="recipe"))
-    elif offered is not None:
-        tasks.append(not_run("关闭各 App 里的广告开关",
-                             UNCHECKED if offered.get("steps") else "没有专用脚本，这一步要照清单手动做",
-                             kind="recipe"))
-    channels = list(plan.channels)
-    if channels:
-        tasks.append(Task("关闭营销通知", "chan_fast.py", uses_ui=True, channels=channels, kind="channels"))
-    elif offered is not None:
-        seen = offered.get("channels")          # None 表示通知没扫成
-        tasks.append(not_run("关闭营销通知",
-                             "通知扫描没有完成，本次没有关闭营销通知" if seen is None
-                             else "没有扫描到可关闭的营销渠道" if not seen else UNCHECKED,
-                             kind="channels"))
-    if plan.quickapp:
-        tasks.append(Task("关闭快应用", "run.py", ["-s", serial, "quickapp", "off"], kind="quickapp"))
-    elif offered is not None:
-        apps = offered.get("quickapps") or []
-        tasks.append(not_run("关闭快应用",
-                             "没有检测到快应用组件" if not apps
-                             else "可关闭的快应用组件都已关闭" if all(q.get("closed") or q.get("keep") for q in apps)
-                             else UNCHECKED,
-                             kind="quickapp"))
-    # 重试轮只在收尾上一轮没做成时才跑它（#638）；首次执行取默认，照旧收尾
-    if plan.finish:
-        tasks.append(Task("收尾", "run.py", ["-s", serial, "finish"], kind="finish", always_run=True))
-    return tasks
-
-
-def retryable(result):
-    """这一步是不是没做成：失败，或因读屏被占用 / 断线 / 锁屏而跳过（#638）。
-
-    除设备侧的原因外，子进程起不来（rc=-1）也算——这类重跑一次多半就好了。
-    没勾选、这台机本来没有或已关、通知没扫成的那几档（#577）是 rc=0 的跳过，用户点「停止」的步带
-    stopped，两者都不重试。
-    """
-    return bool(result.get("rc")) and not result.get("stopped")
-
-
-def retry_plan(plan, results):
-    """上一轮没做成的步骤组成的计划；一项都不剩时返回 None（#638）。
-
-    广告开关步只重跑 `failed_steps` 里的段——脚本中途退出、没留下段名时才整段重跑。
-    快照一旦成功就不再重存：重存会把已经关掉的状态当成原状，还原就还原不回去了。
-    「通知没扫成」那一行不算可重试：扫描在选择页上就失败了，重跑这一步时的渠道清单本来就是空的，
-    要重扫只能回选择页（#577 的第三档）。
-    """
-    plan = _tool("plan").Plan.from_json(plan or {})
-    again = {r.get("kind"): retryable(r) for r in results if r.get("kind")}
-    recipe = next((r for r in results if r.get("kind") == "recipe"), {})
-    steps = list(recipe.get("failed_steps") or plan.steps) if again.get("recipe") else []
-    out = _tool("plan").Plan(backup=again.get("backup", False),
-                             steps=steps, ref=plan.ref, model=plan.model,
-                             channels=list(plan.channels) if again.get("channels") else [],
-                             quickapp=plan.quickapp and again.get("quickapp", False),
-                             ads=list(plan.ads) if again.get("ads") else [],
-                             finish=again.get("finish", False))
-    if not any((out.backup, out.steps, out.channels, out.quickapp, out.ads, out.finish)):
-        return None
-    return out
-
-
-class Job:
-    """一次执行的状态（ADR-0010）。工作线程写，HTTP 线程经 snapshot() 读一致视图。
-
-    `plan` 是这一轮跑的规格对象（`tool/plan.py` 的 `Plan`），`retry_plan()` 拿它重建下一轮；重试轮的
-    `results` / `lines` / `payloads` 从上一轮接管过来，每一步按 kind 覆盖同一步的旧结果，日志与上报
-    仍是整场的（#638）。"""
-
-    def __init__(self, serial="", model="", total=0, t0=None, plan=None, recipe_coverage="",
-                 base_results=(), base_lines=(), base_payloads=()):
-        self.lock = threading.RLock()
-        self.running = True
-        self.recipe_coverage = recipe_coverage   # 这次所用机型脚本的验证档位，两个来源见 Dispatcher.start
-        self.lines = list(base_lines)
-        self.idx = 0
-        self.total = total
-        self.title = ""
-        self.results = list(base_results)
-        self.plan = _tool("plan").Plan.from_json(plan) if plan else None
-        self.failed_steps = []          # 本步骤里引擎报的未完成段名
-        self.proc = None
-        self.cancel = False
-        self.t0 = time.time() if t0 is None else t0
-        self.serial = serial
-        self.model = model
-        self.paused = False
-        self.pause = False
-        self.recovery = ""
-        self.step_events = set()
-        self.payloads = list(base_payloads)
-
-    def add_result(self, result):
-        """记一行的结果。重试轮里同 kind 的那一行被就地覆盖，界面看到的始终是各步最新一轮（#638）。
-
-        标题留着上一轮的：`关闭各 App 里的广告开关（3 / 9 段）` 说的是用户勾了哪几段，重试轮只跑其中
-        一两段，按这一轮重算会把覆盖范围从界面上抹掉。"""
-        with self.lock:
-            kind = result.get("kind")
-            if kind:
-                for i, old in enumerate(self.results):
-                    if old.get("kind") == kind:
-                        self.results[i] = {**result, "title": old.get("title", result["title"])}
-                        return
-            self.results.append(result)
-
-    def request_stop(self):
-        """用户点「停止」：置取消并杀掉正在跑的引擎进程。"""
-        with self.lock:
-            self.cancel = True
-            proc = self.proc
-        if proc:
-            proc.terminate()
-
-    def request_pause(self):
-        with self.lock:
-            self.pause = True
-
-    def clear_pause(self):
-        with self.lock:
-            self.pause = False
-
-    def snapshot(self, since=0):
-        """某一时刻的一致只读视图。lines 只给 since 之后的新行，next 是下一次的偏移。
-
-        这一份另带 `recipe_coverage`：这次所用机型脚本的验证档位，原样透传引擎给的值（#1129）。
-        `retry` 是此刻还能重试的步数，结果页的按钮按它取 N（#638）。"""
-        with self.lock:
-            lines = self.lines[since:]
-            return {"running": self.running, "lines": lines, "next": since + len(lines),
-                    "idx": self.idx, "total": self.total, "title": self.title,
-                    "results": list(self.results), "sec": round(time.time() - self.t0),
-                    "cancel": self.cancel, "recovery": self.recovery,
-                    "recipe_coverage": self.recipe_coverage,
-                    "pause": self.pause, "paused": self.paused,
-                    "retry": sum(1 for r in self.results if retryable(r))}
+# 执行编排（#1383）：`Dispatcher` / `Job` 住 `gui/dispatcher.py`，这里只留显式 re-export；
+# 宿主相关的三个钩子（铃声、断线措辞、adb 存活探测）在 `Api.__init__` 里按调用时取值传入。
+try:
+    from .dispatcher import Dispatcher, Job  # noqa: F401 - 显式 re-export：tests 按 `app.Job` 取用
+except ImportError:
+    from dispatcher import Dispatcher, Job  # noqa: F401 - 同上；打包件里 gui/ 在 sys.path 上
 
 
 def os_name():
@@ -580,41 +360,6 @@ def other_adb():
     return sorted(paths)
 
 
-def win_clipboard(text):
-    """直接写 Unicode 剪贴板。以前经 PowerShell 管道，中文 Windows 按 GBK 解码，粘贴出来是乱码（#33 #50 #128）。"""
-    import ctypes
-    from ctypes import wintypes
-    user32 = ctypes.WinDLL("user32", use_last_error=True)
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    user32.OpenClipboard.argtypes = [wintypes.HWND]
-    user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
-    user32.SetClipboardData.restype = wintypes.HANDLE
-    kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
-    kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
-    kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
-    kernel32.GlobalLock.restype = wintypes.LPVOID
-    kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
-    kernel32.GlobalFree.argtypes = [wintypes.HGLOBAL]
-    data = text.encode("utf-16-le") + b"\0\0"
-    for _ in range(20):                       # 别的程序可能正占着剪贴板
-        if user32.OpenClipboard(None):
-            break
-        time.sleep(0.05)
-    else:
-        raise OSError("剪贴板被占用")
-    try:
-        user32.EmptyClipboard()
-        handle = kernel32.GlobalAlloc(0x0002, len(data))    # GMEM_MOVEABLE
-        pointer = kernel32.GlobalLock(handle)
-        ctypes.memmove(pointer, data, len(data))
-        kernel32.GlobalUnlock(handle)
-        if not user32.SetClipboardData(13, handle):           # CF_UNICODETEXT
-            kernel32.GlobalFree(handle)
-            raise OSError("写剪贴板失败")
-    finally:
-        user32.CloseClipboard()
-
-
 # 错误日志上报：用户预览并确认后发送；说明见 docs/12-错误日志上报.md
 REPORT_URL = "https://supabase.ahuamiao.com/functions/v1/aac-report"
 REPORT_LIMIT = 3            # 每小时最多上报几次（服务器另有按 IP / 安装编号 / 全站的配额）
@@ -630,23 +375,6 @@ TAP_REFUSED = "；电脑点击被拒（未开 USB 调试安全设置）"
 ENGINE_HOST = ""
 # 没执行过任何步骤时只有手机型号，看不出问题（错误日志 10-28：6 份空报告）
 EMPTY_REPORT = "还没有执行记录，这份报告只有手机型号，看不出问题。请先执行一次再上报；还没执行就遇到问题，请到 GitHub 反馈，写清楚卡在哪一步。"
-PRIVATE = (
-    (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "<邮箱>"),
-    (re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)"), "<手机号>"),
-    (re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?\b(?!\()"), "<IP>"),   # 华为版本号「4.2.0.180(C00…)」不是 IP
-    # 用户目录可能不在 C 盘（360「C 盘搬家」等把它挪到 E:\…\Users\名字），整段路径前缀一起换掉
-    (re.compile(r"(?:[A-Za-z]:)?[^\s'\"<>|]*?[\\/](?:Users|home)[\\/][^/\\\s'\"<>]+", re.I), "<用户目录>"),
-)
-
-
-def scrub(text, serial=None):
-    """序列号、用户目录、邮箱、手机号、IP 换成占位符；服务器收到后再做一遍。"""
-    for private, replacement in ((serial, "<序列号>"), (os.path.expanduser("~"), "<用户目录>")):
-        if private:
-            text = text.replace(private, replacement).replace(private.replace("\\", "\\\\"), replacement)
-    for pattern, replacement in PRIVATE:
-        text = pattern.sub(replacement, text)
-    return text
 
 
 def skip_reason(result):
@@ -660,443 +388,6 @@ def skip_reason(result):
         return ""
     return re.split(r"[。！？；\n]", tail[-1].strip())[0].strip()
 
-
-class AdbDownloader:
-    """下载并校验 platform-tools（#273）。下载源表、校验、落盘与下载状态都在这里（ADR-0011）。"""
-
-    def __init__(self, data, adb=None):
-        self.data = data
-        self.adb = adb
-        self.dl = {"state": "idle", "pct": 0, "msg": ""}
-
-    def adb_sources(self):
-        """[(来源名, 网址, sha256 或 None)]：固定版本两处，最后是官网最新版。"""
-        name, digest = ADB_PINNED[platform.system()]
-        return [(label, base + name, digest) for label, base in ADB_MIRRORS] + \
-               [("Google 官网（最新版）", ADB_LATEST[platform.system()], None)]
-
-    def _fetch(self, label, url, digest, zp):
-        self.dl = {"state": "running", "pct": 0, "msg": f"正在从{label}下载 platform-tools……"}
-        h = hashlib.sha256()
-        request = urllib.request.Request(url, headers={"User-Agent": f"AndroidAdCleaner/{VERSION}"})
-        with urllib.request.urlopen(request, timeout=20) as r, open(zp, "wb") as f:
-            total = int(r.headers.get("Content-Length") or 0); got = 0
-            while True:
-                b = r.read(65536)
-                if not b:
-                    break
-                f.write(b); h.update(b); got += len(b)
-                if total:
-                    self.dl["pct"] = int(got * 100 / total)
-        if digest and h.hexdigest() != digest:
-            raise ValueError("文件校验不对，可能下载不完整或被改动")
-
-    def _download(self, sources=None):
-        self.data.ensure()
-        zp = self.data.adb_zip
-        errors = []
-        try:
-            # sources 传 callable：源表构造失败也要被下面这支 except 收成 dl 的 error 状态
-            for label, url, digest in (sources or self.adb_sources)():
-                try:
-                    self._fetch(label, url, digest, zp)
-                    break
-                except Exception as e:
-                    errors.append(f"{label}：{e}")
-            else:
-                raise RuntimeError("；".join(errors))
-            with zipfile.ZipFile(zp) as z:
-                z.extractall(self.data.root)
-            os.remove(zp)
-            adb = os.path.join(self.data.platform_tools, adb_exe())
-            if not IS_WIN:
-                os.chmod(adb, 0o755)
-            self.adb = adb
-            self.dl = {"state": "done", "pct": 100, "msg": "adb 已就绪"}
-        except Exception as e:
-            self.dl = {"state": "error", "pct": 0, "msg": f"下载失败：{e}"}
-            try:
-                os.remove(zp)
-            except OSError:
-                pass
-
-    def download_state(self):
-        return self.dl
-
-
-class Reporter:
-    """错误诊断与上报：记下最近一次失败、组织上报内容、发送与限频（docs/12，ADR-0011）。"""
-
-    def __init__(self, data):
-        self.data = data
-        self.last_error = None
-        self.report_times = []
-
-    def remember_error(self, operation, serial, detail):
-        # 本地保留完整异常，分享前替换序列号和用户目录；不再截掉异常开头。
-        for private, replacement in ((serial, "<序列号>"), (os.path.expanduser("~"), "<用户目录>")):
-            if private:
-                detail = detail.replace(private, replacement).replace(private.replace("\\", "\\\\"), replacement)
-        self.last_error = {"operation": operation, "detail": detail}
-        folder = self.data.logs
-        try:
-            os.makedirs(folder, exist_ok=True)
-            Path(folder, "last-error.txt").write_text(f"客户端 {VERSION} · {operation}\n{detail}\n", encoding="utf-8")
-        except OSError:
-            pass  # 保存日志失败也要让界面收到原始问题
-        lines = detail.splitlines()
-        causes = [line.strip() for line in lines if re.search(r"(?:Exception|Error|Caused by:|原始异常：|启动失败)", line)
-                  and not line.lstrip().startswith("at ")]
-        summary = "\n".join(causes[:4]) or (detail if len(detail) <= 600 else detail[:600] + "…")
-        help_ui = _tool("troubleshooting")
-        recovery = help_ui.UI_RECOVERY if help_ui.is_ui_connection_error(detail) else ""
-        if recovery:
-            summary = recovery + "\n\n" + summary
-        if len(summary) > 1000:
-            summary = summary[:1000] + "…（完整原因见诊断）"
-        result = {"error": summary, "detail": detail}
-        if recovery:
-            result["recovery"] = recovery
-        return result
-
-    def report_payload(self, status, view):
-        """要上报的全部内容。界面原样展示给用户，确认后发送同一份。"""
-        info = (status or {}).get("info") or {}
-        serial = view.get("serial")
-        log = "\n".join(l for l in view.get("lines", []) if l.strip())
-        if self.last_error:
-            log += f"\n\n[最近失败：{self.last_error['operation']}]\n{self.last_error['detail']}"
-        payloads = [x for x in view.get("payloads", []) if x.strip()]
-        if payloads:
-            # 放在末尾：日志只留最后 2 万字，骨架跟着失败日志一起留下，不会被早先的成功步骤挤掉
-            log += "\n\n[诊断载荷]\n" + "\n".join(payloads)
-        steps = [{"title": scrub(r["title"])[:40], "sec": int(r.get("sec") or 0),
-                  "result": "跳过" if r.get("skipped") else "已停止" if r.get("stopped") else ("成功" if r["rc"] == 0 else "失败")}
-                 for r in view.get("results", [])][:12]
-        return {
-            "client_version": VERSION,
-            "platform": f"{os_name()}（{platform.machine()}）"[:80],
-            "phone_brand": scrub(info.get("brand") or "")[:40],
-            "phone_model": scrub(info.get("name") or info.get("model") or "")[:80],
-            "phone_system": scrub(info.get("os") or info.get("build") or "")[:160],
-            "android": (info.get("android") or "")[:16],
-            "steps": steps,
-            "log": scrub(log, serial)[-20000:],      # 只留末尾；开头是早先成功的步骤
-        }
-
-    def _install_id(self):
-        """第一次上报时随机生成，只用来限频；不取任何设备或电脑标识。"""
-        path = Path(self.data.install_id)
-        try:
-            value = path.read_text(encoding="utf-8").strip()
-            if uuid.UUID(value).version == 4:
-                return value
-        except (OSError, ValueError):
-            pass
-        value = str(uuid.uuid4())
-        self.data.ensure()
-        path.write_text(value, encoding="utf-8")
-        return value
-
-    def send_report(self, payload):
-        now = time.time()
-        self.report_times = [t for t in self.report_times if now - t < 3600]
-        if len(self.report_times) >= REPORT_LIMIT:
-            return {"error": f"一小时内最多上报 {REPORT_LIMIT} 次，请稍后再试"}
-        if not isinstance(payload, dict):
-            return {"error": "上报内容格式不对"}
-        if not payload.get("steps") and not str(payload.get("log") or "").strip():
-            return {"error": EMPTY_REPORT}
-        body = dict(payload, install_id=self._install_id())
-        request = urllib.request.Request(
-            REPORT_URL, data=json.dumps(body, ensure_ascii=False).encode("utf-8"), method="POST",
-            headers={"Content-Type": "application/json", "User-Agent": f"AndroidAdCleaner/{VERSION}"})
-        try:
-            # 云函数闲置后第一次调用要加载依赖，给足时间
-            with urllib.request.urlopen(request, timeout=45) as response:
-                result = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as e:
-            if e.code == 429:
-                return {"error": "上报太频繁，请一小时后再试"}
-            try:
-                message = json.loads(e.read().decode("utf-8")).get("message") or ""
-            except (ValueError, OSError):
-                message = ""
-            return {"error": f"服务器拒绝了这次上报（{e.code}{'：' + message if message else ''}）"}
-        except (urllib.error.URLError, OSError, ValueError) as e:
-            return {"error": f"连不上上报服务器：{getattr(e, 'reason', e)}"}
-        self.report_times.append(now)
-        if result.get("status") == "duplicate":
-            return {"ok": True, "duplicate": True}
-        if result.get("status") != "ok":
-            return {"error": "服务器没有确认收到"}
-        return {"ok": True, "id": result.get("id", "")}
-
-
-class Dispatcher:
-    """排任务步骤、起引擎子进程、收日志与事件（ADR-0004 / ADR-0010 / ADR-0011）。
-
-    `on_error(operation, serial, detail)` 只回 recovery 文案，不认识上报块；
-    `adb_of()` / `runner_of()` / `backups_of()` 在真正要用时取值：下载后 adb 路径会变，
-    门面上的 runner / backups 也允许被调用方整体替换，两处必须读同一份。
-    """
-
-    def __init__(self, runner_of, backups_of, data, adb_of, on_error):
-        self.runner_of = runner_of
-        self.backups_of = backups_of
-        self.data = data
-        self.adb_of = adb_of
-        self.on_error = on_error
-        # 结果摘要与验证档位提示（#1189 #1188）：构造时取一次，别在 poll 的轮询热路径上现取
-        self.summary = _tool("summary")
-        self.coverage_note = _tool("coverage_note")
-        self.job = None
-        self.lock = threading.Lock()
-        self.side = ""                  # 正在跑的旁路操作（还原），与执行互斥（#662）
-
-    def exclusive(self):
-        """`ui_check()` 与 `start()` 互斥：持锁期间不许开新任务。"""
-        return self.lock
-
-    def busy(self):
-        """调用方须持 `exclusive()` 的锁。"""
-        return bool(self.job and self.job.running)
-
-    def claim(self, name, wait=0.2):
-        """占住「旁路操作」的位置（还原）：执行中或已有旁路操作时返回占着它的那件事的说明，占到了返回空串。
-        还原与执行同时跑会互相点乱同一块屏，手机版上还原先结束还会把执行的保活一起撤掉（#662）。
-
-        拿锁只等 `wait` 秒：`ui_check()` 持着同一把锁最长 75 秒，按界面按钮的线程不该被按在那里等，
-        拿不到就直接回一句。"""
-        if not self.lock.acquire(timeout=wait):
-            return f"正在检查读屏连接，等它结束后再{name}"
-        try:
-            if self.busy():
-                return f"正在执行去广告，等它结束后再{name}"
-            if self.side:
-                return f"「{self.side}」还没做完，请稍后"
-            self.side = name
-            return ""
-        finally:
-            self.lock.release()
-
-    def release(self):
-        with self.lock:
-            self.side = ""
-
-    def start(self, serial, plan, offered=None, base_results=(), base_lines=(), base_payloads=(),
-              recipe_coverage=""):
-        """plan: 这一轮的规格对象（`tool/plan.py` 的 `Plan`）；直接传字典也收，第一行用 `from_json` 收拢。
-        offered: 选择页上摆出来的项，给没勾的项定「没执行」的原因（#577）；None 表示不知道。
-        recipe_coverage: 这份机型脚本的验证档位，两个调用点各给各的：`Api.start()` 从 status-json 取，
-        `Api.retry()` 沿用上一轮快照的值；都不在这里算（#1129）。
-        三个 base_*: 重试轮从上一轮接管的快照（#638）；首次执行都是空的。"""
-        plan = _tool("plan").Plan.from_json(plan)
-        with self.lock:
-            if self.job and self.job.running:
-                return {"error": "已有任务在运行"}
-            if self.side:
-                return {"error": f"「{self.side}」还没做完，请稍后再开始"}
-            tasks = plan_tasks(serial, plan, offered)
-            total = sum(1 for t in tasks if not t.skip_reason)
-            self.job = Job(serial=serial, model=plan.model, total=total, plan=plan,
-                           recipe_coverage=recipe_coverage,
-                           base_results=base_results, base_lines=base_lines,
-                           base_payloads=base_payloads)
-        threading.Thread(target=self._work, args=(tasks,), daemon=True).start()
-        return {"ok": True, "total": total}
-
-    def _log(self, s, job=None):
-        """记一行输出。事件行只改状态、不进日志，返回 None；人话返回存下来的文本。
-        载荷行（页面骨架、通知权限模式等机器数据）单独收着，上报时拼在末尾：不进界面日志与步骤摘要，也不会在
-        「最近失败的完整诊断」里重复一遍。工作线程传入自己那一次的 Job：它比 `Api.job`
-        活得久，收尾时不能写进下一次执行。"""
-        job = self.job if job is None else job
-        s = s.rstrip("\n")
-        events = _tool("events")
-        if events.is_event(s):
-            self._event(events.parse_data(s), job)
-            return None
-        if events.is_payload(s):
-            with job.lock:
-                job.payloads.append(events.strip_payload(s))
-            return None
-        with job.lock:
-            job.lines.append(s)
-        return s
-
-    def _event(self, data, job=None):
-        """引擎事件（ADR-0004）：暂停 / 继续 / 锁屏改提示状态，`failed_steps` 记下段名，
-        其余记进本步骤的事件集合；都不进日志、不上报。`data` 是 `events.parse_data()` 给出的整份字典。"""
-        job = self.job if job is None else job
-        if not data:                    # 前缀对上但解析不出来：当没有这个事件
-            return
-        kind = data["kind"]
-        if kind == "paused":
-            with job.lock:
-                job.paused = True
-            chime()                     # 可以拿手机了
-        elif kind == "resumed":
-            with job.lock:
-                job.paused = False
-        elif kind == "locked":
-            chime()                     # 要机主来解锁
-        elif kind == "failed_steps":
-            # 载荷来自另一个进程：只认字符串列表，别的形状当没报（单个字符串会被逐字符拆成段名）
-            steps = data.get("steps")
-            named = isinstance(steps, list) and all(isinstance(s, str) for s in steps)
-            with job.lock:
-                job.failed_steps = [s.strip() for s in steps if s.strip()] if named else []
-        else:
-            with job.lock:
-                job.step_events.add(kind)
-
-    def _work(self, tasks):
-        j = self.job
-        ui_busy = False
-        done = 0                        # 真正跑过的步数：没执行的项不进「第 N / M 步」
-        self.resume()                   # 上次没清掉的暂停标记不能带进这次
-        for i, task in enumerate(tasks):
-            if task.skip_reason:
-                not_run_result(j, task)
-                continue
-            done += 1
-            with j.lock:
-                j.step_events = set()
-                j.failed_steps = []
-            if j.pause and not j.cancel:
-                # 步骤之间的暂停；步骤里面的暂停由引擎在段与段、渠道与渠道之间处理
-                with j.lock:
-                    j.paused = True
-                chime()                 # 可以拿手机了：与引擎侧暂停点的提醒一致
-                self._log("⏸ 已暂停：现在可以操作手机。操作完回到桌面、保持解锁，再点「继续」", j)
-                while j.pause and not j.cancel:
-                    time.sleep(0.5)
-                with j.lock:
-                    j.paused = False
-                if not j.cancel:
-                    self._log("▶ 继续执行", j)
-            if j.cancel and not runs_after_stop(task):
-                continue
-            with j.lock:
-                j.idx, j.title = done, task.title
-            self._log(f"\n▶ {task.title}", j)
-            if ui_busy and task.uses_ui:
-                reason = "读屏服务仍被占用，跳过本步骤；请先解决读屏连接再重试。"
-                self._log(reason, j)
-                j.add_result(step_result(task, rc=3, skipped=True, sec=0, tail=[reason]))
-                continue
-            line_start = len(j.lines)
-            t = time.time()
-            script, args = task.script, list(task.args)
-            if task.channels is not None:
-                d = self.backups_of().snapshot(j.model)
-                fn = os.path.join(d, "channels.tsv")
-                with open(fn, "w", encoding="utf-8") as f:
-                    f.write("# 包名\t渠道id\t渠道名\t应用名（客户端勾选）\n")
-                    for c in task.channels:
-                        name = re.sub(r"[\t\r\n]+", " ", str(c.get("app") or "")).strip()
-                        f.write(f"{c['pkg']}\t{c['id']}\t{c['name']}\t{name}\n")
-                args = ["-s", j.serial, "off", fn]
-            killed = False
-            try:
-                p = self.runner_of().spawn(script, *args, env_extra={"AAC_PAUSE_FILE": self.data.pause,
-                                                                     "AAC_EVENTS": "1"})
-                with j.lock:
-                    j.proc = p
-                    # 停止落在 spawn 返回、登记之前：request_stop 看不到这个进程，由登记的一方补杀
-                    killed = j.cancel and not runs_after_stop(task)
-                if killed:
-                    p.terminate()
-                tail = []
-                for line in p.stdout:
-                    shown = self._log(line, j)  # 事件行返回 None：不进步骤摘要（前端会展示 tail）
-                    if shown is not None:
-                        tail.append(shown.strip()); tail = tail[-80:]
-                rc = p.wait()
-            except Exception as e:
-                rc, tail = -1, [str(e)]
-                self._log(f"✗ {e}", j)
-            if (rc or killed) and j.cancel and not runs_after_stop(task):
-                # 用户点了停止：不是出错、不重试，也不记诊断、不提示上报（错误日志 10-28：4 份是停止后上报的）
-                j.add_result(step_result(task, rc=rc, stopped=True, sec=round(time.time() - t), tail=tail))
-                continue
-            j.add_result(step_result(task, rc=rc, sec=round(time.time() - t), tail=tail,
-                                     failed_steps=list(j.failed_steps)))
-            if rc:
-                detail = "\n".join(j.lines[line_start:])
-                ui_busy = ui_busy or "ui_busy" in j.step_events
-                if "link_lost" in j.step_events and not adb_present(self.adb_of(), j.serial):
-                    # 手机已断开：后面每一步都会报同一段排查说明（错误日志 10-27），不再执行
-                    self.on_error(task.title, j.serial, detail)
-                    reason = LINK_LOST
-                    for later in tasks[i + 1:]:
-                        if later.skip_reason:      # 本来就不跑的项：原因照旧，不写成断线
-                            not_run_result(j, later)
-                            continue
-                        self._log(f"\n▶ {later.title}\n{reason}", j)
-                        j.add_result(step_result(later, rc=3, skipped=True, sec=0, tail=[reason]))
-                    break
-                recovery = self.on_error(task.title, j.serial, detail)
-                if recovery:
-                    with j.lock:
-                        j.recovery = recovery
-        self.resume()
-        if not j.cancel:
-            chime()                     # 执行结束（成功或有步骤没成功都响，提醒回来看结果）
-        with j.lock:
-            # 收尾行与「结束」同一个临界区：看到 running=False 的快照一定已经带着这一行，
-            # 且下一次执行要等它发布完才能接管。收尾行按同一个临界区里的 cancel 取，别在锁外算
-            final = f"\n执行结束，用时 {round(time.time() - j.t0)} 秒" if not j.cancel else "\n已停止"
-            self._log(final, j)
-            j.running = False
-            j.proc = None
-
-    def poll(self, since=0):
-        j = self.job
-        if not j:
-            return {"running": False, "lines": [], "next": 0}
-        snap = j.snapshot(since)
-        if snap["running"]:
-            snap["results"] = []        # 执行中不显示结果（前端契约）；诊断与上报仍读快照里的全量
-            snap["coverage_note"] = ""  # 结果页还没出来，这一行也没意义
-        else:
-            # 每条结果附一句话（#1189）：前端只显示这个字段，不再自己认日志模式
-            snap["results"] = [{**r, "summary": self.summary.summarize(r)} for r in snap["results"]]
-            # 验证档位提示也在这里算（#1188）：判据吃拍平后的结果，两个宿主同一个口径。
-            # 宿主显式传 False，不读环境——用户 shell 里导出 AAC_HOST=phone 不该改桌面措辞（#747）。
-            snap["coverage_note"] = self.coverage_note.note(snap, on_phone=False)
-        return snap
-
-    def stop(self):
-        # 取 job、判 running 与置停止在同一把锁里：不然判完之后新一次执行顶上来，停掉的是它（#662）
-        with self.lock:
-            j = self.job
-            if not (j and j.running):
-                return True
-            j.request_stop()
-        self.resume()
-        return True
-
-    def pause(self):
-        """执行中需要操作手机时用：引擎做完手头这一项（一个渠道、机型脚本的一段、一个步骤）就停下等待。"""
-        with self.lock:
-            j = self.job
-            if not j or not j.running or j.cancel:
-                return False
-            self.data.ensure()
-            Path(self.data.pause).write_text("", encoding="utf-8")
-            j.request_pause()
-        return True
-
-    def resume(self):
-        if self.job:
-            self.job.clear_pause()
-        try:
-            os.remove(self.data.pause)
-        except OSError:
-            pass
-        return True
 
 
 # 免安装版与旧名安装并存时的那条提示（#872）。必须写明「0.3.2 及更早版本装的名字」：
@@ -1130,11 +421,21 @@ class Api:
     def __init__(self, data_dir, adb=None, runner=None):
         self.data = ClientData(data_dir)
         self.backups = _tool("backups").Backups(self.data.backups)
-        self.downloader = AdbDownloader(self.data, adb)
-        self.reporter = Reporter(self.data)
+        # 下载器只认 Data 与 adb 初值；版本号与三张源表从本模块传进去，单一来源仍在上面那张表
+        self.downloader = AdbDownloader(self.data, adb, version=VERSION,
+                                        pinned=ADB_PINNED, mirrors=ADB_MIRRORS, latest=ADB_LATEST)
+        # 上报块只用标准库：版本号、地址、空报告文案与限频从本模块传进去（单一来源仍在这里），
+        # 宿主措辞与排查提示给取值函数——手机版在构造之前就把它们换掉了。
+        self.reporter = Reporter(self.data, version=VERSION, report_url=REPORT_URL, empty_report=EMPTY_REPORT,
+                                 limit=REPORT_LIMIT, os_name=lambda: os_name(),
+                                 help_of=lambda: _tool("troubleshooting"))
         self.runner = runner or Runner(self._child_env)
         self.dispatcher = Dispatcher(lambda: self.runner, lambda: self.backups, self.data,
-                                     lambda: self.adb, self._on_error)
+                                     lambda: self.adb, self._on_error,
+                                     chime=lambda: chime(), link_lost=lambda: LINK_LOST,
+                                     adb_present=lambda adb, serial: adb_present(adb, serial),
+                                     summary=_tool("summary"), coverage_note=_tool("coverage_note"),
+                                     plan_of=lambda: _tool("plan"))
         update_root = Path(self.data.updates)
         self.updater = updates.Updates(VERSION, update_root, update_install.DesktopInstaller(update_root),
                                        source=self.data.setting("update_source", "gitee"),
@@ -1193,7 +494,7 @@ class Api:
         update_install.confirm_started(self.data.updates, VERSION, sys.executable)
         return {"adb": self.adb, "data": self.data.root, "version": VERSION, "os": platform.system(),
                 "harmony": self.harmony_bridge.enabled,
-                "images": [f for f in sorted(os.listdir(os.path.join(BASE, "images"))) if f.startswith("dev-")]}
+                "images": [f for f in sorted(os.listdir(os.path.join(toolpath.BASE, "images"))) if f.startswith("dev-")]}
 
     def harmony(self, action, serial="", mode="clean", segments=None):
         """鸿蒙窗口桥只转发；装配与状态在 `harmony_bridge.HarmonyBridge`（#898）。"""
@@ -1588,7 +889,7 @@ class Api:
     def copy_text(self, text):
         try:
             if IS_WIN:
-                win_clipboard(text)
+                startup.win_clipboard(text)          # 与启动失败弹窗同一份实现（gui/startup.py）
             else:
                 subprocess.run(["pbcopy"], input=text, text=True, encoding="utf-8", errors="replace", timeout=10)
             return True
@@ -1610,90 +911,10 @@ class Api:
         webbrowser.open(urllib.parse.quote(url, safe=":/?#[]@!$&'()*+,;=%~"))
 
 
-def version_key(text):
-    m = re.match(r"v?(\d+)\.(\d+)\.(\d+)$", (text or "").strip())
-    return tuple(map(int, m.groups())) if m else ()
-
-
-# 启动失败弹窗是原生 MessageBox：文字选不中，用户只能手抄命令、拍照识别（#811）。
-# 整段先替用户复制好；复制不进去才退回 Ctrl+C——有焦点时 Windows 的弹窗能整段复制。
-COPIED_NOTE = "这段文字已复制到剪贴板，可以直接粘贴到反馈里，不用手抄或拍照。"
-MANUAL_COPY_NOTE = "自动复制没成功，在这个弹窗上按 Ctrl+C 也能复制整段文字。"
-
-
-def startup_advice(state, blocked, error, rejected, copied=None):
-    """窗口起不来时给用户看的文案，以及要不要跳微软官网。
-
-    copied: None 还没试过写剪贴板；True 已写入；False 写入失败（#811）。
-    """
-    text, open_site = _attribution(state, blocked, error, rejected)
-    if copied is not None:
-        text += "\n\n" + (COPIED_NOTE if copied else MANUAL_COPY_NOTE)
-    return text, open_site
-
-
-def _attribution(state, blocked, error, rejected):
-    """按结论选文案（#228、#597）。
-
-    以前一律说「缺少 WebView2」，portable 包解压后文件带 MOTW 的现场被指到装不上的东西上。
-    带 MOTW 的 dll 与被判成「远程来源」的 dll 报的是同一句 `Failed to resolve`，所以先看
-    `blocked` 再认原文——前者的出路是解锁文件，不是补 config。
-    """
-    if state == "missing":
-        return (
-            "这台电脑缺少微软 Edge WebView2 运行时，界面没法显示。\n\n"
-            "点「确定」打开微软官网，下载安装「Evergreen Bootstrapper」后重新打开本程序。\n\n"
-            f"（{error}）", True)
-    if blocked:
-        return (
-            "这台电脑可能已经装了 WebView2，但程序文件被 Windows 标记成「来自网络」，"
-            "加载时被拦住了。\n\n"
-            "办法一：对下载的 zip 压缩包点右键 →「属性」→ 勾选「解除锁定」→ 确定，重新解压后再打开。\n"
-            "办法二：zip 已经删了，就在解压出来的文件夹里按住 Shift 点右键 →"
-            "「在此处打开 PowerShell 窗口」，粘贴下面这行后回车：\n"
-            "Get-ChildItem . -Recurse -File | Unblock-File\n\n"
-            f"（{error}）", False)
-    if rejected:
-        return (
-            "这台电脑的 .NET Framework 把程序自带的 dll 判成了「远程来源」，加载时被拦住了。\n\n"
-            "办法一：确认程序文件夹里 AndroidAdCleaner.exe 旁边有 AndroidAdCleaner.exe.config，"
-            "别把它删掉或改名。\n"
-            "办法二：没有这个文件，或者有了还是这样，从官方 Release 重新下载最新版，"
-            "完整解压后再打开。\n\n"
-            f"（{error}）", False)
-    if state == "unknown":
-        return (
-            "程序启动失败。这台电脑的 WebView2 状态没能确认（多半是注册表读取受限），"
-            "所以下面的原因不一定是缺运行时。\n\n"
-            "如果这是 Windows 10 且从没装过，先装一个再试：\n"
-            "https://developer.microsoft.com/microsoft-edge/webview2/\n\n"
-            "装过还这样，把括号里的原文发到 "
-            "https://github.com/rddmwmddr/android-ad-cleaner/issues/new 。\n\n"
-            f"（{error}）", False)
-    return (
-        "程序启动失败。WebView2 运行时在，程序文件也没有被 Windows 锁定，"
-        "是按别的原因退出的。\n\n"
-        "把下面括号里的原文发到 "
-        "https://github.com/rddmwmddr/android-ad-cleaner/issues/new ，我们按它定位。\n\n"
-        f"（{error}）", False)
-
-
 def startup_failed(error, preflight=None, notify=None, open_url=None, clipboard=None):
-    """先替用户复制、再按归因弹提示（#228、#811）。四个协作者可注入，接线本身在非 Windows 上也能验。"""
-    import ctypes, webbrowser
-    preflight = preflight or winpreflight
-    notify = notify or (lambda text: ctypes.windll.user32.MessageBoxW(0, text, APP_NAME, 0x40))
-    clipboard = clipboard or win_clipboard
-    verdict = (preflight.webview2_state(), preflight.blocked_files(BASE), error,
-               preflight.load_rejected(error))
-    text, open_site = startup_advice(*verdict, copied=True)
-    try:
-        clipboard(text)                       # 写进去的就是弹窗里那句，多一个字都不差
-    except Exception:                         # 复制失败不能连弹窗一起吞掉：这里没有控制台
-        text, open_site = startup_advice(*verdict, copied=False)
-    notify(text)
-    if open_site:
-        (open_url or webbrowser.open)("https://developer.microsoft.com/microsoft-edge/webview2/")
+    """转发到 gui/startup.py；弹窗标题用本模块的 APP_NAME（它的单一来源在这里）。"""
+    return startup.startup_failed(error, preflight=preflight, notify=notify,
+                                  open_url=open_url, clipboard=clipboard, app_name=APP_NAME)
 
 
 if __name__ == "__main__":          # `python -m gui.app` / `python gui/app.py` 仍从这里进

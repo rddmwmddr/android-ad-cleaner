@@ -87,7 +87,7 @@ val syncEngine by tasks.registering(Sync::class) {
     // verified.toml 是 status-json 的验证档位来源（#1124），不随包发出去手机上就少这三个值
     from(repo.resolve("recipes")) { into("recipes"); include("**/*.toml", "**/*.py", "verified.toml"); exclude("zztest-*/**") }
     // 这份清单要覆盖 gui/app.py 导入期需要的每个模块（手机入口启动就 import app），tests/test_android_bundle.py 守着
-    from(repo.resolve("gui")) { into("gui"); include("app.py", "winpreflight.py", "version.py", "updates.py", "update_install.py", "harmony_bridge.py", "web/chime.wav") }
+    from(repo.resolve("gui")) { into("gui"); include("app.py", "toolpath.py", "adb.py", "tasks.py", "dispatcher.py", "startup.py", "reporter.py", "winpreflight.py", "version.py", "updates.py", "update_install.py", "harmony_bridge.py", "web/chime.wav") }
     from(repo.resolve("docs/手机版教程")) { into("docs"); include("brand-taps.json") }   // 首次设置按品牌说路径
 }
 tasks.named("preBuild") { dependsOn(syncEngine) }

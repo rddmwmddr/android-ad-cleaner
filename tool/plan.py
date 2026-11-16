@@ -6,7 +6,24 @@
 两个前端发来的 JSON 形状不变。
 """
 import dataclasses
+from enum import StrEnum
 from typing import Any, get_origin, get_type_hints
+
+
+class StepKind(StrEnum):
+    """这一步是什么身份：六种，排任务、重试对齐与结果页判据共用这一个词。
+
+    成员本身就是 `str`（`StepKind.RECIPE == "recipe"`、序列化与字典键都与字面量互通），所以
+    `result["kind"]` 进 status-json、进上报、进 coverage_note 的字符串比较全部原样成立。
+    增删一种身份必须显式改这里与 `tests/test_plan.py` 的冻结用例。
+    """
+
+    BACKUP = "backup"
+    ADS = "ads"
+    RECIPE = "recipe"
+    CHANNELS = "channels"
+    QUICKAPP = "quickapp"
+    FINISH = "finish"
 
 
 @dataclasses.dataclass

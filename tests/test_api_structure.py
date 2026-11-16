@@ -6,8 +6,10 @@
 """
 import ast
 import inspect
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from gui import app
 
@@ -57,9 +59,30 @@ FORBIDDEN_IN = {
 }
 
 
+CLASS_FILES = {
+    "Api": "app.py",
+    "AdbDownloader": "adb.py",
+    "Dispatcher": "dispatcher.py",
+    "Reporter": "reporter.py",
+}
+
+
+def body_of(rel):
+    return ast.parse((ROOT / "gui" / rel).read_text(encoding="utf-8")).body
+
+
 def classes():
-    tree = ast.parse((ROOT / "gui" / "app.py").read_text(encoding="utf-8"))
-    return {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
+    """类名 → 它的 ClassDef。块搬出 `gui/app.py` 之后仍按这张表取，别去猜文件在哪。
+
+    缺一个就报错：三条边界断言都以这三块为前提，静默少一块会让它们空转。
+    """
+    found = {}
+    for name, rel in CLASS_FILES.items():
+        node = next((node for node in body_of(rel) if isinstance(node, ast.ClassDef) and node.name == name), None)
+        if node is None:
+            raise AssertionError(f"gui/{rel} 里找不到类 {name}：这张表要跟着搬家一起改")
+        found[name] = node
+    return found
 
 
 class BridgeTests(unittest.TestCase):
@@ -80,6 +103,26 @@ class BridgeTests(unittest.TestCase):
                     and node.value.id == "self" and isinstance(node.ctx, ast.Store)}
         self.assertFalse(assigned & {"self.harmony_service", "self.harmony_lock"})
         self.assertIn("self.harmony_bridge", assigned)
+
+
+class ReExportTests(unittest.TestCase):
+    """搬出 `gui/app.py` 的块仍按 `app.<名字>` 取得到，且是同一个对象（#1382）。
+
+    `tests/`、手机版与打包脚本大量按 `app.<名字>` 取用；搬走之后少一个名字，那些地方就是
+    AttributeError，而它们大多不在回归的覆盖面上。`startup_failed` 是转发壳（要多传 `APP_NAME`），
+    在这里只核它还在、签名没变。
+    """
+
+    def test_the_startup_names_are_the_same_objects(self):
+        from gui import startup
+        for name in ("version_key", "startup_advice", "_attribution", "win_clipboard",
+                     "COPIED_NOTE", "MANUAL_COPY_NOTE"):
+            with self.subTest(name=name):
+                self.assertIs(getattr(app, name), getattr(startup, name), f"app.{name} 没有 re-export")
+
+    def test_startup_failed_keeps_its_signature(self):
+        self.assertEqual(tuple(inspect.signature(app.startup_failed).parameters),
+                         ("error", "preflight", "notify", "open_url", "clipboard"))
 
 
 class BoundaryTests(unittest.TestCase):
@@ -116,6 +159,56 @@ class BoundaryTests(unittest.TestCase):
                         and isinstance(node.args[1], ast.Constant):
                     self.assertNotIn(node.args[1].value, BLOCKS,
                                      f"{name} 用 getattr 绕到了 {node.args[1].value}")
+
+
+class DispatcherSeamTests(unittest.TestCase):
+    """执行编排的协作者全部由构造方给（#1383）：块里不认识 `gui/app.py` 的模块全局。
+
+    铃声、断线措辞、adb 存活探测都传取值函数进来——手机版在 `boot()` 里换掉它们、测试在构造之后
+    patch 它们，两种都要落到搬走之后的那份实现上。三样 `tool/` 模块（`summary` / `coverage_note` /
+    `plan_of`）同样是构造参数，块里不自己加载。
+    """
+
+    def test_the_host_hooks_come_from_the_constructor(self):
+        from fixtures import FakeProc, FakeRunner, job_stub
+        from gui import dispatcher, tasks, toolpath
+
+        rings, probes = [], []
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        runner = FakeRunner(spawns=[FakeProc('#aac:event {"kind": "link_lost"}\n读屏断了\n', rc=1)])
+        block = dispatcher.Dispatcher(lambda: runner, lambda: None, app.ClientData(directory.name),
+                                      lambda: None, lambda operation, serial, detail: "",
+                                      chime=lambda: rings.append(1),
+                                      link_lost=lambda: "注入的断线措辞",
+                                      adb_present=lambda adb, serial: probes.append(serial) or False,
+                                      summary=toolpath.tool("summary"),
+                                      coverage_note=toolpath.tool("coverage_note"),
+                                      plan_of=lambda: toolpath.tool("plan"))
+        block.job = job_stub(serial="SER")
+        block._work([tasks.Task("广告开关", "run.py", ["-s", "SER", "recipe"]),
+                     tasks.Task("收尾", "run.py", ["-s", "SER", "finish"], always_run=True)])
+        self.assertEqual(block.job.results[1]["tail"], ["注入的断线措辞"])
+        self.assertEqual(probes, ["SER"])
+        self.assertTrue(rings, "执行结束的提示音要走注入的那个")
+
+
+class ClipboardWiringTests(unittest.TestCase):
+    """写剪贴板只有一个实现：窗口桥的 `copy_text` 与启动失败弹窗走同一个 `win_clipboard`（#1382）。
+
+    那一份住在 `gui/startup.py`，桥面按模块取用；多 import 一份函数对象就会让换掉
+    `gui.startup.win_clipboard` 的替身落不到 `copy_text` 上。
+    """
+
+    def test_copy_text_goes_through_the_startup_clipboard(self):
+        from gui import startup
+        seen = []
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        api = app.Api(directory.name)
+        with patch.object(app, "IS_WIN", True), patch.object(startup, "win_clipboard", seen.append):
+            self.assertTrue(api.copy_text("诊断文本"))
+        self.assertEqual(seen, ["诊断文本"])
 
 
 if __name__ == "__main__":

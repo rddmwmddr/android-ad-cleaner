@@ -13,6 +13,7 @@ from unittest.mock import Mock, patch
 import xml.etree.ElementTree as ET
 
 from fixtures import FakeProc, FakeRunner, job_stub
+from gui import adb as adb_mod
 from gui import app
 from gui.bundle_data import bundle_data
 
@@ -192,14 +193,14 @@ class GuiTests(unittest.TestCase):
                     raise OSError("timed out")
                 return Reply(body)
             with patch.object(api, "adb_sources", return_value=sources), \
-                 patch.object(self.app.urllib.request, "urlopen", side_effect=opener), \
-                 patch.object(self.app.zipfile, "ZipFile", side_effect=self.app.zipfile.BadZipFile("not a zip")):
+                 patch.object(adb_mod.urllib.request, "urlopen", side_effect=opener), \
+                 patch.object(adb_mod.zipfile, "ZipFile", side_effect=adb_mod.zipfile.BadZipFile("not a zip")):
                 api._download()
             self.assertEqual(urls, ["https://g/x.zip", "https://t/x.zip"])
             self.assertIn("not a zip", api.dl["msg"])           # 校验过了，走到解压
             self.assertFalse(Path(d, "fresh", "platform-tools.zip").exists())
             with patch.object(api, "adb_sources", return_value=[("腾讯云镜像", "https://t/x.zip", "0" * 64)]), \
-                 patch.object(self.app.urllib.request, "urlopen", return_value=Reply(body)):
+                 patch.object(adb_mod.urllib.request, "urlopen", return_value=Reply(body)):
                 api._download()
             self.assertIn("校验不对", api.dl["msg"])
 
