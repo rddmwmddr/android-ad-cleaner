@@ -135,6 +135,7 @@
 - 找「免安装版启动时该不该提示旧版还在」先看 `gui/winpreflight.py` 的 `old_install_present()`：旧产品名「安卓去广告」、四处卸载键（HKCU / HKLM 各含 32 位视图）与当前 exe 目录的比较只在那里定义；`gui/app.py` 的 `Api.old_install_notice()` 只把结论变成一条提示，用户点「知道了」后 `settings.json` 的 `old_install_noticed` 记下这一版、下次不再出现；不写注册表，也不自动卸载（#872）。 <!-- rule:dev.windows.old-install-notice -->
 - 找「手机版替换层」先看 `android/app/src/main/python/aac_android/`：`adb.py` / `bridge.py` / `inproc.py` / `u2.py` 是替换层落地的四个文件（[ADR-0019](adr/0019-phone-second-execution-host.md)）。引擎、`tool/`、`recipes/` 与桌面版同一份；新增读屏能力要先加进 `u2.py` 与 `tool/reader.py` 两边。 <!-- rule:dev.android.replacement-layer -->
 - 找「手机版界面」先看 `android/app/src/main/java/com/ahuamiao/adcleaner/ui/AppModel.kt`：页面流程只有 `Screen` 一个状态，每次切换都经过它的方法（[ADR-0018](adr/0018-android-compose-ui.md)）；带判断的逻辑放 `aac_android/view.py`，别写进 Kotlin。手机版不再加载 `gui/web/`。 <!-- rule:dev.android.screen-state -->
+- 找「这个脚本会不会随包发到手机上」先看它所在的目录：`tool/` 是出厂引擎（随 APK 发到手机上），`devtools/` 是仓库工具链（只在 CI 与本机跑，[ADR-0041](adr/0041-tool-engine-devtools-seam.md)）。`syncEngine` 是整目录 glob，往 `tool/` 放一个新脚本它就自动进包，所以「会不会随包」由目录回答。两份冻结名单（引擎 37、工具链 19）与三条守卫在 `tests/test_tool_package.py`：`tool/` 顶层模块必须与名单全等、引擎 import 了工具链即红、打包清单不含 `devtools/`。 <!-- rule:dev.tool.engine-toolchain-seam -->
 
 ## 四、一次执行的路径
 
