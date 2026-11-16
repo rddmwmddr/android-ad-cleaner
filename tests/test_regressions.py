@@ -30,6 +30,7 @@ def phone():
 
 
 class SwitchTests(unittest.TestCase):
+    DOMAIN = "switch"
     def test_titles_deduplicate_rows_and_preserve_auto_update(self):
         root = ET.fromstring('''<hierarchy><node bounds="[0,300][1168,900]">
           <node bounds="[0,320][1168,430]">
@@ -150,6 +151,7 @@ class SwitchTests(unittest.TestCase):
 
 
 class InputTests(unittest.TestCase):
+    DOMAIN = "navigation"
     def test_no_input_without_visible_focused_edit(self):
         p = phone()
         stub(p, "edit_ready", Mock(return_value=False))
@@ -259,6 +261,7 @@ class InputTests(unittest.TestCase):
 
 
 class LaunchTests(unittest.TestCase):
+    DOMAIN = "startup"
     def setUp(self):
         fake_adb(self)
 
@@ -513,6 +516,12 @@ class LaunchTests(unittest.TestCase):
             self.assertFalse(reference)
         self.assertFalse(run.build_ok({"build": "PD2547B_A_17.1.10.2", "os": "OriginOS 7"}, "PD2547D_A_16"))
 
+
+class PackagingEntryTests(unittest.TestCase):
+    DOMAIN = "desktop"
+    def setUp(self):
+        fake_adb(self)
+
     def test_packaged_child_uses_cli_dispatch(self):
         with patch.object(sys, "frozen", True, create=True), patch.object(sys, "executable", "/tmp/app"):
             self.assertEqual(run.script_cmd("fast.py", "-s", "test", "ls"),
@@ -544,6 +553,7 @@ class LaunchTests(unittest.TestCase):
 
 class TapIconTests(unittest.TestCase):
     """没有文字的图标入口：游戏中心 14.43.3 把「设置」做成「我的」页右上角的齿轮（#292）。"""
+    DOMAIN = "navigation"
 
     PAGE = '''<hierarchy>
       <node clickable="true" bounds="[980,120][1080,240]"/>
