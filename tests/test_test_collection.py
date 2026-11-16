@@ -6,6 +6,9 @@ build 不扫。
 
 `AnchorTests`（rule:dev.tests.anchor-registry）：每个测试文件要么是已声明的锚点、要么是
 机型脚本的专用测试。判据正文在 docs/agents/test-anchors.md。
+
+`DomainTests`：七个按批次组织的回归文件里，每个测试类声明行为域 `DOMAIN`，且词表与
+docs/agents/test-anchors.md 的「行为域」一节逐项对拍。
 """
 import os
 import re
@@ -159,6 +162,93 @@ class AnchorTests(unittest.TestCase):
     def test_a_file_outside_the_test_pattern_is_not_examined(self):
         """共享资产（夹具、驱动器、js 用例）不是测试文件，不受锚点规则约束。"""
         self.assertEqual(self.violations({}, "fixtures.py", "compare_chan_pages.py"), [])
+
+
+DOMAIN_SECTION = "## 行为域"
+DOMAIN_ROW = re.compile(r"^\|\s*`([^`]+)`\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*$")
+
+
+def domain_table(text):
+    """`## 行为域` 表：{英文标识: 这个域在守什么}。中文名那一列只给人看，不进对拍。"""
+    found, inside = {}, False
+    for line in text.splitlines():
+        if line.startswith("## "):
+            inside = line.strip() == DOMAIN_SECTION
+            continue
+        if not inside:
+            continue
+        match = DOMAIN_ROW.match(line)
+        if match:
+            found[match.group(1)] = match.group(3)
+    return found
+
+
+def domain_root(tmp, files, extra=None):
+    """临时根目录：七个按批次组织的回归文件都在，正文按 files 给定。"""
+    root = Path(tmp)
+    (root / "tests").mkdir()
+    for name in test_anchors.DOMAIN_FILES:
+        (root / "tests" / name).write_text(files.get(name, ""), encoding="utf-8")
+    for name, body in (extra or {}).items():
+        (root / "tests" / name).write_text(body, encoding="utf-8")
+    return root
+
+
+def a_class(body):
+    return f"import unittest\n\nclass T(unittest.TestCase):\n{body}"
+
+
+class DomainTests(unittest.TestCase):
+    def violations(self, files, extra=None):
+        """在一棵只有七个回归文件（外加 extra）的临时树上求值；反例不必碰真实仓库。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = domain_root(tmp, files, extra)
+            return test_anchors.domain_violations(root)
+
+    def test_the_real_tree_has_no_domain_violation(self):
+        self.assertEqual(test_anchors.domain_violations(ROOT), [],
+                         "七个回归文件里有用例的类没落到词表内的行为域，或别的文件自造了域")
+
+    def test_the_domain_table_matches_the_code(self):
+        registered = domain_table(DOC.read_text(encoding="utf-8"))
+        self.assertTrue(registered, "文档里的 `## 行为域` 表一条都没解析出来，这条对拍会空转")
+        self.assertEqual(registered, test_anchors.DOMAINS,
+                         "行为域词表与文档表不一致：标识、顺序与说明都要逐字同步")
+
+    def test_a_class_without_a_domain_is_reported(self):
+        """用例类不声明 DOMAIN 即红，文案点名文件与类。"""
+        found = self.violations({test_anchors.DOMAIN_FILES[0]: a_class(
+            "    def test_x(self):\n        pass\n")})
+        self.assertTrue(found)
+        self.assertIn("类 T 没有声明 DOMAIN", "\n".join(found))
+
+    def test_a_domain_outside_the_vocabulary_is_reported(self):
+        """声明一个词表外的域即红，文案给出可选词表。"""
+        found = self.violations({test_anchors.DOMAIN_FILES[0]: a_class(
+            '    DOMAIN = "explode"\n\n    def test_x(self):\n        pass\n')})
+        self.assertTrue(found)
+        self.assertIn('DOMAIN = \'explode\' 不在词表里', "\n".join(found))
+
+    def test_a_module_level_test_in_a_domain_file_is_reported(self):
+        """七个文件里模块层的 def test_ 不属于任何类，即红。"""
+        found = self.violations({test_anchors.DOMAIN_FILES[0]: "def test_x():\n    pass\n"})
+        self.assertTrue(found)
+        self.assertIn("模块层的 def test_x 不属于任何类", "\n".join(found))
+
+    def test_a_domain_outside_the_seven_files_is_reported(self):
+        """别的测试文件不许自造行为域：域只属于七个按批次组织的回归文件。"""
+        found = self.violations(
+            {name: a_class('    DOMAIN = "channel"\n\n    def test_x(self):\n        pass\n')
+             for name in test_anchors.DOMAIN_FILES},
+            extra={"test_row.py": a_class('    DOMAIN = "channel"\n\n    def test_x(self):\n        pass\n')})
+        self.assertTrue(found)
+        self.assertIn("只有七个按批次组织的回归文件", "\n".join(found))
+
+    def test_a_valid_class_passes(self):
+        """正例：七个文件里每个类都声明词表内的域时零违规，守卫不是恒红。"""
+        files = {name: a_class('    DOMAIN = "channel"\n\n    def test_x(self):\n        pass\n')
+                 for name in test_anchors.DOMAIN_FILES}
+        self.assertEqual(self.violations(files), [])
 
 
 if __name__ == "__main__":

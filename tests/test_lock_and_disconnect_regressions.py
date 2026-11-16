@@ -33,6 +33,7 @@ SETTINGS = "  mCurrentFocus=Window{91aa u0 com.android.settings/com.android.sett
 
 
 class KeyguardTests(unittest.TestCase):
+    DOMAIN = "device_state"
     def test_coloros_lock_screen_without_keyguard_fields(self):
         # ColorOS 16/17：没有 isKeyguardShowing，锁屏时焦点是 NotificationShade（9 份报告「停在 NotificationShade」）
         self.assertTrue(adb_link.keyguard_showing(SHADE))
@@ -72,6 +73,7 @@ class KeyguardTests(unittest.TestCase):
 
 
 class WaitUnlockedTests(unittest.TestCase):
+    DOMAIN = "device_state"
     def phone(self, states):
         p = phone_stub("test", d=Mock())
         p.conn.locked = Mock(side_effect=states)      # 锁屏判定归连接基座（ADR-0033）
@@ -99,6 +101,7 @@ class WaitUnlockedTests(unittest.TestCase):
 
 
 class FocusTests(unittest.TestCase):
+    DOMAIN = "device_state"
     def test_trailing_brace_is_not_part_of_the_activity(self):
         # vivo OriginOS 3 / Android 13：焦点行以「Activity}}」结尾，以前取到「…Activity}」，渠道页全部认不出
         p = phone_stub("test", d=Mock())
@@ -130,6 +133,7 @@ def run_off(toggle, phone=None, data=None):
 
 
 class LockedBatchTests(unittest.TestCase):
+    DOMAIN = "device_state"
     def test_locked_at_start_reports_once_and_touches_nothing(self):
         # 约 15 份报告：开始执行时手机已锁屏，以前每个渠道都打一行「手机锁屏了」
         phone = Mock(wait_unlocked=Mock(return_value=False), lost=False)
@@ -157,6 +161,7 @@ class LockedBatchTests(unittest.TestCase):
 
 
 class GreyedChannelTests(unittest.TestCase):
+    DOMAIN = "device_state"
     def test_system_locked_channel_is_not_a_failure(self):
         # 23 份报告：只剩一个系统锁定（开关是灰的）的渠道开着，整步被标成失败
         after = {k: (v[0], 0, False) for k, v in DATA.items()}
@@ -167,6 +172,9 @@ class GreyedChannelTests(unittest.TestCase):
         self.assertNotIn("仍开着：", printed)
         self.assertIn("营销渠道仍开着: 0 个", printed)
 
+
+class NonMarketingChannelTests(unittest.TestCase):
+    DOMAIN = "channel"
     def test_ocr_and_transfer_channels_are_not_marketing(self):
         for name in ("内容提取", "内容已传输", "已共享列表活动", "正在进行的活动的最新动态"):
             self.assertTrue(chan.classify(name).scan_excluded, name)
@@ -174,6 +182,7 @@ class GreyedChannelTests(unittest.TestCase):
 
 
 class DisconnectTests(unittest.TestCase):
+    DOMAIN = "connection"
     def test_lost_device_is_reported_once_without_traceback(self):
         code, printed, toggled, _ = run_off([OK, adb_link.lost("adb.exe: device 'x' not found")])
         self.assertEqual(code, 1)
@@ -222,6 +231,7 @@ LISTVIEW_APP_PAGE = '''<hierarchy><node class="android.widget.FrameLayout" bound
 
 
 class ListRowTests(unittest.TestCase):
+    DOMAIN = "switch"
     focus = "com.android.settings/com.android.settings.Settings$AppNotificationSettingsActivity"
 
     def phone(self):
@@ -257,6 +267,7 @@ class ListRowTests(unittest.TestCase):
 
 
 class ReferenceRecipeTests(unittest.TestCase):
+    DOMAIN = "startup"
     def test_reference_does_not_change_when_community_recipes_are_added(self):
         with tempfile.TemporaryDirectory() as root:
             for family, model in (("xiaomi", "24090RA29C"), ("xiaomi", "M154FF"),
@@ -295,6 +306,8 @@ class ReferenceRecipeTests(unittest.TestCase):
 
 
 class ScrubTests(unittest.TestCase):
+    DOMAIN = "connection"
+
     @classmethod
     def setUpClass(cls):
         cls.app = app

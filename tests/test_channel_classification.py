@@ -26,14 +26,18 @@ sys.path.insert(0, str(ROOT / "tests"))
 import adb_link
 import channel_policy as policy
 import chan_fast as chan
+import channel_policy_family
 import fast
+from channel_policy_family import CASES, sample as _sample
+from family import pure_data_violations
 from fixtures import fake_adb
 from phone import connection as phone_connection
 
 
 # ---------- 基线：69cfc4d 的旧实现，逐字冻结 ----------
-# 词表按 alternation 拆成元组：既用来重建旧正则，也给每个词条生成一条对拍样例。
-# 新实现漏词、抄错或改了匹配域，对应样例在基线里仍命中，对拍就会红。
+# 词表按 alternation 拆成元组：用来重建旧正则。每个词条的那条对拍样例现在由
+# channel_policy_family.CASES 承载（见下方 TERM_CASES），这里保留元组是因为重建旧正则
+# 需要它们独立于用例表——从 CASES 反推会让基线跟着用例编辑漂移，失去 69cfc4d 的对照。
 BASE_KW_TERMS = (
     "营销", "活动", "推荐", "推广", "热点", "热门", "资讯", "新闻", "福利", "优惠", "特惠",
     "精选", "精彩", "运营", "促销", "红包", "直播", "种草", "内容", "头条", "猜你", "好物",
@@ -57,11 +61,6 @@ BASE_SKIP = re.compile("|".join(BASE_SKIP_TERMS), re.I)
 BASE_SERVICE = re.compile("|".join(BASE_SERVICE_TERMS + (r"youtube\t2\t", r"\t其他$")), re.I)
 BASE_VIVO = re.compile(r"^VPushChannel_(?:0|4|6)$", re.I)
 BASE_PHOTO = re.compile(r"找[机機]位|[机機]位推[荐薦]|推[荐薦][机機]位")
-
-
-def _sample(term):
-    """把一个 alternation 词条变成一段能命中它的渠道名（只去掉正则边界与可选符）。"""
-    return term.replace(r"\b", "").replace("?", "")
 
 
 def base_protected(name, cid, label=""):
@@ -139,21 +138,27 @@ CURATED = [
     ("com.x", "recommend", "推荐机位", ""),
 ]
 
-# 每个基线词条一条样例：新实现漏词、抄错或改域，这条就会红。
-TERM_CASES = (
+# 每个规则词元一条样例：新实现漏词、抄错或改域，这条就会红。词元表在 channel_policy_family。
+# 广告网络词元只匹配渠道 ID，不在这一组（见 AdNetworkTests）。
+TERM_CASES = [
     # cid 用中性值：否则 cid 里的英文营销词会掩盖渠道名上的 KW 词条被删。
-    [("com.term", "x", _sample(term), "") for term in BASE_KW_TERMS]
-    + [("com.term", "x", _sample(term), "") for term in BASE_SKIP_TERMS]
-    + [("com.term", "x", _sample(term), "") for term in BASE_SERVICE_TERMS]
-)
+    ("com.term", "x", _sample(case["term"]), "") for case in CASES if case["table"] != "adnet"
+]
 
 CORPUS = CURATED + TERM_CASES
 
 
 class BaselineEquivalenceTests(unittest.TestCase):
     def test_every_baseline_term_has_a_case(self):
-        self.assertEqual(len(TERM_CASES),
-                         len(BASE_KW_TERMS) + len(BASE_SKIP_TERMS) + len(BASE_SERVICE_TERMS))
+        # 用例名承诺「每个基线条目都有 case」，所以逐组比集合，不比长度：等量替换（删一个词元、
+        # 加另一个）长度不变却能过。基线元组独立于 CASES 冻结，比集合仍然是两份来源的对照。
+        # 真正的删词检测在族侧：快照 ids 比对抓「删了一条 case」，句柄校验抓「实现里删了词元」。
+        for table, baseline in (("kw", BASE_KW_TERMS), ("skip", BASE_SKIP_TERMS),
+                                ("service", BASE_SERVICE_TERMS)):
+            with self.subTest(table=table):
+                self.assertEqual({case["term"] for case in CASES if case["table"] == table},
+                                 set(baseline))
+        self.assertEqual(len(CORPUS), 150)      # 46 条人工样例 + 104 条词元样例，口径不变
 
     def test_new_judgement_matches_frozen_baseline(self):
         for pkg, cid, name, app in CORPUS:
@@ -162,6 +167,21 @@ class BaselineEquivalenceTests(unittest.TestCase):
                 got = policy.classify(name, cid, package=pkg, app=app)
                 for field, value in want.items():
                     self.assertEqual(getattr(got, field), value, field)
+
+
+class ChannelPolicyFamilyTests(unittest.TestCase):
+    """规则词元表的 owner 是族：删 case、实现里删词元都要被判出来。"""
+
+    def test_family_checks_are_green(self):
+        self.assertEqual(channel_policy_family.FAMILY.violations(), [])
+
+    def test_family_rows_are_pure_data(self):
+        self.assertEqual(pure_data_violations(channel_policy_family), [])
+
+    def test_every_id_is_the_canonical_spelling(self):
+        """`id` 是手写的，重复了 `(table, term)` 两个字段：改字段不改 id 今天没有守卫。"""
+        for case in CASES:
+            self.assertEqual(case["id"], f"{case['table']}/{case['term']}", case["id"])
 
 
 class SerializationEdgeTests(unittest.TestCase):

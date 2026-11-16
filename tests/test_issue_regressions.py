@@ -52,6 +52,7 @@ def snapshot(on=True, app_off=False):
 class ShellPipeTests(unittest.TestCase):
     """#205：管道末端提前退出（grep -m / head -n）→ dumpsys 收到 SIGPIPE → adbutils 判
     「shell output invalid」，chan-off 整段中断。末端必须把整条流读完。"""
+    DOMAIN = "connection"
 
     # 管道末端只要提前退出就会触发 SIGPIPE：grep -m N、head（-N 或 -n N）、sed 'Nq'
     EARLY_EXIT = re.compile(r"grep\s+-m\s*\d|\|\s*head\b|\|\s*sed\s+['\"]?\d+q")
@@ -78,6 +79,7 @@ class ShellPipeTests(unittest.TestCase):
 
 
 class ScreenshotTests(unittest.TestCase):
+    DOMAIN = "connection"
     def test_partial_bounds_do_not_read_outside_image(self):
         image = Image.new("RGB", (100, 100), "blue")
         self.assertIsNone(fast.Screen._pixel_on(image, 70, 70, 160, 120))
@@ -93,6 +95,7 @@ class ScreenshotTests(unittest.TestCase):
 
 @patch.object(chan.time, "sleep")
 class ChannelTests(unittest.TestCase):
+    DOMAIN = "channel"
     def setUp(self):
         fake_adb(self)
 
@@ -373,6 +376,7 @@ class ChannelTests(unittest.TestCase):
 
 
 class QuickappTests(unittest.TestCase):
+    DOMAIN = "packages"
     def setUp(self):
         fake_adb(self)
         self.directory = tempfile.TemporaryDirectory()
@@ -456,6 +460,7 @@ class QuickappTests(unittest.TestCase):
 
 
 class BackupTests(unittest.TestCase):
+    DOMAIN = "backup"
     def setUp(self):
         fake_adb(self)
 
@@ -492,6 +497,7 @@ class BackupTests(unittest.TestCase):
 class ExternalAdbServerTests(unittest.TestCase):
     """#293：复用了外部 adb server（Iriun 等），对方退出后整轮中断，
     而且 pm path 同样没输出，断连被报成「本机没有安装」，三段连报。"""
+    DOMAIN = "connection"
 
     def phone(self):
         p = phone_stub("S", d=Mock())
@@ -568,11 +574,9 @@ class ExternalAdbServerTests(unittest.TestCase):
         p.d.app_stop.assert_not_called()
 
 
-
-
-
 class PackageListTests(unittest.TestCase):
     """#192：HyperOS 4 上 `pm list packages` 任何参数都无输出且 exit 0；要回退 `cmd package list`。"""
+    DOMAIN = "connection"
 
     def setUp(self):
         fake_adb(self)
@@ -585,6 +589,34 @@ class PackageListTests(unittest.TestCase):
         with patch.object(run, "sh", return_value="package:com.example") as shell:
             self.assertEqual(run.pkg_list("test", "--user 0 -s"), "package:com.example")
         self.assertEqual([c.args[1] for c in shell.call_args_list], ["pm list packages --user 0 -s"])
+
+    def test_package_list_error_text_is_kept_for_troubleshooting(self):
+        def shell(_s, cmd):
+            return "Error: Shell does not have permission to access user 666" if cmd.startswith("pm list") else ""
+        with patch.object(run, "sh", side_effect=shell):
+            self.assertIn("does not have permission", run.pkg_list("test", "--user 0 -d"))
+
+    def test_manually_disabled_quickapp_is_closed_via_cmd_package(self):
+        # 装机判定走批量清单（pm list → cmd package 兜底），不再逐包 pm path
+        with patch.object(run, "quickapp_switch", return_value=None), \
+             patch.object(run, "suspended", return_value=False), \
+             patch.object(run, "sh", side_effect=lambda _s, c: "package:com.miui.hybrid" if c.startswith("cmd package") else ""):
+            entries = run.quickapps("test-device")
+        self.assertTrue(entries[0]["closed"])
+
+    def test_not_disabled_quickapp_stays_open(self):
+        with patch.object(run, "installed", side_effect=lambda _s, pkg: pkg == "com.miui.hybrid"), \
+             patch.object(run, "quickapp_switch", return_value=None), \
+             patch.object(run, "suspended", return_value=False), \
+             patch.object(run, "sh", return_value=""):
+            entries = run.quickapps("test-device")
+        self.assertFalse(entries[0]["closed"])
+
+
+class PackageListBackupTests(unittest.TestCase):
+    DOMAIN = "backup"
+    def setUp(self):
+        fake_adb(self)
 
     def test_backup_writes_package_lists_when_pm_list_is_silent(self):
         def shell(_s, cmd):
@@ -630,31 +662,10 @@ class PackageListTests(unittest.TestCase):
             self.assertEqual(Path(directory, "sys.txt").read_text(encoding="utf-8"), "package:com.system")
             self.assertEqual(Path(directory, "user.txt").read_text(encoding="utf-8"), "")
 
-    def test_package_list_error_text_is_kept_for_troubleshooting(self):
-        def shell(_s, cmd):
-            return "Error: Shell does not have permission to access user 666" if cmd.startswith("pm list") else ""
-        with patch.object(run, "sh", side_effect=shell):
-            self.assertIn("does not have permission", run.pkg_list("test", "--user 0 -d"))
-
-    def test_manually_disabled_quickapp_is_closed_via_cmd_package(self):
-        # 装机判定走批量清单（pm list → cmd package 兜底），不再逐包 pm path
-        with patch.object(run, "quickapp_switch", return_value=None), \
-             patch.object(run, "suspended", return_value=False), \
-             patch.object(run, "sh", side_effect=lambda _s, c: "package:com.miui.hybrid" if c.startswith("cmd package") else ""):
-            entries = run.quickapps("test-device")
-        self.assertTrue(entries[0]["closed"])
-
-    def test_not_disabled_quickapp_stays_open(self):
-        with patch.object(run, "installed", side_effect=lambda _s, pkg: pkg == "com.miui.hybrid"), \
-             patch.object(run, "quickapp_switch", return_value=None), \
-             patch.object(run, "suspended", return_value=False), \
-             patch.object(run, "sh", return_value=""):
-            entries = run.quickapps("test-device")
-        self.assertFalse(entries[0]["closed"])
-
 
 class QuickappKeepTests(unittest.TestCase):
     """Issue #335：快应用平台承载负一屏快递详情页，quickapp off 必须保留它。"""
+    DOMAIN = "packages"
     PKGS = ("com.nearme.instant.platform", "com.oppo.instant.local.service", "com.nearme.instant.card")
     HAP = "com.nearme.instant.platform/.dispatch.activity.HapDispatcherActivity"
 
@@ -725,6 +736,7 @@ class QuickappKeepTests(unittest.TestCase):
 
 
 class DesktopTests(unittest.TestCase):
+    DOMAIN = "desktop"
     def test_gui_smoke_output_works_with_non_utf8_console(self):
         buffer = io.BytesIO()
         stream = io.TextIOWrapper(buffer, encoding="ascii", newline="\n")
@@ -756,6 +768,7 @@ class DesktopTests(unittest.TestCase):
 class RepeatedChannelNameTests(unittest.TestCase):
     """#287：华为 HarmonyOS 4 的应用通知页把分组名写在列表里，和渠道名同名。
     inline_switch 以前看到两处同名就放弃，其实只有一处带开关。"""
+    DOMAIN = "channel"
 
     APP = "com.android.settings/.Settings$AppNotificationSettingsActivity"
 
@@ -855,6 +868,7 @@ class AdPackagesHarness:
 class AdPackagesTests(AdPackagesHarness, unittest.TestCase):
     """#367：AD_PKGS 以 ro.product.brand 原值取键，POCO 取不到小米家族的广告包。
     客户端「挂起广告组件」读的是 status-json 的 ads，所以 check 与 status-json 两个入口都守。"""
+    DOMAIN = "packages"
 
     def test_check_lists_xiaomi_ad_package_for_poco_brand(self):
         self.assertIn("广告包 com.miui.systemAdSolution：未挂起", self.check_output("POCO"))
@@ -880,6 +894,7 @@ class AdPackagesTests(AdPackagesHarness, unittest.TestCase):
 class GlobalMsaTests(AdPackagesHarness, unittest.TestCase):
     """海外版 HyperOS（Redmi Note 13 23124RA7EO，OS2.0.213.0.VNHRUXM 俄区实测）的 msa 包名是
     com.miui.msa.global，国行包名不存在：check 与 status-json 要认出它，国行不多出一行。"""
+    DOMAIN = "packages"
 
     INFO = dict(AdPackagesHarness.INFO, model="23124RA7EO", name="Redmi Note 13")
     INSTALLED = ("com.miui.msa.global",)
@@ -902,6 +917,7 @@ class GlobalMsaTests(AdPackagesHarness, unittest.TestCase):
 class OppoSecondAdPackageTests(AdPackagesHarness, unittest.TestCase):
     """「没装就不提」只针对 msa 的两个地区包名；OPPO 族的第二项不是一个组件的别名，
     没装时仍要报「未安装」。"""
+    DOMAIN = "packages"
 
     INFO = dict(AdPackagesHarness.INFO, model="PKT110", name="OPPO Find X8s")
     INSTALLED = ("com.opos.ads",)

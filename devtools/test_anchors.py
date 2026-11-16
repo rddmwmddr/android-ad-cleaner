@@ -1,11 +1,15 @@
 """tests/ 的锚点登记（rule:dev.tests.anchor-registry）：每个测试文件要么是已声明的锚点，
 要么是某份机型脚本的专用测试（文件名点名了它）。两者之外的新文件即红。
 
-判据正文在 docs/agents/test-anchors.md，本文件是它的机械镜像：`ANCHORS` 与文档的
-`## 锚点登记` 表由 tests/test_test_collection.py 逐项对拍。
+七个按批次组织的回归文件另有行为域归属：类里每条用例的 owner 是类上声明的 `DOMAIN`，
+`DOMAIN_FILES` 之外的文件不该声明 `DOMAIN`。
 
-`violations(root)` 对给定根目录求值，不依赖真实仓库状态——反例用临时目录构造。
+判据正文在 docs/agents/test-anchors.md，本文件是它的机械镜像：`ANCHORS` 与文档的
+`## 锚点登记` 表、`DOMAINS` 与 `## 行为域` 表都由 tests/test_test_collection.py 逐项对拍。
+
+`violations(root)` / `domain_violations(root)` 对给定根目录求值，不依赖真实仓库状态——反例用临时目录构造。
 """
+import ast
 import difflib
 import re
 import sys
@@ -82,6 +86,7 @@ ANCHORS = {
     "test_declared_fields.py": "构造处声明过的字段要直接读，不再 getattr 兜底。",
     # tests/ 自身的守卫
     "test_test_collection.py": "用例只在 tests/ 下定义，且每个测试文件都落到已声明的锚点。",
+    "test_family.py": "族容器本身：case id 快照、结构句柄、产出与缺口四件校验、必须附理由的快照更新入口，以及四个族对得上各自的快照。",
     "test_glob_scan.py": "发现式 glob 的反空转：发现集为空时与「全仓合规」不可区分，每个模式对真实仓库求值一次，0 份即红。",
     "test_rules_guards.py": "规则守卫：文档内容、注册表、引擎结构与流程条目各自的机械判据。",
     "test_rules_registry.py": "规则注册表的五条不变式，锚点与登记双向一致，`code:` 规则点名的符号只在一处定义。",
@@ -129,18 +134,45 @@ ANCHORS = {
     "test_old_install_notice.py": "免安装版启动时提示旧名安装还在：文案与「同一版本只说一次」。",
     # 跨车型的行为域
     "test_huawei_channels.py": "华为渠道页的脱敏离线回归：已观察页面，不连手机。",
-    "test_page_and_link_regressions.py": "一期社区反馈引出的跨模块回归：渠道页归属与仿冒、内联开关、多用户解析、点击被拒、adb 掉线与 USB 诊断。",
-    "test_lock_and_disconnect_regressions.py": "上报日志归类的跨模块回归：锁屏判据与等机主解锁、灰态渠道、断线不带堆栈、脱敏与参考脚本。",
-    "test_layout_and_verdict_regressions.py": "发布当天上报的回归：卡片布局差异、vivo 旧页与直达、失败判定、停止不算失败、暂停与空报告。",
-    "test_tap_notice_regressions.py": "发布后一夜上报扫出的回归：点击与确认落点、焦点回退、通知页读取、adb 镜像与提示音、vivo 慢过渡。",
-    "test_issue_regressions.py": "社区反馈回归：模拟页面与系统回读，不以 UI 状态代替执行结果。",
-    "test_regressions.py": "设备无关的回归：输入、页面识别、开关保护与打包入口。",
-    "test_release_regressions.py": "发布回归：横屏、部分失败、通知默认选择与发布资源边界。",
+    "test_page_and_link_regressions.py": "一期社区反馈汇集的设备无关回归：渠道页归属与仿冒、内联开关、多用户解析、点击被拒、adb 掉线与 USB 诊断；每条用例的 owner 是所在类声明的行为域（见「行为域」）。",
+    "test_lock_and_disconnect_regressions.py": "上报日志分类汇集的设备无关回归：锁屏判据与等机主解锁、灰态渠道、断线不带堆栈、脱敏与参考脚本；每条用例的 owner 是所在类声明的行为域（见「行为域」）。",
+    "test_layout_and_verdict_regressions.py": "发布当天上报汇集的设备无关回归：卡片布局差异、vivo 旧页与直达、失败判定、停止不算失败、暂停与空报告；每条用例的 owner 是所在类声明的行为域（见「行为域」）。",
+    "test_tap_notice_regressions.py": "发布后一夜上报汇集的设备无关回归：点击与确认落点、焦点回退、通知页读取、adb 镜像与提示音、vivo 慢过渡；每条用例的 owner 是所在类声明的行为域（见「行为域」）。",
+    "test_issue_regressions.py": "社区反馈汇集的设备无关回归：模拟页面与系统回读，不以 UI 状态代替执行结果；每条用例的 owner 是所在类声明的行为域（见「行为域」）。",
+    "test_regressions.py": "跨批次汇集的设备无关回归：输入、页面识别、开关保护、启动落点与打包入口；每条用例的 owner 是所在类声明的行为域（见「行为域」）。",
+    "test_release_regressions.py": "发布回归汇集的设备无关用例：横屏、部分失败、通知默认选择与发布资源边界；每条用例的 owner 是所在类声明的行为域（见「行为域」）。",
     "test_feedback_safety.py": "用户反馈里的安全项：无障碍排查只读、通知保护与旧清单还原。",
     "test_phone_host.py": "手机版宿主的说法：没有电脑和数据线时该怎么说、界面与诊断里残留的桌面说法，以及唯一的控制流例外（不写插电常亮）。",
     "test_recipe_call_snapshots.py": "机型脚本的调用序列快照：47 份 × present / absent 两场景与入库数据逐条比对，段名归属与空转守卫。更新规则见 docs/agents/recipe-snapshots.md。",
     "test_recipe_audit.py": "本机函数审计：只收模块级函数、四档归属（含声明式钩子）的优先级与判据信号，以及 check 与 status-json 报的「本机策略：N 个」。",
     "test_recipe_strategies.py": "拨动策略的注入面：前导调用它、脚本不留逐字副本，以及家族库按脚本常量选走法（齿轮 / 浏览器设置 / OPPO 系的页面等待、开关名单与整页点击）与认不出即报错。",
+}
+
+# 七个按批次组织的回归文件：用例的 owner 是它所在类声明的行为域（见
+# docs/agents/test-anchors.md 的「行为域」）。这份文件名清单只此一处。
+DOMAIN_FILES = (
+    "test_issue_regressions.py",
+    "test_layout_and_verdict_regressions.py",
+    "test_lock_and_disconnect_regressions.py",
+    "test_page_and_link_regressions.py",
+    "test_regressions.py",
+    "test_release_regressions.py",
+    "test_tap_notice_regressions.py",
+)
+
+# 与 docs/agents/test-anchors.md 的 `## 行为域` 表逐项相同（标识、顺序与说明都逐字），
+# tests/test_test_collection.py 守着。说明里不要出现竖线，表会散架。
+DOMAINS = {
+    "channel": "渠道列表与渠道页：从清单和页面认出营销渠道、跳过系统锁定项、点击后页面变了没有，批处理遇变就停。",
+    "connection": "手机连接：adb 在哪、命令服务断开 / 读屏超时 / 后台屏没了三种结局怎么判，包清单与断线后的收尾。",
+    "startup": "启动与落点：前台归属、权限门、安全模式、脚本选择，以及启动后有没有离开目标应用。",
+    "result": "结果页与暂停：一次执行怎么说成一句话、哪一档步骤可重试、暂停落在哪个安全点。",
+    "packages": "包与快应用：AD 包与 msa 的挂起还原、chain3 原值写回、按品牌或 ROM 取包。",
+    "navigation": "导航与弹窗：搜索框输入、图标入口、底部标签与返回，以及弹窗和推广位怎么退。",
+    "switch": "开关本身：标题去重、状态后缀、自绘开关与单选框、极性、点按与确认框。",
+    "device_state": "设备状态：锁屏与等解锁、焦点归属、常亮写回，以及灰态渠道不算失败。",
+    "desktop": "桌面客户端与打包：USB 诊断、adb 镜像、剪贴板、更新提示，以及随包资产清单。",
+    "backup": "备份还原：备份目录与包清单落盘、扫描失败保留原件、跨盘路径。",
 }
 
 TEST_FILE = re.compile(r"^test_[A-Za-z0-9_]+\.py$")
@@ -246,6 +278,66 @@ def violations(root, anchors=None):
     return found
 
 
+def _test_methods(cls):
+    """类体里直接定义的用例方法；继承来的不算（域由声明它的那个类负责）。"""
+    return [stmt for stmt in cls.body
+            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and stmt.name.startswith("test_")]
+
+
+def _domain_statement(cls):
+    """类体里的 `DOMAIN = …` 赋值；没有则 None。"""
+    for stmt in cls.body:
+        if isinstance(stmt, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "DOMAIN" for target in stmt.targets):
+            return stmt
+    return None
+
+
+def domain_violations(root, domains=None):
+    """对给定根目录求值七个回归文件的行为域归属；每条说清哪里不对、下一步该做什么。
+
+    `domains` 只为构造反例而可注入，默认取本文件的词表。
+    """
+    domains = DOMAINS if domains is None else domains
+    tests = root / "tests"
+    if not tests.is_dir():
+        return ["tests/ 目录不存在；行为域守卫没有可检查的对象"]
+    present = {path.name for path in tests.iterdir() if path.is_file()}
+    found = []
+
+    for name in DOMAIN_FILES:
+        if name not in present:
+            found.append(f"{name} 不存在；七个按批次组织的回归文件缺一，行为域守卫会空转")
+            continue
+        tree = ast.parse((tests / name).read_text(encoding="utf-8"))
+        for stmt in tree.body:
+            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and stmt.name.startswith("test_"):
+                found.append(f"{name}: 模块层的 def {stmt.name} 不属于任何类；挪进一个测试类，"
+                             "并让该类声明 DOMAIN")
+        for cls in (stmt for stmt in tree.body if isinstance(stmt, ast.ClassDef)):
+            if not _test_methods(cls):
+                continue
+            declared = _domain_statement(cls)
+            if declared is None:
+                found.append(f"{name}: 类 {cls.name} 没有声明 DOMAIN；在类里加一行 "
+                             "DOMAIN = \"<域名>\"，词表见 docs/agents/test-anchors.md 的「行为域」")
+                continue
+            value = declared.value.value if isinstance(declared.value, ast.Constant) else None
+            if value not in domains:
+                found.append(f"{name}: 类 {cls.name} 的 DOMAIN = {value!r} 不在词表里；"
+                             f"从 {', '.join(domains)} 里选一个")
+
+    for path in sorted(path for path in tests.iterdir() if path.is_file() and TEST_FILE.match(path.name)):
+        if path.name in DOMAIN_FILES:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for cls in (stmt for stmt in tree.body if isinstance(stmt, ast.ClassDef)):
+            if _domain_statement(cls) is not None:
+                found.append(f"{path.name}: 类 {cls.name} 声明了 DOMAIN，但只有七个按批次组织的回归文件"
+                             "按行为域归属；新文件落进已有的锚点，不要自造域")
+    return found
+
+
 def main(argv=()):
     """`python3 devtools/test_anchors.py`：跑一遍真实仓库，列出每一处违规。
 
@@ -254,9 +346,10 @@ def main(argv=()):
     if argv:
         print(f"不认识的参数 {' '.join(argv)}；这个脚本没有参数", file=sys.stderr)
         return 2
-    found = violations(Path(__file__).resolve().parents[1])
+    root = Path(__file__).resolve().parents[1]
+    found = violations(root) + domain_violations(root)
     if not found:
-        print(f"{len(ANCHORS)} 个锚点，全部合规。")
+        print(f"{len(ANCHORS)} 个锚点、{len(DOMAINS)} 个行为域，全部合规。")
         return 0
     print("\n".join(found))
     print(f"{len(found)} 处违规。", file=sys.stderr)

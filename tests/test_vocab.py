@@ -13,77 +13,34 @@ from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "tool"))
 
 import entries  # noqa: E402
 import vocab  # noqa: E402
+import vocab_family  # noqa: E402
+from family import pure_data_violations  # noqa: E402
 
 RECIPES = str(ROOT / "recipes")
 CLUES = ROOT / "docs" / "清单" / "词条线索.md"
 
-# 解析不出的 only=，按脚本冻结。新脚本多了这种写法，先看能不能写成字面量或模块级常量，确实不能再改这里。
-UNRESOLVED_ONLY = {
-    'honor/WKL-AN20/WKL-AN20.toml': 1,
-    'meizu/MEIZU 21 Pro/MEIZU 21 Pro.toml': 1,
-    'oppo/PHK110/PHK110-android15.toml': 1,
-    'oppo/PJA110/PJA110-android16.toml': 1,
-    'oppo/PJA110/PJA110.toml': 1,
-    'oppo/PKH110/PKH110.toml': 1,
-    'oppo/PKT110/PKT110.toml': 2,
-    'oppo/PKX110/PKX110.toml': 1,
-    'oppo/PLG110/PLG110.toml': 3,
-    'oppo/PLP120/PLP120.toml': 1,
-    'oppo/PLZ110/PLZ110.toml': 2,
-    'oppo/PMA110/PMA110.toml': 2,
-    'oppo/PMX110/PMX110.toml': 2,
-    'vivo/V2303A/V2303A.toml': 1,
-    'vivo/V2417A/V2417A.toml': 1,
-    'xiaomi/23117RK66C/23117RK66C.toml': 1,
-    'xiaomi/24129PN74C/24129PN74C-os4.toml': 2,
-    'xiaomi/24129PN74C/24129PN74C.toml': 1,
-}
-# close_named() 第一个参数解析不出的，和上面分开冻结，免得一个口径盖住另一个。
-UNRESOLVED_CLOSE = {
-    'oppo/PJA110/PJA110-android16.toml': 1,
-    'oppo/PKT110/PKT110.toml': 2,
-    'oppo/PLZ110/PLZ110.toml': 1,
-    'oppo/PMX110/PMX110.toml': 1,
-    'xiaomi/23117RK66C/23117RK66C.toml': 1,
-}
-# 解析不出的 keep=，同样按脚本冻结：它只影响同页保留项，读不出时那页的约束就整段丢了。
-UNRESOLVED_KEEP = {
-    'oppo/PHK110/PHK110-android15.toml': 1,
-    'oppo/PKH110/PKH110.toml': 1,
-    'oppo/PKX110/PKX110.toml': 1,
-    'oppo/PLG110/PLG110.toml': 2,
-    'oppo/PLZ110/PLZ110.toml': 1,
-    'oppo/PMA110/PMA110.toml': 1,
-    'oppo/PMX110/PMX110.toml': 1,
-    'vivo/V2417A/V2417A.toml': 1,
-}
-# 模块级字典里的说明文字，按脚本冻结。
-DICT_NOTES = {
-    "honor/WKL-AN20/WKL-AN20.toml": 37,
-}
-# 一条词条都读不出来的脚本（判据就是零词条）：开关点名散在自建函数里（vivo-V2547A 的 off()、
-# oneplus-PHK110 的 off_exact()、samsung-SM-N9760 的 protect()），或者名单运行时才算。
-SILENT = (
-    'oppo/PHK110/PHK110-android15.toml',
-    'oppo/PHK110/PHK110.toml',
-    'samsung/SM-N9760/SM-N9760.toml',
-    'vivo/V2547A/V2547A.toml',
-)
-# 页面标签归不到分组的调用。多出来的先看能不能加进 vocab.PAGES。
-UNCLASSIFIED = {
-    ('honor', '<title>'): 1,
-    ('meizu', '<page>'): 3,
-    ('oppo', '<page>'): 27,
-    ('oppo', '<title>'): 2,
-    ('oppo', '个性化管理'): 3,
-    ('oppo', '隐私'): 4,
-    ('vivo', '<page>'): 1,
-    ('xiaomi', '<page>'): 6,
-}
+
+def frozen_counts(kind):
+    """某类行（`kind`）重建的 {脚本: 条数}；冻结数据是 `vocab_family.CASES`，一行一条。"""
+    return {case["script"]: case["count"]
+            for case in vocab_family.CASES if case["kind"] == kind}
+
+
+def unclassified_counts():
+    """`unclassified` 行重建的 {(家族, 页面标签): 条数}。"""
+    return {(case["family"], case["text"]): case["count"]
+            for case in vocab_family.CASES if case["kind"] == "unclassified"}
+
+
+def silent_scripts():
+    """`silent` 行重建的脚本元组，按路径排序（`vocab.scan` 的 `silent` 也是这个顺序）。"""
+    return tuple(sorted(case["script"] for case in vocab_family.CASES
+                        if case["kind"] == "silent"))
 
 
 def recipes(**files):
@@ -147,20 +104,24 @@ class RealRecipesTest(unittest.TestCase):
             self.assertIn((model, "小游戏二楼和专区"), found)
 
     def test_unresolved_only_is_frozen_per_script(self):
-        self.assertEqual(dict(Counter(c.script for c in self.scan.unresolved_only)), UNRESOLVED_ONLY)
+        self.assertEqual(dict(Counter(c.script for c in self.scan.unresolved_only)),
+                         frozen_counts("unresolved-only"))
 
     def test_unresolved_close_named_is_frozen_per_script(self):
-        self.assertEqual(dict(Counter(c.script for c in self.scan.unresolved_close)), UNRESOLVED_CLOSE)
+        self.assertEqual(dict(Counter(c.script for c in self.scan.unresolved_close)),
+                         frozen_counts("unresolved-close"))
 
     def test_unresolved_keep_is_frozen_per_script(self):
         """守卫用例，旧树也绿：守的是各处 keep= 不回退，不被静默读成别的词、也不被悄悄丢掉。"""
-        self.assertEqual(dict(Counter(c.script for c in self.scan.unresolved_keep)), UNRESOLVED_KEEP)
+        self.assertEqual(dict(Counter(c.script for c in self.scan.unresolved_keep)),
+                         frozen_counts("unresolved-keep"))
         doc = vocab.render(RECIPES)
         for call in self.scan.unresolved_keep:
             self.assertIn(f"`{call.script}:{call.line}` keep= {call.text}", doc)
 
     def test_dict_notes_are_frozen_per_script(self):
-        self.assertEqual(dict(Counter(n.script for n in self.scan.notes)), DICT_NOTES)
+        self.assertEqual(dict(Counter(n.script for n in self.scan.notes)),
+                         frozen_counts("dict-notes"))
 
     def test_unresolved_only_is_listed_by_name_in_the_doc(self):
         doc = vocab.render(RECIPES)
@@ -168,7 +129,8 @@ class RealRecipesTest(unittest.TestCase):
             self.assertIn(f"`{call.script}:{call.line}` {call.text}", doc)
 
     def test_unclassified_labels_are_frozen_and_listed(self):
-        self.assertEqual(dict(Counter((c.family, c.text) for c in self.scan.unclassified)), UNCLASSIFIED)
+        self.assertEqual(dict(Counter((c.family, c.text) for c in self.scan.unclassified)),
+                         unclassified_counts())
         doc = vocab.render(RECIPES)
         for call in self.scan.unclassified:
             self.assertIn(f"`{call.script}:{call.line}`", doc)
@@ -225,9 +187,10 @@ class RealRecipesTest(unittest.TestCase):
 
     def test_scripts_without_any_word_are_named(self):
         """整份脚本一条词条都读不出来时，文档必须点名，不能让人以为这台机没有词。"""
-        self.assertEqual(tuple(self.scan.silent), SILENT)
+        silent = silent_scripts()
+        self.assertEqual(tuple(self.scan.silent), silent)
         section = vocab.render(RECIPES).split("## 读不到的脚本", 1)[1].split("\n## ", 1)[0]
-        for script in SILENT:
+        for script in silent:
             self.assertIn(f"`{script}`", section)
 
 
@@ -842,6 +805,25 @@ class GapsCommandLineTest(unittest.TestCase):
         done = self.run_cli("gaps")
         self.assertEqual(done.returncode, 1)
         self.assertIn("用法", done.stderr)
+
+
+class VocabFamilyTests(unittest.TestCase):
+    """vocab 族的容器守卫（#1400）：id 集合与句柄对得上、行是纯数据字面量，且族无产出。"""
+
+    def test_family_is_green_against_its_snapshot(self):
+        self.assertEqual(vocab_family.FAMILY.violations(), [])
+
+    def test_case_rows_are_plain_literals(self):
+        self.assertEqual(pure_data_violations(vocab_family), [])
+
+    def test_every_id_is_the_canonical_spelling(self):
+        """`id` 是手写的，重复了 `kind` 与脚本 / 标签字段：改字段不改 id 今天没有守卫。"""
+        for case in vocab_family.CASES:
+            if "script" in case:
+                want = f"{case['kind']}/{case['script']}"
+            else:
+                want = f"{case['kind']}/{case['family']}/{case['text']}"
+            self.assertEqual(case["id"], want, case["id"])
 
 
 if __name__ == "__main__":

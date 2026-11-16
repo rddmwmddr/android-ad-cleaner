@@ -25,6 +25,7 @@ def recipe(p, only="__no_steps__"):
 
 
 class RotationTests(unittest.TestCase):
+    DOMAIN = "switch"
     def phone(self):
         p = phone_stub("test", d=Mock())
         p.W, p.H = 1080, 2340
@@ -56,6 +57,7 @@ class RotationTests(unittest.TestCase):
 
 
 class XiaomiNavigationTests(unittest.TestCase):
+    DOMAIN = "navigation"
     def test_toolbar_image_without_clickable_flag_opens_settings(self):
         p = Mock(W=1080, H=2340)
         p.tree.return_value = ET.fromstring('''<hierarchy><node text="设置" class="android.widget.ImageView"
@@ -90,6 +92,7 @@ HELP = "\n".join("  " + name for name in (
 
 
 class MsaTests(unittest.TestCase):
+    DOMAIN = "packages"
     def setUp(self):
         fake_adb(self)
 
@@ -155,6 +158,7 @@ class MsaTests(unittest.TestCase):
 class GlobalMsaNetTests(unittest.TestCase):
     """海外版 HyperOS 的 msa 是 com.miui.msa.global（Redmi Note 13 俄区实测）：
     挂起后照样断网，断网和回读的命令写的是这个包名，不是国行的 run.MSA。"""
+    DOMAIN = "packages"
 
     GLOBAL = "com.miui.msa.global"
 
@@ -190,7 +194,7 @@ class GlobalMsaNetTests(unittest.TestCase):
         net.assert_called_once_with("test", True, self.GLOBAL, chain3="")
 
 
-class Chain3RestoreTests(unittest.TestCase):
+class Chain3Harness(unittest.TestCase):
     """#945：挂起 msa 时 set-chain3-enabled 是设备级副作用，解除挂起要按挂起前的原值写回。"""
 
     def setUp(self):
@@ -254,6 +258,9 @@ class Chain3RestoreTests(unittest.TestCase):
     def _record(self, original, serial="test", name="chain3-setting.json"):
         Path(self.backup, name).write_text(json.dumps({"serial": serial, "original": original}))
 
+
+class Chain3RestoreTests(Chain3Harness):
+    DOMAIN = "packages"
     def test_suspend_reads_chain3_before_turning_it_on(self):
         code, _ = self._suspend()
         self.assertEqual(code, 0)
@@ -285,14 +292,6 @@ class Chain3RestoreTests(unittest.TestCase):
         self._suspend(later, chain="chain:enabled")
         self.assertEqual(json.loads(Path(self.backup, "chain3-setting.json").read_text())["original"], "disabled")
         self.assertFalse(Path(later, "chain3-setting.json").exists())
-
-    def test_wireless_debug_reuses_device_serial(self):
-        # 无线调试的 adb serial 是 IP:端口，重连就变；记录要认设备自己的序列号
-        self._suspend(device_serial="ABC123")
-        self.assertEqual(json.loads(Path(self.backup, "chain3-setting.json").read_text())["serial"], "ABC123")
-        code, _ = self._unsuspend("chain:enabled", device_serial="ABC123")
-        self.assertEqual(code, 0)
-        self.assertIn("cmd connectivity set-chain3-enabled false", self.sent)
 
     def test_unsuspend_writes_back_disabled_original(self):
         self._record("disabled")
@@ -363,6 +362,17 @@ class Chain3RestoreTests(unittest.TestCase):
             self.assertEqual(run.chain3_record("AAA")[1]["original"], "disabled")
             self.assertEqual(run.chain3_record("BBB")[1]["original"], "enabled")
 
+
+class Chain3WirelessTests(Chain3Harness):
+    DOMAIN = "connection"
+    def test_wireless_debug_reuses_device_serial(self):
+        # 无线调试的 adb serial 是 IP:端口，重连就变；记录要认设备自己的序列号
+        self._suspend(device_serial="ABC123")
+        self.assertEqual(json.loads(Path(self.backup, "chain3-setting.json").read_text())["serial"], "ABC123")
+        code, _ = self._unsuspend("chain:enabled", device_serial="ABC123")
+        self.assertEqual(code, 0)
+        self.assertIn("cmd connectivity set-chain3-enabled false", self.sent)
+
     def test_wireless_serial_never_reaches_the_filename(self):
         self._record("disabled", serial="another-device")
         with patch.object(run, "BACKUPS", self.dir.name):
@@ -371,6 +381,7 @@ class Chain3RestoreTests(unittest.TestCase):
 
 
 class NotificationSelectionTests(unittest.TestCase):
+    DOMAIN = "channel"
     def test_scan_excludes_honor_service_channels(self):
         names = ["警告", "实时活动", "赛事资讯", "护眼推荐", "活动优惠"]
         data = {("com.example", "recommend_" + str(i)): (name, 3, False) for i, name in enumerate(names)}
@@ -391,6 +402,7 @@ class NotificationSelectionTests(unittest.TestCase):
 
 
 class BundleTests(unittest.TestCase):
+    DOMAIN = "desktop"
     def test_only_public_runtime_assets_are_staged(self):
         with tempfile.TemporaryDirectory() as directory:
             root, out = Path(directory, "source"), Path(directory, "stage")
