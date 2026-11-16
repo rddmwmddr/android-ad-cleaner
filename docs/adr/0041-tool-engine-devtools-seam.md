@@ -39,7 +39,7 @@ from(repo.resolve("tool")) { into("tool"); include("**/*.py", "*.dex") }
 - **真包**：`devtools/__init__.py` + 调用点写 `from devtools.claim import claim`。这批模块的调用点
   只有 CI workflow、`tests/` 与人肉命令，数量远小于引擎侧；真包让调用点自带出处，且 `devtools`
   是全新命名空间、零历史包袱。
-- **平铺**：19 个模块在 `devtools/` 下不再分 `checks/` `release/` `issue/`——19 个一眼看得完，
+- **平铺**：模块在 `devtools/` 下不再分 `checks/` `release/` `issue/`——二十来个一眼看得完，
   再分一层就要定第二套归类判据。
 - **保留直接跑文件**：`python3 devtools/claim.py <票号>` 照旧可用，不改 `-m`。`-m` 要求 cwd 在
   仓库根、要改十几处文档与 CI，收益只是形式统一。
@@ -52,7 +52,7 @@ from(repo.resolve("tool")) { into("tool"); include("**/*.py", "*.dex") }
 
 ### 两份冻结名单与三条守卫
 
-`tests/test_tool_package.py` 冻结两份名单——引擎 37 个顶层模块、工具链 19 个顶层模块——
+`tests/test_tool_package.py` 冻结两份名单——引擎 37 个顶层模块、工具链 21 个顶层模块——
 并用三条用例守它：
 
 1. `tool/` 的顶层 `.py` 恰好是引擎名单，`devtools/` 的顶层 `.py`（除 `__init__.py`）恰好是工具链

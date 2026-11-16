@@ -45,3 +45,7 @@ SHA256SUMS.txt
 coverage-*.data
 coverage.xml
 unittest.log
+
+# mutation 的工作目录与 mutmut 的本地缓存（devtools/mutation.py，可重建）
+/.mutmut/
+/mutants/

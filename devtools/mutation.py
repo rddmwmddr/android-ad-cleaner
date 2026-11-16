@@ -1,0 +1,144 @@
+"""跑一个模块的 mutation（#1411）：准备一个工作目录，跑 mutmut，把结局读回来。
+
+用法：
+
+    python3 devtools/mutation.py tool/catalog/schema.py [更多模块…]
+
+退出码：0 全部杀死、1 有存活或「no tests」、2 用的是错。
+
+三条约束来自 #1410 的实测：
+
+- mutmut 3.8 的 mutant 名是「相对路径去掉 `src.` 前缀」，而测试按顶层模块名 import
+  （`from catalog.schema import …`）。工作目录里放一个 `src -> tool` 符号链接，两边在同一
+  视角上对齐，测试一行不改。
+- mutmut 把 cwd 切到 `mutants/` 再跑 pytest，而测试要读仓库根的 `recipes/`、`docs/` 等
+  数据目录，所以它们得进 `also_copy`。
+- 缓存落在工作目录的 `mutants/` 下，跟着 `.mutmut/` 一起忽略，不在仓库根留下痕迹。
+"""
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+try:
+    from . import mutation_scope
+except ImportError:             # 直接跑文件时 sys.path[0] 就是 devtools/
+    import mutation_scope
+
+WORKDIR = Path(".mutmut") / "work"
+# 工作目录里指向仓库根的符号链接：mutmut 只认识 cwd 下的相对路径。
+LINKS = ("tool", "tests", "recipes", "docs", "devtools", "recipe_lib")
+# 变异副本里跑测试要读到的东西。`mutants/` 下的测试会以它为根，缺一项就在收集期报错。
+ALSO_COPY = ["recipe_lib", "recipes", "docs", "devtools"]
+CONFIG = """\
+# devtools/mutation.py 生成，改那里。
+[tool.mutmut]
+source_paths = ["src"]
+only_mutate = [{}]
+pytest_add_cli_args_test_selection = [{}]
+also_copy = [{}]
+"""
+
+
+def _toml_list(values) -> str:
+    return ", ".join(f'"{value}"' for value in values)
+
+
+def write_config(workdir: Path, modules: list[str]) -> None:
+    """把这次要跑的模块与测试写成 mutmut 的配置。"""
+    text = CONFIG.format(
+        _toml_list(mutation_scope.only_mutate(modules)),
+        _toml_list(mutation_scope.tests_for(modules)),
+        _toml_list(ALSO_COPY),
+    )
+    workdir.mkdir(parents=True, exist_ok=True)
+    (workdir / "pyproject.toml").write_text(text, encoding="utf-8")
+
+
+def link_sources(workdir: Path) -> None:
+    """在工作目录里放好 `src -> tool` 与测试 / 数据目录的链接。"""
+    workdir.mkdir(parents=True, exist_ok=True)
+    for name in LINKS:
+        _link(workdir / name, Path("..") / ".." / name)
+    _link(workdir / "src", Path("..") / ".." / "tool")
+
+
+def _link(path: Path, target: Path) -> None:
+    if path.is_symlink() or path.exists():
+        if path.is_symlink() and path.readlink() == target:
+            return
+        if path.is_symlink():
+            path.unlink()
+        else:
+            return
+    path.symlink_to(target)
+
+
+def run(workdir: Path, extra: list[str] | None = None) -> int:
+    """在 workdir 里跑 mutmut；返回它的退出码。"""
+    completed = subprocess.run(
+        [sys.executable, "-m", "mutmut", "run", *(extra or [])],
+        cwd=workdir,
+    )
+    return completed.returncode
+
+
+def stats(workdir: Path) -> dict[str, int]:
+    """读回这次运行的结局计数。mutmut 自己的 summary 只在有 `export-cicd-stats` 时才落盘。"""
+    subprocess.run(
+        [sys.executable, "-m", "mutmut", "export-cicd-stats"],
+        cwd=workdir,
+        check=True,
+        capture_output=True,
+    )
+    return json.loads((workdir / "mutants" / "mutmut-cicd-stats.json").read_text(encoding="utf-8"))
+
+
+def survivors(workdir: Path) -> list[str]:
+    """存活 mutant 的名字，逐条列出——补测试时要知道是哪一行、哪种变异。"""
+    completed = subprocess.run(
+        [sys.executable, "-m", "mutmut", "results"],
+        cwd=workdir,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    found = []
+    for line in completed.stdout.splitlines():
+        name, _, status = line.strip().rpartition(": ")
+        if status == "survived":
+            found.append(name)
+    return found
+
+
+def main(argv: list[str] | None = None) -> int:
+    modules = list(argv if argv is not None else sys.argv[1:])
+    if not modules:
+        print(__doc__.split("用法：")[1].split("\n")[0].strip(), file=sys.stderr)
+        return 2
+    missing = mutation_scope.unknown(modules)
+    if missing:
+        print(f"不在映射表里：{' '.join(missing)}", file=sys.stderr)
+        return 2
+
+    link_sources(WORKDIR)
+    write_config(WORKDIR, modules)
+    code = run(WORKDIR)
+    if code != 0:
+        return code
+
+    counts = stats(WORKDIR)
+    alive = survivors(WORKDIR)
+    print(
+        f"共 {counts['total']} 个 mutant：杀死 {counts['killed']}、存活 {counts['survived']}、"
+        f"pragma 跳过 {counts['skipped']}、超时 {counts['timeout']}、无测试 {counts['no_tests']}"
+    )
+    for name in alive:
+        print(f"  存活 {name}")
+    return 0 if counts["survived"] == 0 and counts["no_tests"] == 0 else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -86,7 +86,7 @@ ADDRESS_EXEMPT = ("recipes/", "tests/")
 # 前端、Kotlin 与资源文件都是随 App 发出去的，凭据落在那里同样是泄露。
 TEXT_SUFFIXES = {".md", ".py", ".toml", ".json", ".yml", ".yaml", ".kts", ".kt", ".java",
                  ".html", ".js", ".css", ".xml", ".txt", ".sh", ".spec", ".cfg", ".ini"}
-SKIP_DIRS = {".git", "node_modules", ".venv", "build", "dist", "__pycache__", ".private"}
+SKIP_DIRS = {".git", "node_modules", ".venv", "build", "dist", "__pycache__", ".private", ".mutmut"}
 SKIP_FILES = {"CLAUDE.local.md"}
 
 
