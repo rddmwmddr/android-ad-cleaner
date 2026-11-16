@@ -6,8 +6,10 @@
 """
 import ast
 import inspect
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from gui import app
 
@@ -137,6 +139,24 @@ class BoundaryTests(unittest.TestCase):
                         and isinstance(node.args[1], ast.Constant):
                     self.assertNotIn(node.args[1].value, BLOCKS,
                                      f"{name} 用 getattr 绕到了 {node.args[1].value}")
+
+
+class ClipboardWiringTests(unittest.TestCase):
+    """写剪贴板只有一个实现：窗口桥的 `copy_text` 与启动失败弹窗走同一个 `win_clipboard`（#1382）。
+
+    那一份住在 `gui/startup.py`，桥面按模块取用；多 import 一份函数对象就会让换掉
+    `gui.startup.win_clipboard` 的替身落不到 `copy_text` 上。
+    """
+
+    def test_copy_text_goes_through_the_startup_clipboard(self):
+        from gui import startup
+        seen = []
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        api = app.Api(directory.name)
+        with patch.object(app, "IS_WIN", True), patch.object(startup, "win_clipboard", seen.append):
+            self.assertTrue(api.copy_text("诊断文本"))
+        self.assertEqual(seen, ["诊断文本"])
 
 
 if __name__ == "__main__":
