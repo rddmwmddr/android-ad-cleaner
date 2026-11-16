@@ -20,7 +20,10 @@ def recipe_files(recipes_dir: str) -> list[str]:
     """`recipes_dir` 下每个型号的页面树数据路径，按型号目录排。
 
     一个型号目录（`recipes/<家族>/<型号>/`）只出一份 `<型号>.toml`（ADR-0038）；`.py` 机型脚本
-    已随注入面删除（#1268），装载器也不再收它。"""
+    已随注入面删除（#1268），装载器也不再收它。
+
+    与 `recipe_pick` 的 `_recipe_files()` 刻意不合并：这份回答「仓库里有哪些脚本」，服务台账与
+    事实层要的是全量、含变体；那份回答「这台机跑哪一份」，按型号目录取主本、把变体留给版本比较。"""
     out = []
     for model_dir in sorted(glob.glob(os.path.join(recipes_dir, "*", "*"))):
         if not os.path.isdir(model_dir):

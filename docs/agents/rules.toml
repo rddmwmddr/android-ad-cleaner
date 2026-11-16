@@ -204,6 +204,14 @@ why = "退出码语义分散会让客户端分不清「没执行」与「失败�
 expires_if = "命令入口改成注册表驱动的插件、退出码统一在平台层给出时删。"
 
 [[rule]]
+id = "dev.recipes.pick-single-owner"
+source = "docs/ARCHITECTURE.md#函数级细节"
+check = "code:tool/recipe_pick.py:recipe_for"
+status = "code"
+why = "「这台机跑哪份脚本」是全仓最热的一段判断（#319 / #942 / #969 / #1263 / #1264 都在改它），曾与 adb、备份、挂起、快应用共处 1119 行的 run.py：想复用它只能从命令层切，测试注入假树只能 patch 模块全局，读代码的人分不清「选脚本」与「执行命令」。"
+expires_if = "选脚本下沉进 catalog 运行时、由数据声明目标机型、不再按目录与版本挑时删。"
+
+[[rule]]
 id = "dev.row.single-definition"
 source = "docs/ARCHITECTURE.md#函数级细节"
 check = "code:tool/row.py:line"
@@ -443,6 +451,14 @@ check = "code:gui/app.py:ClientData"
 status = "code"
 why = "数据目录与备份目录各自硬编码，会让升级、卸载与备份互相看不见对方的文件；工具模块要惰性取，避免 import 期就绑定路径。"
 expires_if = "客户端改由平台 API 提供数据目录时删。"
+
+[[rule]]
+id = "dev.client.diagnostics-owner"
+source = "docs/ARCHITECTURE.md#函数级细节"
+check = "code:tool/diagnostics.py:diagnostics"
+status = "code"
+why = "这段给用户看的文本散在 1808 行的窗口桥文件里时，测一句措辞要构造整个 `Api` 并桩 `adb` 与 `Dispatcher`，加一条诊断行也要在 62 个成员里找位置（#1376）。收进一个模块后整段输出可按 state 直接断言，措辞集中一处；跑本机命令与平台分支留在 `gui/app.py`，所以那边也没有理由再拼一份。"
+expires_if = "客户端不再产出这段诊断文本（例如改由引擎侧统一生成）时删。"
 
 [[rule]]
 id = "dev.windows.startup-verdicts"

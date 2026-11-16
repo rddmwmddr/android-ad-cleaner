@@ -35,7 +35,7 @@ UNGUARDED = {"manual", "advisory", "dead"}
 # 仍是一笔只能靠人记着的债，漏掉它就能靠「把一条 manual 标成 dead」白换一个名额。
 # 涨一个必须在这里改数字：那是一次公开的「我又欠了一条只能靠人记着的规则」，评审要看见。
 # 守卫化一条（status 改 enforced / code）是还债，改完把这里的数字一起下调。
-PROSE_ONLY_BOUND = 71          # manual 59 + advisory 12，dead 0，注册表共 148 条
+PROSE_ONLY_BOUND = 71          # manual 59 + advisory 12，dead 0，注册表共 153 条
 REQUIRED = ("id", "source", "check", "status", "why", "expires_if")
 OPTIONAL = ("since",)
 

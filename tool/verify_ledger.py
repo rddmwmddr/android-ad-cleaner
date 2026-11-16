@@ -77,8 +77,9 @@ def declared_builds(recipes_dir):
 def build_matches(record_build, script_build):
     """记录的 build 串要以脚本声明的 BUILD 打头，脚本没声明 BUILD 时无从校验、一律算匹配。
 
-    只做裸前缀比较，比引擎的 `run.build_ok()` 少一条 HyperOS 版本号回退：记录写的是设备
-    实际报出来的 build，对不上就该有人去看一眼，而不是换个字段再比一次。
+    只做裸前缀比较，比引擎的 `recipe_pick.build_ok()` 少一条 HyperOS 版本号回退：记录写的是设备
+    实际报出来的 build，对不上就该有人去看一眼，而不是换个字段再比一次。所以这里刻意不与选脚本
+    共用那份实现——两处要回答的不是同一个问题。
     """
     return not script_build or record_build.startswith(script_build)
 

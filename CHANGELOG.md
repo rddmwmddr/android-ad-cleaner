@@ -26,6 +26,8 @@
 - 小米十一段「应用商店」转页面树，`require_tab` 加可选键 `settle`（#1364）
 - catalog 新增 `let` 等三条变量与开关校验 op，三段转数据（#1373）
 - catalog 新增 `tap_id` 等两条 op，PNM-AN10 音乐与 PJA110 下拉搜索转数据（#1362）
+- 设备诊断文本搬进 `tool/diagnostics.py`，状态与两个本机查询由 `Api` 注入（#1376）
+- 选脚本搬出 `run.py` 成 `recipe_pick.recipe_for`，`root=` 显式注入（#1361）
 - catalog 各 op 的允许键、必填键、子 ops 与词条来源收成 `OPS` 里的一条记录（#1357）
 - catalog 不产出事实的 op 种类收成 `NO_FACT_KINDS` 声明，投影函数遇未登记 kind 直接报错（#1354）
 - 词库与入口速查的两份库实现下扫合并成事实层的 `library_hits()`，生成物逐字不变（#1352）
