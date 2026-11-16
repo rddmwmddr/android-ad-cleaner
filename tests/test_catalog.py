@@ -105,13 +105,27 @@ class ValidatorTests(unittest.TestCase):
 
 
 class CatalogFamilyTests(unittest.TestCase):
-    """族自己的两条守卫（#1398）：句柄与产出跟快照对得上，case 行是纯数据。"""
+    """族自己的守卫（沿用 #1398，结构反推 #1399）：句柄、产出、gap 跟快照与 `OPS` 对得上，case 行是纯数据。"""
 
     def test_snapshot_handles_and_outputs_agree(self):
         self.assertEqual(catalog_family.FAMILY.violations(), [])
 
     def test_case_rows_are_pure_data(self):
         self.assertEqual(family.pure_data_violations(catalog_family), [])
+
+    def test_every_required_key_has_a_missing_case(self):
+        """`OPS` 里每个必填键都要有一条「缺这个键」的 case（#1399）。"""
+        self.assertEqual(catalog_family.FAMILY.gap_violations(), [])
+
+    def test_a_new_required_key_demands_a_case(self):
+        """加一个带必填键的 op，守卫立刻点名它缺 case——期望集合由 `OPS` 生成，不会自己漂。"""
+        from catalog.schema import OPS as REAL_OPS, OpSpec
+        probe = OpSpec(frozenset({"kind", "x"}), required=("x",))
+        with patch.object(catalog_family, "OPS", {**REAL_OPS, "synthetic_probe": probe}):
+            gaps = catalog_family.FAMILY.gap_violations()
+        text = "\n".join(gaps)
+        self.assertIn("synthetic_probe", text)
+        self.assertIn("'x'", text)
 
 
 def _load_tmp(tmp, toml_text, py_text=None):
@@ -1343,37 +1357,25 @@ class IfFindKwargsTests(unittest.TestCase):
 
 
 class NewOpValidatorTests(unittest.TestCase):
-    """新 op 的封闭清单（#1266）：缺键、名单外的键都在装载期报。"""
+    """新 op 的封闭清单（沿用 #1266）：缺键、名单外的键都在装载期报。
+
+    缺键 path 里少数几条已在 #1399 搬进 `catalog_family.CASES`（start_or_skip 缺 dead_ends、
+    skip_unless_installed 缺 contains、off_required 缺 only、if_setting 缺 kw、let 缺 lib / name），
+    这里只留「名单外的键」「取值非法」与 `OPS` 无 required 的 `check` 形态。"""
 
     def _bad(self, data, needle):
         with self.assertRaises(catalog.SchemaError) as caught:
             catalog.validate(data)
         self.assertIn(needle, str(caught.exception))
 
-    def test_start_or_skip_requires_dead_ends(self):
-        op = {"kind": "start_or_skip", "pkg": "p", "activity": "a", "reason": "r"}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 dead_ends")
-
     def test_start_or_skip_rejects_an_unknown_key(self):
         op = {"kind": "start_or_skip", "pkg": "p", "activity": "a",
               "dead_ends": ["x"], "reason": "r", "surprise": 1}
         self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
 
-    def test_skip_unless_installed_requires_the_marker(self):
-        op = {"kind": "skip_unless_installed", "command": "pm path x", "text": "t"}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 contains")
-
-    def test_off_required_requires_only(self):
-        op = {"kind": "off_required", "page": "p"}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 only")
-
     def test_off_required_rejects_an_empty_only(self):
         op = {"kind": "off_required", "only": [], "page": "p"}
         self._bad({"segment": [{"name": "a", "ops": [op]}]}, "非空")
-
-    def test_if_setting_requires_the_keyword(self):
-        op = {"kind": "if_setting", "ops": []}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 kw")
 
     def test_if_setting_rejects_an_unknown_key(self):
         op = {"kind": "if_setting", "kw": "x", "surprise": 1}
@@ -1408,11 +1410,6 @@ class NewOpValidatorTests(unittest.TestCase):
     def test_if_find_rejects_a_key_outside_its_list(self):
         op = {"kind": "if_find", "text": "x", "edge_ok": "tab", "surprise": 1}
         self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
-
-    def test_let_requires_the_binding_and_the_implementation(self):
-        self._bad({"segment": [{"name": "a", "ops": [{"kind": "let", "name": "pkg"}]}]}, "缺 lib")
-        self._bad({"segment": [{"name": "a", "ops": [{"kind": "let", "lib": "browser_settings"}]}]},
-                  "缺 name")
 
     def test_let_rejects_an_empty_name_and_an_unknown_key(self):
         self._bad({"segment": [{"name": "a", "ops": [{"kind": "let", "name": "", "lib": "x"}]}]},
