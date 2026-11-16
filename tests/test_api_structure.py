@@ -61,7 +61,7 @@ FORBIDDEN_IN = {
 
 CLASS_FILES = {
     "Api": "app.py",
-    "AdbDownloader": "app.py",
+    "AdbDownloader": "adb.py",
     "Dispatcher": "dispatcher.py",
     "Reporter": "reporter.py",
 }

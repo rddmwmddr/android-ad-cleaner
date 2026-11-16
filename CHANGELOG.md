@@ -17,6 +17,7 @@
 - 计划侧九个符号搬进 `gui/tasks.py`，步骤身份收成 `tool/plan.py` 的 `StepKind` 词表（#1386）
 - 启动建议、两条复制提示与写剪贴板搬进 `gui/startup.py`，弹窗标题仍取 `APP_NAME`（#1382）
 - 错误上报搬进 `gui/reporter.py`，版本号与地址等常量由 `Api` 注入（#1384）
+- adb 发现与下载搬进 `gui/adb.py`，版本与源表仍留在 `gui/app.py` 注入（#1385）
 - `gui/toolpath.py` 收下 gui/ 到 tool/ 的惰性加载，`_tool()` 与 BASE / TOOL 只在那里落地（#1381）
 - 剩余 34 段 `code=` 每段上方补一行「裁决：」，写明归哪一类真例外或缺哪种能力（#1374）
 - PNM-AN10 广告跟踪与 RMX3888 主题转数据，直达不通的判据收进 `dead_ends`（#1372）
