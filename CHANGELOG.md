@@ -13,6 +13,7 @@
 - 一加 16 商店段的「消息管理」探测只翻前两屏，常态下省约 40 秒（#1281）
 
 ### 内部
+- channel_policy 规则词元收进 `tests/channel_policy_family.py` 的族数据（#1402）
 - vocab 的按脚本冻结词条表收进 `tests/vocab_family.py` 的族数据（#1400）
 - 入口表的逐行出处用例收进 `tests/entries_family.py` 的族数据（#1401）
 - catalog 族加结构反推守卫，每个必填键都要求一条缺键 case（#1399）
