@@ -13,6 +13,7 @@
 - 一加 16 商店段的「消息管理」探测只翻前两屏，常态下省约 40 秒（#1281）
 
 ### 内部
+- vocab 的按脚本冻结词条表收进 `tests/vocab_family.py` 的族数据（#1400）
 - 入口表的逐行出处用例收进 `tests/entries_family.py` 的族数据（#1401）
 - catalog 的装载期拒绝用例收进 `tests/catalog_family.py` 的族数据（#1398）
 - 族容器 tests/family.py 落成，快照更新必须附理由（#1395）
