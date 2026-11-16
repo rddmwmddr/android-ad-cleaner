@@ -1,6 +1,6 @@
 """从 docs/手机版教程/brand-taps.json 渲染三处「连点 7 下」品牌表（#654）。
 
-用法：python tool/gen_brand_taps.py
+用法：python devtools/gen_brand_taps.py
 只改 JSON 一处，跑本脚本，三处同时生效；漏跑则 tests/test_doc_consistency.py 红。
 
 渲染范围是三个文件里 `brand-taps:start` / `brand-taps:end` 标记之间的内容，

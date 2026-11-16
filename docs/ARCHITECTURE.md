@@ -24,7 +24,12 @@
 | 窗口桥 | 前端 → 客户端 | `gui/web/`；手机版改由 Compose 直接调 Python（[ADR-0018](adr/0018-android-compose-ui.md)） | `Api` 上的方法名与参数是前端唯一契约，内部的下载 / 上报 / 调度怎么分家都可以变（[ADR-0011](adr/0011-api-splitting.md)） |
 | 读屏 adapter | 引擎 → 手机 | `tool/fast.py` 的 `Phone` | `Phone.reader` 是引擎看手机的唯一接口；桌面是 uiautomator2，手机是 `aac_android/u2.py`（[ADR-0001](adr/0001-phone-connection-module.md)、[ADR-0002](adr/0002-phone-state-interface.md)、[ADR-0019](adr/0019-phone-second-execution-host.md)） |
 
-## 三、`tool/` 模块清单
+## 三、`tool/` 模块清单（出厂引擎）
+
+`tool/` 只放**出厂引擎**：随 APK 发到手机上，手机版与桌面版同一份。仓库工具链在 `devtools/`
+（票务、发版与校验脚本，只在 CI 与本机跑、不随包），两边由目录本身分界——`syncEngine` 是整目录
+glob，放进哪个目录就决定了它会不会进包（[ADR-0041](adr/0041-tool-engine-devtools-seam.md)），
+`tests/test_tool_package.py` 守着这条边界。
 
 一次执行会跑到的：
 
@@ -86,16 +91,21 @@
 | `adapt.py` | 新机型适配辅助：试入口 → 探路 → 勾选 → 草稿 → 自检 |
 | `explore.py` | 探路：只读，列出像广告的开关 |
 | `huawei_channels.py` | 华为 ALN-AL00 的清单式渠道处理，需人工审核清单，客户端不自动跑 |
-| `gen_brand_taps.py` | 从 `docs/手机版教程/brand-taps.json` 渲染连点表 |
-| `gen_site_css.py` | 把仓库根 `site.css` 渲染进官网两页的共享样式块 |
-| `gen_adr_index.py` | 从 `docs/adr/` 渲染编号 + 一级标题到 `docs/adr/README.md`，供 `CLAUDE.md` 只留一条指针（#1299） |
 | `verify_ledger.py` | 配方验证台账：读 `recipes/verified.toml`，每个配方文件一行、按距今天数降序，覆盖度与证据来源是两个维度（`entry()` 也供 `run.py` 的 `status-json` 取这三样），缺记录的条目 `entry()` 给「未记录 / 未知」、CLI 行只打「未记录」，段体正文改过标「待复核」（比记录里的 `body_hash` 与脚本现算的值；`--hash` 只打印刷新基线用的当前值），记录 build 对不上脚本 `BUILD` 的打「build 不符」（沿用 #916、#917、#918 的台账口径，沿用 #1124 的证据来源拆档，沿用 #1242 把判据从提交日期换成段体哈希） |
-| `check_dco.py` | PR 的 DCO 校验：逐个非 merge 提交比对 `Signed-off-by` 与作者邮箱（#848） |
-| `check_conventional.py` | PR 的提交主题校验：`type(scope): subject`，类型清单 `TYPES` 也在这里（#849） |
-| `check_ticket_ref.py` | PR 的票号校验：分支名以 `-<票号>` 结尾、正文有 `Refs #N` / `Closes #N` 且是同一张（#1001） |
-| `check_comment_tickets.py` | PR 新增行里的票号要在正文引用的范围内，`docs/adr/` 与含「沿用」的行豁免（#1001） |
 
-`commits.py` 不是命令：它是上面几条 PR 校验共用的 `base..head` 读取与 UTF-8 控制台，沿用 #848、#849 起的那份设计。
+`devtools/` 里是 19 个仓库工具链模块，不随包；下面几份是人肉命令会直接跑的（[ADR-0041](adr/0041-tool-engine-devtools-seam.md)）：
+
+| 模块 | 拥有什么 |
+|---|---|
+| `devtools/gen_brand_taps.py` | 从 `docs/手机版教程/brand-taps.json` 渲染连点表 |
+| `devtools/gen_site_css.py` | 把仓库根 `site.css` 渲染进官网两页的共享样式块 |
+| `devtools/gen_adr_index.py` | 从 `docs/adr/` 渲染编号 + 一级标题到 `docs/adr/README.md`，供 `CLAUDE.md` 只留一条指针（#1299） |
+| `devtools/check_dco.py` | PR 的 DCO 校验：逐个非 merge 提交比对 `Signed-off-by` 与作者邮箱（#848） |
+| `devtools/check_conventional.py` | PR 的提交主题校验：`type(scope): subject`，类型清单 `TYPES` 也在这里（#849） |
+| `devtools/check_ticket_ref.py` | PR 的票号校验：分支名以 `-<票号>` 结尾、正文有 `Refs #N` / `Closes #N` 且是同一张（#1001） |
+| `devtools/check_comment_tickets.py` | PR 新增行里的票号要在正文引用的范围内，`docs/adr/` 与含「沿用」的行豁免（#1001） |
+
+`devtools/commits.py` 不是命令：它是上面几条 PR 校验共用的 `base..head` 读取与 UTF-8 控制台，沿用 #848、#849 起的那份设计。其余工具链脚本（`claim` / `followup` / `stale` / `triage_audit` / `gh` / `release_assets` / `release_meta` / `glob_scan` / `test_anchors` / `typecheck_recipes` / `unittest_summary`）的指路在 `docs/agents/` 与 [ADR-0036](adr/0036-tool-gh-session.md)。
 
 客户端侧：`gui/app.py` 是窗口桥与装配（`Api` / `ClientData`，adb 的那几张源表也留在这里当单一来源），其余各块按 owner 分住——`gui/toolpath.py` 是 `gui/` 到 `tool/` 的惰性加载，`gui/tasks.py` 是计划侧（`Task` … `retry_plan`，身份词表在 `tool/plan.py` 的 `StepKind`），`gui/dispatcher.py` 是执行编排（`Dispatcher` / `Job`），`gui/reporter.py` 是错误上报（`Reporter` / `scrub`），`gui/adb.py` 是 adb 路径解析、下载器与存活探测（`AdbDownloader`），`gui/startup.py` 是启动失败文案与写剪贴板；`gui/launch.py` 是入口与打包冒烟，`gui/web/` 是桌面版的界面，`gui/winpreflight.py` 归因 Windows 启动失败，`gui/dotnet_config.py` 在打包时写随包的 `<exe>.config`。
 

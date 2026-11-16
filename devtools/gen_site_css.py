@@ -1,6 +1,6 @@
 """把 site.css 渲染进官网两页的 <style>（#653）。
 
-用法：python tool/gen_site_css.py
+用法：python devtools/gen_site_css.py
 只改 site.css 一处，跑本脚本，两页同时生效；漏跑则 tests/test_doc_consistency.py 红。
 
 渲染范围是两页 <style> 里 `site-css:start` / `site-css:end` 标记之间的内容，其余一字不动。

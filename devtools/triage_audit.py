@@ -3,8 +3,8 @@
 
 用法：
 
-    python3 tool/triage_audit.py                       # 拉全量 open 票
-    python3 tool/triage_audit.py --input issues.json   # 用一份 `gh issue list --json` 的落盘
+    python3 devtools/triage_audit.py                       # 拉全量 open 票
+    python3 devtools/triage_audit.py --input issues.json   # 用一份 `gh issue list --json` 的落盘
 
 判据正文在 docs/agents/triage-labels.md，本文件只是它的机械镜像：`KNOWN` 与文档的
 `## 标签登记` 表由 tests/test_triage_audit.py 逐项对拍。只读——不写标签、不评论、不关票。
@@ -18,6 +18,8 @@
 import json
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))   # stdio 留在引擎目录
 
 from gh import GhError, json_of, runner_for
 
@@ -48,7 +50,7 @@ MAPPED = "doc.triage.five-roles-map"
 
 EXIT_OK, EXIT_FINDINGS, EXIT_UNREACHABLE = 0, 1, 2
 
-USAGE = """用法：python3 tool/triage_audit.py [--input <path>]
+USAGE = """用法：python3 devtools/triage_audit.py [--input <path>]
 
   --input <path>  读一份 `gh issue list --state open --json number,labels` 的落盘，不联网"""
 

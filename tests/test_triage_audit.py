@@ -1,4 +1,4 @@
-"""triage 四条集合判据（tool/triage_audit.py，#1019）。
+"""triage 四条集合判据（devtools/triage_audit.py，#1019）。
 
 判据正文在 docs/agents/triage-labels.md，脚本是它的机械镜像。这里的对拍用例把文档里
 `## 标签登记` 那张表与脚本的 `KNOWN` 常量逐项比，两边不等即红；真实 `gh` 调用只在
@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 
-import triage_audit  # noqa: E402
+from devtools import triage_audit  # noqa: E402
 from fixtures import FakeRunner  # noqa: E402
 
 LABEL_FILE = ROOT / "docs/agents/triage-labels.md"

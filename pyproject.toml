@@ -14,7 +14,7 @@ select = ["F", "E9", "B"]
 # 整类关在这里，别在每个文件里撒 `# noqa`。
 "recipes/**/*.py" = ["F401"]
 
-# 类型检查只接窄口径：`tool/` 走不带参数的那条 mypy；机型脚本由 `tool/typecheck_recipes.py`
+# 类型检查只接窄口径：`tool/` 走不带参数的那条 mypy；机型脚本由 `devtools/typecheck_recipes.py`
 # 逐份跑（42 份例外 `.py` 随型号脚本取名，整套扫会报非法模块名，理由在那个脚本的 docstring 里）。
 [tool.mypy]
 # 扫描范围属于配置：`gui/` 有自己的平台分支与假对象；`recipes/` 不走 `files`，

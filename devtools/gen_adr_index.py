@@ -1,6 +1,6 @@
 """从 `docs/adr/` 渲染 ADR 索引到 `docs/adr/README.md`（#1299）。
 
-用法：python tool/gen_adr_index.py
+用法：python devtools/gen_adr_index.py
 新增、改名或换掉一级标题的 ADR 写完就跑一次；漏跑或漏收录由
 `tests/test_doc_consistency.py` 的 `AdrIndexTests` 抓。README 整份由本脚本生成，不要手改。
 """
@@ -8,6 +8,8 @@ import re
 import sys
 from pathlib import Path
 from typing import NamedTuple
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tool"))   # stdio 留在引擎目录
 
 from stdio import use_utf8_console
 
@@ -19,7 +21,7 @@ TARGET = ADR_DIR / "README.md"
 NAME = re.compile(r"^(\d{4})-[a-z0-9-]+\.md$")
 HEADING = re.compile(r"^# +(.*\S) *$")
 FENCE = "```"
-HEADER = "<!-- 由 tool/gen_adr_index.py 生成：加 ADR 时写文件再跑一次，不要手改这张表。 -->"
+HEADER = "<!-- 由 devtools/gen_adr_index.py 生成：加 ADR 时写文件再跑一次，不要手改这张表。 -->"
 LEAD = ("`docs/adr/` 下每一份决定的编号与标题，按编号排序。模块边界的决定写进这里；"
         "机制与取舍在各自文件里，目录里放什么、编号怎么取见 "
         "[docs/agents/domain.md](../agents/domain.md)。")

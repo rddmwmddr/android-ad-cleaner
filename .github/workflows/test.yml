@@ -25,10 +25,10 @@ jobs:
       - name: 静态检查（语法 / 未定义名 / bugbear 形状约束）
         run: |
           pip install ruff==0.17.3
-          ruff check tool tests gui android/app/src/main/python android/smoke.py recipes recipe_lib
+          ruff check tool devtools tests gui android/app/src/main/python android/smoke.py recipes recipe_lib
   # 类型检查单独一个 job：红了就是类型问题，不与「用例挂了」混在一起。扫描范围（`tool/`）与宽松档
   # 参数都在 pyproject.toml 的 `[tool.mypy]` 里，所以这里只有一条不带参数的 `mypy`；机型脚本由
-  # tool/typecheck_recipes.py 逐份喂给同一个宽松档（42 份例外 `.py` 随型号脚本取名，整套扫会报非法模块名）。只跑 Linux：
+  # devtools/typecheck_recipes.py 逐份喂给同一个宽松档（42 份例外 `.py` 随型号脚本取名，整套扫会报非法模块名）。只跑 Linux：
   # mypy 按平台裁剪分支，Windows-only 的段落在别的平台上连看都不看，两边结论不等价（ruff 才是无关的）。
   # 版本在 CLAUDE.md、CONTRIBUTING、发版文档与本文件四处，改时一起改；不进 requirements.txt（同 coverage）。
   types:
@@ -44,7 +44,7 @@ jobs:
           pip install mypy==1.18.2
           mypy
       - name: 类型检查（机型脚本，逐份，宽松档）
-        run: python3 tool/typecheck_recipes.py
+        run: python3 devtools/typecheck_recipes.py
   # Linux 跑 3.13，Windows 跑 3.12：两版解释器各跑一次，不重复跑同一组合。
   # 3.13 与仓库根的 .python-version 一致；3.12 与两个发版打包同版。3.13 起编译器会剥掉文档字符串
   # 的公共缩进，异常 repr、argparse 帮助同理，同一份源码在两版下可能逐字不同。
@@ -89,7 +89,7 @@ jobs:
         run: |
           COVERAGE_FILE=coverage-Linux.data coverage run -m unittest discover -s tests -v 2>&1 | tee unittest.log
           rc=${PIPESTATUS[0]}
-          python tool/unittest_summary.py unittest.log "Linux / 3.13" "${HEAD_SHA:0:7}" >> "$GITHUB_STEP_SUMMARY" || true
+          python devtools/unittest_summary.py unittest.log "Linux / 3.13" "${HEAD_SHA:0:7}" >> "$GITHUB_STEP_SUMMARY" || true
           exit "$rc"
       - uses: actions/upload-artifact@v7
         with:
@@ -136,7 +136,7 @@ jobs:
         run: |
           COVERAGE_FILE=coverage-Windows.data coverage run -m unittest discover -s tests -v 2>&1 | tee unittest.log
           rc=${PIPESTATUS[0]}
-          python tool/unittest_summary.py unittest.log "Windows / 3.12" "${HEAD_SHA:0:7}" >> "$GITHUB_STEP_SUMMARY" || true
+          python devtools/unittest_summary.py unittest.log "Windows / 3.12" "${HEAD_SHA:0:7}" >> "$GITHUB_STEP_SUMMARY" || true
           exit "$rc"
       - uses: actions/upload-artifact@v7
         with:

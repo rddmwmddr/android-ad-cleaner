@@ -2,9 +2,9 @@
 # 附件改名、漏传，或 REL 里留了上一版的文件名，用户点下载就是 404，而页面脚本不报错；
 # 名字对上了、大小或 sha 却不是同一批字节时，用户手里的校验值也是错的。
 # 本地复现同一条命令：
-#   python3 tool/release_assets.py          # 比 REL.version 那个 tag，只比文件名
-#   python3 tool/release_assets.py v0.4.0   # 比指定的 tag
-#   python3 tool/release_assets.py --sha    # 文件名、大小、sha 三类都比
+#   python3 devtools/release_assets.py          # 比 REL.version 那个 tag，只比文件名
+#   python3 devtools/release_assets.py v0.4.0   # 比指定的 tag
+#   python3 devtools/release_assets.py --sha    # 文件名、大小、sha 三类都比
 # 退出码：0 一致；1 任一不一致（输出分行差异）；2 取数失败——网络抖动不该被当成不一致。
 # 比 sha 不会误报：同一 tag 的资产内容不可变，换文件必须重发版，sha 不会自己漂。
 name: release-assets
@@ -35,4 +35,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
-        run: python3 tool/release_assets.py "$TAG" --sha
+        run: python3 devtools/release_assets.py "$TAG" --sha
