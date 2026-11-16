@@ -191,7 +191,7 @@ def _parse(argv):
 def cli(argv=None, family=None):
     """更新或体检一个族的快照；返回进程退出码。
 
-    ``--update`` 要配一个非空、且带票号引用（``#123``）的 ``--reason``；不带参数时打印四项检查。
+    ``--update`` 要配一个非空、且带票号引用（``#1395``）的 ``--reason``；不带参数时打印四项检查。
     """
     argv = list(sys.argv[1:] if argv is None else argv)
     chosen = family if family is not None else _family_from_main()
