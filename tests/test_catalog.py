@@ -23,6 +23,8 @@ import fixtures  # noqa: E402
 
 fixtures.load_tool()
 import catalog  # noqa: E402
+import catalog_family  # noqa: E402
+import family  # noqa: E402
 import fast  # noqa: E402
 import recipe_runtime  # noqa: E402
 
@@ -90,103 +92,26 @@ class LibraryViewTests(unittest.TestCase):
 class ValidatorTests(unittest.TestCase):
     """种类白名单：未知键、非法形状在装载期就报，不等真机。"""
 
-    def _bad(self, data, needle):
-        with self.assertRaises(catalog.SchemaError) as caught:
-            catalog.validate(data)
-        self.assertIn(needle, str(caught.exception))
-
-    def test_rejects_unknown_top_key(self):
-        self._bad({"segment": [{"name": "a", "ops": []}], "surprise": 1}, "名单外的键")
-
-    def test_rejects_unknown_op_kind(self):
-        self._bad({"segment": [{"name": "a", "ops": [{"kind": "explode"}]}]}, "不在白名单")
-
-    def test_rejects_off_without_naming(self):
-        op = {"kind": "off", "page": "p"}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "没点名")
-
-    def test_rejects_off_with_only_and_keep_overlap(self):
-        op = {"kind": "off", "only": ["x", "y"], "keep": ["y"], "page": "p"}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "重叠")
-
-    def test_rejects_duplicate_segment_names(self):
-        data = {"segment": [{"name": "a", "ops": []}, {"name": "a", "ops": []}]}
-        self._bad(data, "段名重复")
-
-    def test_rejects_unknown_focus_match(self):
-        op = {"kind": "if_focus", "text": "p", "match": "fnmatch"}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "match='fnmatch' 认不出")
-
-    def test_rejects_a_non_boolean_return_value(self):
-        op = {"kind": "return", "value": "false"}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "只能是 true / false")
-
-    def test_rejects_page_without_args(self):
-        op = {"kind": "page", "kwargs": {"activity": "X"}}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 args")
-
-    def test_rejects_page_with_an_unknown_key(self):
-        op = {"kind": "page", "args": ["X"], "surprise": 1}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
-
-    def test_rejects_skip_without_text(self):
-        op = {"kind": "skip"}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 text")
-
-    def test_rejects_skip_with_an_unknown_key(self):
-        op = {"kind": "skip", "text": "x", "surprise": 1}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
-
-    def test_rejects_fail_without_text(self):
-        op = {"kind": "fail"}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 text")
-
-    def test_rejects_fail_with_an_unknown_key(self):
-        op = {"kind": "fail", "text": "x", "surprise": 1}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
-
-    def test_rejects_require_tap_without_miss_print(self):
-        op = {"kind": "require_tap", "text": "设置"}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 miss_print")
-
-    def test_rejects_require_tap_with_an_unknown_key(self):
-        op = {"kind": "require_tap", "text": "x", "miss_print": "y", "surprise": 1}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
-
-    def test_rejects_close_listed_without_names(self):
-        op = {"kind": "close_listed", "page": "p", "miss_print": "y"}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 names")
-
-    def test_rejects_close_listed_with_an_unknown_key(self):
-        op = {"kind": "close_listed", "names": ["a"], "page": "p", "miss_print": "y", "surprise": 1}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
-
-    def test_rejects_tap_id_without_a_selector(self):
-        self._bad({"segment": [{"name": "a", "ops": [{"kind": "tap_id"}]}]}, "resource_id 或 text")
-
-    def test_rejects_tap_id_with_an_unknown_key(self):
-        op = {"kind": "tap_id", "text": "x", "surprise": 1}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
-
-    def test_rejects_gesture_without_ms(self):
-        op = {"kind": "gesture", "start": [0.5, 0.3], "end": [0.5, 0.7]}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "缺 ms")
-
-    def test_rejects_gesture_with_a_point_out_of_range(self):
-        op = {"kind": "gesture", "start": [0.5, 1.2], "end": [0.5, 0.7], "ms": 300}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "0–1 的比例")
-
-    def test_rejects_gesture_with_a_non_positive_ms(self):
-        op = {"kind": "gesture", "start": [0.5, 0.3], "end": [0.5, 0.7], "ms": 0}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "正的整数毫秒")
-
-    def test_rejects_gesture_with_an_unknown_key(self):
-        op = {"kind": "gesture", "start": [0.5, 0.3], "end": [0.5, 0.7], "ms": 300, "surprise": 1}
-        self._bad({"segment": [{"name": "a", "ops": [op]}]}, "名单外的键")
+    def test_rejects_invalid_shapes(self):
+        for case in catalog_family.CASES:
+            with self.subTest(case["id"]):
+                with self.assertRaises(catalog.SchemaError) as caught:
+                    catalog.validate(case["data"])
+                self.assertIn(case["needle"], str(caught.exception))
 
     def test_accepts_the_shipped_data(self):
         import tomllib
         catalog.validate(tomllib.loads((ROOT / DATA).read_text(encoding="utf-8")))
+
+
+class CatalogFamilyTests(unittest.TestCase):
+    """族自己的两条守卫（#1398）：句柄与产出跟快照对得上，case 行是纯数据。"""
+
+    def test_snapshot_handles_and_outputs_agree(self):
+        self.assertEqual(catalog_family.FAMILY.violations(), [])
+
+    def test_case_rows_are_pure_data(self):
+        self.assertEqual(family.pure_data_violations(catalog_family), [])
 
 
 def _load_tmp(tmp, toml_text, py_text=None):
