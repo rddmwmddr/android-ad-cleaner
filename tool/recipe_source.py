@@ -649,7 +649,7 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 lower(op.get("ops", []))
                 lower(op.get("else_ops", []))
             elif kind in ("lib", "require_lib", "code", "return_lib", "let"):
-                # 用数据里写得出的真实名字（不折回 close_named），归属才查得准（#1263）。`let` 点名的
+                # 用数据里写得出的真实名字（不折回 close_named），归属才查得准（沿用 #1263）。`let` 点名的
                 # 实现写在 `lib` 上，`name` 是它绑定的段内名字（#1373）——绑定的名字不进事实层。
                 called = op["lib"] if kind == "let" else op["name"]
                 args = ", ".join(_s(a) for a in op.get("args", []))
