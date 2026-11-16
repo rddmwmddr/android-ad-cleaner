@@ -19,7 +19,7 @@
 
 | 契约 | 边界 | 谁消费 | 决定 |
 |---|---|---|---|
-| 命令与退出码 | 客户端 → 引擎 | `gui/app.py` 的 `Task` / `Job` | 一条命令一个 `cmd_*(serial, rest) -> int`，`sys.exit` 只在入口一处，转发型命令透出子进程码（[ADR-0005](adr/0005-run-command-handlers.md)） |
+| 命令与退出码 | 客户端 → 引擎 | `gui/tasks.py` 的 `Task`；`gui/dispatcher.py` 的 `Job` | 一条命令一个 `cmd_*(serial, rest) -> int`，`sys.exit` 只在入口一处，转发型命令透出子进程码（[ADR-0005](adr/0005-run-command-handlers.md)） |
 | 引擎输出的三态 | 引擎 → 客户端 | `gui/dispatcher.py` 的 `_log()`；手机版 `aac_android/view.py` | 人话行进界面；`#aac:event` 只改状态、不进日志；`#aac:payload` 只进上报（[ADR-0004](adr/0004-engine-state-events.md)、[ADR-0009](adr/0009-engine-payload-channel.md)） |
 | 窗口桥 | 前端 → 客户端 | `gui/web/`；手机版改由 Compose 直接调 Python（[ADR-0018](adr/0018-android-compose-ui.md)） | `Api` 上的方法名与参数是前端唯一契约，内部的下载 / 上报 / 调度怎么分家都可以变（[ADR-0011](adr/0011-api-splitting.md)） |
 | 读屏 adapter | 引擎 → 手机 | `tool/fast.py` 的 `Phone` | `Phone.reader` 是引擎看手机的唯一接口；桌面是 uiautomator2，手机是 `aac_android/u2.py`（[ADR-0001](adr/0001-phone-connection-module.md)、[ADR-0002](adr/0002-phone-state-interface.md)、[ADR-0019](adr/0019-phone-second-execution-host.md)） |
