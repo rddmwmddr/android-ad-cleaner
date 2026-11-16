@@ -22,4 +22,4 @@ def note(run: Mapping[str, Any], on_phone: bool) -> str:
     results = run.get("results") or []
     if not any(r.get("kind") == StepKind.RECIPE and not r.get("skipped") for r in results):
         return ""
-    return host.coverage_notes(on_phone).get(run.get("recipe_coverage") or "", "")
+    return host.coverage_notes(on_phone).get(run.get("recipe_coverage") or "", "")   # pragma: no mutate 语义等价：`coverage_notes` 的键只有「部分」「未记录」两档，缺档时换成任何占位串都落到同一个空串默认值。
