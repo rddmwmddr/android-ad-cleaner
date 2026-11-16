@@ -99,3 +99,16 @@
 - **`Probe` 两个方法都必须惰性**：`usb_devices()` 只在「adb 看到 0 台」的分支被调用（PowerShell 最坏 8 秒），所以不能预先填进 `state`。这也让 `tool/diagnostics.py` 里没有 `subprocess`、没有平台分支，因此它进 mypy 严格档名单（第 12 个）。
 - **兼容面零改动**：`usb_hw_id` / `usb_parse` / `usb_facts` / `usb_hint` 四个纯函数在 `gui/app.py` 保留同名包装（经 `_tool()` 惰性加载，`tests/` 与 `Api.usb_hint()` 按 `app.<名字>` 取用）；`usb_guid_note` 只有模块内部的 `usb_facts` 调用，没有留壳。`Api.usb_hint()` 与 `Api.diagnostics()` 的桥签名一字不变，`tests/test_api_structure.py` 的 `BRIDGE` 表与 `gui/web/index.html` 的调用都不受影响。
 - **证据**：同一份 `Api` 装置喂给基线 `origin/main @ 67ce5e07` 的 `Api.diagnostics()` 与新的 `diagnostics(state, probe)`，32 组 state（adb 三态、设备 0 / 1 / 多台、其他 adb 空与非空、无设备时 USB 三态、`last_status` 的脚本四档与 `input_blocked` 与「设备名不带品牌前缀」、job 的成败与跳过、附注、`last_error`、脱敏两条）逐字零差异；入库的 `tests/test_diagnostics.py` 按同一批 state 断言整段输出。
+
+## 增补：C3 的模块切分（#1380 系列）
+
+本文的决定不变：**`Api` 仍是窗口桥的唯一契约**，桥面方法名与签名一字不动，`gui/web/` 与手机版 Compose 的调用面也不动。C3 换掉的只是「这些块住哪个文件」——本文「Considered Options」里「三块各起新文件（否）」是 2026-10 的取舍，当时怕 diff 变成搬家大赛；`gui/app.py` 长到 1706 行之后，读代码的人已经分不清哪一段是计划、哪一段是桥，所以六票把它们按 owner 逐块搬出：
+
+- `gui/toolpath.py`（#1381）：`gui/` 到 `tool/` 的惰性加载（`configure(base)` / `tool(name)`）只在这一处；`gui/app.py` 的 `BASE` / `TOOL` / `_tool()` 变成转发。
+- `gui/tasks.py`（#1386）：计划侧九个符号（`Task` … `retry_plan`）与 `UNCHECKED`；步骤身份词表 `StepKind` 落在 `tool/plan.py`，与 `Plan` 同址。
+- `gui/startup.py`（#1382）：启动失败文案（`startup_advice` / `_attribution` / `startup_failed`）、`version_key`、两条复制提示与 `win_clipboard`。
+- `gui/dispatcher.py`（#1383）：执行编排（`Dispatcher` + `Job`）。
+- `gui/reporter.py`（#1384）：错误上报（`Reporter` + `scrub`）。
+- `gui/adb.py`（#1385）：adb 路径解析、下载器与存活探测。
+
+边界与三块的老判据一致：子模块不 import `gui/app.py`、不读它的模块全局，协作方由 `Api.__init__` 构造时注入（手机版会覆盖的 9 个名字因此照旧生效）；`ClientData` 留 `gui/app.py`（五处共用的共享输入）；`app.<名字>` 的显式 re-export 一个不少，测试引用面零改动；`Api` 不瘦身——65 个方法里 37 个是 ≤3 行的纯转发，那正是桥该有的样子。

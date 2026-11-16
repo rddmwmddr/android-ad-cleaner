@@ -5,19 +5,32 @@
 后台：tool/run.py、tool/fast.py、tool/chan_fast.py，以子进程运行，日志实时回传界面。
 打包后没有独立的 Python，子进程用「本程序 --cli 脚本名 参数…」的方式启动。
 """
-import json, os, platform, re, runpy, subprocess, sys, threading, time, urllib.error, urllib.request, uuid
+import json, os, platform, re, runpy, subprocess, sys, threading, time, urllib.error, urllib.request
 from pathlib import Path
 
 try:                                # 当包导入（测试）；直接跑脚本、打包时它是顶层模块
-    from . import winpreflight, updates, update_install, harmony_bridge, toolpath
+    from . import winpreflight, updates, update_install, harmony_bridge, toolpath, startup
     # adb 那一域的实现都搬进了 gui/adb.py（#1385）。显式 re-export：`app.<名字>` 仍可直取，
     # 本模块自己的调用也走这几个名字（多处桩打在 app 上，比如 Dispatcher 用的 adb_present）。
     from .adb import (AdbDownloader, adb_ok, adb_exe,  # noqa: F401 - 显式 re-export：tests 按 app.adb_exe 取用
                       find_adb, adb_from_input, adb_source, adb_present)
+    from .reporter import Reporter
+    from .reporter import scrub  # noqa: F401 - 显式 re-export：tests 按 `app.scrub` 取用脱敏口径
 except ImportError:
-    import winpreflight, updates, update_install, harmony_bridge, toolpath
+    import winpreflight, updates, update_install, harmony_bridge, toolpath, startup
     from adb import (AdbDownloader, adb_ok, adb_exe,  # noqa: F401 - 同上；打包件里 gui/ 在 sys.path 上
                      find_adb, adb_from_input, adb_source, adb_present)
+    from reporter import Reporter
+    from reporter import scrub  # noqa: F401 - 同上；打包件里 gui/ 在 sys.path 上
+
+# 启动建议与写剪贴板的实现在 gui/startup.py；这几个名字按 `app.<名字>` 取用的地方（tests/、
+# Api.copy_text）照旧，`startup_failed` 另有一个转发壳（弹窗标题要用本模块的 APP_NAME）。
+version_key = startup.version_key
+startup_advice = startup.startup_advice
+win_clipboard = startup.win_clipboard
+COPIED_NOTE = startup.COPIED_NOTE
+MANUAL_COPY_NOTE = startup.MANUAL_COPY_NOTE
+
 
 APP_NAME = "肉呆去广告"
 VERSION = "0.4.4"
@@ -261,136 +274,14 @@ class Runner:
                                 creationflags=NOWIN, bufsize=1)
 
 
-class Task:
-    """一个步骤。uses_ui：这一步要连读屏，前一步因读屏被占用失败时跳过它。
-    channels 非 None 表示这一步是关营销通知：运行前把勾选的渠道写进 channels.tsv，
-    args 由 `_work()` 换成 `-s <序列号> off <清单>`。
-    skip_reason 非空表示这一步这次不跑：照样占结果里的一行，说明为什么（#577）。
-    kind 是这一步的固定身份（backup / recipe / channels / quickapp / ads / finish），
-    重试与多轮结果合并都按它对齐，不认标题（#638；标题里的「（3 / 9 段）」会变）。
-    always_run 表示用户点「停止」之后这一步仍要跑完（收尾把手机改回不持续亮屏）。"""
-
-    def __init__(self, title, script, args=(), uses_ui=False, channels=None, skip_reason="", kind="",
-                 always_run=False):
-        self.title, self.script, self.args = title, script, args
-        self.uses_ui, self.channels = uses_ui, channels
-        self.skip_reason, self.kind = skip_reason, kind
-        self.always_run = always_run
-
-
-def runs_after_stop(task):
-    """停止后仍要跑的一步。由构造处声明（#1104）：改标题文案不再影响它跑不跑。"""
-    return task.always_run
-
-
-UNCHECKED = "未勾选，本次没有执行"
-
-
-def not_run(title, reason, kind=""):
-    """这次不跑的步骤：不碰手机，只在结果里留一行（#577）。"""
-    return Task(title, "", skip_reason=reason, kind=kind)
-
-
-def step_result(task, **fields):
-    """结果里的一行：标题与 kind 从任务上取，其余字段各有各的。合并多轮结果时按 kind 对齐（#638）。"""
-    return {"title": task.title, "kind": task.kind, **fields}
-
-
-def not_run_result(job, task):
-    """没执行的项进结果：rc=0 表示这一步没出错，界面按「跳过」显示、上报也写「跳过」；
-    原因放 tail，摘要函数认不出模式时直接拿它当摘要。诊断里由 `skip_reason()` 压成一句。"""
-    job.add_result(step_result(task, rc=0, skipped=True, sec=0, tail=[task.skip_reason]))
-
-
-def plan_tasks(serial, plan, offered=None):
-    """这次排哪些任务。勾了的照旧起脚本；没勾的留一行「跳过」并说明原因（#577）。
-
-    `plan` 是前端发来的计划字典，或已经收好的 `Plan`（#1106；键与默认值在 `tool/plan.py`）。
-    `offered` 是选择页上摆出来的项（调用方从检测结果与上一次通知扫描里取），用来区分
-    「用户没勾」和「这台机本来就没有」；给 None 时不知道摆过什么，就不留这些行。"""
-    plan = _tool("plan").Plan.from_json(plan)
-    tasks = []
-    if plan.backup:
-        tasks.append(Task("存改动前的快照", "run.py", ["-s", serial, "backup"], kind="backup"))
-    # msa 没挂起时它的开屏窗会抢走主题段的前台，所以挂起排在广告段之前（#968）
-    ads = list(plan.ads)
-    if ads:
-        tasks.append(Task("挂起广告组件", "run.py", ["-s", serial, "suspend", *ads], kind="ads"))
-    elif offered is not None:
-        seen = offered.get("ads") or []
-        tasks.append(not_run("挂起广告组件",
-                             "没有已知的广告组件" if not seen
-                             else "广告组件已经挂起" if all(a.get("suspended") for a in seen)
-                             else UNCHECKED,
-                             kind="ads"))
-    steps = list(plan.steps)
-    if steps:
-        title = "关闭各 App 里的广告开关"
-        total = len(offered.get("steps") or []) if offered else 0
-        if total > len(steps):
-            title += f"（{len(steps)} / {total} 段）"
-        tasks.append(Task(title, "run.py",
-                          ["-s", serial, "recipe", *steps, *(["--ref"] if plan.ref else [])],
-                          uses_ui=True, kind="recipe"))
-    elif offered is not None:
-        tasks.append(not_run("关闭各 App 里的广告开关",
-                             UNCHECKED if offered.get("steps") else "没有专用脚本，这一步要照清单手动做",
-                             kind="recipe"))
-    channels = list(plan.channels)
-    if channels:
-        tasks.append(Task("关闭营销通知", "chan_fast.py", uses_ui=True, channels=channels, kind="channels"))
-    elif offered is not None:
-        seen = offered.get("channels")          # None 表示通知没扫成
-        tasks.append(not_run("关闭营销通知",
-                             "通知扫描没有完成，本次没有关闭营销通知" if seen is None
-                             else "没有扫描到可关闭的营销渠道" if not seen else UNCHECKED,
-                             kind="channels"))
-    if plan.quickapp:
-        tasks.append(Task("关闭快应用", "run.py", ["-s", serial, "quickapp", "off"], kind="quickapp"))
-    elif offered is not None:
-        apps = offered.get("quickapps") or []
-        tasks.append(not_run("关闭快应用",
-                             "没有检测到快应用组件" if not apps
-                             else "可关闭的快应用组件都已关闭" if all(q.get("closed") or q.get("keep") for q in apps)
-                             else UNCHECKED,
-                             kind="quickapp"))
-    # 重试轮只在收尾上一轮没做成时才跑它（#638）；首次执行取默认，照旧收尾
-    if plan.finish:
-        tasks.append(Task("收尾", "run.py", ["-s", serial, "finish"], kind="finish", always_run=True))
-    return tasks
-
-
-def retryable(result):
-    """这一步是不是没做成：失败，或因读屏被占用 / 断线 / 锁屏而跳过（#638）。
-
-    除设备侧的原因外，子进程起不来（rc=-1）也算——这类重跑一次多半就好了。
-    没勾选、这台机本来没有或已关、通知没扫成的那几档（#577）是 rc=0 的跳过，用户点「停止」的步带
-    stopped，两者都不重试。
-    """
-    return bool(result.get("rc")) and not result.get("stopped")
-
-
-def retry_plan(plan, results):
-    """上一轮没做成的步骤组成的计划；一项都不剩时返回 None（#638）。
-
-    广告开关步只重跑 `failed_steps` 里的段——脚本中途退出、没留下段名时才整段重跑。
-    快照一旦成功就不再重存：重存会把已经关掉的状态当成原状，还原就还原不回去了。
-    「通知没扫成」那一行不算可重试：扫描在选择页上就失败了，重跑这一步时的渠道清单本来就是空的，
-    要重扫只能回选择页（#577 的第三档）。
-    """
-    plan = _tool("plan").Plan.from_json(plan or {})
-    again = {r.get("kind"): retryable(r) for r in results if r.get("kind")}
-    recipe = next((r for r in results if r.get("kind") == "recipe"), {})
-    steps = list(recipe.get("failed_steps") or plan.steps) if again.get("recipe") else []
-    out = _tool("plan").Plan(backup=again.get("backup", False),
-                             steps=steps, ref=plan.ref, model=plan.model,
-                             channels=list(plan.channels) if again.get("channels") else [],
-                             quickapp=plan.quickapp and again.get("quickapp", False),
-                             ads=list(plan.ads) if again.get("ads") else [],
-                             finish=again.get("finish", False))
-    if not any((out.backup, out.steps, out.channels, out.quickapp, out.ads, out.finish)):
-        return None
-    return out
+# 计划侧（#1386）：这 9 个名字住 `gui/tasks.py`，这里只留显式 re-export，`tests/` 与手机版照旧按
+# `app.<名字>` 取用。身份词表在 `tool/plan.py` 的 `StepKind`。
+try:
+    from .tasks import (UNCHECKED, Task, not_run, not_run_result, plan_tasks,  # noqa: F401 - 显式 re-export
+                        retry_plan, retryable, runs_after_stop, step_result)
+except ImportError:
+    from tasks import (UNCHECKED, Task, not_run, not_run_result, plan_tasks,  # noqa: F401 - 显式 re-export
+                       retry_plan, retryable, runs_after_stop, step_result)
 
 
 class Job:
@@ -536,41 +427,6 @@ def other_adb():
     return sorted(paths)
 
 
-def win_clipboard(text):
-    """直接写 Unicode 剪贴板。以前经 PowerShell 管道，中文 Windows 按 GBK 解码，粘贴出来是乱码（#33 #50 #128）。"""
-    import ctypes
-    from ctypes import wintypes
-    user32 = ctypes.WinDLL("user32", use_last_error=True)
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    user32.OpenClipboard.argtypes = [wintypes.HWND]
-    user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
-    user32.SetClipboardData.restype = wintypes.HANDLE
-    kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
-    kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
-    kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
-    kernel32.GlobalLock.restype = wintypes.LPVOID
-    kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
-    kernel32.GlobalFree.argtypes = [wintypes.HGLOBAL]
-    data = text.encode("utf-16-le") + b"\0\0"
-    for _ in range(20):                       # 别的程序可能正占着剪贴板
-        if user32.OpenClipboard(None):
-            break
-        time.sleep(0.05)
-    else:
-        raise OSError("剪贴板被占用")
-    try:
-        user32.EmptyClipboard()
-        handle = kernel32.GlobalAlloc(0x0002, len(data))    # GMEM_MOVEABLE
-        pointer = kernel32.GlobalLock(handle)
-        ctypes.memmove(pointer, data, len(data))
-        kernel32.GlobalUnlock(handle)
-        if not user32.SetClipboardData(13, handle):           # CF_UNICODETEXT
-            kernel32.GlobalFree(handle)
-            raise OSError("写剪贴板失败")
-    finally:
-        user32.CloseClipboard()
-
-
 # 错误日志上报：用户预览并确认后发送；说明见 docs/12-错误日志上报.md
 REPORT_URL = "https://supabase.ahuamiao.com/functions/v1/aac-report"
 REPORT_LIMIT = 3            # 每小时最多上报几次（服务器另有按 IP / 安装编号 / 全站的配额）
@@ -586,23 +442,6 @@ TAP_REFUSED = "；电脑点击被拒（未开 USB 调试安全设置）"
 ENGINE_HOST = ""
 # 没执行过任何步骤时只有手机型号，看不出问题（错误日志 10-28：6 份空报告）
 EMPTY_REPORT = "还没有执行记录，这份报告只有手机型号，看不出问题。请先执行一次再上报；还没执行就遇到问题，请到 GitHub 反馈，写清楚卡在哪一步。"
-PRIVATE = (
-    (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "<邮箱>"),
-    (re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)"), "<手机号>"),
-    (re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?\b(?!\()"), "<IP>"),   # 华为版本号「4.2.0.180(C00…)」不是 IP
-    # 用户目录可能不在 C 盘（360「C 盘搬家」等把它挪到 E:\…\Users\名字），整段路径前缀一起换掉
-    (re.compile(r"(?:[A-Za-z]:)?[^\s'\"<>|]*?[\\/](?:Users|home)[\\/][^/\\\s'\"<>]+", re.I), "<用户目录>"),
-)
-
-
-def scrub(text, serial=None):
-    """序列号、用户目录、邮箱、手机号、IP 换成占位符；服务器收到后再做一遍。"""
-    for private, replacement in ((serial, "<序列号>"), (os.path.expanduser("~"), "<用户目录>")):
-        if private:
-            text = text.replace(private, replacement).replace(private.replace("\\", "\\\\"), replacement)
-    for pattern, replacement in PRIVATE:
-        text = pattern.sub(replacement, text)
-    return text
 
 
 def skip_reason(result):
@@ -616,115 +455,6 @@ def skip_reason(result):
         return ""
     return re.split(r"[。！？；\n]", tail[-1].strip())[0].strip()
 
-
-
-class Reporter:
-    """错误诊断与上报：记下最近一次失败、组织上报内容、发送与限频（docs/12，ADR-0011）。"""
-
-    def __init__(self, data):
-        self.data = data
-        self.last_error = None
-        self.report_times = []
-
-    def remember_error(self, operation, serial, detail):
-        # 本地保留完整异常，分享前替换序列号和用户目录；不再截掉异常开头。
-        for private, replacement in ((serial, "<序列号>"), (os.path.expanduser("~"), "<用户目录>")):
-            if private:
-                detail = detail.replace(private, replacement).replace(private.replace("\\", "\\\\"), replacement)
-        self.last_error = {"operation": operation, "detail": detail}
-        folder = self.data.logs
-        try:
-            os.makedirs(folder, exist_ok=True)
-            Path(folder, "last-error.txt").write_text(f"客户端 {VERSION} · {operation}\n{detail}\n", encoding="utf-8")
-        except OSError:
-            pass  # 保存日志失败也要让界面收到原始问题
-        lines = detail.splitlines()
-        causes = [line.strip() for line in lines if re.search(r"(?:Exception|Error|Caused by:|原始异常：|启动失败)", line)
-                  and not line.lstrip().startswith("at ")]
-        summary = "\n".join(causes[:4]) or (detail if len(detail) <= 600 else detail[:600] + "…")
-        help_ui = _tool("troubleshooting")
-        recovery = help_ui.UI_RECOVERY if help_ui.is_ui_connection_error(detail) else ""
-        if recovery:
-            summary = recovery + "\n\n" + summary
-        if len(summary) > 1000:
-            summary = summary[:1000] + "…（完整原因见诊断）"
-        result = {"error": summary, "detail": detail}
-        if recovery:
-            result["recovery"] = recovery
-        return result
-
-    def report_payload(self, status, view):
-        """要上报的全部内容。界面原样展示给用户，确认后发送同一份。"""
-        info = (status or {}).get("info") or {}
-        serial = view.get("serial")
-        log = "\n".join(l for l in view.get("lines", []) if l.strip())
-        if self.last_error:
-            log += f"\n\n[最近失败：{self.last_error['operation']}]\n{self.last_error['detail']}"
-        payloads = [x for x in view.get("payloads", []) if x.strip()]
-        if payloads:
-            # 放在末尾：日志只留最后 2 万字，骨架跟着失败日志一起留下，不会被早先的成功步骤挤掉
-            log += "\n\n[诊断载荷]\n" + "\n".join(payloads)
-        steps = [{"title": scrub(r["title"])[:40], "sec": int(r.get("sec") or 0),
-                  "result": "跳过" if r.get("skipped") else "已停止" if r.get("stopped") else ("成功" if r["rc"] == 0 else "失败")}
-                 for r in view.get("results", [])][:12]
-        return {
-            "client_version": VERSION,
-            "platform": f"{os_name()}（{platform.machine()}）"[:80],
-            "phone_brand": scrub(info.get("brand") or "")[:40],
-            "phone_model": scrub(info.get("name") or info.get("model") or "")[:80],
-            "phone_system": scrub(info.get("os") or info.get("build") or "")[:160],
-            "android": (info.get("android") or "")[:16],
-            "steps": steps,
-            "log": scrub(log, serial)[-20000:],      # 只留末尾；开头是早先成功的步骤
-        }
-
-    def _install_id(self):
-        """第一次上报时随机生成，只用来限频；不取任何设备或电脑标识。"""
-        path = Path(self.data.install_id)
-        try:
-            value = path.read_text(encoding="utf-8").strip()
-            if uuid.UUID(value).version == 4:
-                return value
-        except (OSError, ValueError):
-            pass
-        value = str(uuid.uuid4())
-        self.data.ensure()
-        path.write_text(value, encoding="utf-8")
-        return value
-
-    def send_report(self, payload):
-        now = time.time()
-        self.report_times = [t for t in self.report_times if now - t < 3600]
-        if len(self.report_times) >= REPORT_LIMIT:
-            return {"error": f"一小时内最多上报 {REPORT_LIMIT} 次，请稍后再试"}
-        if not isinstance(payload, dict):
-            return {"error": "上报内容格式不对"}
-        if not payload.get("steps") and not str(payload.get("log") or "").strip():
-            return {"error": EMPTY_REPORT}
-        body = dict(payload, install_id=self._install_id())
-        request = urllib.request.Request(
-            REPORT_URL, data=json.dumps(body, ensure_ascii=False).encode("utf-8"), method="POST",
-            headers={"Content-Type": "application/json", "User-Agent": f"AndroidAdCleaner/{VERSION}"})
-        try:
-            # 云函数闲置后第一次调用要加载依赖，给足时间
-            with urllib.request.urlopen(request, timeout=45) as response:
-                result = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as e:
-            if e.code == 429:
-                return {"error": "上报太频繁，请一小时后再试"}
-            try:
-                message = json.loads(e.read().decode("utf-8")).get("message") or ""
-            except (ValueError, OSError):
-                message = ""
-            return {"error": f"服务器拒绝了这次上报（{e.code}{'：' + message if message else ''}）"}
-        except (urllib.error.URLError, OSError, ValueError) as e:
-            return {"error": f"连不上上报服务器：{getattr(e, 'reason', e)}"}
-        self.report_times.append(now)
-        if result.get("status") == "duplicate":
-            return {"ok": True, "duplicate": True}
-        if result.get("status") != "ok":
-            return {"error": "服务器没有确认收到"}
-        return {"ok": True, "id": result.get("id", "")}
 
 
 class Dispatcher:
@@ -1027,7 +757,11 @@ class Api:
         # 下载器只认 Data 与 adb 初值；版本号与三张源表从本模块传进去，单一来源仍在上面那张表
         self.downloader = AdbDownloader(self.data, adb, version=VERSION,
                                         pinned=ADB_PINNED, mirrors=ADB_MIRRORS, latest=ADB_LATEST)
-        self.reporter = Reporter(self.data)
+        # 上报块只用标准库：版本号、地址、空报告文案与限频从本模块传进去（单一来源仍在这里），
+        # 宿主措辞与排查提示给取值函数——手机版在构造之前就把它们换掉了。
+        self.reporter = Reporter(self.data, version=VERSION, report_url=REPORT_URL, empty_report=EMPTY_REPORT,
+                                 limit=REPORT_LIMIT, os_name=lambda: os_name(),
+                                 help_of=lambda: _tool("troubleshooting"))
         self.runner = runner or Runner(self._child_env)
         self.dispatcher = Dispatcher(lambda: self.runner, lambda: self.backups, self.data,
                                      lambda: self.adb, self._on_error)
@@ -1484,7 +1218,7 @@ class Api:
     def copy_text(self, text):
         try:
             if IS_WIN:
-                win_clipboard(text)
+                startup.win_clipboard(text)          # 与启动失败弹窗同一份实现（gui/startup.py）
             else:
                 subprocess.run(["pbcopy"], input=text, text=True, encoding="utf-8", errors="replace", timeout=10)
             return True
@@ -1506,90 +1240,10 @@ class Api:
         webbrowser.open(urllib.parse.quote(url, safe=":/?#[]@!$&'()*+,;=%~"))
 
 
-def version_key(text):
-    m = re.match(r"v?(\d+)\.(\d+)\.(\d+)$", (text or "").strip())
-    return tuple(map(int, m.groups())) if m else ()
-
-
-# 启动失败弹窗是原生 MessageBox：文字选不中，用户只能手抄命令、拍照识别（#811）。
-# 整段先替用户复制好；复制不进去才退回 Ctrl+C——有焦点时 Windows 的弹窗能整段复制。
-COPIED_NOTE = "这段文字已复制到剪贴板，可以直接粘贴到反馈里，不用手抄或拍照。"
-MANUAL_COPY_NOTE = "自动复制没成功，在这个弹窗上按 Ctrl+C 也能复制整段文字。"
-
-
-def startup_advice(state, blocked, error, rejected, copied=None):
-    """窗口起不来时给用户看的文案，以及要不要跳微软官网。
-
-    copied: None 还没试过写剪贴板；True 已写入；False 写入失败（#811）。
-    """
-    text, open_site = _attribution(state, blocked, error, rejected)
-    if copied is not None:
-        text += "\n\n" + (COPIED_NOTE if copied else MANUAL_COPY_NOTE)
-    return text, open_site
-
-
-def _attribution(state, blocked, error, rejected):
-    """按结论选文案（#228、#597）。
-
-    以前一律说「缺少 WebView2」，portable 包解压后文件带 MOTW 的现场被指到装不上的东西上。
-    带 MOTW 的 dll 与被判成「远程来源」的 dll 报的是同一句 `Failed to resolve`，所以先看
-    `blocked` 再认原文——前者的出路是解锁文件，不是补 config。
-    """
-    if state == "missing":
-        return (
-            "这台电脑缺少微软 Edge WebView2 运行时，界面没法显示。\n\n"
-            "点「确定」打开微软官网，下载安装「Evergreen Bootstrapper」后重新打开本程序。\n\n"
-            f"（{error}）", True)
-    if blocked:
-        return (
-            "这台电脑可能已经装了 WebView2，但程序文件被 Windows 标记成「来自网络」，"
-            "加载时被拦住了。\n\n"
-            "办法一：对下载的 zip 压缩包点右键 →「属性」→ 勾选「解除锁定」→ 确定，重新解压后再打开。\n"
-            "办法二：zip 已经删了，就在解压出来的文件夹里按住 Shift 点右键 →"
-            "「在此处打开 PowerShell 窗口」，粘贴下面这行后回车：\n"
-            "Get-ChildItem . -Recurse -File | Unblock-File\n\n"
-            f"（{error}）", False)
-    if rejected:
-        return (
-            "这台电脑的 .NET Framework 把程序自带的 dll 判成了「远程来源」，加载时被拦住了。\n\n"
-            "办法一：确认程序文件夹里 AndroidAdCleaner.exe 旁边有 AndroidAdCleaner.exe.config，"
-            "别把它删掉或改名。\n"
-            "办法二：没有这个文件，或者有了还是这样，从官方 Release 重新下载最新版，"
-            "完整解压后再打开。\n\n"
-            f"（{error}）", False)
-    if state == "unknown":
-        return (
-            "程序启动失败。这台电脑的 WebView2 状态没能确认（多半是注册表读取受限），"
-            "所以下面的原因不一定是缺运行时。\n\n"
-            "如果这是 Windows 10 且从没装过，先装一个再试：\n"
-            "https://developer.microsoft.com/microsoft-edge/webview2/\n\n"
-            "装过还这样，把括号里的原文发到 "
-            "https://github.com/rddmwmddr/android-ad-cleaner/issues/new 。\n\n"
-            f"（{error}）", False)
-    return (
-        "程序启动失败。WebView2 运行时在，程序文件也没有被 Windows 锁定，"
-        "是按别的原因退出的。\n\n"
-        "把下面括号里的原文发到 "
-        "https://github.com/rddmwmddr/android-ad-cleaner/issues/new ，我们按它定位。\n\n"
-        f"（{error}）", False)
-
-
 def startup_failed(error, preflight=None, notify=None, open_url=None, clipboard=None):
-    """先替用户复制、再按归因弹提示（#228、#811）。四个协作者可注入，接线本身在非 Windows 上也能验。"""
-    import ctypes, webbrowser
-    preflight = preflight or winpreflight
-    notify = notify or (lambda text: ctypes.windll.user32.MessageBoxW(0, text, APP_NAME, 0x40))
-    clipboard = clipboard or win_clipboard
-    verdict = (preflight.webview2_state(), preflight.blocked_files(toolpath.BASE), error,
-               preflight.load_rejected(error))
-    text, open_site = startup_advice(*verdict, copied=True)
-    try:
-        clipboard(text)                       # 写进去的就是弹窗里那句，多一个字都不差
-    except Exception:                         # 复制失败不能连弹窗一起吞掉：这里没有控制台
-        text, open_site = startup_advice(*verdict, copied=False)
-    notify(text)
-    if open_site:
-        (open_url or webbrowser.open)("https://developer.microsoft.com/microsoft-edge/webview2/")
+    """转发到 gui/startup.py；弹窗标题用本模块的 APP_NAME（它的单一来源在这里）。"""
+    return startup.startup_failed(error, preflight=preflight, notify=notify,
+                                  open_url=open_url, clipboard=clipboard, app_name=APP_NAME)
 
 
 if __name__ == "__main__":          # `python -m gui.app` / `python gui/app.py` 仍从这里进
