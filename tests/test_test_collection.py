@@ -61,11 +61,12 @@ class CollectionTests(unittest.TestCase):
 
 DOC = ROOT / "docs/agents/test-anchors.md"
 TABLE_SECTION = "## 锚点登记"
-ROW = re.compile(r"^\|\s*`([^`]+)`\s*\|\s*(.+?)\s*\|\s*$")
+ROW = re.compile(r"^\|\s*`([^`]+)`\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*$")
+NO_CAP = "—"
 
 
 def anchor_table(text):
-    """`## 锚点登记` 表：{文件名: why}。这一节是锚点清单在文档里的登记处。"""
+    """`## 锚点登记` 表：{文件名: (why, 断言数上限)}；上限列写 `—` 表示不设预算。"""
     found, inside = {}, False
     for line in text.splitlines():
         if line.startswith("## "):
@@ -75,7 +76,13 @@ def anchor_table(text):
             continue
         match = ROW.match(line)
         if match:
-            found[match.group(1)] = match.group(2)
+            cap_text = match.group(3)
+            try:
+                cap = None if cap_text == NO_CAP else int(cap_text)
+            except ValueError:
+                raise ValueError(f"{match.group(1)} 的断言数上限 {cap_text!r} 不是整数："
+                                 f"写数字，或写 {NO_CAP} 表示不设预算") from None
+            found[match.group(1)] = (match.group(2), cap)
     return found
 
 
@@ -111,20 +118,35 @@ class AnchorTests(unittest.TestCase):
         registered = anchor_table(DOC.read_text(encoding="utf-8"))
         self.assertTrue(registered, "文档里的 `## 锚点登记` 表一条都没解析出来，这条对拍会空转")
         self.assertEqual(registered, test_anchors.ANCHORS,
-                         "锚点清单与文档登记表不一致：两处一起改（文件名与 why 都逐字）")
+                         "锚点清单与文档登记表不一致：两处一起改（文件名、why 与断言数上限都逐字）")
 
     def test_a_ticket_named_file_is_reported_with_a_suggestion(self):
         """新开一个票号命名的文件即红，且文案指出它可能属于哪个锚点。"""
-        found = self.violations({"test_row.py": "行定界"}, "test_row.py", "test_row_1234.py")
+        found = self.violations({"test_row.py": ("行定界", None)}, "test_row.py", "test_row_1234.py")
         self.assertTrue(found)
         self.assertIn("test_row_1234.py 没有登记锚点", "\n".join(found))
         self.assertIn("test_row.py", "\n".join(found))
 
     def test_an_anchor_without_its_file_is_reported(self):
         """清单里有的文件必须存在——双向一致真的双向。"""
-        found = self.violations({"test_row.py": "行定界"})
+        found = self.violations({"test_row.py": ("行定界", None)})
         self.assertEqual(len(found), 1)
         self.assertIn("锚点 test_row.py 在文件树里不存在", found[0])
+
+    def test_the_cap_column_is_parsed_or_read_as_unlimited(self):
+        """第三列是断言数上限；写 `—` 表示不设预算，两种形态都要解析得出来。"""
+        text = ("## 锚点登记\n\n| 文件 | 为什么 | 断言数上限 |\n|---|---|---:|\n"
+                "| `test_a.py` | 守甲。 | 12 |\n| `test_b.py` | 守乙。 | — |\n")
+        self.assertEqual(anchor_table(text),
+                         {"test_a.py": ("守甲。", 12), "test_b.py": ("守乙。", None)})
+
+    def test_an_over_budget_anchor_is_not_a_violation(self):
+        """旧树也绿，守的是不回退：体量超限只是可见（软预算），不进 violations、不阻断合并。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = fake_root(tmp, "test_row.py")
+            (root / "tests/test_row.py").write_text(
+                "class T:\n    def test_x(self):\n        self.assertTrue(1)\n", encoding="utf-8")
+            self.assertEqual(test_anchors.violations(root, {"test_row.py": ("行定界", 0)}), [])
 
     def test_there_is_no_third_way_to_own_a_test_file(self):
         """合法的只有锚点与机型脚本测试两种来源：登记表里不许再有别的逃生口。"""
