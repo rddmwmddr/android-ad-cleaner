@@ -61,6 +61,7 @@ INLINE_PAGE = '''<hierarchy><node>
 
 
 class PageIdentityTests(unittest.TestCase):
+    DOMAIN = "channel"
     def test_honor_systemmanager_channel_page_is_trusted(self):
         # #86 PTP-AN00 实测 Activity
         p = page(CHANNEL_PAGE, "com.hihonor.systemmanager/com.hihonor.notificationmanager.ui.NotificationSettingsActivity")
@@ -101,6 +102,7 @@ class PageIdentityTests(unittest.TestCase):
 
 
 class InlineChannelTests(unittest.TestCase):
+    DOMAIN = "channel"
     focus = "com.android.settings/com.android.settings.Settings$AppNotificationSettingsActivity"
 
     def test_inline_row_switch_is_picked_by_exact_title(self):
@@ -131,6 +133,7 @@ def snap(target_on=True, other_on=True, app_off=False):
 
 @patch.object(chan.time, "sleep")
 class SideEffectTests(unittest.TestCase):
+    DOMAIN = "channel"
     def phone(self):
         return page(CHANNEL_PAGE, "com.android.settings/.Settings$ChannelNotificationSettingsActivity")
 
@@ -196,6 +199,7 @@ DUMP = """PackagePreferences:
 
 
 class ParseTests(unittest.TestCase):
+    DOMAIN = "channel"
     def test_other_user_spaces_do_not_override_owner(self):
         # #95 / 小米双开：另一空间同包名同渠道仍开着，不能当成机主空间没关
         d, app_off = chan.parse(types.SimpleNamespace(d=types.SimpleNamespace(
@@ -217,6 +221,7 @@ class ParseTests(unittest.TestCase):
 
 
 class LockedChannelTests(unittest.TestCase):
+    DOMAIN = "channel"
     DUMP = """PackagePreferences:
   AppSettings: com.motorola.sim (1001) importance=DEFAULT userSet=false fixedImportance=true
     NotificationChannel{mId='sim_promo', mName=智能 SIM 推荐通知, mDescription=, mImportance=3, mBlockableSystem=false, mDeleted=false}
@@ -244,6 +249,7 @@ class LockedChannelTests(unittest.TestCase):
 
 
 class DismissTests(unittest.TestCase):
+    DOMAIN = "navigation"
     def phone(self, xml):
         p = phone_stub("test", d=Mock())
         p.W, p.H = 1272, 2772
@@ -306,6 +312,7 @@ class DismissTests(unittest.TestCase):
 
 class BottomBarWaitTests(unittest.TestCase):
     """底栏按钮在应用内更新弹窗晚到时也要等到它被关掉（#286）。"""
+    DOMAIN = "navigation"
 
     def tap_after(self, found_at):
         p = phone_stub("test", W=1272, H=2772, d=Mock())
@@ -333,6 +340,7 @@ class BottomBarWaitTests(unittest.TestCase):
 
 
 class ScanWordingTests(unittest.TestCase):
+    DOMAIN = "channel"
     def test_overlay_notice_is_not_a_marketing_candidate(self):
         # #115：小米「“钱包”正在其他应用的上层显示内容」被当成营销渠道，整步报失败
         self.assertTrue(chan.classify("“钱包”正在其他应用的上层显示内容").scan_excluded)
@@ -354,6 +362,7 @@ class ScanWordingTests(unittest.TestCase):
 
 
 class SearchBoxTests(unittest.TestCase):
+    DOMAIN = "navigation"
     def test_autocomplete_search_box_counts_as_input(self):
         # 荣耀 PNM-AN10 10.0.0.102 真机：设置搜索框是 AutoCompleteTextView，以前判成「搜索框没打开」
         p = phone_stub("test")
@@ -365,6 +374,7 @@ class SearchBoxTests(unittest.TestCase):
 
 
 class LockScreenTests(unittest.TestCase):
+    DOMAIN = "device_state"
     def test_other_true_fields_on_the_line_are_not_a_lock(self):
         # #115 跟帖：HyperOS 3 全程解锁，30 个渠道都被判成「手机锁屏了」
         p = phone_stub("test", d=Mock())
@@ -375,6 +385,7 @@ class LockScreenTests(unittest.TestCase):
 
 
 class XiaomiInputTests(unittest.TestCase):
+    DOMAIN = "switch"
     MIUI = ("java.lang.SecurityException: Injecting to another application requires INJECT_EVENTS permission\n"
             "\tat android.os.Parcel.createExceptionOrNull")
 
@@ -386,6 +397,12 @@ class XiaomiInputTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "USB 调试（安全设置）"):
             p.click(500, 500)
 
+
+class XiaomiStatusProbeTests(unittest.TestCase):
+    DOMAIN = "connection"
+    MIUI = ("java.lang.SecurityException: Injecting to another application requires INJECT_EVENTS permission\n"
+            "\tat android.os.Parcel.createExceptionOrNull")
+
     def test_status_probe_only_runs_for_xiaomi_family(self):
         with patch.object(run, "sh_all", return_value=self.MIUI) as sh_all:
             self.assertTrue(run.input_blocked("s", "Redmi"))
@@ -395,6 +412,7 @@ class XiaomiInputTests(unittest.TestCase):
 
 
 class AdbLinkTests(unittest.TestCase):
+    DOMAIN = "connection"
     def setUp(self):
         fake_adb(self)
 
@@ -440,6 +458,7 @@ class AdbLinkTests(unittest.TestCase):
 
 
 class KeepAwakeTests(unittest.TestCase):
+    DOMAIN = "device_state"
     def test_failed_write_warns_and_returns_original(self):
         calls = []
         def shell(cmd, timeout=60):
@@ -453,6 +472,7 @@ class KeepAwakeTests(unittest.TestCase):
 
 
 class GuiTests(unittest.TestCase):
+    DOMAIN = "connection"
     def setUp(self):
         self.app = app
         self.data = tempfile.TemporaryDirectory()
@@ -563,6 +583,12 @@ class GuiTests(unittest.TestCase):
         with patch.object(adb_link, "invoke", return_value=new) as invoke:
             self.assertTrue(self.app.adb_ok("adb"))
         invoke.assert_called_once_with("adb", "version", timeout=8)
+
+
+class GuiClipboardTests(unittest.TestCase):
+    DOMAIN = "desktop"
+    def setUp(self):
+        self.app = app
 
     @unittest.skipUnless(sys.platform == "win32", "Windows 剪贴板")
     def test_windows_clipboard_round_trips_chinese(self):

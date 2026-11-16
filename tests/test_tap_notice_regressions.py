@@ -49,6 +49,7 @@ STORE = '''<hierarchy><node bounds="[0,0][1080,2340]">
 
 
 class TapTests(unittest.TestCase):
+    DOMAIN = "switch"
     def test_exact_title_wins_over_partial_text(self):
         p = phone(STORE)
         self.assertEqual(p.find("隐私", nav=True), (380, 850))
@@ -70,6 +71,7 @@ class TapTests(unittest.TestCase):
 
 
 class ConfirmTests(unittest.TestCase):
+    DOMAIN = "switch"
     def test_label_in_child_text_view(self):
         # PR #239：vivo / iQOO 弹窗的按钮文字在 Button 下级 TextView（vbutton_title）
         p = phone('''<hierarchy><node bounds="[0,0][1080,2340]">
@@ -100,6 +102,7 @@ class ConfirmTests(unittest.TestCase):
 
 
 class FocusTests(unittest.TestCase):
+    DOMAIN = "device_state"
     def test_null_focus_falls_back_to_focused_app(self):
         # 华为 LIO-AN00 HarmonyOS 4.2、vivo V2111A：页面在，却报「停在 未知页面」
         p = phone_stub("test", d=Mock())
@@ -126,6 +129,7 @@ Restored without uid:
 
 
 class NotificationTests(unittest.TestCase):
+    DOMAIN = "channel"
     def test_android9_dump_is_read(self):
         # #258 海信 HLTE217T / Android 9：以前「读不到通知渠道状态」
         p = types.SimpleNamespace(d=types.SimpleNamespace(shell=lambda *a, **k: types.SimpleNamespace(output=ANDROID9)))
@@ -169,6 +173,8 @@ class NotificationTests(unittest.TestCase):
 
 
 class GuiTests(unittest.TestCase):
+    DOMAIN = "desktop"
+
     @classmethod
     def setUpClass(cls):
         cls.app = app
@@ -256,9 +262,9 @@ class GuiTests(unittest.TestCase):
         self.assertIn(str(ROOT / "gui/web/chime.wav"), [src for src, _ in bundle_data(ROOT)])
 
 
-
 class VivoSlowTransitionTests(unittest.TestCase):
     """0.2.7 的 vivo 报告里 212 次「点这一行后页面没变；标题顶部」：转场慢，settle 等不到，其实渠道页已经打开。"""
+    DOMAIN = "channel"
     APP = """<hierarchy><node package="com.vivo.systemuiplugin" bounds="[0,0][1080,2340]">
       <node resource-id="com.vivo.systemuiplugin:id/originui_vtoolbar_normal_title" text="淘宝" bounds="[100,120][600,200]"/>
       <node clickable="true" bounds="[0,500][1080,610]">

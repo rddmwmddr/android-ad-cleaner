@@ -42,6 +42,25 @@
 - 句柄必须**从 case 的构造内容派生**，不写手写字符串字面量——手写句柄等于给结构造第二个 owner。
 - 登记是手写元组，发现是自动的：`tests/test_family.py` 的 `FAMILIES` 要列全四个族，`test_every_family_module_is_registered` 拿 `tests/*_family.py` 双向核对——新族漏登记，它会静默逃出 `dev.tests.family-carries-cases` 的检查。
 
+## 行为域
+
+七个按批次组织的回归文件（`test_issue_regressions.py`、`test_layout_and_verdict_regressions.py`、`test_lock_and_disconnect_regressions.py`、`test_page_and_link_regressions.py`、`test_regressions.py`、`test_release_regressions.py`、`test_tap_notice_regressions.py`）里，用例的 owner 是它所在类声明的行为域：类属性 `DOMAIN = "<英文标识>"`。同一份文件可以承载多个域，混合域的类已按用例拆开，所以「一条用例属于哪个域」等于它所在类声明的 `DOMAIN`——一个 `def` 只属于一个域。新开一个含用例的类而不声明域即红；七个文件之外的文件不许声明域，新文件要落进已有锚点。
+
+判据是 `devtools/test_anchors.py` 的 `domain_violations(root)`，词表是同一文件的 `DOMAINS`，与下表逐项对拍；文件名清单只在 `DOMAIN_FILES` 一处。归属换成域而不是票号，是为了行为退役时能按域找到该删的类。这里列的是实测十域，票面写的「渠道 / 连接 / 启动 / 结果页」只是其中之四。
+
+| 英文标识 | 中文名 | 这个域在守什么 |
+|---|---|---|
+| `channel` | 渠道 | 渠道列表与渠道页：从清单和页面认出营销渠道、跳过系统锁定项、点击后页面变了没有，批处理遇变就停。 |
+| `connection` | 连接 | 手机连接：adb 在哪、命令服务断开 / 读屏超时 / 后台屏没了三种结局怎么判，包清单与断线后的收尾。 |
+| `startup` | 启动 | 启动与落点：前台归属、权限门、安全模式、脚本选择，以及启动后有没有离开目标应用。 |
+| `result` | 结果页 | 结果页与暂停：一次执行怎么说成一句话、哪一档步骤可重试、暂停落在哪个安全点。 |
+| `packages` | 包与快应用 | 包与快应用：AD 包与 msa 的挂起还原、chain3 原值写回、按品牌或 ROM 取包。 |
+| `navigation` | 导航 | 导航与弹窗：搜索框输入、图标入口、底部标签与返回，以及弹窗和推广位怎么退。 |
+| `switch` | 开关 | 开关本身：标题去重、状态后缀、自绘开关与单选框、极性、点按与确认框。 |
+| `device_state` | 设备状态 | 设备状态：锁屏与等解锁、焦点归属、常亮写回，以及灰态渠道不算失败。 |
+| `desktop` | 桌面与打包 | 桌面客户端与打包：USB 诊断、adb 镜像、剪贴板、更新提示，以及随包资产清单。 |
+| `backup` | 备份还原 | 备份还原：备份目录与包清单落盘、扫描失败保留原件、跨盘路径。 |
+
 ## 锚点登记
 
 | 文件 | 为什么 |
@@ -146,13 +165,13 @@
 | `test_download_page_rows.py` | 下载页与网盘说明的行：手机版 APK 单独成行、说明里写「不用连电脑」并带校验值，页面 id 写错要在上传前停下。 |
 | `test_old_install_notice.py` | 免安装版启动时提示旧名安装还在：文案与「同一版本只说一次」。 |
 | `test_huawei_channels.py` | 华为渠道页的脱敏离线回归：已观察页面，不连手机。 |
-| `test_page_and_link_regressions.py` | 一期社区反馈引出的跨模块回归：渠道页归属与仿冒、内联开关、多用户解析、点击被拒、adb 掉线与 USB 诊断。 |
-| `test_lock_and_disconnect_regressions.py` | 上报日志归类的跨模块回归：锁屏判据与等机主解锁、灰态渠道、断线不带堆栈、脱敏与参考脚本。 |
-| `test_layout_and_verdict_regressions.py` | 发布当天上报的回归：卡片布局差异、vivo 旧页与直达、失败判定、停止不算失败、暂停与空报告。 |
-| `test_tap_notice_regressions.py` | 发布后一夜上报扫出的回归：点击与确认落点、焦点回退、通知页读取、adb 镜像与提示音、vivo 慢过渡。 |
-| `test_issue_regressions.py` | 社区反馈回归：模拟页面与系统回读，不以 UI 状态代替执行结果。 |
-| `test_regressions.py` | 设备无关的回归：输入、页面识别、开关保护与打包入口。 |
-| `test_release_regressions.py` | 发布回归：横屏、部分失败、通知默认选择与发布资源边界。 |
+| `test_page_and_link_regressions.py` | 一期社区反馈汇集的设备无关回归：渠道页归属与仿冒、内联开关、多用户解析、点击被拒、adb 掉线与 USB 诊断；每条用例的 owner 是所在类声明的行为域（见「行为域」）。 |
+| `test_lock_and_disconnect_regressions.py` | 上报日志分类汇集的设备无关回归：锁屏判据与等机主解锁、灰态渠道、断线不带堆栈、脱敏与参考脚本；每条用例的 owner 是所在类声明的行为域（见「行为域」）。 |
+| `test_layout_and_verdict_regressions.py` | 发布当天上报汇集的设备无关回归：卡片布局差异、vivo 旧页与直达、失败判定、停止不算失败、暂停与空报告；每条用例的 owner 是所在类声明的行为域（见「行为域」）。 |
+| `test_tap_notice_regressions.py` | 发布后一夜上报汇集的设备无关回归：点击与确认落点、焦点回退、通知页读取、adb 镜像与提示音、vivo 慢过渡；每条用例的 owner 是所在类声明的行为域（见「行为域」）。 |
+| `test_issue_regressions.py` | 社区反馈汇集的设备无关回归：模拟页面与系统回读，不以 UI 状态代替执行结果；每条用例的 owner 是所在类声明的行为域（见「行为域」）。 |
+| `test_regressions.py` | 跨批次汇集的设备无关回归：输入、页面识别、开关保护、启动落点与打包入口；每条用例的 owner 是所在类声明的行为域（见「行为域」）。 |
+| `test_release_regressions.py` | 发布回归汇集的设备无关用例：横屏、部分失败、通知默认选择与发布资源边界；每条用例的 owner 是所在类声明的行为域（见「行为域」）。 |
 | `test_feedback_safety.py` | 用户反馈里的安全项：无障碍排查只读、通知保护与旧清单还原。 |
 | `test_phone_host.py` | 手机版宿主的说法：没有电脑和数据线时该怎么说、界面与诊断里残留的桌面说法，以及唯一的控制流例外（不写插电常亮）。 |
 | `test_recipe_call_snapshots.py` | 机型脚本的调用序列快照：47 份 × present / absent 两场景与入库数据逐条比对，段名归属与空转守卫。更新规则见 docs/agents/recipe-snapshots.md。 |

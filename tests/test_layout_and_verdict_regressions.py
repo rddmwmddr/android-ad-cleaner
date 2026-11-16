@@ -90,6 +90,7 @@ FLAT_CARD = '''<hierarchy><node class="android.widget.FrameLayout" bounds="[0,0]
 
 
 class HuaweiCardTests(unittest.TestCase):
+    DOMAIN = "channel"
     def test_row_inside_card_gets_its_own_switch(self):
         # 9 份报告：华为 HarmonyOS 4.0 / 4.2、EMUI 10.1、荣耀 YOK-AN10 / CDY-TN90 每个渠道都「这一行的开关没认出」
         p = phone([HUAWEI_CARD], APP_FOCUS)
@@ -144,6 +145,7 @@ VIVO_APP = '''<hierarchy><node package="com.vivo.systemuiplugin" bounds="[0,0][1
 
 
 class VivoTests(unittest.TestCase):
+    DOMAIN = "channel"
     def test_app_page_is_read_only_after_the_old_channel_page_is_gone(self):
         # 5 份 vivo 报告「点这一行后页面没变；标题顶部」：切回应用通知页时读到的还是直达的渠道页
         p = phone([VIVO_CHANNEL, VIVO_CHANNEL, VIVO_APP, VIVO_CHANNEL], VIVO_FOCUS)
@@ -218,6 +220,7 @@ SKIPPED = chan.Outcome(chan.NOT_CONFIRMED, "未确认「资讯推送」渠道页
 
 
 class RetryTests(unittest.TestCase):
+    DOMAIN = "result"
     def test_unconfirmed_channel_is_retried_once_at_the_end(self):
         # OPPO Find X9 关了 67 个剩 1 个、红米 Note 12 Turbo 93 个剩 1 个，整步算失败
         after = dict(off(ON))
@@ -251,6 +254,7 @@ class RetryTests(unittest.TestCase):
 
 
 class DisconnectTests(unittest.TestCase):
+    DOMAIN = "connection"
     def test_library_errors_that_mean_the_phone_is_gone(self):
         # OPPO K12：u2 HTTPError「device not found」；一加 Ace 6：AdbShellError「closed」。以前都带着堆栈
         http = fast.u2.exceptions.HTTPError("Unable to connect to uiautomator2 server: device 'x' not found")
@@ -286,6 +290,7 @@ class DisconnectTests(unittest.TestCase):
 
 
 class AppLabelTests(unittest.TestCase):
+    DOMAIN = "connection"
     def reader(self, reply):
         return types.SimpleNamespace(push=Mock(), shell=Mock(return_value=types.SimpleNamespace(output=reply)))
 
@@ -332,12 +337,15 @@ class AppLabelTests(unittest.TestCase):
             f.write_text("com.taobao.taobao\tpromo\t活动优惠\t淘宝\n", encoding="utf-8")
             self.assertEqual(chan.load(str(f)), [("com.taobao.taobao", "promo", "活动优惠")])
 
+
+class AppLabelPackagingTests(unittest.TestCase):
+    DOMAIN = "desktop"
     def test_dex_is_shipped_with_the_tools(self):
         self.assertIn(str(ROOT / "tool/applabels.dex"), [src for src, _ in bundle_data(ROOT)])
         self.assertTrue((ROOT / "tool/applabels/Labels.java").exists())
 
 
-class GuiTests(unittest.TestCase):
+class GuiHarness(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = app
@@ -347,6 +355,9 @@ class GuiTests(unittest.TestCase):
         api.job = job_stub(model="M")
         return api
 
+
+class GuiTests(GuiHarness):
+    DOMAIN = "result"
     def test_stop_is_not_a_failure_and_finish_still_runs(self):
         # 4 份报告是用户点了停止后上报的；停止以前也让插电常亮一直开着
         with tempfile.TemporaryDirectory() as directory:
@@ -369,6 +380,9 @@ class GuiTests(unittest.TestCase):
                 self.assertEqual(api.send_report({"steps": [], "log": "  "}), {"error": self.app.EMPTY_REPORT})
             urlopen.assert_not_called()
 
+
+class GuiPackagingTests(GuiHarness):
+    DOMAIN = "desktop"
     def test_channel_list_file_keeps_app_names_for_people(self):
         with tempfile.TemporaryDirectory() as directory:
             api = self.api(directory, spawns=[FakeProc()])
@@ -398,9 +412,9 @@ class GuiTests(unittest.TestCase):
         self.assertGreater(self.app.version_key("0.2.10"), self.app.version_key("0.2.9"))
 
 
-
 class PauseTests(unittest.TestCase):
     """用户要求：执行中需要操作手机时可以暂停。暂停只在安全的位置生效，继续后重新读页面。"""
+    DOMAIN = "result"
     def wait_then_resume(self, path, delay=0.3):
         import threading
         threading.Timer(delay, lambda: Path(path).unlink()).start()
