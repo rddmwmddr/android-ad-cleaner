@@ -14,6 +14,7 @@
 - 一加 16 商店段的「消息管理」探测只翻前两屏，常态下省约 40 秒（#1281）
 
 ### 内部
+- summary 的插电常亮与「等」后缀补真行为用例，mutation 存活清零（#1425）
 - host 的按宿主措辞加逐字断言，mutation 存活清零（#1418）
 - coverage_note 清到 mutation 存活 0，等价变异体标 pragma 豁免（#1426）
 - polarity 清到 mutation 存活 0，等价变异体标 pragma 豁免（#1416）
