@@ -16,6 +16,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 import family  # noqa: E402
+import catalog_family  # noqa: E402
+import channel_policy_family  # noqa: E402
+import entries_family  # noqa: E402
+import vocab_family  # noqa: E402
+
+
+# The four concrete families this repository carries. Each one's own test file also
+# asserts ``FAMILY.violations() == []``; this tuple is the aggregate the rule
+# ``dev.tests.family-carries-cases`` points at, so a family dropping its snapshot or
+# drifting from it is caught in one place even if its own file stops checking.
+FAMILIES = (
+    catalog_family.FAMILY,
+    vocab_family.FAMILY,
+    entries_family.FAMILY,
+    channel_policy_family.FAMILY,
+)
 
 
 CASES = [
@@ -298,6 +314,21 @@ class NoConcreteFamilyTests(unittest.TestCase):
         source = (ROOT / "tests" / "family.py").read_text(encoding="utf-8").lower()
         for word in ("catalog", "vocab", "entries", "channel", "ops"):
             self.assertNotIn(word, source)
+
+
+class FamilyRegistryTests(unittest.TestCase):
+    """Every concrete family this repository carries matches its snapshot.
+
+    ``violations()`` covers three things at once: the case-id set against the snapshot,
+    every declared handle against the structure, and the produced outcomes against the
+    snapshot. This is the single check behind ``dev.tests.family-carries-cases``.
+    """
+
+    def test_every_family_matches_its_snapshot(self):
+        self.assertEqual([v for f in FAMILIES for v in f.violations()], [])
+
+    def test_every_family_has_a_snapshot_on_disk(self):
+        self.assertEqual([f.name for f in FAMILIES if f.read() is None], [])
 
 
 if __name__ == "__main__":
