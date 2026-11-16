@@ -5,13 +5,17 @@
 后台：tool/run.py、tool/fast.py、tool/chan_fast.py，以子进程运行，日志实时回传界面。
 打包后没有独立的 Python，子进程用「本程序 --cli 脚本名 参数…」的方式启动。
 """
-import hashlib, json, os, platform, re, runpy, subprocess, sys, threading, time, urllib.error, urllib.request, uuid, zipfile
+import hashlib, json, os, platform, re, runpy, subprocess, sys, threading, time, urllib.error, urllib.request, zipfile
 from pathlib import Path
 
 try:                                # 当包导入（测试）；直接跑脚本、打包时它是顶层模块
     from . import winpreflight, updates, update_install, harmony_bridge, toolpath
+    from .reporter import Reporter
+    from .reporter import scrub  # noqa: F401 - 显式 re-export：tests 按 `app.scrub` 取用脱敏口径
 except ImportError:
     import winpreflight, updates, update_install, harmony_bridge, toolpath
+    from reporter import Reporter
+    from reporter import scrub  # noqa: F401 - 同上；打包件里 gui/ 在 sys.path 上
 
 APP_NAME = "肉呆去广告"
 VERSION = "0.4.4"
@@ -515,23 +519,6 @@ TAP_REFUSED = "；电脑点击被拒（未开 USB 调试安全设置）"
 ENGINE_HOST = ""
 # 没执行过任何步骤时只有手机型号，看不出问题（错误日志 10-28：6 份空报告）
 EMPTY_REPORT = "还没有执行记录，这份报告只有手机型号，看不出问题。请先执行一次再上报；还没执行就遇到问题，请到 GitHub 反馈，写清楚卡在哪一步。"
-PRIVATE = (
-    (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "<邮箱>"),
-    (re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)"), "<手机号>"),
-    (re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?\b(?!\()"), "<IP>"),   # 华为版本号「4.2.0.180(C00…)」不是 IP
-    # 用户目录可能不在 C 盘（360「C 盘搬家」等把它挪到 E:\…\Users\名字），整段路径前缀一起换掉
-    (re.compile(r"(?:[A-Za-z]:)?[^\s'\"<>|]*?[\\/](?:Users|home)[\\/][^/\\\s'\"<>]+", re.I), "<用户目录>"),
-)
-
-
-def scrub(text, serial=None):
-    """序列号、用户目录、邮箱、手机号、IP 换成占位符；服务器收到后再做一遍。"""
-    for private, replacement in ((serial, "<序列号>"), (os.path.expanduser("~"), "<用户目录>")):
-        if private:
-            text = text.replace(private, replacement).replace(private.replace("\\", "\\\\"), replacement)
-    for pattern, replacement in PRIVATE:
-        text = pattern.sub(replacement, text)
-    return text
 
 
 def skip_reason(result):
@@ -607,115 +594,6 @@ class AdbDownloader:
 
     def download_state(self):
         return self.dl
-
-
-class Reporter:
-    """错误诊断与上报：记下最近一次失败、组织上报内容、发送与限频（docs/12，ADR-0011）。"""
-
-    def __init__(self, data):
-        self.data = data
-        self.last_error = None
-        self.report_times = []
-
-    def remember_error(self, operation, serial, detail):
-        # 本地保留完整异常，分享前替换序列号和用户目录；不再截掉异常开头。
-        for private, replacement in ((serial, "<序列号>"), (os.path.expanduser("~"), "<用户目录>")):
-            if private:
-                detail = detail.replace(private, replacement).replace(private.replace("\\", "\\\\"), replacement)
-        self.last_error = {"operation": operation, "detail": detail}
-        folder = self.data.logs
-        try:
-            os.makedirs(folder, exist_ok=True)
-            Path(folder, "last-error.txt").write_text(f"客户端 {VERSION} · {operation}\n{detail}\n", encoding="utf-8")
-        except OSError:
-            pass  # 保存日志失败也要让界面收到原始问题
-        lines = detail.splitlines()
-        causes = [line.strip() for line in lines if re.search(r"(?:Exception|Error|Caused by:|原始异常：|启动失败)", line)
-                  and not line.lstrip().startswith("at ")]
-        summary = "\n".join(causes[:4]) or (detail if len(detail) <= 600 else detail[:600] + "…")
-        help_ui = _tool("troubleshooting")
-        recovery = help_ui.UI_RECOVERY if help_ui.is_ui_connection_error(detail) else ""
-        if recovery:
-            summary = recovery + "\n\n" + summary
-        if len(summary) > 1000:
-            summary = summary[:1000] + "…（完整原因见诊断）"
-        result = {"error": summary, "detail": detail}
-        if recovery:
-            result["recovery"] = recovery
-        return result
-
-    def report_payload(self, status, view):
-        """要上报的全部内容。界面原样展示给用户，确认后发送同一份。"""
-        info = (status or {}).get("info") or {}
-        serial = view.get("serial")
-        log = "\n".join(l for l in view.get("lines", []) if l.strip())
-        if self.last_error:
-            log += f"\n\n[最近失败：{self.last_error['operation']}]\n{self.last_error['detail']}"
-        payloads = [x for x in view.get("payloads", []) if x.strip()]
-        if payloads:
-            # 放在末尾：日志只留最后 2 万字，骨架跟着失败日志一起留下，不会被早先的成功步骤挤掉
-            log += "\n\n[诊断载荷]\n" + "\n".join(payloads)
-        steps = [{"title": scrub(r["title"])[:40], "sec": int(r.get("sec") or 0),
-                  "result": "跳过" if r.get("skipped") else "已停止" if r.get("stopped") else ("成功" if r["rc"] == 0 else "失败")}
-                 for r in view.get("results", [])][:12]
-        return {
-            "client_version": VERSION,
-            "platform": f"{os_name()}（{platform.machine()}）"[:80],
-            "phone_brand": scrub(info.get("brand") or "")[:40],
-            "phone_model": scrub(info.get("name") or info.get("model") or "")[:80],
-            "phone_system": scrub(info.get("os") or info.get("build") or "")[:160],
-            "android": (info.get("android") or "")[:16],
-            "steps": steps,
-            "log": scrub(log, serial)[-20000:],      # 只留末尾；开头是早先成功的步骤
-        }
-
-    def _install_id(self):
-        """第一次上报时随机生成，只用来限频；不取任何设备或电脑标识。"""
-        path = Path(self.data.install_id)
-        try:
-            value = path.read_text(encoding="utf-8").strip()
-            if uuid.UUID(value).version == 4:
-                return value
-        except (OSError, ValueError):
-            pass
-        value = str(uuid.uuid4())
-        self.data.ensure()
-        path.write_text(value, encoding="utf-8")
-        return value
-
-    def send_report(self, payload):
-        now = time.time()
-        self.report_times = [t for t in self.report_times if now - t < 3600]
-        if len(self.report_times) >= REPORT_LIMIT:
-            return {"error": f"一小时内最多上报 {REPORT_LIMIT} 次，请稍后再试"}
-        if not isinstance(payload, dict):
-            return {"error": "上报内容格式不对"}
-        if not payload.get("steps") and not str(payload.get("log") or "").strip():
-            return {"error": EMPTY_REPORT}
-        body = dict(payload, install_id=self._install_id())
-        request = urllib.request.Request(
-            REPORT_URL, data=json.dumps(body, ensure_ascii=False).encode("utf-8"), method="POST",
-            headers={"Content-Type": "application/json", "User-Agent": f"AndroidAdCleaner/{VERSION}"})
-        try:
-            # 云函数闲置后第一次调用要加载依赖，给足时间
-            with urllib.request.urlopen(request, timeout=45) as response:
-                result = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as e:
-            if e.code == 429:
-                return {"error": "上报太频繁，请一小时后再试"}
-            try:
-                message = json.loads(e.read().decode("utf-8")).get("message") or ""
-            except (ValueError, OSError):
-                message = ""
-            return {"error": f"服务器拒绝了这次上报（{e.code}{'：' + message if message else ''}）"}
-        except (urllib.error.URLError, OSError, ValueError) as e:
-            return {"error": f"连不上上报服务器：{getattr(e, 'reason', e)}"}
-        self.report_times.append(now)
-        if result.get("status") == "duplicate":
-            return {"ok": True, "duplicate": True}
-        if result.get("status") != "ok":
-            return {"error": "服务器没有确认收到"}
-        return {"ok": True, "id": result.get("id", "")}
 
 
 class Dispatcher:
@@ -1016,7 +894,11 @@ class Api:
         self.data = ClientData(data_dir)
         self.backups = _tool("backups").Backups(self.data.backups)
         self.downloader = AdbDownloader(self.data, adb)
-        self.reporter = Reporter(self.data)
+        # 上报块只用标准库：版本号、地址、空报告文案与限频从本模块传进去（单一来源仍在这里），
+        # 宿主措辞与排查提示给取值函数——手机版在构造之前就把它们换掉了。
+        self.reporter = Reporter(self.data, version=VERSION, report_url=REPORT_URL, empty_report=EMPTY_REPORT,
+                                 limit=REPORT_LIMIT, os_name=lambda: os_name(),
+                                 help_of=lambda: _tool("troubleshooting"))
         self.runner = runner or Runner(self._child_env)
         self.dispatcher = Dispatcher(lambda: self.runner, lambda: self.backups, self.data,
                                      lambda: self.adb, self._on_error)
