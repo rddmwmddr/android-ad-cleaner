@@ -96,6 +96,7 @@
 | `test_fixtures.py` | 夹具本身的行为：样本、假时钟、时间轴与假 Phone。 |
 | `test_compare_phone_state.py` | 对拍驱动自己管基线 worktree：未知 SHA 报错且不留下 worktree。 |
 | `test_android_bundle.py` | APK 里那批 gui 文件必须覆盖 gui/app.py 的导入期依赖。 |
+| `test_tool_package.py` | tool/ 的出厂引擎与仓库工具链边界：两份冻结名单与文件系统全等、引擎不拖进工具链、打包清单不含 devtools/。 |
 | `test_android_shim.py` | 手机版替换层：不连手机，替换掉执行通道与读屏。 |
 | `test_android_view.py` | 手机版界面的判断：结果怎么说、什么时候挡住开始、反馈网址怎么截。 |
 | `test_android_version.py` | 单键 getprop 读不到版本时按分区属性回退。 |

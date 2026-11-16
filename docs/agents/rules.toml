@@ -1265,3 +1265,11 @@ check = "test:test_adapt_cli::DraftGenTests.test_docs_04_shows_the_same_skeleton
 status = "enforced"
 why = "新机型的脚本骨架有两份写法：docs/04 给人看、`adapt gen` 给机器写。两份不同形时，照文档手写的数据会缺 op 或段形状写错，照生成器写的人又看不出骨架长什么样——两边都有人照抄，所以第四查要挡它（#1247）。机器守卫钉住骨架那几行（`model = \"PLP120\"`、`models = [\"PLP120\"]`、`build = \"\"` 与生成器产出的每一行 op），文档与生成器任缺一行即红；骨架的其余内容仍靠人对照。"
 expires_if = "生成器不再产出草稿、或 docs/04 与生成器共用一份模板时删。"
+
+[[rule]]
+id = "dev.tool.engine-toolchain-seam"
+source = "docs/ARCHITECTURE.md#函数级细节"
+check = "test:test_tool_package::ToolPackageSeamTests.test_module_lists_match_the_filesystem"
+status = "enforced"
+why = "「什么进 APK」由 `syncEngine` 的整目录 glob 决定，往 `tool/` 放一个新脚本它就自动进包——`tool/` 顶层 56 个模块里 19 个是只在 CI 与本机跑的仓库工具链，占 `tool/` 体积的 22%，就这样悄悄发到手机上（#1389）。守卫把两份冻结名单（引擎 37、工具链 19）钉在文件系统与 import 可达性上：加一个不该随包的脚本即红，引擎 import 了工具链也即红（#1390）。"
+expires_if = "工具链搬进 `devtools/`（#1391）且打包改成显式文件名清单、不再整目录 glob 后，「路径 = 归属」不再需要这份名单兜底时删；ADR-0041 的边界被取代时一并删。"
