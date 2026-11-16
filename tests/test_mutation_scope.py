@@ -64,5 +64,19 @@ class SelectionTests(unittest.TestCase):
             mutation_scope.source_path("gui/app.py")
 
 
+class PatchScopeTests(unittest.TestCase):
+    def test_modules_in_paths_keeps_only_mapped_modules(self):
+        self.assertEqual(mutation_scope.modules_in_paths(["tool/summary.py", "tool/row.py"]),
+                         ["tool/summary.py"])
+
+    def test_modules_in_paths_dedupes_and_keeps_order(self):
+        paths = ["tool/plan.py", "tool/plan.py", "tool/summary.py"]
+        self.assertEqual(mutation_scope.modules_in_paths(paths), ["tool/plan.py", "tool/summary.py"])
+
+    def test_modules_in_paths_ignores_paths_outside_tool(self):
+        self.assertEqual(mutation_scope.modules_in_paths(["recipes/a/b/c.toml", "tests/test_plan.py"]),
+                         [])
+
+
 if __name__ == "__main__":
     unittest.main()

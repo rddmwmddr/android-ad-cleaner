@@ -36,6 +36,19 @@ def tests_for(modules: Sequence[str]) -> list[str]:
     return list(ordered)
 
 
+def modules_in_paths(paths: Iterable[str]) -> list[str]:
+    """路径里落进映射表的模块，按首次出现的顺序去重。
+
+    这几个模块被大量测试间接 import，而改动面只看路径：`git diff --name-only` 的输出直接喂进来，
+    不解析补丁内容、不按行文本匹配——同一行文本在文件里重复出现时不会误判，因为根本不看文本。
+    """
+    ordered: dict[str, None] = {}
+    for path in paths:
+        if path in MODULE_TESTS:
+            ordered.setdefault(path, None)
+    return list(ordered)
+
+
 def unknown(modules: Iterable[str]) -> list[str]:
     """不在表里的模块。调用方据此报错，而不是静默跑出 0 个 mutant。"""
     return [module for module in modules if module not in MODULE_TESTS]

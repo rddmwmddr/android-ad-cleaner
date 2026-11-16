@@ -3,8 +3,14 @@
 用法：
 
     python3 devtools/mutation.py tool/catalog/schema.py [更多模块…]
+    python3 devtools/mutation.py --since origin/main
 
 退出码：0 全部杀死、1 有存活或「no tests」、2 用的是错。
+
+`--since <ref>` 只跑 `git diff --name-only <ref>` 里落进映射表的模块；改动落在表外时
+逐条报出来（数据改动与未立项的模块不在判据范围内，但要看得到）。行级筛选交给 mutmut 自己：
+它按文件内容哈希重算 mutant、按 span 比对新旧，有缓存时只重测试改动行产生的那些（实测单行
+0.75 s）；冷缓存时退化成该模块的全量（实测 schema 8.1 s）。
 
 三条约束来自 #1410 的实测：
 
@@ -113,10 +119,45 @@ def survivors(workdir: Path) -> list[str]:
     return found
 
 
+def changed_paths(ref: str) -> list[str]:
+    """相对 `ref` 改过的文件，相对仓库根。用两点形式，未提交的改动也算进来。"""
+    completed = subprocess.run(
+        ["git", "diff", "--name-only", ref],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    return [line for line in completed.stdout.splitlines() if line]
+
+
+def scope_of(ref: str) -> tuple[list[str], list[str]]:
+    """改动面分成两份：落进映射表的模块，以及没落的 `tool/` 模块（后者只作可见性提示）。"""
+    paths = changed_paths(ref)
+    modules = mutation_scope.modules_in_paths(paths)
+    unmapped = [path for path in paths
+                if path.startswith("tool/") and path.endswith(".py") and path not in modules]
+    return modules, unmapped
+
+
 def main(argv: list[str] | None = None) -> int:
-    modules = list(argv if argv is not None else sys.argv[1:])
+    args = list(argv if argv is not None else sys.argv[1:])
+    unmapped: list[str] = []
+    if args[:1] == ["--since"]:
+        if len(args) != 2:
+            print("--since 要带一个 ref", file=sys.stderr)
+            return 2
+        modules, unmapped = scope_of(args[1])
+        if unmapped:
+            print(f"改动里有不在映射表的模块（本次不判）：{' '.join(unmapped)}", file=sys.stderr)
+        if not modules:
+            print("改动没有落在映射表里的模块，没有要跑的 mutant")
+            return 0
+    else:
+        modules = args
     if not modules:
-        print(__doc__.split("用法：")[1].split("\n")[0].strip(), file=sys.stderr)
+        print(__doc__.split("用法：")[1].split("\n")[1].strip(), file=sys.stderr)
         return 2
     missing = mutation_scope.unknown(modules)
     if missing:
