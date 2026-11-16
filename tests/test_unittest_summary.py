@@ -1,5 +1,6 @@
 """CI 的测试结果表格（devtools/unittest_summary.py，#875）：列取错或漏算跳过数，summary 会静默给出错数字；
-测试规模三项（#1394）与锚点体量（#1397）按 AST 现算，数错就没法当棘轮量具。"""
+测试规模三项（#1394）按 AST 现算，数错就没法当棘轮量具。
+锚点体量同一条口径（#1397）：超限各列一行，不红。"""
 import sys
 import tempfile
 import unittest
