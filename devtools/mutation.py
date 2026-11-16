@@ -3,9 +3,10 @@
 用法：
 
     python3 devtools/mutation.py tool/catalog/schema.py [更多模块…]
-    python3 devtools/mutation.py --since origin/main
+    python3 devtools/mutation.py --since origin/main [--summary <文件>]
 
-退出码：0 全部杀死、1 有存活或「no tests」、2 用的是错。
+退出码：0 全部杀死、1 有存活或「no tests」、2 用的是错。`--summary <文件>` 把一节 markdown
+（含 pragma 计数）追加进去，CI 用它写 job summary。
 
 `--since <ref>` 只跑 `git diff --name-only <ref>` 里落进映射表的模块；改动落在表外时
 逐条报出来（数据改动与未立项的模块不在判据范围内，但要看得到）。行级筛选交给 mutmut 自己：
@@ -145,8 +146,31 @@ def scope_of(ref: str) -> tuple[list[str], list[str]]:
     return modules, unmapped
 
 
+def section(counts: dict[str, int], modules: list[str]) -> str:
+    """CI summary 的一节：一行结论 + 每个模块的结局。pragma 数必须在这里可见。"""
+    verdict = "全绿" if counts["survived"] == 0 and counts["no_tests"] == 0 else "有存活"
+    lines = [
+        "### 变异测试",
+        "",
+        f"{verdict}：{counts['total']} 个 mutant，杀死 {counts['killed']}、存活 {counts['survived']}、"
+        f"pragma 跳过 {counts['skipped']}、超时 {counts['timeout']}、无测试 {counts['no_tests']}",
+        "",
+        f"模块：{' '.join(modules)}",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(argv if argv is not None else sys.argv[1:])
+    summary_path: Path | None = None
+    if "--summary" in args:
+        at = args.index("--summary")
+        if at + 1 >= len(args):
+            print("--summary 要带一个文件路径", file=sys.stderr)
+            return 2
+        summary_path = Path(args[at + 1])
+        del args[at:at + 2]
     unmapped: list[str] = []
     if args[:1] == ["--since"]:
         if len(args) != 2:
@@ -182,6 +206,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     for name in alive:
         print(f"  存活 {name}")
+    if summary_path is not None:
+        with summary_path.open("a", encoding="utf-8") as handle:
+            handle.write(section(counts, modules) + "\n")
     return 0 if counts["survived"] == 0 and counts["no_tests"] == 0 else 1
 
 

@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 
-from devtools import mutation_scope  # noqa: E402
+from devtools import mutation, mutation_scope  # noqa: E402
 
 
 def strict_modules():
@@ -76,6 +76,23 @@ class PatchScopeTests(unittest.TestCase):
     def test_modules_in_paths_ignores_paths_outside_tool(self):
         self.assertEqual(mutation_scope.modules_in_paths(["recipes/a/b/c.toml", "tests/test_plan.py"]),
                          [])
+
+
+class SummaryTests(unittest.TestCase):
+    def test_section_reports_the_pragma_count(self):
+        text = mutation.section(
+            {"total": 10, "killed": 9, "survived": 0, "skipped": 1, "timeout": 0, "no_tests": 0},
+            ["tool/summary.py"],
+        )
+        self.assertIn("pragma 跳过 1", text)
+        self.assertIn("全绿", text)
+
+    def test_section_calls_out_survivors(self):
+        text = mutation.section(
+            {"total": 3, "killed": 2, "survived": 1, "skipped": 0, "timeout": 0, "no_tests": 0},
+            ["tool/plan.py"],
+        )
+        self.assertIn("有存活", text)
 
 
 if __name__ == "__main__":

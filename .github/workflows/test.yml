@@ -209,3 +209,52 @@ jobs:
               summary: "Linux + Windows 合并后的总行覆盖率。无阈值，仅供参考；完整表格见本次 run 的 job summary。"
             }
           }' | gh api -X POST "repos/${GITHUB_REPOSITORY}/check-runs" --input -
+
+  # 变异测试：本次改动行产生的 mutant 必须被测试杀死（等价变异体是唯一豁免）。与 coverage job
+  # 是两层，缺一层就漏一类问题：覆盖率管「新增代码有没有被执行到」，这里管「执行到的代码有没有断言
+  # 守得住」——空覆盖（跑过但断言抓不住差异）只有这一层看得见。
+  # 只挑改动面落进映射表（devtools/mutation_scope.py）的模块，实测单模块冷缓存 8 s 量级，
+  # 整步在一分钟内；行级筛选由 mutmut 自己的内容哈希 + span 缓存完成。
+  # 判据是「该模块存活 mutant = 0」，所以清理完（#1414–#1427）之前，改到未清理模块的 PR 会被
+  # 存量存活挡红——那是清理票要消掉的东西，不是误报。
+  # 只在 PR 上跑：--since 要一个基点，main push 没有 base。
+  mutation:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # --since 要拿到基点的历史，默认的 depth=1 里没有 base commit
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: 安装依赖与 mutmut
+        # mutmut 不进 requirements.txt（那是产品依赖），与 coverage / mypy 同类；版本钉死，
+        # 裁决口径随版本变
+        run: |
+          pip install -r requirements.txt
+          pip install mutmut==3.8.1
+      - name: 准备 adb（与两个测试 job 同一口径：套件里有用例在入口就解析 adb）
+        run: |
+          adb="$(command -v adb || true)"
+          sdk="${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb"
+          if [ -z "$adb" ] && [ -x "$sdk" ]; then adb="$sdk"; fi
+          if [ -z "$adb" ]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y adb
+            adb="$(command -v adb)"
+          fi
+          echo "ADB=$adb" >> "$GITHUB_ENV"
+          "$adb" version
+      - name: 变异测试（改动模块）
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        # tee 留日志给排查；rc 取 pytest 侧那条，别被 summary 的失败盖住
+        run: |
+          set -o pipefail
+          python devtools/mutation.py --since "$BASE" --summary "$GITHUB_STEP_SUMMARY" 2>&1 | tee mutation.log
+          exit "${PIPESTATUS[0]}"
