@@ -17,6 +17,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from gui import adb as adb_mod
 from gui import app
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -527,9 +528,11 @@ class TempRoot(unittest.TestCase):
         return path
 
     def find(self, manual=None, ok=lambda p: True):
+        # find_adb 自己跑在 gui/adb.py 里，它的候选过滤读的是那边的同名函数（#1385）；
+        # 下面 SetAdbPathTests 走的是 Api.set_adb_path，那条消费的是 gui/app.py 的名字，patch 点因此不同
         with patch.dict(os.environ, {"ADB": self.env_adb, "ADBUTILS_ADB_PATH": ""}), \
                 patch("shutil.which", return_value=None), \
-                patch.object(app, "adb_ok", side_effect=ok):
+                patch.object(adb_mod, "adb_ok", side_effect=ok):
             return app.find_adb(self.platform_tools, manual)
 
 
@@ -648,7 +651,10 @@ class SetAdbPathTests(TempRoot):
 
     def test_clearing_goes_back_to_automatic_lookup(self):
         api = self.api()
-        with patch.object(app, "adb_ok", return_value=True):
+        # 两个桩点各管一段：保存走 Api.set_adb_path（读 gui/app.py 的名字），
+        # 清除后重新解析走 find_adb（已搬进 gui/adb.py，候选过滤读那边的名字，#1385）
+        with patch.object(app, "adb_ok", return_value=True), \
+                patch.object(adb_mod, "adb_ok", return_value=True):
             api.set_adb_path(self.manual)
             info = api.clear_adb_path()
         self.assertIsNone(app.ClientData(self.root).setting("adb"))

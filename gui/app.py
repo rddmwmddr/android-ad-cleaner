@@ -5,13 +5,19 @@
 后台：tool/run.py、tool/fast.py、tool/chan_fast.py，以子进程运行，日志实时回传界面。
 打包后没有独立的 Python，子进程用「本程序 --cli 脚本名 参数…」的方式启动。
 """
-import hashlib, json, os, platform, re, runpy, subprocess, sys, threading, time, urllib.error, urllib.request, uuid, zipfile
+import json, os, platform, re, runpy, subprocess, sys, threading, time, urllib.error, urllib.request, uuid
 from pathlib import Path
 
 try:                                # 当包导入（测试）；直接跑脚本、打包时它是顶层模块
     from . import winpreflight, updates, update_install, harmony_bridge, toolpath
+    # adb 那一域的实现都搬进了 gui/adb.py（#1385）。显式 re-export：`app.<名字>` 仍可直取，
+    # 本模块自己的调用也走这几个名字（多处桩打在 app 上，比如 Dispatcher 用的 adb_present）。
+    from .adb import (AdbDownloader, adb_ok, adb_exe,  # noqa: F401 - 显式 re-export：tests 按 app.adb_exe 取用
+                      find_adb, adb_from_input, adb_source, adb_present)
 except ImportError:
     import winpreflight, updates, update_install, harmony_bridge, toolpath
+    from adb import (AdbDownloader, adb_ok, adb_exe,  # noqa: F401 - 同上；打包件里 gui/ 在 sys.path 上
+                     find_adb, adb_from_input, adb_source, adb_present)
 
 APP_NAME = "肉呆去广告"
 VERSION = "0.4.4"
@@ -159,6 +165,7 @@ def cli_main():
 # ---------- adb ----------
 # adb 下载（#273：从 Google 下载失败）。固定版本先从官网、再从腾讯云镜像下，都核对 SHA-256；
 # 校验值按 Google 官方清单 repository2-3.xml 的 SHA-1 核过（2026-10-29，两处文件一致）。都失败再从官网下最新版。
+# 发现与下载的实现都在 gui/adb.py（#1385）；这几张表留在本模块当单一来源，构造 `AdbDownloader` 时传进去。
 ADB_VERSION = "37.0.1"
 ADB_PINNED = {
     "Windows": ("platform-tools_r37.0.1-win.zip", "45f4d63113e895ebde0c90f194099a4676b6ac653bd28d54314a9e022bbc1a99"),
@@ -172,71 +179,13 @@ ADB_LATEST = {
     "Windows": "https://dl.google.com/android/repository/platform-tools-latest-windows.zip",
     "Linux": "https://dl.google.com/android/repository/platform-tools-latest-linux.zip",
 }
-
-
-def adb_ok(path):
-    """只用 1.0.41 及以上的 adb。手机助手自带的 1.0.32 等旧版会让挂起、快应用等命令失败，
-    和新版同时运行还会互相顶掉服务（#25 #75）。"""
-    try:
-        out = _tool("adb_link").invoke(path, "version", timeout=8)
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    m = re.search(r"version 1\.0\.(\d+)", out)
-    return bool(m) and int(m.group(1)) >= 41
-
-
-def adb_exe():
-    return "adb.exe" if IS_WIN else "adb"
-
-
 ADB_VERSION_HINT = "跑不出 Android Debug Bridge 的版本号，或者版本太旧（需要 1.0.41 及以上）"
-
-
-def find_adb(platform_tools, manual=None):
-    """手动指定的 adb 排第一：用户填了就是要它压过客户端下载的那份和其他来源（#311）。
-    不存在或版本不够的候选由 adb_candidates / adb_ok 跳过，于是自动回退到后面的来源。"""
-    last = (os.path.join(os.environ.get("LOCALAPPDATA", ""), "Android", "Sdk", "platform-tools", "adb.exe"),
-            "/opt/homebrew/bin/adb", "/usr/local/bin/adb")
-    first = tuple(p for p in (manual, os.path.join(platform_tools, adb_exe())) if p)
-    for c in _tool("adb_link").adb_candidates(first=first, last=last):
-        if adb_ok(c):
-            return c
-    return None
-
-
-def adb_from_input(text):
-    """手填或文件对话框给的路径 → adb 可执行文件。目录补上 adb / adb.exe，去掉粘贴时带进来的引号。"""
-    path = (text or "").strip().strip("\"'")
-    if not path:
-        return ""
-    path = os.path.abspath(os.path.expanduser(path))
-    if os.path.isdir(path):
-        path = os.path.join(path, adb_exe())
-    return path
-
-
-def adb_source(adb, manual, platform_tools):
-    """当前生效的这份 adb 从哪来：manual / downloaded / system / none。"""
-    if not adb:
-        return "none"
-    if manual and os.path.normcase(adb) == os.path.normcase(manual):
-        return "manual"
-    if os.path.normcase(adb) == os.path.normcase(os.path.join(platform_tools, adb_exe())):
-        return "downloaded"
-    return "system"
 
 
 def client_api():
     """入口（窗口与截图脚本）共用的构造：数据目录建好，adb 按既定顺序找，手填的那份排第一。"""
     data = ClientData(data_dir()).ensure()
     return Api(data.root, adb=find_adb(data.platform_tools, manual=data.setting("adb")))
-
-
-def adb_present(adb, serial):
-    """手机此刻是否连着（adb 状态为 device）；先给它 10 秒回来。"""
-    if not adb:
-        return False
-    return _tool("adb_link").Connection(serial, adb=adb).alive(wait=10)
 
 
 CHIME_GAP = 3       # 秒：几件事挤在一起时只响一次
@@ -668,68 +617,6 @@ def skip_reason(result):
     return re.split(r"[。！？；\n]", tail[-1].strip())[0].strip()
 
 
-class AdbDownloader:
-    """下载并校验 platform-tools（#273）。下载源表、校验、落盘与下载状态都在这里（ADR-0011）。"""
-
-    def __init__(self, data, adb=None):
-        self.data = data
-        self.adb = adb
-        self.dl = {"state": "idle", "pct": 0, "msg": ""}
-
-    def adb_sources(self):
-        """[(来源名, 网址, sha256 或 None)]：固定版本两处，最后是官网最新版。"""
-        name, digest = ADB_PINNED[platform.system()]
-        return [(label, base + name, digest) for label, base in ADB_MIRRORS] + \
-               [("Google 官网（最新版）", ADB_LATEST[platform.system()], None)]
-
-    def _fetch(self, label, url, digest, zp):
-        self.dl = {"state": "running", "pct": 0, "msg": f"正在从{label}下载 platform-tools……"}
-        h = hashlib.sha256()
-        request = urllib.request.Request(url, headers={"User-Agent": f"AndroidAdCleaner/{VERSION}"})
-        with urllib.request.urlopen(request, timeout=20) as r, open(zp, "wb") as f:
-            total = int(r.headers.get("Content-Length") or 0); got = 0
-            while True:
-                b = r.read(65536)
-                if not b:
-                    break
-                f.write(b); h.update(b); got += len(b)
-                if total:
-                    self.dl["pct"] = int(got * 100 / total)
-        if digest and h.hexdigest() != digest:
-            raise ValueError("文件校验不对，可能下载不完整或被改动")
-
-    def _download(self, sources=None):
-        self.data.ensure()
-        zp = self.data.adb_zip
-        errors = []
-        try:
-            # sources 传 callable：源表构造失败也要被下面这支 except 收成 dl 的 error 状态
-            for label, url, digest in (sources or self.adb_sources)():
-                try:
-                    self._fetch(label, url, digest, zp)
-                    break
-                except Exception as e:
-                    errors.append(f"{label}：{e}")
-            else:
-                raise RuntimeError("；".join(errors))
-            with zipfile.ZipFile(zp) as z:
-                z.extractall(self.data.root)
-            os.remove(zp)
-            adb = os.path.join(self.data.platform_tools, adb_exe())
-            if not IS_WIN:
-                os.chmod(adb, 0o755)
-            self.adb = adb
-            self.dl = {"state": "done", "pct": 100, "msg": "adb 已就绪"}
-        except Exception as e:
-            self.dl = {"state": "error", "pct": 0, "msg": f"下载失败：{e}"}
-            try:
-                os.remove(zp)
-            except OSError:
-                pass
-
-    def download_state(self):
-        return self.dl
-
 
 class Reporter:
     """错误诊断与上报：记下最近一次失败、组织上报内容、发送与限频（docs/12，ADR-0011）。"""
@@ -1137,7 +1024,9 @@ class Api:
     def __init__(self, data_dir, adb=None, runner=None):
         self.data = ClientData(data_dir)
         self.backups = _tool("backups").Backups(self.data.backups)
-        self.downloader = AdbDownloader(self.data, adb)
+        # 下载器只认 Data 与 adb 初值；版本号与三张源表从本模块传进去，单一来源仍在上面那张表
+        self.downloader = AdbDownloader(self.data, adb, version=VERSION,
+                                        pinned=ADB_PINNED, mirrors=ADB_MIRRORS, latest=ADB_LATEST)
         self.reporter = Reporter(self.data)
         self.runner = runner or Runner(self._child_env)
         self.dispatcher = Dispatcher(lambda: self.runner, lambda: self.backups, self.data,
