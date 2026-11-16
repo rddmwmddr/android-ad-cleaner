@@ -1826,7 +1826,7 @@ class OpKindDeclarationTests(unittest.TestCase):
 
     允许键、必填键、子 op 键、不产出事实、抽词条的键都在同一条 `OpSpec` 上，代码里剩下的三张
     名单（`_HANDLERS` 处理器、事实层降级分支、装载期点名核对）与声明之间没有任何守卫——漏 handler
-    要等真机走到那条 op 才 `KeyError`，漏事实层登记会让词库与入口速查静默少一条记录。六条用例各守
+    要等真机走到那条 op 才 `KeyError`，漏事实层登记会让词库与入口速查静默少一条记录。七条用例各守
     一个分区，红了就能定位是哪一处漂了。判据只看声明与 `scan_catalog` 的公开行为，不 import 投影
     函数的私有分支。
     """
@@ -1889,6 +1889,19 @@ class OpKindDeclarationTests(unittest.TestCase):
             with self.subTest(kind):
                 self.assertLessEqual({key for key, _source in spec.word_keys}, spec.keys,
                                      f"{kind} 的 word_keys 里有允许键之外的键")
+
+    def test_required_keys_are_allowed_keys(self):
+        """#1360：必填键必须在这个 op 的允许键里。
+
+        落到名单外时这条 op 无论如何都写不对：给了那个键是「出现名单外的键」，不给是「缺那个键」。
+        `nested` 与 `word_keys` 两条只管另外两个字段，`probe_op` 又只按 `keys` 造占位 op，都碰不到
+        这一格。"""
+        from catalog.schema import OPS
+        self.assertTrue(OPS, "OPS 是空的，这条守卫会空转")
+        for kind, spec in sorted(OPS.items()):
+            with self.subTest(kind):
+                self.assertLessEqual(set(spec.required), spec.keys,
+                                     f"{kind} 的 required 里有允许键之外的键")
 
     def test_unregistered_kind_raises(self):
         """未登记的 kind 让投影函数报错，不静默丢数据。
