@@ -81,10 +81,11 @@ class PatchScopeTests(unittest.TestCase):
 class SummaryTests(unittest.TestCase):
     def test_section_reports_the_pragma_count(self):
         text = mutation.section(
-            {"total": 10, "killed": 9, "survived": 0, "skipped": 1, "timeout": 0, "no_tests": 0},
+            {"total": 10, "killed": 9, "survived": 0, "skipped": 0, "timeout": 0, "no_tests": 0},
             ["tool/summary.py"],
+            1,
         )
-        self.assertIn("pragma 跳过 1", text)
+        self.assertIn("pragma 豁免 1", text)
         self.assertIn("全绿", text)
 
     def test_section_calls_out_survivors(self):

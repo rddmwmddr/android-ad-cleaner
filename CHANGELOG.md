@@ -14,6 +14,7 @@
 - 一加 16 商店段的「消息管理」探测只翻前两屏，常态下省约 40 秒（#1281）
 
 ### 内部
+- polarity 清到 mutation 存活 0，等价变异体标 pragma 豁免（#1416）
 - CI 加 mutation job：PR 上只跑改动模块的 mutant，summary 带 pragma 计数（#1413）
 - mutation 驱动加 `--since`，按改动面挑模块跑（#1412）
 - mutmut 接入：模块 → 测试映射与 `devtools/mutation.py` 单模块驱动（#1411）

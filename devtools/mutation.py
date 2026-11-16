@@ -167,14 +167,26 @@ def scope_of(ref: str) -> tuple[list[str], list[str]]:
     return modules, unmapped
 
 
-def section(counts: dict[str, int], modules: list[str]) -> str:
+PRAGMA = "# pragma: no mutate"
+
+
+def pragmas(modules: Sequence[str]) -> int:
+    """模块源码里 `# pragma: no mutate` 的条数。
+
+    mutmut 3.8 不把 pragma 抑制记进 `skipped`（`__main__.py` 里还是 TODO），所以自己数——
+    pragma 必须出现在 summary 里，否则它会变成藏污纳垢的地方。
+    """
+    return sum(Path(module).read_text(encoding="utf-8").count(PRAGMA) for module in modules)
+
+
+def section(counts: dict[str, int], modules: list[str], pragma_total: int = 0) -> str:
     """CI summary 的一节：一行结论 + 每个模块的结局。pragma 数必须在这里可见。"""
     verdict = "全绿" if counts["survived"] == 0 and counts["no_tests"] == 0 else "有存活"
     lines = [
         "### 变异测试",
         "",
         f"{verdict}：{counts['total']} 个 mutant，杀死 {counts['killed']}、存活 {counts['survived']}、"
-        f"pragma 跳过 {counts['skipped']}、超时 {counts['timeout']}、无测试 {counts['no_tests']}",
+        f"pragma 豁免 {pragma_total}、超时 {counts['timeout']}、无测试 {counts['no_tests']}",
         "",
         f"模块：{' '.join(modules)}",
         "",
@@ -222,15 +234,16 @@ def main(argv: list[str] | None = None) -> int:
 
     counts = stats(workdir)
     alive = survivors(workdir)
+    pragma_total = pragmas(modules)
     print(
         f"共 {counts['total']} 个 mutant：杀死 {counts['killed']}、存活 {counts['survived']}、"
-        f"pragma 跳过 {counts['skipped']}、超时 {counts['timeout']}、无测试 {counts['no_tests']}"
+        f"pragma 豁免 {pragma_total}、超时 {counts['timeout']}、无测试 {counts['no_tests']}"
     )
     for name in alive:
         print(f"  存活 {name}")
     if summary_path is not None:
         with summary_path.open("a", encoding="utf-8") as handle:
-            handle.write(section(counts, modules) + "\n")
+            handle.write(section(counts, modules, pragma_total) + "\n")
     return 0 if counts["survived"] == 0 and counts["no_tests"] == 0 else 1
 
 
