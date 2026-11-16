@@ -1,4 +1,4 @@
-"""catalog 族的用例表（#1398）：装载期拒绝非法形状的 23 条，一行一条。
+"""catalog 族的用例表（沿用 #1398 的族承载，结构反推补齐 #1399）：装载期拒绝非法形状，一行一条。
 
 每行是 `data`（`catalog.validate` 必须拒绝的一份数据）加 `needle`（报错里必须出现的子串）。
 这些行原先一条一个 `def`，owner 是票号；现在 owner 是它们依赖的结构项，结构项退场，行跟着退场。
@@ -8,6 +8,10 @@
 
 拒绝「结构里根本没有的东西」的行（`kind = "explode"`、顶层 `surprise`）句柄为空：它们测的就是
 那个名字不在结构里，给任何句柄都会说成「这条行依赖某个结构项」，与它要断言的事相反。
+
+`expected`（#1399）从 `OPS` 反推缺键句柄 `("required", kind, key)`：每个 op 的每个必填键都要有
+一条「缺这个键」的 case，否则 `gap_violations()` 点名缺哪条。`OPS` 里加一个必填键，这里立刻要求
+配套 case；删一条缺键行，句柄检查与 gap 检查一起红。这些缺键 path 此前只覆盖 63 个必填键里的 6 个。
 
 `produce` 跑一次校验器并留下报错原文；不再被拒时留下 `<accepted>`，这样「丢掉一条拒绝」也会在
 快照 diff 里显形。
@@ -169,6 +173,342 @@ CASES = [
         ]}]},
         "needle": "名单外的键",
     },
+    # 缺键 path（#1399）：每个 op 的每个必填键各一条，结构反推由 `expected()` 管。
+    # 其中 if-setting 缺 kw、let 缺 lib / name、off-required 缺 only、skip-unless-installed 缺
+    # contains、start-or-skip 缺 dead_ends 六条是从 `NewOpValidatorTests` 逐字搬来的。
+    {
+        "id": "app-stop-missing-pkg",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "app_stop"}]}]},
+        "needle": "缺 pkg",
+    },
+    {
+        "id": "close-all-missing-page",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "close_all"}]}]},
+        "needle": "缺 page",
+    },
+    {
+        "id": "close-listed-missing-miss-print",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "close_listed", "names": ["a"], "page": "p"},
+        ]}]},
+        "needle": "缺 miss_print",
+    },
+    {
+        "id": "close-listed-missing-page",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "close_listed", "names": ["a"], "miss_print": "m"},
+        ]}]},
+        "needle": "缺 page",
+    },
+    {
+        "id": "code-missing-name",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "code"}]}]},
+        "needle": "缺 name",
+    },
+    {
+        "id": "enter-missing-text",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "enter"}]}]},
+        "needle": "缺 text",
+    },
+    {
+        "id": "entry-missing-text",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "entry"}]}]},
+        "needle": "缺 text",
+    },
+    {
+        "id": "gesture-missing-end",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "gesture", "start": [0.5, 0.3], "ms": 300},
+        ]}]},
+        "needle": "缺 end",
+    },
+    {
+        "id": "gesture-missing-start",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "gesture", "end": [0.5, 0.7], "ms": 300},
+        ]}]},
+        "needle": "缺 start",
+    },
+    {
+        "id": "go-missing-expect",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "go", "text": "x"}]}]},
+        "needle": "缺 expect",
+    },
+    {
+        "id": "go-missing-text",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "go", "expect": "y"}]}]},
+        "needle": "缺 text",
+    },
+    {
+        "id": "if-entry-missing-text",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "if_entry"}]}]},
+        "needle": "缺 text",
+    },
+    {
+        "id": "if-find-missing-text",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "if_find"}]}]},
+        "needle": "缺 text",
+    },
+    {
+        "id": "if-focus-missing-text",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "if_focus"}]}]},
+        "needle": "缺 text",
+    },
+    {
+        "id": "if-lib-missing-name",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "if_lib"}]}]},
+        "needle": "缺 name",
+    },
+    {
+        "id": "if-setting-missing-kw",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "if_setting", "ops": []}]}]},
+        "needle": "缺 kw",
+    },
+    {
+        "id": "if-tap-missing-text",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "if_tap"}]}]},
+        "needle": "缺 text",
+    },
+    {
+        "id": "if-var-missing-name",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "if_var"}]}]},
+        "needle": "缺 name",
+    },
+    {
+        "id": "let-missing-lib",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "let", "name": "pkg"}]}]},
+        "needle": "缺 lib",
+    },
+    {
+        "id": "let-missing-name",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "let", "lib": "browser_settings"},
+        ]}]},
+        "needle": "缺 name",
+    },
+    {
+        "id": "lib-missing-name",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "lib"}]}]},
+        "needle": "缺 name",
+    },
+    {
+        "id": "note-miss-missing-text",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "note_miss"}]}]},
+        "needle": "缺 text",
+    },
+    {
+        "id": "off-missing-page",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "off"}]}]},
+        "needle": "缺 page",
+    },
+    {
+        "id": "off-required-missing-only",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "off_required", "page": "p"}]}]},
+        "needle": "缺 only",
+    },
+    {
+        "id": "off-required-missing-page",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "off_required", "only": ["x"]},
+        ]}]},
+        "needle": "缺 page",
+    },
+    {
+        "id": "press-missing-key",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "press"}]}]},
+        "needle": "缺 key",
+    },
+    {
+        "id": "require-entry-missing-miss-print",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "require_entry", "text": "x"}]}]},
+        "needle": "缺 miss_print",
+    },
+    {
+        "id": "require-entry-missing-text",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_entry", "miss_print": "m"},
+        ]}]},
+        "needle": "缺 text",
+    },
+    {
+        "id": "require-find-missing-miss-print",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "require_find", "text": "x"}]}]},
+        "needle": "缺 miss_print",
+    },
+    {
+        "id": "require-find-missing-text",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "require_find", "miss_print": "m"}]}]},
+        "needle": "缺 text",
+    },
+    {
+        "id": "require-focus-missing-contains",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_focus", "miss_print": "m"},
+        ]}]},
+        "needle": "缺 contains",
+    },
+    {
+        "id": "require-focus-missing-miss-print",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_focus", "contains": "x"},
+        ]}]},
+        "needle": "缺 miss_print",
+    },
+    {
+        "id": "require-go-missing-expect",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_go", "text": "x", "miss_print": "m"},
+        ]}]},
+        "needle": "缺 expect",
+    },
+    {
+        "id": "require-go-missing-miss-print",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_go", "text": "x", "expect": "y"},
+        ]}]},
+        "needle": "缺 miss_print",
+    },
+    {
+        "id": "require-go-missing-text",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_go", "expect": "y", "miss_print": "m"},
+        ]}]},
+        "needle": "缺 text",
+    },
+    {
+        "id": "require-lib-missing-miss-print",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "require_lib", "name": "gear"}]}]},
+        "needle": "缺 miss_print",
+    },
+    {
+        "id": "require-lib-missing-name",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_lib", "miss_print": "m"},
+        ]}]},
+        "needle": "缺 name",
+    },
+    {
+        "id": "require-setting-missing-kw",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_setting", "miss_print": "m"},
+        ]}]},
+        "needle": "缺 kw",
+    },
+    {
+        "id": "require-setting-missing-miss-print",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "require_setting", "kw": "x"}]}]},
+        "needle": "缺 miss_print",
+    },
+    {
+        "id": "require-switches-missing-before",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_switches", "names": ["x"], "title": "t"},
+        ]}]},
+        "needle": "缺 before",
+    },
+    {
+        "id": "require-switches-missing-names",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_switches", "before": {"expr": "var", "name": "v"}, "title": "t"},
+        ]}]},
+        "needle": "缺 names",
+    },
+    {
+        "id": "require-switches-missing-title",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_switches", "before": {"expr": "var", "name": "v"}, "names": ["x"]},
+        ]}]},
+        "needle": "缺 title",
+    },
+    {
+        "id": "require-tab-missing-miss-print",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "require_tab", "name": "gear"}]}]},
+        "needle": "缺 miss_print",
+    },
+    {
+        "id": "require-tab-missing-name",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "require_tab", "miss_print": "m"}]}]},
+        "needle": "缺 name",
+    },
+    {
+        "id": "require-tap-missing-text",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "require_tap", "miss_print": "m"}]}]},
+        "needle": "缺 text",
+    },
+    {
+        "id": "return-lib-missing-name",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "return_lib"}]}]},
+        "needle": "缺 name",
+    },
+    {
+        "id": "shell-missing-command",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "shell"}]}]},
+        "needle": "缺 command",
+    },
+    {
+        "id": "skip-unless-installed-missing-command",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "skip_unless_installed", "contains": "c", "text": "t"},
+        ]}]},
+        "needle": "缺 command",
+    },
+    {
+        "id": "skip-unless-installed-missing-contains",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "skip_unless_installed", "command": "pm path x", "text": "t"},
+        ]}]},
+        "needle": "缺 contains",
+    },
+    {
+        "id": "skip-unless-installed-missing-text",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "skip_unless_installed", "command": "pm path x", "contains": "c"},
+        ]}]},
+        "needle": "缺 text",
+    },
+    {
+        "id": "sleep-missing-seconds",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "sleep"}]}]},
+        "needle": "缺 seconds",
+    },
+    {
+        "id": "start-missing-pkg",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "start"}]}]},
+        "needle": "缺 pkg",
+    },
+    {
+        "id": "start-or-skip-missing-activity",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start_or_skip", "pkg": "p", "dead_ends": ["x"], "reason": "r"},
+        ]}]},
+        "needle": "缺 activity",
+    },
+    {
+        "id": "start-or-skip-missing-dead-ends",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start_or_skip", "pkg": "p", "activity": "a", "reason": "r"},
+        ]}]},
+        "needle": "缺 dead_ends",
+    },
+    {
+        "id": "start-or-skip-missing-pkg",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start_or_skip", "activity": "a", "dead_ends": ["x"], "reason": "r"},
+        ]}]},
+        "needle": "缺 pkg",
+    },
+    {
+        "id": "start-or-skip-missing-reason",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start_or_skip", "pkg": "p", "activity": "a", "dead_ends": ["x"]},
+        ]}]},
+        "needle": "缺 reason",
+    },
+    {
+        "id": "tap-missing-text",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "tap"}]}]},
+        "needle": "缺 text",
+    },
 ]
 
 
@@ -253,8 +593,17 @@ def produce(case):
     return "<accepted>"
 
 
+def _expected():
+    """从 `OPS` 反推「应该有 case」的句柄：每个必填键各一条缺键 case（#1399）。
+
+    句柄词表与 `handles()` 同一口径，所以 `OPS` 加一个必填键，这里立刻点名它缺 case；
+    删一条缺键行，`gap_violations()` 跟着红。`OPS` 是唯一 owner，这份集合不另存一份。
+    """
+    return {("required", kind, key) for kind, spec in OPS.items() for key in spec.required}
+
+
 FAMILY = Family("catalog-rejections", CASES, handles=handles, structure=structure,
-                produce=produce)
+                produce=produce, expected=_expected)
 
 if __name__ == "__main__":
     sys.exit(cli())

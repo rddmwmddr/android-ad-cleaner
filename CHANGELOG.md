@@ -15,6 +15,7 @@
 ### 内部
 - vocab 的按脚本冻结词条表收进 `tests/vocab_family.py` 的族数据（#1400）
 - 入口表的逐行出处用例收进 `tests/entries_family.py` 的族数据（#1401）
+- catalog 族加结构反推守卫，每个必填键都要求一条缺键 case（#1399）
 - catalog 的装载期拒绝用例收进 `tests/catalog_family.py` 的族数据（#1398）
 - 族容器 tests/family.py 落成，快照更新必须附理由（#1395）
 - CI summary 追加「测试规模」：用例数、文件数、行数由 AST 现算（#1394）
