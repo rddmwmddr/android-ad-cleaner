@@ -55,7 +55,7 @@ RESTORE_WAIT = 5                        # 还原失败后重试之前的停顿
 
 # `--es demo` 认的页面名（android/app/src/debug/.../Demo.kt）：不连手机逐屏验收界面
 DEFAULT_SCREENS = (
-    "setup1", "setup2", "setup3", "setup3mi", "old", "stopped-sh", "ask", "denied", "nodev",
+    "setup1", "setup2", "setup3", "setup3mi", "old", "stopped-sh", "ask", "denied", "sui-ask", "sui-denied", "nodev",
     "home", "prepare0", "prepare1", "choose", "blocked", "norecipe", "scanfail",
     "run", "paused", "pausing", "stalled", "fgmode", "stopping", "done", "failed", "failed2", "stopped",
     "coverage",

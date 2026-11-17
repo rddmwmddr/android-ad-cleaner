@@ -1,6 +1,7 @@
 # 手机版（APK）
 
 在手机上直接跑去广告，不用连电脑、不用装别的 App。权限来自手机自带的「无线调试」：本 App 自己配对一次、自己连本机 adbd，以 shell 身份执行命令，和电脑上的 adb 一样，不需要 root（#622）。装了并授权 [Shizuku](https://shizuku.rikka.app/) 的手机也能用。
+装了 [Sui](https://github.com/RikkaApps/Sui)（Magisk 模块，提供同一套 Shizuku 接口）的手机不用配对无线调试，在 App 里直接授权就能用（#1451）。
 
 用户教程（截图 + 视频）：[docs/手机版教程](../docs/手机版教程/README.md)。
 
@@ -61,6 +62,7 @@ adb shell am start -n com.ahuamiao.adcleaner/.MainActivity --es demo home [--es 
 - 命令与读屏：连上后只开一条常驻 `exec:` 流，跑 APK 里的 `ShellServerMain` → `ShellServer`（shell 身份），所有命令、读屏按编号经它收发（`ServerClient`；Shizuku 那条路起的是同一个服务）。读屏用 UiAutomation，不开网络端口——以前借用的 u2.jar 读屏服务在 9008 端口对局域网开放、无鉴权（#623）。不给每条命令单开 adb 流：libadb 在对端关流时有竞态，小命令会丢输出和退出码。
 - 首次连上后经 shell 给本 App 授 `WRITE_SECURE_SETTINGS`：之后无线调试被关（重启、换 Wi-Fi）时 App 自己打开、重连。第一次在某个网络上打开无线调试，系统会弹「允许在此网络上使用无线调试」，勾「始终允许」后才能免确认。
 - 选择：Shizuku 已授权就用 Shizuku，否则用内置无线调试。判定与两句失败文案只在 `ShellBackend`（`pick()`），`Shell` 的 `connected()` / `ensure()` / `client()` 共用它；任何起命令服务的路径都先确认那条通道就绪再开流（`openWhenReady()`），不把 libadb 的 `connect() must be called first` 交给用户看（#1034）。Python 侧不感知。
+  「要不要先去授权 Shizuku / Sui」这一层在 Kotlin 的 `ShellAccess`（`provider()` / `state()`）；Sui 与 Shizuku 共用同一个 `ShizukuShell` 通道，只是 Sui 没有管理器 App，管理界面从拨号盘暗码进（#1451）。
 
 ## 读屏（#623）
 

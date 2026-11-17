@@ -7,7 +7,7 @@ import org.json.JSONObject
 /**
  * 只在 debug 构建里：不连手机、不跑引擎，逐屏验收界面。
  * `adb shell am start -n com.ahuamiao.adcleaner/.MainActivity --es demo home [--es sheet more]`
- * 页面：setup1 setup2 setup3 setup3mi old stopped-sh ask denied nodev home prepare0 prepare1 choose
+ * 页面：setup1 setup2 setup3 setup3mi old stopped-sh ask denied sui-ask sui-denied nodev home prepare0 prepare1 choose
  * blocked norecipe scanfail run paused pausing stalled fgmode stopping done failed stopped failed2 coverage
  * 面板：more newer update update-downloading update-ready update-error restore restored feedback report log；对话框：devoff
  * 另有 `--es call smoke`：真机冒烟用，把 shell 状态与这一轮执行结果按块打到 logcat（#1072）。
@@ -47,6 +47,8 @@ object Demo {
             "setup2" -> "need_wifi"
             "setup3", "setup3mi" -> "need_pair"
             "old", "ask", "denied" -> name
+            "sui-ask" -> "sui_ask"
+            "sui-denied" -> "sui_denied"
             "stopped-sh" -> "stopped"
             else -> "ready"
         }, name != "nodev")
@@ -72,6 +74,8 @@ object Demo {
             "setup2" -> Screen.Setup("need_wifi")
             "setup3", "setup3mi" -> Screen.Setup("need_pair")
             "old", "stopped-sh", "ask", "denied", "nodev" -> Screen.Setup(name.removeSuffix("-sh"))
+            "sui-ask" -> Screen.Setup("sui_ask")
+            "sui-denied" -> Screen.Setup("sui_denied")
             "prepare0" -> Screen.Prepare(0)
             "prepare1" -> Screen.Prepare(1)
             "choose", "blocked", "norecipe", "scanfail" -> Screen.Choose

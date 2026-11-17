@@ -114,12 +114,13 @@ class MainActivity : ComponentActivity(), HostActions {
     }
 
     /**
-     * 授权 Shizuku。没装 → 下载页；装了没启动，或拒绝过（系统不再弹窗）→ 打开 Shizuku 自己处理。
-     * 只在这两种情况下拿到 binder 之外的结果都是一样的：让用户去 Shizuku 那边动手，
-     * 否则这里只会抛异常、页面重查还是原样，点了像没反应。设置页的次级入口也落到这里。
+     * 授权 Shizuku。Sui 在跑 → 拨号盘（它没有自己的 App）；没装 → 下载页；装了没启动，或拒绝过
+     * （系统不再弹窗）→ 打开 Shizuku 自己处理。只在这两种情况下拿到 binder 之外的结果都是一样的：
+     * 让用户去 Shizuku 那边动手，否则这里只会抛异常、页面重查还是原样，点了像没反应。
+     * 设置页的次级入口也落到这里。
      */
     override fun requestShizuku() {
-        val up = ShellAccess.installed(this, ShellAccess.SHIZUKU) && runCatching { Shizuku.pingBinder() }.getOrDefault(false)
+        val up = ShellAccess.provider(this) && runCatching { Shizuku.pingBinder() }.getOrDefault(false)
         if (!up || runCatching { Shizuku.shouldShowRequestPermissionRationale() }.getOrDefault(false)) {
             openShizuku()
             return
@@ -132,6 +133,10 @@ class MainActivity : ComponentActivity(), HostActions {
     }
 
     override fun openShizuku() {
+        if (ShellAccess.sui && Shizuku.pingBinder()) {   // Sui 没有自己的 App：管理界面从拨号盘的暗码进（#1451）
+            runCatching { startActivity(Intent(Intent.ACTION_DIAL)) }    // 平板等没有拨号盘的机器：按钮无反应，文案里已写了暗码
+            return
+        }
         val launch = packageManager.getLaunchIntentForPackage(ShellAccess.SHIZUKU)
         startActivity(launch ?: Intent(Intent.ACTION_VIEW, Uri.parse(ShellAccess.SHIZUKU_PAGE)))
     }
