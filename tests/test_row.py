@@ -776,9 +776,6 @@ class SameLayoutTests(unittest.TestCase):
         self.assertGreater(shells, 0)       # main_switch_bar 形态的样本也要真的走到它的分支
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 # 华为 HarmonyOS 4.2 应用通知页（#1448）：总开关那一行是 switch_bar（整行）+ switch_widget（本体），
 # 都没有文字；同一张卡片里两个同名渠道「营销通知」。页头是 App 名。屏 1260x2720，卡片高 480 < 0.18H。
 HW_SETTINGS = "com.android.settings"
@@ -828,3 +825,7 @@ class UntitledMasterSwitchTests(unittest.TestCase):
                                 ("营销通知", True, (1130, 1052))])
         plan = fast.plan_switches(rows, only=["营销通知"], screen_h=2720)
         self.assertEqual([xy for _, xy, _ in plan.targets], [(1130, 897), (1130, 1052)])
+
+
+if __name__ == "__main__":
+    unittest.main()
