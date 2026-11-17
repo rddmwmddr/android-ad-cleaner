@@ -1,8 +1,10 @@
 """模块 → 测试范围的映射（#1411）：每一行都点到存在的测试，严格档名单与它不漂。
 
-判据只看外部行为：映射表覆盖哪些模块、目标文件在不在、选择结果怎么去重。不跑 mutation
-本身——那要几十秒，且由 devtools/mutation.py 负责。
+判据只看外部行为：映射表覆盖哪些模块、目标文件在不在、选择结果怎么去重，以及 `tool/` 里的
+进程级缓存有没有进 `tests/conftest.py` 的清理表（#1454）。不跑 mutation 本身——那要几十秒，
+且由 devtools/mutation.py 负责。
 """
+import ast
 import json
 import sys
 import tempfile
@@ -24,6 +26,58 @@ def strict_modules():
         if "polarity" in names:
             return list(names)
     raise AssertionError("pyproject.toml 里找不到严格档名单")
+
+
+def _cache_names(tree):
+    """这个模块里哪些名字指向 `functools.cache` / `functools.lru_cache`（模块别名与直接 import 都算）。"""
+    modules = {"functools"}
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "functools":
+                    modules.add(alias.asname or alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module == "functools":
+            for alias in node.names:
+                if alias.name in ("cache", "lru_cache"):
+                    names.add(alias.asname or alias.name)
+    return modules, names
+
+
+def _is_cache_decorator(item, modules, names):
+    target = item.func if isinstance(item, ast.Call) else item
+    if isinstance(target, ast.Name):
+        return target.id in names
+    return (isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name)
+            and target.value.id in modules and target.attr in ("cache", "lru_cache"))
+
+
+def cached_functions(root):
+    """`tool/` 下模块级、被 `functools.cache` / `functools.lru_cache` 装饰的函数，点名成 `模块.函数`。
+
+    只看模块级：函数体内新建的缓存跟着那次调用走，不会跨 pytest 会话留下来。
+    """
+    found = set()
+    for path in sorted((root / "tool").rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        modules, names = _cache_names(tree)
+        module = ".".join(path.relative_to(root / "tool").with_suffix("").parts)
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and any(
+                _is_cache_decorator(item, modules, names) for item in node.decorator_list
+            ):
+                found.add(f"{module}.{node.name}")
+    return found
+
+
+def registered_cache_entries(root):
+    """`tests/conftest.py` 的 `_CACHED_ENTRIES` 里登记的那些点名。"""
+    tree = ast.parse((root / "tests" / "conftest.py").read_text(encoding="utf-8"))
+    for node in tree.body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name) and node.targets[0].id == "_CACHED_ENTRIES"):
+            return set(ast.literal_eval(node.value))
+    raise AssertionError("tests/conftest.py 里找不到 _CACHED_ENTRIES")
 
 
 class MapTests(unittest.TestCase):
@@ -153,6 +207,58 @@ class NothingToMutateTests(unittest.TestCase):
     def test_missing_cache_is_not_a_conclusion(self):
         """没有 meta 说明这轮根本没跑到那一步，不能当成「没东西可判」。"""
         self.assertFalse(mutation.nothing_to_mutate(self.workdir(None), ["tool/reader.py"]))
+
+
+class CacheClearRegistryTests(unittest.TestCase):
+    """`tool/` 里的进程级缓存都要进 `tests/conftest.py` 的清理表（#1454）。
+
+    mutmut 拿同一个解释器跑完全部 mutant，不清掉的缓存会让被变异的那段代码不执行，假存活。
+    """
+
+    def test_every_cached_function_is_registered(self):
+        missing = sorted(cached_functions(ROOT) - registered_cache_entries(ROOT))
+        self.assertEqual(missing, [])
+
+    def test_every_registered_entry_names_a_cached_function(self):
+        """登记表里的点名要还指着真缓存：删掉缓存时忘了摘，清理表就成了空转。"""
+        stale = sorted(registered_cache_entries(ROOT) - cached_functions(ROOT))
+        self.assertEqual(stale, [])
+
+    def test_the_scanner_sees_every_spelling(self):
+        """守卫自己不能瞎：`functools.lru_cache(maxsize=None)`、模块别名与 `from functools import` 都要认。"""
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        (root / "tool").mkdir()
+        (root / "tool" / "sample.py").write_text(
+            "import functools as ft\n"
+            "from functools import cache\n"
+            "from functools import lru_cache as memo\n"
+            "\n"
+            "@functools.lru_cache(maxsize=None)\n"
+            "def a():\n"
+            "    return 1\n"
+            "\n"
+            "@ft.cache\n"
+            "def b():\n"
+            "    return 2\n"
+            "\n"
+            "@cache\n"
+            "def c():\n"
+            "    return 3\n"
+            "\n"
+            "@memo(maxsize=2)\n"
+            "def d():\n"
+            "    return 4\n"
+            "\n"
+            "def nested():\n"
+            "    @functools.cache\n"
+            "    def e():\n"
+            "        return 5\n"
+            "    return e\n"
+            "\n"
+            "def plain():\n"
+            "    return 6\n",
+            encoding="utf-8")
+        self.assertEqual(cached_functions(root), {"sample.a", "sample.b", "sample.c", "sample.d"})
 
 
 if __name__ == "__main__":
