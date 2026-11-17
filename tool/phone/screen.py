@@ -333,7 +333,7 @@ class Screen:
         """按 uiautomator2 选择器直点一个控件：按坐标的 `click` / 按文字的 `tap` 之外的第三条。
 
         `index` 是第几个匹配（0 起）；找不到时读屏库的 not-found 照原样上抛。选择器只有给了才填，
-        与数据里的 `tap_id` op 同构（#1362、#1472）。"""
+        与数据里的 `tap_id` op 同构（沿用 #1362 的做法、#1472）。"""
         selector = {}
         if resource_id is not None:
             selector["resourceId"] = resource_id

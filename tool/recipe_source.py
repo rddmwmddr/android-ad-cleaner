@@ -667,7 +667,7 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 lower(op.get("ops", []))
                 lower(op.get("else_ops", []))
             elif kind == "shell":
-                # 原样下发的拉起串（`am start …`）也是入口，不降级的话入口速查会漏掉这台机（#1263）。
+                # 原样下发的拉起串（`am start …`）也是入口，不降级的话入口速查会漏掉这台机（沿用 #1263 的口径）。
                 lines.append(f"p.shell({_s(op['command'])})")
             elif kind == "gated":
                 for text in op.get("entries", []):

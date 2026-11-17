@@ -441,7 +441,7 @@ id = "dev.reader.unified-adapter"
 source = "docs/ARCHITECTURE.md#函数级细节"
 check = "code:tool/reader.py:Reader"
 status = "code"
-why = "机型脚本与测试直接用 `Phone.d`（历史别名），新增读屏能力只加进 Reader 才两处同时可用。"
+why = "读屏能力只在 `Reader` 上一处声明，新增一种能力两处（桌面 u2 与手机替换层）才同时可用；门面经设备动词对外，不再转发 adapter 本身（ADR-0045）。"
 expires_if = "读屏库直接作为引擎依赖、不再需要适配层时删。"
 
 [[rule]]

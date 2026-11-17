@@ -1,4 +1,4 @@
-"""三个跨阶段会话对象（ADR-0033、#1039）：状态归对象，门面只留设备概念那几个。
+"""三个跨阶段会话对象（ADR-0033、沿用 #1039 的做法）：状态归对象，门面只留设备概念那几个。
 
 钉的是脚本侧真在用的写法——置零（`p.miss = 0`）、换 App（`p.app = pkg`）、
 读集合本体（`p.missed`）。其余字段直接读持有它的会话对象（`p.channel_session.*`），
@@ -32,7 +32,7 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(self.p.launch_session.app, "com.android.settings")
 
     def test_changing_the_app_forgets_the_promoted_marks(self):
-        """`honor` 的 `launch()` 只写 `p.app`：换 App 就该作废上一个 App 的推广位记忆（#420、#1479）。"""
+        """`honor` 的 `launch()` 只写 `p.app`：换 App 就该作废上一个 App 的推广位记忆（沿用 #420 的裁决、#1479）。"""
         self.p.app = "com.vivo.browser"
         self.p.launch_session.promoted.add(("com.vivo.browser", "close"))
         self.p.app = "com.heytap.themestore"
