@@ -374,12 +374,48 @@ class Phone:
     def icon_candidates(self, area=ICON_AREA):
         return self.screen.icon_candidates(area)
 
-    # ---------- 四个动作原语：后续阶段一律经它们动作 ----------
+    # ---------- 动作原语：后续阶段一律经它们动作 ----------
     def click(self, x, y):
         self.screen.click(x, y)
 
-    def back(self, n=1):
-        self.screen.back(n)
+    def back(self, n=1, settle=True):
+        self.screen.back(n, settle)
+
+    def shell(self, command, *, timeout=None):
+        """原样下发一条命令（`am start` / `input …` / `getprop`），返回输出串（#1472）。"""
+        return self.screen.shell(command, timeout=timeout)
+
+    def swipe(self, x1, y1, x2, y2, ms):
+        """按绝对坐标滑一下，时长给毫秒（#1472）。"""
+        self.screen.swipe(x1, y1, x2, y2, ms)
+
+    def window_size(self):
+        """读一次屏幕尺寸（宽, 高）（#1472）。"""
+        return self.screen.window_size()
+
+    def home(self):
+        """回桌面（`input keyevent HOME`）（#1472）。"""
+        self.screen.home()
+
+    def press(self, key):
+        """按一个键（`home` / `back` / `recent` …）：走 uiautomator2 的 `press`（#1472）。"""
+        self.screen.press(key)
+
+    def app_stop(self, package):
+        """强停一个包：走 uiautomator2 的 `app_stop`（#1472）。"""
+        self.screen.app_stop(package)
+
+    def tap_id(self, resource_id=None, text=None, index=0):
+        """按 uiautomator2 选择器直点一个控件（#1472）。"""
+        self.screen.tap_id(resource_id, text, index)
+
+    def tap_id_if_present(self, resource_id=None, text=None, timeout=0):
+        """存在才点，返回点到没有（不抛）（#1472）。"""
+        return self.screen.tap_id_if_present(resource_id, text, timeout)
+
+    def set_text(self, resource_id, value):
+        """往指定资源 id 的输入框写值（#1472）。"""
+        self.screen.set_text(resource_id, value)
 
     def apply(self, intent):
         """意图的唯一执行点（#1432）：按种类分派到基座的动作原语。"""
