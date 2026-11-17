@@ -103,6 +103,36 @@ class ValidatorTests(unittest.TestCase):
         import tomllib
         catalog.validate(tomllib.loads((ROOT / DATA).read_text(encoding="utf-8")))
 
+    def test_accepts_the_boundary_values(self):
+        """边界值也是合法数据：比例取 0 / 1、`ms=1`、`off_required` 不带 `keep`（#1414）。"""
+        self.assertIsNone(catalog.validate({"segment": [{"name": "a", "ops": [
+            {"kind": "gesture", "start": [0, 0.5], "end": [1, 1], "ms": 1},
+            {"kind": "off_required", "only": ["x"], "page": "p"},
+        ]}]}))
+
+    def test_the_top_level_sentences_are_exact(self):
+        """顶层两条拒绝的原文逐字钉住：换个词、换个大小写、前后加个字都是另一种话（#1414）。"""
+        for data, message in (
+            ("这不是表", "数据顶层必须是表（table）"),
+            ({"segment": "x"}, "至少要有 [[segment]]（一份数据至少一段）"),
+        ):
+            with self.subTest(message):
+                with self.assertRaises(catalog.SchemaError) as caught:
+                    catalog.validate(data)
+                self.assertEqual(str(caught.exception), message)
+
+
+class OpKeyListTests(unittest.TestCase):
+    """`OPS` 每条的允许键由 `_keys` 从一行空格分隔的名单拆出来。
+
+    它只在 import 时被调用一次，早于 mutation 生效，所以这里直接喂名单：一行写完、读一列就是
+    完整键集，既是这份表的可读性约定，也是它唯一的产出（#1414）。"""
+
+    def test_a_space_separated_line_becomes_the_key_set(self):
+        from catalog.schema import _keys
+        self.assertEqual(_keys("kind name args kwargs"),
+                         frozenset({"kind", "name", "args", "kwargs"}))
+
 
 class CatalogFamilyTests(unittest.TestCase):
     """族自己的守卫（沿用 #1398，结构反推 #1399）：句柄、产出、gap 跟快照与 `OPS` 对得上，case 行是纯数据。
@@ -1457,6 +1487,30 @@ class NewOpProjectionTests(unittest.TestCase):
         import recipe_source
         facts = recipe_source.scan_catalog(self.DATA)
         self.assertIn("p.setting", {call.name for call in facts.calls})
+
+
+class WordsWalkTests(unittest.TestCase):
+    """`words` 扫数据里的 op 表：没有段、段里没有 ops、kind 不在 `OPS` 里都跳过，跳过一个接着扫下一个。"""
+
+    def test_data_without_segments_yields_nothing(self):
+        self.assertEqual(catalog.words({}), [])
+
+    def test_a_code_segment_has_no_ops_to_walk(self):
+        self.assertEqual(catalog.words({"segment": [{"name": "a", "code": "x"}]}), [])
+
+    def test_an_unknown_kind_is_skipped_and_the_rest_still_scanned(self):
+        data = {"segment": [{"name": "a", "ops": [
+            {"kind": "explode", "only": ["不认的字"]},
+            {"kind": "off", "only": ["甲"], "page": "p"},
+        ]}]}
+        self.assertEqual(catalog.words(data), [("甲", "literal")])
+
+    def test_a_string_valued_key_is_one_word_with_its_source(self):
+        """字符串与列表两种写法都出词条：`only_code` 是策略名单，来源档是 `strategy`。"""
+        data = {"segment": [{"name": "a", "ops": [
+            {"kind": "off", "only_code": "system_ads", "page": "p"},
+        ]}]}
+        self.assertEqual(catalog.words(data), [("system_ads", "strategy")])
 
 
 class OffRequiredProjectionTests(unittest.TestCase):
