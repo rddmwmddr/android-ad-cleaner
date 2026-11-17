@@ -17,6 +17,7 @@
 - mutation job 加 `.mutmut` 判定缓存，非 `.py` 数据一改就整轮重跑（#1453）
 - mutation 的测试会话开头清掉 `tool/` 的进程级缓存，同类假存活加守卫（#1454）
 - 充分性判据拆成代码与数据两条：代码侧由变异测试判定，ADR-0043 记下取舍（#1415）
+- recipe_source 清到 mutation 存活 0：补页面标签、导入面与库下扫用例，降级输出逐行断言（#1421）
 - diagnostics 清到 mutation 存活 0：USB 解析补字段与大小写用例，花括号集合标等价 pragma（#1427）
 - catalog/schema 清到 mutation 存活 0，报错原文与边界值补用例（#1414）
 - recipe_meta 清到 mutation 存活 0：补段名缺省与散落文件两条用例（#1420）
