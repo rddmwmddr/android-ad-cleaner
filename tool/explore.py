@@ -17,6 +17,15 @@ AD = re.compile(r"广告|推荐|推送|营销|资讯|热搜|热点|热榜|热门
 ENTRY_SKIP = re.compile(r"侧边栏|返回|关于|检查更新|版本|清单|协议|声明|帮助|客服|反馈|退出|注销|账号|缓存|清除|恢复默认|备案|许可|开源")
 ME = ("我的", "我", "个人中心", "更多")
 SET = ("设置", "设置中心")
+# 不给包名时的厂商 App 粗筛：认错只是多探一个 App，不产出入口条目。
+VENDOR = re.compile(r"^(com\.(hihonor|honor|huawei|oplus|coloros|heytap|nearme|oppo|vivo|bbk|iqoo|miui|xiaomi|mi"
+                    r"|android\.browser|freeme|zhuoyi|feimi|droi)|cn\.honor)")
+
+
+def vendor_packages(listed):
+    """启动器列表里厂商 App 的包名：`cmd package query-activities --brief` 的输出按 `包名/页面` 一行一条。"""
+    return sorted({line.strip().split("/")[0] for line in listed.splitlines()
+                   if "/" in line and VENDOR.match(line.strip())})
 
 
 def entries(p, pkg):
@@ -104,9 +113,9 @@ def main():
     p = Phone(a[1], log=False)
     pkgs = a[2:]
     if not pkgs:
-        vendor = re.compile(r"^(com\.(hihonor|honor|huawei|oplus|coloros|heytap|nearme|oppo|vivo|bbk|iqoo|miui|xiaomi|mi|android\.browser)|cn\.honor)")
-        out = p.d.shell("cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER").output
-        pkgs = sorted({l.strip().split("/")[0] for l in out.splitlines() if "/" in l and vendor.match(l.strip())})
+        pkgs = vendor_packages(p.d.shell(
+            "cmd package query-activities --brief -a android.intent.action.MAIN"
+            " -c android.intent.category.LAUNCHER").output)
     model = p.d.shell("getprop ro.product.model").output.strip()
     rows, t0 = [], time.time()
     for pk in pkgs:

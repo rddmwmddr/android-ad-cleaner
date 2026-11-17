@@ -61,11 +61,12 @@ CHECKLIST = {"OPPO": "OPPO-ColorOS.md", "ONEPLUS": "OPPO-ColorOS.md", "REALME": 
              "HONOR": "荣耀-MagicOS.md",
              "XIAOMI": "小米-HyperOS.md", "REDMI": "小米-HyperOS.md", "POCO": "小米-HyperOS.md",
              "VIVO": "vivo-OriginOS.md", "IQOO": "vivo-OriginOS.md",
-             "HUAWEI": "华为-HarmonyOS.md", "SAMSUNG": "三星-OneUI.md", "MEIZU": "魅族-Flyme.md"}
+             "HUAWEI": "华为-HarmonyOS.md", "SAMSUNG": "三星-OneUI.md", "MEIZU": "魅族-Flyme.md",
+             "COOLPAD": "FreemeOS.md", "5G": "FreemeOS.md"}
 CHECKLIST_NAME = {"OPPO-ColorOS.md": "OPPO / ColorOS", "荣耀-MagicOS.md": "荣耀 / MagicOS",
                   "小米-HyperOS.md": "小米 / HyperOS", "vivo-OriginOS.md": "vivo / OriginOS",
                   "华为-HarmonyOS.md": "华为 / HarmonyOS", "三星-OneUI.md": "三星 / One UI",
-                  "魅族-Flyme.md": "魅族 / Flyme"}
+                  "魅族-Flyme.md": "魅族 / Flyme", "FreemeOS.md": "酷派 / FreemeOS"}
 
 AD_NAMES = {"com.opos.ads": "OPPO 广告服务",
             "com.heytap.pictorial": "OPPO 乐划锁屏（锁屏杂志）",

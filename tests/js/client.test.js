@@ -370,11 +370,13 @@ test("选择页：直接开始就把 msa 排进计划（#973）", async () => {
   }
 });
 
-test("没有机型脚本时，桌面版手动清单认三星、华为、魅族（#952）", async () => {
+test("没有机型脚本时，桌面版手动清单认三星、华为、魅族、卓易（#952、#1293）", async () => {
   const urls = [];
   const cases = [["samsung", "三星 / One UI ", "三星-OneUI.md"],
                  ["huawei", "华为 / HarmonyOS ", "华为-HarmonyOS.md"],
-                 ["meizu", "魅族 / Flyme ", "魅族-Flyme.md"]];
+                 ["meizu", "魅族 / Flyme ", "魅族-Flyme.md"],
+                 ["coolpad", "酷派 / FreemeOS ", "FreemeOS.md"],
+                 ["5G", "酷派 / FreemeOS ", "FreemeOS.md"]];
   for (const [brand, label, file] of cases) {
     const status = {
       info: { model: "X", brand, name: "Phone", os: "16", build: "", android: "16" },

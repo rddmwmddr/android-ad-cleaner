@@ -9,6 +9,7 @@
 | vivo / iQOO | [vivo-OriginOS.md](vivo-OriginOS.md) | X300 Ultra（V2547DA、V2547A）、X Fold6（V2545A，负一屏需手动）、iQOO V2324HA、V2361A、V1986A、V2417A、iQOO Z11 Turbo（V2536A）、vivo V2309A |
 | 魅族 | [魅族-Flyme.md](魅族-Flyme.md) | 21 Pro（MEIZU 21 Pro，Flyme 12.6.0.0A；路径手动核对，脚本整段待验证） |
 | 三星 | [三星-OneUI.md](三星-OneUI.md) | Galaxy Note10+ 5G（SM-N9760，One UI 4 / Android 12；机型脚本仅「广告」一段） |
+| 酷派 / 卓易 | [FreemeOS.md](FreemeOS.md) | CPDAY3（FreemeOS 11.0；入口与锁定的渠道，开关 UI 不可达，还没有机型脚本） |
 
 ## 怎么读
 
