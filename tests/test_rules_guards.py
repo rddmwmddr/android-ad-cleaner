@@ -543,13 +543,13 @@ class EngineGuards(unittest.TestCase):
                          + "\n".join(problems))
 
 
-CHAN_FAST = ROOT / "tool" / "chan_fast.py"
+OUTCOME_SOURCE = ROOT / "tool" / "channel_batch.py"
 OUTCOMES = "OutcomeKind"
 FROZEN_OUTCOMES = 15        # 封闭词表：加一个结局是一次有意为之的动作，数与 RULES 的键数一起改
 
 
 def outcome_vocabulary(source):
-    """`tool/chan_fast.py` 源码里结局词表的三层对账：枚举成员 ↔ 模块别名 ↔ `RULES` 的键。
+    """`tool/channel_batch.py` 源码里结局词表的三层对账：枚举成员 ↔ 模块别名 ↔ `RULES` 的键。
 
     只读 AST，不 import 引擎。返回问题清单，空列表才合规：新增一个没进 `RULES` 的枚举成员
     在本机就红，不必等跑到那一支时静默产出一个谁都解释不了的空结局。
@@ -558,7 +558,7 @@ def outcome_vocabulary(source):
     kind = next((node for node in tree.body
                  if isinstance(node, ast.ClassDef) and node.name == OUTCOMES), None)
     if kind is None:
-        return [f"{CHAN_FAST.name} 里找不到 class {OUTCOMES}"]
+        return [f"{OUTCOME_SOURCE.name} 里找不到 class {OUTCOMES}"]
     problems = []
     if not any(isinstance(base, ast.Name) and base.id == "StrEnum" for base in kind.bases):
         problems.append(f"{OUTCOMES} 要继承 StrEnum：json 序列化、f-string 与 == 字符串都靠它保持原样")
@@ -619,15 +619,15 @@ class ChannelOutcomeGuards(unittest.TestCase):
     """渠道结局是封闭词表：`OutcomeKind` 的成员 ≡ `RULES` 的键（#1433）。
 
     以前 15 个结局是裸字符串，拼错一个只在跑到那一支时炸，并静默产出一个空结局。
-    篡改用例把源码字符串喂进同一个检查函数，不真的改 `tool/chan_fast.py`。
+    篡改用例把源码字符串喂进同一个检查函数，不真的改 `tool/channel_batch.py`。
     """
 
     def test_enum_members_match_rules_keys(self):
-        problems = outcome_vocabulary(CHAN_FAST.read_text(encoding="utf-8"))
+        problems = outcome_vocabulary(OUTCOME_SOURCE.read_text(encoding="utf-8"))
         self.assertEqual(problems, [], "结局词表与 RULES 对不上：\n" + "\n".join(problems))
 
     def test_a_kind_missing_from_rules_is_reported(self):
-        source = CHAN_FAST.read_text(encoding="utf-8")
+        source = OUTCOME_SOURCE.read_text(encoding="utf-8")
         anchor = '    ERROR = "error"'
         self.assertIn(anchor, source, "篡改落点消失了，这条要跟着改")
         tampered = source.replace(anchor, anchor + '\n    FAKE_KIND = "fake_kind"', 1)
@@ -635,7 +635,7 @@ class ChannelOutcomeGuards(unittest.TestCase):
         self.assertTrue(any("FAKE_KIND" in problem for problem in problems), problems)
 
     def test_a_rule_without_a_kind_is_reported(self):
-        source = CHAN_FAST.read_text(encoding="utf-8")
+        source = OUTCOME_SOURCE.read_text(encoding="utf-8")
         line = next((line for line in source.splitlines() if line.startswith("    ERROR: dict(")), "")
         self.assertTrue(line, "篡改落点消失了，这条要跟着改")
         problems = outcome_vocabulary(source.replace(line + "\n", "", 1))
@@ -1128,6 +1128,7 @@ GEOMETRY_SCAN = (
     "tool/channel_decide.py",
     "tool/channel_arrive.py",
     "tool/channel_toggle.py",
+    "tool/channel_batch.py",
     "tool/phone/screen.py",
     "tool/phone/toggler.py",
     "tool/phone/dismisser.py",
@@ -1227,7 +1228,8 @@ class GeometryGuards(unittest.TestCase):
 DECIDE = ROOT / "tool" / "channel_decide.py"
 ARRIVE = ROOT / "tool" / "channel_arrive.py"
 TOGGLE = ROOT / "tool" / "channel_toggle.py"
-DECIDE_MODULES = (DECIDE, ARRIVE, TOGGLE)
+BATCH = ROOT / "tool" / "channel_batch.py"
+DECIDE_MODULES = (DECIDE, ARRIVE, TOGGLE, BATCH)
 DECIDE_FORBIDDEN = ("fast", "chan_fast", "phone")
 DECIDE_ACTIONS = frozenset({"click", "scroll", "back", "settle", "open_uri", "home",
                             "type_text", "apply", "tree", "focus", "snapshot"})

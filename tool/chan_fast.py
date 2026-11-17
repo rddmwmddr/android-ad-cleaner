@@ -11,7 +11,6 @@
 """
 import hashlib, re, shlex, sys, time, os
 from dataclasses import dataclass
-from enum import StrEnum
 from stdio import use_utf8_console
 
 use_utf8_console()
@@ -22,7 +21,7 @@ from row import PATH_DEPTH, SAME_LINE, link, skeleton
 from channel_decide import VIVO_ACTIVITY, VIVO_HOSTS, vivo_page
 from channel_arrive import truncated as truncated
 from channel_policy import classify, protected_channel
-from screen_snapshot import (ChannelEntry, ChannelList, FG_SERVICE_MARKS as FG_SERVICE_MARKS,
+from screen_snapshot import (FG_SERVICE_MARKS as FG_SERVICE_MARKS,
                              Intent, IntentKind, Progress, parse_notification_dump)
 from troubleshooting import ON_PHONE, XIAOMI_INPUT
 from backups import root_from_env
@@ -33,6 +32,24 @@ import channel_decide as decide
 import channel_toggle as toggle_decide
 import events
 import wait
+
+# 一项的结局、记账表与批处理策略住在 `channel_batch`（纯值类型与纯函数），这里显式 re-export：
+# 用例与渲染照旧取 `chan_fast.Outcome` / `chan_fast.DONE`，改名字要两边一起动。
+import channel_batch as batch
+from channel_batch import (APP_DENIED as APP_DENIED, APP_OFF as APP_OFF,
+                           APP_STATE_UNKNOWN as APP_STATE_UNKNOWN, ALREADY as ALREADY,
+                           CONFIRMED_LATER as CONFIRMED_LATER, DELETED as DELETED,
+                           DONE as DONE, ERROR as ERROR, GREYED as GREYED, KINDS as KINDS,
+                           MISMATCH as MISMATCH, NOT_CONFIRMED as NOT_CONFIRMED,
+                           NO_CHANNEL as NO_CHANNEL, Outcome as Outcome,
+                           OutcomeKind as OutcomeKind, PROTECTED as PROTECTED, RULES as RULES,
+                           UI_HIDDEN as UI_HIDDEN, UNCHANGED as UNCHANGED,
+                           account as account, channel_list_of as channel_list_of,
+                           exempt_from_recheck as exempt_from_recheck, failed as failed,
+                           kind_of_state as kind_of_state, pick_retry as pick_retry,
+                           plan_queue as plan_queue, recheck_row as recheck_row,
+                           retryable as retryable, second_pass as second_pass,
+                           toggled as toggled)
 
 # 「本机 UI 未暴露」名单落在备份目录同一个 root 下（ui_hidden.py），不另开一处。
 BACKUPS = root_from_env() or os.path.join(
@@ -88,109 +105,13 @@ def app_labels(reader, packages):
                 pass
     return out
 
-RETRY_MAX = 10
 ROW_NOT_FOUND = "应用通知页里没找到这一行"     # #427 / #428 的共同卡点：名字挂在了认不出的地方
 SKELETON_PER_RUN = 2                            # 一次运行最多带两份不同布局的骨架，防止占满上报预算
 
-# ---------- 一项的结局 ----------
-# 每个出口返回一个 Outcome；怎么记账（算不算失败、要不要重试、算不算拨动了、复查是否豁免）
-# 由下面的 RULES 表决定，不再由返回值的字符串形状暗示。detail 只给人看。
-# 15 个结局是封闭词表：成员与 RULES 的键一一对应，加一个没登记的结局由
-# tests/test_rules_guards.py 的 ChannelOutcomeGuards 在本机挡下。用 StrEnum 而不是
-# `class X(str, Enum)`：后者从 3.11 起 str() 给「X.DONE」，日志与对拍输出会跟着变。
-class OutcomeKind(StrEnum):
-    DONE = "done"                          # 达成目标（关掉或还原）
-    GREYED = "greyed"                      # 系统锁定了这个渠道：开关是灰的，点了也不会变
-    APP_DENIED = "app_denied"              # 应用通知整体关闭（POST_NOTIFICATIONS 被拒），渠道不会弹出
-    PROTECTED = "protected"                # 找机位一类功能通知，不动
-    NO_CHANNEL = "no_channel"              # 清单里的渠道在手机上不存在
-    DELETED = "deleted"                    # 渠道已删除
-    APP_OFF = "app_off"                    # 应用通知总开关关着
-    ALREADY = "already"                    # 本来就是目标状态，不打印
-    CONFIRMED_LATER = "confirmed_later"    # 第二遍重扫才确认其实已经改好
-    NOT_CONFIRMED = "not_confirmed"        # 页面没认出，或重取时页面已变化
-    APP_STATE_UNKNOWN = "app_state_unknown"    # 应用通知页认出来了，总开关状态却读不出来：判断不了是不是整体关闭
-    UI_HIDDEN = "ui_hidden"                # 页面打得开、页面上确实没有这一行：系统没把它放到界面上
-    MISMATCH = "mismatch"                  # 界面状态与渠道实际状态不一致
-    UNCHANGED = "unchanged"                # 点了三次，渠道状态仍未改变
-    ERROR = "error"                        # 意外异常，原文进 detail
 
-
-# 模块级名字照旧可用（用例与渲染都取 `chan_fast.DONE`）。别名与成员同名，
-# 改名要两处一起动，ChannelOutcomeGuards 对得上才算数。
-DONE = OutcomeKind.DONE
-GREYED = OutcomeKind.GREYED
-APP_DENIED = OutcomeKind.APP_DENIED
-PROTECTED = OutcomeKind.PROTECTED
-NO_CHANNEL = OutcomeKind.NO_CHANNEL
-DELETED = OutcomeKind.DELETED
-APP_OFF = OutcomeKind.APP_OFF
-ALREADY = OutcomeKind.ALREADY
-CONFIRMED_LATER = OutcomeKind.CONFIRMED_LATER
-NOT_CONFIRMED = OutcomeKind.NOT_CONFIRMED
-APP_STATE_UNKNOWN = OutcomeKind.APP_STATE_UNKNOWN
-UI_HIDDEN = OutcomeKind.UI_HIDDEN
-MISMATCH = OutcomeKind.MISMATCH
-UNCHANGED = OutcomeKind.UNCHANGED
-ERROR = OutcomeKind.ERROR
-
-
-@dataclass(frozen=True)
-class Outcome:
-    kind: OutcomeKind
-    detail: str = ""
-    payload: str = ""        # 进上报日志的机器行（页面骨架等），不参与判读
-
-
-# 怎么记账由这一张表决定，不由返回值的形状暗示。键是结局，值是它对整批的四件事：
-# fail_close / fail_open —— 关 / 开的方向上算不算失败（渠道已删除在还原时才算失败）；
-# retry —— 页面慢可能造成的失败，一批跑完再试一次；
-# toggled —— 算不算「实际拨动了」，用于「拨了 N 个」；
-# exempt —— 收尾复查时豁免（系统锁定、应总开关关着，本来就不会变）。
-# 渲染在 render()，是另一个问题：同一结局在不同方向下说法不同。
-RULES = {
-    DONE: dict(fail_close=False, fail_open=False, retry=False, toggled=True, exempt=False),
-    GREYED: dict(fail_close=False, fail_open=False, retry=False, toggled=False, exempt=True),
-    APP_DENIED: dict(fail_close=False, fail_open=False, retry=False, toggled=False, exempt=True),
-    PROTECTED: dict(fail_close=False, fail_open=False, retry=False, toggled=False, exempt=False),
-    NO_CHANNEL: dict(fail_close=True, fail_open=True, retry=False, toggled=False, exempt=False),
-    DELETED: dict(fail_close=False, fail_open=True, retry=False, toggled=False, exempt=False),
-    APP_OFF: dict(fail_close=False, fail_open=True, retry=False, toggled=False, exempt=False),
-    ALREADY: dict(fail_close=False, fail_open=False, retry=False, toggled=False, exempt=False),
-    CONFIRMED_LATER: dict(fail_close=False, fail_open=False, retry=False, toggled=True, exempt=False),
-    NOT_CONFIRMED: dict(fail_close=True, fail_open=True, retry=True, toggled=False, exempt=False),
-    # 记账与 NOT_CONFIRMED 相同：关不关得掉取决于没读到的那个状态，既不能算成功也不能记名单。
-    APP_STATE_UNKNOWN: dict(fail_close=True, fail_open=True, retry=True, toggled=False, exempt=False),
-    # 本机 UI 上根本没有这个渠道的入口：关不掉，重试也是同一个页面，收尾复查也不该算「仍开着」。
-    UI_HIDDEN: dict(fail_close=False, fail_open=True, retry=False, toggled=False, exempt=True),
-    MISMATCH: dict(fail_close=True, fail_open=True, retry=False, toggled=False, exempt=False),
-    UNCHANGED: dict(fail_close=True, fail_open=True, retry=True, toggled=False, exempt=False),
-    ERROR: dict(fail_close=True, fail_open=True, retry=False, toggled=False, exempt=False),
-}
-KINDS = tuple(RULES)
-
-
-def failed(outcome, want_on=False):
-    """这一项要不要算进退出码。"""
-    return RULES[outcome.kind]["fail_open" if want_on else "fail_close"]
-
-
-def retryable(outcome):
-    return RULES[outcome.kind]["retry"]
-
-
-def toggled(outcome):
-    return RULES[outcome.kind]["toggled"]
-
-
-def exempt_from_recheck(outcome):
-    """收尾复查时不算「仍开着」：系统锁定的渠道点不动，应用通知整体关着的渠道不会弹。"""
-    return RULES[outcome.kind]["exempt"]
-
-
-def kind_of_state(st):
-    """state() 的读数 → 结局：清单里的渠道不存在 / 已删除 / 应用通知总开关关着。"""
-    return {"--": NO_CHANNEL, "del": DELETED, "app": APP_OFF}[st]
+def state(d, app_off, pk, cid):
+    """旧签名（parse 的字典 + app_off）：判定在 `channel_batch.state()`。"""
+    return batch.state(channel_list_of(d, app_off), pk, cid)
 
 
 def render(outcome, label, want_on, pk=""):
@@ -237,12 +158,6 @@ def phone_model(reader):
     if not model or len(model) > 40 or any(c in model for c in "\r\n\t{}<>"):
         return ""
     return model
-
-
-def channel_list_of(channels, app_off):
-    """`parse()` 的返回形状 → 到达决策要的通知清单：toggle 已经读过，不再读一次 dumpsys。"""
-    return ChannelList(channels={key: ChannelEntry(*value) for key, value in channels.items()},
-                       app_off=dict(app_off), locked=frozenset(), foreground=frozenset())
 
 
 def parse(p, locked=None, foreground=None):
@@ -297,16 +212,6 @@ def load(path):
                 # 哪一行带应用名就用哪一行的。
                 rows[(pk, cid)] = label or rows.get((pk, cid), "")
     return [(pk, cid, label or cid) for (pk, cid), label in rows.items()]
-
-
-def state(d, app_off, pk, cid):
-    if (pk, cid) not in d:
-        return "--"
-    name, imp, deleted = d[(pk, cid)]
-    if imp == 0: return "off"
-    if deleted: return "del"
-    if app_off.get(pk): return "app"
-    return "ON"
 
 
 # 通知页不在 com.android.settings 里的系统：只接受这些 Activity，页面内容仍由 ChannelPage._recognise() 复核。
@@ -1038,20 +943,13 @@ def run(a):
         stay_on, awake = None, False
         exemptions, gone, halted = set(), False, False
         hidden = None               # 「本机 UI 未暴露」名单，第一次遇到才读型号（少一次 adb 往返）
-        todo = []
-        for pk, cid, label in items:
-            st = state(d, app_off, pk, cid)
-            if not want and protected_channel(d.get((pk, cid), ("", 0, False))[0], cid, label):
-                outcome = Outcome(PROTECTED, f"当前状态 {st}")
-            elif st in ("--", "del", "app"):
-                outcome = Outcome(kind_of_state(st))
-            elif (st == "off") != (not want):
-                todo.append((pk, cid, label))       # 要打开手机去拨
+        planned = plan_queue(items, channel_list_of(d, app_off), want)
+        todo = [row.item for row in planned if row.queued]
+        for row in planned:
+            if row.queued:          # 要打开手机去拨
                 continue
-            else:
-                outcome = Outcome(ALREADY)          # 已经是目标状态，不打印
-            show(outcome, label, want, pk)
-            if failed(outcome, want):
+            show(row.outcome, row.label, want, row.pk)
+            if failed(row.outcome, want):
                 failures += 1
         retry, reached = [], 0
         modes = {}              # 首次打开页面前才读（#330 第 4 条）：没有待拨的渠道就不会有这项副作用
@@ -1059,22 +957,18 @@ def run(a):
             for second in (False, True):
                 queue = todo
                 if second:
-                    # 页面加载慢时一次没认出（错误日志 10-28：关了 93 个剩 1 个，整步算失败）。
-                    # 这台已经关成功过才重试；华为那种一个都认不出的不重试，免得白等。
-                    if halted or p is None or not retry or len(retry) > RETRY_MAX or not (reached or len(retry) <= 2):
+                    # 门槛在 `channel_batch.second_pass()`：锁屏 / 断开过、没起过读屏、
+                    # 没有可重试的、超过上限，或这台一个都没关成功过（华为那种白等一轮）就不重试。
+                    if not second_pass(halted=halted, started=p is not None, retry=retry, reached=reached):
                         break
                     d, app_off = parse(reader)
-                    queue = []
-                    for pk, cid, label in retry:
-                        st = state(d, app_off, pk, cid)
-                        if (st == "off") == (not want):
-                            outcome = Outcome(CONFIRMED_LATER)
-                            failures -= 1       # 其实已经改过来了
-                            reached += 1
-                            changed += toggled(outcome)
-                            show(outcome, label, want, pk)
-                        else:
-                            queue.append((pk, cid, label))
+                    plan = pick_retry(retry, channel_list_of(d, app_off), want)
+                    for row in plan.confirmed:      # 重扫发现其实已经改好了
+                        failures -= 1
+                        reached += 1
+                        changed += toggled(row.outcome)
+                        show(row.outcome, row.label, want, row.pk)
+                    queue = [row.item for row in plan.queue]
                     if not queue:
                         break
                     print(f"再试一次刚才没确认的 {len(queue)} 个渠道", flush=True)
@@ -1111,16 +1005,17 @@ def run(a):
                         halted = True
                         print(f"  ✗ {e}  {label}")
                         break
-                    if failed(outcome, want):
+                    credit = account(outcome, want)
+                    if credit.failure:
                         if not second:
                             failures += 1
-                        if not second and retryable(outcome):
+                        if not second and credit.retry:     # 第一遍的页面慢，留给第二遍再试
                             retry.append((pk, cid, label))
                     else:
                         failures -= second      # 重试成功：第一遍记下的失败撤销
                         reached += 1
-                        changed += toggled(outcome)
-                    if exempt_from_recheck(outcome):
+                        changed += credit.toggled
+                    if credit.exempt:
                         exemptions.add((pk, cid))
                     if outcome.kind == UI_HIDDEN:
                         if hidden is None:
@@ -1147,20 +1042,20 @@ def run(a):
     else:
         exemptions = set()
     d, app_off = parse(reader)
+    channels = channel_list_of(d, app_off)
     bad = 0
     for pk, cid, label in items:
-        st = state(d, app_off, pk, cid)
-        protected = protected_channel(d.get((pk, cid), ("", 0, False))[0], cid, label)
-        if st == "ON" and not protected and (pk, cid) not in exemptions:
+        row = recheck_row(channels, pk, cid, label, exemptions)
+        if row.still_open:
             bad += 1
             if cmd == "off":
                 print(f"  仍开着：{label}（{pk}）")   # 后缀包名同失败行（#582）：同名渠道才分得清（#751）
         if cmd == "verify":
-            note = "，受保护，不参与营销关闭" if protected else ""
-            print(f"{st:4} {label}（{pk}{note}）")
+            note = "，受保护，不参与营销关闭" if row.protected else ""
+            print(f"{row.state:4} {label}（{pk}{note}）")
     print(f"营销渠道仍开着: {bad} 个")
     if cmd == "on":
-        pending = sum(state(d, app_off, pk, cid) != "ON" for pk, cid, _ in items)
+        pending = sum(batch.state(channels, pk, cid) != "ON" for pk, cid, _ in items)
         print(f"未恢复的渠道: {pending} 个")
         if pending or failures:
             sys.exit(1)
