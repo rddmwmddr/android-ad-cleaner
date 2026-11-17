@@ -9,13 +9,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import run
-from fixtures import load_recipe
+import recipe_case
 
 
-class K80ProRecipeTests(unittest.TestCase):
-    def load(self, phone):
-        scope, _ = load_recipe(phone, ROOT / "recipes/xiaomi/24122RKC7C/24122RKC7C.toml")
-        return scope
+class K80ProRecipeTests(recipe_case.RecipeSafetyCase):
+    RECIPE = ROOT / "recipes/xiaomi/24122RKC7C/24122RKC7C.toml"
 
     def test_actual_model_selects_own_recipe_and_pins_recorded_build(self):
         path, reference = run.recipe_for("24122RKC7C", "Redmi")
@@ -81,15 +79,6 @@ class K80ProRecipeTests(unittest.TestCase):
         scope = self.load(p)
         with patch.object(scope["time"], "sleep"):
             self.assertFalse(scope["gear_tap"]("com.android.browser", "BrowserSettingsActivity"))
-
-    def test_missing_target_aborts_without_touching_switches(self):
-        p = Mock()
-        p.switches.return_value = [("其他开关", True, (1, 2))]
-        p.scroll_more.return_value = False
-        scope = self.load(p)
-        with self.assertRaisesRegex(RuntimeError, "未识别全部目标"):
-            scope["close_named"](["个性化广告推荐"], "系统·广告服务")
-        p.off.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""tests/ 自身的两道守卫。
+"""tests/ 自身的四道守卫。
 
 `CollectionTests`（rule:dev.tests.cases-live-under-tests）：`discover -s tests` 只收 tests/，
 tests/ 之外的 .py 里出现 `def test_` 即红，逐文件列出命中数；隐藏目录与 node_modules /
@@ -9,7 +9,11 @@ build 不扫。
 
 `DomainTests`：七个按批次组织的回归文件里，每个测试类声明行为域 `DOMAIN`，且词表与
 docs/agents/test-anchors.md 的「行为域」一节逐项对拍。
+
+`DuplicationTests`：机型测试文件之间不许出现源码逐字节相同的 `def test_`——共用的那份应该
+在 tests/recipe_case.py 的基类里，复制一份就多一个 owner。#1406
 """
+import ast
 import os
 import re
 import sys
@@ -41,6 +45,43 @@ def offenders_in(root):
             if hits:
                 found[path.relative_to(root).as_posix()] = len(hits)
     return found
+
+
+def duplicate_cases(root):
+    """机型测试文件之间逐字节相同的 `def test_`：[[(文件, 用例名), …], …]。
+
+    同一文件里的副本不算：那份归文件自己管；跨文件才是「改一处漏一处」。"""
+    seen = {}
+    for path in sorted((root / "tests").glob("test_*_recipe.py")):
+        source = path.read_text(encoding="utf-8")
+        for node in ast.walk(ast.parse(source)):
+            if not isinstance(node, ast.FunctionDef) or not node.name.startswith("test_"):
+                continue
+            seen.setdefault(ast.get_source_segment(source, node), set()).add(
+                (path.name, node.name))
+    return sorted(sorted(owners) for owners in seen.values()
+                  if len({name for name, _ in owners}) > 1)
+
+
+class DuplicationTests(unittest.TestCase):
+    def test_no_case_body_is_copied_between_device_tests(self):
+        found = duplicate_cases(ROOT)
+        detail = "\n".join(
+            "、".join(f"{name}::{case}" for name, case in owners) + " 逐字节相同"
+            for owners in found)
+        self.assertEqual(found, [], detail +
+                         "\n共用的那份放进 tests/recipe_case.py 的基类，或者只留一份")
+
+    def test_a_copied_case_is_reported_with_both_files(self):
+        body = "    def test_same(self):\n        self.assertTrue(True)\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "tests").mkdir()
+            for name in ("test_a_recipe.py", "test_b_recipe.py"):
+                (root / "tests" / name).write_text(f"class T:\n{body}", encoding="utf-8")
+            self.assertEqual(duplicate_cases(root),
+                             [[("test_a_recipe.py", "test_same"),
+                               ("test_b_recipe.py", "test_same")]])
 
 
 class CollectionTests(unittest.TestCase):

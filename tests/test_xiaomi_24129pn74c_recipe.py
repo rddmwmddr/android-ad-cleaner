@@ -23,6 +23,7 @@ import fast
 import run
 import fixtures
 from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock, stub
+import recipe_case
 
 GEAR_PAGE = """<hierarchy rotation="0">
   <node class="android.widget.FrameLayout" package="com.android.calendar" bounds="[0,0][1080,2340]">
@@ -91,7 +92,9 @@ TOOLBAR_PANEL = """<hierarchy rotation="0">
 </hierarchy>"""
 
 
-class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
+class Xiaomi24129PN74CRecipeTests(recipe_case.RecipeSafetyCase):
+    RECIPE = ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml"
+
     def load(self, phone, recipe="24129PN74C.toml"):
         scope, _ = load_recipe(phone, ROOT / "recipes/xiaomi/24129PN74C" / recipe)
         fixtures.bridge_scope(self, scope)
@@ -239,45 +242,6 @@ class Xiaomi24129PN74CRecipeTests(unittest.TestCase):
         self.assertEqual(scope["FAILED_STEPS"], ["浏览器"])
         p.off.assert_not_called()
         self.assertIn(f"浏览器设置页没有打开；停在 {BROWSER}", out.getvalue())
-
-    def test_missing_target_aborts_without_touching_switches(self):
-        p = Mock()
-        p.switches.return_value = [("其他开关", True, (1, 2))]
-        p.scroll_more.return_value = False
-        scope = self.load(p)
-        with self.assertRaisesRegex(RuntimeError, "未识别全部目标"):
-            scope["close_named"](["个性化广告推荐"], "系统·广告服务")
-        p.off.assert_not_called()
-
-    def test_reverted_switch_is_failure_not_verified(self):
-        p = Mock()
-        p.switches.return_value = [("个性化广告推荐", True, (1, 2))]
-        p.scroll_more.return_value = False
-        scope = self.load(p)
-        with self.assertRaisesRegex(RuntimeError, "回读未确认关闭"):
-            scope["close_named"](["个性化广告推荐"], "系统·广告服务")
-        self.assertEqual(scope["VERIFIED_SWITCHES"], 0)
-
-    def test_already_off_target_is_verified(self):
-        p = Mock()
-        p.switches.return_value = [("个性化广告推荐 个性化广告服务会根据您的喜好进行精准匹配。", False, (1, 2))]
-        p.scroll_more.return_value = False
-        scope = self.load(p)
-        scope["close_named"](["个性化广告推荐"], "系统·广告服务")
-        self.assertEqual(scope["VERIFIED_SWITCHES"], 1)
-        p.off.assert_called_once()
-
-    def test_unrelated_switch_changed_is_not_reported_as_verified(self):
-        p = Mock()
-        p.switches.side_effect = [
-            [("个性化广告推荐", True, (1, 2)), ("其他开关", True, (1, 3))],
-            [("个性化广告推荐", False, (1, 2)), ("其他开关", False, (1, 3))],
-        ]
-        p.scroll_more.return_value = False
-        scope = self.load(p)
-        with self.assertRaisesRegex(RuntimeError, "其他开关状态变化"):
-            scope["close_named"](["个性化广告推荐"], "系统·广告服务")
-        self.assertEqual(scope["VERIFIED_SWITCHES"], 0)
 
     def test_protection_switch_is_not_in_any_only_list(self):
         """「限制广告跟踪」「防止广告追踪」这类开关是保护类，打开才对，不能进 only 名单。"""

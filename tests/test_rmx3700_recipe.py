@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import unittest
 
 from fixtures import keep_list, phone_stub
+import recipe_case
 from recipe_case import fake_shell, load
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,12 +21,9 @@ def make_phone(model="RMX3700", build="RMX3700_16.0.5.1300(CN01)", locked=False)
     return phone_stub("RMX3700", d=d, W=1240, H=2772, locked=lambda: locked, commands=commands)
 
 
-class RecipeSafetyTests(unittest.TestCase):
-    def test_no_selection_does_not_touch_phone(self):
-        phone = make_phone()
-        result = load(phone, RECIPE)
-        self.assertEqual(result["RESULTS"], [])
-        self.assertEqual(phone.commands, [])
+class RecipeSafetyTests(recipe_case.OfflineSafetyCase):
+    RECIPE = RECIPE
+    make_phone = staticmethod(make_phone)
 
     def test_wrong_model_skips_all_steps(self):
         phone = make_phone(model="OTHER")
@@ -38,12 +36,6 @@ class RecipeSafetyTests(unittest.TestCase):
     def test_different_build_skips(self):
         result = load(make_phone(build="RMX3700_17.0.0"), RECIPE, ["软件商店"])
         self.assertEqual(result["RESULTS"], [("软件商店", "跳过")])
-
-    def test_locked_phone_fails_the_step(self):
-        """锁屏不再静默跳过：这一段记未完成，退出码由失败台账给出（#839）。"""
-        result = load(make_phone(locked=True), RECIPE, ["软件商店"])
-        self.assertEqual(result["RESULTS"], [("软件商店", "未完成")])
-        self.assertEqual(result["FAILED_STEPS"], ["软件商店"])
 
     def test_store_keep_holds_protected_features(self):
         keep = keep_list(RECIPE, "软件商店")
@@ -81,15 +73,6 @@ class RecipeSafetyTests(unittest.TestCase):
         phone.screen.tree = lambda: None
         phone.screen.texts = lambda root: [("设置", (0, 0, 100, 100), {"class": "TextView"})]
         phone.switches = lambda root: [("广告", True, (2294, 600))]
-        function = load(phone, RECIPE)["wait_page"]
-        with contextlib.redirect_stdout(io.StringIO()):
-            self.assertFalse(function("ExampleActivity", "设置", timeout=0.01))
-
-    def test_wait_page_rejects_consent_button(self):
-        phone = make_phone()
-        phone.screen.focus = lambda: "example.app/ExampleActivity"
-        phone.screen.tree = lambda: None
-        phone.screen.texts = lambda root: [("同意并继续", (0, 0, 100, 100), {"class": "android.widget.Button"})]
         function = load(phone, RECIPE)["wait_page"]
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertFalse(function("ExampleActivity", "设置", timeout=0.01))
