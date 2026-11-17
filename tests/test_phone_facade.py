@@ -13,18 +13,22 @@
 脚本访问面零变化），不是新增行为。`RecipeWriteTests` 是唯一的例外，它在旧树上红（#1047）。
 """
 import ast
+import contextlib
 import inspect
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import fast  # noqa: E402
+from devtools import script_surface  # noqa: E402
 from fixtures import phone_stub  # noqa: E402
 
 RECIPES = ROOT / "recipes"
@@ -434,6 +438,58 @@ class RecipeWriteTests(unittest.TestCase):
         missing = sorted(name for name in writes if not hasattr(phone, name))
         self.assertEqual(missing, [], "脚本写了门面上不存在的名字，写了也不会报错："
                                      + "、".join(missing))
+
+
+@contextlib.contextmanager
+def _script_tree(files):
+    """临时目录里造一份最小脚本树：{相对路径: 源码}，用来给守卫喂反例。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        for rel, text in files.items():
+            path = Path(tmp) / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+        yield Path(tmp)
+
+
+class ScriptSurfaceTests(unittest.TestCase):
+    """rule:dev.phone.script-surface（#1477）：脚本面是一份明写的集合。
+
+    病因是同一个动作两条访问路径：`p.d.click` 与 `Screen.click` 是一件事的两条路，一条有尺寸 /
+    越界守卫、一条没有，WKL-AN20 因此走了另一条。只修最响的那一条，同构的泄漏半年后还会长出来
+    ——所以钉的是「脚本能碰的名字」这份声明本身（`tool/phone/surface.py` 的 `SCRIPT_SURFACE`）。
+
+    声明是单一来源：本类只做对账，名单不在这里再抄一份。
+    """
+
+    def test_the_real_tree_only_uses_declared_names(self):
+        self.assertTrue(script_surface.script_files(ROOT), "没扫到脚本，守卫会空转")
+        found = script_surface.violations(ROOT)
+        self.assertEqual(
+            found, [],
+            "脚本碰了声明外的门面名字（`tool/phone/surface.py` 的 `SCRIPT_SURFACE`）：\n"
+            + "\n".join(f"{path}:{line}  p.{name}" for path, line, name in found))
+
+    def test_every_declared_name_is_a_real_facade_member(self):
+        """拼错名字会让守卫形同虚设：声明里每个名字都得是门面上真有的成员。"""
+        phone = facade()
+        missing = sorted(name for name in script_surface.SCRIPT_SURFACE if not hasattr(phone, name))
+        self.assertEqual(missing, [], "声明里有门面上不存在的名字："
+                                     + "、".join(missing))
+
+    def test_an_undeclared_name_is_reported_with_its_location(self):
+        with _script_tree({"recipes/honor/X1/X1.py": "def step(p, rt):\n    p.serial.strip()\n"}) as root:
+            found = script_surface.violations(root)
+        self.assertEqual(found, [("recipes/honor/X1/X1.py", 2, "serial")])
+
+    def test_the_library_layer_is_scanned_too(self):
+        with _script_tree({"recipe_lib/honor.py": "def go(p):\n    p.d.click(1, 2)\n"}) as root:
+            found = script_surface.violations(root)
+        self.assertEqual(found, [("recipe_lib/honor.py", 2, "d")])
+
+    def test_writes_are_scanned_as_well(self):
+        with _script_tree({"recipe_lib/honor.py": "def go(p):\n    p.vivo_seen = True\n"}) as root:
+            found = script_surface.violations(root)
+        self.assertEqual(found, [("recipe_lib/honor.py", 2, "vivo_seen")])
 
 
 if __name__ == "__main__":

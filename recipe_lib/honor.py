@@ -182,7 +182,7 @@ def close_named_honor(p, rt, names, title, package, marker, max_screens=6, drawn
         if drawn:
             rt.require(package == "com.hihonor.dz.reader" and marker == "广告推荐服务",
                          "此页不允许自绘开关截图")
-            return p.screen.switches(root)
+            return native(root)
         return native(root)
 
     p.switches = read
