@@ -1313,3 +1313,11 @@ check = "test:test_family::FamilyRegistryTests.test_every_family_matches_its_sna
 status = "enforced"
 why = "一条用例可以悄悄消失而无人发现：owner 是票号、票不会失效，删掉一条 case 既没有守卫报红，`tests/` 也不进覆盖率口径，计数看不见。族把 case 的 owner 换成它依赖的结构项，四个族的 `violations()` 一次查清「case 集合对不上快照、句柄指向已消失的结构项、产出偏离快照」三件事。没有这个聚合守卫，某个族自己的自检被删也无处可见——删一条 case 曾静默通过，靠它才可判。"
 expires_if = "四个族都不再承载 case（族被别的承接形态取代）、或「case 集合与结构项一致」改由另一条守卫覆盖时删。"
+
+[[rule]]
+id = "dev.phone.script-surface"
+source = "CLAUDE.md#开发"
+check = "test:test_phone_facade::ScriptSurfaceTests.test_the_real_tree_only_uses_declared_names"
+status = "enforced"
+why = "同一个动作在门面上原本有两条访问路径：`p.d.click` 走 uiautomator2 原生点击，`Screen.click` 走 `input swipe x y x y 80` 并带尺寸与越界校验——WKL-AN20 因此走了没有守卫的那一条，同一件事在四台机型上出现两种点击行为。只修最响的那一条没有用：`p.serial` / `p.systemui_text` / `p.d(...)` 选择器这些同构泄漏会一个个长回来，每次都要读代码才发现。声明（`tool/phone/surface.py` 的 `SCRIPT_SURFACE`）是脚本能碰的名字的唯一清单，`recipes/` 与 `recipe_lib/` 里出现清单外的 `p.<名字>` 即红（#1477）。"
+expires_if = "脚本不再直接吃 `Phone`（改成显式的数据 + 运行时调用）时，「脚本面」这个概念随之消失，删。"

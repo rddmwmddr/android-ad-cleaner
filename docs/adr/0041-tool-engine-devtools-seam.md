@@ -52,7 +52,7 @@ from(repo.resolve("tool")) { into("tool"); include("**/*.py", "*.dex") }
 
 ### 两份冻结名单与三条守卫
 
-`tests/test_tool_package.py` 冻结两份名单——引擎 43 个顶层模块、工具链 21 个顶层模块——
+`tests/test_tool_package.py` 冻结两份名单——引擎 43 个顶层模块、工具链 22 个顶层模块——
 并用三条用例守它：
 
 1. `tool/` 的顶层 `.py` 恰好是引擎名单，`devtools/` 的顶层 `.py`（除 `__init__.py`）恰好是工具链
