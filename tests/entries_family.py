@@ -1,4 +1,4 @@
-"""entries 族的用例表（#1401）：入口速查表的一行一条，共 53 条。
+"""entries 族的用例表（#1401）：入口速查表的一行一条，共 54 条。
 
 每行是 `entries.ENTRIES` 里的一行入口，id 写成 `<family>/<group>`，与家族、分组的人读写法对得上。
 这些行原先被 `test_every_entry_has_a_source` 的双层循环逐行扫过，owner 是票号；现在 owner 是它依赖的
@@ -70,6 +70,7 @@ CASES = [
     {"id": "samsung/系统广告", "family": "samsung", "group": "系统广告"},
     {"id": "samsung/应用商店", "family": "samsung", "group": "应用商店"},
     {"id": "samsung/通知渠道", "family": "samsung", "group": "通知渠道"},
+    {"id": "freeme/安全管家", "family": "freeme", "group": "安全管家"},
 ]
 
 

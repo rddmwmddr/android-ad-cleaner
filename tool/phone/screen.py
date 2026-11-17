@@ -7,14 +7,18 @@
 两条路共用同一份匹配，谁也不依赖谁。
 """
 import re
+import shlex
 import time
 import xml.etree.ElementTree as ET
 
 import adb_link
 import wait
 from captures import Captures
-from row import bounds, control, dedupe, summary, switch_row, title_hit, unique
+from geometry import CONFIRM_BUTTON_MAX_H, CONFIRM_BUTTON_MAX_W, FIND_EDGE_BOTTOM, FIND_VISIBLE_BOTTOM
+from geometry import ICON_AREA, ICON_MAX_H, ICON_MAX_W, SCROLL_BOTTOM, SCROLL_FRAC, SCROLL_MAX_FRAC
+from row import bounds, summary, switch_row
 from row import residual_note as confirm_note
+from screen_snapshot import IntentKind, on_screen, pixel_on, snapshot_from_tree, switch_rows, text_hits
 from troubleshooting import TAPPED, XIAOMI_INPUT, input_blocked
 
 # 确认框的按钮文字。认法在 `confirm_target()`：点开关后要再点一次才生效的对话框，按钮落在这些词里。
@@ -35,6 +39,9 @@ class Screen:
 
     `systemui_text` 由它持有：`texts()` 是读屏最热路径，读的正是这个开关（ADR-0033）。
     """
+
+    # `__init__` 会按连接重置；没走 `__init__` 的基座（测试替身）读到的也是「不算 systemui」
+    systemui_text = False
 
     def __init__(self, conn, captures=None):
         self.conn = conn
@@ -78,15 +85,7 @@ class Screen:
 
     def texts(self, root=None):
         root = root if root is not None else self.tree()
-        out = []
-        # 华为 HarmonyOS 4 把同一个控件吐出两次；按节点身份数行时会变成「同名 2 行」（#510）
-        for n in unique(root.iter("node")):
-            if n.get("package") == "com.android.systemui" and not self.systemui_text:
-                continue                      # 状态栏/通知栏文字不算
-            t = (n.get("text") or n.get("content-desc") or "").strip()
-            if t and self.on_screen(n):
-                out.append((t, bounds(n), n))
-        return out
+        return text_hits(root, self.W, self.H, self.systemui_text)
 
     def page_text(self):
         """失败诊断用：当前屏可见文字拼成一行。入口找不到时说明停在哪个页面，光报「没找到」分不清
@@ -95,11 +94,7 @@ class Screen:
 
     def on_screen(self, n):
         """折叠屏合上时，dump 里还留着内屏那份节点，坐标在外屏之外（Issue #2）；点上去没反应。"""
-        if n.get("visible-to-user") == "false":
-            return False
-        l, t, r, b = bounds(n)
-        cx, cy = (l + r) // 2, (t + b) // 2
-        return r > l and b > t and 0 <= cx < self.W and 0 <= cy < self.H
+        return on_screen(n, self.W, self.H)
 
     def switches(self, root=None):
         """[(标题, checked, (cx,cy))]，标题取开关所在行的第一段文字。落点是开关本体。"""
@@ -108,65 +103,32 @@ class Screen:
     def switch_rows(self, root=None):
         """[(标题, checked, 开关本体落点, 行标题落点)]：与 switches() 同一次遍历，多带标题落点。
         落点为 None 表示这一行没有独立标题（标题取自开关自己的标签）；`off()` 在开关本体
-        点了不动时改点标题（#608）。"""
+        点了不动时改点标题（#608）。规则只有一份，在 `screen_snapshot.switch_rows()`。"""
         root = root if root is not None else self.tree()
-        parent = {c: p for p in root.iter() for c in p}
-        out = []
-        shot = None
-        for n in unique(root.iter("node")):
-            if not self.on_screen(n) or "RadioButton" in n.get("class", ""):
-                continue
-            if n.get("checkable") != "true":
-                rid = (n.get("resource-id") or "").lower()
-                # 自绘开关：看颜色；TextSwitcher 是文字轮播。里面已经有真开关的（AOSP 渠道页的 main_switch_bar）不算：
-                # 按颜色猜出的状态会盖过里面那个真开关，关着的渠道被读成开着，还原营销通知失败（0.3.1 发版前模拟器发现）
-                if ("switch" in rid and "switcher" not in rid and n.get("clickable") == "true"
-                        and not any(c is not n and c.get("checkable") == "true" for c in n.iter("node"))):
-                    l, t, r, b = bounds(n)
-                    if r - l > 0 and b - t > 0:
-                        if shot is None:
-                            shot = self.conn.reader.screenshot()
-                        # UI 坐标与截图可能来自不同分辨率/旋转状态。不能越界取样，也不能把未知状态当关。
-                        if shot.size != (self.W, self.H):
-                            continue
-                        on = self._pixel_on(shot, l, t, r, b)
-                        if on is None:
-                            continue
-                        n.set("checked", "true" if on else "false")
-                        n.set("checkable", "true")
-                        n.set("class", "SelfDrawnSwitch")
-                if n.get("checkable") != "true":
-                    continue
-            cls = n.get("class", "")
-            if not any(k in cls for k in ("Switch", "CheckBox", "ToggleButton", "Compound")) and n.get("clickable") != "true":
-                continue
-            l, t, r, b = bounds(n)
-            if r - l <= 0 or b - t <= 0 or not self.on_screen(n):
-                continue
-            ctrl = control(n, self.on_screen)       # 卡片整体 checkable 时点在卡片中心不生效
-            l, t, r, b = bounds(ctrl)
-            # 卡片自己报状态时以卡片为准；缺这个属性才读内层开关，别把缺属性当成「关」
-            checked = n.get("checked") if n.get("checked") is not None else ctrl.get("checked")
-            title, hit = title_hit(n, parent, self.on_screen, self.H)
-            out.append((title, checked == "true", (l, t, r, b), hit))
-        return [(title, on, ((l + r) // 2, (t + b) // 2), hit)
-                for title, on, (l, t, r, b), hit in dedupe(out)]
+        return switch_rows(root, self.W, self.H, self._switch_screenshot)
+
+    def _switch_screenshot(self):
+        """自绘开关要截图；取图归读屏 adapter，只有真的遇到自绘节点时才调用。"""
+        return self.conn.reader.screenshot()
 
     @staticmethod
     def _pixel_on(img, l, t, r, b):
         """开关轨道取几个点：彩色（蓝/绿/橙，饱和度高）=开，灰白=关。"""
-        w, h = img.size
-        if not (0 <= l < r <= w and 0 <= t < b <= h):
-            return None
-        img = img.convert("RGB")
-        sat = 0
-        for fx in (0.25, 0.5, 0.75):
-            R, G, B = img.getpixel((int(l + (r - l) * fx), (t + b) // 2))
-            sat = max(sat, max(R, G, B) - min(R, G, B))
-        return sat > 60
+        return pixel_on(img, l, t, r, b)
 
     def sig(self):
         return "|".join(t for t, _, _ in self.texts())
+
+    def snapshot(self, with_rows=True, focus=None, root=None):
+        """一次读屏产出的屏幕快照：一次树、一次前台，行与文字都从同一份 root 派生（#1432）。
+
+        `with_rows=False` 不算开关行，也就不给自绘开关截图：只认标题 / 认行的调用点不该多一次取图。
+        `focus` / `root` 是调用方刚读过的那份，传进来就不再读一次；`focus=""` 表示「没有前台」。
+        按包探测的通知权限状态与 appops 模式不在这里：它们是一次额外 adb 往返，不提前读。"""
+        root = self.tree() if root is None else root
+        focus = self.focus() if focus is None else focus
+        return snapshot_from_tree(root, self.W, self.H, focus, self.systemui_text,
+                                  with_rows=with_rows, screenshot=self._switch_screenshot)
 
     def ls(self):
         root = self.tree()
@@ -239,7 +201,7 @@ class Screen:
             if (n.get("text") or "").strip() != c or n.get("clickable") != "true":
                 return False
             l, t, r, b = bounds(n)
-            return r - l < self.W * 0.5 and b - t < self.H * 0.12
+            return r - l < self.W * CONFIRM_BUTTON_MAX_W and b - t < self.H * CONFIRM_BUTTON_MAX_H
 
         for hit in (button_hit, text_view_hit):
             for c in CONFIRM:
@@ -270,7 +232,7 @@ class Screen:
         句子本身是 `row.residual_note()` 的纯函数，这里只负责读一次屏（导航与拨动共用这一份）。"""
         return confirm_note(self.residual_confirm(root), sep)
 
-    def icon_candidates(self, area=(0.72, 0.0, 1.0, 0.16)):
+    def icon_candidates(self, area=ICON_AREA):
         """没有文字、点了才知道去哪的图标（右上角齿轮、更多）：按位置从右往左给候选坐标。
         整块卡片/列表项点了会进别的页面，按尺寸排除掉。"""
         x0, y0, x1, y1 = (v * s for v, s in zip(area, (self.W, self.H, self.W, self.H), strict=True))    # area 是 (x0,y0,x1,y1)
@@ -284,7 +246,7 @@ class Screen:
             cx, cy = (l + r) // 2, (t + b) // 2
             if not (x0 <= cx <= x1 and y0 <= cy <= y1 and self.on_screen(n)):
                 continue
-            if r - l > self.W * 0.25 or b - t > self.H * 0.10:
+            if r - l > self.W * ICON_MAX_W or b - t > self.H * ICON_MAX_H:
                 continue
             out.append((cx, cy))
         out.sort(key=lambda xy: -xy[0])        # 齿轮在最右边，先试它
@@ -313,11 +275,11 @@ class Screen:
         return bool(wait.until(self.sig, maxwait, poll=0.1, stable=0.2,
                                changed_from=before, now=time.time, sleep=time.sleep))
 
-    def scroll(self, frac=0.45, up=False):
+    def scroll(self, frac=SCROLL_FRAC, up=False):
         """按下-移动-停 0.12 秒-松开：没有惯性，翻多少是多少，约 0.45 秒。"""
         x = self.W * 7 // 10 if self.W > 2000 else self.W // 2
-        frac = min(frac, 0.58)                   # 留在 0.22H~0.80H 之间拖，避开标题栏和底栏
-        y1, y2 = int(self.H * 0.80), int(self.H * (0.80 - frac))
+        frac = min(frac, SCROLL_MAX_FRAC)        # 从 SCROLL_BOTTOM 往上拖，最远落在 0.22H，避开标题栏和底栏
+        y1, y2 = int(self.H * SCROLL_BOTTOM), int(self.H * (SCROLL_BOTTOM - frac))
         if up:
             y1, y2 = y2, y1
         c = [f"input motionevent DOWN {x} {y1}"]
@@ -354,12 +316,56 @@ class Screen:
                 break
             focus = self.focus()
             before = {t for t, _, _ in self.texts()}
-            self.scroll(0.58, up=True)
+            self.scroll(SCROLL_MAX_FRAC, up=True)
             scrolled += 1
             if self.focus() != focus:
                 raise RuntimeError("回到页顶时离开了当前设置页，停止本段")
             if {t for t, _, _ in self.texts()} <= before:
                 break
+
+    def open_uri(self, uri):
+        """按 URI 拉起：公开 Intent，交给系统决定落在哪个 App。"""
+        self.conn.reader.shell("am start -a android.intent.action.VIEW -d " + shlex.quote(uri))
+
+    def start_settings(self, action, extras=()):
+        """按 action + extras 拉起系统设置页（渠道页 / 应用通知页）。
+
+        NEW_TASK|CLEAR_TASK 避免复用旧页面；extras 按给定顺序逐个下发。"""
+        command = f"am start -f 0x10008000 -a {action}"
+        for key, value in extras:
+            command += f" --es {key} {shlex.quote(value)}"
+        self.conn.reader.shell(command)
+
+    def home(self):
+        """回桌面。"""
+        self.conn.reader.shell("input keyevent HOME")
+
+    def type_text(self, text, timeout=4.0):
+        """往当前聚焦的输入框打字：只发一次带超时的 setText，退化链归设置搜索（这里不做）。"""
+        selector = self.conn.reader(classNameMatches=r".*(EditText|AutoCompleteTextView)$",
+                                    focused=True).selector
+        self.conn.reader.jsonrpc.setText(selector, text, http_timeout=timeout)
+
+    def apply(self, intent):
+        """意图的唯一执行点：按种类分派到动作原语，等待与重试由调用方的循环管。"""
+        if intent.kind == IntentKind.TAP:
+            if intent.at is None:
+                raise ValueError("点击意图缺少坐标")
+            self.click(*intent.at)
+        elif intent.kind == IntentKind.SCROLL:
+            self.scroll()
+        elif intent.kind == IntentKind.BACK:
+            self.back()
+        elif intent.kind == IntentKind.OPEN:
+            self.open_uri(intent.target)
+        elif intent.kind == IntentKind.HOME:
+            self.home()
+        elif intent.kind == IntentKind.TYPE:
+            self.type_text(intent.text)
+        elif intent.kind == IntentKind.SETTINGS:
+            self.start_settings(intent.target, intent.extras)
+        else:
+            raise ValueError(f"未知意图种类：{intent.kind}")
 
     def find(self, text, exact=False, root=None, edge_ok=False, nav=False):
         """先找文字完全相同的，再找包含的。nav=True（tap 导航用）：包含匹配不点开关所在行里的文字——
@@ -377,10 +383,10 @@ class Screen:
                     if switch_row(n, parents):
                         continue
                 cy = (tp + b) // 2
-                if cy < self.H * 0.92:
+                if cy < self.H * FIND_VISIBLE_BOTTOM:
                     return ((l + r) // 2, cy)
                 if edge_ok == "tab":                     # 底部标签栏：直接点中心
                     return ((l + r) // 2, cy)
-                if edge_ok and tp < self.H * 0.975:      # 已到页底翻不上来：点这一行的上沿
+                if edge_ok and tp < self.H * FIND_EDGE_BOTTOM:      # 已到页底翻不上来：点这一行的上沿
                     return ((l + r) // 2, tp + 15)
         return None

@@ -13,23 +13,9 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import fixtures
 import run
-from fixtures import load_recipe
+from recipe_case import load, radios
 
 RECIPE = ROOT / "recipes/oppo/PMA110/PMA110.toml"
-
-
-def load(phone, only=None):
-    scope, _ = load_recipe(phone, RECIPE, only)
-    return scope
-
-
-def radios(show=True):
-    return ET.fromstring(f'''<hierarchy><node text="不显示轮播推荐" clickable="true"/>
-      <node><node text="显示轮播推荐"/><node class="android.widget.RadioButton"
-        checkable="true" checked="{str(show).lower()}" enabled="true" bounds="[20,30][60,70]"/></node>
-      <node><node text="不显示轮播推荐"/><node class="android.widget.RadioButton"
-        checkable="true" checked="{str(not show).lower()}" enabled="true" bounds="[200,300][240,340]"/></node>
-    </hierarchy>''')
 
 
 class Pma110RecipeTests(unittest.TestCase):
@@ -37,7 +23,7 @@ class Pma110RecipeTests(unittest.TestCase):
         self.p = Mock()
         self.p.changed = []
         self.p.locked.return_value = False
-        self.scope = load(self.p)
+        self.scope = load(self.p, RECIPE)
         # 用例往 scope[name] 放桩；统一接缝把它们接到库模块与解释器。
         self.read_switches = self.scope["read_switches"] = Mock()
         self.scope["read_switches"] = self.read_switches
@@ -113,7 +99,7 @@ class Pma110RecipeTests(unittest.TestCase):
         self.p.safe_mode = True
         self.p.d.shell.side_effect = [SimpleNamespace(output="PMA110"),
                                       SimpleNamespace(output="PMA110_17.0.0.106(CN01)")]
-        scope = load(self.p, ["广告跟踪"])
+        scope = load(self.p, RECIPE, ["广告跟踪"])
         self.assertEqual(scope["RESULTS"], [("广告跟踪", "跳过")])
         self.assertEqual(scope["SKIPPED_STEPS"], ["广告跟踪"])
         self.p.off.assert_not_called()

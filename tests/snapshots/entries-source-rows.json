@@ -1,6 +1,7 @@
 {
-  "reason": "entries family: one case per table row so a removed row is visible (#1401)",
+  "reason": "收卓易 FreemeOS 家族的入口行（#1293）",
   "ids": [
+    "freeme/安全管家",
     "honor/YOYO",
     "honor/下拉搜索",
     "honor/主题",

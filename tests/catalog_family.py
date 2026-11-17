@@ -304,19 +304,19 @@ CASES = [
     {
         "id": "off-missing-page",
         "data": {"segment": [{"name": "a", "ops": [{"kind": "off"}]}]},
-        "needle": "缺 page",
+        "needle": "第 1 个 op 缺 page",
     },
     {
         "id": "off-required-missing-only",
         "data": {"segment": [{"name": "a", "ops": [{"kind": "off_required", "page": "p"}]}]},
-        "needle": "缺 only",
+        "needle": "第 1 个 op 缺 only",
     },
     {
         "id": "off-required-missing-page",
         "data": {"segment": [{"name": "a", "ops": [
             {"kind": "off_required", "only": ["x"]},
         ]}]},
-        "needle": "缺 page",
+        "needle": "第 1 个 op 缺 page",
     },
     {
         "id": "press-missing-key",
@@ -513,6 +513,189 @@ CASES = [
         "id": "tap-missing-text",
         "data": {"segment": [{"name": "a", "ops": [{"kind": "tap"}]}]},
         "needle": "缺 text",
+    },
+    # 报错原文与报错位置（#1414）：形状行原先只钉「被拒」，报错话术与「第几个 call / 第几段」
+    # 全凭运气，消息换成 None、位置换成 None 或在 `and` / `or` 之间抖一下都不会红。
+    {
+        "id": "top-level-not-a-table",
+        "data": "segment 不是表",
+        "needle": "数据顶层必须是表（table）",
+    },
+    {
+        "id": "segments-not-a-list",
+        "data": {"segment": "x"},
+        "needle": "至少要有 [[segment]]",
+    },
+    {
+        "id": "segment-not-a-table",
+        "data": {"segment": ["x"]},
+        "needle": "第 1 段 必须是表",
+    },
+    {
+        "id": "segment-unknown-key",
+        "data": {"segment": [{"name": "a", "ops": [], "surprise": 1}]},
+        "needle": "第 1 段 出现名单外的键",
+    },
+    {
+        "id": "segment-name-not-a-string",
+        "data": {"segment": [{"name": 5, "ops": []}]},
+        "needle": "缺段名 name",
+    },
+    {
+        "id": "segment-with-code-and-ops",
+        "data": {"segment": [{"name": "a", "code": "x", "ops": []}]},
+        "needle": "不能同时有 code 与 ops",
+    },
+    {
+        "id": "segment-without-code-and-ops",
+        "data": {"segment": [{"name": "a"}]},
+        "needle": "既没有 code 也没有 ops",
+    },
+    {
+        "id": "segment-ops-not-a-list",
+        "data": {"segment": [{"name": "a", "ops": "x"}]},
+        "needle": "的 ops 必须是数组",
+    },
+    {
+        "id": "nested-op-not-a-table",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "gated", "entries": ["x"], "ops": [7]},
+        ]}]},
+        "needle": "第 1 个 op 第 1 个 op 必须是表",
+    },
+    {
+        "id": "off-only-and-only-code",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "off", "only": ["x"], "only_code": "s", "page": "p"},
+        ]}]},
+        "needle": "不能同时给 only 与 only_code",
+    },
+    {
+        "id": "off-only-not-a-list",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "off", "only": "x", "page": "p"},
+        ]}]},
+        "needle": "off 的 only 必须是非空数组",
+    },
+    {
+        "id": "off-required-only-keep-overlap",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "off_required", "only": ["x"], "keep": ["x"], "page": "p"},
+        ]}]},
+        "needle": "off_required 里 only 与 keep 重叠",
+    },
+    {
+        "id": "gesture-point-not-a-list",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "gesture", "start": 5, "end": [0.5, 0.7], "ms": 300},
+        ]}]},
+        "needle": "要是两个 0–1 的比例",
+    },
+    {
+        "id": "gesture-ms-is-a-boolean",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "gesture", "start": [0.5, 0.3], "end": [0.5, 0.7], "ms": True},
+        ]}]},
+        "needle": "正的整数毫秒",
+    },
+    {
+        "id": "if-var-name-not-a-string",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "if_var", "name": 5, "ops": []},
+        ]}]},
+        "needle": "name 必须是非空字符串",
+    },
+    {
+        "id": "require-switches-before-name-not-a-string",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_switches", "before": {"expr": "var", "name": 5},
+             "names": ["x"], "title": "t"},
+        ]}]},
+        "needle": "before 要写成",
+    },
+    {
+        "id": "require-switches-before-not-a-table",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_switches", "before": "var", "names": ["x"], "title": "t"},
+        ]}]},
+        "needle": "before 要写成",
+    },
+    {
+        "id": "require-switches-names-with-a-non-string",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_switches", "before": {"expr": "var", "name": "v"},
+             "names": [5], "title": "t"},
+        ]}]},
+        "needle": "names 必须是非空的字符串数组",
+    },
+    {
+        "id": "require-switches-title-not-a-string",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_switches", "before": {"expr": "var", "name": "v"},
+             "names": ["x"], "title": 5},
+        ]}]},
+        "needle": "title 必须是非空字符串",
+    },
+    {
+        "id": "require-expect-call-not-a-table",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_expect", "calls": [7]},
+        ]}]},
+        "needle": "第 1 个 op 的第 1 个 call 必须是表",
+    },
+    {
+        "id": "require-expect-call-extra-key",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_expect", "calls": [{"args": ["x"], "name": "n"}]},
+        ]}]},
+        "needle": "第 1 个 call 出现名单外的键",
+    },
+    {
+        "id": "require-expect-missing-miss-print",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_expect", "calls": [{"args": ["x"]}]},
+        ]}]},
+        "needle": "第 1 个 op 缺 miss_print",
+    },
+    {
+        "id": "require-expect-call-without-args",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_expect", "calls": [{"kwargs": {}}], "miss_print": "m"},
+        ]}]},
+        "needle": "第 1 个 call 缺 args",
+    },
+    {
+        "id": "require-expect-args-empty",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_expect", "calls": [{"args": []}], "miss_print": "m"},
+        ]}]},
+        "needle": "的 args 必须是非空数组",
+    },
+    {
+        "id": "require-expect-args-not-a-list",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "require_expect", "calls": [{"args": "x"}], "miss_print": "m"},
+        ]}]},
+        "needle": "的 args 必须是非空数组",
+    },
+    {
+        "id": "if-lib-any-call-with-both-name-and-method",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "if_lib_any", "calls": [{"name": "gear", "method": "x"}], "ops": []},
+        ]}]},
+        "needle": "要给「name / method」里的恰好一个",
+    },
+    {
+        "id": "gated-entries-not-a-list",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "gated", "entries": "x"}]}]},
+        "needle": "gated 需要非空的 entries",
+    },
+    {
+        "id": "lib-arg-block-extra-key",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "lib", "name": "close_named", "args": [{"ops": [], "surprise": 1}]},
+        ]}]},
+        "needle": "实参块 出现名单外的键",
     },
 ]
 

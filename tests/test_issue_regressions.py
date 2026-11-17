@@ -34,7 +34,7 @@ def channel_phone():
     p.conn.locked = Mock(return_value=False)
     p.screen.focus = Mock(return_value="com.android.settings/.Settings$ChannelNotificationSettingsActivity")
     p.confirm = Mock()
-    p.click = Mock()
+    p.click = p.screen.click = Mock()      # 到达决策经 apply() 落到观测基座
     p.screen.tree = Mock(return_value=ET.fromstring('''<hierarchy><node>
       <node text="营销" bounds="[100,80][600,180]"/>
       <node bounds="[0,300][1080,410]">

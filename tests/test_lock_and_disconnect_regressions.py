@@ -239,7 +239,7 @@ class ListRowTests(unittest.TestCase):
         p.W, p.H = 1080, 2340
         p.locked = Mock(return_value=False)
         p.screen.focus = Mock(return_value=self.focus)
-        p.click = Mock()
+        p.click = p.screen.click = Mock()      # 到达决策经 apply() 落到观测基座
         p.screen.settle = Mock(return_value=False)
         p.screen.sig = Mock(return_value="")
         p.scroll_more = Mock(return_value=False)

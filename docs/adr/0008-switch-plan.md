@@ -63,3 +63,7 @@
 **`only=None` 的全页扫描不变**：没有 `only` 可供精确命中，`keep` 的子串命中照旧拦行。`STORE_KEEP`（`oppo-PLP120` / `oneplus-PLR110` / `realme-RMX3700`）走这条路径，同类漏关是已知缺口（#861 的 Out of scope），等真机证据再定改哪一侧——那三份脚本没有非目标行回读，误关功能入口不会被发现。
 
 影响面是用 `keep=[name for name in before if name not in names]` 这一形状的 5 份脚本（`oppo-PMX110`、`oneplus-PLZ110`、`oppo-PMA110`、`vivo-V2417A`、`oppo-PLG110`），另加 `oppo-PKT110`——它的 `close_named` 不传 `keep`，只在回读侧有同一形状的名字过滤；引擎改一处即覆盖，配方不动。
+
+## 增补：点击 / 回读 / 重试分层与 `run()` 的 fold（#1409，接管）
+
+[ADR-0044](0044-channel-snapshot-intent.md) 接管了本文「本票不做」里的两项：渠道引擎的点击收进唯一执行点 `Screen.apply()`（决定是屏幕快照上的纯函数、输出意图），`run()` 的批处理 fold 由 #1437 把队列、两趟门槛、重试挑行与收尾复查搬进 `tool/channel_batch.py`。回读那一层仍如上面 2026-11-07 的订正所记，由 [ADR-0021](0021-readback-verdicts.md) 落地。

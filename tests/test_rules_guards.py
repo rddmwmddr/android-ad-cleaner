@@ -1,10 +1,13 @@
 """规则守卫：文档内容类四条（`DocGuards`）、注册表类一条（`RegistryGuards`）、引擎结构类两条（`EngineGuards`）、
+渠道结局词表一条（`ChannelOutcomeGuards`）、
 库依赖方向一条（`RecipeLibGuards`）、手机版界面一条（`AndroidGuards`）、流程 / CI 类三条（`CiGuards`）、
 夹具装配类两条（`FixtureGuards`）、桩与断言两条（`StubGuards`）、发版产物一条（`ReleaseGuards`）、
-标准流一条（`StdioGuards`）与 `gh` 会话一条（`GhGuards`），沿用 #1000、#1002 的做法。
+标准流一条（`StdioGuards`）、`gh` 会话一条（`GhGuards`）、屏幕几何比例一条（`GeometryGuards`）
+与渠道认页决策的纯函数边界一条（`ChannelDecideGuards`），沿用 #1000、#1002 的做法。
 
 `DocGuards`：CHANGELOG 条目一行一个票号、文档里的代码位置用符号名、指到的 `.py` 路径要存在、
 上报服务地址与凭据不写进仓库。`RegistryGuards`：无锚点的顶层列表项按文档冻结上限。
+`ChannelOutcomeGuards`：渠道结局枚举的成员 ≡ `RULES` 的键，加结局要两处一起改。
 `AndroidGuards`：手机版页面状态只由 `AppModel.show()` 改写。`CiGuards`：回归命令与 CI 同一条、
 `.python-version` 与 Linux job 同版、两个平台各跑一版解释器。`FixtureGuards`：`tests/` 里绕过
 `fixtures.phone_stub()` 手搓假 `Phone` 的文件按清单冻结。`StubGuards`：`with patch(...) as X`
@@ -40,7 +43,7 @@ from aac_android import view  # noqa: E402
 from test_rules_registry import ANCHOR as RULE_ANCHOR  # noqa: E402  同一份锚点口径，别再抄一份
 from test_rules_registry import read_rows, top_level_names  # noqa: E402
 from devtools import release_assets  # noqa: E402
-from tool import events, summary  # noqa: E402
+from tool import events, geometry, summary  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -86,7 +89,7 @@ ADDRESS_EXEMPT = ("recipes/", "tests/")
 # 前端、Kotlin 与资源文件都是随 App 发出去的，凭据落在那里同样是泄露。
 TEXT_SUFFIXES = {".md", ".py", ".toml", ".json", ".yml", ".yaml", ".kts", ".kt", ".java",
                  ".html", ".js", ".css", ".xml", ".txt", ".sh", ".spec", ".cfg", ".ini"}
-SKIP_DIRS = {".git", "node_modules", ".venv", "build", "dist", "__pycache__", ".private"}
+SKIP_DIRS = {".git", "node_modules", ".venv", "build", "dist", "__pycache__", ".private", ".mutmut"}
 SKIP_FILES = {"CLAUDE.local.md"}
 
 
@@ -538,6 +541,105 @@ class EngineGuards(unittest.TestCase):
                 problems.append(f"aac_android/{name} 少了 {'、'.join(absent)}")
         self.assertEqual(problems, [], "替换层少了文件或导出名，手机会在打包后才暴露：\n"
                          + "\n".join(problems))
+
+
+OUTCOME_SOURCE = ROOT / "tool" / "channel_batch.py"
+OUTCOMES = "OutcomeKind"
+FROZEN_OUTCOMES = 15        # 封闭词表：加一个结局是一次有意为之的动作，数与 RULES 的键数一起改
+
+
+def outcome_vocabulary(source):
+    """`tool/channel_batch.py` 源码里结局词表的三层对账：枚举成员 ↔ 模块别名 ↔ `RULES` 的键。
+
+    只读 AST，不 import 引擎。返回问题清单，空列表才合规：新增一个没进 `RULES` 的枚举成员
+    在本机就红，不必等跑到那一支时静默产出一个谁都解释不了的空结局。
+    """
+    tree = ast.parse(source)
+    kind = next((node for node in tree.body
+                 if isinstance(node, ast.ClassDef) and node.name == OUTCOMES), None)
+    if kind is None:
+        return [f"{OUTCOME_SOURCE.name} 里找不到 class {OUTCOMES}"]
+    problems = []
+    if not any(isinstance(base, ast.Name) and base.id == "StrEnum" for base in kind.bases):
+        problems.append(f"{OUTCOMES} 要继承 StrEnum：json 序列化、f-string 与 == 字符串都靠它保持原样")
+    members = {}
+    for stmt in kind.body:
+        if isinstance(stmt, ast.Assign):
+            for target in stmt.targets:
+                if isinstance(target, ast.Name):
+                    members[target.id] = stmt.value.value if isinstance(stmt.value, ast.Constant) else None
+    if len(set(members.values())) != len(members):
+        problems.append(f"{OUTCOMES} 有两个成员用了同一个字面量，后一个只是别名、不是新结局")
+
+    aliases, rules = {}, None
+    for stmt in tree.body:
+        if not isinstance(stmt, ast.Assign):
+            continue
+        for target in stmt.targets:
+            if not isinstance(target, ast.Name):
+                continue
+            value = stmt.value
+            if (isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name)
+                    and value.value.id == OUTCOMES):
+                aliases[target.id] = value.attr
+            elif target.id == "RULES" and isinstance(value, ast.Dict):
+                rules = value
+    for name, member in sorted(aliases.items()):
+        if member not in members:
+            problems.append(f"{name} = {OUTCOMES}.{member}：{OUTCOMES} 里没有这个成员")
+        elif name != member:
+            problems.append(f"{name} 指向 {OUTCOMES}.{member}：别名要与成员同名，否则 chan_fast.{name} 换了结局")
+    if rules is None:
+        problems.append("找不到模块层的 RULES 表")
+        return problems
+    keys = []
+    for key in rules.keys:
+        if isinstance(key, ast.Name):
+            keys.append(key.id)
+        else:
+            problems.append(f"RULES 的键要写成结局别名，{ast.unparse(key)} 不是")
+    unresolved = sorted({key for key in keys if key not in aliases})
+    if unresolved:
+        problems.append("RULES 的键不是结局别名：" + "、".join(unresolved))
+    used = {aliases[key] for key in keys if key in aliases}
+    missing = sorted(set(members) - used)
+    if missing:
+        problems.append("枚举里有、RULES 里没有的结局：" + "、".join(missing))
+    extra = sorted(used - set(members))
+    if extra:
+        problems.append("RULES 里有、枚举里没有的结局：" + "、".join(extra))
+    if len(members) != FROZEN_OUTCOMES:
+        problems.append(f"{OUTCOMES} 有 {len(members)} 个成员，封闭词表应是 {FROZEN_OUTCOMES} 个")
+    if len(keys) != FROZEN_OUTCOMES:
+        problems.append(f"RULES 有 {len(keys)} 个键，封闭词表应是 {FROZEN_OUTCOMES} 个")
+    return problems
+
+
+class ChannelOutcomeGuards(unittest.TestCase):
+    """渠道结局是封闭词表：`OutcomeKind` 的成员 ≡ `RULES` 的键（#1433）。
+
+    以前 15 个结局是裸字符串，拼错一个只在跑到那一支时炸，并静默产出一个空结局。
+    篡改用例把源码字符串喂进同一个检查函数，不真的改 `tool/channel_batch.py`。
+    """
+
+    def test_enum_members_match_rules_keys(self):
+        problems = outcome_vocabulary(OUTCOME_SOURCE.read_text(encoding="utf-8"))
+        self.assertEqual(problems, [], "结局词表与 RULES 对不上：\n" + "\n".join(problems))
+
+    def test_a_kind_missing_from_rules_is_reported(self):
+        source = OUTCOME_SOURCE.read_text(encoding="utf-8")
+        anchor = '    ERROR = "error"'
+        self.assertIn(anchor, source, "篡改落点消失了，这条要跟着改")
+        tampered = source.replace(anchor, anchor + '\n    FAKE_KIND = "fake_kind"', 1)
+        problems = outcome_vocabulary(tampered)
+        self.assertTrue(any("FAKE_KIND" in problem for problem in problems), problems)
+
+    def test_a_rule_without_a_kind_is_reported(self):
+        source = OUTCOME_SOURCE.read_text(encoding="utf-8")
+        line = next((line for line in source.splitlines() if line.startswith("    ERROR: dict(")), "")
+        self.assertTrue(line, "篡改落点消失了，这条要跟着改")
+        problems = outcome_vocabulary(source.replace(line + "\n", "", 1))
+        self.assertTrue(any("ERROR" in problem for problem in problems), problems)
 
 
 def facade_imports(path):
@@ -1013,6 +1115,232 @@ class GhGuards(unittest.TestCase):
         self.assertGreater(scanned, 0, "devtools/ 下一个 .py 都没扫到，这条守卫会空转")
         self.assertEqual(hits, [], "`gh` 只经 devtools/gh.py 起进程（runner_for / call / json_of），"
                          "别再各写一份执行器：\n" + "\n".join(hits))
+
+
+# 判定「这一行在不在屏带内 / 这个控件算不算图标命中 / 是不是底部标签 / 是不是对话框按钮 /
+# 哪些行可拨」用的比例只在 tool/geometry.py 定义（#1431）。扫描面是本次触碰的八个文件：
+# 认行、门面、基座、拨动、弹窗、导航、渠道引擎与渠道认页决策。字符串与注释不入 AST，天然豁免。
+GEOMETRY_HOME = "tool/geometry.py"
+GEOMETRY_SCAN = (
+    "tool/row.py",
+    "tool/fast.py",
+    "tool/chan_fast.py",
+    "tool/channel_decide.py",
+    "tool/channel_arrive.py",
+    "tool/channel_toggle.py",
+    "tool/channel_batch.py",
+    "tool/phone/screen.py",
+    "tool/phone/toggler.py",
+    "tool/phone/dismisser.py",
+    "tool/phone/navigator.py",
+)
+# 屏幕宽高的名字：裸名（`screen_h`）与属性（`self.W` / `p.H` / `screen.H`）。
+SPAN_NAMES = frozenset({"W", "H", "screen_w", "screen_h"})
+SPAN_ATTRS = frozenset({"W", "H"})
+# 以比例为默认值的参数：`frac` 是拖动比例，`area` 是图标取样区（四元组比例）。
+RATIO_PARAMS = frozenset({"frac", "area"})
+
+
+def screen_span(node):
+    """这个表达式是不是屏幕宽高。"""
+    if isinstance(node, ast.Name):
+        return node.id in SPAN_NAMES
+    if isinstance(node, ast.Attribute):
+        return node.attr in SPAN_ATTRS
+    return False
+
+
+# 搬进 `tool/geometry.py` 的 20 个比例常量的当前值（取自 #1431 搬移前的字面量）：
+# 逐条冻结就是「搬移没改数值」的证据，抄错一位不会全绿。
+GEOMETRY_VALUES = {
+    "TOP_BAND": 0.22,
+    "SHORT_CONTAINER_MAX": 0.18,
+    "HEADER_BAND": 0.4,
+    "TOP_TITLE_BAND": 0.15,
+    "TOP_TITLE_WIDTH": 0.8,
+    "INLINE_ROW_MAX": 0.2,
+    "CONFIRM_BUTTON_MAX_W": 0.5,
+    "CONFIRM_BUTTON_MAX_H": 0.12,
+    "FIND_VISIBLE_BOTTOM": 0.92,
+    "FIND_EDGE_BOTTOM": 0.975,
+    "SCROLL_BOTTOM": 0.80,
+    "SCROLL_MAX_FRAC": 0.58,
+    "SCROLL_FRAC": 0.45,
+    "ICON_AREA": (0.72, 0.0, 1.0, 0.16),
+    "ICON_MAX_W": 0.25,
+    "ICON_MAX_H": 0.10,
+    "DISMISS_ICON_MAX_W": 0.3,
+    "DISMISS_ICON_MAX_H": 0.12,
+    "TAB_BAND": 0.85,
+    "TAPPABLE_BAND": (0.08, 0.985),
+}
+
+
+def geometry_mismatches(values):
+    """冻结表与给定常量表逐条比对；返回 `名字: 期望 != 实际` 的列表（空列表才算一致）。"""
+    found = []
+    for name, want in GEOMETRY_VALUES.items():
+        if name not in values:
+            found.append(f"{name}: 缺少这个常量")
+        elif values[name] != want:
+            found.append(f"{name}: 期望 {want!r}，实际 {values[name]!r}")
+    return found
+
+
+def stray_ratios(source, name):
+    """源码里绕过 `tool/geometry.py` 的比例字面量；返回可读的 `文件:行号` 列表。
+
+    两条判据：浮点字面量直接乘 / 除到屏幕宽高上（`screen_h * 0.22`、`self.W * 0.5`），
+    以及比例为默认值的参数（`frac=0.45`、`area=(0.72, 0.0, 1.0, 0.16)`）。整数不做比例看
+    （`self.W * 7 // 10` 是取中点），时长只看调用参数与默认值里的裸浮点数（`time.sleep(0.22)`、
+    `poll=0.2`），两者都不在判据里。
+    """
+    hits = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Mult, ast.Div)):
+            pairs = ((node.left, node.right), (node.right, node.left))
+            if any(isinstance(lit, ast.Constant) and isinstance(lit.value, float) and screen_span(span)
+                   for lit, span in pairs):
+                hits.append(f"{name}:{node.lineno} 浮点比例直接乘除屏幕宽高")
+        elif isinstance(node, ast.arguments):
+            positional = node.posonlyargs + node.args
+            # 两个切片与 kw_defaults 都按参数个数一一对应（AST 的形状），长度必然相等。
+            paired = list(zip(positional[len(positional) - len(node.defaults):], node.defaults,
+                              strict=True))
+            paired += list(zip(node.kwonlyargs, node.kw_defaults, strict=True))
+            for param, default in paired:
+                if default is None or param.arg not in RATIO_PARAMS:
+                    continue
+                if any(isinstance(value, ast.Constant) and isinstance(value.value, float)
+                       for value in ast.walk(default)):
+                    hits.append(f"{name}:{default.lineno} 参数 {param.arg} 的默认值是比例字面量")
+    return hits
+
+
+class GeometryGuards(unittest.TestCase):
+    def test_ratios_live_only_in_the_geometry_module(self):
+        """屏带、图标命中、底部标签、确认按钮与可拨带的比例只许出现在 `tool/geometry.py`。
+
+        守的是不回退：把任意一条已经搬走的比例写回被扫模块即红。判据只看 AST 里的浮点字面量，
+        时长（`poll=0.2`、`time.sleep(0.4)`）、整数取中点（`self.W // 2`）与字符串 / 注释都不算。
+        数值与语义的逐条对应在 `tool/geometry.py` 的注释里，这里只证明没有第二份。
+        """
+        self.assertTrue((ROOT / GEOMETRY_HOME).is_file(), f"{GEOMETRY_HOME} 不在，这条守卫会空转")
+        hits = []
+        for name in GEOMETRY_SCAN:
+            path = ROOT / name
+            self.assertTrue(path.is_file(), f"{name} 不在，这条守卫会空转")
+            hits += stray_ratios(path.read_text(encoding="utf-8"), name)
+        self.assertEqual(hits, [], "判定用的比例只在 tool/geometry.py 定义，调用方从那里取：\n"
+                         + "\n".join(hits))
+
+    def test_the_moved_constants_keep_their_values(self):
+        """20 个比例常量的数值逐条冻结：搬进 `tool/geometry.py` 时一位都没改（#1431）。"""
+        self.assertEqual(geometry_mismatches(vars(geometry)), [])
+
+    def test_a_changed_or_missing_constant_is_red(self):
+        """改一位、删一个，同一个检查函数都当场返红（自证，不是只写正例）。"""
+        changed = dict(vars(geometry), TOP_BAND=0.3)
+        self.assertEqual(geometry_mismatches(changed), ["TOP_BAND: 期望 0.22，实际 0.3"])
+        missing = {name: value for name, value in vars(geometry).items() if name != "TAB_BAND"}
+        self.assertEqual(geometry_mismatches(missing), ["TAB_BAND: 缺少这个常量"])
+
+    def test_a_ratio_written_back_into_a_scanned_module_is_red(self):
+        """把一条已经搬走的比例写回真实模块，守卫当场返红（不是只对合成片段生效）。"""
+        source = (ROOT / "tool/phone/navigator.py").read_text(encoding="utf-8")
+        self.assertIn("screen.H * TAB_BAND", source)
+        self.assertTrue(stray_ratios(source.replace("screen.H * TAB_BAND", "screen.H * 0.85"),
+                                     "tool/phone/navigator.py"))
+
+    def test_the_guard_ignores_times_and_integers(self):
+        """时长、整数算术、字符串与注释里的数字都不是比例，不能误报。"""
+        source = ('time.sleep(0.22)\n'
+                  'x = self.W // 2\n'
+                  'note = "0.22H"\n'
+                  '# 顶部 0.22H 以内\n'
+                  'def wait(maxwait=0.8, poll=0.2):\n'
+                  '    return maxwait\n')
+        self.assertEqual(stray_ratios(source, "snippet.py"), [])
+
+    def test_the_guard_flags_a_default_that_is_a_ratio(self):
+        """`frac` / `area` 的默认值是比例，写在模块里同样算第二份。"""
+        source = ("def scroll(self, frac=0.45, up=False):\n    return frac\n"
+                  "def icon_candidates(self, area=(0.72, 0.0, 1.0, 0.16)):\n    return area\n")
+        self.assertEqual(len(stray_ratios(source, "snippet.py")), 2)
+
+
+# 渠道的认页（#1434）、到达（#1435）与拨动（#1436）决策都是快照上的纯函数：
+# `tool/channel_decide.py`、`tool/channel_arrive.py` 与 `tool/channel_toggle.py` 不 import
+# 引擎 / 基座，也不调用动作原语。
+# 属性读（快照自己的 `.tree` / `.texts`）不是调用，不在这条判据里。
+DECIDE = ROOT / "tool" / "channel_decide.py"
+ARRIVE = ROOT / "tool" / "channel_arrive.py"
+TOGGLE = ROOT / "tool" / "channel_toggle.py"
+BATCH = ROOT / "tool" / "channel_batch.py"
+DECIDE_MODULES = (DECIDE, ARRIVE, TOGGLE, BATCH)
+DECIDE_FORBIDDEN = ("fast", "chan_fast", "phone")
+DECIDE_ACTIONS = frozenset({"click", "scroll", "back", "settle", "open_uri", "home",
+                            "type_text", "apply", "tree", "focus", "snapshot"})
+
+
+def engine_imports(source):
+    """`tool/channel_decide.py` 里指向引擎 / 基座的 import；返回 `行号: 名字`。"""
+    hits = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            names = [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            names = [node.module or ""]
+        else:
+            continue
+        for name in names:
+            if name.split(".")[0] in DECIDE_FORBIDDEN:
+                hits.append(f"{node.lineno}: {name}")
+    return hits
+
+
+def action_calls(source):
+    """调用动作原语的地方；`snap.tree` 这样的属性读不是调用，不算。"""
+    hits = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        name = func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) else ""
+        if name in DECIDE_ACTIONS:
+            hits.append(f"{node.lineno}: {name}")
+    return hits
+
+
+class ChannelDecideGuards(unittest.TestCase):
+    def test_the_decision_modules_import_no_engine_or_base(self):
+        """决策模块只认识值类型与判定库：import `fast` / `phone.*` / `chan_fast` 即红。"""
+        for path in DECIDE_MODULES:
+            with self.subTest(module=rel(path)):
+                self.assertTrue(path.is_file(), f"{rel(path)} 不在，这条守卫会空转")
+                self.assertEqual(engine_imports(path.read_text(encoding="utf-8")), [],
+                                 f"{rel(path)} 是纯决策模块，别把引擎或基座拖进来")
+
+    def test_the_decision_modules_call_no_action_primitive(self):
+        """认页与到达决策不许读屏、点击：函数体里出现动作原语的调用即红。"""
+        for path in DECIDE_MODULES:
+            with self.subTest(module=rel(path)):
+                self.assertTrue(path.is_file(), f"{rel(path)} 不在，这条守卫会空转")
+                self.assertEqual(action_calls(path.read_text(encoding="utf-8")), [],
+                                 f"{rel(path)} 只吃快照，动作留给出调用方")
+
+    def test_the_guard_sees_a_violation(self):
+        source = ("from fast import Phone\n"
+                  "def judge(p, snap):\n"
+                  "    p.click(1, 2)\n"
+                  "    p.tree()\n"
+                  "    return snap.tree\n")
+        self.assertEqual(engine_imports(source), ["1: fast"])
+        self.assertEqual([hit.split(": ")[1] for hit in action_calls(source)], ["click", "tree"])
+        clean = ("from screen_snapshot import on_screen\n"
+                 "def judge(snap):\n"
+                 "    return snap.tree, snap.texts\n")
+        self.assertEqual((engine_imports(clean), action_calls(clean)), ([], []))
 
 
 if __name__ == "__main__":

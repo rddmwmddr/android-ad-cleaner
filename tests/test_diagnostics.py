@@ -5,8 +5,9 @@
 措辞回归会整条红，能直接指出是哪一档分支。分支只由 state 与 probe 给，用例不构造 `Api`、不碰手机。
 
 USB 的纯函数（`usb_parse` / `usb_hw_id` / `usb_facts` / `usb_hint`，以及 `usb_facts` 内部用的
-`usb_guid_note`）仍由 `tests/test_page_and_link_regressions.py` 与 `tests/test_adb_link.py` 覆盖，
-本文件不重复。
+`usb_guid_note`）由 `tests/test_page_and_link_regressions.py` 与 `tests/test_adb_link.py` 覆盖，
+本文件只补一条从模块直调的：客户端包装 `gui.app.usb_facts()` 每次都显式传 `limit`，默认条数只有
+直接调本模块才走得到。
 """
 import sys
 import unittest
@@ -87,6 +88,12 @@ def report(*lines):
     return "\n".join(lines)
 
 
+class ClientLineTests(unittest.TestCase):
+    def test_a_frozen_client_is_reported_as_packaged(self):
+        self.assertEqual(text(frozen=True),
+                         report("- 客户端：肉呆去广告 0.4.4（打包版）", COMPUTER, ADB_OK, ONE_DEVICE, NO_PHONE))
+
+
 class AdbLineTests(unittest.TestCase):
     def test_the_line_is_whatever_the_probe_says(self):
         for version in ("Android Debug Bridge version 1.0.41", "没有 adb", "adb 出错：device offline"):
@@ -154,6 +161,12 @@ class UsbTests(unittest.TestCase):
         self.assertEqual(probe.usb_calls, 0)
 
 
+class UsbFactsDefaultTests(unittest.TestCase):
+    def test_the_default_limit_is_five_devices(self):
+        found = [("安卓", f"外设 {i}", "OK", False, f"USB\\VID_05C6&PID_900{i}", None) for i in range(6)]
+        self.assertEqual(len(diagnostics.usb_facts(found)), 5)
+
+
 class PhoneStatusTests(unittest.TestCase):
     def test_no_info_means_not_detected_yet(self):
         for st in (None, {"recipe": "xiaomi-M154FF"}):
@@ -194,6 +207,24 @@ class PhoneStatusTests(unittest.TestCase):
     def test_a_name_without_the_brand_gets_the_brand_prefixed(self):
         """`info` 的 name 不带品牌时诊断自己补上，否则报告里那台机认不出是谁（基线 1644 行那个分支）。"""
         self.assertEqual(text(status={**status(), "info": dict(INFO, name="13")}),
+                         report(*HEADER, ADB_OK, ONE_DEVICE, PHONE, SYSTEM,
+                                "- 机型脚本：xiaomi-M154FF（录制版本 OS3.0.308.0，一致）", FOLD_OFF))
+
+    def test_a_missing_name_falls_back_to_the_model(self):
+        info = {key: value for key, value in INFO.items() if key != "name"}
+        self.assertEqual(text(status=status(info=info)),
+                         report(*HEADER, ADB_OK, ONE_DEVICE, "- 手机：Xiaomi M154FF（M154FF）", SYSTEM,
+                                "- 机型脚本：xiaomi-M154FF（录制版本 OS3.0.308.0，一致）", FOLD_OFF))
+
+    def test_a_missing_brand_does_not_prefix_the_name(self):
+        info = {key: value for key, value in INFO.items() if key != "brand"}
+        self.assertEqual(text(status=status(info=info)),
+                         report(*HEADER, ADB_OK, ONE_DEVICE, PHONE, SYSTEM,
+                                "- 机型脚本：xiaomi-M154FF（录制版本 OS3.0.308.0，一致）", FOLD_OFF))
+
+    def test_a_missing_os_falls_back_to_the_build(self):
+        info = {key: value for key, value in INFO.items() if key != "os"}
+        self.assertEqual(text(status=status(info=info)),
                          report(*HEADER, ADB_OK, ONE_DEVICE, PHONE, SYSTEM,
                                 "- 机型脚本：xiaomi-M154FF（录制版本 OS3.0.308.0，一致）", FOLD_OFF))
 
@@ -255,6 +286,17 @@ class ExecutionTests(unittest.TestCase):
                                 "", "**执行结果**", "", "- 备份：成功，1 秒",
                                 "", "<details><summary>最近的日志</summary>", "",
                                 "```text", "save to <用户目录>/backups/x", "```", "</details>"))
+
+    def test_a_windows_home_is_scrubbed_in_both_spellings(self):
+        # 日志里既有原样的 `C:\Users\...`，也有被转义成双反斜杠的那一份：两种都要换成占位符
+        job = job_view(results=[{"title": "备份", "rc": 0, "sec": 1, "skipped": False, "reason": ""}],
+                       log=[r"save to C:\Users\tester\a", r"save to C:\\Users\\tester\\b"])
+        self.assertEqual(text(job=job, home="C:\\Users\\tester"),
+                         report(*HEADER, ADB_OK, ONE_DEVICE, NO_PHONE,
+                                "", "**执行结果**", "", "- 备份：成功，1 秒",
+                                "", "<details><summary>最近的日志</summary>", "",
+                                "```text", "save to <用户目录>\\a", "save to <用户目录>\\\\b",
+                                "```", "</details>"))
 
     def test_no_job_no_execution_section(self):
         self.assertNotIn("执行结果", text(job=None))

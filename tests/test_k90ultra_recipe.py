@@ -15,15 +15,15 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import run
 from fixtures import load_recipe, phone_mock
+import recipe_case
+from recipe_case import walk
 
 RECIPE = ROOT / "recipes/xiaomi/M332BF/M332BF.toml"
 EXCEPTIONS = ROOT / "recipes/xiaomi/M332BF/M332BF.py"
 
 
-class K90UltraRecipeTests(unittest.TestCase):
-    def setUp(self):
-        self.path = RECIPE
-        self.source = self.path.read_text(encoding="utf-8")
+class K90UltraRecipeTests(recipe_case.RecipeSourceCase):
+    RECIPE = RECIPE
 
     def phone(self):
         p = phone_mock()
@@ -72,7 +72,7 @@ class K90UltraRecipeTests(unittest.TestCase):
     def test_every_switch_page_names_the_switches_it_touches(self):
         # 不整页全关：数据里的每一条 off 都点名 only；例外函数里的 p.off 同理。
         data = tomllib.loads(self.source)
-        offs = [op for segment in data["segment"] for op in _walk(segment.get("ops", []))
+        offs = [op for segment in data["segment"] for op in walk(segment.get("ops", []))
                 if op.get("kind") in ("off", "off_required")]
         self.assertTrue(offs)
         for op in offs:
@@ -98,17 +98,10 @@ class K90UltraRecipeTests(unittest.TestCase):
                                 for path in sorted((ROOT / "recipe_lib").glob("*.py"))))
         theme = next(segment for segment in tomllib.loads(self.source)["segment"]
                      if segment["name"] == "主题")
-        gears = [op for op in _walk(theme["ops"]) if op.get("name") == "gear"]
+        gears = [op for op in walk(theme["ops"]) if op.get("name") == "gear"]
         self.assertTrue(gears, "主题段的设置入口要走家族库的 gear")
         self.assertTrue(all(op.get("fail") for op in gears), "齿轮点不到要按这一段失败收尾")
 
-
-def _walk(ops):
-    """展开带分支的 op（if_entry / if_lib_any …）里的子表。"""
-    for op in ops:
-        yield op
-        yield from _walk(op.get("ops", []))
-        yield from _walk(op.get("else_ops", []))
 
 
 if __name__ == "__main__":

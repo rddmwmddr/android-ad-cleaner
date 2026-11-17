@@ -25,11 +25,15 @@ FAMILY = {
     "oppo": "oppo", "oneplus": "oppo", "realme": "oppo",
     "vivo": "vivo", "iqoo": "vivo",
     "honor": "honor", "huawei": "huawei", "meizu": "meizu", "samsung": "samsung",
+    # 卓易 FreemeOS 的两个贴牌线：酷派 CPDAY3 读 coolpad，#455 那台读 5g，两台 `ro.build.freeme.label` 一致。
+    # 家族名本身也要在表里：`recipe_source.scan_dir()` 按目录名过滤，缺这一行时 `recipes/freeme/` 的脚本
+    # 会被词库与同族参考静默丢掉。
+    "freeme": "freeme", "coolpad": "freeme", "5g": "freeme",
 }
 
 # 家族在文档里的写法。
 LABEL = {"xiaomi": "小米", "oppo": "OPPO", "vivo": "vivo", "honor": "荣耀",
-         "huawei": "华为", "meizu": "魅族", "samsung": "三星"}
+         "huawei": "华为", "meizu": "魅族", "samsung": "三星", "freeme": "卓易 FreemeOS"}
 
 # 没有主题商店的小米 / 红米机型上，主题管理包的代理页会被系统转去这两个包：应用商店详情页
 # 或桌面。落在这里说明主题设置不可达，段体按跳过收尾（#902）。
@@ -247,6 +251,14 @@ ENTRIES = {
         "通知渠道": Entry(
             menu="设置 → 应用程序通知 → 选择应用 → 通知类别 → 分组名 → 渠道名",
             note="One UI 4 首层没有渠道行，chan-off 停在这一层报「同名 0 行」，只能照清单手动关"),
+    },
+    "freeme": {
+        "安全管家": Entry(
+            menu="安全管家 → 设置 → 关于我们 → 个性化广告",
+            direct=(Direct("com.freeme.secureguard", "com.zhuoyi.security.lite.SC_SettingActivity", ""),),
+            note="裸启动 com.freeme.secureguard 会被转到 ...SC_SettingActivity，按包名判「没进前台」，"
+                 "所以直达写转过去的那一页；「个性化广告」在 关于我们（AboutMeActivity）里，本机点开关本体与"
+                 "行标题都不动、无确认框，见 docs/清单/FreemeOS.md（CPDAY3，#1293）"),
     },
 }
 

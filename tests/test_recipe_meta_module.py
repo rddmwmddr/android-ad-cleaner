@@ -86,6 +86,25 @@ class ParseTests(unittest.TestCase):
     def test_missing_declarations_are_empty_not_errors(self):
         self.assertEqual(self.parse('model = "x"\n'), {"build": "", "models": [], "steps": []})
 
+    def test_a_segment_without_a_name_is_an_empty_string(self):
+        """段名缺 default 是空串：`recipes/*/*` 里的每个 segment 都该有一格，不能变成 None 或占位词。"""
+        self.assertEqual(self.parse('[[segment]]\nops = []\n'),
+                         {"build": "", "models": [], "steps": [""]})
+
+
+class RecipeFilesTests(unittest.TestCase):
+    """`recipe_files` 枚举的是型号目录：家族目录下的散落文件不该截断后面的型号。"""
+
+    def test_a_stray_file_does_not_stop_the_scan(self):
+        """`recipes/*/*` 也会命中家族目录下的普通文件；跳过它而不是停下。"""
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "A").mkdir()
+            (root / "A" / "stray.txt").write_text("x", encoding="utf-8")
+            (root / "B" / "M").mkdir(parents=True)
+            (root / "B" / "M" / "M.toml").write_text("", encoding="utf-8")
+            self.assertEqual(recipe_meta.recipe_files(d), [str(root / "B" / "M" / "M.toml")])
+
 
 class SingleDefinitionTests(unittest.TestCase):
     def test_run_reuses_the_neutral_function(self):

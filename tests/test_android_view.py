@@ -220,10 +220,12 @@ class DetectTest(unittest.TestCase):
         self.assertIn("OPPO-ColorOS.md", d["manual_url"])
 
     def test_samsung_huawei_meizu_land_on_their_own_checklist(self):
-        """没有专用脚本时，这三家的按钮要落到自己那份清单并写上品牌名（#952）。"""
+        """没有专用脚本时，这几家的按钮要落到自己那份清单并写上品牌名（#952、#1293）。"""
         want = {"samsung": ("三星 / One UI", "三星-OneUI.md"),
                 "huawei": ("华为 / HarmonyOS", "华为-HarmonyOS.md"),
-                "meizu": ("魅族 / Flyme", "魅族-Flyme.md")}
+                "meizu": ("魅族 / Flyme", "魅族-Flyme.md"),
+                "coolpad": ("酷派 / FreemeOS", "FreemeOS.md"),
+                "5G": ("酷派 / FreemeOS", "FreemeOS.md")}
         for brand, (name, filename) in want.items():
             with self.subTest(brand=brand):
                 d = self.detect(steps=[], recipe=None, info={"brand": brand})

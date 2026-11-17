@@ -53,7 +53,7 @@ def _validate_off(op: Mapping, where: str) -> None:
 
     `only` 与 `only_code` 是「点名」（安全模式不抑制）；都不给时按 `p.off(page=…)` 的整页全关，与
     UI 按钮式的 `close_all` 是两条不同的路（前者是引擎的 plan_switches 没有 only，后者点屏幕上的按钮）。"""
-    _require(op, "page", where)
+    _require(op, "page", where)  # pragma: no mutate 不可达：`OPS["off"].required` 已含 page，通用必填循环在 check 之前就拦了
     has_only, has_code = "only" in op, "only_code" in op
     if has_only and has_code:
         raise SchemaError(f"{where} 的 off 不能同时给 only 与 only_code")
@@ -70,8 +70,8 @@ def _validate_off(op: Mapping, where: str) -> None:
 
 def _validate_off_required(op: Mapping, where: str) -> None:
     """`off_required`：跨翻页读齐开关、点名断言都在再关。`only` 必填且非空，`keep` 不许与它重叠。"""
-    _require(op, "only", where)
-    _require(op, "page", where)
+    _require(op, "only", where)  # pragma: no mutate 不可达：`OPS["off_required"].required` 已含 only
+    _require(op, "page", where)  # pragma: no mutate 不可达：同上，page 也在 required 里，check 跑不到这里
     only = op["only"]
     if not isinstance(only, list) or not only:
         raise SchemaError(f"{where} 的 off_required 的 only 必须是非空数组")
@@ -97,15 +97,13 @@ def _validate_calls(op: Mapping, where: str, allowed: tuple, required: str | tup
             raise SchemaError(f"{place} 必须是表")
         _reject_extra(call, frozenset(allowed), place)
         if isinstance(required, tuple):
-            present = [key for key in required if key in call]
+            present = [key for key in required if key in call]  # pragma: no mutate 语义等价：元组只有 ("name", "method") 两项，len(present) 与 len(缺席) 同真同假
             if len(present) != 1:
                 raise SchemaError(f"{place} 要给「{' / '.join(required)}」里的恰好一个")
         elif required not in call:
             raise SchemaError(f"{place} 缺 {required}")
         if "args" in call and (not isinstance(call["args"], list) or not call["args"]):
             raise SchemaError(f"{place} 的 args 必须是非空数组")
-        if required == "args" and not isinstance(call.get("args"), list):
-            raise SchemaError(f"{place} 的 args 必须是数组")
 
 
 def _validate_focus_match(op: Mapping, where: str) -> None:
@@ -402,7 +400,7 @@ def _walk(ops: Sequence) -> list[Mapping]:
     flat: list[Mapping] = []
     for op in ops:
         if not isinstance(op, Mapping):
-            continue
+            continue  # pragma: no mutate 不可达：words 只接经 validate 的页面树，ops 逐项都是表
         flat.append(op)
         flat += _walk(op.get("ops", []))
     return flat

@@ -11,7 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import run
-from fixtures import load_recipe, phone_mock
+from fixtures import phone_mock
+from recipe_case import load
 
 RECIPE = ROOT / "recipes/vivo/V2309A/V2309A.toml"
 
@@ -44,11 +45,6 @@ def make_phone(nodes, **fields):
     return p
 
 
-def load(phone, only=None):
-    scope, _ = load_recipe(phone, RECIPE, only)
-    return scope
-
-
 def call(scope, name, *args, **kwargs):
     return scope[name](*args, **kwargs)
 
@@ -72,7 +68,7 @@ class VivoV2309ARecipeTests(unittest.TestCase):
         p.entry.return_value = False
         p.start.return_value = None
         p.back.return_value = None
-        scope = load(p, only=["应用商店"])
+        scope = load(p, RECIPE, only=["应用商店"])
         self.assertEqual(scope["FAILED_STEPS"], [])
         p.tab.assert_called_once_with("我的")
         self.assertNotIn("我的", [c.args[0] for c in p.tap.call_args_list if c.args])
@@ -84,33 +80,33 @@ class VivoV2309ARecipeTests(unittest.TestCase):
         p.tab.return_value = False
         p.start.return_value = None
         p.back.return_value = None
-        scope = load(p, only=["应用商店"])
+        scope = load(p, RECIPE, only=["应用商店"])
         self.assertEqual(scope["FAILED_STEPS"], ["应用商店"])
         p.click.assert_not_called()
 
     def test_gear_is_picked_even_when_decoy_row_comes_first(self):
         p = make_phone(DECOY_ROW + GEAR_ICON)
-        scope = load(p)
+        scope = load(p, RECIPE)
         self.assertTrue(call(scope, "gear_top"))
         p.click.assert_called_once_with(*GEAR_CENTER)
 
     def test_gear_does_not_click_decoy_when_gear_is_absent(self):
         p = make_phone(DECOY_ROW)
-        scope = load(p)
+        scope = load(p, RECIPE)
         self.assertFalse(call(scope, "gear_top"))
         p.click.assert_not_called()
 
     def test_gear_skips_tiles_whose_label_merely_contains_settings(self):
         """「设置壁纸」这种含「设置」的描述不算入口：判据走引擎的精确匹配（#374）。"""
         p = make_phone(DECOY_TILE + DECOY_ROW + GEAR_ICON)
-        scope = load(p)
+        scope = load(p, RECIPE)
         self.assertTrue(call(scope, "gear_top"))
         p.click.assert_called_once_with(*GEAR_CENTER)
 
     def test_about_row_clicks_row_middle_not_title_text(self):
         """点左侧标题文字不跳转（V1986A 同此），落点要落在行宽 40% 处。"""
         p = make_phone(ABOUT_ROW)
-        scope = load(p)
+        scope = load(p, RECIPE)
         self.assertTrue(call(scope, "tap_row", "关于"))
         p.click.assert_called_once_with(ABOUT_ROW_CENTER_X, ABOUT_ROW_CENTER_Y)
         self.assertNotEqual(ABOUT_ROW_CENTER_X, 143)
@@ -123,7 +119,7 @@ class VivoV2309ARecipeTests(unittest.TestCase):
         p.entry.return_value = True          # 关于页的各个子页都当作存在
         p.start.return_value = None
         p.back.return_value = None
-        scope = load(p, only=["应用商店"])
+        scope = load(p, RECIPE, only=["应用商店"])
         self.assertEqual(scope["FAILED_STEPS"], [])
         pages = {c.kwargs.get("page"): c.kwargs.get("only") for c in p.off.call_args_list}
         self.assertEqual(pages.get("商店·消息提醒"), ["资讯活动提醒"])

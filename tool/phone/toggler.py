@@ -10,6 +10,7 @@ import unicodedata
 from dataclasses import dataclass
 
 import wait
+from geometry import TAPPABLE_BAND
 from polarity import TRACK_WORDS, want_state
 from row import disabled_at
 
@@ -33,7 +34,7 @@ class SwitchPlan:
 
 def in_band(xy, screen_h):
     """行的落点在可点带内：避开顶部标题栏与底部栏。"""
-    return screen_h * 0.08 <= xy[1] <= screen_h * 0.985
+    return screen_h * TAPPABLE_BAND[0] <= xy[1] <= screen_h * TAPPABLE_BAND[1]
 
 
 def match_key(text):

@@ -58,6 +58,8 @@ AD_PKGS = {
     # 第二个是海外版（global / 俄区等）HyperOS 上同一个系统广告组件的包名，国行没有
     "xiaomi": ["com.miui.systemAdSolution", "com.miui.msa.global"],
     "vivo": [],
+    # 没有确认到可挂起的系统广告包（CPDAY3 的推送渠道挂在 secureguard 上，见 docs/清单/FreemeOS.md）
+    "freeme": [],
 }
 
 # 选择页上默认勾上「挂起」的包（#973）。小米族的 msa 就是去广告目标本身，未挂起时

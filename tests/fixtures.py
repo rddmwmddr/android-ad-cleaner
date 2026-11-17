@@ -641,14 +641,19 @@ def drive(call, modules=(), size=SIZES[0], stages=((0.0, EMPTY_PAGE),),
           focus=((0.0, ""),), read_cost=0.0, **fields):
     """跑一次并回报代价：造钟 → 装进给定模块 → 造假设备 → call(phone) → (结果, 耗时, 读屏次数, 点击次数)。
 
-    对拍时左右两边各调一次，比较这四项里哪些变了；read_cost 用来看慢机型下的差异。
+    对拍时左右两边各调一次，比较这四项里哪些变了；read_cost 用来看慢机型下的差异。退出时把
+    `time` 放回去：装的是模块级属性，留着会让后面的用例按假钟空转（见 `clocked()`）。
     """
     clock = Clock(read_cost=read_cost)
-    for module in modules:
-        install_clock(module, clock)
-    p = fake_phone(clock=clock, size=size, stages=stages, focus=focus, **fields)
-    out = call(p)
-    return out, round(clock.t, 2), clock.page_reads, clock.clicks
+    saved = [(target, target.time) for module in modules for target in clock_targets(module)]
+    for target, _ in saved:
+        target.time = clock
+    try:
+        p = fake_phone(clock=clock, size=size, stages=stages, focus=focus, **fields)
+        return call(p), round(clock.t, 2), clock.page_reads, clock.clicks
+    finally:
+        for target, value in saved:
+            target.time = value
 
 
 class FakeProc:

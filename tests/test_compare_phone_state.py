@@ -1,4 +1,8 @@
-"""对拍驱动自己管基线 worktree：未知 SHA 要报错，且不留下 worktree。"""
+"""对拍驱动自己管基线 worktree：未知 SHA 要报错，且不留下 worktree。
+
+两个驱动共用 `fixtures.baseline_worktree()`：`compare_phone_state.py` 与 `compare_chan_pages.py`
+都能用 `--baseline <提交>` 自己准备干净副本；不指定基线时，手工备 tool 目录的老写法照旧。
+"""
 import subprocess
 import sys
 import unittest
@@ -6,6 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "tests" / "compare_phone_state.py"
+CHAN = ROOT / "tests" / "compare_chan_pages.py"
 
 
 class BaselineTests(unittest.TestCase):
@@ -27,6 +32,26 @@ class BaselineTests(unittest.TestCase):
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("找不到提交", proc.stderr)     # 守卫：走到了「拉基线失败」这一支
         self.assertEqual(self.worktrees(), before)
+
+
+class ChanPagesBaselineTests(BaselineTests):
+    """``compare_chan_pages.py`` 走同一份基线机制，且不指定基线时的命令行形状不变。"""
+
+    def test_unknown_sha_fails_without_leaving_a_worktree(self):
+        before = self.worktrees()
+        proc = subprocess.run([sys.executable, str(CHAN), "--baseline", "0" * 40],
+                              capture_output=True, text=True, encoding="utf-8", errors="replace")
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("找不到提交", proc.stderr)
+        self.assertEqual(self.worktrees(), before)
+
+    def test_without_a_baseline_the_usage_is_unchanged(self):
+        """不指定基线时仍只认「手工备好的 tool 目录」这一种位置实参；少给就报用法。"""
+        proc = subprocess.run([sys.executable, str(CHAN)],
+                              capture_output=True, text=True, encoding="utf-8", errors="replace")
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("改动前的 tool 目录", proc.stderr + proc.stdout)
+        self.assertIn("--baseline", proc.stderr + proc.stdout)
 
 
 if __name__ == "__main__":

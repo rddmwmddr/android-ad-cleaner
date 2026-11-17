@@ -16,6 +16,7 @@ from gui.bundle_data import bundle_data
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
+import recipe_pick
 import run
 
 
@@ -219,6 +220,10 @@ class XiaomiVersionCoreTests(unittest.TestCase):
         self.assertEqual(run.version_core("OS3.0", "xiaomi"), "OS3.0")
         self.assertEqual(run.version_core("V816.0.1.0.UMCCNXM", "xiaomi"), "V816.0.1.0.UMCCNXM")
 
+    def test_an_unlabelled_recording_is_an_empty_core(self):
+        """`build = ""` 的脚本抽不出核心：空核心不参与比对，否则会命中同族一切脚本。"""
+        self.assertEqual(run.version_core("", "xiaomi"), "")
+
 
 class OppoFamilyTests(unittest.TestCase):
     """ro.build.display.id 以型号开头，跨机型要先抽掉型号才能比版本。"""
@@ -343,6 +348,10 @@ class HonorFamilyTests(unittest.TestCase):
     def test_an_unlabelled_reference_never_matches(self):
         self.assertEqual(Path(self.pick("PNM-AN10 10.0.0.1")[0]).parent.name, "PNM-AN10")
 
+    def test_only_the_first_model_marker_is_cut(self):
+        """只切第一个机型标记：它再出现时后面已经是版本的一部分，全切或按最后一个切都会丢版本。"""
+        self.assertEqual(run.version_core("WKL-AN20 11.0.0.111 SP7C00", "honor"), "11.0.0.111 SP7C00")
+
 
 class MeizuFamilyTests(unittest.TestCase):
     """魅族的版本在 Flyme 之后。"""
@@ -366,6 +375,79 @@ class MeizuFamilyTests(unittest.TestCase):
 
     def test_falls_back_when_the_version_is_not_recorded_anywhere(self):
         self.assertEqual(Path(self.pick("M621Q Flyme 14.0.0.0A")[0]).parent.name, "MEIZU 21 Pro")
+
+
+class VersionMatchTests(unittest.TestCase):
+    """check 的「版本相同 / 不同」：切掉机型名之后比版本，借用同族参考时录制值与设备值前缀不同也算。"""
+
+    def test_the_same_version_under_another_model_prefix_matches(self):
+        # 录制在 PLP120 上的版本，设备报的是 PJX110：切掉机型名之后是同一个版本。
+        self.assertEqual(
+            run.version_match({"build": "PJX110_16.0.5.1201", "os": ""}, "PLP120_16.0.5.1201", "oppo"),
+            "PJX110_16.0.5.1201")
+
+    def test_a_different_patch_level_under_another_prefix_does_not_match(self):
+        self.assertEqual(
+            run.version_match({"build": "PJX110_16.0.5.1001", "os": ""}, "PLP120_16.0.5.1201", "oppo"), "")
+
+
+class ScriptLayoutTests(unittest.TestCase):
+    """型号目录里哪一份算脚本：`_main_script()` / `_recipe_files()` / `_dir_family()` 的路径口径。"""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = self._tmp.name
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_the_main_toml_wins_over_a_version_variant(self):
+        write_recipe(self.root, "xiaomi-M1", "OS4.0", 3)
+        write_recipe(self.root, "xiaomi-M1", "OS3.0", 3, filename="M1-os3.toml")
+        directory = Path(self.root, "recipes", "xiaomi", "M1")
+        self.assertEqual(Path(recipe_pick._main_script(str(directory))), directory / "M1.toml")
+
+    def test_a_directory_with_only_a_version_variant_returns_that_variant(self):
+        # 主本（`<型号>.toml`）不在时退回目录里的变体，不能让这台机从清单里消失。
+        write_recipe(self.root, "xiaomi-M1", "OS3.0", 3, filename="M1-v2.toml")
+        directory = Path(self.root, "recipes", "xiaomi", "M1")
+        self.assertEqual(Path(recipe_pick._main_script(str(directory))), directory / "M1-v2.toml")
+
+    def test_recipe_files_skips_stray_entries_and_keeps_py_variants(self):
+        """散文件不算型号目录，后面排着的目录照收；只剩 `recipe*.py` 的目录退回变体。"""
+        write_recipe(self.root, "xiaomi-M1", "OS4.0", 3)
+        Path(self.root, "recipes", "xiaomi", "AAstray.txt").touch()
+        write_recipe(self.root, "xiaomi-VarOnly", "OS4.0", 3, filename="recipe_v1.py")
+        write_recipe(self.root, "xiaomi-VarOnly", "OS4.0", 3, filename="recipe_v2.py")
+        self.assertEqual(recipe_pick._recipe_files(self.root), [
+            str(Path(self.root, "recipes", "xiaomi", "M1", "M1.toml")),
+            str(Path(self.root, "recipes", "xiaomi", "VarOnly", "recipe_v1.py")),
+            str(Path(self.root, "recipes", "xiaomi", "VarOnly", "recipe_v2.py")),
+        ])
+
+    def test_an_unknown_family_directory_has_no_family(self):
+        # 旧布局 / 手写目录的上一级不在 FAMILY 里：给空族，`recipe_for()` 靠它做相等比较。
+        self.assertEqual(recipe_pick._dir_family("recipes/unknownfamily/M1/M1.toml"), "")
+
+
+class VariantPoolTests(unittest.TestCase):
+    """变体池：`recipe_*.py`（迁移前留下的形态）与 `<型号>-*.toml` 同池按录制版本挑。"""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = self._tmp.name
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_a_legacy_py_variant_is_picked_by_its_recorded_build(self):
+        write_recipe(self.root, "xiaomi-M1", "OS4.0", 3)
+        write_recipe(self.root, "xiaomi-M1", "OS5.0.1", 3, filename="recipe_v2.py")
+        write_recipe(self.root, "xiaomi-M1", "OS3.0", 3, filename="M1-os3.toml")
+        path, reference = run.recipe_for("M1", "Xiaomi", {"build": "OS5.0.1.0.X", "os": ""},
+                                         root=self.root)
+        self.assertFalse(reference)
+        self.assertEqual(Path(path).name, "recipe_v2.py")
 
 
 class RealXiaomiRecipeBuildTests(unittest.TestCase):

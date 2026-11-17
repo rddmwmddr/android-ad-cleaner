@@ -92,7 +92,7 @@ class FakePhoneTests(unittest.TestCase):
         self.assertTrue(p.vivo_seen)
 
     def test_drive_reports_result_and_cost(self):
-        # drive() 自己造钟、装进模块且不还原，外面这层负责把全部门面 / 基座 / 阶段放回去
+        # drive() 自己造钟装进模块，退出时把 clock_targets() 的目标全放回；这层 patched_clock 只管还原它自己装的那份
         with fixtures.patched_clock(fixtures.Clock(), fast):
             out, elapsed, reads, clicks = fixtures.drive(lambda p: bool(p.sig()), modules=[fast],
                                                          stages=[(0.0, PAGE)])
