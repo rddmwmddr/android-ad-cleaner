@@ -3,30 +3,15 @@ from pathlib import Path
 import sys
 import unittest
 from unittest.mock import Mock
-import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import run
 import fixtures
-from fixtures import load_recipe
+from recipe_case import load, radios
 
 RECIPE = ROOT / "recipes/oppo/PLG110/PLG110.toml"
-
-
-def load(phone, only=None):
-    scope, _ = load_recipe(phone, RECIPE, only)
-    return scope
-
-
-def radios(show=True):
-    return ET.fromstring(f'''<hierarchy><node text="不显示轮播推荐" clickable="true"/>
-      <node><node text="显示轮播推荐"/><node class="android.widget.RadioButton"
-        checkable="true" checked="{str(show).lower()}" enabled="true" bounds="[20,30][60,70]"/></node>
-      <node><node text="不显示轮播推荐"/><node class="android.widget.RadioButton"
-        checkable="true" checked="{str(not show).lower()}" enabled="true" bounds="[200,300][240,340]"/></node>
-    </hierarchy>''')
 
 
 class Plg110RecipeTests(unittest.TestCase):
@@ -34,7 +19,7 @@ class Plg110RecipeTests(unittest.TestCase):
         self.p = Mock()
         self.p.changed = []
         self.p.locked.return_value = False
-        self.scope = load(self.p)
+        self.scope = load(self.p, RECIPE)
         self.read_switches = Mock()
         fixtures.patch_surface(self, "read_switches",
                                lambda p, rt, *a, **k: self.read_switches(*a, **k))
