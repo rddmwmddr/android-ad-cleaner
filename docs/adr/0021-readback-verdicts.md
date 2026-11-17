@@ -32,3 +32,7 @@
 - `CONTEXT.md` 的「回读」条目补一句结局词表；`CLAUDE.md` 的 `plan_switches` 指引补 `readback()` 与 `pick_retry_rows()`。
 - **`chan_fast.Outcome` 不动**。两边仍是两套类型；将来若要统一，先解决 `chan_fast` → `fast` 的反向依赖。
 - **没有真机可验。** 验收是单元回归加对拍，真机复测进下一版 `waiting-for-verify` 清单，与 ADR-0008 同一标准。
+
+## 增补：渠道侧沿同一做法分层（#1409，接管）
+
+[ADR-0044](0044-channel-snapshot-intent.md) 把「判定出调用方、收成模块级纯函数」这条做法沿用到渠道引擎：认页、到达、拨动与批处理都成了屏幕快照 / 通知清单上的纯函数，动作只有一个执行点 `Screen.apply()`。本文「不与渠道那边共用类型」的结论保留——两套结局空间粒度仍差一个量级，`chan_fast → fast` 的反向依赖也还在；「什么情况下允许新开一套词表」由 ADR-0044 写成判据。

@@ -52,7 +52,7 @@ from(repo.resolve("tool")) { into("tool"); include("**/*.py", "*.dex") }
 
 ### 两份冻结名单与三条守卫
 
-`tests/test_tool_package.py` 冻结两份名单——引擎 37 个顶层模块、工具链 21 个顶层模块——
+`tests/test_tool_package.py` 冻结两份名单——引擎 43 个顶层模块、工具链 21 个顶层模块——
 并用三条用例守它：
 
 1. `tool/` 的顶层 `.py` 恰好是引擎名单，`devtools/` 的顶层 `.py`（除 `__init__.py`）恰好是工具链
@@ -70,11 +70,12 @@ from(repo.resolve("tool")) { into("tool"); include("**/*.py", "*.dex") }
 第一段（#1390）不动物理布局，先把两份名单与可达性钉死成可执行的棘轮；第二段（#1391）把 19 个
 工具链模块搬进 `devtools/`、名单路径从 `tool/` 改成 `devtools/`，并改写了调用点与几十处指针。
 名单内容不变，第 3 条从「前瞻」变成「承重」。引擎侧的模块名、`sys.path` 根与手机侧代码在搬移里
-一个字节都没动，`tool/` 顶层今天就是那 37 个引擎模块。此后 `tool/geometry.py`（#1431，判定用的
+一个字节都没动，搬移完成时 `tool/` 顶层是那 37 个引擎模块。此后 `tool/geometry.py`（#1431，判定用的
 屏幕几何比例的唯一 owner）作为引擎模块加入，引擎名单是 38 个；`syncEngine` 的整目录 glob 自动收它。
 `tool/channel_decide.py`（#1434，渠道认页决策的纯函数）同此，引擎名单是 39 个。
 `tool/screen_snapshot.py`（#1432 的值类型）、`tool/channel_arrive.py`（#1435，渠道到达决策）与
 `tool/channel_toggle.py`（#1436，渠道拨动决策）同此，引擎名单是 42 个。
+`tool/channel_batch.py`（#1437，渠道批处理的策略与结局词表）同此，引擎名单是 43 个。
 
 ### 引擎侧的硬约束
 

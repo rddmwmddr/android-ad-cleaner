@@ -357,6 +357,14 @@ why = "15 个结局原是裸字符串，拼错一个只在跑到那一支时炸�
 expires_if = "结局不再以字符串参与记账（枚举与 RULES 合并成一份声明、或改成结构化对象）时删。"
 
 [[rule]]
+id = "dev.channels.decisions-are-pure"
+source = "docs/ARCHITECTURE.md#函数级细节"
+check = "test:test_rules_guards::ChannelDecideGuards.test_the_decision_modules_call_no_action_primitive"
+status = "enforced"
+why = "认页、到达、拨动与批处理的判断原先与点击、adb 往返、打印长在同一个循环里，判断类 bug（#486、#531、#555、#604、#378、#1120）只能上真机复现；判断抽成屏幕快照上的纯函数后，只要有人在决策模块里读一次屏或点一下，它就不再可离线测，而这类越界不会自己报错（#1434–#1437、ADR-0044）。同一类的 `ChannelDecideGuards.test_the_decision_modules_import_no_engine_or_base` 守 import 面，这条守动作原语调用。"
+expires_if = "渠道引擎改由结构化接口而不是读屏文字定位、决策与动作不再共享同一个进程时删。"
+
+[[rule]]
 id = "dev.navigation.bottom-tab"
 source = "docs/ARCHITECTURE.md#函数级细节"
 check = "code:tool/phone/navigator.py:Navigator"
@@ -1295,7 +1303,7 @@ id = "dev.tool.engine-toolchain-seam"
 source = "docs/ARCHITECTURE.md#函数级细节"
 check = "test:test_tool_package::ToolPackageSeamTests.test_module_lists_match_the_filesystem"
 status = "enforced"
-why = "「什么进 APK」由 `syncEngine` 的整目录 glob 决定，往 `tool/` 放一个新脚本它就自动进包——搬移前 `tool/` 顶层 56 个模块里 19 个是只在 CI 与本机跑的仓库工具链，占 `tool/` 体积的 22%，就这样悄悄发到手机上（#1389）。守卫把两份冻结名单（引擎 38、工具链 21）钉在文件系统与 import 可达性上：加一个不该随包的脚本即红，引擎 import 了工具链也即红（#1390）；搬进 `devtools/` 之后名单的内容不变，`tool/` 与 `devtools/` 各自与名单全等（#1391）。"
+why = "「什么进 APK」由 `syncEngine` 的整目录 glob 决定，往 `tool/` 放一个新脚本它就自动进包——搬移前 `tool/` 顶层 56 个模块里 19 个是只在 CI 与本机跑的仓库工具链，占 `tool/` 体积的 22%，就这样悄悄发到手机上（#1389）。守卫把两份冻结名单（引擎 43、工具链 21）钉在文件系统与 import 可达性上：加一个不该随包的脚本即红，引擎 import 了工具链也即红（#1390）；搬进 `devtools/` 之后名单的内容不变，`tool/` 与 `devtools/` 各自与名单全等（#1391）。"
 expires_if = "打包改成显式文件名清单、不再整目录 glob 后，「路径 = 归属」不再需要这份名单兜底时删；ADR-0041 的边界被取代时一并删。"
 
 [[rule]]
