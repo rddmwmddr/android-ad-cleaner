@@ -43,6 +43,7 @@ from reader import Reader
 # 屏幕几何比例的唯一 owner（#1431）：门面转发壳的默认值（`icon_candidates` / `tap_icon` 的取样区、
 # `scroll` 的拖动比例）也从那里取，别在这里写第二份。
 from geometry import ICON_AREA as ICON_AREA, SCROLL_FRAC as SCROLL_FRAC
+from screen_snapshot import read_channel_list
 from row import bounds as bounds
 from row import switch_row as switch_row
 # 弹窗搬走后本文件不再用它们，但改前这两个名字就在模块命名空间里（ADR-0033 的出口承诺）：
@@ -345,6 +346,14 @@ class Phone:
     def sig(self):
         return self.screen.sig()
 
+    def snapshot(self):
+        """一次读屏产出的屏幕快照：行、文字、前台、屏宽高、签名与能否滚动（#1432）。"""
+        return self.screen.snapshot()
+
+    def channel_list(self):
+        """通知清单：一次 `dumpsys notification --noredact` 读出整份数据源（#1432）。"""
+        return read_channel_list(self.reader)
+
     def scroll_more(self):
         """翻一页；翻完没出现新文字（到底、回弹）返回 False。"""
         return self.screen.scroll_more()
@@ -371,6 +380,10 @@ class Phone:
 
     def back(self, n=1):
         self.screen.back(n)
+
+    def apply(self, intent):
+        """意图的唯一执行点（#1432）：按种类分派到基座的动作原语。"""
+        return self.screen.apply(intent)
 
     def settle(self, before, maxwait=0.8):
         return self.screen.settle(before, maxwait)

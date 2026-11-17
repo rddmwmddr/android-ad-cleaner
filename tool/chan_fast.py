@@ -21,6 +21,7 @@ from phone.errors import ScreenLocked
 from geometry import HEADER_BAND, INLINE_ROW_MAX, TOP_BAND, TOP_TITLE_BAND, TOP_TITLE_WIDTH
 from row import PATH_DEPTH, SAME_LINE, bounds, disabled_at as row_disabled_at, link, named_nodes, own, skeleton
 from channel_policy import classify, protected_channel
+from screen_snapshot import FG_SERVICE_MARKS as FG_SERVICE_MARKS, parse_notification_dump
 from troubleshooting import ON_PHONE, XIAOMI_INPUT
 from backups import root_from_env
 from ui_hidden import UiHidden
@@ -220,12 +221,6 @@ def show(outcome, label, want_on, pk=""):
         events.payload(outcome.payload)
 
 
-# 前台服务常驻通知的标记（#459）。13 及以前叫 mFgServiceShown，14 起框架改名为
-# mUserVisibleTaskShown（置位条件也从 FLAG_FOREGROUND_SERVICE 扩到 isFgsOrUij()，
-# 含机主发起的任务）。两个名字都认，否则新系统上这条排除静默不生效。
-FG_SERVICE_MARKS = ("mFgServiceShown=true", "mUserVisibleTaskShown=true")
-
-
 def phone_model(reader):
     """名单按型号分文件。读不到型号、或读数不像型号（多行、超长）时返回空串，整条名单停用：
     宁可下一轮继续报同一行，也不把另一台手机的名单套到这台上。"""
@@ -248,41 +243,15 @@ def parse(p, locked=None, foreground=None):
     """只取机主空间（user 0）。双开、分身、隐私空间、安全文件夹的同名应用 UID 不同（#95），
     以前按包名混在一起：界面已关，回读却拿到另一空间的「开」。
     locked：传入集合时，收集系统不允许关闭的渠道（系统应用固定通知权限、渠道本身不可屏蔽，#134）。
-    foreground：传入集合时，收集前台服务的常驻通知渠道（#459）。字段打在渠道行上，不在记录段。"""
+    foreground：传入集合时，收集前台服务的常驻通知渠道（#459）。字段打在渠道行上，不在记录段。
+    解析那一半在 `screen_snapshot.parse_notification_dump()`：通知清单值类型与这里共用同一份。"""
     txt = p.d.shell("dumpsys notification --noredact", timeout=60).output
-    # 安卓 8 / 9 的段名是「per-package config:」（RankingHelper），10 起是「PackagePreferences:」（#258 海信 Android 9）
-    start = next((k for k in (txt.find("PackagePreferences:"), txt.find("per-package config:")) if k >= 0), -1)
-    if start < 0:
-        raise RuntimeError("读不到通知渠道状态，停止操作；请检查 USB 调试连接和系统权限")
-    txt = txt[start:]
-    cur, fixed, app_off, d = None, False, {}, {}
-    for line in txt.splitlines():
-        m = re.match(r"\s*AppSettings: (\S+)(?: \((\d+)\))?", line)
-        if m:
-            cur = m.group(1) if not m.group(2) or int(m.group(2)) < 100000 else None
-            fixed = "fixedImportance=true" in line
-            if cur:
-                app_off[cur] = "importance=NONE" in line
-            continue
-        m = re.search(r"NotificationChannel\{mId='(.*?)', mName=(.*?), mDescription=.*?mImportance=(-?\d+).*?mDeleted=(\w+)", line)
-        if m and cur:
-            # 同一渠道可能带尾随空格回读两次（#194 纵横读屏）：键统一去掉空格，否则清单行
-            # 查不到状态。两条读数矛盾时取「开着」的那条，宁可多关一次也不漏关；
-            # 已删除的记录不覆盖有效记录。只有重要性 0 是已屏蔽，其余值都按开着算（同 state()）。
-            key = (cur, m.group(1).strip())
-            importance, deleted = int(m.group(3)), m.group(4) == "true"
-            old = d.get(key)
-            if (old is None or (old[2] and not deleted)
-                    or (old[2] == deleted and old[1] == 0 and importance != 0)):
-                d[key] = (m.group(2).strip(), importance, deleted)
-            # 两条读数对「系统锁定」说法不一时按锁定处理：跳过比误关安全，且与回读顺序无关。
-            # 已删除的记录不参与判断，它的锁定信息不可信。
-            if locked is not None and fixed and not deleted and "mBlockableSystem=false" in line:
-                locked.add(key)
-            # 同一渠道的两条读数（#194）任一说是前台服务就算：方向与上面的 locked 一致，宁可少关。
-            if foreground is not None and not deleted and any(m in line for m in FG_SERVICE_MARKS):
-                foreground.add(key)
-    return d, app_off
+    channels, app_off, locked_hits, foreground_hits = parse_notification_dump(txt)
+    if locked is not None:
+        locked.update(locked_hits)
+    if foreground is not None:
+        foreground.update(foreground_hits)
+    return channels, app_off
 
 
 def stays_on(value):

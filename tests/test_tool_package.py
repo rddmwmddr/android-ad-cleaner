@@ -21,7 +21,7 @@ ENGINE = frozenset({
     "captures", "channel_policy", "coverage_note", "diagnostics", "entries", "events", "geometry",
     "host", "plan", "polarity", "reader", "recipe_audit", "recipe_kit", "recipe_loader", "recipe_meta",
     "recipe_nav", "recipe_pick", "recipe_runtime", "recipe_source", "recipe_steps",
-    "recipe_strategies", "row", "stdio", "summary", "troubleshooting", "ui_hidden", "ui_session",
+    "recipe_strategies", "row", "screen_snapshot", "stdio", "summary", "troubleshooting", "ui_hidden", "ui_session",
     "verify_ledger", "vocab", "wait",
 })
 # 仓库工具链：搬进 devtools/，只在 CI 与本机跑、不随包（#1390 冻结的 19 项，加上 #1411 的

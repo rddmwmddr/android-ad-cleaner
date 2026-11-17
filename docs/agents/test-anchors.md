@@ -96,6 +96,7 @@
 | `test_channel_classification.py` | 渠道判定：哪些渠道算营销、受保护、默认不勾，扫描因此列出谁、排除谁。 | 81 |
 | `test_channel_outcomes.py` | 渠道批处理的结局记账与上报：一项的结局是值，怎么记、怎么报由几张表定。 | 213 |
 | `test_channel_page.py` | 渠道页：从哪条路走进去、认出的是不是渠道页、从哪一行拿开关。 | 152 |
+| `test_channel_snapshot.py` | 屏幕快照 / 通知清单 / 意图 / 进度四个值类型：构造、JSON 往返，以及每个意图种类只经基座唯一执行点落地。 | 60 |
 | `test_phone_facade.py` | Phone 门面 + 两个基座 + 五个阶段的对外契约。 | 21 |
 | `test_phone_base.py` | 两个基座可以各自独立构造，不必造整台 Phone。 | 22 |
 | `test_phone_sessions.py` | 三个跨阶段会话对象，门面用显式属性转发过去。 | 12 |
