@@ -254,7 +254,8 @@ def named_nodes(root, parents, on_screen, name, screen_h, top_band=TOP_BAND, sys
 
 def title_label(switch, parents, on_screen, screen_h, max_depth=SWITCH_ROW_DEPTH):
     """(标题, 标题文字的节点)：往上找到第一个带文字的祖先。容器矮（就是一行）时分不清标题和说明，
-    取最上面那段；容器高（是一整张列表）时取竖直方向离开关最近的文字。
+    取最上面那段；容器高（是一整张列表）时取竖直方向离开关最近的文字。两种都不取「贴着另一个开关」的
+    文字——它是别的开关行的标题，本行没有文字时宁可空着（#1448）。
     行里没有别的文字时标题退回开关自己的无障碍标签，节点为 None——那样的行没有独立的标题可点。"""
     _, t, _, b = bounds(switch)
     cy = (t + b) // 2
@@ -264,6 +265,10 @@ def title_label(switch, parents, on_screen, screen_h, max_depth=SWITCH_ROW_DEPTH
     def gap(c):
         # 候选是 (上, 左, 下, 文字, 节点)：竖直距离按上 / 下边界算，跟左边框没有关系
         return 0 if c[0] <= cy <= c[2] else min(abs(c[0] - cy), abs(c[2] - cy))
+
+    def beside_other(c, others):
+        # 文字的竖直带正好穿过另一个开关的中心线、却不穿过本开关：它是那一行的标题（#1448）
+        return not (c[0] <= cy <= c[2]) and any(c[0] <= oy <= c[2] for oy in others)
 
     title, node, chosen = "", switch, None
     for _ in range(max_depth):
@@ -283,6 +288,18 @@ def title_label(switch, parents, on_screen, screen_h, max_depth=SWITCH_ROW_DEPTH
             if xb <= xt or not on_screen(x):
                 continue
             cand.append((xt, xl, xb, tx, x))
+        # 本行没有文字时不跨行借别的开关行的标题：华为应用通知页的总开关那一行没有文字，
+        # 同一张卡片里第一个渠道的名字会被当成它的标题，`only 营销通知` 就点中了总开关（#1448）。
+        # 同一水平带上的开关（整行可点 + 行内开关）是这一行自己，不算别的开关行。
+        others = []
+        for x in node.iter("node"):
+            if x is switch or not is_switch(x) or not on_screen(x):
+                continue
+            box = bounds(x)
+            if not same_line(box, (0, t, 0, b)):
+                others.append((box[1] + box[3]) // 2)
+        if others:
+            cand = [c for c in cand if not beside_other(c, others)]
         if cand:
             pl, pt, pr, pb = bounds(node)
             if pb - pt <= max(screen_h * 0.18, (b - t) * 3):

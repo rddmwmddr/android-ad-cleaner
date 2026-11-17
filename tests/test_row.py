@@ -778,3 +778,53 @@ class SameLayoutTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# 华为 HarmonyOS 4.2 应用通知页（#1448）：总开关那一行是 switch_bar（整行）+ switch_widget（本体），
+# 都没有文字；同一张卡片里两个同名渠道「营销通知」。页头是 App 名。屏 1260x2720，卡片高 480 < 0.18H。
+HW_SETTINGS = "com.android.settings"
+HW_APP_PAGE_1448 = f'''<hierarchy rotation="0"><node package="{HW_SETTINGS}" bounds="[0,0][1260,2720]">
+  <node resource-id="{HW_SETTINGS}:id/entity_header_title" text="样例应用" bounds="[300,440][960,495]"/>
+  <node class="androidx.recyclerview.widget.RecyclerView" scrollable="true" bounds="[0,600][1260,2600]">
+    <node class="android.widget.LinearLayout" bounds="[0,640][1260,1120]">
+      <node class="android.widget.Switch" resource-id="{HW_SETTINGS}:id/switch_bar" checkable="true"
+            clickable="true" checked="true" bounds="[0,650][1260,780]">
+        <node class="android.widget.Switch" resource-id="{HW_SETTINGS}:id/switch_widget" checkable="true"
+              checked="true" bounds="[1100,680][1224,750]"/>
+      </node>
+      <node class="android.widget.LinearLayout" clickable="true" bounds="[0,820][1260,975]">
+        <node text="营销通知" bounds="[60,870][800,925]"/>
+        <node class="android.widget.CheckBox" resource-id="{HW_SETTINGS}:id/checkboxWidget" checkable="true"
+              checked="true" bounds="[1080,860][1180,935]"/>
+      </node>
+      <node class="android.widget.LinearLayout" clickable="true" bounds="[0,975][1260,1115]">
+        <node text="营销通知" bounds="[60,1025][800,1080]"/>
+        <node class="android.widget.CheckBox" resource-id="{HW_SETTINGS}:id/checkboxWidget" checkable="true"
+              checked="true" bounds="[1080,1015][1180,1090]"/>
+      </node>
+    </node>
+  </node>
+</node></hierarchy>'''
+
+
+def hw_phone_1448():
+    p = phone_stub("test")
+    p.W, p.H = 1260, 2720
+    p.screen.tree = lambda: ET.fromstring(HW_APP_PAGE_1448)
+    return p
+
+
+class UntitledMasterSwitchTests(unittest.TestCase):
+    """#1448：本行没有文字时，标题不跨行借同一张卡片里别的开关行的名字。"""
+
+    def test_master_switch_row_without_text_gets_no_title(self):
+        root, parents = page(HW_APP_PAGE_1448)
+        widget = next(n for n in root.iter("node") if n.get("resource-id", "").endswith("/switch_widget"))
+        self.assertEqual(row.title_of(widget, parents, on_screen(1260, 2720), 2720), "")
+
+    def test_only_targets_the_channels_not_the_master_switch(self):
+        rows = hw_phone_1448().switches()
+        self.assertEqual(rows, [("", True, (1162, 715)),
+                                ("营销通知", True, (1130, 897)),
+                                ("营销通知", True, (1130, 1052))])
+        plan = fast.plan_switches(rows, only=["营销通知"], screen_h=2720)
+        self.assertEqual([xy for _, xy, _ in plan.targets], [(1130, 897), (1130, 1052)])
