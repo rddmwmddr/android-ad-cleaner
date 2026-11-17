@@ -53,7 +53,7 @@ def step_negative(p, rt):
     p.d.shell("am start -f 0x10008000 -n com.hihonor.hiboard/com.hihonor.intelligent.LauncherActivity")
     time.sleep(2)
     if not p.find("头像", exact=True):
-        p.d.press("home"); time.sleep(0.6)
+        p.press("home"); time.sleep(0.6)
         for _ in range(3):
             p.d.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250"); time.sleep(1.2)
             if p.find("头像", exact=True):
@@ -88,7 +88,7 @@ def step_music(p, rt):
         hush_music(p, rt, listening)
         nav.my_tab(p, rt, "音乐")
         p.dismiss()
-        if not p.d(resourceId=f"{MUSIC}:id/ic_setting").click_exists(timeout=3):
+        if not p.tap_id_if_present(f"{MUSIC}:id/ic_setting", timeout=3):
             raise RuntimeError("音乐设置图标没找到")
         time.sleep(1.2)
         nav.enter(p, rt, "更多设置")
