@@ -15,6 +15,9 @@
 
 ### 内部
 - catalog/schema 清到 mutation 存活 0，报错原文与边界值补用例（#1414）
+- recipe_meta 清到 mutation 存活 0：补段名缺省与散落文件两条用例（#1420）
+- channel_policy 清到 mutation 存活 0：补渠道 ID 受保护用例，默认值标等价变异体（#1417）
+- events 清到 mutation 存活 0：中文逐字、逐行 flush 与载荷行原样返回补用例，编码行标等价 pragma（#1419）
 - mutation 的模块 → 测试映射按覆盖矩阵补到「无测试 = 0」（#1452）
 - plan 清到 mutation 存活 0：补 str 字段收拢与下标读法两条用例（#1424）
 - summary 的插电常亮与「等」后缀补真行为用例，mutation 存活清零（#1425）

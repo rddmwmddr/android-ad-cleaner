@@ -84,12 +84,12 @@
 | `test_wait.py` | 「等到认得出」：超时、稳定、变化、受阻四个判据，外加等机主解锁。 | 47 |
 | `test_entries.py` | 入口速查表与它怎么被用：每条入口有出处、文档同源、reach() 按直达与搜索回退，以及各品牌脚本进具体入口（齿轮、直达、浏览器 / 主题 / 商店 / 负一屏）。 | 442 |
 | `test_vocab.py` | 品牌词库：词条有出处、键与入口速查相同、同页保留项只在那一页成立，以及 gaps 查漏。 | 156 |
-| `test_events.py` | 引擎事件的词表与解析：六个 kind、固定前缀、坏行当没有。 | 13 |
+| `test_events.py` | 引擎事件的词表与解析：六个 kind、固定前缀、坏行当没有，写出的行中文逐字、逐行 flush。 | 18 |
 | `test_engine_events.py` | 引擎侧在语义发生地发事件，人话逐字不变。 | 36 |
 | `test_client_events.py` | 客户端只认引擎事件：事件行不进日志、人话本身不改状态。 | 35 |
 | `test_summary.py` | 结果摘要的唯一定义：一段 tail 怎么说成一句话，两个宿主与两条链路说同一句。 | 16 |
 | `test_coverage_note.py` | 结果页验证档位提示的唯一定义：说不说的判据、按宿主分叉的措辞（整句逐字），与档位词表的对应。 | 15 |
-| `test_channel_classification.py` | 渠道判定：哪些渠道算营销、受保护、默认不勾，扫描因此列出谁、排除谁。 | 80 |
+| `test_channel_classification.py` | 渠道判定：哪些渠道算营销、受保护、默认不勾，扫描因此列出谁、排除谁。 | 81 |
 | `test_channel_outcomes.py` | 渠道批处理的结局记账与上报：一项的结局是值，怎么记、怎么报由几张表定。 | 213 |
 | `test_channel_page.py` | 渠道页：从哪条路走进去、认出的是不是渠道页、从哪一行拿开关。 | 152 |
 | `test_phone_facade.py` | Phone 门面 + 两个基座 + 五个阶段的对外契约。 | 21 |
@@ -108,7 +108,7 @@
 | `test_ui_session.py` | 读屏服务占用、失败清理、跨进程互斥与失败后的收尾。 | 39 |
 | `test_never_suspend.py` | NEVER 保护集：挂了会坏功能的包，整批拒绝、不落一条命令到手机。 | 13 |
 | `test_recipe_loader.py` | 机型脚本只有一个装载入口，测试不许自己 exec 一份脚本。 | 8 |
-| `test_recipe_meta_module.py` | 配方元数据住中立模块：非 CLI 代码 import 它不背 CLI 副作用。 | 8 |
+| `test_recipe_meta_module.py` | 配方元数据住中立模块：import 不背 CLI 副作用，脚本枚举跳过非目录项，头部三段缺省是空值（段名缺 name 也是空串）。 | 10 |
 | `test_recipe_variants.py` | 同一型号按系统版本选脚本变体、变体要进安装包，以及没有本型号脚本时参考脚本按录制版本在同族里挑。 | 91 |
 | `test_recipe_setting_checked.py` | 机型脚本必须消费 p.setting() 的返回值，不能空跑还记成功。 | 35 |
 | `test_recipe_nav.py` | 机型库的拆分守卫（例外 `.py` 的同名助手必须升格进 `recipe_lib`；`shared.py` 的实现必须被 ≥2 个家族使用）、名字表 owner 与三个兼容壳的一致守卫（`SurfaceTests`），以及调用序列对拍驱动自己管基线 worktree。 | 22 |

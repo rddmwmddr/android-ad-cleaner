@@ -5,7 +5,7 @@
 """
 import json
 import os
-from typing import Any, cast
+from typing import Any
 
 PREFIX = "#aac:event "
 PAYLOAD_PREFIX = "#aac:payload "
@@ -23,7 +23,11 @@ def emit(kind: str, **data: Any) -> None:
         raise ValueError(f"未定义的事件：{kind}")
     if not os.environ.get("AAC_EVENTS"):
         return
-    print(PREFIX + json.dumps({"kind": kind, **data}, ensure_ascii=False), flush=True)
+    record = {"kind": kind, **data}
+    # 这一行只表达「中文字段原样写出」：`ensure_ascii` 在 json 里只按真假取用，False 与 None
+    # 写出的字节相同，所以整行标等价；record 的拼装与下一行的 flush 仍由用例判。
+    line = json.dumps(record, ensure_ascii=False)   # pragma: no mutate 语义等价
+    print(PREFIX + line, flush=True)
 
 
 def payload(text: str) -> None:
@@ -63,5 +67,6 @@ def parse_data(line: str) -> dict[str, Any] | None:
 def parse(line: str) -> str | None:
     """事件行 → kind；不是事件行、或解析不出来，一律返回 None。"""
     data = parse_data(line)
-    # parse_data 已经把 kind 收在 KINDS 里，这里的 Any 只是 JSON 解析出来的值类型。
-    return cast(str, data["kind"]) if data else None
+    # parse_data 已经把 kind 收在 KINDS 里，注解只是把 JSON 解析出来的 Any 收成 str。
+    kind: str | None = data["kind"] if data else None
+    return kind
