@@ -1,6 +1,6 @@
 {
   "provenance": {
-    "baseline": "9d4554d0",
+    "baseline": "38e35b12",
     "how": "git archive <sha> | tar -x -C /tmp/aac-chan-base && .venv/bin/python tests/make_chan_cli_baseline.py /tmp/aac-chan-base <sha>",
     "cases": 24
   },
