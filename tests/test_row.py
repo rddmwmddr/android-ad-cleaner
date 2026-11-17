@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 import chan_fast
+import channel_decide
 import fast
 import fixtures
 import row
@@ -471,7 +472,7 @@ def real_candidates(method, xml, focus, **kwargs):
         seen.append(node)
         return None, []
 
-    with patch.object(chan_fast, "own", recording):
+    with patch.object(channel_decide, "own", recording):
         method(chan_fast.ChannelPage(p, NAME, pk="com.example.app"))
     want = [n for _, _, n in row.named_nodes(root, parents, p.on_screen, NAME, p.H, **kwargs)]
     return seen, want

@@ -1,0 +1,502 @@
+{
+  "provenance": {
+    "baseline": "38e35b12",
+    "how": "git archive <sha> | tar -x -C /tmp/aac-chan-base && .venv/bin/python tests/make_chan_cli_baseline.py /tmp/aac-chan-base <sha>",
+    "cases": 24
+  },
+  "cases": {
+    "scan-正常批": {
+      "rc": 0,
+      "stdout": "com.shop\tpromo\t活动优惠\t购物应用\ncom.video\tVPushChannel_0\t运营消息\n",
+      "stderr": "另有 1 个渠道的 ID 被系统缩略，无法可靠定位，未列入清单\n另有 1 个渠道属于系统锁定、不允许关闭的系统应用，未列入清单\n另有 1 个前台服务渠道未列入清单\n另有 1 个渠道本机 UI 未暴露，未列入清单\n",
+      "guards": {
+        "parse_calls": 1,
+        "toggle_calls": [],
+        "shells": [
+          "getprop ro.product.model"
+        ],
+        "phone_created": false,
+        "phone_closed": false,
+        "hidden": [
+          "com.vivo.desktop\tVPushChannel_4"
+        ]
+      }
+    },
+    "scan-空清单": {
+      "rc": 0,
+      "stdout": "",
+      "stderr": "",
+      "guards": {
+        "parse_calls": 1,
+        "toggle_calls": [],
+        "shells": [
+          "getprop ro.product.model"
+        ],
+        "phone_created": false,
+        "phone_closed": false,
+        "hidden": []
+      }
+    },
+    "scan-reset-名单清空": {
+      "rc": 0,
+      "stdout": "com.shop\tpromo\t活动优惠\ncom.video\tVPushChannel_0\t运营消息\ncom.vivo.desktop\tVPushChannel_4\t运营消息\n",
+      "stderr": "另有 1 个渠道的 ID 被系统缩略，无法可靠定位，未列入清单\n另有 1 个渠道属于系统锁定、不允许关闭的系统应用，未列入清单\n另有 1 个前台服务渠道未列入清单\n",
+      "guards": {
+        "parse_calls": 1,
+        "toggle_calls": [],
+        "shells": [
+          "getprop ro.product.model"
+        ],
+        "phone_created": false,
+        "phone_closed": false,
+        "hidden": []
+      }
+    },
+    "scan-断线": {
+      "rc": 1,
+      "stdout": "",
+      "stderr": "✗ device offline\n",
+      "guards": {
+        "parse_calls": 1,
+        "toggle_calls": [],
+        "shells": [],
+        "phone_created": false,
+        "phone_closed": false,
+        "hidden": []
+      }
+    },
+    "scan-读不到清单": {
+      "rc": 1,
+      "stdout": "",
+      "stderr": "✗ 读不到通知渠道状态，停止操作；请检查 USB 调试连接和系统权限\n",
+      "guards": {
+        "parse_calls": 1,
+        "toggle_calls": [],
+        "shells": [],
+        "phone_created": false,
+        "phone_closed": false,
+        "hidden": []
+      }
+    },
+    "off-正常批": {
+      "rc": 0,
+      "stdout": "正在连接手机读屏服务……\n要处理 2 个渠道，每个几秒到半分钟，处理完一个显示一行\n  关  活动优惠\n  关  热点资讯\n拨了 2 个，0 秒\n营销渠道仍开着: 0 个\n",
+      "stderr": "",
+      "guards": {
+        "parse_calls": 2,
+        "toggle_calls": [
+          [
+            "com.shop",
+            "promo",
+            false,
+            "活动优惠"
+          ],
+          [
+            "com.news",
+            "news",
+            false,
+            "热点资讯"
+          ]
+        ],
+        "shells": [
+          "cmd appops get com.news POST_NOTIFICATION",
+          "cmd appops get com.shop POST_NOTIFICATION",
+          "input keyevent HOME",
+          "settings put global stay_on_while_plugged_in 7"
+        ],
+        "phone_created": true,
+        "phone_closed": true,
+        "hidden": []
+      }
+    },
+    "off-受保护": {
+      "rc": 0,
+      "stdout": "  · 受保护，未改动 找机位通知（找机位功能通知，当前状态 ON）\n拨了 0 个，0 秒\n营销渠道仍开着: 0 个\n",
+      "stderr": "",
+      "guards": {
+        "parse_calls": 2,
+        "toggle_calls": [],
+        "shells": [],
+        "phone_created": false,
+        "phone_closed": false,
+        "hidden": []
+      }
+    },
+    "off-渠道不存在": {
+      "rc": 1,
+      "stdout": "  · 未操作 已删渠道（渠道不存在、已删除或应用通知已关闭）\n拨了 0 个，0 秒\n营销渠道仍开着: 0 个\n",
+      "stderr": "",
+      "guards": {
+        "parse_calls": 2,
+        "toggle_calls": [],
+        "shells": [],
+        "phone_created": false,
+        "phone_closed": false,
+        "hidden": []
+      }
+    },
+    "off-应用通知关闭": {
+      "rc": 0,
+      "stdout": "  · 未操作 活动优惠（渠道不存在、已删除或应用通知已关闭）\n拨了 0 个，0 秒\n营销渠道仍开着: 0 个\n",
+      "stderr": "",
+      "guards": {
+        "parse_calls": 2,
+        "toggle_calls": [],
+        "shells": [],
+        "phone_created": false,
+        "phone_closed": false,
+        "hidden": []
+      }
+    },
+    "off-渠道已删除": {
+      "rc": 0,
+      "stdout": "  · 未操作 活动优惠（渠道不存在、已删除或应用通知已关闭）\n拨了 0 个，0 秒\n营销渠道仍开着: 0 个\n",
+      "stderr": "",
+      "guards": {
+        "parse_calls": 2,
+        "toggle_calls": [],
+        "shells": [],
+        "phone_created": false,
+        "phone_closed": false,
+        "hidden": []
+      }
+    },
+    "off-已经是目标状态": {
+      "rc": 0,
+      "stdout": "拨了 0 个，0 秒\n营销渠道仍开着: 0 个\n",
+      "stderr": "",
+      "guards": {
+        "parse_calls": 2,
+        "toggle_calls": [],
+        "shells": [],
+        "phone_created": false,
+        "phone_closed": false,
+        "hidden": []
+      }
+    },
+    "off-第二遍重试成功": {
+      "rc": 0,
+      "stdout": "正在连接手机读屏服务……\n要处理 2 个渠道，每个几秒到半分钟，处理完一个显示一行\n  ✗ 点击后渠道状态未改变  活动优惠（com.shop）\n  ✗ 点击后渠道状态未改变  热点资讯（com.news）\n再试一次刚才没确认的 1 个渠道\n  关  热点资讯\n拨了 2 个，0 秒\n营销渠道仍开着: 0 个\n",
+      "stderr": "",
+      "guards": {
+        "parse_calls": 3,
+        "toggle_calls": [
+          [
+            "com.shop",
+            "promo",
+            false,
+            "活动优惠"
+          ],
+          [
+            "com.news",
+            "news",
+            false,
+            "热点资讯"
+          ],
+          [
+            "com.news",
+            "news",
+            false,
+            "热点资讯"
+          ]
+        ],
+        "shells": [
+          "cmd appops get com.news POST_NOTIFICATION",
+          "cmd appops get com.shop POST_NOTIFICATION",
+          "input keyevent HOME",
+          "settings put global stay_on_while_plugged_in 7"
+        ],
+        "phone_created": true,
+        "phone_closed": true,
+        "hidden": []
+      }
+    },
+    "off-第二遍仍失败": {
+      "rc": 1,
+      "stdout": "正在连接手机读屏服务……\n要处理 2 个渠道，每个几秒到半分钟，处理完一个显示一行\n  ✗ 点击后渠道状态未改变  活动优惠（com.shop）\n  ✗ 点击后渠道状态未改变  热点资讯（com.news）\n再试一次刚才没确认的 1 个渠道\n  ✗ 点击后渠道状态未改变  热点资讯（com.news）\n拨了 1 个，0 秒\n  仍开着：热点资讯（com.news）\n营销渠道仍开着: 1 个\n",
+      "stderr": "",
+      "guards": {
+        "parse_calls": 3,
+        "toggle_calls": [
+          [
+            "com.shop",
+            "promo",
+            false,
+            "活动优惠"
+          ],
+          [
+            "com.news",
+            "news",
+            false,
+            "热点资讯"
+          ],
+          [
+            "com.news",
+            "news",
+            false,
+            "热点资讯"
+          ]
+        ],
+        "shells": [
+          "cmd appops get com.news POST_NOTIFICATION",
+          "cmd appops get com.shop POST_NOTIFICATION",
+          "input keyevent HOME",
+          "settings put global stay_on_while_plugged_in 7"
+        ],
+        "phone_created": true,
+        "phone_closed": true,
+        "hidden": []
+      }
+    },
+    "off-一个都没认出不重试": {
+      "rc": 1,
+      "stdout": "正在连接手机读屏服务……\n要处理 3 个渠道，每个几秒到半分钟，处理完一个显示一行\n  ✗ 点击后渠道状态未改变  活动优惠（com.shop）\n  ✗ 点击后渠道状态未改变  热点资讯（com.news）\n  ✗ 点击后渠道状态未改变  活动推荐（com.more）\n拨了 0 个，0 秒\n  仍开着：活动优惠（com.shop）\n  仍开着：热点资讯（com.news）\n  仍开着：活动推荐（com.more）\n营销渠道仍开着: 3 个\n",
+      "stderr": "",
+      "guards": {
+        "parse_calls": 2,
+        "toggle_calls": [
+          [
+            "com.shop",
+            "promo",
+            false,
+            "活动优惠"
+          ],
+          [
+            "com.news",
+            "news",
+            false,
+            "热点资讯"
+          ],
+          [
+            "com.more",
+            "more",
+            false,
+            "活动推荐"
+          ]
+        ],
+        "shells": [
+          "cmd appops get com.more POST_NOTIFICATION",
+          "cmd appops get com.news POST_NOTIFICATION",
+          "cmd appops get com.shop POST_NOTIFICATION",
+          "input keyevent HOME",
+          "settings put global stay_on_while_plugged_in 7"
+        ],
+        "phone_created": true,
+        "phone_closed": true,
+        "hidden": []
+      }
+    },
+    "off-重试全部确认": {
+      "rc": 0,
+      "stdout": "正在连接手机读屏服务……\n要处理 3 个渠道，每个几秒到半分钟，处理完一个显示一行\n  关  活动优惠\n  ✗ 点击后渠道状态未改变  热点资讯（com.news）\n  ✗ 点击后渠道状态未改变  活动推荐（com.more）\n拨了 3 个，0 秒\n营销渠道仍开着: 0 个\n",
+      "stderr": "",
+      "guards": {
+        "parse_calls": 3,
+        "toggle_calls": [
+          [
+            "com.shop",
+            "promo",
+            false,
+            "活动优惠"
+          ],
+          [
+            "com.news",
+            "news",
+            false,
+            "热点资讯"
+          ],
+          [
+            "com.more",
+            "more",
+            false,
+            "活动推荐"
+          ]
+        ],
+        "shells": [
+          "cmd appops get com.more POST_NOTIFICATION",
+          "cmd appops get com.news POST_NOTIFICATION",
+          "cmd appops get com.shop POST_NOTIFICATION",
+          "input keyevent HOME",
+          "settings put global stay_on_while_plugged_in 7"
+        ],
+        "phone_created": true,
+        "phone_closed": true,
+        "hidden": []
+      }
+    },
+    "off-锁屏中止": {
+      "rc": 1,
+      "stdout": "正在连接手机读屏服务……\n要处理 1 个渠道，每个几秒到半分钟，处理完一个显示一行\n  ✗ 手机锁屏了，停在「活动优惠」，剩下 1 项没有处理。请解锁手机、保持亮屏后重试\n拨了 0 个，0 秒\n  仍开着：活动优惠（com.shop）\n营销渠道仍开着: 1 个\n",
+      "stderr": "",
+      "guards": {
+        "parse_calls": 2,
+        "toggle_calls": [
+          [
+            "com.shop",
+            "promo",
+            false,
+            "活动优惠"
+          ]
+        ],
+        "shells": [
+          "cmd appops get com.shop POST_NOTIFICATION",
+          "input keyevent HOME",
+          "settings put global stay_on_while_plugged_in 7"
+        ],
+        "phone_created": true,
+        "phone_closed": true,
+        "hidden": []
+      }
+    },
+    "off-断线": {
+      "rc": 1,
+      "stdout": "正在连接手机读屏服务……\n要处理 1 个渠道，每个几秒到半分钟，处理完一个显示一行\n  ✗ device offline  活动优惠\n拨了 0 个，0 秒\n",
+      "stderr": "",
+      "guards": {
+        "parse_calls": 1,
+        "toggle_calls": [
+          [
+            "com.shop",
+            "promo",
+            false,
+            "活动优惠"
+          ]
+        ],
+        "shells": [
+          "cmd appops get com.shop POST_NOTIFICATION",
+          "settings put global stay_on_while_plugged_in 7"
+        ],
+        "phone_created": true,
+        "phone_closed": true,
+        "hidden": []
+      }
+    },
+    "off-点错开关停止整批": {
+      "rc": 1,
+      "stdout": "正在连接手机读屏服务……\n要处理 1 个渠道，每个几秒到半分钟，处理完一个显示一行\n  ✗ 点击后应用通知总开关发生变化，停止整批；请在手机上核对该 App 的通知设置  活动优惠\n拨了 0 个，0 秒\n  仍开着：活动优惠（com.shop）\n营销渠道仍开着: 1 个\n",
+      "stderr": "",
+      "guards": {
+        "parse_calls": 2,
+        "toggle_calls": [
+          [
+            "com.shop",
+            "promo",
+            false,
+            "活动优惠"
+          ]
+        ],
+        "shells": [
+          "cmd appops get com.shop POST_NOTIFICATION",
+          "input keyevent HOME",
+          "settings put global stay_on_while_plugged_in 7"
+        ],
+        "phone_created": true,
+        "phone_closed": true,
+        "hidden": []
+      }
+    },
+    "off-本机UI未暴露记名单": {
+      "rc": 0,
+      "stdout": "正在连接手机读屏服务……\n要处理 1 个渠道，每个几秒到半分钟，处理完一个显示一行\n  · 本机界面没有这个渠道的入口，关不掉，不算失败  活动优惠\n拨了 0 个，0 秒\n营销渠道仍开着: 0 个\n",
+      "stderr": "",
+      "guards": {
+        "parse_calls": 2,
+        "toggle_calls": [
+          [
+            "com.shop",
+            "promo",
+            false,
+            "活动优惠"
+          ]
+        ],
+        "shells": [
+          "cmd appops get com.shop POST_NOTIFICATION",
+          "getprop ro.product.model",
+          "input keyevent HOME",
+          "settings put global stay_on_while_plugged_in 7"
+        ],
+        "phone_created": true,
+        "phone_closed": true,
+        "hidden": [
+          "com.shop\tpromo"
+        ]
+      }
+    },
+    "on-正常批": {
+      "rc": 0,
+      "stdout": "正在连接手机读屏服务……\n要处理 1 个渠道，每个几秒到半分钟，处理完一个显示一行\n  开  活动优惠\n拨了 1 个，0 秒\n营销渠道仍开着: 2 个\n未恢复的渠道: 0 个\n",
+      "stderr": "",
+      "guards": {
+        "parse_calls": 2,
+        "toggle_calls": [
+          [
+            "com.shop",
+            "promo",
+            true,
+            "活动优惠"
+          ]
+        ],
+        "shells": [
+          "cmd appops get com.shop POST_NOTIFICATION",
+          "input keyevent HOME",
+          "settings put global stay_on_while_plugged_in 7"
+        ],
+        "phone_created": true,
+        "phone_closed": true,
+        "hidden": []
+      }
+    },
+    "on-渠道已删除算失败": {
+      "rc": 1,
+      "stdout": "  · 未操作 活动优惠（渠道不存在、已删除或应用通知已关闭）\n拨了 0 个，0 秒\n营销渠道仍开着: 0 个\n未恢复的渠道: 1 个\n",
+      "stderr": "",
+      "guards": {
+        "parse_calls": 2,
+        "toggle_calls": [],
+        "shells": [],
+        "phone_created": false,
+        "phone_closed": false,
+        "hidden": []
+      }
+    },
+    "verify-逐项": {
+      "rc": 0,
+      "stdout": "ON   活动优惠（com.shop）\noff  热点资讯（com.news）\n营销渠道仍开着: 1 个\n",
+      "stderr": "",
+      "guards": {
+        "parse_calls": 1,
+        "toggle_calls": [],
+        "shells": [],
+        "phone_created": false,
+        "phone_closed": false,
+        "hidden": []
+      }
+    },
+    "参数-缺子命令": {
+      "rc": 1,
+      "stdout": "",
+      "stderr": "用法：chan_fast.py -s <序列号> scan|verify|off|on [清单.tsv]\n",
+      "guards": {
+        "parse_calls": 0,
+        "toggle_calls": [],
+        "shells": [],
+        "phone_created": false,
+        "phone_closed": false,
+        "hidden": []
+      }
+    },
+    "参数-缺清单": {
+      "rc": 1,
+      "stdout": "",
+      "stderr": "请提供通知清单路径\n",
+      "guards": {
+        "parse_calls": 0,
+        "toggle_calls": [],
+        "shells": [],
+        "phone_created": false,
+        "phone_closed": false,
+        "hidden": []
+      }
+    }
+  }
+}

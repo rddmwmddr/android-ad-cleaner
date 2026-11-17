@@ -14,6 +14,10 @@
 """
 import re
 
+# 顶部带阈值归 tool/geometry.py（#1431）：这里显式 re-export，`named_nodes` 的默认值与
+# `summary()` 都取它，`from row import TOP_BAND` 的老调用点不必改。
+from geometry import SHORT_CONTAINER_MAX, TOP_BAND as TOP_BAND
+
 BOUNDS = re.compile(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]")
 LISTS = re.compile(r"ListView|RecyclerView|ScrollView", re.I)
 SWITCH_ROW_DEPTH = 6
@@ -221,10 +225,6 @@ def switch_row(node, parents, depth=SWITCH_ROW_DEPTH):
     return any("RadioButton" not in (n.get("class") or "") for n in boxes)
 
 
-# 页面顶部这一段里的同名文字是页眉 / 顶栏标题，不是列表里的候选行
-TOP_BAND = 0.22
-
-
 def named_nodes(root, parents, on_screen, name, screen_h, top_band=TOP_BAND, systemui_text=False):
     """按名字筛「可能是这一行」的文字节点：[(文字, bounds, 节点)]。
 
@@ -285,7 +285,7 @@ def title_label(switch, parents, on_screen, screen_h, max_depth=SWITCH_ROW_DEPTH
             cand.append((xt, xl, xb, tx, x))
         if cand:
             pl, pt, pr, pb = bounds(node)
-            if pb - pt <= max(screen_h * 0.18, (b - t) * 3):
+            if pb - pt <= max(screen_h * SHORT_CONTAINER_MAX, (b - t) * 3):
                 best = min(cand, key=lambda c: c[:4])
             else:
                 best = min(cand, key=lambda c: (gap(c), c[0], c[3]))

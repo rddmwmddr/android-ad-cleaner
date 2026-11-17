@@ -10,6 +10,7 @@ desc / id 认 ✕，其余按文字认拒绝类按钮；点完前台换成了别
 import re
 import time
 
+from geometry import DISMISS_ICON_MAX_H, DISMISS_ICON_MAX_W
 from row import bounds, is_switch, switches_in
 
 from phone.screen import PERMISSION_CONTROLLERS
@@ -82,7 +83,8 @@ class Dismisser:
                     and not in_list(n) and not is_switch_row(n)):
                 l, t, r, b = bounds(n)
                 # 只点屏幕内的图标：屏幕外还留着上一层的节点，点它会抛「点击坐标在屏幕外」把整段打断
-                if 0 < r - l < screen.W * 0.3 and 0 < b - t < screen.H * 0.12 and screen.on_screen(n):
+                if (0 < r - l < screen.W * DISMISS_ICON_MAX_W
+                        and 0 < b - t < screen.H * DISMISS_ICON_MAX_H and screen.on_screen(n)):
                     if self.promoted_click((l + r) // 2, (t + b) // 2, key.strip()):
                         return None         # 没关掉弹窗，调用方按「这次什么也没关」处理
                     screen.say(f"  · 弹窗点了 ✕（{key.strip()[:40]}）")

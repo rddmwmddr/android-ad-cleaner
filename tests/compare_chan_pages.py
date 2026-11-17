@@ -1,9 +1,13 @@
 """改「认渠道页」时的对拍：同一份页面样本喂给两份 `tool/`，比较认页、进页与编排这三层。
 
 样本取本仓库 `tests/` 里所有 `<hierarchy>` 字面量；基线取改动前的干净副本（钉改前那个提交，
-不用会前进的 `origin/main`）：
+不用会前进的 `origin/main`）。驱动自己拉临时 worktree、跑完删掉：
 
-    git archive e1a8001 | tar -x -C /tmp/aac-baseline
+    python tests/compare_chan_pages.py --baseline <改动前的提交>
+
+也可以手工备好一份 worktree，把它的 tool 目录传进来（老写法，行为不变）：
+
+    git worktree add /tmp/aac-baseline <改动前的提交>
     python tests/compare_chan_pages.py /tmp/aac-baseline/tool
 
 比四件事：
@@ -26,11 +30,17 @@ import json
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 TESTS = Path(__file__).resolve().parent
 ROOT = TESTS.parent
+# Windows 控制台与管道默认不是 UTF-8：这个驱动打印中文诊断，与兄弟驱动走同一个出口
+sys.path.insert(0, str(ROOT / "tool"))
+from stdio import use_utf8_console  # noqa: E402
+
+use_utf8_console()
 SIZES = ((1080, 2340), (720, 1600))
 FOCI = (
     "com.android.systemui/com.vivo.systemui.statusbar.notification.settings.channels.NotificationSettingsActivity",
@@ -148,6 +158,8 @@ def probe(tool):
         getattr(p, "conn", p).locked = Mock(return_value=False)
         p.scroll, p.scroll_more = Mock(), Mock(return_value=False)
         p.click = Mock()
+        # 到达决策走 `apply()`，落在观测基座的动作原语上；旧塔里门面自己就是基座
+        p.screen.scroll, p.screen.click = p.scroll, p.click
         return p
 
     out = {}
@@ -216,6 +228,7 @@ def probe(tool):
             screen.sig = Mock(side_effect=lambda: str(next(ticks)))  # noqa: B023 - 每轮新建 ticks，Mock 同步调用
             screen.settle = Mock(return_value=True)
             p.scroll, p.scroll_more = Mock(), Mock(return_value=False)
+            screen.scroll, screen.click = p.scroll, p.click      # 同上：改后经基座执行
             p.confirm = Mock()
             p.reader = Mock()
             p.reader.shell.return_value = Mock(output="")
@@ -241,13 +254,29 @@ def run(tool):
                                      capture_output=True, text=True, encoding="utf-8", errors="replace", check=True).stdout)
 
 
+@contextmanager
+def baseline_tool_dir(sha):
+    """把 <sha> 解到临时 worktree，交出它的 tool/；退出时删掉 worktree 与临时目录。"""
+    import fixtures
+    with fixtures.baseline_worktree(sha, TESTS.parent) as tree:
+        yield tree / "tool"
+
+
 def main(argv):
     if len(argv) == 2 and argv[1] == "--dump":
         json.dump(probe(argv[0]), sys.stdout, ensure_ascii=False)
         return 0
+    if len(argv) == 2 and argv[0] == "--baseline":
+        with baseline_tool_dir(argv[1]) as tool_dir:
+            return compare(tool_dir)
     if len(argv) != 1:
-        raise SystemExit("用法：python tests/compare_chan_pages.py <改动前的 tool 目录>")
-    old, new = run(Path(argv[0]).resolve()), run(ROOT / "tool")
+        raise SystemExit("用法：python tests/compare_chan_pages.py <改动前的 tool 目录>\n"
+                         "      python tests/compare_chan_pages.py --baseline <改动前的提交>")
+    return compare(Path(argv[0]).resolve())
+
+
+def compare(old_tool):
+    old, new = run(old_tool), run(ROOT / "tool")
     assert old.keys() == new.keys(), "两边样本集不同"
     clicks = [v for k, v in old.items() if k.startswith("via|")]
     hits = sum(1 for k, v in old.items() if k.startswith("switch|") and v[0] != "None" and not v[0].startswith("EXC:"))

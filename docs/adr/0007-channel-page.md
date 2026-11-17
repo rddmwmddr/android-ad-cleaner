@@ -47,3 +47,7 @@
 - **`CONTEXT.md` 补两个词**：「渠道页」与「到达」。
 - **本票不做**：`run()` 批处理的 fold、`fast.py` 把「该拨哪些开关」抽成纯函数、`recipes/` 解冻。
 - **没有真机可验。** 验收是单元回归加改前改后对拍，与 ADR-0002 / ADR-0005 同一标准。
+
+## 增补：到达的路线与逐帧下一步搬出 `ChannelPage`（#1409，接管）
+
+[ADR-0044](0044-channel-snapshot-intent.md) 沿「观察 → 决定 → 动作」把渠道引擎再切一刀：`ChannelPage` 仍拥有一次到达（入口、诊断与 `vivo_app` 这个中间状态），但**路线选择与逐帧的下一步**改成 `tool/channel_arrive.py` 的纯函数（`route()` / `page_step()` / `after_click()` / `scroll_fallback()` / `after_scroll()`），认页与认行判定在 `tool/channel_decide.py`；`open()` / `_enter_app_page()` 只取快照、执行意图、把进度带回去。本文记的前向壳与「一个对象拥有到达」的结论不变；上面「本票不做」里的 `run()` 批处理 fold 由 #1437 接管。

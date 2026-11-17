@@ -40,6 +40,10 @@ import recipe_kit as recipe_kit
 import recipe_loader
 import wait
 from reader import Reader
+# 屏幕几何比例的唯一 owner（#1431）：门面转发壳的默认值（`icon_candidates` / `tap_icon` 的取样区、
+# `scroll` 的拖动比例）也从那里取，别在这里写第二份。
+from geometry import ICON_AREA as ICON_AREA, SCROLL_FRAC as SCROLL_FRAC
+from screen_snapshot import read_channel_list
 from row import bounds as bounds
 from row import switch_row as switch_row
 # 弹窗搬走后本文件不再用它们，但改前这两个名字就在模块命名空间里（ADR-0033 的出口承诺）：
@@ -342,6 +346,14 @@ class Phone:
     def sig(self):
         return self.screen.sig()
 
+    def snapshot(self, with_rows=True, focus=None, root=None):
+        """一次读屏产出的屏幕快照：行、文字、前台、屏宽高、签名与能否滚动（#1432）。"""
+        return self.screen.snapshot(with_rows=with_rows, focus=focus, root=root)
+
+    def channel_list(self):
+        """通知清单：一次 `dumpsys notification --noredact` 读出整份数据源（#1432）。"""
+        return read_channel_list(self.reader)
+
     def scroll_more(self):
         """翻一页；翻完没出现新文字（到底、回弹）返回 False。"""
         return self.screen.scroll_more()
@@ -359,7 +371,7 @@ class Phone:
     def page_evidence(self, titles=()):
         return self.screen.page_evidence(titles)
 
-    def icon_candidates(self, area=(0.72, 0.0, 1.0, 0.16)):
+    def icon_candidates(self, area=ICON_AREA):
         return self.screen.icon_candidates(area)
 
     # ---------- 四个动作原语：后续阶段一律经它们动作 ----------
@@ -369,13 +381,17 @@ class Phone:
     def back(self, n=1):
         self.screen.back(n)
 
+    def apply(self, intent):
+        """意图的唯一执行点（#1432）：按种类分派到基座的动作原语。"""
+        return self.screen.apply(intent)
+
     def settle(self, before, maxwait=0.8):
         return self.screen.settle(before, maxwait)
 
     def find(self, text, exact=False, root=None, edge_ok=False, nav=False):
         return self.screen.find(text, exact=exact, root=root, edge_ok=edge_ok, nav=nav)
 
-    def scroll(self, frac=0.45, up=False):
+    def scroll(self, frac=SCROLL_FRAC, up=False):
         """按下-移动-停 0.12 秒-松开：没有惯性，翻多少是多少，约 0.45 秒。"""
         self.screen.scroll(frac, up)
 
@@ -406,7 +422,7 @@ class Phone:
     def entry(self, text, scrolls=6, budget=2.4, poll=0.2, tries=2):
         return self.navigator.entry(text, scrolls, budget, poll, tries)
 
-    def tap_icon(self, expect, area=(0.72, 0.0, 1.0, 0.16), tries=3):
+    def tap_icon(self, expect, area=ICON_AREA, tries=3):
         return self.navigator.tap_icon(expect, area, tries)
 
     def enter(self, text, scrolls=0, tries=3):

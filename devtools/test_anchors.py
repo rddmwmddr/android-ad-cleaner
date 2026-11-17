@@ -44,6 +44,11 @@ ANCHORS = {
     "test_channel_classification.py": ("渠道判定：哪些渠道算营销、受保护、默认不勾，扫描因此列出谁、排除谁。", 81),
     "test_channel_outcomes.py": ("渠道批处理的结局记账与上报：一项的结局是值，怎么记、怎么报由几张表定。", 213),
     "test_channel_page.py": ("渠道页：从哪条路走进去、认出的是不是渠道页、从哪一行拿开关。", 152),
+    "test_channel_snapshot.py": ("屏幕快照 / 通知清单 / 意图 / 进度四个值类型：构造、JSON 往返，以及每个意图种类只经基座唯一执行点落地。", 60),
+    "test_channel_decide.py": ("渠道页的认页决策是屏幕快照上的纯函数：认出哪一行、卡在哪一阶段、哪些行可拨。", 61),
+    "test_channel_arrive.py": ("渠道页的到达决策：六条路线与三条失败路径各自该发哪个意图、结局是什么。", 31),
+    "test_channel_toggle.py": ("渠道拨动的决定：能不能点、重试还是放弃、点后消失与灰态各自算什么。", 21),
+    "test_channel_batch.py": ("渠道批处理策略：清单→队列的预筛、两趟门槛、重试挑行与收尾复查豁免，逐条结局用纯数据证明。", 43),
     # Phone 门面、两个基座与七个阶段
     "test_phone_facade.py": ("Phone 门面 + 两个基座 + 五个阶段的对外契约。", 21),
     "test_phone_base.py": ("两个基座可以各自独立构造，不必造整台 Phone。", 22),
@@ -99,7 +104,7 @@ ANCHORS = {
     "test_doc_consistency.py": ("文档与单一来源一致：ADR 字段表、品牌连点表、共享样式与教程截图，以及四条「配置即判据」的规则与 pyproject / .coveragerc 对拍。", 112),
     "test_web_client.py": ("前端用例的代跑与守卫：tests/js/ 的 jsdom 用例由它在 unittest 里跑。", 8),
     "test_fixtures.py": ("夹具本身的行为：样本、假时钟、时间轴与假 Phone。", 27),
-    "test_compare_phone_state.py": ("对拍驱动自己管基线 worktree：未知 SHA 报错且不留下 worktree。", 3),
+    "test_compare_phone_state.py": ("两个对拍驱动自己管基线 worktree：未知 SHA 报错且不留下 worktree，不指定基线时仍认手工备好的 tool 目录。", 3),
     "test_mutation_scope.py": ("模块 → 测试范围的映射：严格档名单与它不漂、每个目标都在仓库里、选择结果去重保序、摘掉的类确实挂在被收集的文件上，改动面只挑映射表里的模块，summary 一节的结论与 pragma 计数，以及「无可变异节点」的判据。", 31),
     # 手机版与鸿蒙
     "test_android_bundle.py": ("APK 里那批 gui 文件必须覆盖 gui/app.py 的导入期依赖。", 11),
@@ -122,6 +127,7 @@ ANCHORS = {
     "test_plan.py": ("一次执行跑哪些步骤：Plan 规格的八个键与往返，以及按规格排出的任务、未执行行与重试轮。", 98),
     "test_run_commands.py": ("run.py 的命令接口与它产出的诊断：退出码只在出口、多余往返的守卫、「只是搬家」的对拍，以及设备名与收尾快照。", 111),
     "test_adapt_cli.py": ("adapt.py 三条子命令对外的退出码与两路输出，survey 试入口的三种结局与 `-s S adapt` 的转发，以及 TSV 解析、草稿生成、自检报告与探路导航。", 167),
+    "test_chan_cli_baseline.py": ("渠道引擎三个子命令的 CLI 输出基线：scan / off / on 的退出码、输出行与分支守卫。", 6),
     # 适配工具与仓库流程
     "test_gh.py": ("工具层共用的 gh 会话：失败取错误输出、为空退回标准输出，以及判 JSON 的三档报错。", 15),
     "test_claim.py": ("开工认领：一条命令写认领评论并摘待办标签，仲裁只看票下评论。", 90),
