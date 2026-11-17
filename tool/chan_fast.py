@@ -159,13 +159,13 @@ def phone_model(reader):
     return model
 
 
-def parse(p, locked=None, foreground=None):
+def parse(reader, locked=None, foreground=None):
     """只取机主空间（user 0）。双开、分身、隐私空间、安全文件夹的同名应用 UID 不同（#95），
     以前按包名混在一起：界面已关，回读却拿到另一空间的「开」。
     locked：传入集合时，收集系统不允许关闭的渠道（系统应用固定通知权限、渠道本身不可屏蔽，#134）。
     foreground：传入集合时，收集前台服务的常驻通知渠道（#459）。字段打在渠道行上，不在记录段。
     解析那一半在 `screen_snapshot.parse_notification_dump()`：通知清单值类型与这里共用同一份。"""
-    txt = p.d.shell("dumpsys notification --noredact", timeout=60).output
+    txt = reader.shell("dumpsys notification --noredact", timeout=60).output
     channels, app_off, locked_hits, foreground_hits = parse_notification_dump(txt)
     if locked is not None:
         locked.update(locked_hits)
@@ -634,7 +634,7 @@ def undo_message(p, before, apps_before, may_change, restored, extra, clicked):
         return f"{what}，本次没有点击这一行，停止整批；请在手机上核对该 App 的通知设置", False
     head = what + ("" if restored else "，没能自动点回")
     try:
-        current, apps = parse(p)
+        current, apps = parse(p.conn.reader)
     except adb_link.DeviceLost:
         return f"{head}；复核时手机断开，没能核对是否恢复，停止整批", True
     except Exception:
@@ -665,8 +665,8 @@ def notifications_state(p, pk):
     `notifications_denied()`，那里把「不知道」当「没关」。"""
     try:
         # 不加 grep -m：提前退出会让 dumpsys 收到 SIGPIPE，u2 判「shell output invalid」（#205）
-        out = p.d.shell(f"dumpsys package {shlex.quote(pk)} | grep 'POST_NOTIFICATIONS: granted='"
-                        " | sed -n '1,3p'").output
+        out = p.shell(f"dumpsys package {shlex.quote(pk)} | grep 'POST_NOTIFICATIONS: granted='"
+                      " | sed -n '1,3p'")
     except Exception:
         out = ""
     if isinstance(out, str):
@@ -785,7 +785,7 @@ def toggle(p, pk, cid, want_on, name="", allowed=()):
     try:
         if p.locked():
             raise ScreenLocked("手机锁屏了")
-        before, apps_before = parse(p)
+        before, apps_before = parse(p.conn.reader)
         actual_name = before.get((pk, cid), ("", 0, False))[0]
         st = state(before, apps_before, pk, cid)
         if not want_on and protected_channel(actual_name, cid, name):
@@ -833,7 +833,7 @@ def toggle(p, pk, cid, want_on, name="", allowed=()):
                 # 引擎自己的点击也走唯一执行点（`Screen.apply()`），与到达阶段的点击同一条原语
                 p.apply(Intent(IntentKind.TAP, at=switch[2]))
                 time.sleep(0.4); p.confirm()
-            current, apps = parse(p)
+            current, apps = parse(p.conn.reader)
             extra = side_effects(before, apps_before, current, apps, pk, cid, allowed)
             effect = toggle_decide.side_effect_verdict(extra, clicked)
             if effect.stop:
@@ -1027,7 +1027,7 @@ def run(a):
                 if halted:
                     break                       # 锁屏、点错开关、断开：整批停下，不再重试
             if p is not None and not gone:
-                p.d.shell("input keyevent HOME")   # 只读 / 无需改动时不操作手机页面
+                p.shell("input keyevent HOME")   # 只读 / 无需改动时不操作手机页面
         finally:
             if p is not None:
                 p.close()

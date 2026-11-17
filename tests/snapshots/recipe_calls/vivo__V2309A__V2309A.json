@@ -40,7 +40,8 @@
    ["i管家", "off", [], {"only": ["应用个性化推荐", "清理个性化推荐"], "page": "i管家·个性化设置"}],
    ["i管家", "back", [3], {}],
    ["天气", "locked", [], {}],
-   ["天气", "d.shell", ["am start -f 0x10008000 -n com.vivo.weather/.WeatherSettings"], {}],
+   ["天气", "shell", ["am start -f 0x10008000 -n com.vivo.weather/.WeatherSettings"], {}],
+   ["天气", "d.shell", ["am start -f 0x10008000 -n com.vivo.weather/.WeatherSettings"], {"timeout": null}],
    ["天气", "off", [], {"page": "天气·设置", "only": ["天气服务"], "keep": ["气象预警", "异常天气", "地震预警"]}]
   ],
   "absent": [
@@ -64,7 +65,8 @@
    ["i管家", "entry", ["关于"], {"scrolls": 6}],
    ["i管家", "back", [3], {}],
    ["天气", "locked", [], {}],
-   ["天气", "d.shell", ["am start -f 0x10008000 -n com.vivo.weather/.WeatherSettings"], {}],
+   ["天气", "shell", ["am start -f 0x10008000 -n com.vivo.weather/.WeatherSettings"], {}],
+   ["天气", "d.shell", ["am start -f 0x10008000 -n com.vivo.weather/.WeatherSettings"], {"timeout": null}],
    ["天气", "off", [], {"page": "天气·设置", "only": ["天气服务"], "keep": ["气象预警", "异常天气", "地震预警"]}]
   ]
  }

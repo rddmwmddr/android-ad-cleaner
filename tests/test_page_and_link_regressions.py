@@ -202,8 +202,8 @@ class ParseTests(unittest.TestCase):
     DOMAIN = "channel"
     def test_other_user_spaces_do_not_override_owner(self):
         # #95 / 小米双开：另一空间同包名同渠道仍开着，不能当成机主空间没关
-        d, app_off = chan.parse(types.SimpleNamespace(d=types.SimpleNamespace(
-            shell=lambda *a, **k: types.SimpleNamespace(output=DUMP))))
+        d, app_off = chan.parse(types.SimpleNamespace(
+            shell=lambda *a, **k: types.SimpleNamespace(output=DUMP)))
         self.assertEqual(d[("com.ss.android", "promo")][1], 0)
         self.assertNotIn(("com.dual.only", "x"), d)
         self.assertNotIn("com.dual.only", app_off)

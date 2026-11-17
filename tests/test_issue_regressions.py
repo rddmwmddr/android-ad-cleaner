@@ -141,7 +141,7 @@ class ChannelTests(unittest.TestCase):
         NotificationChannel{mId='flhd', mName=福利活动, mDescription=null, mImportance=0, mDeleted=false}
         NotificationChannel{mId='flhd ', mName=福利活动 , mDescription=null, mImportance=3, mDeleted=false}
     """
-        d, _ = chan.parse(p)
+        d, _ = chan.parse(p.d)
         self.assertEqual(list(d), [("com.zongheng.reader", "flhd")])
         self.assertEqual(d[("com.zongheng.reader", "flhd")][:2], ("福利活动", 3))
 
@@ -152,7 +152,7 @@ class ChannelTests(unittest.TestCase):
         NotificationChannel{mId='promo', mName=活动优惠, mDescription=null, mImportance=0, mDeleted=false}
         NotificationChannel{mId='promo ', mName=活动优惠 , mDescription=null, mImportance=3, mDeleted=true}
     """
-        d, _ = chan.parse(p)
+        d, _ = chan.parse(p.d)
         self.assertEqual(d[("com.example", "promo")], ("活动优惠", 0, False))
 
     def test_unspecified_importance_keeps_channel_on(self, _sleep):
@@ -163,7 +163,7 @@ class ChannelTests(unittest.TestCase):
         NotificationChannel{mId='promo', mName=营销, mDescription=null, mImportance=0, mDeleted=false}
         NotificationChannel{mId='promo ', mName=营销 , mDescription=null, mImportance=-1000, mDeleted=false}
     """
-        d, _ = chan.parse(p)
+        d, _ = chan.parse(p.d)
         self.assertEqual(d[("com.example", "promo")][1], -1000)
         self.assertEqual(chan.state(d, {}, "com.example", "promo"), "ON")
 
@@ -175,7 +175,7 @@ class ChannelTests(unittest.TestCase):
         NotificationChannel{mId='promo ', mName=活动优惠 , mDescription=null, mImportance=3, mDeleted=true, mBlockableSystem=false}
     """
         locked = set()
-        chan.parse(p, locked)
+        chan.parse(p.d, locked)
         self.assertEqual(locked, set())
 
     def test_repeated_rows_do_not_count_as_still_on(self, _sleep):
@@ -241,7 +241,7 @@ class ChannelTests(unittest.TestCase):
         p = channel_phone()
         p.d.shell.return_value.output = "Permission denied"
         with self.assertRaisesRegex(RuntimeError, "读不到"):
-            chan.parse(p)
+            chan.parse(p.d)
 
     def test_app_master_switch_is_not_channel_switch(self, _sleep):
         p = channel_phone()

@@ -22,6 +22,7 @@
 - catalog 里 29 条 `am start`、monkey 与强停迁进结构化 op，入口速查不再回读生成的源码（#1478）
 - 门面补 `Phone.shell` / `Phone.tap_id` 等十个设备动词，现有调用点一行未改（#1472）
 - catalog 的 start op 能表达公开 Intent、URI、窗口模式、裸启动与 monkey 拉起（#1473）
+- 引擎与 catalog 解释器改走门面动词，`p.d` 归零（#1476）
 - 机型测试的共享助手与安全用例收进 `tests/recipe_case.py`，复制与重写用例各加守卫（#1406）
 - 渠道引擎的分层决定写成新 ADR：快照、意图与唯一执行点的边界（#1438，ADR-0044）
 - 渠道批处理的队列、两趟重试与收尾复查搬进 `channel_batch`，行为不变（#1437）

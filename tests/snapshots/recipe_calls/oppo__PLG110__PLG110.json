@@ -643,7 +643,8 @@
    ["小布建议", "focus", [], {}],
    ["小布建议", "focus", [], {}],
    ["主题商店", "locked", [], {}],
-   ["主题商店", "d.shell", ["am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.oplus.themestore"], {}],
+   ["主题商店", "shell", ["am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.oplus.themestore"], {}],
+   ["主题商店", "d.shell", ["am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.oplus.themestore"], {"timeout": null}],
    ["主题商店", "focus", [], {}]
   ],
   "absent": [
@@ -1098,7 +1099,8 @@
    ["小布建议", "focus", [], {}],
    ["小布建议", "focus", [], {}],
    ["主题商店", "locked", [], {}],
-   ["主题商店", "d.shell", ["am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.oplus.themestore"], {}],
+   ["主题商店", "shell", ["am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.oplus.themestore"], {}],
+   ["主题商店", "d.shell", ["am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.oplus.themestore"], {"timeout": null}],
    ["主题商店", "focus", [], {}]
   ]
  }

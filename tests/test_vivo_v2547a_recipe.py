@@ -241,8 +241,8 @@ class WeatherSegmentTests(unittest.TestCase):
 
     def test_the_menu_is_tapped_by_resource_id_then_settings_is_closed(self):
         phone, calls, scope, _out = run_segment("天气")
-        selectors = [call_.kwargs for call_ in phone.d.call_args_list]
-        self.assertEqual(selectors, [{"resourceId": "com.vivo.weather:id/more_btn"}])
+        selectors = [call_.kwargs for call_ in phone.tap_id.call_args_list]
+        self.assertEqual(selectors, [{"resource_id": "com.vivo.weather:id/more_btn"}])
         self.assertEqual([call_[0] for call_ in calls], ["tap_text", "off"])
         self.assertEqual(calls[1][2], {"only": ["天气服务"], "keep": ["气象预警", "异常天气", "地震预警"],
                                        "page": "天气·设置"})
@@ -255,7 +255,7 @@ class WeatherSegmentTests(unittest.TestCase):
         phone = phone_mock(W=1260, H=2800)
         phone.locked.return_value = False
         # 选择器本身不会失败：读屏库是在点的时候才去找控件
-        phone.d.return_value.click.side_effect = u2.exceptions.UiObjectNotFoundError({"code": -32002})
+        phone.tap_id.side_effect = u2.exceptions.UiObjectNotFoundError({"code": -32002})
         asked = []
         with patch.dict(interpreter.LIBRARY, {"tap_text": lambda p, rt, *a, **k: asked.append(a)}):
             _scope, out = load_recipe(phone, RECIPE, ["天气"])
