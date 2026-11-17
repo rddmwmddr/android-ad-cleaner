@@ -19,6 +19,7 @@
 - 一加 16 商店段的「消息管理」探测只翻前两屏，常态下省约 40 秒（#1281）
 
 ### 内部
+- catalog 里 29 条 `am start`、monkey 与强停迁进结构化 op，入口速查不再回读生成的源码（#1478）
 - 门面补 `Phone.shell` / `Phone.tap_id` 等十个设备动词，现有调用点一行未改（#1472）
 - catalog 的 start op 能表达公开 Intent、URI、窗口模式、裸启动与 monkey 拉起（#1473）
 - 机型测试的共享助手与安全用例收进 `tests/recipe_case.py`，复制与重写用例各加守卫（#1406）

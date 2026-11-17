@@ -132,7 +132,11 @@ def norm(value):
 
 
 def recording(phone, state):
-    """包住门面上的公开方法与 `p.d.shell`，记下 (段名, 名字, 参数, 关键字参数) 的调用顺序。"""
+    """包住门面上的公开方法、`p.d.shell` 与 `p.d.app_stop`，记下 (段名, 名字, 参数, 关键字参数) 的调用顺序。
+
+    `p.d.app_stop` 与 `p.d.shell` 同一类：数据里的强停 op 走它，而它不是门面方法。只记门面的话
+    这一条会从序列里凭空消失，看上去像「什么都没做」（#1478）。
+    """
     log = []
 
     def wrap(name, call):
@@ -149,6 +153,7 @@ def recording(phone, state):
         if callable(call):
             setattr(phone, name, wrap(name, call))
     phone.d.shell = wrap("d.shell", phone.d.shell)
+    phone.d.app_stop = wrap("d.app_stop", phone.d.app_stop)
     return log
 
 

@@ -16,7 +16,7 @@ OFF_EXACT_OPTIONAL = true
 name = "广告跟踪"
 ops = [
   {kind = "skip_in_safe_mode"},
-  {kind = "shell", command = "am start -f 0x10008000 -a android.settings.SETTINGS"},
+  {kind = "start", action = "android.settings.SETTINGS"},
   {kind = "sleep", seconds = 1.5},
   # ColorOS 17：「隐私」已并入「隐私与安全」；设置搜索点结果不跳转，只能走面板路径。
   {kind = "if_tap", text = "隐私与安全", scrolls = 3, else_ops = [
@@ -67,7 +67,7 @@ name = "主题商店"
 ops = [
   # 主题商店的 APP_SETTINGS 页没有固定标题（ColorOS 17 直接落在 SettingActivity 列表），
   # 因此这里只确认前台包名，不等页标题。
-  { kind = "shell", command = "am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.heytap.themestore" },
+  { kind = "start", action = "oppo.intent.action.APP_SETTINGS", pkg = "com.heytap.themestore" },
   { kind = "sleep", seconds = 2.5 },
   { kind = "if_focus", text = "com.heytap.themestore", match = "starts", else_ops = [
     { kind = "print", text = "  ✗ 主题商店设置页没有打开" },

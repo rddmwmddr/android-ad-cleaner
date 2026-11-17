@@ -54,7 +54,7 @@ ops = [{ kind = "lib", name = "i_manager_ads" }]
 [[segment]]
 name = "天气"
 ops = [
-  { kind = "shell", command = "am start -f 0x10008000 -n com.vivo.weather/.WeatherSettings" },
+  { kind = "start", pkg = "com.vivo.weather", activity = ".WeatherSettings", clear_task = true },
   { kind = "sleep", seconds = 1.0 },
   { kind = "off", only = ["天气服务"], keep = ["气象预警", "异常天气", "地震预警"], page = "天气·设置" },
 ]

@@ -11,7 +11,7 @@ build = "OS3.0.306.0"
 name = "系统广告"
 ops = [
   # HyperOS 3：隐私页首屏没有「更多安全设置」，它在「安全」标签页下。
-  { kind = "shell", command = "am start -f 0x10008000 -a android.settings.SETTINGS" },
+  { kind = "start", action = "android.settings.SETTINGS" },
   { kind = "sleep", seconds = 1.2 },
   { kind = "if_entry", text = "隐私与安全", ops = [
     { kind = "lib", name = "tap_tab", args = ["安全"] },
@@ -98,7 +98,7 @@ ops = [
 name = "浏览器"
 ops = [
   # 直达设置页，绕开首页导航；主页布局和功能入口按机主当前选择保留。
-  { kind = "shell", command = "am start -f 0x10008000 -n com.android.browser/.BrowserSettingsActivity" },
+  { kind = "start", pkg = "com.android.browser", activity = ".BrowserSettingsActivity", clear_task = true },
   { kind = "sleep", seconds = 2 },
   { kind = "dismiss" },
   { kind = "if_entry", text = "隐私和安全", ops = [

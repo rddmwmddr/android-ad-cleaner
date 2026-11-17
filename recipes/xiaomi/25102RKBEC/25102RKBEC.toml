@@ -26,7 +26,7 @@ BROWSER_FLOW = "toolbar"
 name = "系统广告"
 ops = [
   # 不用设置搜索：HyperOS 搜索框用 setText 输入中文会卡住、一直打「%」。按菜单路径点进去。
-  { kind = "shell", command = "am start -f 0x10008000 -a android.settings.SETTINGS" },
+  { kind = "start", action = "android.settings.SETTINGS" },
   { kind = "sleep", seconds = 1.2 },
   # 这台设置首页一屏放不下，「隐私与安全」在第二屏。
   { kind = "require_entry", text = "隐私与安全", scrolls = 8, miss_print = "  ✗ 设置首页没翻到「隐私与安全」，本段收手" },

@@ -17,7 +17,7 @@ TAP_PAGE_STYLE = "tuple"
 name = "广告跟踪"
 ops = [
   {kind = "skip_in_safe_mode"},
-  {kind = "shell", command = "am start -f 0x10008000 -a android.settings.SETTINGS"},
+  {kind = "start", action = "android.settings.SETTINGS"},
   {kind = "sleep", seconds = 1.2},
   {kind = "return_lib", name = "tap_page", args = ["隐私", "com.oplusos.securitypermission.privacy.PrivacySettingsDashboardActivity", "隐私"]},
   {kind = "return_lib", name = "tap_page", args = ["设备标识与广告", "OplusSettingsActivity$DevicesIdentifySettingsActivity", "设备标识与广告"]},

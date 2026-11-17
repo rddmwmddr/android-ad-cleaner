@@ -638,8 +638,19 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
             elif kind == "close_all":
                 lines.append(f'p.off(page={_s(op["page"])})')
             elif kind == "start":
-                extra = f", {_s(op['activity'])}" if "activity" in op else ""
-                lines.append(f'p.start({_s(op["pkg"])}{extra})')
+                # 拉起形状由 op 提供（#1478）：这里只交出事实层读得懂的调用形状。整条 `am start`
+                # 不再写进源码让入口速查正则回读——那会绕回「同一批脚本被两套词法解释」。
+                # 带 `action` + `pkg` 的是公开 Intent 入口，`-n` 那条靠位置实参认直达。
+                # 每个 op 仍占一行（投影的既有契约，词库的出处行号按它算）：只有 action 的那几种
+                # 写成 `p.start(action=…)`，没有包名就不构成入口。
+                facts: list[str] = []
+                if "pkg" in op:
+                    facts.append(_s(op["pkg"]))
+                    if "activity" in op:
+                        facts.append(_s(op["activity"]))
+                if "action" in op:
+                    facts.append(f"action={_s(op['action'])}")
+                lines.append(f"p.start({', '.join(facts)})")
             elif kind == "start_or_skip":
                 lines.append(f'start_or_skip(p, rt, {_s(op["pkg"])}, {_s(op["activity"])})')
             elif kind == "skip_unless_installed":

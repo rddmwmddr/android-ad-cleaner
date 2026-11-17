@@ -330,6 +330,11 @@ def _arg_of(call, index, keyword=None):
         return positional[index]
     if keyword is None:
         return None
+    return _kwarg(call, keyword)
+
+
+def _kwarg(call, keyword):
+    """只按关键字取的实参：`start` op 降级出的 `action=`（#1478）就是这一类，没有位置。"""
     for arg in call.args:
         if arg.keyword == keyword:
             return arg
@@ -351,6 +356,10 @@ def _scan_entries(facts, model, found):
             pkg, act = _value(_arg_of(call, 0)), _value(_arg_of(call, 1, "activity"))
             if pkg and act:
                 found.setdefault(("direct", pkg, full(pkg, act)), set()).add(model)
+            # `start` op 的公开 Intent（#1478）：`action` 只按关键字来，与 `-a … -p …` 同一条入口。
+            action = _value(_kwarg(call, "action"))
+            if pkg and action:
+                found.setdefault(("intent", action, pkg), set()).add(model)
         elif call.name == "p.setting":
             keyword = _value(_arg_of(call, 0))
             if keyword:

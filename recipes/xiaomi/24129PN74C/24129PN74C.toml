@@ -40,7 +40,7 @@ name = "系统广告"
 ops = [
   # 本机「隐私与安全」是权限中心，没有「更多安全设置」。用设置搜索直达「广告服务」，搜不到走深链。
   { kind = "if_setting", kw = "广告服务", else_ops = [
-    { kind = "shell", command = "am start -f 0x10008000 -n com.android.settings/.ad.AdServiceSettings" },
+    { kind = "start", pkg = "com.android.settings", activity = ".ad.AdServiceSettings", clear_task = true },
     { kind = "sleep", seconds = 1.5 },
   ] },
   { kind = "lib", name = "close_named", args = [["个性化广告推荐"], "系统·广告服务"] },
