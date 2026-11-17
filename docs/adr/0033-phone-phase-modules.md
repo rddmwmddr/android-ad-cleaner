@@ -1,5 +1,7 @@
 # ADR-0033：`Phone` 按阶段拆成两个基座与五个阶段
 
+> **后续**：本 ADR 的「冻结面 / 公开名字一个不改」条款已被 [ADR-0045](0045-device-vocabulary-script-surface.md) 取代（门面收缩成设备概念、脚本面另有一份声明）；按阶段拆模块的结论不变。本正文保留当时的取舍与代价，不复改。
+
 基线 `f4c5df5`。前置是 [ADR-0002](0002-phone-state-interface.md)（读屏 adapter 只命名、不收窄）
 与 [ADR-0020](0020-no-read-write-split.md)（否决把 `Phone` 按读 / 写切分）。
 

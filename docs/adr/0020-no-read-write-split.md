@@ -1,5 +1,7 @@
 # 不把 `Phone` 拆成读屏与输入两个 adapter
 
+> **后续**：[ADR-0045](0045-device-vocabulary-script-surface.md) 之后结论不变（仍不按读 / 写切 `Reader`），但门面不再暴露 `reader`——`Phone(serial, reader=…)` 只是构造参数，传输改由门面动词（`shell` / `press` / `app_stop` …）承载。
+
 基线 `0b8e21c`。
 
 [ADR-0002](0002-phone-state-interface.md) 给读屏 adapter 起了名字（`Phone.reader`），但明确选了「只命名、不收窄」：
