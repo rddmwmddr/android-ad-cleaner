@@ -1986,9 +1986,9 @@ def page_texts_796(*labels, top=100):
 
 
 def home_presses_796(p):
-    """按 HOME 的次数：shell 与 `d.press` 两条路都算。"""
+    """按 HOME 的次数：shell 与门面 `press` 两条路都算。"""
     return ([c.args[0] for c in p.d.shell.call_args_list if "keyevent HOME" in c.args[0]]
-            + [c.args[0] for c in p.d.press.call_args_list if c.args[0] == "home"])
+            + [c.args[0] for c in p.press.call_args_list if c.args[0] == "home"])
 
 
 def landing_failed_796(pkg, activity=None, **kw):

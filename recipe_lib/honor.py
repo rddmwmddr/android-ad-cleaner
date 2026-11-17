@@ -74,7 +74,7 @@ def _honor_browser_settings_mounted(p, rt):
     p.dismiss()
     if p.find("我的", exact=True):                       # 经典首页：我的 → 右上第三个图标
         p.tap("我的", exact=True, scrolls=0)
-        p.d(resourceId="com.honor.browser:id/top_local_icon")[2].click()
+        p.tap_id("com.honor.browser:id/top_local_icon", index=2)
         rt.clock.sleep(1)
     else:                                                # 简洁首页：更多 → 设置
         p.tap("更多", exact=True, scrolls=0)
@@ -220,7 +220,7 @@ def search_more(p, rt, miss_print):
 
     xy = more_at()
     if not xy:
-        p.d.press("back")
+        p.press("back")
         rt.clock.sleep(0.5)
         xy = more_at()
     if not xy:

@@ -301,7 +301,7 @@ class MusicTest(unittest.TestCase):
 
     def test_late_playback_is_paused_even_when_the_step_fails(self):
         p = self.phone(self.PAUSED, self.PAUSED)
-        p.d.return_value.click_exists.return_value = False      # 设置图标没找到
+        p.tap_id_if_present.return_value = False      # 设置图标没找到
 
         def late():
             p.d.shell.side_effect = lambda cmd: Mock(output=self.PLAYING if cmd.startswith("dumpsys") else "")
@@ -323,14 +323,14 @@ class SearchTest(unittest.TestCase):
         p.texts.return_value = self.more_at(1000)
         scope, _ = run(p, "搜索")
         self.assertEqual(scope["FAILED_STEPS"], [])
-        p.d.press.assert_not_called()
+        p.press.assert_not_called()
 
     def test_back_closes_the_keyboard_when_more_is_hidden(self):
         p = phone()
         p.texts.side_effect = [[], self.more_at(1000)] + [[]] * 20
         scope, _ = run(p, "搜索")
         self.assertEqual(scope["FAILED_STEPS"], [])
-        p.d.press.assert_called_once_with("back")
+        p.press.assert_called_once_with("back")
 
     def test_missing_more_fails_with_the_message_the_data_gives(self):
         """旧树也绿，守的是不回退：两处都读不到「更多」时这一段按失败收场，文案来自数据。"""

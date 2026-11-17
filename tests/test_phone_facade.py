@@ -70,8 +70,9 @@ SCRIPT_NAMES = frozenset({
     "await_page", "back", "changed", "click", "confirm", "d", "dismiss", "enter",
     "entry", "expect_page", "find", "focus", "go", "H", "has_text", "in_settings_page",
     "locked", "note_miss", "off", "on_screen", "page_evidence",
-    "safe_mode", "scroll", "scroll_more", "setting", "shell", "settle", "sig",
-    "start", "switches", "systemui_text", "tab", "tap", "tap_icon", "texts", "top", "tree", "W",
+    "press", "safe_mode", "scroll", "scroll_more", "setting", "shell", "settle", "sig",
+    "start", "swipe", "switches", "systemui_text", "tab", "tap", "tap_icon",
+    "tap_id_if_present", "texts", "top", "tree", "W", "window_size",
 })
 
 # 今天每一条公开成员都可写。脚本确实这样用的有 4 个：`honor-WKL-AN20` 把
