@@ -90,8 +90,10 @@ def main():
             raise adb_link.DeviceLost("device offline")
         if step.get("raise") == "stop":
             raise chan.StopBatch("点击后应用通知总开关发生变化，停止整批；请在手机上核对该 App 的通知设置")
-        return chan.Outcome(chan.OutcomeKind(step.get("kind", "done")), step.get("detail", ""),
-                            step.get("payload", ""))
+        # #1437 把结局词表收进 `channel_batch` 并改成枚举；拆分前的树里 kind 是裸字符串。
+        # 探针要能同时驱动两棵树，按树里有没有 `OutcomeKind` 取构造器。
+        kind = getattr(chan, "OutcomeKind", str)(step.get("kind", "done"))
+        return chan.Outcome(kind, step.get("detail", ""), step.get("payload", ""))
 
     labels = spec.get("labels") or {}
     chan.ShellPhone = lambda _serial: reader

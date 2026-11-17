@@ -43,7 +43,7 @@ from aac_android import view  # noqa: E402
 from test_rules_registry import ANCHOR as RULE_ANCHOR  # noqa: E402  同一份锚点口径，别再抄一份
 from test_rules_registry import read_rows, top_level_names  # noqa: E402
 from devtools import release_assets  # noqa: E402
-from tool import events, summary  # noqa: E402
+from tool import events, geometry, summary  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -1150,6 +1150,43 @@ def screen_span(node):
     return False
 
 
+# 搬进 `tool/geometry.py` 的 20 个比例常量的当前值（取自 #1431 搬移前的字面量）：
+# 逐条冻结就是「搬移没改数值」的证据，抄错一位不会全绿。
+GEOMETRY_VALUES = {
+    "TOP_BAND": 0.22,
+    "SHORT_CONTAINER_MAX": 0.18,
+    "HEADER_BAND": 0.4,
+    "TOP_TITLE_BAND": 0.15,
+    "TOP_TITLE_WIDTH": 0.8,
+    "INLINE_ROW_MAX": 0.2,
+    "CONFIRM_BUTTON_MAX_W": 0.5,
+    "CONFIRM_BUTTON_MAX_H": 0.12,
+    "FIND_VISIBLE_BOTTOM": 0.92,
+    "FIND_EDGE_BOTTOM": 0.975,
+    "SCROLL_BOTTOM": 0.80,
+    "SCROLL_MAX_FRAC": 0.58,
+    "SCROLL_FRAC": 0.45,
+    "ICON_AREA": (0.72, 0.0, 1.0, 0.16),
+    "ICON_MAX_W": 0.25,
+    "ICON_MAX_H": 0.10,
+    "DISMISS_ICON_MAX_W": 0.3,
+    "DISMISS_ICON_MAX_H": 0.12,
+    "TAB_BAND": 0.85,
+    "TAPPABLE_BAND": (0.08, 0.985),
+}
+
+
+def geometry_mismatches(values):
+    """冻结表与给定常量表逐条比对；返回 `名字: 期望 != 实际` 的列表（空列表才算一致）。"""
+    found = []
+    for name, want in GEOMETRY_VALUES.items():
+        if name not in values:
+            found.append(f"{name}: 缺少这个常量")
+        elif values[name] != want:
+            found.append(f"{name}: 期望 {want!r}，实际 {values[name]!r}")
+    return found
+
+
 def stray_ratios(source, name):
     """源码里绕过 `tool/geometry.py` 的比例字面量；返回可读的 `文件:行号` 列表。
 
@@ -1196,6 +1233,17 @@ class GeometryGuards(unittest.TestCase):
             hits += stray_ratios(path.read_text(encoding="utf-8"), name)
         self.assertEqual(hits, [], "判定用的比例只在 tool/geometry.py 定义，调用方从那里取：\n"
                          + "\n".join(hits))
+
+    def test_the_moved_constants_keep_their_values(self):
+        """20 个比例常量的数值逐条冻结：搬进 `tool/geometry.py` 时一位都没改（#1431）。"""
+        self.assertEqual(geometry_mismatches(vars(geometry)), [])
+
+    def test_a_changed_or_missing_constant_is_red(self):
+        """改一位、删一个，同一个检查函数都当场返红（自证，不是只写正例）。"""
+        changed = dict(vars(geometry), TOP_BAND=0.3)
+        self.assertEqual(geometry_mismatches(changed), ["TOP_BAND: 期望 0.22，实际 0.3"])
+        missing = {name: value for name, value in vars(geometry).items() if name != "TAB_BAND"}
+        self.assertEqual(geometry_mismatches(missing), ["TAB_BAND: 缺少这个常量"])
 
     def test_a_ratio_written_back_into_a_scanned_module_is_red(self):
         """把一条已经搬走的比例写回真实模块，守卫当场返红（不是只对合成片段生效）。"""
