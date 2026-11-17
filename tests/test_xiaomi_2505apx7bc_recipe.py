@@ -19,16 +19,16 @@ sys.path.insert(0, str(ROOT / "tests"))
 import fast
 import run
 from fixtures import load_recipe, phone_mock
+import recipe_case
+from recipe_case import _walk
 
 RECIPE = ROOT / "recipes/xiaomi/2505APX7BC/2505APX7BC.toml"
 EXCEPTIONS = ROOT / "recipes/xiaomi/2505APX7BC/2505APX7BC.py"
 STEPS = ["系统广告", "应用商店", "手机管家", "下载管理", "主题", "浏览器", "全局搜索", "负一屏", "天气和日历"]
 
 
-class MixFlip2RecipeTests(unittest.TestCase):
-    def setUp(self):
-        self.path = RECIPE
-        self.source = self.path.read_text(encoding="utf-8")
+class MixFlip2RecipeTests(recipe_case.RecipeSourceCase):
+    RECIPE = RECIPE
 
     def phone(self, focus=""):
         p = phone_mock()
@@ -215,12 +215,6 @@ class MixFlip2RecipeTests(unittest.TestCase):
                        ("扫一扫", "AI搜索", "搜索历史", "搜索引擎切换栏")), named)
 
 
-def _walk(ops):
-    """展开带分支的 op（if_entry / if_lib_any …）里的子表。"""
-    for op in ops:
-        yield op
-        yield from _walk(op.get("ops", []))
-        yield from _walk(op.get("else_ops", []))
 
 
 if __name__ == "__main__":

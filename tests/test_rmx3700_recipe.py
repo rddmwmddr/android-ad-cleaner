@@ -5,7 +5,8 @@ from pathlib import Path
 from types import SimpleNamespace
 import unittest
 
-from fixtures import keep_list, load_recipe, phone_stub
+from fixtures import keep_list, phone_stub
+from recipe_case import fake_shell, load
 
 ROOT = Path(__file__).resolve().parents[1]
 RECIPE = ROOT / "recipes/oppo/RMX3700/RMX3700.toml"
@@ -13,51 +14,34 @@ RECIPE = ROOT / "recipes/oppo/RMX3700/RMX3700.toml"
 STEPS = ["广告跟踪", "软件商店", "浏览器", "下拉搜索", "小布建议", "应用建议"]
 
 
-def fake_shell(model, build, commands):
-    """回答两条 getprop，其余命令当场失败：这一段只该读型号与版本号。"""
-    values = {"getprop ro.product.model": model, "getprop ro.build.display.id": build}
-
-    def shell(command, timeout=None):
-        commands.append(command)
-        if command not in values:
-            raise AssertionError("Unexpected phone command: " + command)
-        return SimpleNamespace(output=values[command])
-
-    return shell
-
-
 def make_phone(model="RMX3700", build="RMX3700_16.0.5.1300(CN01)", locked=False):
-    commands = []
-    d = SimpleNamespace(shell=fake_shell(model, build, commands))
+    shell, commands = fake_shell(model, build)
+    d = SimpleNamespace(shell=shell)
     return phone_stub("RMX3700", d=d, W=1240, H=2772, locked=lambda: locked, commands=commands)
-
-
-def load(phone=None, only=None):
-    return load_recipe(phone or make_phone(), RECIPE, only)[0]
 
 
 class RecipeSafetyTests(unittest.TestCase):
     def test_no_selection_does_not_touch_phone(self):
         phone = make_phone()
-        result = load(phone)
+        result = load(phone, RECIPE)
         self.assertEqual(result["RESULTS"], [])
         self.assertEqual(phone.commands, [])
 
     def test_wrong_model_skips_all_steps(self):
         phone = make_phone(model="OTHER")
-        result = load(phone, STEPS)
+        result = load(phone, RECIPE, STEPS)
         self.assertEqual(len(result["RESULTS"]), len(STEPS))
         self.assertTrue(all(state == "跳过" for _, state in result["RESULTS"]))
         self.assertEqual(result["FAILED_STEPS"], [])
         self.assertTrue(all(command.startswith("getprop ") for command in phone.commands))
 
     def test_different_build_skips(self):
-        result = load(make_phone(build="RMX3700_17.0.0"), ["软件商店"])
+        result = load(make_phone(build="RMX3700_17.0.0"), RECIPE, ["软件商店"])
         self.assertEqual(result["RESULTS"], [("软件商店", "跳过")])
 
     def test_locked_phone_fails_the_step(self):
         """锁屏不再静默跳过：这一段记未完成，退出码由失败台账给出（#839）。"""
-        result = load(make_phone(locked=True), ["软件商店"])
+        result = load(make_phone(locked=True), RECIPE, ["软件商店"])
         self.assertEqual(result["RESULTS"], [("软件商店", "未完成")])
         self.assertEqual(result["FAILED_STEPS"], ["软件商店"])
 
@@ -78,7 +62,7 @@ class RecipeSafetyTests(unittest.TestCase):
         calls = []
         phone.find = lambda text, exact=False: True
         phone.tap = lambda text, exact=False, scrolls=6: calls.append((text, scrolls)) or True
-        function = load(phone)["tap_by_scroll"]
+        function = load(phone, RECIPE)["tap_by_scroll"]
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertTrue(function("资讯服务"))
         self.assertEqual(calls, [("资讯服务", 0)])
@@ -87,7 +71,7 @@ class RecipeSafetyTests(unittest.TestCase):
         phone = make_phone()
         phone.find = lambda text, exact=False: False
         phone.scroll_more = lambda: False
-        function = load(phone)["tap_by_scroll"]
+        function = load(phone, RECIPE)["tap_by_scroll"]
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertFalse(function("不存在的入口"))
 
@@ -97,7 +81,7 @@ class RecipeSafetyTests(unittest.TestCase):
         phone.screen.tree = lambda: None
         phone.screen.texts = lambda root: [("设置", (0, 0, 100, 100), {"class": "TextView"})]
         phone.switches = lambda root: [("广告", True, (2294, 600))]
-        function = load(phone)["wait_page"]
+        function = load(phone, RECIPE)["wait_page"]
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertFalse(function("ExampleActivity", "设置", timeout=0.01))
 
@@ -106,7 +90,7 @@ class RecipeSafetyTests(unittest.TestCase):
         phone.screen.focus = lambda: "example.app/ExampleActivity"
         phone.screen.tree = lambda: None
         phone.screen.texts = lambda root: [("同意并继续", (0, 0, 100, 100), {"class": "android.widget.Button"})]
-        function = load(phone)["wait_page"]
+        function = load(phone, RECIPE)["wait_page"]
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertFalse(function("ExampleActivity", "设置", timeout=0.01))
 
@@ -116,7 +100,7 @@ class RecipeSafetyTests(unittest.TestCase):
         phone.screen.tree = lambda: None
         phone.screen.texts = lambda root: [("设置", (0, 0, 100, 100), {"class": "TextView"})]
         phone.switches = lambda root: []
-        function = load(phone)["wait_page"]
+        function = load(phone, RECIPE)["wait_page"]
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertFalse(function("ExampleActivity", "设置", timeout=0.01))
 
