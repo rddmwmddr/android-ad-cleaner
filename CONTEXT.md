@@ -26,6 +26,8 @@
 
 **脚本事实层** — 一份机型脚本（数据 + 同目录例外 `.py`）里发生了哪些调用，由 `tool/recipe_source.py` 用纯 AST 给出：调用名、解析后的实参、所在函数、行号、页面标签，外加模块级函数名与模块级常量；它只做字面量提取，不再解析 import 归属（[ADR-0038](docs/adr/0038-recipe-catalog.md)）。它不认词表、不做分类、不碰手机；入口速查与词库各从这一份事实投影成自己的形状（[ADR-0034](docs/adr/0034-recipe-source-facts.md)）。
 
+**脚本面** — 脚本与家族库可以碰的门面名字，不是「门面上有什么就能用什么」：`Phone` 的公开面还包含引擎自己与各阶段用的名字（`ls` / `close` / `check_alive` / `home` / `app_stop` …），脚本该看到的是其中**声明过的那一份**（`tool/phone/surface.py` 的 `SCRIPT_SURFACE`）。守卫是 AST 静态扫描（`devtools/script_surface.py`，`tests/test_phone_facade.py` 代跑）：`recipes/` 与 `recipe_lib/` 里出现声明外的 `p.<名字>` 即红。判据在 [ADR-0045](docs/adr/0045-device-vocabulary-script-surface.md)：门面只放「这台手机」的概念，传输与内部状态归协作者；加一个新名字前先回答「脚本该不该碰它」。
+
 **页面树** — 机型脚本的终态数据（`recipes/<家族>/<型号>/<型号>.toml`，[ADR-0038](docs/adr/0038-recipe-catalog.md)）：把「有哪些页面、有哪些行、怎么进去、关哪些、留哪些」写成声明式节点，由 `tool/catalog/` 的解释器执行。它只装机型知识，不装编排语义（失败怎么收场、顺序、重试、台账、页面快照归运行时）。
 
 **本机策略** — 某一台机型页面树表达不了、只能写成该机 `.py` 例外函数的逻辑（数据里的 `code = "<本机策略名>"`）。它在 `check` / `status-json` 里报成「本机策略：N 个」；同一份实现被第二台机复制即触发升格守卫，必须进家族库或共享库。
@@ -146,7 +148,7 @@
 
 **已确认断线** — 断线之后等手机回来（`wait-for-device`）仍然不回来，或者回来了第二轮命令仍然断。一旦确认，本轮剩下的段落只报一句「连接已断开」，不再逐段等重试。
 
-**读屏 adapter** — `Phone` 与手机之间那一层（`tool/reader.py` 的 `Reader`）：`shell` / `dump_hierarchy` / `window_size` / `screenshot` / `settings` 等。手机上是 uiautomator2 的连接，测试里是按时间轴换页的假设备（`tests/fixtures.py` 的 `Device`）。`Phone.reader` 是名字（实体归 `Connection`，门面只转发），`Phone.d` 是同一个对象的历史别名，机型脚本与测试用的是它。
+**读屏 adapter** — `Phone` 与手机之间那一层（`tool/reader.py` 的 `Reader`）：`shell` / `dump_hierarchy` / `window_size` / `screenshot` / `settings` 等。手机上是 uiautomator2 的连接，测试里是按时间轴换页的假设备（`tests/fixtures.py` 的 `Device`）。实体归 `Connection`（读 `p.conn.reader`），门面不再转发它——脚本与引擎都经门面动词（`p.shell` / `p.tap_id` …）做事，不直接碰这个对象（ADR-0045）。
 
 ## 事件
 

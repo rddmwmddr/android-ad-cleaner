@@ -224,8 +224,8 @@ def check_draft(p, recipe_path, only=()):
     # 手改过的草稿若写了不带 only= 的 p.off()，靠这个也只关点名的开关，不整页全关。
     p.safe_mode = True
     p.screen.captures.task = "adapt"        # 失败现场按任务归档（#1126）
-    build = p.d.shell("getprop ro.build.display.id").output.strip()
-    osv = p.d.shell("getprop ro.mi.os.version.incremental").output.strip()
+    build = p.shell("getprop ro.build.display.id").strip()
+    osv = p.shell("getprop ro.mi.os.version.incremental").strip()
     recorded = str(data.get("build", ""))
     if recorded and not (build.startswith(recorded) or osv.startswith(recorded)):
         print(f"⚠ 草稿标注 BUILD {recorded}，这台是 {osv or build}：按安全模式跑（只关点名的开关）")
@@ -264,13 +264,13 @@ def cmd_check(rest):
         if p.locked():
             locked = True
         else:
-            stay = p.d.shell("settings get global stay_on_while_plugged_in").output.strip()
+            stay = p.shell("settings get global stay_on_while_plugged_in").strip()
             try:
-                p.d.shell("settings put global stay_on_while_plugged_in 7")
+                p.shell("settings put global stay_on_while_plugged_in 7")
                 print("⚠ 安全模式自检：这份是待验证草稿，只关 only= 点名的开关，找不到就如实报告。")
                 report = check_draft(p, recipe, only)
             finally:
-                p.d.shell(f"settings put global stay_on_while_plugged_in {int(stay) if stay.isdigit() else 0}")
+                p.shell(f"settings put global stay_on_while_plugged_in {int(stay) if stay.isdigit() else 0}")
     if locked:                      # 文案等 __exit__ 跑完再渲染：close 抛错时与 sys.exit 的旧时机一致
         return fail("手机锁屏了，请机主解锁后再跑")
     return 0 if print_report(report) else 1
@@ -281,7 +281,7 @@ def cmd_check(rest):
 
 def _installed_packages(p):
     """一次 `pm list packages` 换成集合：逐条 `pm path` 每次都要起一个进程。"""
-    out = p.reader.shell("pm list packages").output or ""
+    out = p.shell("pm list packages") or ""
     return {line.strip().split("package:", 1)[1] for line in out.splitlines() if "package:" in line}
 
 
@@ -311,7 +311,7 @@ def survey(p, family, words, log=print, now=None, sleep=None):
     for group, entry in entries.ENTRIES.get(family, {}).items():
         for d in entry.direct:
             page = entries.full(d.pkg, d.activity)
-            result = p.reader.shell(entries.start_command(d, wait=True))
+            result = p.shell(entries.start_command(d, wait=True))
             if getattr(result, "exit_code", 0) or re.search(r"Error|Exception", result.output or "", re.I):
                 log(f"✗ 打不开  {group} {page}")
                 rows.append({"group": group, "page": page, "landed": False, "expect": False, "words": []})
@@ -358,7 +358,7 @@ def cmd_survey(rest):
     with Phone(rest[1]) as p:
         if p.locked():
             return fail("手机锁屏了，请机主解锁后再跑")
-        brand = p.reader.shell("getprop ro.product.brand").output.strip().lower()
+        brand = p.shell("getprop ro.product.brand").strip().lower()
         family = entries.FAMILY.get(brand)
         if not family:
             return fail(f"认不出品牌「{brand or '空'}」：入口速查只收了"
@@ -372,7 +372,7 @@ def cmd_survey(rest):
         print(f"{entries.LABEL.get(family, family)}：试 {sum(len(e.direct) for e in groups.values())} 个直达入口，"
               "屏幕会跳，不要碰手机。", flush=True)
         rows = survey(p, family, words)
-        p.reader.press("home")
+        p.press("home")
     return 0 if any(row["landed"] and row["expect"] for row in rows) else 1
 
 

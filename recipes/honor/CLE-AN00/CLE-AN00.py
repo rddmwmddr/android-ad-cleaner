@@ -21,14 +21,14 @@ def wait_open(p, rt, pkg, app):
 
 
 def music_playing(p, rt):
-    sessions = p.d.shell("dumpsys media_session").output.split("package=")[1:]
+    sessions = p.shell("dumpsys media_session").split("package=")[1:]
     return any(s.startswith(MUSIC) and "state=PLAYING" in s for s in sessions)
 
 
 def hush_music(p, rt, listening):
     if listening or not music_playing(p, rt):
         return False
-    p.d.shell("input keyevent KEYCODE_MEDIA_PAUSE")
+    p.shell("input keyevent KEYCODE_MEDIA_PAUSE")
     print("  · 音乐一打开就放歌（它的「启动后自动播放歌曲」开着），已暂停")
     return True
 
@@ -50,12 +50,12 @@ def assert_none_left(p, rt):
 
 
 def step_negative(p, rt):
-    p.d.shell("am start -f 0x10008000 -n com.hihonor.hiboard/com.hihonor.intelligent.LauncherActivity")
+    p.shell("am start -f 0x10008000 -n com.hihonor.hiboard/com.hihonor.intelligent.LauncherActivity")
     time.sleep(2)
     if not p.find("头像", exact=True):
-        p.d.press("home"); time.sleep(0.6)
+        p.press("home"); time.sleep(0.6)
         for _ in range(3):
-            p.d.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250"); time.sleep(1.2)
+            p.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250"); time.sleep(1.2)
             if p.find("头像", exact=True):
                 break
         else:
@@ -75,7 +75,7 @@ def step_negative(p, rt):
 
 def step_music(p, rt):
     listening = music_playing(p, rt)
-    p.d.shell(f"am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER "
+    p.shell(f"am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER "
               f"-n {MUSIC}/com.netease.cloudmusic.activity.MainActivity")
     try:
         for _i in range(10):
@@ -88,7 +88,7 @@ def step_music(p, rt):
         hush_music(p, rt, listening)
         nav.my_tab(p, rt, "音乐")
         p.dismiss()
-        if not p.d(resourceId=f"{MUSIC}:id/ic_setting").click_exists(timeout=3):
+        if not p.tap_id_if_present(f"{MUSIC}:id/ic_setting", timeout=3):
             raise RuntimeError("音乐设置图标没找到")
         time.sleep(1.2)
         nav.enter(p, rt, "更多设置")

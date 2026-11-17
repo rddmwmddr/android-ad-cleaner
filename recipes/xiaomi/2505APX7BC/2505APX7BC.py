@@ -30,7 +30,7 @@ def step_weather_calendar(p, rt):
         print("  · 天气：本版无此类开关（只有提醒与单位设置），跳过")
     p.back(2)
     # 日历：设置是无文字图标，直达 Activity；这版 7 项全是功能开关。
-    p.d.shell("am start -f 0x10008000 -n com.android.calendar/.settings.CalendarActionbarSettingsActivity")
+    p.shell("am start -f 0x10008000 -n com.android.calendar/.settings.CalendarActionbarSettingsActivity")
     time.sleep(1.5)
     rt.require("CalendarActionbarSettingsActivity" in p.focus(), f"日历设置页没有打开；停在 {p.focus()}")
     if nav.maybe(p, rt, "用户体验计划"):

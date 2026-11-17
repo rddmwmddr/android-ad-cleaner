@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "tool"))
 
 import fixtures  # noqa: E402
+from fixtures import shell_result  # noqa: E402
 
 fixtures.load_tool()
 import catalog  # noqa: E402
@@ -527,6 +528,41 @@ class CodeFallbackTests(unittest.TestCase):
         self.assertEqual(recipe.rt.results, [("a", "完成")])
 
 
+class ScopedOpTests(unittest.TestCase):
+    """`scoped` op：段内设一个页面属性，退出必须恢复到原值。
+
+    属性归观测基座（`p.screen`），设与恢复打的是同一个对象——V1986A 的「阅图锁屏」段靠它：
+    恢复没做到，退出后读屏一直算上 `com.android.systemui` 的状态栏文字，后续段会误判。"""
+
+    TOML = ('[[segment]]\nname="a"\n'
+            'ops=[{kind="scoped", systemui_text=true, ops=[{kind="back", n=1}]}]\n')
+
+    def test_the_attribute_is_visible_inside_and_restored_afterwards(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.TOML)
+            seen = []
+            phone.back = lambda n=1: seen.append(phone.screen.systemui_text)
+            before = phone.screen.systemui_text
+            recipe.run()
+        self.assertEqual(seen, [True], "段内没把 systemui_text 设上")
+        self.assertEqual(phone.screen.systemui_text, before, "退出后没有恢复到原值")
+        self.assertNotIn("systemui_text", vars(phone),
+                         "恢复打到了 Phone 上而不是 Screen：属性已不在门面上，这句只是挂了个死属性")
+
+    def test_a_failing_op_still_restores_the_attribute(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.TOML)
+            before = phone.screen.systemui_text
+
+            def boom(n=1):
+                raise RuntimeError("段体失败")
+
+            phone.back = boom
+            with contextlib.redirect_stdout(io.StringIO()):
+                recipe.run()
+        self.assertEqual(phone.screen.systemui_text, before)
+
+
 class EnterOpTests(unittest.TestCase):
     """`enter` op（#1264）：数据里的 `p.enter(text, scrolls=…)`，与 `entry`（布尔入口）是两条路。"""
 
@@ -626,7 +662,7 @@ class TapIdOpTests(unittest.TestCase):
                 def click(self):
                     clicks.append(True)
 
-            phone.d = self.Reader(lambda selectors: seen.append(selectors) or Target())
+            phone.conn.reader = self.Reader(lambda selectors: seen.append(selectors) or Target())
             recipe.run()
         return seen, clicks, recipe.rt.results
 
@@ -663,7 +699,7 @@ class TapIdOpTests(unittest.TestCase):
                 def click(self):
                     raise RuntimeError("读屏失败了")
 
-            phone.d = self.Reader(lambda _selectors: Target())
+            phone.conn.reader = self.Reader(lambda _selectors: Target())
             with contextlib.redirect_stdout(io.StringIO()) as out:
                 recipe.run()
         self.assertEqual(recipe.rt.results, [("a", "未完成")])
@@ -703,12 +739,7 @@ class GestureOpTests(unittest.TestCase):
             recipe, phone, _calls = _load_tmp(tmp, toml)
             phone.W, phone.H = size
             shells = []
-
-            def shell(command):
-                shells.append(command)
-                return SimpleNamespace(output="", exit_code=0)
-
-            phone.d.shell = shell
+            phone.shell = lambda command, timeout=None: (shells.append(command), "")[1]
             recipe.run()
         return [command for command in shells if command.startswith("input swipe")]
 
@@ -1046,6 +1077,140 @@ class CloseListedOpTests(unittest.TestCase):
         self.assertEqual(recipe.rt.failed_steps, ["a"])
 
 
+class StartOpCommandTests(unittest.TestCase):
+    """`start` op 的命令形状（#1473）：动作 / URI / 窗口模式 / 裸启动 / monkey 五种写法。
+
+    判据是**下发到手机的 shell 串**：把数据里手写的 `am start` 迁进 op（#1478）要的是与迁移前
+    逐字节相同的命令，所以这里逐字比字面量，不比「调了哪个方法」。不带形状键的 `start` 仍走
+    `p.start`（落点校验那一条），见 `StartOpLandingTests`。
+    """
+
+    def _commands(self, toml):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            shells = []
+            phone.shell = lambda command, timeout=None: (shells.append(command), "")[1]
+            recipe.run()
+        return shells
+
+    def test_a_public_intent_launch_gets_the_clear_task_flag_by_default(self):
+        self.assertEqual(
+            self._commands('[[segment]]\nname="a"\nops=[{kind="start",'
+                           ' action="android.settings.SETTINGS"}]\n'),
+            ["am start -f 0x10008000 -a android.settings.SETTINGS"])
+
+    def test_a_page_launch_renders_the_same_command_as_the_handwritten_shell(self):
+        """`-n` + 清栈：与数据里手写的 `shell` 串同一个形状，迁移才对得上。"""
+        self.assertEqual(
+            self._commands('[[segment]]\nname="a"\nops=[{kind="start",'
+                           ' pkg="com.android.settings", activity=".ad.AdServiceSettings",'
+                           ' clear_task=true}]\n'),
+            ["am start -f 0x10008000 -n com.android.settings/.ad.AdServiceSettings"])
+
+    def test_a_bare_launch_drops_the_clear_task_flag(self):
+        """裸启动：带清栈参数会立刻退出的页面（沿用 #165 的裁决），数据里写 `clear_task = false`。"""
+        self.assertEqual(
+            self._commands('[[segment]]\nname="a"\nops=[{kind="start",'
+                           ' pkg="com.heytap.browser",'
+                           ' activity="com.heytap.browser.settings.component.BrowserPreferencesPage",'
+                           ' clear_task=false}]\n'),
+            ["am start -n com.heytap.browser/"
+             "com.heytap.browser.settings.component.BrowserPreferencesPage"])
+
+    def test_a_public_intent_names_its_package_when_the_page_is_not_exported(self):
+        self.assertEqual(
+            self._commands('[[segment]]\nname="a"\nops=[{kind="start",'
+                           ' action="oppo.intent.action.APP_SETTINGS", pkg="com.heytap.market"}]\n'),
+            ["am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.heytap.market"])
+
+    def test_a_window_mode_flag_goes_right_after_am_start(self):
+        self.assertEqual(
+            self._commands('[[segment]]\nname="a"\nops=[{kind="start",'
+                           ' flags="--windowingMode 1", action="android.settings.SETTINGS"}]\n'),
+            ["am start --windowingMode 1 -f 0x10008000 -a android.settings.SETTINGS"])
+
+    def test_a_uri_is_quoted_so_the_device_shell_does_not_split_it(self):
+        self.assertEqual(
+            self._commands('[[segment]]\nname="a"\nops=[{kind="start",'
+                           ' action="android.intent.action.VIEW", data="gs://search/setting"}]\n'),
+            ["am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"])
+
+    def test_a_launcher_start_takes_the_monkey_route(self):
+        self.assertEqual(
+            self._commands('[[segment]]\nname="a"\nops=[{kind="start",'
+                           ' pkg="com.android.browser", launcher=true}]\n'),
+            ["monkey -p com.android.browser -c android.intent.category.LAUNCHER 1"])
+
+
+class ShippedShellOpsTests(unittest.TestCase):
+    """48 份数据里还剩哪些 raw `shell`（#1478）。
+
+    拉起、强停与 monkey 都进了结构化 op；留下的只能是 op 表达不了的那几条。
+    再加一条手写的 `am start` 就说明「同一批脚本被两套词法解释」又长回来了（ADR-0034 的病）。
+    """
+
+    KEPT = (
+        "input tap 1098 240",          # 这版日历的「更多」对 uiautomator 点击不响应
+        "input tap 769 647",           # 同上，「设置」
+        "input keyevent KEYCODE_HOME",  # u2 的 press 走 jsonrpc，不是 input keyevent
+        "input keyevent HOME",
+        "input keyevent BACK",
+        # 录脚本时写死的绝对坐标：`gesture` 按屏宽/屏高比例现算，真机上换回来的绝像素与原串不同
+        "input swipe 600 2200 600 500 250",
+        "input swipe 600 2200 600 500 250",
+        "input swipe 600 2200 600 500 250",
+    )
+
+    @staticmethod
+    def _walk(value):
+        """op 出现在 `ops` / `else_ops` / 调用实参块里，一律递归收。"""
+        if isinstance(value, dict):
+            if isinstance(value.get("kind"), str):
+                yield value
+            for item in value.values():
+                yield from ShippedShellOpsTests._walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                yield from ShippedShellOpsTests._walk(item)
+
+    def test_the_commands_that_stay_raw_shell_are_the_documented_ones(self):
+        found = []
+        for path in sorted((ROOT / "recipes").glob("*/*/*.toml")):
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+            found += [op["command"] for op in self._walk(data) if op["kind"] == "shell"]
+        self.assertEqual(sorted(found), sorted(self.KEPT))
+
+    def test_no_catalog_data_launches_or_stops_through_a_shell_string(self):
+        """`am start` / `am force-stop` / `monkey` 的形状只在 `tool/catalog/launch.py` 拼一次。"""
+        leftovers = []
+        for path in sorted((ROOT / "recipes").glob("*/*/*.toml")):
+            for op in self._walk(tomllib.loads(path.read_text(encoding="utf-8"))):
+                command = op.get("command", "")
+                if op["kind"] == "shell" and (
+                        "am start" in command or "am force-stop" in command
+                        or command.startswith("monkey ")):
+                    leftovers.append((path.relative_to(ROOT).as_posix(), command))
+        self.assertEqual(leftovers, [])
+
+
+class StartOpLandingTests(unittest.TestCase):
+    """不带形状键的 `start` 仍是 `p.start`：落点校验（前台归属、弹窗）不能因为这次扩展丢掉。"""
+
+    def test_a_plain_package_and_activity_still_goes_through_start(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="start", pkg="com.hionor.id",'
+                ' activity=".oaid.ui.X", expect="广告"}]\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            seen = []
+            phone.start = lambda *a, **kw: seen.append((a, kw))
+            shells = []
+            phone.shell = lambda command, timeout=None: shells.append(command)
+            recipe.run()
+        self.assertEqual(seen, [(("com.hionor.id", ".oaid.ui.X"),
+                                 {"expect": "广告"})])
+        self.assertEqual(shells, [])
+
+
 class StartOrSkipOpTests(unittest.TestCase):
     """`start_or_skip` op（#1266）：数据里的 `start_or_skip(pkg, activity, dead_ends=…, reason=…)`。
 
@@ -1067,7 +1232,7 @@ class StartOrSkipOpTests(unittest.TestCase):
 
 
 class SkipUnlessInstalledTests(unittest.TestCase):
-    """`skip_unless_installed` op（#1266）：`if "package:" not in p.d.shell("pm path X").output: print; return`。
+    """`skip_unless_installed` op（沿用 #1266 的做法）：`if "package:" not in p.shell("pm path X"): print; return`。
 
     本机没装主题管理包时，后面的入口一个都走不到：打印一句、按「完成」收尾（旧脚本是 `return`，
     不是失败），后面的 op 不再做。"""
@@ -1082,7 +1247,7 @@ class SkipUnlessInstalledTests(unittest.TestCase):
             recipe, phone, _calls = _load_tmp(tmp, self.TOML)
             backs = []
             phone.back = lambda n=1: backs.append(n)
-            phone.d.shell = lambda command, **kw: self._NS(output=output, exit_code=0)
+            phone.shell = lambda command, **kw: output
             recipe.run()
         return recipe, backs
 
@@ -1479,7 +1644,7 @@ class NewOpProjectionTests(unittest.TestCase):
         import recipe_source
         lowered = recipe_source._catalog_src(self.DATA)
         self.assertIn('p.setting("广告服务")', lowered)
-        self.assertIn('p.d.shell("am start -n com.android.settings/.ad.AdServiceSettings")', lowered)
+        self.assertIn('p.shell("am start -n com.android.settings/.ad.AdServiceSettings")', lowered)
         self.assertEqual([line for line in lowered.splitlines() if line.startswith("gear(")],
                          ["gear(p, rt)", "gear(p, rt)"])
 
@@ -1551,13 +1716,13 @@ class LibArgOpsProjectionTests(unittest.TestCase):
         lowered = recipe_source._catalog_src(self.DATA)
         self.assertIn('p.start("com.heytap.themestore")', lowered)
         self.assertIn('p.enter("我的")', lowered)
-        self.assertIn('p.d.shell("am start -n com.heytap.themestore/.Setting")', lowered)
+        self.assertIn('p.shell("am start -n com.heytap.themestore/.Setting")', lowered)
 
     def test_the_block_names_resolve_into_the_entry_facts(self):
         import recipe_source
         names = {call.name for call in recipe_source.scan_catalog(self.DATA).calls}
         self.assertIn("p.enter", names)
-        self.assertIn("p.d.shell", names)
+        self.assertIn("p.shell", names)
 
 
 class SettlePageVocabularyTests(unittest.TestCase):
@@ -1629,10 +1794,9 @@ class BrowserRecsBindingTests(unittest.TestCase):
         recipe, phone = _load_model(self.PATH, ["浏览器推荐"])
         phone.back = lambda n=1: seen.append(("back", n))
         # 这份数据的 guard 钩子先核对型号与系统版本，对不上整份跳过。
-        phone.d.shell = lambda command: SimpleNamespace(
-            output={"getprop ro.product.model": "WKL-AN20",
-                    "getprop ro.build.display.id": "WKL-AN20 11.0.0.111(SP7C00E110R101P7)"}.get(command, ""),
-            exit_code=0)
+        phone.shell = lambda command, timeout=None: shell_result(
+            {"getprop ro.product.model": "WKL-AN20",
+             "getprop ro.build.display.id": "WKL-AN20 11.0.0.111(SP7C00E110R101P7)"}.get(command, ""), 0)
         recipe.run()
         return seen
 
@@ -1886,7 +2050,7 @@ class OpKindDeclarationTests(unittest.TestCase):
     """
 
     # 事实类条件分支（if_find / if_entry / if_focus / if_tap）靠子 op 产出事实；给一个稳定产出
-    # `p.d.shell` 的子 op，占位 op 才判得出「这个 kind 会不会产出事实」。
+    # `p.shell` 的子 op，占位 op 才判得出「这个 kind 会不会产出事实」。
     _SUB_OP = {"kind": "shell", "command": "x"}
 
     def _probe_value(self, key):
@@ -2011,7 +2175,7 @@ class CatalogLoweringDetailTests(unittest.TestCase):
     def test_skip_unless_installed_keeps_its_command(self):
         op = {"kind": "skip_unless_installed", "command": "pm path com.a",
               "contains": "com.a", "text": "com.a"}
-        self.assertEqual(self.lowered([op]), 'p.d.shell("pm path com.a")')
+        self.assertEqual(self.lowered([op]), 'p.shell("pm path com.a")')
 
     def test_entry_keeps_its_text(self):
         self.assertEqual(self.lowered([{"kind": "entry", "text": "甲"}]), 'p.entry("甲")')

@@ -638,13 +638,24 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
             elif kind == "close_all":
                 lines.append(f'p.off(page={_s(op["page"])})')
             elif kind == "start":
-                extra = f", {_s(op['activity'])}" if "activity" in op else ""
-                lines.append(f'p.start({_s(op["pkg"])}{extra})')
+                # 拉起形状由 op 提供（#1478）：这里只交出事实层读得懂的调用形状。整条 `am start`
+                # 不再写进源码让入口速查正则回读——那会绕回「同一批脚本被两套词法解释」。
+                # 带 `action` + `pkg` 的是公开 Intent 入口，`-n` 那条靠位置实参认直达。
+                # 每个 op 仍占一行（投影的既有契约，词库的出处行号按它算）：只有 action 的那几种
+                # 写成 `p.start(action=…)`，没有包名就不构成入口。
+                facts: list[str] = []
+                if "pkg" in op:
+                    facts.append(_s(op["pkg"]))
+                    if "activity" in op:
+                        facts.append(_s(op["activity"]))
+                if "action" in op:
+                    facts.append(f"action={_s(op['action'])}")
+                lines.append(f"p.start({', '.join(facts)})")
             elif kind == "start_or_skip":
                 lines.append(f'start_or_skip(p, rt, {_s(op["pkg"])}, {_s(op["activity"])})')
             elif kind == "skip_unless_installed":
-                # `p.d.shell("pm path …")` 原样进事实层（不是 am start，不构成入口，只是不丢这条读）。
-                lines.append(f"p.d.shell({_s(op['command'])})")
+                # `p.shell("pm path …")` 原样进事实层（不是 am start，不构成入口，只是不丢这条读）。
+                lines.append(f"p.shell({_s(op['command'])})")
             elif kind in ("entry", "require_entry"):
                 lines.append(f"p.entry({_s(op['text'])})")
             elif kind == "enter":
@@ -656,15 +667,15 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 lower(op.get("ops", []))
                 lower(op.get("else_ops", []))
             elif kind == "shell":
-                # 不经门面的拉起串（`am start …`）也是入口，不降级的话入口速查会漏掉这台机（#1263）。
-                lines.append(f"p.d.shell({_s(op['command'])})")
+                # 原样下发的拉起串（`am start …`）也是入口，不降级的话入口速查会漏掉这台机（沿用 #1263 的口径）。
+                lines.append(f"p.shell({_s(op['command'])})")
             elif kind == "gated":
                 for text in op.get("entries", []):
                     lines.append(f"maybe(p, rt, {_s(text)})")
                 lower(op.get("ops", []))
             elif kind == "scoped":
                 if "systemui_text" in op:
-                    lines.append(f"p.systemui_text = {op['systemui_text']!r}")
+                    lines.append(f"p.screen.systemui_text = {op['systemui_text']!r}")
                 lower(op.get("ops", []))
             elif kind in ("if_find", "if_entry", "if_lib", "if_lib_any", "if_focus", "if_tap",
                           "if_var"):

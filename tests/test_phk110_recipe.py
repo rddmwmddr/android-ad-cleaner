@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import unittest
 
-from fixtures import phone_stub
+from fixtures import phone_stub, shell_result
 import recipe_case
 from recipe_case import fake_shell, load
 
@@ -16,7 +16,7 @@ RECIPE = ROOT / "recipes/oppo/PHK110/PHK110.toml"
 def make_phone(model="PHK110", build="PHK110_16.0.5.1201(CN01)", locked=False):
     shell, commands = fake_shell(model, build)
     d = SimpleNamespace(shell=shell)
-    return phone_stub("PHK110", d=d, W=1240, H=2772, locked=lambda: locked, commands=commands)
+    return phone_stub("PHK110", reader=d, W=1240, H=2772, locked=lambda: locked, commands=commands)
 
 
 class RecipeSafetyTests(recipe_case.OfflineSafetyCase):
@@ -48,7 +48,7 @@ class RecipeSafetyTests(recipe_case.OfflineSafetyCase):
         所以改装要在装载前把同一个对象传进去，不能再走 `__globals__["p"]`。"""
         phone = make_phone()
         namespace = load(phone, RECIPE)
-        phone.d.shell = lambda command: SimpleNamespace(output="Permission Denial: not exported")
+        phone.shell = lambda command: shell_result("Permission Denial: not exported", 0)
         function = namespace["open_app_settings"]
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertFalse(function("example.app", "ExampleActivity", "设置"))

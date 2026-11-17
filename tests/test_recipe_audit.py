@@ -42,7 +42,7 @@ def close_exact():
 
 def build_id():
     """真机型知识：只有这一台才要的版本守卫。"""
-    return p.d.shell("getprop ro.build.display.id")
+    return p.shell("getprop ro.build.display.id")
 '''
 
 OTHERS = '''"""假机型脚本：与 FAKEA 定义同名的 open_settings，用来验「涉及机型数」。"""
@@ -90,7 +90,7 @@ class TierTests(unittest.TestCase):
 
     def test_neither_signal_is_device_knowledge(self):
         """读屏库直调、getprop 这类逃生口不是词汇也不是策略：它们才是该留在机型脚本里的知识。"""
-        self.assertEqual(recipe_audit.tier_of(["p.d.shell", "RuntimeError"]),
+        self.assertEqual(recipe_audit.tier_of(["p.shell", "RuntimeError"]),
                          (recipe_audit.KNOWLEDGE, ()))
         self.assertEqual(recipe_audit.tier_of([]), (recipe_audit.KNOWLEDGE, ()))
 
@@ -99,7 +99,7 @@ class TierTests(unittest.TestCase):
 
         不收的话十几个 `tail()` 会混进真机型知识，本机策略数也被收尾打印淹没。"""
         source = ('def tail():\n    print(rt.verified)\n'
-                  'def guard():\n    require(p.d.shell("getprop x") == "1", "型号不符")\n'
+                  'def guard():\n    require(p.shell("getprop x") == "1", "型号不符")\n'
                   'def helper():\n    return tail\n')
         found = {function.name: function for function in recipe_audit.classify(source)}
         self.assertEqual(found["tail"].tier, recipe_audit.HOOK)
@@ -192,7 +192,7 @@ class CliTests(unittest.TestCase):
         self.assertIn("过滤：机型 FAKEA", out)
         self.assertIn("- `close_exact`：拨动策略（命中 p.off、p.switches） · 机型 1 台", out)
         # 真机型知识的现场是「两档信号都不占」：把它调过的名字打出来，判据才能当场复核
-        self.assertIn("- `build_id`：真机型知识（没有判据信号，只调了 p.d.shell）", out)
+        self.assertIn("- `build_id`：真机型知识（没有判据信号，只调了 p.shell）", out)
 
     def test_summary_skips_the_per_script_sections(self):
         rc, out, _err = self.run_cli(["--summary"])

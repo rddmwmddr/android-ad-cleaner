@@ -53,12 +53,12 @@ def close_all_oaid(p, rt):
 
 
 def step_negative(p, rt):
-    p.d.shell("am start -f 0x10008000 -n com.hihonor.hiboard/com.hihonor.intelligent.LauncherActivity")
+    p.shell("am start -f 0x10008000 -n com.hihonor.hiboard/com.hihonor.intelligent.LauncherActivity")
     time.sleep(2)
     if not p.find("头像", exact=True):
-        p.d.press("home"); time.sleep(0.6)
+        p.press("home"); time.sleep(0.6)
         for _ in range(3):
-            p.d.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250"); time.sleep(1.2)
+            p.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250"); time.sleep(1.2)
             if p.find("头像", exact=True):
                 break
         else:

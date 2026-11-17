@@ -24,7 +24,7 @@ ops = [
     { kind = "back" },
   ], else_ops = [
     # 搜索不可用时退回菜单路径（全程可选探测）；兜底也不通要记成未完成（沿用 #819）。
-    { kind = "shell", command = "am start -f 0x10008000 -a android.settings.SETTINGS" },
+    { kind = "start", action = "android.settings.SETTINGS" },
     { kind = "sleep", seconds = 1.2 },
     { kind = "if_lib_any", calls = [
       { method = "entry", args = ["隐私与安全"], kwargs = { scrolls = 6 } },

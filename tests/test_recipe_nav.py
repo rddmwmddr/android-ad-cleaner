@@ -218,7 +218,7 @@ class DriverTests(unittest.TestCase):
         self.assertEqual(self.worktrees(), before)
 
     def test_the_recorder_catches_a_script_calling_the_phone(self):
-        """记录器真的记到了门面方法与 `p.d.shell`：一份脚本装载后既有段首的拉起，也有直发命令。"""
+        """记录器真的记到了门面方法与 `p.shell`：一份脚本装载后既有段首的拉起，也有直发命令。"""
         import compare_recipe_calls as driver
         import fast
         import fixtures
@@ -228,7 +228,7 @@ class DriverTests(unittest.TestCase):
         names = [call[1] for call in calls]
         self.assertIn("start", names)
         self.assertIn("entry", names)
-        self.assertIn("d.shell", names)
+        self.assertIn("shell", names)
         self.assertIn("系统广告", {call[0] for call in calls})
         self.assertGreater(len(calls), 40)
 

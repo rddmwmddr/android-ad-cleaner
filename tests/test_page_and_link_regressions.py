@@ -24,7 +24,7 @@ from fixtures import fake_adb, phone_stub
 
 
 def page(xml, focus, w=1080, h=2340):
-    p = phone_stub("test", d=Mock())
+    p = phone_stub("test", reader=Mock())
     p.W, p.H = w, h
     p.locked = Mock(return_value=False)
     p.screen.focus = Mock(return_value=focus)
@@ -202,15 +202,14 @@ class ParseTests(unittest.TestCase):
     DOMAIN = "channel"
     def test_other_user_spaces_do_not_override_owner(self):
         # #95 / 小米双开：另一空间同包名同渠道仍开着，不能当成机主空间没关
-        d, app_off = chan.parse(types.SimpleNamespace(d=types.SimpleNamespace(
-            shell=lambda *a, **k: types.SimpleNamespace(output=DUMP))))
+        d, app_off = chan.parse(types.SimpleNamespace(
+            shell=lambda *a, **k: types.SimpleNamespace(output=DUMP)))
         self.assertEqual(d[("com.ss.android", "promo")][1], 0)
         self.assertNotIn(("com.dual.only", "x"), d)
         self.assertNotIn("com.dual.only", app_off)
 
     def test_truncated_ids_are_left_out_of_scan(self):
         reader = types.SimpleNamespace(shell=lambda *a, **k: types.SimpleNamespace(output=DUMP))
-        reader.d = reader
         err = io.StringIO()
         with patch.object(chan, "ShellPhone", return_value=reader), \
              patch.object(sys, "argv", ["chan_fast.py", "-s", "test", "scan"]), \
@@ -232,7 +231,6 @@ class LockedChannelTests(unittest.TestCase):
     def test_scan_leaves_out_system_locked_channels(self):
         # #134：系统锁定的渠道开关是灰的，列进清单只会报「状态未改变」
         reader = types.SimpleNamespace(shell=lambda *a, **k: types.SimpleNamespace(output=self.DUMP))
-        reader.d = reader
         with patch.object(chan, "ShellPhone", return_value=reader), \
              patch.object(sys, "argv", ["chan_fast.py", "-s", "test", "scan"]), \
              contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
@@ -251,7 +249,7 @@ class LockedChannelTests(unittest.TestCase):
 class DismissTests(unittest.TestCase):
     DOMAIN = "navigation"
     def phone(self, xml):
-        p = phone_stub("test", d=Mock())
+        p = phone_stub("test", reader=Mock())
         p.W, p.H = 1272, 2772
         p.screen.tree = Mock(return_value=ET.fromstring(xml))
         p.screen.focus = Mock(return_value="com.oplus.securitypermission/.privacy.PrivacySecuritySettingsDashboardActivity")
@@ -315,7 +313,7 @@ class BottomBarWaitTests(unittest.TestCase):
     DOMAIN = "navigation"
 
     def tap_after(self, found_at):
-        p = phone_stub("test", W=1272, H=2772, d=Mock())
+        p = phone_stub("test", W=1272, H=2772, reader=Mock())
         p.say = Mock()
         p.screen.sig = Mock(return_value="page")
         p.screen.settle = Mock(return_value=True)
@@ -377,10 +375,10 @@ class LockScreenTests(unittest.TestCase):
     DOMAIN = "device_state"
     def test_other_true_fields_on_the_line_are_not_a_lock(self):
         # #115 跟帖：HyperOS 3 全程解锁，30 个渠道都被判成「手机锁屏了」
-        p = phone_stub("test", d=Mock())
-        p.d.shell.return_value = types.SimpleNamespace(output="    isKeyguardShowing=false mKeyguardOccluded=true\n")
+        p = phone_stub("test", reader=Mock())
+        p.conn.reader.shell.return_value = types.SimpleNamespace(output="    isKeyguardShowing=false mKeyguardOccluded=true\n")
         self.assertFalse(p.locked())
-        p.d.shell.return_value = types.SimpleNamespace(output="    isKeyguardShowing=true\n")
+        p.conn.reader.shell.return_value = types.SimpleNamespace(output="    isKeyguardShowing=true\n")
         self.assertTrue(p.locked())
 
 
@@ -392,8 +390,8 @@ class XiaomiInputTests(unittest.TestCase):
     def test_blocked_click_names_the_security_setting(self):
         p = page("<hierarchy/>", "x/y")
         del p.click, p.screen.click
-        p.d.window_size.return_value = (1080, 2340)
-        p.d.shell.return_value = types.SimpleNamespace(output=self.MIUI, exit_code=1)
+        p.conn.reader.window_size.return_value = (1080, 2340)
+        p.conn.reader.shell.return_value = types.SimpleNamespace(output=self.MIUI, exit_code=1)
         with self.assertRaisesRegex(RuntimeError, "USB 调试（安全设置）"):
             p.click(500, 500)
 

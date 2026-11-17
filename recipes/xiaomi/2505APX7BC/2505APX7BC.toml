@@ -29,7 +29,7 @@ name = "系统广告"
 ops = [
   # 同底包的 24129PN74C 走设置搜索「广告服务」，这台实测可用；搜不到时用深链兜底。
   { kind = "if_setting", kw = "广告服务", else_ops = [
-    { kind = "shell", command = "am start -f 0x10008000 -n com.android.settings/.ad.AdServiceSettings" },
+    { kind = "start", pkg = "com.android.settings", activity = ".ad.AdServiceSettings", clear_task = true },
     { kind = "sleep", seconds = 1.5 },
   ] },
   # 两条路都收敛到同一个判据：页面上要有这个开关，否则本段 0 项却算成功

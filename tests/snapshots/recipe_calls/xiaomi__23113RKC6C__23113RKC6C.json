@@ -3,7 +3,7 @@
  "scenarios": {
   "present": [
    ["系统广告", "locked", [], {}],
-   ["系统广告", "d.shell", ["am start -f 0x10008000 -a android.settings.SETTINGS"], {}],
+   ["系统广告", "shell", ["am start -f 0x10008000 -a android.settings.SETTINGS"], {}],
    ["系统广告", "tap", ["隐私与安全"], {"exact": true, "scrolls": 6}],
    ["系统广告", "texts", [], {}],
    ["应用商店", "locked", [], {}],
@@ -40,7 +40,7 @@
    ["下载管理", "off", [], {"only": ["资源推荐", "热榜推荐"], "page": "下载管理·信息流"}],
    ["下载管理", "back", [3], {}],
    ["主题", "locked", [], {}],
-   ["主题", "d.shell", ["pm path com.android.thememanager"], {}],
+   ["主题", "shell", ["pm path com.android.thememanager"], {}],
    ["主题", "start", ["com.android.thememanager", ".ThemeResourceProxyTabActivity"], {}],
    ["主题", "go", ["我的", "设置"], {}],
    ["主题", "tree", [], {}],
@@ -118,7 +118,7 @@
   ],
   "absent": [
    ["系统广告", "locked", [], {}],
-   ["系统广告", "d.shell", ["am start -f 0x10008000 -a android.settings.SETTINGS"], {}],
+   ["系统广告", "shell", ["am start -f 0x10008000 -a android.settings.SETTINGS"], {}],
    ["系统广告", "tap", ["隐私与安全"], {"exact": true, "scrolls": 6}],
    ["应用商店", "locked", [], {}],
    ["应用商店", "start", ["com.xiaomi.market"], {}],
@@ -141,7 +141,7 @@
    ["下载管理", "find", ["设置"], {"exact": true, "edge_ok": "tab"}],
    ["下载管理", "tree", [], {}],
    ["主题", "locked", [], {}],
-   ["主题", "d.shell", ["pm path com.android.thememanager"], {}],
+   ["主题", "shell", ["pm path com.android.thememanager"], {}],
    ["主题", "start", ["com.android.thememanager", ".ThemeResourceProxyTabActivity"], {}],
    ["主题", "go", ["我的", "设置"], {}],
    ["主题", "page_evidence", [], {}],

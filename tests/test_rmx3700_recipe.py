@@ -18,7 +18,7 @@ STEPS = ["广告跟踪", "软件商店", "浏览器", "下拉搜索", "小布建
 def make_phone(model="RMX3700", build="RMX3700_16.0.5.1300(CN01)", locked=False):
     shell, commands = fake_shell(model, build)
     d = SimpleNamespace(shell=shell)
-    return phone_stub("RMX3700", d=d, W=1240, H=2772, locked=lambda: locked, commands=commands)
+    return phone_stub("RMX3700", reader=d, W=1240, H=2772, locked=lambda: locked, commands=commands)
 
 
 class RecipeSafetyTests(recipe_case.OfflineSafetyCase):

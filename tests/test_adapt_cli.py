@@ -34,7 +34,7 @@ import explore  # noqa: E402
 import recipe_loader  # noqa: E402
 import run  # noqa: E402
 import vocab  # noqa: E402
-from fixtures import Clock, fake_adb, phone_mock  # noqa: E402
+from fixtures import shell_result, Clock, fake_adb, phone_mock  # noqa: E402
 
 BASELINE = ROOT / "tests" / "baselines" / "adapt_cli.json"
 
@@ -93,7 +93,7 @@ def draft_phone(switch_lists, tap_ok=True):
     p.top.return_value = None
     p.off.return_value = 0
     p.switches.side_effect = switch_lists
-    p.d.shell.return_value = types.SimpleNamespace(output="PJA110_14.0.0.812")
+    p.shell.return_value = shell_result("PJA110_14.0.0.812")
     return p
 
 
@@ -344,7 +344,7 @@ class CheckReportTests(unittest.TestCase):
                 code = adapt.main(["check", "-s", "FAKE_SERIAL", str(self.draft(d))])
         self.assertEqual(code, 1)
         self.assertEqual(err.getvalue(), "手机锁屏了，请机主解锁后再跑\n")
-        p.d.shell.assert_not_called()
+        p.shell.assert_not_called()
         p.off.assert_not_called()
 
     def test_close_failure_keeps_the_lock_message_unprinted(self):
@@ -411,7 +411,7 @@ class ExploreNavigationTests(unittest.TestCase):
         self.assertIn("探路到此为止", out.getvalue())
         self.assertEqual(p.back.call_count, 3)
         self.assertEqual(p.start.call_count, 2)                     # 首次 + 一次恢复，不反复重启
-        p.d.app_stop.assert_called_once_with("com.example")
+        p.app_stop.assert_called_once_with("com.example")
         tapped = [c.args[0] for c in p.tap.call_args_list]
         self.assertNotIn("通知", tapped)
         self.assertNotIn("电池", tapped)
@@ -426,7 +426,7 @@ class ExploreNavigationTests(unittest.TestCase):
             self.assertIn(entry, tapped)
         self.assertEqual(p.start.call_count, 2)
         self.assertEqual(p.back.call_count, 3)                      # 只有第一次回不去时按了返回
-        p.d.app_stop.assert_called_once_with("com.example")
+        p.app_stop.assert_called_once_with("com.example")
 
     def test_recovery_is_capped_at_two_per_package(self):
         """重进设置页每次都成功、但焦点始终回不去：同一个 App 最多恢复 2 次，然后明确中断。
@@ -452,7 +452,7 @@ class ExploreNavigationTests(unittest.TestCase):
             self.assertIn(entry, tapped)                            # 前 3 个条目都探过
         for entry in ("声音", "显示"):
             self.assertNotIn(entry, tapped)                         # 中断后不再探剩下的条目
-        p.d.app_stop.assert_called_once_with("com.example")
+        p.app_stop.assert_called_once_with("com.example")
 
 
 class VendorPickTests(unittest.TestCase):
@@ -524,14 +524,14 @@ def survey_phone(focus="", texts=(), start=("", 0), packages="package:com.androi
 
     def shell(cmd, timeout=None):
         if cmd.startswith("getprop ro.product.brand"):
-            return types.SimpleNamespace(output=brand, exit_code=0)
+            return shell_result(brand, 0)
         if cmd.startswith("am start"):
-            return types.SimpleNamespace(output=start[0], exit_code=start[1])
+            return shell_result(start[0], start[1])
         if cmd == "pm list packages":
-            return types.SimpleNamespace(output=packages, exit_code=0)
-        return types.SimpleNamespace(output="", exit_code=0)
+            return shell_result(packages, 0)
+        return shell_result("", 0)
 
-    p.reader.shell.side_effect = shell
+    p.shell.side_effect = shell
     return p
 
 
@@ -544,7 +544,7 @@ def run_survey(p, words, family="xiaomi", family_map=ONE_FAMILY):
 
 
 def shell_calls(p):
-    return [call.args[0] for call in p.reader.shell.call_args_list]
+    return [call.args[0] for call in p.shell.call_args_list]
 
 
 class SurveyResultTests(unittest.TestCase):
@@ -674,7 +674,7 @@ class SurveyEntryTests(unittest.TestCase):
         code, _out = self.run_cmd(p)
         self.assertEqual(code, 0)
         self.factory.assert_called_once_with("FAKE")
-        p.reader.press.assert_called_once_with("home")
+        p.press.assert_called_once_with("home")
 
     def test_landed_without_the_expect_text_exits_one(self):
         p = survey_phone(focus="com.android.settings/.ad.AdServiceSettings", texts=("别的文字",))
@@ -709,7 +709,7 @@ class SurveyEntryTests(unittest.TestCase):
         p.tap.assert_not_called()
         p.click.assert_not_called()
         p.off.assert_not_called()
-        calls = [str(call) for call in p.reader.shell.call_args_list]
+        calls = [str(call) for call in p.shell.call_args_list]
         self.assertFalse([call for call in calls if "am start" in call], calls)
 
     def test_family_without_direct_entries_exits_one(self):

@@ -95,7 +95,7 @@ code = "step_advice"
 name = "主题商店"
 ops = [
   { kind = "print", text = "  检查主题商店服务模式；基础服务模式无广告，不代为同意完整模式协议。" },
-  { kind = "shell", command = "am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.oplus.themestore" },
+  { kind = "start", action = "oppo.intent.action.APP_SETTINGS", pkg = "com.oplus.themestore" },
   { kind = "sleep", seconds = 1 },
   { kind = "if_focus", text = "BasicEntranceActivity", ops = [
     { kind = "print", text = "  · 主题商店处于「基础服务」模式，本身不含广告，保持不变" },

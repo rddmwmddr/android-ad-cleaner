@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import fixtures
-from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock, phone_stub
+from fixtures import Clock, clocked, fake_phone, load_recipe, phone_mock, phone_stub, shell_result
 import fast
 import run
 
@@ -229,11 +229,11 @@ class NavigationTests(unittest.TestCase):
         self.scope = load(self.p, case=self)
 
     def test_denied_public_entry_stops_before_page_or_taps(self):
-        self.p.d.shell.return_value = SimpleNamespace(exit_code=1, output="Permission Denial")
+        self.p.shell.return_value = shell_result("Permission Denial", 1)
         self.scope["page"] = Mock()
         with self.assertRaisesRegex(RuntimeError, "系统未允许"):
             self.scope["open_page"]("am start", "隐私", "test")
-        self.p.d.shell.assert_called_once_with("am start")
+        self.p.shell.assert_called_once_with("am start")
         self.scope["page"].assert_not_called()
         self.p.click.assert_not_called()
 
@@ -313,7 +313,7 @@ class SearchStepTests(unittest.TestCase):
         self.assertIn("7", self.scope["SKIPPED_ITEMS"][0])
 
     def test_settings_page_without_titles_is_not_accepted(self):
-        self.p.d.shell.return_value = SimpleNamespace(exit_code=0, output="")
+        self.p.shell.return_value = shell_result("", 0)
         self.p.focus.return_value = SEARCH_SETTINGS_FOCUS
         self.p.find.return_value = False
         scope = load(self.p, only=("下拉搜索",), case=self)
@@ -321,14 +321,14 @@ class SearchStepTests(unittest.TestCase):
         self.p.off.assert_not_called()
 
     def test_search_home_is_not_mistaken_for_the_settings_page(self):
-        self.p.d.shell.return_value = SimpleNamespace(exit_code=0, output="")
+        self.p.shell.return_value = shell_result("", 0)
         self.p.focus.return_value = SEARCH_HOME_FOCUS
         self.p.find.return_value = True
         scope = load(self.p, only=("下拉搜索",), case=self)
         self.assertEqual(scope["FAILED_STEPS"], ["下拉搜索"])
         self.p.off.assert_not_called()
         self.p.click.assert_not_called()
-        commands = [c.args[0] for c in self.p.d.shell.call_args_list]
+        commands = [c.args[0] for c in self.p.shell.call_args_list]
         self.assertFalse([c for c in commands if "input swipe" in c])
 
 
@@ -514,22 +514,22 @@ class StoreThemeVideoTests(unittest.TestCase):
                          {"optional": ["个性化内容推荐"]})
 
     def test_video_missing_app_skips_without_launching(self):
-        self.p.d.shell.return_value = SimpleNamespace(exit_code=0, output="")
+        self.p.shell.return_value = shell_result("", 0)
         with self.assertRaisesRegex(self.scope["SkipStep"], "未安装视频"):
             action(self.scope, "视频")()
-        self.p.d.shell.assert_called_once_with("pm path com.heytap.yoli")
+        self.p.shell.assert_called_once_with("pm path com.heytap.yoli")
         self.p.start.assert_not_called()
         self.p.off.assert_not_called()
 
     def test_video_settings_open_by_deep_link(self):
         """设置页用 App 自己的深链直达（#650），不经开屏页和「我的」。"""
-        self.p.d.shell.return_value = SimpleNamespace(exit_code=0, output="package:/system/video.apk")
+        self.p.shell.return_value = shell_result("package:/system/video.apk", 0)
         self.p.focus.return_value = "com.heytap.yoli/com.heytap.yoli.mine.setting.SettingActivity"
         self.p.find.return_value = True
         self.scope["row"] = Mock()
         self.scope["close_named_optional"] = Mock()
         action(self.scope, "视频")()
-        launch = self.p.d.shell.call_args_list[1].args[0]
+        launch = self.p.shell.call_args_list[1].args[0]
         self.assertIn("yoli://yoli.com/mine_act_lib_yoli/settings", launch)
         self.assertIn("-p com.heytap.yoli", launch)          # 别的 App 也注册 scheme 时不弹选择器
         self.p.start.assert_not_called()
@@ -537,7 +537,7 @@ class StoreThemeVideoTests(unittest.TestCase):
 
     def test_video_wrong_landing_stops_before_personalization(self):
         """深链没落到 SettingActivity 就停本段，不接着在别的页里关开关。"""
-        self.p.d.shell.return_value = SimpleNamespace(exit_code=0, output="package:/system/video.apk")
+        self.p.shell.return_value = shell_result("package:/system/video.apk", 0)
         self.p.focus.return_value = "com.heytap.yoli/MainActivity"
         self.p.find.return_value = True
         with self.assertRaisesRegex(RuntimeError, "未进入目标设置页"):
@@ -666,14 +666,13 @@ class GameCenterTests(unittest.TestCase):
         self.p = phone_mock(W=1080, H=2340)
         self.p.locked.return_value = False
         self.p.texts.return_value = []
-        self.p.d.shell.return_value = SimpleNamespace(
-            exit_code=0, output="package:/data/app/gamecenter/base.apk")
+        self.p.shell.return_value = shell_result("package:/data/app/gamecenter/base.apk", 0)
         self.scope = load(self.p, case=self)
         self.scope["row"] = Mock()
         self.scope["close_named_optional"] = Mock()
 
     def test_missing_app_skips_without_launching(self):
-        self.p.d.shell.return_value = SimpleNamespace(exit_code=0, output="")
+        self.p.shell.return_value = shell_result("", 0)
         with self.assertRaisesRegex(self.scope["SkipStep"], "未安装游戏中心"):
             action(self.scope, "游戏中心")()
         self.p.start.assert_not_called()
@@ -686,7 +685,7 @@ class GameCenterTests(unittest.TestCase):
         action(self.scope, "游戏中心")()
         self.p.start.assert_not_called()
         self.assertIn("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.nearme.gamecenter",
-                      [c.args[0] for c in self.p.d.shell.call_args_list])
+                      [c.args[0] for c in self.p.shell.call_args_list])
         self.assertEqual([c.args[0] for c in self.scope["row"].call_args_list], ["隐私开关设置", "个性化推荐管理"])
         self.assertEqual(self.scope["close_named_optional"].call_args_list, [call(["个性化推荐"], "个性化推荐管理")])
 
@@ -695,7 +694,7 @@ class GameCenterTests(unittest.TestCase):
             if command.startswith("pm path"):
                 return SimpleNamespace(exit_code=0, output="package:/data/app/gamecenter/base.apk")
             return SimpleNamespace(exit_code=1, output="Permission Denial")
-        self.p.d.shell.side_effect = shell
+        self.p.shell.side_effect = shell
         with self.assertRaisesRegex(RuntimeError, "系统未允许"):
             action(self.scope, "游戏中心")()
         self.scope["row"].assert_not_called()
@@ -713,8 +712,8 @@ class AdTrackingFlowTests(unittest.TestCase):
         self.p.back = Mock()
         self.p.await_page = Mock()
         self.p.tap = Mock(return_value=True)
-        self.p.d.shell = Mock(side_effect=lambda cmd: SimpleNamespace(
-            exit_code=0, output="PMX110" if cmd.startswith("getprop") else ""))
+        self.p.shell = Mock(side_effect=lambda cmd: shell_result(
+            "PMX110" if cmd.startswith("getprop") else "", 0))
         self.scope = load(self.p, case=self)
         self.scope["p"].setting = Mock()
         self.scope["menu_state"] = Mock()
@@ -761,14 +760,14 @@ class RealDumpMenuTests(unittest.TestCase):
         self.p = phone_stub("dump", fast_mod=fast)
         self.p.W, self.p.H = 1080, 2340
         # 读屏 adapter：`tree()` / `texts()` 走它；window_size 在 reader 上是可调用的
-        self.p.reader = Mock(window_size=Mock(return_value=(1080, 2340)))
+        self.p.conn.reader = Mock(window_size=Mock(return_value=(1080, 2340)))
         self.p.tap = Mock(return_value=True)
         self.p.await_page = Mock()
         self.p.back = Mock()
         self.scope, _ = load_recipe(self.p, RECIPE, ("__no_steps__",))
 
     def dump(self, xml):
-        self.p.reader.dump_hierarchy.return_value = xml
+        self.p.conn.reader.dump_hierarchy.return_value = xml
 
     def test_content_desc_only_state_suffix_is_disabled(self):
         self.dump('<hierarchy><node content-desc="全部关闭 - 已停用" enabled="false" '
@@ -794,14 +793,14 @@ class TrackingGuardTests(unittest.TestCase):
         self.p.safe_mode = True
         with self.assertRaisesRegex(self.scope["SkipStep"], "仅在 PMX110"):
             action(self.scope, "广告跟踪")()
-        self.p.d.shell.assert_not_called()
+        self.p.shell.assert_not_called()
         self.p.off.assert_not_called()
 
     def test_another_model_skips_before_navigation(self):
-        self.p.d.shell.return_value = SimpleNamespace(exit_code=0, output="PMX120")
+        self.p.shell.return_value = shell_result("PMX120", 0)
         with self.assertRaisesRegex(self.scope["SkipStep"], "仅在 PMX110"):
             action(self.scope, "广告跟踪")()
-        self.p.d.shell.assert_called_once_with("getprop ro.product.model")
+        self.p.shell.assert_called_once_with("getprop ro.product.model")
         self.p.click.assert_not_called()
         self.p.off.assert_not_called()
 

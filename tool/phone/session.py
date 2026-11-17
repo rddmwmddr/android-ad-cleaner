@@ -1,8 +1,8 @@
 """三个跨阶段会话状态：丢失记录、启动会话、渠道会话（ADR-0033、#1039）。
 
 它们本来只是碰巧对齐在同一个 `self` 上的裸字段：寿命与写者各不相同，却长得像普通属性。
-门面用显式属性 + 赋值器转发到这里的对象，搬漏的名字必须当场 AttributeError（不走 `__getattr__`）。
-集合字段转发的是对象本体，转发成拷贝会让 `p.promoted.clear()` 静默失效。
+门面上只留设备概念那几个（`miss` / `missed` / `app`），其余直接读 `p.lost_note.*` /
+`p.channel_session.*`；`__getattr__` 兜底一律不写，名字搬漏必须当场 AttributeError（ADR-0033、#1479）。
 """
 
 
@@ -23,15 +23,23 @@ class LostNote:
 class LaunchSession:
     """启动会话：由启动写、被弹窗读。
 
-    `app` 是最近一次 `start()` 拉起的目标 App，`start()` 写、`Dismisser.promoted_click()`（弹窗一侧）读，
+    `app` 是最近一次拉起的目标 App，启动处写、`Dismisser.promoted_click()`（弹窗一侧）读，
     用来判「点了 ✕ 之后跳走的是不是推广位」。
-    `promoted` 是点过才发现是推广位的 ✕，同一处不再点第二次（#420）：`start()` 换 App 时清空，
+    `promoted` 是点过才发现是推广位的 ✕，同一处不再点第二次（沿用 #420 的裁决）：换 App 时清空，
     `Dismisser.promoted_click()` 记下。
+
+    「换 App 就作废推广位记忆」只有 `set_app()` 一份（#1479）：门面的 `p.app = …`、
+    `Launcher.start()`、`recipe_lib/honor.py` 的裸拉起都走它，别各自再清一次。
     """
 
     def __init__(self):
         self.app = ""
         self.promoted = set()
+
+    def set_app(self, pkg):
+        """换目标 App：旧 App 的推广位记忆随之作废，同一个 ✕ 不在新 App 上重记（沿用 #420 的裁决）。"""
+        self.app = pkg
+        self.promoted.clear()
 
 
 class ChannelSession:

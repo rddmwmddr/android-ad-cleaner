@@ -12,6 +12,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from . import launch
+
 # 顶层允许的键：身份（model / models / build）、四个可选钩子的名字（指向该机例外函数），以及段表。
 TOP_KEYS = frozenset({"model", "models", "build", "const", "tail", "guard", "detail", "wrap", "segment"})
 # 一段要么 `code = "<本机策略名>"`（整段交给例外函数），要么给一串 `ops`；两者只能选一个。
@@ -19,6 +21,9 @@ SEGMENT_KEYS = frozenset({"name", "code", "ops"})
 
 # `if_focus` 的比法：前台窗口原文与数据里的 text 怎么比。缺省 contains（与 `require_focus` 同档）。
 FOCUS_MATCHES = frozenset({"equals", "starts", "contains", "icontains"})
+
+# `p.start` 的落点参数：只有那条路会等前台回目标 App 并核落点，命令形状不经它。
+LANDING_KEYS = ("settle", "foreground", "expect", "budget")
 
 
 class SchemaError(ValueError):
@@ -213,6 +218,47 @@ def _validate_any_calls(op: Mapping[str, Any], where: str) -> None:
     _validate_calls(op, where, ("name", "method", "args", "kwargs"), required=("name", "method"))
 
 
+def _validate_start(op: Mapping, where: str) -> None:
+    """`start` 的两种写法：`p.start`（包 + 页面 + 落点参数）与原始命令（Intent / URI / 窗口模式 / 裸启动 / monkey）。
+
+    `pkg` 不是无条件必填：`am start -a android.settings.SETTINGS` 这种公开 Intent 不带 `-p`，数据里
+    没有包名可写。落点参数（`settle` / `foreground` / `expect` / `budget`）只属于 `p.start` 那条路，
+    与命令形状同写会让数据以为有落点校验、实际没有。"""
+    for key in ("pkg", "activity", "action", "data", "flags"):
+        if key in op and (not isinstance(op[key], str) or not op[key]):
+            raise SchemaError(f"{where} 的 {key} 必须是非空字符串")
+    for key in ("clear_task", "launcher"):
+        if key in op and not isinstance(op[key], bool):
+            raise SchemaError(f"{where} 的 {key} 只能是 true / false")
+    if "launcher" in op and not op["launcher"]:
+        raise SchemaError(f"{where} 的 launcher 只有 true 一种写法（不发 monkey 就不写）")
+    if op.get("launcher"):
+        extra = sorted(set(op) & ({"activity", "action", "data", "flags"} | set(LANDING_KEYS)))
+        if extra:
+            raise SchemaError(f"{where} 的 start 用 launcher 拉起时不能再给 {extra}")
+        if "pkg" not in op:
+            raise SchemaError(f"{where} 的 start 用 launcher 拉起时 launcher 要有 pkg")
+    else:
+        if not any(key in op for key in ("pkg", "action", "data")):
+            raise SchemaError(f"{where} 的 start 至少要给 pkg / action / data / launcher 之一")
+        if "activity" in op and "pkg" not in op:
+            raise SchemaError(f"{where} 的 start 的 activity 要配 pkg")
+        if any(key in op for key in launch.SHAPE_KEYS):
+            landing = sorted(set(op) & set(LANDING_KEYS))
+            if landing:
+                raise SchemaError(f"{where} 的 {landing} 只走 p.start 那条路，不能与命令形状同写")
+            if "pkg" in op and not any(key in op for key in ("activity", "action")):
+                # `am start -p <包>` 不是一次拉起：包名只在 `-n <包/页面>` 或 `-a <动作> -p <包>` 里有用。
+                raise SchemaError(f"{where} 的 start 只有 pkg 拉不起来：写形状键时要再给 activity 或 action")
+        if "data" in op and "action" not in op:
+            raise SchemaError(f"{where} 的 start 的 data 要配 action（单独的 -d 没有 Intent 可寻址）")
+    if "flags" in op:
+        flag = op["flags"].split()
+        if not flag or flag[0] not in launch.LAUNCH_FLAGS:
+            raise SchemaError(f"{where} 的 flags 只放行 {sorted(launch.LAUNCH_FLAGS)}，"
+                              f"收到 {flag[0] if flag else op['flags']!r}")
+
+
 def _keys(names: str) -> frozenset[str]:
     """`"kind name args"` → 键集合：一条记录一行写完，读一列就是完整的允许键。"""
     return frozenset(names.split())
@@ -237,7 +283,9 @@ OPS: dict[str, OpSpec] = {
     "close_listed": OpSpec(_keys("kind names page miss_print"),
                            required=("names", "page", "miss_print"),
                            word_keys=(("names", "literal"),)),
-    "start": OpSpec(_keys("kind pkg activity settle foreground expect budget"), required=("pkg",)),
+    "start": OpSpec(_keys("kind pkg activity action data flags clear_task launcher "
+                          "settle foreground expect budget"),
+                    check=_validate_start),
     "start_or_skip": OpSpec(_keys("kind pkg activity dead_ends reason"),
                             required=("pkg", "activity", "dead_ends", "reason")),
     "skip_unless_installed": OpSpec(_keys("kind command contains text"),

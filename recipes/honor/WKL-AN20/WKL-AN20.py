@@ -41,9 +41,9 @@ def safe_ui(p, rt):
 
     def click(x, y):
         rt.require(not p.locked(), "手机锁屏，未点击")
-        rt.require(tuple(p.d.window_size()) == (p.W, p.H), "屏幕尺寸变化，未使用旧坐标")
+        rt.require(tuple(p.window_size()) == (p.W, p.H), "屏幕尺寸变化，未使用旧坐标")
         rt.require(0 <= x < p.W and 0 <= y < p.H, "按钮在屏外，未点击")
-        p.d.click(x, y)
+        original["click"](x, y)      # 引擎那条带守卫的点击（`input swipe x y x y 80`）；`p.click` 此刻是这个包装器
 
     def scroll(frac=.45, up=False):
         p.tree()
@@ -51,7 +51,7 @@ def safe_ui(p, rt):
         y1, y2 = int(p.H * .8), int(p.H * (.8 - min(frac, .58)))
         if up:
             y1, y2 = y2, y1
-        p.d.swipe(p.W // 2, y1, p.W // 2, y2, duration=.45)
+        p.swipe(p.W // 2, y1, p.W // 2, y2, 450)
         time.sleep(.25)
 
     def switches(root=None):
@@ -88,9 +88,9 @@ def safe_ui(p, rt):
 
 
 def guard(p, rt):
-    if p.d.shell("getprop ro.product.model").output.strip() not in MODELS:
+    if p.shell("getprop ro.product.model").strip() not in MODELS:
         rt.skip("型号不匹配，跳过；不使用其他型号的路径")
-    if not p.d.shell("getprop ro.build.display.id").output.strip().startswith(BUILD):
+    if not p.shell("getprop ro.build.display.id").strip().startswith(BUILD):
         rt.skip("系统版本不匹配，跳过；请重新核对页面")
 
 
@@ -156,13 +156,13 @@ def step_browser_home(p, rt):
 
 
 def step_search(p, rt):
-    p.d.press("home")
+    p.press("home")
     time.sleep(.5)
-    p.d.press("home")
+    p.press("home")
     p.tree()
-    p.d.swipe(p.W // 2, p.H * 3 // 10, p.W // 2, p.H * 7 // 10, duration=.3)
+    p.swipe(p.W // 2, p.H * 3 // 10, p.W // 2, p.H * 7 // 10, 300)
     time.sleep(1)
-    p.d.press("back")
+    p.press("back")
     nav.settle_page(p, rt, "com.hihonor.search", "更多")
     nav.tap(p, rt, "更多", scrolls=0)
     nav.tap(p, rt, "设置", scrolls=0)
@@ -172,13 +172,13 @@ def step_search(p, rt):
 
 def step_negative(p, rt):
     package = "com.hihonor.hiboard"
-    p.d.press("home")
+    p.press("home")
     time.sleep(.5)
     for _ in range(3):
         if p.focus().split("/", 1)[0] == package and p.find("头像", exact=True):
             break
         p.tree()
-        p.d.swipe(p.W // 7, p.H // 2, p.W * 6 // 7, p.H // 2, duration=.3)
+        p.swipe(p.W // 7, p.H // 2, p.W * 6 // 7, p.H // 2, 300)
         time.sleep(.7)
     nav.settle_page(p, rt, package, "头像")
     nav.tap(p, rt, "头像", scrolls=0)

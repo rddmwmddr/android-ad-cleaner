@@ -13,7 +13,7 @@ ops = [
   # 广告服务在「安全」分栏 →「更多安全设置」页底，直达 AdServiceSettings 从 50 秒降到 2 秒（#374）。
   # 不走 p.start()：这一页的开关说明行是「关闭后，广告数量不会因此减少……」，
   # 启动后的 dismiss() 会把整行 content-desc 当成弹窗 ✕ 点一下，等于替用户拨了一次开关。
-  { kind = "shell", command = "am start -f 0x10008000 -n com.android.settings/.ad.AdServiceSettings" },
+  { kind = "start", pkg = "com.android.settings", activity = ".ad.AdServiceSettings", clear_task = true },
   { kind = "require_expect", calls = [{ args = ["个性化广告推荐", 3] }], miss_print = "广告服务页没有打开" },
   { kind = "off", only = ["个性化广告推荐"], page = "系统·广告服务" },
 ]

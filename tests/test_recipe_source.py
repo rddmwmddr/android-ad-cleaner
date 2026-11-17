@@ -133,9 +133,9 @@ class NameTest(unittest.TestCase):
     def test_parameter_without_a_call_site_in_this_file_is_unreadable(self):
         facts = scan('''
             def app_settings(package):
-                p.d.shell("am start -a oppo.intent.action.APP_SETTINGS -p " + package)
+                p.shell("am start -a oppo.intent.action.APP_SETTINGS -p " + package)
         ''')
-        argument = calls(facts, "p.d.shell")[0].args[0]
+        argument = calls(facts, "p.shell")[0].args[0]
         self.assertEqual(argument.values, ())
         self.assertEqual(argument.text, "'am start -a oppo.intent.action.APP_SETTINGS -p ' + package")
 
@@ -148,14 +148,14 @@ class AmStartTest(unittest.TestCase):
         TEMPLATE = "am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p {}"
 
         def _():
-            p.d.shell("am start -f 0x10008000 -n com.android.browser/.BrowserSettingsActivity")
-            p.d.shell("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.heytap.market")
-            p.d.shell("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + MARKET)
-            p.d.shell(TEMPLATE.format(MARKET))
+            p.shell("am start -f 0x10008000 -n com.android.browser/.BrowserSettingsActivity")
+            p.shell("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.heytap.market")
+            p.shell("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + MARKET)
+            p.shell(TEMPLATE.format(MARKET))
     '''
 
     def test_all_three_spellings_resolve_to_the_same_command(self):
-        commands = [texts(arg.values)[0] for call in calls(scan(self.SRC), "p.d.shell") for arg in call.args]
+        commands = [texts(arg.values)[0] for call in calls(scan(self.SRC), "p.shell") for arg in call.args]
         self.assertEqual(len(commands), 4)
         self.assertEqual(commands[0], "am start -f 0x10008000 -n com.android.browser/.BrowserSettingsActivity")
         self.assertEqual(commands[1:], ["am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.heytap.market"] * 3)
@@ -163,13 +163,13 @@ class AmStartTest(unittest.TestCase):
     def test_each_call_site_of_a_parameter_yields_its_own_command(self):
         facts = scan('''
             def app_settings(package):
-                p.d.shell("am start -a oppo.intent.action.APP_SETTINGS -p " + package)
+                p.shell("am start -a oppo.intent.action.APP_SETTINGS -p " + package)
 
             def _():
                 app_settings("com.heytap.market")
                 app_settings("com.heytap.themestore")
         ''')
-        command = calls(facts, "p.d.shell")[0].args[0]
+        command = calls(facts, "p.shell")[0].args[0]
         self.assertEqual(texts(command.values),
                          ["am start -a oppo.intent.action.APP_SETTINGS -p com.heytap.market",
                           "am start -a oppo.intent.action.APP_SETTINGS -p com.heytap.themestore"])
@@ -342,12 +342,12 @@ class ValueResolutionTest(unittest.TestCase):
     def test_concatenation_backfills_both_operands_and_yields_their_product(self):
         facts = scan('''
             def shell(a, b):
-                p.d.shell(a + b)
+                p.shell(a + b)
             def _():
                 shell("x1", "y1")
                 shell("x2", "y2")
         ''')
-        argument = calls(facts, "p.d.shell")[0].args[0]
+        argument = calls(facts, "p.shell")[0].args[0]
         self.assertEqual(texts(argument.values), ["x1y1", "x1y2", "x2y1", "x2y2"])
         self.assertEqual({item.line for item in argument.values}, {3})
 
@@ -356,34 +356,34 @@ class FormattedTemplateTest(unittest.TestCase):
     """`模板常量.format(…)`：占位按位置从左往右填，多一个 / 少一个都读不出。"""
 
     def values(self, src):
-        return calls(scan(src), "p.d.shell")[0].args[0].values
+        return calls(scan(src), "p.shell")[0].args[0].values
 
     def test_a_template_without_a_slot_is_not_read(self):
-        self.assertEqual(self.values('T = "am start"\ndef _():\n    p.d.shell(T.format())'), ())
+        self.assertEqual(self.values('T = "am start"\ndef _():\n    p.shell(T.format())'), ())
 
     def test_two_slots_are_filled_left_to_right(self):
         # 与行号那条用不同的模板：`scan_source` 进程内缓存会吞掉同源的第二份，变异统计看不到它。
         self.assertEqual(
-            texts(self.values('T = "go {} via {}"\ndef _():\n    p.d.shell(T.format("x", "y"))')),
+            texts(self.values('T = "go {} via {}"\ndef _():\n    p.shell(T.format("x", "y"))')),
             ["go x via y"])
 
     def test_a_leftover_slot_is_unreadable(self):
-        self.assertEqual(self.values('T = "{} {}"\ndef _():\n    p.d.shell(T.format("a"))'), ())
+        self.assertEqual(self.values('T = "{} {}"\ndef _():\n    p.shell(T.format("a"))'), ())
 
     def test_a_parameter_is_backfilled_through_the_template(self):
         facts = scan('''
             T = "am start -a oppo.intent.action.APP_SETTINGS -p {}"
             def app_settings(package):
-                p.d.shell(T.format(package))
+                p.shell(T.format(package))
             def _():
                 app_settings("com.heytap.market")
         ''')
         self.assertEqual(
-            texts(calls(facts, "p.d.shell")[0].args[0].values),
+            texts(calls(facts, "p.shell")[0].args[0].values),
             ["am start -a oppo.intent.action.APP_SETTINGS -p com.heytap.market"])
 
     def test_every_filled_part_carries_the_call_line(self):
-        values = self.values('T = "am {} -n {}"\ndef _():\n    p.d.shell(T.format("a", "b"))')
+        values = self.values('T = "am {} -n {}"\ndef _():\n    p.shell(T.format("a", "b"))')
         self.assertEqual({item.line for item in values}, {3})
 
 

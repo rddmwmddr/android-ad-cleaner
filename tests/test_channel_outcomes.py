@@ -227,7 +227,7 @@ def denied_phone(pages, focus=DENIED_FOCUS):
     def click(*_args):
         index[0] = min(index[0] + 1, len(pages) - 1)
 
-    p = phone_stub("test", d=Mock())
+    p = phone_stub("test", reader=Mock())
     p.W, p.H = 1080, 2340
     p.locked = Mock(return_value=False)
     p.screen.focus = Mock(return_value=focus)
@@ -239,8 +239,8 @@ def denied_phone(pages, focus=DENIED_FOCUS):
     p.scroll, p.scroll_more = Mock(), Mock(return_value=False)
     p.screen.scroll = p.scroll
     p.screen.tree = tree
-    p.reader = Mock()
-    p.reader.shell.return_value = Mock(output="")
+    p.conn.reader = Mock()
+    p.conn.reader.shell.return_value = Mock(output="")
     return p
 
 
@@ -300,20 +300,20 @@ class AppLevelOffTests(unittest.TestCase):
     def test_appops_ignore_on_the_master_only_page_is_not_a_failure(self):
         # 华为 HarmonyOS 4.2（安卓 12）没有 POST_NOTIFICATIONS 权限，只能看 appops
         p = denied_phone([MASTER_ONLY])
-        p.reader.shell.side_effect = denied_shell("ignore")
+        p.conn.reader.shell.side_effect = denied_shell("ignore")
         self.assertEqual(denied_outcome(p).kind, chan.APP_DENIED)
 
     def test_appops_deny_is_the_same_answer(self):
         # 新一点的系统上同一个开关写作 deny
         p = denied_phone([MASTER_ONLY])
-        p.reader.shell.side_effect = denied_shell("deny")
+        p.conn.reader.shell.side_effect = denied_shell("deny")
         self.assertEqual(denied_outcome(p).kind, chan.APP_DENIED)
 
     def test_appops_allow_is_ui_hidden(self):
         # 应用通知开着、页面上却没有这个渠道：不是「应用通知整体关闭」，也不该每轮重复报同一条失败
         # —— 记成「本机 UI 未暴露」，下一轮扫描不再列出（#576）
         p = denied_phone([MASTER_ONLY])
-        p.reader.shell.side_effect = denied_shell("allow")
+        p.conn.reader.shell.side_effect = denied_shell("allow")
         self.assertEqual(denied_outcome(p).kind, chan.UI_HIDDEN)
 
     def test_unreadable_appops_is_its_own_failure(self):
@@ -325,7 +325,7 @@ class AppLevelOffTests(unittest.TestCase):
                 raise RuntimeError("shell output invalid")
             return Mock(output="")
         p = denied_phone([MASTER_ONLY])
-        p.reader.shell.side_effect = broken
+        p.conn.reader.shell.side_effect = broken
         got = denied_outcome(p)
         self.assertEqual(got.kind, chan.APP_STATE_UNKNOWN)
         self.assertTrue(chan.failed(got, False))
@@ -339,7 +339,7 @@ class AppLevelOffTests(unittest.TestCase):
                 raise RuntimeError("shell output invalid")
             return Mock(output="")
         p = denied_phone([MASTER_WITH_NAME])
-        p.reader.shell.side_effect = broken
+        p.conn.reader.shell.side_effect = broken
         self.assertEqual(denied_outcome(p).kind, chan.APP_STATE_UNKNOWN)
 
     def test_no_operations_means_not_denied(self):
@@ -349,26 +349,26 @@ class AppLevelOffTests(unittest.TestCase):
                 return Mock(output="No operations.\n")
             return Mock(output="")
         p = denied_phone([MASTER_ONLY])
-        p.reader.shell.side_effect = unknown_op
+        p.conn.reader.shell.side_effect = unknown_op
         self.assertEqual(denied_outcome(p).kind, chan.UI_HIDDEN)
 
     def test_a_listed_row_without_a_readable_switch_is_not_degraded(self):
         # 渠道行在页面上（#427 那批），只是行内开关没认出：此时不许套用总开关判据
         p = denied_phone([ROW_UNREADABLE])
-        p.reader.shell.side_effect = denied_shell("ignore")
+        p.conn.reader.shell.side_effect = denied_shell("ignore")
         self.assertEqual(denied_outcome(p).kind, chan.NOT_CONFIRMED)
 
     def test_a_page_full_of_channels_is_not_degraded(self):
         # 页面明明列着渠道（渠道名写在 CheckBox 上、这轮没认出来）就说明应用通知没关：
         # 不能因为「这轮没找到行」就把 #427 那批算成 #426
         p = denied_phone([CHECKBOX_ROWS])
-        p.reader.shell.side_effect = denied_shell("ignore")
+        p.conn.reader.shell.side_effect = denied_shell("ignore")
         self.assertEqual(denied_outcome(p).kind, chan.NOT_CONFIRMED)
 
     def test_restore_direction_keeps_the_old_wording(self):
         # 还原（chan-on）方向不套这条判据：文案与记账维持原样
         p = denied_phone([MASTER_ONLY])
-        p.reader.shell.side_effect = denied_shell("ignore")
+        p.conn.reader.shell.side_effect = denied_shell("ignore")
         got = denied_outcome(p, want_on=True)
         self.assertEqual(got.kind, chan.NOT_CONFIRMED)
         self.assertIn("未确认「营销通知」渠道页及通知开关，跳过", got.detail)
@@ -376,14 +376,14 @@ class AppLevelOffTests(unittest.TestCase):
     def test_granted_permission_short_circuits_appops(self):
         # 权限读数说 granted=true 就是没关，不再去问 appops（#330 记过两者可能不同步）
         p = denied_phone([MASTER_ONLY])
-        p.reader.shell.side_effect = denied_shell("ignore", permission="  POST_NOTIFICATIONS: granted=true, flags=[ ]\n")
+        p.conn.reader.shell.side_effect = denied_shell("ignore", permission="  POST_NOTIFICATIONS: granted=true, flags=[ ]\n")
         self.assertEqual(denied_outcome(p).kind, chan.UI_HIDDEN)
-        self.assertFalse([c for c in p.reader.shell.call_args_list if "appops" in str(c)])
+        self.assertFalse([c for c in p.conn.reader.shell.call_args_list if "appops" in str(c)])
 
     def test_unconfirmed_page_is_not_degraded(self):
         # 压根没确认停在应用通知页（前台是别的页面）时，就算 appops 说 ignore 也不能降级
         p = denied_phone([MASTER_ONLY], focus="com.vendor.notify/.UnknownPage")
-        p.reader.shell.side_effect = denied_shell("ignore")
+        p.conn.reader.shell.side_effect = denied_shell("ignore")
         self.assertEqual(denied_outcome(p).kind, chan.NOT_CONFIRMED)
 
 
@@ -436,7 +436,7 @@ def hidden_phone(pages, focus=HIDDEN_FOCUS):
     def click(*_args):
         index[0] = min(index[0] + 1, len(pages) - 1)
 
-    p = phone_stub("test", d=Mock())
+    p = phone_stub("test", reader=Mock())
     p.W, p.H = 1080, 2340
     p.locked = Mock(return_value=False)
     p.screen.focus = Mock(return_value=focus)
@@ -448,8 +448,8 @@ def hidden_phone(pages, focus=HIDDEN_FOCUS):
     p.scroll, p.scroll_more = Mock(), Mock(return_value=False)
     p.screen.scroll = p.scroll
     p.screen.tree = tree
-    p.reader = Mock()
-    p.reader.shell.return_value = Mock(output="")
+    p.conn.reader = Mock()
+    p.conn.reader.shell.return_value = Mock(output="")
     return p
 
 
@@ -497,13 +497,13 @@ class HiddenToggleTests(unittest.TestCase):
     def test_page_with_other_switches_but_no_row_is_ui_hidden(self):
         # 「信息」那种页面：另有开关，渠道行同样不存在
         p = hidden_phone([HIDDEN_OTHER_SWITCHES])
-        p.reader.shell.side_effect = hidden_shell("allow")
+        p.conn.reader.shell.side_effect = hidden_shell("allow")
         self.assertEqual(hidden_close(p).kind, chan.UI_HIDDEN)
 
     def test_name_on_the_page_but_no_row_is_still_a_failure(self):
         # 名字还在页面上：#427 那批是没认出，不能记成「页面没有这一行」
         p = hidden_phone([HIDDEN_NAME_ON_PAGE])
-        p.reader.shell.side_effect = hidden_shell("allow")
+        p.conn.reader.shell.side_effect = hidden_shell("allow")
         got = hidden_close(p)
         self.assertEqual(got.kind, chan.NOT_CONFIRMED)
         self.assertIn("没找到这一行", got.detail)
@@ -516,7 +516,7 @@ class HiddenToggleTests(unittest.TestCase):
                 raise RuntimeError("shell output invalid")
             return Mock(output="")
         p = hidden_phone([HIDDEN_OTHER_SWITCHES])
-        p.reader.shell.side_effect = broken
+        p.conn.reader.shell.side_effect = broken
         self.assertEqual(hidden_close(p).kind, chan.APP_STATE_UNKNOWN)
 
     def test_ui_hidden_is_not_a_failure_and_leaves_the_recheck_alone(self):
@@ -975,7 +975,7 @@ UNDO_CHANNEL_PAGE = '''<hierarchy><node>
 
 
 def undo_page():
-    p = phone_stub("test", d=Mock())
+    p = phone_stub("test", reader=Mock())
     p.W, p.H = 1080, 2340
     p.locked = Mock(return_value=False)
     p.screen.focus = Mock(return_value=UNDO_FOCUS)
@@ -1203,7 +1203,7 @@ class BatchAppOpsTests(unittest.TestCase):
             return chan.Outcome(chan.DONE)
 
         phone = Mock()
-        phone.d = reader
+        phone.conn = SimpleNamespace(reader=reader, serial="test", pause_at_lock_check=False)
         phone.wait_unlocked = Mock(return_value=True)
         with patch.object(chan, "ShellPhone", return_value=reader), \
              patch.object(chan, "load", return_value=items), \

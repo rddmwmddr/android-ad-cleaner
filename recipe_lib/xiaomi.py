@@ -133,7 +133,7 @@ def browser_start(p, rt):
         except RuntimeError as e:
             if attempt or "离开前台" not in str(e):
                 raise
-            p.d.shell("am force-stop com.android.browser")
+            p.shell("am force-stop com.android.browser")
             rt.clock.sleep(1.5)
     return False
 
@@ -221,7 +221,7 @@ def tap_low(p, rt, name, tries=3):
     for _ in range(tries):
         if p.tap(name, exact=True, scrolls=0):
             return True
-        p.d.shell("input swipe 600 2000 600 1700 150"); rt.clock.sleep(0.7)
+        p.shell("input swipe 600 2000 600 1700 150"); rt.clock.sleep(0.7)
     return False
 
 def settings_icon_visible(p, rt):
@@ -328,7 +328,7 @@ def close_with_plain_tap(p, rt, names, page):
         xy = next((xy for t, on, xy in p.switches() if t == title and on), None)
         if not xy:
             raise RuntimeError(f"{page}：目标开关位置未识别，停止本页")
-        p.d.shell(f"input tap {xy[0]} {xy[1]}")
+        p.shell(f"input tap {xy[0]} {xy[1]}")
         rt.clock.sleep(0.5)
         p.confirm()
     after = {title: on for title, on, _ in p.switches()}
@@ -351,7 +351,7 @@ def gear_tap(p, rt, pkg, activity):
             l, t, r, b = bounds(n)
             if not p.on_screen(n):
                 continue
-            p.d.shell(f"input tap {(l + r) // 2} {(t + b) // 2}")
+            p.shell(f"input tap {(l + r) // 2} {(t + b) // 2}")
             rt.clock.sleep(1.2)
             return p.focus().split("/", 1)[0] == pkg and activity in p.focus()
     return False
@@ -427,7 +427,7 @@ def downloads_tap(p, rt):
     p.back(3)
 
 def theme(p, rt):
-    if "package:" not in p.d.shell("pm path com.android.thememanager").output:
+    if "package:" not in p.shell("pm path com.android.thememanager"):
         print("  · 本机没有主题管理包，跳过"); return
     rt.start_or_skip("com.android.thememanager", ".ThemeResourceProxyTabActivity",
                        dead_ends=rt.constants['THEME_DEAD_ENDS'], reason="主题页打不开")
@@ -543,7 +543,7 @@ def store_mode(p, rt):
     p.back(2)
 
 def system_ads_security(p, rt):
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
+    p.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
     rt.clock.sleep(1.2)
     rt.require(p.tap("隐私与安全", exact=True, scrolls=6), "未找到「隐私与安全」")
     rt.require(security_tab(p, rt), "未识别「安全」标签")
@@ -558,7 +558,7 @@ def system_ads_menu(p, rt, security_tab_first=False):
     调用方按返回值决定还动不动开关。`security_tab_first` 给隐私页首屏没有「更多安全设置」的机型：
     它要先把顶部的「安全」标签切过去，切完页面还要再画几秒，所以按页里的内容轮询三次、没画出来
     就再点一次；其余机型先按文字翻「更多安全设置」，翻不到才去切标签。"""
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
+    p.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
     rt.clock.sleep(1.2)
     if not maybe(p, rt, "隐私与安全"):
         return False

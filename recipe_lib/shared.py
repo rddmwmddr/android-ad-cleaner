@@ -261,13 +261,13 @@ def open_settings(p, rt, *args, **kwargs):
         return p.tap_icon(list(expect))
     def intent_style(package, activity, title):
         """公开设置 Intent 直达，落点交给同名助手 `page()` 判（脚本把它绑到 page_activity）。"""
-        out = p.d.shell("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + package)
+        out = p.shell("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + package)
         if out.exit_code or any(x in out.output for x in ("Error", "Exception", "Permission Denial")):
             return False
         return page_activity(p, rt, activity, title)
     def shell_style(package, activity, title):
         """公开设置 Intent 直达 App 设置页，核对前台 Activity 与页标题。"""
-        result = p.d.shell(rt.constants['SETTINGS_INTENT'].format(package))
+        result = p.shell(rt.constants['SETTINGS_INTENT'].format(package))
         rt.require(not result.exit_code and not any(m in result.output for m in rt.constants['SETTINGS_REFUSED']),
                      f"{package}：系统不允许直达设置，未操作（{result.output.strip()[-200:]}）")
         rt.require(p.expect_page(title), f"{package}：设置页未打开；{p.page_evidence()}")
@@ -284,13 +284,13 @@ def open_settings(p, rt, *args, **kwargs):
 
 def open_page(p, rt, *args, **kwargs):
     def fields_style(command, title, package, activity=None):
-        result = p.d.shell(command)
+        result = p.shell(command)
         rt.require(not result.exit_code and not any(word in result.output for word in
                       ("Error", "Exception", "Permission Denial", "unable to resolve")),
                      "系统未允许打开设置页")
         rt.page(title, package, activity)
     def shell_style(command, activity, title=None):
-        result = p.d.shell(command)
+        result = p.shell(command)
         rt.require(not result.exit_code and not re.search(
             r"Error|Exception|Permission Denial|unable to resolve", result.output, re.I),
             f"系统未允许打开「{title or activity}」，未继续操作")
@@ -561,7 +561,7 @@ def browser_settings(p, rt):
         直达入口可能复用旧子页；只从已识别的浏览器设置子页返回，不清数据或历史。
         命令串按 `rt.constants['BROWSER_PREFS']` 拼：这一档的入口只属于这台机，事实层按调用方的常量
         还原，别的家族导入同一个 `browser_settings` 时读不出这条入口（#1245）。"""
-        result = p.d.shell("am start -n " + rt.constants['BROWSER_PREFS'])
+        result = p.shell("am start -n " + rt.constants['BROWSER_PREFS'])
         rt.require(not result.exit_code and "Error" not in result.output, "浏览器设置未打开")
         rt.clock.sleep(.5)
         for _ in range(4):
@@ -593,13 +593,13 @@ def browser_settings(p, rt):
 
         实测冷启动会直接停在首页，底部只有菜单/窗口，没有「我的」，走「我的」会整段跑空。"""
         try:
-            p.d(resourceId="com.vivo.browser:id/menu_btn").click()
+            p.tap_id("com.vivo.browser:id/menu_btn")
             rt.clock.sleep(1.4)
             if p.tap("设置", exact=True, scrolls=0, wait=1.3) and "SettingActivity" in p.focus():
                 return True
         except Exception:
             pass
-        p.d.shell("input keyevent BACK")
+        p.shell("input keyevent BACK")
         rt.clock.sleep(0.8)
         if p.tap("我的", exact=True, scrolls=4, wait=1.2):     # 兜底：「我的」页顶部也有设置入口
             p.top()

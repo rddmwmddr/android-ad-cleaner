@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 import adb_link
 import run
 import fixtures
-from fixtures import load_recipe, phone_stub
+from fixtures import load_recipe, phone_stub, shell_result
 
 
 class HonorWKLRecipeTests(unittest.TestCase):
@@ -21,9 +21,9 @@ class HonorWKLRecipeTests(unittest.TestCase):
         return scope
 
     def phone(self, xml="<hierarchy/>"):
-        p = phone_stub("test", d=Mock())
+        p = phone_stub("test", reader=Mock())
         p.W, p.H = 1080, 2400
-        p.d.window_size.return_value = (p.W, p.H)
+        p.conn.reader.window_size.return_value = (p.W, p.H)
         p.screen.tree = Mock(return_value=ET.fromstring(xml))
         p.locked = Mock(return_value=False)
         return p
@@ -54,7 +54,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
 
     def test_wrong_build_does_not_enter_any_action(self):
         p = Mock()
-        p.d.shell.side_effect = [Mock(output="WKL-AN20"), Mock(output="another build")]
+        p.shell.side_effect = [shell_result("WKL-AN20", 0), shell_result("another build", 0)]
         scope = self.load(p)
         scope["ONLY"] = ["系统管家"]
         action = Mock()
@@ -67,7 +67,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
 
     def test_wrong_model_is_skipped_not_failed(self):
         p = Mock()
-        p.d.shell.side_effect = [Mock(output="OTHER-MODEL"), Mock(output="WKL-AN20 11.0.0.111")]
+        p.shell.side_effect = [shell_result("OTHER-MODEL", 0), shell_result("WKL-AN20 11.0.0.111", 0)]
         scope = self.load(p)
         scope["ONLY"] = ["系统管家"]
         action = Mock()
@@ -83,7 +83,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
         """
         p = Mock()
         p.locked.return_value = False
-        p.d.shell.side_effect = [Mock(output="WKL-AN20"), Mock(output="WKL-AN20 11.0.0.111(SP7C00E110R101P7)")]
+        p.shell.side_effect = [shell_result("WKL-AN20", 0), shell_result("WKL-AN20 11.0.0.111(SP7C00E110R101P7)", 0)]
         scope = self.load(p)
         scope["ONLY"] = []
         with contextlib.redirect_stdout(io.StringIO()):
@@ -95,7 +95,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
     def test_skip_step_does_not_enter_failed_steps(self):
         p = Mock()
         p.locked.return_value = False
-        p.d.shell.side_effect = [Mock(output="WKL-AN20"), Mock(output="WKL-AN20 11.0.0.111(SP7C00E110R101P7)")]
+        p.shell.side_effect = [shell_result("WKL-AN20", 0), shell_result("WKL-AN20 11.0.0.111(SP7C00E110R101P7)", 0)]
         scope = self.load(p)
         scope["ONLY"] = ["系统管家"]
         with contextlib.redirect_stdout(io.StringIO()):
@@ -105,7 +105,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
 
     def test_device_loss_is_not_swallowed_as_a_skipped_step(self):
         p = Mock()
-        p.d.shell.side_effect = adb_link.DeviceLost("lost")
+        p.shell.side_effect = adb_link.DeviceLost("lost")
         scope = self.load(p)
         scope["ONLY"] = ["系统管家"]
         with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(adb_link.DeviceLost):
@@ -161,7 +161,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
         scope = self.load(p)
         with scope["safe_ui"](p, scope["rt"]):
             self.assertEqual(p.switches(), [])
-        p.d.screenshot.assert_not_called()
+        p.conn.reader.screenshot.assert_not_called()
 
     def test_offscreen_and_disabled_confirmation_buttons_are_ignored(self):
         p = self.phone('''<hierarchy>
@@ -172,7 +172,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
         scope = self.load(p)
         with patch.object(scope["time"], "sleep"), scope["safe_ui"](p, scope["rt"]):
             self.assertEqual(p.confirm(), "确定")
-        p.d.click.assert_called_once_with(550, 750)
+        p.conn.reader.shell.assert_called_once_with("input swipe 550 750 550 750 80")
 
     def test_text_confirmation_requires_the_specific_music_dialog(self):
         p = self.phone('''<hierarchy><node text="确定" class="android.widget.TextView"
@@ -180,13 +180,13 @@ class HonorWKLRecipeTests(unittest.TestCase):
         scope = self.load(p)
         with patch.object(scope["time"], "sleep"), scope["safe_ui"](p, scope["rt"]):
             self.assertIsNone(p.confirm())
-        p.d.click.assert_not_called()
+        p.conn.reader.shell.assert_not_called()
         root = p.screen.tree.return_value
         ET.SubElement(root, "node", text="关闭个性化广告推荐", bounds="[100,300][800,400]")
         ET.SubElement(root, "node", text="取消", bounds="[100,700][200,800]")
         with patch.object(scope["time"], "sleep"), scope["safe_ui"](p, scope["rt"]):
             self.assertEqual(p.confirm(), "确定")
-        p.d.click.assert_called_once_with(550, 750)
+        p.conn.reader.shell.assert_called_once_with("input swipe 550 750 550 750 80")
 
     def test_helpers_are_restored_even_when_action_fails(self):
         p = self.phone()
@@ -207,13 +207,51 @@ class HonorWKLRecipeTests(unittest.TestCase):
         scope = self.load(p)
         with self.assertRaisesRegex(RuntimeError, "唯一单选按钮"):
             scope["radio"](p, scope["rt"], p.tree(), "简洁首页")
-        p.d.click.assert_not_called()
+        p.conn.reader.shell.assert_not_called()
         root = ET.fromstring('''<hierarchy><node bounds="[0,200][1080,400]">
           <node text="简洁首页" bounds="[50,250][500,300]"/>
           <node class="android.widget.RadioButton" checkable="true" checked="false"
            bounds="[900,250][1000,300]"/>
           </node></hierarchy>''')
         self.assertEqual(scope["radio"](p, scope["rt"], root, "简洁首页").get("checked"), "false")
+
+
+class DrawnSwitchReadTests(unittest.TestCase):
+    """`close_named_honor(drawn=True)`：自绘页要读引擎自己那份开关表。
+
+    段内包装器（`safe_ui`）把自绘开关的 `clickable` 抹成 false，读屏规则随即把它们过滤掉；
+    「仅阅读」那一档本来就允许读它们，所以这一档必须拿 `p.switches_raw()`（引擎的读法），
+    不是实例上那个包装器。"""
+
+    def _require_switches(self, drawn):
+        import recipe_lib.honor as honor
+        row = ("个性化广告", True, (900, 425))
+        p = phone_stub("test", reader=Mock())
+        p.W, p.H = 1080, 2400
+        p.screen.switches = Mock(return_value=[row])     # 引擎自己的读法
+        wrapper = Mock(return_value=[])                  # 段内包装器：把自绘开关过滤掉
+        p.switches = wrapper
+        p.screen.tree = Mock(return_value=ET.fromstring("<hierarchy/>"))
+        p.focus = Mock(return_value="com.hihonor.dz.reader/.Settings")
+        p.scroll_more = Mock(return_value=False)
+        p.top = Mock()
+        p.off = Mock()
+        rt = Mock()
+        with patch.object(honor, "settle_page", Mock()), \
+                patch.object(honor, "labels", Mock(return_value={"广告推荐服务"})):
+            honor.close_named_honor(p, rt, ["个性化广告"], "阅读·广告推荐服务",
+                                    "com.hihonor.dz.reader", "广告推荐服务", drawn=drawn)
+        self.assertIs(p.switches, wrapper, "退出后 `switches` 没有还原到段内包装器")
+        return rt.require_switches.call_args
+
+    def test_the_drawn_branch_reads_the_custom_switch_through_the_engine(self):
+        before, wanted, title = self._require_switches(True).args
+        self.assertEqual(before, {"个性化广告": True}, "`drawn` 档没读到自绘开关")
+        self.assertEqual((wanted, title), ({"个性化广告"}, "阅读·广告推荐服务"))
+
+    def test_without_drawn_the_wrapper_still_hides_the_custom_switch(self):
+        before, _wanted, _title = self._require_switches(False).args
+        self.assertEqual(before, {}, "非 `drawn` 档不该绕过段内包装器")
 
 
 class WklDataSegmentTests(unittest.TestCase):
@@ -242,7 +280,7 @@ class WklDataSegmentTests(unittest.TestCase):
         """型号 / 版本核对通过的可编排设备：`guard` 每个段各读一次 getprop。"""
         p = Mock()
         p.locked.return_value = False
-        p.d.shell.side_effect = [Mock(output="WKL-AN20"),
+        p.shell.side_effect = [shell_result("WKL-AN20", 0),
                                  Mock(output="WKL-AN20 11.0.0.111(SP7C00E110R101P7)")]
         p.go.return_value = True
         p.setting.return_value = True

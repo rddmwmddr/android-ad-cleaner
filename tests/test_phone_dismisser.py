@@ -153,7 +153,7 @@ class PromotedClickTests(unittest.TestCase):
     """#420：`dismiss()` 的 ✕ 分支点完跳到了别的 App 就退回来，这一次不算关掉了弹窗。"""
 
     def phone(self, focus, app="com.heytap.market"):
-        p = phone_stub("test", d=Mock())
+        p = phone_stub("test", reader=Mock())
         p.W, p.H = 1272, 2772
         p.screen.tree = Mock(return_value=ET.fromstring(POPUP))
         p.screen.focus = Mock(side_effect=list(focus))
@@ -269,7 +269,7 @@ BROWSER_SETTINGS = "com.vivo.browser/com.vivo.browser.setting.SettingActivity"
 
 
 def dismiss_phone(page, focus="com.vivo.browser/com.vivo.browser.BrowserActivity"):
-    p = phone_stub("test", d=Mock(), W=1080, H=2400)
+    p = phone_stub("test", reader=Mock(), W=1080, H=2400)
     p.screen.tree = Mock(return_value=ET.fromstring(page))
     p.screen.focus = Mock(return_value=focus)
     p.app = "com.vivo.browser"
@@ -317,7 +317,7 @@ def menu_phone(**fields):
     p.off.return_value = None
     p.top.return_value = None
     p.screen.focus.return_value = BROWSER_SETTINGS
-    p.d.return_value.click_exists.return_value = True
+    p.tap_id_if_present.return_value = True
     return p
 
 
@@ -335,7 +335,7 @@ class VivoBrowserMenuTests(unittest.TestCase):
                 p = menu_phone()
                 scope, _ = run_browser(p, path)
                 self.assertEqual(scope["FAILED_STEPS"], [])
-                p.d.assert_any_call(resourceId="com.vivo.browser:id/menu_btn")
+                p.tap_id_if_present.assert_any_call("com.vivo.browser:id/menu_btn", timeout=3)
                 p.click.assert_called_once_with(540, 750)
                 self.assertNotIn("设置", [c.args[0] for c in p.tap.call_args_list if c.args])
                 self.assertEqual(["首页设置", "网页浏览设置", "更多设置", "隐私权限设置"],
@@ -349,7 +349,7 @@ class VivoBrowserMenuTests(unittest.TestCase):
                 p.in_settings_page.side_effect = [False, True]
                 scope, _ = run_browser(p, path)
                 self.assertEqual(scope["FAILED_STEPS"], [])
-                self.assertEqual(2, p.d.return_value.click_exists.call_count)
+                self.assertEqual(2, p.tap_id_if_present.call_count)
                 self.assertIn(call(), p.back.call_args_list)     # 退回收起浮层，重开菜单
                 self.assertIn("首页设置", [c.args[0] for c in p.entry.call_args_list])
 
@@ -358,7 +358,7 @@ class VivoBrowserMenuTests(unittest.TestCase):
         for path in BROWSER_RECIPES:
             with self.subTest(path=path.parent.name + "/" + path.name):
                 p = menu_phone()
-                p.d.return_value.click_exists.return_value = False
+                p.tap_id_if_present.return_value = False
                 scope, out = run_browser(p, path)
                 self.assertEqual(scope["FAILED_STEPS"], [])
                 self.assertIn("没有右上菜单按钮", out)
@@ -375,7 +375,7 @@ class VivoBrowserMenuTests(unittest.TestCase):
                 self.assertEqual(["浏览器"], scope["FAILED_STEPS"])
                 self.assertIn("浏览器设置页没有打开", out)
                 p.entry.assert_not_called()
-                self.assertEqual(2, p.d.return_value.click_exists.call_count)
+                self.assertEqual(2, p.tap_id_if_present.call_count)
 
 
 BOTTOM_MENU_PAGE = '''<hierarchy>
@@ -388,7 +388,7 @@ BOTTOM_MENU_PAGE = '''<hierarchy>
 
 
 class _MenuButton:
-    """p.d 的门面：既能按 uiautomator2 的选择器调用（找右上角按钮），又照旧当读屏 adapter 用。"""
+    """p.conn.reader 的门面：既能按 uiautomator2 的选择器调用（找右上角按钮），又照旧当读屏 adapter 用。"""
 
     def __init__(self, device):
         self._device = device
@@ -423,7 +423,7 @@ class VivoBrowserRealPageTests(unittest.TestCase):
                 p.top = lambda *a, **k: None
                 p.entry = lambda *a, **k: False
                 p.off = lambda *a, **k: None
-                p.d = _MenuButton(p.reader)
+                p.conn.reader = _MenuButton(p.conn.reader)
                 scope, _ = run_browser(p, path)
                 self.assertEqual(scope["FAILED_STEPS"], [])
                 self.assertEqual([(500, 2285)], clicks)      # 菜单那一行，不是上面那个「返回」✕
@@ -442,7 +442,7 @@ AD_SERVICE_PAGE = '''<hierarchy>
 
 
 def close_row_phone(page, focus):
-    p = phone_stub("test", d=Mock())
+    p = phone_stub("test", reader=Mock())
     p.W, p.H = 1272, 2772
     p.screen.focus = Mock(return_value=focus)
     p.screen.tree = Mock(return_value=ET.fromstring(page))

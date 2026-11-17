@@ -93,7 +93,7 @@ class PhotoSpotTests(unittest.TestCase):
         with patch.object(chan, "parse", return_value=self.state()):
             result = chan.toggle(p, "com.example", "recommend", False, "活动优惠")
         self.assertEqual(result.kind, chan.PROTECTED)
-        p.d.shell.assert_not_called()
+        p.conn.reader.shell.assert_not_called()
         p.click.assert_not_called()
 
     def test_targeted_restore_of_protected_notification_is_still_allowed(self):

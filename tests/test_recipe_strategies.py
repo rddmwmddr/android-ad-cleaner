@@ -10,7 +10,6 @@ import sys
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -29,7 +28,6 @@ def scope(**constants):
     import catalog.interpreter as interpreter
     import recipe_runtime
     phone = phone_mock(W=1080, H=2400)
-    phone.d = Mock()
     phone.tree.return_value = ET.fromstring('<hierarchy rotation="0"></hierarchy>')
     phone.on_screen.return_value = True
     rt = recipe_runtime.Runtime(phone)
@@ -110,7 +108,7 @@ class StrategyBehaviourTests(unittest.TestCase):
         after = [("推荐", False, (100, 200)), ("保留项", True, (300, 400))]
         phone.switches.side_effect = [before, before, after]
         g["close_with_plain_tap"](["推荐"], "下载管理·信息流")
-        phone.d.shell.assert_called_once_with("input tap 100 200")
+        phone.shell.assert_called_once_with("input tap 100 200")
         phone.confirm.assert_called_once()
         phone.changed.append.assert_called_once_with(("下载管理·信息流", "推荐"))
 
@@ -127,7 +125,7 @@ class StrategyBehaviourTests(unittest.TestCase):
         phone.tree.return_value = ET.fromstring(GEAR_NODE)
         phone.focus.return_value = "com.android.browser/.BrowserSettingsActivity"
         self.assertTrue(g["gear_tap"]("com.android.browser", "BrowserSettingsActivity"))
-        phone.d.shell.assert_called_once_with("input tap 960 160")
+        phone.shell.assert_called_once_with("input tap 960 160")
 
 
 if __name__ == "__main__":

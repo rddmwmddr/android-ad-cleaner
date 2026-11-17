@@ -30,7 +30,7 @@ from captures import root_from_env as _captures_root_from_env
 from phone.screen import CONFIRM as CONFIRM
 from phone.screen import PERMISSION_CONTROLLERS as PERMISSION_CONTROLLERS
 from phone.screen import Captures as Captures
-from phone.screen import Screen
+from phone.screen import Screen, ShellResult as ShellResult
 from phone.session import ChannelSession, LaunchSession, LostNote
 import adb_link
 import backups
@@ -100,11 +100,13 @@ from phone.toggler import Toggler
 
 
 class Phone:
-    """门面：只做转发与组合，公开名字一个不改（ADR-0033）。
+    """门面：只做转发与组合（ADR-0033）。公开面是「这台手机」的概念，不是内部字段的并集。
 
     两个基座与五个阶段已全部搬进 `tool/phone/`：`Connection`（连接与生命周期）、
     `Screen`（观测、视口几何、动作原语）、`Toggler`（整页拨动）、`Launcher`（启动与落点）、
     `SettingsSearch`（设置搜索）、`Dismisser`（弹窗与推广位）与 `Navigator`（导航）。
+    协作者对象就是它们状态的唯一入口（`p.conn.*` / `p.screen.*` / `p.channel_session.*` …）；
+    门面只留 8 个设备概念属性与动作动词（ADR-0045、#1479）。
     """
 
     # 设置搜索框的识别式与直达动作归 `SettingsSearch`，弹窗的 ✕ 判据归 `Dismisser`；
@@ -131,68 +133,18 @@ class Phone:
         self.navigator = Navigator(self.screen, self.lost_note, self.dismisser.dismiss)
         self.conn.check_input()
 
-    # ---------- 转发：连接（Connection）与观测（Screen） ----------
+    # ---------- 转发：门面自己的 8 个名字 ----------
     # 显式属性 + 赋值器，不用 `__getattr__` 兜底：搬漏的方法必须当场 AttributeError（ADR-0033）。
-    @property
-    def reader(self):
-        """读屏 adapter：引擎看手机的唯一接口（ADR-0001），实体归 `Connection`。"""
-        return self.conn.reader
-
-    @reader.setter
-    def reader(self, value):
-        self.conn.reader = value
-
-    @property
-    def d(self):
-        """读屏 adapter 的历史名字：recipes（`p.d.shell`）与测试用它，实体是同一个 `reader`。"""
-        return self.reader
-
-    @d.setter
-    def d(self, value):
-        self.reader = value
-
-    @property
-    def link(self):
-        """adb 连接与断线判定，状态归 `Connection`，这里只是读写它的一个别名。"""
-        return self.conn.link
-
-    @link.setter
-    def link(self, value):
-        self.conn.link = value
-
-    @property
-    def serial(self):
-        """串号归 Connection：每条命令都要带 -s，不存在「手机对象认一台、命令发给另一台」。"""
-        return self.conn.serial
-
-    @serial.setter
-    def serial(self, value):
-        self.conn.serial = value
-
+    # 每个名字都要能回答「它是不是这台手机这个概念的一部分」；其余状态归协作者，读 `p.conn.*` /
+    # `p.screen.*` / `p.channel_session.*` / `p.launch_session.*` / `p.toggler.*`（ADR-0045、#1479）。
     @property
     def lost(self):
-        """本轮是否已确认断线；状态归 Connection，这里只是读写它的一个别名。"""
+        """本轮是否已确认断线。归 `Connection`。"""
         return self.conn.lost
 
     @lost.setter
     def lost(self, value):
         self.conn.lost = value
-
-    @property
-    def log(self):
-        return self.conn.log
-
-    @log.setter
-    def log(self, value):
-        self.conn.log = value
-
-    @property
-    def pause_at_lock_check(self):
-        return self.conn.pause_at_lock_check
-
-    @pause_at_lock_check.setter
-    def pause_at_lock_check(self, value):
-        self.conn.pause_at_lock_check = value
 
     @property
     def W(self):
@@ -210,17 +162,10 @@ class Phone:
     def H(self, value):
         self.screen.H = value
 
-    @property
-    def systemui_text(self):
-        """读屏时是否算上 com.android.systemui 的文字：归观测基座，`texts()` 在读它。"""
-        return self.screen.systemui_text
-
-    @systemui_text.setter
-    def systemui_text(self, value):
-        self.screen.systemui_text = value
-
-    # ---------- 转发：三个跨阶段会话（LostNote / LaunchSession / ChannelSession） ----------
+    # ---------- 转发：两个跨阶段会话（LostNote / LaunchSession） ----------
     # 谁在什么时候写它们，写在 `tool/phone/session.py` 的类 docstring 上，这里只给归属。
+    # `ChannelSession` 的四个字段（`vivo_seen` / 骨架两份 / `mismatch_probes`）只有渠道引擎在读写，
+    # 不属于「这台手机」的概念，直接读 `p.channel_session.*`（#1479）。
     @property
     def miss(self):
         """本段已经没找到几次。归 `LostNote`。"""
@@ -241,57 +186,12 @@ class Phone:
 
     @property
     def app(self):
-        """最近一次 start 拉起的目标 App。归 `LaunchSession`。"""
+        """最近一次拉起的目标 App。归 `LaunchSession`；换 App 时作废推广位记忆（#1479）。"""
         return self.launch_session.app
 
     @app.setter
     def app(self, value):
-        self.launch_session.app = value
-
-    @property
-    def promoted(self):
-        """点过才发现是推广位的 ✕。归 `LaunchSession`。"""
-        return self.launch_session.promoted
-
-    @promoted.setter
-    def promoted(self, value):
-        self.launch_session.promoted = value
-
-    @property
-    def vivo_seen(self):
-        """见过 vivo 的通知页。归 `ChannelSession`。"""
-        return self.channel_session.vivo_seen
-
-    @vivo_seen.setter
-    def vivo_seen(self, value):
-        self.channel_session.vivo_seen = value
-
-    @property
-    def skeleton_sigs(self):
-        """本次运行已上报的骨架布局。归 `ChannelSession`。"""
-        return self.channel_session.skeleton_sigs
-
-    @skeleton_sigs.setter
-    def skeleton_sigs(self, value):
-        self.channel_session.skeleton_sigs = value
-
-    @property
-    def skeleton_count(self):
-        """本次运行已上报的骨架份数。归 `ChannelSession`。"""
-        return self.channel_session.skeleton_count
-
-    @skeleton_count.setter
-    def skeleton_count(self, value):
-        self.channel_session.skeleton_count = value
-
-    @property
-    def mismatch_probes(self):
-        """本次运行已补的 MISMATCH 判据读数。归 `ChannelSession`。"""
-        return self.channel_session.mismatch_probes
-
-    @mismatch_probes.setter
-    def mismatch_probes(self, value):
-        self.channel_session.mismatch_probes = value
+        self.launch_session.set_app(value)
 
     def _resilient_shell(self, *args, **kwargs):
         return self.conn._resilient_shell(*args, **kwargs)
@@ -340,6 +240,10 @@ class Phone:
     def switches(self, root=None):
         return self.screen.switches(root)
 
+    def switches_raw(self, root=None):
+        """引擎自己的读法：不看段内装在实例上的 `switches` 包装器（自绘开关只有这一档允许读）。"""
+        return self.screen.switches(root)
+
     def switch_rows(self, root=None):
         return self.screen.switch_rows(root)
 
@@ -352,7 +256,7 @@ class Phone:
 
     def channel_list(self):
         """通知清单：一次 `dumpsys notification --noredact` 读出整份数据源（#1432）。"""
-        return read_channel_list(self.reader)
+        return read_channel_list(self.conn.reader)
 
     def scroll_more(self):
         """翻一页；翻完没出现新文字（到底、回弹）返回 False。"""
@@ -374,12 +278,48 @@ class Phone:
     def icon_candidates(self, area=ICON_AREA):
         return self.screen.icon_candidates(area)
 
-    # ---------- 四个动作原语：后续阶段一律经它们动作 ----------
+    # ---------- 动作原语：后续阶段一律经它们动作 ----------
     def click(self, x, y):
         self.screen.click(x, y)
 
-    def back(self, n=1):
-        self.screen.back(n)
+    def back(self, n=1, settle=True):
+        self.screen.back(n, settle)
+
+    def shell(self, command, *, timeout=None):
+        """原样下发一条命令（`am start` / `input …` / `getprop`），返回输出串（#1472）。"""
+        return self.screen.shell(command, timeout=timeout)
+
+    def swipe(self, x1, y1, x2, y2, ms):
+        """按绝对坐标滑一下，时长给毫秒（#1472）。"""
+        self.screen.swipe(x1, y1, x2, y2, ms)
+
+    def window_size(self):
+        """读一次屏幕尺寸（宽, 高）（#1472）。"""
+        return self.screen.window_size()
+
+    def home(self):
+        """回桌面（`input keyevent HOME`）（#1472）。"""
+        self.screen.home()
+
+    def press(self, key):
+        """按一个键（`home` / `back` / `recent` …）：走 uiautomator2 的 `press`（#1472）。"""
+        self.screen.press(key)
+
+    def app_stop(self, package):
+        """强停一个包：走 uiautomator2 的 `app_stop`（#1472）。"""
+        self.screen.app_stop(package)
+
+    def tap_id(self, resource_id=None, text=None, index=0):
+        """按 uiautomator2 选择器直点一个控件（#1472）。"""
+        self.screen.tap_id(resource_id, text, index)
+
+    def tap_id_if_present(self, resource_id=None, text=None, timeout=0):
+        """存在才点，返回点到没有（不抛）（#1472）。"""
+        return self.screen.tap_id_if_present(resource_id, text, timeout)
+
+    def set_text(self, resource_id, value):
+        """往指定资源 id 的输入框写值（#1472）。"""
+        self.screen.set_text(resource_id, value)
 
     def apply(self, intent):
         """意图的唯一执行点（#1432）：按种类分派到基座的动作原语。"""
@@ -617,8 +557,8 @@ def execute(p, cmd, rest):
         if str(rest[0]).lower().endswith(".toml"):
             with open(rest[0], "rb") as f:
                 recorded = str(tomllib.load(f).get("build", ""))
-        build = p.d.shell("getprop ro.build.display.id").output.strip()
-        osv = p.d.shell("getprop ro.mi.os.version.incremental").output.strip()     # 小米：HyperOS 版本号
+        build = p.shell("getprop ro.build.display.id").strip()
+        osv = p.shell("getprop ro.mi.os.version.incremental").strip()     # 小米：HyperOS 版本号
         if recorded and not (build.startswith(recorded) or osv.startswith(recorded)):
             p.safe_mode = True
             print(f"⚠ 机型脚本是按 {recorded} 录的，这台是 {osv or build}：用安全模式跑（只关点名的开关），没找到的段会快速跳过")

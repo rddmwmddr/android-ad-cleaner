@@ -1,7 +1,8 @@
 """观测基座：读屏、认行、页面诊断、视口几何，以及动作原语（ADR-0033）。
 
 构造时注入 `Connection`：读屏 adapter 与断线判定都只经它，不认识 `Phone`。
-动作原语是 `click` / `back` / `settle` / `find`，翻页的 `scroll` / `scroll_more` 同在
+动作原语是 `shell` / `click` / `swipe` / `window_size` / `press` / `app_stop` / `home` / `back` /
+`tap_id` / `tap_id_if_present` / `set_text` / `settle` / `find`，翻页的 `scroll` / `scroll_more` 同在
 这一层（拨动与导航都要翻页，不该由其中一方提供）。后续阶段一律经它们动作，不直接碰传输。
 确认框的认法（`confirm_target`）也在这一层：拨动用它点掉遮罩，导航用它说清失败原因（#557），
 两条路共用同一份匹配，谁也不依赖谁。
@@ -32,6 +33,26 @@ PERMISSION_CONTROLLERS = {"com.android.permissioncontroller", "com.google.androi
 # 页面顶部有倒计时、轮播推广位这类会自己变的内容时那条判据永不成立，而没有上限就是一路滑下去
 # （旧实现固定 4 次，不会挂住；#1094）。
 TOP_SCREENS = 60
+
+
+class ShellResult(str):
+    """一条 shell 命令的结果：本体是输出串，另挂 `exit_code`。
+
+    `Phone.shell()` 的输出按字符串用（探型号、读 dumpsys），但拉起 App 那几处还要判命令成没成功
+    （`am start` 的退出码）。返回值做成 str 子类：既当字符串用，也取得到 `exit_code`，不必为
+    退出码再开一个动词（#1474）。`.output` 仍可读，搬过来的调用点两种写法都成立。
+    """
+
+    exit_code: int
+
+    def __new__(cls, output, exit_code=0):
+        result = super().__new__(cls, output or "")
+        result.exit_code = exit_code
+        return result
+
+    @property
+    def output(self):
+        return str(self)
 
 
 class Screen:
@@ -252,7 +273,7 @@ class Screen:
         out.sort(key=lambda xy: -xy[0])        # 齿轮在最右边，先试它
         return out
 
-    # ---------- 四个动作原语（后续阶段一律经它们动作） ----------
+    # ---------- 动作原语（后续阶段一律经它们动作） ----------
     def click(self, x, y):
         size = self.conn._u2(self.conn.reader.window_size)
         if tuple(size) != (self.W, self.H):
@@ -264,11 +285,89 @@ class Screen:
         if input_blocked(out):
             raise RuntimeError(f"系统拒绝了{TAPPED}。" + XIAOMI_INPUT)
 
-    def back(self, n=1):
+    def shell(self, command, *, timeout=None):
+        """原样下发一条命令，返回它的输出串（`ShellResult`：是 str，另带 `exit_code`）。
+
+        断线语义由 `Connection` 装配的 `_resilient_shell` 承载（它就在 `reader.shell` 上），
+        这里只转发、不另包 try（#1472）。不给超时就不传这个实参，调用序列才与搬过来的
+        `reader.shell(command)` 逐条一致（#1474）。"""
+        if timeout is None:
+            result = self.conn.reader.shell(command)
+        else:
+            result = self.conn.reader.shell(command, timeout=timeout)
+        output, exit_code = result.output, getattr(result, "exit_code", 0)
+        if type(output) is str:
+            return ShellResult(output, exit_code)
+        # 传输给的是自带比较语义的字符串子类（对拍驱动的「读数一律算对得上」）：原样返回，
+        # 只把退出码挂上去，别换成普通 str 把它的语义吃掉。
+        if hasattr(output, "__dict__"):
+            output.exit_code = exit_code
+            return output
+        return ShellResult(output, exit_code)
+
+    def swipe(self, x1, y1, x2, y2, ms):
+        """按绝对坐标滑一下，时长给毫秒：走 uiautomator2 的 swipe，**不**改成 `input swipe`。
+
+        数据里的 `gesture` 才是 `input swipe` 那条路；两条比例相同、下发路径不同，实测换过去
+        真机行为不一致（WKL-AN20 的桌面手势）。"""
+        self.conn._u2(self.conn.reader.swipe, x1, y1, x2, y2, duration=ms / 1000)
+
+    def window_size(self):
+        """读一次屏幕尺寸（宽, 高）：脚本自己比对用，与 `click` 的越界守卫同一个来源。"""
+        return tuple(self.conn._u2(self.conn.reader.window_size))
+
+    def press(self, key):
+        """按一个键（`home` / `back` / `recent` …）：走 uiautomator2 的 `press`。
+
+        它与 `back()` 的 `input keyevent BACK` **不是**同一条下发路径（u2 走 jsonrpc `pressKey`），
+        所以脚本里原有的按键调用搬过来时走这个原语，路径零变化（#1472）。"""
+        self.conn._u2(self.conn.reader.press, key)
+
+    def app_stop(self, package):
+        """强停一个包：走 uiautomator2 的 `app_stop`（它内部就是 `am force-stop`）。
+
+        与 `shell("am force-stop …")` 的区别是 `_u2` 的断线记账，别在调用方绕过它（#1472）。"""
+        self.conn._u2(self.conn.reader.app_stop, package)
+
+    def tap_id(self, resource_id=None, text=None, index=0):
+        """按 uiautomator2 选择器直点一个控件：按坐标的 `click` / 按文字的 `tap` 之外的第三条。
+
+        `index` 是第几个匹配（0 起）；找不到时读屏库的 not-found 照原样上抛。选择器只有给了才填，
+        与数据里的 `tap_id` op 同构（沿用 #1362 的做法、#1472）。"""
+        selector = {}
+        if resource_id is not None:
+            selector["resourceId"] = resource_id
+        if text is not None:
+            selector["text"] = text
+        target = self.conn.reader(**selector)
+        if index:
+            target = target[index]
+        target.click()
+
+    def tap_id_if_present(self, resource_id=None, text=None, timeout=0):
+        """存在才点：点到返回 True，等 `timeout` 秒还没有返回 False，**不抛**。
+
+        默认 0 与 uiautomator2 `click_exists` 的默认一致（只查一次、不等）；传 None 在那边会退回
+        十秒默认等待，所以这里不用 None 作缺省（#1472）。"""
+        selector = {}
+        if resource_id is not None:
+            selector["resourceId"] = resource_id
+        if text is not None:
+            selector["text"] = text
+        return bool(self.conn.reader(**selector).click_exists(timeout=timeout))
+
+    def set_text(self, resource_id, value):
+        """往指定资源 id 的输入框写值：走 uiautomator2 的 `set_text`，空串会清空（#1472）。"""
+        self.conn.reader(resourceId=resource_id).set_text(value)
+
+    def back(self, n=1, settle=True):
+        """发 `input keyevent BACK`。默认每条都等页面稳定；`settle=False` 只发 keyevent、
+        不先读屏也不等——省掉的是 `sig()` 与 `settle()`，下发仍是 `input keyevent BACK`。"""
         for _ in range(n):
-            b = self.sig()
+            before = self.sig() if settle else None
             self.conn.reader.shell("input keyevent BACK")
-            self.settle(b, 0.6)
+            if settle:
+                self.settle(before, 0.6)
 
     def settle(self, before, maxwait=0.8):
         """等新的非空页面稳定；跳页动画中的空树不算已经加载好。"""

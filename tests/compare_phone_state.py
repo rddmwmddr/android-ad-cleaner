@@ -40,6 +40,23 @@ use_utf8_console()
 
 TESTS = Path(__file__).resolve().parent
 
+
+def _conn(p):
+    """连接与读屏 adapter 的持有者：拆分后的树是 `p.conn`，拆分前门面自己就是它（对拍两边都要能喂）。"""
+    return getattr(p, "conn", p)
+
+
+def _launch(p):
+    return getattr(p, "launch_session", p)
+
+
+def _screen(p):
+    return getattr(p, "screen", p)
+
+
+def _channel(p):
+    return getattr(p, "channel_session", p)
+
 SIZES = ((1080, 2340), (720, 1600))
 
 # 推广位样本的焦点轴：点击（0.05 秒）加 sleep(0.6) 之后前台已经换成商店，
@@ -279,7 +296,7 @@ def dump(tool_dir):
     def page_phone(xml, size):
         p = fixtures.phone_stub("test", fast_mod=fast)
         p.W, p.H = size
-        p.d = fixtures.Device(fixtures.Timeline([(0.0, xml)]), size, fixtures.Clock())
+        _conn(p).reader = fixtures.Device(fixtures.Timeline([(0.0, xml)]), size, fixtures.Clock())
         return p
 
     def texts():
@@ -288,8 +305,8 @@ def dump(tool_dir):
             for size in SIZES:
                 for flag in (False, True):
                     p = page_phone(xml, size)
-                    p.sysui = flag            # 改前的名字
-                    p.systemui_text = flag    # 改后的名字
+                    p.sysui = flag                    # 改前的名字
+                    _screen(p).systemui_text = flag    # 改后的名字：归观测基座（#1479）
                     try:
                         got = [(t, b) for t, b, _ in p.texts(ET.fromstring(xml))]
                     except Exception as e:
@@ -367,18 +384,18 @@ def dump(tool_dir):
             fixtures.install_clock(fast, clock)
             lines, backs = [], []
             p = fixtures.fake_phone(clock=clock, fast_mod=fast, focus=PROMO_FOCUS, say=lines.append)
-            p.app = "com.promo"
-            p.promoted = set(promoted)
+            _launch(p).app = "com.promo"
+            _launch(p).promoted = set(promoted)
             fixtures.stub(p, "back", lambda *a, _c=clock, _b=backs, **k: (_c.click(), _b.append(round(_c.t, 3))))
             got = p._promoted_click(10, 20, "close icon")
             out.append({"id": f"promoted|{label}", "got": got, "backs": backs,
-                        "promoted": sorted(p.promoted), "lines": lines})
+                        "promoted": sorted(_launch(p).promoted), "lines": lines})
 
         p = fixtures.phone_stub("test", fast_mod=fast)
-        p.vivo_seen, p.skeleton_count, p.mismatch_probes = True, 1, 2
-        p.skeleton_sigs.add("layout-a")
+        _channel(p).vivo_seen, _channel(p).skeleton_count, _channel(p).mismatch_probes = True, 1, 2
+        _channel(p).skeleton_sigs.add("layout-a")
         out.append({"id": "channel|write-then-read",
-                    "got": [p.vivo_seen, sorted(p.skeleton_sigs), p.skeleton_count, p.mismatch_probes]})
+                    "got": [_channel(p).vivo_seen, sorted(_channel(p).skeleton_sigs), _channel(p).skeleton_count, _channel(p).mismatch_probes]})
         return out
 
     def toggling():
@@ -420,7 +437,7 @@ def dump(tool_dir):
                 err = f"{type(e).__name__}: {e}"
             out.append({"id": label, "err": err, "lines": lines, "t": round(clock.t, 2),
                         "reads": clock.page_reads, "clicks": clock.clicks,
-                        "promoted": sorted(p.promoted)})
+                        "promoted": sorted(_launch(p).promoted)})
 
         case("enter", [(0.0, fixtures.EMPTY_PAGE), (0.6, LAUNCH_HOME)],
              focus=((0.0, ""), (0.6, LAUNCH_APP)))
@@ -450,10 +467,10 @@ def dump(tool_dir):
         fast.adb_link.detached = lambda serial, adb=None: False
         try:
             case("link-lost", [(0.0, LAUNCH_HOME)], focus=((0.0, LAUNCH_APP),), expect=None,
-                 prepare=lambda p, clock: setattr(p.d, "shell",
+                 prepare=lambda p, clock: setattr(_conn(p).reader, "shell",
                                                   shell_reply("error: device 'x' not found", 1)))
             case("missing-package", [(0.0, LAUNCH_HOME)], focus=((0.0, LAUNCH_APP),), expect=None,
-                 prepare=lambda p, clock: setattr(p.d, "shell",
+                 prepare=lambda p, clock: setattr(_conn(p).reader, "shell",
                                                   shell_reply("monkey aborted", 1, only="monkey")))
         finally:
             fast.adb_link.detached = real_adb
@@ -482,9 +499,9 @@ def dump(tool_dir):
             commands, posts, clicks, backs, lines = [], [], [], [], []
             p = fixtures.phone_stub("search", fast_mod=fast)
             p.W, p.H = size
-            p.d = fixtures.Device(fixtures.Timeline([(0.0, fixtures.EMPTY_PAGE)]), size, clock)
+            _conn(p).reader = fixtures.Device(fixtures.Timeline([(0.0, fixtures.EMPTY_PAGE)]), size, clock)
             state = {"page": fit(page, size)}
-            p.d.shell = lambda cmd, timeout=60: (commands.append(cmd), (replies or ok)(cmd))[1]
+            _conn(p).reader.shell = lambda cmd, timeout=60: (commands.append(cmd), (replies or ok)(cmd))[1]
 
             def set_text(selector, text, http_timeout=None):
                 posts.append(["setText", text])
@@ -505,7 +522,7 @@ def dump(tool_dir):
                 if paste_page:
                     state["page"] = fit(paste_page, size)
 
-            p.d.jsonrpc = SimpleNamespace(setText=set_text, clearTextField=clear_field,
+            _conn(p).reader.jsonrpc = SimpleNamespace(setText=set_text, clearTextField=clear_field,
                                           setClipboard=clipboard)
 
             def tree():
@@ -605,7 +622,7 @@ def dump(tool_dir):
                 axis = ((0.0, focus),) if not promote else PROMO_FOCUS
                 p = fixtures.fake_phone(clock=clock, size=size, stages=[(0.0, fit(page, size))],
                                         focus=axis, fast_mod=fast, say=lines.append)
-                p.app = app
+                _launch(p).app = app
                 p.__dict__.pop("dismiss", None)      # `fake_phone()` 默认把 dismiss 桩成空：这一段要真的跑它
                 click = lambda x, y, _c=clock, _a=clicks: (_c.click(), _a.append((x, y)))  # noqa: E731
                 p.click = p.screen.click = click     # 改前 dismiss() 走门面、改后走观测基座
@@ -615,7 +632,7 @@ def dump(tool_dir):
                 except Exception as e:                   # noqa: BLE001 - 对拍要的是原文，不是分类
                     got = f"{type(e).__name__}: {e}"
                 out.append({"id": f"{label}|{size[0]}x{size[1]}", "got": got, "clicks": clicks,
-                            "backs": backs, "promoted": sorted(p.promoted), "lines": lines,
+                            "backs": backs, "promoted": sorted(_launch(p).promoted), "lines": lines,
                             "t": round(clock.t, 2), "reads": clock.page_reads})
 
         run("permission|deny", PERMISSION_DENY, focus=permission)

@@ -335,7 +335,7 @@ def phone(pages, focus=APP_FOCUS):
     def click(*_args):
         index[0] = min(index[0] + 1, len(pages) - 1)
 
-    p = phone_stub("test", d=Mock())
+    p = phone_stub("test", reader=Mock())
     p.W, p.H = 1080, 2340
     p.conn.locked = Mock(return_value=False)
     p.screen.focus = Mock(return_value=focus)
@@ -345,8 +345,8 @@ def phone(pages, focus=APP_FOCUS):
     p.scroll, p.scroll_more = Mock(), Mock(return_value=False)
     p.click = Mock(side_effect=click)
     p.confirm = Mock()
-    p.reader = Mock()
-    p.reader.shell.return_value = Mock(output="")
+    p.conn.reader = Mock()
+    p.conn.reader.shell.return_value = Mock(output="")
     return p
 
 

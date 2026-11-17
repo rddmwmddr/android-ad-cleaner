@@ -100,7 +100,7 @@ class NavigationDoesNotDependOnTogglingTests(unittest.TestCase):
 
 def bare_phone(size=(1080, 2400)):
     """只给读屏替身的门面：确认框判定不碰手机，也不装假时钟（`time.sleep` 由用例 patch）。"""
-    p = phone_stub("test", d=Mock())
+    p = phone_stub("test", reader=Mock())
     p.W, p.H = size
     return p
 
@@ -341,7 +341,7 @@ class MaskClickTests(unittest.TestCase):
     def run_off(self, delay):
         clock = clocked(self, fast, Clock(read_cost=0.1))
         device = StoreDevice(clock, delay)
-        phone = fake_phone(clock=clock, size=(1260, 2800), click=device.click, d=device)
+        phone = fake_phone(clock=clock, size=(1260, 2800), click=device.click, reader=device)
         return phone.off(), device
 
     def test_late_dialog_never_swallows_the_remaining_clicks(self):

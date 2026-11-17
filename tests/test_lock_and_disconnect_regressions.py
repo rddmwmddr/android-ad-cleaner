@@ -52,16 +52,16 @@ class KeyguardTests(unittest.TestCase):
         self.assertTrue(adb_link.keyguard_showing("    mDreamingLockscreen=true\n"))
 
     def test_engine_collapses_shade_when_not_locked(self):
-        p = phone_stub("test", d=Mock())
-        p.d.shell.side_effect = [out(SHADE + "      mIsShowing=false\n"), out(""),
+        p = phone_stub("test", reader=Mock())
+        p.conn.reader.shell.side_effect = [out(SHADE + "      mIsShowing=false\n"), out(""),
                                  out(SETTINGS + "      mIsShowing=false\n")]
         with patch.object(fast.time, "sleep"):
             self.assertFalse(p.locked())
-        self.assertEqual(p.d.shell.call_args_list[1].args[0], "cmd statusbar collapse")
+        self.assertEqual(p.conn.reader.shell.call_args_list[1].args[0], "cmd statusbar collapse")
 
     def test_engine_lock_screen_stays_locked_after_collapse(self):
-        p = phone_stub("test", d=Mock())
-        p.d.shell.side_effect = [out(SHADE), out(""), out(SHADE)]
+        p = phone_stub("test", reader=Mock())
+        p.conn.reader.shell.side_effect = [out(SHADE), out(""), out(SHADE)]
         with patch.object(fast.time, "sleep"):
             self.assertTrue(p.locked())
 
@@ -75,7 +75,7 @@ class KeyguardTests(unittest.TestCase):
 class WaitUnlockedTests(unittest.TestCase):
     DOMAIN = "device_state"
     def phone(self, states):
-        p = phone_stub("test", d=Mock())
+        p = phone_stub("test", reader=Mock())
         p.conn.locked = Mock(side_effect=states)      # 锁屏判定归连接基座（ADR-0033）
         return p
 
@@ -83,7 +83,7 @@ class WaitUnlockedTests(unittest.TestCase):
         p = self.phone([True, True, False])
         with patch.object(fast.time, "sleep"), contextlib.redirect_stdout(io.StringIO()) as printed:
             self.assertTrue(p.wait_unlocked())
-        self.assertEqual(p.d.shell.call_args_list[0].args[0], "input keyevent KEYCODE_WAKEUP")
+        self.assertEqual(p.conn.reader.shell.call_args_list[0].args[0], "input keyevent KEYCODE_WAKEUP")
         self.assertIn("解锁后自动继续", printed.getvalue())
 
     def test_gives_up_after_timeout(self):
@@ -104,9 +104,9 @@ class FocusTests(unittest.TestCase):
     DOMAIN = "device_state"
     def test_trailing_brace_is_not_part_of_the_activity(self):
         # vivo OriginOS 3 / Android 13：焦点行以「Activity}}」结尾，以前取到「…Activity}」，渠道页全部认不出
-        p = phone_stub("test", d=Mock())
+        p = phone_stub("test", reader=Mock())
         name = "com.vivo.systemuiplugin/com.vivo.systemui.statusbar.notification.settings.channels.NotificationSettingsActivity"
-        p.d.shell.return_value = out(f"  mCurrentFocus=Window{{4c2 u0 {name}}}}}\n")
+        p.conn.reader.shell.return_value = out(f"  mCurrentFocus=Window{{4c2 u0 {name}}}}}\n")
         self.assertEqual(p.focus(), name)
         self.assertEqual(adb_link.focus_window(f"mCurrentFocus=Window{{4c2 u0 {name}}}}}"), name)
 
@@ -235,7 +235,7 @@ class ListRowTests(unittest.TestCase):
     focus = "com.android.settings/com.android.settings.Settings$AppNotificationSettingsActivity"
 
     def phone(self):
-        p = phone_stub("test", d=Mock())
+        p = phone_stub("test", reader=Mock())
         p.W, p.H = 1080, 2340
         p.locked = Mock(return_value=False)
         p.screen.focus = Mock(return_value=self.focus)

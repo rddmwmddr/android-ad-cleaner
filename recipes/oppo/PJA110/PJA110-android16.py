@@ -14,7 +14,7 @@ PROMOTIONS = ["首页：悬浮活动图标", "首页：活动弹窗", "首页：
 import recipe_nav as nav
 def step_search(p, rt):
     """桌面下滑手势在 adb 下不稳；scheme 不通时退回搜索首页底部的「设置」，不碰手势。"""
-    p.d.shell(SEARCH_SETTINGS)
+    p.shell(SEARCH_SETTINGS)
     if not nav.search_settings_ready(p, rt):
         print("  · scheme 没落到搜索设置页，改点搜索首页底部的「设置」", flush=True)
         p.start("com.heytap.quicksearchbox", ".ui.activity.SearchHomeActivity")

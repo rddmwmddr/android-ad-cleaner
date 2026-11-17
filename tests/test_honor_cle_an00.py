@@ -2,9 +2,8 @@
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
 
-from fixtures import load_recipe, phone_mock
+from fixtures import load_recipe, phone_mock, shell_result
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -65,7 +64,7 @@ class AgreementTest(unittest.TestCase):
         p.find.side_effect = agreement
         run(p, "主题")
         p.start.assert_not_called()
-        self.assertIn("com.hihonor.android.thememanager/.PageActivity", p.d.shell.call_args.args[0])
+        self.assertIn("com.hihonor.android.thememanager/.PageActivity", p.shell.call_args.args[0])
 
     def test_agreement_that_draws_late_is_still_seen(self):
         # 后台屏慢：首页先有文字，协议框晚一点。没等到就会接着往下点，弹窗处理再把协议「取消」掉
@@ -223,7 +222,7 @@ class ReduceAdsTest(unittest.TestCase):
 
     def test_it_is_named_on_the_music_ad_page(self):
         p = in_app(phone(), "com.hihonor.cloudmusic")
-        p.d.shell.return_value = Mock(output="")
+        p.shell.return_value = shell_result("", 0)
         run(p, "音乐")
         p.off.assert_any_call(only=["个性化广告推荐", "减少广告"], page="音乐·广告推荐")
 
@@ -253,13 +252,13 @@ class MusicTest(unittest.TestCase):
                 state["now"] = after
             elif "KEYCODE_MEDIA_PAUSE" in cmd:
                 state["now"] = self.PAUSED
-            return Mock(output=state["now"] if cmd.startswith("dumpsys") else "")
+            return shell_result(state["now"] if cmd.startswith("dumpsys") else "")
 
-        p.d.shell.side_effect = shell
+        p.shell.side_effect = shell
         return p
 
     def pauses(self, p):
-        return [c for c in p.d.shell.call_args_list if "KEYCODE_MEDIA_PAUSE" in c.args[0]]
+        return [c for c in p.shell.call_args_list if "KEYCODE_MEDIA_PAUSE" in c.args[0]]
 
     def test_auto_play_is_paused_once_before_the_page_is_awaited(self):
         p = self.phone(self.PAUSED, self.PLAYING)
@@ -281,7 +280,7 @@ class MusicTest(unittest.TestCase):
         p = self.phone(self.PAUSED, self.PLAYING)
         run(p, "音乐")
         p.start.assert_not_called()
-        self.assertEqual(sum(c.args[0].startswith("am start") for c in p.d.shell.call_args_list), 1)
+        self.assertEqual(sum(c.args[0].startswith("am start") for c in p.shell.call_args_list), 1)
 
     def test_user_who_was_already_listening_is_left_alone(self):
         p = self.phone(self.PLAYING, self.PLAYING)
@@ -301,16 +300,16 @@ class MusicTest(unittest.TestCase):
 
     def test_late_playback_is_paused_even_when_the_step_fails(self):
         p = self.phone(self.PAUSED, self.PAUSED)
-        p.d.return_value.click_exists.return_value = False      # 设置图标没找到
+        p.tap_id_if_present.return_value = False      # 设置图标没找到
 
         def late():
-            p.d.shell.side_effect = lambda cmd: Mock(output=self.PLAYING if cmd.startswith("dumpsys") else "")
+            p.shell.side_effect = lambda cmd: shell_result(self.PLAYING if cmd.startswith("dumpsys") else "", 0)
             return "com.hihonor.cloudmusic/.Main"
 
         p.focus.side_effect = late
         scope, _ = run(p, "音乐")
         self.assertEqual(scope["FAILED_STEPS"], ["音乐"])
-        self.assertTrue(any("KEYCODE_MEDIA_PAUSE" in c.args[0] for c in p.d.shell.call_args_list))
+        self.assertTrue(any("KEYCODE_MEDIA_PAUSE" in c.args[0] for c in p.shell.call_args_list))
 
 
 class SearchTest(unittest.TestCase):
@@ -323,14 +322,14 @@ class SearchTest(unittest.TestCase):
         p.texts.return_value = self.more_at(1000)
         scope, _ = run(p, "搜索")
         self.assertEqual(scope["FAILED_STEPS"], [])
-        p.d.press.assert_not_called()
+        p.press.assert_not_called()
 
     def test_back_closes_the_keyboard_when_more_is_hidden(self):
         p = phone()
         p.texts.side_effect = [[], self.more_at(1000)] + [[]] * 20
         scope, _ = run(p, "搜索")
         self.assertEqual(scope["FAILED_STEPS"], [])
-        p.d.press.assert_called_once_with("back")
+        p.press.assert_called_once_with("back")
 
     def test_missing_more_fails_with_the_message_the_data_gives(self):
         """旧树也绿，守的是不回退：两处都读不到「更多」时这一段按失败收场，文案来自数据。"""

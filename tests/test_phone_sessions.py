@@ -1,7 +1,9 @@
-"""三个跨阶段会话对象（ADR-0033、#1039）：门面用显式属性 + 赋值器转发过去。
+"""三个跨阶段会话对象（ADR-0033、沿用 #1039 的做法）：状态归对象，门面只留设备概念那几个。
 
-钉的是脚本侧真在用的三种写法——置零（`p.miss = 0`）、赋值（`p.app = pkg`）、
-清空集合（`p.promoted.clear()`）。转发成拷贝会让最后一种静默失效，所以集合必须读回同一个对象。
+钉的是脚本侧真在用的写法——置零（`p.miss = 0`）、换 App（`p.app = pkg`）、
+读集合本体（`p.missed`）。其余字段直接读持有它的会话对象（`p.channel_session.*`），
+门面上没有第二条访问路径（ADR-0045、#1479）；转发成拷贝会让集合类字段静默失效，所以
+留下的那几个必须读回同一个对象。
 """
 import sys
 import unittest
@@ -29,12 +31,20 @@ class SessionTests(unittest.TestCase):
         self.p.app = "com.android.settings"
         self.assertEqual(self.p.launch_session.app, "com.android.settings")
 
-    def test_promoted_is_the_live_set(self):
-        """`honor-CLE-AN00` 直接写 `p.promoted.clear()`：清空了才是真的清空。"""
-        self.assertIs(self.p.promoted, self.p.launch_session.promoted)
-        self.p.promoted.add(("com.vivo.browser", "close"))
-        self.p.promoted.clear()
+    def test_changing_the_app_forgets_the_promoted_marks(self):
+        """`honor` 的 `launch()` 只写 `p.app`：换 App 就该作废上一个 App 的推广位记忆（沿用 #420 的裁决、#1479）。"""
+        self.p.app = "com.vivo.browser"
+        self.p.launch_session.promoted.add(("com.vivo.browser", "close"))
+        self.p.app = "com.heytap.themestore"
         self.assertEqual(self.p.launch_session.promoted, set())
+        self.assertEqual(self.p.launch_session.app, "com.heytap.themestore")
+
+    def test_the_launch_session_keeps_a_single_setter_for_that_invariant(self):
+        """「换 App 就清空 promoted」只有 `LaunchSession.set_app()` 一份，别处不再各清一次。"""
+        session = self.p.launch_session
+        session.promoted.add(("com.android.settings", "close"))
+        session.set_app("com.android.vending")
+        self.assertEqual(session.promoted, set())
 
     def test_missed_is_the_live_list(self):
         self.assertIs(self.p.missed, self.p.lost_note.missed)
@@ -42,22 +52,27 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(self.p.lost_note.missed, [("系统·广告服务", "个性化推荐")])
 
     def test_channel_fields_live_in_the_channel_session(self):
-        self.p.vivo_seen = True
-        self.p.skeleton_count = 1
-        self.p.skeleton_sigs.add("sig")
-        self.p.mismatch_probes = 2
         session = self.p.channel_session
+        session.vivo_seen = True
+        session.skeleton_count = 1
+        session.skeleton_sigs.add("sig")
+        session.mismatch_probes = 2
         self.assertEqual((session.vivo_seen, session.skeleton_count, session.mismatch_probes),
                          (True, 1, 2))
         self.assertEqual(session.skeleton_sigs, {"sig"})
+
+    def test_the_channel_fields_are_not_on_the_facade(self):
+        for gone in ("vivo_seen", "skeleton_sigs", "skeleton_count", "mismatch_probes", "promoted"):
+            with self.assertRaises(AttributeError):
+                getattr(self.p, gone)
 
     def test_each_facade_gets_its_own_sessions(self):
         """两个 Phone 的丢失记录与推广位互不影响：会话对象是门面自己造的。"""
         other = phone_stub(W=1080, H=2340)
         self.p.miss = 1
-        self.p.promoted.add(("com.android.settings", "close"))
+        self.p.launch_session.promoted.add(("com.android.settings", "close"))
         self.assertEqual(other.miss, 0)
-        self.assertEqual(other.promoted, set())
+        self.assertEqual(other.launch_session.promoted, set())
         self.assertIsNot(self.p.lost_note, other.lost_note)
 
 

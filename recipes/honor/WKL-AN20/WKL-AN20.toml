@@ -81,7 +81,7 @@ ops = [
 
 [[segment]]
 name = "搜索"
-# 裁决：缺能力 + 「坐标算法」。桌面下滑是 `p.d.swipe` 的绝对坐标手势；数据里的 `gesture` 走
+# 裁决：缺能力 + 「坐标算法」。桌面下滑是 `p.swipe` 的绝对坐标手势；数据里的 `gesture` 走
 # `input swipe`，比例相同但另一条下发路径，换过去真机行为不一致
 code = "step_search"
 

@@ -461,7 +461,7 @@ def real_candidates(method, xml, focus, **kwargs):
     候选集与 `systemui_text` 原样转发下去；`named_nodes()` 自己的三条筛选由 `NamedNodesTests` 直接守。"""
     root = ET.fromstring(xml)
     parents = {c: n for n in root.iter() for c in n}
-    p = phone_stub("test", d=Mock(), W=1080, H=2340)
+    p = phone_stub("test", reader=Mock(), W=1080, H=2340)
     p.screen.focus = Mock(return_value=focus)
     p.screen.tree = Mock(return_value=root)
     p.screen.scroll_more = Mock(return_value=False)
@@ -655,7 +655,7 @@ def old_switches_403(p, root):
                 l, t, r, b = row.bounds(n)
                 if r - l > 0 and b - t > 0:
                     if shot is None:
-                        shot = p.reader.screenshot()
+                        shot = p.conn.reader.screenshot()
                     if shot.size != (p.W, p.H):
                         continue
                     on = fast.Screen._pixel_on(shot, l, t, r, b)

@@ -16,7 +16,7 @@ __all__ = ('browser_recommendations', 'browser_settings_vivo', 'by_desc', 'close
 
 # ---------- 词汇 ----------
 def settings_home(p, rt):
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
+    p.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
 
 def browser_settings_vivo(p, rt, tries=2):
     """右上「菜单 → 设置」，点完要认出设置页（沿用 #753 的做法）。
@@ -32,7 +32,7 @@ def browser_settings_vivo(p, rt, tries=2):
         return bool(at) and at[1] < p.H * 0.25
 
     for _ in range(tries):
-        if not p.d(resourceId="com.vivo.browser:id/menu_btn").click_exists(timeout=3):
+        if not p.tap_id_if_present("com.vivo.browser:id/menu_btn", timeout=3):
             return False                        # 本机没有这个按钮：交给调用方跳过本段
         p.await_page(1.6)                       # 菜单是弹层，画出来的那一帧才有「设置」
         xy = until(lambda: p.find("设置", exact=True, edge_ok="tab"), timeout=3.0, poll=0.3,
@@ -231,7 +231,7 @@ def search_setting(p, rt, kw, pick=True):
     引擎的 p.setting 依赖 focused 输入框，在 vivo 上时而等不到（会抛异常），这里直接按 resourceId
     取输入框。点完还要确认焦点窗口真的变了，否则返回 False —— 宁可报错，也不要装作进去了。"""
     p.miss = 0
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
+    p.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
     for _ in range(24):
         if p.find("搜索设置项"):
             break
@@ -239,7 +239,7 @@ def search_setting(p, rt, kw, pick=True):
     if not p.tap("搜索设置项", scrolls=0, wait=0.6):
         print("  ✗ 设置首页没找到搜索框"); return False
     try:
-        p.d(resourceId="com.android.settings:id/vigour_search_edit").set_text(kw)
+        p.set_text("com.android.settings:id/vigour_search_edit", kw)
     except Exception as e:
         print(f"  ✗ 搜索框输入失败：{e}"); return False
     xy = None
@@ -269,14 +269,14 @@ def hiboard_panel(p, rt):
     # 此页面未导出，不能 am start；两次 HOME 回默认桌面，再按真机路径滑入。
     for _ in range(2):
         signature = p.sig()
-        p.d.shell("input keyevent HOME")
+        p.shell("input keyevent HOME")
         p.settle(signature, 1.0)
     # HOME 会恢复上次停留的负一屏；已在 HiBoard 时不必再当普通桌面横滑。
     home = p.focus()
     if home != "HiBoard":
         rt.require(home.startswith("com.bbk.launcher2/"), "未回到系统桌面，停止负一屏段")
         signature = p.sig()
-        p.d.shell(f"input swipe {p.W // 10} {p.H // 2} {p.W * 9 // 10} {p.H // 2} 300")
+        p.shell(f"input swipe {p.W // 10} {p.H // 2} {p.W * 9 // 10} {p.H // 2} 300")
         p.settle(signature, 1.5)
     rt.require(p.focus() == "HiBoard" and p.find("添加组件", exact=True),
                  "未进入负一屏（可能未启用），停止本段")
@@ -291,9 +291,9 @@ def hiboard_panel_v2547a(p, rt):
     不能用「屏上有『热点资讯』」来判断：负一屏主页上本来就有资讯卡片，会误判成面板。"""
     if "AppletSettingActivity" in p.focus():
         return True
-    p.d.shell("input keyevent HOME"); rt.clock.sleep(1.0)
+    p.shell("input keyevent HOME"); rt.clock.sleep(1.0)
     for _ in range(3):
-        p.d.shell(f"input swipe {p.W//10} {p.H//2} {p.W*9//10} {p.H//2} 250")
+        p.shell(f"input swipe {p.W//10} {p.H//2} {p.W*9//10} {p.H//2} 250")
         rt.clock.sleep(1.5)
         if p.find("添加组件") or p.find("小V建议"):
             break
@@ -631,7 +631,7 @@ def browser_recommendations(p, rt):
 
 def i_manager_ads(p, rt):
     """i管家「关于 → 个性化设置」，直达 MainSettings 页。"""
-    p.d.shell("am start -f 0x10008000 -n com.iqoo.secure/.MainSettings")
+    p.shell("am start -f 0x10008000 -n com.iqoo.secure/.MainSettings")
     rt.clock.sleep(1.0)
     if maybe(p, rt, "关于") and maybe(p, rt, "个性化设置"):
         p.off(only=["应用个性化推荐", "清理个性化推荐"], page="i管家·个性化设置")
@@ -684,7 +684,7 @@ def global_search_ads(p, rt):
 
 def weather_service(p, rt):
     """天气设置页只关「天气服务」（天气相关热点资讯通知），预警类三个开关同页保留。"""
-    p.d.shell("am start -f 0x10008000 -n com.vivo.weather/.WeatherSettings")
+    p.shell("am start -f 0x10008000 -n com.vivo.weather/.WeatherSettings")
     rt.clock.sleep(1.0)
     p.off(only=["天气服务"], keep=["气象预警", "异常天气", "地震预警"], page="天气·设置")
     p.back(1)

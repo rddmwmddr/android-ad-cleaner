@@ -20,6 +20,7 @@ _root = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__fi
 if _root not in _sys.path:
     _sys.path.insert(0, _root)
 import recipe_lib
+from .launch import launch_command, launches_by_command
 
 # 数据可调用的实现：owner 表的拷贝，不是共享引用——`tests/fixtures.py` 的打桩助手与
 # `tests/test_catalog.py` 会就地改这张表再 `addCleanup` 还原，共享引用会让漏还原的用例污染 owner。
@@ -187,6 +188,9 @@ def _close_all(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
 
 
 def _start(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
+    if launches_by_command(op):
+        p.shell(launch_command(op))
+        return
     args = [op["pkg"]]
     kwargs: dict[str, Any] = {}
     if "activity" in op:
@@ -204,8 +208,8 @@ def _start_or_skip(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
 
 
 def _skip_unless_installed(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
-    """`if marker not in p.d.shell(command).output: print(text); return`：本机没装这个包就整段收尾（完成）。"""
-    output = p.d.shell(op["command"]).output
+    """`if marker not in p.shell(command): print(text); return`：本机没装这个包就整段收尾（完成）。"""
+    output = p.shell(op["command"])
     if op["contains"] not in output:
         print(op["text"], flush=True)
         raise _Abort
@@ -246,16 +250,16 @@ def _gated(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
 
 def _scoped(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
     """作用域内设一个页面属性、退出恢复（对应段体里的 try/finally，例如锁屏页的 `systemui_text`）。"""
-    page = p
+    scope = p.screen                       # 属性归观测基座：设与恢复都打在同一个对象上
     saved = {}
     if "systemui_text" in op:
-        saved["systemui_text"] = page.systemui_text
-        page.systemui_text = op["systemui_text"]
+        saved["systemui_text"] = scope.systemui_text
+        scope.systemui_text = op["systemui_text"]
     try:
         _run(op.get("ops", []), p, rt, g)
     finally:
         for name, value in saved.items():
-            setattr(page, name, value)
+            setattr(scope, name, value)
 
 
 def _back(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
@@ -329,8 +333,8 @@ def _if_focus(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
 
 
 def _shell(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
-    """不经门面的读屏命令（`p.d.shell`）：拉起设置页、`input swipe`、`getprop` 这类原样下发。"""
-    p.d.shell(op["command"])
+    """原样下发一条命令（`p.shell`）：拉起设置页、`input swipe`、`getprop` 这类。"""
+    p.shell(op["command"])
 
 
 def _sleep(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
@@ -338,11 +342,11 @@ def _sleep(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
 
 
 def _press(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
-    p.d.press(op["key"])
+    p.press(op["key"])
 
 
 def _app_stop(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
-    p.d.app_stop(op["pkg"])
+    p.app_stop(op["pkg"])
 
 
 def _note_miss(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
@@ -419,16 +423,15 @@ def _tap_id(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
     这一段按未完成收场。"""
     selectors: dict[str, Any] = {}
     if "resource_id" in op:
-        selectors["resourceId"] = op["resource_id"]
+        selectors["resource_id"] = op["resource_id"]
     if "text" in op:
         selectors["text"] = op["text"]
-    target = p.d(**selectors)
     if not op.get("optional") and "miss_print" not in op:
-        target.click()
+        p.tap_id(**selectors)
         return
     from fast import u2          # 顶层导入会把 adbutils / uiautomator2 拖进只装载数据的调用方
     try:
-        target.click()
+        p.tap_id(**selectors)
     except u2.exceptions.UiObjectNotFoundError:
         if op.get("optional"):
             return
@@ -443,7 +446,7 @@ def _gesture(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
     start, end = op["start"], op["end"]
     x1, y1 = int(p.W * start[0]), int(p.H * start[1])
     x2, y2 = int(p.W * end[0]), int(p.H * end[1])
-    p.d.shell(f"input swipe {x1} {y1} {x2} {y2} {op['ms']}")
+    p.shell(f"input swipe {x1} {y1} {x2} {y2} {op['ms']}")
 
 
 def _dismiss(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:

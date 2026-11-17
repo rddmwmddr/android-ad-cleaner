@@ -4,6 +4,7 @@
 """
 import io
 from pathlib import Path
+from types import SimpleNamespace
 import sys
 import tomllib
 import unittest
@@ -210,9 +211,10 @@ class HonorAdTrackingTests(unittest.TestCase):
 
         def shelled(command, **kw):
             order.append(("shell", command))
+            return SimpleNamespace(output="")
 
         p.tap.side_effect = tapped
-        p.d.shell.side_effect = shelled
+        p.shell.side_effect = shelled
         return order
 
     def test_the_direct_page_is_used_first_and_the_menu_is_not_walked(self):
@@ -221,7 +223,7 @@ class HonorAdTrackingTests(unittest.TestCase):
         self.assertEqual(scope["FAILED_STEPS"], [])
         p.start.assert_any_call(self.PKG, self.PAGE, expect="应用广告跟踪管理")
         p.setting.assert_not_called()
-        p.d.shell.assert_not_called()
+        p.shell.assert_not_called()
         self.assertEqual([c.args[0] for c in p.tap.call_args_list],
                          ["更多选项", "全部关闭"])
 
@@ -233,7 +235,7 @@ class HonorAdTrackingTests(unittest.TestCase):
         scope, _out = load_out(p, ["广告跟踪"])
         self.assertEqual(scope["FAILED_STEPS"], [])
         p.setting.assert_called_once_with("广告", "广告与隐私")
-        p.d.shell.assert_not_called()
+        p.shell.assert_not_called()
         self.assertEqual([c.args[0] for c in p.tap.call_args_list],
                          ["更多选项", "全部关闭"])
 
@@ -269,7 +271,7 @@ class HonorAdTrackingTests(unittest.TestCase):
         self.assertEqual(scope["SKIPPED_STEPS"], ["广告跟踪"])
         self.assertIn("安全模式", printed)
         p.start.assert_not_called()
-        p.d.shell.assert_not_called()
+        p.shell.assert_not_called()
 
     def test_the_segment_is_page_tree_data(self):
         """段体从 `code=` 搬进页面树（#1372）；旧树这一段还是 `code = "step_ad_tracking"`。"""
@@ -287,7 +289,7 @@ class HonorAdTrackingTests(unittest.TestCase):
 class HonorMusicTests(unittest.TestCase):
     def music_phone(self):
         p = phone()
-        p.d = MagicMock()          # `tap_id` 走 p.d(**选择器).click()
+        p.tap_id = MagicMock()     # `tap_id` 走门面 p.tap_id(**选择器)（#1476）
         return p
 
     def test_music_entries_are_opened_with_page_change_confirmation(self):
@@ -307,9 +309,9 @@ class HonorMusicTests(unittest.TestCase):
         段体从 `code=` 搬进数据，调用不变：旧树也绿，守的是 `tap_id` 的选择器与顺序不回退。"""
         p = self.music_phone()
         load(p, ["音乐"])
-        self.assertEqual([c.kwargs for c in p.d.call_args_list],
-                         [{"text": "我的"}, {"resourceId": "com.hihonor.cloudmusic:id/ic_setting"}])
-        self.assertEqual(p.d.return_value.click.call_count, 2)
+        self.assertEqual([c.kwargs for c in p.tap_id.call_args_list],
+                         [{"text": "我的"}, {"resource_id": "com.hihonor.cloudmusic:id/ic_setting"}])
+        self.assertEqual(p.tap_id.call_count, 2)
 
     def test_missing_privacy_menu_skips_the_section_without_blind_scrolling(self):
         """「更多设置」页里没有该菜单时：留下停在哪一页就跳过，脚本自己不另起一套盲点。"""

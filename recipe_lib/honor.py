@@ -17,9 +17,8 @@ __all__ = ('baidu_browser', 'browser_gear', 'close_named_honor', 'launch', 'no_a
 def launch(p, rt, activity, app):
     """按 Activity 拉起 App 并等首页画出来（CLE-AN00 的浏览器 / 主题）。"""
     pkg = activity.split("/", 1)[0]
-    p.app = pkg
-    p.promoted.clear()
-    p.d.shell(f"am start -f 0x10008000 -n {activity}")
+    p.app = pkg          # 换 App 顺带作废推广位记忆（`LaunchSession.set_app()`）：这里不必再清一次
+    p.shell(f"am start -f 0x10008000 -n {activity}")
     for _ in range(20):
         if p.focus().split("/", 1)[0] == pkg and p.has_text():
             return
@@ -68,13 +67,13 @@ def _honor_my_tab(p, rt, app):
     rt.clock.sleep(1)
 
 def _honor_browser_settings_mounted(p, rt):
-    if "package:" not in p.d.shell("pm path com.honor.browser").output:
+    if "package:" not in p.shell("pm path com.honor.browser"):
         return baidu_browser(p, rt)
     p.start("com.honor.browser")
     p.dismiss()
     if p.find("我的", exact=True):                       # 经典首页：我的 → 右上第三个图标
         p.tap("我的", exact=True, scrolls=0)
-        p.d(resourceId="com.honor.browser:id/top_local_icon")[2].click()
+        p.tap_id("com.honor.browser:id/top_local_icon", index=2)
         rt.clock.sleep(1)
     else:                                                # 简洁首页：更多 → 设置
         p.tap("更多", exact=True, scrolls=0)
@@ -179,10 +178,11 @@ def close_named_honor(p, rt, names, title, package, marker, max_screens=6, drawn
         rt.require(p.focus().split("/", 1)[0] == package and marker in labels(p, root),
                      "已离开目标设置页，停止读取开关")
         # 仅阅读的「广告推荐服务」设置页允许截图识别自绘开关，不写图片文件。
+        # 自绘开关不满足 clickable，段内包装器（`safe_ui`）会把它们过滤掉；这一档要引擎自己那份读法。
         if drawn:
             rt.require(package == "com.hihonor.dz.reader" and marker == "广告推荐服务",
                          "此页不允许自绘开关截图")
-            return p.screen.switches(root)
+            return p.switches_raw(root)
         return native(root)
 
     p.switches = read
@@ -220,7 +220,7 @@ def search_more(p, rt, miss_print):
 
     xy = more_at()
     if not xy:
-        p.d.press("back")
+        p.press("back")
         rt.clock.sleep(0.5)
         xy = more_at()
     if not xy:

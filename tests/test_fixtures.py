@@ -87,9 +87,10 @@ class FakePhoneTests(unittest.TestCase):
         self.assertEqual(clock.clicks, 1)
 
     def test_fields_replace_the_defaults(self):
-        p = fixtures.fake_phone(locked=lambda: True, vivo_seen=True)
+        p = fixtures.fake_phone(locked=lambda: True)
+        p.channel_session.vivo_seen = True
         self.assertTrue(p.locked())
-        self.assertTrue(p.vivo_seen)
+        self.assertTrue(p.channel_session.vivo_seen)
 
     def test_drive_reports_result_and_cost(self):
         # drive() 自己造钟装进模块，退出时把 clock_targets() 的目标全放回；这层 patched_clock 只管还原它自己装的那份
@@ -106,13 +107,13 @@ class PhoneStubTests(unittest.TestCase):
 
     def test_serial_and_lost_write_through_to_the_link(self):
         p = fixtures.phone_stub("S")
-        self.assertEqual(p.serial, "S")
+        self.assertEqual(p.conn.serial, "S")
         p.lost = True
-        self.assertTrue(p.link.lost)
-        self.assertEqual(p.link.serial, "S")
+        self.assertTrue(p.conn.link.lost)
+        self.assertEqual(p.conn.link.serial, "S")
 
     def test_the_default_shell_answers_empty(self):
-        self.assertEqual(fixtures.phone_stub().link.shell("getprop x").output, "")
+        self.assertEqual(fixtures.phone_stub().conn.link.shell("getprop x").output, "")
 
 
 if __name__ == "__main__":

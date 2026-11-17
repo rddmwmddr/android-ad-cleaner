@@ -268,7 +268,16 @@ class Device:
         return SimpleNamespace(selector=None, click=click)
 
 
-def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
+def shell_result(output="", exit_code=0):
+    """假手机上 `p.shell()` 的返回值形状：是字符串，另带 `exit_code`（#1474）。
+
+    桩成 `p.shell` 的用例用它，脚本才既能把结果当字符串读，又能判拉起成没成功。"""
+    load_tool()
+    import fast as fast_mod
+    return fast_mod.ShellResult(output, exit_code)
+
+
+def phone_stub(serial="test", shell=None, fast_mod=None, reader=None, **fields):
     """造一个不连手机的 Phone：假 link 与假传输都由它接好，其余属性按关键字传。
 
     `shell` 顶替读屏库那条传输（签名 `(command, timeout=)`）；`serial` / `lost` 会写穿到 link 上。
@@ -285,7 +294,9 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
     `search` / `dismisser`）也在这里造；
     它们的默认值归各自的类，这里不抄第二份。`changed` / `safe_mode` 归拨动会话，经门面的属性转发生效。
     另有一处与构造处不同：`pause_at_lock_check` 默认 False，因为假手机后面没有客户端在点「暂停」。
-    屏尺寸 `W` / `H` 与读屏 adapter `d` 不设默认：它们是每条用例的前提，由调用方传。
+    屏尺寸 `W` / `H` 与读屏 adapter（`p.conn.reader`）不设默认：它们是每条用例的前提，由调用方传。
+    门面只剩 8 个设备概念属性，其余状态写在持有它的协作者上（`p.conn.*` / `p.screen.*` /
+    `p.channel_session.*` / `p.launch_session.*`），门面不再提供第二条访问路径（ADR-0045、#1479）。
     """
     if fast_mod is None:
         load_tool()
@@ -312,8 +323,17 @@ def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
         p.dismisser = bind_dismisser(p, fast_mod)
     if hasattr(fast_mod, "Navigator"):         # 导航同理：`tap()` / `go()` / `tab()` 内部走它
         p.navigator = bind_navigator(p, fast_mod)
-    p.link = fast_mod.adb_link.Connection(serial, transport=shell or _silent_shell)
-    p.log, p.pause_at_lock_check, p.systemui_text = False, False, False
+    link = fast_mod.adb_link.Connection(serial, transport=shell or _silent_shell)
+    if hasattr(p, "conn"):                     # 新树：状态归协作者，门面只留 8 个设备概念属性（#1479）
+        p.conn.link, p.conn.log, p.conn.pause_at_lock_check = link, False, False
+        p.screen.systemui_text = False
+    else:                                      # 旧树：这些字段直接落在实例上
+        p.link, p.log, p.pause_at_lock_check, p.systemui_text = link, False, False, False
+    if reader is not None:                     # 读屏替身：新树落 `conn.reader`，旧树就是门面自己
+        if hasattr(p, "conn"):
+            p.conn.reader = reader
+        else:
+            p.d = reader
     p.changed, p.safe_mode = [], False
     if not hasattr(fast_mod, "LostNote"):      # 旧树：这些字段直接落在实例上
         p.miss, p.missed, p.promoted, p.app = 0, [], set(), ""
@@ -436,10 +456,9 @@ def job_stub(**fields):
 def phone_mock(fast_mod=None, **fields):
     """以 Mock 冒充 Phone（配方脚本、只读命令这类不需要真页面的用例）。
 
-    `Mock()` 上任何属性都是真值，于是 `Phone` 构造处声明的开关（`safe_mode` / `systemui_text` /
-    `vivo_seen` / `lost`）在真实方法里会被当成 True；`d` 与 `reader` 也会变成两个不相干的 Mock，而
-    `Phone.start` 这类内部走 `reader`、配方脚本走 `p.d`。这里只补这两件事，其余照旧交给 Mock
-    （`changed` 保持 Mock，用例可以数 `.append` 的次数）。
+    `Mock()` 上任何属性都是真值，于是 `Phone` 构造处声明的开关（`safe_mode` / `lost`）在真实方法里
+    会被当成 True；`reader` 也会变成一个不相干的 Mock，而 `Phone.start` 这类内部走 `conn.reader`。
+    这里只补这几件事，其余照旧交给 Mock（`changed` 保持 Mock，用例可以数 `.append` 的次数）。
 
     两个基座指向它自己（`p.conn = p.screen = p`）：机型脚本直接写 `p.tree()`，观测基座内部也写
     `self.tree()`，两处要看到同一个桩，否则同一份页面得在两处各配一遍（ADR-0033）。
@@ -449,14 +468,18 @@ def phone_mock(fast_mod=None, **fields):
         import fast as fast_mod
     p = Mock(name="Phone")
     p.conn = p.screen = p      # 门面与两个基座是同一个 Mock：p.tree 与 p.screen.tree 是同一处桩
-    p.pause_at_lock_check, p.systemui_text, p.vivo_seen, p.safe_mode = False, False, False, False
+    p.conn.pause_at_lock_check, p.screen.systemui_text = False, False
+    p.channel_session.vivo_seen, p.safe_mode = False, False
     p.lost = False              # Phone 上这是代理 link 的属性，Mock 上没有：不补就恒为真
     p.missed = []               # `report_run()` 读它：Mock 恒真会把干净的一轮判成失败（#788）
     # 三个会话对象（#1039）不造：没有代码直接读 `p.lost_note` 这类对象本身，读的都是它的字段，
     # 而字段在 Mock 上本来就是可写可读的替身。
-    p.skeleton_sigs, p.skeleton_count = set(), 0
-    p.mismatch_probes = 0
-    p.reader = p.d = Mock(name="reader")
+    p.channel_session.skeleton_sigs, p.channel_session.skeleton_count = set(), 0
+    p.channel_session.mismatch_probes = 0
+    p.conn.reader = Mock(name="reader")
+    # 两个名字、两条路：脚本与引擎走门面 `p.shell`（直接桩它，返回值用 `shell_result(...)`），
+    # `Screen` 的动作原语走传输 `p.conn.reader.shell`（#1474 / #1479）。
+    p.shell = Mock(return_value=shell_result(""))
     for name, value in fields.items():
         setattr(p, name, value)
     return p
@@ -597,12 +620,12 @@ def stub(phone, name, value):
 
 
 def fake_phone(clock=None, size=SIZES[0], stages=((0.0, EMPTY_PAGE),),
-               focus=((0.0, ""),), fast_mod=None, shell=None, **fields):
+               focus=((0.0, ""),), fast_mod=None, shell=None, reader=None, **fields):
     """造一个不连手机的 Phone：读屏走时间轴，点击 / 返回只推进假时钟。
 
     只替掉会碰手机的部分；tree / sig / settle 等仍是真的，走 Device.dump_hierarchy。
-    `shell` 一起换掉两条传输：脚本里的 `p.d.shell`（读屏 adapter）与 `Phone.start` 走的
-    `p.link`（连接基座）。要换掉别的属性（想断言点击的坐标、想固定 locked）用关键字传进来，
+    `shell` 一起换掉两条传输：脚本里的 `p.shell`（读屏 adapter）与 `Phone.start` 走的
+    `conn.link`（连接基座）。要换掉别的属性（想断言点击的坐标、想固定 locked）用关键字传进来，
     形如 fake_phone(locked=lambda: True)——这些桩会同时落到它所属的基座上：门面只转发，
     内部调用走的是基座（ADR-0033）。
     """
@@ -613,7 +636,7 @@ def fake_phone(clock=None, size=SIZES[0], stages=((0.0, EMPTY_PAGE),),
         device.shell = shell
     p = phone_stub("fake", shell=shell or device.shell, fast_mod=fast_mod)
     p.W, p.H = size
-    p.d = device
+    p.conn.reader = reader or device
 
     def on_screen_base(name, value):
         """动作桩落在观测基座：门面的 `click` / `scroll` 只是转发，拆分前后内部调用都落到这里。"""

@@ -477,9 +477,149 @@ CASES = [
         "needle": "缺 seconds",
     },
     {
-        "id": "start-missing-pkg",
+        "id": "start-nothing-to-launch",
         "data": {"segment": [{"name": "a", "ops": [{"kind": "start"}]}]},
-        "needle": "缺 pkg",
+        "needle": "至少要给 pkg / action / data / launcher 之一",
+    },
+    {
+        "id": "start-flag-not-allowed",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start", "pkg": "com.example", "activity": ".X",
+             "clear_task": True, "flags": "--activity-clear-top"},
+        ]}]},
+        "needle": "flags 只放行",
+    },
+    {
+        "id": "start-launcher-with-action",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start", "pkg": "com.example", "launcher": True,
+             "action": "android.intent.action.MAIN"},
+        ]}]},
+        "needle": "用 launcher 拉起时不能再给",
+    },
+    {
+        "id": "start-launcher-missing-pkg",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "start", "launcher": True}]}]},
+        "needle": "launcher 要有 pkg",
+    },
+    {
+        "id": "start-launcher-false",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start", "pkg": "com.example", "launcher": False},
+        ]}]},
+        "needle": "launcher 只有 true",
+    },
+    {
+        "id": "start-activity-without-pkg",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start", "activity": ".X", "action": "android.intent.action.MAIN"},
+        ]}]},
+        "needle": "activity 要配 pkg",
+    },
+    {
+        "id": "start-landing-args-on-command-shape",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start", "action": "android.settings.SETTINGS", "expect": "广告"},
+        ]}]},
+        "needle": "只走 p.start 那条路",
+    },
+    {
+        "id": "start-pkg-only-on-command-shape",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start", "pkg": "com.example", "clear_task": False},
+        ]}]},
+        "needle": "只有 pkg 拉不起来",
+    },
+    {
+        "id": "start-data-without-action",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start", "data": "gs://search/setting"},
+        ]}]},
+        "needle": "data 要配 action",
+    },
+    {
+        "id": "start-launcher-with-activity",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start", "pkg": "com.example", "launcher": True, "activity": ".X"},
+        ]}]},
+        "needle": "用 launcher 拉起时不能再给",
+    },
+    {
+        "id": "start-launcher-with-data",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start", "pkg": "com.example", "launcher": True, "data": "gs://x"},
+        ]}]},
+        "needle": "用 launcher 拉起时不能再给",
+    },
+    {
+        "id": "start-launcher-with-flags",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start", "pkg": "com.example", "launcher": True,
+             "flags": "--windowingMode 1"},
+        ]}]},
+        "needle": "用 launcher 拉起时不能再给",
+    },
+    {
+        "id": "start-launcher-not-a-boolean",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start", "pkg": "com.example", "launcher": "true"},
+        ]}]},
+        "needle": "launcher 只能是 true / false",
+    },
+    {
+        "id": "start-pkg-not-a-string",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start", "pkg": 1, "action": "android.settings.SETTINGS"},
+        ]}]},
+        "needle": "pkg 必须是非空字符串",
+    },
+    {
+        "id": "start-activity-is-empty",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start", "pkg": "com.example", "activity": "", "clear_task": True},
+        ]}]},
+        "needle": "activity 必须是非空字符串",
+    },
+    {
+        "id": "start-data-not-a-string",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start", "action": "android.intent.action.VIEW", "data": 1},
+        ]}]},
+        "needle": "data 必须是非空字符串",
+    },
+    {
+        "id": "start-flags-not-a-string",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start", "action": "android.settings.SETTINGS", "flags": 1},
+        ]}]},
+        "needle": "flags 必须是非空字符串",
+    },
+    {
+        "id": "start-flags-blank",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start", "action": "android.settings.SETTINGS", "flags": "   "},
+        ]}]},
+        "needle": "flags 只放行",
+    },
+    {
+        "id": "start-flag-with-an-argument-not-allowed",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start", "action": "android.settings.SETTINGS",
+             "flags": "--activity-clear-top 1"},
+        ]}]},
+        "needle": "收到 '--activity-clear-top'",
+    },
+    {
+        "id": "start-action-not-a-string",
+        "data": {"segment": [{"name": "a", "ops": [{"kind": "start", "action": 1}]}]},
+        "needle": "action 必须是非空字符串",
+    },
+    {
+        "id": "start-clear-task-not-a-boolean",
+        "data": {"segment": [{"name": "a", "ops": [
+            {"kind": "start", "pkg": "com.example", "clear_task": "false"},
+        ]}]},
+        "needle": "clear_task 只能是 true / false",
     },
     {
         "id": "start-or-skip-missing-activity",

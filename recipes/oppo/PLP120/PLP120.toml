@@ -83,7 +83,7 @@ ops = [
     ], else_ops = [
       # 首页切成「简洁」后没有「我的」和菜单（ColorOS 17，沿用 #165）：浏览器在前台时直达设置页；
       # 带清栈参数会立刻退出，所以只用最朴素的一条 am start。
-      { kind = "shell", command = "am start -n com.heytap.browser/.settings.component.BrowserPreferencesPage" },
+      { kind = "start", pkg = "com.heytap.browser", activity = ".settings.component.BrowserPreferencesPage", clear_task = false },
       { kind = "sleep", seconds = 1.2 },
       { kind = "if_focus", text = "com.heytap.browser", else_ops = [
         { kind = "print", text = "  ✗ 浏览器设置页没有打开" },

@@ -36,7 +36,7 @@ def step_ad_tracking(p, rt):
     # 每个应用一个开关。用菜单「全部关闭」整表关，再看它是否置灰来确认（#650）：
     # 以前逐行读整个列表（547 个具名项）两遍，约 27 分钟；现在不用滚动列表，个人应用名单也不必读出来。
     # 版本由引擎判（录制版本对不上会置 safe_mode）；这里只挡「拿这份脚本去跑别的型号」。
-    if p.safe_mode or p.d.shell("getprop ro.product.model").output.strip() != "PMX110":
+    if p.safe_mode or p.shell("getprop ro.product.model").strip() != "PMX110":
         rt.skip("仅在 PMX110 上批量处理广告跟踪")
     nav.ad_id_page(p, rt)
     nav.row(p, rt, "广告跟踪", activity="OAIDActivity")

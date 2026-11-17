@@ -52,7 +52,7 @@ class PJASearchSegmentTests(unittest.TestCase):
 
     def test_home_gesture_back_enters_search_then_closes_the_privacy_page(self):
         phone, taps, closes, results = self.run_segment("com.heytap.quicksearchbox/.MainActivity")
-        commands = [call.args[0] for call in phone.d.shell.call_args_list]
+        commands = [call.args[0] for call in phone.shell.call_args_list]
         self.assertEqual([c for c in commands if c.startswith("input")],
                          ["input keyevent HOME", "input swipe 540 702 540 1638 300",
                           "input keyevent BACK"])

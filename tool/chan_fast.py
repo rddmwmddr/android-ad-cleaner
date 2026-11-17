@@ -59,7 +59,6 @@ class ShellPhone(adb_link.Connection):
     """扫描和复查只读 adb，不启动手机端 UiAutomation。"""
     def __init__(self, serial):
         super().__init__(serial, sticky=False)          # 一个 reader 跑一整批：一次掉线不该毒掉后面的读取
-        self.d = self
 
     def shell(self, command, timeout=60):
         result = super().shell(command, timeout=timeout)
@@ -159,13 +158,13 @@ def phone_model(reader):
     return model
 
 
-def parse(p, locked=None, foreground=None):
+def parse(reader, locked=None, foreground=None):
     """只取机主空间（user 0）。双开、分身、隐私空间、安全文件夹的同名应用 UID 不同（#95），
     以前按包名混在一起：界面已关，回读却拿到另一空间的「开」。
     locked：传入集合时，收集系统不允许关闭的渠道（系统应用固定通知权限、渠道本身不可屏蔽，#134）。
     foreground：传入集合时，收集前台服务的常驻通知渠道（#459）。字段打在渠道行上，不在记录段。
     解析那一半在 `screen_snapshot.parse_notification_dump()`：通知清单值类型与这里共用同一份。"""
-    txt = p.d.shell("dumpsys notification --noredact", timeout=60).output
+    txt = reader.shell("dumpsys notification --noredact", timeout=60).output
     channels, app_off, locked_hits, foreground_hits = parse_notification_dump(txt)
     if locked is not None:
         locked.update(locked_hits)
@@ -232,7 +231,7 @@ def notification_focus(p):
 
 def top_title(p, root):
     """顶栏标题。旧接口的一行前向壳，实现在 `channel_decide.top_title()`。"""
-    return decide.top_title(p.snapshot(root=root, focus="", with_rows=False), p.systemui_text)
+    return decide.top_title(p.snapshot(root=root, focus="", with_rows=False), p.screen.systemui_text)
 
 
 def group_floor(texts):
@@ -307,14 +306,14 @@ class ChannelPage:
         package, _, activity = focus.partition("/")
         if activity.startswith("."):
             activity = package + activity
-        p.systemui_text = False
+        p.screen.systemui_text = False
         if package in NOTIFY_HOSTS:
             return focus if NOTIFY_HOSTS[package].match(activity) else ""
         if package in VIVO_HOSTS:
             if not activity.endswith(VIVO_ACTIVITY):
                 return ""
-            p.vivo_seen = True
-            p.systemui_text = package == "com.android.systemui"   # texts() 默认不读 systemui 的文字（那是状态栏）
+            p.channel_session.vivo_seen = True
+            p.screen.systemui_text = package == "com.android.systemui"   # texts() 默认不读 systemui 的文字（那是状态栏）
             return focus
         return focus if "settings" in package.lower() and ("notification" in activity.lower() or "SubSettings" in activity) else ""
 
@@ -344,10 +343,10 @@ class ChannelPage:
         if not focus or "AppNotification" in focus or not name:
             return None
         snap = p.snapshot(focus=self.raw_focus, with_rows=False)
-        if not decide.recognised_page(snap, name, focus, self.vivo_app, p.systemui_text):
+        if not decide.recognised_page(snap, name, focus, self.vivo_app, p.screen.systemui_text):
             return None
         snap = p.snapshot(root=snap.tree, focus=self.raw_focus, with_rows=True)
-        return decide.recognise(snap, name, focus, self.vivo_app, p.systemui_text).switch
+        return decide.recognise(snap, name, focus, self.vivo_app, p.screen.systemui_text).switch
 
     def _recognise_inline(self):
         """应用通知页里渠道行自带开关（荣耀 MagicOS 10 / Android 16，#99）。判定在
@@ -357,7 +356,7 @@ class ChannelPage:
         if not name or name in decide.ALLOW or not focus or vivo_page(focus):
             return None
         snap = p.snapshot(focus=self.raw_focus, with_rows=False)
-        got = decide.recognise_inline(snap, name, focus, p.systemui_text)
+        got = decide.recognise_inline(snap, name, focus, p.screen.systemui_text)
         # 早退分支返回的 `why` 是空串：旧实现在这些分支不动上一轮留下的诊断，别清掉它
         if got.why:
             self.why = got.why
@@ -373,7 +372,7 @@ class ChannelPage:
         def sample():
             switch = self._page_switch()
             # vivo 直达的渠道页按规则不直接用（见 _recognise），不空等（错误日志 10-28：每个渠道 29 秒）
-            if switch is None and self.p.vivo_seen is True and not self.vivo_app:
+            if switch is None and self.p.channel_session.vivo_seen is True and not self.vivo_app:
                 raise wait.GiveUp()
             return switch
 
@@ -406,7 +405,7 @@ class ChannelPage:
             self.skeleton = self._skeleton(root)
             snap = p.snapshot(root=root, focus=self.raw_focus, with_rows=True)
             # 开关列表照旧读两次（允许通知一次、全部一次）：自绘开关的页面两次各截一张图
-            text = decide.page_hint(snap, name, p.systemui_text, total=len(p.switches(root)))
+            text = decide.page_hint(snap, name, p.screen.systemui_text, total=len(p.switches(root)))
         except Exception:
             return ""
         # 遮罩挡着的页面也读成「开关 0 个」，补一句才分得清是没适配还是有弹窗（#557）
@@ -422,7 +421,7 @@ class ChannelPage:
             return ""
         if self.no_row:
             return ""            # 应用通知整体关着：页面上确实没有这一行（#426），不是没认出来
-        if p.skeleton_count >= SKELETON_PER_RUN:
+        if p.channel_session.skeleton_count >= SKELETON_PER_RUN:
             return ""
         try:
             # 用 _focus() 刚读到的前台原文：再调一次 p.focus() 会多一次 dumpsys（ADR-0007），
@@ -437,10 +436,10 @@ class ChannelPage:
             "|".join((n.get("class") or "", n.get("bounds") or "", n.get("resource-id") or "",
                       n.get("clickable") or "", n.get("checkable") or "", n.get("scrollable") or ""))
             for n in root.iter("node")).encode("utf-8")).hexdigest()
-        if sig in p.skeleton_sigs:
+        if sig in p.channel_session.skeleton_sigs:
             return ""
-        p.skeleton_sigs.add(sig)
-        p.skeleton_count += 1
+        p.channel_session.skeleton_sigs.add(sig)
+        p.channel_session.skeleton_count += 1
         return text
 
     # ---------- 到页 ----------
@@ -485,7 +484,7 @@ class ChannelPage:
             vivo = vivo_page(self._focus())      # 另一次读：raw_focus 取这一次的，与快照同一帧
             snap = p.snapshot(root=root, focus=self.raw_focus, with_rows=False)
             step = arrive.page_step(snap, name=name, vivo=vivo,
-                                    systemui_text=p.systemui_text, vivo_app=vivo_app,
+                                    systemui_text=p.screen.systemui_text, vivo_app=vivo_app,
                                     seen=seen)
             seen, vivo_app = step.seen, step.vivo_app
             self.vivo_app = vivo_app
@@ -539,7 +538,7 @@ class ChannelPage:
         """走一趟到达：能直达就直达，不能就走应用通知页；失败时带上卡在哪一环。"""
         self.stage = "渠道深链没打开渠道页"
         leg = arrive.route(self.channels, None, pk=self.pk, cid=self.cid,
-                           vivo_seen=self.p.vivo_seen)
+                           vivo_seen=self.p.channel_session.vivo_seen)
         for intent in leg.intents:
             self.p.apply(intent)
         switch = _switch_of(self.refresh(rounds)) if leg.way == arrive.DIRECT else None
@@ -634,7 +633,7 @@ def undo_message(p, before, apps_before, may_change, restored, extra, clicked):
         return f"{what}，本次没有点击这一行，停止整批；请在手机上核对该 App 的通知设置", False
     head = what + ("" if restored else "，没能自动点回")
     try:
-        current, apps = parse(p)
+        current, apps = parse(p.conn.reader)
     except adb_link.DeviceLost:
         return f"{head}；复核时手机断开，没能核对是否恢复，停止整批", True
     except Exception:
@@ -665,8 +664,8 @@ def notifications_state(p, pk):
     `notifications_denied()`，那里把「不知道」当「没关」。"""
     try:
         # 不加 grep -m：提前退出会让 dumpsys 收到 SIGPIPE，u2 判「shell output invalid」（#205）
-        out = p.d.shell(f"dumpsys package {shlex.quote(pk)} | grep 'POST_NOTIFICATIONS: granted='"
-                        " | sed -n '1,3p'").output
+        out = p.shell(f"dumpsys package {shlex.quote(pk)} | grep 'POST_NOTIFICATIONS: granted='"
+                      " | sed -n '1,3p'")
     except Exception:
         out = ""
     if isinstance(out, str):
@@ -675,7 +674,7 @@ def notifications_state(p, pk):
         if "POST_NOTIFICATIONS: granted=false" in out:
             return True
     try:
-        mode = appops_mode(p.d, pk)
+        mode = appops_mode(p.conn.reader, pk)
     except adb_link.DeviceLost:
         return None
     if mode == "unknown":
@@ -711,7 +710,7 @@ def appops_mode(reader, package):
 def appops_denied(p, pk):
     """没装 POST_NOTIFICATIONS 权限的系统（安卓 12 及以前）从 appops 读同一个总开关。"""
     try:
-        return appops_mode(p.d, pk) in APPOPS_DENIED
+        return appops_mode(p.conn.reader, pk) in APPOPS_DENIED
     except adb_link.DeviceLost:
         return False            # 这条既有判据读到断线时按「没关」处理，不改变 #426 的收容行为
 
@@ -770,9 +769,9 @@ TOGGLE_TRIES = 3        # 单次拨动最多重认几次；退避时长在循环
 def mismatch_probe(p, pk, cid, current, denied=None):
     """MISMATCH 的一条判据读数（#582）：页面上关着、渠道记录里开着，差在哪一项。
     只用 toggle 已经读到的 importance；应用级结论已有（denied）就不再问一次。"""
-    if p.mismatch_probes >= MISMATCH_PER_RUN:
+    if p.channel_session.mismatch_probes >= MISMATCH_PER_RUN:
         return ""
-    p.mismatch_probes += 1
+    p.channel_session.mismatch_probes += 1
     importance = current.get((pk, cid), ("", 0, False))[1]
     if denied is None:
         denied = notifications_denied(p, pk)
@@ -785,7 +784,7 @@ def toggle(p, pk, cid, want_on, name="", allowed=()):
     try:
         if p.locked():
             raise ScreenLocked("手机锁屏了")
-        before, apps_before = parse(p)
+        before, apps_before = parse(p.conn.reader)
         actual_name = before.get((pk, cid), ("", 0, False))[0]
         st = state(before, apps_before, pk, cid)
         if not want_on and protected_channel(actual_name, cid, name):
@@ -833,7 +832,7 @@ def toggle(p, pk, cid, want_on, name="", allowed=()):
                 # 引擎自己的点击也走唯一执行点（`Screen.apply()`），与到达阶段的点击同一条原语
                 p.apply(Intent(IntentKind.TAP, at=switch[2]))
                 time.sleep(0.4); p.confirm()
-            current, apps = parse(p)
+            current, apps = parse(p.conn.reader)
             extra = side_effects(before, apps_before, current, apps, pk, cid, allowed)
             effect = toggle_decide.side_effect_verdict(extra, clicked)
             if effect.stop:
@@ -863,7 +862,7 @@ def toggle(p, pk, cid, want_on, name="", allowed=()):
     except (StopBatch, adb_link.DeviceLost, ScreenLocked):
         raise                                    # 点错开关、手机断开、锁屏：由整批处理
     except Exception as e:
-        gone = adb_link.lost_from(e, p.serial)   # 读屏库的断线异常不是 RuntimeError，以前带着堆栈退出（错误日志 10-28）
+        gone = adb_link.lost_from(e, p.conn.serial)   # 读屏库的断线异常不是 RuntimeError，以前带着堆栈退出（错误日志 10-28）
         if gone is not None:
             raise gone from e
         # 读屏这一次没读成（手机版「读屏请求超时」）也只是这个渠道没处理，后面照常跑（#731）
@@ -980,13 +979,13 @@ def run(a):
                     if p is None:
                         print("正在连接手机读屏服务……", flush=True)
                         p = Phone(serial, log=False)
-                        p.pause_at_lock_check = False   # 渠道里面查锁屏的地方不是安全位置：只在两个渠道之间暂停
+                        p.conn.pause_at_lock_check = False   # 渠道里面查锁屏的地方不是安全位置：只在两个渠道之间暂停
                         if not p.wait_unlocked():
                             failures += 1
                             print("  ✗ 手机一直锁屏，本步骤没有执行。请解锁手机、保持亮屏后重试")
                             halted = True
                             break
-                        modes = {pk: appops_mode(p.d, pk) for pk in sorted({pk for pk, _, _ in todo})}
+                        modes = {pk: appops_mode(p.conn.reader, pk) for pk in sorted({pk for pk, _, _ in todo})}
                         print(f"要处理 {len(todo)} 个渠道，每个几秒到半分钟，处理完一个显示一行", flush=True)
                     pause_point()
                     try:
@@ -1027,7 +1026,7 @@ def run(a):
                 if halted:
                     break                       # 锁屏、点错开关、断开：整批停下，不再重试
             if p is not None and not gone:
-                p.d.shell("input keyevent HOME")   # 只读 / 无需改动时不操作手机页面
+                p.shell("input keyevent HOME")   # 只读 / 无需改动时不操作手机页面
         finally:
             if p is not None:
                 p.close()

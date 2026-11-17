@@ -138,7 +138,7 @@ class VivoV2417ARecipeTests(unittest.TestCase):
         p.go.return_value = True
         scope = self.load(p)
         scope["hiboard_panel"]()
-        self.assertEqual([call.args[0] for call in p.d.shell.call_args_list],
+        self.assertEqual([call.args[0] for call in p.shell.call_args_list],
                          ["input keyevent HOME", "input keyevent HOME"])
         p.go.assert_called_once_with("设置", "更多设置")
 
@@ -148,7 +148,7 @@ class VivoV2417ARecipeTests(unittest.TestCase):
         scope = self.load(p)
         with self.assertRaisesRegex(RuntimeError, "未回到系统桌面"):
             scope["hiboard_panel"]()
-        self.assertEqual([call.args[0] for call in p.d.shell.call_args_list],
+        self.assertEqual([call.args[0] for call in p.shell.call_args_list],
                          ["input keyevent HOME", "input keyevent HOME"])
         p.go.assert_not_called()
 
@@ -156,7 +156,7 @@ class VivoV2417ARecipeTests(unittest.TestCase):
         p = phone_mock()
         p.locked.return_value = False
         p.focus.return_value = "com.android.settings/com.android.settings.Settings$AdAndPrivacyActivityForOsTwo"
-        p.reader.shell.return_value = Mock(exit_code=0, output="Starting: Intent")   # Phone.start 走 reader
+        p.conn.reader.shell.return_value = Mock(exit_code=0, output="Starting: Intent")   # Phone.start 走 reader
         p.texts.return_value = [("个性化广告.关闭后仍会看到广告", (1, 2, 3, 4), None)]
         p.switches.return_value = [(name, False, (1, 600))
                                    for name in ("个性化广告", "个性化推荐", "智能推荐服务")]

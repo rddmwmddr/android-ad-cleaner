@@ -1,5 +1,5 @@
 """机型脚本的调用序列快照（#1239）：同一份合成手机、同一组读屏观察下，每份脚本发出的调用
-（段名 + 方法名 + 参数 + 顺序，含绕过门面的 `p.d.shell` 命令）记成数据文件入库，回归里逐条比对。
+（段名 + 方法名 + 参数 + 顺序，含传输层直发的 `shell` 命令）记成数据文件入库，回归里逐条比对。
 
 比对当前树与入库快照（回归默认走这条，不建基线 worktree、不起子进程）：
 
@@ -26,8 +26,8 @@
 - `absent`：同一批观察一律算「不在」，脚本退到备用分支（菜单、翻页、重试那几圈循环）。
 
 两个场景都记，备用分支才不是空的。型号守卫读到的 shell 输出一律算「对得上」。记录的是脚本
-发出的动作：门面方法，以及不经门面的 `p.d.shell(...)` 命令 —— 有几份被收口的助手整段只有一条
-`p.d.shell`，只记门面的话它们搬动前后都是零调用。空页面上「要点名开关」的深支与只认特定控件
+发出的动作：门面方法，以及传输层的 `shell` 命令（在 `reader.shell` 上记，门面只是转发）——
+有几份被收口的助手整段只有一条 shell，只在门面上记的话它们搬动前后都是零调用。空页面上「要点名开关」的深支与只认特定控件
 的助手（单选按钮之类）走不到，那部分不在快照范围内。
 
 守卫：每份脚本的每个场景都要记到调用，全部加起来不到 MIN_CALLS 条就算没测到 —— 只报「一样」
@@ -56,6 +56,8 @@ use_utf8_console()
 # 43 份 `<型号>.toml` 加 4 份变体、两个场景实测约 1.3 万条调用；低于这个数说明记录或装载退化了
 MIN_CALLS = 4000
 SCENARIOS = ("present", "absent")
+# 记在传输边界的两个门面名字：都只是转发同一次 `reader.shell`，包了就会一条命令记两条。
+TRANSPORT_CALLS = frozenset({"shell"})
 SNAPSHOTS = TESTS / "snapshots" / "recipe_calls"
 
 
@@ -74,6 +76,11 @@ class AnyText(str):
         return True
 
     def strip(self, *args, **kwargs):
+        return self
+
+    @property
+    def output(self):
+        """门面的 `p.shell()` 原样把它传出来（#1474）：`.output` 也得取得到。"""
         return self
 
 
@@ -132,7 +139,12 @@ def norm(value):
 
 
 def recording(phone, state):
-    """包住门面上的公开方法与 `p.d.shell`，记下 (段名, 名字, 参数, 关键字参数) 的调用顺序。"""
+    """包住门面上的公开方法与传输层的 `shell`，记下 (段名, 名字, 参数, 关键字参数) 的调用顺序。
+
+    `shell` 记在传输边界（`conn.reader.shell`）而不是门面：门面只是转发，两边都包会一条命令记
+    两条；记在边界上，旧树里的 `p.d.shell`（#1472 之前）与新树的 `p.shell` 落成同一个名字，
+    `--baseline` 对拍才只比命令本身。门面那一个名字因此跳过，否则同一次下发会被记两遍。
+    """
     log = []
 
     def wrap(name, call):
@@ -143,12 +155,12 @@ def recording(phone, state):
         return recorder
 
     for name in dir(phone):
-        if name.startswith("_") or isinstance(getattr(type(phone), name, None), property):
+        if name.startswith("_") or name in TRANSPORT_CALLS or isinstance(getattr(type(phone), name, None), property):
             continue
         call = getattr(phone, name)
         if callable(call):
             setattr(phone, name, wrap(name, call))
-    phone.d.shell = wrap("d.shell", phone.d.shell)
+    phone.conn.reader.shell = wrap("shell", phone.conn.reader.shell)
     return log
 
 

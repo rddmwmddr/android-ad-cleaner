@@ -99,7 +99,7 @@ ops = [
 name = "浏览器"
 ops = [
   # 主页是「简洁」模式：没有底部「我的」，也没有菜单。设置页只能按公开 Activity 直达。
-  { kind = "shell", command = "am start -n com.heytap.browser/com.heytap.browser.settings.component.BrowserPreferencesPage" },
+  { kind = "start", pkg = "com.heytap.browser", activity = "com.heytap.browser.settings.component.BrowserPreferencesPage", clear_task = false },
   { kind = "sleep", seconds = 1.5 },
   { kind = "if_lib", name = "wait_page", args = ["com.heytap.browser.settings.component.BrowserPreferencesPage", "浏览器"], else_ops = [{ kind = "return", value = false }] },
   { kind = "if_lib", name = "tap_by_scroll", args = ["隐私"], else_ops = [{ kind = "print", text = "  ! 没找到「隐私」" }, { kind = "return", value = false }] },

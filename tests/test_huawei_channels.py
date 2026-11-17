@@ -37,12 +37,15 @@ class OfflineDevice:
         self.on_restore = None
         self.clock = 0
         self.reader = SimpleNamespace(shell=self.shell)
-        self.phone = SimpleNamespace(serial="offline-device", W=1080, H=2400, changed=[],
+        self.phone = SimpleNamespace(conn=SimpleNamespace(serial="offline-device"),
+                                     W=1080, H=2400, changed=[],
                                      locked=Mock(return_value=False), close=Mock(),
                                      focus=lambda: hw.APP_PAGE, tree=self.tree,
                                      top=Mock(), scroll_more=Mock(return_value=False),
                                      on_screen=lambda node: True)
-        self.phone.d = SimpleNamespace(shell=self.ui_shell, window_size=lambda: (1080, 2400))
+        # 门面动词：引擎改走 `p.shell()` / `p.window_size()`（沿用 #1476 的做法），桩是同一份 ui_shell。
+        self.phone.shell = lambda command, timeout=None: self.ui_shell(command).output
+        self.phone.window_size = lambda: (1080, 2400)
 
     def shell(self, command):
         self.commands.append(command)

@@ -177,9 +177,9 @@ class NotificationDumpTests(unittest.TestCase):
 
     def test_chan_fast_parse_still_fills_the_same_out_parameters(self):
         p = phone_stub("test")
-        p.d = SimpleNamespace(shell=Mock(return_value=SimpleNamespace(output=DUMP)))
+        p.conn.reader = SimpleNamespace(shell=Mock(return_value=SimpleNamespace(output=DUMP)))
         locked, foreground = set(), set()
-        channels, app_off = chan.parse(p, locked, foreground)
+        channels, app_off = chan.parse(p.conn.reader, locked, foreground)
         self.assertEqual((channels, app_off), snap.parse_notification_dump(DUMP)[:2])
         self.assertEqual(locked, {("com.example.app", "locked")})
         self.assertEqual(foreground, {("com.example.app", "fg")})
@@ -279,7 +279,7 @@ class FacadeForwardingTests(unittest.TestCase):
 
     def test_phone_produces_a_channel_list_from_its_reader(self):
         p = phone_stub("test")
-        p.d = SimpleNamespace(shell=Mock(return_value=SimpleNamespace(output=DUMP)))
+        p.conn.reader = SimpleNamespace(shell=Mock(return_value=SimpleNamespace(output=DUMP)))
         self.assertEqual(p.channel_list().app_off, {"com.example.app": True, "com.other": False})
 
 

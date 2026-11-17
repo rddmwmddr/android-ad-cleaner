@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import fixtures
+from fixtures import shell_result
 import run
 from recipe_case import load, radios
 
@@ -84,7 +85,7 @@ class Pma110RecipeTests(unittest.TestCase):
         reopen.assert_called_once_with()
 
     def test_denied_activity_never_falls_through_to_clicks(self):
-        self.p.d.shell.return_value = SimpleNamespace(exit_code=1, output="SecurityException: not exported")
+        self.p.shell.return_value = shell_result("SecurityException: not exported", 1)
         self.scope["wait_page"] = Mock()
         with self.assertRaisesRegex(RuntimeError, "系统未允许"):
             self.scope["open_page"]("am start", "test/Settings", "设置")
@@ -97,7 +98,7 @@ class Pma110RecipeTests(unittest.TestCase):
         型号与版本喂对：没有段首出口时这条路会走到 `p.off` 才收场，用例才会红。"""
         self.p.locked.return_value = False
         self.p.safe_mode = True
-        self.p.d.shell.side_effect = [SimpleNamespace(output="PMA110"),
+        self.p.shell.side_effect = [shell_result("PMA110", 0),
                                       SimpleNamespace(output="PMA110_17.0.0.106(CN01)")]
         scope = load(self.p, RECIPE, ["广告跟踪"])
         self.assertEqual(scope["RESULTS"], [("广告跟踪", "跳过")])

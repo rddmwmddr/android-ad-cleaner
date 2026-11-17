@@ -2,13 +2,12 @@
 from pathlib import Path
 import sys
 import unittest
-from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import run
-from fixtures import load_recipe, phone_mock
+from fixtures import load_recipe, phone_mock, shell_result
 
 VARIANT = ROOT / "recipes/oppo/PJA110/PJA110-android16.toml"
 OLD = ROOT / "recipes/oppo/PJA110/PJA110.toml"
@@ -22,7 +21,7 @@ EVIDENCE = "停在 com.heytap.market/.MainActivity；结构摘要；当次读到
 
 def phone(focus=MARKET, **fields):
     p = phone_mock(locked=lambda: False, **fields)
-    p.d.shell.return_value = SimpleNamespace(exit_code=0, output="")
+    p.shell.return_value = shell_result("", 0)
     p.focus.return_value = focus
     p.page_evidence.return_value = EVIDENCE
     p.expect_page.return_value = True
@@ -48,7 +47,7 @@ class VersionTests(unittest.TestCase):
 class SettingsEntryTests(unittest.TestCase):
     def test_system_refusal_stops_without_looking_for_the_page(self):
         p = phone()
-        p.d.shell.return_value = SimpleNamespace(exit_code=0, output="Error: Permission Denial: not exported")
+        p.shell.return_value = shell_result("Error: Permission Denial: not exported", 0)
         scope = loaded(p)
         with self.assertRaisesRegex(RuntimeError, "com.heytap.market：系统不允许直达设置"):
             scope["open_settings"]("com.heytap.market", "com.heytap.market.mine.cn.setting.ui.SettingActivity",

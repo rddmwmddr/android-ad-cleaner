@@ -48,9 +48,18 @@ def main():
     class FakeDevice:
         def __init__(self, serial, log=False):
             self.serial, self.d, self.closed = serial, reader, False
+            # 门面收窄之后状态归协作者：三个对象都指向自己，两棵树都能驱动（#1479）
+            self.conn = self.screen = self.channel_session = self
+            self.reader = reader
+            self.systemui_text = False
+            self.vivo_seen = False
+            self.skeleton_sigs, self.skeleton_count, self.mismatch_probes = set(), 0, 0
             self.pause_at_lock_check = True
             self.unlocks = list(spec.get("unlocks") or [True])
             phones.append(self)
+
+        def shell(self, command, timeout=None):
+            return reader.shell(command, timeout=60 if timeout is None else timeout).output
 
         def wait_unlocked(self, timeout=None):
             if len(self.unlocks) > 1:

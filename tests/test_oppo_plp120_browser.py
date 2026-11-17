@@ -54,7 +54,7 @@ class Plp120BrowserTests(unittest.TestCase):
     def test_the_direct_page_path_keeps_walking_when_the_browser_is_in_front(self):
         p, _scope = run(focus=f"{BROWSER}/.BrowserActivity", tap=True)
         self.assertEqual(p.tap.call_args_list[0].args[0], "主页设置")
-        self.assertIn("BrowserPreferencesPage", p.d.shell.call_args_list[0].args[0])
+        self.assertIn("BrowserPreferencesPage", p.shell.call_args_list[0].args[0])
 
 
 if __name__ == "__main__":
