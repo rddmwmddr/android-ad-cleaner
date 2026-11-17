@@ -263,6 +263,10 @@ class InterfaceTests(unittest.TestCase):
     def test_protected_uses_list_label_like_before(self):
         self.assertTrue(policy.classify("活动", "promo", list_label="找机位").protected)
 
+    def test_protected_reads_the_channel_id_as_well(self):
+        """渠道 ID 里带「找机位」也算受保护：`classify` 把 ID 一起交下去，受保护判定不是只看渠道名。"""
+        self.assertTrue(policy.classify("活动", "找机位").protected)
+
 
 # ---- channel_send_progress ----
 # 发送进度类渠道（WhatsApp「发送影音内容」）不进营销候选：名字带「内容」曾被默认勾选。
