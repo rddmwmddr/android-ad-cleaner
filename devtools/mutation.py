@@ -54,6 +54,9 @@ LINKS = {
 }
 # 变异副本里跑测试要读到的东西。`mutants/` 下的测试会以它为根，缺一项就在收集期报错。
 ALSO_COPY = ["recipe_lib", "recipes", "docs", "devtools", "gui", "aac_android"]
+# `on_dependency_change` 必须是 `rerun`（默认 `warn`）：mutmut 用 git 比上次全量跑时的提交，
+# 非 `.py` 文件变了只警告、保留旧裁决。本仓测试大量读 `recipes/`、`docs/`、`recipe_lib/`，
+# 改了 recipe 却不重跑，`catalog/schema` 与 `recipe_source` 会拿旧结论报绿。
 CONFIG = """\
 # devtools/mutation.py 生成，改那里。
 [tool.mutmut]
@@ -61,6 +64,7 @@ source_paths = ["src"]
 only_mutate = [{}]
 pytest_add_cli_args_test_selection = [{}]
 also_copy = [{}]
+on_dependency_change = "rerun"
 """
 
 
