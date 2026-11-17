@@ -44,7 +44,8 @@ def violations(root, surface=SCRIPT_SURFACE):
     for path in script_files(base):
         for name, lineno in accesses(path):
             if name not in surface:
-                found.append((str(path.relative_to(base)), lineno, name))
+                # 路径按 `/` 归一：报告形状与平台无关，Windows 上也报 `recipe_lib/honor.py`
+                found.append((path.relative_to(base).as_posix(), lineno, name))
     return found
 
 
