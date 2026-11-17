@@ -45,7 +45,7 @@ def make_phone(focus=SETTINGS_FOCUS, switches=TARGET, enter=None, shell=None, fi
     if enter is not None:
         p.enter.side_effect = enter
     if shell is not None:
-        p.d.shell.side_effect = shell
+        p.shell.side_effect = shell
     return p
 
 
@@ -128,7 +128,7 @@ class GameCenterStepTests(unittest.TestCase):
         p = make_phone(focus=GAME_SETTINGS, switches=GAME_TARGET,
                        shell=[SimpleNamespace(exit_code=0, output="")])
         run(p, "游戏中心")
-        self.assertIn("oppo.intent.action.APP_SETTINGS", p.d.shell.call_args.args[0])
+        self.assertIn("oppo.intent.action.APP_SETTINGS", p.shell.call_args.args[0])
         p.start.assert_not_called()
         self.assertEqual(p.off.call_args.kwargs["only"], ["个性化推荐"])
 

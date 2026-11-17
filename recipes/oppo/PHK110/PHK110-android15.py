@@ -10,8 +10,8 @@ BUILD = "PHK110_15.0.0.601(CN01)"
 
 
 def guard(p, rt):
-    model = p.d.shell("getprop ro.product.model").output.strip()
-    build = p.d.shell("getprop ro.build.display.id").output.strip()
+    model = p.shell("getprop ro.product.model").strip()
+    build = p.shell("getprop ro.build.display.id").strip()
     if model != "PHK110" or not build.startswith(BUILD):
         rt.skip("型号或系统版本不匹配，跳过")
 

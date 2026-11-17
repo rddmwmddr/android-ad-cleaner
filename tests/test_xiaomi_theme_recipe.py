@@ -22,7 +22,7 @@ def run(machine, answers=None, segment="主题"):
     import catalog.interpreter as interpreter
     phone = phone_mock(W=1080, H=2400)
     phone.locked.return_value = False
-    phone.d.shell.return_value.output = "package:/system/app/ThemeManager/ThemeManager.apk"
+    phone.shell.return_value.output = "package:/system/app/ThemeManager/ThemeManager.apk"
     phone.page_evidence.return_value = "停在 主题首页"
     phone.switches.return_value = [("每次联网时通知", True, (0, 0, 10, 10))]
     phone.entry.return_value = True

@@ -70,7 +70,7 @@ SCRIPT_NAMES = frozenset({
     "await_page", "back", "changed", "click", "confirm", "d", "dismiss", "enter",
     "entry", "expect_page", "find", "focus", "go", "H", "has_text", "in_settings_page",
     "locked", "note_miss", "off", "on_screen", "page_evidence",
-    "safe_mode", "scroll", "scroll_more", "setting", "settle", "sig",
+    "safe_mode", "scroll", "scroll_more", "setting", "settle", "shell", "sig",
     "start", "switches", "systemui_text", "tab", "tap", "tap_icon", "texts", "top", "tree", "W",
 })
 

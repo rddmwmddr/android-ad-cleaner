@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "tool"))
 
 import fixtures  # noqa: E402
+from fixtures import shell_result  # noqa: E402
 
 fixtures.load_tool()
 import catalog  # noqa: E402
@@ -1717,10 +1718,9 @@ class BrowserRecsBindingTests(unittest.TestCase):
         recipe, phone = _load_model(self.PATH, ["浏览器推荐"])
         phone.back = lambda n=1: seen.append(("back", n))
         # 这份数据的 guard 钩子先核对型号与系统版本，对不上整份跳过。
-        phone.d.shell = lambda command: SimpleNamespace(
-            output={"getprop ro.product.model": "WKL-AN20",
-                    "getprop ro.build.display.id": "WKL-AN20 11.0.0.111(SP7C00E110R101P7)"}.get(command, ""),
-            exit_code=0)
+        phone.shell = lambda command: shell_result(
+            {"getprop ro.product.model": "WKL-AN20",
+             "getprop ro.build.display.id": "WKL-AN20 11.0.0.111(SP7C00E110R101P7)"}.get(command, ""), 0)
         recipe.run()
         return seen
 

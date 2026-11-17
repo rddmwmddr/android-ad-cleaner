@@ -49,7 +49,7 @@ class K90UltraRecipeTests(recipe_case.RecipeSourceCase):
         # p.start() 启动后会跑 dismiss()，#374 的开关说明行含「关闭」会被当成弹窗 ✕ 点掉
         p = self.phone()
         load_recipe(p, self.path, ["系统广告"])
-        p.d.shell.assert_any_call(
+        p.shell.assert_any_call(
             "am start -f 0x10008000 -n com.android.settings/.ad.AdServiceSettings")
         p.start.assert_not_called()
 

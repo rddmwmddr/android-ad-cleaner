@@ -28,7 +28,7 @@ def wait_search_settings(p, rt, tries=30):
 
 def settings_page(p, rt, *path):
     def tap_style(*path):
-        p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
+        p.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
         rt.clock.sleep(1.2)
         for t in path:
             if not p.tap(t, exact=True):
@@ -36,7 +36,7 @@ def settings_page(p, rt, *path):
         return True
     def scroll_style(*path):
         """设置并逐级点进 path 里的每一级；长列表靠 `tap_by_scroll` 自己往下翻（RMX3700）。"""
-        p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
+        p.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
         rt.clock.sleep(1.5)
         for text in path:
             if not tap_by_scroll(p, rt, text):
@@ -75,9 +75,9 @@ def tap_page(p, rt, text, activity, title=None, scrolls=4, exact=True):
             "raise": raise_style}[style](text, activity, title, scrolls, exact)
 
 def open_app_settings(p, rt, package, activity, title):
-    result = p.d.shell(
+    result = p.shell(
         "am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + package
-    ).output
+    )
     if "Permission Denial" in result or "SecurityException" in result:
         print("  ! 系统不允许直达设置，跳过，不提升权限")
         return False
@@ -99,30 +99,30 @@ def navigate(p, rt, label, activity, title):
 
 def search_settings(p, rt):
     def page_style():
-        out = p.d.shell("am start -a android.intent.action.VIEW -d gs://search/setting")
+        out = p.shell("am start -a android.intent.action.VIEW -d gs://search/setting")
         if out.exit_code or "Error" in out.output:
             return False
         return page_activity(p, rt, "com.heytap.quicksearchbox.ui.activity.SearchSettingActivity", "搜索设置")
     def wait_style():
         """先走 scheme，打不开再退回桌面下滑进搜索页、点底部「设置」的旧入口（沿用 #165）。"""
-        p.d.shell(rt.constants['SEARCH_SETTING'])
+        p.shell(rt.constants['SEARCH_SETTING'])
         if wait_search_settings(p, rt):
             return True
         # ColorOS 16 及更早版本：桌面下滑进搜索页，底部「设置」。别往下拉，会退出。
-        p.d.shell("input keyevent HOME"); rt.clock.sleep(0.6)
-        p.d.shell(f"input swipe {p.W//2} {p.H*3//10} {p.W//2} {p.H*7//10} 300"); rt.clock.sleep(1.5)
-        p.d.shell("input keyevent BACK"); rt.clock.sleep(0.4)      # 收键盘
+        p.shell("input keyevent HOME"); rt.clock.sleep(0.6)
+        p.shell(f"input swipe {p.W//2} {p.H*3//10} {p.W//2} {p.H*7//10} 300"); rt.clock.sleep(1.5)
+        p.shell("input keyevent BACK"); rt.clock.sleep(0.4)      # 收键盘
         return p.tap("设置", exact=True) and wait_search_settings(p, rt)
     def swipe_style():
         """先用全局搜索自己的 scheme 落地（同族 PLP120 / PMX110 实测，沿用 #796）；打不开再退回桌面下拉。
         SearchSettingActivity 未导出，按组件名 `am start -n` 会被系统拒绝。"""
-        p.d.shell(rt.constants['SEARCH_SETTING'])
+        p.shell(rt.constants['SEARCH_SETTING'])
         if wait_search_settings(p, rt):
             return True
-        p.d.shell("input keyevent HOME"); rt.clock.sleep(0.6)
+        p.shell("input keyevent HOME"); rt.clock.sleep(0.6)
         # HOME 可能停在速览页（左一屏）：先左滑回主桌面，否则下拉手势被速览吃掉
-        p.d.shell(f"input swipe {p.W*6//7} {p.H//2} {p.W//7} {p.H//2} 250"); rt.clock.sleep(1.0)
-        p.d.shell(f"input swipe {p.W//2} {p.H*3//10} {p.W//2} {p.H*7//10} 300"); rt.clock.sleep(1.5)
+        p.shell(f"input swipe {p.W*6//7} {p.H//2} {p.W//7} {p.H//2} 250"); rt.clock.sleep(1.0)
+        p.shell(f"input swipe {p.W//2} {p.H*3//10} {p.W//2} {p.H*7//10} 300"); rt.clock.sleep(1.5)
         if "quicksearchbox" not in p.focus():
             print("  ✗ 下拉没进全局搜索")
             return False
@@ -145,12 +145,12 @@ def search_settings(p, rt):
         return True
     def swipe_strict_style():
         """与 swipe 同形，失败句换成抛出（PYB110 的录制口径）。"""
-        p.d.shell(rt.constants['SEARCH_SETTING'])
+        p.shell(rt.constants['SEARCH_SETTING'])
         if wait_search_settings(p, rt):
             return True
-        p.d.shell("input keyevent HOME"); rt.clock.sleep(0.6)
-        p.d.shell(f"input swipe {p.W*6//7} {p.H//2} {p.W//7} {p.H//2} 250"); rt.clock.sleep(1.0)
-        p.d.shell(f"input swipe {p.W//2} {p.H*3//10} {p.W//2} {p.H*7//10} 300"); rt.clock.sleep(1.5)
+        p.shell("input keyevent HOME"); rt.clock.sleep(0.6)
+        p.shell(f"input swipe {p.W*6//7} {p.H//2} {p.W//7} {p.H//2} 250"); rt.clock.sleep(1.0)
+        p.shell(f"input swipe {p.W//2} {p.H*3//10} {p.W//2} {p.H*7//10} 300"); rt.clock.sleep(1.5)
         if "quicksearchbox" not in p.focus():
             raise RuntimeError("下拉没进全局搜索")
         p.tap("收起键盘", exact=True, scrolls=0)
@@ -171,7 +171,7 @@ def search_settings(p, rt):
 
 def enter_settings(p, rt, *path):
     """设置 → path 逐跳点开，每一跳都要真的换页：点击被弹窗淡出动画吞掉时重试（沿用 #286）。"""
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); rt.clock.sleep(1.2)
+    p.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); rt.clock.sleep(1.2)
     for name in path:
         p.enter(name, scrolls=6)
 
@@ -198,9 +198,9 @@ def search_settings_ready(p, rt, timeout=6):
 
 def open_search_settings(p, rt):
     """ColorOS 17 的下拉搜索设置挂在 quicksearchbox 里；桌面下滑手势在 adb 下不稳定，直接拉 Activity。"""
-    p.d.shell("am start -f 0x10008000 -n com.heytap.quicksearchbox/.ui.activity.SearchHomeActivity")
+    p.shell("am start -f 0x10008000 -n com.heytap.quicksearchbox/.ui.activity.SearchHomeActivity")
     rt.clock.sleep(2.2)
-    p.d.shell("input keyevent BACK")          # 收键盘
+    p.shell("input keyevent BACK")          # 收键盘
     rt.clock.sleep(0.8)
     cands = sorted((tp, l, tp, r, b) for t, (l, tp, r, b), _ in p.texts() if t == "设置")
     if not cands:
@@ -214,7 +214,7 @@ def open_search_settings(p, rt):
 def game_settings_direct(p, rt):
     """ColorOS 17 的游戏中心设置页认 APP_SETTINGS 动作，直达（PMX110，沿用 #650）。
     旧版本不认这个动作时落不到设置页，返回假交给「我的 → 设置」兜底。"""
-    result = p.d.shell("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + rt.constants['GAME'])
+    result = p.shell("am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p " + rt.constants['GAME'])
     if result.exit_code or any(word in result.output for word in
                                ("Error", "Exception", "Permission Denial", "unable to resolve")):
         return False
@@ -336,7 +336,7 @@ def tap_by_scroll(p, rt, text, max_scrolls=12):
 
 def open_search_setting(p, rt):
     """打开全局搜索的设置首页。包被挂起时拉起的是系统「应用已被暂停」页，要区分出来。"""
-    p.d.shell(rt.constants['SEARCH_SETTING'])
+    p.shell(rt.constants['SEARCH_SETTING'])
     rt.clock.sleep(1.8)
     if "SuspendedAppActivity" in p.focus():
         print("  ! com.heytap.quicksearchbox 被挂起了，全局搜索整个不可用；"
@@ -446,12 +446,12 @@ def assistant_swipe_in(p, rt, text=None, exact_text=None):
     进桌面进程、焦点一直停在 launcher，只能按首页文案判（沿用 #901 对同一条判据的结论），文案由
     数据传进来：`text` 按包含比、`exact_text` 按精确比——首页还有同名的按钮。两次 HOME 是因为
     多主页时一次会停在中途，而 HOME 也可能正好落在负一屏。"""
-    p.d.shell("input keyevent HOME")
+    p.shell("input keyevent HOME")
     rt.clock.sleep(0.6)
-    p.d.shell("input keyevent HOME")
+    p.shell("input keyevent HOME")
     rt.clock.sleep(0.6)
     for _ in range(3):
-        p.d.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250")
+        p.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250")
         rt.clock.sleep(1.2)
         if text:
             if p.find(text) or p.find(exact_text, exact=True):
@@ -471,7 +471,7 @@ def assistant_icon(p, rt):
     else:
         reached = False
         for _ in range(2):
-            p.d.shell("input keyevent HOME")
+            p.shell("input keyevent HOME")
             p.await_page()
             reached = at_assistant(p, rt)
             if reached:
@@ -479,7 +479,7 @@ def assistant_icon(p, rt):
         if not reached:
             for _ in range(4):
                 rt.require(p.focus().startswith(rt.constants['LAUNCHER']), "未停在系统桌面，请勿同时操作手机")
-                p.d.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250")
+                p.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250")
                 p.await_page()
                 if at_assistant(p, rt):
                     break
@@ -492,14 +492,14 @@ def assistant_icon(p, rt):
 
 def assistant_settings(p, rt):
     """PMA110 录制时负一屏子页没导出：走桌面入口，不尝试绕过权限，也不截图「我的」页。"""
-    p.d.shell("input keyevent HOME")
+    p.shell("input keyevent HOME")
     rt.clock.sleep(.8)
     for _ in range(4):
         texts = {text for text, _, _ in p.texts()}
         if {"我的服务", "添加卡片"} <= texts:
             break
         rt.require(p.focus().startswith("com.android.launcher/"), "未停在系统桌面，请勿同时操作手机")
-        p.d.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250")
+        p.shell(f"input swipe {p.W//7} {p.H//2} {p.W*6//7} {p.H//2} 250")
         rt.clock.sleep(.8)
     else:
         raise RuntimeError("未进入负一屏，未继续操作")
@@ -1094,7 +1094,7 @@ def assistant_advice_search(p, rt):
 
 def require_installed(p, rt, package, label):
     """没装的包 `pm path` 输出为空，退出码是 1 或 0：那是「没装」，跳过本段（#899）。"""
-    result = p.d.shell("pm path " + package)
+    result = p.shell("pm path " + package)
     if "package:" in result.output:
         return
     rt.require(result.exit_code in (0, 1) and not result.output.strip(), f"无法读取{label}安装状态")

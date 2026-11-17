@@ -20,8 +20,8 @@ STORE_PROMOTIONS = [
 
 
 def guard(p, rt):
-    model = p.d.shell("getprop ro.product.model").output.strip()
-    build = p.d.shell("getprop ro.build.display.id").output.strip()
+    model = p.shell("getprop ro.product.model").strip()
+    build = p.shell("getprop ro.build.display.id").strip()
     if model not in MODELS or not build.startswith(BUILD):
         rt.skip("型号或系统版本不同，跳过；请重新核对页面")
 

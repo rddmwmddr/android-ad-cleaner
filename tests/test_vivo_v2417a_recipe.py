@@ -138,7 +138,7 @@ class VivoV2417ARecipeTests(unittest.TestCase):
         p.go.return_value = True
         scope = self.load(p)
         scope["hiboard_panel"]()
-        self.assertEqual([call.args[0] for call in p.d.shell.call_args_list],
+        self.assertEqual([call.args[0] for call in p.shell.call_args_list],
                          ["input keyevent HOME", "input keyevent HOME"])
         p.go.assert_called_once_with("设置", "更多设置")
 
@@ -148,7 +148,7 @@ class VivoV2417ARecipeTests(unittest.TestCase):
         scope = self.load(p)
         with self.assertRaisesRegex(RuntimeError, "未回到系统桌面"):
             scope["hiboard_panel"]()
-        self.assertEqual([call.args[0] for call in p.d.shell.call_args_list],
+        self.assertEqual([call.args[0] for call in p.shell.call_args_list],
                          ["input keyevent HOME", "input keyevent HOME"])
         p.go.assert_not_called()
 

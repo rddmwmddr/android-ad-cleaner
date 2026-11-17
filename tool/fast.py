@@ -30,7 +30,7 @@ from captures import root_from_env as _captures_root_from_env
 from phone.screen import CONFIRM as CONFIRM
 from phone.screen import PERMISSION_CONTROLLERS as PERMISSION_CONTROLLERS
 from phone.screen import Captures as Captures
-from phone.screen import Screen
+from phone.screen import Screen, ShellResult as ShellResult
 from phone.session import ChannelSession, LaunchSession, LostNote
 import adb_link
 import backups

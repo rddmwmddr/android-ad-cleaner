@@ -25,8 +25,8 @@ def guard(p, rt):
     # 安全模式下不因型号拒跑；否则比对机型与版本。
     if p.safe_mode:
         return
-    model = p.d.shell("getprop ro.product.model").output.strip()
-    build = p.d.shell("getprop ro.build.display.id").output.strip()
+    model = p.shell("getprop ro.product.model").strip()
+    build = p.shell("getprop ro.build.display.id").strip()
     rt.require(model in MODELS and build == BUILD, "型号或系统版本不符，未操作；请逐页核对")
 
 
@@ -46,7 +46,7 @@ def tap_id(p, rt, resource_id):
 
 def open_intent(p, rt, action, package):
     # 只使用本机已手动验证的公开 intent；不依赖跨版本参考脚本。
-    result = p.d.shell(f"am start --windowingMode 1 -f 0x10008000 -a {action} -p {package}")
+    result = p.shell(f"am start --windowingMode 1 -f 0x10008000 -a {action} -p {package}")
     rt.require(not result.exit_code and not any(x in result.output for x in
             ("Error", "Exception", "Permission Denial")), "设置入口启动失败")
 

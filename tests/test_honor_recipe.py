@@ -212,7 +212,7 @@ class HonorAdTrackingTests(unittest.TestCase):
             order.append(("shell", command))
 
         p.tap.side_effect = tapped
-        p.d.shell.side_effect = shelled
+        p.shell.side_effect = shelled
         return order
 
     def test_the_direct_page_is_used_first_and_the_menu_is_not_walked(self):
@@ -221,7 +221,7 @@ class HonorAdTrackingTests(unittest.TestCase):
         self.assertEqual(scope["FAILED_STEPS"], [])
         p.start.assert_any_call(self.PKG, self.PAGE, expect="应用广告跟踪管理")
         p.setting.assert_not_called()
-        p.d.shell.assert_not_called()
+        p.shell.assert_not_called()
         self.assertEqual([c.args[0] for c in p.tap.call_args_list],
                          ["更多选项", "全部关闭"])
 
@@ -233,7 +233,7 @@ class HonorAdTrackingTests(unittest.TestCase):
         scope, _out = load_out(p, ["广告跟踪"])
         self.assertEqual(scope["FAILED_STEPS"], [])
         p.setting.assert_called_once_with("广告", "广告与隐私")
-        p.d.shell.assert_not_called()
+        p.shell.assert_not_called()
         self.assertEqual([c.args[0] for c in p.tap.call_args_list],
                          ["更多选项", "全部关闭"])
 
@@ -269,7 +269,7 @@ class HonorAdTrackingTests(unittest.TestCase):
         self.assertEqual(scope["SKIPPED_STEPS"], ["广告跟踪"])
         self.assertIn("安全模式", printed)
         p.start.assert_not_called()
-        p.d.shell.assert_not_called()
+        p.shell.assert_not_called()
 
     def test_the_segment_is_page_tree_data(self):
         """段体从 `code=` 搬进页面树（#1372）；旧树这一段还是 `code = "step_ad_tracking"`。"""

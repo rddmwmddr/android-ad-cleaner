@@ -35,6 +35,26 @@ PERMISSION_CONTROLLERS = {"com.android.permissioncontroller", "com.google.androi
 TOP_SCREENS = 60
 
 
+class ShellResult(str):
+    """一条 shell 命令的结果：本体是输出串，另挂 `exit_code`。
+
+    `Phone.shell()` 的输出按字符串用（探型号、读 dumpsys），但拉起 App 那几处还要判命令成没成功
+    （`am start` 的退出码）。返回值做成 str 子类：既当字符串用，也取得到 `exit_code`，不必为
+    退出码再开一个动词（#1474）。`.output` 仍可读，搬过来的调用点两种写法都成立。
+    """
+
+    exit_code: int
+
+    def __new__(cls, output, exit_code=0):
+        result = super().__new__(cls, output or "")
+        result.exit_code = exit_code
+        return result
+
+    @property
+    def output(self):
+        return str(self)
+
+
 class Screen:
     """当前这一屏：文字、开关行、前台窗口、屏宽高。
 
@@ -266,11 +286,24 @@ class Screen:
             raise RuntimeError(f"系统拒绝了{TAPPED}。" + XIAOMI_INPUT)
 
     def shell(self, command, *, timeout=None):
-        """原样下发一条命令，返回它的输出串。
+        """原样下发一条命令，返回它的输出串（`ShellResult`：是 str，另带 `exit_code`）。
 
         断线语义由 `Connection` 装配的 `_resilient_shell` 承载（它就在 `reader.shell` 上），
-        这里只转发、不另包 try（#1472）。"""
-        return self.conn.reader.shell(command, timeout=timeout).output
+        这里只转发、不另包 try（#1472）。不给超时就不传这个实参，调用序列才与搬过来的
+        `reader.shell(command)` 逐条一致（#1474）。"""
+        if timeout is None:
+            result = self.conn.reader.shell(command)
+        else:
+            result = self.conn.reader.shell(command, timeout=timeout)
+        output, exit_code = result.output, getattr(result, "exit_code", 0)
+        if type(output) is str:
+            return ShellResult(output, exit_code)
+        # 传输给的是自带比较语义的字符串子类（对拍驱动的「读数一律算对得上」）：原样返回，
+        # 只把退出码挂上去，别换成普通 str 把它的语义吃掉。
+        if hasattr(output, "__dict__"):
+            output.exit_code = exit_code
+            return output
+        return ShellResult(output, exit_code)
 
     def swipe(self, x1, y1, x2, y2, ms):
         """按绝对坐标滑一下，时长给毫秒：走 uiautomator2 的 swipe，**不**改成 `input swipe`。

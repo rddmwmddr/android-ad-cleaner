@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 import adb_link
 import run
 import fixtures
-from fixtures import load_recipe, phone_stub
+from fixtures import load_recipe, phone_stub, shell_result
 
 
 class HonorWKLRecipeTests(unittest.TestCase):
@@ -54,7 +54,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
 
     def test_wrong_build_does_not_enter_any_action(self):
         p = Mock()
-        p.d.shell.side_effect = [Mock(output="WKL-AN20"), Mock(output="another build")]
+        p.shell.side_effect = [shell_result("WKL-AN20", 0), shell_result("another build", 0)]
         scope = self.load(p)
         scope["ONLY"] = ["系统管家"]
         action = Mock()
@@ -67,7 +67,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
 
     def test_wrong_model_is_skipped_not_failed(self):
         p = Mock()
-        p.d.shell.side_effect = [Mock(output="OTHER-MODEL"), Mock(output="WKL-AN20 11.0.0.111")]
+        p.shell.side_effect = [shell_result("OTHER-MODEL", 0), shell_result("WKL-AN20 11.0.0.111", 0)]
         scope = self.load(p)
         scope["ONLY"] = ["系统管家"]
         action = Mock()
@@ -83,7 +83,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
         """
         p = Mock()
         p.locked.return_value = False
-        p.d.shell.side_effect = [Mock(output="WKL-AN20"), Mock(output="WKL-AN20 11.0.0.111(SP7C00E110R101P7)")]
+        p.shell.side_effect = [shell_result("WKL-AN20", 0), shell_result("WKL-AN20 11.0.0.111(SP7C00E110R101P7)", 0)]
         scope = self.load(p)
         scope["ONLY"] = []
         with contextlib.redirect_stdout(io.StringIO()):
@@ -95,7 +95,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
     def test_skip_step_does_not_enter_failed_steps(self):
         p = Mock()
         p.locked.return_value = False
-        p.d.shell.side_effect = [Mock(output="WKL-AN20"), Mock(output="WKL-AN20 11.0.0.111(SP7C00E110R101P7)")]
+        p.shell.side_effect = [shell_result("WKL-AN20", 0), shell_result("WKL-AN20 11.0.0.111(SP7C00E110R101P7)", 0)]
         scope = self.load(p)
         scope["ONLY"] = ["系统管家"]
         with contextlib.redirect_stdout(io.StringIO()):
@@ -105,7 +105,7 @@ class HonorWKLRecipeTests(unittest.TestCase):
 
     def test_device_loss_is_not_swallowed_as_a_skipped_step(self):
         p = Mock()
-        p.d.shell.side_effect = adb_link.DeviceLost("lost")
+        p.shell.side_effect = adb_link.DeviceLost("lost")
         scope = self.load(p)
         scope["ONLY"] = ["系统管家"]
         with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(adb_link.DeviceLost):
@@ -242,7 +242,7 @@ class WklDataSegmentTests(unittest.TestCase):
         """型号 / 版本核对通过的可编排设备：`guard` 每个段各读一次 getprop。"""
         p = Mock()
         p.locked.return_value = False
-        p.d.shell.side_effect = [Mock(output="WKL-AN20"),
+        p.shell.side_effect = [shell_result("WKL-AN20", 0),
                                  Mock(output="WKL-AN20 11.0.0.111(SP7C00E110R101P7)")]
         p.go.return_value = True
         p.setting.return_value = True

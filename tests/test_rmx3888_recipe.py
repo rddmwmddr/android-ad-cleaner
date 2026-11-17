@@ -87,7 +87,7 @@ class AdTrackingTests(unittest.TestCase):
         self.assertEqual(scope["SKIPPED_STEPS"], ["广告跟踪"])
         self.assertEqual(scope["FAILED_STEPS"], [])
         self.assertIn("安全模式不做整页全关", printed)
-        p.d.shell.assert_not_called()
+        p.shell.assert_not_called()
         p.tap.assert_not_called()
         p.off.assert_not_called()
 

@@ -29,8 +29,8 @@ STORE_PROMOTIONS = [
 
 
 def guard(p, rt):
-    model = p.d.shell("getprop ro.product.model").output.strip()
-    build = p.d.shell("getprop ro.build.display.id").output.strip()
+    model = p.shell("getprop ro.product.model").strip()
+    build = p.shell("getprop ro.build.display.id").strip()
     if model != "PKX110" or not build.startswith(BUILD):
         rt.skip("型号或系统版本不同，跳过；请重新核对页面")
 
@@ -39,7 +39,7 @@ def step_advice(p, rt):
     # 2026-10-28 实测：设置首页 → OPPO AI（com.oplus.pantanal.ums/com.ums.aisetting.AISettingActivity）
     # → 小布建议（AdviceSettingActivity）。资讯服务是行状态（已卸载/已开启），不是本页开关，
     # 要关就点进「内容资讯 → 资讯服务」二级页（PKG110 同）。本机全部服务已是「已卸载」，无开关。
-    p.d.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
+    p.shell("am start -f 0x10008000 -a android.settings.SETTINGS"); time.sleep(1.2)
     if not nav.tap_page(p, rt, "OPPO AI", "com.ums.aisetting.AISettingActivity", "OPPO AI"):
         return False
     if not nav.tap_page(p, rt, "小布建议", "com.oplus.advice.settings.ui.AdviceSettingActivity", "小布建议"):

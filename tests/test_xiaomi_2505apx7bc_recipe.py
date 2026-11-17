@@ -118,7 +118,7 @@ class MixFlip2RecipeTests(recipe_case.RecipeSourceCase):
 
     def test_theme_settings_entry_is_the_text_button_on_the_my_page(self):
         p = self.phone("com.android.thememanager/.ThemePreferenceActivity")
-        p.d.shell.return_value.output = "package:/data/app/themestore/base.apk"
+        p.shell.return_value.output = "package:/data/app/themestore/base.apk"
         p.tab.return_value = True
         p.tap.return_value = True
         p.expect_page.return_value = True
@@ -132,7 +132,7 @@ class MixFlip2RecipeTests(recipe_case.RecipeSourceCase):
     def test_theme_settings_page_that_does_not_open_fails_the_step(self):
         # 落点判据看页面上的项：页面没画出这些项就报失败
         p = self.phone("com.android.thememanager/.ThemePreferenceActivity")
-        p.d.shell.return_value.output = "package:/data/app/themestore/base.apk"
+        p.shell.return_value.output = "package:/data/app/themestore/base.apk"
         p.tab.return_value = True
         p.tap.return_value = True
         p.expect_page.return_value = False
@@ -172,7 +172,7 @@ class MixFlip2RecipeTests(recipe_case.RecipeSourceCase):
         p.off.assert_not_called()
         self.assertEqual(out.getvalue().count("本版无此类开关"), 2)
         self.assertNotIn("没有可识别的设置入口", out.getvalue())
-        p.d.shell.assert_any_call(
+        p.shell.assert_any_call(
             "am start -f 0x10008000 -n com.android.calendar/.settings.CalendarActionbarSettingsActivity")
 
     def test_weather_that_does_not_reach_its_settings_page_fails_instead_of_claiming_no_switches(self):
