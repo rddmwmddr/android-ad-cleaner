@@ -643,8 +643,8 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
             elif kind == "start_or_skip":
                 lines.append(f'start_or_skip(p, rt, {_s(op["pkg"])}, {_s(op["activity"])})')
             elif kind == "skip_unless_installed":
-                # `p.d.shell("pm path …")` 原样进事实层（不是 am start，不构成入口，只是不丢这条读）。
-                lines.append(f"p.d.shell({_s(op['command'])})")
+                # `p.shell("pm path …")` 原样进事实层（不是 am start，不构成入口，只是不丢这条读）。
+                lines.append(f"p.shell({_s(op['command'])})")
             elif kind in ("entry", "require_entry"):
                 lines.append(f"p.entry({_s(op['text'])})")
             elif kind == "enter":
@@ -656,8 +656,8 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 lower(op.get("ops", []))
                 lower(op.get("else_ops", []))
             elif kind == "shell":
-                # 不经门面的拉起串（`am start …`）也是入口，不降级的话入口速查会漏掉这台机（#1263）。
-                lines.append(f"p.d.shell({_s(op['command'])})")
+                # 原样下发的拉起串（`am start …`）也是入口，不降级的话入口速查会漏掉这台机（#1263）。
+                lines.append(f"p.shell({_s(op['command'])})")
             elif kind == "gated":
                 for text in op.get("entries", []):
                     lines.append(f"maybe(p, rt, {_s(text)})")

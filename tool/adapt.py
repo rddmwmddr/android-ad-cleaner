@@ -224,8 +224,8 @@ def check_draft(p, recipe_path, only=()):
     # 手改过的草稿若写了不带 only= 的 p.off()，靠这个也只关点名的开关，不整页全关。
     p.safe_mode = True
     p.screen.captures.task = "adapt"        # 失败现场按任务归档（#1126）
-    build = p.d.shell("getprop ro.build.display.id").output.strip()
-    osv = p.d.shell("getprop ro.mi.os.version.incremental").output.strip()
+    build = p.shell("getprop ro.build.display.id").strip()
+    osv = p.shell("getprop ro.mi.os.version.incremental").strip()
     recorded = str(data.get("build", ""))
     if recorded and not (build.startswith(recorded) or osv.startswith(recorded)):
         print(f"⚠ 草稿标注 BUILD {recorded}，这台是 {osv or build}：按安全模式跑（只关点名的开关）")
@@ -264,13 +264,13 @@ def cmd_check(rest):
         if p.locked():
             locked = True
         else:
-            stay = p.d.shell("settings get global stay_on_while_plugged_in").output.strip()
+            stay = p.shell("settings get global stay_on_while_plugged_in").strip()
             try:
-                p.d.shell("settings put global stay_on_while_plugged_in 7")
+                p.shell("settings put global stay_on_while_plugged_in 7")
                 print("⚠ 安全模式自检：这份是待验证草稿，只关 only= 点名的开关，找不到就如实报告。")
                 report = check_draft(p, recipe, only)
             finally:
-                p.d.shell(f"settings put global stay_on_while_plugged_in {int(stay) if stay.isdigit() else 0}")
+                p.shell(f"settings put global stay_on_while_plugged_in {int(stay) if stay.isdigit() else 0}")
     if locked:                      # 文案等 __exit__ 跑完再渲染：close 抛错时与 sys.exit 的旧时机一致
         return fail("手机锁屏了，请机主解锁后再跑")
     return 0 if print_report(report) else 1

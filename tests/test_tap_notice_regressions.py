@@ -133,7 +133,7 @@ class NotificationTests(unittest.TestCase):
     def test_android9_dump_is_read(self):
         # #258 海信 HLTE217T / Android 9：以前「读不到通知渠道状态」
         p = types.SimpleNamespace(d=types.SimpleNamespace(shell=lambda *a, **k: types.SimpleNamespace(output=ANDROID9)))
-        d, app_off = chan.parse(p)
+        d, app_off = chan.parse(p.d)
         self.assertEqual(d[("com.hisense.promo", "deals")], ("优惠活动", 3, False))
         self.assertTrue(app_off["com.blocked"])
 
@@ -153,9 +153,9 @@ class NotificationTests(unittest.TestCase):
     def test_app_level_permission_off_is_not_a_failure(self):
         # 三星 SM-S9080：9 个渠道页上开关显示关、渠道记录仍开（应用通知整体关了）
         p = Mock()
-        p.d.shell.return_value = types.SimpleNamespace(output="      android.permission.POST_NOTIFICATIONS: granted=false, flags=[ USER_SET ]\n")
+        p.shell.return_value = "      android.permission.POST_NOTIFICATIONS: granted=false, flags=[ USER_SET ]\n"
         self.assertTrue(chan.notifications_denied(p, "com.samsung.x"))
-        p.d.shell.return_value = types.SimpleNamespace(output="      android.permission.POST_NOTIFICATIONS: granted=true, flags=[ ]\n")
+        p.shell.return_value = "      android.permission.POST_NOTIFICATIONS: granted=true, flags=[ ]\n"
         self.assertFalse(chan.notifications_denied(p, "com.samsung.x"))
 
     def test_denied_channels_are_left_out_of_the_failure_count(self):

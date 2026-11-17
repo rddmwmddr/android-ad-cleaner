@@ -4,6 +4,7 @@
 """
 import io
 from pathlib import Path
+from types import SimpleNamespace
 import sys
 import tomllib
 import unittest
@@ -210,6 +211,7 @@ class HonorAdTrackingTests(unittest.TestCase):
 
         def shelled(command, **kw):
             order.append(("shell", command))
+            return SimpleNamespace(output="")
 
         p.tap.side_effect = tapped
         p.d.shell.side_effect = shelled
@@ -287,7 +289,7 @@ class HonorAdTrackingTests(unittest.TestCase):
 class HonorMusicTests(unittest.TestCase):
     def music_phone(self):
         p = phone()
-        p.d = MagicMock()          # `tap_id` 走 p.d(**选择器).click()
+        p.tap_id = MagicMock()     # `tap_id` 走门面 p.tap_id(**选择器)（#1476）
         return p
 
     def test_music_entries_are_opened_with_page_change_confirmation(self):
@@ -307,9 +309,9 @@ class HonorMusicTests(unittest.TestCase):
         段体从 `code=` 搬进数据，调用不变：旧树也绿，守的是 `tap_id` 的选择器与顺序不回退。"""
         p = self.music_phone()
         load(p, ["音乐"])
-        self.assertEqual([c.kwargs for c in p.d.call_args_list],
-                         [{"text": "我的"}, {"resourceId": "com.hihonor.cloudmusic:id/ic_setting"}])
-        self.assertEqual(p.d.return_value.click.call_count, 2)
+        self.assertEqual([c.kwargs for c in p.tap_id.call_args_list],
+                         [{"text": "我的"}, {"resource_id": "com.hihonor.cloudmusic:id/ic_setting"}])
+        self.assertEqual(p.tap_id.call_count, 2)
 
     def test_missing_privacy_menu_skips_the_section_without_blind_scrolling(self):
         """「更多设置」页里没有该菜单时：留下停在哪一页就跳过，脚本自己不另起一套盲点。"""

@@ -105,7 +105,7 @@ def explore(p, pkg, rows):
                       f"{'失败：' + err if err else '后页面也不对'}，本 App 探路到此为止，换下一个 App）")
                 break
             home = now                      # 重进后落点可能和首次不同：以实际页面为准
-    p.d.app_stop(pkg)
+    p.app_stop(pkg)
 
 
 def main():
@@ -113,10 +113,10 @@ def main():
     p = Phone(a[1], log=False)
     pkgs = a[2:]
     if not pkgs:
-        pkgs = vendor_packages(p.d.shell(
+        pkgs = vendor_packages(p.shell(
             "cmd package query-activities --brief -a android.intent.action.MAIN"
-            " -c android.intent.category.LAUNCHER").output)
-    model = p.d.shell("getprop ro.product.model").output.strip()
+            " -c android.intent.category.LAUNCHER"))
+    model = p.shell("getprop ro.product.model").strip()
     rows, t0 = [], time.time()
     for pk in pkgs:
         try:
