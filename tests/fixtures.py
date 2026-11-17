@@ -457,6 +457,9 @@ def phone_mock(fast_mod=None, **fields):
     p.skeleton_sigs, p.skeleton_count = set(), 0
     p.mismatch_probes = 0
     p.reader = p.d = Mock(name="reader")
+    # 门面动词 `shell` 返回输出串（`Screen.shell` 的语义），底下仍是同一个 `d.shell`：
+    # 用例如旧桩在 `p.d.shell` 上，引擎改走门面之后两处是同一份桩（#1476）。
+    p.shell = lambda command, **kw: p.d.shell(command, **kw).output
     for name, value in fields.items():
         setattr(p, name, value)
     return p

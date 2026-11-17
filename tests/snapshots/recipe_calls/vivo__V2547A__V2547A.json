@@ -47,7 +47,8 @@
    ["i管家", "tap", ["设置"], {"exact": true, "scrolls": 0}],
    ["i管家", "focus", [], {}],
    ["天气", "locked", [], {}],
-   ["天气", "start", ["com.vivo.weather"], {"settle": 1.2}]
+   ["天气", "start", ["com.vivo.weather"], {"settle": 1.2}],
+   ["天气", "tap_id", [], {"resource_id": "com.vivo.weather:id/more_btn"}]
   ],
   "absent": [
    ["广告与隐私", "locked", [], {}],
@@ -140,7 +141,8 @@
    ["i管家", "tap", ["设置"], {"exact": true, "scrolls": 0}],
    ["i管家", "tap", ["设置"], {"exact": true, "scrolls": 0}],
    ["天气", "locked", [], {}],
-   ["天气", "start", ["com.vivo.weather"], {"settle": 1.2}]
+   ["天气", "start", ["com.vivo.weather"], {"settle": 1.2}],
+   ["天气", "tap_id", [], {"resource_id": "com.vivo.weather:id/more_btn"}]
   ]
  }
 }

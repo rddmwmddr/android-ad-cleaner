@@ -653,8 +653,8 @@ def execute(p, cmd, rest):
         if str(rest[0]).lower().endswith(".toml"):
             with open(rest[0], "rb") as f:
                 recorded = str(tomllib.load(f).get("build", ""))
-        build = p.d.shell("getprop ro.build.display.id").output.strip()
-        osv = p.d.shell("getprop ro.mi.os.version.incremental").output.strip()     # 小米：HyperOS 版本号
+        build = p.shell("getprop ro.build.display.id").strip()
+        osv = p.shell("getprop ro.mi.os.version.incremental").strip()     # 小米：HyperOS 版本号
         if recorded and not (build.startswith(recorded) or osv.startswith(recorded)):
             p.safe_mode = True
             print(f"⚠ 机型脚本是按 {recorded} 录的，这台是 {osv or build}：用安全模式跑（只关点名的开关），没找到的段会快速跳过")

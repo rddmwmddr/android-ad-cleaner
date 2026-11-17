@@ -179,7 +179,7 @@ class NotificationDumpTests(unittest.TestCase):
         p = phone_stub("test")
         p.d = SimpleNamespace(shell=Mock(return_value=SimpleNamespace(output=DUMP)))
         locked, foreground = set(), set()
-        channels, app_off = chan.parse(p, locked, foreground)
+        channels, app_off = chan.parse(p.d, locked, foreground)
         self.assertEqual((channels, app_off), snap.parse_notification_dump(DUMP)[:2])
         self.assertEqual(locked, {("com.example.app", "locked")})
         self.assertEqual(foreground, {("com.example.app", "fg")})
