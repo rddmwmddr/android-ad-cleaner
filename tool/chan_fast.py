@@ -18,7 +18,7 @@ use_utf8_console()
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fast import Phone, pause_point
 from phone.errors import ScreenLocked
-from row import PATH_DEPTH, SAME_LINE, disabled_at as row_disabled_at, link, skeleton
+from row import PATH_DEPTH, SAME_LINE, link, skeleton
 from channel_decide import VIVO_ACTIVITY, VIVO_HOSTS, vivo_page
 from channel_arrive import truncated as truncated
 from channel_policy import classify, protected_channel
@@ -30,6 +30,7 @@ from ui_hidden import UiHidden
 import adb_link
 import channel_arrive as arrive
 import channel_decide as decide
+import channel_toggle as toggle_decide
 import events
 import wait
 
@@ -856,11 +857,12 @@ def restore_report(reader, modes):
 
 def disabled_at(p, xy):
     """开关是灰的（系统锁定的渠道）：点了也不会变，不再连点三次再报「状态未改变」。
-    判定只有一份，在 `row.disabled_at()`；这里保留按 Phone 取页面的旧签名。"""
-    return row_disabled_at(p.tree(), xy)
+    判定只有一份，在 `channel_toggle.greyed()`；这里保留按 Phone 取页面的旧签名。"""
+    return toggle_decide.greyed(p.snapshot(root=p.tree(), focus="", with_rows=False), xy)
 
 
 MISMATCH_PER_RUN = 3    # 一次运行最多补几条 MISMATCH 判据读数：额外命令只在不一致时发生，且要封顶
+TOGGLE_TRIES = 3        # 单次拨动最多重认几次；退避时长在循环里，决定函数只数次数
 
 
 def mismatch_probe(p, pk, cid, current, denied=None):
@@ -913,32 +915,42 @@ def toggle(p, pk, cid, want_on, name="", allowed=()):
         if disabled_at(p, reached.switch[2]):
             return Outcome(GREYED)
         desired = "ON" if want_on else "off"
-        for attempt in range(3):
+        for attempt in range(TOGGLE_TRIES):
             # 每次重取页面，开关消失时不能复用旧坐标。
             if p.locked():
                 raise ScreenLocked("手机锁屏了")
             again = page.refresh(rounds=6)
-            if not isinstance(again, Reached):
-                return Outcome(NOT_CONFIRMED, "渠道页或开关已变化，停止操作")
+            if toggle_decide.vanished(isinstance(again, Reached)):
+                return Outcome(NOT_CONFIRMED, toggle_decide.VANISHED_DETAIL)
             switch = again.switch
-            clicked = switch[1] != want_on
+            snap = toggle_decide.row_snapshot(switch, width=p.W, height=p.H)
+            clicked = toggle_decide.can_click(snap, want_on)
             if clicked:
                 p.click(*switch[2]); time.sleep(0.4); p.confirm()
             current, apps = parse(p)
             extra = side_effects(before, apps_before, current, apps, pk, cid, allowed)
-            if extra:
-                restored = clicked and page.undo(switch[2], want_on)
+            effect = toggle_decide.side_effect_verdict(extra, clicked)
+            if effect.stop:
+                restored = effect.undo and page.undo(switch[2], want_on)
                 message, lost = undo_message(p, before, apps_before, set(allowed) | {(pk, cid)},
                                              restored, extra, clicked)
                 raise (StopBatchLost if lost else StopBatch)(message)
-            if state(current, apps, pk, cid) == desired:
+            current_state = state(current, apps, pk, cid)
+            # 界面这一行已经在目标态、渠道记录却还没跟上：只有这时才多读一次应用通知总开关，
+            # 分清「应用通知整体关着」与「界面与记录不一致」（今天如此，别提前读）。
+            denied = (notifications_denied(p, pk)
+                      if current_state != desired and not clicked and not want_on else None)
+            got = toggle_decide.verdict(snap, current_state, want_on, attempt,
+                                        tries=TOGGLE_TRIES, denied=denied)
+            if got == toggle_decide.ToggleVerdict.DONE:
                 return Outcome(DONE)
-            if switch[1] == want_on:
-                denied = notifications_denied(p, pk) if not want_on else None
-                if denied:
-                    return Outcome(APP_DENIED)
+            if got == toggle_decide.ToggleVerdict.APP_DENIED:
+                return Outcome(APP_DENIED)
+            if got == toggle_decide.ToggleVerdict.MISMATCH:
                 return Outcome(MISMATCH, "界面状态与渠道实际状态不一致，未继续点击",
                                mismatch_probe(p, pk, cid, current, denied))
+            if got == toggle_decide.ToggleVerdict.UNCHANGED:
+                break
             time.sleep(0.25 + 0.3 * attempt)
         return Outcome(UNCHANGED, "点击后渠道状态未改变")
     except (StopBatch, adb_link.DeviceLost, ScreenLocked):

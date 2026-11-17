@@ -1127,6 +1127,7 @@ GEOMETRY_SCAN = (
     "tool/chan_fast.py",
     "tool/channel_decide.py",
     "tool/channel_arrive.py",
+    "tool/channel_toggle.py",
     "tool/phone/screen.py",
     "tool/phone/toggler.py",
     "tool/phone/dismisser.py",
@@ -1219,12 +1220,14 @@ class GeometryGuards(unittest.TestCase):
         self.assertEqual(len(stray_ratios(source, "snippet.py")), 2)
 
 
-# 渠道的认页（#1434）与到达（#1435）决策都是快照上的纯函数：`tool/channel_decide.py` 与
-# `tool/channel_arrive.py` 不 import 引擎 / 基座，也不调用动作原语。
+# 渠道的认页（#1434）、到达（#1435）与拨动（#1436）决策都是快照上的纯函数：
+# `tool/channel_decide.py`、`tool/channel_arrive.py` 与 `tool/channel_toggle.py` 不 import
+# 引擎 / 基座，也不调用动作原语。
 # 属性读（快照自己的 `.tree` / `.texts`）不是调用，不在这条判据里。
 DECIDE = ROOT / "tool" / "channel_decide.py"
 ARRIVE = ROOT / "tool" / "channel_arrive.py"
-DECIDE_MODULES = (DECIDE, ARRIVE)
+TOGGLE = ROOT / "tool" / "channel_toggle.py"
+DECIDE_MODULES = (DECIDE, ARRIVE, TOGGLE)
 DECIDE_FORBIDDEN = ("fast", "chan_fast", "phone")
 DECIDE_ACTIONS = frozenset({"click", "scroll", "back", "settle", "open_uri", "home",
                             "type_text", "apply", "tree", "focus", "snapshot"})

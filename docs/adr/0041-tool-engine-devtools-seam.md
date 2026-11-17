@@ -73,6 +73,8 @@ from(repo.resolve("tool")) { into("tool"); include("**/*.py", "*.dex") }
 一个字节都没动，`tool/` 顶层今天就是那 37 个引擎模块。此后 `tool/geometry.py`（#1431，判定用的
 屏幕几何比例的唯一 owner）作为引擎模块加入，引擎名单是 38 个；`syncEngine` 的整目录 glob 自动收它。
 `tool/channel_decide.py`（#1434，渠道认页决策的纯函数）同此，引擎名单是 39 个。
+`tool/screen_snapshot.py`（#1432 的值类型）、`tool/channel_arrive.py`（#1435，渠道到达决策）与
+`tool/channel_toggle.py`（#1436，渠道拨动决策）同此，引擎名单是 42 个。
 
 ### 引擎侧的硬约束
 
