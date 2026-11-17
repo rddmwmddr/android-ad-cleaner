@@ -16,6 +16,7 @@
 ### 内部
 - 机型测试的共享助手与安全用例收进 `tests/recipe_case.py`，复制与重写用例各加守卫（#1406）
 - 渠道引擎的 15 个结局收成封闭枚举，`RULES` 仍是唯一记账表（#1433）
+- 屏幕阈值收进 `tool/geometry.py` 唯一 owner，对拍驱动可钉基线提交（#1431）
 - test_recipe_strategies 的模块 docstring 与锚点描述按家族库常量分派的现状重写（#1351）
 - mutation job 加 `.mutmut` 判定缓存，非 `.py` 数据一改就整轮重跑（#1453）
 - mutation 的测试会话开头清掉 `tool/` 的进程级缓存，同类假存活加守卫（#1454）

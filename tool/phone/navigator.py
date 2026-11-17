@@ -11,6 +11,7 @@ import re
 import time
 
 import wait
+from geometry import ICON_AREA, TAB_BAND
 
 # 设置页的焦点窗口签名：同一批小米 / OPPO App 里两种命名并存，只认 Setting 会把
 # ThemePreferenceActivity、BrowserPreferencesPage 这类判成「没进去」（#960）。
@@ -121,7 +122,7 @@ class Navigator:
         self.screen.note_miss(text)
         return False
 
-    def tap_icon(self, expect, area=(0.72, 0.0, 1.0, 0.16), tries=3):
+    def tap_icon(self, expect, area=ICON_AREA, tries=3):
         """点一个没有文字的图标入口，点完要求 expect 里任一文字精确出现在新页面上；
         点开的不是目标页就退回来换下一个（#292）。游戏中心 14.43.3 把「设置」做成「我的」页右上角的齿轮，
         没有文字，按文字找永远找不到。
@@ -209,7 +210,7 @@ class Navigator:
                     lambda t: re.split(r"[,，]", t)[-1].strip() == name,
                     lambda t: name in t):
             for text, (l, top, r, b), _ in items:
-                if top > screen.H * 0.85 and hit(text):
+                if top > screen.H * TAB_BAND and hit(text):
                     return (l + r) // 2, (top + b) // 2
         return None
 

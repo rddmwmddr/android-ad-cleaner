@@ -2,7 +2,8 @@
 渠道结局词表一条（`ChannelOutcomeGuards`）、
 库依赖方向一条（`RecipeLibGuards`）、手机版界面一条（`AndroidGuards`）、流程 / CI 类三条（`CiGuards`）、
 夹具装配类两条（`FixtureGuards`）、桩与断言两条（`StubGuards`）、发版产物一条（`ReleaseGuards`）、
-标准流一条（`StdioGuards`）与 `gh` 会话一条（`GhGuards`），沿用 #1000、#1002 的做法。
+标准流一条（`StdioGuards`）、`gh` 会话一条（`GhGuards`）与屏幕几何比例一条（`GeometryGuards`），
+沿用 #1000、#1002 的做法。
 
 `DocGuards`：CHANGELOG 条目一行一个票号、文档里的代码位置用符号名、指到的 `.py` 路径要存在、
 上报服务地址与凭据不写进仓库。`RegistryGuards`：无锚点的顶层列表项按文档冻结上限。
@@ -1114,6 +1115,106 @@ class GhGuards(unittest.TestCase):
         self.assertGreater(scanned, 0, "devtools/ 下一个 .py 都没扫到，这条守卫会空转")
         self.assertEqual(hits, [], "`gh` 只经 devtools/gh.py 起进程（runner_for / call / json_of），"
                          "别再各写一份执行器：\n" + "\n".join(hits))
+
+
+# 判定「这一行在不在屏带内 / 这个控件算不算图标命中 / 是不是底部标签 / 是不是对话框按钮 /
+# 哪些行可拨」用的比例只在 tool/geometry.py 定义（#1431）。扫描面是本次触碰的七个文件：
+# 认行、门面、基座、拨动、弹窗、导航与渠道引擎。字符串与注释不入 AST，天然豁免。
+GEOMETRY_HOME = "tool/geometry.py"
+GEOMETRY_SCAN = (
+    "tool/row.py",
+    "tool/fast.py",
+    "tool/chan_fast.py",
+    "tool/phone/screen.py",
+    "tool/phone/toggler.py",
+    "tool/phone/dismisser.py",
+    "tool/phone/navigator.py",
+)
+# 屏幕宽高的名字：裸名（`screen_h`）与属性（`self.W` / `p.H` / `screen.H`）。
+SPAN_NAMES = frozenset({"W", "H", "screen_w", "screen_h"})
+SPAN_ATTRS = frozenset({"W", "H"})
+# 以比例为默认值的参数：`frac` 是拖动比例，`area` 是图标取样区（四元组比例）。
+RATIO_PARAMS = frozenset({"frac", "area"})
+
+
+def screen_span(node):
+    """这个表达式是不是屏幕宽高。"""
+    if isinstance(node, ast.Name):
+        return node.id in SPAN_NAMES
+    if isinstance(node, ast.Attribute):
+        return node.attr in SPAN_ATTRS
+    return False
+
+
+def stray_ratios(source, name):
+    """源码里绕过 `tool/geometry.py` 的比例字面量；返回可读的 `文件:行号` 列表。
+
+    两条判据：浮点字面量直接乘 / 除到屏幕宽高上（`screen_h * 0.22`、`self.W * 0.5`），
+    以及比例为默认值的参数（`frac=0.45`、`area=(0.72, 0.0, 1.0, 0.16)`）。整数不做比例看
+    （`self.W * 7 // 10` 是取中点），时长只看调用参数与默认值里的裸浮点数（`time.sleep(0.22)`、
+    `poll=0.2`），两者都不在判据里。
+    """
+    hits = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Mult, ast.Div)):
+            pairs = ((node.left, node.right), (node.right, node.left))
+            if any(isinstance(lit, ast.Constant) and isinstance(lit.value, float) and screen_span(span)
+                   for lit, span in pairs):
+                hits.append(f"{name}:{node.lineno} 浮点比例直接乘除屏幕宽高")
+        elif isinstance(node, ast.arguments):
+            positional = node.posonlyargs + node.args
+            # 两个切片与 kw_defaults 都按参数个数一一对应（AST 的形状），长度必然相等。
+            paired = list(zip(positional[len(positional) - len(node.defaults):], node.defaults,
+                              strict=True))
+            paired += list(zip(node.kwonlyargs, node.kw_defaults, strict=True))
+            for param, default in paired:
+                if default is None or param.arg not in RATIO_PARAMS:
+                    continue
+                if any(isinstance(value, ast.Constant) and isinstance(value.value, float)
+                       for value in ast.walk(default)):
+                    hits.append(f"{name}:{default.lineno} 参数 {param.arg} 的默认值是比例字面量")
+    return hits
+
+
+class GeometryGuards(unittest.TestCase):
+    def test_ratios_live_only_in_the_geometry_module(self):
+        """屏带、图标命中、底部标签、确认按钮与可拨带的比例只许出现在 `tool/geometry.py`。
+
+        守的是不回退：把任意一条已经搬走的比例写回被扫模块即红。判据只看 AST 里的浮点字面量，
+        时长（`poll=0.2`、`time.sleep(0.4)`）、整数取中点（`self.W // 2`）与字符串 / 注释都不算。
+        数值与语义的逐条对应在 `tool/geometry.py` 的注释里，这里只证明没有第二份。
+        """
+        self.assertTrue((ROOT / GEOMETRY_HOME).is_file(), f"{GEOMETRY_HOME} 不在，这条守卫会空转")
+        hits = []
+        for name in GEOMETRY_SCAN:
+            path = ROOT / name
+            self.assertTrue(path.is_file(), f"{name} 不在，这条守卫会空转")
+            hits += stray_ratios(path.read_text(encoding="utf-8"), name)
+        self.assertEqual(hits, [], "判定用的比例只在 tool/geometry.py 定义，调用方从那里取：\n"
+                         + "\n".join(hits))
+
+    def test_a_ratio_written_back_into_a_scanned_module_is_red(self):
+        """把一条已经搬走的比例写回真实模块，守卫当场返红（不是只对合成片段生效）。"""
+        source = (ROOT / "tool/phone/navigator.py").read_text(encoding="utf-8")
+        self.assertIn("screen.H * TAB_BAND", source)
+        self.assertTrue(stray_ratios(source.replace("screen.H * TAB_BAND", "screen.H * 0.85"),
+                                     "tool/phone/navigator.py"))
+
+    def test_the_guard_ignores_times_and_integers(self):
+        """时长、整数算术、字符串与注释里的数字都不是比例，不能误报。"""
+        source = ('time.sleep(0.22)\n'
+                  'x = self.W // 2\n'
+                  'note = "0.22H"\n'
+                  '# 顶部 0.22H 以内\n'
+                  'def wait(maxwait=0.8, poll=0.2):\n'
+                  '    return maxwait\n')
+        self.assertEqual(stray_ratios(source, "snippet.py"), [])
+
+    def test_the_guard_flags_a_default_that_is_a_ratio(self):
+        """`frac` / `area` 的默认值是比例，写在模块里同样算第二份。"""
+        source = ("def scroll(self, frac=0.45, up=False):\n    return frac\n"
+                  "def icon_candidates(self, area=(0.72, 0.0, 1.0, 0.16)):\n    return area\n")
+        self.assertEqual(len(stray_ratios(source, "snippet.py")), 2)
 
 
 if __name__ == "__main__":

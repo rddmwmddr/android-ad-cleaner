@@ -18,6 +18,7 @@ use_utf8_console()
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fast import Phone, pause_point
 from phone.errors import ScreenLocked
+from geometry import HEADER_BAND, INLINE_ROW_MAX, TOP_BAND, TOP_TITLE_BAND, TOP_TITLE_WIDTH
 from row import PATH_DEPTH, SAME_LINE, bounds, disabled_at as row_disabled_at, link, named_nodes, own, skeleton
 from channel_policy import classify, protected_channel
 from troubleshooting import ON_PHONE, XIAOMI_INPUT
@@ -345,7 +346,7 @@ NOTIFY_HOSTS = {
     "com.hihonor.systemmanager": re.compile(r"^com\.hihonor\.notificationmanager\.ui\.\w*Notification\w*Activity$"),
     "com.huawei.systemmanager": re.compile(r"^com\.huawei\.notificationmanager\.ui\.\w*Notification\w*Activity$"),
 }
-HEADER_IDS = ("entity_header_title", "header_title")   # 三星 One UI 渠道名在页眉控件里，位置低于 0.22H（#95）
+HEADER_IDS = ("entity_header_title", "header_title")   # 三星 One UI 渠道名在页眉控件里，位置低于 TOP_BAND（#95）
 
 
 # vivo 通知设置页：OriginOS 4 起在 com.vivo.systemuiplugin；OriginOS Ocean（安卓 10）还在 com.android.systemui（错误日志 10-28）
@@ -364,7 +365,7 @@ def notification_focus(p):
 
 def titled(p, root, name):
     """页面顶部的标题就是这个渠道名：还停在渠道页。"""
-    return any(t == name and b[1] < p.H * 0.22 for t, b, _ in p.texts(root))
+    return any(t == name and b[1] < p.H * TOP_BAND for t, b, _ in p.texts(root))
 
 
 def top_title(p, root):
@@ -372,12 +373,12 @@ def top_title(p, root):
     texts = p.texts(root)
     for t, b, n in texts:
         rid = (n.get("resource-id") or "").lower()
-        if "toolbar" in rid and "title" in rid and b[1] < p.H * 0.22:
+        if "toolbar" in rid and "title" in rid and b[1] < p.H * TOP_BAND:
             return t
-    # Funtouch 13 的渠道页顶栏没有 resource-id（#336）：顶部 15% 里几乎横跨整屏的那段文字。
+    # Funtouch 13 的渠道页顶栏没有 resource-id（#336）：顶部 TOP_TITLE_BAND 里几乎横跨整屏的那段文字。
     # 半屏宽的多半是行内标签（「允许通知」那一行），拿它当标题就会把总开关当成渠道开关。
     wide = [(b[1], b[0] - b[2], t) for t, b, _ in texts
-            if b[1] < p.H * 0.15 and b[2] - b[0] >= p.W * 0.8]
+            if b[1] < p.H * TOP_TITLE_BAND and b[2] - b[0] >= p.W * TOP_TITLE_WIDTH]
     return min(wide)[2] if wide else None
 
 
@@ -519,8 +520,8 @@ class ChannelPage:
         if not focus or "AppNotification" in focus or not name:
             return None
         root = p.tree()
-        if not any(t == name and (b[1] < p.H * 0.22 or (
-                b[1] < p.H * 0.4 and (n.get("resource-id") or "").endswith(HEADER_IDS)))
+        if not any(t == name and (b[1] < p.H * TOP_BAND or (
+                b[1] < p.H * HEADER_BAND and (n.get("resource-id") or "").endswith(HEADER_IDS)))
                 for t, b, n in p.texts(root)):
             return None
         if vivo_page(focus):
@@ -564,7 +565,7 @@ class ChannelPage:
                 sl, st, sr, sb = bounds(boxes[0])
                 gap = abs((b[1] + b[3]) // 2 - (st + sb) // 2)
                 tol = max(b[3] - b[1], sb - st)
-            ok = len(boxes) == 1 and btm - tp <= p.H * 0.2 and not labels & ALLOW
+            ok = len(boxes) == 1 and btm - tp <= p.H * INLINE_ROW_MAX and not labels & ALLOW
             notes.append(f"行内开关 {len(boxes)} 个，行高 {round((btm - tp) * 100 / p.H)}%"
                          + (f"，文字与开关错开 {gap}px" if ok else "")
                          + ("，行内有应用总开关" if labels & ALLOW else "") + "；" + chain(n, parents))
@@ -620,7 +621,7 @@ class ChannelPage:
         p, name = self.p, self.name
         try:
             root = p.tree()
-            at = [b[1] < p.H * 0.22 for t, b, _ in p.texts(root) if t == name]
+            at = [b[1] < p.H * TOP_BAND for t, b, _ in p.texts(root) if t == name]
             title = "顶部" if any(at) else ("列表" if at else "无")
             self.skeleton = self._skeleton(root)
             text = f"标题{title}，允许通知开关 {len(allow_switches(p, root))} 个，开关 {len(p.switches(root))} 个"

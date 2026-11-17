@@ -146,7 +146,7 @@
 | `test_doc_consistency.py` | 文档与单一来源一致：ADR 字段表、品牌连点表、共享样式与教程截图，以及四条「配置即判据」的规则与 pyproject / .coveragerc 对拍。 | 112 |
 | `test_web_client.py` | 前端用例的代跑与守卫：tests/js/ 的 jsdom 用例由它在 unittest 里跑。 | 8 |
 | `test_fixtures.py` | 夹具本身的行为：样本、假时钟、时间轴与假 Phone。 | 27 |
-| `test_compare_phone_state.py` | 对拍驱动自己管基线 worktree：未知 SHA 报错且不留下 worktree。 | 3 |
+| `test_compare_phone_state.py` | 两个对拍驱动自己管基线 worktree：未知 SHA 报错且不留下 worktree，不指定基线时仍认手工备好的 tool 目录。 | 3 |
 | `test_mutation_scope.py` | 模块 → 测试范围的映射：严格档名单与它不漂、每个目标都在仓库里、选择结果去重保序、摘掉的类确实挂在被收集的文件上，改动面只挑映射表里的模块，summary 一节的结论与 pragma 计数，以及「无可变异节点」的判据。 | 31 |
 | `test_android_bundle.py` | APK 里那批 gui 文件必须覆盖 gui/app.py 的导入期依赖。 | 11 |
 | `test_tool_package.py` | tool/ 的出厂引擎与仓库工具链边界：两份冻结名单与文件系统全等、引擎不拖进工具链、打包清单不含 devtools/。 | 12 |

@@ -13,6 +13,8 @@ import xml.etree.ElementTree as ET
 import adb_link
 import wait
 from captures import Captures
+from geometry import CONFIRM_BUTTON_MAX_H, CONFIRM_BUTTON_MAX_W, FIND_EDGE_BOTTOM, FIND_VISIBLE_BOTTOM
+from geometry import ICON_AREA, ICON_MAX_H, ICON_MAX_W, SCROLL_BOTTOM, SCROLL_FRAC, SCROLL_MAX_FRAC
 from row import bounds, control, dedupe, summary, switch_row, title_hit, unique
 from row import residual_note as confirm_note
 from troubleshooting import TAPPED, XIAOMI_INPUT, input_blocked
@@ -239,7 +241,7 @@ class Screen:
             if (n.get("text") or "").strip() != c or n.get("clickable") != "true":
                 return False
             l, t, r, b = bounds(n)
-            return r - l < self.W * 0.5 and b - t < self.H * 0.12
+            return r - l < self.W * CONFIRM_BUTTON_MAX_W and b - t < self.H * CONFIRM_BUTTON_MAX_H
 
         for hit in (button_hit, text_view_hit):
             for c in CONFIRM:
@@ -270,7 +272,7 @@ class Screen:
         句子本身是 `row.residual_note()` 的纯函数，这里只负责读一次屏（导航与拨动共用这一份）。"""
         return confirm_note(self.residual_confirm(root), sep)
 
-    def icon_candidates(self, area=(0.72, 0.0, 1.0, 0.16)):
+    def icon_candidates(self, area=ICON_AREA):
         """没有文字、点了才知道去哪的图标（右上角齿轮、更多）：按位置从右往左给候选坐标。
         整块卡片/列表项点了会进别的页面，按尺寸排除掉。"""
         x0, y0, x1, y1 = (v * s for v, s in zip(area, (self.W, self.H, self.W, self.H), strict=True))    # area 是 (x0,y0,x1,y1)
@@ -284,7 +286,7 @@ class Screen:
             cx, cy = (l + r) // 2, (t + b) // 2
             if not (x0 <= cx <= x1 and y0 <= cy <= y1 and self.on_screen(n)):
                 continue
-            if r - l > self.W * 0.25 or b - t > self.H * 0.10:
+            if r - l > self.W * ICON_MAX_W or b - t > self.H * ICON_MAX_H:
                 continue
             out.append((cx, cy))
         out.sort(key=lambda xy: -xy[0])        # 齿轮在最右边，先试它
@@ -313,11 +315,11 @@ class Screen:
         return bool(wait.until(self.sig, maxwait, poll=0.1, stable=0.2,
                                changed_from=before, now=time.time, sleep=time.sleep))
 
-    def scroll(self, frac=0.45, up=False):
+    def scroll(self, frac=SCROLL_FRAC, up=False):
         """按下-移动-停 0.12 秒-松开：没有惯性，翻多少是多少，约 0.45 秒。"""
         x = self.W * 7 // 10 if self.W > 2000 else self.W // 2
-        frac = min(frac, 0.58)                   # 留在 0.22H~0.80H 之间拖，避开标题栏和底栏
-        y1, y2 = int(self.H * 0.80), int(self.H * (0.80 - frac))
+        frac = min(frac, SCROLL_MAX_FRAC)        # 从 SCROLL_BOTTOM 往上拖，最远落在 0.22H，避开标题栏和底栏
+        y1, y2 = int(self.H * SCROLL_BOTTOM), int(self.H * (SCROLL_BOTTOM - frac))
         if up:
             y1, y2 = y2, y1
         c = [f"input motionevent DOWN {x} {y1}"]
@@ -354,7 +356,7 @@ class Screen:
                 break
             focus = self.focus()
             before = {t for t, _, _ in self.texts()}
-            self.scroll(0.58, up=True)
+            self.scroll(SCROLL_MAX_FRAC, up=True)
             scrolled += 1
             if self.focus() != focus:
                 raise RuntimeError("回到页顶时离开了当前设置页，停止本段")
@@ -377,10 +379,10 @@ class Screen:
                     if switch_row(n, parents):
                         continue
                 cy = (tp + b) // 2
-                if cy < self.H * 0.92:
+                if cy < self.H * FIND_VISIBLE_BOTTOM:
                     return ((l + r) // 2, cy)
                 if edge_ok == "tab":                     # 底部标签栏：直接点中心
                     return ((l + r) // 2, cy)
-                if edge_ok and tp < self.H * 0.975:      # 已到页底翻不上来：点这一行的上沿
+                if edge_ok and tp < self.H * FIND_EDGE_BOTTOM:      # 已到页底翻不上来：点这一行的上沿
                     return ((l + r) // 2, tp + 15)
         return None

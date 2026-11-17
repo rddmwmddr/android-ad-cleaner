@@ -220,6 +220,14 @@ why = "「哪一行是开关、哪一个才是它的本体」曾散在 off()、f
 expires_if = "读屏直接返回结构化的控件归属、不再从 bounds 推行的结构时删。"
 
 [[rule]]
+id = "dev.geometry.single-owner"
+source = "docs/ARCHITECTURE.md#函数级细节"
+check = "test:test_rules_guards::GeometryGuards.test_ratios_live_only_in_the_geometry_module"
+status = "enforced"
+why = "屏幕带、图标命中、底部标签、确认按钮与可拨带的判定比例曾散在认行、基座、拨动、弹窗、导航与渠道引擎六处，顶部带 0.22H 有五份副本（`row.TOP_BAND` 一份、`chan_fast` 四处字面量）：屏幕带比例要变时满仓找不到同一个数，漏掉一处就是认页与认行各用各的阈值，表现成「标题算不算页眉」两处结论不一致（#1431）。"
+expires_if = "读屏直接返回语义化的控件归属（页眉 / 图标 / 底部标签由系统标注、不再从屏宽高比例推）时删。"
+
+[[rule]]
 id = "dev.entries.source-and-family"
 source = "docs/ARCHITECTURE.md#函数级细节"
 check = "test:test_entries::SourceTest.test_every_entry_has_a_source"
@@ -1287,7 +1295,7 @@ id = "dev.tool.engine-toolchain-seam"
 source = "docs/ARCHITECTURE.md#函数级细节"
 check = "test:test_tool_package::ToolPackageSeamTests.test_module_lists_match_the_filesystem"
 status = "enforced"
-why = "「什么进 APK」由 `syncEngine` 的整目录 glob 决定，往 `tool/` 放一个新脚本它就自动进包——搬移前 `tool/` 顶层 56 个模块里 19 个是只在 CI 与本机跑的仓库工具链，占 `tool/` 体积的 22%，就这样悄悄发到手机上（#1389）。守卫把两份冻结名单（引擎 37、工具链 21）钉在文件系统与 import 可达性上：加一个不该随包的脚本即红，引擎 import 了工具链也即红（#1390）；搬进 `devtools/` 之后名单的内容不变，`tool/` 与 `devtools/` 各自与名单全等（#1391）。"
+why = "「什么进 APK」由 `syncEngine` 的整目录 glob 决定，往 `tool/` 放一个新脚本它就自动进包——搬移前 `tool/` 顶层 56 个模块里 19 个是只在 CI 与本机跑的仓库工具链，占 `tool/` 体积的 22%，就这样悄悄发到手机上（#1389）。守卫把两份冻结名单（引擎 38、工具链 21）钉在文件系统与 import 可达性上：加一个不该随包的脚本即红，引擎 import 了工具链也即红（#1390）；搬进 `devtools/` 之后名单的内容不变，`tool/` 与 `devtools/` 各自与名单全等（#1391）。"
 expires_if = "打包改成显式文件名清单、不再整目录 glob 后，「路径 = 归属」不再需要这份名单兜底时删；ADR-0041 的边界被取代时一并删。"
 
 [[rule]]
