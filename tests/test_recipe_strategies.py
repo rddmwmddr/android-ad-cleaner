@@ -1,9 +1,10 @@
-"""拨动策略的注入面（`tool/recipe_strategies.py`，#1244）：前导调用它、脚本不留逐字副本，
-以及家族库里按脚本常量选走法的那几处（齿轮 / 浏览器设置）。
+"""家族库按脚本常量选走法：`GEAR_STYLE` / `BROWSER_FLOW` / `WAIT_PAGE_STYLE` /
+`READ_SWITCHES_STYLE` / `CLOSE_NAMED_STYLE` / `TAP_STYLE` 各挑一份实现；常量由脚本声明，
+catalog 装载时放进 `rt.constants`（实现按家族住在 `recipe_lib/<家族>.py` 与 `shared.py`）。
 
-判据与 `test_recipe_nav.py` 同形：实现住在工厂里、前导名字按 `g` 现取；脚本侧只留调用点，
-本地同名 `def` 不许再留与注入版逐字相同的副本。走法分派用假手机断言「选了哪一份」与
-「认不出的值当场报错」——静默回退会点错入口，比报错更难查。
+`scope()` 搭一次执行的视图：假手机 + 带常量的 `rt` + 按执行绑好的库函数。分派用例断言「选了
+哪一份」，报错用例守认不出的值当场抛 `RuntimeError`——静默回退会点错入口，比报错更难查
+（#819 的口径）。`StrategyBehaviourTests` 守选中之后的行为：回读确认、落点核对与改动台账。
 """
 import sys
 import unittest
