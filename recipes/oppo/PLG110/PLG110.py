@@ -44,8 +44,8 @@ STORE_PROMOTIONS = [
 def step_ad_tracking(p, rt):
 
     rt.skip_in_safe_mode()
-    model = p.d.shell("getprop ro.product.model").output.strip()
-    build = p.d.shell("getprop ro.build.display.id").output.strip()
+    model = p.shell("getprop ro.product.model").strip()
+    build = p.shell("getprop ro.build.display.id").strip()
     if model != "PLG110" or not build.startswith(BUILD):
         rt.skip("参考或版本不同时不批量处理逐应用广告跟踪，需重新核对")
     print("  将关闭逐应用 OAID 广告跟踪许可；不重置设备标识符。", flush=True)

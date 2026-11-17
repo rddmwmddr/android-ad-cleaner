@@ -95,7 +95,7 @@ class Redmi24094RAD4CRecipeTests(unittest.TestCase):
         ]
         scope, _ = load_recipe(p, self.path)
         scope["close_with_plain_tap"](["资源推荐", "热榜推荐"], "下载管理·信息流")
-        self.assertEqual(p.d.shell.call_count, 2)
+        self.assertEqual(p.shell.call_count, 2)
         self.assertEqual(p.confirm.call_count, 2)
         self.assertEqual(p.changed, [("下载管理·信息流", "资源推荐"),
                                      ("下载管理·信息流", "热榜推荐")])
@@ -110,7 +110,7 @@ class Redmi24094RAD4CRecipeTests(unittest.TestCase):
         ]
         scope, _ = load_recipe(p, self.path)
         scope["close_with_plain_tap"](["资源推荐", "热榜推荐"], "浏览器·隐私和安全")
-        self.assertEqual(p.d.shell.call_count, 1)
+        self.assertEqual(p.shell.call_count, 1)
         self.assertEqual(p.changed, [("浏览器·隐私和安全", "热榜推荐")])
 
     def test_plain_tap_fallback_aborts_when_target_missing(self):
@@ -119,7 +119,7 @@ class Redmi24094RAD4CRecipeTests(unittest.TestCase):
         scope, _ = load_recipe(p, self.path)
         with self.assertRaisesRegex(RuntimeError, "未识别全部目标"):
             scope["close_with_plain_tap"](["资源推荐", "热榜推荐"], "下载管理·信息流")
-        p.d.shell.assert_not_called()
+        p.shell.assert_not_called()
 
     def test_note_14_pro_remains_a_separate_recipe(self):
         path, reference = run.recipe_for("24090RA29C", "Redmi")

@@ -5,13 +5,13 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import Mock, call, patch
+from unittest.mock import call, patch
 from xml.etree import ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
 import run
-from fixtures import load_recipe, phone_mock
+from fixtures import load_recipe, phone_mock, shell_result
 
 RECIPE = ROOT / "recipes/meizu/MEIZU 21 Pro/MEIZU 21 Pro.toml"
 
@@ -29,8 +29,8 @@ class MeizuRecipeTests(unittest.TestCase):
 
     def device(self, phone):
         """按本机型号与录制版本应答 getprop；要验不符时由用例自己覆盖。"""
-        phone.d.shell.side_effect = lambda command: Mock(
-            output="MEIZU 21 Pro" if "model" in command else "Flyme 12.6.0.0A")
+        phone.shell.side_effect = lambda command: shell_result(
+            "MEIZU 21 Pro" if "model" in command else "Flyme 12.6.0.0A")
         return phone
 
     def load(self, phone, only=None, out=None):
@@ -39,17 +39,17 @@ class MeizuRecipeTests(unittest.TestCase):
 
     def test_version_mismatch_aborts_before_navigation(self):
         p = self.phone()
-        p.d.shell.side_effect = [Mock(output="MEIZU 21 Pro"), Mock(output="Flyme 12.6.1.0A")]
+        p.shell.side_effect = [shell_result("MEIZU 21 Pro", 0), shell_result("Flyme 12.6.1.0A", 0)]
         scope = self.load(p, ["全局搜索"])
         self.assertEqual(scope["FAILED_STEPS"], ["全局搜索"])
         p.click.assert_not_called()
-        self.assertEqual(p.d.shell.call_count, 2)
+        self.assertEqual(p.shell.call_count, 2)
 
     def test_safe_mode_runs_the_step_instead_of_aborting_on_model_mismatch(self):
         # 别的魅族机型借这份脚本走安全模式；型号硬校验若照旧生效，8 段会全部空转（#379）
         p = self.phone()
         p.safe_mode = True
-        p.d.shell.return_value = Mock(output="MEIZU 22")
+        p.shell.return_value = shell_result("MEIZU 22", 0)
         scope = self.load(p, ["探针"])
         ran = []
 
@@ -59,11 +59,11 @@ class MeizuRecipeTests(unittest.TestCase):
 
         self.assertEqual(ran, [1])
         self.assertEqual(scope["FAILED_STEPS"], [])
-        self.assertFalse(p.d.shell.called)
+        self.assertFalse(p.shell.called)
 
     def test_unsafe_mode_still_aborts_on_model_mismatch(self):
         p = self.phone()
-        p.d.shell.return_value = Mock(output="MEIZU 22")
+        p.shell.return_value = shell_result("MEIZU 22", 0)
         scope = self.load(p, ["探针"])
         ran = []
 

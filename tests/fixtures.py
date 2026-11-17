@@ -268,6 +268,15 @@ class Device:
         return SimpleNamespace(selector=None, click=click)
 
 
+def shell_result(output="", exit_code=0):
+    """假手机上 `p.shell()` 的返回值形状：是字符串，另带 `exit_code`（#1474）。
+
+    桩成 `p.shell` 的用例用它，脚本才既能把结果当字符串读，又能判拉起成没成功。"""
+    load_tool()
+    import fast as fast_mod
+    return fast_mod.ShellResult(output, exit_code)
+
+
 def phone_stub(serial="test", shell=None, fast_mod=None, **fields):
     """造一个不连手机的 Phone：假 link 与假传输都由它接好，其余属性按关键字传。
 
@@ -457,9 +466,10 @@ def phone_mock(fast_mod=None, **fields):
     p.skeleton_sigs, p.skeleton_count = set(), 0
     p.mismatch_probes = 0
     p.reader = p.d = Mock(name="reader")
-    # 门面动词 `shell` 返回输出串（`Screen.shell` 的语义），底下仍是同一个 `d.shell`：
-    # 用例如旧桩在 `p.d.shell` 上，引擎改走门面之后两处是同一份桩（#1476）。
-    p.shell = lambda command, **kw: p.d.shell(command, **kw).output
+    # 一次下发，两个名字：门面 `shell` 与传输 `d.shell` 指向同一个桩，桩打在哪儿都算数，
+    # `call_args_list` 也只有一份（#1476 / #1474）。
+    p.shell = Mock()
+    p.d.shell = p.shell
     for name, value in fields.items():
         setattr(p, name, value)
     return p

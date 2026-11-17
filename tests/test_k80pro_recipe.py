@@ -36,7 +36,7 @@ class K80ProRecipeTests(recipe_case.RecipeSafetyCase):
         with patch.object(scope["time"], "sleep"):
             self.assertTrue(scope["browser_start"]())
         self.assertEqual(p.start.call_count, 2)
-        p.d.shell.assert_called_once_with("am force-stop com.android.browser")
+        p.shell.assert_called_once_with("am force-stop com.android.browser")
 
     def test_browser_start_does_not_retry_other_failures(self):
         p = Mock()
@@ -44,7 +44,7 @@ class K80ProRecipeTests(recipe_case.RecipeSafetyCase):
         scope = self.load(p)
         with self.assertRaisesRegex(RuntimeError, "无法打开"):
             scope["browser_start"]()
-        p.d.shell.assert_not_called()
+        p.shell.assert_not_called()
         self.assertEqual(p.start.call_count, 1)
 
     def test_browser_start_reports_failure_when_retry_also_leaves(self):
@@ -66,7 +66,7 @@ class K80ProRecipeTests(recipe_case.RecipeSafetyCase):
         scope = self.load(p)
         with patch.object(scope["time"], "sleep"):
             self.assertTrue(scope["gear_tap"]("com.android.browser", "BrowserSettingsActivity"))
-        p.d.shell.assert_called_once_with("input tap 980 191")
+        p.shell.assert_called_once_with("input tap 980 191")
 
     def test_gear_tap_reports_when_settings_still_not_open(self):
         root = ET.fromstring(

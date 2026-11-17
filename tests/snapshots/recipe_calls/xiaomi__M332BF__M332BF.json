@@ -4,7 +4,6 @@
   "present": [
    ["系统广告", "locked", [], {}],
    ["系统广告", "shell", ["am start -f 0x10008000 -n com.android.settings/.ad.AdServiceSettings"], {}],
-   ["系统广告", "d.shell", ["am start -f 0x10008000 -n com.android.settings/.ad.AdServiceSettings"], {"timeout": null}],
    ["系统广告", "expect_page", ["个性化广告推荐", 3], {}],
    ["系统广告", "off", [], {"page": "系统·广告服务", "only": ["个性化广告推荐"]}],
    ["应用商店", "locked", [], {}],
@@ -34,7 +33,6 @@
    ["下载管理", "back", [], {}],
    ["主题", "locked", [], {}],
    ["主题", "shell", ["pm path com.android.thememanager"], {}],
-   ["主题", "d.shell", ["pm path com.android.thememanager"], {"timeout": null}],
    ["主题", "start", ["com.android.thememanager", ".ThemeResourceProxyTabActivity"], {}],
    ["主题", "sig", [], {}],
    ["主题", "tab", ["我的"], {}],
@@ -116,7 +114,6 @@
   "absent": [
    ["系统广告", "locked", [], {}],
    ["系统广告", "shell", ["am start -f 0x10008000 -n com.android.settings/.ad.AdServiceSettings"], {}],
-   ["系统广告", "d.shell", ["am start -f 0x10008000 -n com.android.settings/.ad.AdServiceSettings"], {"timeout": null}],
    ["系统广告", "expect_page", ["个性化广告推荐", 3], {}],
    ["应用商店", "locked", [], {}],
    ["应用商店", "start", ["com.xiaomi.market", ".ui.MarketPreferenceActivity"], {"expect": "通知设置", "budget": 2}],
@@ -135,7 +132,6 @@
    ["下载管理", "back", [], {}],
    ["主题", "locked", [], {}],
    ["主题", "shell", ["pm path com.android.thememanager"], {}],
-   ["主题", "d.shell", ["pm path com.android.thememanager"], {"timeout": null}],
    ["主题", "start", ["com.android.thememanager", ".ThemeResourceProxyTabActivity"], {}],
    ["主题", "sig", [], {}],
    ["主题", "tab", ["我的"], {}],

@@ -88,9 +88,9 @@ def safe_ui(p, rt):
 
 
 def guard(p, rt):
-    if p.d.shell("getprop ro.product.model").output.strip() not in MODELS:
+    if p.shell("getprop ro.product.model").strip() not in MODELS:
         rt.skip("型号不匹配，跳过；不使用其他型号的路径")
-    if not p.d.shell("getprop ro.build.display.id").output.strip().startswith(BUILD):
+    if not p.shell("getprop ro.build.display.id").strip().startswith(BUILD):
         rt.skip("系统版本不匹配，跳过；请重新核对页面")
 
 

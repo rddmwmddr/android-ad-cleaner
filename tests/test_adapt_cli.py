@@ -34,7 +34,7 @@ import explore  # noqa: E402
 import recipe_loader  # noqa: E402
 import run  # noqa: E402
 import vocab  # noqa: E402
-from fixtures import Clock, fake_adb, phone_mock  # noqa: E402
+from fixtures import shell_result, Clock, fake_adb, phone_mock  # noqa: E402
 
 BASELINE = ROOT / "tests" / "baselines" / "adapt_cli.json"
 
@@ -93,7 +93,7 @@ def draft_phone(switch_lists, tap_ok=True):
     p.top.return_value = None
     p.off.return_value = 0
     p.switches.side_effect = switch_lists
-    p.d.shell.return_value = types.SimpleNamespace(output="PJA110_14.0.0.812")
+    p.shell.return_value = shell_result("PJA110_14.0.0.812")
     return p
 
 
@@ -344,7 +344,7 @@ class CheckReportTests(unittest.TestCase):
                 code = adapt.main(["check", "-s", "FAKE_SERIAL", str(self.draft(d))])
         self.assertEqual(code, 1)
         self.assertEqual(err.getvalue(), "手机锁屏了，请机主解锁后再跑\n")
-        p.d.shell.assert_not_called()
+        p.shell.assert_not_called()
         p.off.assert_not_called()
 
     def test_close_failure_keeps_the_lock_message_unprinted(self):

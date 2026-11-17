@@ -111,10 +111,10 @@
    ["负一屏", "locked", [], {}],
    ["负一屏", "focus", [], {}],
    ["负一屏", "sig", [], {}],
-   ["负一屏", "d.shell", ["input keyevent HOME"], {}],
+   ["负一屏", "shell", ["input keyevent HOME"], {}],
    ["负一屏", "settle", ["", 1.0], {}],
    ["负一屏", "sig", [], {}],
-   ["负一屏", "d.shell", ["input keyevent HOME"], {}],
+   ["负一屏", "shell", ["input keyevent HOME"], {}],
    ["负一屏", "settle", ["", 1.0], {}],
    ["负一屏", "focus", [], {}]
   ],
@@ -191,10 +191,10 @@
    ["负一屏", "locked", [], {}],
    ["负一屏", "focus", [], {}],
    ["负一屏", "sig", [], {}],
-   ["负一屏", "d.shell", ["input keyevent HOME"], {}],
+   ["负一屏", "shell", ["input keyevent HOME"], {}],
    ["负一屏", "settle", ["", 1.0], {}],
    ["负一屏", "sig", [], {}],
-   ["负一屏", "d.shell", ["input keyevent HOME"], {}],
+   ["负一屏", "shell", ["input keyevent HOME"], {}],
    ["负一屏", "settle", ["", 1.0], {}],
    ["负一屏", "focus", [], {}]
   ]

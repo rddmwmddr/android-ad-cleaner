@@ -110,7 +110,7 @@ class StrategyBehaviourTests(unittest.TestCase):
         after = [("推荐", False, (100, 200)), ("保留项", True, (300, 400))]
         phone.switches.side_effect = [before, before, after]
         g["close_with_plain_tap"](["推荐"], "下载管理·信息流")
-        phone.d.shell.assert_called_once_with("input tap 100 200")
+        phone.shell.assert_called_once_with("input tap 100 200")
         phone.confirm.assert_called_once()
         phone.changed.append.assert_called_once_with(("下载管理·信息流", "推荐"))
 
@@ -127,7 +127,7 @@ class StrategyBehaviourTests(unittest.TestCase):
         phone.tree.return_value = ET.fromstring(GEAR_NODE)
         phone.focus.return_value = "com.android.browser/.BrowserSettingsActivity"
         self.assertTrue(g["gear_tap"]("com.android.browser", "BrowserSettingsActivity"))
-        phone.d.shell.assert_called_once_with("input tap 960 160")
+        phone.shell.assert_called_once_with("input tap 960 160")
 
 
 if __name__ == "__main__":

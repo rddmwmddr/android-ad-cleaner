@@ -19,7 +19,7 @@ def launch(p, rt, activity, app):
     pkg = activity.split("/", 1)[0]
     p.app = pkg
     p.promoted.clear()
-    p.d.shell(f"am start -f 0x10008000 -n {activity}")
+    p.shell(f"am start -f 0x10008000 -n {activity}")
     for _ in range(20):
         if p.focus().split("/", 1)[0] == pkg and p.has_text():
             return
@@ -68,7 +68,7 @@ def _honor_my_tab(p, rt, app):
     rt.clock.sleep(1)
 
 def _honor_browser_settings_mounted(p, rt):
-    if "package:" not in p.d.shell("pm path com.honor.browser").output:
+    if "package:" not in p.shell("pm path com.honor.browser"):
         return baidu_browser(p, rt)
     p.start("com.honor.browser")
     p.dismiss()

@@ -181,9 +181,9 @@ class SwipeInTests(unittest.TestCase):
         p = phone_mock(W=1080, H=2400)
         p.find.side_effect = [False, False, True]     # 第二轮读到「我的服务」
         self.assertTrue(oppo.assistant_swipe_in(p, Mock(), "我的服务", "添加卡片"))
-        self.assertEqual([item.args[0] for item in p.d.shell.call_args_list[:2]],
+        self.assertEqual([item.args[0] for item in p.shell.call_args_list[:2]],
                          ["input keyevent HOME"] * 2)
-        self.assertEqual(len([item for item in p.d.shell.call_args_list
+        self.assertEqual(len([item for item in p.shell.call_args_list
                               if "input swipe" in item.args[0]]), 2)
         p.find.assert_any_call("我的服务")             # 一条按包含比
         p.find.assert_any_call("添加卡片", exact=True)  # 一条按精确比
@@ -193,7 +193,7 @@ class SwipeInTests(unittest.TestCase):
         p = phone_mock(W=1080, H=2400)
         p.find.return_value = False
         self.assertFalse(oppo.assistant_swipe_in(p, Mock(), "我的服务", "添加卡片"))
-        self.assertEqual(len([item for item in p.d.shell.call_args_list
+        self.assertEqual(len([item for item in p.shell.call_args_list
                               if "input swipe" in item.args[0]]), 3)
 
     def test_without_texts_the_foreground_window_name_decides(self):
@@ -203,7 +203,7 @@ class SwipeInTests(unittest.TestCase):
         p.focus.side_effect = ["com.android.launcher/.Launcher",
                                "com.coloros.assistantscreen/.AssistantScreenActivity"]
         self.assertTrue(oppo.assistant_swipe_in(p, Mock()))
-        self.assertEqual(len([item for item in p.d.shell.call_args_list
+        self.assertEqual(len([item for item in p.shell.call_args_list
                               if "input swipe" in item.args[0]]), 2)
         p.find.assert_not_called()
 

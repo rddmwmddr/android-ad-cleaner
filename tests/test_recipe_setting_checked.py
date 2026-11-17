@@ -9,12 +9,11 @@ say("✗ …跳过") 再返回 False，不抛异常。脚本丢掉这个返回�
 """
 import ast
 from pathlib import Path
-from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, call
 
 import fixtures
-from fixtures import load_recipe, phone_mock
+from fixtures import load_recipe, phone_mock, shell_result
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -162,8 +161,8 @@ class SegmentFailsWhenSettingFails(unittest.TestCase):
         p.setting = lambda *a, **k: False
         if recipe in BUILD_GATED:
             model, build = BUILD_GATED[recipe]
-            p.d.shell = lambda cmd, timeout=60: SimpleNamespace(
-                output=model if "ro.product.model" in cmd else build, exit_code=0)
+            p.shell = lambda cmd, timeout=60: shell_result(
+                model if "ro.product.model" in cmd else build, 0)
         scope, out = load_recipe(p, recipe_of(recipe), only=[name])
         return scope, out.getvalue()
 
@@ -262,7 +261,7 @@ class FallbackStaysSilent(unittest.TestCase):
         p.setting = lambda *a, **k: True
         scope, _ = load_recipe(p, recipe_of("redmi-25060RK16C"), only=["系统广告"])
         self.assertEqual(scope["FAILED_STEPS"], [])
-        p.d.shell.assert_not_called()
+        p.shell.assert_not_called()
         self.assertGreaterEqual(p.off.call_count, 1)
 
     def test_redmi_search_miss_walks_the_menu(self):
@@ -270,7 +269,7 @@ class FallbackStaysSilent(unittest.TestCase):
         p.setting = lambda *a, **k: False
         scope, _ = load_recipe(p, recipe_of("redmi-25060RK16C"), only=["系统广告"])
         self.assertEqual(scope["FAILED_STEPS"], [])
-        p.d.shell.assert_called_once_with("am start -f 0x10008000 -a android.settings.SETTINGS")
+        p.shell.assert_called_once_with("am start -f 0x10008000 -a android.settings.SETTINGS")
 
     def xiaomi_phone(self, search_hits):
         """close_named 前后各读一次开关，第二次读到已关才算核对通过。"""
@@ -285,13 +284,13 @@ class FallbackStaysSilent(unittest.TestCase):
         p = self.xiaomi_phone(search_hits=True)
         scope, text = load_recipe(p, recipe_of("xiaomi-24129PN74C"), only=["系统广告"])
         self.assertEqual(scope["FAILED_STEPS"], [], text)
-        p.d.shell.assert_not_called()
+        p.shell.assert_not_called()
 
     def test_xiaomi_search_miss_uses_the_deeplink(self):
         p = self.xiaomi_phone(search_hits=False)
         scope, text = load_recipe(p, recipe_of("xiaomi-24129PN74C"), only=["系统广告"])
         self.assertEqual(scope["FAILED_STEPS"], [], text)
-        p.d.shell.assert_called_once_with(
+        p.shell.assert_called_once_with(
             "am start -f 0x10008000 -n com.android.settings/.ad.AdServiceSettings")
 
 
@@ -321,7 +320,7 @@ class FallbackFailingTooFailsTheSegment(unittest.TestCase):
         self.assertIn("✗ 未完成：没找到「广告与隐私」入口", out.getvalue())
         # 先落到「设置搜索失败 → 菜单三步」那一支，再从第一步失败出来；
         # 只断言 FAILED_STEPS 的话，把菜单链整段删成无条件 raise 也照样绿。
-        p.d.shell.assert_called_once_with("am start -f 0x10008000 -a android.settings.SETTINGS")
+        p.shell.assert_called_once_with("am start -f 0x10008000 -a android.settings.SETTINGS")
         self.assertEqual(p.tap.call_args_list, [call("隐私和安全", exact=True)])
 
 

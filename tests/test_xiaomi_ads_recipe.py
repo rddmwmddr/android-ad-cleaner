@@ -178,7 +178,7 @@ class SearchFirstTests(unittest.TestCase):
         phone, events, scope, _out = self.walk()
         self.assertEqual(events, [("off", ["个性化广告推荐", "广告跟踪"])])
         phone.entry.assert_not_called()
-        phone.d.shell.assert_not_called()
+        phone.shell.assert_not_called()
         self.assertEqual(scope["FAILED_STEPS"], [])
 
     def test_a_search_that_misses_walks_the_menu_path_column_by_column(self):
@@ -211,7 +211,7 @@ class SystemAdsMenuTests(unittest.TestCase):
         reached, phone, rt = self.walk([True, True, True], security_tab_first=True,
                                        painted={"人身安全"})
         self.assertTrue(reached)
-        self.assertEqual(phone.d.shell.call_args_list,
+        self.assertEqual(phone.shell.call_args_list,
                          [call("am start -f 0x10008000 -a android.settings.SETTINGS")])
         phone.tap.assert_not_called()                 # 页面已经在「安全」这一页，不再切
         self.assertEqual(rt.clock.sleep.call_args_list, [call(1.2)])

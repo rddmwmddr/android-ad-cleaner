@@ -14,7 +14,6 @@ import types
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,6 +36,7 @@ import row  # noqa: E402
 from fast import ScreenLocked  # noqa: E402
 from row import icon_hit  # noqa: E402
 from fixtures import (EMPTY_PAGE, Clock, clocked, fake_phone, load_recipe,  # noqa: E402
+                      shell_result,
                       phone_mock, phone_stub, stub)
 
 DOCS = "\n".join(p.read_text(encoding="utf-8") for p in (ROOT / "docs" / "清单").glob("*.md")
@@ -607,15 +607,15 @@ def shell_recorder_901(p, swipes, before=HOME_PAGE_901, after=ICON_PAGE_901, foc
             state["front"], state["home"] = LAUNCHER_901, True
         elif cmd.startswith("input swipe"):
             swipes.append(cmd)
-        return SimpleNamespace(output="", exit_code=0)
+        return shell_result("")
 
-    p.d.shell.side_effect = shell
+    p.shell.side_effect = shell
     p.focus.side_effect = lambda: state["front"]
     p.tree.side_effect = lambda: page_901(after if swipes else after_home if state["home"] else before)
 
 
 def commands_901(p):
-    return [call.args[0] for call in p.d.shell.call_args_list]
+    return [call.args[0] for call in p.shell.call_args_list]
 
 
 def load_901(p, recipe):
@@ -733,7 +733,7 @@ class AssistantEntryTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "未停在系统桌面"):
                     load_901(p, recipe)["assistant_icon"]()
                 self.assertFalse(any("input swipe" in c.args[0]
-                                     for c in p.d.shell.call_args_list))
+                                     for c in p.shell.call_args_list))
 
     def test_missing_entry_reports_where_the_swipe_stopped(self):
         """认不到头像入口：输出带上停在哪个 Activity 与页面结构摘要，文案保持不变。"""
@@ -1213,7 +1213,7 @@ def expects_667(p):
 
 
 def shells_667(p):
-    return [c.args[0] for c in p.d.shell.call_args_list]
+    return [c.args[0] for c in p.shell.call_args_list]
 
 
 def fail_direct_667(pkg, activity=None, **kw):
@@ -1987,7 +1987,7 @@ def page_texts_796(*labels, top=100):
 
 def home_presses_796(p):
     """按 HOME 的次数：shell 与门面 `press` 两条路都算。"""
-    return ([c.args[0] for c in p.d.shell.call_args_list if "keyevent HOME" in c.args[0]]
+    return ([c.args[0] for c in p.shell.call_args_list if "keyevent HOME" in c.args[0]]
             + [c.args[0] for c in p.press.call_args_list if c.args[0] == "home"])
 
 
@@ -2022,9 +2022,9 @@ class PnmNegativeScreenEntryTests(unittest.TestCase):
         p = phone_796(find=lambda text, **kw: object() if text == "头像" else None)
         scope, _ = load_796(p, PNM_796, "负一屏")
         self.assertEqual(scope["FAILED_STEPS"], [])
-        self.assertEqual(p.d.shell.call_args_list[0].args[0], HIBOARD_START_796)
+        self.assertEqual(p.shell.call_args_list[0].args[0], HIBOARD_START_796)
         self.assertEqual(home_presses_796(p), [])
-        self.assertEqual(len(p.d.shell.call_args_list), 1)
+        self.assertEqual(len(p.shell.call_args_list), 1)
         p.tap.assert_any_call("头像", exact=True, scrolls=0)
 
     def test_negative_screen_falls_back_to_the_swipe_when_the_activity_does_not_land(self):
@@ -2033,9 +2033,9 @@ class PnmNegativeScreenEntryTests(unittest.TestCase):
         scope, out = load_796(p, PNM_796, "负一屏")
         self.assertEqual(scope["FAILED_STEPS"], ["负一屏"])
         self.assertIn("负一屏没打开", out)
-        self.assertEqual(p.d.shell.call_args_list[0].args[0], HIBOARD_START_796)
+        self.assertEqual(p.shell.call_args_list[0].args[0], HIBOARD_START_796)
         self.assertEqual(len(home_presses_796(p)), 1)
-        self.assertTrue(any("input swipe" in c.args[0] for c in p.d.shell.call_args_list))
+        self.assertTrue(any("input swipe" in c.args[0] for c in p.shell.call_args_list))
 
 
 class PnmAdTrackingEntryTests(unittest.TestCase):
@@ -2088,9 +2088,9 @@ class PlrSearchEntryTests(unittest.TestCase):
                   texts=lambda: page_texts_796("搜索范围"))
         scope, _ = load_796(p, PLR_796, "下拉搜索")
         self.assertEqual(scope["FAILED_STEPS"], [])
-        self.assertEqual(p.d.shell.call_args_list[0].args[0], SEARCH_SETTING_796)
+        self.assertEqual(p.shell.call_args_list[0].args[0], SEARCH_SETTING_796)
         self.assertEqual(home_presses_796(p), [])
-        self.assertFalse(any("input swipe" in c.args[0] for c in p.d.shell.call_args_list))
+        self.assertFalse(any("input swipe" in c.args[0] for c in p.shell.call_args_list))
         p.tap.assert_any_call("搜索范围", exact=True)
 
     def test_pull_down_search_falls_back_to_the_desktop_gesture(self):
@@ -2100,9 +2100,9 @@ class PlrSearchEntryTests(unittest.TestCase):
         self.assertEqual(scope["FAILED_STEPS"], ["下拉搜索"])
         self.assertIn("下拉没进全局搜索", out)
         self.assertIn("没进全局搜索设置页", out)
-        self.assertEqual(p.d.shell.call_args_list[0].args[0], SEARCH_SETTING_796)
+        self.assertEqual(p.shell.call_args_list[0].args[0], SEARCH_SETTING_796)
         self.assertEqual(len(home_presses_796(p)), 1)
-        self.assertTrue(any("input swipe" in c.args[0] for c in p.d.shell.call_args_list))
+        self.assertTrue(any("input swipe" in c.args[0] for c in p.shell.call_args_list))
 
 
 # ---------- 来源 tests/test_store_privacy_933.py ----------
@@ -2668,7 +2668,7 @@ def literal_730(node):
 
 
 def monkey_shells_730(tree):
-    """`p.d.shell("… monkey … com.android.thememanager …")`：注定 abort 的那条命令。"""
+    """`p.shell("… monkey … com.android.thememanager …")`：注定 abort 的那条命令。"""
     hits = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call) or not node.args:
@@ -2730,9 +2730,9 @@ class ThemeFallbackBehaviourTests(unittest.TestCase):
         def shell(command, timeout=None):
             for package, output in paths.items():
                 if command == f"pm path {package}":
-                    return SimpleNamespace(output=output, exit_code=0)
-            return SimpleNamespace(output="", exit_code=0)
-        p.d.shell.side_effect = shell
+                    return shell_result(output)
+            return shell_result("")
+        p.shell.side_effect = shell
         out = io.StringIO()
         scope, _ = load_recipe(p, path, only="主题", out=out)
         return p, out.getvalue(), scope
@@ -2743,7 +2743,7 @@ class ThemeFallbackBehaviourTests(unittest.TestCase):
             with self.subTest(recipe=path.parent.name):
                 p, _, _ = self.load(path, "", "package:/system/app/ThemeManager/ThemeManager.apk")
                 # 只比对拉起那一步：往后的「我的 → 齿轮」与开关校验由 #906 的用例守
-                p.d.shell.assert_any_call(f"pm path {THEME}")
+                p.shell.assert_any_call(f"pm path {THEME}")
                 p.start.assert_called_once_with(THEME, DIRECT)
 
     # 缺失主题管理包时按跳过收尾的那条判据由 #906 / #902 一起守（覆盖全部脚本），这里不再重复。
@@ -3035,7 +3035,7 @@ class ThemeSettingsLandingTests(unittest.TestCase):
 
         def shell(command, timeout=None):
             return SimpleShell(INSTALLED_906 if command == f"pm path {THEME_906}" else "")
-        p.d.shell.side_effect = shell
+        p.shell.side_effect = shell
         p.switches.side_effect = lambda *a, **k: [(name, on, (900, 500)) for name, on in rows.items()]
 
         def fake_off(*a, only=None, **k):
@@ -3103,21 +3103,19 @@ class ThemeUnreachableStillSkippedTests(unittest.TestCase):
             with self.subTest(recipe=str(path.relative_to(ROOT))):
                 p = phone_mock()
                 p.locked = lambda: False
-                p.d.shell = Mock(return_value=SimpleShell(""))
+                p.shell.return_value = shell_result("")
                 out = io.StringIO()
                 scope, _ = load_recipe(p, path, only="主题", out=out)
                 self.assertEqual(scope["SKIPPED_STEPS"], [])
                 self.assertEqual(scope["FAILED_STEPS"], [])
                 self.assertIn("本机没有主题管理包，跳过", out.getvalue())
-                p.d.shell.assert_any_call(f"pm path {THEME_906}")
+                p.shell.assert_any_call(f"pm path {THEME_906}")
                 p.start.assert_not_called()
 
 
-class SimpleShell:
-    """`p.d.shell` 的返回形状：只要 output / exit_code。"""
-
-    def __init__(self, output=""):
-        self.output, self.exit_code = output, 0
+def SimpleShell(output=""):     # noqa: N802 - 旧名字，调用点很多，保留
+    """`p.shell` 的返回形状：是字符串，另带 `exit_code`（#1474 起与门面返回同一个类型）。"""
+    return shell_result(output)
 
 
 # ---------- 来源 tests/test_theme_unreachable_902.py ----------
@@ -3149,10 +3147,10 @@ class ThemeUnreachableTests(unittest.TestCase):
         def shell(command, timeout=None):
             for package, output in installed.items():
                 if command == "pm path " + package:
-                    return SimpleNamespace(output=output, exit_code=0)
-            return SimpleNamespace(output="", exit_code=0)
+                    return shell_result(output)
+            return shell_result("")
 
-        p.d.shell.side_effect = shell
+        p.shell.side_effect = shell
         # 落点只认 `Phone.start` 报错里带着的那份；抛错之后再读前台有窗口期，故意让它读成别的。
         p.screen.focus = lambda: "com.example.stale/.Main"
         p.start.side_effect = RuntimeError(
@@ -3166,7 +3164,7 @@ class ThemeUnreachableTests(unittest.TestCase):
         """只装了主题管理包、没有主题商店：脚本会走代理页兜底。"""
         def shell(command, timeout=None):
             installed = command == "pm path " + THEME_902
-            return SimpleNamespace(output="package:/system/app/ThemeManager/ThemeManager.apk"
+            return shell_result("package:/system/app/ThemeManager/ThemeManager.apk"
                                    if installed else "", exit_code=0)
         return shell
 
@@ -3212,7 +3210,7 @@ class ThemeUnreachableTests(unittest.TestCase):
         p = phone_mock()
         p.locked = lambda: False
         p.screen.focus = lambda: LAUNCHER_902
-        p.d.shell.side_effect = self.manager_only()
+        p.shell.side_effect = self.manager_only()
         p.start.side_effect = RuntimeError(f"无法打开 {THEME_902}：** No activities found to run")
         out = io.StringIO()
         scope, _ = load_recipe(p, ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml", only="主题", out=out)
@@ -3225,7 +3223,7 @@ class ThemeUnreachableTests(unittest.TestCase):
         p = phone_mock()
         p.locked = lambda: False
         p.screen.focus = lambda: LAUNCHER_902
-        p.d.shell.side_effect = self.manager_only()
+        p.shell.side_effect = self.manager_only()
         p.start.side_effect = adb_link.DeviceLost("device offline")
         with self.assertRaises(adb_link.DeviceLost):
             load_recipe(p, ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml", only="主题", out=io.StringIO())

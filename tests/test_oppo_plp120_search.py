@@ -55,7 +55,7 @@ class Plp120SearchEntryTests(unittest.TestCase):
         p = self.phone(SETTINGS_FOCUS, SETTINGS_TEXTS)
         scope = load(p)
         self.assertTrue(self.run_search_settings(scope))
-        self.assertIn("gs://search/setting", p.d.shell.call_args_list[0].args[0])
+        self.assertIn("gs://search/setting", p.shell.call_args_list[0].args[0])
         p.tap.assert_not_called()
 
     def test_wait_keeps_polling_until_the_settings_page_renders(self):
@@ -100,7 +100,7 @@ class Plp120SearchEntryTests(unittest.TestCase):
         p.tap.side_effect = tap
         scope = load(p)
         self.assertTrue(self.run_search_settings(scope))
-        commands = [call.args[0] for call in p.d.shell.call_args_list]
+        commands = [call.args[0] for call in p.shell.call_args_list]
         self.assertIn("gs://search/setting", commands[0])
         self.assertTrue(any("input keyevent HOME" in c for c in commands))
         self.assertTrue(any("input swipe" in c for c in commands))

@@ -67,7 +67,7 @@ DATA = frozenset({
 # `miss` 也是这一类：`p.miss = 0` 随 PNM-AN10 的广告跟踪段搬进数据的 `miss_reset` op（#1372），
 # 写入落在解释器里，`miss` 仍在 `DATA`。
 SCRIPT_NAMES = frozenset({
-    "await_page", "back", "changed", "click", "confirm", "d", "dismiss", "enter",
+    "await_page", "back", "changed", "click", "confirm", "dismiss", "enter",
     "entry", "expect_page", "find", "focus", "go", "H", "has_text", "in_settings_page",
     "locked", "note_miss", "off", "on_screen", "page_evidence",
     "press", "safe_mode", "scroll", "scroll_more", "setting", "shell", "settle", "sig",
