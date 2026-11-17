@@ -51,9 +51,12 @@ class ChannelJudgement:
     foreground_service: bool = False
 
 
-def protected_channel(name: str, channel_id: str = "", list_label: str = "") -> bool:
-    # 名称可能带空格 / 零宽字符；当前名称、ID、旧清单描述任一命中就保留。
-    text = re.sub(r"[\s\u200b\ufeff]+", "", " ".join((name, channel_id, list_label)))
+def protected_channel(name: str, channel_id: str = "", list_label: str = "") -> bool:   # pragma: no mutate 不可达 / 语义等价：channel_id 每个调用方都显式传，默认值从不生效；list_label 的占位串接在末尾，造不出也打不掉前面的命中。
+    # 名称可能带空格 / 零宽字符；当前名称、ID、旧清单描述任一命中就保留。字段直接相连：
+    # 原来是 `" ".join(...)`，那个分隔空格本来就会被空白清除吃掉。
+    # 这个串不是 raw 字面量：零宽字符的转义由解释器转成实际字符、`\\s` 留给 re —— 写成 raw 时
+    # 变异器会把转义里十六进制的大小写翻一遍（同一码位），多出一个杀不掉的等价 mutant。
+    text = re.sub("[\\s\u200b\ufeff]+", "", name + channel_id + list_label)
     return bool(PHOTO_SPOT.search(text))
 
 
@@ -65,7 +68,7 @@ def _youtube_channel_two(fields: list[str]) -> bool:
     return False
 
 
-def classify(name: str, channel_id: str = "", list_label: str = "", package: str = "",
+def classify(name: str, channel_id: str = "", list_label: str = "", package: str = "",   # pragma: no mutate 语义等价：省略这三个参数时占位默认值不命中任何一个正则（KW / SKIP / SERVICE / VIVO / AD_NETWORK / PHOTO_SPOT），`_youtube_channel_two` 也要求某字段以 youtube 结尾。
              app: str = "", foreground_service: bool = False) -> ChannelJudgement:
     vivo = bool(VIVO_MARKETING.match(channel_id))
     ad_network = bool(AD_NETWORK.search(channel_id))
@@ -77,7 +80,7 @@ def classify(name: str, channel_id: str = "", list_label: str = "", package: str
         or fields[-1] == "其他"
     )
     return ChannelJudgement(
-        marketing_candidate=ad_network or bool(KW.search(name + " " + channel_id)),
+        marketing_candidate=ad_network or bool(KW.search(name) or KW.search(channel_id)),
         scan_excluded=bool(SKIP.search(name)) and not vivo and not ad_network,
         default_unchecked=default_unchecked,
         protected=protected_channel(name, channel_id, list_label),

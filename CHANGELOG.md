@@ -14,6 +14,10 @@
 - 一加 16 商店段的「消息管理」探测只翻前两屏，常态下省约 40 秒（#1281）
 
 ### 内部
+- diagnostics 清到 mutation 存活 0：USB 解析补字段与大小写用例，花括号集合标等价 pragma（#1427）
+- catalog/schema 清到 mutation 存活 0，报错原文与边界值补用例（#1414）
+- recipe_meta 清到 mutation 存活 0：补段名缺省与散落文件两条用例（#1420）
+- channel_policy 清到 mutation 存活 0：补渠道 ID 受保护用例，默认值标等价变异体（#1417）
 - recipe_pick 清到 mutation 存活 0：补主脚本与变体池用例，参考脚本段去掉不可达回退，两处占位默认值标等价 pragma（#1422）
 - events 清到 mutation 存活 0：中文逐字、逐行 flush 与载荷行原样返回补用例，编码行标等价 pragma（#1419）
 - mutation 的模块 → 测试映射按覆盖矩阵补到「无测试 = 0」（#1452）

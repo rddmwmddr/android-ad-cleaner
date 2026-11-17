@@ -79,7 +79,7 @@
 
 | 文件 | 为什么 | 断言数上限 |
 |---|---|---:|
-| `test_adb_link.py` | 手机连接：adb 在哪、命令服务断开 / 读屏超时 / 后台屏没了三种结局怎么判、读屏探测在哪找。 | 167 |
+| `test_adb_link.py` | 手机连接：adb 在哪、命令服务断开 / 读屏超时 / 后台屏没了三种结局怎么判、读屏探测在哪找。 | 176 |
 | `test_row.py` | 「开关所属的那一行」的唯一定义：结构定界、几何分带、同名去重与自绘开关去重。 | 64 |
 | `test_wait.py` | 「等到认得出」：超时、稳定、变化、受阻四个判据，外加等机主解锁。 | 47 |
 | `test_entries.py` | 入口速查表与它怎么被用：每条入口有出处、文档同源、reach() 按直达与搜索回退，以及各品牌脚本进具体入口（齿轮、直达、浏览器 / 主题 / 商店 / 负一屏）。 | 442 |
@@ -89,7 +89,7 @@
 | `test_client_events.py` | 客户端只认引擎事件：事件行不进日志、人话本身不改状态。 | 35 |
 | `test_summary.py` | 结果摘要的唯一定义：一段 tail 怎么说成一句话，两个宿主与两条链路说同一句。 | 16 |
 | `test_coverage_note.py` | 结果页验证档位提示的唯一定义：说不说的判据、按宿主分叉的措辞（整句逐字），与档位词表的对应。 | 15 |
-| `test_channel_classification.py` | 渠道判定：哪些渠道算营销、受保护、默认不勾，扫描因此列出谁、排除谁。 | 80 |
+| `test_channel_classification.py` | 渠道判定：哪些渠道算营销、受保护、默认不勾，扫描因此列出谁、排除谁。 | 81 |
 | `test_channel_outcomes.py` | 渠道批处理的结局记账与上报：一项的结局是值，怎么记、怎么报由几张表定。 | 213 |
 | `test_channel_page.py` | 渠道页：从哪条路走进去、认出的是不是渠道页、从哪一行拿开关。 | 152 |
 | `test_phone_facade.py` | Phone 门面 + 两个基座 + 五个阶段的对外契约。 | 21 |
@@ -108,19 +108,19 @@
 | `test_ui_session.py` | 读屏服务占用、失败清理、跨进程互斥与失败后的收尾。 | 39 |
 | `test_never_suspend.py` | NEVER 保护集：挂了会坏功能的包，整批拒绝、不落一条命令到手机。 | 13 |
 | `test_recipe_loader.py` | 机型脚本只有一个装载入口，测试不许自己 exec 一份脚本。 | 8 |
-| `test_recipe_meta_module.py` | 配方元数据住中立模块：非 CLI 代码 import 它不背 CLI 副作用。 | 8 |
+| `test_recipe_meta_module.py` | 配方元数据住中立模块：import 不背 CLI 副作用，脚本枚举跳过非目录项，头部三段缺省是空值（段名缺 name 也是空串）。 | 10 |
 | `test_recipe_variants.py` | 同一型号按系统版本选脚本变体、变体要进安装包，型号目录里哪一份算主脚本，以及没有本型号脚本时参考脚本按录制版本在同族里挑、怎么比对版本。 | 101 |
 | `test_recipe_setting_checked.py` | 机型脚本必须消费 p.setting() 的返回值，不能空跑还记成功。 | 35 |
 | `test_recipe_nav.py` | 机型库的拆分守卫（例外 `.py` 的同名助手必须升格进 `recipe_lib`；`shared.py` 的实现必须被 ≥2 个家族使用）、名字表 owner 与三个兼容壳的一致守卫（`SurfaceTests`），以及调用序列对拍驱动自己管基线 worktree。 | 22 |
 | `test_recipe_source.py` | 脚本事实层：实参按语法切分、形参回填与读不出态、Intent 三种包名写法、语法错直接抛，以及库实现表与源码扫描结果在进程内缓存。 | 37 |
-| `test_catalog.py` | catalog 内核：页面树数据经唯一装载入口跑出与旧脚本逐条相同的调用序列、装载期拒绝非法数据与写错的点名、only 两态与 page-wide 全关。 | 201 |
+| `test_catalog.py` | catalog 内核：页面树数据经唯一装载入口跑出与旧脚本逐条相同的调用序列、装载期拒绝非法数据与写错的点名（报错原文与边界值也逐字）、only 两态与 page-wide 全关。 | 211 |
 | `test_xiaomi_store_recipe.py` | 小米各机型的应用商店段：入口形态（回到首页 / 直达偏好页 / 底栏标签 / 顶栏齿轮）与收尾次序各一条，入口成功的那条路快照走不到。 | 64 |
 | `test_xiaomi_theme_recipe.py` | 小米主题两段：下半屏「我的」的判据、换页慢机型的签名等待，以及齿轮点不到那条出口——快照在这里只看得到一次 settle。 | 22 |
 | `test_xiaomi_ads_recipe.py` | 小米系统广告五台机：直达不通退回菜单的两个出口、设置搜索搜不到的那条失败，以及「安全」标签的重试轮与切完再翻一次——快照在「隐私与安全」那一步就断了。 | 57 |
 | `test_backups.py` | 备份目录的命名、扫描与 <型号>-gui 兜底。 | 35 |
 | `test_captures.py` | 失败现场落盘：两处留现场写原文、没目录不写、归档名与体积报数。 | 18 |
 | `test_error_report.py` | 错误上报：内容脱敏、预览与发送一致、限频、安装编号与服务器回应。 | 38 |
-| `test_diagnostics.py` | 设备诊断文本的唯一定义：给定一份整理好的 state，整段输出逐字等于什么，含按分支的措辞与脱敏。 | 29 |
+| `test_diagnostics.py` | 设备诊断文本的唯一定义：给定一份整理好的 state，整段输出逐字等于什么，含按分支的措辞与脱敏。 | 35 |
 | `test_updates.py` | 应用内更新：真实字节下载与状态迁移，网络与安装由边界替身接管。 | 63 |
 | `test_update_install.py` | 在临时目录里真正换文件：回滚、保留卸载器与新进程健康回执。 | 77 |
 | `test_win_preflight.py` | Windows 启动失败归因：缺 WebView2、MOTW、托管 dll 被判远程。 | 77 |
@@ -180,7 +180,7 @@
 | `test_download_page_rows.py` | 下载页与网盘说明的行：手机版 APK 单独成行、说明里写「不用连电脑」并带校验值，页面 id 写错要在上传前停下。 | 23 |
 | `test_old_install_notice.py` | 免安装版启动时提示旧名安装还在：文案与「同一版本只说一次」。 | 12 |
 | `test_huawei_channels.py` | 华为渠道页的脱敏离线回归：已观察页面，不连手机。 | 70 |
-| `test_page_and_link_regressions.py` | 一期社区反馈汇集的设备无关回归：渠道页归属与仿冒、内联开关、多用户解析、点击被拒、adb 掉线与 USB 诊断；每条用例的 owner 是所在类声明的行为域（见「行为域」）。 | 120 |
+| `test_page_and_link_regressions.py` | 一期社区反馈汇集的设备无关回归：渠道页归属与仿冒、内联开关、多用户解析、点击被拒、adb 掉线与 USB 诊断；每条用例的 owner 是所在类声明的行为域（见「行为域」）。 | 126 |
 | `test_lock_and_disconnect_regressions.py` | 上报日志分类汇集的设备无关回归：锁屏判据与等机主解锁、灰态渠道、断线不带堆栈、脱敏与参考脚本；每条用例的 owner 是所在类声明的行为域（见「行为域」）。 | 71 |
 | `test_layout_and_verdict_regressions.py` | 发布当天上报汇集的设备无关回归：卡片布局差异、vivo 旧页与直达、失败判定、停止不算失败、暂停与空报告；每条用例的 owner 是所在类声明的行为域（见「行为域」）。 | 86 |
 | `test_tap_notice_regressions.py` | 发布后一夜上报汇集的设备无关回归：点击与确认落点、焦点回退、通知页读取、adb 镜像与提示音、vivo 慢过渡；每条用例的 owner 是所在类声明的行为域（见「行为域」）。 | 39 |
