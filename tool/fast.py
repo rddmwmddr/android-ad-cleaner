@@ -100,11 +100,13 @@ from phone.toggler import Toggler
 
 
 class Phone:
-    """门面：只做转发与组合，公开名字一个不改（ADR-0033）。
+    """门面：只做转发与组合（ADR-0033）。公开面是「这台手机」的概念，不是内部字段的并集。
 
     两个基座与五个阶段已全部搬进 `tool/phone/`：`Connection`（连接与生命周期）、
     `Screen`（观测、视口几何、动作原语）、`Toggler`（整页拨动）、`Launcher`（启动与落点）、
     `SettingsSearch`（设置搜索）、`Dismisser`（弹窗与推广位）与 `Navigator`（导航）。
+    协作者对象就是它们状态的唯一入口（`p.conn.*` / `p.screen.*` / `p.channel_session.*` …）；
+    门面只留 8 个设备概念属性与动作动词（ADR-0045、#1479）。
     """
 
     # 设置搜索框的识别式与直达动作归 `SettingsSearch`，弹窗的 ✕ 判据归 `Dismisser`；
@@ -131,68 +133,18 @@ class Phone:
         self.navigator = Navigator(self.screen, self.lost_note, self.dismisser.dismiss)
         self.conn.check_input()
 
-    # ---------- 转发：连接（Connection）与观测（Screen） ----------
+    # ---------- 转发：门面自己的 8 个名字 ----------
     # 显式属性 + 赋值器，不用 `__getattr__` 兜底：搬漏的方法必须当场 AttributeError（ADR-0033）。
-    @property
-    def reader(self):
-        """读屏 adapter：引擎看手机的唯一接口（ADR-0001），实体归 `Connection`。"""
-        return self.conn.reader
-
-    @reader.setter
-    def reader(self, value):
-        self.conn.reader = value
-
-    @property
-    def d(self):
-        """读屏 adapter 的历史名字：recipes（`p.d.shell`）与测试用它，实体是同一个 `reader`。"""
-        return self.reader
-
-    @d.setter
-    def d(self, value):
-        self.reader = value
-
-    @property
-    def link(self):
-        """adb 连接与断线判定，状态归 `Connection`，这里只是读写它的一个别名。"""
-        return self.conn.link
-
-    @link.setter
-    def link(self, value):
-        self.conn.link = value
-
-    @property
-    def serial(self):
-        """串号归 Connection：每条命令都要带 -s，不存在「手机对象认一台、命令发给另一台」。"""
-        return self.conn.serial
-
-    @serial.setter
-    def serial(self, value):
-        self.conn.serial = value
-
+    # 每个名字都要能回答「它是不是这台手机这个概念的一部分」；其余状态归协作者，读 `p.conn.*` /
+    # `p.screen.*` / `p.channel_session.*` / `p.launch_session.*` / `p.toggler.*`（ADR-0045、#1479）。
     @property
     def lost(self):
-        """本轮是否已确认断线；状态归 Connection，这里只是读写它的一个别名。"""
+        """本轮是否已确认断线。归 `Connection`。"""
         return self.conn.lost
 
     @lost.setter
     def lost(self, value):
         self.conn.lost = value
-
-    @property
-    def log(self):
-        return self.conn.log
-
-    @log.setter
-    def log(self, value):
-        self.conn.log = value
-
-    @property
-    def pause_at_lock_check(self):
-        return self.conn.pause_at_lock_check
-
-    @pause_at_lock_check.setter
-    def pause_at_lock_check(self, value):
-        self.conn.pause_at_lock_check = value
 
     @property
     def W(self):
@@ -210,17 +162,10 @@ class Phone:
     def H(self, value):
         self.screen.H = value
 
-    @property
-    def systemui_text(self):
-        """读屏时是否算上 com.android.systemui 的文字：归观测基座，`texts()` 在读它。"""
-        return self.screen.systemui_text
-
-    @systemui_text.setter
-    def systemui_text(self, value):
-        self.screen.systemui_text = value
-
-    # ---------- 转发：三个跨阶段会话（LostNote / LaunchSession / ChannelSession） ----------
+    # ---------- 转发：两个跨阶段会话（LostNote / LaunchSession） ----------
     # 谁在什么时候写它们，写在 `tool/phone/session.py` 的类 docstring 上，这里只给归属。
+    # `ChannelSession` 的四个字段（`vivo_seen` / 骨架两份 / `mismatch_probes`）只有渠道引擎在读写，
+    # 不属于「这台手机」的概念，直接读 `p.channel_session.*`（#1479）。
     @property
     def miss(self):
         """本段已经没找到几次。归 `LostNote`。"""
@@ -241,57 +186,12 @@ class Phone:
 
     @property
     def app(self):
-        """最近一次 start 拉起的目标 App。归 `LaunchSession`。"""
+        """最近一次拉起的目标 App。归 `LaunchSession`；换 App 时作废推广位记忆（#1479）。"""
         return self.launch_session.app
 
     @app.setter
     def app(self, value):
-        self.launch_session.app = value
-
-    @property
-    def promoted(self):
-        """点过才发现是推广位的 ✕。归 `LaunchSession`。"""
-        return self.launch_session.promoted
-
-    @promoted.setter
-    def promoted(self, value):
-        self.launch_session.promoted = value
-
-    @property
-    def vivo_seen(self):
-        """见过 vivo 的通知页。归 `ChannelSession`。"""
-        return self.channel_session.vivo_seen
-
-    @vivo_seen.setter
-    def vivo_seen(self, value):
-        self.channel_session.vivo_seen = value
-
-    @property
-    def skeleton_sigs(self):
-        """本次运行已上报的骨架布局。归 `ChannelSession`。"""
-        return self.channel_session.skeleton_sigs
-
-    @skeleton_sigs.setter
-    def skeleton_sigs(self, value):
-        self.channel_session.skeleton_sigs = value
-
-    @property
-    def skeleton_count(self):
-        """本次运行已上报的骨架份数。归 `ChannelSession`。"""
-        return self.channel_session.skeleton_count
-
-    @skeleton_count.setter
-    def skeleton_count(self, value):
-        self.channel_session.skeleton_count = value
-
-    @property
-    def mismatch_probes(self):
-        """本次运行已补的 MISMATCH 判据读数。归 `ChannelSession`。"""
-        return self.channel_session.mismatch_probes
-
-    @mismatch_probes.setter
-    def mismatch_probes(self, value):
-        self.channel_session.mismatch_probes = value
+        self.launch_session.set_app(value)
 
     def _resilient_shell(self, *args, **kwargs):
         return self.conn._resilient_shell(*args, **kwargs)
@@ -352,7 +252,7 @@ class Phone:
 
     def channel_list(self):
         """通知清单：一次 `dumpsys notification --noredact` 读出整份数据源（#1432）。"""
-        return read_channel_list(self.reader)
+        return read_channel_list(self.conn.reader)
 
     def scroll_more(self):
         """翻一页；翻完没出现新文字（到底、回弹）返回 False。"""

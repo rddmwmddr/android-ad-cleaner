@@ -25,7 +25,7 @@ from fixtures import phone_stub
 
 
 def phone(xml, w=1080, h=2340):
-    p = phone_stub("test", d=Mock())
+    p = phone_stub("test", reader=Mock())
     p.W, p.H = w, h
     p.screen.click = Mock()
     p.screen.tree = Mock(return_value=ET.fromstring(xml))
@@ -105,14 +105,14 @@ class FocusTests(unittest.TestCase):
     DOMAIN = "device_state"
     def test_null_focus_falls_back_to_focused_app(self):
         # 华为 LIO-AN00 HarmonyOS 4.2、vivo V2111A：页面在，却报「停在 未知页面」
-        p = phone_stub("test", d=Mock())
-        p.d.shell.return_value = types.SimpleNamespace(output=(
+        p = phone_stub("test", reader=Mock())
+        p.conn.reader.shell.return_value = types.SimpleNamespace(output=(
             "  mCurrentFocus=null\n  mFocusedApp=ActivityRecord{5e1 u0 com.android.settings/.Settings$AppNotificationSettingsActivity t88}\n"))
         self.assertEqual(p.focus(), "com.android.settings/.Settings$AppNotificationSettingsActivity")
 
     def test_resumed_activity_line_variants(self):
-        p = phone_stub("test", d=Mock())
-        p.d.shell.side_effect = [types.SimpleNamespace(output="  mCurrentFocus=null\n"),
+        p = phone_stub("test", reader=Mock())
+        p.conn.reader.shell.side_effect = [types.SimpleNamespace(output="  mCurrentFocus=null\n"),
                                  types.SimpleNamespace(output="    mResumedActivity: ActivityRecord{9a u0 com.vivo.x/.MainActivity t3}\n")]
         self.assertEqual(p.focus(), "com.vivo.x/.MainActivity")
 
@@ -132,8 +132,9 @@ class NotificationTests(unittest.TestCase):
     DOMAIN = "channel"
     def test_android9_dump_is_read(self):
         # #258 海信 HLTE217T / Android 9：以前「读不到通知渠道状态」
-        p = types.SimpleNamespace(d=types.SimpleNamespace(shell=lambda *a, **k: types.SimpleNamespace(output=ANDROID9)))
-        d, app_off = chan.parse(p.d)
+        p = types.SimpleNamespace(conn=types.SimpleNamespace(
+            reader=types.SimpleNamespace(shell=lambda *a, **k: types.SimpleNamespace(output=ANDROID9))))
+        d, app_off = chan.parse(p.conn.reader)
         self.assertEqual(d[("com.hisense.promo", "deals")], ("优惠活动", 3, False))
         self.assertTrue(app_off["com.blocked"])
 
@@ -287,7 +288,7 @@ class VivoSlowTransitionTests(unittest.TestCase):
     </node></hierarchy>"""
 
     def phone(self, pages, settled):
-        p = phone_stub("test", d=Mock())
+        p = phone_stub("test", reader=Mock())
         p.W, p.H = 1080, 2340
         p.locked = Mock(return_value=False)
         p.screen.focus = Mock(return_value="com.vivo.systemuiplugin/com.vivo.systemui.statusbar.notification.settings.channels.NotificationSettingsActivity")

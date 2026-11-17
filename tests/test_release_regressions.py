@@ -27,33 +27,33 @@ def recipe(p, only="__no_steps__"):
 class RotationTests(unittest.TestCase):
     DOMAIN = "switch"
     def phone(self):
-        p = phone_stub("test", d=Mock())
+        p = phone_stub("test", reader=Mock())
         p.W, p.H = 1080, 2340
         return p
 
     def test_landscape_right_edge_switch_is_visible_and_clickable(self):
         p = self.phone()
-        p.d.window_size.return_value = (2340, 1080)
-        p.d.dump_hierarchy.return_value = '''<hierarchy><node class="android.widget.Switch"
+        p.conn.reader.window_size.return_value = (2340, 1080)
+        p.conn.reader.dump_hierarchy.return_value = '''<hierarchy><node class="android.widget.Switch"
           text="热榜推荐" checkable="true" checked="true" bounds="[2040,300][2170,400]"/></hierarchy>'''
         switches = p.switches(p.tree())
         self.assertEqual(switches, [("热榜推荐", True, (2105, 350))])
         p.click(*switches[0][2])
-        p.d.shell.assert_called_once_with("input swipe 2105 350 2105 350 80")
+        p.conn.reader.shell.assert_called_once_with("input swipe 2105 350 2105 350 80")
 
     def test_rotation_between_read_and_click_refuses_old_coordinates(self):
         p = self.phone()
-        p.d.window_size.return_value = (2340, 1080)
+        p.conn.reader.window_size.return_value = (2340, 1080)
         with self.assertRaisesRegex(RuntimeError, "旧坐标"):
             p.click(900, 600)
-        p.d.shell.assert_not_called()
+        p.conn.reader.shell.assert_not_called()
 
     def test_outside_screen_click_is_refused(self):
         p = self.phone()
-        p.d.window_size.return_value = (1080, 2340)
+        p.conn.reader.window_size.return_value = (1080, 2340)
         with self.assertRaisesRegex(RuntimeError, "屏幕外"):
             p.click(2105, 350)
-        p.d.shell.assert_not_called()
+        p.conn.reader.shell.assert_not_called()
 
 
 class XiaomiNavigationTests(unittest.TestCase):

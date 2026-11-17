@@ -253,8 +253,8 @@ def _scoped(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
     page = p
     saved = {}
     if "systemui_text" in op:
-        saved["systemui_text"] = page.systemui_text
-        page.systemui_text = op["systemui_text"]
+        saved["systemui_text"] = page.screen.systemui_text
+        page.screen.systemui_text = op["systemui_text"]
     try:
         _run(op.get("ops", []), p, rt, g)
     finally:

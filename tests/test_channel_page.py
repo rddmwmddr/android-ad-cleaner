@@ -41,7 +41,7 @@ def phone(pages, focus=DEEP_FOCUS, w=1080, h=2340):
     def click(*_args):
         index[0] = min(index[0] + 1, len(pages) - 1)
 
-    p = phone_stub("test", d=Mock())
+    p = phone_stub("test", reader=Mock())
     p.W, p.H = w, h
     p.locked = Mock(return_value=False)
     p.screen.focus = Mock(return_value=focus)
@@ -53,8 +53,8 @@ def phone(pages, focus=DEEP_FOCUS, w=1080, h=2340):
     p.scroll, p.scroll_more = Mock(), Mock(return_value=False)
     p.screen.scroll = p.scroll
     p.screen.tree = tree
-    p.reader = Mock()
-    p.reader.shell.return_value = Mock(output="")
+    p.conn.reader = Mock()
+    p.conn.reader.shell.return_value = Mock(output="")
     return p
 
 
@@ -100,7 +100,7 @@ SAME_NAME_PAGE = page(
 
 
 def shells(p):
-    return [str(c) for c in p.reader.shell.call_args_list]
+    return [str(c) for c in p.conn.reader.shell.call_args_list]
 
 
 class ReachedTests(unittest.TestCase):
@@ -161,7 +161,7 @@ class RouteTests(unittest.TestCase):
 
     def test_vivo_only_enters_from_the_app_page(self):
         p = phone([INLINE_PAGE], focus=APP_FOCUS)
-        p.vivo_seen = True
+        p.channel_session.vivo_seen = True
         with patch.object(chan.time, "sleep"):
             got = chan.ChannelPage(p, NAME, PK, CID).open()
         self.assertIsInstance(got, chan.Reached)
@@ -224,7 +224,7 @@ VIVO_NAME = "优质内容推送"       # 渠道页 dump 里的那一个
 
 def vivo_phone(pages, w=1080, h=2340):
     """pages：依次返回的页面，最后一页一直重复。每次读屏的文字签名都不同，相当于页面真的翻动了。"""
-    p = phone_stub("test", d=Mock())
+    p = phone_stub("test", reader=Mock())
     p.W, p.H = w, h
     p.locked = Mock(return_value=False)
     p.screen.focus = Mock(return_value=VIVO_FOCUS)
@@ -326,7 +326,7 @@ class VivoChannelPageTests(unittest.TestCase):
 
     def test_wait_page_recognises_the_same_page(self):
         p = vivo_phone([VIVO_CHANNEL_PAGE])
-        p.vivo_seen = True                  # 已经走过应用通知页
+        p.channel_session.vivo_seen = True                  # 已经走过应用通知页
         with patch.object(chan.time, "sleep"):
             sw = chan.wait_page(p, VIVO_NAME, chan.Attempt(vivo_app=VIVO_APP))
         self.assertEqual(sw[2], (948, 435))
@@ -474,7 +474,7 @@ COLOROS_APP_PAGE = '''<hierarchy><node>
 
 
 def coloros_phone(xml, focus):
-    p = phone_stub("test", d=Mock())
+    p = phone_stub("test", reader=Mock())
     p.W, p.H = 1080, 2340
     p.locked = Mock(return_value=False)
     p.screen.focus = Mock(return_value=focus)
@@ -518,7 +518,7 @@ EMPTY_TREE = "<hierarchy><node/></hierarchy>"
 
 
 def hint_phone(focus):
-    p = phone_stub("test", d=Mock())
+    p = phone_stub("test", reader=Mock())
     p.W, p.H = 1080, 2340
     p.locked = Mock(return_value=False)
     p.screen.focus = Mock(return_value=focus)
@@ -527,8 +527,8 @@ def hint_phone(focus):
     p.screen.tree = Mock(return_value=ET.fromstring(EMPTY_TREE))
     p.scroll, p.scroll_more = Mock(), Mock(return_value=False)
     p.screen.scroll = p.scroll
-    p.reader = Mock()
-    p.reader.shell.return_value = Mock(output="")
+    p.conn.reader = Mock()
+    p.conn.reader.shell.return_value = Mock(output="")
     return p
 
 
@@ -616,7 +616,7 @@ def dup_page(*nodes):
 
 
 def dup_phone(xml):
-    p = phone_stub("test", d=Mock())
+    p = phone_stub("test", reader=Mock())
     p.W, p.H = 1080, 2340
     p.screen.focus = Mock(return_value=DUPLICATE_FOCUS)
     p.screen.tree = Mock(return_value=ET.fromstring(xml))
@@ -867,7 +867,7 @@ class SkeletonTests(unittest.TestCase):
 
 def skeleton_phone(pages):
     """每次读屏返回下一页，最后一页重复。"""
-    p = phone_stub("test", d=Mock())
+    p = phone_stub("test", reader=Mock())
     p.W, p.H = 1080, 2340
     p.locked = Mock(return_value=False)
     p.screen.focus = Mock(return_value=SKELETON_FOCUS)
@@ -901,12 +901,12 @@ class ChannelPageSkeletonTests(unittest.TestCase):
 
         self.assertTrue(attempt().startswith("骨架 v1"))
         self.assertEqual(attempt(), "")           # 同布局失败很多个渠道：只留第一份
-        self.assertEqual(p.skeleton_count, 1)
+        self.assertEqual(p.channel_session.skeleton_count, 1)
 
         self.assertTrue(attempt().startswith("骨架 v1"))          # 第二种布局
-        self.assertEqual(p.skeleton_count, 2)
+        self.assertEqual(p.channel_session.skeleton_count, 2)
         self.assertEqual(attempt(), "")                           # 第三份不再带
-        self.assertEqual(p.skeleton_count, 2)
+        self.assertEqual(p.channel_session.skeleton_count, 2)
 
     def test_hint_does_not_read_the_focus_window_again(self):
         # ADR-0007：p.focus() 的调用次数只减不增；骨架用 _focus() 留下的 raw_focus
@@ -929,7 +929,7 @@ class ChannelPageSkeletonTests(unittest.TestCase):
                 self.assertTrue(page.skeleton.startswith("骨架 v1"))
             else:
                 self.assertEqual(page.skeleton, "")
-        self.assertEqual(p.skeleton_count, 1)
+        self.assertEqual(p.channel_session.skeleton_count, 1)
 
     def test_an_app_level_denial_carries_no_skeleton(self):
         # 应用通知整体关着：页面上只有总开关，行不在页面上，不是没认出来（#426）
@@ -939,7 +939,7 @@ class ChannelPageSkeletonTests(unittest.TestCase):
         page.no_row = True
         page._hint()
         self.assertEqual(page.skeleton, "")
-        self.assertEqual(p.skeleton_count, 0)
+        self.assertEqual(p.channel_session.skeleton_count, 0)
 
     def test_a_page_that_cannot_be_read_keeps_the_step_alive(self):
         p = skeleton_phone([HUAWEI_CARD])
@@ -1071,7 +1071,7 @@ def trad_app_page(ui):
 
 
 def trad_phone(xml):
-    p = phone_stub("test", d=Mock())
+    p = phone_stub("test", reader=Mock())
     p.W, p.H = 1080, 2340
     p.screen.focus = Mock(return_value=TRAD_FOCUS)
     p.screen.tree = Mock(return_value=ET.fromstring(xml))

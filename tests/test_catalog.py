@@ -627,7 +627,7 @@ class TapIdOpTests(unittest.TestCase):
                 def click(self):
                     clicks.append(True)
 
-            phone.d = self.Reader(lambda selectors: seen.append(selectors) or Target())
+            phone.conn.reader = self.Reader(lambda selectors: seen.append(selectors) or Target())
             recipe.run()
         return seen, clicks, recipe.rt.results
 
@@ -664,7 +664,7 @@ class TapIdOpTests(unittest.TestCase):
                 def click(self):
                     raise RuntimeError("读屏失败了")
 
-            phone.d = self.Reader(lambda _selectors: Target())
+            phone.conn.reader = self.Reader(lambda _selectors: Target())
             with contextlib.redirect_stdout(io.StringIO()) as out:
                 recipe.run()
         self.assertEqual(recipe.rt.results, [("a", "未完成")])

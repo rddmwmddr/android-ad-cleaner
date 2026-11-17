@@ -35,7 +35,7 @@ MINE_PAGE = """<hierarchy rotation="0">
 class Vivo2417BrowserEntryTests(unittest.TestCase):
     def phone(self, has_menu):
         """一段浏览器路径需要的最小假手机：入口点得到，页面细节交给被替换的 helper。"""
-        p = phone_stub("test", d=Mock())
+        p = phone_stub("test", reader=Mock())
         p.W, p.H = 1080, 2400
         p.locked = Mock(return_value=False)
         p.start = Mock(return_value=True)
@@ -87,7 +87,7 @@ class Vivo2417BrowserEntryTests(unittest.TestCase):
 
     def test_the_mine_page_settings_icon_is_found_by_its_content_desc(self):
         """「设置」只写在 content-desc 上：`find` 要能按文字命中它，`tap_icon` 反而不该命中。"""
-        p = phone_stub("test", d=Mock(), W=1080, H=2400)
+        p = phone_stub("test", reader=Mock(), W=1080, H=2400)
         p.screen.tree = Mock(return_value=ET.fromstring(MINE_PAGE))
         self.assertEqual(p.find("设置", exact=True, edge_ok="tab", nav=True), (1003, 187))
         self.assertEqual(p.icon_candidates(), [])

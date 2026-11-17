@@ -81,7 +81,7 @@ def phone(pages, focus=APP_FOCUS, **fields):
     def click(*_args):
         index[0] = min(index[0] + 1, len(pages) - 1)
 
-    p = phone_stub("test", d=Mock())
+    p = phone_stub("test", reader=Mock())
     p.W, p.H = 1080, 2340
     p.locked = Mock(return_value=False)
     p.screen.focus = Mock(return_value=focus)
@@ -93,8 +93,8 @@ def phone(pages, focus=APP_FOCUS, **fields):
     p.scroll, p.scroll_more = Mock(), Mock(return_value=False)
     p.screen.scroll = p.scroll
     p.screen.tree = tree
-    p.reader = Mock()
-    p.reader.shell.return_value = Mock(output="")
+    p.conn.reader = Mock()
+    p.conn.reader.shell.return_value = Mock(output="")
     p.apply = Mock(wraps=p.apply)
     for name, value in fields.items():
         setattr(p, name, value)
@@ -167,7 +167,7 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(arrive.route(CHANNELS, None, pk=PK, cid=CID, vivo_seen=True),
                          arrive.Route(arrive.APP_PAGE, (arrive.app_page_intent(PK),)))
         p = phone([INLINE_PAGE])
-        p.vivo_seen = True
+        p.channel_session.vivo_seen = True
         with patch.object(chan.time, "sleep"):
             got = chan.ChannelPage(p, NAME, PK, CID, channels=CHANNELS).open()
         self.assertEqual(intents(p), [arrive.app_page_intent(PK)])

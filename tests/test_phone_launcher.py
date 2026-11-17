@@ -264,10 +264,10 @@ class LandingTests(unittest.TestCase):
         p, clock = self.phone(
             [(0.0, promo_page()), (30.0, STORE_HOME)],
             focus=((0.0, STORE_APP), (30.0, "com.android.launcher/.Launcher"), (31.0, STORE_APP)))
-        p.d.app_stop = Mock()
+        p.conn.reader.app_stop = Mock()
         stub(p, "back", lambda *a, **k: setattr(clock, "t", 30.0))
         p.start("com.bbk.appstore", settle=0, expect=("我的",))
-        self.assertEqual(p.d.app_stop.call_count, 2)  # 首次拉起 + 返回后重拉
+        self.assertEqual(p.conn.reader.app_stop.call_count, 2)  # 首次拉起 + 返回后重拉
         self.assertTrue(p.tap("我的", exact=True, scrolls=0))
 
     def test_expected_page_needs_no_recovery(self):
@@ -310,13 +310,13 @@ class LandingTests(unittest.TestCase):
     def test_promoted_keys_are_reset_on_start(self):
         """#420 每次启动清空「点过的推广位」：同一个 App 的新一轮不再沿用上一轮的豁免。"""
         p, _ = self.phone([(0.0, STORE_HOME)])
-        p.promoted = {("com.bbk.appstore", "关闭")}
+        p.launch_session.promoted = {("com.bbk.appstore", "关闭")}
         p.start("com.bbk.appstore", settle=0, expect=("我的",))
-        self.assertEqual(p.promoted, set())
+        self.assertEqual(p.launch_session.promoted, set())
 
     def test_device_lost_while_waiting_for_the_landing_page_is_raised(self):
         """#420 等落点时设备掉线：抛 DeviceLost，不当作「没落在预期页面」。"""
-        p = phone_stub("test", d=Mock())
+        p = phone_stub("test", reader=Mock())
         p.W, p.H = 1080, 2340
         p.lost = True
         with self.assertRaises(adb_link.DeviceLost):

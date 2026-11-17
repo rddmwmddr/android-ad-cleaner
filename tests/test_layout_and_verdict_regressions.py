@@ -33,7 +33,7 @@ OCEAN_FOCUS = "com.android.systemui/com.vivo.systemui.statusbar.notification.set
 
 def phone(pages, focus, w=1080, h=2340):
     """pages：依次返回的页面，最后一页一直重复。"""
-    p = phone_stub("test", d=Mock())
+    p = phone_stub("test", reader=Mock())
     p.W, p.H = w, h
     p.locked = Mock(return_value=False)
     p.screen.focus = Mock(return_value=focus)
@@ -162,7 +162,7 @@ class VivoTests(unittest.TestCase):
         with patch.object(chan.time, "sleep"):
             self.assertIsNone(chan.wait_page(p, "营销通知", chan.Attempt()))
         self.assertEqual(p.screen.tree.call_count, 1)
-        self.assertTrue(p.vivo_seen)
+        self.assertTrue(p.channel_session.vivo_seen)
 
     def test_deep_link_page_gives_up_without_a_single_poll(self):
         # 认不出就当场放弃，不是「等满 12 轮再放弃」，也不该多睡一次
@@ -173,12 +173,12 @@ class VivoTests(unittest.TestCase):
 
     def test_known_vivo_skips_the_deep_link(self):
         p = phone([VIVO_APP, VIVO_CHANNEL], VIVO_FOCUS)
-        p.vivo_seen = True
+        p.channel_session.vivo_seen = True
         with patch.object(chan, "parse", return_value=({("com.taobao.taobao", "promo"): ("营销通知", 3, False)}, {})), \
              patch.object(chan.ChannelPage, "_enter_app_page", return_value=None) as via, patch.object(chan.time, "sleep"):
             chan.toggle(p, "com.taobao.taobao", "promo", False, "营销通知")
         via.assert_called_once()
-        self.assertFalse(any("CHANNEL_NOTIFICATION_SETTINGS" in str(c) for c in p.d.shell.call_args_list))
+        self.assertFalse(any("CHANNEL_NOTIFICATION_SETTINGS" in str(c) for c in p.conn.reader.shell.call_args_list))
 
     def test_origin_os_ocean_host_is_recognised(self):
         # OriginOS Ocean / 安卓 10：通知页挂在 com.android.systemui，以前「应用通知页没有打开」
@@ -273,7 +273,7 @@ class DisconnectTests(unittest.TestCase):
 
     def test_toggle_turns_library_disconnect_into_device_lost(self):
         p = phone([HUAWEI_CARD], APP_FOCUS)
-        p.serial = "x"
+        p.conn.serial = "x"
         p.screen.tree = Mock(side_effect=fast.u2.exceptions.HTTPError("device 'x' not found"))
         with patch.object(chan, "parse", return_value=({("com.x", "promo"): ("营销通知", 3, False)}, {})), \
              patch.object(adb_link, "present", return_value=False), patch.object(chan.time, "sleep"):
@@ -431,12 +431,13 @@ class PauseTests(unittest.TestCase):
             self.assertIn("▶ 继续执行", printed.getvalue())
 
     def test_recipe_segments_pause_at_their_lock_check_and_wait_for_unlock(self):
-        p = phone_stub("test", d=Mock(), pause_at_lock_check=True)
+        p = phone_stub("test", reader=Mock())
+        p.conn.pause_at_lock_check = True
         p.conn.wait_unlocked = Mock(return_value=True)
         with patch.object(phone_connection, "pause_point", return_value=True):
             self.assertFalse(p.locked())
         p.conn.wait_unlocked.assert_called_once()
-        p.d.shell.assert_not_called()
+        p.conn.reader.shell.assert_not_called()
 
     def test_channels_pause_only_between_channels(self):
         phone = Mock(wait_unlocked=Mock(return_value=True), lost=False)
@@ -446,7 +447,7 @@ class PauseTests(unittest.TestCase):
              patch.object(sys, "argv", ["chan_fast.py", "-s", "test", "off", "x.tsv"]), contextlib.redirect_stdout(io.StringIO()):
             chan.main()
         self.assertEqual(paused.call_count, 3)
-        self.assertIs(phone.pause_at_lock_check, False)
+        self.assertIs(phone.conn.pause_at_lock_check, False)
 
     def test_gui_pause_resume_and_stop(self):
         with tempfile.TemporaryDirectory() as directory:

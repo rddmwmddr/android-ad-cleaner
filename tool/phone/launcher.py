@@ -6,8 +6,8 @@
 `_landing_note()` / `_launch_evidence()` 仍带「停在哪 / 标题 / 结构」。
 
 观测只经 `Screen`，传输经它背后的 `Connection`；`dismiss` 是注入的窄接口（弹窗与推广位归
-`Dismisser`，启动只顺手关一下）。启动会话（`app` / `promoted`）的对象由门面建：`app` 在这里写，
-`promoted` 在这里换 App 时清空、另由弹窗侧读写——`promoted_click()` 在 `Dismisser` 里。
+`Dismisser`，启动只顺手关一下）。启动会话的对象由门面建：`app` 与「换 App 清空 `promoted`」
+一起收在 `LaunchSession.set_app()` 里，弹窗侧读写 `promoted`——`promoted_click()` 在 `Dismisser` 里。
 """
 import re
 import shlex
@@ -68,8 +68,7 @@ class Launcher:
         有开屏 / 推广页的 App 用它：落在别处时退一次，返回把 App 退到后台就重新拉起一次；
         仍不对就结束本段（#420）。判据由调用方给（如该 App 的底部标签栏文字）。
         空白页不等于推广页，不按返回：慢机型上首屏可能只是还没画完。"""
-        self.session.promoted.clear()
-        self.session.app = foreground or pkg
+        self.session.set_app(foreground or pkg)
         self._launch(pkg, activity, settle, foreground)
         if expect is None or self.expect_page(expect, budget):
             return

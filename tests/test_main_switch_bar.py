@@ -29,8 +29,8 @@ class MainSwitchBarTests(unittest.TestCase):
     def phone(self, checked):
         p = phone_stub("fake")
         p.W, p.H = 1344, 2992
-        p.reader = Mock()
-        p.reader.screenshot.side_effect = AssertionError("有真开关时不该截图猜颜色")
+        p.conn.reader = Mock()
+        p.conn.reader.screenshot.side_effect = AssertionError("有真开关时不该截图猜颜色")
         return p, ET.fromstring(PAGE.replace("CHECKED", checked))
 
     def test_real_switch_inside_the_bar_decides_the_state(self):

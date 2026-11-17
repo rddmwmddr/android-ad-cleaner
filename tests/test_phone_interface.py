@@ -1,7 +1,8 @@
-"""Phone 的接口面：读屏策略、探路的包名过滤、安全模式、读屏 adapter 的名字。
+"""Phone 的接口面：读屏策略、探路的包名过滤、安全模式、读屏 adapter 的归属。
 
 守的是「这些状态从哪来」：一次渠道尝试的诊断归 chan_fast（Attempt），
-读屏策略与设备记忆归 Phone 构造处声明的字段。装配统一走 fixtures。
+读屏策略归观测基座（`p.screen.*`），读屏 adapter 归连接基座（`p.conn.reader`）——
+门面上没有第二条访问路径（ADR-0045、#1479）。装配统一走 fixtures。
 """
 import contextlib
 import io
@@ -43,7 +44,7 @@ class TextsTests(unittest.TestCase):
     def test_systemui_text_is_dropped_unless_the_page_is_systemui(self):
         p = fake_phone(stages=[(0.0, SYSTEMUI_PAGE)])
         self.assertEqual(p.texts(), [])                              # 状态栏文字默认不算
-        p.systemui_text = True
+        p.screen.systemui_text = True
         self.assertEqual([t for t, _, _ in p.texts()], ["状态栏", "允许通知"])
 
 
@@ -63,16 +64,19 @@ class ReaderTests(unittest.TestCase):
     def test_fixtures_device_is_a_reader(self):
         self.assertIsInstance(reader(), Reader)
 
-    def test_a_stub_reader_is_the_same_object_as_d(self):
-        p = phone_stub("S", d=reader())
-        self.assertIs(p.d, p.reader)                                  # `d` 只是历史名字
-        p.d = reader()                                                # 写 `d` 也写穿到 reader
-        self.assertIsNotNone(p.reader)
+    def test_a_stub_reader_lives_on_the_connection(self):
+        dev = reader()
+        p = phone_stub("S")
+        p.conn.reader = dev
+        self.assertIs(p.conn.reader, dev)
+        for gone in ("d", "reader"):                                  # 门面上不再有第二条访问路径
+            with self.assertRaises(AttributeError):
+                getattr(p, gone)
 
     def test_phone_can_be_built_from_a_named_reader(self):
         r = reader()
         p = fast.Phone("S", log=False, reader=r)
-        self.assertIs(p.reader, r)
+        self.assertIs(p.conn.reader, r)
         self.assertEqual((p.W, p.H), (1080, 2340))
         self.assertEqual(p.texts(), [])                               # 没连手机也能读屏（空树）
         p.close()

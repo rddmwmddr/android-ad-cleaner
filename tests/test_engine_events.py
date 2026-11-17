@@ -96,7 +96,7 @@ class PausePointTests(unittest.TestCase):
 
 class LockedTests(unittest.TestCase):
     def phone_wait(self, on):
-        p = phone_stub("test", d=Mock())
+        p = phone_stub("test", reader=Mock())
         p.conn.locked = Mock(side_effect=[True, False])
         with patch.object(fast.time, "sleep"):
             return capture(lambda: p.wait_unlocked(), on=on)
@@ -123,7 +123,7 @@ class LockedTests(unittest.TestCase):
 
     def test_both_call_sites_go_through_the_shared_wait(self):
         # 文案与节奏只有一份（#709）：两处都调 wait.wait_unlocked，只交出锁屏判据与亮屏命令
-        p = phone_stub("test", d=Mock())
+        p = phone_stub("test", reader=Mock())
         p.conn.locked = Mock(return_value=False)
         with patch.object(wait, "wait_unlocked", return_value=True) as shared, \
              patch.object(run, "sh") as sh, patch.object(run, "locked", return_value=False) as run_locked:
@@ -136,7 +136,7 @@ class LockedTests(unittest.TestCase):
         run_locked.assert_called_once_with("test")
         sh.assert_called_once_with("test", adb_link.WAKEUP)
         self.assertIs(phone_locked, p.conn.locked)
-        p.d.shell.assert_called_once_with(adb_link.WAKEUP)
+        p.conn.reader.shell.assert_called_once_with(adb_link.WAKEUP)
 
 
 class UiBusyTests(unittest.TestCase):

@@ -16,7 +16,7 @@ RECIPE = ROOT / "recipes/oppo/PHK110/PHK110.toml"
 def make_phone(model="PHK110", build="PHK110_16.0.5.1201(CN01)", locked=False):
     shell, commands = fake_shell(model, build)
     d = SimpleNamespace(shell=shell)
-    return phone_stub("PHK110", d=d, W=1240, H=2772, locked=lambda: locked, commands=commands)
+    return phone_stub("PHK110", reader=d, W=1240, H=2772, locked=lambda: locked, commands=commands)
 
 
 class RecipeSafetyTests(recipe_case.OfflineSafetyCase):

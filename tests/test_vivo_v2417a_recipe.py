@@ -156,7 +156,7 @@ class VivoV2417ARecipeTests(unittest.TestCase):
         p = phone_mock()
         p.locked.return_value = False
         p.focus.return_value = "com.android.settings/com.android.settings.Settings$AdAndPrivacyActivityForOsTwo"
-        p.reader.shell.return_value = Mock(exit_code=0, output="Starting: Intent")   # Phone.start 走 reader
+        p.conn.reader.shell.return_value = Mock(exit_code=0, output="Starting: Intent")   # Phone.start 走 reader
         p.texts.return_value = [("个性化广告.关闭后仍会看到广告", (1, 2, 3, 4), None)]
         p.switches.return_value = [(name, False, (1, 600))
                                    for name in ("个性化广告", "个性化推荐", "智能推荐服务")]

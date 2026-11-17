@@ -8,8 +8,9 @@
 单一来源：守卫（`devtools/script_surface.py`，由 `tests/test_phone_facade.py` 的
 `ScriptSurfaceTests` 代跑）读的就是这里，别在别处再抄一份名单。
 
-`app` / `promoted` 是 `recipe_lib/honor.py` 的 `launch()` 在写（它自己做裸 `am start`、不走
-`Phone.start`），所以它们暂时留在脚本面；#1479 收缩门面时会连同代码一起处理。
+`app` 是 `recipe_lib/honor.py` 的 `launch()` 在写（它自己做裸 `am start`、不走 `Phone.start`）：
+「这台手机现在拉起的是哪个 App」是设备概念，留在脚本面。`promoted` 不在这里——换 App 时清空
+推广位记忆已经收进 `LaunchSession.set_app()`，脚本不必再碰那个集合（#1479）。
 """
 
 # 设备概念属性：都是「这台手机现在是什么样」的读数，脚本直接读、少数直接写。
@@ -19,7 +20,7 @@ DEVICE_PROPERTIES = frozenset({
     "safe_mode",              # 只关点名的开关，不做整页全关
     "miss", "missed",         # 本段没找到几次 / 本次没拨到的开关
     "lost",                   # 本轮是否已确认断线
-    "app", "promoted",        # 最近拉起的 App / 点过的推广位（#1479 再定去留）
+    "app",                    # 最近拉起的 App
 })
 
 # 门面动词与查询：动作原语（`shell` / `swipe` / `press` / `tap_id` …）、页面查询、整页拨动。

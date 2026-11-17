@@ -927,7 +927,7 @@ class BatchContinuesTests(unittest.TestCase):
         phone, reads = fake_phone(clock=clock), []
 
         def parse(target, *a, **k):
-            if target is not phone.d:
+            if target is not phone.conn.reader:
                 return DATA_731, {}                     # 通知记录那一读不在这条路上
             reads.append(target)
             if len(reads) == 1:

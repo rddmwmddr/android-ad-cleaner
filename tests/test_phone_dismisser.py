@@ -153,7 +153,7 @@ class PromotedClickTests(unittest.TestCase):
     """#420：`dismiss()` 的 ✕ 分支点完跳到了别的 App 就退回来，这一次不算关掉了弹窗。"""
 
     def phone(self, focus, app="com.heytap.market"):
-        p = phone_stub("test", d=Mock())
+        p = phone_stub("test", reader=Mock())
         p.W, p.H = 1272, 2772
         p.screen.tree = Mock(return_value=ET.fromstring(POPUP))
         p.screen.focus = Mock(side_effect=list(focus))
@@ -269,7 +269,7 @@ BROWSER_SETTINGS = "com.vivo.browser/com.vivo.browser.setting.SettingActivity"
 
 
 def dismiss_phone(page, focus="com.vivo.browser/com.vivo.browser.BrowserActivity"):
-    p = phone_stub("test", d=Mock(), W=1080, H=2400)
+    p = phone_stub("test", reader=Mock(), W=1080, H=2400)
     p.screen.tree = Mock(return_value=ET.fromstring(page))
     p.screen.focus = Mock(return_value=focus)
     p.app = "com.vivo.browser"
@@ -388,7 +388,7 @@ BOTTOM_MENU_PAGE = '''<hierarchy>
 
 
 class _MenuButton:
-    """p.d 的门面：既能按 uiautomator2 的选择器调用（找右上角按钮），又照旧当读屏 adapter 用。"""
+    """p.conn.reader 的门面：既能按 uiautomator2 的选择器调用（找右上角按钮），又照旧当读屏 adapter 用。"""
 
     def __init__(self, device):
         self._device = device
@@ -423,7 +423,7 @@ class VivoBrowserRealPageTests(unittest.TestCase):
                 p.top = lambda *a, **k: None
                 p.entry = lambda *a, **k: False
                 p.off = lambda *a, **k: None
-                p.d = _MenuButton(p.reader)
+                p.conn.reader = _MenuButton(p.conn.reader)
                 scope, _ = run_browser(p, path)
                 self.assertEqual(scope["FAILED_STEPS"], [])
                 self.assertEqual([(500, 2285)], clicks)      # 菜单那一行，不是上面那个「返回」✕
@@ -442,7 +442,7 @@ AD_SERVICE_PAGE = '''<hierarchy>
 
 
 def close_row_phone(page, focus):
-    p = phone_stub("test", d=Mock())
+    p = phone_stub("test", reader=Mock())
     p.W, p.H = 1272, 2772
     p.screen.focus = Mock(return_value=focus)
     p.screen.tree = Mock(return_value=ET.fromstring(page))

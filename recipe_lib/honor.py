@@ -17,8 +17,7 @@ __all__ = ('baidu_browser', 'browser_gear', 'close_named_honor', 'launch', 'no_a
 def launch(p, rt, activity, app):
     """按 Activity 拉起 App 并等首页画出来（CLE-AN00 的浏览器 / 主题）。"""
     pkg = activity.split("/", 1)[0]
-    p.app = pkg
-    p.promoted.clear()
+    p.app = pkg          # 换 App 顺带作废推广位记忆（`LaunchSession.set_app()`）：这里不必再清一次
     p.shell(f"am start -f 0x10008000 -n {activity}")
     for _ in range(20):
         if p.focus().split("/", 1)[0] == pkg and p.has_text():
