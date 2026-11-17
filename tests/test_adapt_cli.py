@@ -455,6 +455,21 @@ class ExploreNavigationTests(unittest.TestCase):
         p.d.app_stop.assert_called_once_with("com.example")
 
 
+class VendorPickTests(unittest.TestCase):
+    """不给包名时按启动器列表挑厂商 App；卓易系四个前缀也要认得出（#1293）。"""
+
+    def test_picks_freeme_packages_alongside_the_older_vendors(self):
+        listed = "\n".join([
+            f"{pkg}/.MainActivity" for pkg in (
+                "com.freeme.secureguard", "com.freeme.launcher", "com.freeme.secureguardmanager",
+                "com.zhuoyi.market", "com.feimi.theme", "com.droi.store",
+                "com.miui.securitycenter", "com.android.settings", "org.example.app",
+            )])
+        self.assertEqual(explore.vendor_packages(listed), [
+            "com.droi.store", "com.feimi.theme", "com.freeme.launcher", "com.freeme.secureguard",
+            "com.freeme.secureguardmanager", "com.miui.securitycenter", "com.zhuoyi.market"])
+
+
 class EntryShapeTests(unittest.TestCase):
     """adapt 与 ADR-0005 同形状——命令只返回退出码，退出只留在 `__main__` 那一处。"""
 

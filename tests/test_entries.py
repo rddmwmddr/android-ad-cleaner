@@ -115,6 +115,18 @@ class SourceTest(unittest.TestCase):
         self.assertIsNotNone(entries.lookup("REDMI", "系统广告"))
         self.assertIsNone(entries.lookup("google", "系统广告"))
 
+    def test_freeme_family_collects_coolpad_and_5g(self):
+        """#1293：酷派 CPDAY3 读 `coolpad`、#455 那台读 `5G`，两台 `ro.build.freeme.label` 一致，同属卓易系。"""
+        self.assertEqual(entries.family("coolpad"), "freeme")
+        self.assertEqual(entries.family("5G"), "freeme")
+        # 家族名本身也要认：否则 recipes/freeme/ 被 scan_dir 的家族过滤静默丢掉，词库永远空。
+        self.assertEqual(entries.family("freeme"), "freeme")
+        e = entries.lookup("coolpad", "安全管家")
+        self.assertIsNotNone(e)
+        self.assertEqual(entries.source_key(e.direct[0]),
+                         ("direct", "com.freeme.secureguard",
+                          "com.zhuoyi.security.lite.SC_SettingActivity"))
+
     def test_used_by_reads_variable_packages(self):
         """honor-WKL-AN20 写的是 p.start(package, ".X")：只认字面量会把这台机漏掉。"""
         used = entries.used_by(RECIPES)
