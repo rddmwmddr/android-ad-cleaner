@@ -64,7 +64,7 @@ ANCHORS = {
     # 机型脚本的基础设施
     "test_recipe_loader.py": ("机型脚本只有一个装载入口，测试不许自己 exec 一份脚本。", 8),
     "test_recipe_meta_module.py": ("配方元数据住中立模块：import 不背 CLI 副作用，脚本枚举跳过非目录项，头部三段缺省是空值（段名缺 name 也是空串）。", 10),
-    "test_recipe_variants.py": ("同一型号按系统版本选脚本变体、变体要进安装包，以及没有本型号脚本时参考脚本按录制版本在同族里挑。", 91),
+    "test_recipe_variants.py": ("同一型号按系统版本选脚本变体、变体要进安装包，型号目录里哪一份算主脚本，以及没有本型号脚本时参考脚本按录制版本在同族里挑、怎么比对版本。", 101),
     "test_recipe_setting_checked.py": ("机型脚本必须消费 p.setting() 的返回值，不能空跑还记成功。", 35),
     "test_recipe_nav.py": ("机型库的拆分守卫（例外 `.py` 的同名助手必须升格进 `recipe_lib`；`shared.py` 的实现必须被 ≥2 个家族使用）、名字表 owner 与三个兼容壳的一致守卫（`SurfaceTests`），以及调用序列对拍驱动自己管基线 worktree。", 22),
     "test_recipe_source.py": ("脚本事实层：实参按语法切分、形参回填与读不出态、Intent 三种包名写法、语法错直接抛，以及库实现表与源码扫描结果在进程内缓存。", 37),
