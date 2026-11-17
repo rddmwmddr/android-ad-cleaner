@@ -516,6 +516,30 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(self.app.usb_hw_id("USB\\VID_2717&PID_FF40"), "USB\\VID_2717&PID_FF40")
         self.assertEqual(self.app.usb_hw_id("HDAUDIO\\FUNC_01&VEN_10EC"), "")
         self.assertEqual(self.app.usb_hw_id(""), "")
+        self.assertEqual(self.app.usb_hw_id(None), "")
+        # 注册表给的 VID / PID 大小写不固定：小写同样认得出，且原样保留
+        self.assertEqual(self.app.usb_hw_id("usb\\vid_2717&pid_ff40\\5e3d4f6b"),
+                         "usb\\vid_2717&pid_ff40")
+
+    def test_usb_facts_render_each_verdict_and_the_missing_hardware_id_verbatim(self):
+        self.assertEqual(
+            self.app.usb_facts([("华为", "HUAWEI M30", "OK", False, "USB\\VID_12D1&PID_107E", None)]),
+            ["华为 HUAWEI M30（OK，非调试接口）硬件 ID：USB\\VID_12D1&PID_107E"])
+        self.assertEqual(self.app.usb_facts([("小米", "MI 15", "Error", False, "", None)]),
+                         ["小米 MI 15（Error，非调试接口）硬件 ID：未识别"])
+
+    def test_usb_hint_without_a_driver_hint_ends_after_the_advice(self):
+        # 只给 DRIVER_HINT 里那三个品牌配驱动提示，其余品牌那句话说完就结束
+        self.assertEqual(
+            self.app.usb_hint([("小米", "MI 15", "OK", True, "USB\\VID_2717&PID_FF40", None)]),
+            "电脑识别到小米手机的调试接口，但 adb 没连上：请退出手机助手类软件和模拟器后重新插线。")
+
+    def test_usb_hint_multi_phone_reports_each_brand_with_its_own_state(self):
+        found = [("荣耀", "ADB Interface", "OK", True, "USB\\VID_339B&PID_107D&MI_02", None),
+                 ("华硕", "ROG Phone", "Error", True, "USB\\VID_0B05&PID_1ABC", None)]
+        self.assertEqual(self.app.usb_hint(found),
+                         "电脑识别到多台手机：荣耀（调试接口在，但 adb 没连上）、"
+                         "华硕（调试接口的驱动没有装好）。只留要处理的那一台插着，重新插线后再检测。")
 
     def test_usb_facts_render_one_line_per_hit_device(self):
         facts = self.app.usb_facts([("三星", "Galaxy S25", "OK", True, "USB\\VID_04E8&PID_6860&MI_00", None)])

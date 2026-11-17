@@ -14,6 +14,28 @@
 - 一加 16 商店段的「消息管理」探测只翻前两屏，常态下省约 40 秒（#1281）
 
 ### 内部
+- mutation job 加 `.mutmut` 判定缓存，非 `.py` 数据一改就整轮重跑（#1453）
+- mutation 的测试会话开头清掉 `tool/` 的进程级缓存，同类假存活加守卫（#1454）
+- 充分性判据拆成代码与数据两条：代码侧由变异测试判定，ADR-0043 记下取舍（#1415）
+- recipe_source 清到 mutation 存活 0：补页面标签、导入面与库下扫用例，降级输出逐行断言（#1421）
+- diagnostics 清到 mutation 存活 0：USB 解析补字段与大小写用例，花括号集合标等价 pragma（#1427）
+- catalog/schema 清到 mutation 存活 0，报错原文与边界值补用例（#1414）
+- recipe_meta 清到 mutation 存活 0：补段名缺省与散落文件两条用例（#1420）
+- channel_policy 清到 mutation 存活 0：补渠道 ID 受保护用例，默认值标等价变异体（#1417）
+- recipe_pick 清到 mutation 存活 0：补主脚本与变体池用例，参考脚本段去掉不可达回退，两处占位默认值标等价 pragma（#1422）
+- events 清到 mutation 存活 0：中文逐字、逐行 flush 与载荷行原样返回补用例，编码行标等价 pragma（#1419）
+- mutation 的模块 → 测试映射按覆盖矩阵补到「无测试 = 0」（#1452）
+- plan 清到 mutation 存活 0：补 str 字段收拢与下标读法两条用例（#1424）
+- summary 的插电常亮与「等」后缀补真行为用例，mutation 存活清零（#1425）
+- host 的按宿主措辞加逐字断言，mutation 存活清零（#1418）
+- mutation 驱动的失败路径、summary 措辞与文档计数按审查结果修正（#1407）
+- 按审查修正 mutation 文档口径，conftest 的缓存清理不再提前返回（#1407）
+- mutation 驱动按模块分工作目录，并补 `gui` / `aac_android` 依赖（#1414）
+- coverage_note 清到 mutation 存活 0，缺档判断拆成一行、pragma 只覆盖那一行（#1426）
+- polarity 清到 mutation 存活 0：`want_state()` 对 None 早返回，不再需要 pragma（#1416）
+- CI 加 mutation job：PR 上只跑改动模块的 mutant，summary 带 pragma 计数（#1413）
+- mutation 驱动加 `--since`，按改动面挑模块跑（#1412）
+- mutmut 接入：模块 → 测试映射与 `devtools/mutation.py` 单模块驱动（#1411）
 - OPS 加守卫：必填键必须落在该 op 的允许键里（#1360）
 - 锚点登记加断言数上限，超限只在 CI summary 里可见、不阻断合并（#1397）
 - 按批次组织的回归用例改按行为域归属，十个域的 owner 由类上 `DOMAIN` 声明（#1404）

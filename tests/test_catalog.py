@@ -103,6 +103,36 @@ class ValidatorTests(unittest.TestCase):
         import tomllib
         catalog.validate(tomllib.loads((ROOT / DATA).read_text(encoding="utf-8")))
 
+    def test_accepts_the_boundary_values(self):
+        """边界值也是合法数据：比例取 0 / 1、`ms=1`、`off_required` 不带 `keep`（#1414）。"""
+        self.assertIsNone(catalog.validate({"segment": [{"name": "a", "ops": [
+            {"kind": "gesture", "start": [0, 0.5], "end": [1, 1], "ms": 1},
+            {"kind": "off_required", "only": ["x"], "page": "p"},
+        ]}]}))
+
+    def test_the_top_level_sentences_are_exact(self):
+        """顶层两条拒绝的原文逐字钉住：换个词、换个大小写、前后加个字都是另一种话（#1414）。"""
+        for data, message in (
+            ("这不是表", "数据顶层必须是表（table）"),
+            ({"segment": "x"}, "至少要有 [[segment]]（一份数据至少一段）"),
+        ):
+            with self.subTest(message):
+                with self.assertRaises(catalog.SchemaError) as caught:
+                    catalog.validate(data)
+                self.assertEqual(str(caught.exception), message)
+
+
+class OpKeyListTests(unittest.TestCase):
+    """`OPS` 每条的允许键由 `_keys` 从一行空格分隔的名单拆出来。
+
+    它只在 import 时被调用一次，早于 mutation 生效，所以这里直接喂名单：一行写完、读一列就是
+    完整键集，既是这份表的可读性约定，也是它唯一的产出（#1414）。"""
+
+    def test_a_space_separated_line_becomes_the_key_set(self):
+        from catalog.schema import _keys
+        self.assertEqual(_keys("kind name args kwargs"),
+                         frozenset({"kind", "name", "args", "kwargs"}))
+
 
 class CatalogFamilyTests(unittest.TestCase):
     """族自己的守卫（沿用 #1398，结构反推 #1399）：句柄、产出、gap 跟快照与 `OPS` 对得上，case 行是纯数据。
@@ -1459,6 +1489,30 @@ class NewOpProjectionTests(unittest.TestCase):
         self.assertIn("p.setting", {call.name for call in facts.calls})
 
 
+class WordsWalkTests(unittest.TestCase):
+    """`words` 扫数据里的 op 表：没有段、段里没有 ops、kind 不在 `OPS` 里都跳过，跳过一个接着扫下一个。"""
+
+    def test_data_without_segments_yields_nothing(self):
+        self.assertEqual(catalog.words({}), [])
+
+    def test_a_code_segment_has_no_ops_to_walk(self):
+        self.assertEqual(catalog.words({"segment": [{"name": "a", "code": "x"}]}), [])
+
+    def test_an_unknown_kind_is_skipped_and_the_rest_still_scanned(self):
+        data = {"segment": [{"name": "a", "ops": [
+            {"kind": "explode", "only": ["不认的字"]},
+            {"kind": "off", "only": ["甲"], "page": "p"},
+        ]}]}
+        self.assertEqual(catalog.words(data), [("甲", "literal")])
+
+    def test_a_string_valued_key_is_one_word_with_its_source(self):
+        """字符串与列表两种写法都出词条：`only_code` 是策略名单，来源档是 `strategy`。"""
+        data = {"segment": [{"name": "a", "ops": [
+            {"kind": "off", "only_code": "system_ads", "page": "p"},
+        ]}]}
+        self.assertEqual(catalog.words(data), [("system_ads", "strategy")])
+
+
 class OffRequiredProjectionTests(unittest.TestCase):
     """`off_required` 的名字要同时进词库与事实层（#1266）：漏一处，入口速查 / 词库就静默丢名字。
 
@@ -1940,6 +1994,149 @@ class OpKindDeclarationTests(unittest.TestCase):
                     self.assertFalse(facts.calls, f"{kind} 在 NO_FACT_KINDS 里却产出了事实：{facts.calls}")
                 else:
                     self.assertTrue(facts.calls, f"{kind} 不在 NO_FACT_KINDS 里却没产出事实")
+
+
+class CatalogLoweringDetailTests(unittest.TestCase):
+    """数据降级出的源码行：每个分支的键与实参都照数据写出来，缺可选键时按空处理而不是崩。
+
+    判据是 `_catalog_src()` 自己的输出（事实层唯一的中间表示），以及 `scan_catalog()` 补的归属。"""
+
+    def lowered(self, ops):
+        import recipe_source
+        return recipe_source._catalog_src({"segment": [{"name": "a", "ops": ops}]})
+
+    def test_close_all_keeps_its_page(self):
+        self.assertEqual(self.lowered([{"kind": "close_all", "page": "广告"}]), 'p.off(page="广告")')
+
+    def test_skip_unless_installed_keeps_its_command(self):
+        op = {"kind": "skip_unless_installed", "command": "pm path com.a",
+              "contains": "com.a", "text": "com.a"}
+        self.assertEqual(self.lowered([op]), 'p.d.shell("pm path com.a")')
+
+    def test_entry_keeps_its_text(self):
+        self.assertEqual(self.lowered([{"kind": "entry", "text": "甲"}]), 'p.entry("甲")')
+
+    def test_gated_lists_every_entry_as_a_maybe_call(self):
+        self.assertEqual(self.lowered([{"kind": "gated", "entries": ["甲", "乙"], "ops": []}]),
+                         'maybe(p, rt, "甲")\nmaybe(p, rt, "乙")')
+
+    def test_a_non_mapping_op_is_skipped_not_the_end_of_the_list(self):
+        lowered = self.lowered(["不是 op", {"kind": "off", "only": ["甲"], "page": "p"}])
+        self.assertEqual(lowered, 'p.off(only=["甲"], page="p")')
+
+    def test_off_writes_only_and_keep_together(self):
+        lowered = self.lowered([{"kind": "off", "only": ["甲"], "keep": ["乙"], "page": "p"}])
+        self.assertIn('only=["甲"], ', lowered)
+        self.assertIn('keep=["乙"], ', lowered)
+
+    def test_off_required_writes_only_code_and_keep_together(self):
+        op = {"kind": "off", "only_code": "system_ads", "keep": ["乙"], "page": "p"}
+        lowered = self.lowered([op])
+        self.assertIn("only=system_ads(), ", lowered)
+        self.assertIn('keep=["乙"], ', lowered)
+
+    def test_if_lib_without_arguments_has_no_trailing_comma(self):
+        self.assertEqual(self.lowered([{"kind": "if_lib", "name": "gear"}]), "gear(p, rt)")
+
+    def test_if_lib_keeps_its_arguments(self):
+        self.assertEqual(self.lowered([{"kind": "if_lib", "name": "gear", "args": ["甲"]}]),
+                         'gear(p, rt, "甲")')
+
+    def test_if_lib_any_writes_each_short_circuit_call(self):
+        lowered = self.lowered([{"kind": "if_lib_any", "calls": [
+            {"name": "gear", "args": ["甲"]},
+            {"name": "off_one"},
+            {"method": "enter", "args": ["乙"]},
+        ]}])
+        self.assertEqual(lowered, 'gear(p, rt, "甲")\noff_one(p, rt)\np.enter("乙")')
+
+    def test_lib_without_arguments_has_no_trailing_comma(self):
+        self.assertEqual(self.lowered([{"kind": "lib", "name": "gear"}]), "gear(p, rt)")
+
+    def test_lib_keeps_its_arguments(self):
+        self.assertEqual(self.lowered([{"kind": "lib", "name": "gear", "args": ["甲"]}]),
+                         'gear(p, rt, "甲")')
+
+    def test_close_listed_writes_the_names_and_the_page(self):
+        op = {"kind": "close_listed", "names": ["甲", "乙"], "page": "页", "miss_print": "m"}
+        self.assertEqual(self.lowered([op]), 'close_named(p, rt, ["甲", "乙"], "页")')
+
+    def test_close_listed_without_names_writes_an_empty_list(self):
+        """`scan_catalog()` 也收未经校验的映射：缺 `names` 时按空名单降级，不抛。"""
+        self.assertEqual(self.lowered([{"kind": "close_listed", "page": "页", "miss_print": "m"}]),
+                         'close_named(p, rt, [], "页")')
+
+    def test_ops_inside_an_argument_block_are_walked(self):
+        op = {"kind": "lib", "name": "gear", "args": [{"ops": [{"kind": "entry", "text": "甲"}]}]}
+        self.assertEqual(self.lowered([op]), "gear(p, rt, {'ops': [{'kind': 'entry', 'text': '甲'}]})\n"
+                                            'p.entry("甲")')
+
+    def test_a_missing_sub_op_list_is_treated_as_empty(self):
+        cases = [
+            ({"kind": "gated", "entries": ["甲"]}, 'maybe(p, rt, "甲")'),
+            ({"kind": "gated"}, "pass"),
+            ({"kind": "scoped"}, "pass"),
+            ({"kind": "if_lib_any"}, "pass"),
+            ({"kind": "if_find", "text": "甲"}, "pass"),
+        ]
+        for op, expected in cases:
+            with self.subTest(op["kind"]):
+                self.assertEqual(self.lowered([op]), expected)
+
+    def test_data_without_segments_lowers_to_pass(self):
+        import recipe_source
+        self.assertEqual(recipe_source._catalog_src({}), "pass")
+
+    def test_a_segment_without_ops_lowers_to_pass(self):
+        import recipe_source
+        self.assertEqual(recipe_source._catalog_src({"segment": [{"name": "a"}]}), "pass")
+
+    def test_the_unregistered_kind_message_is_verbatim(self):
+        import recipe_source
+        data = {"segment": [{"name": "a", "ops": [{"kind": "not_a_registered_kind"}]}]}
+        with self.assertRaises(RuntimeError) as caught:
+            recipe_source._catalog_src(data)
+        self.assertEqual(str(caught.exception),
+                         "catalog 事实层不认识 kind='not_a_registered_kind'：给它加一条降级分支"
+                         "（产出词条 / 入口事实），或在 catalog.schema 的 OPS 里声明 no_fact=True"
+                         "（它本来就不产出事实，派生出 NO_FACT_KINDS）")
+
+
+class CatalogAttributionTests(unittest.TestCase):
+    """`scan_catalog()` 按名字补库调用的归属：`imports` / `import_lines` / `Call.module` 三处一起。"""
+
+    DATA = {"segment": [{"name": "a", "ops": [{"kind": "lib", "name": "gear"}]}]}
+
+    def test_a_library_call_gets_its_module_and_its_lowered_line(self):
+        import recipe_source
+        module = recipe_source._lib_modules()["gear"]
+        facts = recipe_source.scan_catalog(self.DATA)
+        self.assertEqual(facts.imports, {"gear": module})
+        self.assertEqual(facts.import_lines, {"gear": 1})
+        self.assertEqual([call.module for call in facts.calls], [module])
+
+    def test_the_exception_file_imports_are_merged_with_the_data_side(self):
+        import recipe_source
+        module = recipe_source._lib_modules()["gear"]
+        facts = recipe_source.scan_catalog(self.DATA, "from recipe_nav import gear as other\n")
+        self.assertEqual(facts.imports, {"gear": module, "other": "recipe_nav"})
+        self.assertEqual(facts.import_lines, {"gear": 1, "other": 1})
+
+    def test_the_exception_file_definitions_are_merged_not_intersected(self):
+        import recipe_source
+        facts = recipe_source.scan_catalog(self.DATA, "def helper(p, rt):\n    p.entry('甲')\n")
+        self.assertEqual(facts.defines, {"helper"})
+        self.assertEqual([call.name for call in facts.calls], ["gear", "p.entry"])
+
+    def test_an_exception_file_without_a_companion_is_not_merged(self):
+        """`scan_catalog_file()` 读不到同名 `.py` 时走的是同一条数据事实，不额外合并空源码。"""
+        import recipe_source
+        with tempfile.TemporaryDirectory() as tmp:
+            toml_path = Path(tmp) / "M1.toml"
+            toml_path.write_text('[[segment]]\nname="a"\nops=[{kind="lib", name="gear"}]\n',
+                                 encoding="utf-8")
+            facts = recipe_source.scan_catalog_file(str(toml_path))
+        self.assertEqual([call.name for call in facts.calls], ["gear"])
 
 
 if __name__ == "__main__":

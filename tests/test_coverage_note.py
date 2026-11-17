@@ -84,6 +84,22 @@ class HostWordingTests(unittest.TestCase):
         with patch.object(host, "ON_PHONE", False):
             self.assertNotIn("App", note(run("部分"), on_phone=True))
 
+    def test_the_sentences_are_exactly_what_the_user_reads(self):
+        """#1418：整句逐字钉住——两个宿主的措辞各一处 `where` 拼进去，改一个字用户看到的就是另一句话。"""
+        self.assertEqual(
+            {"desktop": host.coverage_notes(False), "phone": host.coverage_notes(True)},
+            {
+                "desktop": {
+                    "部分": "这套机型脚本只在一部分步骤上做过真机验证，其余步骤这次是照脚本直接跑的，建议在 App 里顺手核对一眼。",
+                    "未记录": "这套机型脚本没有真机验证记录，改动结果建议在 App 里自己核对一遍。",
+                },
+                "phone": {
+                    "部分": "这套机型脚本只在一部分步骤上做过真机验证，其余步骤这次是照脚本直接跑的，建议顺手核对一眼。",
+                    "未记录": "这套机型脚本没有真机验证记录，改动结果建议自己核对一遍。",
+                },
+            },
+        )
+
     def test_every_tier_but_full_has_its_own_line(self):
         """档位词表两处：`verify_ledger.TIERS` 是单一来源，这里只做映射（两个宿主同一张表）。
         台账加一档时这条会红，提醒「新档在结果页说不说」要想一遍，而不是静默不显示（#1130）。"""

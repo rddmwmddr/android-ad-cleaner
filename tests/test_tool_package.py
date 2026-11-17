@@ -24,12 +24,13 @@ ENGINE = frozenset({
     "recipe_strategies", "row", "stdio", "summary", "troubleshooting", "ui_hidden", "ui_session",
     "verify_ledger", "vocab", "wait",
 })
-# 仓库工具链：搬进 devtools/，只在 CI 与本机跑、不随包（名单内容与 #1390 冻结的一致）。
+# 仓库工具链：搬进 devtools/，只在 CI 与本机跑、不随包（#1390 冻结的 19 项，加上 #1411 的
+# mutation / mutation_scope）。
 TOOLCHAIN = frozenset({
     "check_comment_tickets", "check_conventional", "check_dco", "check_ticket_ref", "claim",
     "commits", "followup", "gen_adr_index", "gen_brand_taps", "gen_site_css", "gh", "glob_scan",
-    "release_assets", "release_meta", "stale", "test_anchors", "triage_audit",
-    "typecheck_recipes", "unittest_summary",
+    "mutation", "mutation_scope", "release_assets", "release_meta", "stale", "test_anchors",
+    "triage_audit", "typecheck_recipes", "unittest_summary",
 })
 # 引擎的两个子包整体算引擎；逐个 import 时一并带上。
 ENGINE_PACKAGES = ("phone", "catalog")

@@ -53,8 +53,9 @@ def matching_device_version(device_info: Mapping[str, str] | None, core: str, fa
     """设备版本核心以 core 开头的那段原值；core 为空或对不上返回空串。"""
     if not core:
         return ""
-    for field in ("build", "os"):
-        raw = (device_info or {}).get(field) or ""
+    # 没报的字段不进比较：`filter(None, ...)` 同时跳过缺键与空串，不用给每个字段垫一个 `or ""`。
+    versions = filter(None, ((device_info or {}).get("build"), (device_info or {}).get("os")))
+    for raw in versions:
         if version_core(raw, fam).startswith(core):
             return raw
     return ""
@@ -138,7 +139,7 @@ def _recipe_files(root: str | os.PathLike[str]) -> list[str]:
     return out
 
 
-def recipe_for(model: str, brand: str = "", device_info: Mapping[str, str] | None = None, *,
+def recipe_for(model: str, brand: str = "", device_info: Mapping[str, str] | None = None, *,   # pragma: no mutate 语义等价：省略 brand 时的占位串 "XXXX" 在 FAMILY 里没有条目，fam 仍是空串。
                root: str | os.PathLike[str] | None = None) -> tuple[str | None, bool]:
     """返回 (路径, 是否参考)。先找本型号（目录名或脚本里的 MODELS）；没有就找同家族别的机型，作参考。
 
@@ -161,20 +162,21 @@ def recipe_for(model: str, brand: str = "", device_info: Mapping[str, str] | Non
                     if recorded and build_ok(device_info, recorded):
                         return variant, False
             return r, False
-    fam = FAMILY.get((brand or "").lower(), "")
-    refdir = os.path.join(where, "recipes", fam, REFERENCE.get(fam, ""))
-    # 参考脚本与 `_recipe_files()` 同一口径：主本优先于变体。vivo 的 `V2547DA-android17.toml`
-    # 按字母序排在 `V2547DA.toml` 前面，取 `sorted(...)[0]` 会让参考变成 Android 17 变体，
-    # `same_version_family_recipe()` 的 `ref_core` 跟着从 `16` 变 `17.1.10.2`。
-    preferred = _main_script(refdir) or os.path.join(refdir, "recipe.py")
-    if fam in REFERENCE and os.path.exists(preferred):
-        # 固定参考的 BUILD 常写得粗（OS4.0、16），前缀一命中就到它为止，同族里录在同版本上的
-        # 脚本永远进不了候选。两条路径同池排（#969）；固定参考的 BUILD 写粗只是让它自己不够贴。
-        if device_info:
-            picked = same_version_family_recipe(allr, fam, preferred, device_info)
-            if picked:
-                return picked, True
-        return preferred, True
+    fam = FAMILY.get((brand or "").lower(), "")   # pragma: no mutate 语义等价：占位品牌串 "xxxx" 与占位族名 "XXXX" 都不在 FAMILY 的键 / 值里，查表与后面的比较给出的仍是空族。
+    if fam in REFERENCE:
+        # 参考脚本与 `_recipe_files()` 同一口径：主本优先于变体。vivo 的 `V2547DA-android17.toml`
+        # 按字母序排在 `V2547DA.toml` 前面，取 `sorted(...)[0]` 会让参考变成 Android 17 变体，
+        # `same_version_family_recipe()` 的 `ref_core` 跟着从 `16` 变 `17.1.10.2`。
+        # `_main_script()` 只给两种答案：目录里确实存在的那份主本，或一份脚本都没有时的 None。
+        preferred = _main_script(os.path.join(where, "recipes", fam, REFERENCE[fam]))
+        if preferred is not None:
+            # 固定参考的 BUILD 常写得粗（OS4.0、16），前缀一命中就到它为止，同族里录在同版本上的
+            # 脚本永远进不了候选。两条路径同池排（#969）；固定参考的 BUILD 写粗只是让它自己不够贴。
+            if device_info:
+                picked = same_version_family_recipe(allr, fam, preferred, device_info)
+                if picked:
+                    return picked, True
+            return preferred, True
     for r in allr:
         if fam and _dir_family(r) == fam:
             return r, True
@@ -183,4 +185,8 @@ def recipe_for(model: str, brand: str = "", device_info: Mapping[str, str] | Non
 
 def build_ok(i: Mapping[str, str], rb: str) -> bool:
     """录制版本 rb 和这台对不对得上：比 ro.build.display.id，小米再比 HyperOS 版本号。"""
-    return (not rb) or i["build"].startswith(rb) or (i.get("os") or "").startswith(rb)
+    if not rb:
+        return True
+    # 没报的字段不进比较：`filter(None, ...)` 同时跳过缺键与空串，不用给 HyperOS 版本号垫一个 `or ""`。
+    versions = filter(None, (i["build"], i.get("os")))
+    return any(version.startswith(rb) for version in versions)

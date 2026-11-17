@@ -1,4 +1,5 @@
-"""引擎事件的词表与解析（ADR-0004）：六个 kind、固定前缀、默认不发、坏行当没有。"""
+"""引擎事件的词表与解析（ADR-0004）：六个 kind、固定前缀、默认不发、坏行当没有，
+写出的每一行中文原样可读并立即送达客户端。"""
 import io
 import os
 import sys
@@ -26,6 +27,18 @@ def emit(kind, on, **data):
     return out.getvalue()
 
 
+class FlushCountingStdout(io.StringIO):
+    """数 flush 次数：客户端按行读子进程的管道，`print(..., flush=True)` 是唯一让它立刻看见的手段。"""
+
+    def __init__(self):
+        super().__init__()
+        self.flushes = 0
+
+    def flush(self):
+        self.flushes += 1
+        super().flush()
+
+
 class EmitTests(unittest.TestCase):
     def test_silent_unless_the_client_asked_for_events(self):
         self.assertEqual(emit("paused", on=False), "")
@@ -40,17 +53,27 @@ class EmitTests(unittest.TestCase):
             self.assertEqual(events.parse(line.strip()), kind, kind)
 
     def test_a_kind_outside_the_vocabulary_is_a_programming_error(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError) as caught:
             emit("paused_maybe", on=True)
+        self.assertEqual(str(caught.exception), "未定义的事件：paused_maybe")
 
     def test_a_payload_rides_in_the_same_json_object(self):
         line = emit("failed_steps", on=True, steps=["桌面", "商店"])
+        # 逐字钉住：载荷里的中文不转成 \uXXXX，客户端与上报日志直接读这一行。
+        self.assertEqual(line, '#aac:event {"kind": "failed_steps", "steps": ["桌面", "商店"]}\n')
         self.assertEqual(events.parse(line.strip()), "failed_steps")
         self.assertEqual(events.parse_data(line.strip())["steps"], ["桌面", "商店"])
 
     def test_no_payload_keeps_the_line_byte_for_byte(self):
         # 旧树也绿：守的是给 emit() 加关键字载荷之后，没载荷的那几行不许变一个字节。
         self.assertEqual(emit("link_lost", on=True), '#aac:event {"kind": "link_lost"}\n')
+
+    def test_an_event_line_is_flushed_as_soon_as_it_is_written(self):
+        # 引擎的 stdout 接的是客户端的管道：不 flush 的话暂停 / 断线要等缓冲写满才送到。
+        out = FlushCountingStdout()
+        with patch.dict(os.environ, {"AAC_EVENTS": "1"}), redirect_stdout(out):
+            events.emit("paused")
+        self.assertEqual(out.flushes, 1)
 
 
 class ParseTests(unittest.TestCase):
@@ -74,6 +97,19 @@ class ParseTests(unittest.TestCase):
             self.assertTrue(events.is_event(line), line)
             self.assertIsNone(events.parse(line), line)
             self.assertIsNone(events.parse_data(line), line)
+
+
+class PayloadTests(unittest.TestCase):
+    def test_each_payload_line_is_flushed_as_soon_as_it_is_written(self):
+        out = FlushCountingStdout()
+        with patch.dict(os.environ, {"AAC_EVENTS": "1"}), redirect_stdout(out):
+            events.payload("骨架 v1\n0 FrameLayout 0,0,100,100")
+        self.assertEqual(out.flushes, 2)
+
+    def test_a_line_that_is_not_a_payload_comes_back_untouched(self):
+        # 不是载荷行（事件行、人话）一律原样交回，不能按前缀长度截掉一段。
+        for line in ('#aac:event {"kind": "paused"}', "普通人话"):
+            self.assertEqual(events.strip_payload(line), line, line)
 
 
 if __name__ == "__main__":

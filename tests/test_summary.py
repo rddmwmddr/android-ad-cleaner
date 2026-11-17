@@ -48,6 +48,16 @@ class PureFunctionTest(unittest.TestCase):
         self.assertEqual(summary.summarize({"tail": ["插电常亮已改回 1"]}), "插电常亮已改回 1")
         self.assertEqual(summary.summarize({"tail": ["插电常亮未改动"]}), "插电常亮未改动")
 
+    def test_the_plugged_in_line_does_not_lean_on_the_last_line(self):
+        """#1425：这两句必须走自己的分支——tail 里后面还有别的行时，末行不是它们。"""
+        self.assertEqual(summary.summarize({"tail": ["插电常亮已改回 1", "收尾完成"]}), "插电常亮已改回 1")
+        self.assertEqual(summary.summarize({"tail": ["插电常亮未改动", "收尾完成"]}), "插电常亮未改动")
+
+    def test_two_unfinished_steps_keep_the_etc_suffix(self):
+        """#1425：恰好两个未完成步骤时仍带「等」后缀。"""
+        tail = ["机型脚本跑完：关了 3 个，12 秒", "未完成步骤：甲、乙"]
+        self.assertEqual(summary.summarize({"tail": tail}), "关了 3 个开关；2 段未完成（甲 等）")
+
     def test_quickapp_counts_lines(self):
         tail = ["  快应用 com.a 已关闭", "  快应用 com.b 已关闭",
                 "快应用组件已关闭（保留项除外）。请按常用入口核对效果；恢复：quickapp on"]
