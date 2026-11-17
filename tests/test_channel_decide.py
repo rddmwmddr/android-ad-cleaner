@@ -1,8 +1,7 @@
 """渠道页的认页决策是屏幕快照上的纯函数：认出哪一行、卡在哪一阶段、哪些行可拨。（#1434）
 
 输入只有一份 `ScreenSnapshot`（内联 XML 字面量经 `snapshot_from_tree()` 装配），输出是
-认出 / 没认出与原因；用例里没有一个读屏或点击入口，`ChannelPage` 那侧另有一条「不该点时
-一次都没点」的桩级断言。
+认出 / 没认出与原因；最后一组用点击桩断言 `ChannelPage` 那侧「不该点时一次都没点」。
 """
 import sys
 import unittest
