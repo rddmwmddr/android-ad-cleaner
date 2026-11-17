@@ -11,6 +11,7 @@
 """
 import hashlib, re, shlex, sys, time, os
 from dataclasses import dataclass
+from enum import StrEnum
 from stdio import use_utf8_console
 
 use_utf8_console()
@@ -87,26 +88,49 @@ SKELETON_PER_RUN = 2                            # 一次运行最多带两份不
 # ---------- 一项的结局 ----------
 # 每个出口返回一个 Outcome；怎么记账（算不算失败、要不要重试、算不算拨动了、复查是否豁免）
 # 由下面的 RULES 表决定，不再由返回值的字符串形状暗示。detail 只给人看。
-DONE = "done"                          # 达成目标（关掉或还原）
-GREYED = "greyed"                      # 系统锁定了这个渠道：开关是灰的，点了也不会变
-APP_DENIED = "app_denied"              # 应用通知整体关闭（POST_NOTIFICATIONS 被拒），渠道不会弹出
-PROTECTED = "protected"                # 找机位一类功能通知，不动
-NO_CHANNEL = "no_channel"              # 清单里的渠道在手机上不存在
-DELETED = "deleted"                    # 渠道已删除
-APP_OFF = "app_off"                    # 应用通知总开关关着
-ALREADY = "already"                    # 本来就是目标状态，不打印
-CONFIRMED_LATER = "confirmed_later"    # 第二遍重扫才确认其实已经改好
-NOT_CONFIRMED = "not_confirmed"        # 页面没认出，或重取时页面已变化
-APP_STATE_UNKNOWN = "app_state_unknown"    # 应用通知页认出来了，总开关状态却读不出来：判断不了是不是整体关闭
-UI_HIDDEN = "ui_hidden"                # 页面打得开、页面上确实没有这一行：系统没把它放到界面上
-MISMATCH = "mismatch"                  # 界面状态与渠道实际状态不一致
-UNCHANGED = "unchanged"                # 点了三次，渠道状态仍未改变
-ERROR = "error"                        # 意外异常，原文进 detail
+# 15 个结局是封闭词表：成员与 RULES 的键一一对应，加一个没登记的结局由
+# tests/test_rules_guards.py 的 ChannelOutcomeGuards 在本机挡下。用 StrEnum 而不是
+# `class X(str, Enum)`：后者从 3.11 起 str() 给「X.DONE」，日志与对拍输出会跟着变。
+class OutcomeKind(StrEnum):
+    DONE = "done"                          # 达成目标（关掉或还原）
+    GREYED = "greyed"                      # 系统锁定了这个渠道：开关是灰的，点了也不会变
+    APP_DENIED = "app_denied"              # 应用通知整体关闭（POST_NOTIFICATIONS 被拒），渠道不会弹出
+    PROTECTED = "protected"                # 找机位一类功能通知，不动
+    NO_CHANNEL = "no_channel"              # 清单里的渠道在手机上不存在
+    DELETED = "deleted"                    # 渠道已删除
+    APP_OFF = "app_off"                    # 应用通知总开关关着
+    ALREADY = "already"                    # 本来就是目标状态，不打印
+    CONFIRMED_LATER = "confirmed_later"    # 第二遍重扫才确认其实已经改好
+    NOT_CONFIRMED = "not_confirmed"        # 页面没认出，或重取时页面已变化
+    APP_STATE_UNKNOWN = "app_state_unknown"    # 应用通知页认出来了，总开关状态却读不出来：判断不了是不是整体关闭
+    UI_HIDDEN = "ui_hidden"                # 页面打得开、页面上确实没有这一行：系统没把它放到界面上
+    MISMATCH = "mismatch"                  # 界面状态与渠道实际状态不一致
+    UNCHANGED = "unchanged"                # 点了三次，渠道状态仍未改变
+    ERROR = "error"                        # 意外异常，原文进 detail
+
+
+# 模块级名字照旧可用（用例与渲染都取 `chan_fast.DONE`）。别名与成员同名，
+# 改名要两处一起动，ChannelOutcomeGuards 对得上才算数。
+DONE = OutcomeKind.DONE
+GREYED = OutcomeKind.GREYED
+APP_DENIED = OutcomeKind.APP_DENIED
+PROTECTED = OutcomeKind.PROTECTED
+NO_CHANNEL = OutcomeKind.NO_CHANNEL
+DELETED = OutcomeKind.DELETED
+APP_OFF = OutcomeKind.APP_OFF
+ALREADY = OutcomeKind.ALREADY
+CONFIRMED_LATER = OutcomeKind.CONFIRMED_LATER
+NOT_CONFIRMED = OutcomeKind.NOT_CONFIRMED
+APP_STATE_UNKNOWN = OutcomeKind.APP_STATE_UNKNOWN
+UI_HIDDEN = OutcomeKind.UI_HIDDEN
+MISMATCH = OutcomeKind.MISMATCH
+UNCHANGED = OutcomeKind.UNCHANGED
+ERROR = OutcomeKind.ERROR
 
 
 @dataclass(frozen=True)
 class Outcome:
-    kind: str
+    kind: OutcomeKind
     detail: str = ""
     payload: str = ""        # 进上报日志的机器行（页面骨架等），不参与判读
 

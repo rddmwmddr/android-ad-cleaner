@@ -341,6 +341,14 @@ why = "营销 / 服务 / 受保护七组判定散开会让扫描与拨动给出�
 expires_if = "渠道判定改成服务端规则、或机型脚本各自声明时删。"
 
 [[rule]]
+id = "dev.channels.outcome-enum"
+source = "docs/ARCHITECTURE.md#函数级细节"
+check = "test:test_rules_guards::ChannelOutcomeGuards.test_enum_members_match_rules_keys"
+status = "enforced"
+why = "15 个结局原是裸字符串，拼错一个只在跑到那一支时炸，并静默产出一个谁都解释不了的空结局（#1433）；`RULES` 仍是唯一一张「怎么记账」的表，成员与键必须一一对应，加一个没登记的结局要在本机就红，而不是等真机走到那一支。"
+expires_if = "结局不再以字符串参与记账（枚举与 RULES 合并成一份声明、或改成结构化对象）时删。"
+
+[[rule]]
 id = "dev.navigation.bottom-tab"
 source = "docs/ARCHITECTURE.md#函数级细节"
 check = "code:tool/phone/navigator.py:Navigator"

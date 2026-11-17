@@ -1,10 +1,12 @@
 """规则守卫：文档内容类四条（`DocGuards`）、注册表类一条（`RegistryGuards`）、引擎结构类两条（`EngineGuards`）、
+渠道结局词表一条（`ChannelOutcomeGuards`）、
 库依赖方向一条（`RecipeLibGuards`）、手机版界面一条（`AndroidGuards`）、流程 / CI 类三条（`CiGuards`）、
 夹具装配类两条（`FixtureGuards`）、桩与断言两条（`StubGuards`）、发版产物一条（`ReleaseGuards`）、
 标准流一条（`StdioGuards`）与 `gh` 会话一条（`GhGuards`），沿用 #1000、#1002 的做法。
 
 `DocGuards`：CHANGELOG 条目一行一个票号、文档里的代码位置用符号名、指到的 `.py` 路径要存在、
 上报服务地址与凭据不写进仓库。`RegistryGuards`：无锚点的顶层列表项按文档冻结上限。
+`ChannelOutcomeGuards`：渠道结局枚举的成员 ≡ `RULES` 的键，加结局要两处一起改。
 `AndroidGuards`：手机版页面状态只由 `AppModel.show()` 改写。`CiGuards`：回归命令与 CI 同一条、
 `.python-version` 与 Linux job 同版、两个平台各跑一版解释器。`FixtureGuards`：`tests/` 里绕过
 `fixtures.phone_stub()` 手搓假 `Phone` 的文件按清单冻结。`StubGuards`：`with patch(...) as X`
@@ -538,6 +540,105 @@ class EngineGuards(unittest.TestCase):
                 problems.append(f"aac_android/{name} 少了 {'、'.join(absent)}")
         self.assertEqual(problems, [], "替换层少了文件或导出名，手机会在打包后才暴露：\n"
                          + "\n".join(problems))
+
+
+CHAN_FAST = ROOT / "tool" / "chan_fast.py"
+OUTCOMES = "OutcomeKind"
+FROZEN_OUTCOMES = 15        # 封闭词表：加一个结局是一次有意为之的动作，数与 RULES 的键数一起改
+
+
+def outcome_vocabulary(source):
+    """`tool/chan_fast.py` 源码里结局词表的三层对账：枚举成员 ↔ 模块别名 ↔ `RULES` 的键。
+
+    只读 AST，不 import 引擎。返回问题清单，空列表才合规：新增一个没进 `RULES` 的枚举成员
+    在本机就红，不必等跑到那一支时静默产出一个谁都解释不了的空结局。
+    """
+    tree = ast.parse(source)
+    kind = next((node for node in tree.body
+                 if isinstance(node, ast.ClassDef) and node.name == OUTCOMES), None)
+    if kind is None:
+        return [f"{CHAN_FAST.name} 里找不到 class {OUTCOMES}"]
+    problems = []
+    if not any(isinstance(base, ast.Name) and base.id == "StrEnum" for base in kind.bases):
+        problems.append(f"{OUTCOMES} 要继承 StrEnum：json 序列化、f-string 与 == 字符串都靠它保持原样")
+    members = {}
+    for stmt in kind.body:
+        if isinstance(stmt, ast.Assign):
+            for target in stmt.targets:
+                if isinstance(target, ast.Name):
+                    members[target.id] = stmt.value.value if isinstance(stmt.value, ast.Constant) else None
+    if len(set(members.values())) != len(members):
+        problems.append(f"{OUTCOMES} 有两个成员用了同一个字面量，后一个只是别名、不是新结局")
+
+    aliases, rules = {}, None
+    for stmt in tree.body:
+        if not isinstance(stmt, ast.Assign):
+            continue
+        for target in stmt.targets:
+            if not isinstance(target, ast.Name):
+                continue
+            value = stmt.value
+            if (isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name)
+                    and value.value.id == OUTCOMES):
+                aliases[target.id] = value.attr
+            elif target.id == "RULES" and isinstance(value, ast.Dict):
+                rules = value
+    for name, member in sorted(aliases.items()):
+        if member not in members:
+            problems.append(f"{name} = {OUTCOMES}.{member}：{OUTCOMES} 里没有这个成员")
+        elif name != member:
+            problems.append(f"{name} 指向 {OUTCOMES}.{member}：别名要与成员同名，否则 chan_fast.{name} 换了结局")
+    if rules is None:
+        problems.append("找不到模块层的 RULES 表")
+        return problems
+    keys = []
+    for key in rules.keys:
+        if isinstance(key, ast.Name):
+            keys.append(key.id)
+        else:
+            problems.append(f"RULES 的键要写成结局别名，{ast.unparse(key)} 不是")
+    unresolved = sorted({key for key in keys if key not in aliases})
+    if unresolved:
+        problems.append("RULES 的键不是结局别名：" + "、".join(unresolved))
+    used = {aliases[key] for key in keys if key in aliases}
+    missing = sorted(set(members) - used)
+    if missing:
+        problems.append("枚举里有、RULES 里没有的结局：" + "、".join(missing))
+    extra = sorted(used - set(members))
+    if extra:
+        problems.append("RULES 里有、枚举里没有的结局：" + "、".join(extra))
+    if len(members) != FROZEN_OUTCOMES:
+        problems.append(f"{OUTCOMES} 有 {len(members)} 个成员，封闭词表应是 {FROZEN_OUTCOMES} 个")
+    if len(keys) != FROZEN_OUTCOMES:
+        problems.append(f"RULES 有 {len(keys)} 个键，封闭词表应是 {FROZEN_OUTCOMES} 个")
+    return problems
+
+
+class ChannelOutcomeGuards(unittest.TestCase):
+    """渠道结局是封闭词表：`OutcomeKind` 的成员 ≡ `RULES` 的键（#1433）。
+
+    以前 15 个结局是裸字符串，拼错一个只在跑到那一支时炸，并静默产出一个空结局。
+    篡改用例把源码字符串喂进同一个检查函数，不真的改 `tool/chan_fast.py`。
+    """
+
+    def test_enum_members_match_rules_keys(self):
+        problems = outcome_vocabulary(CHAN_FAST.read_text(encoding="utf-8"))
+        self.assertEqual(problems, [], "结局词表与 RULES 对不上：\n" + "\n".join(problems))
+
+    def test_a_kind_missing_from_rules_is_reported(self):
+        source = CHAN_FAST.read_text(encoding="utf-8")
+        anchor = '    ERROR = "error"'
+        self.assertIn(anchor, source, "篡改落点消失了，这条要跟着改")
+        tampered = source.replace(anchor, anchor + '\n    FAKE_KIND = "fake_kind"', 1)
+        problems = outcome_vocabulary(tampered)
+        self.assertTrue(any("FAKE_KIND" in problem for problem in problems), problems)
+
+    def test_a_rule_without_a_kind_is_reported(self):
+        source = CHAN_FAST.read_text(encoding="utf-8")
+        line = next((line for line in source.splitlines() if line.startswith("    ERROR: dict(")), "")
+        self.assertTrue(line, "篡改落点消失了，这条要跟着改")
+        problems = outcome_vocabulary(source.replace(line + "\n", "", 1))
+        self.assertTrue(any("ERROR" in problem for problem in problems), problems)
 
 
 def facade_imports(path):
