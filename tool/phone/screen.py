@@ -327,6 +327,15 @@ class Screen:
         """按 URI 拉起：公开 Intent，交给系统决定落在哪个 App。"""
         self.conn.reader.shell("am start -a android.intent.action.VIEW -d " + shlex.quote(uri))
 
+    def start_settings(self, action, extras=()):
+        """按 action + extras 拉起系统设置页（渠道页 / 应用通知页）。
+
+        NEW_TASK|CLEAR_TASK 避免复用旧页面；extras 按给定顺序逐个下发。"""
+        command = f"am start -f 0x10008000 -a {action}"
+        for key, value in extras:
+            command += f" --es {key} {shlex.quote(value)}"
+        self.conn.reader.shell(command)
+
     def home(self):
         """回桌面。"""
         self.conn.reader.shell("input keyevent HOME")
@@ -353,6 +362,8 @@ class Screen:
             self.home()
         elif intent.kind == IntentKind.TYPE:
             self.type_text(intent.text)
+        elif intent.kind == IntentKind.SETTINGS:
+            self.start_settings(intent.target, intent.extras)
         else:
             raise ValueError(f"未知意图种类：{intent.kind}")
 

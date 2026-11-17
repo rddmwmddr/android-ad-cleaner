@@ -46,11 +46,12 @@ def phone(pages, focus=DEEP_FOCUS, w=1080, h=2340):
     p.locked = Mock(return_value=False)
     p.screen.focus = Mock(return_value=focus)
     p.confirm = Mock()
-    p.click = Mock(side_effect=click)
+    p.click = p.screen.click = Mock(side_effect=click)   # 到达决策经 apply() 落到观测基座
     seen = iter(range(10 ** 6))
     p.screen.sig = Mock(side_effect=lambda: str(next(seen)))
     p.screen.settle = Mock(return_value=True)
     p.scroll, p.scroll_more = Mock(), Mock(return_value=False)
+    p.screen.scroll = p.scroll
     p.screen.tree = tree
     p.reader = Mock()
     p.reader.shell.return_value = Mock(output="")
@@ -202,10 +203,12 @@ def vivo_phone(pages, w=1080, h=2340):
     p.locked = Mock(return_value=False)
     p.screen.focus = Mock(return_value=VIVO_FOCUS)
     p.confirm, p.click = Mock(), Mock()
+    p.screen.click = p.click
     pages_seen = iter(range(10 ** 6))
     p.screen.sig = Mock(side_effect=lambda: str(next(pages_seen)))
     p.screen.settle = Mock(return_value=True)
     p.scroll, p.scroll_more = Mock(), Mock(return_value=False)
+    p.screen.scroll = p.scroll
     queue = [ET.fromstring(x) for x in pages]
     p.screen.tree = Mock(side_effect=lambda: queue.pop(0) if len(queue) > 1 else queue[0])
     return p
@@ -391,7 +394,8 @@ class VivoAppPageTests(unittest.TestCase):
         p = vivo_phone([vivo_app_page_with_row(y=2500, scrollable=False)])
         page_now = {"focus": VIVO_FOCUS}
         p.screen.focus = Mock(side_effect=lambda: page_now["focus"])
-        p.scroll = Mock(side_effect=lambda: page_now.update(focus="com.android.settings/.SubSettings"))
+        p.scroll = p.screen.scroll = Mock(
+            side_effect=lambda: page_now.update(focus="com.android.settings/.SubSettings"))
         at = chan.Attempt()
         with patch.object(chan.time, "sleep"):
             self.assertIsNone(chan.via_app_page(p, "com.kuaishou.nebula", VIVO_NAME, at))
@@ -449,6 +453,7 @@ def coloros_phone(xml, focus):
     p.locked = Mock(return_value=False)
     p.screen.focus = Mock(return_value=focus)
     p.confirm, p.click = Mock(), Mock()
+    p.screen.click = p.click
     p.screen.tree = Mock(return_value=ET.fromstring(xml))
     return p
 
@@ -492,8 +497,10 @@ def hint_phone(focus):
     p.locked = Mock(return_value=False)
     p.screen.focus = Mock(return_value=focus)
     p.confirm, p.click = Mock(), Mock()
+    p.screen.click = p.click
     p.screen.tree = Mock(return_value=ET.fromstring(EMPTY_TREE))
     p.scroll, p.scroll_more = Mock(), Mock(return_value=False)
+    p.screen.scroll = p.scroll
     p.reader = Mock()
     p.reader.shell.return_value = Mock(output="")
     return p

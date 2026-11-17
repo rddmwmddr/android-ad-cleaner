@@ -38,6 +38,7 @@ class IntentKind(StrEnum):
     OPEN = "open"
     HOME = "home"
     TYPE = "type"
+    SETTINGS = "settings"      # 按 action + extras 拉起系统设置页（渠道页 / 应用通知页）
 
 
 @dataclass(frozen=True)
@@ -127,17 +128,22 @@ class ChannelList:
 
 @dataclass(frozen=True)
 class Intent:
-    """对设备的一个动作；等待与重试不在这里。"""
+    """对设备的一个动作；等待与重试不在这里。
+
+    `extras` 是 `SETTINGS` 要逐个下发的 `--es` 键值对（有序）；其余种类留空。
+    """
     kind: IntentKind
     at: tuple[int, int] | None = None
     text: str = ""
     target: str = ""
+    extras: tuple[tuple[str, str], ...] = ()
 
     def to_json(self):
         return {"kind": self.kind.value,
                 "at": None if self.at is None else list(self.at),
                 "text": self.text,
-                "target": self.target}
+                "target": self.target,
+                "extras": [list(pair) for pair in self.extras]}
 
     @classmethod
     def from_json(cls, data):
@@ -145,7 +151,8 @@ class Intent:
         return cls(kind=IntentKind(data["kind"]),
                    at=None if at is None else tuple(at),
                    text=data.get("text", ""),
-                   target=data.get("target", ""))
+                   target=data.get("target", ""),
+                   extras=tuple(tuple(pair) for pair in data.get("extras", ())))
 
 
 @dataclass

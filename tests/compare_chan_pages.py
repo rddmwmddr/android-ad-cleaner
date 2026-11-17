@@ -153,6 +153,8 @@ def probe(tool):
         getattr(p, "conn", p).locked = Mock(return_value=False)
         p.scroll, p.scroll_more = Mock(), Mock(return_value=False)
         p.click = Mock()
+        # 到达决策走 `apply()`，落在观测基座的动作原语上；旧塔里门面自己就是基座
+        p.screen.scroll, p.screen.click = p.scroll, p.click
         return p
 
     out = {}
@@ -221,6 +223,7 @@ def probe(tool):
             screen.sig = Mock(side_effect=lambda: str(next(ticks)))  # noqa: B023 - 每轮新建 ticks，Mock 同步调用
             screen.settle = Mock(return_value=True)
             p.scroll, p.scroll_more = Mock(), Mock(return_value=False)
+            screen.scroll, screen.click = p.scroll, p.click      # 同上：改后经基座执行
             p.confirm = Mock()
             p.reader = Mock()
             p.reader.shell.return_value = Mock(output="")

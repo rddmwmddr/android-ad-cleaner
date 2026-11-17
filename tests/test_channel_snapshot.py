@@ -68,9 +68,9 @@ class ValueTypeTests(unittest.TestCase):
         self.assertTrue({"package", "activity", "width", "height", "rows", "texts",
                          "signature", "can_scroll"} <= names)
 
-    def test_intent_kinds_are_the_closed_six(self):
+    def test_intent_kinds_are_the_closed_seven(self):
         self.assertEqual([kind.value for kind in snap.IntentKind],
-                         ["tap", "scroll", "back", "open", "home", "type"])
+                         ["tap", "scroll", "back", "open", "home", "type", "settings"])
 
     def test_channel_list_keeps_channels_and_sets_apart(self):
         entry = snap.ChannelEntry("营销通知", 3, False)
@@ -146,7 +146,10 @@ class SnapshotJsonTests(unittest.TestCase):
                  snap.Intent(snap.IntentKind.BACK),
                  snap.Intent(snap.IntentKind.OPEN, target="https://example.com/渠道"),
                  snap.Intent(snap.IntentKind.HOME),
-                 snap.Intent(snap.IntentKind.TYPE, text="营销通知")]
+                 snap.Intent(snap.IntentKind.TYPE, text="营销通知"),
+                 snap.Intent(snap.IntentKind.SETTINGS, target="android.settings.CHANNEL_NOTIFICATION_SETTINGS",
+                             extras=(("android.provider.extra.APP_PACKAGE", "com.example.app"),
+                                     ("android.provider.extra.CHANNEL_ID", "promo")))]
         for intent in cases:
             with self.subTest(kind=intent.kind):
                 restored = snap.Intent.from_json(json.loads(json.dumps(intent.to_json())))
@@ -196,7 +199,7 @@ class IntentApplyTests(unittest.TestCase):
     def base(self):
         base = screen_stub()
         base.conn = SimpleNamespace(reader=Mock())
-        for name in ("click", "scroll", "back", "open_uri", "home", "type_text"):
+        for name in ("click", "scroll", "back", "open_uri", "home", "type_text", "start_settings"):
             setattr(base, name, Mock())
         return base
 
@@ -207,15 +210,33 @@ class IntentApplyTests(unittest.TestCase):
                  (snap.Intent(snap.IntentKind.OPEN, target="https://example.com"), "open_uri",
                   ("https://example.com",)),
                  (snap.Intent(snap.IntentKind.HOME), "home", ()),
-                 (snap.Intent(snap.IntentKind.TYPE, text="营销通知"), "type_text", ("营销通知",))]
+                 (snap.Intent(snap.IntentKind.TYPE, text="营销通知"), "type_text", ("营销通知",)),
+                 (snap.Intent(snap.IntentKind.SETTINGS, target="android.settings.APP_NOTIFICATION_SETTINGS",
+                              extras=(("android.provider.extra.APP_PACKAGE", "com.example.app"),)),
+                  "start_settings",
+                  ("android.settings.APP_NOTIFICATION_SETTINGS",
+                   (("android.provider.extra.APP_PACKAGE", "com.example.app"),)))]
         for intent, action, args in cases:
             with self.subTest(kind=intent.kind):
                 base = self.base()
                 base.apply(intent)
                 getattr(base, action).assert_called_once_with(*args)
-                for other in ("click", "scroll", "back", "open_uri", "home", "type_text"):
+                for other in ("click", "scroll", "back", "open_uri", "home", "type_text", "start_settings"):
                     if other != action:
                         getattr(base, other).assert_not_called()
+
+    def test_the_settings_intent_sends_the_same_am_start_line(self):
+        """深链表与重构前逐字相同：参数按给定顺序、值按 shell 规则引用。"""
+        base = screen_stub()
+        base.conn = SimpleNamespace(reader=Mock())
+        base.apply(snap.Intent(snap.IntentKind.SETTINGS,
+                               target="android.settings.CHANNEL_NOTIFICATION_SETTINGS",
+                               extras=(("android.provider.extra.APP_PACKAGE", "com.example.app"),
+                                       ("android.provider.extra.CHANNEL_ID", "a b"))))
+        self.assertEqual(base.conn.reader.shell.call_args.args[0],
+                         "am start -f 0x10008000 -a android.settings.CHANNEL_NOTIFICATION_SETTINGS"
+                         " --es android.provider.extra.APP_PACKAGE com.example.app"
+                         " --es android.provider.extra.CHANNEL_ID 'a b'")
 
     def test_tap_without_coordinates_is_refused(self):
         with self.assertRaises(ValueError):

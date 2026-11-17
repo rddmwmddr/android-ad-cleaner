@@ -46,6 +46,7 @@ ANCHORS = {
     "test_channel_page.py": ("渠道页：从哪条路走进去、认出的是不是渠道页、从哪一行拿开关。", 152),
     "test_channel_snapshot.py": ("屏幕快照 / 通知清单 / 意图 / 进度四个值类型：构造、JSON 往返，以及每个意图种类只经基座唯一执行点落地。", 60),
     "test_channel_decide.py": ("渠道页的认页决策是屏幕快照上的纯函数：认出哪一行、卡在哪一阶段、哪些行可拨。", 61),
+    "test_channel_arrive.py": ("渠道页的到达决策：六条路线与三条失败路径各自该发哪个意图、结局是什么。", 31),
     # Phone 门面、两个基座与七个阶段
     "test_phone_facade.py": ("Phone 门面 + 两个基座 + 五个阶段的对外契约。", 21),
     "test_phone_base.py": ("两个基座可以各自独立构造，不必造整台 Phone。", 22),

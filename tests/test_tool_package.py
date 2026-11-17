@@ -18,7 +18,7 @@ GRADLE = ROOT / "android" / "app" / "build.gradle.kts"
 # 出厂引擎：留在 tool/，随 APK 发到手机上（名单逐字来自 #1389 的「实现决定」）。
 ENGINE = frozenset({
     "run", "fast", "chan_fast", "adapt", "explore", "huawei_channels", "adb_link", "backups",
-    "captures", "channel_decide", "channel_policy", "coverage_note", "diagnostics", "entries",
+    "captures", "channel_arrive", "channel_decide", "channel_policy", "coverage_note", "diagnostics", "entries",
     "events", "geometry", "host", "plan", "polarity", "reader", "recipe_audit", "recipe_kit",
     "recipe_loader", "recipe_meta", "recipe_nav", "recipe_pick", "recipe_runtime",
     "recipe_source", "recipe_steps", "recipe_strategies", "row", "screen_snapshot", "stdio",

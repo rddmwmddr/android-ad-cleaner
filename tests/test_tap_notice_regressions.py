@@ -292,6 +292,7 @@ class VivoSlowTransitionTests(unittest.TestCase):
         p.locked = Mock(return_value=False)
         p.screen.focus = Mock(return_value="com.vivo.systemuiplugin/com.vivo.systemui.statusbar.notification.settings.channels.NotificationSettingsActivity")
         p.click, p.confirm, p.screen.sig = Mock(), Mock(), Mock(return_value="")
+        p.screen.click = p.click
         p.screen.settle = Mock(return_value=settled)
         p.scroll_more = Mock(return_value=False)
         queue = [ET.fromstring(x) for x in pages]

@@ -1126,6 +1126,7 @@ GEOMETRY_SCAN = (
     "tool/fast.py",
     "tool/chan_fast.py",
     "tool/channel_decide.py",
+    "tool/channel_arrive.py",
     "tool/phone/screen.py",
     "tool/phone/toggler.py",
     "tool/phone/dismisser.py",
@@ -1218,9 +1219,12 @@ class GeometryGuards(unittest.TestCase):
         self.assertEqual(len(stray_ratios(source, "snippet.py")), 2)
 
 
-# 渠道认页决策（#1434）是屏幕快照上的纯函数：`tool/channel_decide.py` 不 import 引擎 / 基座，
-# 也不调用动作原语。属性读（快照自己的 `.tree` / `.texts`）不是调用，不在这条判据里。
+# 渠道的认页（#1434）与到达（#1435）决策都是快照上的纯函数：`tool/channel_decide.py` 与
+# `tool/channel_arrive.py` 不 import 引擎 / 基座，也不调用动作原语。
+# 属性读（快照自己的 `.tree` / `.texts`）不是调用，不在这条判据里。
 DECIDE = ROOT / "tool" / "channel_decide.py"
+ARRIVE = ROOT / "tool" / "channel_arrive.py"
+DECIDE_MODULES = (DECIDE, ARRIVE)
 DECIDE_FORBIDDEN = ("fast", "chan_fast", "phone")
 DECIDE_ACTIONS = frozenset({"click", "scroll", "back", "settle", "open_uri", "home",
                             "type_text", "apply", "tree", "focus", "snapshot"})
@@ -1256,17 +1260,21 @@ def action_calls(source):
 
 
 class ChannelDecideGuards(unittest.TestCase):
-    def test_the_decision_module_imports_no_engine_or_base(self):
+    def test_the_decision_modules_import_no_engine_or_base(self):
         """决策模块只认识值类型与判定库：import `fast` / `phone.*` / `chan_fast` 即红。"""
-        self.assertTrue(DECIDE.is_file(), f"{rel(DECIDE)} 不在，这条守卫会空转")
-        self.assertEqual(engine_imports(DECIDE.read_text(encoding="utf-8")), [],
-                         f"{rel(DECIDE)} 是纯决策模块，别把引擎或基座拖进来")
+        for path in DECIDE_MODULES:
+            with self.subTest(module=rel(path)):
+                self.assertTrue(path.is_file(), f"{rel(path)} 不在，这条守卫会空转")
+                self.assertEqual(engine_imports(path.read_text(encoding="utf-8")), [],
+                                 f"{rel(path)} 是纯决策模块，别把引擎或基座拖进来")
 
-    def test_the_decision_module_calls_no_action_primitive(self):
-        """认页决策不许读屏、点击：函数体里出现动作原语的调用即红。"""
-        self.assertTrue(DECIDE.is_file(), f"{rel(DECIDE)} 不在，这条守卫会空转")
-        self.assertEqual(action_calls(DECIDE.read_text(encoding="utf-8")), [],
-                         f"{rel(DECIDE)} 只吃快照，动作留给出调用方")
+    def test_the_decision_modules_call_no_action_primitive(self):
+        """认页与到达决策不许读屏、点击：函数体里出现动作原语的调用即红。"""
+        for path in DECIDE_MODULES:
+            with self.subTest(module=rel(path)):
+                self.assertTrue(path.is_file(), f"{rel(path)} 不在，这条守卫会空转")
+                self.assertEqual(action_calls(path.read_text(encoding="utf-8")), [],
+                                 f"{rel(path)} 只吃快照，动作留给出调用方")
 
     def test_the_guard_sees_a_violation(self):
         source = ("from fast import Phone\n"

@@ -20,12 +20,15 @@ from fast import Phone, pause_point
 from phone.errors import ScreenLocked
 from row import PATH_DEPTH, SAME_LINE, disabled_at as row_disabled_at, link, skeleton
 from channel_decide import VIVO_ACTIVITY, VIVO_HOSTS, vivo_page
+from channel_arrive import truncated as truncated
 from channel_policy import classify, protected_channel
-from screen_snapshot import FG_SERVICE_MARKS as FG_SERVICE_MARKS, parse_notification_dump
+from screen_snapshot import (ChannelEntry, ChannelList, FG_SERVICE_MARKS as FG_SERVICE_MARKS,
+                             Intent, IntentKind, Progress, parse_notification_dump)
 from troubleshooting import ON_PHONE, XIAOMI_INPUT
 from backups import root_from_env
 from ui_hidden import UiHidden
 import adb_link
+import channel_arrive as arrive
 import channel_decide as decide
 import events
 import wait
@@ -235,9 +238,10 @@ def phone_model(reader):
     return model
 
 
-def truncated(cid):
-    """三星等系统会把长渠道 ID 缩略成 'com.se...'（#95）：不能当真实 ID 深链或去重。"""
-    return cid.endswith(("...", "…"))
+def channel_list_of(channels, app_off):
+    """`parse()` 的返回形状 → 到达决策要的通知清单：toggle 已经读过，不再读一次 dumpsys。"""
+    return ChannelList(channels={key: ChannelEntry(*value) for key, value in channels.items()},
+                       app_off=dict(app_off), locked=frozenset(), foreground=frozenset())
 
 
 def parse(p, locked=None, foreground=None):
@@ -373,12 +377,14 @@ POLL = 0.2                                  # 认渠道页的采样间隔
 class ChannelPage:
     """一次「到达某个渠道页」的全过程：选路线、发深链、必要时转应用通知页、认出这一行的开关。
 
-    vivo_app 是一次到达的中间状态（从应用通知页记下的 App 名，用来区分总页与渠道页），
-    所以到达是一个对象而不是一组函数。页面身份由 `_focus()` 判定，它写 Phone 上的
-    systemui_text / vivo_seen，归属不变（ADR-0002）。"""
+    路线与逐帧的下一步由 `channel_arrive` 的纯函数决定，这里只取快照、执行意图、把进度带回去。
+    vivo_app 是一次到达的结果（从应用通知页记下的 App 名，用来区分总页与渠道页），认页要用，
+    所以留在对象上；跨屏累积都在循环手里的 `Progress` 里。页面身份由 `_focus()` 判定，
+    它写 Phone 上的 systemui_text / vivo_seen，归属不变（ADR-0002）。"""
 
-    def __init__(self, p, name, pk="", cid="", vivo_app=None):
+    def __init__(self, p, name, pk="", cid="", vivo_app=None, channels=None):
         self.p, self.name, self.pk, self.cid, self.vivo_app = p, name, pk, cid, vivo_app
+        self.channels = channels        # 到达决策的输入：调用方已经读到的通知清单（可为 None）
         self.stage, self.why, self.raw_focus = "", "", ""
         self.no_row = False
         self.hidden = False
@@ -529,11 +535,15 @@ class ChannelPage:
         return text
 
     # ---------- 到页 ----------
-    def _enter_app_page(self):
-        """渠道深链被拦截时，从应用通知页进入：渠道行是导航行就点进去（HyperOS），自带开关就直接用这一行（内联布局）。"""
+    def _enter_app_page(self, app_page_ready=False):
+        """渠道深链被拦截时，从应用通知页进入：渠道行是导航行就点进去（HyperOS），自带开关就直接用这一行（内联布局）。
+
+        每一帧都是「取快照 → `channel_arrive.page_step()` 给下一步 → 执行 → 把进度带回去」；
+        `app_page_ready` 表示应用通知页的深链由 `open()` 按 `route()` 的意图发过了，这里不再发一次。
+        """
         p, name = self.p, self.name
-        p.reader.shell("am start -f 0x10008000 -a android.settings.APP_NOTIFICATION_SETTINGS"
-                       f" --es android.provider.extra.APP_PACKAGE {shlex.quote(self.pk)}")
+        if not app_page_ready:
+            p.apply(arrive.app_page_intent(self.pk))
         root = None
 
         def app_page_shown():
@@ -552,55 +562,66 @@ class ChannelPage:
             self.stage = self._unopened_stage()
             return None
         self.stage = ROW_NOT_FOUND
-        seen, bottom = False, False      # 名字在这一页出现过没有；列表翻到底没有
-        for _ in range(9):
+        progress, seen, bottom, vivo_app = Progress(), False, False, self.vivo_app
+        while progress.pages < arrive.PAGE_LIMIT:
+            progress.pages += 1
             if p.locked():
                 raise ScreenLocked("手机锁屏了")
-            if not self._focus():
-                self.stage = "应用通知页翻页时离开了"
+            focus = self._focus()
+            if not focus:
+                step = arrive.page_step(None, name=name, alive=False, seen=seen, vivo_app=vivo_app)
+                self.stage = step.stage
+                progress.failed_ways.add(step.stage)
                 return None
             root = root if root is not None else p.tree()
-            vivo = vivo_page(self._focus())
+            vivo = vivo_page(self._focus())      # 另一次读：raw_focus 取这一次的，与快照同一帧
             snap = p.snapshot(root=root, focus=self.raw_focus, with_rows=False)
-            seen = seen or any(hit.text == name for hit in snap.texts)
-            floor = decide.group_floor(snap) if vivo else None
-            if vivo and self.vivo_app is None and floor is not None:
-                # 这一屏有「类别」分组，说明是应用通知页：先记下 App 名。往下翻页后顶栏可能收起来（#336）
-                self.vivo_app = decide.top_title(snap, p.systemui_text)
-            for cand in decide.candidates(snap, name, systemui_text=p.systemui_text, floor=floor):
-                if not vivo and cand.boxes:
-                    self.stage = "应用通知页这一行的开关没认出"
-                    return _switch_of(self.refresh(rounds=12))   # 内联开关：不当作导航行点；vivo 的渠道行也带 checked，要点进去
-                if vivo:
-                    # 同一次读屏里列表有这一行渠道，说明是总页：这时的顶栏才是 App 名（直达页可能还没退掉）。
-                    # 翻页后顶栏可能已经不在，先前记下的 App 名照样有效
-                    self.vivo_app = self.vivo_app or decide.top_title(snap, p.systemui_text)
-                before = p.sig()
-                l, t, r, btm = cand.bounds
-                p.click((l + r) // 2, (t + btm) // 2)
-                if not p.settle(before):
-                    self.stage = "点这一行后页面没变"
-                    # vivo 进渠道页的转场慢，settle 等不到变化不代表没进去：照常认页，认不出才算没变。
-                    # 错误日志 10-30：0.2.7 的 vivo 报告里 212 次「点这一行后页面没变；标题顶部」——跳过时渠道页已经打开。
-                    # 只放宽 vivo：它的认页要求顶栏是渠道名、且不同于刚记下的 App 名，不会把总页的「允许通知」当成渠道开关
-                    return _switch_of(self.refresh(rounds=12)) if vivo else None
-                self.stage = "点进去后没认出渠道页"
+            step = arrive.page_step(snap, name=name, vivo=vivo,
+                                    systemui_text=p.systemui_text, vivo_app=vivo_app,
+                                    seen=seen, tapped=frozenset(progress.tapped))
+            seen, vivo_app = step.seen, step.vivo_app
+            self.vivo_app = vivo_app
+            if step.kind == arrive.StepAction.STOP:
+                if step.stage:
+                    self.stage = step.stage
+                    progress.failed_ways.add(step.stage)
+                return None
+            if step.kind == arrive.StepAction.RECOGNISE:
+                self.stage = step.stage
+                progress.failed_ways.add(step.stage)
                 return _switch_of(self.refresh(rounds=12))
-            if not p.scroll_more():
-                # vivo 的列表可能没标 scrollable，而渠道行已经读进 dump、坐标在屏下（#336）：自己翻一页找它。
-                # 这条路绕过了 scroll_more 的「没标可滚动就不滑」守卫，所以照它的规矩补一次焦点检查：
-                # 滑动把页面带走了就停下，不当成「没找到这一行」
-                if not (vivo and decide.off_screen_name(snap, name)):
-                    bottom = True
-                    break
-                focus, before = p.focus(), p.sig()
-                p.scroll()
-                if p.focus() != focus:
-                    self.stage = "应用通知页翻页时离开了"
+            if step.kind == arrive.StepAction.TAP:
+                progress.tapped.add(name)
+                before = p.sig()
+                p.apply(step.intent)
+                follow = arrive.after_click(settled=p.settle(before), vivo=vivo)
+                self.stage = follow.stage
+                progress.failed_ways.add(follow.stage)
+                if follow.kind == arrive.StepAction.STOP:
                     return None
-                if p.sig() == before:
-                    bottom = True
-                    break                     # 滑了没动：列表到底了，再滑也是空转
+                return _switch_of(self.refresh(rounds=12))
+            if p.scroll_more():
+                root = None
+                continue
+            if not arrive.scroll_fallback(snap, name, vivo=vivo):
+                bottom = True
+                break
+            # 自己翻一页找它。这条路绕过了 scroll_more 的「没标可滚动就不滑」守卫，
+            # 所以照它的规矩补一次焦点检查：滑动把页面带走了就停下，不当成「没找到这一行」
+            focus = p.focus()
+            progress.last_signature = p.sig()
+            p.apply(Intent(IntentKind.SCROLL))
+            if p.focus() != focus:
+                follow = arrive.after_scroll(stayed=False)
+            else:
+                follow = arrive.after_scroll(stayed=True, moved=p.sig() != progress.last_signature)
+            if follow.kind == arrive.StepAction.STOP:
+                if follow.stage:
+                    self.stage = follow.stage
+                    progress.failed_ways.add(follow.stage)
+                    return None
+                bottom = True
+                break                     # 滑了没动：列表到底了，再滑也是空转
             root = None
         # 「没认出行」不等于「页面上没有这一行」：渠道名写在 CheckBox 上（#427）、own() 拿不到行容器、
         # 页面没标可滚动或翻页到上限时，行还在页面上而这轮没认出来。只有这一屏除了总开关再没有别的开关
@@ -614,15 +635,13 @@ class ChannelPage:
     def open(self, rounds=12):
         """走一趟到达：能直达就直达，不能就走应用通知页；失败时带上卡在哪一环。"""
         self.stage = "渠道深链没打开渠道页"
-        switch = None
-        if not truncated(self.cid) and self.p.vivo_seen is not True:
-            # NEW_TASK|CLEAR_TASK 避免复用旧渠道；仍需核对真实页面。
-            self.p.reader.shell("am start -f 0x10008000 -a android.settings.CHANNEL_NOTIFICATION_SETTINGS"
-                                f" --es android.provider.extra.APP_PACKAGE {shlex.quote(self.pk)}"
-                                f" --es android.provider.extra.CHANNEL_ID {shlex.quote(self.cid)}")
-            switch = _switch_of(self.refresh(rounds))
+        leg = arrive.route(self.channels, None, pk=self.pk, cid=self.cid,
+                           vivo_seen=self.p.vivo_seen)
+        for intent in leg.intents:
+            self.p.apply(intent)
+        switch = _switch_of(self.refresh(rounds)) if leg.way == arrive.DIRECT else None
         if not switch:
-            switch = self._enter_app_page()
+            switch = self._enter_app_page(app_page_ready=leg.way == arrive.APP_PAGE)
         if switch:
             return Reached(switch)
         return Unreached(self.stage, self.why, self._hint(), self.no_row, self.skeleton, self.hidden)
@@ -869,7 +888,7 @@ def toggle(p, pk, cid, want_on, name="", allowed=()):
             return Outcome(PROTECTED, f"当前状态 {st}")
         if st in ("--", "del", "app"):
             return Outcome(kind_of_state(st))
-        page = ChannelPage(p, name, pk, cid)
+        page = ChannelPage(p, name, pk, cid, channels=channel_list_of(before, apps_before))
         reached = page.open()
         if not isinstance(reached, Reached):
             absent = not want_on and reached.hidden        # 翻到底都没读到这个渠道名
