@@ -3,6 +3,7 @@ from contextlib import ExitStack, redirect_stdout
 import copy
 import io
 from pathlib import Path
+import re
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -15,6 +16,8 @@ sys.path.insert(0, str(ROOT / "tool"))
 import huawei_channels as hw
 import adb_link
 import run
+
+RECORDED_BUILD = "ALN-AL00 4.2.0.223(C00E215R5P16)"   # 假设备演的是做过路径实测的那台，不跟元组顺序走
 
 
 class OfflineDevice:
@@ -46,7 +49,7 @@ class OfflineDevice:
         if command == "getprop ro.product.model":
             text = hw.MODEL
         elif command == "getprop ro.build.display.id":
-            text = hw.BUILD
+            text = RECORDED_BUILD
         elif command.startswith("cmd appops get "):
             text = "POST_NOTIFICATION: " + self.modes[command.split()[3]]
         elif command.startswith("cmd appops set "):
@@ -232,6 +235,23 @@ class HuaweiChannelsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             hw.execute("offline-device", self.items(), reader=reader)
         self.assertEqual(reader.shell.call_count, 2)
+
+    def test_build_gate_lists_only_builds_with_evidence(self):
+        """R5P16 在本工具上路径实测；R4P16 只有报告者临时实现跑出的页面证据（#1449），门禁认、本工具没跑过。"""
+        listed = re.escape("、".join(hw.BUILDS) + "；当前版本未验证")
+        def reader(model, build):
+            return SimpleNamespace(shell=Mock(side_effect=[
+                SimpleNamespace(output=model + "\n"), SimpleNamespace(output=build + "\n")]))
+        for build in ("ALN-AL00 4.2.0.223(C00E215R5P16)", "ALN-AL00 4.2.0.223(C00E215R4P16)"):
+            with self.subTest(build=build):
+                hw.require_device(reader(hw.MODEL, build))
+        for model, build in ((hw.MODEL, "ALN-AL00 4.2.0.223(C00E215R3P16)"),
+                             (hw.MODEL, "ALN-AL00 4.2.0.223(C00E216R5P16)"),
+                             (hw.MODEL, "ALN-AL00 4.2.0.226(C00E215R4P16)"),
+                             ("ALN-AL10", "ALN-AL00 4.2.0.223(C00E215R4P16)")):
+            with self.subTest(model=model, build=build):
+                with self.assertRaisesRegex(ValueError, listed):
+                    hw.require_device(reader(model, build))
 
     def test_renamed_or_missing_channels_never_open_phone_ui(self):
         device = OfflineDevice()
