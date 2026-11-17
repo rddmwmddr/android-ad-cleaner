@@ -104,8 +104,6 @@ def _validate_calls(op: Mapping, where: str, allowed: tuple, required: str | tup
             raise SchemaError(f"{place} 缺 {required}")
         if "args" in call and (not isinstance(call["args"], list) or not call["args"]):
             raise SchemaError(f"{place} 的 args 必须是非空数组")
-        if required == "args" and not isinstance(call.get("args"), list):  # pragma: no mutate 不可达：缺 args 在上面 elif 已报，非 list 在上面一条已报
-            raise SchemaError(f"{place} 的 args 必须是数组")  # pragma: no mutate 不可达：上面那个条件恒不成立，这条报错跑不到
 
 
 def _validate_focus_match(op: Mapping, where: str) -> None:
