@@ -72,6 +72,7 @@ from(repo.resolve("tool")) { into("tool"); include("**/*.py", "*.dex") }
 名单内容不变，第 3 条从「前瞻」变成「承重」。引擎侧的模块名、`sys.path` 根与手机侧代码在搬移里
 一个字节都没动，`tool/` 顶层今天就是那 37 个引擎模块。此后 `tool/geometry.py`（#1431，判定用的
 屏幕几何比例的唯一 owner）作为引擎模块加入，引擎名单是 38 个；`syncEngine` 的整目录 glob 自动收它。
+`tool/channel_decide.py`（#1434，渠道认页决策的纯函数）同此，引擎名单是 39 个。
 
 ### 引擎侧的硬约束
 

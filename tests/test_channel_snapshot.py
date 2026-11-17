@@ -1,9 +1,8 @@
 """屏幕快照 / 通知清单 / 意图 / 进度四个值类型：构造、JSON 往返，以及每个意图种类只经基座唯一执行点落地（#1432）。
 
-本票只建接缝，不改任何现有判断：引擎（`chan_fast`）此刻对四个类型零引用，
-`NoEngineReferenceTests` 就是这条的守卫；#1434 把认页判定接上快照后删掉它。
+#1432 只建接缝；#1434 起认页判定消费快照（见 `tests/test_channel_decide.py`），
+这里只守值类型本身。
 """
-import ast
 import json
 import sys
 import unittest
@@ -19,9 +18,6 @@ sys.path.insert(0, str(ROOT / "tests"))
 import chan_fast as chan
 import screen_snapshot as snap
 from fixtures import phone_stub, screen_stub
-
-CHAN_FAST = ROOT / "tool" / "chan_fast.py"
-TYPE_NAMES = ("ScreenSnapshot", "ChannelList", "Intent", "Progress")
 
 PAGE = """<hierarchy rotation="0">
  <node package="com.android.systemui" class="android.widget.TextView" text="12:00" bounds="[0,0][1080,80]"/>
@@ -264,33 +260,6 @@ class FacadeForwardingTests(unittest.TestCase):
         p = phone_stub("test")
         p.d = SimpleNamespace(shell=Mock(return_value=SimpleNamespace(output=DUMP)))
         self.assertEqual(p.channel_list().app_off, {"com.example.app": True, "com.other": False})
-
-
-class NoEngineReferenceTests(unittest.TestCase):
-    """引擎此刻对四个新类型零引用（#1434 接上后删掉这条守卫）。"""
-
-    @staticmethod
-    def references(source):
-        names = set()
-        for node in ast.walk(ast.parse(source)):
-            if isinstance(node, ast.Name):
-                names.add(node.id)
-            elif isinstance(node, ast.Attribute):
-                names.add(node.attr)
-            elif isinstance(node, (ast.Import, ast.ImportFrom)):
-                for alias in node.names:
-                    names.update((alias.name, alias.asname or ""))
-        return sorted(set(TYPE_NAMES) & names)
-
-    def test_chan_fast_references_none_of_the_four_types(self):
-        source = CHAN_FAST.read_text(encoding="utf-8")
-        self.assertIn("from screen_snapshot import", source, "扫描面没读到新模块的引用，守卫会空转")
-        self.assertEqual(self.references(source), [])
-
-    def test_the_guard_actually_sees_a_reference(self):
-        self.assertEqual(self.references("from screen_snapshot import ChannelList"),
-                         ["ChannelList"])
-        self.assertEqual(self.references("x = snapshot.Progress()"), ["Progress"])
 
 
 if __name__ == "__main__":

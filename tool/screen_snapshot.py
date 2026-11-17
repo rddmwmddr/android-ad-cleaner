@@ -3,6 +3,7 @@
 一次读屏产出一份 `ScreenSnapshot`（行、文字、前台包与 Activity、屏宽高、文字签名、还能不能往下滚），
 `ChannelList` 是通知清单那一份独立的数据源。对设备的一个动作收成 `Intent`，由 `Screen.apply()`
 按种类分派到基座的动作原语；`Progress` 跨帧累积、由循环显式传出，**不进**快照。
+只认标题 / 认行的调用点传 `with_rows=False`：不算行也就不给自绘开关截图，`rows` 留空。
 
 纯数据与纯构造：本模块不读屏、不点击，也不认识 `fast` / `phone` / `chan_fast`（避免环）。
 行与文字的取法仍只有一份：`Screen.texts()` / `Screen.switch_rows()` 与快照都经这里的
@@ -274,10 +275,12 @@ def rows_from_tree(root, width, height, screenshot=None):
     return tuple(rows)
 
 
-def snapshot_from_tree(root, width, height, focus, systemui_text=False, *, screenshot=None):
+def snapshot_from_tree(root, width, height, focus, systemui_text=False, *,
+                       with_rows=True, screenshot=None):
     """把一份页面树装配成快照：不读屏、不点击。
 
     `Screen.snapshot()` 与用例里的 `ET.fromstring(dump)` 都走它，装配只此一处。
+    `with_rows=False` 时不算开关行：自绘开关要在这一步截图，只认标题 / 认行的路径不该多截一张。
     """
     package, sep, activity = focus.partition("/")
     hits = text_hits(root, width, height, systemui_text)
@@ -286,7 +289,7 @@ def snapshot_from_tree(root, width, height, focus, systemui_text=False, *, scree
         activity=activity if sep else "",
         width=width,
         height=height,
-        rows=rows_from_tree(root, width, height, screenshot),
+        rows=rows_from_tree(root, width, height, screenshot) if with_rows else (),
         texts=tuple(TextHit(text=t, bounds=b) for t, b, _ in hits),
         signature="|".join(t for t, _, _ in hits),
         can_scroll=can_scroll(root),

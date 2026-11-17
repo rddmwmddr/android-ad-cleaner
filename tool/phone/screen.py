@@ -119,13 +119,16 @@ class Screen:
     def sig(self):
         return "|".join(t for t, _, _ in self.texts())
 
-    def snapshot(self):
+    def snapshot(self, with_rows=True, focus=None, root=None):
         """一次读屏产出的屏幕快照：一次树、一次前台，行与文字都从同一份 root 派生（#1432）。
 
+        `with_rows=False` 不算开关行，也就不给自绘开关截图：只认标题 / 认行的调用点不该多一次取图。
+        `focus` / `root` 是调用方刚读过的那份，传进来就不再读一次；`focus=""` 表示「没有前台」。
         按包探测的通知权限状态与 appops 模式不在这里：它们是一次额外 adb 往返，不提前读。"""
-        root = self.tree()
-        return snapshot_from_tree(root, self.W, self.H, self.focus(), self.systemui_text,
-                                  screenshot=self._switch_screenshot)
+        root = self.tree() if root is None else root
+        focus = self.focus() if focus is None else focus
+        return snapshot_from_tree(root, self.W, self.H, focus, self.systemui_text,
+                                  with_rows=with_rows, screenshot=self._switch_screenshot)
 
     def ls(self):
         root = self.tree()

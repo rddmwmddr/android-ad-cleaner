@@ -2,8 +2,8 @@
 渠道结局词表一条（`ChannelOutcomeGuards`）、
 库依赖方向一条（`RecipeLibGuards`）、手机版界面一条（`AndroidGuards`）、流程 / CI 类三条（`CiGuards`）、
 夹具装配类两条（`FixtureGuards`）、桩与断言两条（`StubGuards`）、发版产物一条（`ReleaseGuards`）、
-标准流一条（`StdioGuards`）、`gh` 会话一条（`GhGuards`）与屏幕几何比例一条（`GeometryGuards`），
-沿用 #1000、#1002 的做法。
+标准流一条（`StdioGuards`）、`gh` 会话一条（`GhGuards`）、屏幕几何比例一条（`GeometryGuards`）
+与渠道认页决策的纯函数边界一条（`ChannelDecideGuards`），沿用 #1000、#1002 的做法。
 
 `DocGuards`：CHANGELOG 条目一行一个票号、文档里的代码位置用符号名、指到的 `.py` 路径要存在、
 上报服务地址与凭据不写进仓库。`RegistryGuards`：无锚点的顶层列表项按文档冻结上限。
@@ -1118,13 +1118,14 @@ class GhGuards(unittest.TestCase):
 
 
 # 判定「这一行在不在屏带内 / 这个控件算不算图标命中 / 是不是底部标签 / 是不是对话框按钮 /
-# 哪些行可拨」用的比例只在 tool/geometry.py 定义（#1431）。扫描面是本次触碰的七个文件：
-# 认行、门面、基座、拨动、弹窗、导航与渠道引擎。字符串与注释不入 AST，天然豁免。
+# 哪些行可拨」用的比例只在 tool/geometry.py 定义（#1431）。扫描面是本次触碰的八个文件：
+# 认行、门面、基座、拨动、弹窗、导航、渠道引擎与渠道认页决策。字符串与注释不入 AST，天然豁免。
 GEOMETRY_HOME = "tool/geometry.py"
 GEOMETRY_SCAN = (
     "tool/row.py",
     "tool/fast.py",
     "tool/chan_fast.py",
+    "tool/channel_decide.py",
     "tool/phone/screen.py",
     "tool/phone/toggler.py",
     "tool/phone/dismisser.py",
@@ -1215,6 +1216,70 @@ class GeometryGuards(unittest.TestCase):
         source = ("def scroll(self, frac=0.45, up=False):\n    return frac\n"
                   "def icon_candidates(self, area=(0.72, 0.0, 1.0, 0.16)):\n    return area\n")
         self.assertEqual(len(stray_ratios(source, "snippet.py")), 2)
+
+
+# 渠道认页决策（#1434）是屏幕快照上的纯函数：`tool/channel_decide.py` 不 import 引擎 / 基座，
+# 也不调用动作原语。属性读（快照自己的 `.tree` / `.texts`）不是调用，不在这条判据里。
+DECIDE = ROOT / "tool" / "channel_decide.py"
+DECIDE_FORBIDDEN = ("fast", "chan_fast", "phone")
+DECIDE_ACTIONS = frozenset({"click", "scroll", "back", "settle", "open_uri", "home",
+                            "type_text", "apply", "tree", "focus", "snapshot"})
+
+
+def engine_imports(source):
+    """`tool/channel_decide.py` 里指向引擎 / 基座的 import；返回 `行号: 名字`。"""
+    hits = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            names = [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            names = [node.module or ""]
+        else:
+            continue
+        for name in names:
+            if name.split(".")[0] in DECIDE_FORBIDDEN:
+                hits.append(f"{node.lineno}: {name}")
+    return hits
+
+
+def action_calls(source):
+    """调用动作原语的地方；`snap.tree` 这样的属性读不是调用，不算。"""
+    hits = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        name = func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) else ""
+        if name in DECIDE_ACTIONS:
+            hits.append(f"{node.lineno}: {name}")
+    return hits
+
+
+class ChannelDecideGuards(unittest.TestCase):
+    def test_the_decision_module_imports_no_engine_or_base(self):
+        """决策模块只认识值类型与判定库：import `fast` / `phone.*` / `chan_fast` 即红。"""
+        self.assertTrue(DECIDE.is_file(), f"{rel(DECIDE)} 不在，这条守卫会空转")
+        self.assertEqual(engine_imports(DECIDE.read_text(encoding="utf-8")), [],
+                         f"{rel(DECIDE)} 是纯决策模块，别把引擎或基座拖进来")
+
+    def test_the_decision_module_calls_no_action_primitive(self):
+        """认页决策不许读屏、点击：函数体里出现动作原语的调用即红。"""
+        self.assertTrue(DECIDE.is_file(), f"{rel(DECIDE)} 不在，这条守卫会空转")
+        self.assertEqual(action_calls(DECIDE.read_text(encoding="utf-8")), [],
+                         f"{rel(DECIDE)} 只吃快照，动作留给出调用方")
+
+    def test_the_guard_sees_a_violation(self):
+        source = ("from fast import Phone\n"
+                  "def judge(p, snap):\n"
+                  "    p.click(1, 2)\n"
+                  "    p.tree()\n"
+                  "    return snap.tree\n")
+        self.assertEqual(engine_imports(source), ["1: fast"])
+        self.assertEqual([hit.split(": ")[1] for hit in action_calls(source)], ["click", "tree"])
+        clean = ("from screen_snapshot import on_screen\n"
+                 "def judge(snap):\n"
+                 "    return snap.tree, snap.texts\n")
+        self.assertEqual((engine_imports(clean), action_calls(clean)), ([], []))
 
 
 if __name__ == "__main__":

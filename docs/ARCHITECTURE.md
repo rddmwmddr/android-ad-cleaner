@@ -46,7 +46,8 @@ glob，放进哪个目录就决定了它会不会进包（[ADR-0041](adr/0041-to
 | `recipe_audit.py` | 本机函数审计：每份脚本自己定义了哪些模块级函数、归哪一档，「本机策略：N 个」从哪来；`check` 与 `status-json` 取同一份计数（`counts()`），只读 AST、不 import、不连手机 |
 | `recipe_meta.py` | 机型脚本头部的元数据：录制版本、机型列表、段名，以及对外的稳定身份（目录名，`recipe_id()`）；只有正则，不背 CLI 入口的副作用 |
 | `recipe_source.py` | 机型脚本的事实层：一份源码里的调用点与模块级常量，纯 AST，入口速查与词库共用（[ADR-0034](adr/0034-recipe-source-facts.md)） |
-| `chan_fast.py` | 营销通知渠道：`ChannelPage`（到页 + 认行）、批处理循环 |
+| `chan_fast.py` | 营销通知渠道：`ChannelPage`（到页 + 认行的执行壳）、批处理循环 |
+| `channel_decide.py` | 渠道页的认页决策：认页、页眉、组底、屏外名与可拨名单是屏幕快照上的纯函数（#1434） |
 | `channel_policy.py` | 渠道判定：营销候选、扫描排除、默认不勾、受保护、前台服务 |
 | `screen_snapshot.py` | 屏幕快照 / 通知清单 / 意图 / 进度四个值类型与它们的纯构造、JSON 往返；`Screen.snapshot()` 与 `Screen.apply()` 都从这里取一份定义（#1432） |
 | `row.py` | 「开关所属的那一行」的唯一定义 |
@@ -122,7 +123,7 @@ glob，放进哪个目录就决定了它会不会进包（[ADR-0041](adr/0041-to
 - 找「这份脚本经共享库实现还能关到哪些名字、用到哪些入口」先看 `tool/recipe_source.py` 的 `library_hits()`：库实现逐层下扫只在那里定义（只认有归属模块的调用、脚本层 import 过但没调用的也算、实参按位置回填），词库与入口速查都只做投影，别在消费方再写一份递归。 <!-- rule:dev.lib.single-walk -->
 - 找「`ScreenLocked` 定义在哪儿、库层该从哪儿取引擎名字」先看 `tool/phone/errors.py`：安卓引擎侧这个异常只在那一处定义（鸿蒙宿主在 `gui/harmony_engine.py` 另有自己的一套，与它无关），`fast` 只是显式 re-export（`from fast import ScreenLocked` 仍是 ADR-0033 冻结的对外面，机型脚本与 `tests/` 照旧）；`recipe_lib/` 与 `tool/recipe_runtime.py` 只向下依赖工具层，不经引擎门面取名字——`bounds` / `icon_hit` 取 `row`、`want_state` 取 `polarity`、整页开关走 `p.screen.switches()`。函数内 import 同样算越界，判据是模块归属不是书写位置。 <!-- rule:dev.recipe.lib-not-import-fast -->
 - 找「适配新机型从哪一步开始」先看 `tool/adapt.py`：`survey` 只读试入口（只试 `entries.ENTRIES` 的直达、不走 `Phone.start`），`explore` / `gen` / `check` 是后三段；`-s 序列号 adapt <子命令>` 的转发只认 `ADAPT_SERIAL_SUBS`（`survey` / `explore` / `check`）；`gen`（不用带 `-s`）与未知子命令按这种形态调时，`dispatch()` 直接 `fail()`，不再静默打印帮助。 <!-- rule:dev.adapt.serial-subcommands -->
-- 找「怎么走到渠道页、认出哪一行的开关」先看 `tool/chan_fast.py` 的 `ChannelPage.open()`：直达 / 转应用通知页 / 内联行 / 同名放弃四类只在那里定义（[ADR-0007](adr/0007-channel-page.md)）；`channel_switch` / `inline_switch` / `wait_page` / `via_app_page` 是一行前向壳，不要往里加逻辑。 <!-- rule:dev.channels.page-entry -->
+- 找「怎么走到渠道页、认出哪一行的开关」先看 `tool/chan_fast.py` 的 `ChannelPage.open()`：直达 / 转应用通知页 / 内联行 / 同名放弃四类只在那里定义（[ADR-0007](adr/0007-channel-page.md)）；`channel_switch` / `inline_switch` / `wait_page` / `via_app_page` 是一行前向壳，不要往里加逻辑。认页、页眉、组底、屏外名与可拨名单的判定在 `tool/channel_decide.py`（喂一份屏幕快照，不读屏、不点击；`ChannelPage` 只取快照、执行点击与翻页），别在壳里另写一份。 <!-- rule:dev.channels.page-entry -->
 - 找「渠道怎么判营销 / 服务 / 受保护」先看 `tool/channel_policy.py` 的 `classify()`：七组判定只在那里定义（[ADR-0006](adr/0006-channel-classification.md)）；`chan_fast` 的扫描分支与 `gui/app.py` 的 `chan_scan()` 都消费它，不要另写词表。前台服务的证据来自渠道行（Android 14 起字段改名，两个都认，见 `screen_snapshot.FG_SERVICE_MARKS`；`chan_fast.parse()` 用 `foreground` out 参数带回），不在通知记录段。 <!-- rule:dev.channels.classification -->
 - 找「一项渠道结局有哪些、怎么记账」先看 `tool/chan_fast.py` 的 `OutcomeKind` 与 `RULES`：15 个结局是封闭枚举，`RULES` 按成员给出失败 / 重试 / 拨动 / 复查豁免四件事，加结局要两处一起改；`tests/test_rules_guards.py` 的 `ChannelOutcomeGuards` 守着成员 ≡ 键。 <!-- rule:dev.channels.outcome-enum -->
 - 找「开关所属的行」先看 `tool/row.py`：`line` 定界、`own` 收窄多开关容器、`title_of` 给行标题、`title_hit` 给标题文字的落点（`off()` 回退用）、`dedupe` 同一水平带、`control` 开关本体（卡片整体 checkable 时取内层 Switch）。`tool/phone/screen.py` 的 `switches()` 消费 `dedupe` / `control`，`chan_fast.py` 共用 `SAME_LINE` 与 `own`，按名字筛候选文字节点共用 `named_nodes`（其顶部带阈值取 `geometry.TOP_BAND`，`row.TOP_BAND` 是显式 re-export）；`disabled_at` 判开关是不是灰的，`off()` 与 `chan_fast` 共用它，不要另写一份。设置入口（齿轮）的判据是 `icon_hit`，机型脚本从 `fast` 取这一份。 <!-- rule:dev.row.single-definition -->

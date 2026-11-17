@@ -346,9 +346,9 @@ class Phone:
     def sig(self):
         return self.screen.sig()
 
-    def snapshot(self):
+    def snapshot(self, with_rows=True, focus=None, root=None):
         """一次读屏产出的屏幕快照：行、文字、前台、屏宽高、签名与能否滚动（#1432）。"""
-        return self.screen.snapshot()
+        return self.screen.snapshot(with_rows=with_rows, focus=focus, root=root)
 
     def channel_list(self):
         """通知清单：一次 `dumpsys notification --noredact` 读出整份数据源（#1432）。"""
