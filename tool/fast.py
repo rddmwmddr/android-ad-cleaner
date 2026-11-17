@@ -405,6 +405,18 @@ class Phone:
         """强停一个包：走 uiautomator2 的 `app_stop`（#1472）。"""
         self.screen.app_stop(package)
 
+    def tap_id(self, resource_id=None, text=None, index=0):
+        """按 uiautomator2 选择器直点一个控件（#1472）。"""
+        self.screen.tap_id(resource_id, text, index)
+
+    def tap_id_if_present(self, resource_id=None, text=None, timeout=0):
+        """存在才点，返回点到没有（不抛）（#1472）。"""
+        return self.screen.tap_id_if_present(resource_id, text, timeout)
+
+    def set_text(self, resource_id, value):
+        """往指定资源 id 的输入框写值（#1472）。"""
+        self.screen.set_text(resource_id, value)
+
     def apply(self, intent):
         """意图的唯一执行点（#1432）：按种类分派到基座的动作原语。"""
         return self.screen.apply(intent)

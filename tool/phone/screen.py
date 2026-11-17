@@ -2,8 +2,8 @@
 
 构造时注入 `Connection`：读屏 adapter 与断线判定都只经它，不认识 `Phone`。
 动作原语是 `shell` / `click` / `swipe` / `window_size` / `press` / `app_stop` / `home` / `back` /
-`settle` / `find`，翻页的 `scroll` / `scroll_more` 同在这一层（拨动与导航都要翻页，不该由其中
-一方提供）。后续阶段一律经它们动作，不直接碰传输。
+`tap_id` / `tap_id_if_present` / `set_text` / `settle` / `find`，翻页的 `scroll` / `scroll_more` 同在
+这一层（拨动与导航都要翻页，不该由其中一方提供）。后续阶段一律经它们动作，不直接碰传输。
 确认框的认法（`confirm_target`）也在这一层：拨动用它点掉遮罩，导航用它说清失败原因（#557），
 两条路共用同一份匹配，谁也不依赖谁。
 """
@@ -295,6 +295,37 @@ class Screen:
 
         与 `shell("am force-stop …")` 的区别是 `_u2` 的断线记账，别在调用方绕过它（#1472）。"""
         self.conn._u2(self.conn.reader.app_stop, package)
+
+    def tap_id(self, resource_id=None, text=None, index=0):
+        """按 uiautomator2 选择器直点一个控件：按坐标的 `click` / 按文字的 `tap` 之外的第三条。
+
+        `index` 是第几个匹配（0 起）；找不到时读屏库的 not-found 照原样上抛。选择器只有给了才填，
+        与数据里的 `tap_id` op 同构（#1362、#1472）。"""
+        selector = {}
+        if resource_id is not None:
+            selector["resourceId"] = resource_id
+        if text is not None:
+            selector["text"] = text
+        target = self.conn.reader(**selector)
+        if index:
+            target = target[index]
+        target.click()
+
+    def tap_id_if_present(self, resource_id=None, text=None, timeout=0):
+        """存在才点：点到返回 True，等 `timeout` 秒还没有返回 False，**不抛**。
+
+        默认 0 与 uiautomator2 `click_exists` 的默认一致（只查一次、不等）；传 None 在那边会退回
+        十秒默认等待，所以这里不用 None 作缺省（#1472）。"""
+        selector = {}
+        if resource_id is not None:
+            selector["resourceId"] = resource_id
+        if text is not None:
+            selector["text"] = text
+        return bool(self.conn.reader(**selector).click_exists(timeout=timeout))
+
+    def set_text(self, resource_id, value):
+        """往指定资源 id 的输入框写值：走 uiautomator2 的 `set_text`，空串会清空（#1472）。"""
+        self.conn.reader(resourceId=resource_id).set_text(value)
 
     def back(self, n=1, settle=True):
         """发 `input keyevent BACK`。默认每条都等页面稳定；`settle=False` 只发 keyevent、

@@ -29,7 +29,7 @@ from fixtures import phone_stub  # noqa: E402
 
 RECIPES = ROOT / "recipes"
 
-# 门面的公开方法：类上定义的函数，今天 45 个。方法变成数据（例如搬成实例上绑定的函数）也算红：
+# 门面的公开方法：类上定义的函数，今天 54 个。方法变成数据（例如搬成实例上绑定的函数）也算红：
 # 脚本会把 `p.click` / `p.switches` 换成本地读法，形状变了就不是同一个门面。
 METHODS = frozenset({
     "app_stop", "await_page", "back", "check_alive", "click",
@@ -39,9 +39,9 @@ METHODS = frozenset({
     "has_text", "home", "icon_candidates", "in_settings_page", "locked",
     "ls", "note_miss", "off", "on_screen",
     "page_evidence", "page_text", "press", "residual_confirm", "residual_note",
-    "say", "scroll", "scroll_more", "setting",
+    "say", "scroll", "scroll_more", "set_text", "setting",
     "settle", "shell", "sig", "start", "swipe", "switch_rows",
-    "switches", "tab", "tap", "tap_icon",
+    "switches", "tab", "tap", "tap_id", "tap_id_if_present", "tap_icon",
     "texts", "top", "tree", "type_text",
     "wait_unlocked", "window_size",
 })
@@ -241,16 +241,48 @@ class RecipeAccessTests(unittest.TestCase):
         self.assertEqual(missing, [], "脚本 import 的模块级名字没了：" + "、".join(missing))
 
 
+class RecordingSelection:
+    """u2 选择器的替身：记选择器、下标与动作，`click_exists` 按 `present` 回真假。"""
+
+    def __init__(self, reader, selector):
+        self.reader, self.selector = reader, selector
+        self.index = None
+
+    def __getitem__(self, index):
+        self.index = index
+        self.reader.indexes.append(index)
+        return self
+
+    def click(self, timeout=None):
+        self.reader.clicks.append((self.selector, self.index, timeout))
+
+    def click_exists(self, timeout=0):
+        self.reader.existence_checks.append((self.selector, timeout))
+        return self.reader.present
+
+    def set_text(self, text, timeout=None):
+        self.reader.typed.append((self.selector, text))
+
+
 class RecordingReader:
     """读屏替身：记下发过什么，`shell` 返回一段固定输出。#1472 的门面动词只经它观察。"""
 
-    def __init__(self, output="probe", size=(1080, 2340)):
-        self.output, self.size = output, size
+    def __init__(self, output="probe", size=(1080, 2340), present=True):
+        self.output, self.size, self.present = output, size, present
         self.shells = []       # [(命令, timeout)]
         self.swipes = []       # [((x1, y1, x2, y2), {关键字})]
         self.presses = []      # [键名]
         self.stops = []        # [包名]
         self.size_reads = 0
+        self.selectors = []    # [选择器]：`reader(**选择器)` 收到了什么
+        self.clicks = []       # [(选择器, 下标, timeout)]
+        self.indexes = []      # [下标]
+        self.existence_checks = []   # [(选择器, timeout)]
+        self.typed = []        # [(选择器, 值)]
+
+    def __call__(self, **selectors):
+        self.selectors.append(selectors)
+        return RecordingSelection(self, selectors)
 
     def shell(self, command, timeout=None):
         self.shells.append((command, timeout))
@@ -319,6 +351,46 @@ class DeviceVerbTests(unittest.TestCase):
         phone.app_stop("com.android.browser")
         self.assertEqual(reader.stops, ["com.android.browser"])
         self.assertEqual(reader.shells, [], "app_stop 不该退回 `am force-stop` 那条路")
+
+    def test_tap_id_clicks_the_first_match_without_an_instance_key(self):
+        """`p.d(resourceId=X).click()` 的等价物：选择器里不出现空键，也不带 instance。"""
+        phone, reader = verb_phone()
+        phone.tap_id("com.honor.browser:id/menu_btn")
+        self.assertEqual(reader.selectors, [{"resourceId": "com.honor.browser:id/menu_btn"}])
+        self.assertEqual(reader.clicks, [({"resourceId": "com.honor.browser:id/menu_btn"}, None, None)])
+        self.assertEqual(reader.indexes, [], "默认档不该往选择器上加 instance")
+
+    def test_tap_id_index_picks_the_nth_match(self):
+        """`p.d(resourceId=X)[2].click()` 的等价物：下标原样落到 u2 选择器上。"""
+        phone, reader = verb_phone()
+        phone.tap_id("com.honor.browser:id/top_local_icon", index=2)
+        self.assertEqual(reader.indexes, [2])
+
+    def test_tap_id_accepts_a_text_selector_alone(self):
+        """数据里的 `tap_id` op 两种选择器都要能表达：只给文字时不塞空的 resourceId。"""
+        phone, reader = verb_phone()
+        phone.tap_id(text="确定")
+        self.assertEqual(reader.selectors, [{"text": "确定"}])
+
+    def test_tap_id_if_present_returns_true_when_it_lands(self):
+        phone, reader = verb_phone()
+        self.assertTrue(phone.tap_id_if_present("com.android.settings:id/vigour_search_edit", timeout=3))
+        self.assertEqual(reader.existence_checks,
+                         [({"resourceId": "com.android.settings:id/vigour_search_edit"}, 3)])
+
+    def test_tap_id_if_present_returns_false_instead_of_raising(self):
+        """`p.d(...).click_exists(timeout=3)` 的语义：没点到是 False，不是异常。"""
+        phone, reader = verb_phone()
+        reader.present = False
+        self.assertFalse(phone.tap_id_if_present("com.honor.browser:id/menu_btn", timeout=3))
+
+    def test_set_text_writes_through_uiautomator2(self):
+        """`p.d(resourceId=X).set_text(v)` 的等价物：u2 原方法，不是 `input text` 串。"""
+        phone, reader = verb_phone()
+        phone.set_text("com.android.settings:id/vigour_search_edit", "广告")
+        self.assertEqual(reader.typed,
+                         [({"resourceId": "com.android.settings:id/vigour_search_edit"}, "广告")])
+        self.assertEqual(reader.shells, [], "set_text 不该退回 shell 那条路")
 
     def back_phone(self):
         """`back()` 读屏与等待都桩在观测基座上（`phone_stub` 的约定），只留下发的命令可观察。"""
