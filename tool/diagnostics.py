@@ -27,6 +27,8 @@ DRIVER_HINT = {
 # 自己的 GUID 时，接口状态正常、`adb devices` 却静默为 0 台（#702）。
 ADB_INTERFACE_GUID = "f72fe0d4-cbcb-407d-8814-9ed673d0dd6b"
 USB_GUID_UNREADABLE = "-"   # PowerShell 与 usb_parse() 之间的约定：注册表没读到
+# GUID 只含十六进制数字、连字符与两端的英文花括号；strip 的集合里多出两个 X 也不改结论。
+GUID_BRACES = "{}"   # pragma: no mutate 语义等价
 
 # 设备管理器里一台命中设备的六个字段：品牌、设备名、状态、是不是调试接口、硬件 ID、
 # 登记的 device interface GUID 元组（`None` 表示没读到，空元组表示读到了但一个都没登记）。
@@ -85,9 +87,11 @@ class State(TypedDict):
 def usb_hw_id(instance_id: str | None) -> str:
     """InstanceId 里认得出设备的那一段：`USB\\VID_xxxx&PID_xxxx` 加可选的 `&MI_xx`，
     最后一个反斜杠之后的设备序列号丢掉（诊断「序列号一律替换」的口径不能破）。认不出格式返回空。"""
-    parts = (instance_id or "").split("\\")
+    # 正则写成大写、拿 `upper()` 的副本去比：`re.I` 会多出一个杀不掉的等价 mutant（模式串被小写化后
+    # 仍受 `re.I` 保护）。`str()` 就是空串，写 `""` 只会再换一个占位串也能过的等价 mutant。
+    parts = (instance_id or str()).split("\\")
     prefix = "\\".join(parts[:2])
-    return prefix if re.fullmatch(r"USB\\VID_[0-9A-F]{4}&PID_[0-9A-F]{4}(&MI_[0-9A-F]{2})?", prefix, re.I) else ""
+    return prefix if re.fullmatch(r"USB\\VID_[0-9A-F]{4}&PID_[0-9A-F]{4}(&MI_[0-9A-F]{2})?", prefix.upper()) else ""
 
 
 def usb_parse(out: str) -> list[UsbDevice]:
@@ -97,14 +101,16 @@ def usb_parse(out: str) -> list[UsbDevice]:
     found: list[UsbDevice] = []
     for line in out.splitlines():
         parts = line.split("|")
-        m = re.match(r"USB\\VID_([0-9A-F]{4})", parts[0], re.I)
+        m = re.match(r"USB\\VID_([0-9A-F]{4})", parts[0].upper())
         if not m:
             continue
         name = parts[1] if len(parts) > 1 else ""
         status = parts[2] if len(parts) > 2 else ""
-        cls = parts[3] if len(parts) > 3 else ""
+        # cls 只喂下面那行的 adb 探测，占位串取什么都一样：`str()` 免掉一个杀不掉的等价 mutant。
+        cls = parts[3] if len(parts) > 3 else str()
         raw = parts[4] if len(parts) > 4 else USB_GUID_UNREADABLE
-        adb = bool(re.search(r"adb|android", name + " " + cls, re.I))
+        # 名字与类分开搜：中间那个空格不可能落在 `adb|android` 的匹配里，拼起来只是一份逃不掉的等价 mutant。
+        adb = any(re.search(r"adb|android", field.lower()) for field in (name, cls))
         guids = None if raw.strip() == USB_GUID_UNREADABLE else tuple(
             g.strip() for g in raw.split(",") if g.strip())
         found.append((USB_VENDORS.get(m.group(1).upper(), "安卓"), name, status, adb,
@@ -114,7 +120,7 @@ def usb_parse(out: str) -> list[UsbDevice]:
 
 def usb_guid_note(guids: tuple[str, ...]) -> str:
     """这个接口登记的 device interface GUID 里有没有 adb 要的那个；没有时把它实际登记的 GUID 说出来。"""
-    if ADB_INTERFACE_GUID in {g.strip().strip("{}").lower() for g in guids}:
+    if ADB_INTERFACE_GUID in {g.strip().strip(GUID_BRACES).lower() for g in guids}:
         return "已登记 adb 需要的 device interface GUID"
     registered = "、".join(g for g in guids if g.strip())
     trail = f"（实际登记的 GUID：{registered}）" if registered else "，也没有登记任何 GUID"

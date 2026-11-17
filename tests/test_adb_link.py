@@ -472,6 +472,18 @@ class UsbFactsGuidTests(unittest.TestCase):
         self.assertIn("未登记", lines[1])
         self.assertIn("没有登记任何 GUID", lines[1])
 
+    def test_the_registered_guid_line_is_verbatim(self):
+        found = [("荣耀", "ADB Interface", "OK", True, HW_702, (ADB_702, VENDOR_702))]
+        self.assertEqual(app.usb_facts(found)[1],
+                         "荣耀 ADB Interface 已登记 adb 需要的 device interface GUID")
+
+    def test_the_unregistered_guid_line_names_every_registered_guid(self):
+        other = "{11111111-2222-3333-4444-555555555555}"
+        found = [("荣耀", "ADB Interface", "OK", True, HW_702, (VENDOR_702, other))]
+        self.assertEqual(app.usb_facts(found)[1],
+                         "荣耀 ADB Interface 未登记 adb 需要的 device interface GUID"
+                         f"（实际登记的 GUID：{VENDOR_702}、{other}）")
+
 
 class UsbParseTests(unittest.TestCase):
     def test_parse_reads_the_guid_field(self):
@@ -487,6 +499,37 @@ class UsbParseTests(unittest.TestCase):
     def test_parse_of_a_line_without_the_guid_field_is_unreadable(self):
         # 老格式 / 输出被截断：宁可不说，也不报成「没登记任何 GUID」
         self.assertIsNone(app.usb_parse(f"{HW_702}|ADB Interface|OK|USBDevice\n")[0][5])
+
+    def test_parse_drops_lines_that_are_not_usb_devices(self):
+        # 前面那行不是手机（HDAUDIO 声卡）：跳过它，后面的手机照样解析
+        out = ("HDAUDIO\\FUNC_01&VEN_10EC|声卡|OK\n"
+               f"{HW_702}|ADB Interface|OK|USBDevice|{ADB_702}\n")
+        self.assertEqual(app.usb_parse(out),
+                         [("荣耀", "ADB Interface", "OK", True, HW_702, (ADB_702,))])
+
+    def test_parse_pads_missing_trailing_fields(self):
+        # 输出被截断到只剩两三段：缺的字段按空串算，GUID 一段整个缺了才算「没读到」
+        self.assertEqual(app.usb_parse(f"{HW_702}\n"), [("荣耀", "", "", False, HW_702, None)])
+        self.assertEqual(app.usb_parse(f"{HW_702}|ADB Interface\n"),
+                         [("荣耀", "ADB Interface", "", True, HW_702, None)])
+        self.assertEqual(app.usb_parse(f"{HW_702}|荣耀600 超级版|OK\n"),
+                         [("荣耀", "荣耀600 超级版", "OK", False, HW_702, None)])
+
+    def test_parse_reads_the_class_field_to_recognise_the_debug_interface(self):
+        # 设备名里没有 adb / android 字样时，调试接口由第四段（设备类）认出来
+        out = f"{HW_702}|荣耀600 超级版|OK|AndroidUsbDeviceClass\n"
+        self.assertEqual(app.usb_parse(out), [("荣耀", "荣耀600 超级版", "OK", True, HW_702, None)])
+
+    def test_parse_labels_an_unrecognised_vendor_as_android(self):
+        # 厂商号不在表里（不是手机品牌，或是新厂商）时统一说「安卓」，不能留空把设备说成无名
+        out = "USB\\VID_1234&PID_5678|USB Device|OK\n"
+        self.assertEqual(app.usb_parse(out),
+                         [("安卓", "USB Device", "OK", False, "USB\\VID_1234&PID_5678", None)])
+
+    def test_parse_matches_the_vid_in_any_case(self):
+        out = f"usb\\vid_339b&pid_107d&mi_02|ADB Interface|OK|USBDevice|{ADB_702}\n"
+        self.assertEqual(app.usb_parse(out), [("荣耀", "ADB Interface", "OK", True,
+                                               "usb\\vid_339b&pid_107d&mi_02", (ADB_702,))])
 
 
 class DiagnosticsTests(unittest.TestCase):
