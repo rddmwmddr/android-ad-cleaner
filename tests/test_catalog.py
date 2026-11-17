@@ -704,12 +704,7 @@ class GestureOpTests(unittest.TestCase):
             recipe, phone, _calls = _load_tmp(tmp, toml)
             phone.W, phone.H = size
             shells = []
-
-            def shell(command):
-                shells.append(command)
-                return SimpleNamespace(output="", exit_code=0)
-
-            phone.d.shell = shell
+            phone.shell = lambda command, timeout=None: (shells.append(command), "")[1]
             recipe.run()
         return [command for command in shells if command.startswith("input swipe")]
 
@@ -1059,12 +1054,7 @@ class StartOpCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             recipe, phone, _calls = _load_tmp(tmp, toml)
             shells = []
-
-            def shell(command, timeout=None):
-                shells.append(command)
-                return SimpleNamespace(output="", exit_code=0)
-
-            phone.d.shell = shell
+            phone.shell = lambda command, timeout=None: (shells.append(command), "")[1]
             recipe.run()
         return shells
 
@@ -1128,7 +1118,7 @@ class StartOpLandingTests(unittest.TestCase):
             seen = []
             phone.start = lambda *a, **kw: seen.append((a, kw))
             shells = []
-            phone.d.shell = lambda command, timeout=None: shells.append(command)
+            phone.shell = lambda command, timeout=None: shells.append(command)
             recipe.run()
         self.assertEqual(seen, [(("com.hionor.id", ".oaid.ui.X"),
                                  {"expect": "广告"})])
@@ -1156,7 +1146,7 @@ class StartOrSkipOpTests(unittest.TestCase):
 
 
 class SkipUnlessInstalledTests(unittest.TestCase):
-    """`skip_unless_installed` op（#1266）：`if "package:" not in p.d.shell("pm path X").output: print; return`。
+    """`skip_unless_installed` op（#1266）：`if "package:" not in p.shell("pm path X"): print; return`。
 
     本机没装主题管理包时，后面的入口一个都走不到：打印一句、按「完成」收尾（旧脚本是 `return`，
     不是失败），后面的 op 不再做。"""
@@ -1171,7 +1161,7 @@ class SkipUnlessInstalledTests(unittest.TestCase):
             recipe, phone, _calls = _load_tmp(tmp, self.TOML)
             backs = []
             phone.back = lambda n=1: backs.append(n)
-            phone.d.shell = lambda command, **kw: self._NS(output=output, exit_code=0)
+            phone.shell = lambda command, **kw: output
             recipe.run()
         return recipe, backs
 
@@ -1568,7 +1558,7 @@ class NewOpProjectionTests(unittest.TestCase):
         import recipe_source
         lowered = recipe_source._catalog_src(self.DATA)
         self.assertIn('p.setting("广告服务")', lowered)
-        self.assertIn('p.d.shell("am start -n com.android.settings/.ad.AdServiceSettings")', lowered)
+        self.assertIn('p.shell("am start -n com.android.settings/.ad.AdServiceSettings")', lowered)
         self.assertEqual([line for line in lowered.splitlines() if line.startswith("gear(")],
                          ["gear(p, rt)", "gear(p, rt)"])
 
@@ -1640,13 +1630,13 @@ class LibArgOpsProjectionTests(unittest.TestCase):
         lowered = recipe_source._catalog_src(self.DATA)
         self.assertIn('p.start("com.heytap.themestore")', lowered)
         self.assertIn('p.enter("我的")', lowered)
-        self.assertIn('p.d.shell("am start -n com.heytap.themestore/.Setting")', lowered)
+        self.assertIn('p.shell("am start -n com.heytap.themestore/.Setting")', lowered)
 
     def test_the_block_names_resolve_into_the_entry_facts(self):
         import recipe_source
         names = {call.name for call in recipe_source.scan_catalog(self.DATA).calls}
         self.assertIn("p.enter", names)
-        self.assertIn("p.d.shell", names)
+        self.assertIn("p.shell", names)
 
 
 class SettlePageVocabularyTests(unittest.TestCase):
@@ -1718,7 +1708,7 @@ class BrowserRecsBindingTests(unittest.TestCase):
         recipe, phone = _load_model(self.PATH, ["浏览器推荐"])
         phone.back = lambda n=1: seen.append(("back", n))
         # 这份数据的 guard 钩子先核对型号与系统版本，对不上整份跳过。
-        phone.shell = lambda command: shell_result(
+        phone.shell = lambda command, timeout=None: shell_result(
             {"getprop ro.product.model": "WKL-AN20",
              "getprop ro.build.display.id": "WKL-AN20 11.0.0.111(SP7C00E110R101P7)"}.get(command, ""), 0)
         recipe.run()
@@ -1974,7 +1964,7 @@ class OpKindDeclarationTests(unittest.TestCase):
     """
 
     # 事实类条件分支（if_find / if_entry / if_focus / if_tap）靠子 op 产出事实；给一个稳定产出
-    # `p.d.shell` 的子 op，占位 op 才判得出「这个 kind 会不会产出事实」。
+    # `p.shell` 的子 op，占位 op 才判得出「这个 kind 会不会产出事实」。
     _SUB_OP = {"kind": "shell", "command": "x"}
 
     def _probe_value(self, key):
@@ -2099,7 +2089,7 @@ class CatalogLoweringDetailTests(unittest.TestCase):
     def test_skip_unless_installed_keeps_its_command(self):
         op = {"kind": "skip_unless_installed", "command": "pm path com.a",
               "contains": "com.a", "text": "com.a"}
-        self.assertEqual(self.lowered([op]), 'p.d.shell("pm path com.a")')
+        self.assertEqual(self.lowered([op]), 'p.shell("pm path com.a")')
 
     def test_entry_keeps_its_text(self):
         self.assertEqual(self.lowered([{"kind": "entry", "text": "甲"}]), 'p.entry("甲")')

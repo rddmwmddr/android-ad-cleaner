@@ -466,8 +466,9 @@ def phone_mock(fast_mod=None, **fields):
     p.skeleton_sigs, p.skeleton_count = set(), 0
     p.mismatch_probes = 0
     p.reader = p.d = Mock(name="reader")
-    # 引擎里还有几处经 `p.d.shell` 下发（#1476 才归零）：桩只配在门面上，那条老路也得看到同一个桩，
-    # 否则同一份用例要在两处各配一遍。
+    # 一次下发，两个名字：门面 `shell` 与传输 `d.shell` 指向同一个桩，桩打在哪儿都算数，
+    # `call_args_list` 也只有一份（#1476 / #1474）。
+    p.shell = Mock()
     p.d.shell = p.shell
     for name, value in fields.items():
         setattr(p, name, value)

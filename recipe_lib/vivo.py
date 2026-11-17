@@ -32,7 +32,7 @@ def browser_settings_vivo(p, rt, tries=2):
         return bool(at) and at[1] < p.H * 0.25
 
     for _ in range(tries):
-        if not p.d(resourceId="com.vivo.browser:id/menu_btn").click_exists(timeout=3):
+        if not p.tap_id_if_present("com.vivo.browser:id/menu_btn", timeout=3):
             return False                        # 本机没有这个按钮：交给调用方跳过本段
         p.await_page(1.6)                       # 菜单是弹层，画出来的那一帧才有「设置」
         xy = until(lambda: p.find("设置", exact=True, edge_ok="tab"), timeout=3.0, poll=0.3,
@@ -239,7 +239,7 @@ def search_setting(p, rt, kw, pick=True):
     if not p.tap("搜索设置项", scrolls=0, wait=0.6):
         print("  ✗ 设置首页没找到搜索框"); return False
     try:
-        p.d(resourceId="com.android.settings:id/vigour_search_edit").set_text(kw)
+        p.set_text("com.android.settings:id/vigour_search_edit", kw)
     except Exception as e:
         print(f"  ✗ 搜索框输入失败：{e}"); return False
     xy = None

@@ -52,6 +52,9 @@ def main():
             self.unlocks = list(spec.get("unlocks") or [True])
             phones.append(self)
 
+        def shell(self, command, timeout=None):
+            return reader.shell(command, timeout=60 if timeout is None else timeout).output
+
         def wait_unlocked(self, timeout=None):
             if len(self.unlocks) > 1:
                 return bool(self.unlocks.pop(0))

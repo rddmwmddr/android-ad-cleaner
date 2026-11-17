@@ -317,7 +317,7 @@ def menu_phone(**fields):
     p.off.return_value = None
     p.top.return_value = None
     p.screen.focus.return_value = BROWSER_SETTINGS
-    p.d.return_value.click_exists.return_value = True
+    p.tap_id_if_present.return_value = True
     return p
 
 
@@ -335,7 +335,7 @@ class VivoBrowserMenuTests(unittest.TestCase):
                 p = menu_phone()
                 scope, _ = run_browser(p, path)
                 self.assertEqual(scope["FAILED_STEPS"], [])
-                p.d.assert_any_call(resourceId="com.vivo.browser:id/menu_btn")
+                p.tap_id_if_present.assert_any_call("com.vivo.browser:id/menu_btn", timeout=3)
                 p.click.assert_called_once_with(540, 750)
                 self.assertNotIn("设置", [c.args[0] for c in p.tap.call_args_list if c.args])
                 self.assertEqual(["首页设置", "网页浏览设置", "更多设置", "隐私权限设置"],
@@ -349,7 +349,7 @@ class VivoBrowserMenuTests(unittest.TestCase):
                 p.in_settings_page.side_effect = [False, True]
                 scope, _ = run_browser(p, path)
                 self.assertEqual(scope["FAILED_STEPS"], [])
-                self.assertEqual(2, p.d.return_value.click_exists.call_count)
+                self.assertEqual(2, p.tap_id_if_present.call_count)
                 self.assertIn(call(), p.back.call_args_list)     # 退回收起浮层，重开菜单
                 self.assertIn("首页设置", [c.args[0] for c in p.entry.call_args_list])
 
@@ -358,7 +358,7 @@ class VivoBrowserMenuTests(unittest.TestCase):
         for path in BROWSER_RECIPES:
             with self.subTest(path=path.parent.name + "/" + path.name):
                 p = menu_phone()
-                p.d.return_value.click_exists.return_value = False
+                p.tap_id_if_present.return_value = False
                 scope, out = run_browser(p, path)
                 self.assertEqual(scope["FAILED_STEPS"], [])
                 self.assertIn("没有右上菜单按钮", out)
@@ -375,7 +375,7 @@ class VivoBrowserMenuTests(unittest.TestCase):
                 self.assertEqual(["浏览器"], scope["FAILED_STEPS"])
                 self.assertIn("浏览器设置页没有打开", out)
                 p.entry.assert_not_called()
-                self.assertEqual(2, p.d.return_value.click_exists.call_count)
+                self.assertEqual(2, p.tap_id_if_present.call_count)
 
 
 BOTTOM_MENU_PAGE = '''<hierarchy>

@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 import fast
 import run
-from fixtures import load_recipe, phone_mock
+from fixtures import shell_result, load_recipe, phone_mock
 import recipe_case
 from recipe_case import walk
 
@@ -118,7 +118,7 @@ class MixFlip2RecipeTests(recipe_case.RecipeSourceCase):
 
     def test_theme_settings_entry_is_the_text_button_on_the_my_page(self):
         p = self.phone("com.android.thememanager/.ThemePreferenceActivity")
-        p.shell.return_value.output = "package:/data/app/themestore/base.apk"
+        p.shell.return_value = shell_result("package:/data/app/themestore/base.apk")
         p.tab.return_value = True
         p.tap.return_value = True
         p.expect_page.return_value = True
@@ -132,7 +132,7 @@ class MixFlip2RecipeTests(recipe_case.RecipeSourceCase):
     def test_theme_settings_page_that_does_not_open_fails_the_step(self):
         # 落点判据看页面上的项：页面没画出这些项就报失败
         p = self.phone("com.android.thememanager/.ThemePreferenceActivity")
-        p.shell.return_value.output = "package:/data/app/themestore/base.apk"
+        p.shell.return_value = shell_result("package:/data/app/themestore/base.apk")
         p.tab.return_value = True
         p.tap.return_value = True
         p.expect_page.return_value = False

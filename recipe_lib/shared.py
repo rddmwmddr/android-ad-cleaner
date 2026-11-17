@@ -593,7 +593,7 @@ def browser_settings(p, rt):
 
         实测冷启动会直接停在首页，底部只有菜单/窗口，没有「我的」，走「我的」会整段跑空。"""
         try:
-            p.d(resourceId="com.vivo.browser:id/menu_btn").click()
+            p.tap_id("com.vivo.browser:id/menu_btn")
             rt.clock.sleep(1.4)
             if p.tap("设置", exact=True, scrolls=0, wait=1.3) and "SettingActivity" in p.focus():
                 return True

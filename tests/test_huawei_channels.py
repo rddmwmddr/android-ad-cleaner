@@ -43,6 +43,9 @@ class OfflineDevice:
                                      top=Mock(), scroll_more=Mock(return_value=False),
                                      on_screen=lambda node: True)
         self.phone.d = SimpleNamespace(shell=self.ui_shell, window_size=lambda: (1080, 2400))
+        # 门面动词：引擎改走 `p.shell()` / `p.window_size()`（#1476），桩是同一份 ui_shell。
+        self.phone.shell = lambda command, timeout=None: self.ui_shell(command).output
+        self.phone.window_size = lambda: (1080, 2400)
 
     def shell(self, command):
         self.commands.append(command)
