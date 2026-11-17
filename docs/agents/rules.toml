@@ -509,12 +509,20 @@ why = "VIVO_MARKETING 迁到 channel_policy.py 后，docs/09 与测试注释仍�
 expires_if = "文档里的代码引用改由机器生成、移动符号时自动重写时删。"
 
 [[rule]]
+id = "dev.tests.mutation-kills-changed-lines"
+source = "CODING_STANDARDS.md#代码改动的充分性由变异测试判定"
+check = "ci:mutation"
+status = "enforced"
+why = "充分性判据原先是「行为变化要有一条会红的用例」，它只证明「测了」，不证明测试能区分行为，空覆盖可以长期存活（#1407、#674）。`tool/` 里落在映射表内的模块改一行，PR 上的 mutation job 就判本次改动行产生的 mutant 是否全部被杀死，summary 同时给出 pragma 条数。等价变异体不是测试能杀死的，所以它是唯一豁免，且只认「语义等价」与「不可达」两条；工具只让 pragma 的数量与位置可见，属于哪一条、为什么，仍靠评审读 diff。"
+expires_if = "mutation 不再是 PR 判据（例如被能直接判定等价变异的工具取代）时删，那时把这条并进新的判据规则。"
+
+[[rule]]
 id = "dev.tests.behaviour-change-needs-red-test"
 source = "CODING_STANDARDS.md#行为变化要有测试直接守住；纯重构要给对拍证据"
 check = "none"
 status = "manual"
-why = "#674 的读屏错误分流只断言了旧树也满足的性质，新旧两边都绿、看着有覆盖；不把新用例搬回旧树跑红，空覆盖就看不出来。允许旧树也绿的守卫用例与什么都没测的空覆盖在报告里长得一样，评审只能靠 docstring 分清。"
-expires_if = "变异测试进了 CI，返红由工具判定时删；用例是否守卫不回退由工具自动标注时也删。"
+why = "#674 的读屏错误分流只断言了旧树也满足的性质，新旧两边都绿、看着有覆盖。代码侧从 #1415 起由 mutation 判据接管（dev.tests.mutation-kills-changed-lines），但 `recipes/` 的数据改动没有 mutant 可跑，mutation 那一层对它完全看不见；`gui/`（#1429）与手机版替换层（#1430）也还没纳入。这些对象上「搬回旧树看红」仍只能由人跑，守卫用例与空覆盖仍只能靠 docstring 分清，所以这条不能跟着 mutation 一起删。"
+expires_if = "数据改动也有了能程序判定的等价判据（例如按结构派生的行为对拍能直接指出哪条用例抓住了这次差异）时删；`gui/` 与手机版替换层纳入 mutation 只缩短它的适用面，不构成删除条件。"
 
 [[rule]]
 id = "dev.tests.refactor-needs-comparison"
