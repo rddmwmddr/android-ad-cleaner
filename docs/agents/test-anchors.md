@@ -101,7 +101,7 @@
 | `test_channel_arrive.py` | 渠道页的到达决策：六条路线与三条失败路径各自该发哪个意图、结局是什么。 | 31 |
 | `test_channel_toggle.py` | 渠道拨动的决定：能不能点、重试还是放弃、点后消失与灰态各自算什么。 | 21 |
 | `test_channel_batch.py` | 渠道批处理策略：清单→队列的预筛、两趟门槛、重试挑行与收尾复查豁免，逐条结局用纯数据证明。 | 43 |
-| `test_phone_facade.py` | Phone 门面 + 两个基座 + 五个阶段的对外契约。 | 21 |
+| `test_phone_facade.py` | Phone 门面 + 两个基座 + 五个阶段的对外契约。 | 64 |
 | `test_phone_base.py` | 两个基座可以各自独立构造，不必造整台 Phone。 | 22 |
 | `test_phone_sessions.py` | 三个跨阶段会话对象，门面用显式属性转发过去。 | 12 |
 | `test_phone_toggler.py` | 拨动阶段：这一页该关的开关真的被关掉，含确认框判定与等待、页顶复位与残留提示；`drive()` 装的假钟要还原。 | 82 |

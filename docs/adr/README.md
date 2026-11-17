@@ -48,3 +48,4 @@
 - [0042](0042-family-carried-test-cases.md) — 测试用例由「族」承载：让删除成为可判定动作
 - [0043](0043-mutation-as-sufficiency-criterion.md) — 测试充分性由变异测试判定：覆盖率管执行，mutation 管断言
 - [0044](0044-channel-snapshot-intent.md) — 渠道引擎沿「观察 → 决定 → 动作」再切一刀：屏幕快照与意图
+- [0045](0045-device-vocabulary-script-surface.md) — 设备词汇与脚本面边界：门面补动词、catalog 收 shell
