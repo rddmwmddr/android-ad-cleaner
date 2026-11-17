@@ -10,7 +10,6 @@ import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import kotlinx.coroutines.MainScope
-import rikka.sui.Sui
 
 /**
  * 进程级：解出引擎文件、起 Python、调 aac_android.main.boot。界面打开前就在后台开始，界面等它。
@@ -26,8 +25,6 @@ class AacApp : Application() {
         super.onCreate()
         Native.app = this
         AdbShell.app = this
-        // Sui（#1451）：在 Zygisk 里直接递来 binder，不经 ShizukuProvider；不是 Sui 时返回 false，什么也不做。
-        ShellAccess.sui = runCatching { Sui.init(packageName) }.getOrDefault(false)
         booted = worker.submit<String> {
             val base = extract()
             if (!Python.isStarted()) Python.start(AndroidPlatform(this))
