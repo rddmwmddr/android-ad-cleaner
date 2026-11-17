@@ -20,7 +20,7 @@ import fast
 import run
 from fixtures import load_recipe, phone_mock
 import recipe_case
-from recipe_case import _walk
+from recipe_case import walk
 
 RECIPE = ROOT / "recipes/xiaomi/2505APX7BC/2505APX7BC.toml"
 EXCEPTIONS = ROOT / "recipes/xiaomi/2505APX7BC/2505APX7BC.py"
@@ -201,7 +201,7 @@ class MixFlip2RecipeTests(recipe_case.RecipeSourceCase):
     def test_every_switch_page_names_the_switches_it_touches(self):
         # 不整页全关：每一条 off 都点名 only（整页全关要显式写 page_wide / close_all）。
         data = tomllib.loads(self.source)
-        offs = [op for segment in data["segment"] for op in _walk(segment.get("ops", []))
+        offs = [op for segment in data["segment"] for op in walk(segment.get("ops", []))
                 if op.get("kind") in ("off", "off_required")]
         self.assertTrue(offs)
         for op in offs:
@@ -213,7 +213,6 @@ class MixFlip2RecipeTests(recipe_case.RecipeSourceCase):
         self.assertIn(("浏览器·功能设置", ("小说",), ("我的网盘",)), named)
         self.assertIn(("浏览器·搜索设置", ("显示猜你想搜模块",),
                        ("扫一扫", "AI搜索", "搜索历史", "搜索引擎切换栏")), named)
-
 
 
 

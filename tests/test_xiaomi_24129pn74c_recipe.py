@@ -93,8 +93,6 @@ TOOLBAR_PANEL = """<hierarchy rotation="0">
 
 
 class Xiaomi24129PN74CRecipeTests(recipe_case.RecipeSafetyCase):
-    RECIPE = ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml"
-
     def load(self, phone, recipe="24129PN74C.toml"):
         scope, _ = load_recipe(phone, ROOT / "recipes/xiaomi/24129PN74C" / recipe)
         fixtures.bridge_scope(self, scope)

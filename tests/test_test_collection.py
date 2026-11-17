@@ -10,8 +10,8 @@ build 不扫。
 `DomainTests`：七个按批次组织的回归文件里，每个测试类声明行为域 `DOMAIN`，且词表与
 docs/agents/test-anchors.md 的「行为域」一节逐项对拍。
 
-`DuplicationTests`：机型测试文件之间不许出现源码逐字节相同的 `def test_`——共用的那份应该
-在 tests/recipe_case.py 的基类里，复制一份就多一个 owner。#1406
+`DuplicationTests`：测试文件之间不许出现源码逐字节相同的 `def test_`，继承了基类的用例也不许
+在文件里再写一份——共用的那份应该收进共享模块或基类，复制一份就多一个 owner。#1406
 """
 import ast
 import os
@@ -48,11 +48,11 @@ def offenders_in(root):
 
 
 def duplicate_cases(root):
-    """机型测试文件之间逐字节相同的 `def test_`：[[(文件, 用例名), …], …]。
+    """测试文件之间逐字节相同的 `def test_`：[[(文件, 用例名), …], …]。
 
     同一文件里的副本不算：那份归文件自己管；跨文件才是「改一处漏一处」。"""
     seen = {}
-    for path in sorted((root / "tests").glob("test_*_recipe.py")):
+    for path in sorted((root / "tests").glob("test_*.py")):
         source = path.read_text(encoding="utf-8")
         for node in ast.walk(ast.parse(source)):
             if not isinstance(node, ast.FunctionDef) or not node.name.startswith("test_"):
@@ -60,7 +60,35 @@ def duplicate_cases(root):
             seen.setdefault(ast.get_source_segment(source, node), set()).add(
                 (path.name, node.name))
     return sorted(sorted(owners) for owners in seen.values()
-                  if len({name for name, _ in owners}) > 1)
+                  if len({file for file, _ in owners}) > 1)
+
+
+def shadowed_cases(root):
+    """继承了基类的用例、又在文件里写一份同名 `def test_`：[(文件, 类, 用例名), …]。
+
+    基类里的用例只在 recipe_case.py 写一次；文件里再写一份会静默盖掉它，两份从此各走各的。"""
+    base_cases = {}
+    shared = root / "tests/recipe_case.py"
+    if shared.exists():
+        for node in ast.walk(ast.parse(shared.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ClassDef):
+                base_cases[node.name] = {
+                    item.name for item in node.body
+                    if isinstance(item, ast.FunctionDef) and item.name.startswith("test_")}
+    found = []
+    for path in sorted((root / "tests").glob("test_*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            inherited = set()
+            for base in node.bases:
+                if (isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name)
+                        and base.value.id == "recipe_case"):
+                    inherited |= base_cases.get(base.attr, set())
+            for item in node.body:
+                if isinstance(item, ast.FunctionDef) and item.name in inherited:
+                    found.append((path.name, node.name, item.name))
+    return sorted(found)
 
 
 class DuplicationTests(unittest.TestCase):
@@ -70,7 +98,7 @@ class DuplicationTests(unittest.TestCase):
             "、".join(f"{name}::{case}" for name, case in owners) + " 逐字节相同"
             for owners in found)
         self.assertEqual(found, [], detail +
-                         "\n共用的那份放进 tests/recipe_case.py 的基类，或者只留一份")
+                         "\n共用的那份收进共享模块或基类，或者只留一份")
 
     def test_a_copied_case_is_reported_with_both_files(self):
         body = "    def test_same(self):\n        self.assertTrue(True)\n"
@@ -82,6 +110,25 @@ class DuplicationTests(unittest.TestCase):
             self.assertEqual(duplicate_cases(root),
                              [[("test_a_recipe.py", "test_same"),
                                ("test_b_recipe.py", "test_same")]])
+
+    def test_no_inherited_case_is_written_again_in_the_file(self):
+        found = shadowed_cases(ROOT)
+        self.assertEqual(found, [], "\n".join(
+            f"{file}::{owner} 重写了继承来的 {case}" for file, owner, case in found) +
+            "\n基类那份才是 owner，删掉文件里的副本")
+
+    def test_a_case_shadowing_its_base_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "tests").mkdir()
+            (root / "tests/recipe_case.py").write_text(
+                "import unittest\n\nclass Base(unittest.TestCase):\n"
+                "    def test_shared(self):\n        pass\n", encoding="utf-8")
+            (root / "tests/test_a_recipe.py").write_text(
+                "import recipe_case\n\nclass T(recipe_case.Base):\n"
+                "    def test_shared(self):\n        pass\n", encoding="utf-8")
+            self.assertEqual(shadowed_cases(root),
+                             [("test_a_recipe.py", "T", "test_shared")])
 
 
 class CollectionTests(unittest.TestCase):

@@ -43,12 +43,12 @@ def fake_shell(model, build):
     return shell, commands
 
 
-def _walk(ops):
+def walk(ops):
     """展开带分支的 op（if_entry / if_lib_any …）里的子表。"""
     for op in ops:
         yield op
-        yield from _walk(op.get("ops", []))
-        yield from _walk(op.get("else_ops", []))
+        yield from walk(op.get("ops", []))
+        yield from walk(op.get("else_ops", []))
 
 
 class RecipeSourceCase(unittest.TestCase):
@@ -172,7 +172,7 @@ class OfflineSafetyCase(unittest.TestCase):
         self.assertEqual(phone.commands, [])
 
     def test_locked_phone_fails_the_step(self):
-        """锁屏不再静默跳过：这一段记未完成，退出码由失败台账给出（#839）。"""
+        """锁屏不再静默跳过：这一段记未完成，退出码由失败台账给出（沿用 #839）。"""
         result = self.load(self.make_phone(locked=True), ["软件商店"])
         self.assertEqual(result["RESULTS"], [("软件商店", "未完成")])
         self.assertEqual(result["FAILED_STEPS"], ["软件商店"])

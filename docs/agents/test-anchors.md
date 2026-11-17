@@ -10,7 +10,7 @@
 
 **机型脚本的专用测试**：文件名点名了 `recipes/` 下的某份脚本就自动合规，不逐个登记。点名的形式有三种：目录名的品牌段（`test_honor_recipe.py`）、型号段（`test_rmx3888_recipe.py`）、或脚本头注里的市场名（`test_k70_recipe.py`，对应 `recipes/xiaomi/23113RKC6C`）。给新机型写脚本时，按脚本目录给测试文件命名即可。
 
-跨文件同体的助手与用例不各写一份：[tests/recipe_case.py](../../tests/recipe_case.py) 放共享助手与几个继承用的基类（非 `test_` 前缀，因此不登记锚点）。用例收进基类后 `grep -l recipe_case tests/` 就能列出共用这套断言的机型——继承来的用例在文件里看不见，这条就是这个代价的补偿。
+跨文件共用的助手与继承用的基类放在 [tests/recipe_case.py](../../tests/recipe_case.py)（非 `test_` 前缀，因此不登记锚点）。用例收进基类后 `grep -l recipe_case tests/` 能列出所有用到它的机型（继承基类的与只借助手的都在内）——继承来的用例在文件里看不见，这条就是这个代价的补偿。
 
 ## 新增用例往哪儿放
 
@@ -30,7 +30,7 @@
 
 守卫只扫 `tests/` 顶层。`tests/` 下将来若出现子目录，里面的 `test_*.py` 会被 `discover` 收到却不受这条规则约束——目前没有，出现时要先把守卫改成递归再放进去。
 
-机型测试之间的去重守卫（`tests/test_test_collection.py` 的 `duplicate_cases()`）只挡逐字节相同：改一个字、换个变量名就绕过去了。它挡的是复制粘贴，不是「两条用例其实在验同一件事」——后者仍归评审。同一文件里的副本也不管，那份归文件自己。
+机型测试之间的去重守卫（`tests/test_test_collection.py` 的 `duplicate_cases()`）只挡逐字节相同：改一个字、换个变量名就绕过去了。它挡的是复制粘贴，不是「两条用例其实在验同一件事」——后者仍归评审。同一文件里的副本也不管，那份归文件自己。同一文件的 `shadowed_cases()` 补另一个方向：继承了基类又在文件里写同名 `def test_` 会静默盖掉基类那份，它按 `class X(recipe_case.Y)` 认继承，写成别的形式（`from recipe_case import Y`）就看不见。
 
 ## 族
 
@@ -138,7 +138,7 @@
 | `test_subprocess_text_mode.py` | 子进程的文本模式必须写清解码方式。 | 3 |
 | `test_runtime_symbols.py` | 跨运行时符号：tool/ 在电脑与手机版跑两套依赖，静态引用的名字要真的存在。 | 2 |
 | `test_declared_fields.py` | 构造处声明过的字段要直接读，不再 getattr 兜底。 | 1 |
-| `test_test_collection.py` | 用例只在 tests/ 下定义，每个测试文件都落到已声明的锚点，锚点的断言数上限在两处登记上逐字对拍，机型测试之间不许有逐字节相同的用例。 | 35 |
+| `test_test_collection.py` | 用例只在 tests/ 下定义，每个测试文件都落到已声明的锚点，锚点的断言数上限在两处登记上逐字对拍，测试文件之间不许有逐字节相同的用例，也不许重写继承来的用例。 | 37 |
 | `test_family.py` | 族容器本身：case id 快照、结构句柄、产出与缺口四件校验、必须附理由的快照更新入口，以及四个族对得上各自的快照。 | 82 |
 | `test_glob_scan.py` | 发现式 glob 的反空转：发现集为空时与「全仓合规」不可区分，每个模式对真实仓库求值一次，0 份即红。 | 24 |
 | `test_rules_guards.py` | 规则守卫：文档内容、注册表、引擎结构与流程条目各自的机械判据。 | 61 |
