@@ -178,10 +178,11 @@ def close_named_honor(p, rt, names, title, package, marker, max_screens=6, drawn
         rt.require(p.focus().split("/", 1)[0] == package and marker in labels(p, root),
                      "已离开目标设置页，停止读取开关")
         # 仅阅读的「广告推荐服务」设置页允许截图识别自绘开关，不写图片文件。
+        # 自绘开关不满足 clickable，段内包装器（`safe_ui`）会把它们过滤掉；这一档要引擎自己那份读法。
         if drawn:
             rt.require(package == "com.hihonor.dz.reader" and marker == "广告推荐服务",
                          "此页不允许自绘开关截图")
-            return native(root)
+            return p.switches_raw(root)
         return native(root)
 
     p.switches = read

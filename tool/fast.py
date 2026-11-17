@@ -240,6 +240,10 @@ class Phone:
     def switches(self, root=None):
         return self.screen.switches(root)
 
+    def switches_raw(self, root=None):
+        """引擎自己的读法：不看段内装在实例上的 `switches` 包装器（自绘开关只有这一档允许读）。"""
+        return self.screen.switches(root)
+
     def switch_rows(self, root=None):
         return self.screen.switch_rows(root)
 

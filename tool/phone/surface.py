@@ -30,6 +30,8 @@ DEVICE_VERBS = frozenset({
     "tap_id", "tap_id_if_present", "set_text",
     # 页面查询与等待
     "texts", "tree", "focus", "sig", "on_screen", "switches", "has_text",
+    # 绕过段内包装器的引擎读法：自绘开关只有「仅阅读」那一档允许读，`honor.close_named_honor(drawn=True)` 用
+    "switches_raw",
     "find", "settle", "await_page", "expect_page", "locked", "in_settings_page",
     "page_text", "page_evidence", "note_miss", "scroll_more", "say",
     # 导航、拨动与设置搜索

@@ -250,16 +250,16 @@ def _gated(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
 
 def _scoped(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
     """作用域内设一个页面属性、退出恢复（对应段体里的 try/finally，例如锁屏页的 `systemui_text`）。"""
-    page = p
+    scope = p.screen                       # 属性归观测基座：设与恢复都打在同一个对象上
     saved = {}
     if "systemui_text" in op:
-        saved["systemui_text"] = page.screen.systemui_text
-        page.screen.systemui_text = op["systemui_text"]
+        saved["systemui_text"] = scope.systemui_text
+        scope.systemui_text = op["systemui_text"]
     try:
         _run(op.get("ops", []), p, rt, g)
     finally:
         for name, value in saved.items():
-            setattr(page, name, value)
+            setattr(scope, name, value)
 
 
 def _back(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
