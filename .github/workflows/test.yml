@@ -233,8 +233,10 @@ jobs:
       # tool/（被测源码）、devtools/mutation*.py（映射表与工作目录布局）；`recipes/` 这类
       # 数据不进货 key——它们由 mutmut 自己的 git 比对抓，配置里 on_dependency_change = "rerun"
       # 让数据一变就整轮重跑。restore-keys 回退到同前缀的旧缓存：源码改了也值得复用，
-      # 没动过的函数判定仍然有效；`.python-version` 与 mutmut 版本进 key 前缀，判定缓存格式
-      # 随解释器与 mutmut 版本走，升级时整份作废。只给这个 Linux job 用，不跨平台。
+      # 没动过的函数判定仍然有效；解释器档位（`py313`，硬编码，与 `.python-version` 及本 job 的
+      # setup-python 一致）与 mutmut 版本进 key 前缀，判定缓存格式随解释器与 mutmut 版本走，
+      # 升级解释器时 key 里的档位、`.python-version` 与本 job 的 setup-python 要一起改、整份缓存作废。
+      # 只给这个 Linux job 用，不跨平台。
       - name: 恢复 .mutmut 判定缓存
         uses: actions/cache@v4
         with:

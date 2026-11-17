@@ -28,7 +28,7 @@ README、PR 描述、Release Note 里的计数，必须交代它在什么样本�
 
 ## 代码改动的充分性由变异测试判定
 
-「有测试跑过」不算证据：改动落在变异映射表（`devtools/mutation_scope.py`）里的模块上时，本次改动行产生的 mutant 必须全部被杀死，等价变异体是唯一豁免，也不设比例门槛——允许比例会立刻出现卡阈值的写法。它与覆盖率是两层，缺一层就漏一类问题：覆盖率管「新增代码有没有被执行到」，没执行的代码生不出可杀的 mutant；mutation 管「执行到的代码有没有断言守得住」，空覆盖只有这一层看得见。PR 判据看 mutation job 的结论，不再以「有一条会红的用例」代替。 <!-- rule:dev.tests.mutation-kills-changed-lines -->
+改动落在变异映射表（`devtools/mutation_scope.py`）里的模块上时，本次改动行产生的 mutant 必须全部被杀死：门槛是 100%，不设比例；等价变异体是唯一豁免。「有测试跑过」不算证据。覆盖率与 mutation 是两层判据，两层都要满足，不能互相替代。PR 判据看 mutation job 的结论，不再以「有一条会红的用例」代替。 <!-- rule:dev.tests.mutation-kills-changed-lines -->
 
 杀不死的 mutant 只有两条豁免：**语义等价**（变异前后对任何输入同结果）与**不可达**（所在分支走不到）。`# pragma: no mutate` 必须写明属于哪一条；说不清为什么属于这一条的，就是没写理由。「无意义变异」不在豁免内——不影响行为的代码该删该改，不是标 pragma。pragma 条数进 CI summary 的变异测试一节，评审要看新增的那条 pragma 在 diff 里读不读得出它属于哪一类。
 

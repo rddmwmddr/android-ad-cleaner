@@ -14,7 +14,7 @@
 
 mutmut 3.8 对代码做小改动（mutant）再跑测试：测试仍然全绿的那一处改动就是存活。判据落在改动面而不是整个仓库——PR 上 `python devtools/mutation.py --since <base>` 只跑 `git diff --name-only` 里落进映射表（`devtools/mutation_scope.py`，13 个模块）的那些，行级筛选交给 mutmut 自己的内容哈希 + span 缓存（实测单行 0.75 s，单模块冷缓存 8.1 s）。
 
-门槛是 100%，不设比例：允许比例会立刻出现卡阈值的写法。存活之外，`no_tests`（没有测试碰到这处变异）、`suspicious`、`segfault` 同样返红。映射表把测试范围收窄到「执行过该模块的那些文件」，因为它决定尺子的宽度——窄了会把没被选中的测试能杀死的 mutant 报成存活，所以 `mutation_scope` 的每一行由 coverage 的 `dynamic_context` 矩阵量出来，不按 import 反推。
+门槛是 100%，不设比例：允许比例会立刻出现卡阈值的写法。存活之外，`no_tests`（没有测试碰到这处变异）、`suspicious`、`segfault` 同样返红。映射表把测试范围收窄到「执行过该模块的那些文件」，因为它决定尺子的宽度——窄了会把没被选中的测试能杀死的 mutant 报成存活，所以 `mutation_scope` 除 `reader` 外每一行由 coverage 的 `dynamic_context` 矩阵量出来，不按 import 反推（`reader` 那行只为让 mutmut 有得收集，见 Consequences）。
 
 ### 两层判据各管一端
 

@@ -29,6 +29,7 @@
 - summary 的插电常亮与「等」后缀补真行为用例，mutation 存活清零（#1425）
 - host 的按宿主措辞加逐字断言，mutation 存活清零（#1418）
 - mutation 驱动的失败路径、summary 措辞与文档计数按审查结果修正（#1407）
+- 按审查修正 mutation 文档口径，conftest 的缓存清理不再提前返回（#1407）
 - mutation 驱动按模块分工作目录，并补 `gui` / `aac_android` 依赖（#1414）
 - coverage_note 清到 mutation 存活 0，缺档判断拆成一行、pragma 只覆盖那一行（#1426）
 - polarity 清到 mutation 存活 0：`want_state()` 对 None 早返回，不再需要 pragma（#1416）

@@ -571,8 +571,7 @@ def scan_dir(recipes_dir: str, families: Mapping[str, str] | None = None) -> dic
         if py:
             for path in py:
                 rel = os.path.relpath(path, recipes_dir).replace(os.sep, "/")
-                # 二进制读再 decode：`bytes.decode()` 的缺省编码就是 UTF-8，不随平台 / locale 的
-                # `open()` 默认编码走（Windows 上会按代码页解坏中文脚本）。
+                # 与本模块读 `.toml` 的 `tomllib.load()` 同口径按二进制打开，再 `decode()`（缺省 UTF-8）。
                 with open(path, "rb") as handle:
                     raw = handle.read()
                 out[rel] = scan_source(raw.decode())
@@ -856,7 +855,7 @@ def scan_catalog_file(toml_path: str) -> Facts:
     companion = os.path.splitext(toml_path)[0] + ".py"
     exception_src = None   # pragma: no mutate 语义等价：空源码扫出的事实为空，合并结果与不合并相同。
     if os.path.isfile(companion):
-        # 与 `scan_dir()` 同一口径：二进制读再 decode，缺省编码就是 UTF-8，不看平台 locale。
+        # 与 `scan_dir()` 同口径：二进制读再 `decode()`（缺省 UTF-8）。
         with open(companion, "rb") as handle:
             raw = handle.read()
         exception_src = raw.decode()

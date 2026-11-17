@@ -24,5 +24,5 @@ def pytest_sessionstart(session):
         try:
             module = importlib.import_module(module_name)
         except ImportError:
-            return
+            continue
         getattr(module, attribute).cache_clear()
