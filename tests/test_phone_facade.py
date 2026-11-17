@@ -32,13 +32,13 @@ RECIPES = ROOT / "recipes"
 # 门面的公开方法：类上定义的函数，今天 45 个。方法变成数据（例如搬成实例上绑定的函数）也算红：
 # 脚本会把 `p.click` / `p.switches` 换成本地读法，形状变了就不是同一个门面。
 METHODS = frozenset({
-    "await_page", "back", "check_alive", "click",
+    "app_stop", "await_page", "back", "check_alive", "click",
     "close", "confirm", "dismiss", "edit_ready",
     "enter", "entry", "expect_hits", "expect_page",
     "find", "focus", "focused_text", "go",
     "has_text", "home", "icon_candidates", "in_settings_page", "locked",
     "ls", "note_miss", "off", "on_screen",
-    "page_evidence", "page_text", "residual_confirm", "residual_note",
+    "page_evidence", "page_text", "press", "residual_confirm", "residual_note",
     "say", "scroll", "scroll_more", "setting",
     "settle", "shell", "sig", "start", "swipe", "switch_rows",
     "switches", "tab", "tap", "tap_icon",
@@ -248,6 +248,8 @@ class RecordingReader:
         self.output, self.size = output, size
         self.shells = []       # [(命令, timeout)]
         self.swipes = []       # [((x1, y1, x2, y2), {关键字})]
+        self.presses = []      # [键名]
+        self.stops = []        # [包名]
         self.size_reads = 0
 
     def shell(self, command, timeout=None):
@@ -256,6 +258,12 @@ class RecordingReader:
 
     def swipe(self, x1, y1, x2, y2, **kwargs):
         self.swipes.append(((x1, y1, x2, y2), kwargs))
+
+    def press(self, key):
+        self.presses.append(key)
+
+    def app_stop(self, package):
+        self.stops.append(package)
 
     def window_size(self):
         self.size_reads += 1
@@ -297,6 +305,20 @@ class DeviceVerbTests(unittest.TestCase):
         phone.swipe(100, 200, 300, 400, 450)
         self.assertEqual(reader.swipes, [((100, 200, 300, 400), {"duration": 0.45})])
         self.assertEqual(reader.shells, [], "swipe 不该退回 `input swipe` 那条路")
+
+    def test_press_keeps_the_uiautomator2_path(self):
+        """按一个键走 u2 的 `press`（jsonrpc `pressKey`），**不是** `input keyevent`：两条不同路。"""
+        phone, reader = verb_phone()
+        phone.press("home")
+        self.assertEqual(reader.presses, ["home"])
+        self.assertEqual(reader.shells, [], "press 不该退回 `input keyevent` 那条路")
+
+    def test_app_stop_keeps_the_uiautomator2_path(self):
+        """强停走 u2 的 `app_stop`，**不是** `am force-stop` 串：`_u2` 还负责断线记账。"""
+        phone, reader = verb_phone()
+        phone.app_stop("com.android.browser")
+        self.assertEqual(reader.stops, ["com.android.browser"])
+        self.assertEqual(reader.shells, [], "app_stop 不该退回 `am force-stop` 那条路")
 
     def back_phone(self):
         """`back()` 读屏与等待都桩在观测基座上（`phone_stub` 的约定），只留下发的命令可观察。"""

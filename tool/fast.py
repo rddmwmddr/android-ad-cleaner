@@ -397,6 +397,14 @@ class Phone:
         """回桌面（`input keyevent HOME`）（#1472）。"""
         self.screen.home()
 
+    def press(self, key):
+        """按一个键（`home` / `back` / `recent` …）：走 uiautomator2 的 `press`（#1472）。"""
+        self.screen.press(key)
+
+    def app_stop(self, package):
+        """强停一个包：走 uiautomator2 的 `app_stop`（#1472）。"""
+        self.screen.app_stop(package)
+
     def apply(self, intent):
         """意图的唯一执行点（#1432）：按种类分派到基座的动作原语。"""
         return self.screen.apply(intent)

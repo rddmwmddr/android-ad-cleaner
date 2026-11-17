@@ -1,9 +1,9 @@
 """观测基座：读屏、认行、页面诊断、视口几何，以及动作原语（ADR-0033）。
 
 构造时注入 `Connection`：读屏 adapter 与断线判定都只经它，不认识 `Phone`。
-动作原语是 `shell` / `click` / `swipe` / `window_size` / `home` / `back` / `settle` / `find`，
-翻页的 `scroll` / `scroll_more` 同在这一层（拨动与导航都要翻页，不该由其中一方提供）。后续阶段
-一律经它们动作，不直接碰传输。
+动作原语是 `shell` / `click` / `swipe` / `window_size` / `press` / `app_stop` / `home` / `back` /
+`settle` / `find`，翻页的 `scroll` / `scroll_more` 同在这一层（拨动与导航都要翻页，不该由其中
+一方提供）。后续阶段一律经它们动作，不直接碰传输。
 确认框的认法（`confirm_target`）也在这一层：拨动用它点掉遮罩，导航用它说清失败原因（#557），
 两条路共用同一份匹配，谁也不依赖谁。
 """
@@ -253,7 +253,7 @@ class Screen:
         out.sort(key=lambda xy: -xy[0])        # 齿轮在最右边，先试它
         return out
 
-    # ---------- 四个动作原语（后续阶段一律经它们动作） ----------
+    # ---------- 动作原语（后续阶段一律经它们动作） ----------
     def click(self, x, y):
         size = self.conn._u2(self.conn.reader.window_size)
         if tuple(size) != (self.W, self.H):
@@ -283,9 +283,22 @@ class Screen:
         """读一次屏幕尺寸（宽, 高）：脚本自己比对用，与 `click` 的越界守卫同一个来源。"""
         return tuple(self.conn._u2(self.conn.reader.window_size))
 
+    def press(self, key):
+        """按一个键（`home` / `back` / `recent` …）：走 uiautomator2 的 `press`。
+
+        它与 `back()` 的 `input keyevent BACK` **不是**同一条下发路径（u2 走 jsonrpc `pressKey`），
+        所以脚本里原有的按键调用搬过来时走这个原语，路径零变化（#1472）。"""
+        self.conn._u2(self.conn.reader.press, key)
+
+    def app_stop(self, package):
+        """强停一个包：走 uiautomator2 的 `app_stop`（它内部就是 `am force-stop`）。
+
+        与 `shell("am force-stop …")` 的区别是 `_u2` 的断线记账，别在调用方绕过它（#1472）。"""
+        self.conn._u2(self.conn.reader.app_stop, package)
+
     def back(self, n=1, settle=True):
         """发 `input keyevent BACK`。默认每条都等页面稳定；`settle=False` 只发 keyevent、
-        不先读屏也不等（脚本原来 `p.d.press("back")` 的语义，WKL-AN20）。"""
+        不先读屏也不等——省掉的是 `sig()` 与 `settle()`，下发仍是 `input keyevent BACK`。"""
         for _ in range(n):
             before = self.sig() if settle else None
             self.conn.reader.shell("input keyevent BACK")
