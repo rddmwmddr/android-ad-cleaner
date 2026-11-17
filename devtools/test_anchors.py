@@ -146,7 +146,7 @@ ANCHORS = {
     "test_download_page_rows.py": ("下载页与网盘说明的行：手机版 APK 单独成行、说明里写「不用连电脑」并带校验值，页面 id 写错要在上传前停下。", 23),
     "test_old_install_notice.py": ("免安装版启动时提示旧名安装还在：文案与「同一版本只说一次」。", 12),
     # 跨车型的行为域
-    "test_huawei_channels.py": ("华为渠道页的脱敏离线回归：已观察页面，不连手机。", 70),
+    "test_huawei_channels.py": ("华为渠道页的脱敏离线回归：已观察页面，不连手机。", 71),
     "test_page_and_link_regressions.py": ("一期社区反馈汇集的设备无关回归：渠道页归属与仿冒、内联开关、多用户解析、点击被拒、adb 掉线与 USB 诊断；每条用例的 owner 是所在类声明的行为域（见「行为域」）。", 126),
     "test_lock_and_disconnect_regressions.py": ("上报日志分类汇集的设备无关回归：锁屏判据与等机主解锁、灰态渠道、断线不带堆栈、脱敏与参考脚本；每条用例的 owner 是所在类声明的行为域（见「行为域」）。", 71),
     "test_layout_and_verdict_regressions.py": ("发布当天上报汇集的设备无关回归：卡片布局差异、vivo 旧页与直达、失败判定、停止不算失败、暂停与空报告；每条用例的 owner 是所在类声明的行为域（见「行为域」）。", 86),
