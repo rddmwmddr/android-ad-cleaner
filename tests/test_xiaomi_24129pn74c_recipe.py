@@ -135,9 +135,9 @@ class Xiaomi24129PN74CRecipeTests(recipe_case.RecipeSafetyCase):
         # 本机「隐私与安全」是权限中心，没有「更多安全设置」这一项：搜索直达 + 深链兜底。
         self.assertEqual(ops[0]["kind"], "if_setting")
         self.assertEqual(ops[0]["kw"], "广告服务")
-        self.assertEqual([op for op in ops[0]["else_ops"] if op["kind"] == "shell"],
-                         [{"kind": "shell",
-                           "command": "am start -f 0x10008000 -n com.android.settings/.ad.AdServiceSettings"}])
+        self.assertEqual([op for op in ops[0]["else_ops"] if op["kind"] == "start"],
+                         [{"kind": "start", "pkg": "com.android.settings",
+                           "activity": ".ad.AdServiceSettings", "clear_task": True}])
         # 整份数据里不能出现「更多安全设置」这个点击动作（注释里的说明不算）。
         code = "\n".join(line for line in
                          (ROOT / "recipes/xiaomi/24129PN74C/24129PN74C.toml").read_text(encoding="utf-8").splitlines()

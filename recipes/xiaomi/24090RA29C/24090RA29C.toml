@@ -12,7 +12,7 @@ build = "OS3.0.309.0"
 name = "系统广告"
 ops = [
   # 不用设置搜索：HyperOS 搜索框用 setText 输入中文会卡住、一直打「%」。按菜单路径点进去
-  { kind = "shell", command = "am start -f 0x10008000 -a android.settings.SETTINGS" },
+  { kind = "start", action = "android.settings.SETTINGS" },
   { kind = "sleep", seconds = 1.2 },
   { kind = "if_entry", text = "隐私与安全", ops = [
     # OS3.0：隐私页首屏没有「更多安全设置」，它在「安全」标签页下
@@ -65,7 +65,7 @@ name = "浏览器"
 ops = [
   # 首页「默认 / 探索版 / 自定义主页」不改：按机主喜好。
   # 底栏「我的」标签在部分启动状态下点不动，直达设置页 Activity，绕开首页导航。
-  { kind = "shell", command = "am start -n com.android.browser/.BrowserSettingsActivity" },
+  { kind = "start", pkg = "com.android.browser", activity = ".BrowserSettingsActivity", clear_task = false },
   { kind = "sleep", seconds = 2 },
   { kind = "dismiss" },
   { kind = "if_entry", text = "隐私和安全", ops = [

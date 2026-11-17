@@ -19,7 +19,7 @@ CLOSE_NAMED_STYLE = "meizu"
 [[segment]]
 name = "系统跟踪"
 ops = [
-  {kind = "shell", command = "am start --windowingMode 1 -f 0x10008000 -a android.settings.SETTINGS"},
+  {kind = "start", flags = "--windowingMode 1", action = "android.settings.SETTINGS"},
   {kind = "lib", name = "wait_page", args = ["com.android.settings/com.android.settings.homepage.SettingsHomepageActivity", "我的手机"]},
   {kind = "lib", name = "goto", args = ["权限和隐私", "com.meizu.safe/com.meizu.safe.ui.permission.PermissionMainActivity", "权限和隐私", 8]},
   {kind = "lib", name = "goto", args = ["应用跟踪控制", "com.flyme.secureservice/com.flyme.secureservice.openid.ui.OAIDSettingsActivity", "应用跟踪控制", 6]},
@@ -90,7 +90,7 @@ ops = [
 [[segment]]
 name = "手机管家"
 ops = [
-  {kind = "shell", command = "am start --windowingMode 1 -f 0x10008000 -a android.settings.SETTINGS"},
+  {kind = "start", flags = "--windowingMode 1", action = "android.settings.SETTINGS"},
   {kind = "lib", name = "wait_page", args = ["com.android.settings/com.android.settings.homepage.SettingsHomepageActivity", "我的手机"]},
   {kind = "lib", name = "goto", args = ["手机管家", "com.meizu.safe/com.meizu.safe.SecurityMainActivity", "设置", 8]},
   {kind = "lib", name = "goto", args = ["设置", "com.meizu.safe/com.meizu.safe.MainSettingsActivity", "应用下载推荐"]},

@@ -1106,6 +1106,57 @@ class StartOpCommandTests(unittest.TestCase):
             ["monkey -p com.android.browser -c android.intent.category.LAUNCHER 1"])
 
 
+class ShippedShellOpsTests(unittest.TestCase):
+    """48 份数据里还剩哪些 raw `shell`（#1478）。
+
+    拉起、强停与 monkey 都进了结构化 op；留下的只能是 op 表达不了的那几条。
+    再加一条手写的 `am start` 就说明「同一批脚本被两套词法解释」又长回来了（ADR-0034 的病）。
+    """
+
+    KEPT = (
+        "input tap 1098 240",          # 这版日历的「更多」对 uiautomator 点击不响应
+        "input tap 769 647",           # 同上，「设置」
+        "input keyevent KEYCODE_HOME",  # u2 的 press 走 jsonrpc，不是 input keyevent
+        "input keyevent HOME",
+        "input keyevent BACK",
+        # 录脚本时写死的绝对坐标：`gesture` 按屏宽/屏高比例现算，真机上换回来的绝像素与原串不同
+        "input swipe 600 2200 600 500 250",
+        "input swipe 600 2200 600 500 250",
+        "input swipe 600 2200 600 500 250",
+    )
+
+    @staticmethod
+    def _walk(value):
+        """op 出现在 `ops` / `else_ops` / 调用实参块里，一律递归收。"""
+        if isinstance(value, dict):
+            if isinstance(value.get("kind"), str):
+                yield value
+            for item in value.values():
+                yield from ShippedShellOpsTests._walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                yield from ShippedShellOpsTests._walk(item)
+
+    def test_the_commands_that_stay_raw_shell_are_the_documented_ones(self):
+        found = []
+        for path in sorted((ROOT / "recipes").glob("*/*/*.toml")):
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+            found += [op["command"] for op in self._walk(data) if op["kind"] == "shell"]
+        self.assertEqual(sorted(found), sorted(self.KEPT))
+
+    def test_no_catalog_data_launches_or_stops_through_a_shell_string(self):
+        """`am start` / `am force-stop` / `monkey` 的形状只在 `tool/catalog/launch.py` 拼一次。"""
+        leftovers = []
+        for path in sorted((ROOT / "recipes").glob("*/*/*.toml")):
+            for op in self._walk(tomllib.loads(path.read_text(encoding="utf-8"))):
+                command = op.get("command", "")
+                if op["kind"] == "shell" and (
+                        "am start" in command or "am force-stop" in command
+                        or command.startswith("monkey ")):
+                    leftovers.append((path.relative_to(ROOT).as_posix(), command))
+        self.assertEqual(leftovers, [])
+
+
 class StartOpLandingTests(unittest.TestCase):
     """不带形状键的 `start` 仍是 `p.start`：落点校验（前台归属、弹窗）不能因为这次扩展丢掉。"""
 

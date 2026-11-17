@@ -34,7 +34,7 @@ name = "浏览器"
 ops = [
   { kind = "start", pkg = "com.heytap.browser" },
   # ColorOS 17 首页读不到「我的」/菜单入口，用实测可直达的设置页 Activity；带清栈参数会立刻退出。
-  { kind = "shell", command = "am start -f 0x10008000 -n com.heytap.browser/.settings.component.BrowserPreferencesPage" },
+  { kind = "start", pkg = "com.heytap.browser", activity = ".settings.component.BrowserPreferencesPage", clear_task = true },
   { kind = "sleep", seconds = 1.2 },
   { kind = "if_focus", text = "com.heytap.browser", match = "contains", else_ops = [{ kind = "print", text = "  ✗ 浏览器设置页没有打开" }, { kind = "return" }] },
   { kind = "if_tap", text = "主页设置", exact = true, ops = [{ kind = "if_tap", text = "页面布局", exact = true, ops = [{ kind = "tap", text = "简洁", exact = true, scrolls = 0 }, { kind = "back" }] }, { kind = "back" }] },

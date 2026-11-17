@@ -155,7 +155,9 @@ ops = [
   { kind = "sleep", seconds = 1.5 },
   { kind = "shell", command = "input tap 769 647" },       # 菜单里的「设置」
   { kind = "sleep", seconds = 2 },
-  # 「用户体验计划」在页底，先滚下去（三屏）
+  # 「用户体验计划」在页底，先滚下去（三屏）。坐标是录这台机时写死的绝对值，**不能**换成按屏
+  # 比例现算的 `gesture`：同一份数据里 `input tap 1098 240` 说明这台的屏宽大于 1080，比例换回来
+  # 的绝像素与原串不同，等于在真机上换了手势（#1478）。
   { kind = "shell", command = "input swipe 600 2200 600 500 250" },
   { kind = "sleep", seconds = 0.8 },
   { kind = "shell", command = "input swipe 600 2200 600 500 250" },

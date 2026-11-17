@@ -19,7 +19,7 @@ CLOSE_NAMED_STYLE = "reopen"
 name = "广告跟踪"
 ops = [
   { kind = "skip_in_safe_mode" },
-  { kind = "shell", command = "am start -f 0x10008000 -a android.settings.SETTINGS" },
+  { kind = "start", action = "android.settings.SETTINGS" },
   { kind = "sleep", seconds = 1.2 },
   { kind = "miss_reset" },
   # 17 把入口改名叫「隐私与安全」：先试新名字，免得在旧名字上白翻一轮、还打印一行失败（沿用 #292）。
@@ -39,7 +39,7 @@ name = "下拉搜索"
 ops = [
   # 全局搜索的设置页没有导出：`am start -n` 会被系统拒绝（SecurityException: not exported），
   # 只能用它自己的 gs:// scheme 打开。
-  { kind = "shell", command = "am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'" },
+  { kind = "start", action = "android.intent.action.VIEW", data = "gs://search/setting" },
   { kind = "sleep", seconds = 1.5 },
   { kind = "require_focus", contains = "com.heytap.quicksearchbox", miss_print = "全局搜索设置页没有打开" },
   { kind = "lib", name = "tap", args = ["首页卡片管理"] },
@@ -72,7 +72,7 @@ ops = [
 name = "浏览器"
 ops = [
   { kind = "start", pkg = "com.heytap.browser" },
-  { kind = "shell", command = "am start -n com.heytap.browser/.settings.component.BrowserPreferencesPage" },
+  { kind = "start", pkg = "com.heytap.browser", activity = ".settings.component.BrowserPreferencesPage", clear_task = false },
   { kind = "sleep", seconds = 1.5 },
   { kind = "require_focus", contains = "com.heytap.browser", miss_print = "浏览器设置页没有打开" },
   { kind = "lib", name = "tap", args = ["隐私"] },
@@ -146,7 +146,7 @@ ops = [
 [[segment]]
 name = "小布建议"
 ops = [
-  { kind = "shell", command = "am start -f 0x10008000 -a android.settings.SETTINGS" },
+  { kind = "start", action = "android.settings.SETTINGS" },
   { kind = "sleep", seconds = 1.2 },
   { kind = "lib", name = "tap", args = ["OPPO AI"], kwargs = { scrolls = 6 } },
   { kind = "lib", name = "tap", args = ["小布建议"], kwargs = { scrolls = 6 } },
@@ -163,7 +163,7 @@ ops = [
 name = "应用建议"
 ops = [
   { kind = "skip_in_safe_mode" },
-  { kind = "shell", command = "am start -f 0x10008000 -a android.settings.SETTINGS" },
+  { kind = "start", action = "android.settings.SETTINGS" },
   { kind = "sleep", seconds = 1.2 },
   { kind = "lib", name = "tap", args = ["OPPO AI"], kwargs = { scrolls = 6 } },
   { kind = "lib", name = "tap", args = ["小布建议"], kwargs = { scrolls = 6 } },

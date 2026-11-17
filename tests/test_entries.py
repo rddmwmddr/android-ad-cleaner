@@ -15,7 +15,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, call
+from unittest.mock import Mock, call, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -149,6 +149,51 @@ class SourceTest(unittest.TestCase):
         self.assertNotIn("PMX110", used[browser])  # PMX110 的浏览器走裸 `-n`，不是这个 Intent
         self.assertIn(("intent", "oppo.intent.action.APP_SETTINGS", "com.heytap.themestore"),
                       used)                        # 字面量：PKH110
+
+    def test_catalog_data_entry_facts_no_longer_need_the_am_start_regexes(self):
+        """catalog 数据里的拉起形状由 `start` op 提供（#1478）：把两条回读正则打死，数据派生的入口不变。
+
+        只扫数据、不带同目录 `<型号>.py` 例外：那批手写脚本与 `recipe_lib` 实现里的 `am start` 串
+        仍是正则的活（没有结构化形态），删了会整行丢掉「用过的机型」。这条钉的是数据这一侧——
+        哪天有人把 `am start` 写回 `shell` 串，`_AM_PAGE` / `_AM_INTENT` 一停摆就红。
+        """
+        data = {path.relative_to(ROOT / "recipes").as_posix():
+                recipe_source.scan_catalog(tomllib.loads(path.read_text(encoding="utf-8")))
+                for path in sorted((ROOT / "recipes").glob("*/*/*.toml"))}
+
+        def derived():
+            found = {}
+            for rel, item in data.items():
+                entries._scan_entries(item, rel.split("/")[1], found)
+            return found
+
+        before = derived()
+        # 不空转：`-n` 直达与公开 Intent 两档都得真在，否则下面的「一样」是两份空的
+        self.assertIn(("direct", "com.android.settings",
+                       "com.android.settings.ad.AdServiceSettings"), before)
+        self.assertIn(("intent", "oppo.intent.action.APP_SETTINGS",
+                       "com.heytap.themestore"), before)
+        with patch.object(entries, "_AM_PAGE", re.compile(r"(?!)")), \
+                patch.object(entries, "_AM_INTENT", re.compile(r"(?!)")):
+            self.assertEqual(derived(), before)
+
+    def test_a_start_op_with_action_and_package_is_a_public_intent(self):
+        """`start` op 的 `action` + `pkg` 在事实层是一个公开 Intent 入口（#1478）。
+
+        不写这条路，入口速查就得继续从生成的源码里正则回读 `-a … -p …`。
+        """
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            model = Path(d) / "brand" / "model"
+            model.mkdir(parents=True)
+            (model / "model.toml").write_text(
+                '[[segment]]\nname = "a"\nops = [{kind = "start",'
+                ' action = "oppo.intent.action.APP_SETTINGS", pkg = "com.example.store"},'
+                ' {kind = "start", action = "android.settings.SETTINGS"}]\n',
+                encoding="utf-8")
+            self.assertEqual(entries.used_by(d),
+                             {("intent", "oppo.intent.action.APP_SETTINGS",
+                               "com.example.store"): {"model"}})
 
     def test_markdown_shows_the_public_intent_and_its_models(self):
         doc = entries.markdown(RECIPES)

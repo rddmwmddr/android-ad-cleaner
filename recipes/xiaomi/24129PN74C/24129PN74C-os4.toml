@@ -35,7 +35,7 @@ ops = [
 name = "应用商店"
 ops = [
   # 上次停在应用详情页时 start 会复用旧任务，先停掉。
-  {kind = "shell", command = "am force-stop com.xiaomi.market"},
+  {kind = "app_stop", pkg = "com.xiaomi.market"},
   {kind = "sleep", seconds = 1},
   {kind = "start", pkg = "com.xiaomi.market"},
   # 底栏标签的 content-desc 是「我的，有新消息」，精确匹配「我的」找不到（沿用 #193 四个入口全空的起点）。
@@ -93,9 +93,9 @@ name = "浏览器"
 ops = [
   # p.start 是「先 app_stop 再起，5 秒内前台必须是本包」。这台冷启动能起，但 start 内部的弹窗清理
   # 会把它顶掉，报「启动后离开前台」（#193 同一条）。这里直接拉起，前台实测 1 秒就稳定。
-  { kind = "shell", command = "am force-stop com.android.browser" },
+  { kind = "app_stop", pkg = "com.android.browser" },
   { kind = "sleep", seconds = 1 },
-  { kind = "shell", command = "monkey -p com.android.browser -c android.intent.category.LAUNCHER 1" },
+  { kind = "start", pkg = "com.android.browser", launcher = true },
   { kind = "sleep", seconds = 3 },
   { kind = "if_focus", text = "basicmode", match = "icontains", ops = [
     # 拒绝浏览器协议后落到基本模式设置页，设置入口都不在这条路径上，找下去只会空转报错（#414、#460）
