@@ -23,7 +23,11 @@ from row import bounds
 import wait
 
 MODEL = "ALN-AL00"
-BUILD = "ALN-AL00 4.2.0.223(C00E215R5P16)"
+# 逐个列出有证据的 build，不按分支通配：同分支的其它补丁号没人跑过（#1449）。
+BUILDS = (
+    "ALN-AL00 4.2.0.223(C00E215R5P16)",   # 2026-10-30 路径实测（#330）
+    "ALN-AL00 4.2.0.223(C00E215R4P16)",   # 报告者现场：87 条清单关 84 条、清单外 0 条（#1449）
+)
 APP_PAGE = "com.android.settings/com.android.settings.Settings$AppNotificationSettingsActivity"
 HEADER = "com.android.settings:id/entity_header_title"
 CHECKBOX = "com.android.settings:id/checkboxWidget"
@@ -82,8 +86,8 @@ def permission_mode(reader, package):
 def require_device(reader):
     model = reader.shell("getprop ro.product.model").output.strip()
     build = reader.shell("getprop ro.build.display.id").output.strip()
-    if model != MODEL or build != BUILD:
-        raise ValueError(f"仅适配 {MODEL} / {BUILD}；当前版本未验证，未修改")
+    if model != MODEL or build not in BUILDS:
+        raise ValueError(f"仅适配 {MODEL} / {'、'.join(BUILDS)}；当前版本未验证，未修改")
 
 
 def guard(before, apps_before, current, apps, allowed):

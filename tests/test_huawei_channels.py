@@ -46,7 +46,7 @@ class OfflineDevice:
         if command == "getprop ro.product.model":
             text = hw.MODEL
         elif command == "getprop ro.build.display.id":
-            text = hw.BUILD
+            text = hw.BUILDS[0]
         elif command.startswith("cmd appops get "):
             text = "POST_NOTIFICATION: " + self.modes[command.split()[3]]
         elif command.startswith("cmd appops set "):
@@ -232,6 +232,22 @@ class HuaweiChannelsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             hw.execute("offline-device", self.items(), reader=reader)
         self.assertEqual(reader.shell.call_count, 2)
+
+    def test_build_gate_lists_only_builds_with_evidence(self):
+        """R5P16 有路径实测，R4P16 有报告者现场证据（#1449）；同分支别的补丁号与别的分支仍拒绝。"""
+        def reader(model, build):
+            return SimpleNamespace(shell=Mock(side_effect=[
+                SimpleNamespace(output=model + "\n"), SimpleNamespace(output=build + "\n")]))
+        for build in ("ALN-AL00 4.2.0.223(C00E215R5P16)", "ALN-AL00 4.2.0.223(C00E215R4P16)"):
+            with self.subTest(build=build):
+                hw.require_device(reader(hw.MODEL, build))
+        for model, build in ((hw.MODEL, "ALN-AL00 4.2.0.223(C00E215R3P16)"),
+                             (hw.MODEL, "ALN-AL00 4.2.0.223(C00E216R5P16)"),
+                             (hw.MODEL, "ALN-AL00 4.2.0.226(C00E215R4P16)"),
+                             ("ALN-AL10", "ALN-AL00 4.2.0.223(C00E215R4P16)")):
+            with self.subTest(model=model, build=build):
+                with self.assertRaisesRegex(ValueError, "当前版本未验证"):
+                    hw.require_device(reader(model, build))
 
     def test_renamed_or_missing_channels_never_open_phone_ui(self):
         device = OfflineDevice()
