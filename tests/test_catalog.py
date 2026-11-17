@@ -1109,7 +1109,7 @@ class StartOpCommandTests(unittest.TestCase):
 class ShippedShellOpsTests(unittest.TestCase):
     """48 份数据里还剩哪些 raw `shell`（#1478）。
 
-    拉起、强停、monkey 与相对坐标手势都进了结构化 op；留下的只能是 op 表达不了的那几条。
+    拉起、强停与 monkey 都进了结构化 op；留下的只能是 op 表达不了的那几条。
     再加一条手写的 `am start` 就说明「同一批脚本被两套词法解释」又长回来了（ADR-0034 的病）。
     """
 
@@ -1119,6 +1119,10 @@ class ShippedShellOpsTests(unittest.TestCase):
         "input keyevent KEYCODE_HOME",  # u2 的 press 走 jsonrpc，不是 input keyevent
         "input keyevent HOME",
         "input keyevent BACK",
+        # 录脚本时写死的绝对坐标：`gesture` 按屏宽/屏高比例现算，真机上换回来的绝像素与原串不同
+        "input swipe 600 2200 600 500 250",
+        "input swipe 600 2200 600 500 250",
+        "input swipe 600 2200 600 500 250",
     )
 
     @staticmethod

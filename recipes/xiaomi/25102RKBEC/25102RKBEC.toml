@@ -67,6 +67,7 @@ ops = [
   # 首页「默认 / 探索版 / 自定义主页」不改：自定义主页要填网址，按机主喜好
   # 紧跟「主题」段连跑时会失败：退出主题商店的那一下会跟浏览器的冷启动抢焦点，
   # 脚本判定「离开前台」整段停（单独跑这段从来不出问题）。先回桌面、等稳了再拉。
+  # 这一下保持 raw shell：`press` op 走 u2 的 jsonrpc.pressKey，与 `input keyevent` 不是同一条通道。
   { kind = "shell", command = "input keyevent KEYCODE_HOME" },
   { kind = "sleep", seconds = 2 },
   { kind = "start", pkg = "com.android.browser" },

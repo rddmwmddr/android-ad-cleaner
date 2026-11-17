@@ -16,6 +16,8 @@ START_ACTIVITIES = { "com.heytap.browser" = "com.android.browser.BrowserActivity
 [[segment]]
 name = "下拉搜索"
 ops = [
+  # 两条按键保持 raw shell：`press` op 走 u2 的 jsonrpc.pressKey，与录脚本时的 `input keyevent`
+  # 不是同一条下发通道，换过去就不是纯重构了（#1478）。
   { kind = "shell", command = "input keyevent HOME" },
   { kind = "sleep", seconds = 0.6 },
   { kind = "gesture", start = [0.5, 0.3], end = [0.5, 0.7], ms = 300 },
