@@ -1,6 +1,6 @@
 """渠道拨动的决定：能不能点、重试还是放弃、点后消失与灰态各自算什么。（#1436）
 
-每个决定只吃一份屏幕快照（内联 XML 经 `snapshot_from_tree()` 装配），断言下一步与结局；
+每个决定只吃一份快照（内联 XML 经 `snapshot_from_tree()` 装配）或快照里的一行，断言下一步与结局；
 退避与重试次数的节奏留在执行侧，这里只证明决定函数数次数、不表达时间。
 """
 import sys
@@ -60,41 +60,41 @@ VANISHED_PAGE = page(text(NAME, "[0,111][1080,360]"))
 
 class ClickTests(unittest.TestCase):
     def test_a_row_already_at_the_target_is_not_clicked(self):
-        self.assertTrue(toggling.can_click(make(OFF_PAGE), True))
-        self.assertFalse(toggling.can_click(make(ON_PAGE), True))
-        self.assertTrue(toggling.can_click(make(ON_PAGE), False))
-        self.assertFalse(toggling.can_click(make(OFF_PAGE), False))
+        self.assertTrue(toggling.can_click(make(OFF_PAGE).rows[0], True))
+        self.assertFalse(toggling.can_click(make(ON_PAGE).rows[0], True))
+        self.assertTrue(toggling.can_click(make(ON_PAGE).rows[0], False))
+        self.assertFalse(toggling.can_click(make(OFF_PAGE).rows[0], False))
 
 
 class RecheckTests(unittest.TestCase):
     def test_three_rechecks_retry_twice_then_give_up(self):
-        snap_ = make(ON_PAGE)       # 点了三次，页面上的开关一次都没动
-        got = [toggling.verdict(snap_, "ON", False, attempt, tries=3) for attempt in range(3)]
+        row = make(ON_PAGE).rows[0]       # 点了三次，页面上的开关一次都没动
+        got = [toggling.verdict(row, "ON", False, attempt, tries=3) for attempt in range(3)]
         self.assertEqual(got, [toggling.ToggleVerdict.RETRY, toggling.ToggleVerdict.RETRY,
                                toggling.ToggleVerdict.UNCHANGED])
 
     def test_the_retry_rhythm_is_the_callers_and_the_decision_never_watches_a_clock(self):
-        snap_ = make(ON_PAGE)
-        self.assertEqual([toggling.verdict(snap_, "ON", False, attempt, tries=2) for attempt in range(2)],
+        row = make(ON_PAGE).rows[0]
+        self.assertEqual([toggling.verdict(row, "ON", False, attempt, tries=2) for attempt in range(2)],
                          [toggling.ToggleVerdict.RETRY, toggling.ToggleVerdict.UNCHANGED])
         self.assertFalse(hasattr(toggling, "time"))
 
     def test_the_channel_record_winning_over_the_page_is_done(self):
-        self.assertEqual(toggling.verdict(make(ON_PAGE), "off", False, 0, tries=3),
+        self.assertEqual(toggling.verdict(make(ON_PAGE).rows[0], "off", False, 0, tries=3),
                          toggling.ToggleVerdict.DONE)
 
     def test_a_page_that_matches_the_target_but_the_record_does_not_splits_on_the_app_switch(self):
-        snap_ = make(OFF_PAGE)      # 页面上已经关着，渠道记录却还开着
-        self.assertEqual(toggling.verdict(snap_, "ON", False, 0, tries=3),
+        row = make(OFF_PAGE).rows[0]      # 页面上已经关着，渠道记录却还开着
+        self.assertEqual(toggling.verdict(row, "ON", False, 0, tries=3),
                          toggling.ToggleVerdict.MISMATCH)
-        self.assertEqual(toggling.verdict(snap_, "ON", False, 0, tries=3, denied=True),
+        self.assertEqual(toggling.verdict(row, "ON", False, 0, tries=3, denied=True),
                          toggling.ToggleVerdict.APP_DENIED)
 
 
 class VanishedTests(unittest.TestCase):
     def test_a_row_gone_from_the_list_is_not_counted_as_closed(self):
         after = make(VANISHED_PAGE)
-        self.assertIsNone(toggling.switch_row(after))
+        self.assertEqual(after.rows, ())
         self.assertTrue(toggling.vanished(reached=False))
         self.assertFalse(toggling.vanished(reached=True))
 

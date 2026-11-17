@@ -169,6 +169,32 @@ class RouteTests(unittest.TestCase):
 
 
 class ToggleTests(unittest.TestCase):
+    def test_the_last_round_backs_off_before_giving_up(self):
+        """第三轮放弃时也照旧退避一次：三档等待 0.25 / 0.55 / 0.85 都在，最后一次不是被 break 跳过。
+
+        对拍看不见时间；这条直接读 `time.sleep` 的实参，顺序与旧实现一致（点击后 0.4 秒确认、
+        每轮再等 0.25 + 0.3 × attempt）。
+        """
+        p = phone([DEEP_PAGE])
+        with patch.object(chan, "parse", return_value=({(PK, CID): (NAME, 3, False)}, {})), \
+             patch.object(chan.time, "sleep") as sleep:
+            outcome = chan.toggle(p, PK, CID, False, NAME)
+        self.assertEqual(outcome.kind, chan.UNCHANGED)
+        self.assertEqual(p.screen.click.call_count, 3)
+        waits = [round(call.args[0], 2) for call in sleep.call_args_list]
+        self.assertEqual([w for w in waits if w not in (0.2, 0.4)], [0.25, 0.55, 0.85])
+
+    def test_the_engine_taps_through_the_single_execution_point(self):
+        """引擎自己那一下也经 `Screen.apply()`：与到达阶段同一条原语，不是第二条点击路径。"""
+        p = phone([DEEP_PAGE])
+        p.apply = Mock(wraps=p.apply)
+        with patch.object(chan, "parse", return_value=({(PK, CID): (NAME, 3, False)}, {})), \
+             patch.object(chan.time, "sleep"):
+            chan.toggle(p, PK, CID, False, NAME)
+        taps = [call.args[0] for call in p.apply.call_args_list
+                if call.args[0].kind == chan.IntentKind.TAP]
+        self.assertEqual([tap.at for tap in taps], [(948, 435)] * 3)
+
     def test_unreached_page_is_reported_with_the_same_wording(self):
         # 给用户看的那一段逐字不变：未确认「名」渠道页及通知开关，跳过（停在 …；卡在哪一环）
         p = phone([SAME_NAME_PAGE], focus="com.vendor.notify/.UnknownPage")
@@ -622,6 +648,27 @@ class DuplicateRowTests(unittest.TestCase):
         at = chan.Attempt()
         self.assertEqual(chan.inline_switch(dup_phone(dup_page(twice)), DUPLICATE_NAME, at), (DUPLICATE_NAME, True, (950, 980)))
         self.assertEqual(at.why, "")
+
+
+class InlineWhyTests(unittest.TestCase):
+    def test_an_empty_reason_does_not_clear_the_previous_one(self):
+        """认不出又没给理由时不动 `self.why`：旧实现只在拿到理由那一支改写它，空串不能清诊断。"""
+        p = phone([INLINE_PAGE], focus=APP_FOCUS)
+        page_ = chan.ChannelPage(p, NAME, PK, CID)
+        page_.why = "同名 2 行"
+        with patch.object(chan.decide, "recognise_inline",
+                          return_value=chan.decide.Recognition()), patch.object(chan.time, "sleep"):
+            self.assertIsNone(page_._recognise_inline())
+        self.assertEqual(page_.why, "同名 2 行")
+
+    def test_a_real_reason_replaces_the_previous_one(self):
+        """拿到理由时照旧覆盖：同名放弃那条诊断要能刷新。"""
+        p = phone([SAME_NAME_PAGE], focus=APP_FOCUS)
+        page_ = chan.ChannelPage(p, NAME, PK, CID)
+        page_.why = "上一轮"
+        with patch.object(chan.time, "sleep"):
+            self.assertIsNone(page_._recognise_inline())
+        self.assertIn("同名 2 行", page_.why)
 
 
 class SummaryTests(unittest.TestCase):

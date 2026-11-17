@@ -1,4 +1,4 @@
-"""渠道拨动的决定：一份屏幕快照进来，这一行点不点、点完算不算成、要不要撤回（#1436）。
+"""渠道拨动的决定：一行开关（或一份屏幕快照）进来，这一行点不点、点完算不算成、要不要撤回（#1436）。
 
 单次拨动今天是一次「重认 → 点 → 重读 → 核」的循环；这里只留判断，吃快照上的事实、吐出决定。
 纯函数：不读屏、不点击、也不认识 `fast` / `phone.*` / `chan_fast`——`tests/test_rules_guards.py`
@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from row import disabled_at
-from screen_snapshot import Row, ScreenSnapshot
+from screen_snapshot import Row
 
 VANISHED_DETAIL = "渠道页或开关已变化，停止操作"
 
@@ -32,24 +32,15 @@ class SideEffect:
     undo: bool
 
 
-def row_snapshot(switch, *, width=0, height=0):
-    """把认出的一行开关装成最小快照：拨动的决定只读这一行，不必为它再读一次屏。"""
+def row_of(switch):
+    """认出的一行开关 → 判断用的 `Row`：拨动的决定只读这一行，不必为它再读一次屏。"""
     title, checked, (x, y) = switch
-    return ScreenSnapshot(package="", activity="", width=width, height=height,
-                          rows=(Row(title=title, bounds=(x, y, x, y), checked=checked,
-                                    clickable=True),),
-                          texts=(), signature="", can_scroll=False)
+    return Row(title=title, bounds=(x, y, x, y), checked=checked, clickable=True)
 
 
-def switch_row(snapshot):
-    """快照里这个渠道的开关行；没有这一行（比如点完从列表消失）返回 None。"""
-    return snapshot.rows[0] if snapshot.rows else None
-
-
-def can_click(snapshot, want_on):
+def can_click(row, want_on):
     """这一行要不要点：已经是目标态就不点。"""
-    row = switch_row(snapshot)
-    return row is not None and row.checked != want_on
+    return row.checked != want_on
 
 
 def greyed(snapshot, xy):
@@ -59,17 +50,16 @@ def greyed(snapshot, xy):
     return disabled_at(snapshot.tree, xy)
 
 
-def verdict(snapshot, channel_state, want_on, attempt, *, tries, denied=None):
+def verdict(row, channel_state, want_on, attempt, *, tries, denied=None):
     """点完重读之后的决定，不表达时间：重认次数由调用方传，退避时长也留在那里。
 
-    `snapshot` 是这一轮重认到的那一行（与点击同一帧）；`attempt` 从 0 数。
+    `row` 是这一轮重认到的那一行（与点击同一帧）；`attempt` 从 0 数。
     界面这一行已经是目标态时才分得出 APP_DENIED 与 MISMATCH，`denied` 由调用方在那个分支下
     多读一次应用通知总开关。
     """
     if channel_state == ("ON" if want_on else "off"):
         return ToggleVerdict.DONE
-    row = switch_row(snapshot)
-    if row is not None and row.checked == want_on:
+    if row.checked == want_on:
         return ToggleVerdict.APP_DENIED if denied else ToggleVerdict.MISMATCH
     return ToggleVerdict.RETRY if attempt + 1 < tries else ToggleVerdict.UNCHANGED
 

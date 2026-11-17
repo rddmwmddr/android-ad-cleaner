@@ -54,14 +54,13 @@ class Route:
 class Step:
     """这一帧的下一步：一个意图或一个不动作的收场，外加这一帧的事实与收场信号。
 
-    `seen` / `bottom` 是收场用的两个结构信号（名字在这一页出现过没有、列表翻到底没有），
-    由 `Unreached.hidden` 派生；`vivo_app` 是这一帧之后记下的 App 名（#336）。
+    `seen` 是收场用的结构信号（名字在这一页出现过没有），由 `Unreached.hidden` 派生；
+    `vivo_app` 是这一帧之后记下的 App 名（#336）。
     """
     kind: StepAction
     intent: Intent | None = None
     stage: str = ""
     seen: bool = False
-    bottom: bool = False
     vivo_app: str | None = None
 
 
@@ -97,12 +96,11 @@ def route(channels, snap, *, pk, cid, vivo_seen=None):
 
 
 def page_step(snap: ScreenSnapshot | None, *, name, vivo=False, alive=True, systemui_text=False,
-              vivo_app=None, seen=False, tapped=frozenset()):
+              vivo_app=None, seen=False):
     """应用通知页这一帧的下一步。
 
     `alive` 是调用方刚读到的「前台还在这张通知页上」：不在就直接收场，那一帧的 `snap` 已经
-    不是这一页了，不读。`tapped` 是本趟已点过的行标题：同一行不再点第二次（今天一次点击都会
-    结束这一趟，留着是给下一帧的守卫）。
+    不是这一页了，不读。
     """
     if not alive or snap is None:
         return Step(StepAction.STOP, stage=LEFT_PAGE, seen=seen, vivo_app=vivo_app)
@@ -111,8 +109,7 @@ def page_step(snap: ScreenSnapshot | None, *, name, vivo=False, alive=True, syst
     if vivo and vivo_app is None and floor is not None:
         # 这一屏有「类别」分组，说明是应用通知页：先记下 App 名。往下翻页后顶栏可能收起来（#336）
         vivo_app = top_title(snap, systemui_text)
-    pending = tuple(cand for cand in candidates(snap, name, systemui_text=systemui_text, floor=floor)
-                    if name not in tapped)
+    pending = candidates(snap, name, systemui_text=systemui_text, floor=floor)
     if pending:
         cand = pending[0]
         if not vivo and cand.boxes:
@@ -147,5 +144,5 @@ def after_scroll(*, stayed, moved=False):
     if not stayed:
         return Step(StepAction.STOP, stage=LEFT_PAGE)
     if not moved:
-        return Step(StepAction.STOP, bottom=True)
+        return Step(StepAction.STOP)
     return Step(StepAction.SCROLL)

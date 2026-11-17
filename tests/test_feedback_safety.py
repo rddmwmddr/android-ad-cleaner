@@ -112,6 +112,9 @@ class PhotoSpotTests(unittest.TestCase):
 
     def test_low_level_restore_can_enable_protected_channel(self):
         p = Mock(); p.locked.return_value = False
+        # 镜像桩：唯一执行点的点击落到点击原语，深链意图交给 Mock 自己吞掉
+        p.apply.side_effect = (lambda intent: p.click(*intent.at)
+                               if intent.kind == chan.IntentKind.TAP else None)
         with patch.object(chan, "parse", side_effect=[self.state(on=False), self.state()]), \
              patch.object(chan.ChannelPage, "refresh", return_value=chan.Reached(("允许通知", False, (500, 500)))), \
              patch.object(chan, "disabled_at", return_value=False), \

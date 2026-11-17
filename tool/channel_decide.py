@@ -19,7 +19,7 @@ ALLOW = {"允许通知", "显示通知", "允許通知", "顯示通知", "Allow 
 # 三星 One UI 渠道名在页眉控件里，位置低于 TOP_BAND（#95）
 HEADER_IDS = ("entity_header_title", "header_title")
 
-CHANNEL_GROUP = ("类别", "類別", "Categories")   # vivo 旧系统把渠道行收在「类别」分组下面（#336）
+CHANNEL_GROUP = ("类别", "類別", "Categories")   # vivo 旧系统把渠道行收在「类别」分组下面（#336）；繁体界面是「類別」（#498）
 
 # vivo 通知设置页：OriginOS 4 起在 com.vivo.systemuiplugin；OriginOS Ocean（安卓 10）还在 com.android.systemui（错误日志 10-28）
 VIVO_HOSTS = ("com.vivo.systemuiplugin", "com.android.systemui")
@@ -216,9 +216,14 @@ def page_switch(snapshot, name, focus="", vivo_app=None, systemui_text=False):
     return got if got.switch is not None else recognise_inline(snapshot, name, focus, systemui_text)
 
 
-def page_hint(snapshot, name, systemui_text=False):
-    """失败时的人话摘要：标题在顶部 / 列表 / 没有，允许通知开关几个，开关几个（不含页面文字）。"""
+def page_hint(snapshot, name, systemui_text=False, total=None):
+    """失败时的人话摘要：标题在顶部 / 列表 / 没有，允许通知开关几个，开关几个（不含页面文字）。
+
+    `total` 是调用方另外独立读到的开关总数（`p.switches()`）：自绘开关的页面两次读取各截一张图，
+    与旧实现同形；不传时才退回快照里的行数。
+    """
     at = [hit.bounds[1] < snapshot.height * TOP_BAND for hit in snapshot.texts if hit.text == name]
     title = "顶部" if any(at) else ("列表" if at else "无")
+    total = len(snapshot.rows) if total is None else total
     return (f"标题{title}，允许通知开关 {len(allow_switches(snapshot, systemui_text))} 个，"
-            f"开关 {len(snapshot.rows)} 个")
+            f"开关 {total} 个")

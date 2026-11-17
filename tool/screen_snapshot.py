@@ -22,7 +22,6 @@ from row import LISTS, bounds, control, dedupe, disabled_at, title_hit, unique
 # 前台服务常驻通知的标记（#459）。13 及以前叫 mFgServiceShown，14 起框架改名为
 # mUserVisibleTaskShown（置位条件也从 FLAG_FOREGROUND_SERVICE 扩到 isFgsOrUij()，
 # 含机主发起的任务）。两个名字都认，否则新系统上这条排除静默不生效。
-# `chan_fast` 仍显式 re-export 这个名字，旧调用点与文档不变。
 FG_SERVICE_MARKS = ("mFgServiceShown=true", "mUserVisibleTaskShown=true")
 
 # 自绘开关的截图惰性取一次：`_UNSET` 是「还没取」，`_NO_SHOT` 是「纯构造没有取图函数」
@@ -157,7 +156,11 @@ class Intent:
 
 @dataclass
 class Progress:
-    """跨帧累积的进度，由循环显式传出；它不是一屏的事实，所以不进快照。"""
+    """跨帧累积的进度，由循环显式传出；它不是一屏的事实，所以不进快照。
+
+    `tapped` / `failed_ways` 是本票只建的接缝，消费方在后面（#1432 的验收面）；今天没有读取方，
+    所以引擎也不再往里写值。
+    """
     tapped: set[str] = field(default_factory=set)
     pages: int = 0
     last_signature: str = ""

@@ -21,8 +21,7 @@ from row import PATH_DEPTH, SAME_LINE, link, skeleton
 from channel_decide import VIVO_ACTIVITY, VIVO_HOSTS, vivo_page
 from channel_arrive import truncated as truncated
 from channel_policy import classify, protected_channel
-from screen_snapshot import (FG_SERVICE_MARKS as FG_SERVICE_MARKS,
-                             Intent, IntentKind, Progress, parse_notification_dump)
+from screen_snapshot import Intent, IntentKind, Progress, parse_notification_dump
 from troubleshooting import ON_PHONE, XIAOMI_INPUT
 from backups import root_from_env
 from ui_hidden import UiHidden
@@ -359,7 +358,8 @@ class ChannelPage:
             return None
         snap = p.snapshot(focus=self.raw_focus, with_rows=False)
         got = decide.recognise_inline(snap, name, focus, p.systemui_text)
-        if got.switch is None:
+        # 早退分支返回的 `why` 是空串：旧实现在这些分支不动上一轮留下的诊断，别清掉它
+        if got.why:
             self.why = got.why
         return got.switch
 
@@ -389,7 +389,9 @@ class ChannelPage:
         """只在同一位置仍是刚拨过去的那个开关时再点一次，不沿用已消失的坐标。"""
         switch = _switch_of(self.refresh(rounds=6))
         if switch and abs(switch[2][1] - xy[1]) < SAME_LINE and switch[1] == want_on:
-            self.p.click(*switch[2]); time.sleep(0.4); self.p.confirm()
+            # 引擎自己的点击也走唯一执行点（`Screen.apply()`），与拨动的点击同一条原语
+            self.p.apply(Intent(IntentKind.TAP, at=switch[2]))
+            time.sleep(0.4); self.p.confirm()
             return True
         return False
 
@@ -403,7 +405,8 @@ class ChannelPage:
             # 骨架在算开关行之前取：自绘开关要截图，截图那一步会改写节点类名（#531）
             self.skeleton = self._skeleton(root)
             snap = p.snapshot(root=root, focus=self.raw_focus, with_rows=True)
-            text = decide.page_hint(snap, name, p.systemui_text)
+            # 开关列表照旧读两次（允许通知一次、全部一次）：自绘开关的页面两次各截一张图
+            text = decide.page_hint(snap, name, p.systemui_text, total=len(p.switches(root)))
         except Exception:
             return ""
         # 遮罩挡着的页面也读成「开关 0 个」，补一句才分得清是没适配还是有弹窗（#557）
@@ -477,32 +480,27 @@ class ChannelPage:
             if not focus:
                 step = arrive.page_step(None, name=name, alive=False, seen=seen, vivo_app=vivo_app)
                 self.stage = step.stage
-                progress.failed_ways.add(step.stage)
                 return None
             root = root if root is not None else p.tree()
             vivo = vivo_page(self._focus())      # 另一次读：raw_focus 取这一次的，与快照同一帧
             snap = p.snapshot(root=root, focus=self.raw_focus, with_rows=False)
             step = arrive.page_step(snap, name=name, vivo=vivo,
                                     systemui_text=p.systemui_text, vivo_app=vivo_app,
-                                    seen=seen, tapped=frozenset(progress.tapped))
+                                    seen=seen)
             seen, vivo_app = step.seen, step.vivo_app
             self.vivo_app = vivo_app
             if step.kind == arrive.StepAction.STOP:
                 if step.stage:
                     self.stage = step.stage
-                    progress.failed_ways.add(step.stage)
                 return None
             if step.kind == arrive.StepAction.RECOGNISE:
                 self.stage = step.stage
-                progress.failed_ways.add(step.stage)
                 return _switch_of(self.refresh(rounds=12))
             if step.kind == arrive.StepAction.TAP:
-                progress.tapped.add(name)
                 before = p.sig()
                 p.apply(step.intent)
                 follow = arrive.after_click(settled=p.settle(before), vivo=vivo)
                 self.stage = follow.stage
-                progress.failed_ways.add(follow.stage)
                 if follow.kind == arrive.StepAction.STOP:
                     return None
                 return _switch_of(self.refresh(rounds=12))
@@ -524,7 +522,6 @@ class ChannelPage:
             if follow.kind == arrive.StepAction.STOP:
                 if follow.stage:
                     self.stage = follow.stage
-                    progress.failed_ways.add(follow.stage)
                     return None
                 bottom = True
                 break                     # 滑了没动：列表到底了，再滑也是空转
@@ -795,6 +792,8 @@ def toggle(p, pk, cid, want_on, name="", allowed=()):
             return Outcome(PROTECTED, f"当前状态 {st}")
         if st in ("--", "del", "app"):
             return Outcome(kind_of_state(st))
+        # 清单投影每个渠道建一次、纯内存（400 个渠道约 0.09 ms，远低于一次 adb 往返），
+        # 留给 `route()` 的下一个判据直接从已知事实取，别为到达再读一次 dumpsys
         page = ChannelPage(p, name, pk, cid, channels=channel_list_of(before, apps_before))
         reached = page.open()
         if not isinstance(reached, Reached):
@@ -828,10 +827,12 @@ def toggle(p, pk, cid, want_on, name="", allowed=()):
             if toggle_decide.vanished(isinstance(again, Reached)):
                 return Outcome(NOT_CONFIRMED, toggle_decide.VANISHED_DETAIL)
             switch = again.switch
-            snap = toggle_decide.row_snapshot(switch, width=p.W, height=p.H)
-            clicked = toggle_decide.can_click(snap, want_on)
+            row = toggle_decide.row_of(switch)
+            clicked = toggle_decide.can_click(row, want_on)
             if clicked:
-                p.click(*switch[2]); time.sleep(0.4); p.confirm()
+                # 引擎自己的点击也走唯一执行点（`Screen.apply()`），与到达阶段的点击同一条原语
+                p.apply(Intent(IntentKind.TAP, at=switch[2]))
+                time.sleep(0.4); p.confirm()
             current, apps = parse(p)
             extra = side_effects(before, apps_before, current, apps, pk, cid, allowed)
             effect = toggle_decide.side_effect_verdict(extra, clicked)
@@ -845,7 +846,7 @@ def toggle(p, pk, cid, want_on, name="", allowed=()):
             # 分清「应用通知整体关着」与「界面与记录不一致」（今天如此，别提前读）。
             denied = (notifications_denied(p, pk)
                       if current_state != desired and not clicked and not want_on else None)
-            got = toggle_decide.verdict(snap, current_state, want_on, attempt,
+            got = toggle_decide.verdict(row, current_state, want_on, attempt,
                                         tries=TOGGLE_TRIES, denied=denied)
             if got == toggle_decide.ToggleVerdict.DONE:
                 return Outcome(DONE)
@@ -854,9 +855,10 @@ def toggle(p, pk, cid, want_on, name="", allowed=()):
             if got == toggle_decide.ToggleVerdict.MISMATCH:
                 return Outcome(MISMATCH, "界面状态与渠道实际状态不一致，未继续点击",
                                mismatch_probe(p, pk, cid, current, denied))
+            # 退避放在退出判断之前：第三轮放弃时也照旧等一次（旧实现两处顺序相同，别合并）
+            time.sleep(0.25 + 0.3 * attempt)
             if got == toggle_decide.ToggleVerdict.UNCHANGED:
                 break
-            time.sleep(0.25 + 0.3 * attempt)
         return Outcome(UNCHANGED, "点击后渠道状态未改变")
     except (StopBatch, adb_link.DeviceLost, ScreenLocked):
         raise                                    # 点错开关、手机断开、锁屏：由整批处理

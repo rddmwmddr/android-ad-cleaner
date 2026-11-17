@@ -89,6 +89,8 @@ RULES = {
 KINDS = tuple(RULES)
 
 
+# 下面四个谓词与后面的 `account()` 都直接读 `RULES`：表只有这一份，单键读取与整行投影
+# 是同一份数据的两条通路，不是第二份实现，别为「统一」再加一层间接。
 def failed(outcome, want_on=False):
     """这一项要不要算进退出码。"""
     return RULES[outcome.kind]["fail_open" if want_on else "fail_close"]
