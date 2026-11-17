@@ -27,7 +27,7 @@ import org.json.JSONObject
 sealed interface Screen {
     data object Boot : Screen
     data class Failed(val reason: String) : Screen
-    /** need_dev / need_wifi / need_pair 是首次设置三步；old / stopped / ask / denied 走 Shizuku；nodev 是已授权却读不到手机。 */
+    /** need_dev / need_wifi / need_pair 是首次设置三步；old / stopped / ask / denied 走 Shizuku，sui_ask / sui_denied 走 Sui（#1451）；nodev 是已授权却读不到手机。 */
     data class Setup(val state: String) : Screen
     data object Home : Screen
     /** 一键的准备页，at 是做到第几件。 */

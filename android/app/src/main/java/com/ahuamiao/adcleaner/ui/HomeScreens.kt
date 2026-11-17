@@ -357,6 +357,8 @@ private fun statusCopy(state: String) = when (state) {
     "stopped" -> StatusCopy("Shizuku 还没启动", "打开 Shizuku 按说明启动。手机重启后要再启动一次。", "打开 Shizuku") { it.openShizuku() }
     "ask" -> StatusCopy("允许本 App 使用 Shizuku", "点下面的按钮，在弹窗里选「始终允许」。", "授权") { it.requestShizuku() }
     "denied" -> StatusCopy("之前拒绝了 Shizuku 授权", "打开 Shizuku →「已授权的应用」，打开「肉呆去广告」，再回到这里。", "打开 Shizuku") { it.openShizuku() }
+    "sui_ask" -> StatusCopy("允许本 App 使用 Sui", "检测到 Sui，不用再配对无线调试。点下面的按钮，在弹窗里选「始终允许」。", "授权") { it.requestShizuku() }
+    "sui_denied" -> StatusCopy("之前拒绝了 Sui 授权", "在拨号盘输入 *#*#784784#*#* 打开 Sui，把「肉呆去广告」改成允许，再回到这里。", "打开拨号盘") { it.openShizuku() }
     else -> StatusCopy("读不到这台手机", "到「开发者选项」把「无线调试」关掉再打开，然后回到这里。", "打开开发者选项") { it.openSettings("dev") }
 }
 

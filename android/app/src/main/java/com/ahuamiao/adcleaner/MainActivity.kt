@@ -119,7 +119,7 @@ class MainActivity : ComponentActivity(), HostActions {
      * 否则这里只会抛异常、页面重查还是原样，点了像没反应。设置页的次级入口也落到这里。
      */
     override fun requestShizuku() {
-        val up = ShellAccess.installed(this, ShellAccess.SHIZUKU) && runCatching { Shizuku.pingBinder() }.getOrDefault(false)
+        val up = ShellAccess.provider(this) && runCatching { Shizuku.pingBinder() }.getOrDefault(false)
         if (!up || runCatching { Shizuku.shouldShowRequestPermissionRationale() }.getOrDefault(false)) {
             openShizuku()
             return
@@ -132,6 +132,10 @@ class MainActivity : ComponentActivity(), HostActions {
     }
 
     override fun openShizuku() {
+        if (ShellAccess.sui) {                        // Sui 没有自己的 App：管理界面从拨号盘的暗码进（#1451）
+            runCatching { startActivity(Intent(Intent.ACTION_DIAL)) }    // 平板等没有拨号盘的机器：按钮无反应，文案里已写了暗码
+            return
+        }
         val launch = packageManager.getLaunchIntentForPackage(ShellAccess.SHIZUKU)
         startActivity(launch ?: Intent(Intent.ACTION_VIEW, Uri.parse(ShellAccess.SHIZUKU_PAGE)))
     }

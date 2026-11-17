@@ -10,19 +10,32 @@ object ShellAccess {
     const val SHIZUKU_PAGE = "https://shizuku.rikka.app/zh-hans/download/"
 
     /**
+     * Sui（Zygisk 模块，#1451）在本进程里拿到了 binder。由 `AacApp.onCreate` 调 `Sui.init` 写入一次。
+     * Sui 实现的是同一套 Shizuku API，但没有 Shizuku 管理器 App：判「装没装」不能只看那个包名。
+     */
+    @Volatile var sui = false
+
+    /** 有 Shizuku API 的提供方：装了 Shizuku 管理器，或 Sui 在跑。 */
+    fun provider(context: Context) = sui || installed(context, SHIZUKU)
+
+    /**
      * 能不能以 shell 身份执行，以及差哪一步。已授权的 Shizuku 永远优先；没有就走内置无线调试（#622，安卓 11 起）：
      * need_dev 没开开发者选项 → need_wifi 没开无线调试 → need_pair 没配对。
      * Shizuku 在跑但没授权不再挡内置的路（决策：未授权时仍要能走内置）；要改走 Shizuku 由配对页的次级入口手动切。
      * 安卓 10 及以下没有无线调试，只有 Shizuku：old（没装）/ stopped（装了没启动）/ ask / denied。
+     * Sui 在跑时不走无线调试引导（用户装 Sui 就是为了免配对，#1451）：没授权 → sui_ask，拒绝过 → sui_denied。
      * 连接要经 mDNS 找端口，最多等几秒，只在后台线程调。
      * 这里会顺手去连（Shell.ensure），不是纯查询：「已就绪」的定义就是连得上，光看开关打没打开说明不了（#662）。
      */
     fun state(context: Context): String {
-        val shizukuUp = installed(context, SHIZUKU) && runCatching { Shizuku.pingBinder() }.getOrDefault(false)
+        val shizukuUp = provider(context) && runCatching { Shizuku.pingBinder() }.getOrDefault(false)
         if (shizukuUp && !Shizuku.isPreV11() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) return "ready"
+        if (sui && shizukuUp) {
+            return if (runCatching { Shizuku.shouldShowRequestPermissionRationale() }.getOrDefault(false)) "sui_denied" else "sui_ask"
+        }
         if (Build.VERSION.SDK_INT < 30) {
             return when {
-                !installed(context, SHIZUKU) -> "old"
+                !provider(context) -> "old"
                 !shizukuUp -> "stopped"
                 Shizuku.shouldShowRequestPermissionRationale() -> "denied"
                 else -> "ask"
