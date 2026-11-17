@@ -95,6 +95,18 @@ class SummaryTests(unittest.TestCase):
         )
         self.assertIn("有存活", text)
 
+    def test_section_does_not_call_untested_mutants_survivors(self):
+        """只有「无测试」时不能说「有存活」：那是测试选择不够，不是断言不够。"""
+        text = mutation.section(
+            {"total": 3, "killed": 3, "survived": 0, "skipped": 0, "timeout": 0, "no_tests": 2},
+            ["tool/reader.py"],
+        )
+        self.assertIn("有 mutant 没有测试覆盖到", text)
+        self.assertNotIn("有存活", text)
+
+    def test_pragmas_counts_the_marker_in_the_module_source(self):
+        self.assertEqual(mutation.pragmas(["tool/coverage_note.py"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

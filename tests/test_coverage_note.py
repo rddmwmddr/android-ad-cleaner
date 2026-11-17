@@ -85,7 +85,7 @@ class HostWordingTests(unittest.TestCase):
             self.assertNotIn("App", note(run("部分"), on_phone=True))
 
     def test_the_sentences_are_exactly_what_the_user_reads(self):
-        """整句逐字钉住：两个宿主的措辞各一处 `where` 拼进去，改一个字用户看到的就是另一句话。"""
+        """#1418：整句逐字钉住——两个宿主的措辞各一处 `where` 拼进去，改一个字用户看到的就是另一句话。"""
         self.assertEqual(
             {"desktop": host.coverage_notes(False), "phone": host.coverage_notes(True)},
             {

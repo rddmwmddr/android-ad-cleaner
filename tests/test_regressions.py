@@ -123,6 +123,7 @@ class SwitchTests(unittest.TestCase):
         self.assertIs(fast.want_state("个性化广告推荐"), False)
         self.assertIs(fast.want_state("选择广告推荐"), False)   # 只多认一个动词前缀，不认没否定词的行
         self.assertIsNone(fast.want_state("关闭推送"))
+        self.assertIs(fast.want_state(None), False)   # #1416：没有标题的行不算保护类开关
 
     def test_protection_polarity_traditional(self):
         """繁体界面的同一批保护开关（#604；#498 只覆盖了渠道线词表）。"""

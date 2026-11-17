@@ -69,8 +69,8 @@ class Plan:
         """按字段名读：`p["steps"]` 与 `p.steps` 同义。
 
         生产代码一律用属性；`retry_plan()` 的返回从字典换成对象时，照旧拿 `plan["steps"]` 断言的
-        用例不用改写（#1106，见 `tests/test_result_retry.py`）。它只实现按名字读这一半，`in` 与
-        迭代不跟着变成字典语义。
+        用例不用改写（沿用 #1106 的做法，见 `tests/test_result_retry.py`）。它只实现按名字读这一半，
+        `in` 与迭代不跟着变成字典语义。
         """
         if name not in {f.name for f in dataclasses.fields(self)}:
             raise KeyError(name)

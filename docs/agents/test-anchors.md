@@ -143,7 +143,7 @@
 | `test_web_client.py` | 前端用例的代跑与守卫：tests/js/ 的 jsdom 用例由它在 unittest 里跑。 | 8 |
 | `test_fixtures.py` | 夹具本身的行为：样本、假时钟、时间轴与假 Phone。 | 27 |
 | `test_compare_phone_state.py` | 对拍驱动自己管基线 worktree：未知 SHA 报错且不留下 worktree。 | 3 |
-| `test_mutation_scope.py` | 模块 → 测试范围的映射：严格档名单与它不漂、每个目标都在仓库里、选择结果去重保序，以及改动面只挑映射表里的模块。 | 12 |
+| `test_mutation_scope.py` | 模块 → 测试范围的映射：严格档名单与它不漂、每个目标都在仓库里、选择结果去重保序，改动面只挑映射表里的模块，以及 summary 一节的结论与 pragma 计数。 | 18 |
 | `test_android_bundle.py` | APK 里那批 gui 文件必须覆盖 gui/app.py 的导入期依赖。 | 11 |
 | `test_tool_package.py` | tool/ 的出厂引擎与仓库工具链边界：两份冻结名单与文件系统全等、引擎不拖进工具链、打包清单不含 devtools/。 | 12 |
 | `test_android_shim.py` | 手机版替换层：不连手机，替换掉执行通道与读屏。 | 184 |
@@ -185,7 +185,7 @@
 | `test_layout_and_verdict_regressions.py` | 发布当天上报汇集的设备无关回归：卡片布局差异、vivo 旧页与直达、失败判定、停止不算失败、暂停与空报告；每条用例的 owner 是所在类声明的行为域（见「行为域」）。 | 86 |
 | `test_tap_notice_regressions.py` | 发布后一夜上报汇集的设备无关回归：点击与确认落点、焦点回退、通知页读取、adb 镜像与提示音、vivo 慢过渡；每条用例的 owner 是所在类声明的行为域（见「行为域」）。 | 39 |
 | `test_issue_regressions.py` | 社区反馈汇集的设备无关回归：模拟页面与系统回读，不以 UI 状态代替执行结果；每条用例的 owner 是所在类声明的行为域（见「行为域」）。 | 135 |
-| `test_regressions.py` | 跨批次汇集的设备无关回归：输入、页面识别、开关保护、启动落点与打包入口；每条用例的 owner 是所在类声明的行为域（见「行为域」）。 | 105 |
+| `test_regressions.py` | 跨批次汇集的设备无关回归：输入、页面识别、开关保护、启动落点与打包入口；每条用例的 owner 是所在类声明的行为域（见「行为域」）。 | 106 |
 | `test_release_regressions.py` | 发布回归汇集的设备无关用例：横屏、部分失败、通知默认选择与发布资源边界；每条用例的 owner 是所在类声明的行为域（见「行为域」）。 | 85 |
 | `test_feedback_safety.py` | 用户反馈里的安全项：无障碍排查只读、通知保护与旧清单还原。 | 30 |
 | `test_phone_host.py` | 手机版宿主的说法：没有电脑和数据线时该怎么说、界面与诊断里残留的桌面说法，以及唯一的控制流例外（不写插电常亮）。 | 67 |

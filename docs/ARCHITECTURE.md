@@ -93,7 +93,7 @@ glob，放进哪个目录就决定了它会不会进包（[ADR-0041](adr/0041-to
 | `huawei_channels.py` | 华为 ALN-AL00 的清单式渠道处理，需人工审核清单，客户端不自动跑 |
 | `verify_ledger.py` | 配方验证台账：读 `recipes/verified.toml`，每个配方文件一行、按距今天数降序，覆盖度与证据来源是两个维度（`entry()` 也供 `run.py` 的 `status-json` 取这三样），缺记录的条目 `entry()` 给「未记录 / 未知」、CLI 行只打「未记录」，段体正文改过标「待复核」（比记录里的 `body_hash` 与脚本现算的值；`--hash` 只打印刷新基线用的当前值），记录 build 对不上脚本 `BUILD` 的打「build 不符」（沿用 #916、#917、#918 的台账口径，沿用 #1124 的证据来源拆档，沿用 #1242 把判据从提交日期换成段体哈希） |
 
-`devtools/` 里是 19 个仓库工具链模块，不随包；下面几份是人肉命令会直接跑的（[ADR-0041](adr/0041-tool-engine-devtools-seam.md)）：
+`devtools/` 里是 21 个仓库工具链模块，不随包；下面几份是人肉命令会直接跑的（[ADR-0041](adr/0041-tool-engine-devtools-seam.md)）：
 
 | 模块 | 拥有什么 |
 |---|---|
@@ -104,8 +104,9 @@ glob，放进哪个目录就决定了它会不会进包（[ADR-0041](adr/0041-to
 | `devtools/check_conventional.py` | PR 的提交主题校验：`type(scope): subject`，类型清单 `TYPES` 也在这里（#849） |
 | `devtools/check_ticket_ref.py` | PR 的票号校验：分支名以 `-<票号>` 结尾、正文有 `Refs #N` / `Closes #N` 且是同一张（#1001） |
 | `devtools/check_comment_tickets.py` | PR 新增行里的票号要在正文引用的范围内，`docs/adr/` 与含「沿用」的行豁免（#1001） |
+| `devtools/mutation.py` | 一个模块的变异测试：搭工作目录、跑 mutmut、读回结局；`--since` 按改动面挑模块（#1411） |
 
-`devtools/commits.py` 不是命令：它是上面几条 PR 校验共用的 `base..head` 读取与 UTF-8 控制台，沿用 #848、#849 起的那份设计。其余工具链脚本（`claim` / `followup` / `stale` / `triage_audit` / `gh` / `release_assets` / `release_meta` / `glob_scan` / `test_anchors` / `typecheck_recipes` / `unittest_summary`）的指路在 `docs/agents/` 与 [ADR-0036](adr/0036-tool-gh-session.md)。
+`devtools/commits.py` 不是命令：它是上面几条 PR 校验共用的 `base..head` 读取与 UTF-8 控制台，沿用 #848、#849 起的那份设计。其余工具链脚本（`claim` / `followup` / `stale` / `triage_audit` / `gh` / `release_assets` / `release_meta` / `glob_scan` / `test_anchors` / `typecheck_recipes` / `unittest_summary` / `mutation_scope`）的指路在 `docs/agents/` 与 [ADR-0036](adr/0036-tool-gh-session.md)。
 
 客户端侧：`gui/app.py` 是窗口桥与装配（`Api` / `ClientData`，adb 的那几张源表也留在这里当单一来源），其余各块按 owner 分住——`gui/toolpath.py` 是 `gui/` 到 `tool/` 的惰性加载，`gui/tasks.py` 是计划侧（`Task` … `retry_plan`，身份词表在 `tool/plan.py` 的 `StepKind`），`gui/dispatcher.py` 是执行编排（`Dispatcher` / `Job`），`gui/reporter.py` 是错误上报（`Reporter` / `scrub`），`gui/adb.py` 是 adb 路径解析、下载器与存活探测（`AdbDownloader`），`gui/startup.py` 是启动失败文案与写剪贴板；`gui/launch.py` 是入口与打包冒烟，`gui/web/` 是桌面版的界面，`gui/winpreflight.py` 归因 Windows 启动失败，`gui/dotnet_config.py` 在打包时写随包的 `<exe>.config`。
 
@@ -145,7 +146,7 @@ glob，放进哪个目录就决定了它会不会进包（[ADR-0041](adr/0041-to
 - 找「免安装版启动时该不该提示旧版还在」先看 `gui/winpreflight.py` 的 `old_install_present()`：旧产品名「安卓去广告」、四处卸载键（HKCU / HKLM 各含 32 位视图）与当前 exe 目录的比较只在那里定义；`gui/app.py` 的 `Api.old_install_notice()` 只把结论变成一条提示，用户点「知道了」后 `settings.json` 的 `old_install_noticed` 记下这一版、下次不再出现；不写注册表，也不自动卸载（#872）。 <!-- rule:dev.windows.old-install-notice -->
 - 找「手机版替换层」先看 `android/app/src/main/python/aac_android/`：`adb.py` / `bridge.py` / `inproc.py` / `u2.py` 是替换层落地的四个文件（[ADR-0019](adr/0019-phone-second-execution-host.md)）。引擎、`tool/`、`recipes/` 与桌面版同一份；新增读屏能力要先加进 `u2.py` 与 `tool/reader.py` 两边。 <!-- rule:dev.android.replacement-layer -->
 - 找「手机版界面」先看 `android/app/src/main/java/com/ahuamiao/adcleaner/ui/AppModel.kt`：页面流程只有 `Screen` 一个状态，每次切换都经过它的方法（[ADR-0018](adr/0018-android-compose-ui.md)）；带判断的逻辑放 `aac_android/view.py`，别写进 Kotlin。手机版不再加载 `gui/web/`。 <!-- rule:dev.android.screen-state -->
-- 找「这个脚本会不会随包发到手机上」先看它所在的目录：`tool/` 是出厂引擎（随 APK 发到手机上），`devtools/` 是仓库工具链（只在 CI 与本机跑，[ADR-0041](adr/0041-tool-engine-devtools-seam.md)）。`syncEngine` 是整目录 glob，往 `tool/` 放一个新脚本它就自动进包，所以「会不会随包」由目录回答。两份冻结名单（引擎 37、工具链 19）与三条守卫在 `tests/test_tool_package.py`：`tool/` 顶层模块必须与名单全等、引擎 import 了工具链即红、打包清单不含 `devtools/`。 <!-- rule:dev.tool.engine-toolchain-seam -->
+- 找「这个脚本会不会随包发到手机上」先看它所在的目录：`tool/` 是出厂引擎（随 APK 发到手机上），`devtools/` 是仓库工具链（只在 CI 与本机跑，[ADR-0041](adr/0041-tool-engine-devtools-seam.md)）。`syncEngine` 是整目录 glob，往 `tool/` 放一个新脚本它就自动进包，所以「会不会随包」由目录回答。两份冻结名单（引擎 37、工具链 21）与三条守卫在 `tests/test_tool_package.py`：`tool/` 顶层模块必须与名单全等、引擎 import 了工具链即红、打包清单不含 `devtools/`。 <!-- rule:dev.tool.engine-toolchain-seam -->
 
 ## 四、一次执行的路径
 

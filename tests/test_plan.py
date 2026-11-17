@@ -74,10 +74,11 @@ class FromJsonTests(unittest.TestCase):
         self.assertIsInstance(p.channels, list)
 
     def test_a_none_string_field_becomes_empty_not_the_word_none(self):
+        """#1424：str 字段喂 None 收成空串，不是字面量 None。"""
         self.assertEqual(Plan.from_json({"model": None}).model, "")
 
     def test_the_subscript_form_reads_fields_by_name(self):
-        """`retry_plan()` 从字典换成对象后，`plan["steps"]` 的老断言照旧成立；名单外的键照字典。"""
+        """#1424：`retry_plan()` 从字典换成对象后，`plan["steps"]` 的老断言照旧成立；名单外的键照字典。"""
         plan = Plan.from_json({"steps": [{"kind": "ads"}]})
         self.assertEqual(plan["steps"], [{"kind": "ads"}])
         with self.assertRaises(KeyError) as raised:

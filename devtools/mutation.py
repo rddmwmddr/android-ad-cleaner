@@ -5,15 +5,15 @@
     python3 devtools/mutation.py tool/catalog/schema.py [更多模块…]
     python3 devtools/mutation.py --since origin/main [--summary <文件>]
 
-退出码：0 全部杀死、1 有存活或「no tests」、2 用的是错。`--summary <文件>` 把一节 markdown
-（含 pragma 计数）追加进去，CI 用它写 job summary。
+退出码：0 全部杀死、1 有存活 / 无测试 / 可疑 / 段错误、2 用错或 mutmut 自己没跑完。
+`--summary <文件>` 把一节 markdown（含 pragma 计数）追加进去，CI 用它写 job summary。
 
 `--since <ref>` 只跑 `git diff --name-only <ref>` 里落进映射表的模块；改动落在表外时
 逐条报出来（数据改动与未立项的模块不在判据范围内，但要看得到）。行级筛选交给 mutmut 自己：
 它按文件内容哈希重算 mutant、按 span 比对新旧，有缓存时只重测试改动行产生的那些（实测单行
 0.75 s）；冷缓存时退化成该模块的全量（实测 schema 8.1 s）。
 
-三条约束来自 #1410 的实测：
+三条约束沿用 #1410 的实测结论：
 
 - mutmut 3.8 的 mutant 名是「相对路径去掉 `src.` 前缀」，而测试按顶层模块名 import
   （`from catalog.schema import …`）。工作目录里放一个 `src -> tool` 符号链接，两边在同一
@@ -115,15 +115,22 @@ def run(workdir: Path, extra: list[str] | None = None) -> int:
     return completed.returncode
 
 
-def stats(workdir: Path) -> dict[str, int]:
-    """读回这次运行的结局计数。mutmut 自己的 summary 只在有 `export-cicd-stats` 时才落盘。"""
+def stats(workdir: Path) -> dict[str, int] | None:
+    """读回这次运行的结局计数。
+
+    mutmut 只在真有 mutant 判定记录时才写这个 JSON：整份模块没有可变异节点、或者映射表里留着一个
+    已经不存在的模块时，`export-cicd-stats` 只打一行提示就正常退出，不落盘。这里返回 `None`
+    而不是让调用方在 `read_text` 上崩掉。
+    """
     subprocess.run(
         [sys.executable, "-m", "mutmut", "export-cicd-stats"],
         cwd=workdir,
-        check=True,
         capture_output=True,
     )
-    return json.loads((workdir / "mutants" / "mutmut-cicd-stats.json").read_text(encoding="utf-8"))
+    path = workdir / "mutants" / "mutmut-cicd-stats.json"
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def survivors(workdir: Path) -> list[str]:
@@ -168,6 +175,9 @@ def scope_of(ref: str) -> tuple[list[str], list[str]]:
 
 
 PRAGMA = "# pragma: no mutate"
+USAGE = "python3 devtools/mutation.py tool/<模块>.py | --since <ref> [--summary <文件>]"
+# 这些结局同样不该放行：mutmut 把认不出的退出码记成 suspicious，段错误单独一栏。
+FAILING = ("survived", "no_tests", "suspicious", "segfault")
 
 
 def pragmas(modules: Sequence[str]) -> int:
@@ -180,13 +190,21 @@ def pragmas(modules: Sequence[str]) -> int:
 
 
 def section(counts: dict[str, int], modules: list[str], pragma_total: int = 0) -> str:
-    """CI summary 的一节：一行结论 + 每个模块的结局。pragma 数必须在这里可见。"""
-    verdict = "全绿" if counts["survived"] == 0 and counts["no_tests"] == 0 else "有存活"
+    """CI summary 的一节：一行结论 + 全局计数。pragma 数必须在这里可见。"""
+    if counts["survived"]:
+        verdict = "有存活"
+    elif counts["no_tests"]:
+        verdict = "有 mutant 没有测试覆盖到"
+    elif counts.get("suspicious") or counts.get("segfault"):
+        verdict = "有未归类的结局"
+    else:
+        verdict = "全绿"
     lines = [
         "### 变异测试",
         "",
         f"{verdict}：{counts['total']} 个 mutant，杀死 {counts['killed']}、存活 {counts['survived']}、"
-        f"pragma 豁免 {pragma_total}、超时 {counts['timeout']}、无测试 {counts['no_tests']}",
+        f"无测试 {counts['no_tests']}、pragma 豁免 {pragma_total}、超时 {counts['timeout']}、"
+        f"可疑 {counts.get('suspicious', 0)}、段错误 {counts.get('segfault', 0)}",
         "",
         f"模块：{' '.join(modules)}",
         "",
@@ -218,11 +236,15 @@ def main(argv: list[str] | None = None) -> int:
     else:
         modules = args
     if not modules:
-        print(__doc__.split("用法：")[1].split("\n")[1].strip(), file=sys.stderr)
+        print(f"用法：{USAGE}", file=sys.stderr)
         return 2
     missing = mutation_scope.unknown(modules)
     if missing:
         print(f"不在映射表里：{' '.join(missing)}", file=sys.stderr)
+        return 2
+    gone = [module for module in modules if not Path(module).is_file()]
+    if gone:
+        print(f"映射表里的模块在仓库里不存在（表要跟着改）：{' '.join(gone)}", file=sys.stderr)
         return 2
 
     workdir = workdir_for(modules)
@@ -230,21 +252,27 @@ def main(argv: list[str] | None = None) -> int:
     write_config(workdir, modules)
     code = run(workdir)
     if code != 0:
-        return code
+        # mutmut 自己的失败（没装、变异副本上收集就红）不是「有存活」，别让退出码骗人
+        print(f"mutmut 没跑完（退出码 {code}），上面的日志里是原因", file=sys.stderr)
+        return 2
 
     counts = stats(workdir)
+    if counts is None:
+        print("mutmut 没有产出任何 mutant 判定，检查 only_mutate 与模块是否还有可变异的函数",
+              file=sys.stderr)
+        return 2
     alive = survivors(workdir)
     pragma_total = pragmas(modules)
     print(
         f"共 {counts['total']} 个 mutant：杀死 {counts['killed']}、存活 {counts['survived']}、"
-        f"pragma 豁免 {pragma_total}、超时 {counts['timeout']}、无测试 {counts['no_tests']}"
+        f"无测试 {counts['no_tests']}、pragma 豁免 {pragma_total}、超时 {counts['timeout']}"
     )
     for name in alive:
         print(f"  存活 {name}")
     if summary_path is not None:
         with summary_path.open("a", encoding="utf-8") as handle:
             handle.write(section(counts, modules, pragma_total) + "\n")
-    return 0 if counts["survived"] == 0 and counts["no_tests"] == 0 else 1
+    return 1 if any(counts.get(key) for key in FAILING) else 0
 
 
 if __name__ == "__main__":

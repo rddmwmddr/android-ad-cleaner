@@ -17,8 +17,10 @@
 - plan 清到 mutation 存活 0：补 str 字段收拢与下标读法两条用例（#1424）
 - summary 的插电常亮与「等」后缀补真行为用例，mutation 存活清零（#1425）
 - host 的按宿主措辞加逐字断言，mutation 存活清零（#1418）
-- coverage_note 清到 mutation 存活 0，等价变异体标 pragma 豁免（#1426）
-- polarity 清到 mutation 存活 0，等价变异体标 pragma 豁免（#1416）
+- mutation 驱动的失败路径、summary 措辞与文档计数按审查结果修正（#1407）
+- mutation 驱动按模块分工作目录，并补 `gui` / `aac_android` 依赖（#1414）
+- coverage_note 清到 mutation 存活 0，缺档判断拆成一行、pragma 只覆盖那一行（#1426）
+- polarity 清到 mutation 存活 0：`want_state()` 对 None 早返回，不再需要 pragma（#1416）
 - CI 加 mutation job：PR 上只跑改动模块的 mutant，summary 带 pragma 计数（#1413）
 - mutation 驱动加 `--since`，按改动面挑模块跑（#1412）
 - mutmut 接入：模块 → 测试映射与 `devtools/mutation.py` 单模块驱动（#1411）
