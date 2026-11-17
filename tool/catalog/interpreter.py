@@ -20,6 +20,7 @@ _root = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__fi
 if _root not in _sys.path:
     _sys.path.insert(0, _root)
 import recipe_lib
+from .launch import launch_command, launches_by_command
 
 # 数据可调用的实现：owner 表的拷贝，不是共享引用——`tests/fixtures.py` 的打桩助手与
 # `tests/test_catalog.py` 会就地改这张表再 `addCleanup` 还原，共享引用会让漏还原的用例污染 owner。
@@ -187,6 +188,9 @@ def _close_all(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
 
 
 def _start(op: Mapping, p: Any, rt: Any, g: dict[str, Any]) -> None:
+    if launches_by_command(op):
+        p.d.shell(launch_command(op))
+        return
     args = [op["pkg"]]
     kwargs: dict[str, Any] = {}
     if "activity" in op:

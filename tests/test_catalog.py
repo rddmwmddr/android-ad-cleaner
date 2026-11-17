@@ -1046,6 +1046,94 @@ class CloseListedOpTests(unittest.TestCase):
         self.assertEqual(recipe.rt.failed_steps, ["a"])
 
 
+class StartOpCommandTests(unittest.TestCase):
+    """`start` op 的命令形状（#1473）：动作 / URI / 窗口模式 / 裸启动 / monkey 五种写法。
+
+    判据是**下发到手机的 shell 串**：把数据里手写的 `am start` 迁进 op（#1478）要的是与迁移前
+    逐字节相同的命令，所以这里逐字比字面量，不比「调了哪个方法」。不带形状键的 `start` 仍走
+    `p.start`（落点校验那一条），见 `StartOpLandingTests`。
+    """
+
+    def _commands(self, toml):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            shells = []
+
+            def shell(command, timeout=None):
+                shells.append(command)
+                return SimpleNamespace(output="", exit_code=0)
+
+            phone.d.shell = shell
+            recipe.run()
+        return shells
+
+    def test_a_public_intent_launch_gets_the_clear_task_flag_by_default(self):
+        self.assertEqual(
+            self._commands('[[segment]]\nname="a"\nops=[{kind="start",'
+                           ' action="android.settings.SETTINGS"}]\n'),
+            ["am start -f 0x10008000 -a android.settings.SETTINGS"])
+
+    def test_a_page_launch_renders_the_same_command_as_the_handwritten_shell(self):
+        """`-n` + 清栈：与数据里手写的 `shell` 串同一个形状，迁移才对得上。"""
+        self.assertEqual(
+            self._commands('[[segment]]\nname="a"\nops=[{kind="start",'
+                           ' pkg="com.android.settings", activity=".ad.AdServiceSettings",'
+                           ' clear_task=true}]\n'),
+            ["am start -f 0x10008000 -n com.android.settings/.ad.AdServiceSettings"])
+
+    def test_a_bare_launch_drops_the_clear_task_flag(self):
+        """裸启动：带清栈参数会立刻退出的页面（#165），数据里写 `clear_task = false`。"""
+        self.assertEqual(
+            self._commands('[[segment]]\nname="a"\nops=[{kind="start",'
+                           ' pkg="com.heytap.browser",'
+                           ' activity="com.heytap.browser.settings.component.BrowserPreferencesPage",'
+                           ' clear_task=false}]\n'),
+            ["am start -n com.heytap.browser/"
+             "com.heytap.browser.settings.component.BrowserPreferencesPage"])
+
+    def test_a_public_intent_names_its_package_when_the_page_is_not_exported(self):
+        self.assertEqual(
+            self._commands('[[segment]]\nname="a"\nops=[{kind="start",'
+                           ' action="oppo.intent.action.APP_SETTINGS", pkg="com.heytap.market"}]\n'),
+            ["am start -f 0x10008000 -a oppo.intent.action.APP_SETTINGS -p com.heytap.market"])
+
+    def test_a_window_mode_flag_goes_right_after_am_start(self):
+        self.assertEqual(
+            self._commands('[[segment]]\nname="a"\nops=[{kind="start",'
+                           ' flags="--windowingMode 1", action="android.settings.SETTINGS"}]\n'),
+            ["am start --windowingMode 1 -f 0x10008000 -a android.settings.SETTINGS"])
+
+    def test_a_uri_is_quoted_so_the_device_shell_does_not_split_it(self):
+        self.assertEqual(
+            self._commands('[[segment]]\nname="a"\nops=[{kind="start",'
+                           ' action="android.intent.action.VIEW", data="gs://search/setting"}]\n'),
+            ["am start -f 0x10008000 -a android.intent.action.VIEW -d 'gs://search/setting'"])
+
+    def test_a_launcher_start_takes_the_monkey_route(self):
+        self.assertEqual(
+            self._commands('[[segment]]\nname="a"\nops=[{kind="start",'
+                           ' pkg="com.android.browser", launcher=true}]\n'),
+            ["monkey -p com.android.browser -c android.intent.category.LAUNCHER 1"])
+
+
+class StartOpLandingTests(unittest.TestCase):
+    """不带形状键的 `start` 仍是 `p.start`：落点校验（前台归属、弹窗）不能因为这次扩展丢掉。"""
+
+    def test_a_plain_package_and_activity_still_goes_through_start(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="start", pkg="com.hionor.id",'
+                ' activity=".oaid.ui.X", expect="广告"}]\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml)
+            seen = []
+            phone.start = lambda *a, **kw: seen.append((a, kw))
+            shells = []
+            phone.d.shell = lambda command, timeout=None: shells.append(command)
+            recipe.run()
+        self.assertEqual(seen, [(("com.hionor.id", ".oaid.ui.X"),
+                                 {"expect": "广告"})])
+        self.assertEqual(shells, [])
+
+
 class StartOrSkipOpTests(unittest.TestCase):
     """`start_or_skip` op（#1266）：数据里的 `start_or_skip(pkg, activity, dead_ends=…, reason=…)`。
 
