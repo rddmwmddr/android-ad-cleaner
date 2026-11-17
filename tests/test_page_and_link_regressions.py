@@ -210,7 +210,6 @@ class ParseTests(unittest.TestCase):
 
     def test_truncated_ids_are_left_out_of_scan(self):
         reader = types.SimpleNamespace(shell=lambda *a, **k: types.SimpleNamespace(output=DUMP))
-        reader.d = reader
         err = io.StringIO()
         with patch.object(chan, "ShellPhone", return_value=reader), \
              patch.object(sys, "argv", ["chan_fast.py", "-s", "test", "scan"]), \
@@ -232,7 +231,6 @@ class LockedChannelTests(unittest.TestCase):
     def test_scan_leaves_out_system_locked_channels(self):
         # #134：系统锁定的渠道开关是灰的，列进清单只会报「状态未改变」
         reader = types.SimpleNamespace(shell=lambda *a, **k: types.SimpleNamespace(output=self.DUMP))
-        reader.d = reader
         with patch.object(chan, "ShellPhone", return_value=reader), \
              patch.object(sys, "argv", ["chan_fast.py", "-s", "test", "scan"]), \
              contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:

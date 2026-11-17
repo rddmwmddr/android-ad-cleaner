@@ -148,7 +148,7 @@
 
 **已确认断线** — 断线之后等手机回来（`wait-for-device`）仍然不回来，或者回来了第二轮命令仍然断。一旦确认，本轮剩下的段落只报一句「连接已断开」，不再逐段等重试。
 
-**读屏 adapter** — `Phone` 与手机之间那一层（`tool/reader.py` 的 `Reader`）：`shell` / `dump_hierarchy` / `window_size` / `screenshot` / `settings` 等。手机上是 uiautomator2 的连接，测试里是按时间轴换页的假设备（`tests/fixtures.py` 的 `Device`）。`Phone.reader` 是名字（实体归 `Connection`，门面只转发），`Phone.d` 是同一个对象的历史别名，机型脚本与测试用的是它。
+**读屏 adapter** — `Phone` 与手机之间那一层（`tool/reader.py` 的 `Reader`）：`shell` / `dump_hierarchy` / `window_size` / `screenshot` / `settings` 等。手机上是 uiautomator2 的连接，测试里是按时间轴换页的假设备（`tests/fixtures.py` 的 `Device`）。实体归 `Connection`（读 `p.conn.reader`），门面不再转发它——脚本与引擎都经门面动词（`p.shell` / `p.tap_id` …）做事，不直接碰这个对象（ADR-0045）。
 
 ## 事件
 

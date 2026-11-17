@@ -1,5 +1,7 @@
 # 一次渠道尝试的诊断归 chan_fast，读屏策略归 Phone
 
+> **后续**：[ADR-0045](0045-device-vocabulary-script-surface.md) 之后，本 ADR 给出的 `Phone.reader` 命名与 `Phone.d` 写穿别名都已从门面退场（读 `p.conn.reader`，脚本走门面动词）。「只命名、不收窄」这条判断仍是当时的取舍记录，正文不复改。
+
 `Phone` 上原本挂着六个别人写、别人读的字段：`sysui`（读屏要不要算 systemui 的文字）、`vivo_seen` / `vivo_app`（vivo 的两页同一个 Activity）、`why` / `stage`（这次渠道尝试卡在哪）、`pkg_now`（探路时前台是哪个包）。读的地方一律 `getattr(p, "x", 默认值)`，写名字写错也不报错，只静默少一段诊断；测试只能 `.__new__` 之后逐项赋值，28 处、10 个文件。`AAC_REF` 环境变量同样改写 `off()` 的语义。
 
 这次把它们按**生命周期**拆开：一次渠道尝试内的诊断（`why` / `stage` / `vivo_app`）归 `chan_fast` 的 `Attempt`；读屏策略与设备记忆（`systemui_text` / `vivo_seen`）归 `Phone` 构造处声明；`pkg_now` 消失，改成 `entries(p, pkg)` 的参数；`AAC_REF` 变成 `Phone.safe_mode`。

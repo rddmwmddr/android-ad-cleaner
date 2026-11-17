@@ -216,6 +216,44 @@ class HonorWKLRecipeTests(unittest.TestCase):
         self.assertEqual(scope["radio"](p, scope["rt"], root, "简洁首页").get("checked"), "false")
 
 
+class DrawnSwitchReadTests(unittest.TestCase):
+    """`close_named_honor(drawn=True)`：自绘页要读引擎自己那份开关表。
+
+    段内包装器（`safe_ui`）把自绘开关的 `clickable` 抹成 false，读屏规则随即把它们过滤掉；
+    「仅阅读」那一档本来就允许读它们，所以这一档必须拿 `p.switches_raw()`（引擎的读法），
+    不是实例上那个包装器。"""
+
+    def _require_switches(self, drawn):
+        import recipe_lib.honor as honor
+        row = ("个性化广告", True, (900, 425))
+        p = phone_stub("test", reader=Mock())
+        p.W, p.H = 1080, 2400
+        p.screen.switches = Mock(return_value=[row])     # 引擎自己的读法
+        wrapper = Mock(return_value=[])                  # 段内包装器：把自绘开关过滤掉
+        p.switches = wrapper
+        p.screen.tree = Mock(return_value=ET.fromstring("<hierarchy/>"))
+        p.focus = Mock(return_value="com.hihonor.dz.reader/.Settings")
+        p.scroll_more = Mock(return_value=False)
+        p.top = Mock()
+        p.off = Mock()
+        rt = Mock()
+        with patch.object(honor, "settle_page", Mock()), \
+                patch.object(honor, "labels", Mock(return_value={"广告推荐服务"})):
+            honor.close_named_honor(p, rt, ["个性化广告"], "阅读·广告推荐服务",
+                                    "com.hihonor.dz.reader", "广告推荐服务", drawn=drawn)
+        self.assertIs(p.switches, wrapper, "退出后 `switches` 没有还原到段内包装器")
+        return rt.require_switches.call_args
+
+    def test_the_drawn_branch_reads_the_custom_switch_through_the_engine(self):
+        before, wanted, title = self._require_switches(True).args
+        self.assertEqual(before, {"个性化广告": True}, "`drawn` 档没读到自绘开关")
+        self.assertEqual((wanted, title), ({"个性化广告"}, "阅读·广告推荐服务"))
+
+    def test_without_drawn_the_wrapper_still_hides_the_custom_switch(self):
+        before, _wanted, _title = self._require_switches(False).args
+        self.assertEqual(before, {}, "非 `drawn` 档不该绕过段内包装器")
+
+
 class WklDataSegmentTests(unittest.TestCase):
     """阅读 / 魔法画报转成数据之后的行为（#1371）。
 

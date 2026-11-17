@@ -26,7 +26,7 @@
 
 ### 脚本面是一份声明
 
-`tool/phone/surface.py` 的 `SCRIPT_SURFACE` 是唯一来源（8 属性 + 40 动词与查询）。守卫是 AST 静态扫描：`devtools/script_surface.py` 扫 `recipes/**/*.py` 与 `recipe_lib/*.py`，出现声明外的 `p.<名字>` 即红（读、写两种上下文都抓，`p.d(...)` 这种「属性即调用」也抓）；`tests/` 下的假数据不扫。规则 id 是 `dev.phone.script-surface`（`rules.toml`，`status = enforced`），由 `tests/test_phone_facade.py` 的 `ScriptSurfaceTests` 代跑。
+`tool/phone/surface.py` 的 `SCRIPT_SURFACE` 是唯一来源（8 属性 + 41 动词与查询）。守卫是 AST 静态扫描：`devtools/script_surface.py` 扫 `recipes/**/*.py` 与 `recipe_lib/*.py`，出现声明外的 `p.<名字>` 即红（读、写两种上下文都抓，`p.d(...)` 这种「属性即调用」也抓）；`tests/` 下的假数据不扫。规则 id 是 `dev.phone.script-surface`（`rules.toml`，`status = enforced`），由 `tests/test_phone_facade.py` 的 `ScriptSurfaceTests` 代跑。
 
 脚本面≠门面：`ls` / `close` / `check_alive` / `wait_unlocked` / `home` / `app_stop` 这些是引擎自己或阶段用的，脚本不该碰。新增一个公开名字时要先回答「脚本该不该碰它」，再加进声明。
 
@@ -39,6 +39,7 @@
 - **取代 [ADR-0033](0033-phone-phase-modules.md) 的「冻结面 / 公开名字一个不改」条款。** 按阶段拆模块的结论不变（两个基座 + 五个阶段 + 薄门面），但「公开面冻结」这条到此为止：它把「所有内部字段的并集」固化成了对外契约，正是本病的来源。ADR-0033 的正文保留当时的取舍与代价叙述。
 - **[ADR-0020](0020-no-read-write-split.md) 的结论不变**（不按读 / 写切 `Reader`），但门面不再暴露 `reader`；本 ADR 只把传输收进门面动词，不重新划读写边界。
 - [ADR-0034](0034-recipe-source-facts.md) 的「一份 AST 层给事实」不变；本 ADR 让 catalog 数据的 `am start` 形状由结构化 op 提供，不再需要从生成源码里二次解析。
+- **[ADR-0002](0002-phone-state-interface.md) 的 `Phone.reader` 命名与 `Phone.d` 写穿别名到此退场。** 它当年选「只命名、不收窄」，让读屏 adapter 在门面上有个名字；现在名字的实体留在 `Connection`（`p.conn.reader`），脚本经门面动词做事，门面不再转发 adapter 本身。ADR-0002 的正文保留当时的取舍。
 
 ## 四条实测得来的取舍
 

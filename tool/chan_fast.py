@@ -59,7 +59,6 @@ class ShellPhone(adb_link.Connection):
     """扫描和复查只读 adb，不启动手机端 UiAutomation。"""
     def __init__(self, serial):
         super().__init__(serial, sticky=False)          # 一个 reader 跑一整批：一次掉线不该毒掉后面的读取
-        self.d = self
 
     def shell(self, command, timeout=60):
         result = super().shell(command, timeout=timeout)

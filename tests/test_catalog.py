@@ -528,6 +528,41 @@ class CodeFallbackTests(unittest.TestCase):
         self.assertEqual(recipe.rt.results, [("a", "完成")])
 
 
+class ScopedOpTests(unittest.TestCase):
+    """`scoped` op：段内设一个页面属性，退出必须恢复到原值。
+
+    属性归观测基座（`p.screen`），设与恢复打的是同一个对象——V1986A 的「阅图锁屏」段靠它：
+    恢复没做到，退出后读屏一直算上 `com.android.systemui` 的状态栏文字，后续段会误判。"""
+
+    TOML = ('[[segment]]\nname="a"\n'
+            'ops=[{kind="scoped", systemui_text=true, ops=[{kind="back", n=1}]}]\n')
+
+    def test_the_attribute_is_visible_inside_and_restored_afterwards(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.TOML)
+            seen = []
+            phone.back = lambda n=1: seen.append(phone.screen.systemui_text)
+            before = phone.screen.systemui_text
+            recipe.run()
+        self.assertEqual(seen, [True], "段内没把 systemui_text 设上")
+        self.assertEqual(phone.screen.systemui_text, before, "退出后没有恢复到原值")
+        self.assertNotIn("systemui_text", vars(phone),
+                         "恢复打到了 Phone 上而不是 Screen：属性已不在门面上，这句只是挂了个死属性")
+
+    def test_a_failing_op_still_restores_the_attribute(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.TOML)
+            before = phone.screen.systemui_text
+
+            def boom(n=1):
+                raise RuntimeError("段体失败")
+
+            phone.back = boom
+            with contextlib.redirect_stdout(io.StringIO()):
+                recipe.run()
+        self.assertEqual(phone.screen.systemui_text, before)
+
+
 class EnterOpTests(unittest.TestCase):
     """`enter` op（#1264）：数据里的 `p.enter(text, scrolls=…)`，与 `entry`（布尔入口）是两条路。"""
 
@@ -1073,7 +1108,7 @@ class StartOpCommandTests(unittest.TestCase):
             ["am start -f 0x10008000 -n com.android.settings/.ad.AdServiceSettings"])
 
     def test_a_bare_launch_drops_the_clear_task_flag(self):
-        """裸启动：带清栈参数会立刻退出的页面（#165），数据里写 `clear_task = false`。"""
+        """裸启动：带清栈参数会立刻退出的页面（沿用 #165 的裁决），数据里写 `clear_task = false`。"""
         self.assertEqual(
             self._commands('[[segment]]\nname="a"\nops=[{kind="start",'
                            ' pkg="com.heytap.browser",'
@@ -1197,7 +1232,7 @@ class StartOrSkipOpTests(unittest.TestCase):
 
 
 class SkipUnlessInstalledTests(unittest.TestCase):
-    """`skip_unless_installed` op（#1266）：`if "package:" not in p.shell("pm path X"): print; return`。
+    """`skip_unless_installed` op（沿用 #1266 的做法）：`if "package:" not in p.shell("pm path X"): print; return`。
 
     本机没装主题管理包时，后面的入口一个都走不到：打印一句、按「完成」收尾（旧脚本是 `return`，
     不是失败），后面的 op 不再做。"""

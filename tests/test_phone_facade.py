@@ -4,8 +4,8 @@
 或把可写字段改成只读，都会在真机上炸，而不是在评审里被发现。
 
 脚本访问面守卫：`recipes/` 里 `p.<名字>` 的读取必须仍然取得得到，写入必须仍然赋得进去并读得回来，
-集合类字段必须仍是活对象（`p.changed.append(...)` 与 `p.promoted.clear()` 直接改它，转发成拷贝
-只会静默失效），`from fast import …` 的模块级名字也必须仍可 import。
+集合类字段必须仍是活对象（`p.changed.append(...)` 直接改它，转发成拷贝只会静默失效），
+`from fast import …` 的模块级名字也必须仍可 import。
 
 两条都只钉对外契约，钉不到七个模块之间的内部分工——那由代码结构与评审保证。
 
@@ -65,7 +65,7 @@ DATA = frozenset({
 # `say` 同理，随广告跟踪段搬进 `recipe_steps`（沿用 #1213）。`page_text` 也是这一类：读它的是
 # `recipe_nav` 里 `tap` 的 exact 档（#1245），脚本本地那份已删。门面是否还提供它们由成员守卫盯：
 # `lost` 在 `DATA`，`say` / `page_text` 在 `METHODS`。
-# `app` 同样如此：写它的是 `recipe_lib/honor.py` 的 `launch`（#1370），它仍在 `DATA`。
+# `app` 同样如此：写它的是 `recipe_lib/honor.py` 的 `launch`（沿用 #1370 的落点），它仍在 `DATA`。
 # `miss` 也是这一类：`p.miss = 0` 随 PNM-AN10 的广告跟踪段搬进数据的 `miss_reset` op（#1372），
 # 写入落在解释器里，`miss` 仍在 `DATA`。
 # `screen` 来自 catalog 数据的 `scoped` op 降级出的那一行（`p.screen.systemui_text = …`，
@@ -82,7 +82,7 @@ SCRIPT_NAMES = frozenset({
 # 今天每一条公开成员都可写。脚本确实这样用的有 4 个：`honor-WKL-AN20` 把
 # `p.click` / `p.scroll` / `p.confirm` / `p.switches` 换成本地读法，
 # `p.changed.append(...)` 直接改集合本体。`p.app` 随 CLE-AN00 的浏览器 / 主题搬进
-# `recipe_lib/honor.py` 的 `launch`（#1370），`p.miss = 0` 随 PNM-AN10 的广告跟踪段搬进
+# `recipe_lib/honor.py` 的 `launch`（沿用 #1370 的落点），`p.miss = 0` 随 PNM-AN10 的广告跟踪段搬进
 # 数据的 `miss_reset` op（#1372），都不再是脚本侧的写入。
 # 其中任何一条变成只读属性即红——只读转发会让脚本静默失效。
 WRITTEN_BY_SCRIPTS = frozenset({"click", "scroll", "confirm", "switches"})
@@ -391,6 +391,14 @@ class DeviceVerbTests(unittest.TestCase):
         phone.press("home")
         self.assertEqual(reader.presses, ["home"])
         self.assertEqual(reader.shells, [], "press 不该退回 `input keyevent` 那条路")
+
+    def test_switches_raw_ignores_a_wrapper_installed_on_the_instance(self):
+        """自绘页的读法：段内包装器装在实例的 `switches` 上，`switches_raw` 仍走引擎自己那份。"""
+        phone = facade()
+        phone.screen.switches = Mock(return_value=[("自绘开关", True, (900, 425))])
+        phone.switches = Mock(return_value=[])
+        self.assertEqual(phone.switches_raw(), [("自绘开关", True, (900, 425))])
+        self.assertEqual(phone.switches(), [])
 
     def test_app_stop_keeps_the_uiautomator2_path(self):
         """强停走 u2 的 `app_stop`，**不是** `am force-stop` 串：`_u2` 还负责断线记账。"""

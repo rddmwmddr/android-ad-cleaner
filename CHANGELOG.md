@@ -24,7 +24,7 @@
 - 脚本面收成一份声明：脚本与家族库只许碰 `SCRIPT_SURFACE` 里的名字，越界由 AST 守卫报红（#1477）
 - catalog 里 29 条 `am start`、monkey 与强停迁进结构化 op，入口速查不再回读生成的源码（#1478）
 - 脚本里绕过门面的点击、滑动、按键与选择器直点改走具名动词，下发路径不变（#1475）
-- 门面补 `Phone.shell` / `Phone.tap_id` 等十个设备动词，现有调用点一行未改（#1472）
+- 门面补 `Phone.shell` / `Phone.tap_id` 等十一个设备动词，现有调用点一行未改（#1472）
 - catalog 的 start op 能表达公开 Intent、URI、窗口模式、裸启动与 monkey 拉起（#1473）
 - 机型脚本与家族库的 82 处裸 shell 改走 `Phone.shell`，下发命令一条未变（#1474）
 - 引擎与 catalog 解释器改走门面动词，`p.d` 归零（#1476）

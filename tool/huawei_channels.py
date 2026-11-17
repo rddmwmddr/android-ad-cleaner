@@ -192,7 +192,7 @@ def execute(serial, items, want_on=False, verify=False, phone=None, reader=None)
     result = Result()
     if not items:
         return result
-    if phone is not None and getattr(phone, "conn", phone).serial != serial:
+    if phone is not None and phone.conn.serial != serial:
         raise ValueError("读屏设备和指定序列号不一致，未修改")
     reader = reader or ShellPhone(serial)
     if not verify:

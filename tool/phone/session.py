@@ -25,7 +25,7 @@ class LaunchSession:
 
     `app` 是最近一次拉起的目标 App，启动处写、`Dismisser.promoted_click()`（弹窗一侧）读，
     用来判「点了 ✕ 之后跳走的是不是推广位」。
-    `promoted` 是点过才发现是推广位的 ✕，同一处不再点第二次（#420）：换 App 时清空，
+    `promoted` 是点过才发现是推广位的 ✕，同一处不再点第二次（沿用 #420 的裁决）：换 App 时清空，
     `Dismisser.promoted_click()` 记下。
 
     「换 App 就作废推广位记忆」只有 `set_app()` 一份（#1479）：门面的 `p.app = …`、
@@ -37,7 +37,7 @@ class LaunchSession:
         self.promoted = set()
 
     def set_app(self, pkg):
-        """换目标 App：旧 App 的推广位记忆随之作废，同一个 ✕ 不在新 App 上重记（#420）。"""
+        """换目标 App：旧 App 的推广位记忆随之作废，同一个 ✕ 不在新 App 上重记（沿用 #420 的裁决）。"""
         self.app = pkg
         self.promoted.clear()
 

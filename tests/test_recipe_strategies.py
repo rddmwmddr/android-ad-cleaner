@@ -10,7 +10,6 @@ import sys
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -29,7 +28,6 @@ def scope(**constants):
     import catalog.interpreter as interpreter
     import recipe_runtime
     phone = phone_mock(W=1080, H=2400)
-    phone.d = Mock()
     phone.tree.return_value = ET.fromstring('<hierarchy rotation="0"></hierarchy>')
     phone.on_screen.return_value = True
     rt = recipe_runtime.Runtime(phone)
