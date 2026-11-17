@@ -50,15 +50,13 @@ METHODS = frozenset({
     "wait_unlocked", "window_size",
 })
 
-# 公开数据：3 个读写属性（`d` / `serial` / `lost`）、4 个类常量、17 个实例字段，今天 24 个。
-# 拆分时它们可以变成属性，但不能消失、不能变成方法。
+# 公开数据：4 个类常量 + 8 个设备概念属性，今天 12 个（ADR-0045、#1479）。
+# 其余状态归协作者（`p.conn.*` / `p.screen.*` / `p.channel_session.*` / `p.launch_session.*`），
+# 门面上不再有第二条访问路径；`FacadeShrinkTests` 钉住删掉的那些取不到。
 DATA = frozenset({
     "BACK_LABELS", "BOX", "CLOSE", "SEARCH_ACTION",
     "H", "W",
-    "app", "changed", "d", "link", "log", "lost", "miss", "missed",
-    "mismatch_probes", "pause_at_lock_check", "promoted", "reader",
-    "safe_mode", "serial", "skeleton_count", "skeleton_sigs",
-    "systemui_text", "vivo_seen",
+    "app", "changed", "lost", "miss", "missed", "safe_mode",
 })
 
 # 脚本访问面的快照：`recipes/` 里出现过 `p.<名字>` 的 37 个唯一名字。新增或去掉一个名字都要
@@ -67,30 +65,34 @@ DATA = frozenset({
 # `say` 同理，随广告跟踪段搬进 `recipe_steps`（沿用 #1213）。`page_text` 也是这一类：读它的是
 # `recipe_nav` 里 `tap` 的 exact 档（#1245），脚本本地那份已删。门面是否还提供它们由成员守卫盯：
 # `lost` 在 `DATA`，`say` / `page_text` 在 `METHODS`。
-# `app` / `promoted` 同样如此：写它们的是 `recipe_lib/honor.py` 的 `launch`（#1370），两者仍在 `DATA`。
+# `app` 同样如此：写它的是 `recipe_lib/honor.py` 的 `launch`（#1370），它仍在 `DATA`。
 # `miss` 也是这一类：`p.miss = 0` 随 PNM-AN10 的广告跟踪段搬进数据的 `miss_reset` op（#1372），
 # 写入落在解释器里，`miss` 仍在 `DATA`。
+# `screen` 来自 catalog 数据的 `scoped` op 降级出的那一行（`p.screen.systemui_text = …`，
+# 写的是协作者而不是门面）；真实 `recipes/**/*.py` 里没有 `p.screen`，脚本面守卫只扫真实文件。
 SCRIPT_NAMES = frozenset({
     "await_page", "back", "changed", "click", "confirm", "dismiss", "enter",
     "entry", "expect_page", "find", "focus", "go", "H", "has_text", "in_settings_page",
     "locked", "note_miss", "off", "on_screen", "page_evidence",
-    "press", "safe_mode", "scroll", "scroll_more", "setting", "shell", "settle", "sig",
-    "start", "swipe", "switches", "systemui_text", "tab", "tap", "tap_icon",
+    "press", "safe_mode", "screen", "scroll", "scroll_more", "setting", "shell", "settle", "sig",
+    "start", "swipe", "switches", "tab", "tap", "tap_icon",
     "tap_id_if_present", "texts", "top", "tree", "W", "window_size",
 })
 
 # 今天每一条公开成员都可写。脚本确实这样用的有 4 个：`honor-WKL-AN20` 把
 # `p.click` / `p.scroll` / `p.confirm` / `p.switches` 换成本地读法，
-# `p.changed.append(...)` 直接改集合本体。`p.app` / `p.promoted` 随 CLE-AN00 的浏览器 / 主题
-# 搬进 `recipe_lib/honor.py` 的 `launch`（#1370），`p.miss = 0` 随 PNM-AN10 的广告跟踪段搬进
+# `p.changed.append(...)` 直接改集合本体。`p.app` 随 CLE-AN00 的浏览器 / 主题搬进
+# `recipe_lib/honor.py` 的 `launch`（#1370），`p.miss = 0` 随 PNM-AN10 的广告跟踪段搬进
 # 数据的 `miss_reset` op（#1372），都不再是脚本侧的写入。
 # 其中任何一条变成只读属性即红——只读转发会让脚本静默失效。
 WRITTEN_BY_SCRIPTS = frozenset({"click", "scroll", "confirm", "switches"})
 
 
 def facade():
-    """造一台不连手机的门面：装配仍走 `phone_stub()` 这一处。"""
-    return phone_stub(W=1080, H=2340, d=Mock(name="reader"))
+    """造一台不连手机的门面：装配仍走 `phone_stub()` 这一处，读屏替身落 `conn.reader`。"""
+    phone = phone_stub(W=1080, H=2340)
+    phone.conn.reader = Mock(name="reader")
+    return phone
 
 
 def public_functions(cls):
@@ -190,6 +192,46 @@ class FacadeSurfaceTests(unittest.TestCase):
         self.assertLessEqual(WRITTEN_BY_SCRIPTS, METHODS | DATA)
 
 
+class FacadeShrinkTests(unittest.TestCase):
+    """门面只剩「这台手机」的概念（ADR-0045、#1479）。
+
+    留的 8 个设备概念属性仍可读写；删掉的 12 组内部状态在门面上取不到、也写不进去。
+    写不进去这一半同样重要：留着赋值器，读侧就还是有第二条访问路径。
+    """
+
+    KEPT = ("W", "H", "changed", "safe_mode", "miss", "missed", "lost", "app")
+    GONE = ("d", "reader", "link", "log", "serial", "pause_at_lock_check", "systemui_text",
+            "vivo_seen", "skeleton_sigs", "skeleton_count", "mismatch_probes", "promoted")
+
+    def test_the_eight_device_concepts_are_still_readable_and_writable(self):
+        phone = facade()
+        for name in self.KEPT:
+            with self.subTest(name=name):
+                value = getattr(phone, name)
+                setattr(phone, name, value)
+                self.assertEqual(getattr(phone, name), value)
+
+    def test_the_twelve_internal_states_are_gone(self):
+        phone = facade()
+        for name in self.GONE:
+            with self.subTest(name=name):
+                with self.assertRaises(AttributeError):
+                    getattr(phone, name)
+
+    def test_the_state_moved_to_its_collaborator(self):
+        """删掉不等于丢：状态还在持有它的协作者上，门面留下的那几个读的是同一份。"""
+        phone = facade()
+        self.assertEqual(phone.W, phone.screen.W)
+        self.assertEqual(phone.H, phone.screen.H)
+        self.assertEqual(phone.miss, phone.lost_note.miss)
+        self.assertIs(phone.missed, phone.lost_note.missed)
+        self.assertEqual(phone.app, phone.launch_session.app)
+        self.assertFalse(phone.screen.systemui_text)
+        self.assertFalse(phone.channel_session.vivo_seen)
+        self.assertEqual(phone.channel_session.skeleton_count, 0)
+        self.assertIsNotNone(phone.conn.reader)
+
+
 class RecipeAccessTests(unittest.TestCase):
     """旧树也绿，守的是不回退：`recipes/` 现在怎么用门面，搬迁期间必须照旧。"""
 
@@ -222,7 +264,7 @@ class RecipeAccessTests(unittest.TestCase):
         self.assertEqual(broken, [], "脚本写不进去了：\n" + "\n".join(broken))
 
     def test_collections_stay_live(self):
-        """`p.changed.append(...)` / `p.promoted.clear()` 改的是门面持有的那一个集合，不是副本。"""
+        """`p.changed.append(...)` 改的是门面持有的那一个集合，不是副本。"""
         reads, _ = recipe_accesses()
         phone = facade()
         mutable = {name for name in reads if isinstance(getattr(phone, name, None), (list, set, dict))}
@@ -310,7 +352,7 @@ class RecordingReader:
 def verb_phone(**fields):
     """带记录读屏的门面：装配仍走 `phone_stub()`，只把读屏换成会记账的那一份。"""
     reader = RecordingReader()
-    return phone_stub(W=1080, H=2340, d=reader, **fields), reader
+    return phone_stub(W=1080, H=2340, reader=reader, **fields), reader
 
 
 class DeviceVerbTests(unittest.TestCase):

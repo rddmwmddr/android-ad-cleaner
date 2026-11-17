@@ -415,7 +415,7 @@ def open_direct(p, d, settle=1.2):
         p.start(d.pkg, d.activity, settle=settle)
         return
     page = full(d.pkg, d.activity)
-    result = p.reader.shell(start_command(d))
+    result = p.shell(start_command(d))
     if getattr(result, "exit_code", 0) or re.search(r"Error|Exception", result.output or "", re.I):
         raise RuntimeError(f"无法打开 {page}：{(result.output or '').strip()[-200:]}")
 

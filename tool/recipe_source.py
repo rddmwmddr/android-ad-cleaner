@@ -675,7 +675,7 @@ def _catalog_src(data: Mapping[str, Any]) -> str:
                 lower(op.get("ops", []))
             elif kind == "scoped":
                 if "systemui_text" in op:
-                    lines.append(f"p.systemui_text = {op['systemui_text']!r}")
+                    lines.append(f"p.screen.systemui_text = {op['systemui_text']!r}")
                 lower(op.get("ops", []))
             elif kind in ("if_find", "if_entry", "if_lib", "if_lib_any", "if_focus", "if_tap",
                           "if_var"):

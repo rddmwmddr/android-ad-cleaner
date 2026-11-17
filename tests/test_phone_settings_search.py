@@ -82,8 +82,8 @@ class SettingSearchExitTests(unittest.TestCase):
         stub(p, "back", self.back)
         stub(p, "click", self.click)
         stub(p, "type_text", Mock(return_value=True))
-        p.reader = Mock()
-        p.reader.shell.return_value = types.SimpleNamespace(exit_code=0, output="Starting: Intent")
+        p.conn.reader = Mock()
+        p.conn.reader.shell.return_value = types.SimpleNamespace(exit_code=0, output="Starting: Intent")
         state = {"page": page}
         p.screen.tree = Mock(side_effect=lambda: ET.fromstring(
             SEARCH_PAGE if state["page"] == "search" else SETTINGS_HOME))
@@ -123,7 +123,7 @@ class SettingSearchExitTests(unittest.TestCase):
     def test_search_box_not_opening_does_not_press_back(self):
         """旧树也绿，守的是失败路径不乱按返回：没进搜索页就没有输入法占屏。"""
         p = self.make_phone(page="home")
-        p.reader.shell.return_value = types.SimpleNamespace(
+        p.conn.reader.shell.return_value = types.SimpleNamespace(
             exit_code=1, output="Error: Activity not started, unable to resolve Intent")
         self.assertFalse(self.run_setting(p))
         self.back.assert_not_called()
@@ -132,7 +132,7 @@ class SettingSearchExitTests(unittest.TestCase):
         # 直达搜索页时它是新任务根：退场要主动拉起设置首页，不能只按返回
         p = self.make_phone()
         self.assertFalse(self.run_setting(p))
-        commands = [c.args[0] for c in p.reader.shell.call_args_list]
+        commands = [c.args[0] for c in p.conn.reader.shell.call_args_list]
         self.assertIn("am start -f 0x10008000 -a android.settings.SETTINGS", commands)
 
     def test_stuck_on_search_page_reports_where_it_landed(self):
@@ -203,7 +203,7 @@ def focus_phone(**fields):
     """不连手机、焦点窗口由参数给的 Phone：判据只读 focus()。
 
     `focus` 归观测基座（ADR-0033）：桩要落在 `p.screen` 上，门面与导航阶段读的才是同一处。"""
-    p = phone_stub("test", d=Mock(), W=1080, H=2400)
+    p = phone_stub("test", reader=Mock(), W=1080, H=2400)
     for name, value in fields.items():
         stub(p, name, value)
     return p

@@ -53,7 +53,7 @@ def run_step(fast_mod, store, body, name="主题"):
     """跑一段机型脚本的段体：装配走 `phone_stub()`，段包装是真的（`preamble` + `step`）。
 
     `body(p)` 决定这一段是失败（自己抛）还是走完；失败现场归 `store` 管，段名由 `step()` 设。"""
-    phone = fixtures.phone_stub("test", fast_mod=fast_mod, W=1080, H=2340, d=Mock(name="reader"))
+    phone = fixtures.phone_stub("test", fast_mod=fast_mod, W=1080, H=2340, reader=Mock(name="reader"))
     phone.locked = lambda: False
     phone.screen.focus = lambda: "com.android.settings/.Settings"
     phone.screen.tree = lambda: ET.fromstring(PAGE)

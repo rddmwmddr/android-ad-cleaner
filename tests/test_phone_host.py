@@ -408,7 +408,7 @@ class BlockedMessageTests(unittest.TestCase):
 
     def message(self, tapped):
         p = phone_stub(W=1000, H=2000)
-        p.reader = types.SimpleNamespace(
+        p.conn.reader = types.SimpleNamespace(
             window_size=lambda: (1000, 2000),
             shell=lambda command, timeout=None: types.SimpleNamespace(output="INJECT_EVENTS"))
         with patch.object(phone_screen, "TAPPED", tapped), patch.object(phone_screen, "XIAOMI_INPUT", ""):

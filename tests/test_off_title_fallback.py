@@ -124,7 +124,7 @@ class TitleFallbackTests(unittest.TestCase):
         def back(*a, **k):
             self.backs.append("back")
             self.clock.click()
-        p = fake_phone(clock=self.clock, size=SIZE, click=click, d=device, back=back, say=Mock())
+        p = fake_phone(clock=self.clock, size=SIZE, click=click, reader=device, back=back, say=Mock())
         p.screen.focus = lambda: device.focus        # focus 这条时间轴由设备自己管：标题可能点进详情页
         return p
 

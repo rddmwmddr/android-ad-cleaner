@@ -345,7 +345,7 @@ NO_GEAR = """<hierarchy rotation="0">
 
 
 def gear_phone(page, focus=MINE):
-    p = phone_stub("test", d=Mock(), W=1080, H=2400)
+    p = phone_stub("test", reader=Mock(), W=1080, H=2400)
     p.screen.tree = Mock(return_value=ET.fromstring(page))
     p.screen.focus = Mock(return_value=focus)
     p.click = Mock()

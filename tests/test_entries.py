@@ -374,7 +374,7 @@ class FakeReader:
 
 def phone(reader):
     """一台带假读屏的 Phone，装配走 fixtures.phone_stub()。"""
-    return fixtures.phone_stub("test", d=reader, W=1080, H=2400)
+    return fixtures.phone_stub("test", reader=reader, W=1080, H=2400)
 
 
 class ReachTest(unittest.TestCase):

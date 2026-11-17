@@ -760,14 +760,14 @@ class RealDumpMenuTests(unittest.TestCase):
         self.p = phone_stub("dump", fast_mod=fast)
         self.p.W, self.p.H = 1080, 2340
         # 读屏 adapter：`tree()` / `texts()` 走它；window_size 在 reader 上是可调用的
-        self.p.reader = Mock(window_size=Mock(return_value=(1080, 2340)))
+        self.p.conn.reader = Mock(window_size=Mock(return_value=(1080, 2340)))
         self.p.tap = Mock(return_value=True)
         self.p.await_page = Mock()
         self.p.back = Mock()
         self.scope, _ = load_recipe(self.p, RECIPE, ("__no_steps__",))
 
     def dump(self, xml):
-        self.p.reader.dump_hierarchy.return_value = xml
+        self.p.conn.reader.dump_hierarchy.return_value = xml
 
     def test_content_desc_only_state_suffix_is_disabled(self):
         self.dump('<hierarchy><node content-desc="全部关闭 - 已停用" enabled="false" '

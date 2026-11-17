@@ -524,14 +524,14 @@ def survey_phone(focus="", texts=(), start=("", 0), packages="package:com.androi
 
     def shell(cmd, timeout=None):
         if cmd.startswith("getprop ro.product.brand"):
-            return types.SimpleNamespace(output=brand, exit_code=0)
+            return shell_result(brand, 0)
         if cmd.startswith("am start"):
-            return types.SimpleNamespace(output=start[0], exit_code=start[1])
+            return shell_result(start[0], start[1])
         if cmd == "pm list packages":
-            return types.SimpleNamespace(output=packages, exit_code=0)
-        return types.SimpleNamespace(output="", exit_code=0)
+            return shell_result(packages, 0)
+        return shell_result("", 0)
 
-    p.reader.shell.side_effect = shell
+    p.shell.side_effect = shell
     return p
 
 
@@ -544,7 +544,7 @@ def run_survey(p, words, family="xiaomi", family_map=ONE_FAMILY):
 
 
 def shell_calls(p):
-    return [call.args[0] for call in p.reader.shell.call_args_list]
+    return [call.args[0] for call in p.shell.call_args_list]
 
 
 class SurveyResultTests(unittest.TestCase):
@@ -674,7 +674,7 @@ class SurveyEntryTests(unittest.TestCase):
         code, _out = self.run_cmd(p)
         self.assertEqual(code, 0)
         self.factory.assert_called_once_with("FAKE")
-        p.reader.press.assert_called_once_with("home")
+        p.press.assert_called_once_with("home")
 
     def test_landed_without_the_expect_text_exits_one(self):
         p = survey_phone(focus="com.android.settings/.ad.AdServiceSettings", texts=("别的文字",))
@@ -709,7 +709,7 @@ class SurveyEntryTests(unittest.TestCase):
         p.tap.assert_not_called()
         p.click.assert_not_called()
         p.off.assert_not_called()
-        calls = [str(call) for call in p.reader.shell.call_args_list]
+        calls = [str(call) for call in p.shell.call_args_list]
         self.assertFalse([call for call in calls if "am start" in call], calls)
 
     def test_family_without_direct_entries_exits_one(self):

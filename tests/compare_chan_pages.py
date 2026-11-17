@@ -19,7 +19,7 @@
   `toggle()` —— 九类编排场景 × 两种屏尺寸：直达 / 应用通知页 / 内联 / 同名放弃 / 截断 ID / vivo
     六条路线，加锁屏 / 读屏报错 / 断线三条失败路径。比结局与文案、发出哪些 `am start`、
     点在哪、滑了几下。页面坐标按屏宽高取比例，720 那一边才走得到同一条分支。
-    `p.focus()` 的调用次数允许减少、不允许增加；dumpsys 走 `p.reader.shell`，已在 `shells` 里逐条比对。
+    `p.focus()` 的调用次数允许减少、不允许增加；dumpsys 走 `conn.reader.shell`，已在 `shells` 里逐条比对。
 
 结论不只看「相等」：驱动同时打印守卫数字（旧实现认出开关的组数、认得顶栏标题的组数、
 进页真的点了行的组数，以及编排层每条分支各自走到几次），任一项为 0 就以非零退出——
@@ -143,7 +143,7 @@ def probe(tool):
     from fixtures import all_pages, phone_stub
 
     def stub(xml, size, focus):
-        p = phone_stub("probe", d=Mock())
+        p = phone_stub("probe", reader=Mock())
         p.W, p.H = size
 
         def observe(name, value):
@@ -216,10 +216,10 @@ def probe(tool):
             }
             parse = faults.get(fault, Mock(side_effect=healthy))
 
-            p = phone_stub("probe", d=Mock())
+            p = phone_stub("probe")
             p.W, p.H = size
-            p.vivo_seen = vivo
             screen, conn = getattr(p, "screen", p), getattr(p, "conn", p)   # 拆分后的基座；拆分前门面自己就是它们
+            getattr(p, "channel_session", p).vivo_seen = vivo               # 渠道会话：新树在协作者上（#1479）
             screen.focus = Mock(return_value=focus)
             screen.tree = tree
             p.click = Mock(side_effect=click)
@@ -230,8 +230,8 @@ def probe(tool):
             p.scroll, p.scroll_more = Mock(), Mock(return_value=False)
             screen.scroll, screen.click = p.scroll, p.click      # 同上：改后经基座执行
             p.confirm = Mock()
-            p.reader = Mock()
-            p.reader.shell.return_value = Mock(output="")
+            conn.reader = Mock()
+            conn.reader.shell.return_value = Mock(output="")
             with patch.object(chan, "parse", parse):
                 try:
                     outcome = chan.toggle(p, PK, cid, False, NAME)
@@ -241,7 +241,7 @@ def probe(tool):
             key = f"toggle|{label}|{size[0]}x{size[1]}"
             out[key] = {
                 "outcome": got,
-                "shells": [str(a) for a in p.reader.shell.call_args_list],
+                "shells": [str(a) for a in conn.reader.shell.call_args_list],
                 "clicks": [list(c.args) for c in p.click.call_args_list],
                 "skips": [list(c.args) for c in p.scroll.call_args_list],
                 "focus": screen.focus.call_count,        # 只打印：调用次数不是对外契约
@@ -307,7 +307,7 @@ def compare(old_tool):
     print("编排层分支各组走到 " + "、".join(f"{label} {count}" for label, count in reached.items()))
     print(f"top_title 不同 {len(diff) - len(switch) - len(via) - len(toggled)} 组，"
           f"channel_switch 不同 {len(switch)} 组，via_app_page 不同 {len(via)} 组，toggle 不同 {len(toggled)} 组")
-    print(f"p.focus() 调用次数有变化 {len(focus)} 组（允许减少，不允许增加；dumpsys 走 p.reader.shell，已在 shells 里逐条比对）"
+    print(f"p.focus() 调用次数有变化 {len(focus)} 组（允许减少，不允许增加；dumpsys 走 conn.reader.shell，已在 shells 里逐条比对）"
           + ("：" + "，".join(f"{k} {old[k]['focus']}→{new[k]['focus']}" for k in focus[:6]) if focus else ""))
     if focus_up:
         raise SystemExit("p.focus() 调用次数增加了：" + "、".join(focus_up[:6]))
