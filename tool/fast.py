@@ -374,12 +374,28 @@ class Phone:
     def icon_candidates(self, area=ICON_AREA):
         return self.screen.icon_candidates(area)
 
-    # ---------- 四个动作原语：后续阶段一律经它们动作 ----------
+    # ---------- 动作原语：后续阶段一律经它们动作 ----------
     def click(self, x, y):
         self.screen.click(x, y)
 
-    def back(self, n=1):
-        self.screen.back(n)
+    def back(self, n=1, settle=True):
+        self.screen.back(n, settle)
+
+    def shell(self, command, *, timeout=None):
+        """原样下发一条命令（`am start` / `input …` / `getprop`），返回输出串（#1472）。"""
+        return self.screen.shell(command, timeout=timeout)
+
+    def swipe(self, x1, y1, x2, y2, ms):
+        """按绝对坐标滑一下，时长给毫秒（#1472）。"""
+        self.screen.swipe(x1, y1, x2, y2, ms)
+
+    def window_size(self):
+        """读一次屏幕尺寸（宽, 高）（#1472）。"""
+        return self.screen.window_size()
+
+    def home(self):
+        """回桌面（`input keyevent HOME`）（#1472）。"""
+        self.screen.home()
 
     def apply(self, intent):
         """意图的唯一执行点（#1432）：按种类分派到基座的动作原语。"""

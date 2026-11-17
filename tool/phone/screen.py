@@ -1,8 +1,9 @@
 """观测基座：读屏、认行、页面诊断、视口几何，以及动作原语（ADR-0033）。
 
 构造时注入 `Connection`：读屏 adapter 与断线判定都只经它，不认识 `Phone`。
-动作原语是 `click` / `back` / `settle` / `find`，翻页的 `scroll` / `scroll_more` 同在
-这一层（拨动与导航都要翻页，不该由其中一方提供）。后续阶段一律经它们动作，不直接碰传输。
+动作原语是 `shell` / `click` / `swipe` / `window_size` / `home` / `back` / `settle` / `find`，
+翻页的 `scroll` / `scroll_more` 同在这一层（拨动与导航都要翻页，不该由其中一方提供）。后续阶段
+一律经它们动作，不直接碰传输。
 确认框的认法（`confirm_target`）也在这一层：拨动用它点掉遮罩，导航用它说清失败原因（#557），
 两条路共用同一份匹配，谁也不依赖谁。
 """
@@ -264,11 +265,32 @@ class Screen:
         if input_blocked(out):
             raise RuntimeError(f"系统拒绝了{TAPPED}。" + XIAOMI_INPUT)
 
-    def back(self, n=1):
+    def shell(self, command, *, timeout=None):
+        """原样下发一条命令，返回它的输出串。
+
+        断线语义由 `Connection` 装配的 `_resilient_shell` 承载（它就在 `reader.shell` 上），
+        这里只转发、不另包 try（#1472）。"""
+        return self.conn.reader.shell(command, timeout=timeout).output
+
+    def swipe(self, x1, y1, x2, y2, ms):
+        """按绝对坐标滑一下，时长给毫秒：走 uiautomator2 的 swipe，**不**改成 `input swipe`。
+
+        数据里的 `gesture` 才是 `input swipe` 那条路；两条比例相同、下发路径不同，实测换过去
+        真机行为不一致（WKL-AN20 的桌面手势）。"""
+        self.conn._u2(self.conn.reader.swipe, x1, y1, x2, y2, duration=ms / 1000)
+
+    def window_size(self):
+        """读一次屏幕尺寸（宽, 高）：脚本自己比对用，与 `click` 的越界守卫同一个来源。"""
+        return tuple(self.conn._u2(self.conn.reader.window_size))
+
+    def back(self, n=1, settle=True):
+        """发 `input keyevent BACK`。默认每条都等页面稳定；`settle=False` 只发 keyevent、
+        不先读屏也不等（脚本原来 `p.d.press("back")` 的语义，WKL-AN20）。"""
         for _ in range(n):
-            b = self.sig()
+            before = self.sig() if settle else None
             self.conn.reader.shell("input keyevent BACK")
-            self.settle(b, 0.6)
+            if settle:
+                self.settle(before, 0.6)
 
     def settle(self, before, maxwait=0.8):
         """等新的非空页面稳定；跳页动画中的空树不算已经加载好。"""
