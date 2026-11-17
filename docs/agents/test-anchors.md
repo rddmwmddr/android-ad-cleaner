@@ -95,7 +95,7 @@
 | `test_phone_facade.py` | Phone 门面 + 两个基座 + 五个阶段的对外契约。 | 21 |
 | `test_phone_base.py` | 两个基座可以各自独立构造，不必造整台 Phone。 | 22 |
 | `test_phone_sessions.py` | 三个跨阶段会话对象，门面用显式属性转发过去。 | 12 |
-| `test_phone_toggler.py` | 拨动阶段：这一页该关的开关真的被关掉，含确认框判定与等待、页顶复位与残留提示。 | 79 |
+| `test_phone_toggler.py` | 拨动阶段：这一页该关的开关真的被关掉，含确认框判定与等待、页顶复位与残留提示；`drive()` 装的假钟要还原。 | 82 |
 | `test_phone_navigator.py` | 导航阶段的对外契约：go / tab / 入口与落点确认，含底部标签带内三层匹配与齿轮点完的落点校验。 | 93 |
 | `test_phone_settings_search.py` | 设置搜索阶段：对外契约、搜索失败后的退场，以及设置页签名认 Setting 与 Preference 两族。 | 35 |
 | `test_phone_dismisser.py` | 弹窗与推广位阶段：词表只有一份，推广位点了要退回；菜单的返回键与设置页里的说明行都不算弹窗 ✕。 | 79 |
@@ -143,7 +143,7 @@
 | `test_web_client.py` | 前端用例的代跑与守卫：tests/js/ 的 jsdom 用例由它在 unittest 里跑。 | 8 |
 | `test_fixtures.py` | 夹具本身的行为：样本、假时钟、时间轴与假 Phone。 | 27 |
 | `test_compare_phone_state.py` | 对拍驱动自己管基线 worktree：未知 SHA 报错且不留下 worktree。 | 3 |
-| `test_mutation_scope.py` | 模块 → 测试范围的映射：严格档名单与它不漂、每个目标都在仓库里、选择结果去重保序，改动面只挑映射表里的模块，以及 summary 一节的结论与 pragma 计数。 | 18 |
+| `test_mutation_scope.py` | 模块 → 测试范围的映射：严格档名单与它不漂、每个目标都在仓库里、选择结果去重保序、摘掉的类确实挂在被收集的文件上，改动面只挑映射表里的模块，summary 一节的结论与 pragma 计数，以及「无可变异节点」的判据。 | 28 |
 | `test_android_bundle.py` | APK 里那批 gui 文件必须覆盖 gui/app.py 的导入期依赖。 | 11 |
 | `test_tool_package.py` | tool/ 的出厂引擎与仓库工具链边界：两份冻结名单与文件系统全等、引擎不拖进工具链、打包清单不含 devtools/。 | 12 |
 | `test_android_shim.py` | 手机版替换层：不连手机，替换掉执行通道与读屏。 | 184 |

@@ -3,7 +3,9 @@
 判据只看外部行为：映射表覆盖哪些模块、目标文件在不在、选择结果怎么去重。不跑 mutation
 本身——那要几十秒，且由 devtools/mutation.py 负责。
 """
+import json
 import sys
+import tempfile
 import tomllib
 import unittest
 from pathlib import Path
@@ -43,11 +45,32 @@ class MapTests(unittest.TestCase):
         empty = [m for m, targets in mutation_scope.MODULE_TESTS.items() if not targets]
         self.assertEqual(empty, [])
 
+    def test_every_deselected_file_is_used_by_some_row(self):
+        """`UNUSABLE` 里留着一份没人收集的文件，等于悄悄少跑一个测试。"""
+        selected = {target for targets in mutation_scope.MODULE_TESTS.values() for target in targets}
+        self.assertEqual(sorted(set(mutation_scope.UNUSABLE) - selected), [])
+
+    def test_every_deselect_node_id_names_a_real_file(self):
+        for path, node_ids in mutation_scope.UNUSABLE.items():
+            for node_id in node_ids:
+                with self.subTest(node_id=node_id):
+                    self.assertTrue(node_id.startswith(path + "::"), node_id)
+                    self.assertTrue((ROOT / path).is_file(), f"{path} 不在仓库里")
+
 
 class SelectionTests(unittest.TestCase):
     def test_tests_for_dedupes_repeated_modules(self):
-        targets = mutation_scope.tests_for(["tool/events.py", "tool/events.py"])
-        self.assertEqual(targets, ["tests/test_events.py", "tests/test_engine_events.py"])
+        once = mutation_scope.tests_for(["tool/events.py"])
+        twice = mutation_scope.tests_for(["tool/events.py", "tool/events.py"])
+        self.assertEqual(twice, once)
+        files = [arg for arg in once if arg.startswith("tests/")]
+        self.assertEqual(len(files), len(set(files)))
+
+    def test_tests_for_drops_the_classes_that_cannot_run_in_the_copy(self):
+        args = mutation_scope.tests_for(["tool/recipe_source.py"])
+        self.assertIn("--deselect", args)
+        self.assertIn("tests/test_vocab.py::SourceShapeTest", args)
+        self.assertLess(args.index("tests/test_vocab.py"), args.index("--deselect"))
 
     def test_tests_for_keeps_first_seen_order(self):
         targets = mutation_scope.tests_for(["tool/summary.py", "tool/events.py"])
@@ -106,6 +129,30 @@ class SummaryTests(unittest.TestCase):
 
     def test_pragmas_counts_the_marker_in_the_module_source(self):
         self.assertEqual(mutation.pragmas(["tool/coverage_note.py"]), 1)
+
+
+class NothingToMutateTests(unittest.TestCase):
+    """`reader.py` 这种 `Protocol`：mutmut 退出 1，但没有 mutant 可判，不是失败。"""
+
+    def workdir(self, payload):
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        meta = root / "mutants" / "src" / "reader.py.meta"
+        meta.parent.mkdir(parents=True)
+        if payload is not None:
+            meta.write_text(json.dumps(payload), encoding="utf-8")
+        return root
+
+    def test_an_empty_hash_table_is_a_conclusion(self):
+        self.assertTrue(mutation.nothing_to_mutate(self.workdir({"hash_by_function_name": {}}),
+                                                  ["tool/reader.py"]))
+
+    def test_a_module_with_functions_still_fails(self):
+        self.assertFalse(mutation.nothing_to_mutate(
+            self.workdir({"hash_by_function_name": {"src.reader.x": "abc"}}), ["tool/reader.py"]))
+
+    def test_missing_cache_is_not_a_conclusion(self):
+        """没有 meta 说明这轮根本没跑到那一步，不能当成「没东西可判」。"""
+        self.assertFalse(mutation.nothing_to_mutate(self.workdir(None), ["tool/reader.py"]))
 
 
 if __name__ == "__main__":

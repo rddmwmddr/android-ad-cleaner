@@ -133,6 +133,23 @@ def stats(workdir: Path) -> dict[str, int] | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def nothing_to_mutate(workdir: Path, modules: Sequence[str]) -> bool:
+    """这些模块里没有一个可变异的函数。
+
+    `reader.py` 是 `Protocol`，方法体只有 `...`，mutmut 生成不出 mutant，于是统计阶段收起
+    0 条关联、退出码 1 并说「找不到任何测试」。那不是失败而是「没有东西可判」：用它的
+    `hash_by_function_name` 空表认这一种，别把收集期真红掉的情况也放过。
+    """
+    for module in modules:
+        meta = workdir / "mutants" / (mutation_scope.source_path(module) + ".meta")
+        if not meta.exists():
+            return False
+        data = json.loads(meta.read_text(encoding="utf-8"))
+        if data.get("hash_by_function_name"):
+            return False
+    return True
+
+
 def survivors(workdir: Path) -> list[str]:
     """存活 mutant 的名字，逐条列出——补测试时要知道是哪一行、哪种变异。"""
     completed = subprocess.run(
@@ -252,6 +269,9 @@ def main(argv: list[str] | None = None) -> int:
     write_config(workdir, modules)
     code = run(workdir)
     if code != 0:
+        if nothing_to_mutate(workdir, modules):
+            print(f"无可变异节点：{' '.join(modules)} 里没有函数体可改，没有要判的 mutant")
+            return 0
         # mutmut 自己的失败（没装、变异副本上收集就红）不是「有存活」，别让退出码骗人
         print(f"mutmut 没跑完（退出码 {code}），上面的日志里是原因", file=sys.stderr)
         return 2

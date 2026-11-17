@@ -24,7 +24,7 @@ import adb_link  # noqa: E402
 import chan_fast  # noqa: E402
 import fast  # noqa: E402
 import row  # noqa: E402
-from fixtures import (SIZES, Clock, clocked, drive, fake_phone,  # noqa: E402
+from fixtures import (SIZES, Clock, clock_targets, clocked, drive, fake_phone,  # noqa: E402
                       install_clock, phone_stub)
 
 SIZE = (1260, 2800)
@@ -255,9 +255,6 @@ class LateDialogTests(unittest.TestCase):
     没有弹窗的页面也不能无限等。
     """
 
-    def setUp(self):
-        self.addCleanup(setattr, fast, "time", fast.time)      # 假时钟装进模块后要还原，别影响后面的用例
-
     def test_dialog_that_arrives_late_is_still_confirmed(self):
         """0.6 秒才进树的弹窗仍要被认出来，且只点一次「确认关闭」。"""
         out, _, _, clicks = drive(lambda p: p.confirm(), modules=(fast,),
@@ -341,12 +338,8 @@ class StoreDevice:
 class MaskClickTests(unittest.TestCase):
     """#555 的另一半：弹窗挂着时页面上的点击会被遮罩吞掉，连点前必须先看清屏上有没有确认框。"""
 
-    def setUp(self):
-        self.addCleanup(setattr, fast, "time", fast.time)
-
     def run_off(self, delay):
-        clock = Clock(read_cost=0.1)
-        install_clock(fast, clock)
+        clock = clocked(self, fast, Clock(read_cost=0.1))
         device = StoreDevice(clock, delay)
         phone = fake_phone(clock=clock, size=(1260, 2800), click=device.click, d=device)
         return phone.off(), device
@@ -386,8 +379,7 @@ class ResidualConfirmTests(unittest.TestCase):
     """
 
     def setUp(self):
-        self.addCleanup(setattr, fast, "time", fast.time)
-        self.clock = install_clock(fast, Clock())
+        self.clock = clocked(self, fast, Clock())
 
     def phone(self, xml):
         self.lines = []
@@ -651,6 +643,25 @@ class OffStartsFromThePageTopTests(unittest.TestCase):
         p = long_phone(model)
         self.assertEqual(p.off(page="广告"), 6)
         self.assertEqual(model.scrolls, 0)
+
+
+class ClockRestoreTests(unittest.TestCase):
+    """假钟装的是模块级属性，`drive()` 退出时必须放回去。
+
+    留着的话，后面用真时间的用例会对着不推进的钟空转：变异副本里按模块选测试时，
+    `test_regressions` 的 `_launch()` 就因此把替身的 side_effect 抽干（#1452 实测）。
+    """
+
+    def test_drive_puts_every_clock_target_back(self):
+        before = {id(target): target.time for target in clock_targets(fast)}
+        drive(lambda p: None, modules=(fast,))
+        self.assertEqual({id(target): target.time for target in clock_targets(fast)}, before)
+
+    def test_drive_restores_after_the_call_raises(self):
+        before = fast.time
+        with self.assertRaises(RuntimeError):
+            drive(lambda p: (_ for _ in ()).throw(RuntimeError("炸")), modules=(fast,))
+        self.assertIs(fast.time, before)
 
 
 if __name__ == "__main__":
