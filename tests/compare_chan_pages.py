@@ -36,6 +36,11 @@ from unittest.mock import Mock, patch
 
 TESTS = Path(__file__).resolve().parent
 ROOT = TESTS.parent
+# Windows 控制台与管道默认不是 UTF-8：这个驱动打印中文诊断，与兄弟驱动走同一个出口
+sys.path.insert(0, str(ROOT / "tool"))
+from stdio import use_utf8_console  # noqa: E402
+
+use_utf8_console()
 SIZES = ((1080, 2340), (720, 1600))
 FOCI = (
     "com.android.systemui/com.vivo.systemui.statusbar.notification.settings.channels.NotificationSettingsActivity",
