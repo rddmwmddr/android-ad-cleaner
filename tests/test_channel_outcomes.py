@@ -1143,10 +1143,28 @@ class AppOpsTests(unittest.TestCase):
         reader = Mock()
         reader.shell.return_value = Mock(output="POST_NOTIFICATION: allow\n")
         self.assertEqual(chan.appops_mode(reader, "com.a"), "allow")
+        reader.shell.return_value = Mock(output="Uid mode: POST_NOTIFICATION: allow\n")
+        self.assertEqual(chan.appops_mode(reader, "com.a"), "allow")
         reader.shell.return_value = Mock(output="No operations.")
         self.assertEqual(chan.appops_mode(reader, "com.a"), "default")
         reader.shell.return_value = Mock(output="看不懂的输出")
         self.assertEqual(chan.appops_mode(reader, "com.a"), "unknown")
+
+    def test_uid_mode_prefix_is_written_back_and_verified(self):
+        class UidModeReader(FakeReader):
+            """ColorOS 一类系统在模式前加 `Uid mode: ` 前缀。"""
+
+            def shell(self, command, timeout=60):
+                result = super().shell(command, timeout)
+                if command.startswith("cmd appops get "):
+                    result.output = "Uid mode: " + result.output
+                return result
+
+        reader = UidModeReader({"com.a": "allow"})
+        changed, failed = chan.restore_appops(reader, {"com.a": "default"})
+        self.assertEqual((changed, failed), (["com.a"], []))
+        self.assertEqual(reader.modes["com.a"], "default")
+        self.assertEqual(len(reader.writes), 1)
 
 
 class RestoreReportTests(unittest.TestCase):
