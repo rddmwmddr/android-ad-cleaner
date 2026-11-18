@@ -348,6 +348,17 @@ class HonorFamilyTests(unittest.TestCase):
     def test_an_unlabelled_reference_never_matches(self):
         self.assertEqual(Path(self.pick("PNM-AN10 10.0.0.1")[0]).parent.name, "PNM-AN10")
 
+    def test_a_truncated_device_version_picks_the_finer_script(self):
+        # #1428：设备只报到 MagicOS 11.0.0，脚本录到 11.0.0.111，同族同版本要能选上。
+        path, reference = self.pick("MAA-AN10 11.0.0")
+        self.assertEqual(Path(path).parent.name, "WKL-AN20")
+        self.assertTrue(reference)
+
+    def test_a_different_build_number_is_still_a_different_version(self):
+        path, reference = self.pick("MAA-AN10 11.0.0.120")
+        self.assertEqual(Path(path).parent.name, "PNM-AN10")
+        self.assertTrue(reference)
+
     def test_only_the_first_model_marker_is_cut(self):
         """只切第一个机型标记：它再出现时后面已经是版本的一部分，全切或按最后一个切都会丢版本。"""
         self.assertEqual(run.version_core("WKL-AN20 11.0.0.111 SP7C00", "honor"), "11.0.0.111 SP7C00")
@@ -389,6 +400,16 @@ class VersionMatchTests(unittest.TestCase):
     def test_a_different_patch_level_under_another_prefix_does_not_match(self):
         self.assertEqual(
             run.version_match({"build": "PJX110_16.0.5.1001", "os": ""}, "PLP120_16.0.5.1201", "oppo"), "")
+
+    def test_a_truncated_device_version_matches_a_finer_recording(self):
+        # #1428：设备只报到分量边界，录制值多一层仍算同一版本。
+        self.assertEqual(
+            run.version_match({"build": "PJX110_16.0.5", "os": ""}, "PLP120_16.0.5.1201", "oppo"),
+            "PJX110_16.0.5")
+
+    def test_a_prefix_inside_a_component_is_not_the_same_version(self):
+        self.assertEqual(
+            run.version_match({"build": "PJX110_16.0.5.12", "os": ""}, "PLP120_16.0.5.120", "oppo"), "")
 
 
 class ScriptLayoutTests(unittest.TestCase):
