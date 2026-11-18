@@ -701,7 +701,7 @@ def appops_mode(reader, package):
         return "unknown"
     if not isinstance(text, str):
         return "unknown"
-    match = re.search(r"(?m)^\s*POST_NOTIFICATION:\s*([A-Za-z_]+)", text)
+    match = re.search(r"(?m)^\s*(?:Uid mode:\s*)?POST_NOTIFICATION:\s*([A-Za-z_]+)", text)
     if match:
         return match.group(1).lower()
     return "default" if "No operations" in text else "unknown"
