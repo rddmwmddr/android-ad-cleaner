@@ -6,7 +6,7 @@
 
 ### 修复
 
-- appops 模式解析接受可选的「Uid mode:」前缀，ColorOS 上不再一律读成 unknown（#1466）
+- appops 解析认「Uid mode:」前缀，ColorOS 等机型的通知写回与载荷行不再被跳过（#1466）
 
 ## 0.4.5 · 2026-11-18
 

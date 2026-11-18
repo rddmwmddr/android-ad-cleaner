@@ -1151,6 +1151,8 @@ class AppOpsTests(unittest.TestCase):
         self.assertEqual(chan.appops_mode(reader, "com.a"), "unknown")
 
     def test_uid_mode_prefix_is_written_back_and_verified(self):
+        """#1466：带 `Uid mode: ` 前缀的机型上，写回与复核要真的发生。"""
+
         class UidModeReader(FakeReader):
             """ColorOS 一类系统在模式前加 `Uid mode: ` 前缀。"""
 
