@@ -34,7 +34,7 @@ MANUAL_COPY_NOTE = startup.MANUAL_COPY_NOTE
 
 
 APP_NAME = "肉呆去广告"
-VERSION = "0.4.4"
+VERSION = "0.4.5"
 FROZEN = getattr(sys, "frozen", False)
 IS_WIN = platform.system() == "Windows"
 
