@@ -355,6 +355,7 @@ class HonorFamilyTests(unittest.TestCase):
         self.assertTrue(reference)
 
     def test_a_different_build_number_is_still_a_different_version(self):
+        """旧树也绿，守的是不回退：同一层里不同的号仍互不命中，分量边界比不能变成宽匹配。"""
         path, reference = self.pick("MAA-AN10 11.0.0.120")
         self.assertEqual(Path(path).parent.name, "PNM-AN10")
         self.assertTrue(reference)
@@ -408,6 +409,7 @@ class VersionMatchTests(unittest.TestCase):
             "PJX110_16.0.5")
 
     def test_a_prefix_inside_a_component_is_not_the_same_version(self):
+        """旧树也绿，守的是不回退：停在分量中间的前缀不算同一版本。"""
         self.assertEqual(
             run.version_match({"build": "PJX110_16.0.5.12", "os": ""}, "PLP120_16.0.5.120", "oppo"), "")
 

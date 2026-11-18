@@ -64,8 +64,8 @@ def matching_device_version(device_info: Mapping[str, str] | None, core: str, fa
     """设备和 core 对得上的那段版本原值；core 为空或对不上返回空串。
 
     `core` 与设备版本按分量对齐，短的可以是长的前缀：设备常只报到 `11.0.0`，脚本录到
-    `11.0.0.111`（#1428）。同一层里不同的号仍不算对上——`11.0.0.111` 与 `11.0.0.120`
-    互不命中，已录完整版本串的脚本不会因此匹配到别的版本。"""
+    `11.0.0.111`（#1428）。同一层里不同的号仍互不命中——`11.0.0.111` 与 `11.0.0.120`
+    不算同一版本；设备报得更粗时两者都可能命中，由挑选方的核心长度 / 段数 / 目录名定序。"""
     if not core:
         return ""
     # 没报的字段不进比较：`filter(None, ...)` 同时跳过缺键与空串，不用给每个字段垫一个 `or ""`。
@@ -78,7 +78,7 @@ def matching_device_version(device_info: Mapping[str, str] | None, core: str, fa
 
 
 def version_match(device_info: Mapping[str, str] | None, recorded: str, fam: str) -> str:
-    """返回和录制版本对得上的那段设备版本；对不上返回空串。按分量前缀比较（#319）。
+    """返回和录制版本对得上的那段设备版本；对不上返回空串。按分量前缀比较（沿用 #319 的前缀比，分量边界见 #1428）。
 
     与 build_ok 不同：这里没标录制版本就算对不上、不参与挑选；build_ok 把没标的当成不告警。
     """
