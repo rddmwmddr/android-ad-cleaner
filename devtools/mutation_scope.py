@@ -214,6 +214,9 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
     "android/app/src/main/python/aac_android/screen.py": ("tests/test_android_shim.py",),
     "android/app/src/main/python/aac_android/inproc.py": ("tests/test_android_shim.py",),
     "android/app/src/main/python/aac_android/u2.py": ("tests/test_android_shim.py",),
+    # devtools（#1515）：`check_ticket_ref` 单模块单测试文件。`WorkflowTest` 读
+    # `.github/workflows/ticket-checks.yml`，副本里没有根级 `.github/`，按类摘掉（见 `UNUSABLE`）。
+    "devtools/check_ticket_ref.py": ("tests/test_ticket_ref.py",),
 }
 
 # 变异副本里跑不通的测试，按 pytest node id 摘掉。整份文件都跑不通的（`test_rules_guards`
@@ -249,6 +252,8 @@ UNUSABLE: dict[str, tuple[str, ...]] = {
     "tests/test_recipe_nav.py": ("tests/test_recipe_nav.py::DriverTests",),
     "tests/test_result_retry.py": ("tests/test_result_retry.py::EngineEmitsFailedStepsTests",),
     "tests/test_run_commands.py": ("tests/test_run_commands.py::CliParityTests",),
+    # 副本里没有根级 `.github/`：整类读 workflow 文件的用例按类摘掉（#1515）。
+    "tests/test_ticket_ref.py": ("tests/test_ticket_ref.py::WorkflowTest",),
     "tests/test_ui_session.py": (
         "tests/test_ui_session.py::LockTests::test_other_process_is_blocked_until_owner_exits",
     ),
@@ -289,17 +294,23 @@ def unknown(modules: Iterable[str]) -> list[str]:
 
 # 手机版替换层不在仓库根，按产品路径（Chaquopy 的 sourceSets 要求它留在原处）换个前缀映射到 `src`。
 ANDROID_PREFIX = "android/app/src/main/python/aac_android/"
-SOURCE_PREFIXES = {"tool/": "src/", "gui/": "src/gui/", ANDROID_PREFIX: "src/aac_android/"}
+SOURCE_PREFIXES = {
+    "tool/": "src/",
+    "gui/": "src/gui/",
+    "devtools/": "src/devtools/",
+    ANDROID_PREFIX: "src/aac_android/",
+}
 
 
 def source_path(module: str) -> str:
     """`tool/catalog/schema.py` → `src/catalog/schema.py`，`gui/tasks.py` → `src/gui/tasks.py`，
+    `devtools/check_ticket_ref.py` → `src/devtools/check_ticket_ref.py`，
     `android/…/aac_android/view.py` → `src/aac_android/view.py`。
 
-    mutmut 按相对路径去掉 `src.` 前缀生成 mutant 名，工作目录里的 `src` 是 `tool/`、`gui/` 与
-    `aac_android/` 的镜像；测试按顶层模块名 import `tool/` 的包、按包名 import `gui/`（`from gui
-    import tasks`）、按包名 import `aac_android`（`from aac_android import view`），两边只在 `src`
-    这个视角上对齐。
+    mutmut 按相对路径去掉 `src.` 前缀生成 mutant 名，工作目录里的 `src` 是 `tool/`、`gui/`、
+    `devtools/` 与 `aac_android/` 的镜像；测试按顶层模块名 import `tool/` 的包、按包名 import
+    `gui/`（`from gui import tasks`）、`devtools/`（`from devtools import check_ticket_ref`）与
+    `aac_android`（`from aac_android import view`），两边只在 `src` 这个视角上对齐。
     """
     for prefix, view in SOURCE_PREFIXES.items():
         if module.startswith(prefix):

@@ -154,8 +154,18 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(mutation_scope.only_mutate([module]), ["src/aac_android/view.py"])
 
     def test_source_path_rejects_modules_outside_the_source_view(self):
+        # `android/smoke.py` 与 `recipes/` 都不在映射表里，也没有 `src` 视角的位置。
         with self.assertRaises(ValueError):
-            mutation_scope.source_path("devtools/mutation.py")
+            mutation_scope.source_path("android/smoke.py")
+
+    def test_source_path_keeps_devtools_under_its_package(self):
+        """`devtools/` 按包名 import（`from devtools import check_ticket_ref`），落在 `src/devtools/` 下（#1515）。"""
+        self.assertEqual(mutation_scope.source_path("devtools/check_ticket_ref.py"),
+                         "src/devtools/check_ticket_ref.py")
+
+    def test_only_mutate_uses_the_devtools_src_view(self):
+        self.assertEqual(mutation_scope.only_mutate(["devtools/check_ticket_ref.py"]),
+                         ["src/devtools/check_ticket_ref.py"])
 
 
 class WorkdirTests(unittest.TestCase):
@@ -169,6 +179,11 @@ class WorkdirTests(unittest.TestCase):
         self.assertEqual(
             mutation.workdir_for(["android/app/src/main/python/aac_android/view.py"]).name,
             "aac_view")
+
+    def test_workdir_for_slugs_devtools_with_its_package_prefix(self):
+        """devtools 的 slug 保留目录名：`devtools/check_ticket_ref.py` 与 `tool/` 里的同名模块别撞车（#1515）。"""
+        self.assertEqual(mutation.workdir_for(["devtools/check_ticket_ref.py"]).name,
+                         "devtools_check_ticket_ref")
 
 
 @unittest.skipIf(os.name == "nt", "建符号链接要开发者模式；变异 job 只在 Linux 上跑")
@@ -221,6 +236,18 @@ class SourceMirrorTests(unittest.TestCase):
         self.assertTrue((self.src / "aac_android" / "view.py").is_symlink())
         self.assertEqual((self.src / "aac_android" / "view.py").resolve(), real.resolve())
 
+    def test_every_devtools_entry_is_mirrored_under_the_devtools_package(self):
+        """devtools 按包名 import（`from devtools import …`），镜像落在 `src/devtools/` 下（#1515）。"""
+        missing = [name for name in (ROOT / "devtools").iterdir()
+                   if name.name != "__pycache__" and not (self.src / "devtools" / name.name).exists()]
+        self.assertEqual(missing, [])
+
+    def test_the_devtools_files_are_linked_to_the_real_source(self):
+        """devtools 的镜像也指回仓库里的真源码，测试导入命中的是变异后的副本。"""
+        real = ROOT / "devtools" / "check_ticket_ref.py"
+        self.assertTrue((self.src / "devtools" / "check_ticket_ref.py").is_symlink())
+        self.assertEqual((self.src / "devtools" / "check_ticket_ref.py").resolve(), real.resolve())
+
     def test_relinking_replaces_a_stale_src_link(self):
         """旧的 `src -> tool` 形态要能被下一次运行换掉，不然副本里没有 `gui`。"""
         stale = self.workdir / "src"
@@ -247,6 +274,11 @@ class PatchScopeTests(unittest.TestCase):
     def test_modules_in_paths_reads_the_android_layer(self):
         module = "android/app/src/main/python/aac_android/view.py"
         self.assertEqual(mutation_scope.modules_in_paths([module]), [module])
+
+    def test_modules_in_paths_reads_devtools_modules(self):
+        self.assertEqual(mutation_scope.modules_in_paths(
+            ["devtools/check_ticket_ref.py", "devtools/mutation.py"]),
+            ["devtools/check_ticket_ref.py"])
 
     def test_modules_in_paths_ignores_paths_outside_tool(self):
         self.assertEqual(mutation_scope.modules_in_paths(["recipes/a/b/c.toml", "tests/test_plan.py"]),
@@ -282,6 +314,30 @@ class ScopeReportTests(unittest.TestCase):
         modules, unmapped = self.scope([module])
         self.assertEqual(modules, [module])
         self.assertEqual(unmapped, [])
+
+    def test_unmapped_devtools_modules_are_reported(self):
+        """表外的 devtools 模块逐条报「本次不判」：`--since` 要看得见（#1515）。"""
+        modules, unmapped = self.scope(["devtools/gen_site_css.py", "tests/test_doc_consistency.py"])
+        self.assertEqual(modules, [])
+        self.assertEqual(unmapped, ["devtools/gen_site_css.py"])
+
+    def test_mapped_devtools_modules_are_not_reported_as_skipped(self):
+        modules, unmapped = self.scope(["devtools/check_ticket_ref.py"])
+        self.assertEqual(modules, ["devtools/check_ticket_ref.py"])
+        self.assertEqual(unmapped, [])
+
+
+class CopyWiringTests(unittest.TestCase):
+    """devtools 只以镜像进副本：留着未变异的真副本会让测试永远导到原件（#1515）。"""
+
+    def test_devtools_is_not_linked_into_the_workdir(self):
+        self.assertNotIn("devtools", mutation.LINKS)
+
+    def test_devtools_is_not_copied_into_the_mutants_tree(self):
+        self.assertNotIn("devtools", mutation.ALSO_COPY)
+
+    def test_devtools_is_mirrored_into_the_src_view(self):
+        self.assertIn("devtools", mutation.SOURCE_PACKAGES)
 
 
 class SummaryTests(unittest.TestCase):
