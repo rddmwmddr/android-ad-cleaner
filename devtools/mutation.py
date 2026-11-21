@@ -139,8 +139,18 @@ def _mirror_sources(src: Path) -> None:
                 destination.mkdir(parents=True, exist_ok=True)
                 continue
             destination.parent.mkdir(parents=True, exist_ok=True)
-            # 相对链接按物理路径算：macOS 的 `/var` 与 `/Volumes` 在逻辑路径上可能没有同一前缀
-            destination.symlink_to(os.path.relpath(path, destination.parent.resolve()))
+            destination.symlink_to(_relative(path, destination.parent))
+
+
+def _relative(path: Path, folder: Path) -> str:
+    """链接目标按物理路径算：macOS 的 `/var` 与 `/Volumes` 在逻辑路径上可能没有同一前缀。
+
+    跨盘符（Windows 上仓库与临时目录各在一个盘）没有相对路径，退回绝对路径。
+    """
+    try:
+        return os.path.relpath(path, folder.resolve())
+    except ValueError:
+        return str(path)
 
 
 def _link(path: Path, target: Path) -> None:

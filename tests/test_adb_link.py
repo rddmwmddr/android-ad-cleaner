@@ -1028,14 +1028,14 @@ class AdbFromInputTests(unittest.TestCase):
         self.assertEqual(adb_mod.adb_from_input("   "), "")
 
     def test_quotes_are_peeled_and_the_path_made_absolute(self):
-        self.assertEqual(adb_mod.adb_from_input(' "/opt/sdk/adb" '), "/opt/sdk/adb")
+        self.assertEqual(adb_mod.adb_from_input(' "/opt/sdk/adb" '), os.path.abspath("/opt/sdk/adb"))
 
     def test_a_drive_letter_is_not_treated_as_a_quote(self):
         self.assertEqual(adb_mod.adb_from_input("X:/sdk/adb.exe"), os.path.abspath("X:/sdk/adb.exe"))
 
     def test_a_directory_gets_the_executable_name_appended(self):
         with tempfile.TemporaryDirectory() as folder:
-            self.assertEqual(adb_mod.adb_from_input(folder), os.path.join(folder, "adb"))
+            self.assertEqual(adb_mod.adb_from_input(folder), os.path.join(folder, adb_mod.adb_exe()))
 
 
 class AdbPresentTests(unittest.TestCase):

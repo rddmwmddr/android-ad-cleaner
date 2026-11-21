@@ -6,6 +6,7 @@
 """
 import ast
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -154,6 +155,7 @@ class WorkdirTests(unittest.TestCase):
         self.assertEqual(mutation.workdir_for(["tool/summary.py"]).name, "summary")
 
 
+@unittest.skipIf(os.name == "nt", "建符号链接要开发者模式；变异 job 只在 Linux 上跑")
 class SourceMirrorTests(unittest.TestCase):
     """副本里的 `src` 是镜像：目录真建、文件逐条链接，两个包都 import 得到。
 
