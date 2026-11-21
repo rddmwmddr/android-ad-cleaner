@@ -109,7 +109,7 @@ ANCHORS = {
     # 手机版与鸿蒙
     "test_android_bundle.py": ("APK 里那批 gui 文件必须覆盖 gui/app.py 的导入期依赖。", 11),
     "test_tool_package.py": ("tool/ 的出厂引擎与仓库工具链边界：两份冻结名单与文件系统全等、引擎不拖进工具链、打包清单不含 devtools/。", 12),
-    "test_android_shim.py": ("手机版替换层：不连手机，替换掉执行通道与读屏。", 322),
+    "test_android_shim.py": ("手机版替换层：不连手机，替换掉执行通道与读屏。", 400),
     "test_android_view.py": ("手机版界面的判断：结果怎么说、什么时候挡住开始、反馈网址怎么截。", 217),
     "test_android_version.py": ("单键 getprop 读不到版本时按分区属性回退。", 7),
     "test_android_smoke.py": ("真机冒烟：出包、装机、启动、执行、还原三段各自出结论。", 208),
