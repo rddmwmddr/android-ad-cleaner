@@ -155,7 +155,7 @@
 | `test_mutation_scope.py` | 模块 → 测试范围的映射：严格档名单与它不漂、每个目标都在仓库里、选择结果去重保序、摘掉的方法确实挂在被收集的文件上，副本的 src 是 tool、gui 与手机版替换层的镜像，改动面只挑映射表里的模块、表外的 gui 与手机版模块逐条报出来，summary 一节的结论与 pragma 计数，以及「无可变异节点」的判据。 | 59 |
 | `test_android_bundle.py` | APK 里那批 gui 文件必须覆盖 gui/app.py 的导入期依赖。 | 11 |
 | `test_tool_package.py` | tool/ 的出厂引擎与仓库工具链边界：两份冻结名单与文件系统全等、引擎不拖进工具链、打包清单不含 devtools/。 | 12 |
-| `test_android_shim.py` | 手机版替换层：不连手机，替换掉执行通道与读屏。 | 184 |
+| `test_android_shim.py` | 手机版替换层：不连手机，替换掉执行通道与读屏。 | 285 |
 | `test_android_view.py` | 手机版界面的判断：结果怎么说、什么时候挡住开始、反馈网址怎么截。 | 217 |
 | `test_android_version.py` | 单键 getprop 读不到版本时按分区属性回退。 | 7 |
 | `test_android_smoke.py` | 真机冒烟：出包、装机、启动、执行、还原三段各自出结论。 | 208 |

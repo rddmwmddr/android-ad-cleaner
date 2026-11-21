@@ -1,5 +1,6 @@
 """手机版替换层（android/app/src/main/python/aac_android）：不连手机，替换掉执行通道后验 adb 语义、进程内脚本、选择器。"""
 import contextlib
+import io
 import os
 import subprocess
 import sys
@@ -10,6 +11,7 @@ import unittest
 import warnings
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "android" / "app" / "src" / "main" / "python"))
@@ -20,6 +22,9 @@ from aac_android import adb, bridge, inproc, main, screen, u2  # noqa: E402
 class FakeBridge:
     def __init__(self, ready=True):
         self.is_ready, self.cmds, self.calls = ready, [], []
+        self.exec_result = None
+        self.ensure_seq = None
+        self.last_exec_timeout = None
 
     def ready(self):
         self.calls.append("ready")
@@ -27,10 +32,15 @@ class FakeBridge:
 
     def ensure(self):
         self.calls.append("ensure")
+        if self.ensure_seq is not None:
+            return self.ensure_seq.pop(0) if self.ensure_seq else False
         return self.is_ready
 
     def exec(self, cmd, stdin=None, timeout=None):
         self.cmds.append((cmd, stdin))
+        self.last_exec_timeout = timeout
+        if self.exec_result is not None:
+            return self.exec_result
         if cmd.startswith("cat ") and not cmd.startswith("cat >"):
             return bridge.Result(0, b"remote-bytes", b"")
         return bridge.Result(3 if "fail" in cmd else 0, b"out\n", b"err\n")
@@ -1033,6 +1043,368 @@ class SelectorTest(unittest.TestCase):
         self.assertNotIn("instance", s)
         with self.assertRaises(ReferenceError):
             u2.Selector(bogus=1)
+
+
+class AdbHelpersTest(unittest.TestCase):
+    """adb 替换层的辅助函数：解析命令行、文本模式、脚本识别、CompletedProcess 组装（#1508）。"""
+
+    def test_split_drops_every_two_arg_global_option(self):
+        self.assertEqual(
+            adb._split(["-s", "local", "-t", "1", "-H", "h", "-P", "2", "-L", "x", "get-state", "a"]),
+            ("get-state", ["a"]))
+
+    def test_split_treats_an_unknown_flag_as_one_token(self):
+        self.assertEqual(adb._split(["-d", "devices"]), ("devices", []))
+
+    def test_split_of_only_flags_or_empty_is_empty(self):
+        self.assertEqual(adb._split(["-s"]), ("", []))
+        self.assertEqual(adb._split([]), ("", []))
+
+    def test_split_accepts_a_tuple(self):
+        self.assertEqual(adb._split(("-s", "x", "shell", "ls")), ("shell", ["ls"]))
+
+    def test_decode_returns_bytes_without_text_mode(self):
+        self.assertEqual(adb._decode(b"\xe4\xb8\xad", {}), b"\xe4\xb8\xad")
+
+    def test_decode_honours_each_text_flag(self):
+        data = b"\xe4\xb8\xad"
+        self.assertEqual(adb._decode(data, {"text": True}), "中")
+        self.assertEqual(adb._decode(data, {"universal_newlines": True}), "中")
+        self.assertEqual(adb._decode(data, {"encoding": "utf-8"}), "中")
+        self.assertEqual(adb._decode(b"\xff", {"errors": "ignore"}), "")
+
+    def test_decode_uses_the_given_encoding_and_errors(self):
+        self.assertEqual(adb._decode(b"\xe9", {"text": True, "encoding": "latin-1"}), "é")
+        self.assertEqual(adb._decode(b"\xffa", {"text": True, "errors": "ignore"}), "a")
+
+    def test_input_bytes_encodes_text_and_passes_bytes_through(self):
+        self.assertEqual(adb._input_bytes({"input": "中"}), b"\xe4\xb8\xad")
+        self.assertEqual(adb._input_bytes({"input": "é", "encoding": "latin-1"}), b"\xe9")
+        self.assertEqual(adb._input_bytes({"input": b"x"}), b"x")
+        self.assertIsNone(adb._input_bytes({}))
+
+    def test_is_script_recognizes_the_two_engine_spellings(self):
+        self.assertTrue(adb._is_script([inproc.EXECUTABLE, "run.py"]))
+        self.assertTrue(adb._is_script([inproc.EXECUTABLE, "--cli", "foo"]))
+        self.assertFalse(adb._is_script([inproc.EXECUTABLE, "-c", "x"]))
+        self.assertFalse(adb._is_script(["/other/python", "run.py"]))
+        self.assertFalse(adb._is_script(["python"]))
+
+    def test_completed_capture_and_text(self):
+        cp = adb._completed(["x"], 0, b"out\n", b"err\n", {"capture_output": True, "text": True})
+        self.assertEqual((cp.returncode, cp.stdout, cp.stderr), (0, "out\n", "err\n"))
+        self.assertEqual(cp.args, ["x"])
+
+    def test_completed_without_capture_leaves_streams_none(self):
+        cp = adb._completed(["x"], 0, b"o", b"e", {})
+        self.assertIsNone(cp.stdout)
+        self.assertIsNone(cp.stderr)
+
+    def test_completed_stdout_and_stderr_pipe(self):
+        self.assertIsNotNone(adb._completed(["x"], 0, b"o", b"e", {"stdout": subprocess.PIPE}).stdout)
+        self.assertIsNone(adb._completed(["x"], 0, b"o", b"e", {"stdout": subprocess.PIPE}).stderr)
+        self.assertIsNone(adb._completed(["x"], 0, b"o", b"e", {"stderr": subprocess.PIPE}).stdout)
+        self.assertIsNotNone(adb._completed(["x"], 0, b"o", b"e", {"stderr": subprocess.PIPE}).stderr)
+
+    def test_completed_merges_stderr_into_stdout(self):
+        cp = adb._completed(["x"], 0, b"o", b"e",
+                            {"capture_output": True, "stderr": subprocess.STDOUT})
+        self.assertEqual(cp.stdout, b"oe")
+
+    def test_completed_check_raises_with_details(self):
+        with self.assertRaises(subprocess.CalledProcessError) as ctx:
+            adb._completed(["prog"], 3, b"o", b"e", {"capture_output": True, "check": True})
+        err = ctx.exception
+        self.assertEqual((err.returncode, err.cmd, err.output, err.stderr),
+                         (3, ["prog"], b"o", b"e"))
+
+    def test_completed_without_check_does_not_raise(self):
+        self.assertEqual(adb._completed(["x"], 3, b"o", b"e", {"capture_output": True}).returncode, 3)
+
+
+class AdbChannelTest(unittest.TestCase):
+    """把 `subprocess.run/call/check_output` 接到 adb 占位命令、脚本与真实子进程三条路上（#1508）。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.placeholder = os.path.join(self.tmp.name, "bin", "adb")
+        os.makedirs(os.path.dirname(self.placeholder), exist_ok=True)
+        open(self.placeholder, "w").close()
+        self.fake = FakeBridge()
+        self.addCleanup(self._restore, bridge._bridge, adb.ADB_PATH, dict(adb._orig))
+        bridge._bridge = self.fake
+        adb.ADB_PATH = self.placeholder
+
+    def _restore(self, bridge0, adb_path, orig):
+        bridge._bridge = bridge0
+        adb.ADB_PATH = adb_path
+        adb._orig.clear()
+        adb._orig.update(orig)
+
+    def _passthrough(self, **stub):
+        adb._orig.clear()
+        adb._orig.update(stub)
+
+    def test_run_answers_the_placeholder_command(self):
+        argv = [self.placeholder, "-s", "local", "shell", "echo"]
+        cp = adb._run(argv, capture_output=True, text=True, encoding="utf-8",
+                      timeout=5, input=b"in")
+        self.assertEqual((cp.returncode, cp.stdout, cp.stderr), (0, "out\n", "err\n"))
+        self.assertEqual(cp.args, argv)
+        self.assertEqual(self.fake.last_exec_timeout, 5)
+        self.assertEqual(self.fake.cmds[-1], ("echo", b"in"))
+
+    def test_run_hands_a_script_to_inproc(self):
+        recorded = {}
+        def fake_call(argv, capture=False):
+            recorded["argv"], recorded["capture"] = argv, capture
+            return 7, "so", "se"
+        argv = [inproc.EXECUTABLE, "run.py", "x"]
+        with mock.patch.object(inproc, "call", fake_call):
+            cp = adb._run(argv, capture_output=True)
+        self.assertEqual((cp.returncode, cp.stdout, cp.stderr), (7, b"so", b"se"))
+        self.assertEqual(cp.args, argv)
+        self.assertEqual(recorded, {"argv": ["run.py", "x"], "capture": True})
+
+    def test_run_a_script_captures_when_only_stdout_is_piped(self):
+        recorded = {}
+        def fake_call(argv, capture=False):
+            recorded["capture"] = capture
+            return 0, "", ""
+        with mock.patch.object(inproc, "call", fake_call):
+            adb._run([inproc.EXECUTABLE, "run.py"], stdout=subprocess.PIPE)
+        self.assertTrue(recorded["capture"])
+
+    def test_run_falls_through_to_the_real_subprocess(self):
+        sentinel = subprocess.CompletedProcess(["ls", "-l"], 0, b"", b"")
+        seen = {}
+        def stub(argv, *a, **kw):
+            seen.update(argv=argv, a=a, kw=kw)
+            return sentinel
+        self._passthrough(run=stub)
+        self.assertIs(adb._run(["ls", "-l"], "extra", timeout=3), sentinel)
+        self.assertEqual(seen, {"argv": ["ls", "-l"], "a": ("extra",), "kw": {"timeout": 3}})
+
+    def test_call_returns_the_code_for_placeholder_and_script(self):
+        self.assertEqual(adb._call([self.placeholder, "version"]), 0)
+        with mock.patch.object(inproc, "call", lambda argv, capture=False: (5, "", "")):
+            self.assertEqual(adb._call([inproc.EXECUTABLE, "run.py"]), 5)
+
+    def test_call_forwards_timeout_and_input_to_adb(self):
+        adb._call([self.placeholder, "shell", "x"], timeout=5, input=b"in")
+        self.assertEqual(self.fake.last_exec_timeout, 5)
+        self.assertEqual(self.fake.cmds[-1], ("x", b"in"))
+
+    def test_call_falls_through(self):
+        seen = {}
+        def stub(argv, *a, **kw):
+            seen.update(argv=argv, a=a, kw=kw)
+            return 9
+        self._passthrough(call=stub)
+        self.assertEqual(adb._call(["ls"], "pos", timeout=2), 9)
+        self.assertEqual(seen, {"argv": ["ls"], "a": ("pos",), "kw": {"timeout": 2}})
+
+    def test_check_output_returns_stdout_for_placeholder_and_script(self):
+        self.assertEqual(adb._check_output([self.placeholder, "version"]), adb.VERSION_TEXT.encode())
+        with mock.patch.object(inproc, "call", lambda argv, capture=False: (0, "hi\n", "")):
+            self.assertEqual(adb._check_output([inproc.EXECUTABLE, "run.py"]), b"hi\n")
+
+    def test_check_output_keeps_the_callers_text_mode(self):
+        self.assertEqual(adb._check_output([self.placeholder, "version"], text=True), adb.VERSION_TEXT)
+
+    def test_check_output_raises_on_a_failed_command(self):
+        with self.assertRaises(subprocess.CalledProcessError) as ctx:
+            adb._check_output([self.placeholder, "shell", "fail"])
+        self.assertEqual(ctx.exception.returncode, 3)
+
+    def test_check_output_falls_through(self):
+        seen = {}
+        def stub(argv, *a, **kw):
+            seen.update(argv=argv, a=a, kw=kw)
+            return b"real"
+        self._passthrough(check_output=stub)
+        self.assertEqual(adb._check_output(["ls"], "pos", timeout=2), b"real")
+        self.assertEqual(seen, {"argv": ["ls"], "a": ("pos",), "kw": {"timeout": 2}})
+
+    def test_install_creates_the_placeholder_and_patches_once(self):
+        saved = (adb.ADB_PATH, dict(adb._orig), subprocess.run)
+        try:
+            adb._orig.clear()
+            adb.install(self.placeholder)
+            self.assertEqual(adb.ADB_PATH, self.placeholder)
+            self.assertIs(subprocess.run, adb._run)
+            with open(self.placeholder, "w", encoding="utf-8") as handle:
+                handle.write("keep")
+            adb.install(self.placeholder)          # 幂等：不重开、不清空已有文件
+            with open(self.placeholder, encoding="utf-8") as handle:
+                self.assertEqual(handle.read(), "keep")
+        finally:
+            adb.ADB_PATH = saved[0]
+            adb._orig.clear()
+            adb._orig.update(saved[1])
+            subprocess.run = saved[2]
+
+
+class AdbAnswerTest(unittest.TestCase):
+    """`_answer` 的各条 adb 语义与 `answer` 的异常处理（#1508）。"""
+
+    def setUp(self):
+        self.fake = FakeBridge()
+        saved = bridge._bridge
+        self.addCleanup(setattr, bridge, "_bridge", saved)
+        bridge._bridge = self.fake
+
+    def test_version_reports_the_pinned_build(self):
+        self.assertEqual(adb.answer(["version"]), (0, adb.VERSION_TEXT.encode(), b""))
+
+    def test_server_commands_are_noops(self):
+        self.assertEqual(adb.answer(["start-server"]), (0, b"", b""))
+        self.assertEqual(adb.answer(["kill-server"]), (0, b"", b""))
+
+    def test_devices_lists_the_local_serial_when_ready(self):
+        self.assertEqual(adb.answer(["devices"]),
+                         (0, b"List of devices attached\nlocal\tdevice\n\n", b""))
+        self.fake.is_ready = False
+        self.assertEqual(adb.answer(["devices"])[1], b"List of devices attached\n\n")
+
+    def test_get_state_follows_the_bridge(self):
+        self.assertEqual(adb.answer(["get-state"]), (0, b"device\n", b""))
+        self.fake.is_ready = False
+        self.assertEqual(adb.answer(["get-state"]), (1, b"", adb.NOT_READY))
+
+    def test_shell_joins_arguments_and_passes_timeout(self):
+        rc, out, err = adb.answer(["shell", "pm", "list"], stdin=b"in", timeout=9)
+        self.assertEqual((rc, out, err), (0, b"out\n", b"err\n"))
+        self.assertEqual(self.fake.cmds[-1], ("pm list", b"in"))
+        self.assertEqual(self.fake.last_exec_timeout, 9)
+
+    def test_exec_out_takes_the_same_branch(self):
+        adb.answer(["exec-out", "cat", "x"])
+        self.assertEqual(self.fake.cmds[-1][0], "cat x")
+
+    def test_shell_when_not_ready_is_not_ready(self):
+        self.fake.is_ready = False
+        self.assertEqual(adb.answer(["shell", "ls"]), (1, b"", adb.NOT_READY))
+
+    def test_shell_timeout_becomes_timeout_expired(self):
+        self.fake.exec_result = bridge.Result(0, b"", b"", timed_out=True)
+        with self.assertRaises(subprocess.TimeoutExpired) as ctx:
+            adb.answer(["shell", "sleep"], timeout=4)
+        self.assertEqual((ctx.exception.cmd, ctx.exception.timeout), (["shell", "sleep"], 4))
+
+    def test_push_to_a_directory_keeps_the_file_name(self):
+        src = os.path.join(self.tmp_name(), "a.dex")
+        with open(src, "wb") as handle:
+            handle.write(b"\x00dex")
+        self.assertEqual(adb.answer(["push", src, "/data/local/tmp/"], timeout=6),
+                         (0, f"{src}: 1 file pushed, 0 skipped.\n".encode(), b""))
+        self.assertEqual(self.fake.cmds[-1], ("cat > /data/local/tmp/a.dex", b"\x00dex"))
+        self.assertEqual(self.fake.last_exec_timeout, 6)
+        self.assertEqual(adb.answer(["push", src, "/data/local/tmp/a.dex"])[1],
+                         f"{src}: 1 file pushed, 0 skipped.\n".encode())
+
+    def test_push_takes_the_last_argument_as_the_remote(self):
+        src = os.path.join(self.tmp_name(), "a.dex")
+        dst = os.path.join(self.tmp_name(), "remote.dex")
+        with open(src, "wb") as handle:
+            handle.write(b"data")
+        adb.answer(["push", "ignored", src, dst])
+        self.assertEqual(self.fake.cmds[-1], (f"cat > {dst}", b"data"))
+
+    def test_push_failure_reports_the_bridge_error_or_a_default(self):
+        src = os.path.join(self.tmp_name(), "a.dex")
+        open(src, "wb").close()
+        self.fake.exec_result = bridge.Result(3, b"", b"")
+        self.assertEqual(adb.answer(["push", src, "/tmp/x"]),
+                         (3, b"", b"adb: error: failed to copy\n"))
+        self.fake.exec_result = bridge.Result(3, b"", b"boom\n")
+        self.assertEqual(adb.answer(["push", src, "/tmp/x"])[2], b"boom\n")
+
+    def test_push_tries_to_connect_first(self):
+        src = os.path.join(self.tmp_name(), "a.dex")
+        open(src, "wb").close()
+        self.fake.ensure_seq = [False]
+        self.assertEqual(adb.answer(["push", src, "/tmp/x"]), (1, b"", adb.NOT_READY))
+
+    def test_pull_writes_the_file_and_reports(self):
+        dst = os.path.join(self.tmp_name(), "b")
+        self.assertEqual(adb.answer(["pull", "/data/local/tmp/x", dst], timeout=8),
+                         (0, b"/data/local/tmp/x: 1 file pulled.\n", b""))
+        self.assertEqual(self.fake.last_exec_timeout, 8)
+        self.assertIsNone(self.fake.cmds[-1][1])
+        self.assertEqual(self.fake.cmds[-1][0], "cat /data/local/tmp/x")
+        with open(dst, "rb") as handle:
+            self.assertEqual(handle.read(), b"remote-bytes")
+
+    def test_pull_writes_the_last_argument(self):
+        remote = os.path.join(self.tmp_name(), "remote")
+        dst = os.path.join(self.tmp_name(), "local")
+        adb.answer(["pull", "ignored", remote, dst])
+        with open(dst, "rb") as handle:
+            self.assertEqual(handle.read(), b"remote-bytes")
+        self.assertFalse(os.path.exists(remote))
+
+    def test_pull_failure_and_not_connected(self):
+        dst = os.path.join(self.tmp_name(), "b")
+        self.fake.exec_result = bridge.Result(1, b"", b"err\n")
+        self.assertEqual(adb.answer(["pull", "/x", dst]), (1, b"", b"err\n"))
+        self.fake.ensure_seq = [False]
+        self.assertEqual(adb.answer(["pull", "/x", dst]), (1, b"", adb.NOT_READY))
+
+    def test_unsupported_command_names_it(self):
+        self.assertEqual(adb.answer(["forward", "tcp:1"]), (1, b"", "adb: 手机版不支持 forward\n".encode()))
+        self.assertEqual(adb.answer(["forward", "a", "b"]), (1, b"", "adb: 手机版不支持 forward\n".encode()))
+
+    def test_unsupported_command_when_not_ready(self):
+        self.fake.is_ready = False
+        self.assertEqual(adb.answer(["forward"]), (1, b"", adb.NOT_READY))
+
+    def test_wait_for_device_returns_once_connected(self):
+        self.fake.ensure_seq = [True]
+        self.assertEqual(adb.answer(["wait-for-device"]), (0, b"", b""))
+
+    def test_wait_for_device_times_out(self):
+        self.fake.ensure_seq = [False] * 10
+        clock = iter(range(0, 1000))
+        with mock.patch.object(adb.time, "monotonic", lambda: next(clock)), \
+                mock.patch.object(adb.time, "sleep", lambda _s: None):
+            with self.assertRaises(subprocess.TimeoutExpired) as ctx:
+                adb.answer(["wait-for-device"], timeout=0.05)
+        self.assertEqual((ctx.exception.cmd, ctx.exception.timeout), (["wait-for-device"], 0.05))
+
+    def test_wait_for_device_polls_every_half_second_for_the_30s_default(self):
+        """默认等 30 秒、每 0.5 秒试一次：整秒推进时应当睡 30 次、每次 0.5，才在越过 30 时放弃。"""
+        self.fake.ensure_seq = [False] * 1000
+        sleeps = []
+        ticks = iter(range(0, 10_000))
+        with mock.patch.object(adb.time, "monotonic", lambda: next(ticks)), \
+                mock.patch.object(adb.time, "sleep", lambda s: sleeps.append(s)):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                adb.answer(["wait-for-device"])
+        self.assertEqual(len(sleeps), 30)
+        self.assertEqual(set(sleeps), {0.5})
+
+    def test_unexpected_error_is_logged_then_reraised(self):
+        class BoomBridge(FakeBridge):
+            def exec(self, cmd, stdin=None, timeout=None):
+                raise ValueError("boom")
+        bridge._bridge = BoomBridge()
+        sink = io.StringIO()
+        saved = inproc._fallback
+        inproc._fallback = (saved[0], sink)
+        try:
+            with self.assertRaises(ValueError):
+                adb.answer(["shell", "x"])
+        finally:
+            inproc._fallback = saved
+        self.assertIn("boom", sink.getvalue())
+
+    def tmp_name(self):
+        if not hasattr(self, "_tmp"):
+            self._tmp = tempfile.TemporaryDirectory()
+            self.addCleanup(self._tmp.cleanup)
+        return self._tmp.name
 
 
 if __name__ == "__main__":
