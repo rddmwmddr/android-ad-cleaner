@@ -305,11 +305,8 @@ def parse(argv):
     if not argv:
         raise ValueError("缺子命令，只认 sums / page")
     command, rest = argv[0], list(argv[1:])
-    # `--from-files` 有专门分支先处理，从不经 `allowed` 查；这一项是死成员。拆成单独一行只为让
-    # 变异测试只豁免这一个字面量，`--upload` / `--write` / `--gitee` 仍由端到端用例判（#1522）。
     allowed = {
-        "sums": {"--upload",
-                 "--from-files"},  # pragma: no mutate 语义等价：专门的 `--from-files` 分支先处理，集合成员从不被查
+        "sums": {"--upload"},
         "page": {"--write", "--gitee"},
     }.get(command)
     if allowed is None:

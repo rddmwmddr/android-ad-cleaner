@@ -128,7 +128,10 @@ pragma 全部写明「语义等价」或「不可达」，理由随源码行。�
 - `typecheck_recipes` 经实测登记为表外缺口（spec 给的是「留实现阶段按实测判」）。
 - 子进程端的 mutant 区分力为零，靠进程内调用点；spec 允许「改不动再摘」，实测是「能改跑但带不了 mutant 环境」。
 - 为消等价变异对少数源码做了行为保持的收窄（模块级常量、去掉冗余默认值、`removeprefix` / `removesuffix` 等），可见行为未变。
+- 「去掉冗余默认值」指 `claim.label_names` 与 `stale.decide` 把 `item.get("name", "")` 改成 `item.get("name")`：标签缺 name 时返回 `None` 而不是 `""`。两处都只做成员判断 / 过滤，可观察结果相同——`role_labels` 只保留 `ROLE_LABELS` 里的名字，`decide` 只做集合成员判断。
 - #1516 的证伪只到机制层：删除回填后同一解释器里的下一条用例可见污染，但没有造出 mutant 判决翻转（collection 期 import 是每个 fork 共享的基线）；19 个文件带与不带回填均为 736 passed。
+- 造不出跨 mutant 判决翻转是结构使然：mutmut 3.8 的 `ForkServerRunner` 只让 fork server import 一次 pytest / 测试模块，之后每个 mutant 再 fork 一个孙进程，跨 mutant 的全局状态本来就不共享；回填守的是同一 mutant 会话内、用例之间的污染，不是没做实验。
+- spec「副本内跑不通的测试」表里列的 `test_mutation_scope` 中依赖 `ROOT/tool` 与 `pyproject.toml` 的类**没有**进 `UNUSABLE`：该文件不在任何 `MODULE_TESTS` 行里，`tests_for()` 从不收集它，副本里跑不到，加了也是空转。
 
 ## Consequences
 
