@@ -471,14 +471,22 @@ class WriteTests(DocumentCase):
         gh = FakeGh([{"number": 11, "author": {"login": "b"}},
                      {"number": 7, "author": {"login": "s"}}])   # 缺 #7，必须写回
         self.path.write_text(text, encoding="utf-8")
-        if os.name == "posix":
-            os.chmod(self.path, 0o444)
-            self.addCleanup(os.chmod, self.path, 0o644)
+        # 权限位在 Windows 上不挡写，改成注入：只让这一份文档的写入失败。
+        target = self.path
+        real_write_text = Path.write_text
+
+        def write_text(path, *args, **kwargs):
+            if path == target:
+                raise PermissionError("read-only")
+            return real_write_text(path, *args, **kwargs)
+
         out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        with patch.object(Path, "write_text", write_text), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = followup.main(["--write"], runner=gh.runner.run, doc=self.path)
         self.assertEqual(code, 2)
         self.assertEqual(err.getvalue().splitlines()[0].split("：")[0], "写不回复测队列文档")
+        self.assertEqual(self.path.read_text(encoding="utf-8"), text, "写失败不该动原文档")
 
     def test_write_drops_an_expired_row_from_the_batch_table(self):
         text = doc("| #11 | @b | 机型 | PR #2 | 输出 |",
