@@ -47,13 +47,13 @@ def looks_like_a_colour(line, match):
 
 def added_lines(rev_range, run=git):
     """`[(路径, 行号, 文本)]`：diff 的新增行，行号取新文件里的那一列。"""
-    path, lineno = None, 0
+    path, lineno = None, 0  # pragma: no mutate（语义等价：格式良好的 diff 里 `@@` 会覆盖这个初值）
     for line in run("diff", "--unified=0", "--no-color", rev_range).splitlines():
-        if line.startswith("diff --git "):
-            path, lineno = None, 0
+        if line.startswith("diff --git "):  # pragma: no mutate（语义等价：这次重置会被随后的 `+++` / `@@` 覆盖）
+            path, lineno = None, 0  # pragma: no mutate（语义等价：同上，重置发生在 `@@` 之前）
         elif line.startswith("+++ "):
             name = line[4:].strip()
-            path = None if name == "/dev/null" else (name[2:] if name.startswith("b/") else name)
+            path = None if name == "/dev/null" else (name[2:] if name.startswith("b/") else name)  # pragma: no mutate（语义等价：`git diff` 的 `+++` 只有 `b/…` 与 `/dev/null`，删除文件没有新增行）
         elif line.startswith("@@ "):
             match = HUNK.match(line)
             lineno = int(match.group(1)) if match else 0
