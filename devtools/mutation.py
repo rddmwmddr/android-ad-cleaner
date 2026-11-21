@@ -44,8 +44,16 @@ except ImportError:             # 直接跑文件时 sys.path[0] 就是 devtools
 WORKDIR = Path(".mutmut")
 # 仓库根：`src` 镜像按它生成链接，测试传临时目录时仍然指回真源码。
 ROOT = Path(__file__).resolve().parents[1]
-# 进 `src` 视角的两个包（#1429）。
-SOURCE_PACKAGES = ("tool", "gui")
+# 进 `src` 视角的三个包（#1429、#1430）：`tool` 落在 `src/` 根上，`gui` 落在 `src/gui/`，
+# `aac_android` 落在 `src/aac_android/`。手机版替换层不在仓库根（Chaquopy 的 sourceSets 要求它留在
+# `android/app/src/main/python/` 下），这里只把它的基目录映射过来。
+PACKAGE_BASES = {
+    "tool": Path("tool"),
+    "gui": Path("gui"),
+    "aac_android": Path("android/app/src/main/python/aac_android"),
+}
+# 保持 tool、gui、aac_android 的顺序：字典按插入序迭代，镜像与映射都以这个顺序遍历。
+SOURCE_PACKAGES = tuple(PACKAGE_BASES)
 # 仓库根的数据目录，副本里要按 `src` 视角放一份：`gui/app.py` 用 `__file__` 的两级 dirname
 # 定 `toolpath.BASE`，在副本里那是 `mutants/src`，读根目录数据的用例（`Api.env()` 的
 # `images/dev-*`）才会在那里找。数据本身由 `ALSO_COPY` 拷进 `mutants/src/`。
@@ -61,13 +69,11 @@ LINKS = {
     "gui": "gui",
     # 开发者模式的引导截图：`app.Api.env()` 从 `images/` 列出 `dev-*`，副本里缺它就会红
     "images": "images",
-    # 手机版替换层不在仓库根，单独挂一下：`tests/test_summary.py` 这类用例会 import 它
-    "aac_android": "android/app/src/main/python/aac_android",
 }
 # 变异副本里跑测试要读到的东西。`mutants/` 下的测试会以它为根，缺一项就在收集期报错。
 # `images` 拷两份：一份落在 `mutants/`（`toolpath.BASE` 按 `mutants/gui` 算时的视角），
 # 一份落在 `mutants/src/`（按 `mutants/src/gui` 算时的视角），见 `ROOT_DATA`。
-ALSO_COPY = ["recipe_lib", "recipes", "docs", "devtools", "gui", "images", "src/images", "aac_android"]
+ALSO_COPY = ["recipe_lib", "recipes", "docs", "devtools", "gui", "images", "src/images"]
 # `on_dependency_change` 必须是 `rerun`（默认 `warn`）：mutmut 用 git 比上次全量跑时的提交，
 # 非 `.py` 文件变了只警告、保留旧裁决。本仓测试大量读 `recipes/`、`docs/`、`recipe_lib/`，
 # 改了 recipe 却不重跑，`catalog/schema` 与 `recipe_source` 会拿旧结论报绿。
@@ -112,6 +118,8 @@ def _slug(module: str) -> str:
         name = name[len("tool/"):]
     elif name.startswith("gui/"):
         name = "gui_" + name[len("gui/"):]
+    elif name.startswith(mutation_scope.ANDROID_PREFIX):
+        name = "aac_" + name[len(mutation_scope.ANDROID_PREFIX):]
     return name.replace("/", "_")
 
 
@@ -124,12 +132,14 @@ def link_sources(workdir: Path) -> None:
 
 
 def _mirror_sources(src: Path) -> None:
-    """`tool/` 与 `gui/` 的镜像：目录真建、文件逐条链接，跳过 `__pycache__`。
+    """`tool/`、`gui/` 与手机版 `aac_android/` 的镜像：目录真建、文件逐条链接，跳过 `__pycache__`。
 
     mutmut 的 `os.walk` 不跟随目录符号链接（`followlinks=False`），所以不能放一条 `src -> tool`
-    或 `src -> gui`：目录链接下它会报「0 files mutated」。镜像把两个包放进同一个视角——`tool/`
+    或 `src -> gui`：目录链接下它会报「0 files mutated」。镜像把三个包放进同一个视角——`tool/`
     的条目落在 `src/` 根上（测试按顶层包名 import），`gui/` 的条目落在 `src/gui/`（测试按
-    `from gui import …`）。每次按目录列表现生成，新增顶层模块自动进来。
+    `from gui import …`），`aac_android/` 的条目落在 `src/aac_android/`（测试按
+    `from aac_android import …`；产品路径在 `android/app/src/main/python/` 下，见 `PACKAGE_BASES`）。
+    每次按目录列表现生成，新增顶层模块自动进来。
     """
     if src.is_symlink() or src.is_file():
         src.unlink()
@@ -139,7 +149,7 @@ def _mirror_sources(src: Path) -> None:
     for name in ROOT_DATA:
         (src / name).symlink_to(_relative(ROOT / name, src))
     for package in SOURCE_PACKAGES:
-        base = ROOT / package
+        base = ROOT / PACKAGE_BASES[package]
         top = src if package == "tool" else src / package
         for path in sorted(base.rglob("*")):
             if "__pycache__" in path.relative_to(base).parts:
@@ -251,14 +261,16 @@ def changed_paths(ref: str) -> list[str]:
 
 
 def scope_of(ref: str) -> tuple[list[str], list[str]]:
-    """改动面分成两份：落进映射表的模块，以及没落的 `tool/` / `gui/` 模块（后者只作可见性提示）。
+    """改动面分成两份：落进映射表的模块，以及没落的 `tool/` / `gui/` / 手机版模块（后者只作可见性提示）。
 
-    `gui/` 里界壳文件、harmony 三份与还没有行的模块都会逐条报出来：缺席要看得见（#1429）。
+    `gui/` 里界壳文件、harmony 三份、手机版替换层里还没有行的模块都会逐条报出来：缺席要看得见
+    （#1429、#1430）。
     """
     paths = changed_paths(ref)
     modules = mutation_scope.modules_in_paths(paths)
+    roots = ("tool/", "gui/", mutation_scope.ANDROID_PREFIX)
     unmapped = [path for path in paths
-                if path.startswith(("tool/", "gui/")) and path.endswith(".py")
+                if path.startswith(roots) and path.endswith(".py")
                 and path not in modules]
     return modules, unmapped
 

@@ -204,6 +204,16 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_summary.py", "tests/test_tap_notice_regressions.py", "tests/test_ui_session.py",
         "tests/test_updates.py", "tests/test_old_install_notice.py",
     ),
+    # 手机版替换层（#1430），同样由覆盖矩阵量出。`view` 被界面用例、inproc 的日志分流（经
+    # `machine_prefix`）与 summary 的宿主链接用例执行到；`test_android_smoke` 整份在副本里跑不通
+    # （出包、读 `android/` 源码），不进任何行。
+    "android/app/src/main/python/aac_android/view.py": (
+        "tests/test_android_view.py", "tests/test_android_shim.py", "tests/test_summary.py",
+    ),
+    "android/app/src/main/python/aac_android/adb.py": ("tests/test_android_shim.py",),
+    "android/app/src/main/python/aac_android/screen.py": ("tests/test_android_shim.py",),
+    "android/app/src/main/python/aac_android/inproc.py": ("tests/test_android_shim.py",),
+    "android/app/src/main/python/aac_android/u2.py": ("tests/test_android_shim.py",),
 }
 
 # 变异副本里跑不通的测试，按 pytest node id 摘掉。整份文件都跑不通的（`test_rules_guards`
@@ -211,6 +221,14 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
 UNUSABLE: dict[str, tuple[str, ...]] = {
     "tests/test_adapt_cli.py": ("tests/test_adapt_cli.py::AdaptCliParityTests",),
     "tests/test_adb_link.py": ("tests/test_adb_link.py::BackendMissingTextTests",),
+    # 副本里没有 `android/` 的 Kotlin 源码：唯一读它的两条按方法摘掉，其余用例照跑（#1430）。
+    # `test_modules_are_fresh_per_top_level_run` 依赖真产品路径的模块 purge，在 `src` 视角的副本里
+    # 判定不同（重跑读到 `2` 而不是 `1`），也与被测模块无关，按方法摘掉。
+    "tests/test_android_shim.py": (
+        "tests/test_android_shim.py::ShellFacadeTest::test_facade_exposes_the_names_python_calls",
+        "tests/test_android_shim.py::ShellFacadeTest::test_result_lives_on_the_facade",
+        "tests/test_android_shim.py::InprocTest::test_modules_are_fresh_per_top_level_run",
+    ),
     "tests/test_harmony_client.py": ("tests/test_harmony_client.py::PackageTests",),
     "tests/test_layout_and_verdict_regressions.py": (
         "tests/test_layout_and_verdict_regressions.py::AppLabelPackagingTests",
@@ -269,15 +287,19 @@ def unknown(modules: Iterable[str]) -> list[str]:
     return [module for module in modules if module not in MODULE_TESTS]
 
 
-SOURCE_PREFIXES = {"tool/": "src/", "gui/": "src/gui/"}
+# 手机版替换层不在仓库根，按产品路径（Chaquopy 的 sourceSets 要求它留在原处）换个前缀映射到 `src`。
+ANDROID_PREFIX = "android/app/src/main/python/aac_android/"
+SOURCE_PREFIXES = {"tool/": "src/", "gui/": "src/gui/", ANDROID_PREFIX: "src/aac_android/"}
 
 
 def source_path(module: str) -> str:
-    """`tool/catalog/schema.py` → `src/catalog/schema.py`，`gui/tasks.py` → `src/gui/tasks.py`。
+    """`tool/catalog/schema.py` → `src/catalog/schema.py`，`gui/tasks.py` → `src/gui/tasks.py`，
+    `android/…/aac_android/view.py` → `src/aac_android/view.py`。
 
-    mutmut 按相对路径去掉 `src.` 前缀生成 mutant 名，工作目录里的 `src` 是 `tool/` 与 `gui/` 的镜像；测试按
-    顶层模块名 import `tool/` 的包、按包名 import `gui/`（`from gui import tasks`），两边只在
-    `src` 这个视角上对齐。
+    mutmut 按相对路径去掉 `src.` 前缀生成 mutant 名，工作目录里的 `src` 是 `tool/`、`gui/` 与
+    `aac_android/` 的镜像；测试按顶层模块名 import `tool/` 的包、按包名 import `gui/`（`from gui
+    import tasks`）、按包名 import `aac_android`（`from aac_android import view`），两边只在 `src`
+    这个视角上对齐。
     """
     for prefix, view in SOURCE_PREFIXES.items():
         if module.startswith(prefix):

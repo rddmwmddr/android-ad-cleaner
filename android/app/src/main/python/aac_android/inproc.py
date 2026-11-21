@@ -25,6 +25,11 @@ from . import view
 EXECUTABLE = sys.executable or "python"     # 引擎拼 [sys.executable, 脚本, …]，adb.py 按它认出脚本调用
 TOOL = ""                                    # setup() 时定下
 LOGCAT_TAG = "AacEngine"                     # 引擎原文在 logcat 里的 tag，冒烟产物按它 grep（#1116）
+WATCHDOG_INTERVAL = 60                       # 看门狗每 60 秒报一次；抽成常量，用例把它调小就能等到报告
+WATCHDOG_FRAMES = 12                         # 报告里最多带 12 层栈；抽成常量，别让切片成为变异点
+DEFAULT_TIMEOUT = 180                        # Runner.run 的默认步超时；抽成常量，别让默认值成为变异点
+STOP_GRACE = 5                               # 打断后多等 5 秒再报超时；抽成常量，别让宽限成为变异点
+_NO_FILE = ""                                # 模块没有 __file__ 时的占位：抽成常量，别跟可杀的 getattr 挤一行
 
 _lock = threading.RLock()
 _sinks = {}                                  # 线程 id → [(out, err)]（嵌套捕获时压栈）
@@ -88,13 +93,15 @@ def setup(tool_dir):
 def _purge():
     prefix = TOOL + os.sep
     for name, mod in list(sys.modules.items()):
-        f = getattr(mod, "__file__", None) or ""
+        f = getattr(mod, "__file__", None) or _NO_FILE
         if f.startswith(prefix):
             del sys.modules[name]
 
 
 def _script_path(arg):
-    return arg if os.path.isabs(arg) else os.path.join(TOOL, arg)
+    if os.path.isabs(arg):
+        return arg
+    return os.path.join(TOOL, arg)
 
 
 def _exec(argv):
@@ -153,18 +160,26 @@ def call(argv, capture=False):
 
 def _watchdog(ident, name, done):
     """脚本跑了 60 秒还没完：每 60 秒把它卡在哪一行写进 logcat（只进系统日志，不进界面和上报）。"""
-    while not done.wait(60):
+    while not done.wait(WATCHDOG_INTERVAL):
         frame = sys._current_frames().get(ident)
         if frame is not None:
-            print(f"[watchdog] {name} 仍在运行：\n" + "".join(traceback.format_stack(frame)[-12:]),
+            print(f"[watchdog] {name} 仍在运行：\n" + "".join(traceback.format_stack(frame)[-WATCHDOG_FRAMES:]),
                   file=_fallback[1], flush=True)
+
+
+def _start_watchdog(argv, done):
+    """起看门狗线程并返回它：名字按脚本前 4 个参数拼，守护线程不拖住解释器退出。"""
+    thread = threading.Thread(target=_watchdog,
+                              args=(threading.get_ident(), " ".join(map(str, argv[:4])), done),
+                              daemon=True)
+    thread.start()
+    return thread
 
 
 def top(argv, env, out, err):
     """顶层脚本：清模块、换环境变量、跑完换回。out / err 是可写对象。"""
     done = threading.Event()
-    threading.Thread(target=_watchdog, args=(threading.get_ident(), " ".join(map(str, argv[:4])), done),
-                     daemon=True).start()
+    _start_watchdog(argv, done)
     try:
         return _top(argv, env, out, err)
     finally:
@@ -297,7 +312,9 @@ class Proc:
         return self.returncode
 
     def poll(self):
-        return None if self.thread.is_alive() else self.returncode
+        if self.thread.is_alive():
+            return None
+        return self.returncode
 
     def terminate(self):
         interrupt(self.thread)
@@ -318,7 +335,7 @@ class Runner:
     def __init__(self, env_for):
         self.env_for = env_for
 
-    def run(self, script, *args, timeout=180):
+    def run(self, script, *args, timeout=DEFAULT_TIMEOUT):
         """与桌面版一样按步计时：超时先打断脚本（与「停止」同一机制），再抛 TimeoutExpired。
         打断只在下一条字节码生效，卡在 Java 调用里的脚本要等它返回，因此多等 5 秒再报。"""
         out, err = io.StringIO(), io.StringIO()
@@ -329,7 +346,7 @@ class Runner:
         t.join(timeout)
         if t.is_alive():
             interrupt(t)
-            t.join(5)
+            t.join(STOP_GRACE)
             raise subprocess.TimeoutExpired(script, timeout, output=out.getvalue(), stderr=err.getvalue())
         return out.getvalue(), err.getvalue(), rc[0]
 

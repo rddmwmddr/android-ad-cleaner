@@ -20,6 +20,12 @@ import xml.etree.ElementTree as ET
 from . import bridge, screen
 
 EMPTY_XML = '<?xml version=\'1.0\' encoding=\'UTF-8\' standalone=\'yes\' ?>\r\n<hierarchy rotation="0" />'
+# 抽成常量，别让「等价的大小写/写法变异」跟可杀的变异挤在同一行（先例见 adb 的 _ENCODING）。
+_ENCODING = "utf-8"
+_ERRORS = "replace"
+_EMPTY_BOUNDS = "[0,0][0,0]"   # bounds 读不到时的兜底：任意不带数字的串都会解析成四个 0
+_WARN_STACKLEVEL = 2           # wait 读超时的告警要指向调用方，不指向替换层内部
+HTTP_TIMEOUT = 10              # _Rpc 方法签名里的 http_timeout 默认值：引擎按 uiautomator2 约定传，替换层不读它
 
 
 # ---------- 异常：名字与继承关系与 uiautomator2 / adbutils 一致，引擎按类型判断 ----------
@@ -55,7 +61,7 @@ def display():
 
 
 def text_of(raw):
-    return raw.decode("utf-8", "replace") if isinstance(raw, (bytes, bytearray)) else str(raw or "")
+    return raw.decode(_ENCODING, _ERRORS) if isinstance(raw, (bytes, bytearray)) else str(raw or "")
 
 
 def read_failed(what, err):
@@ -79,17 +85,17 @@ class _Rpc:
     def setText(self, *a, **k):
         raise RPCUnknownError(-32001, "不经读屏写字，改用剪贴板粘贴", "setText")
 
-    def clearTextField(self, selector, http_timeout=10):
+    def clearTextField(self, selector, http_timeout=HTTP_TIMEOUT):
         obj = UiObject(self.device, selector)
         node = obj._found_node("clearTextField")
         obj.click()
         select_all(self.device, node)
         return self.device.shell("input keyevent KEYCODE_DEL")
 
-    def setClipboard(self, label, text, http_timeout=10):
+    def setClipboard(self, label, text, http_timeout=HTTP_TIMEOUT):
         bridge.get().set_clipboard(text)
 
-    def deviceInfo(self, http_timeout=10):
+    def deviceInfo(self, http_timeout=HTTP_TIMEOUT):
         w, h = self.device.window_size()
         return {"displayWidth": w, "displayHeight": h, "displayRotation": 0}
 
@@ -162,7 +168,7 @@ def matches(node, selector):
 
 
 def bounds_of(node):
-    l, t, r, b = map(int, re.findall(r"-?\d+", node.get("bounds") or "[0,0][0,0]"))
+    l, t, r, b = map(int, re.findall(r"-?\d+", node.get("bounds") or _EMPTY_BOUNDS))
     return l, t, r, b
 
 
@@ -215,7 +221,7 @@ class UiObject:
                     return False
                 time.sleep(0.3)
         except DeviceError as e:
-            warnings.warn(f"wait readTimeout: {e}", RuntimeWarning, stacklevel=2)
+            warnings.warn(f"wait readTimeout: {e}", RuntimeWarning, stacklevel=_WARN_STACKLEVEL)
         try:
             return self.exists if exists else not self.exists
         except DeviceError:
@@ -312,7 +318,7 @@ class Device:
             raise AdbShellError(f"shell timeout: {cmdargs[:80]}")
         return ShellResponse(text_of(r.out + r.err), r.code)
 
-    def dump_hierarchy(self, compressed=False, pretty=False, max_depth=None):
+    def dump_hierarchy(self, compressed=False, pretty=False, max_depth=None):  # pragma: no mutate 语义等价：compressed / pretty 为兼容 uiautomator2 调用签名保留，替换层不读它们
         t = time.monotonic()
         r = bridge.get().dump(display())
         bridge.slow("dump", t)
@@ -331,7 +337,7 @@ class Device:
     def info(self):
         return self.jsonrpc.deviceInfo()
 
-    def screenshot(self, filename=None, format="pillow"):
+    def screenshot(self, filename=None, format="pillow"):  # pragma: no mutate 语义等价：format 为兼容 uiautomator2 调用签名保留，替换层固定按 RGB 处理
         from PIL import Image
         r = bridge.get().exec("screencap -p", None, 30)
         # 带背屏的机型（小米 18 Pro Max）会先打一行「Multiple displays」警告：从 PNG 文件头截起

@@ -15,6 +15,9 @@ LOG_FILE = "/data/local/tmp/aac-vd.log"
 NAME = "aac-bg"
 ALWAYS_UNLOCKED = 1 << 12       # Vd.java 的标记：降级档可能没有它，那时这块屏照样会被锁
 
+# dumpsys 的回包按 UTF-8 读、坏字节换成替换符。
+_ENCODING = "utf-8"
+
 
 class Screen:
     def __init__(self, display, sf, flags=0):
@@ -61,7 +64,7 @@ def _reclaim():
         return
     deadline = time.monotonic() + 3
     while time.monotonic() < deadline:
-        dump = b.exec("dumpsys SurfaceFlinger --displays", None, 10).out.decode("utf-8", "replace")
+        dump = b.exec("dumpsys SurfaceFlinger --displays", None, 10).out.decode(_ENCODING, "replace")
         if f'name="{NAME}"' not in dump:
             return
         time.sleep(0.2)
@@ -72,14 +75,15 @@ def _build(package):
     _reclaim()                      # 先清残留：这一步之后的任何早退都不该把旧 Vd 留在屏上
     b = bridge.get()
     paths = b.exec(f"pm path {package}", None, 10).out.decode()
-    apk = next((line[len("package:"):].strip() for line in paths.splitlines() if line.endswith("base.apk")), "")
+    apk = next((line[len("package:"):].strip() for line in paths.splitlines() if line.endswith("base.apk")), None)
     w, h, dpi = _size(b)
     if not apk or not (w and h and dpi):
         return None
     b.exec(f"rm -f {LOG_FILE}", None, 10)
     b.daemon("vd", f"echo $$ > {PID_FILE}; CLASSPATH={apk} exec app_process / com.ahuamiao.adcleaner.Vd "
                    f"{w} {h} {dpi} > {LOG_FILE} 2>&1")
-    display, flags = None, 0
+    display = None
+    flags = 0   # pragma: no mutate 语义等价：没等到 DISPLAY 时函数在读到它之前就返回 None，等到了又整行覆盖
     deadline = time.monotonic() + 8
     while time.monotonic() < deadline:
         m = re.search(r"DISPLAY (-?\d+)(?: flags=0x([0-9a-fA-F]+))?",
@@ -88,9 +92,9 @@ def _build(package):
             display, flags = int(m.group(1)), int(m.group(2) or "0", 16)
             break
         time.sleep(0.2)
-    sf = None
+    sf = None   # pragma: no mutate 语义等价：只有 DISPLAY 报成功时才读 sf，而那条路在它之前已经重新赋值
     if display is not None and display >= 0:
-        dump = b.exec("dumpsys SurfaceFlinger --displays", None, 10).out.decode("utf-8", "replace")
+        dump = b.exec("dumpsys SurfaceFlinger --displays", None, 10).out.decode(_ENCODING, "replace")
         m = re.search(r"Virtual Display (\d+)\s*\n\s*name=\"" + NAME + "\"", dump)
         sf = m.group(1) if m else None
     if display is None or display < 0 or sf is None:
