@@ -15,10 +15,11 @@ mutmut 把「没被选中的测试能杀死的 mutant」报成存活 / 无测试
 
 `UNUSABLE` 列的是**在变异副本里跑不通**的测试：副本只有 `src/` 没有 `tool/`，所以起子进程
 `python tool/run.py`、`python -c "import host"`、读 `android/` 源码、整仓扫文本的用例都会红。
-红掉的用例会把碰过同一个函数的 mutant 误判成「杀死」，所以整份文件都跑不通的干脆不进表，
-个别跑不通的按**方法** `--deselect` 摘掉——粒度到方法而不是到类或文件，是因为这些文件里剩下的
-用例往往是该模块最大的覆盖来源（`test_vocab` 一个文件就覆盖 `recipe_source` 一半以上；
-`PackagingEntryTests` 里只有起子进程那 3 条会红，按类摘会连带扔掉同类的布局断言）。
+红掉的用例会把碰过同一个函数的 mutant 误判成「杀死」，所以整份文件都跑不通的干脆不进表；
+个别跑不通的按**方法** `--deselect` 摘掉，整类都受影响的按类摘——粒度尽量到方法而不是到类或
+文件，是因为这些文件里剩下的用例往往是该模块最大的覆盖来源（`test_vocab` 一个文件就覆盖
+`recipe_source` 一半以上；`PackagingEntryTests` 里只有起子进程那 3 条会红，按类摘会连带扔掉
+同类的布局断言）。
 """
 from collections.abc import Iterable, Sequence
 
@@ -170,6 +171,38 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_lock_and_disconnect_regressions.py", "tests/test_release_regressions.py",
         "tests/test_feedback_safety.py", "tests/test_ui_session.py", "tests/test_api_structure.py",
         "tests/test_error_report.py",
+    ),
+    "gui/reporter.py": (
+        "tests/test_error_report.py", "tests/test_client_events.py",
+        "tests/test_layout_and_verdict_regressions.py", "tests/test_lock_and_disconnect_regressions.py",
+        "tests/test_feedback_safety.py", "tests/test_job_races.py", "tests/test_plan.py",
+        "tests/test_run_commands.py", "tests/test_ui_session.py", "tests/test_channel_outcomes.py",
+        "tests/test_adb_link.py", "tests/test_issue_regressions.py", "tests/test_phone_host.py",
+        "tests/test_result_retry.py", "tests/test_channel_page.py", "tests/test_api_structure.py",
+        "tests/test_job.py", "tests/test_packaging_entry.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_release_regressions.py",
+        "tests/test_summary.py", "tests/test_tap_notice_regressions.py", "tests/test_updates.py",
+    ),
+    "gui/updates.py": (
+        "tests/test_updates.py", "tests/test_update_install.py", "tests/test_adb_link.py",
+        "tests/test_api_structure.py", "tests/test_channel_outcomes.py", "tests/test_client_events.py",
+        "tests/test_error_report.py", "tests/test_feedback_safety.py", "tests/test_issue_regressions.py",
+        "tests/test_job.py", "tests/test_job_races.py", "tests/test_layout_and_verdict_regressions.py",
+        "tests/test_lock_and_disconnect_regressions.py", "tests/test_packaging_entry.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_phone_host.py", "tests/test_plan.py",
+        "tests/test_release_regressions.py", "tests/test_result_retry.py", "tests/test_run_commands.py",
+        "tests/test_summary.py", "tests/test_tap_notice_regressions.py", "tests/test_ui_session.py",
+    ),
+    "gui/update_install.py": (
+        "tests/test_update_install.py", "tests/test_adb_link.py", "tests/test_api_structure.py",
+        "tests/test_channel_outcomes.py", "tests/test_client_events.py", "tests/test_error_report.py",
+        "tests/test_feedback_safety.py", "tests/test_issue_regressions.py", "tests/test_job.py",
+        "tests/test_job_races.py", "tests/test_layout_and_verdict_regressions.py",
+        "tests/test_lock_and_disconnect_regressions.py", "tests/test_packaging_entry.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_phone_host.py", "tests/test_plan.py",
+        "tests/test_release_regressions.py", "tests/test_result_retry.py", "tests/test_run_commands.py",
+        "tests/test_summary.py", "tests/test_tap_notice_regressions.py", "tests/test_ui_session.py",
+        "tests/test_updates.py", "tests/test_old_install_notice.py",
     ),
 }
 

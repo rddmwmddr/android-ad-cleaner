@@ -20,6 +20,15 @@ SOURCES = {
 SUFFIXES = {"android-arm64": "android-arm64.apk", "mac-arm64": "mac-arm64.dmg",
             "mac-intel": "mac-intel.dmg", "windows": "windows-portable.zip"}
 MAX_PACKAGE = 1024 * 1024 * 1024
+MAX_MANIFEST = 256 * 1024
+MANIFEST_READ = MAX_MANIFEST + 1
+CHUNK = 256 * 1024
+PARTIAL_SUFFIX = ".part"
+DIGEST_NAME = "sha256"
+LOCK_FILE = "download.lock"
+RESULT_FILE = "last-result.json"
+DEFAULT_SOURCE = "gitee"
+USER_AGENT_HEADER = "User-Agent"
 ACTIVE = {"checking", "downloading", "cancelling", "installing"}
 
 
@@ -44,9 +53,9 @@ def _try_lock(stream):
 
 
 def _unlock(stream):
-    stream.seek(0)
     if os.name == "nt":
         import msvcrt
+        stream.seek(0)
         msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
     else:
         import fcntl
@@ -90,7 +99,7 @@ def open_https(request, timeout=30):
 def version_tuple(value):
     if not isinstance(value, str) or not re.fullmatch(r"v?\d{1,4}\.\d{1,4}\.\d{1,4}", value):
         raise UpdateError("更新清单里的版本号无效")
-    return tuple(map(int, value.lstrip("v").split(".")))
+    return tuple(map(int, value.removeprefix("v").split(".")))
 
 
 def platform_id(system=None, machine=None):
@@ -108,7 +117,7 @@ def artifact(data, target):
     if not isinstance(data, dict) or data.get("schema") != 1:
         raise UpdateError("这个版本尚未提供应用内更新，请从官网下载")
     version_tuple(data.get("version"))
-    version = data["version"].lstrip("v")
+    version = data["version"].removeprefix("v")
     if target not in SUFFIXES:
         raise UpdateError("当前平台暂不支持应用内安装")
     rows = data.get("artifacts")
@@ -121,7 +130,7 @@ def artifact(data, target):
     size = row.get("size")
     if type(size) is not int or not 0 < size <= MAX_PACKAGE:
         raise UpdateError("更新包大小无效")
-    sha = row.get("sha256", "")
+    sha = row.get("sha256")
     if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{64}", sha):
         raise UpdateError("更新包缺少有效的 SHA256 校验值")
     urls = {key: prefix + version + "/" + name for key, prefix in SOURCES.items()}
@@ -134,18 +143,16 @@ def verify_file(path, row):
     path = Path(path)
     if path.is_symlink() or not path.is_file() or path.stat().st_size != row["size"]:
         raise UpdateError("安装包不完整，请重新下载")
-    digest = hashlib.sha256()
     with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(256 * 1024), b""):
-            digest.update(chunk)
-    if digest.hexdigest() != row["sha256"]:
+        digest = hashlib.file_digest(stream, DIGEST_NAME).hexdigest()
+    if digest != row["sha256"]:
         raise UpdateError("安装包校验失败，请重新下载")
 
 
 class Updates:
     """每次只跑一个更新操作；快照给两个界面，网络和安装不在界面线程里跑。"""
 
-    def __init__(self, current, root, installer, *, target=None, source="gitee", opener=None,
+    def __init__(self, current, root, installer, *, target=None, source=DEFAULT_SOURCE, opener=None,
                  claim=None, release=None, save_source=None):
         self.current = current
         self.root = Path(root)
@@ -160,10 +167,10 @@ class Updates:
         self.worker = None
         self.offer = None
         self.path = None
-        self.state = {"state": "idle", "current": current, "version": "", "source": source if source in SOURCES else "gitee",
+        self.state = {"state": "idle", "current": current, "version": "", "source": source if source in SOURCES else DEFAULT_SOURCE,
                       "received": 0, "size": 0, "message": "", "error": ""}
         try:
-            previous = json.loads((self.root / "last-result.json").read_text(encoding="utf-8"))
+            previous = json.loads((self.root / RESULT_FILE).read_bytes())
             if previous.get("ok") is False:
                 self.state["previous_error"] = previous.get("error", "上次更新没有完成")
         except (OSError, ValueError, AttributeError):
@@ -208,24 +215,24 @@ class Updates:
         with self.lock:
             self.offer = self.path = None
             self.state.update(version="", received=0, size=0)
-        request = urllib.request.Request(MANIFEST_URL, headers={"User-Agent": f"AndroidAdCleaner/{self.current}"})
+        request = urllib.request.Request(MANIFEST_URL, headers={USER_AGENT_HEADER: f"AndroidAdCleaner/{self.current}"})
         with self.opener(request, timeout=15) as response:
-            raw = response.read(256 * 1024 + 1)
-        if len(raw) > 256 * 1024:
+            raw = response.read(MANIFEST_READ)
+        if len(raw) > MAX_MANIFEST:
             raise UpdateError("更新清单过大")
-        data = json.loads(raw.decode("utf-8"))
+        data = json.loads(raw)
         if not isinstance(data, dict):
             raise UpdateError("更新清单无效")
-        latest = data.get("version", "")
+        latest = data.get("version")
         if version_tuple(latest) <= version_tuple(self.current):
             with self.lock:
                 self.offer = self.path = None
-                self.state.update(state="current", version="", received=0, size=0, message="已是最新版本")
+                self.state.update(state="current", message="已是最新版本")
             return
         row = artifact(data, self.target)
         with self.lock:
             self.offer, self.path = row, None
-            self.state.update(state="available", version=row["version"], size=row["size"], received=0)
+            self.state.update(state="available", version=row["version"], size=row["size"])
 
     def download(self, source="gitee"):
         if source not in SOURCES:
@@ -245,25 +252,25 @@ class Updates:
             self.path = None
         self.root.mkdir(parents=True, exist_ok=True)
         # 两个窗口会写同一个 .part：后完成的那份会把已经校验过的成品再写坏。
-        with file_lock(self.root / "download.lock", "另一个窗口正在下载更新，等它完成后再试"):
+        with file_lock(self.root / LOCK_FILE, "另一个窗口正在下载更新，等它完成后再试"):
             self._fetch(row, source)
 
     def _fetch(self, row, source):
         destination = self.root / row["file"]
-        partial = self.root / (row["file"] + ".part")
+        partial = self.root / (row["file"] + PARTIAL_SUFFIX)
         # 不跟随已有软链接；下载不触碰程序目录或备份目录。
         if partial.is_symlink() or destination.is_symlink():
             raise UpdateError("更新目录里有异常链接，请清理更新缓存后重试")
         self._set(received=0)
         try:
-            request = urllib.request.Request(row["sources"][source], headers={"User-Agent": f"AndroidAdCleaner/{self.current}"})
+            request = urllib.request.Request(row["sources"][source], headers={USER_AGENT_HEADER: f"AndroidAdCleaner/{self.current}"})
             with self.opener(request, timeout=30) as response, partial.open("wb") as output:
                 size = 0
                 digest = hashlib.sha256()
                 while True:
                     if self.cancelled.is_set():
                         raise Cancelled()
-                    chunk = response.read(256 * 1024)
+                    chunk = response.read(CHUNK)
                     if not chunk:
                         break
                     size += len(chunk)
@@ -302,7 +309,7 @@ class Updates:
         error = self.claim()
         if error:
             raise UpdateError(error)
-        handed_off = False
+        handed_off = bool()   # pragma: no mutate 语义等价：只按真假用，None 与 False 同假
         try:
             try:
                 verify_file(self.path, self.offer)
@@ -317,7 +324,7 @@ class Updates:
                 try:
                     self.installer.close()
                 except Exception:
-                    handed_off = False
+                    handed_off = bool()   # pragma: no mutate 语义等价：只按真假用，None 与 False 同假
                     self.installer.abort()
                     raise
         finally:
