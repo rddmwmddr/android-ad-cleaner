@@ -46,6 +46,10 @@ WORKDIR = Path(".mutmut")
 ROOT = Path(__file__).resolve().parents[1]
 # 进 `src` 视角的两个包（#1429）。
 SOURCE_PACKAGES = ("tool", "gui")
+# 仓库根的数据目录，副本里要按 `src` 视角放一份：`gui/app.py` 用 `__file__` 的两级 dirname
+# 定 `toolpath.BASE`，在副本里那是 `mutants/src`，读根目录数据的用例（`Api.env()` 的
+# `images/dev-*`）才会在那里找。数据本身由 `ALSO_COPY` 拷进 `mutants/src/`。
+ROOT_DATA = ("images",)
 # 工作目录里指向仓库根的符号链接：mutmut 只认识 cwd 下的相对路径。
 LINKS = {
     "tool": "tool",
@@ -55,11 +59,15 @@ LINKS = {
     "devtools": "devtools",
     "recipe_lib": "recipe_lib",
     "gui": "gui",
+    # 开发者模式的引导截图：`app.Api.env()` 从 `images/` 列出 `dev-*`，副本里缺它就会红
+    "images": "images",
     # 手机版替换层不在仓库根，单独挂一下：`tests/test_summary.py` 这类用例会 import 它
     "aac_android": "android/app/src/main/python/aac_android",
 }
 # 变异副本里跑测试要读到的东西。`mutants/` 下的测试会以它为根，缺一项就在收集期报错。
-ALSO_COPY = ["recipe_lib", "recipes", "docs", "devtools", "gui", "aac_android"]
+# `images` 拷两份：一份落在 `mutants/`（`toolpath.BASE` 按 `mutants/gui` 算时的视角），
+# 一份落在 `mutants/src/`（按 `mutants/src/gui` 算时的视角），见 `ROOT_DATA`。
+ALSO_COPY = ["recipe_lib", "recipes", "docs", "devtools", "gui", "images", "src/images", "aac_android"]
 # `on_dependency_change` 必须是 `rerun`（默认 `warn`）：mutmut 用 git 比上次全量跑时的提交，
 # 非 `.py` 文件变了只警告、保留旧裁决。本仓测试大量读 `recipes/`、`docs/`、`recipe_lib/`，
 # 改了 recipe 却不重跑，`catalog/schema` 与 `recipe_source` 会拿旧结论报绿。
@@ -128,6 +136,8 @@ def _mirror_sources(src: Path) -> None:
     elif src.exists():
         shutil.rmtree(src)
     src.mkdir(parents=True)
+    for name in ROOT_DATA:
+        (src / name).symlink_to(_relative(ROOT / name, src))
     for package in SOURCE_PACKAGES:
         base = ROOT / package
         top = src if package == "tool" else src / package

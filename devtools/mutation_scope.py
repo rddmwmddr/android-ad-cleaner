@@ -192,6 +192,17 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_release_regressions.py", "tests/test_result_retry.py", "tests/test_run_commands.py",
         "tests/test_summary.py", "tests/test_tap_notice_regressions.py", "tests/test_ui_session.py",
     ),
+    "gui/update_install.py": (
+        "tests/test_update_install.py", "tests/test_adb_link.py", "tests/test_api_structure.py",
+        "tests/test_channel_outcomes.py", "tests/test_client_events.py", "tests/test_error_report.py",
+        "tests/test_feedback_safety.py", "tests/test_issue_regressions.py", "tests/test_job.py",
+        "tests/test_job_races.py", "tests/test_layout_and_verdict_regressions.py",
+        "tests/test_lock_and_disconnect_regressions.py", "tests/test_packaging_entry.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_phone_host.py", "tests/test_plan.py",
+        "tests/test_release_regressions.py", "tests/test_result_retry.py", "tests/test_run_commands.py",
+        "tests/test_summary.py", "tests/test_tap_notice_regressions.py", "tests/test_ui_session.py",
+        "tests/test_updates.py", "tests/test_old_install_notice.py",
+    ),
 }
 
 # 变异副本里跑不通的测试，按 pytest node id 摘掉。整份文件都跑不通的（`test_rules_guards`

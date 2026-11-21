@@ -4,6 +4,7 @@ import os
 import plistlib
 import stat
 import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -936,3 +937,474 @@ class GeneratorTests(unittest.TestCase):
         release['assets'][0]['digest'] = None
         with self.assertRaises(ValueError):
             update_manifest.generate(release)
+
+
+class ToolsRun:
+    """外部工具的替身：记录命令与参数，挂载时按需放好映像内容，并按路径给出签名团队。"""
+
+    def __init__(self, *, teams=None, mount_app=None):
+        self.calls = []
+        self.teams = teams or {}
+        self.mount_app = mount_app
+
+    def __call__(self, args, **kwargs):
+        self.calls.append((args, kwargs))
+        if args[:2] == ['/usr/bin/hdiutil', 'attach'] and self.mount_app is not None:
+            self.mount_app()
+        if args[:2] == ['/usr/bin/codesign', '-dv']:
+            team = self.teams.get(args[-1])
+            stderr = f'Executable={args[-1]}\n' + (f'TeamIdentifier={team}\n' if team else '')
+            return subprocess.CompletedProcess(args, 0, stderr=stderr)
+        return subprocess.CompletedProcess(args, 0)
+
+    def kinds(self):
+        return [tuple(args[:2]) for args, _ in self.calls]
+
+
+class PrepareMacTests(unittest.TestCase):
+    """DMG 准备段的外部过程：挂载、校验标识 / 版本 / 签名、复制新包、始终卸载。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+        self.work = self.root / 'work'
+        self.work.mkdir()
+        self.archive = self.root / 'update.dmg'
+        self.archive.write_bytes(b'dmg')
+        self.installed = self.root / 'Applications/Old.app'
+        info_plist(self.installed)
+
+    def mount_app(self, work, *, name='Update.app', identifier=install.BUNDLE_ID, version='0.4.2'):
+        app = work / 'mount' / name
+        info_plist(app, identifier=identifier, version=version)
+        return app
+
+    def prepare(self, tools, work=None):
+        work = work or self.work
+        work.mkdir(parents=True, exist_ok=True)
+        return install.prepare_mac(self.archive, work, self.installed, '0.4.2', run=tools)
+
+    def assert_update_steps(self, tools, app):
+        attach, verify, assess, signing, installed_signing, ditto, detach = tools.calls
+        self.assertEqual(attach[0], ['/usr/bin/hdiutil', 'attach', '-readonly', '-nobrowse', '-mountpoint',
+                                     str(self.work / 'mount'), str(self.archive)])
+        self.assertEqual(attach[1], {'check': True, 'capture_output': True, 'timeout': 90})
+        self.assertEqual(verify[0], ['/usr/bin/codesign', '--verify', '--deep', '--strict', str(app)])
+        self.assertEqual(verify[1], {'check': True, 'capture_output': True, 'timeout': 90})
+        self.assertEqual(assess[0], ['/usr/sbin/spctl', '--assess', '--type', 'execute', str(app)])
+        self.assertEqual(assess[1], {'check': True, 'capture_output': True, 'timeout': 90})
+        self.assertEqual(signing[0][-1], str(app))
+        self.assertEqual(installed_signing[0][-1], str(self.installed))
+        self.assertEqual(ditto[0], ['/usr/bin/ditto', str(app), str(self.work / 'Old.app')])
+        self.assertEqual(ditto[1], {'check': True, 'capture_output': True, 'timeout': 180})
+        self.assertEqual(detach[0], ['/usr/bin/hdiutil', 'detach', str(self.work / 'mount')])
+        self.assertEqual(detach[1], {'check': False, 'capture_output': True, 'timeout': 30})
+
+    def test_prepare_mounts_checks_copies_and_unmounts(self):
+        app = self.work / 'mount' / 'Update.app'
+        tools = ToolsRun(teams={str(app): 'TEAM1', str(self.installed): 'TEAM1'},
+                         mount_app=lambda: self.mount_app(self.work))
+        prepared = self.prepare(tools)
+        self.assertEqual(prepared, self.work / 'Old.app')
+        self.assertEqual([args[0] for args, _ in tools.calls],
+                         ['/usr/bin/hdiutil', '/usr/bin/codesign', '/usr/sbin/spctl', '/usr/bin/codesign',
+                          '/usr/bin/codesign', '/usr/bin/ditto', '/usr/bin/hdiutil'])
+        self.assert_update_steps(tools, app)
+
+    def test_a_missing_or_duplicate_app_is_refused_after_unmounting(self):
+        for index, build in enumerate((lambda work: None,
+                                       lambda work: (self.mount_app(work), self.mount_app(work, name='Two.app')))):
+            work = self.root / f'work-{index}'
+            tools = ToolsRun(mount_app=lambda work=work, build=build: build(work))
+            with self.subTest(index=index):
+                with self.assertRaises(UpdateError) as caught:
+                    self.prepare(tools, work)
+                self.assertEqual(str(caught.exception), '磁盘映像里没有唯一的应用程序')
+                self.assertEqual(tools.kinds()[-1], ('/usr/bin/hdiutil', 'detach'))
+
+    def test_identity_or_version_mismatch_is_refused(self):
+        for index, (identifier, version) in enumerate(((install.BUNDLE_ID, '0.4.1'),
+                                                       ('com.example.other', '0.4.2'))):
+            work = self.root / f'identity-{index}'
+            tools = ToolsRun(mount_app=lambda work=work, identifier=identifier, version=version:
+                             self.mount_app(work, identifier=identifier, version=version))
+            with self.subTest(identifier=identifier, version=version):
+                with self.assertRaises(UpdateError) as caught:
+                    self.prepare(tools, work)
+                self.assertEqual(str(caught.exception), '应用的标识或版本与更新清单不一致')
+                self.assertEqual(tools.kinds()[-1], ('/usr/bin/hdiutil', 'detach'))
+
+    def test_a_different_signing_team_is_refused(self):
+        app = self.work / 'mount' / 'Update.app'
+        tools = ToolsRun(teams={str(app): 'TEAM1', str(self.installed): 'TEAM2'},
+                         mount_app=lambda: self.mount_app(self.work))
+        with self.assertRaises(UpdateError) as caught:
+            self.prepare(tools)
+        self.assertEqual(str(caught.exception), '新旧应用的开发者签名不一致')
+        self.assertEqual(tools.kinds()[-1], ('/usr/bin/hdiutil', 'detach'))
+
+    def test_attach_failure_leaves_no_detach_call(self):
+        calls = []
+
+        def run(args, **kwargs):
+            calls.append(args[:2])
+            if args[:2] == ['/usr/bin/hdiutil', 'attach']:
+                raise subprocess.CalledProcessError(1, args)
+            return subprocess.CompletedProcess(args, 0)
+
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.prepare(run)
+        self.assertEqual(calls, [['/usr/bin/hdiutil', 'attach']])
+
+    @unittest.skipIf(os.name == 'nt', '需要目录符号链接')
+    def test_a_symlinked_bundle_is_not_the_mounted_app(self):
+        target = self.root / 'Elsewhere'
+        target.mkdir()
+        link = self.work / 'mount' / 'Linked.app'
+        tools = ToolsRun(mount_app=lambda: link.symlink_to(target, target_is_directory=True))
+        with self.assertRaises(UpdateError) as caught:
+            self.prepare(tools)
+        self.assertEqual(str(caught.exception), '磁盘映像里没有唯一的应用程序')
+
+
+class MacAppTests(unittest.TestCase):
+    """bundle 根只从 `…/X.app/Contents/MacOS/<程序>` 这一种形状认出来。"""
+
+    def test_an_executable_inside_a_bundle_resolves_to_its_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Path(tmp).resolve() / 'Applications' / 'App.app'
+            exe = app / 'Contents' / 'MacOS' / 'program'
+            self.assertEqual(install.mac_app(exe), app)
+
+    def test_anything_else_is_refused_with_the_install_hint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for relative in ('App.app/Contents/Other/program', 'App.app/Other/MacOS/program',
+                             'App.bundle/Contents/MacOS/program'):
+                with self.subTest(path=relative), self.assertRaises(UpdateError) as caught:
+                    install.mac_app(root / relative)
+                self.assertEqual(str(caught.exception), '请从已安装的 App 中更新')
+
+
+class BundleInfoTests(unittest.TestCase):
+    def test_reads_the_info_plist_inside_the_bundle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Path(tmp) / 'App.app'
+            info_plist(app, identifier='com.example.app', version='9.9.9')
+            self.assertEqual(install.bundle_info(app),
+                             {'CFBundleIdentifier': 'com.example.app', 'CFBundleShortVersionString': '9.9.9'})
+
+
+class SigningTeamTests(unittest.TestCase):
+    def test_reads_the_team_from_codesign_diagnostics(self):
+        calls = []
+
+        def run(args, **kwargs):
+            calls.append((args, kwargs))
+            self.assertEqual(kwargs, {'capture_output': True, 'text': True, 'encoding': 'utf-8',
+                                      'errors': 'replace', 'check': True})
+            return subprocess.CompletedProcess(args, 0, stderr='Executable=x\nTeamIdentifier=AB12CD34\n')
+
+        self.assertEqual(install.signing_team(Path('/Applications/Old.app'), run=run), 'AB12CD34')
+        self.assertEqual(calls[0][0], ['/usr/bin/codesign', '-dv', '--verbose=4', '/Applications/Old.app'])
+
+    def test_a_missing_team_is_reported_as_an_unknown_developer(self):
+        def run(args, **kwargs):
+            return subprocess.CompletedProcess(args, 0, stderr='Executable=x\nno team here\n')
+
+        with self.assertRaises(UpdateError) as caught:
+            install.signing_team(Path('/Applications/Old.app'), run=run)
+        self.assertEqual(str(caught.exception), '无法确认应用签名的开发者')
+
+
+class WriteJsonTests(unittest.TestCase):
+    def test_writes_utf8_json_and_replaces_the_target_atomically(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / 'state.json'
+            path.write_text('old', encoding='utf-8')
+            data = {'note': '中文', 'n': 1}
+            install.write_json(path, data)
+            self.assertEqual(path.read_bytes(), json.dumps(data, ensure_ascii=False).encode('utf-8'))
+            self.assertEqual(sorted(item.name for item in root.iterdir()), ['state.json'])
+
+
+class StaleSweepTests(unittest.TestCase):
+    """只清一天前的 `install-*` 目录：另一个窗口刚建的那份与普通文件都不能碰。"""
+
+    NOW = 1_700_000_000
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def aged(self, name, seconds, *, directory=True):
+        path = self.root / name
+        path.mkdir() if directory else path.write_text('x', encoding='utf-8')
+        stamp = self.NOW - seconds
+        os.utime(path, (stamp, stamp))
+        return path
+
+    def sweep(self):
+        with patch.object(install.time, 'time', return_value=self.NOW):
+            install.sweep_stale(self.root)
+
+    def test_sweeps_only_directories_older_than_a_day(self):
+        old = self.aged('install-old', install.STALE_SECONDS + 1)
+        fresh = self.aged('install-fresh', 0)
+        self.sweep()
+        self.assertFalse(old.exists())
+        self.assertTrue(fresh.exists(), '另一个窗口刚建的准备目录不能清')
+
+    def test_the_cutoff_is_exclusive(self):
+        boundary = self.aged('install-boundary', install.STALE_SECONDS)
+        self.sweep()
+        self.assertTrue(boundary.exists(), '恰好一天前的不算「更早」')
+
+    def test_a_plain_file_and_a_lookalike_are_left_alone(self):
+        loose = self.aged('install-file', install.STALE_SECONDS + 1, directory=False)
+        lookalike = self.aged('update-old', install.STALE_SECONDS + 1)
+        self.sweep()
+        self.assertTrue(loose.exists())
+        self.assertTrue(lookalike.exists())
+
+
+class HelperErrorTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.work = Path(self.tmp.name)
+
+    def test_the_helper_reason_is_read(self):
+        (self.work / install.ERROR_FILE).write_text(
+            json.dumps({'error': '另一个窗口正在安装更新，请等它完成后重试'}, ensure_ascii=False), encoding='utf-8')
+        self.assertEqual(install._helper_error(self.work), '另一个窗口正在安装更新，请等它完成后重试')
+
+    def test_a_missing_or_malformed_reason_is_empty(self):
+        self.assertEqual(install._helper_error(self.work), '')
+        for text in ('{}', '{oops', '[1]'):
+            (self.work / install.ERROR_FILE).write_text(text, encoding='utf-8')
+            with self.subTest(text=text):
+                self.assertEqual(install._helper_error(self.work), '')
+
+
+class StubHelper:
+    def __init__(self, *, running=True, hang=False):
+        self.running = running
+        self.hang = hang
+        self.terminated = 0
+        self.killed = 0
+        self.waits = []
+
+    def poll(self):
+        return None if self.running else 1
+
+    def terminate(self):
+        self.terminated += 1
+
+    def wait(self, timeout=None):
+        self.waits.append(timeout)
+        if self.hang and len(self.waits) == 1:
+            raise subprocess.TimeoutExpired('helper', timeout or 0)
+        return 0
+
+    def kill(self):
+        self.killed += 1
+
+
+class InstallerOptionsTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+
+    def test_defaults_come_from_the_running_process(self):
+        adapter = install.DesktopInstaller(self.root)
+        self.assertEqual(adapter.root, self.root)
+        self.assertEqual(adapter.system, sys.platform)
+        self.assertEqual(adapter.executable, Path(sys.executable).resolve())
+        self.assertIs(adapter.frozen, False)
+        self.assertIsNone(adapter.helper)
+        self.assertIsNone(adapter.close())
+        self.assertIs(adapter.popen, subprocess.Popen)
+
+    def test_explicit_values_win(self):
+        calls, popped = [], []
+        def close():
+            calls.append('closed')
+        def popen(args, **kwargs):
+            popped.append(args)
+        executable = self.root / 'App' / 'program'
+        adapter = install.DesktopInstaller(self.root, system='win32', executable=executable,
+                                           frozen=True, close=close, popen=popen)
+        self.assertEqual(adapter.system, 'win32')
+        self.assertEqual(adapter.executable, executable.resolve())
+        self.assertIs(adapter.frozen, True)
+        self.assertIs(adapter.popen, popen)
+        adapter.close()
+        self.assertEqual(calls, ['closed'])
+
+    def test_a_frozen_flag_from_the_interpreter_is_used(self):
+        with patch.object(install.sys, 'frozen', True, create=True):
+            adapter = install.DesktopInstaller(self.root)
+        self.assertIs(adapter.frozen, True)
+
+    def test_process_options_detach_the_child_from_three_streams(self):
+        options = install.process_options()
+        self.assertEqual(set(options), {'stdin', 'stdout', 'stderr', 'env'})
+        for key in ('stdin', 'stdout', 'stderr'):
+            self.assertIs(options[key], subprocess.DEVNULL)
+        self.assertEqual(options['env']['PYINSTALLER_RESET_ENVIRONMENT'], '1')
+        self.assertEqual(options['env']['PATH'], os.environ['PATH'])
+
+
+class AbortTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.adapter = install.DesktopInstaller(Path(self.tmp.name))
+
+    def test_a_running_helper_is_terminated_with_a_bounded_wait(self):
+        helper = StubHelper()
+        self.adapter.helper = helper
+        self.adapter.abort()
+        self.assertEqual(helper.terminated, 1)
+        self.assertEqual(helper.waits, [10])
+        self.assertEqual(helper.killed, 0)
+
+    def test_a_helper_that_ignores_terminate_is_killed(self):
+        helper = StubHelper(hang=True)
+        self.adapter.helper = helper
+        self.adapter.abort()
+        self.assertEqual(helper.waits, [10])
+        self.assertEqual(helper.killed, 1)
+
+    def test_no_helper_or_an_exited_helper_is_left_alone(self):
+        self.adapter.abort()
+        helper = StubHelper(running=False)
+        self.adapter.helper = helper
+        self.adapter.abort()
+        self.assertEqual(helper.terminated, 0)
+
+
+class KernelFunction:
+    def __init__(self, result, code=None):
+        self.result = result
+        self.code = code
+        self.calls = []
+        self.argtypes = None
+        self.restype = None
+
+    def __call__(self, *args):
+        self.calls.append(args)
+        if self.code is not None:
+            args[-1]._obj.value = self.code
+        return self.result
+
+
+class FakeKernel:
+    """Win32 kernel32 的替身：OpenProcess / GetExitCodeProcess / CloseHandle 各自可断言。"""
+
+    def __init__(self, *, handle=7, exit_ok=True, code=259):
+        self.OpenProcess = KernelFunction(handle)
+        self.GetExitCodeProcess = KernelFunction(exit_ok, code=code)
+        self.CloseHandle = KernelFunction(None)
+
+
+class FakeWindll:
+    def __init__(self, kernel):
+        self.kernel32 = kernel
+
+
+class ParentAliveTests(unittest.TestCase):
+    def test_windows_alive_checks_the_handle_and_still_active_code(self):
+        import ctypes
+        from ctypes import wintypes
+        kernel = FakeKernel(handle=7, code=259)
+        self.assertIs(install._alive_windows(4242, kernel), True)
+        self.assertEqual(kernel.OpenProcess.calls, [(0x1000, False, 4242)])
+        self.assertEqual(kernel.OpenProcess.argtypes, [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD])
+        self.assertIs(kernel.OpenProcess.restype, wintypes.HANDLE)
+        self.assertEqual(kernel.GetExitCodeProcess.argtypes,
+                         [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)])
+        self.assertEqual(kernel.CloseHandle.argtypes, [wintypes.HANDLE])
+        self.assertEqual(kernel.GetExitCodeProcess.calls[0][0], 7)
+        self.assertEqual(kernel.CloseHandle.calls, [(7,)])
+
+    def test_windows_dead_processes_report_false(self):
+        self.assertIs(install._alive_windows(1, FakeKernel(handle=0)), False)
+        self.assertIs(install._alive_windows(1, FakeKernel(code=0)), False)
+        self.assertIs(install._alive_windows(1, FakeKernel(exit_ok=False, code=259)), False)
+
+    def test_posix_liveness_uses_signal_zero(self):
+        calls = []
+        with patch.object(install.os, 'kill', lambda pid, signal: calls.append((pid, signal))):
+            self.assertIs(install._alive_posix(4242), True)
+        self.assertEqual(calls, [(4242, 0)])
+
+    @unittest.skipIf(os.name == 'nt', 'Windows 上 os.kill(pid, 0) 不是空操作')
+    def test_posix_own_pid_is_alive_and_a_dead_pid_is_not(self):
+        self.assertIs(install.parent_alive(os.getpid()), True)
+        self.assertIs(install.parent_alive(4_000_000), False)
+
+    @unittest.skipIf(os.name == 'nt', 'Windows 上 os.kill(pid, 0) 不是空操作')
+    def test_parent_alive_dispatches_to_posix(self):
+        with patch.object(install.os, 'kill', lambda pid, signal: None):
+            self.assertIs(install.parent_alive(4242), True)
+
+    def test_parent_alive_dispatches_to_windows_when_os_name_is_nt(self):
+        import ctypes
+        kernel = FakeKernel(handle=0)
+        with patch.object(install.os, 'name', 'nt'), \
+                patch.object(ctypes, 'windll', FakeWindll(kernel), create=True):
+            self.assertIs(install.parent_alive(os.getpid()), False)
+        self.assertEqual(kernel.OpenProcess.calls, [(0x1000, False, os.getpid())])
+
+
+class CopyRemoveTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_a_file_is_copied_with_its_bytes(self):
+        source = self.root / 'file.txt'
+        source.write_text('payload', encoding='utf-8')
+        destination = self.root / 'copy.txt'
+        install.copy_item(source, destination)
+        self.assertEqual(destination.read_text(encoding='utf-8'), 'payload')
+
+    @unittest.skipIf(os.name == 'nt', '需要符号链接')
+    def test_a_directory_is_copied_with_its_links_intact(self):
+        source = self.root / 'tree'
+        source.mkdir()
+        (source / 'file').write_text('payload', encoding='utf-8')
+        (source / 'link').symlink_to('file')
+        destination = self.root / 'copy'
+        install.copy_item(source, destination)
+        self.assertEqual((destination / 'file').read_text(encoding='utf-8'), 'payload')
+        self.assertTrue((destination / 'link').is_symlink())
+        self.assertEqual(os.readlink(destination / 'link'), 'file')
+
+    def test_a_directory_tree_is_removed(self):
+        tree = self.root / 'tree' / 'nested'
+        tree.mkdir(parents=True)
+        (tree / 'file').write_text('x', encoding='utf-8')
+        install.remove_item(self.root / 'tree')
+        self.assertFalse((self.root / 'tree').exists())
+
+    def test_a_missing_entry_is_removed_silently(self):
+        install.remove_item(self.root / 'never-there')
+        self.assertFalse((self.root / 'never-there').exists())
+
+    @unittest.skipIf(os.name == 'nt', '需要符号链接')
+    def test_a_symlink_is_unlinked_without_touching_its_target(self):
+        target = self.root / 'target'
+        target.mkdir()
+        link = self.root / 'link'
+        link.symlink_to(target, target_is_directory=True)
+        install.remove_item(link)
+        self.assertFalse(link.is_symlink())
+        self.assertTrue(target.is_dir())

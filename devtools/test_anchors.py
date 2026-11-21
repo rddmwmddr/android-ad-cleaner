@@ -83,7 +83,7 @@ ANCHORS = {
     "test_error_report.py": ("错误上报：内容脱敏、预览与发送一致、限频、安装编号与服务器回应。", 75),
     "test_diagnostics.py": ("设备诊断文本的唯一定义：给定一份整理好的 state，整段输出逐字等于什么，含按分支的措辞与脱敏。", 35),
     "test_updates.py": ("应用内更新：真实字节下载与状态迁移，网络与安装由边界替身接管。", 227),
-    "test_update_install.py": ("在临时目录里真正换文件：回滚、保留卸载器与新进程健康回执。", 77),
+    "test_update_install.py": ("在临时目录里真正换文件：回滚、保留卸载器与新进程健康回执。", 286),
     "test_win_preflight.py": ("Windows 启动失败归因：缺 WebView2、MOTW、托管 dll 被判远程。", 77),
     "test_win_dotnet_config.py": ("随包分发的 <exe>.config 让包内托管 dll 不被判成网络位置。", 11),
     "test_hdc_fetch.py": ("HDC 只在构建期下载、按钉死的 SHA-256 校验并解包。", 33),
