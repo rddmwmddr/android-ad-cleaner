@@ -14,8 +14,8 @@ sys.path.insert(0, str(ROOT / "tool"))
 import fixtures  # noqa: E402
 from devtools import check_ticket_ref  # noqa: E402
 
-# 起子进程跑的脚本就是被 import 的这份模块：变异副本里它是 `src/devtools/` 下的变异后副本，子进程
-# 继承 `MUTANT_UNDER_TEST` 会执行到同一批 mutant（#1515）。按 `ROOT/devtools` 写死只会跑到未变异原件。
+# 起子进程跑的脚本就是被 import 的这份模块：变异副本里它是 `src/devtools/` 下的变异后副本，与进程内
+# 用例落在同一份文件上；按 `ROOT/devtools` 写死只会跑到未变异原件（#1515）。
 SCRIPT = Path(check_ticket_ref.__file__).resolve()
 # 脚本按 `__file__` 的两级 dirname 找 `tool/`，副本里那是 `src/tool`（不存在）；它的 `import stdio`
 # 要能在同一个 `src` 视角里找到。正常运行时这就是仓库根（`stdio` 仍在 `tool/` 下，无害）。
