@@ -85,7 +85,7 @@ def scan(root):
 
 def _scan_file(path, root, report):
     where = path.relative_to(root).as_posix()
-    tree = ast.parse(path.read_text(encoding="utf-8"))
+    tree = ast.parse(path.read_text(encoding="utf-8"))  # pragma: no mutate 语义等价：扫的都是本仓 UTF-8 源码，`None` 与大小写写法取同一编解码器
     module_env = _module_constants(tree)
     loops = _loop_values(tree)
     funcs = _function_constants(tree)
@@ -172,7 +172,7 @@ def _glob_calls(tree):
         if isinstance(func.value, ast.Name) and func.value.id == "glob" and func.attr in _GLOB_FUNCS:
             yield node, None, func.attr, arg, _recursive_flag(node)
         elif func.attr in ("glob", "rglob"):
-            yield node, func.value, func.attr, arg, True
+            yield node, func.value, func.attr, arg, True  # pragma: no mutate 不可达：方法档接收者非空，`recursive` 只有模块档的整路径求值会读
 
 
 def _recursive_flag(node):
@@ -238,7 +238,7 @@ def _source(node):
     try:
         return ast.unparse(node)
     except Exception:
-        return "<表达式>"
+        return "<表达式>"  # pragma: no mutate 不可达：实参都是 `ast.parse` 出来的完整节点，`unparse` 不会失败
 
 
 def _evaluate(node, ctx):
@@ -326,7 +326,7 @@ def _os_path_call(node, ctx, name):
 
 def _combine(left_node, right_node, ctx, build):
     left, right = _evaluate(left_node, ctx), _evaluate(right_node, ctx)
-    if left is _UNKNOWN or right is _UNKNOWN:
+    if left is _UNKNOWN or right is _UNKNOWN:  # pragma: no mutate 语义等价：放过去时 `sorted(哨兵)` 也抛 TypeError，被下面的 except 接回 `_UNKNOWN`
         return _UNKNOWN
     try:
         return {str(build(litem, ritem)) for litem, ritem in product(sorted(left), sorted(right))}
@@ -336,7 +336,7 @@ def _combine(left_node, right_node, ctx, build):
 
 def _combine_chain(nodes, ctx, build):
     parts = [_evaluate(node, ctx) for node in nodes]
-    if not parts or any(part is _UNKNOWN for part in parts):
+    if not parts or any(part is _UNKNOWN for part in parts):  # pragma: no mutate 语义等价：放过去时 `sorted(哨兵)` 也抛 TypeError，被下面的 except 接回 `_UNKNOWN`
         return _UNKNOWN
     try:
         return {str(build(combo)) for combo in product(*[sorted(part) for part in parts])}
