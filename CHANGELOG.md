@@ -13,6 +13,7 @@
 
 - gui 侧纳入变异判据：`tasks` / `adb` 存活清零并进映射表，副本的 `src` 改成两包镜像（#1429，ADR-0043）
 - `gui/dispatcher.py` 的存活清零并进映射表（#1429，ADR-0043）
+- gui 的 `reporter` / `updates` / `update_install` 存活清零并进变异映射表（#1429，ADR-0043）
 
 ## 0.4.5 · 2026-11-18
 
