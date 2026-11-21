@@ -71,6 +71,11 @@ class AuditTests(unittest.TestCase):
                 lines = triage_audit.audit([ticket(13, "bug", "waiting-for-verify", role)])
                 self.assertEqual(rules_hit(lines), {"doc.triage.waiting-for-verify-outranks"})
 
+    def test_several_outranked_roles_are_reported(self):
+        lines = triage_audit.audit(
+            [ticket(18, "bug", "waiting-for-verify", "needs-info", "ready-for-agent")])
+        self.assertEqual(rules_hit(lines), {"doc.triage.waiting-for-verify-outranks"})
+
     def test_in_progress_never_rides_with_waiting_for_verify(self):
         lines = triage_audit.audit([ticket(14, "bug", "in-progress", "waiting-for-verify")])
         self.assertEqual(rules_hit(lines), {"doc.triage.in-progress-is-a-claim"})
@@ -84,6 +89,11 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(rules_hit(lines), {"doc.triage.five-roles-map"})
         self.assertIn("wont-do", lines[0])
 
+    def test_a_ticket_without_labels_shows_the_placeholder(self):
+        lines = triage_audit.audit([ticket(19)])
+        self.assertEqual(rules_hit(lines), {"doc.triage.one-category-label"})
+        self.assertTrue(lines[0].endswith("  (无标签)"), "占位符在行尾，不是被包起来")
+
     def test_line_carries_rule_and_labelled_set(self):
         lines = triage_audit.audit([ticket(9, "needs-triage", "bug", "enhancement")])
         self.assertIn(f"#{9}  doc.triage.one-category-label  bug,enhancement,needs-triage", lines)
@@ -95,6 +105,36 @@ class AuditTests(unittest.TestCase):
     def test_second_category_clears_once_removed(self):
         self.assertTrue(triage_audit.audit([ticket(16, "bug", "enhancement")]))
         self.assertEqual(triage_audit.audit([ticket(16, "enhancement")]), [])
+
+
+class MessageTests(unittest.TestCase):
+    """`hits()` 给出的逐句现场：`audit()` 只留判据 id，这些文案只有这里能守住。"""
+
+    def message(self, names, rule):
+        found = dict(triage_audit.hits(names))
+        self.assertIn(rule, found)
+        return found[rule]
+
+    def test_missing_category_says_none_was_found(self):
+        self.assertEqual(self.message(["needs-triage"], triage_audit.ONE_CATEGORY),
+                         "分类要恰好一个：一个都没有")
+
+    def test_two_categories_are_named(self):
+        self.assertEqual(self.message(["bug", "enhancement"], triage_audit.ONE_CATEGORY),
+                         "分类要恰好一个：bug、enhancement")
+
+    def test_outranked_roles_are_joined(self):
+        message = self.message(["bug", "waiting-for-verify", "needs-info", "ready-for-agent"],
+                               triage_audit.VERIFY_OUTRANKS)
+        self.assertIn("不能再带 needs-info、ready-for-agent", message)
+
+    def test_unregistered_label_is_named(self):
+        self.assertEqual(self.message(["bug", "wont-do"], triage_audit.MAPPED),
+                         "标签没在 triage-labels.md 登记：wont-do")
+
+    def test_several_unregistered_labels_are_joined_and_sorted(self):
+        self.assertEqual(self.message(["bug", "wont-do", "mystery"], triage_audit.MAPPED),
+                         "标签没在 triage-labels.md 登记：mystery、wont-do")
 
 
 class MainTests(unittest.TestCase):
@@ -126,9 +166,18 @@ class MainTests(unittest.TestCase):
 
     def test_findings_exit_one_and_print_each_line(self):
         payload = [ticket(5, "bug", "enhancement")]
-        code, out, _ = self.run_main(["--input", self.write_dump(payload)])
+        code, out, err = self.run_main(["--input", self.write_dump(payload)])
         self.assertEqual(code, triage_audit.EXIT_FINDINGS)
         self.assertIn(f"#{5}  doc.triage.one-category-label", out)
+        self.assertIn("1 条违规，涉及 1 张票。", err)
+
+    def test_several_findings_keep_their_own_lines(self):
+        """两条违规各占一行：行间不能被换行连接符的改动粘在一起。"""
+        payload = [ticket(5, "bug", "enhancement"), ticket(6, "needs-triage")]
+        code, out, _ = self.run_main(["--input", self.write_dump(payload)])
+        self.assertEqual(code, triage_audit.EXIT_FINDINGS)
+        self.assertIn("#5  doc.triage.one-category-label  bug,enhancement\n"
+                      "#6  doc.triage.one-category-label  needs-triage", out)
 
     def test_fetch_failure_is_not_a_finding(self):
         code, _, err = self.run_main([], runner=self.runner_with(error=OSError("gh 没装")))
@@ -154,10 +203,20 @@ class MainTests(unittest.TestCase):
         payload = [{"labels": []}]
         _, _, offline = self.run_main(["--input", self.write_dump(payload)])
         _, _, online = self.run_main([], runner=self.runner_with(payload))
-        self.assertIn("缺 number", offline)
-        self.assertIn("缺 number", online)
+        self.assertIn("`gh issue list` 里有条目缺 number", online)
         self.assertIn("issues.json", offline)
-        self.assertIn("`gh issue list`", online)
+        self.assertIn("里有条目缺 number", offline)
+
+    def test_a_non_json_failure_names_the_gh_command(self):
+        """取数中途失败时，报错要带上是哪条 `gh` 命令出的问题。"""
+        runner = FakeRunner(runs=("", "boom", 1))
+        code, _, err = self.run_main([], runner=runner)
+        self.assertEqual(code, triage_audit.EXIT_UNREACHABLE)
+        self.assertIn("`gh issue list` 退出码非零", err)
+
+    def test_an_input_value_may_contain_equals_signs(self):
+        """`--input=<路径>` 只按第一个 `=` 切开，路径里再出现 `=` 也整段保留。"""
+        self.assertEqual(triage_audit.parse_args(["--input=a=b"]), "a=b")
 
     def test_dump_that_is_not_the_expected_shape_is_unreachable(self):
         cases = {
@@ -172,15 +231,16 @@ class MainTests(unittest.TestCase):
                 self.assertIn(reason, err)
 
     def test_unreadable_input_is_unreachable(self):
-        code, _, _ = self.run_main(["--input", "/nonexistent/issues.json"])
+        code, _, err = self.run_main(["--input", "/nonexistent/issues.json"])
         self.assertEqual(code, triage_audit.EXIT_UNREACHABLE)
+        self.assertIn("读不了", err)
 
     def test_empty_input_value_never_falls_back_to_the_network(self):
         for argv in (["--input="], ["--input", ""], ["--input"]):
             with self.subTest(argv=argv):
                 code, _, err = self.run_main(argv)
                 self.assertEqual(code, triage_audit.EXIT_UNREACHABLE)
-                self.assertIn("要给路径", err)
+                self.assertEqual(err.splitlines()[0], "--input 后面要给路径")
 
     def test_unknown_argument_is_unreachable(self):
         code, _, err = self.run_main(["--nope"])

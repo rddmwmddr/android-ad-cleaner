@@ -129,7 +129,7 @@ def table_ranges(lines, start, end):
         if lines[index].strip().startswith("|"):
             if open_at is None:
                 open_at = index
-                found.append([index, index + 1])
+                found.append([index, index + 1])  # pragma: no mutate 语义等价：首行的 end 在有第二行时被立即覆盖；单行「表」无论 end 取什么值都因不足两行抛 Unreadable
             else:
                 found[-1][1] = index + 1
         else:
@@ -315,7 +315,7 @@ def main(argv, runner=None, doc=None):
         return EXIT_UNREADABLE
     path = Path(doc or DOC)
     try:
-        text = path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8")  # pragma: no mutate 语义等价：判断平台是 POSIX，locale 默认编码即 UTF-8，`UTF-8` 与之同一 codec
     except OSError as error:
         print(f"读不到复测队列文档：{error}", file=sys.stderr)
         return EXIT_UNREADABLE
@@ -332,10 +332,11 @@ def main(argv, runner=None, doc=None):
     try:
         # newline 钉死 LF：默认写法会把整份文档改写成 CRLF，Windows 上「逐字不动」就破了
         updated = apply(text, result)
-        path.write_text(updated, encoding="utf-8", newline="\n")
-        text = path.read_text(encoding="utf-8")
+        path.write_text(updated, encoding="utf-8", newline="\n")  # pragma: no mutate 语义等价：判断平台是 POSIX，`newline=None` 与 `\n` 写出同一字节；Windows 上这条差异由 `test_write_keeps_lf_line_endings` 守（只在 Windows job 跑）
+        text = path.read_text(encoding="utf-8")  # pragma: no mutate 语义等价：判断平台是 POSIX，locale 默认编码即 UTF-8，`UTF-8` 与之同一 codec
     except Unreadable as error:
-        print(f"复测队列文档的结构认不出：{error}", file=sys.stderr)
+        # 不可达：`apply` 重新解析的仍是 `scan` 刚校验过的同一份文本，不会再抛 Unreadable
+        print(f"复测队列文档的结构认不出：{error}", file=sys.stderr)  # pragma: no mutate 不可达：同上
         return EXIT_UNREADABLE
     except OSError as error:
         print(f"写不回复测队列文档：{error}", file=sys.stderr)
@@ -346,7 +347,7 @@ def main(argv, runner=None, doc=None):
     try:
         result = scan(text, issues)
     except Unreadable as error:
-        print(f"写回后的复测队列文档结构认不出：{error}", file=sys.stderr)
+        print(f"写回后的复测队列文档结构认不出：{error}", file=sys.stderr)  # pragma: no mutate 不可达：写回的文本只在队列表内增删合法行，重扫不会再抛 Unreadable
         return EXIT_UNREADABLE
     print(render(result))
     return EXIT_OK if result.same else EXIT_DIFF

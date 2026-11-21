@@ -140,7 +140,7 @@ def fetch_issues(runner):
 def read_dump(path):
     """读一份 `gh issue list --json number,labels` 的落盘；读不了或形状不符都抛 GhError。"""
     try:
-        issues = json.loads(Path(path).read_text(encoding="utf-8"))
+        issues = json.loads(Path(path).read_text(encoding="utf-8"))  # pragma: no mutate 语义等价：判断平台是 POSIX，locale 默认编码即 UTF-8，`UTF-8` 与之同一 codec
     except (OSError, ValueError) as error:
         raise GhError(f"读不了 {path}：{error}") from error
     return checked(issues, str(path))

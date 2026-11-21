@@ -118,7 +118,7 @@ def page_entries(assets, version):
     写进页面会让版本一致性守卫红，所以在这里先挡住。
     """
     entries = []
-    for (entry_id, _), asset in zip(SUFFIXES, select(assets, what="回填"), strict=True):
+    for (entry_id, _), asset in zip(SUFFIXES, select(assets, what="回填"), strict=True):  # pragma: no mutate 语义等价：`SUFFIXES` 与 `select()` 恒返回五条，strict 三档同结果
         if asset.name.split("-")[1:2] != [version]:
             raise Refused(f"{asset.name} 的文件名里没有版本 {version}：tag 与资产对不上，拒绝回填。")
         entries.append(Entry(entry_id, asset.name, human_size(asset.size), digest_of(
@@ -174,7 +174,7 @@ def plan_page(text, assets, version, released, gitee=False):
     if incomplete:
         raise Refused(f"页面里这些卡片读不出完整条目（{'、'.join(incomplete)}）：拒绝回填。")
 
-    head, sep, tail = match.group(1).partition("files:")
+    head, sep, tail = match.group(1).partition("files:")  # pragma: no mutate 语义等价：合规 REL 块里 `files:` 只出现一次，partition 与 rpartition 同结果
     if not sep:
         raise Refused("页面里 REL 没有 files 段：结构变了，拒绝回填。")
     head = replace_once(VERSION_LINE, head, lambda _: version, "REL.version")
@@ -213,7 +213,7 @@ def cache_key_ok(text, version):
 def file_digest(path):
     digest = hashlib.sha256()
     with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
+        for chunk in iter(lambda: handle.read(1 << 20), b""):  # pragma: no mutate 语义等价：sha256 分块大小不影响摘要；`b""` 是唯一的 EOF 终止值
             digest.update(chunk)
     return digest.hexdigest()
 
@@ -233,9 +233,9 @@ def from_files(assets, root):
 def write_atomic(path, text):
     """先写同目录临时文件再替换：写到一半中断不留半份清单。"""
     path = Path(path)
-    tmp = path.with_name(path.name + ".tmp")
+    tmp = path.with_name(path.name + ".tmp")  # pragma: no mutate 语义等价：临时文件名只在写盘瞬间存在，成功后 rename、失败后 unlink，外部看不到
     try:
-        tmp.write_text(text, encoding="utf-8", newline="\n")
+        tmp.write_text(text, encoding="utf-8", newline="\n")  # pragma: no mutate 语义等价：判断平台是 POSIX，locale 默认编码即 UTF-8，`newline=None` 与 `\n` 写出同一字节
         os.replace(tmp, path)
     except OSError:
         tmp.unlink(missing_ok=True)
@@ -245,10 +245,10 @@ def write_atomic(path, text):
 def write_checked(path, text, check):
     """临时文件 → 读回已落盘的原文自检 → 原子替换；自检不过就删掉临时文件，页面保持原样。"""
     path = Path(path)
-    tmp = path.with_name(path.name + ".tmp")
+    tmp = path.with_name(path.name + ".tmp")  # pragma: no mutate 语义等价：临时文件名只在写盘瞬间存在，成功后 rename、失败后 unlink，外部看不到
     try:
-        tmp.write_text(text, encoding="utf-8", newline="\n")
-        if not check(tmp.read_text(encoding="utf-8")):
+        tmp.write_text(text, encoding="utf-8", newline="\n")  # pragma: no mutate 语义等价：判断平台是 POSIX，locale 默认编码即 UTF-8，`newline=None` 与 `\n` 写出同一字节
+        if not check(tmp.read_text(encoding="utf-8")):  # pragma: no mutate 语义等价：判断平台是 POSIX，locale 默认编码即 UTF-8，`UTF-8` 与之同一 codec
             raise Refused(f"{path} 写后回读与预期不一致：不落盘，页面保持原样。")
         os.replace(tmp, path)
     except (OSError, Refused):
@@ -273,11 +273,11 @@ def release_published(tag):
     """Release 发布时间的 UTC 日期（`YYYY-MM-DD`）；还没发布时拒绝回填。"""
     raw = run_gh("release", "view", tag, "--json", "publishedAt", "--jq", ".publishedAt").strip()
     try:
-        moment = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        moment = datetime.fromisoformat(raw.replace("Z", "+00:00"))  # pragma: no mutate 语义等价：判断平台是 3.12+，fromisoformat 直接接受尾部 Z，替换与否同结果
     except ValueError:
         raise Refused(f"{tag} 还没发布（publishedAt 是空的）：页面先不写。") from None
     if moment.tzinfo is None:          # 没有时区的读数按 UTC 认，不拿本机时区去猜
-        moment = moment.replace(tzinfo=timezone.utc)
+        moment = moment.replace(tzinfo=timezone.utc)  # pragma: no mutate 语义等价：判断平台是 UTC，naive 时间 astimezone(UTC) 与按 UTC 认同一天
     return moment.astimezone(timezone.utc).date().isoformat()
 
 
@@ -305,7 +305,13 @@ def parse(argv):
     if not argv:
         raise ValueError("缺子命令，只认 sums / page")
     command, rest = argv[0], list(argv[1:])
-    allowed = {"sums": {"--upload", "--from-files"}, "page": {"--write", "--gitee"}}.get(command)
+    # `--from-files` 有专门分支先处理，从不经 `allowed` 查；这一项是死成员。拆成单独一行只为让
+    # 变异测试只豁免这一个字面量，`--upload` / `--write` / `--gitee` 仍由端到端用例判（#1522）。
+    allowed = {
+        "sums": {"--upload",
+                 "--from-files"},  # pragma: no mutate 语义等价：专门的 `--from-files` 分支先处理，集合成员从不被查
+        "page": {"--write", "--gitee"},
+    }.get(command)
     if allowed is None:
         raise ValueError(f"不认识的子命令：{command}")
     tag, from_dir, flags = "", None, set()
@@ -390,7 +396,7 @@ def run_page(opts, fetch, published, pages, verify):
     texts = {}
     for key, path in paths.items():
         try:
-            texts[key] = path.read_text(encoding="utf-8")
+            texts[key] = path.read_text(encoding="utf-8")  # pragma: no mutate 语义等价：判断平台是 POSIX，locale 默认编码即 UTF-8，`UTF-8` 与之同一 codec
         except OSError as error:
             print(f"读不到 {path}：{error}", file=sys.stderr)
             return EXIT_UNREACHABLE

@@ -231,6 +231,13 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
     "devtools/gh.py": ("tests/test_gh.py", "tests/test_claim.py", "tests/test_stale_scan.py"),
     "devtools/claim.py": ("tests/test_claim.py",),
     "devtools/stale.py": ("tests/test_stale_scan.py",),
+    # devtools（#1522）：`followup` / `triage_audit` / `release_assets` / `release_meta` 都经 `gh` 取数，
+    # 但各有独立测试文件、互不共享；`gh` 已由上面那行进表，这里只收各自的行。副本里跑不通的根级读取
+    # （`release_meta` 读 `index.html`、`followup` 读模块相对路径下不存在的 `docs/`）见 `UNUSABLE`。
+    "devtools/followup.py": ("tests/test_followup.py",),
+    "devtools/triage_audit.py": ("tests/test_triage_audit.py",),
+    "devtools/release_assets.py": ("tests/test_release_assets.py",),
+    "devtools/release_meta.py": ("tests/test_release_meta.py",),
     # devtools（#1519）：`test_anchors` 与 `unittest_summary` 作为一族。`test_anchors` 的判定逻辑
     # （`recipe_tokens` / `base_of` / `recipe_owned` / `violations` / `domain_violations`）与 CLI 入口由
     # `tests/test_test_collection.py` 的 `AnchorTests` / `DomainTests` / `AnchorMainTests` 逐条覆盖
@@ -268,6 +275,14 @@ UNUSABLE: dict[str, tuple[str, ...]] = {
     ),
     # 副本里没有根级 `.github/`：整类读 workflow 文件的用例按类摘掉（#1517）。
     "tests/test_dco.py": ("tests/test_dco.py::WorkflowTest",),
+    # `RealQueueTests` 读 `followup.DOC`，它是模块相对路径 `…/docs/agents/release-followup.md`：副本里
+    # 模块在 `mutants/src/devtools/` 下，`mutants/src/docs/` 不存在（`docs/` 只拷到 `mutants/` 根）。
+    # 整类两条都在读它，按类摘掉（#1522）。
+    "tests/test_followup.py": ("tests/test_followup.py::RealQueueTests",),
+    # 副本里没有根级 `index.html`：只摘读它比对卡片顺序的那条方法，同类的清单生成断言照跑（#1522）。
+    "tests/test_release_meta.py": (
+        "tests/test_release_meta.py::PlanSumsTests::test_manifest_order_is_the_download_card_order",
+    ),
     # 副本里没有 `android/` 的 Kotlin 源码：唯一读它的两条按方法摘掉，其余用例照跑（#1430）。
     # `test_modules_are_fresh_per_top_level_run` 依赖真产品路径的模块 purge，在 `src` 视角的副本里
     # 判定不同（重跑读到 `2` 而不是 `1`），也与被测模块无关，按方法摘掉。

@@ -246,7 +246,7 @@ def main(argv, fetch=fetch_release, page=PAGE):
         print(f"{error}\n{USAGE}", file=sys.stderr)
         return EXIT_UNREACHABLE
     name = Path(page).name
-    version, entries = read_entries(Path(page).read_text(encoding="utf-8"))
+    version, entries = read_entries(Path(page).read_text(encoding="utf-8"))  # pragma: no mutate 语义等价：判断平台是 POSIX，locale 默认编码即 UTF-8，`UTF-8` 与之同一 codec
     if not readable(version, entries):
         print(f"{page} 里读不到 REL 的 version 与 files：页面结构变了，这条检查没法比对。",
               file=sys.stderr)
@@ -262,7 +262,7 @@ def main(argv, fetch=fetch_release, page=PAGE):
     else:
         only_page, only_release = compare([entry.file for entry in entries],
                                           [asset.name for asset in release])
-        diff = Diff(only_page, only_release, [], [], [])
+        diff = Diff(only_page, only_release, [], [], [])  # pragma: no mutate 语义等价：非 --sha 档只按真假用 size / sha / unverified，None 与 [] 同假
     differs = bool(diff.only_page or diff.only_release or diff.size or diff.sha)
     if differs:
         print(f"{tag} 与 {name} 的 REL 对不上：", file=sys.stderr)
