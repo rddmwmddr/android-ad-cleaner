@@ -262,7 +262,7 @@ def main(argv, fetch=fetch_release, page=PAGE):
     else:
         only_page, only_release = compare([entry.file for entry in entries],
                                           [asset.name for asset in release])
-        diff = Diff(only_page, only_release, [], [], [])
+        diff = Diff(only_page, only_release, [], [], [])  # pragma: no mutate 语义等价：非 --sha 档只按真假用 size / sha / unverified，None 与 [] 同假
     differs = bool(diff.only_page or diff.only_release or diff.size or diff.sha)
     if differs:
         print(f"{tag} 与 {name} 的 REL 对不上：", file=sys.stderr)

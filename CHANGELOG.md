@@ -27,6 +27,7 @@
 - `test_anchors` / `unittest_summary` 存活清零并进变异映射表（#1519，ADR-0043）
 - devtools 的 `gh` / `claim` / `stale` 存活清零并进变异映射表（#1520，ADR-0043）
 - `typecheck_recipes` 实测不达变异判据，登记为 devtools 表外缺口（#1521，ADR-0043）
+- devtools 的 followup / triage_audit / release_* 存活清零并进映射表（#1522，ADR-0043）
 
 ## 0.4.5 · 2026-11-18
 
