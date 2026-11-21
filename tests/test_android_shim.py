@@ -3,6 +3,7 @@ import contextlib
 import io
 import os
 import queue
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -1920,7 +1921,8 @@ class AdbAnswerTest(unittest.TestCase):
         with open(src, "wb") as handle:
             handle.write(b"data")
         adb.answer(["push", "ignored", src, dst])
-        self.assertEqual(self.fake.cmds[-1], (f"cat > {dst}", b"data"))
+        # 远端路径按实现的口径过一遍 shell 引用；这条守的是「最后一个参数当远端」
+        self.assertEqual(self.fake.cmds[-1], (f"cat > {shlex.quote(dst)}", b"data"))
 
     def test_push_failure_reports_the_bridge_error_or_a_default(self):
         src = os.path.join(self.tmp_name(), "a.dex")

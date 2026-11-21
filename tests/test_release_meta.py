@@ -26,6 +26,23 @@ def _restore_tz(old):
         os.environ["TZ"] = old
     time.tzset()
 
+
+@contextlib.contextmanager
+def _local_timezone(name):
+    """临时把本机时区切成 `name`，退出时切回来；`TZ` + `tzset` 只在 POSIX 上生效。
+
+    宿主机本身是 UTC 还是 +08 都不影响结论：`tzset()` 按 `TZ` 重读时区库。
+    """
+    if os.name == "nt":
+        raise unittest.SkipTest("TZ 变量 + tzset 只在 POSIX 上生效")
+    old = os.environ.get("TZ")
+    os.environ["TZ"] = name
+    time.tzset()
+    try:
+        yield
+    finally:
+        _restore_tz(old)
+
 VERSION = "1.2.3"
 RELEASED = "2026-11-12"
 NAMES = {entry_id: f"App-{VERSION}-{suffix}" for entry_id, suffix in release_meta.SUFFIXES}
@@ -571,21 +588,27 @@ class PageTests(unittest.TestCase):
 
     def test_an_unwritable_page_exits_two(self):
         """两页都读得到，但有一页写不进去：报「写不进」并退回非零。"""
-        ro = Path(self.dir.name) / "ro"
-        ro.mkdir()
-        target = ro / "android-tutorial.html"
+        target = Path(self.dir.name) / "android-tutorial.html"
         target.write_text(TUTORIAL, encoding="utf-8")
-        if os.name == "posix":
-            os.chmod(ro, 0o555)
-            self.addCleanup(os.chmod, ro, 0o755)
+        # `write_checked` 先写同目录 `.tmp`：只让这个临时文件写失败，两端同一路径。
+        tmp = target.with_name(target.name + ".tmp")
+        real_write_text = Path.write_text
+
+        def write_text(path, *args, **kwargs):
+            if path == tmp:
+                raise PermissionError("read-only")
+            return real_write_text(path, *args, **kwargs)
+
         out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        with mock.patch.object(Path, "write_text", write_text), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = release_meta.main(("page", "v1.2.3", "--write"),
                                      fetch=lambda tag: make_assets(sizes=SIZES),
                                      published=lambda tag: RELEASED,
                                      pages={"home": self.page, "tutorial": target})
         self.assertEqual(code, release_meta.EXIT_UNREACHABLE)
         self.assertTrue(err.getvalue().splitlines()[0].startswith("写不进 "))
+        self.assertTrue(target.exists(), "写失败不该动原页面")
 
 
 class PublishedTests(unittest.TestCase):
@@ -603,15 +626,17 @@ class PublishedTests(unittest.TestCase):
 
     def test_a_naive_timestamp_is_read_as_utc(self):
         """不带时区的读数按 UTC 认：本机时区设成东八区时，跨零点会差一天。"""
-        if os.name == "nt":
-            self.skipTest("TZ 变量 + tzset 只在 POSIX 上生效")
-        old = os.environ.get("TZ")
-        os.environ["TZ"] = "Asia/Shanghai"
-        time.tzset()
-        self.addCleanup(_restore_tz, old)
-        # 02:30 按 UTC 认是 11-11；若按 +08 本机时区换算会退到 11-10
-        with mock.patch.object(release_meta, "run_gh", return_value="2026-11-11T02:30:00"):
-            self.assertEqual(release_meta.release_published("v1"), "2026-11-11")
+        with _local_timezone("Asia/Shanghai"):
+            # 02:30 按 UTC 认是 11-11；若按 +08 本机时区换算会退到 11-10
+            with mock.patch.object(release_meta, "run_gh", return_value="2026-11-11T02:30:00"):
+                self.assertEqual(release_meta.release_published("v1"), "2026-11-11")
+
+    def test_an_aware_timestamp_keeps_the_utc_date_in_a_plus_eight_zone(self):
+        """带 Z 的读数按 UTC 取日期：本机是 +08 时，换算成本机时区会挪到第二天。"""
+        with _local_timezone("Asia/Shanghai"):
+            # 20:30 UTC 在 +08 是次日 04:30；按本机时区取日期会写成 11-12
+            with mock.patch.object(release_meta, "run_gh", return_value="2026-11-11T20:30:00Z"):
+                self.assertEqual(release_meta.release_published("v1"), "2026-11-11")
 
     def test_unpublished_release_refuses(self):
         with mock.patch.object(release_meta, "run_gh", return_value="null\n"):
