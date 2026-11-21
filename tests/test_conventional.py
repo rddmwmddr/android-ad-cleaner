@@ -1,4 +1,6 @@
 """Conventional Commits 校验（devtools/check_conventional.py）：`base..head` 里每个非 merge 提交的主题都要带合规前缀（#849）。"""
+import contextlib
+import io
 import re
 import sys
 import unittest
@@ -10,7 +12,15 @@ sys.path.insert(0, str(ROOT / "tool"))
 import fixtures  # noqa: E402
 from devtools import check_conventional  # noqa: E402
 
-SCRIPT = ROOT / "devtools" / "check_conventional.py"
+# 起子进程跑的脚本就是被 import 的这份模块（#1517，照 #1515）：按 `ROOT/devtools` 写死只会跑到
+# 未变异原件，对 mutant 零区分力。
+SCRIPT = Path(check_conventional.__file__).resolve()
+# 副本里 `SCRIPT.parents[1]` 是 `mutants/src`，子进程的 `import stdio` 要在那里找得到；正常运行时
+# 就是仓库根，`stdio` 仍在 `tool/` 下，无损。
+SRC_ROOT = SCRIPT.parents[1]
+# 子进程端到端不参与 mutmut 的进程内归属（归属由 `MainTest` 给）；清空继承来的 `MUTANT_UNDER_TEST`
+# 免得 trampoline 在临时 git 目录里找不到 mutmut 配置。
+RUN_ENV = {"PYTHONPATH": str(SRC_ROOT), "MUTANT_UNDER_TEST": ""}
 WORKFLOW = ROOT / ".github" / "workflows" / "commit-checks.yml"
 CLAUDE_MD = ROOT / "CLAUDE.md"
 ANCHOR = "rule:dev.git.conventional-commits"
@@ -27,7 +37,8 @@ class ViolationsTest(unittest.TestCase):
     def test_subject_without_prefix_is_reported(self):
         bad = check_conventional.violations([commit("Update README.md")])
         self.assertEqual(len(bad), 1)
-        self.assertIn("前缀", bad[0].reason)
+        # 提示里写的是小写的 `type(scope)`：大写变体会让维护者照抄一个错的模板。
+        self.assertIn("没有 `type(scope): ` 前缀", bad[0].reason)
 
     def test_chinese_subject_with_a_valid_prefix_passes(self):
         self.assertEqual(check_conventional.violations([commit("fix(chan): 插电常亮原值已是 15 等更宽的值时不改写")]), [])
@@ -41,7 +52,9 @@ class ViolationsTest(unittest.TestCase):
     def test_unknown_type_is_reported(self):
         bad = check_conventional.violations([commit("feature: 加了东西")])
         self.assertEqual(len(bad), 1)
-        self.assertIn("type", bad[0].reason)
+        self.assertIn("type feature 不在清单里", bad[0].reason)
+        # 清单原样抄给维护者看：「 / 」分隔符被改掉时能看见。
+        self.assertIn(" / ".join(check_conventional.TYPES), bad[0].reason)
 
     def test_scope_must_be_lowercase_slug(self):
         for scope in ("GUI", "a b", "带中文"):
@@ -60,6 +73,11 @@ class ViolationsTest(unittest.TestCase):
     def test_merge_commits_are_skipped(self):
         self.assertEqual(check_conventional.violations([commit("Merge branch 'main'", merge=True)]), [])
 
+    def test_a_merge_commit_does_not_stop_the_scan(self):
+        # `continue` 跳过 merge 后还要往后看：后面的违规提交不能被漏掉（`break` 会漏）。
+        commits = [commit("Merge branch 'main'", merge=True), commit("Update README.md")]
+        self.assertEqual(len(check_conventional.violations(commits)), 1)
+
 
 class RangeTest(unittest.TestCase):
     """端到端：在真 git 仓上跑脚本，退出码与输出就是 CI 看到的结论。"""
@@ -71,8 +89,9 @@ class RangeTest(unittest.TestCase):
     def commit(self, subject):
         return self.repo.commit(subject)
 
-    def run_check(self, base, head="HEAD"):
-        return self.repo.run(SCRIPT, f"{base}..{head}")
+    def run_check(self, base, head="HEAD", env_extra=None):
+        return self.repo.run(SCRIPT, f"{base}..{head}",
+                             env_extra={**RUN_ENV, **(env_extra or {})})
 
     def test_subject_without_prefix_fails_and_names_it(self):
         base = self.commit("fix: 起点")
@@ -117,9 +136,68 @@ class RangeTest(unittest.TestCase):
         # Windows 控制台与管道默认 cp1252：打印中文不能把校验本身打崩。
         base = self.commit("chore: 起点")
         sha = self.commit("初版：引擎")
-        code, out = self.repo.run(SCRIPT, f"{base}..HEAD", env_extra={"PYTHONIOENCODING": "cp1252"})
+        code, out = self.run_check(base, env_extra={"PYTHONIOENCODING": "cp1252"})
         self.assertEqual(code, 1, out)
         self.assertIn(sha, out)
+
+
+class MainTest(unittest.TestCase):
+    """`main()` 在同一解释器里直接调，让 mutmut 记到它的归属（#1517）。
+
+    只经子进程跑到的入口在统计阶段记不到测试，mutmut 记为「无测试」（exit 33），一条测试都不跑。
+    """
+
+    def setUp(self):
+        self.repo = fixtures.GitRepo()
+        self.addCleanup(self.repo.cleanup)
+
+    def call(self, *argv):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = check_conventional.main(list(argv))
+        return code, out.getvalue(), err.getvalue()
+
+    def run_in(self, *argv):
+        with contextlib.chdir(self.repo.dir):
+            return self.call(*argv)
+
+    def test_clean_range_says_so(self):
+        base = self.repo.commit("chore: 起点")
+        self.repo.commit("fix(chan): 插电常亮原值已是 15 等更宽的值时不改写")
+        code, out, err = self.run_in(f"{base}..HEAD")
+        self.assertEqual(code, 0, err)
+        self.assertIn("都符合 Conventional Commits", out)
+
+    def test_violations_are_listed_with_sha_subject_and_reason(self):
+        base = self.repo.commit("chore: 起点")
+        sha = self.repo.commit("Update README.md")
+        code, out, err = self.run_in(f"{base}..HEAD")
+        self.assertEqual(code, 1, err)
+        self.assertIn(f"{base}..HEAD 有 1 个提交主题不合规", out)
+        self.assertIn(f"{sha} Update README.md —— 主题没有", out)
+
+    def test_unknown_type_reason_is_reported(self):
+        base = self.repo.commit("chore: 起点")
+        self.repo.commit("feature: 加了东西")
+        code, out, _ = self.run_in(f"{base}..HEAD")
+        self.assertEqual(code, 1)
+        self.assertIn("type feature 不在清单里", out)
+
+    def test_wrong_argument_count_is_an_error(self):
+        code, out, err = self.call()
+        self.assertEqual(code, 2, out + err)
+        self.assertTrue(err.startswith("用法：python3 devtools/check_conventional.py"), err)
+        self.assertIn("<base>..<head>", err)
+
+    def test_extra_arguments_are_an_error(self):
+        code, out, err = self.call("a..b", "extra")
+        self.assertEqual(code, 2, out + err)
+        self.assertIn("用法：python3 devtools/check_conventional.py", err)
+
+    def test_git_error_is_reported_not_a_pass(self):
+        code, out, err = self.run_in("bad-range")
+        self.assertEqual(code, 2, out + err)
+        self.assertIn("git rev-list --parents bad-range 失败", err)
 
 
 def uncommented(text):
