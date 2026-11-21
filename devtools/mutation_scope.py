@@ -225,6 +225,12 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
     "devtools/check_dco.py": ("tests/test_dco.py",),
     "devtools/check_conventional.py": ("tests/test_conventional.py",),
     "devtools/check_comment_tickets.py": ("tests/test_comment_tickets.py",),
+    # devtools（#1520）：`gh` 被 `claim` / `stale` 共用，三份测试文件都真实执行它。
+    # 另外几份执行 `gh` 的测试（`followup` / `triage_audit` / `release_*`）属于各自模块的行，
+    # 这里不收：它们把副本里跑不通的根级读取一并拖进这一段。
+    "devtools/gh.py": ("tests/test_gh.py", "tests/test_claim.py", "tests/test_stale_scan.py"),
+    "devtools/claim.py": ("tests/test_claim.py",),
+    "devtools/stale.py": ("tests/test_stale_scan.py",),
     # devtools（#1519）：`test_anchors` 与 `unittest_summary` 作为一族。`test_anchors` 的判定逻辑
     # （`recipe_tokens` / `base_of` / `recipe_owned` / `violations` / `domain_violations`）与 CLI 入口由
     # `tests/test_test_collection.py` 的 `AnchorTests` / `DomainTests` / `AnchorMainTests` 逐条覆盖
@@ -248,6 +254,11 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
 UNUSABLE: dict[str, tuple[str, ...]] = {
     "tests/test_adapt_cli.py": ("tests/test_adapt_cli.py::AdaptCliParityTests",),
     "tests/test_adb_link.py": ("tests/test_adb_link.py::BackendMissingTextTests",),
+    # 副本里没有根级 `CLAUDE.md`：只摘读它的那条方法。退出码与命令名两条断言拆在同类另一条里，
+    # 仍在变异里跑（#1520）。
+    "tests/test_claim.py": (
+        "tests/test_claim.py::PinnedContractTests::test_the_command_is_documented_in_claude_md",
+    ),
     # 副本里没有根级 `.github/`：整类读 workflow 文件的用例按类摘掉（#1517）。
     "tests/test_comment_tickets.py": ("tests/test_comment_tickets.py::WorkflowTest",),
     # 副本里没有根级 `.github/`（`WorkflowTest`）与 `CLAUDE.md`（`DocumentedTypesTest`）：两类一起摘（#1517）。
