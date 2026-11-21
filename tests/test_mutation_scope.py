@@ -83,6 +83,40 @@ def registered_cache_entries(root):
     raise AssertionError("tests/conftest.py 里找不到 _CACHED_ENTRIES")
 
 
+def devtools_importing_files(root):
+    """`tests/` 顶层里导入 devtools 的测试文件（按文件名）。
+
+    认三种写法：`import devtools`、`from devtools import …`、`from devtools.x import …`，包级子模块
+    也算。函数体内的延迟 import 照样认——`test_catalog` 的 `from devtools import typecheck_recipes`
+    就在方法里，但它触发的 import 期改写一样会漏出去。
+    """
+    found = set()
+    for path in sorted((root / "tests").glob("test_*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import) and any(
+                    alias.name == "devtools" or alias.name.startswith("devtools.")
+                    for alias in node.names):
+                found.add(path.name)
+                break
+            if isinstance(node, ast.ImportFrom) and node.module is not None and (
+                    node.module == "devtools" or node.module.startswith("devtools.")):
+                found.add(path.name)
+                break
+    return found
+
+
+def registered_devtools_files(root):
+    """`tests/conftest.py` 的 `_DEVPTOOLS_IMPORTING_FILES` 里登记的测试文件名。"""
+    tree = ast.parse((root / "tests" / "conftest.py").read_text(encoding="utf-8"))
+    for node in tree.body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id == "_DEVPTOOLS_IMPORTING_FILES"):
+            return set(ast.literal_eval(node.value))
+    raise AssertionError("tests/conftest.py 里找不到 _DEVPTOOLS_IMPORTING_FILES")
+
+
 class MapTests(unittest.TestCase):
     def test_every_strict_module_is_mapped(self):
         missing = [f"tool/{m}.py" for m in strict_modules()
@@ -444,6 +478,28 @@ class CacheClearRegistryTests(unittest.TestCase):
             "    return 6\n",
             encoding="utf-8")
         self.assertEqual(cached_functions(root), {"sample.a", "sample.b", "sample.c", "sample.d"})
+
+
+class DevtoolsImportScopeTests(unittest.TestCase):
+    """导入 devtools 的测试文件都要进逐用例回填的名单（#1516）。
+
+    devtools 模块在 import 期 `sys.path.insert`、随即 `use_utf8_console()` 改写标准流且不还原。
+    mutmut 在父进程里跑统计阶段、之后每个 mutant 从父进程 fork，残留的全局状态会漏进每一个
+    mutant 子进程；`tests/conftest.py` 只在这些文件的用例边界上快照 / 回填，所以「哪些文件导入
+    devtools」与「登记了哪些文件」必须双向对齐。新增一个导入 devtools 的测试文件却漏登记，这里报红。
+    """
+
+    def test_registered_files_match_the_importers(self):
+        importers = devtools_importing_files(ROOT)
+        registered = registered_devtools_files(ROOT)
+        self.assertEqual(sorted(registered - importers), [], "登记了却不导入 devtools 的文件")
+        self.assertEqual(sorted(importers - registered), [], "导入了 devtools 却漏登记的文件")
+
+    def test_the_snapshot_hooks_are_defined(self):
+        """名单在、钩子被删掉，回填就空转；两个 pytest 钩子缺一不可。"""
+        tree = ast.parse((ROOT / "tests" / "conftest.py").read_text(encoding="utf-8"))
+        defined = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
+        self.assertTrue({"pytest_runtest_setup", "pytest_runtest_teardown"} <= defined)
 
 
 if __name__ == "__main__":
