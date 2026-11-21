@@ -2,11 +2,14 @@
 import contextlib
 import io
 import os
+import queue
 import subprocess
 import sys
 import tempfile
 import textwrap
+import threading
 import time
+import types
 import unittest
 import warnings
 from pathlib import Path
@@ -1033,22 +1036,85 @@ class ScreenObjectTest(unittest.TestCase):
         self.assertEqual(len(w), 1)
 
 
+class _FlushSink:
+    """写进缓冲、flush 时才落盘：能看出 `print(..., flush=…)` 到底有没有调 flush。"""
+
+    def __init__(self):
+        self.buf, self.flushes = "", 0
+
+    def write(self, s):
+        self.buf += s
+        return len(s)
+
+    def flush(self):
+        self.flushes += 1
+
+
+class _Done:
+    """`_watchdog` 的 done 参数替身：按给定的序列回答，并记下每次等的秒数。"""
+
+    def __init__(self, answers):
+        self.answers, self.waits = list(answers), []
+
+    def wait(self, timeout):
+        self.waits.append(timeout)
+        return self.answers.pop(0) if self.answers else True
+
+
 class InprocTest(unittest.TestCase):
+    """进程内执行：清模块、换环境、分流输出、看门狗与停止通道。
+
+    `inproc` 的模块级状态（`TOOL` / `_fallback` / `_sinks` / `_engine_log` / `after_run` /
+    `WATCHDOG_INTERVAL`）在同一个解释器里跨用例存活。mutation 把全部 mutant 跑在同一个解释器里，
+    不还原就会出现「后一个 mutant 读到的初值不是初值」的假存活（#1510）。先例是 #1454 在会话开头
+    清 `tool/` 的 lru_cache：方向一致，只把状态还原成模块刚加载时的样子，不制造假杀死。
+    """
+
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
         self.tool = Path(self.dir.name)
         self.saved = (inproc.TOOL, sys.stdout, sys.stderr, inproc._fallback)
+        self.saved_globals = (dict(inproc._sinks), inproc._engine_log, list(inproc.after_run),
+                              inproc.WATCHDOG_INTERVAL)
         inproc.setup(str(self.tool))
 
     def tearDown(self):
         inproc.TOOL = self.saved[0]
         sys.stdout, sys.stderr, inproc._fallback = self.saved[1:]
+        sinks, engine_log, after_run, interval = self.saved_globals
+        inproc._sinks.clear()
+        inproc._sinks.update(sinks)
+        inproc._engine_log = engine_log
+        inproc.after_run[:] = after_run
+        inproc.WATCHDOG_INTERVAL = interval
         if str(self.tool) in sys.path:
             sys.path.remove(str(self.tool))
         self.dir.cleanup()
 
     def script(self, name, body):
         (self.tool / name).write_text(textwrap.dedent(body), encoding="utf-8")
+
+    def read_stdout(self, proc, timeout=5, cap=1000):
+        """把 spawn 的 stdout 读到结束标记。
+
+        工作线程没送结束标记（坏掉的 `Proc`）或反复送同一行时，到点 / 到上限就收手：不然一条
+        卡在 `q.get()` 的用例会把 mutation 的整个解释器挂住，并留下没有结论的 mutant。
+        """
+        got = []
+
+        def collect():
+            for line in proc.stdout:
+                got.append(line)
+                if len(got) >= cap:
+                    return
+
+        reader = threading.Thread(target=collect, daemon=True)
+        reader.start()
+        reader.join(timeout)
+        return got
+
+    def clear_sinks(self):
+        inproc._sinks.clear()
 
     def test_exit_code_output_and_env(self):
         self.script("a.py", """
@@ -1079,24 +1145,62 @@ class InprocTest(unittest.TestCase):
                 time.sleep(0.01)
         """)
         proc = inproc.Runner(lambda: dict(os.environ)).spawn("loop.py")
-        lines = iter(proc.stdout)
-        self.assertEqual(next(lines), "start\n")
-        time.sleep(0.05)
+        got = []
+
+        def collect():
+            for line in proc.stdout:
+                got.append(line)
+
+        reader = threading.Thread(target=collect, daemon=True)
+        reader.start()
+        deadline = time.monotonic() + 5
+        while not got and time.monotonic() < deadline:
+            time.sleep(0.01)
+        # 流式：脚本还没结束，第一行就已经读到了
+        self.assertEqual(got, ["start\n"])
         proc.terminate()
         self.assertEqual(proc.wait(5), -15)
 
     def test_run_times_out_and_leaves_the_next_run_usable(self):
+        # 有限时长的脚本：join 变异成 join(None) 时会等到它自然结束（而不是一起挂住），
+        # 那时 `run` 会正常返回而不是抛超时，断言能把它区分出来。
         self.script("slow.py", """
-            import time
-            while True:
-                time.sleep(0.01)
+            import sys, time
+            print("partial")
+            print("warn", file=sys.stderr)
+            time.sleep(0.5)
         """)
         self.script("ok.py", "print('ok')\n")
         run = inproc.Runner(lambda: dict(os.environ)).run
-        with self.assertRaises(subprocess.TimeoutExpired):
-            run("slow.py", timeout=0.2)
+        with self.assertRaises(subprocess.TimeoutExpired) as ctx:
+            run("slow.py", timeout=0.1)
+        error = ctx.exception
+        self.assertEqual(error.cmd, "slow.py")
+        self.assertEqual(error.timeout, 0.1)
+        self.assertEqual(error.output, "partial\n")
+        self.assertEqual(error.stderr, "warn\n已停止\n")
         # 打断后锁与环境变量都要还回来，下一步照常跑
         self.assertEqual(run("ok.py", timeout=5), ("ok\n", "", 0))
+
+    def test_a_script_that_outlives_the_stop_grace_reports_what_it_had_printed(self):
+        """打断后最多再等 STOP_GRACE：等不到就带着此刻已有输出报超时，不陪着一起等。"""
+        saved_grace = inproc.STOP_GRACE
+        self.addCleanup(setattr, inproc, "STOP_GRACE", saved_grace)
+        inproc.STOP_GRACE = 0.1
+        finished = threading.Event()
+        inproc.after_run[:] = [finished.set]    # 等被打断的脚本线程收尾，别让它漏到后面的用例
+        self.script("stubborn.py", """
+            import sys, time
+            print("early", flush=True)
+            try:
+                time.sleep(0.5)
+            finally:
+                print("late", flush=True)
+        """)
+        with self.assertRaises(subprocess.TimeoutExpired) as ctx:
+            inproc.Runner(lambda: dict(os.environ)).run("stubborn.py", timeout=0.05)
+        self.assertEqual(ctx.exception.output, "early\n")
+        self.assertTrue(finished.wait(5))
 
     def test_modules_are_fresh_per_top_level_run(self):
         self.script("counter.py", "N = []\n")
@@ -1123,9 +1227,9 @@ class InprocTest(unittest.TestCase):
         """)
         lines = self.logcat()
         proc = inproc.Runner(lambda: dict(os.environ)).spawn("say.py")
-        queue = list(proc.stdout)
+        shown = self.read_stdout(proc)
         self.assertEqual(proc.wait(5), 0)
-        self.assertEqual(queue, ["核对 3 项\n", "半行\n", "尾"])
+        self.assertEqual(shown, ["核对 3 项\n", "半行\n", "尾"])
         self.assertEqual(lines, [(inproc.LOGCAT_TAG, "核对 3 项"), (inproc.LOGCAT_TAG, "半行"),
                                  (inproc.LOGCAT_TAG, "尾")])
 
@@ -1138,9 +1242,9 @@ class InprocTest(unittest.TestCase):
         """)
         lines = self.logcat()
         proc = inproc.Runner(lambda: dict(os.environ)).spawn("mix.py")
-        queue = list(proc.stdout)
+        shown = self.read_stdout(proc)
         self.assertEqual(proc.wait(5), 0)
-        self.assertEqual(queue, ["abcdef\n"])
+        self.assertEqual(shown, ["abcdef\n"])
         self.assertEqual(lines, [(inproc.LOGCAT_TAG, "abcdef")])
 
     def test_machine_lines_reach_the_ui_but_not_logcat(self):
@@ -1164,6 +1268,330 @@ class InprocTest(unittest.TestCase):
         inproc._engine_log = boom
         out, err, rc = inproc.Runner(lambda: dict(os.environ)).run("say.py")
         self.assertEqual((out, err, rc), ("一\n二\n", "", 0))
+
+    # ---- 模块级状态：logcat 解析、输出分流、tool 目录与模块清理（#1510） ----
+
+    def test_logger_resolves_android_util_log_once(self):
+        """镜像取 `android.util.Log.i`：取到就记住，别再每行去 Java 里找一次。"""
+        log = lambda tag, text: None
+        java = SimpleNamespace(jclass=mock.Mock(return_value=SimpleNamespace(i=log)))
+        inproc._engine_log = inproc._UNSET
+        with mock.patch.dict(sys.modules, {"java": java}):
+            self.assertIs(inproc._logger(), log)
+            self.assertIs(inproc._engine_log, log)
+        java.jclass.assert_called_once_with("android.util.Log")
+
+    def test_logger_remembers_no_java_as_none(self):
+        """没有 java 模块时返回 None 并记住：镜像据此关掉，不会每行再试。"""
+        java = SimpleNamespace(jclass=mock.Mock(side_effect=RuntimeError("no java")))
+        inproc._engine_log = inproc._UNSET
+        with mock.patch.dict(sys.modules, {"java": java}):
+            self.assertIsNone(inproc._logger())
+        self.assertIsNone(inproc._engine_log)
+
+    def test_router_routes_each_stream_to_its_sink_then_the_fallback(self):
+        """stdout / stderr 各走自己的槽；没有活动 sink 时落到 setup 记下的那一对，嵌套时写最上面一层。"""
+        self.clear_sinks()
+        saved_fallback = inproc._fallback
+        self.addCleanup(setattr, inproc, "_fallback", saved_fallback)
+        fb_out, fb_err = io.StringIO(), io.StringIO()
+        inproc._fallback = (fb_out, fb_err)
+        self.assertEqual(inproc._Router(0).write("o"), 1)
+        self.assertEqual(inproc._Router(1).write("e"), 1)
+        self.assertEqual((fb_out.getvalue(), fb_err.getvalue()), ("o", "e"))
+        top_out, top_err = io.StringIO(), io.StringIO()
+        inproc._push(top_out, top_err)
+        inproc._Router(0).write("O")
+        inproc._Router(1).write("E")
+        self.assertEqual((top_out.getvalue(), top_err.getvalue()), ("O", "E"))
+        inner_out, inner_err = io.StringIO(), io.StringIO()
+        inproc._push(inner_out, inner_err)
+        inproc._Router(0).write("I")
+        self.assertEqual((inner_out.getvalue(), top_out.getvalue()), ("I", "O"))
+
+    def test_router_flush_reaches_a_sink_that_has_one(self):
+        self.clear_sinks()
+        sink = _FlushSink()
+        saved_fallback = inproc._fallback
+        self.addCleanup(setattr, inproc, "_fallback", saved_fallback)
+        inproc._fallback = (sink, sink)
+        out_router, err_router = inproc._Router(0), inproc._Router(1)
+        out_router.flush()
+        err_router.flush()
+        self.assertEqual(sink.flushes, 2)
+
+    def test_router_flush_ignores_a_sink_without_flush(self):
+        """fallback 可能是任意可写对象：没有 flush 也不能让它抛。"""
+        self.clear_sinks()
+        saved_fallback = inproc._fallback
+        self.addCleanup(setattr, inproc, "_fallback", saved_fallback)
+        inproc._fallback = (object(), object())
+        inproc._Router(0).flush()
+
+    def test_router_claims_to_be_writable(self):
+        self.assertIs(inproc._Router(0).writable(), True)
+
+    def test_setup_puts_a_new_tool_dir_at_the_front_once(self):
+        """新 tool 目录插到最前（模块先从这里找），已在清单里就不重复插。"""
+        other = str(self.tool / "nested")
+        os.makedirs(other)
+        self.addCleanup(lambda: sys.path.remove(other) if other in sys.path else None)
+        inproc.setup(other)
+        self.assertEqual(sys.path[0], other)
+        inproc.setup(other)
+        self.assertEqual(sys.path.count(other), 1)
+
+    def test_setup_keeps_the_original_streams_as_the_fallback(self):
+        """换掉的 stdout / stderr 要留一份当 fallback：没有活动 sink 时输出照旧落到原处。"""
+        self.assertEqual(inproc._fallback, (self.saved[1], self.saved[2]))
+
+    def test_purge_drops_modules_under_the_tool_dir_only(self):
+        """只清 TOOL 目录下的模块：同名前缀的兄弟目录、没有 __file__ 的模块都不动。"""
+        inside = types.ModuleType("aac_probe_inside")
+        inside.__file__ = os.path.join(str(self.tool), "probe_inside.py")
+        sibling = types.ModuleType("aac_probe_sibling")
+        sibling.__file__ = str(self.tool) + "x" + os.sep + "probe_sibling.py"
+        bare = types.ModuleType("aac_probe_bare")
+        names = ("aac_probe_inside", "aac_probe_sibling", "aac_probe_bare")
+        saved = {name: sys.modules.get(name) for name in names}
+        self.addCleanup(self._restore_modules, saved)
+        sys.modules.update(dict(zip(names, (inside, sibling, bare), strict=True)))
+        inproc._purge()
+        self.assertNotIn("aac_probe_inside", sys.modules)
+        self.assertIn("aac_probe_sibling", sys.modules)
+        self.assertIn("aac_probe_bare", sys.modules)
+
+    @staticmethod
+    def _restore_modules(saved):
+        for name, module in saved.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
+
+    def test_script_path_keeps_absolute_and_joins_relative(self):
+        absolute = os.path.join(str(self.tool), "x.py")
+        self.assertEqual(inproc._script_path(absolute), absolute)
+        self.assertEqual(inproc._script_path("x.py"), os.path.join(str(self.tool), "x.py"))
+
+    def test_push_and_pop_keep_one_stack_per_thread(self):
+        self.clear_sinks()
+        ident = threading.get_ident()
+        inproc._push("o", "e")
+        inproc._push("o2", "e2")
+        self.assertEqual(inproc._sinks[ident], [("o", "e"), ("o2", "e2")])
+        inproc._pop()
+        self.assertEqual(inproc._sinks[ident], [("o", "e")])
+        inproc._pop()
+        self.assertNotIn(ident, inproc._sinks)
+        inproc._pop()       # 没有栈时再 pop 也不抛
+
+    # ---- 跑脚本：argv / 退出码 / 停止与异常收容（#1510） ----
+
+    def test_cli_marker_is_stripped_and_argv_restored(self):
+        """`--cli` 只是引擎的一个标记，传到脚本前去掉；跑完 sys.argv 要还给调用方。"""
+        self.script("args.py", "import sys\nprint(sys.argv[1:])\n")
+        before = list(sys.argv)
+        self.assertEqual(inproc.call(["--cli", "args.py", "a", "b"], capture=True), (0, "['a', 'b']\n", ""))
+        self.assertEqual(sys.argv, before)
+
+    def test_the_script_runs_as_main(self):
+        self.script("mainonly.py", 'if __name__ == "__main__":\n    print("ran")\n')
+        self.assertEqual(inproc.call(["mainonly.py"], capture=True), (0, "ran\n", ""))
+
+    def test_exit_without_a_code_is_zero(self):
+        self.script("quiet_exit.py", "import sys\nsys.exit()\n")
+        self.assertEqual(inproc.call(["quiet_exit.py"], capture=True), (0, "", ""))
+
+    def test_exit_with_a_message_returns_one(self):
+        """非整数的 SystemExit.code 按桌面版的口径：原文进 stderr，退出码 1。"""
+        self.script("msg_exit.py", "import sys\nsys.exit('boom')\n")
+        self.assertEqual(inproc.call(["msg_exit.py"], capture=True), (1, "", "boom\n"))
+
+    def test_a_keyboard_interrupt_returns_minus_fifteen(self):
+        self.script("interrupted.py", "raise KeyboardInterrupt\n")
+        self.assertEqual(inproc.call(["interrupted.py"], capture=True), (-15, "", "已停止\n"))
+
+    def test_an_unexpected_error_prints_the_traceback_and_returns_one(self):
+        self.script("boom.py", "raise ValueError('bad')\n")
+        rc, out, err = inproc.call(["boom.py"], capture=True)
+        self.assertEqual((rc, out), (1, ""))
+        self.assertIn("Traceback", err)
+        self.assertIn("ValueError: bad", err)
+
+    def test_call_without_capture_returns_empty_streams(self):
+        """不捕获时只回退出码：输出照旧走当前输出，不往返回值里塞。"""
+        self.script("hi.py", "print('hi')\n")
+        self.clear_sinks()
+        saved_fallback = inproc._fallback
+        self.addCleanup(setattr, inproc, "_fallback", saved_fallback)
+        fallback = io.StringIO()
+        inproc._fallback = (fallback, fallback)
+        self.assertEqual(inproc.call(["hi.py"]), (0, "", ""))
+        self.assertEqual(fallback.getvalue(), "hi\n")
+
+    def test_capture_collects_stdout_and_stderr_apart(self):
+        self.script("sep.py", "import sys\nprint('o')\nprint('e', file=sys.stderr)\n")
+        self.assertEqual(inproc.call(["sep.py"], capture=True), (0, "o\n", "e\n"))
+
+    # ---- 行分流与 logcat 镜像（#1510） ----
+
+    def test_a_two_line_chunk_is_mirrored_line_by_line(self):
+        """一次 write 里带两个换行：队列与镜像都要按行拆开，而不是整块转手。"""
+        self.script("burst.py", "import sys\nsys.stdout.write('a\\nb\\n')\n")
+        lines = self.logcat()
+        proc = inproc.Runner(lambda: dict(os.environ)).spawn("burst.py")
+        shown = self.read_stdout(proc)
+        self.assertEqual(proc.wait(5), 0)
+        self.assertEqual(shown, ["a\n", "b\n"])
+        self.assertEqual(lines, [(inproc.LOGCAT_TAG, "a"), (inproc.LOGCAT_TAG, "b")])
+
+    def test_without_logcat_the_mirror_only_tries_once(self):
+        """取不到 logcat 就关掉：不该每行都重新找一次 Java 接口。"""
+        self.script("two.py", "print('a')\nprint('b')\n")
+        calls = []
+        saved = inproc._logger
+        self.addCleanup(setattr, inproc, "_logger", saved)
+        inproc._logger = lambda: (calls.append(1), None)[1]
+        out, _, rc = inproc.Runner(lambda: dict(os.environ)).run("two.py")
+        self.assertEqual((out, rc), ("a\nb\n", 0))
+        self.assertEqual(len(calls), 1)
+
+    def test_closing_the_mirror_relays_the_tail_and_resets_the_buffer(self):
+        self.clear_sinks()
+        seen = []
+        saved = inproc._engine_log
+        self.addCleanup(setattr, inproc, "_engine_log", saved)
+        inproc._engine_log = lambda tag, text: seen.append(text)
+        sink = io.StringIO()
+        mirror = inproc._Mirror(sink)
+        mirror.write("tail")
+        mirror.close()
+        self.assertEqual(sink.getvalue(), "tail")
+        self.assertEqual(seen, ["tail"])
+        self.assertEqual(mirror.buf, "")
+
+    def test_line_sink_close_emits_the_tail_once_and_resets_the_buffer(self):
+        q = queue.Queue()
+        sink = inproc._LineSink(q)
+        sink.write("tail")
+        sink.close()
+        sink.close()
+        self.assertEqual(q.get_nowait(), "tail")
+        self.assertTrue(q.empty())
+        self.assertEqual(sink.buf, "")
+
+    # ---- 进程替身：等待、轮询、环境合并与守护线程（#1510） ----
+
+    def test_wait_reports_running_until_the_script_finishes(self):
+        self.script("late.py", "import time\ntime.sleep(0.3)\nprint('done')\n")
+        proc = inproc.Runner(lambda: dict(os.environ)).spawn("late.py")
+        self.assertIsNone(proc.wait(0))
+        self.assertEqual(proc.wait(5), 0)
+
+    def test_poll_reports_running_then_the_exit_code(self):
+        self.script("late.py", "import time\ntime.sleep(0.2)\nimport sys\nsys.exit(3)\n")
+        proc = inproc.Runner(lambda: dict(os.environ)).spawn("late.py")
+        self.assertIsNone(proc.poll())
+        self.assertEqual(proc.wait(5), 3)
+        self.assertEqual(proc.poll(), 3)
+
+    def test_spawn_runs_the_script_on_a_daemon_thread(self):
+        """脚本跑在守护线程上：卡住的脚本不能拖住解释器退出。"""
+        self.script("threaded.py", "import threading\nprint(threading.current_thread().daemon)\n")
+        proc = inproc.Runner(lambda: dict(os.environ)).spawn("threaded.py")
+        self.assertEqual(self.read_stdout(proc), ["True\n"])
+        self.assertEqual(proc.wait(5), 0)
+
+    def test_spawn_merges_base_and_extra_env(self):
+        self.script("envy.py", "import os\nprint(os.environ.get('BASE'), os.environ.get('EXTRA'))\n")
+        proc = inproc.Runner(lambda: {"BASE": "b"}).spawn("envy.py", env_extra={"EXTRA": "e"})
+        self.assertEqual(self.read_stdout(proc), ["b e\n"])
+
+    def test_run_runs_the_script_on_a_daemon_thread(self):
+        self.script("threaded.py", "import threading\nprint(threading.current_thread().daemon)\n")
+        out, _, rc = inproc.Runner(lambda: dict(os.environ)).run("threaded.py")
+        self.assertEqual((out, rc), ("True\n", 0))
+
+    # ---- 看门狗与收尾回调（#1510） ----
+
+    def test_watched_stack_is_reported(self):
+        """看门狗报的是被观察线程的栈（最多 12 层），不是它自己的；tag 行与 flush 都要对。"""
+        saved = inproc._fallback
+        self.addCleanup(setattr, inproc, "_fallback", saved)
+        sink = _FlushSink()
+        inproc._fallback = (io.StringIO(), sink)
+        done = _Done([False, True])
+        reached, held = threading.Event(), threading.Event()
+        self.addCleanup(held.set)
+
+        def tower(n):
+            if n:
+                return tower(n - 1)
+            reached.set()
+            held.wait(5)        # 停在深栈里，让看门狗取到不止 12 层
+
+        watched = threading.Thread(target=tower, args=(30,), daemon=True)
+        watched.start()
+        self.assertTrue(reached.wait(5))
+        watcher = threading.Thread(target=inproc._watchdog,
+                                   args=(watched.ident, "run.py x", done), daemon=True)
+        watcher.start()
+        watcher.join(5)
+        held.set()
+        watched.join(5)
+        self.assertFalse(watcher.is_alive(), "done 置位后看门狗要退出")
+        self.assertEqual(done.waits, [inproc.WATCHDOG_INTERVAL] * 2)
+        report = sink.buf
+        self.assertTrue(report.startswith("[watchdog] run.py x 仍在运行：\n"), report)
+        self.assertIn("tower", report)          # 报的是被观察线程的栈
+        self.assertNotIn("_watchdog", report)   # 不是看门狗自己的栈
+        self.assertNotIn("XXXX", report)        # 帧之间用换行拼，不是占位串
+        self.assertEqual(sink.flushes, 1)
+
+    def test_the_watchdog_thread_is_daemonic(self):
+        """看门狗是守护线程：卡住时不能拖住解释器退出。"""
+        done = _Done([True])
+        thread = inproc._start_watchdog(["x.py"], done)
+        self.assertTrue(thread.daemon)
+        thread.join(5)
+        self.assertFalse(thread.is_alive())
+
+    def test_the_watchdog_names_the_running_script(self):
+        """top 把脚本前 4 个参数按空格拼成名字交给看门狗：多了少了都不是它。"""
+        self.script("slow_ok.py", "import time\ntime.sleep(0.3)\n")
+        saved = inproc._fallback
+        self.addCleanup(setattr, inproc, "_fallback", saved)
+        sink = _FlushSink()
+        inproc._fallback = (io.StringIO(), sink)
+        saved_interval = inproc.WATCHDOG_INTERVAL
+        self.addCleanup(setattr, inproc, "WATCHDOG_INTERVAL", saved_interval)
+        inproc.WATCHDOG_INTERVAL = 0.05
+        self.assertEqual(inproc.Runner(lambda: dict(os.environ)).run(
+            "slow_ok.py", "x", "y", "z", "w", timeout=5), ("", "", 0))
+        self.assertIn("[watchdog] slow_ok.py x y z 仍在运行：", sink.buf)
+
+    def test_after_run_callbacks_run_and_a_failure_does_not_block_the_rest(self):
+        self.script("ok.py", "print('ok')\n")
+        calls = []
+
+        def first():
+            calls.append("first")
+
+        def explode():
+            raise RuntimeError("callback boom")
+
+        inproc.after_run[:] = [first, explode]
+        saved_fallback = inproc._fallback
+        self.addCleanup(setattr, inproc, "_fallback", saved_fallback)
+        err, other = io.StringIO(), io.StringIO()
+        inproc._fallback = (io.StringIO(), err)
+        sys.stderr = other      # 回调的堆栈要写回 setup 记下的那份，而不是碰巧当前的 sys.stderr（tearDown 会还回去）
+        out, _, rc = inproc.Runner(lambda: dict(os.environ)).run("ok.py")
+        self.assertEqual((out, rc), ("ok\n", 0))
+        self.assertEqual(calls, ["first"])
+        self.assertIn("callback boom", err.getvalue())
+        self.assertNotIn("callback boom", other.getvalue())
 
 
 class WaitTest(unittest.TestCase):
