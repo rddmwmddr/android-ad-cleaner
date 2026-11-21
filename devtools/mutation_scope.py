@@ -213,6 +213,7 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
     "android/app/src/main/python/aac_android/adb.py": ("tests/test_android_shim.py",),
     "android/app/src/main/python/aac_android/screen.py": ("tests/test_android_shim.py",),
     "android/app/src/main/python/aac_android/inproc.py": ("tests/test_android_shim.py",),
+    "android/app/src/main/python/aac_android/u2.py": ("tests/test_android_shim.py",),
 }
 
 # 变异副本里跑不通的测试，按 pytest node id 摘掉。整份文件都跑不通的（`test_rules_guards`

@@ -1635,6 +1635,17 @@ class SelectorTest(unittest.TestCase):
         with self.assertRaises(ReferenceError):
             u2.Selector(bogus=1)
 
+    def test_defaults_are_empty(self):
+        s = u2.Selector()
+        self.assertEqual(s["mask"], 0)
+        self.assertEqual(s["childOrSibling"], [])
+        self.assertEqual(s["childOrSiblingSelector"], [])
+
+    def test_unknown_field_names_the_field(self):
+        with self.assertRaises(ReferenceError) as caught:
+            u2.Selector(bogus=1)
+        self.assertEqual(caught.exception.args[0], "bogus is not allowed.")
+
 
 class AdbHelpersTest(unittest.TestCase):
     """adb 替换层的辅助函数：解析命令行、文本模式、脚本识别、CompletedProcess 组装（#1508）。"""
@@ -1996,6 +2007,524 @@ class AdbAnswerTest(unittest.TestCase):
             self._tmp = tempfile.TemporaryDirectory()
             self.addCleanup(self._tmp.cleanup)
         return self._tmp.name
+
+
+EMPTY_PAGE = '<hierarchy rotation="0" />'
+
+
+class _Clipboard:
+    """`jsonrpc.setClipboard` 的替身：记下 (label, text)。"""
+
+    def __init__(self):
+        self.calls = []
+
+    def setClipboard(self, label, text, http_timeout=10):
+        self.calls.append((label, text))
+
+
+class _Node:
+    """u2.UiObject 用的假设备：按页面回 dump（可按次数换页 / 抛错），记下 shell、点按与剪贴板。"""
+
+    def __init__(self, page=PAGE7, exit_code=0, wait_timeout=20.0, pages=None):
+        self.page, self.exit_code, self.wait_timeout = page, exit_code, wait_timeout
+        self.pages = pages          # [(前 N 次, 页面或异常)]：让读屏在 wait 与取节点之间变化
+        self.jsonrpc = _Clipboard()
+        self.cmds, self.clicks = [], []
+        self.reads = 0
+
+    def dump_hierarchy(self, *a, **k):
+        self.reads += 1
+        page = self.page
+        if self.pages:
+            for upto, candidate in self.pages:
+                if self.reads <= upto:
+                    page = candidate
+                    break
+        if isinstance(page, BaseException):
+            raise page
+        return page
+
+    def shell(self, cmdargs, timeout=60):
+        self.cmds.append(cmdargs if isinstance(cmdargs, str) else list(cmdargs))
+        return u2.ShellResponse("", self.exit_code)
+
+    def click(self, x, y):
+        self.clicks.append((x, y))
+
+
+class DeviceBridge:
+    """u2.Device 用的假通道：按命令回包，记下 exec 的 (命令, stdin, 超时)。"""
+
+    def __init__(self, code=0, timed_out=False, out=b"", err=b""):
+        self.code, self.timed_out, self.out, self.err = code, timed_out, out, err
+        self.exec_args, self.displays = [], []
+
+    def exec(self, cmd, stdin=None, timeout=None):
+        self.exec_args.append((cmd, stdin, timeout))
+        return bridge.Result(self.code, self.out, self.err, self.timed_out)
+
+    def dump(self, display):
+        self.displays.append(display)
+        return bridge.Result(self.code, self.out, self.err, self.timed_out)
+
+    def size(self, display):
+        self.displays.append(display)
+        return bridge.Result(self.code, self.out, self.err, self.timed_out)
+
+    def ready(self):
+        return True
+
+    def ensure(self):
+        return True
+
+
+class ModuleHelperTest(unittest.TestCase):
+    """模块级的读屏小工具（#1511）：屏号、字节转文字、读屏失败分类。"""
+
+    def test_display_reads_zero_without_a_background_screen(self):
+        saved = screen.active
+        screen.active = None
+        try:
+            self.assertEqual(u2.display(), 0)
+        finally:
+            screen.active = saved
+
+    def test_display_reports_a_lost_screen_with_the_read_wording(self):
+        saved = (screen.active, screen.LOST)
+        screen.active = screen.Screen(7, "11")
+        screen.active.lost = True
+        screen.LOST = ""        # 落进「<what>失败」兜底，才看得出 display 传的 what 是「读屏」
+        try:
+            with self.assertRaises(u2.UiAutomationError) as caught:
+                u2.display()
+        finally:
+            screen.active, screen.LOST = saved
+        self.assertEqual(str(caught.exception), "读屏失败")
+
+    def test_text_of_decodes_bytes_and_stringifies_others(self):
+        self.assertEqual(u2.text_of(b"\xe8\x8f\x9c"), "菜")
+        self.assertEqual(u2.text_of(bytearray(b"ok")), "ok")
+        self.assertEqual(u2.text_of("abc"), "abc")
+        self.assertEqual(u2.text_of(None), "")
+        self.assertEqual(u2.text_of(0), "")
+
+    def test_text_of_replaces_bad_bytes(self):
+        self.assertEqual(u2.text_of(b"a\xffb"), "a�b")
+
+    def test_read_failed_maps_already_registered_to_the_busy_type(self):
+        for message in ("already registered", "AlreadyRegistered"):
+            err = u2.read_failed("读屏", message.encode())
+            self.assertIsInstance(err, u2.AccessibilityServiceAlreadyRegisteredError, message)
+            self.assertEqual(err.args[0], message)
+
+    def test_read_failed_keeps_other_messages_as_a_plain_read_error(self):
+        err = u2.read_failed("读屏", b"  boom  ")
+        self.assertIsInstance(err, u2.UiAutomationError)
+        self.assertNotIsInstance(err, u2.AccessibilityServiceAlreadyRegisteredError)
+        self.assertEqual(err.args[0], "boom")
+
+
+class RpcTest(unittest.TestCase):
+    """jsonrpc 替身（#1511）：引擎按 uiautomator2 的 jsonrpc 调这几个方法。"""
+
+    def test_set_text_refuses_with_the_documented_rpc_error(self):
+        with self.assertRaises(u2.RPCUnknownError) as caught:
+            u2._Rpc().setText({}, "x")
+        self.assertEqual(caught.exception.args, (-32001, "不经读屏写字，改用剪贴板粘贴", "setText"))
+
+    def test_unknown_methods_report_the_method_name(self):
+        with self.assertRaises(u2.RPCUnknownError) as caught:
+            u2._Rpc().intersect({})
+        self.assertEqual(caught.exception.args, (-32601, "手机版读屏不支持 intersect", "intersect"))
+
+    def test_set_clipboard_writes_the_text(self):
+        with _using(_Reader()) as fake:
+            u2._Rpc().setClipboard(None, "kw")
+        self.assertIn("clipboard:kw", fake.cmds)
+
+    def test_device_info_reports_the_window_size(self):
+        dev = SimpleNamespace(window_size=lambda: (1080, 2400))
+        self.assertEqual(u2._Rpc(dev).deviceInfo(),
+                         {"displayWidth": 1080, "displayHeight": 2400, "displayRotation": 0})
+
+    def test_clear_text_field_reports_its_method_name(self):
+        with mock.patch.object(u2, "time", FakeClock()), \
+                self.assertRaises(u2.UiObjectNotFoundError) as caught:
+            u2._Rpc(_Node(EMPTY_PAGE)).clearTextField(u2.Selector(text="x"))
+        self.assertEqual(caught.exception.args[0]["method"], "clearTextField")
+
+    def test_shell_response_unpacks_into_output_and_code(self):
+        self.assertEqual(tuple(u2.ShellResponse("o", 3)), ("o", 3))
+
+
+class MatchesTest(unittest.TestCase):
+    """选择器字段 → 页面节点属性（#1511）：精确 / 正则 / 包含 / 前缀 / 序号，未知字段不匹配。"""
+
+    def setUp(self):
+        import xml.etree.ElementTree as ET
+        self.menu = ET.fromstring('<node text="菜单" content-desc="图标" class="android.widget.TextView" '
+                                  'resource-id="com.x:id/menu" package="com.x" clickable="true" index="2" />')
+        self.blank = ET.fromstring('<node class="android.widget.TextView" />')
+
+    def test_exact_attribute_match(self):
+        self.assertTrue(u2.matches(self.menu, u2.Selector(text="菜单")))
+        self.assertFalse(u2.matches(self.menu, u2.Selector(text="别的")))
+
+    def test_missing_attribute_reads_as_the_empty_string(self):
+        self.assertTrue(u2.matches(self.blank, u2.Selector(text="")))
+
+    def test_regex_match_and_a_regex_that_matches_only_empty(self):
+        self.assertTrue(u2.matches(self.menu, u2.Selector(textMatches="菜.")))
+        self.assertTrue(u2.matches(self.blank, u2.Selector(textMatches="^$")))
+
+    def test_contains(self):
+        self.assertTrue(u2.matches(self.menu, u2.Selector(textContains="单")))
+        self.assertFalse(u2.matches(self.blank, u2.Selector(textContains="X")))
+
+    def test_starts_with(self):
+        self.assertTrue(u2.matches(self.menu, u2.Selector(textStartsWith="菜")))
+        self.assertFalse(u2.matches(self.blank, u2.Selector(textStartsWith="X")))
+
+    def test_index(self):
+        self.assertTrue(u2.matches(self.menu, u2.Selector(index=2)))
+        self.assertFalse(u2.matches(self.menu, u2.Selector(index=3)))
+
+    def test_unknown_fields_never_match(self):
+        self.assertFalse(u2.matches(self.menu, {"bogus": 1}))
+        self.assertFalse(u2.matches(self.menu, {"fooMatches": "x"}))
+
+    def test_bounds_reads_the_four_numbers(self):
+        import xml.etree.ElementTree as ET
+        self.assertEqual(u2.bounds_of(ET.fromstring('<node bounds="[10,20][30,40]" />')), (10, 20, 30, 40))
+        self.assertEqual(u2.bounds_of(ET.fromstring('<node />')), (0, 0, 0, 0))
+
+
+class UiObjectTest(unittest.TestCase):
+    """节点读取（#1511）：wait 的截止与回落、must_wait 的报错细节、序号、读字与写字。"""
+
+    def test_wait_stops_at_its_own_deadline(self):
+        """显式 timeout 只等这么久，不退到设备默认的 20 秒；截止正好落在第二次轮询后。"""
+        dev = _Node(EMPTY_PAGE)
+        obj = u2.UiObject(dev, u2.Selector(text="菜单"))
+        with mock.patch.object(u2, "time", FakeClock()):
+            self.assertFalse(obj.wait(timeout=0.3))
+        self.assertEqual(dev.reads, 2)
+
+    def test_wait_returns_true_once_the_node_appears(self):
+        dev = _Node(pages=[(1, EMPTY_PAGE), (9, PAGE7)])
+        obj = u2.UiObject(dev, u2.Selector(text="菜单"))
+        clock = FakeClock()
+        with mock.patch.object(u2, "time", clock):
+            self.assertTrue(obj.wait(timeout=5))
+        self.assertEqual(clock.now, 0.3, "轮询间隔是 0.3 秒")
+
+    def test_wait_warns_and_falls_back_when_the_read_times_out(self):
+        dev = _Node(pages=[(1, u2.HTTPTimeoutError("read timeout")), (9, PAGE7)])
+        obj = u2.UiObject(dev, u2.Selector(text="菜单"))
+        with mock.patch.object(u2, "time", FakeClock()), warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            self.assertTrue(obj.wait())
+        self.assertEqual(len(caught), 1)
+        self.assertIs(caught[0].category, RuntimeWarning)
+        self.assertEqual(str(caught[0].message), "wait readTimeout: read timeout")
+        # 告警要指向调用方；落到 u2 自己的文件就是 stacklevel 被去掉、退回默认（变异副本里还会被 trampoline 多垫一层，所以只比「不是 u2 自己」）
+        self.assertNotEqual(caught[0].filename, u2.__file__)
+
+    def test_wait_fallback_respects_exists_false(self):
+        dev = _Node(pages=[(1, u2.HTTPTimeoutError("read timeout")), (9, PAGE7)])
+        obj = u2.UiObject(dev, u2.Selector(text="菜单"))
+        with mock.patch.object(u2, "time", FakeClock()), warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            self.assertFalse(obj.wait(exists=False))
+
+    def test_must_wait_reports_the_selector_and_method(self):
+        """找不到时抛带 code / data / method 的异常；timeout 也要传到 wait 里。"""
+        dev = _Node(pages=[(1, EMPTY_PAGE), (9, PAGE7)])
+        selector = u2.Selector(text="不存在")
+        obj = u2.UiObject(dev, selector)
+        with mock.patch.object(u2, "time", FakeClock()), \
+                self.assertRaises(u2.UiObjectNotFoundError) as caught:
+            obj.must_wait(timeout=0)
+        self.assertEqual(caught.exception.args[0],
+                         {"code": -32002, "data": str(selector), "method": "wait"})
+
+    def test_index_picks_the_nth_match_or_raises(self):
+        dev = _Node(PAGE7)
+        obj = u2.UiObject(dev, u2.Selector(text="菜单"))
+        self.assertEqual(obj[1].get_text(), "菜单")
+        with self.assertRaises(IndexError) as caught:
+            obj[5]
+        self.assertEqual(caught.exception.args[0], 5)
+
+    def test_get_text_returns_the_node_text_or_empty(self):
+        self.assertEqual(u2.UiObject(_Node(PAGE7), u2.Selector(text="菜单")).get_text(), "菜单")
+        page = '<hierarchy><node resource-id="x" /></hierarchy>'
+        self.assertEqual(u2.UiObject(_Node(page), u2.Selector(resourceId="x")).get_text(), "")
+
+    def test_get_text_honours_its_timeout_and_names_itself(self):
+        dev = _Node(pages=[(1, EMPTY_PAGE), (9, PAGE7)])
+        obj = u2.UiObject(dev, u2.Selector(text="菜单"))
+        with mock.patch.object(u2, "time", FakeClock()), self.assertRaises(u2.UiObjectNotFoundError):
+            obj.get_text(timeout=0)
+        # wait 第一次读到时在，取节点那次已经没了：报错里带着 code / data / getText 方法名
+        gone = u2.UiObject(_Node(pages=[(1, PAGE7), (9, EMPTY_PAGE)]), u2.Selector(text="菜单"))
+        with self.assertRaises(u2.UiObjectNotFoundError) as caught:
+            gone.get_text()
+        self.assertEqual(caught.exception.args[0],
+                         {"code": -32002, "data": str(gone.selector), "method": "getText"})
+
+    def test_empty_selector_picks_the_first_real_node_not_the_root(self):
+        """`_node` 只在 <node> 里找：空选择器不该先匹配到 XML 根元素。"""
+        self.assertEqual(u2.UiObject(_Node(PAGE7), u2.Selector()).bounds(), (0, 0, 100, 100))
+
+    def test_bounds_name_themselves_when_the_node_is_gone(self):
+        with self.assertRaises(u2.UiObjectNotFoundError) as caught:
+            u2.UiObject(_Node(EMPTY_PAGE), u2.Selector(text="菜单")).bounds()
+        self.assertEqual(caught.exception.args[0]["method"], "bounds")
+
+    def test_click_honours_its_timeout(self):
+        dev = _Node(pages=[(1, EMPTY_PAGE), (9, PAGE7)])
+        obj = u2.UiObject(dev, u2.Selector(text="菜单"))
+        with mock.patch.object(u2, "time", FakeClock()), self.assertRaises(u2.UiObjectNotFoundError):
+            obj.click(timeout=0)
+
+    def test_click_exists_returns_the_click_result(self):
+        dev = _Node(PAGE7)
+        obj = u2.UiObject(dev, u2.Selector(text="菜单", instance=1))
+        self.assertTrue(obj.click_exists())
+        self.assertEqual(dev.clicks, [(50, 20)])
+        missing = u2.UiObject(_Node(EMPTY_PAGE), u2.Selector(text="菜单"))
+        self.assertFalse(missing.click_exists())
+
+    def test_click_exists_default_is_a_single_look(self):
+        """默认 timeout=0 只查一次、不等；把它改成 1 秒会等到第二次轮询才动手。"""
+        for call in (lambda o: o.click_exists(), lambda o: o.click_exists(timeout=0)):
+            dev = _Node(pages=[(1, EMPTY_PAGE), (9, PAGE7)])
+            obj = u2.UiObject(dev, u2.Selector(text="菜单"))
+            with mock.patch.object(u2, "time", FakeClock()):
+                self.assertFalse(call(obj))
+
+    def test_set_text_clears_then_pastes(self):
+        dev = _Node(PAGE7)
+        u2.UiObject(dev, u2.Selector(text="菜单", instance=1)).set_text("新词")
+        self.assertEqual(dev.jsonrpc.calls, [(None, "新词")])
+        self.assertEqual(dev.cmds[-1], "input keyevent KEYCODE_PASTE")
+
+    def test_set_text_with_no_text_just_clears(self):
+        dev = _Node(PAGE7)
+        u2.UiObject(dev, u2.Selector(text="菜单")).set_text("")
+        self.assertEqual(dev.cmds[-1], "input keyevent KEYCODE_DEL")
+        self.assertEqual(dev.jsonrpc.calls, [])
+
+    def test_set_text_falls_back_to_per_character_clear(self):
+        """keycombination 失败时按「菜单」字数逐字删，node 的文本要读得到。"""
+        dev = _Node(PAGE7, exit_code=1)
+        u2.UiObject(dev, u2.Selector(text="菜单", instance=1)).set_text("新词")
+        self.assertEqual(dev.cmds.count("input keyevent KEYCODE_DEL"), 2)
+        self.assertEqual(dev.cmds[-1], "input keyevent KEYCODE_PASTE")
+
+    def test_set_text_names_itself_when_the_node_is_gone(self):
+        dev = _Node(pages=[(1, PAGE7), (9, EMPTY_PAGE)])
+        with self.assertRaises(u2.UiObjectNotFoundError) as caught:
+            u2.UiObject(dev, u2.Selector(text="菜单")).set_text("x")
+        self.assertEqual(caught.exception.args[0]["method"], "setText")
+
+    def test_set_text_honours_its_timeout(self):
+        dev = _Node(pages=[(1, EMPTY_PAGE), (9, PAGE7)])
+        obj = u2.UiObject(dev, u2.Selector(text="菜单"))
+        with mock.patch.object(u2, "time", FakeClock()), self.assertRaises(u2.UiObjectNotFoundError):
+            obj.set_text("x", timeout=0)
+
+
+class DeviceTest(unittest.TestCase):
+    """u2.Device（#1511）：连上读一次、命令下发、屏尺寸、截图、按键与手势。"""
+
+    def setUp(self):
+        self.saved = (bridge._bridge, screen.active)
+        screen.active = None
+
+    def tearDown(self):
+        bridge._bridge, screen.active = self.saved
+
+    def test_device_carries_serial_settings_and_wait_timeout(self):
+        with _using(DeviceBridge(out=b"<hierarchy />")):
+            dev = u2.Device("abc")
+        self.assertEqual(dev.serial, "abc")
+        self.assertEqual(dev.wait_timeout, 20.0)
+        self.assertEqual(dev.settings, {"operation_delay": (0, 0),
+                                        "operation_delay_methods": ["click", "swipe"],
+                                        "wait_timeout": 20.0, "max_depth": 50})
+
+    def test_connect_builds_a_device_for_the_serial(self):
+        with _using(DeviceBridge(out=b"<hierarchy />")):
+            dev = u2.connect("abc")
+        self.assertEqual(dev.serial, "abc")
+
+    def test_dump_returns_the_page_and_labels_the_slow_log(self):
+        slow = []
+        with _using(DeviceBridge(out=b"<page />")), \
+                mock.patch.object(bridge, "slow",
+                                  side_effect=lambda what, started, extra="": slow.append(what)):
+            page = u2.Device.__new__(u2.Device).dump_hierarchy()
+        self.assertEqual(page, "<page />")
+        self.assertEqual(slow, ["dump"])
+
+    def test_dump_failure_uses_the_read_wording(self):
+        dev = u2.Device.__new__(u2.Device)
+        with _using(DeviceBridge(code=255, err=b"")), self.assertRaises(u2.UiAutomationError) as caught:
+            dev.dump_hierarchy()
+        self.assertEqual(str(caught.exception), "读屏失败")
+
+    def test_shell_passes_the_command_timeout_and_stdin(self):
+        fake = DeviceBridge(code=3, out=b"out", err=b"err")
+        dev = u2.Device.__new__(u2.Device)
+        with _using(fake):
+            r = dev.shell("ls -l")
+            dev.shell("ls", timeout=0)
+        self.assertEqual(fake.exec_args[0], ("ls -l", None, 60))
+        self.assertEqual(fake.exec_args[1], ("ls", None, 60))
+        self.assertEqual((r.output, r.exit_code), ("outerr", 3))
+
+    def test_shell_joins_a_list_command(self):
+        fake = DeviceBridge()
+        with _using(fake):
+            u2.Device.__new__(u2.Device).shell(["am", "force-stop", "com.x"])
+        self.assertEqual(fake.exec_args[-1][0], "am force-stop com.x")
+
+    def test_shell_timeout_raises_with_a_bounded_command(self):
+        dev = u2.Device.__new__(u2.Device)
+        with _using(DeviceBridge(timed_out=True, code=1)), self.assertRaises(u2.AdbShellError) as caught:
+            dev.shell("x" * 100)
+        self.assertEqual(caught.exception.args[0], "shell timeout: " + "x" * 80)
+
+    def test_window_size_reads_the_first_two_numbers(self):
+        for out, want in ((b"1080 2400", (1080, 2400)), (b"1 2 3", (1, 2)),
+                          (b"1080", (1080, 0)), (b"", (0, 0))):
+            fake = DeviceBridge(out=out)
+            with _using(fake):
+                got = u2.Device.__new__(u2.Device).window_size()
+            self.assertEqual(got, want, out)
+            self.assertEqual(fake.displays, [0], out)
+
+    def test_window_size_failure_names_the_size_wording(self):
+        dev = u2.Device.__new__(u2.Device)
+        with _using(DeviceBridge(code=255, err=b"")), self.assertRaises(u2.UiAutomationError) as caught:
+            dev.window_size()
+        self.assertEqual(str(caught.exception), "问屏幕尺寸失败")
+
+    def test_screenshot_cuts_from_the_png_header_and_saves(self):
+        opened, converted, saved = [], [], []
+
+        class Image:
+            def convert(self, mode):
+                converted.append(mode)
+                return self
+
+            def save(self, name):
+                saved.append(name)
+
+        class PilImage:
+            @staticmethod
+            def open(fp):
+                opened.append(fp.read())
+                return Image()
+
+        pil = SimpleNamespace(Image=PilImage)
+        for out in (b"pre\x89PNG-A-and-\x89PNG-B", b"\x89PNG-Z"):
+            fake = DeviceBridge(out=out)
+            with _using(fake), mock.patch.dict(sys.modules, {"PIL": pil}):
+                image = u2.Device.__new__(u2.Device).screenshot("/tmp/shot.png")
+            self.assertIsInstance(image, Image)
+            self.assertEqual(opened[-1], out[out.find(b"\x89PNG"):], out)
+            self.assertEqual(fake.exec_args[-1], ("screencap -p", None, 30))
+        self.assertEqual(converted, ["RGB", "RGB"])
+        self.assertEqual(saved, ["/tmp/shot.png", "/tmp/shot.png"])
+
+    def test_app_stop_forces_stop_through_shell(self):
+        fake = DeviceBridge()
+        with _using(fake):
+            u2.Device.__new__(u2.Device).app_stop("com.x")
+        self.assertEqual(fake.exec_args[-1][0], "am force-stop com.x")
+
+    def test_swipe_builds_the_input_command(self):
+        fake = DeviceBridge()
+        with _using(fake):
+            dev = u2.Device.__new__(u2.Device)
+            dev.swipe(1, 2, 3, 4, 1.0)      # 1 秒 → 200 步 → 200×5 = 1000ms
+            dev.swipe(10, 20, 30, 40)       # 没给时长 → 默认 55 步 → 275ms
+            dev.swipe(1, 1, 2, 2, 0.005)    # 1 步 → 下限 2 步 → 10ms
+        self.assertEqual([a[0] for a in fake.exec_args],
+                         ["input swipe 1 2 3 4 1000", "input swipe 10 20 30 40 275", "input swipe 1 1 2 2 10"])
+
+    def test_press_maps_names_and_integers_to_key_events(self):
+        fake = DeviceBridge()
+        with _using(fake):
+            dev = u2.Device.__new__(u2.Device)
+            dev.press("recent")     # 名字表里映射到 APP_SWITCH，默认兜底会写成 KEYCODE_RECENT
+            dev.press("F2")         # 表里没有 → KEYCODE_F2
+            dev.press(3)            # 整数当键码原样用
+        self.assertEqual([a[0] for a in fake.exec_args],
+                         ["input keyevent KEYCODE_APP_SWITCH", "input keyevent KEYCODE_F2", "input keyevent 3"])
+
+
+INSTALLED = ("uiautomator2", "uiautomator2.exceptions", "uiautomator2.core", "adbutils", "ui_session")
+
+
+class InstallTest(unittest.TestCase):
+    """install() 把本模块登记成 uiautomator2 / adbutils / ui_session（#1511）。
+
+    mutmut 默认用 fork 隔离：统计阶段在父进程里跑完整个套件，之后每个 mutant 从父进程 fork。
+    父进程里若残留 install() 写进 sys.modules 的条目，会带进每一个 mutant 子进程，断言就可能读到
+    上一次的残留（假存活）。所以本用例在调用前后都把被改写的那几个键快照 / 还原，父进程跑完仍是干净的。
+    """
+
+    def setUp(self):
+        self.saved = {name: sys.modules.get(name) for name in INSTALLED}
+
+    def tearDown(self):
+        for name, module in self.saved.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
+
+    def test_install_registers_the_replacement_modules(self):
+        u2.install()
+        self.assertEqual(sys.modules["uiautomator2"].__name__, "uiautomator2")
+        self.assertIs(sys.modules["uiautomator2"].Device, u2.Device)
+        self.assertIs(sys.modules["uiautomator2"].connect, u2.connect)
+        exceptions = sys.modules["uiautomator2.exceptions"]
+        self.assertEqual(exceptions.__name__, "uiautomator2.exceptions")
+        self.assertIs(exceptions.UiObjectNotFoundError, u2.UiObjectNotFoundError)
+        self.assertIs(exceptions.AccessibilityServiceAlreadyRegisteredError,
+                      u2.AccessibilityServiceAlreadyRegisteredError)
+        core = sys.modules["uiautomator2.core"]
+        self.assertEqual(core.__name__, "uiautomator2.core")
+        self.assertTrue(callable(core._http_request))
+        self.assertEqual(sys.modules["adbutils"].__name__, "adbutils")
+        self.assertIs(sys.modules["adbutils"].AdbError, u2.AdbError)
+        session = sys.modules["ui_session"]
+        self.assertEqual(session.__name__, "ui_session")
+        self.assertIs(session.connect, u2.connect)
+        self.assertIs(session.DeviceBusyError, u2.DeviceBusyError)
+        self.assertIs(session.ManagedDevice, u2.Device)
+
+    def test_install_http_request_refuses(self):
+        u2.install()
+        with self.assertRaises(u2.RPCUnknownError) as caught:
+            sys.modules["uiautomator2.core"]._http_request()
+        self.assertEqual(caught.exception.args, (-32601, "手机版没有读屏 HTTP 服务", "_http_request"))
+
+    def test_install_is_reversible(self):
+        before = {name: sys.modules.get(name) for name in INSTALLED}
+        u2.install()
+        self.assertIsNot(sys.modules["uiautomator2"], before.get("uiautomator2"))
+        for name, module in before.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
+        self.assertEqual({name: sys.modules.get(name) for name in INSTALLED}, before)
 
 
 if __name__ == "__main__":
