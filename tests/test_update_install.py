@@ -1109,7 +1109,8 @@ class SigningTeamTests(unittest.TestCase):
             return subprocess.CompletedProcess(args, 0, stderr='Executable=x\nTeamIdentifier=AB12CD34\n')
 
         self.assertEqual(install.signing_team(Path('/Applications/Old.app'), run=run), 'AB12CD34')
-        self.assertEqual(calls[0][0], ['/usr/bin/codesign', '-dv', '--verbose=4', '/Applications/Old.app'])
+        self.assertEqual(calls[0][0], ['/usr/bin/codesign', '-dv', '--verbose=4',
+                                       str(Path('/Applications/Old.app'))])
 
     def test_a_missing_team_is_reported_as_an_unknown_developer(self):
         def run(args, **kwargs):
