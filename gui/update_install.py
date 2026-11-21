@@ -19,17 +19,31 @@ try:
 except ImportError:
     from updates import UpdateError, file_lock, version_tuple
 
-WINDOWS_FILES = ("AndroidAdCleaner.exe", "aac-cli.exe", "AndroidAdCleaner.exe.config", "aac-cli.exe.config", "_internal")
+REQUIRED_DIR = "_internal"
+CLI_FILES = ("aac-cli.exe", "aac-cli.exe.config")
+WINDOWS_FILES = ("AndroidAdCleaner.exe", "aac-cli.exe", "AndroidAdCleaner.exe.config", "aac-cli.exe.config", REQUIRED_DIR)
 BUNDLE_ID = "com.rddmwmddr.androidadcleaner"
 MAX_EXPANDED = 2 * 1024 * 1024 * 1024
 HANDOFF_FILE = "handoff.json"
 ERROR_FILE = "error.json"
+CONTENTS = "Contents"
+MACOS = "MacOS"
+APP_SUFFIX = ".app"
+INFO_PLIST = "Info.plist"
+STALE_SECONDS = 24 * 3600
+SIGN_ARGS = ("/usr/bin/codesign", "-dv", "--verbose=4")
+VERIFY_ARGS = ("/usr/bin/codesign", "--verify", "--deep", "--strict")
+ASSESS_ARGS = ("/usr/sbin/spctl", "--assess", "--type", "execute")
+ATTACH_ARGS = ("/usr/bin/hdiutil", "attach", "-readonly", "-nobrowse", "-mountpoint")
+DETACH_ARGS = ("/usr/bin/hdiutil", "detach")
+DITTO = "/usr/bin/ditto"
 
 
 def write_json(path, data):
     path = Path(path)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    temporary = path.with_suffix(path.suffix + ".tmp")  # pragma: no mutate — semantic equivalence: the temp file is renamed over the target, so its name is never observed
+    text = json.dumps(data, ensure_ascii=False)  # pragma: no mutate — semantic equivalence: ensure_ascii=None is falsy, same output as False
+    temporary.write_bytes(text.encode())
     os.replace(temporary, path)
 
 
@@ -61,25 +75,25 @@ def safe_extract(archive, destination):
                 raise UpdateError("更新包包含系统保留文件名")
         zf.extractall(destination)
     root = Path(destination) / "AndroidAdCleaner"
-    if not all((root / name).is_file() for name in WINDOWS_FILES[:-1]) or not (root / "_internal").is_dir():
+    if not all((root / name).is_file() for name in WINDOWS_FILES[:-1]) or not (root / REQUIRED_DIR).is_dir():
         raise UpdateError("更新包缺少程序文件")
     return root
 
 
 def mac_app(executable):
     path = Path(executable).resolve()
-    if path.parent.name != "MacOS" or path.parent.parent.name != "Contents" or path.parent.parent.parent.suffix != ".app":
+    if path.parent.name != MACOS or path.parent.parent.name != CONTENTS or path.parent.parent.parent.suffix != APP_SUFFIX:
         raise UpdateError("请从已安装的 App 中更新")
     return path.parent.parent.parent
 
 
 def bundle_info(path):
-    with (Path(path) / "Contents" / "Info.plist").open("rb") as stream:
+    with (Path(path) / CONTENTS / INFO_PLIST).open("rb") as stream:
         return plistlib.load(stream)
 
 
 def signing_team(path, run=subprocess.run):
-    result = run(["/usr/bin/codesign", "-dv", "--verbose=4", str(path)], capture_output=True, text=True, encoding="utf-8", errors="replace", check=True)
+    result = run([*SIGN_ARGS, str(path)], capture_output=True, text=True, encoding="utf-8", errors="replace", check=True)
     found = re.search(r"^TeamIdentifier=([A-Z0-9]+)$", result.stderr, re.M)
     if not found:
         raise UpdateError("无法确认应用签名的开发者")
@@ -89,11 +103,8 @@ def signing_team(path, run=subprocess.run):
 def prepare_mac(archive, destination, installed, version, run=subprocess.run):
     mount = Path(destination) / "mount"
     mount.mkdir()
-    attached = False
+    run([*ATTACH_ARGS, str(mount), str(archive)], check=True, capture_output=True, timeout=90)
     try:
-        run(["/usr/bin/hdiutil", "attach", "-readonly", "-nobrowse", "-mountpoint", str(mount), str(archive)],
-            check=True, capture_output=True, timeout=90)
-        attached = True
         apps = [p for p in mount.glob("*.app") if p.is_dir() and not p.is_symlink()]
         if len(apps) != 1:
             raise UpdateError("磁盘映像里没有唯一的应用程序")
@@ -101,16 +112,15 @@ def prepare_mac(archive, destination, installed, version, run=subprocess.run):
         info = bundle_info(app)
         if info.get("CFBundleIdentifier") != BUNDLE_ID or info.get("CFBundleShortVersionString") != version:
             raise UpdateError("应用的标识或版本与更新清单不一致")
-        run(["/usr/bin/codesign", "--verify", "--deep", "--strict", str(app)], check=True, capture_output=True, timeout=90)
-        run(["/usr/sbin/spctl", "--assess", "--type", "execute", str(app)], check=True, capture_output=True, timeout=90)
+        run([*VERIFY_ARGS, str(app)], check=True, capture_output=True, timeout=90)
+        run([*ASSESS_ARGS, str(app)], check=True, capture_output=True, timeout=90)
         if signing_team(app, run) != signing_team(installed, run):
             raise UpdateError("新旧应用的开发者签名不一致")
         prepared = Path(destination) / installed.name
-        run(["/usr/bin/ditto", str(app), str(prepared)], check=True, capture_output=True, timeout=180)
+        run([DITTO, str(app), str(prepared)], check=True, capture_output=True, timeout=180)
         return prepared
     finally:
-        if attached:
-            run(["/usr/bin/hdiutil", "detach", str(mount)], check=False, capture_output=True, timeout=30)
+        run([*DETACH_ARGS, str(mount)], check=False, capture_output=True, timeout=30)
 
 
 def install_cwd(target, platform):
@@ -122,7 +132,7 @@ def launch_target(target, platform, name):
     """要启动的程序，以及它的 cwd。mac 在 bundle 里、Windows 在程序目录根上。"""
     target = Path(target)
     if platform == "darwin":
-        return target / "Contents" / "MacOS" / name, target.parent
+        return target / CONTENTS / MACOS / name, target.parent
     return target / name, target
 
 
@@ -133,7 +143,7 @@ def target_units(target, platform):
 
 def sweep_stale(root):
     """清掉上次没收尾的准备目录；只动一天前创建的，另一个窗口刚建的那份不能碰。"""
-    cutoff = time.time() - 24 * 3600
+    cutoff = time.time() - STALE_SECONDS
     for path in Path(root).glob("install-*"):
         try:
             if path.is_dir() and path.stat().st_mtime < cutoff:
@@ -145,7 +155,7 @@ def sweep_stale(root):
 def _helper_error(work):
     """助手退出前留下的原因；没有就用调用方的通用文案。"""
     try:
-        return json.loads((Path(work) / ERROR_FILE).read_text(encoding="utf-8")).get("error", "")
+        return json.loads((Path(work) / ERROR_FILE).read_bytes()).get("error", "")
     except (OSError, ValueError, AttributeError):
         return ""
 
@@ -194,15 +204,15 @@ class DesktopInstaller:
             if self.system == "darwin":
                 prepared = prepare_mac(archive, work, target, version)
                 helper = work / "helper.app"
-                subprocess.run(["/usr/bin/ditto", str(target), str(helper)], check=True, capture_output=True, timeout=180)
-                helper_exe = helper / "Contents" / "MacOS" / self.executable.name
+                subprocess.run([DITTO, str(target), str(helper)], check=True, capture_output=True, timeout=180)
+                helper_exe = helper / CONTENTS / MACOS / self.executable.name
             else:
                 prepared = safe_extract(archive, work / "extracted")
                 helper = work / "helper"
                 helper.mkdir()
-                for name in ("aac-cli.exe", "aac-cli.exe.config"):
+                for name in CLI_FILES:
                     shutil.copy2(target / name, helper / name)
-                shutil.copytree(target / "_internal", helper / "_internal")
+                shutil.copytree(target / REQUIRED_DIR, helper / REQUIRED_DIR)
                 helper_exe = helper / "aac-cli.exe"
             token = uuid.uuid4().hex
             handoff = self.root / HANDOFF_FILE
@@ -245,20 +255,29 @@ def process_options():
 def parent_alive(pid):
     if os.name == "nt":
         import ctypes
-        from ctypes import wintypes
-        kernel = ctypes.windll.kernel32
-        kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-        kernel.OpenProcess.restype = wintypes.HANDLE
-        kernel.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
-        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
-        handle = kernel.OpenProcess(0x1000, False, pid)
-        if not handle:
-            return False
-        code = wintypes.DWORD()
-        try:
-            return bool(kernel.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == 259
-        finally:
-            kernel.CloseHandle(handle)
+        return _alive_windows(pid, ctypes.windll.kernel32)
+    return _alive_posix(pid)
+
+
+def _alive_windows(pid, kernel):
+    """Win32 判活的调用序列；`kernel` 可注入，Windows 分支才能在两个平台都被测到。"""
+    import ctypes
+    from ctypes import wintypes
+    kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = kernel.OpenProcess(0x1000, False, pid)   # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return False
+    code = wintypes.DWORD()
+    try:
+        return bool(kernel.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == 259   # STILL_ACTIVE
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def _alive_posix(pid):
     try:
         os.kill(pid, 0)
         return True
