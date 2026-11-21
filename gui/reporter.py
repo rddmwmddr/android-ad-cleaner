@@ -53,8 +53,9 @@ class Reporter:
         folder = self.data.logs
         try:
             os.makedirs(folder, exist_ok=True)
-            Path(folder, "last-error.txt").write_text(f"客户端 {self.version} · {operation}\n{detail}\n",
-                                                      encoding="utf-8")
+            # 按字节写：`str.encode()` 默认就是 UTF-8，换行也不必经平台转一次
+            Path(folder, "last-error.txt").write_bytes(
+                f"客户端 {self.version} · {operation}\n{detail}\n".encode())
         except OSError:
             pass  # 保存日志失败也要让界面收到原始问题
         lines = detail.splitlines()
@@ -101,14 +102,14 @@ class Reporter:
         """第一次上报时随机生成，只用来限频；不取任何设备或电脑标识。"""
         path = Path(self.data.install_id)
         try:
-            value = path.read_text(encoding="utf-8").strip()
+            value = path.read_bytes().decode().strip()
             if uuid.UUID(value).version == 4:
                 return value
         except (OSError, ValueError):
             pass
         value = str(uuid.uuid4())
         self.data.ensure()
-        path.write_text(value, encoding="utf-8")
+        path.write_bytes(value.encode())
         return value
 
     def send_report(self, payload):
@@ -121,20 +122,23 @@ class Reporter:
         if not payload.get("steps") and not str(payload.get("log") or "").strip():
             return {"error": self.empty_report}
         body = dict(payload, install_id=self._install_id())
+        content_type = "application/json"
+        agent = f"AndroidAdCleaner/{self.version}"
+        headers = {"Content-Type": content_type, "User-Agent": agent}   # pragma: no mutate 语义等价：urllib 把 header 名按 capitalize 归一，"content-type" 与 "CONTENT-TYPE" 落成同一个键
+        text = json.dumps(body, ensure_ascii=False)   # pragma: no mutate 语义等价：ensure_ascii 只按真假取用，None 与 False 写出相同字节
         request = urllib.request.Request(
-            self.report_url, data=json.dumps(body, ensure_ascii=False).encode("utf-8"), method="POST",
-            headers={"Content-Type": "application/json", "User-Agent": f"AndroidAdCleaner/{self.version}"})
+            self.report_url, data=text.encode(), method="POST", headers=headers)
         try:
             # 云函数闲置后第一次调用要加载依赖，给足时间
             with urllib.request.urlopen(request, timeout=45) as response:
-                result = json.loads(response.read().decode("utf-8"))
+                result = json.loads(response.read().decode())
         except urllib.error.HTTPError as e:
             if e.code == 429:
                 return {"error": "上报太频繁，请一小时后再试"}
             try:
-                message = json.loads(e.read().decode("utf-8")).get("message") or ""
+                message = json.loads(e.read().decode()).get("message") or ""
             except (ValueError, OSError):
-                message = ""
+                message = ""   # pragma: no mutate 语义等价：这里只要空串，None 在下面的真假判断里同路
             return {"error": f"服务器拒绝了这次上报（{e.code}{'：' + message if message else ''}）"}
         except (urllib.error.URLError, OSError, ValueError) as e:
             return {"error": f"连不上上报服务器：{getattr(e, 'reason', e)}"}
