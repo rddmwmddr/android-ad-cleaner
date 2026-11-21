@@ -152,11 +152,11 @@
 | `test_web_client.py` | 前端用例的代跑与守卫：tests/js/ 的 jsdom 用例由它在 unittest 里跑。 | 8 |
 | `test_fixtures.py` | 夹具本身的行为：样本、假时钟、时间轴与假 Phone。 | 27 |
 | `test_compare_phone_state.py` | 两个对拍驱动自己管基线 worktree：未知 SHA 报错且不留下 worktree，不指定基线时仍认手工备好的 tool 目录。 | 3 |
-| `test_mutation_scope.py` | 模块 → 测试范围的映射：严格档名单与它不漂、每个目标都在仓库里、选择结果去重保序、摘掉的方法确实挂在被收集的文件上，副本的 src 是 tool 与 gui 的镜像，改动面只挑映射表里的模块、表外的 gui 模块逐条报出来，summary 一节的结论与 pragma 计数，以及「无可变异节点」的判据。 | 31 |
+| `test_mutation_scope.py` | 模块 → 测试范围的映射：严格档名单与它不漂、每个目标都在仓库里、选择结果去重保序、摘掉的方法确实挂在被收集的文件上，副本的 src 是 tool、gui 与手机版替换层的镜像，改动面只挑映射表里的模块、表外的 gui 与手机版模块逐条报出来，summary 一节的结论与 pragma 计数，以及「无可变异节点」的判据。 | 59 |
 | `test_android_bundle.py` | APK 里那批 gui 文件必须覆盖 gui/app.py 的导入期依赖。 | 11 |
 | `test_tool_package.py` | tool/ 的出厂引擎与仓库工具链边界：两份冻结名单与文件系统全等、引擎不拖进工具链、打包清单不含 devtools/。 | 12 |
 | `test_android_shim.py` | 手机版替换层：不连手机，替换掉执行通道与读屏。 | 184 |
-| `test_android_view.py` | 手机版界面的判断：结果怎么说、什么时候挡住开始、反馈网址怎么截。 | 125 |
+| `test_android_view.py` | 手机版界面的判断：结果怎么说、什么时候挡住开始、反馈网址怎么截。 | 217 |
 | `test_android_version.py` | 单键 getprop 读不到版本时按分区属性回退。 | 7 |
 | `test_android_smoke.py` | 真机冒烟：出包、装机、启动、执行、还原三段各自出结论。 | 208 |
 | `test_api_structure.py` | 窗口桥契约与客户端三块的责任边界。 | 15 |

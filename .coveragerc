@@ -9,6 +9,9 @@ relative_files = True
 source =
     tool
     gui
+    # 手机版替换层（#1430）：产品布局在 android/app/src/main/python/ 下，按目录算，不按包名——
+    # 它没有 __init__.py，测试靠把该目录插进 sys.path 后 `from aac_android import …`。
+    android/app/src/main/python/aac_android
 omit =
     gui/bundle_data.py
     gui/dotnet_config.py
