@@ -12,6 +12,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -163,6 +164,21 @@ class MainTests(unittest.TestCase):
         code, out, _ = self.run_main(["--input", self.write_dump([ticket(5, "bug")])])
         self.assertEqual(code, triage_audit.EXIT_OK)
         self.assertEqual(out.strip(), "1 张 open 票，四条标签判据全绿。")
+
+    def test_the_dump_is_read_as_utf8(self):
+        """编码在 ASCII 标签上没有可观察差异，只能从调用参数上钉住（#1522）。"""
+        dump = self.write_dump([ticket(5, "bug")])
+        reads = []
+        real = Path.read_text
+
+        def spy(target, *args, **kwargs):
+            reads.append(kwargs)
+            return real(target, *args, **kwargs)
+
+        with mock.patch.object(Path, "read_text", spy):
+            code, _, _ = self.run_main(["--input", dump])
+        self.assertEqual(code, triage_audit.EXIT_OK)
+        self.assertEqual(reads, [{"encoding": "utf-8"}])
 
     def test_findings_exit_one_and_print_each_line(self):
         payload = [ticket(5, "bug", "enhancement")]

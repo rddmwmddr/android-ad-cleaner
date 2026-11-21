@@ -235,7 +235,7 @@ def write_atomic(path, text):
     path = Path(path)
     tmp = path.with_name(path.name + ".tmp")  # pragma: no mutate 语义等价：临时文件名只在写盘瞬间存在，成功后 rename、失败后 unlink，外部看不到
     try:
-        tmp.write_text(text, encoding="utf-8", newline="\n")  # pragma: no mutate 语义等价：判断平台是 POSIX，locale 默认编码即 UTF-8，`newline=None` 与 `\n` 写出同一字节
+        tmp.write_text(text, encoding="utf-8", newline="\n")
         os.replace(tmp, path)
     except OSError:
         tmp.unlink(missing_ok=True)
@@ -247,8 +247,8 @@ def write_checked(path, text, check):
     path = Path(path)
     tmp = path.with_name(path.name + ".tmp")  # pragma: no mutate 语义等价：临时文件名只在写盘瞬间存在，成功后 rename、失败后 unlink，外部看不到
     try:
-        tmp.write_text(text, encoding="utf-8", newline="\n")  # pragma: no mutate 语义等价：判断平台是 POSIX，locale 默认编码即 UTF-8，`newline=None` 与 `\n` 写出同一字节
-        if not check(tmp.read_text(encoding="utf-8")):  # pragma: no mutate 语义等价：判断平台是 POSIX，locale 默认编码即 UTF-8，`UTF-8` 与之同一 codec
+        tmp.write_text(text, encoding="utf-8", newline="\n")
+        if not check(tmp.read_text(encoding="utf-8")):
             raise Refused(f"{path} 写后回读与预期不一致：不落盘，页面保持原样。")
         os.replace(tmp, path)
     except (OSError, Refused):
@@ -273,11 +273,11 @@ def release_published(tag):
     """Release 发布时间的 UTC 日期（`YYYY-MM-DD`）；还没发布时拒绝回填。"""
     raw = run_gh("release", "view", tag, "--json", "publishedAt", "--jq", ".publishedAt").strip()
     try:
-        moment = datetime.fromisoformat(raw.replace("Z", "+00:00"))  # pragma: no mutate 语义等价：判断平台是 3.12+，fromisoformat 直接接受尾部 Z，替换与否同结果
+        moment = datetime.fromisoformat(raw.replace("Z", "+00:00"))  # pragma: no mutate 语义等价：项目解释器是 3.12/3.13，`fromisoformat` 自 3.11 起直接接受尾部 Z，替换与否同结果
     except ValueError:
         raise Refused(f"{tag} 还没发布（publishedAt 是空的）：页面先不写。") from None
     if moment.tzinfo is None:          # 没有时区的读数按 UTC 认，不拿本机时区去猜
-        moment = moment.replace(tzinfo=timezone.utc)  # pragma: no mutate 语义等价：判断平台是 UTC，naive 时间 astimezone(UTC) 与按 UTC 认同一天
+        moment = moment.replace(tzinfo=timezone.utc)
     return moment.astimezone(timezone.utc).date().isoformat()
 
 
@@ -396,7 +396,7 @@ def run_page(opts, fetch, published, pages, verify):
     texts = {}
     for key, path in paths.items():
         try:
-            texts[key] = path.read_text(encoding="utf-8")  # pragma: no mutate 语义等价：判断平台是 POSIX，locale 默认编码即 UTF-8，`UTF-8` 与之同一 codec
+            texts[key] = path.read_text(encoding="utf-8")
         except OSError as error:
             print(f"读不到 {path}：{error}", file=sys.stderr)
             return EXIT_UNREACHABLE

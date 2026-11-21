@@ -345,6 +345,20 @@ class MainTests(unittest.TestCase):
         self.assertEqual(code, release_assets.EXIT_OK, err)
         self.assertEqual(self.calls, ["v1.2.3"])
 
+    def test_the_page_is_read_as_utf8(self):
+        """编码在 ASCII 页面上没有可观察差异，只能从调用参数上钉住（#1522）。"""
+        reads = []
+        real = Path.read_text
+
+        def spy(target, *args, **kwargs):
+            reads.append(kwargs)
+            return real(target, *args, **kwargs)
+
+        with mock.patch.object(Path, "read_text", spy):
+            code, _, err = self.run_main(self.assets(*self.page_files))
+        self.assertEqual(code, release_assets.EXIT_OK, err)
+        self.assertEqual(reads, [{"encoding": "utf-8"}])
+
 
 class ShaMainTests(unittest.TestCase):
     """`--sha` 下比文件名、大小与 sha 三类，差异分行列出（#1136）。"""

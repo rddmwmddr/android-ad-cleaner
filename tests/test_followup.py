@@ -536,6 +536,34 @@ class WriteTests(DocumentCase):
         self.assertIn("| #193 / #581 | @a | 机型 | PR #1 | 输出 |",
                       self.path.read_text(encoding="utf-8"))
 
+    def test_the_document_is_read_and_written_as_utf8_with_lf(self):
+        """编码 / 换行在 ASCII 文档上没有可观察差异，只能从调用参数上钉住：`encoding=None`
+        取本机 locale、`newline=None` 在 Windows 写 CRLF，同一份文档结论会变（#1522）。"""
+        text = doc("| #11 | @b | 机型 | PR #2 | 输出 |")
+        gh = FakeGh([{"number": 11, "author": {"login": "b"}},
+                     {"number": 7, "author": {"login": "s"}}])   # 缺 #7，会走写回
+        self.path.write_text(text, encoding="utf-8")
+        reads, writes = [], []
+        real_read, real_write = Path.read_text, Path.write_text
+
+        def spy_read(target, *args, **kwargs):
+            reads.append(kwargs)
+            return real_read(target, *args, **kwargs)
+
+        def spy_write(target, *args, **kwargs):
+            writes.append(kwargs)
+            return real_write(target, *args, **kwargs)
+
+        out, err = io.StringIO(), io.StringIO()
+        with patch.object(Path, "read_text", spy_read), \
+                patch.object(Path, "write_text", spy_write), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = followup.main(["--write"], runner=gh.runner.run, doc=self.path)
+        self.assertEqual(code, 0, err.getvalue())
+        self.assertTrue(reads and all(kw == {"encoding": "utf-8"} for kw in reads), reads)
+        self.assertTrue(writes and all(kw == {"encoding": "utf-8", "newline": "\n"}
+                                       for kw in writes), writes)
+
 
 class RealQueueTests(unittest.TestCase):
     """真实的复测队列文档：小节名、列名或合列行被改掉时，这里先红。"""

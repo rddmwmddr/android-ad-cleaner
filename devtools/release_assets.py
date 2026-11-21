@@ -246,7 +246,7 @@ def main(argv, fetch=fetch_release, page=PAGE):
         print(f"{error}\n{USAGE}", file=sys.stderr)
         return EXIT_UNREACHABLE
     name = Path(page).name
-    version, entries = read_entries(Path(page).read_text(encoding="utf-8"))  # pragma: no mutate 语义等价：判断平台是 POSIX，locale 默认编码即 UTF-8，`UTF-8` 与之同一 codec
+    version, entries = read_entries(Path(page).read_text(encoding="utf-8"))
     if not readable(version, entries):
         print(f"{page} 里读不到 REL 的 version 与 files：页面结构变了，这条检查没法比对。",
               file=sys.stderr)

@@ -315,7 +315,7 @@ def main(argv, runner=None, doc=None):
         return EXIT_UNREADABLE
     path = Path(doc or DOC)
     try:
-        text = path.read_text(encoding="utf-8")  # pragma: no mutate 语义等价：判断平台是 POSIX，locale 默认编码即 UTF-8，`UTF-8` 与之同一 codec
+        text = path.read_text(encoding="utf-8")
     except OSError as error:
         print(f"读不到复测队列文档：{error}", file=sys.stderr)
         return EXIT_UNREADABLE
@@ -332,8 +332,8 @@ def main(argv, runner=None, doc=None):
     try:
         # newline 钉死 LF：默认写法会把整份文档改写成 CRLF，Windows 上「逐字不动」就破了
         updated = apply(text, result)
-        path.write_text(updated, encoding="utf-8", newline="\n")  # pragma: no mutate 语义等价：判断平台是 POSIX，`newline=None` 与 `\n` 写出同一字节；Windows 上这条差异由 `test_write_keeps_lf_line_endings` 守（只在 Windows job 跑）
-        text = path.read_text(encoding="utf-8")  # pragma: no mutate 语义等价：判断平台是 POSIX，locale 默认编码即 UTF-8，`UTF-8` 与之同一 codec
+        path.write_text(updated, encoding="utf-8", newline="\n")
+        text = path.read_text(encoding="utf-8")
     except Unreadable as error:
         # 不可达：`apply` 重新解析的仍是 `scan` 刚校验过的同一份文本，不会再抛 Unreadable
         print(f"复测队列文档的结构认不出：{error}", file=sys.stderr)  # pragma: no mutate 不可达：同上

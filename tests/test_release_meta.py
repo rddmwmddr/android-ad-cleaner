@@ -9,6 +9,7 @@ import io
 import os
 import re
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from string import Template
@@ -16,6 +17,14 @@ from unittest import mock
 
 from fixtures import FakeRunner
 from devtools import release_assets, release_meta
+
+
+def _restore_tz(old):
+    """用例改过 `TZ` 后恢复本机时区并让 C 库重新读一次。"""
+    os.environ.pop("TZ", None)
+    if old is not None:
+        os.environ["TZ"] = old
+    time.tzset()
 
 VERSION = "1.2.3"
 RELEASED = "2026-11-12"
@@ -157,6 +166,21 @@ class MainTests(unittest.TestCase):
         self.assertEqual(self.sums.read_text(encoding="utf-8"), expected_text())
         self.assertEqual(self.fetched, ["v1.2.3"])
         self.assertIn("5", out)
+
+    def test_the_manifest_is_written_as_utf8_with_lf(self):
+        """编码 / 换行在 ASCII 清单上没有可观察差异，只能从调用参数上钉住（#1522）。"""
+        writes = []
+        real = Path.write_text
+
+        def spy(target, *args, **kwargs):
+            writes.append(kwargs)
+            return real(target, *args, **kwargs)
+
+        with mock.patch.object(Path, "write_text", spy):
+            code, _, err = self.run_main()
+        self.assertEqual(code, release_meta.EXIT_OK, err)
+        self.assertTrue(writes and all(kw == {"encoding": "utf-8", "newline": "\n"}
+                                       for kw in writes), writes)
 
     def test_missing_digest_exits_one_and_leaves_no_file(self):
         code, _, err = self.run_main(assets=make_assets(digest=lambda _: ""))
@@ -368,6 +392,27 @@ class PageTests(unittest.TestCase):
         self.assertTrue(any(line.endswith("图标地址的 ?v= 同版本。") for line in out.splitlines()))
         self.assertTrue(any(line.startswith("REL.gitee 没动") for line in out.splitlines()))
 
+    def test_pages_are_read_and_written_as_utf8_with_lf(self):
+        """编码 / 换行在 ASCII 页面上没有可观察差异，只能从调用参数上钉住（#1522）。"""
+        reads, writes = [], []
+        real_read, real_write = Path.read_text, Path.write_text
+
+        def spy_read(target, *args, **kwargs):
+            reads.append(kwargs)
+            return real_read(target, *args, **kwargs)
+
+        def spy_write(target, *args, **kwargs):
+            writes.append(kwargs)
+            return real_write(target, *args, **kwargs)
+
+        with mock.patch.object(Path, "read_text", spy_read), \
+                mock.patch.object(Path, "write_text", spy_write):
+            code, _, err = self.run_main()
+        self.assertEqual(code, release_meta.EXIT_OK, err)
+        self.assertTrue(reads and all(kw == {"encoding": "utf-8"} for kw in reads), reads)
+        self.assertTrue(writes and all(kw == {"encoding": "utf-8", "newline": "\n"}
+                                       for kw in writes), writes)
+
     def test_backfills_the_icon_cache_key_on_both_pages(self):
         """?v= 是图标的缓存键：两页一起换成本版，否则同一份源码里出现两个版本号。"""
         code, _, err = self.run_main()
@@ -557,8 +602,15 @@ class PublishedTests(unittest.TestCase):
             self.assertEqual(release_meta.release_published("v1"), "2026-11-11")
 
     def test_a_naive_timestamp_is_read_as_utc(self):
-        """不带时区的读数按 UTC 认：拿本机时区去换算会让日期在东八区差一天。"""
-        with mock.patch.object(release_meta, "run_gh", return_value="2026-11-11T20:30:00"):
+        """不带时区的读数按 UTC 认：本机时区设成东八区时，跨零点会差一天。"""
+        if os.name == "nt":
+            self.skipTest("TZ 变量 + tzset 只在 POSIX 上生效")
+        old = os.environ.get("TZ")
+        os.environ["TZ"] = "Asia/Shanghai"
+        time.tzset()
+        self.addCleanup(_restore_tz, old)
+        # 02:30 按 UTC 认是 11-11；若按 +08 本机时区换算会退到 11-10
+        with mock.patch.object(release_meta, "run_gh", return_value="2026-11-11T02:30:00"):
             self.assertEqual(release_meta.release_published("v1"), "2026-11-11")
 
     def test_unpublished_release_refuses(self):
