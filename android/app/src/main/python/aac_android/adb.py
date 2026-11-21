@@ -17,9 +17,8 @@ NOT_READY = b"error: no devices/emulators found\n"
 
 ADB_PATH = ""               # install() 时定下：一个真实存在的空文件，adb_link 的候选检查要求路径存在
 
-# `subprocess` 的文本模式缺省：没给 encoding / errors 时用什么。抽成常量，让等价的大小写变异不跟可杀的
-# 参数变异挤在同一行（`UTF-8` 与 `utf-8` 是同一个编解码器）。
-_ENCODING = "utf-8"   # pragma: no mutate 语义等价：编解码器名大小写不敏感，UTF-8 与 utf-8 同义
+# `subprocess` 的文本模式缺省：没给 encoding / errors 时用什么。
+_ENCODING = "utf-8"
 _ERRORS = "replace"
 
 

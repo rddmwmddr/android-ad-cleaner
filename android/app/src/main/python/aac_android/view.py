@@ -78,7 +78,7 @@ BRAND_KEYS = {"xiaomi": "小米", "redmi": "小米", "poco": "小米", "vivo": "
 XIAOMI = {"xiaomi", "redmi", "poco"}
 
 
-_SAFE = "-_.!~*'()"   # pragma: no mutate 语义等价：字母数字本就免编码，safe 里多出的字符不改变任何字符的编码
+_SAFE = "-_.!~*'()"
 
 
 def _encode(text):
@@ -180,13 +180,14 @@ def smoke_export(api, shell=""):
     results = [{key: row.get(key) for key in EXPORT_FIELDS if key in row}
                for row in run.get("results") or []]
     finished = not run.get("running") and bool(results or run.get("cancel"))
+    # 直接下标取 outcome：`_snapshot` 每次都会写入它；其余可缺省字段仍用 `.get` 给默认值。
     payload = {"shell": shell, "finished": finished,
                "run": {"running": bool(run.get("running")), "cancel": bool(run.get("cancel")),
                        "idx": run.get("idx", 0), "total": run.get("total", 0),
                        "title": run.get("title", ""), "sec": run.get("sec", 0),
                        "outcome": run["outcome"], "recovery": run.get("recovery", ""),
                        "results": results}}
-    encoded = json.dumps(payload, ensure_ascii=False)  # pragma: no mutate 语义等价：ensure_ascii 只按真假取用，None 与 False 写出相同字节
+    encoded = json.dumps(payload, ensure_ascii=False)
     return {"finished": finished, "running": bool(run.get("running")), "chunks": _chunks(encoded)}
 
 
@@ -345,7 +346,7 @@ def feedback_url(kind, text, diag):
         return url, ""
     head = diag.split("<details>")[0].strip()
     found = re.search(r"```text\n([\s\S]*?)\n```", diag)
-    tail = [line for line in (found.group(1) if found else "").split("\n") if line.strip()]  # pragma: no mutate 语义等价：取不到代码块时裁剪正文由兜底覆盖，占位值不改变最终结果
+    tail = [line for line in (found.group(1) if found else "").split("\n") if line.strip()]
 
     def brief(n):
         kept = "\n".join(tail[-n:]) if n else ""

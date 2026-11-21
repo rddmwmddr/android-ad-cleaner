@@ -15,9 +15,8 @@ LOG_FILE = "/data/local/tmp/aac-vd.log"
 NAME = "aac-bg"
 ALWAYS_UNLOCKED = 1 << 12       # Vd.java 的标记：降级档可能没有它，那时这块屏照样会被锁
 
-# dumpsys 的回包按 UTF-8 读、坏字节换成替换符：抽成常量，让等价的大小写变异不跟可杀的 errors 变异挤在同一行
-# （`UTF-8` 与 `utf-8` 是同一个编解码器）。
-_ENCODING = "utf-8"   # pragma: no mutate 语义等价：编解码器名大小写不敏感，UTF-8 与 utf-8 同义
+# dumpsys 的回包按 UTF-8 读、坏字节换成替换符。
+_ENCODING = "utf-8"
 
 
 class Screen:
