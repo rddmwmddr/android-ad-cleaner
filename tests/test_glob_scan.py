@@ -57,6 +57,21 @@ class ScanTests(unittest.TestCase):
             write(tmp, "recipes/model.toml", "[meta]\n")
             self.assertEqual(glob_scan.scan(tmp).offenders, [])
 
+    def test_source_files_are_read_as_utf8(self):
+        """编码在 ASCII 输入上没有可观察差异，只能从调用参数上钉住：换成 locale 默认会在坏字节上变结论。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            write(tmp, "tool/probe.py", PREAMBLE + "hits = list((ROOT / 'recipes').glob('*.toml'))\n")
+            real = Path.read_text
+            seen = []
+
+            def spy(path_self, *args, **kwargs):
+                seen.append(kwargs)
+                return real(path_self, *args, **kwargs)
+
+            with patch.object(Path, "read_text", spy):
+                glob_scan.scan(tmp)
+        self.assertEqual(seen, [{"encoding": "utf-8"}])
+
     def test_module_level_glob_function_is_not_mistaken_for_a_method(self):
         """`glob.glob(os.path.join(ROOT, ...))` 一直是仓库里的主流写法：它的第一个实参是
         完整模式，不能被读成「接收者叫 glob」而整个跳过。"""

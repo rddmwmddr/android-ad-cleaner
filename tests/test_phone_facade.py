@@ -542,6 +542,20 @@ class ScriptSurfaceTests(unittest.TestCase):
             found = script_surface.violations(root)
         self.assertEqual(found, [("recipe_lib/honor.py", 2, "vivo_seen")])
 
+    def test_scripts_are_read_as_utf8(self):
+        """编码在 ASCII 输入上没有可观察差异，只能从调用参数上钉住：换成 locale 默认会在非 UTF-8 环境变结论。"""
+        real = Path.read_text
+        seen = []
+
+        def spy(path_self, *args, **kwargs):
+            seen.append(kwargs)
+            return real(path_self, *args, **kwargs)
+
+        with _script_tree({"recipe_lib/honor.py": "def go(p):\n    p.click(1, 2)\n"}) as root:
+            with patch.object(Path, "read_text", spy):
+                script_surface.violations(root)
+        self.assertEqual(seen, [{"encoding": "utf-8"}])
+
     def test_main_reports_each_undeclared_name_and_returns_nonzero(self):
         with _script_tree({"recipes/honor/X1/X1.py": "def step(p, rt):\n    p.serial.strip()\n"}) as root:
             with contextlib.redirect_stdout(io.StringIO()) as out:

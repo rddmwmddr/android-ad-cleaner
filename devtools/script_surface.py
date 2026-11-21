@@ -30,7 +30,7 @@ def script_files(root):
 
 def accesses(path):
     """一份脚本里 `p.<名字>` 的 (名字, 行号)，读写两种上下文都算。"""
-    tree = ast.parse(Path(path).read_text(encoding="utf-8"))  # pragma: no mutate 语义等价：扫的都是本仓 UTF-8 源码，`None` 与大小写写法取同一编解码器
+    tree = ast.parse(Path(path).read_text(encoding="utf-8"))
     for node in ast.walk(tree):
         if (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
                 and node.value.id == "p"):

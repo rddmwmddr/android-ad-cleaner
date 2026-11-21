@@ -85,7 +85,7 @@ def scan(root):
 
 def _scan_file(path, root, report):
     where = path.relative_to(root).as_posix()
-    tree = ast.parse(path.read_text(encoding="utf-8"))  # pragma: no mutate 语义等价：扫的都是本仓 UTF-8 源码，`None` 与大小写写法取同一编解码器
+    tree = ast.parse(path.read_text(encoding="utf-8"))
     module_env = _module_constants(tree)
     loops = _loop_values(tree)
     funcs = _function_constants(tree)
