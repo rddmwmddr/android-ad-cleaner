@@ -10,7 +10,7 @@ mutant 的 `pytest.main()` 都是一次新会话，所以在会话开头把 `too
 
 同理，devtools 模块在 import 期 `sys.path.insert`、随即 `use_utf8_console()` 改写标准流，且都不
 还原。mutmut 在父进程里跑统计阶段、之后每个 mutant 从父进程 fork，残留的全局状态会漏进每一个
-mutant 子进程，让后续 mutant 在错的环境里被判定（#1516）。`_DEVPTOOLS_IMPORTING_FILES` 是导入
+mutant 子进程，让后续 mutant 在错的环境里被判定（#1516）。`_DEVTOOLS_IMPORTING_FILES` 是导入
 devtools 的测试文件登记表，这些文件的用例在**每条用例**的边界上快照 / 回填 `sys.path`、
 `sys.modules` 与标准流对象；名单漂移同样由 `test_mutation_scope.py` 的守卫双向对拍。
 """
@@ -26,7 +26,7 @@ _CACHED_ENTRIES = (
 
 # 导入 devtools 的测试文件（相对 `tests/` 的文件名）。这些文件的用例会触发或再触发 devtools 的
 # import 期改写，按用例快照 / 回填全局状态。名单与 `import devtools` 的实际集合由守卫双向对拍。
-_DEVPTOOLS_IMPORTING_FILES = {
+_DEVTOOLS_IMPORTING_FILES = {
     "test_catalog.py",
     "test_claim.py",
     "test_comment_tickets.py",
@@ -49,7 +49,7 @@ _DEVPTOOLS_IMPORTING_FILES = {
 }
 
 _TESTS_DIR = Path(__file__).resolve().parent
-_DEVPTOOLS_SCOPE = frozenset(_TESTS_DIR / name for name in _DEVPTOOLS_IMPORTING_FILES)
+_DEVTOOLS_SCOPE = frozenset(_TESTS_DIR / name for name in _DEVTOOLS_IMPORTING_FILES)
 
 
 def _snapshot_globals():
@@ -83,7 +83,7 @@ def pytest_sessionstart(session):
 
 def pytest_runtest_setup(item):
     # 只给导入 devtools 的文件付快照成本；`Path(item.path)` 是 pytest 7+ 的现代 API。
-    if Path(str(item.path)).resolve() in _DEVPTOOLS_SCOPE:
+    if Path(str(item.path)).resolve() in _DEVTOOLS_SCOPE:
         item._devtools_globals = _snapshot_globals()
 
 

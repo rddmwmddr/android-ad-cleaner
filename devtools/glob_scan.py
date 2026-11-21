@@ -336,7 +336,7 @@ def _combine(left_node, right_node, ctx, build):
 
 def _combine_chain(nodes, ctx, build):
     parts = [_evaluate(node, ctx) for node in nodes]
-    if not parts or any(part is _UNKNOWN for part in parts):  # pragma: no mutate 语义等价：放过去时 `sorted(哨兵)` 也抛 TypeError，被下面的 except 接回 `_UNKNOWN`
+    if not parts or any(part is _UNKNOWN for part in parts):  # pragma: no mutate 不可达：唯一调用点在 `_evaluate` 的 `Path(...)` 分支、调用前有 `and node.args` 保证 `nodes` 非空，`not parts` 走不到；`_UNKNOWN` 支放过去时 `sorted(哨兵)` 也抛 TypeError，被下面的 except 接回 `_UNKNOWN`
         return _UNKNOWN
     try:
         return {str(build(combo)) for combo in product(*[sorted(part) for part in parts])}

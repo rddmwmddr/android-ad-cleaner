@@ -107,14 +107,14 @@ def devtools_importing_files(root):
 
 
 def registered_devtools_files(root):
-    """`tests/conftest.py` 的 `_DEVPTOOLS_IMPORTING_FILES` 里登记的测试文件名。"""
+    """`tests/conftest.py` 的 `_DEVTOOLS_IMPORTING_FILES` 里登记的测试文件名。"""
     tree = ast.parse((root / "tests" / "conftest.py").read_text(encoding="utf-8"))
     for node in tree.body:
         if (isinstance(node, ast.Assign) and len(node.targets) == 1
                 and isinstance(node.targets[0], ast.Name)
-                and node.targets[0].id == "_DEVPTOOLS_IMPORTING_FILES"):
+                and node.targets[0].id == "_DEVTOOLS_IMPORTING_FILES"):
             return set(ast.literal_eval(node.value))
-    raise AssertionError("tests/conftest.py 里找不到 _DEVPTOOLS_IMPORTING_FILES")
+    raise AssertionError("tests/conftest.py 里找不到 _DEVTOOLS_IMPORTING_FILES")
 
 
 class MapTests(unittest.TestCase):
