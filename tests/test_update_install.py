@@ -44,6 +44,34 @@ class FakeHelper:
         pass
 
 
+class RecordingChild:
+    """新程序的替身：记录终止与等待，`hang_on_terminate` 时第一次 wait 超时。"""
+
+    def __init__(self, *, exit_after=None, hang_on_terminate=False):
+        self.polls = 0
+        self.exit_after = exit_after
+        self.hang_on_terminate = hang_on_terminate
+        self.terminated = 0
+        self.waits = []
+        self.killed = 0
+
+    def poll(self):
+        self.polls += 1
+        return None if self.exit_after is None or self.polls <= self.exit_after else 1
+
+    def terminate(self):
+        self.terminated += 1
+
+    def wait(self, timeout=None):
+        self.waits.append(timeout)
+        if self.hang_on_terminate and len(self.waits) == 1:
+            raise subprocess.TimeoutExpired('app', timeout or 0)
+        return 0
+
+    def kill(self):
+        self.killed += 1
+
+
 class InstallTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -63,6 +91,7 @@ class InstallTests(unittest.TestCase):
         self.child = Mock()
         self.child.poll.return_value = None
         self.launches = []
+        self.sleeps = []
 
     def write_plan(self):
         install.write_json(self.plan_path, self.plan)
@@ -72,9 +101,13 @@ class InstallTests(unittest.TestCase):
         self.launches.append((args, kwargs))
         return self.child
 
-    def run_helper(self, **kwargs):
-        return install.apply_update(self.plan_path, alive=lambda _: False, sleep=lambda _: None,
-                                    launch=self.start, attempts=3, **kwargs)
+    def run_helper(self, *, launch=None, alive=None, attempts=3):
+        self.sleeps = []
+        return install.apply_update(self.plan_path, alive=alive or (lambda _: False),
+                                    sleep=self.sleeps.append, launch=launch or self.start, attempts=attempts)
+
+    def receipt(self):
+        return json.loads(Path(self.plan['result']).read_text(encoding='utf-8'))
 
     def assert_old(self):
         self.assertEqual((self.target / 'AndroidAdCleaner.exe').read_text(), 'old')
@@ -88,50 +121,153 @@ class InstallTests(unittest.TestCase):
             self.assertEqual((self.target / 'AndroidAdCleaner.exe').read_text(), 'new')
             install.confirm_started(self.work.parent, '0.4.2', args[0])
             return self.child
-        rc = install.apply_update(self.plan_path, alive=lambda _: False, sleep=lambda _: None, launch=start, attempts=3)
+        rc = install.apply_update(self.plan_path, alive=lambda _: False, sleep=self.sleeps.append,
+                                  launch=start, attempts=3)
         self.assertEqual(rc, 0)
-        self.assertTrue(json.loads(Path(self.plan['result']).read_text(encoding='utf-8'))['ok'])
+        self.assertEqual(self.receipt(), {'ok': True, 'version': '0.4.2'})
         self.assertEqual((self.target / 'unins000.exe').read_text(), 'uninstaller')
         self.assertEqual((self.target / 'user.txt').read_text(), 'user file')
-        self.assertEqual(self.launches[0][1]['env']['PYINSTALLER_RESET_ENVIRONMENT'], '1')
+        args, kwargs = self.launches[0]
+        self.assertEqual(args, [str(self.target / 'AndroidAdCleaner.exe')])
+        self.assertEqual(kwargs['cwd'], str(self.target))
+        self.assertEqual(kwargs['env']['PYINSTALLER_RESET_ENVIRONMENT'], '1')
         self.assertFalse(Path(self.plan['handoff']).exists())
+        self.assertFalse(Path(self.plan['prepared']).exists(), '成功安装后暂存的程序副本要清掉')
         self.assertFalse(list(self.target.glob('.aac-*')))
         self.child.terminate.assert_not_called()
+        self.assertEqual(json.loads(Path(self.plan['ready']).read_text(encoding='utf-8')),
+                         {'token': self.plan['token']})
+        self.assertEqual(json.loads(Path(self.plan['health']).read_text(encoding='utf-8')),
+                         {'token': self.plan['token'], 'version': '0.4.2'})
 
     def test_new_app_crash_rolls_back_and_relaunches_old(self):
         self.child.poll.return_value = 1
-        self.assertEqual(self.run_helper(), 1)
+        def start(args, **kwargs):
+            self.start(args, **kwargs)
+            Path(self.plan['handoff']).unlink(missing_ok=True)   # 父窗口已经取走回执
+            return self.child
+        self.assertEqual(self.run_helper(launch=start), 1)
         self.assert_old()
-        self.assertEqual(len(self.launches), 2)
-        self.assertIn('恢复', json.loads(Path(self.plan['result']).read_text(encoding='utf-8'))['error'])
+        self.assertEqual(self.launches[0][0], [str(self.target / 'AndroidAdCleaner.exe')])
+        self.assertEqual(self.launches[0][1]['cwd'], str(self.target))
+        self.assertEqual(self.launches[1][0], [str(self.target / 'AndroidAdCleaner.exe')])
+        self.assertEqual(self.launches[1][1]['cwd'], str(self.target))
+        self.assertEqual(self.launches[1][1]['env']['PYINSTALLER_RESET_ENVIRONMENT'], '1')
+        self.assertEqual(self.receipt(),
+                         {'ok': False, 'version': '0.4.2', 'error': '新版没有正常打开，已恢复原版本'})
+        self.assertEqual(self.sleeps, [], '新程序已经退出，不再空等')
+        self.assertFalse(Path(self.plan['handoff']).exists())
         self.assertFalse(list(self.target.glob('.aac-*')), '回滚成功后不能把临时目录留在程序目录里')
         self.child.terminate.assert_not_called()
 
     def test_new_app_hang_is_terminated_before_rollback(self):
+        self.child = RecordingChild()
         self.assertEqual(self.run_helper(), 1)
         self.assert_old()
-        self.child.terminate.assert_called_once()
-        self.child.wait.assert_called_once_with(timeout=15)
+        self.assertEqual(self.child.terminated, 1)
+        self.assertEqual(self.child.waits, [15])
+        self.assertEqual(self.child.killed, 0)
+        self.assertEqual(self.sleeps, [0.5, 0.5, 0.5], '等新版界面确认的轮询间隔')
         self.assertEqual(len(self.launches), 2)
 
     def test_unresponsive_new_app_is_killed_before_rollback(self):
-        self.child.wait.side_effect = [subprocess.TimeoutExpired('app', 15), 0]
+        self.child = RecordingChild(hang_on_terminate=True)
         self.assertEqual(self.run_helper(), 1)
-        self.child.kill.assert_called_once()
+        self.assertEqual(self.child.killed, 1)
+        self.assertEqual(self.child.waits, [15, 15])
         self.assert_old()
 
     def test_parent_still_alive_never_replaces(self):
-        rc = install.apply_update(self.plan_path, alive=lambda _: True, sleep=lambda _: None,
-                                  launch=self.start, attempts=2)
+        asked, sleeps = [], []
+        rc = install.apply_update(self.plan_path, alive=lambda pid: asked.append(pid) or True,
+                                  sleep=sleeps.append, launch=self.start, attempts=2)
         self.assertEqual(rc, 1)
         self.assert_old()
         self.assertEqual(self.launches, [])
-        self.assertIn('没有退出', json.loads(Path(self.plan['result']).read_text(encoding='utf-8'))['error'])
+        self.assertEqual(self.receipt(),
+                         {'ok': False, 'version': '0.4.2', 'error': '原程序没有退出，本次更新未安装'})
+        self.assertEqual(asked, [1234, 1234, 1234], '最后一次是决定要不要拉起旧程序')
+        self.assertEqual(sleeps, [0.5, 0.5])
+        self.assertEqual(json.loads(Path(self.plan['ready']).read_text(encoding='utf-8')),
+                         {'token': self.plan['token']})
+
+    def test_apply_update_waits_sixty_seconds_by_default(self):
+        """默认预算 120 次 × 0.5 秒：父程序一直不退时按这个上限收手。"""
+        asked, sleeps = [], []
+        rc = install.apply_update(self.plan_path, alive=lambda pid: asked.append(pid) or True,
+                                  sleep=sleeps.append, launch=self.start)
+        self.assertEqual(rc, 1)
+        self.assertEqual(len(asked), 121, '120 次轮询后还要再问一次要不要拉起旧程序')
+        self.assertEqual(sleeps, [0.5] * 120)
+        self.assertEqual(self.launches, [])
 
     def test_wrong_health_cannot_commit_new_version(self):
         install.write_json(self.plan['health'], dict(token='b' * 32, version='0.4.2'))
         self.assertEqual(self.run_helper(), 1)
         self.assert_old()
+        self.assertEqual(self.receipt(),
+                         {'ok': False, 'version': '0.4.2', 'error': '新版没有正常打开，已恢复原版本'})
+
+    def test_confirm_started_writes_health_for_the_running_new_version(self):
+        exe = self.target / 'AndroidAdCleaner.exe'
+        install.confirm_started(self.work.parent, '0.4.2', str(exe))
+        self.assertEqual(json.loads(Path(self.plan['health']).read_text(encoding='utf-8')),
+                         {'token': self.plan['token'], 'version': '0.4.2'})
+
+    def test_confirm_started_uses_the_platform_launch_path(self):
+        """mac 的新程序在 bundle 里的 Contents/MacOS 下：停在 bundle 根上的同名文件不算启动成功。"""
+        target = self.root / 'Applications/Old.app'
+        exe = target / 'Contents' / 'MacOS' / 'AndroidAdCleaner'
+        install.write_json(Path(self.plan['handoff']),
+                           dict(self.plan, platform='darwin', target=str(target), executable='AndroidAdCleaner'))
+        install.confirm_started(self.work.parent, '0.4.2', str(exe))
+        self.assertEqual(json.loads(Path(self.plan['health']).read_text(encoding='utf-8')),
+                         {'token': self.plan['token'], 'version': '0.4.2'})
+
+    def test_success_without_handoff_still_clears_the_staged_copy(self):
+        def start(args, **kwargs):
+            self.start(args, **kwargs)
+            Path(self.plan['handoff']).unlink(missing_ok=True)
+            install.write_json(self.plan['health'], {'token': self.plan['token'], 'version': '0.4.2'})
+            return self.child
+        self.assertEqual(self.run_helper(launch=start), 0)
+        self.assertEqual(self.receipt(), {'ok': True, 'version': '0.4.2'})
+        self.assertFalse(Path(self.plan['prepared']).exists(), '回执已不在也要把暂存的程序副本清掉')
+
+    def test_failed_recovery_keeps_the_backup_and_reports_where(self):
+        self.child.poll.return_value = 1
+        backup = self.target / ('.aac-old-' + self.plan['token'])
+        with patch.object(install.Replacement, 'rollback', side_effect=OSError('locked')):
+            self.assertEqual(self.run_helper(), 1)
+        self.assertEqual(self.receipt(), {
+            'ok': False, 'version': '0.4.2',
+            'error': f'新版没有正常打开，已恢复原版本；恢复未完成：locked。旧程序文件保留在 {backup}'})
+        self.assertEqual((backup / 'AndroidAdCleaner.exe').read_text(), 'old')
+        self.assertEqual((backup / '_internal/runtime.dll').read_text(), 'old')
+
+    def test_darwin_plan_swaps_the_bundle_and_launches_inside_it(self):
+        target = self.root / 'Applications/Old.app'
+        info_plist(target)
+        prepared = self.work / 'Old.app'
+        info_plist(prepared)
+        for path, content in ((target, 'old'), (prepared, 'new')):
+            exe = path / 'Contents' / 'MacOS' / 'AndroidAdCleaner'
+            exe.parent.mkdir(parents=True, exist_ok=True)
+            exe.write_text(content, encoding='utf-8')
+        plan = dict(self.plan, platform='darwin', target=str(target), prepared=str(prepared),
+                    executable='AndroidAdCleaner')
+        install.write_json(self.plan_path, plan)
+        install.write_json(plan['handoff'], plan)
+        def start(args, **kwargs):
+            self.start(args, **kwargs)
+            self.assertEqual((target / 'Contents/MacOS/AndroidAdCleaner').read_text(), 'new')
+            install.confirm_started(self.work.parent, '0.4.2', args[0])
+            return self.child
+        self.assertEqual(self.run_helper(launch=start), 0)
+        args, kwargs = self.launches[0]
+        self.assertEqual(args, [str(target / 'Contents' / 'MacOS' / 'AndroidAdCleaner')])
+        self.assertEqual(kwargs['cwd'], str(target.parent))
+        self.assertEqual(self.receipt(), {'ok': True, 'version': '0.4.2'})
 
     def test_old_or_other_executable_cannot_confirm_health(self):
         for version, exe in [('0.4.1', self.target / 'AndroidAdCleaner.exe'),
@@ -158,7 +294,7 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(replacement.old, [])
 
     def test_failed_replace_cleans_its_own_temporary_directories(self):
-        """install() 自己回滚后要顺手清掉 .aac-*：这时 _apply_plan 的 replaced 还是 False。"""
+        """install() 自己回滚后要顺手清掉 .aac-*：这时 _apply_plan 不该再滚一次。"""
         real_replace = os.replace
 
         def replace(source, dest):
@@ -178,7 +314,7 @@ class InstallTests(unittest.TestCase):
             install.confirm_started(self.work.parent, '0.4.2', args[0])
             return self.child
         with patch.object(install.Replacement, 'cleanup', autospec=True, side_effect=OSError('cleanup failed')) as cleanup:
-            self.assertEqual(install.apply_update(self.plan_path, alive=lambda _: False, sleep=lambda _: None,
+            self.assertEqual(install.apply_update(self.plan_path, alive=lambda _: False, sleep=self.sleeps.append,
                                                  launch=start, attempts=2), 0)
             cleanup.assert_called_once()
         self.assertEqual((self.target / 'AndroidAdCleaner.exe').read_text(), 'new')

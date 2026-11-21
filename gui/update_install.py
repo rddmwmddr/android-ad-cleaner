@@ -22,6 +22,8 @@ except ImportError:
 WINDOWS_FILES = ("AndroidAdCleaner.exe", "aac-cli.exe", "AndroidAdCleaner.exe.config", "aac-cli.exe.config", "_internal")
 BUNDLE_ID = "com.rddmwmddr.androidadcleaner"
 MAX_EXPANDED = 2 * 1024 * 1024 * 1024
+HANDOFF_FILE = "handoff.json"
+ERROR_FILE = "error.json"
 
 
 def write_json(path, data):
@@ -143,7 +145,7 @@ def sweep_stale(root):
 def _helper_error(work):
     """助手退出前留下的原因；没有就用调用方的通用文案。"""
     try:
-        return json.loads((Path(work) / "error.json").read_text(encoding="utf-8")).get("error", "")
+        return json.loads((Path(work) / ERROR_FILE).read_text(encoding="utf-8")).get("error", "")
     except (OSError, ValueError, AttributeError):
         return ""
 
@@ -203,7 +205,7 @@ class DesktopInstaller:
                 shutil.copytree(target / "_internal", helper / "_internal")
                 helper_exe = helper / "aac-cli.exe"
             token = uuid.uuid4().hex
-            handoff = self.root / "handoff.json"
+            handoff = self.root / HANDOFF_FILE
             plan = {"schema": 1, "token": token, "platform": self.system, "target": str(target),
                     "prepared": str(prepared), "version": version, "parent_pid": os.getpid(),
                     "executable": self.executable.name, "health": str(work / "healthy.json"), "ready": str(work / "ready.json"),
@@ -336,7 +338,7 @@ def confirm_started(root, current, executable):
     """只有新程序的窗口桥已可用时才确认；更新助手本身不创建 Api，也不会确认。"""
     root = Path(root)
     try:
-        plan = json.loads((root / "handoff.json").read_text(encoding="utf-8"))
+        plan = json.loads((root / HANDOFF_FILE).read_bytes())
         target = Path(plan["target"])
         expected = launch_target(target, plan["platform"], plan["executable"])[0]
         if current == plan["version"] and Path(executable).resolve() == expected.resolve():
@@ -365,7 +367,7 @@ def validate_plan(path):
             or Path(plan["ready"]).resolve() != work / "ready.json"
             or Path(plan["result"]).resolve() != work.parent / "last-result.json"):
         raise UpdateError("更新任务的状态路径无效")
-    if Path(plan["handoff"]).resolve() != work.parent / "handoff.json":
+    if Path(plan["handoff"]).resolve() != work.parent / HANDOFF_FILE:
         raise UpdateError("更新任务的交接路径无效")
     if plan["platform"] == "darwin":
         if target.suffix != ".app" or bundle_info(target).get("CFBundleIdentifier") != BUNDLE_ID:
@@ -396,7 +398,7 @@ def apply_update(path, *, alive=parent_alive, sleep=time.sleep, launch=subproces
             return _apply_plan(plan, alive=alive, sleep=sleep, launch=launch, attempts=attempts)
     except UpdateError as exc:
         # 锁冲突发生在写回执之前：留给父窗口一份原因，否则它只能报「助手没起来」。
-        write_json(Path(path).parent / "error.json", {"error": str(exc)})
+        write_json(Path(path).parent / ERROR_FILE, {"error": str(exc)})
         raise
 
 
@@ -407,7 +409,6 @@ def _apply_plan(plan, *, alive, sleep, launch, attempts):
     replacement = Replacement(target, plan["prepared"], plan["platform"], plan["token"])
     write_json(plan["ready"], {"token": plan["token"]})
     child = None
-    replaced = False
     try:
         for _ in range(attempts):
             if not alive(plan["parent_pid"]):
@@ -416,11 +417,10 @@ def _apply_plan(plan, *, alive, sleep, launch, attempts):
         else:
             raise UpdateError("原程序没有退出，本次更新未安装")
         replacement.install()
-        replaced = True
         child = launch([str(executable)], cwd=str(cwd), **process_options())
         for _ in range(attempts):
             try:
-                health = json.loads(Path(plan["health"]).read_text(encoding="utf-8"))
+                health = json.loads(Path(plan["health"]).read_bytes())
                 if health == {"token": plan["token"], "version": plan["version"]}:
                     write_json(receipt, {"ok": True, "version": plan["version"]})
                     # 新版已确认可用；清理失败不能再回滚（备份可能已部分删除）。
@@ -440,14 +440,15 @@ def _apply_plan(plan, *, alive, sleep, launch, attempts):
     except Exception as exc:
         error = str(exc)
         try:
-            if child and child.poll() is None:
+            if child is not None and child.poll() is None:
                 child.terminate()
                 try:
                     child.wait(timeout=15)
                 except subprocess.TimeoutExpired:
                     child.kill()
                     child.wait(timeout=15)
-            if replaced:
+            # 装成功的标志就是 new 列表非空：install() 自己失败时已回滚并清空，不能再滚一次。
+            if replacement.new:
                 replacement.rollback()
                 replacement.cleanup()
             Path(plan["handoff"]).unlink(missing_ok=True)
