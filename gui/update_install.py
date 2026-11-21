@@ -43,8 +43,10 @@ def safe_extract(archive, destination):
             parts = PurePosixPath(name).parts
             raw_parts = name.rstrip("/").split("/")
             mode = info.external_attr >> 16
+            # 绝对路径由 `parts[0] != "AndroidAdCleaner"` 兜住（PurePosixPath 把开头的 `/` 落成 parts[0]），
+            # `..` / `.` 由 `rstrip(" .")` 兜住，两处冗余判断不各写一份。
             if (info.orig_filename != name or not parts or parts[0] != "AndroidAdCleaner" or "\\" in name or ":" in name
-                    or name.startswith("/") or any(p in ("", "..", ".") or p.rstrip(" .") != p for p in raw_parts)
+                    or any(p == "" or p.rstrip(" .") != p for p in raw_parts)
                     or stat.S_ISLNK(mode) or stat.S_IFMT(mode) not in (0, stat.S_IFREG, stat.S_IFDIR)):
                 raise UpdateError("更新包包含不安全的文件路径")
             if len(parts) > 1 and parts[1] not in WINDOWS_FILES:
@@ -347,9 +349,11 @@ def confirm_started(root, current, executable):
 
 def validate_plan(path):
     path = Path(path).resolve()
-    plan = json.loads(path.read_text(encoding="utf-8"))
+    # 按字节读：json.loads 自己按 UTF-8 解码，省掉一份会随 locale 漂的编码参数。
+    plan = json.loads(path.read_bytes())
     work = path.parent
-    if plan.get("schema") != 1 or not re.fullmatch(r"[0-9a-f]{32}", plan.get("token", "")):
+    token = plan.get("token")
+    if plan.get("schema") != 1 or not isinstance(token, str) or not re.fullmatch(r"[0-9a-f]{32}", token):
         raise UpdateError("更新任务格式无效")
     if plan.get("platform") not in ("darwin", "win32") or type(plan.get("parent_pid")) is not int or plan["parent_pid"] <= 0:
         raise UpdateError("更新任务的宿主无效")
