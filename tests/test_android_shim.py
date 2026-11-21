@@ -1061,6 +1061,20 @@ class _Done:
         return self.answers.pop(0) if self.answers else True
 
 
+def _snapshot_modules(names):
+    """记下这些模块键当前的值（缺省记 None），供还原用。"""
+    return {name: sys.modules.get(name) for name in names}
+
+
+def _restore_modules(saved):
+    """把 `_snapshot_modules` 的快照回填进 sys.modules：原本缺的键删掉，原本有的放回去。"""
+    for name, module in saved.items():
+        if module is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = module
+
+
 class InprocTest(unittest.TestCase):
     """进程内执行：清模块、换环境、分流输出、看门狗与停止通道。
 
@@ -1279,6 +1293,8 @@ class InprocTest(unittest.TestCase):
         with mock.patch.dict(sys.modules, {"java": java}):
             self.assertIs(inproc._logger(), log)
             self.assertIs(inproc._engine_log, log)
+        # 刻意锁住 tag 字符串：这是「只在 mock 注册上等价」的变异的唯一区分手段，不锁就只能算
+        # 存活；不锁一般的调用序列。
         java.jclass.assert_called_once_with("android.util.Log")
 
     def test_logger_remembers_no_java_as_none(self):
@@ -1353,21 +1369,12 @@ class InprocTest(unittest.TestCase):
         sibling.__file__ = str(self.tool) + "x" + os.sep + "probe_sibling.py"
         bare = types.ModuleType("aac_probe_bare")
         names = ("aac_probe_inside", "aac_probe_sibling", "aac_probe_bare")
-        saved = {name: sys.modules.get(name) for name in names}
-        self.addCleanup(self._restore_modules, saved)
+        self.addCleanup(_restore_modules, _snapshot_modules(names))
         sys.modules.update(dict(zip(names, (inside, sibling, bare), strict=True)))
         inproc._purge()
         self.assertNotIn("aac_probe_inside", sys.modules)
         self.assertIn("aac_probe_sibling", sys.modules)
         self.assertIn("aac_probe_bare", sys.modules)
-
-    @staticmethod
-    def _restore_modules(saved):
-        for name, module in saved.items():
-            if module is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = module
 
     def test_script_path_keeps_absolute_and_joins_relative(self):
         absolute = os.path.join(str(self.tool), "x.py")
@@ -1547,6 +1554,7 @@ class InprocTest(unittest.TestCase):
         self.assertIn("tower", report)          # 报的是被观察线程的栈
         self.assertNotIn("_watchdog", report)   # 不是看门狗自己的栈
         self.assertNotIn("XXXX", report)        # 帧之间用换行拼，不是占位串
+        self.assertLessEqual(report.count("  File "), inproc.WATCHDOG_FRAMES)  # 上限 12 层，不整栈倒出
         self.assertEqual(sink.flushes, 1)
 
     def test_the_watchdog_thread_is_daemonic(self):
@@ -2479,14 +2487,10 @@ class InstallTest(unittest.TestCase):
     """
 
     def setUp(self):
-        self.saved = {name: sys.modules.get(name) for name in INSTALLED}
+        self.saved = _snapshot_modules(INSTALLED)
 
     def tearDown(self):
-        for name, module in self.saved.items():
-            if module is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = module
+        _restore_modules(self.saved)
 
     def test_install_registers_the_replacement_modules(self):
         u2.install()
@@ -2516,15 +2520,11 @@ class InstallTest(unittest.TestCase):
         self.assertEqual(caught.exception.args, (-32601, "手机版没有读屏 HTTP 服务", "_http_request"))
 
     def test_install_is_reversible(self):
-        before = {name: sys.modules.get(name) for name in INSTALLED}
+        before = _snapshot_modules(INSTALLED)
         u2.install()
         self.assertIsNot(sys.modules["uiautomator2"], before.get("uiautomator2"))
-        for name, module in before.items():
-            if module is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = module
-        self.assertEqual({name: sys.modules.get(name) for name in INSTALLED}, before)
+        _restore_modules(before)
+        self.assertEqual(_snapshot_modules(INSTALLED), before)
 
 
 if __name__ == "__main__":

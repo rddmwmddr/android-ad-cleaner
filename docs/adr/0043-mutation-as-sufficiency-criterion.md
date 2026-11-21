@@ -58,7 +58,7 @@ mutmut 3.8 对代码做小改动（mutant）再跑测试：测试仍然全绿的
 - **测试导入落到副本**：mutmut 的 `setup_source_paths()` 把 `mutants/src` 插在 `sys.path` 最前；镜像里有 `src/aac_android`，测试原有的 `from aac_android import …` 就落到变异后的副本。测试的导入路径照产品布局写、不改。
 - **覆盖率**：`.coveragerc` 的 `source` 增加 `android/app/src/main/python/aac_android`，CI 的覆盖率地图看得见这一块（仍不设阈值）。
 
-**两条管道风险**：`u2.install()` 与 `inproc` 会改写 `sys.modules` 和模块全局，`adb.install()` 会把 `subprocess.run` / `call` / `check_output` 换成占位实现；mutmut 3.8 在同一个解释器里跑完所有 mutant，这些副作用会漏到下一个 mutant。处置是在每条用例的 `tearDown` / `addCleanup` 里保存并回填（`sys.modules`、`subprocess.*`、`_orig`、模块全局），方向保守——只防「被改掉的入口让 mutant 假存活」，不为制造假杀死去锁调用序列。
+**两条管道风险**：`u2.install()` 与 `inproc` 会改写 `sys.modules` 和模块全局，`adb.install()` 会把 `subprocess.run` / `call` / `check_output` 换成占位实现；mutmut 3.8 在同一个解释器里跑完所有 mutant，这些副作用会漏到下一个 mutant。处置是在每条用例的 `tearDown` / `addCleanup` 里保存并回填（`sys.modules`、`subprocess.*`、`_orig`、模块全局），方向保守——只防「被改掉的入口让 mutant 假存活」，不为制造假杀死去锁调用序列。票面原写「在 `tests/conftest.py` 的会话钩子里还原」，但会话启动钩子管不到 stats 阶段跨 mutant 累积的状态，实测改为每条用例各自还原，让 fork 前的父进程保持干净。
 
 **启动条件已到期、可启动**：票面原写的「`tool/` 侧 12 个严格档模块清完」已经满足，不再是历史前提。
 

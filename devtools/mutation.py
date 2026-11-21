@@ -47,12 +47,13 @@ ROOT = Path(__file__).resolve().parents[1]
 # 进 `src` 视角的三个包（#1429、#1430）：`tool` 落在 `src/` 根上，`gui` 落在 `src/gui/`，
 # `aac_android` 落在 `src/aac_android/`。手机版替换层不在仓库根（Chaquopy 的 sourceSets 要求它留在
 # `android/app/src/main/python/` 下），这里只把它的基目录映射过来。
-SOURCE_PACKAGES = ("tool", "gui", "aac_android")
 PACKAGE_BASES = {
     "tool": Path("tool"),
     "gui": Path("gui"),
     "aac_android": Path("android/app/src/main/python/aac_android"),
 }
+# 保持 tool、gui、aac_android 的顺序：字典按插入序迭代，镜像与映射都以这个顺序遍历。
+SOURCE_PACKAGES = tuple(PACKAGE_BASES)
 # 仓库根的数据目录，副本里要按 `src` 视角放一份：`gui/app.py` 用 `__file__` 的两级 dirname
 # 定 `toolpath.BASE`，在副本里那是 `mutants/src`，读根目录数据的用例（`Api.env()` 的
 # `images/dev-*`）才会在那里找。数据本身由 `ALSO_COPY` 拷进 `mutants/src/`。

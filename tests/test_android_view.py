@@ -549,6 +549,8 @@ class BrandGuideTest(unittest.TestCase):
         with mock.patch("builtins.open", wraps=open) as op:
             view.brand_guide(None, "OPPO")
         self.assertEqual(Path(op.call_args.args[0]), Path(self.tmp.name, "docs", "brand-taps.json"))
+        # 刻意锁住路径与编码：这是「只在大小写不敏感文件系统 / 只在 mock 注册上等价」的变异的
+        # 唯一区分手段，不锁就只能算存活；不锁一般的调用序列。
         self.assertEqual(op.call_args.kwargs.get("encoding"), "utf-8")
 
 
@@ -709,6 +711,13 @@ class FeedbackTest(unittest.TestCase):
         self.assertTrue(clip)
         self.assertIn("手机：PX 1", self.query(url)["body"][0])
 
+    def test_a_long_body_without_a_fence_trims_without_a_placeholder(self):
+        """诊断带 <details> 但没有 ```text 围栏时取不到日志：裁剪正文里不能塞占位串（#1430）。"""
+        diag = "head\n<details>\n" + "z" * 9000
+        url, clip = view.feedback_url("bug", "卡住了", diag)
+        self.assertTrue(clip)
+        self.assertNotIn("XXXX", self.query(url)["body"][0])
+
 
 class BrandTapsShapeTest(unittest.TestCase):
     """品牌键冻结在这里：从实现自己的表派生样例，删键会连样例一起消失。"""
@@ -809,6 +818,12 @@ class SmokeExportTest(unittest.TestCase):
         """写出的是 UTF-8 而不是 \\u 转义：日志与模板都要能直接读（ensure_ascii=False）。"""
         raw = "".join(view.smoke_export(FakeApi(run={"title": "系统广告"}), "")["chunks"])
         self.assertIn("系统广告", raw)
+
+    def test_the_flag_is_false_not_the_equivalent_none(self):
+        """ensure_ascii 传的是 False 而不是等价的 None：json 只看真假，输出分不开，只能锁参数。"""
+        with mock.patch("json.dumps", wraps=json.dumps) as dumps:
+            view.smoke_export(FakeApi(run={"title": "系统广告"}), "")
+        self.assertIs(dumps.call_args.kwargs.get("ensure_ascii"), False)
 
 
 class SetupStepsTextTest(unittest.TestCase):
