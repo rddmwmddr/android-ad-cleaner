@@ -1,8 +1,11 @@
 """新写的行里挂的票号要与这次 PR 有关（devtools/check_comment_tickets.py，#1001）。"""
+import contextlib
+import io
 import re
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -10,7 +13,15 @@ sys.path.insert(0, str(ROOT / "tool"))
 import fixtures  # noqa: E402
 from devtools import check_comment_tickets  # noqa: E402
 
-SCRIPT = ROOT / "devtools" / "check_comment_tickets.py"
+# 起子进程跑的脚本就是被 import 的这份模块（#1517，照 #1515）：按 `ROOT/devtools` 写死只会跑到
+# 未变异原件，对 mutant 零区分力。
+SCRIPT = Path(check_comment_tickets.__file__).resolve()
+# 副本里 `SCRIPT.parents[1]` 是 `mutants/src`，子进程的 `import stdio` / `import commits` 要在那里
+# 找得到；正常运行时就是仓库根，无害。
+SRC_ROOT = SCRIPT.parents[1]
+# 子进程端到端不参与 mutmut 的进程内归属（归属由 `DiffTest` / `MainTest` 给）；清空继承来的
+# `MUTANT_UNDER_TEST` 免得 trampoline 在临时 git 目录里找不到 mutmut 配置。
+RUN_ENV = {"PYTHONPATH": str(SRC_ROOT), "MUTANT_UNDER_TEST": ""}
 WORKFLOW = ROOT / ".github" / "workflows" / "ticket-checks.yml"
 
 # 用例里构造的票号是数据、不是引用：写成字面量会被本 PR 的 comment-tickets job 自己抓到，
@@ -90,13 +101,79 @@ class DiffTest(unittest.TestCase):
         self.assertEqual(self.problems({"a.md": "见 https://example.com/x#42 与 &#1001;\n"}), [])
 
     def test_css_colours_are_not_tickets(self):
-        # 调色行与票号同形：冒号开头的属性值与收在分号 / 右花括号前的一律当颜色。
-        css = f"body {{ color: {BLACK}; border: 1px solid {GREY} }}\na {{ color:{INK} }}\n"
+        # 调色行与票号同形：冒号开头的属性值、收在分号 / 右花括号前的、以及值后直接换行的，
+        # 一律当颜色（三种位置各一条，拆开覆盖 `before.endswith(":") or after in (";", "}")` 的两支，
+        # 第三条的「; }」还钉住判定只看紧跟的单个字符）。
+        css = (f"body {{ color: {BLACK}; border: 1px solid {GREY}; }}\n"
+               f"em {{ border: 1px solid {GREY} }}\n"
+               f"span {{ border: 1px solid {GREY} ;\n"
+               f"a {{ color:{INK} }}\n"
+               f"i {{ color: {BLACK} \n")
         self.assertEqual(self.problems({"site.css": css}), [])
+
+    def test_colour_config_does_not_hide_added_lines(self):
+        # `--no-color` 是解析的前提：仓库把 `color.diff` 设成 always 时，diff 头会带 ANSI 码，
+        # 去掉这个参数就认不出 `diff --git` / `+++` 前缀、整份 diff 静默当成空。
+        self.repo.git("config", "color.diff", "always")
+        bad = self.problems({"a.py": f"# 见 {FOREIGN}\n"})
+        self.assertEqual(len(bad), 1)
+
+    def test_no_reference_set_is_described_as_none(self):
+        # PR 文本里一个票号都没有时，报错里的「引用的是」要说「无」，不能是空串。
+        bad = self.problems({"a.py": f"# 见 {FOREIGN}\n"}, "改了点东西")
+        self.assertEqual(len(bad), 1)
+        self.assertIn("引用的是 无", bad[0])
+
+    def test_multiple_references_are_joined_with_the_ideographic_comma(self):
+        bad = self.problems({"a.py": f"# 见 {FOREIGN}\n"}, "Refs #1001、Closes #1002")
+        self.assertEqual(len(bad), 1)
+        self.assertIn("引用的是 #1001、#1002", bad[0])
+
+    def test_references_are_sorted_numerically(self):
+        # `key=int`：字符串排序会把「#10」排在「#9」前面。
+        bad = self.problems({"a.py": f"# 见 {FOREIGN}\n"}, "Refs #10、Closes #9")
+        self.assertEqual(len(bad), 1)
+        self.assertIn("引用的是 #9、#10", bad[0])
+
+    def test_an_exempt_line_does_not_stop_the_scan(self):
+        # 豁免一条（ADR 目录）后还要往后看：后面的违规不能被漏掉（`break` 会漏）。
+        # diff 按路径排序，`docs/adr/` 排在 `z.py` 前面。
+        bad = self.problems({"docs/adr/x.md": f"见 {FOREIGN}\n", "z.py": f"# 见 {FOREIGN}\n"})
+        self.assertEqual(len(bad), 1)
+        self.assertIn("z.py:1", bad[0])
 
     def test_ticket_right_after_a_cjk_word_still_counts(self):
         # 按「ASCII 词字符」排除会漏掉紧挨中文的写法：中文与 `#` 之间没有空格也是挂票号。
         self.assertEqual(len(self.problems({"a.py": f"见{FOREIGN} 的做法\n"})), 1)
+
+
+class AddedLinesTest(unittest.TestCase):
+    """`added_lines` 的解析喂构造的 diff 文本：解析的边角分支走不到真 git，进程内直接覆盖（#1517）。"""
+
+    def parse(self, text):
+        return list(check_comment_tickets.added_lines("x..y", run=lambda *args: text))
+
+    def test_a_normal_hunk_yields_each_added_line(self):
+        # 行号取新文件那一列，多行依次加一。
+        text = ("diff --git a/x.py b/x.py\n"
+                "--- a/x.py\n"
+                "+++ b/x.py\n"
+                "@@ -0,0 +1,2 @@\n"
+                "+first\n"
+                "+second\n")
+        self.assertEqual(self.parse(text), [("x.py", 1, "first"), ("x.py", 2, "second")])
+
+    def test_a_stray_added_line_without_a_file_header_is_ignored(self):
+        # 没有 `+++` 标明文件时，`+` 行不属于任何一个文件的新增行（`and` 改成 `or` 会把它算进去）。
+        self.assertEqual(self.parse("+orphan\n"), [])
+
+    def test_an_unparseable_hunk_header_does_not_invent_a_line_number(self):
+        # `@@` 头认不出时行号保持初值 0，而不是猜一个数（猜 1 会把报错指到错误的行）。
+        text = ("diff --git a/x.py b/x.py\n"
+                "+++ b/x.py\n"
+                "@@ not a hunk header @@\n"
+                "+after\n")
+        self.assertEqual(self.parse(text), [("x.py", 0, "after")])
 
 
 class RangeTest(unittest.TestCase):
@@ -116,7 +193,8 @@ class RangeTest(unittest.TestCase):
     def run_check(self, rev_range, pr_text="Refs #1001", env_extra=None):
         path = self.repo.dir / "pr.txt"
         path.write_text(pr_text, encoding="utf-8")
-        return self.repo.run(SCRIPT, rev_range, str(path), env_extra=env_extra)
+        return self.repo.run(SCRIPT, rev_range, str(path),
+                             env_extra={**RUN_ENV, **(env_extra or {})})
 
     def test_foreign_ticket_fails_and_names_it(self):
         code, out = self.run_check(self.stage(f"# 见 {FOREIGN}\n"))
@@ -135,7 +213,7 @@ class RangeTest(unittest.TestCase):
         self.assertIn("git", out)
 
     def test_wrong_argument_count_is_an_error(self):
-        code, out = self.repo.run(SCRIPT, "origin/main..HEAD")
+        code, out = self.repo.run(SCRIPT, "origin/main..HEAD", env_extra=RUN_ENV)
         self.assertEqual(code, 2, out)
         self.assertIn("用法", out)
 
@@ -143,6 +221,87 @@ class RangeTest(unittest.TestCase):
         code, out = self.run_check(self.stage(f"# 见 {FOREIGN}\n"), env_extra={"PYTHONIOENCODING": "cp1252"})
         self.assertEqual(code, 1, out)
         self.assertIn(FOREIGN, out)
+
+
+class MainTest(unittest.TestCase):
+    """`main()` 在同一解释器里直接调，让 mutmut 记到它的归属（#1517）。
+
+    只经子进程跑到的入口在统计阶段记不到测试，mutmut 记为「无测试」（exit 33），一条测试都不跑。
+    """
+
+    def setUp(self):
+        self.repo = fixtures.GitRepo()
+        self.addCleanup(self.repo.cleanup)
+        self.base = self.repo.commit("chore: 起点")
+
+    def stage(self, text):
+        (self.repo.dir / "a.py").write_text(text, encoding="utf-8")
+        self.repo.git("add", "a.py")
+        self.repo.git("commit", "-q", "-m", "docs: 加注释")
+        return f"{self.base}..HEAD"
+
+    def call(self, *argv):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = check_comment_tickets.main(list(argv))
+        return code, out.getvalue(), err.getvalue()
+
+    def run_in(self, rev_range, pr_text="Refs #1001"):
+        path = self.repo.dir / "pr.txt"
+        path.write_text(pr_text, encoding="utf-8")
+        with contextlib.chdir(self.repo.dir):
+            return self.call(rev_range, str(path))
+
+    def test_foreign_ticket_lists_file_line_and_ticket(self):
+        code, out, err = self.run_in(self.stage(f"# 见 {FOREIGN}\n"))
+        self.assertEqual(code, 1, err)
+        self.assertIn("有 1 处票号对不上", out)
+        self.assertIn(f"a.py:1: {FOREIGN} 不在 PR 引用的票号里", out)
+
+    def test_referenced_ticket_passes(self):
+        code, out, err = self.run_in(self.stage("# 见 #1001\n"))
+        self.assertEqual(code, 0, err)
+        self.assertIn("都在 PR 引用的范围内", out)
+
+    def test_unreadable_file_is_an_error(self):
+        code, out, err = self.call("origin/main..HEAD", str(self.repo.dir / "nope.txt"))
+        self.assertEqual(code, 2, out + err)
+        self.assertIn("读不出", err)
+
+    def test_reads_the_text_as_utf8_replacing_bad_bytes(self):
+        # 编码与错误策略是显式契约：退回本地编码、或丢掉 errors="replace"，非 UTF-8 的 PR 正文
+        # 会按系统默认解码、遇到坏字节时整份校验崩掉。
+        rev = self.stage("# 见 #1001\n")
+        path = self.repo.dir / "pr.txt"
+        path.write_text("Refs #1001", encoding="utf-8")
+        seen = {}
+        real_open = open
+
+        def spy(file, *args, **kwargs):
+            seen.update(kwargs)
+            return real_open(file, *args, **kwargs)
+
+        with mock.patch("builtins.open", spy), contextlib.chdir(self.repo.dir):
+            code, out, err = self.call(rev, str(path))
+        self.assertEqual(code, 0, err)
+        self.assertEqual(seen.get("encoding"), "utf-8")
+        self.assertEqual(seen.get("errors"), "replace")
+
+    def test_wrong_argument_count_is_an_error(self):
+        code, out, err = self.call("origin/main..HEAD")
+        self.assertEqual(code, 2, out + err)
+        self.assertTrue(err.startswith("用法：python3 devtools/check_comment_tickets.py"), err)
+        self.assertIn("<PR 文本文件>", err)
+
+    def test_extra_arguments_are_an_error(self):
+        code, out, err = self.call("a..b", "pr.txt", "extra")
+        self.assertEqual(code, 2, out + err)
+        self.assertIn("用法", err)
+
+    def test_git_error_is_reported_not_a_pass(self):
+        code, out, err = self.run_in("no-such-ref..HEAD")
+        self.assertEqual(code, 2, out + err)
+        self.assertIn("git", err)
 
 
 def uncommented(text):
