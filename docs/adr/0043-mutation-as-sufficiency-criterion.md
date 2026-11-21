@@ -108,7 +108,7 @@ mutmut 3.8 对代码做小改动（mutant）再跑测试：测试仍然全绿的
 | `followup` | 417 | 0 | 0 | 3 |
 | `triage_audit` | 197 | 0 | 0 | 0 |
 | `release_assets` | 322 | 0 | 0 | 1 |
-| `release_meta` | 727 | 0 | 0 | 7 |
+| `release_meta` | 728 | 0 | 0 | 6 |
 
 pragma 全部写明「语义等价」或「不可达」，理由随源码行。三条与平台相关的豁免在 #1522 返工时被推翻（`encoding=None` 在 cp1252 上、`newline=None` 写 CRLF、`tzinfo=None` 取本机时区都会改变结论），改成 spy 用例钉住实参后仍保持存活 0。
 
