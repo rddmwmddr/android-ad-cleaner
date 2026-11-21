@@ -143,6 +143,16 @@ class SelectionTests(unittest.TestCase):
         """`gui/` 的模块在副本里按包名 import（`from gui import tasks`），所以落在 `src/gui/` 下。"""
         self.assertEqual(mutation_scope.source_path("gui/tasks.py"), "src/gui/tasks.py")
 
+    def test_source_path_keeps_the_android_layer_under_aac_android(self):
+        """手机版替换层按包名 import（`from aac_android import view`），落在 `src/aac_android/` 下。"""
+        self.assertEqual(
+            mutation_scope.source_path("android/app/src/main/python/aac_android/view.py"),
+            "src/aac_android/view.py")
+
+    def test_only_mutate_uses_the_android_src_view(self):
+        module = "android/app/src/main/python/aac_android/view.py"
+        self.assertEqual(mutation_scope.only_mutate([module]), ["src/aac_android/view.py"])
+
     def test_source_path_rejects_modules_outside_the_source_view(self):
         with self.assertRaises(ValueError):
             mutation_scope.source_path("devtools/mutation.py")
@@ -153,6 +163,12 @@ class WorkdirTests(unittest.TestCase):
         """`gui/tasks.py` 与 `tool/tasks.py` 若同日出现，别共用一个工作目录。"""
         self.assertEqual(mutation.workdir_for(["gui/tasks.py"]).name, "gui_tasks")
         self.assertEqual(mutation.workdir_for(["tool/summary.py"]).name, "summary")
+
+    def test_workdir_for_keeps_the_aac_prefix_in_the_slug(self):
+        """手机版 `view.py` 与 `tool/` 里的同名模块别共用一个工作目录。"""
+        self.assertEqual(
+            mutation.workdir_for(["android/app/src/main/python/aac_android/view.py"]).name,
+            "aac_view")
 
 
 @unittest.skipIf(os.name == "nt", "建符号链接要开发者模式；变异 job 只在 Linux 上跑")
@@ -183,6 +199,13 @@ class SourceMirrorTests(unittest.TestCase):
                    if name.name != "__pycache__" and not (self.src / "gui" / name.name).exists()]
         self.assertEqual(missing, [])
 
+    def test_every_android_entry_is_mirrored_under_the_aac_android_package(self):
+        """手机版替换层在 `android/app/src/main/python/` 下，也要进 `src/aac_android/`（#1430）。"""
+        real = ROOT / "android" / "app" / "src" / "main" / "python" / "aac_android"
+        missing = [name for name in real.iterdir()
+                   if name.name != "__pycache__" and not (self.src / "aac_android" / name.name).exists()]
+        self.assertEqual(missing, [])
+
     def test_the_mirror_skips_bytecode_cache(self):
         self.assertEqual(sorted(self.src.rglob("__pycache__")), [])
 
@@ -191,6 +214,12 @@ class SourceMirrorTests(unittest.TestCase):
         self.assertTrue((self.src / "gui" / "tasks.py").is_symlink())
         self.assertEqual((self.src / "catalog" / "schema.py").resolve(),
                          (ROOT / "tool" / "catalog" / "schema.py").resolve())
+
+    def test_the_android_files_are_linked_to_the_real_source(self):
+        """手机版的镜像也指回 `android/app/src/main/python/` 里的真源码。"""
+        real = ROOT / "android" / "app" / "src" / "main" / "python" / "aac_android" / "view.py"
+        self.assertTrue((self.src / "aac_android" / "view.py").is_symlink())
+        self.assertEqual((self.src / "aac_android" / "view.py").resolve(), real.resolve())
 
     def test_relinking_replaces_a_stale_src_link(self):
         """旧的 `src -> tool` 形态要能被下一次运行换掉，不然副本里没有 `gui`。"""
@@ -215,6 +244,10 @@ class PatchScopeTests(unittest.TestCase):
         self.assertEqual(mutation_scope.modules_in_paths(["gui/tasks.py", "gui/app.py"]),
                          ["gui/tasks.py"])
 
+    def test_modules_in_paths_reads_the_android_layer(self):
+        module = "android/app/src/main/python/aac_android/view.py"
+        self.assertEqual(mutation_scope.modules_in_paths([module]), [module])
+
     def test_modules_in_paths_ignores_paths_outside_tool(self):
         self.assertEqual(mutation_scope.modules_in_paths(["recipes/a/b/c.toml", "tests/test_plan.py"]),
                          [])
@@ -235,6 +268,19 @@ class ScopeReportTests(unittest.TestCase):
     def test_mapped_gui_modules_are_not_reported_as_skipped(self):
         modules, unmapped = self.scope(["gui/tasks.py"])
         self.assertEqual(modules, ["gui/tasks.py"])
+        self.assertEqual(unmapped, [])
+
+    def test_unmapped_android_modules_are_reported(self):
+        """手机版替换层落表前的模块逐条报「本次不判」，缺席要看得见（#1430）。"""
+        module = "android/app/src/main/python/aac_android/main.py"
+        modules, unmapped = self.scope([module, "tests/test_android_view.py"])
+        self.assertEqual(modules, [])
+        self.assertEqual(unmapped, [module])
+
+    def test_mapped_android_modules_are_not_reported_as_skipped(self):
+        module = "android/app/src/main/python/aac_android/view.py"
+        modules, unmapped = self.scope([module])
+        self.assertEqual(modules, [module])
         self.assertEqual(unmapped, [])
 
 

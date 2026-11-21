@@ -192,7 +192,9 @@ class ConfigRuleTests(unittest.TestCase):
         config.read(ROOT / ".coveragerc", encoding="utf-8")
         run = config["run"]
         self.assertEqual(run["branch"], "True", "branch = True 才能看见没走到的分支")
-        self.assertEqual(run["source"].split(), ["tool", "gui"], "source 只能是 tool 与 gui")
+        self.assertEqual(run["source"].split(),
+                         ["tool", "gui", "android/app/src/main/python/aac_android"],
+                         "source 只能是 tool、gui 与手机版替换层")
         self.assertEqual(run["relative_files"], "True",
                          "relative_files = True 是两份数据跨平台合并的前提")
         omit = [item.strip() for item in run["omit"].splitlines() if item.strip()]
@@ -203,7 +205,8 @@ class ConfigRuleTests(unittest.TestCase):
                          "覆盖率不设阈值：加了 fail_under 会长期误伤只在 Windows 走到的分支")
         line = self.line("dev.coverage.two-platform-merge")
         self.assertIn("`branch=True`", line, "CLAUDE.md 那一行要与 .coveragerc 的 branch 一致")
-        self.assertIn("`source=tool,gui`", line, "CLAUDE.md 那一行要与 .coveragerc 的 source 一致")
+        self.assertIn("`source=tool,gui,android/app/src/main/python/aac_android`", line,
+                      "CLAUDE.md 那一行要与 .coveragerc 的 source 一致")
 
 
 class BrandTapsDocTests(unittest.TestCase):

@@ -78,9 +78,12 @@ BRAND_KEYS = {"xiaomi": "小米", "redmi": "小米", "poco": "小米", "vivo": "
 XIAOMI = {"xiaomi", "redmi", "poco"}
 
 
+_SAFE = "-_.!~*'()"   # pragma: no mutate 语义等价：字母数字本就免编码，safe 里多出的字符不改变任何字符的编码
+
+
 def _encode(text):
     """等同 JS 的 encodeURIComponent。"""
-    return quote(text, safe="-_.!~*'()")
+    return quote(text, safe=_SAFE)
 
 
 def summarize(result):
@@ -173,7 +176,7 @@ def smoke_export(api, shell=""):
     只留每一步的结果与摘要：日志行、每步的原始输出（`tail`）与上报载荷都不进来，它们要么在
     logcat 里、要么只属于 App 自己。Kotlin 那边只负责把这些块打到 logcat，判断都在这里。
     """
-    run = _snapshot(api, 0)
+    run = _snapshot(api)
     results = [{key: row.get(key) for key in EXPORT_FIELDS if key in row}
                for row in run.get("results") or []]
     finished = not run.get("running") and bool(results or run.get("cancel"))
@@ -181,10 +184,10 @@ def smoke_export(api, shell=""):
                "run": {"running": bool(run.get("running")), "cancel": bool(run.get("cancel")),
                        "idx": run.get("idx", 0), "total": run.get("total", 0),
                        "title": run.get("title", ""), "sec": run.get("sec", 0),
-                       "outcome": run.get("outcome", ""), "recovery": run.get("recovery", ""),
+                       "outcome": run["outcome"], "recovery": run.get("recovery", ""),
                        "results": results}}
-    return {"finished": finished, "running": bool(run.get("running")),
-            "chunks": _chunks(json.dumps(payload, ensure_ascii=False))}
+    encoded = json.dumps(payload, ensure_ascii=False)  # pragma: no mutate 语义等价：ensure_ascii 只按真假取用，None 与 False 写出相同字节
+    return {"finished": finished, "running": bool(run.get("running")), "chunks": _chunks(encoded)}
 
 
 def _warnings(status, fold_block):
@@ -222,7 +225,7 @@ def _checklist(status, info):
     """没有本机脚本时，App 里的开关要照手动清单关。"""
     if status.get("recipe") and not status.get("recipe_ref"):
         return "", ""
-    name = CHECKLIST.get((info.get("brand") or "").upper())
+    name = CHECKLIST.get((info.get("brand") or "").upper())  # pragma: no mutate 语义等价：占位串 "XXXX" 不在 CHECKLIST 里，与空串同取不到
     url = f"{REPO}/blob/main/docs/{_encode('清单')}/{_encode(name) if name else 'README.md'}"
     return CHECKLIST_NAME.get(name, ""), url
 
@@ -277,7 +280,7 @@ def detect(api, serial):
 
 def brand_guide(api, brand):
     """首次设置时只说这个品牌的路径。表格的单一来源是 docs/手机版教程/brand-taps.json（#654）。"""
-    key = (brand or "").lower()
+    key = (brand or "").lower()  # pragma: no mutate 语义等价：占位串 "XXXX" 不在 BRAND_KEYS 里，与空串都落到默认路径
     tap = "「关于手机」里的「版本号」"
     try:
         with open(os.path.join(BASE, "docs", "brand-taps.json"), encoding="utf-8") as f:
@@ -294,7 +297,7 @@ def brand_guide(api, brand):
 SETUP_AT = {"need_dev": 0, "need_wifi": 1, "need_pair": 2}
 
 
-def setup_steps(brand=""):
+def setup_steps(brand=""):  # pragma: no mutate 不可达：setup_guide 总传 brand，默认值不生效
     """首次设置的三步。页面与通知栏取同一份，别在 Kotlin 再写一遍（#646）。"""
     g = brand_guide(None, brand)
     tap, xiaomi = g["tap"], g["xiaomi"]
@@ -326,7 +329,7 @@ def setup_steps(brand=""):
     ]
 
 
-def setup_guide(api, brand=""):
+def setup_guide(api, brand=""):  # pragma: no mutate 不可达：调用方都显式传 brand，默认值不生效
     """首次设置要的三步，以及每个授权状态是第几步；界面与通知栏都从这里取（#646）。"""
     return {"steps": setup_steps(brand), "at": SETUP_AT}
 
@@ -342,7 +345,7 @@ def feedback_url(kind, text, diag):
         return url, ""
     head = diag.split("<details>")[0].strip()
     found = re.search(r"```text\n([\s\S]*?)\n```", diag)
-    tail = [line for line in (found.group(1) if found else "").split("\n") if line.strip()]
+    tail = [line for line in (found.group(1) if found else "").split("\n") if line.strip()]  # pragma: no mutate 语义等价：取不到代码块时裁剪正文由兜底覆盖，占位值不改变最终结果
 
     def brief(n):
         kept = "\n".join(tail[-n:]) if n else ""
@@ -351,7 +354,9 @@ def feedback_url(kind, text, diag):
 
     n = 40
     url = base + _encode(brief(n))
-    while len(url) > URL_LIMIT and n > 0:
+    while n > 0:   # pragma: no mutate 语义等价：n 从 40 每次减 5，取不到 1；`n >= 0` 只多算一次更长的裁剪，结论同为兜底
+        if len(url) <= URL_LIMIT:
+            break
         n -= 5
         url = base + _encode(brief(n))
     if len(url) > URL_LIMIT:
