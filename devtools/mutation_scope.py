@@ -237,6 +237,10 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
     # 门面测试的 `ScriptSurfaceTests`。两份都要在副本里对真实仓库求值/读根级目录的用例摘掉，见 `UNUSABLE`。
     "devtools/glob_scan.py": ("tests/test_glob_scan.py",),
     "devtools/script_surface.py": ("tests/test_phone_facade.py",),
+    # `devtools/typecheck_recipes.py` 在表外（#1521，ADR-0043）：实测 179 个 mutant，存活 8、无测试 154。
+    # 唯一覆盖是 `test_catalog` 的一个方法，只碰到 `_check_catalog`，且它还有 8 个存活；`recipes` /
+    # `_check_python` / `main` 分别 54 / 28 / 72 个 mutant 全无测试。`_check_python` 起 mypy 子进程、
+    # `main` 扫全部 recipes，补到存活 0、无测试 0 需要新建 harness，不是补一条断言——登记为表外已知缺口。
 }
 
 # 变异副本里跑不通的测试，按 pytest node id 摘掉。整份文件都跑不通的（`test_rules_guards`
