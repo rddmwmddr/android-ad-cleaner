@@ -23,6 +23,7 @@
 - devtools 进变异镜像、摘掉未变异真副本，`check_ticket_ref` 存活清零并进映射表（#1515，ADR-0043）
 - 导入 devtools 的测试按用例回填 sys.path / sys.modules / 标准流，防改写漏进变异子进程（#1516）
 - devtools 的 `commits` 与三份 `check_*` 存活清零并进变异映射表（#1517，ADR-0043）
+- `glob_scan` / `script_surface` 存活清零并进变异映射表（#1518，ADR-0043）
 - `test_anchors` / `unittest_summary` 存活清零并进变异映射表（#1519，ADR-0043）
 - `typecheck_recipes` 实测不达变异判据，登记为 devtools 表外缺口（#1521，ADR-0043）
 

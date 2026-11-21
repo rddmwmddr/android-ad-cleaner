@@ -233,6 +233,10 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_test_collection.py", "tests/test_unittest_summary.py",
     ),
     "devtools/unittest_summary.py": ("tests/test_unittest_summary.py",),
+    # devtools（#1518）：`glob_scan` 单模块单测试文件；`script_surface` 的唯一覆盖者就是手机版
+    # 门面测试的 `ScriptSurfaceTests`。两份都要在副本里对真实仓库求值/读根级目录的用例摘掉，见 `UNUSABLE`。
+    "devtools/glob_scan.py": ("tests/test_glob_scan.py",),
+    "devtools/script_surface.py": ("tests/test_phone_facade.py",),
     # `devtools/typecheck_recipes.py` 在表外（#1521，ADR-0043）：实测 179 个 mutant，存活 8、无测试 154。
     # 唯一覆盖是 `test_catalog` 的一个方法，只碰到 `_check_catalog`，且它还有 8 个存活；`recipes` /
     # `_check_python` / `main` 分别 54 / 28 / 72 个 mutant 全无测试。`_check_python` 起 mypy 子进程、
@@ -260,6 +264,13 @@ UNUSABLE: dict[str, tuple[str, ...]] = {
         "tests/test_android_shim.py::ShellFacadeTest::test_facade_exposes_the_names_python_calls",
         "tests/test_android_shim.py::ShellFacadeTest::test_result_lives_on_the_facade",
         "tests/test_android_shim.py::InprocTest::test_modules_are_fresh_per_top_level_run",
+    ),
+    # 副本里 `ROOT` 是 `mutants/`：没有根级 `tool/`、`devtools/`。`RepoTests` 整类对真实仓库求值
+    # （`scan(ROOT)`、读 `tests/test_source_text.py`）；`ExemptionTests` 里那条「豁免仍对得上空匹配」
+    # 同样 `scan(ROOT)`，按方法摘掉，同类的负例用例照跑（#1518）。
+    "tests/test_glob_scan.py": (
+        "tests/test_glob_scan.py::RepoTests",
+        "tests/test_glob_scan.py::ExemptionTests::test_every_exemption_still_matches_nothing_on_the_real_repo",
     ),
     "tests/test_harmony_client.py": ("tests/test_harmony_client.py::PackageTests",),
     "tests/test_layout_and_verdict_regressions.py": (
