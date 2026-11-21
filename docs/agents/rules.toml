@@ -545,7 +545,7 @@ id = "dev.tests.behaviour-change-needs-red-test"
 source = "CODING_STANDARDS.md#行为变化要有测试直接守住；纯重构要给对拍证据"
 check = "none"
 status = "manual"
-why = "#674 的读屏错误分流只断言了旧树也满足的性质，新旧两边都绿、看着有覆盖。代码侧从 #1415 起由 mutation 判据接管（dev.tests.mutation-kills-changed-lines），但 `recipes/` 的数据改动没有 mutant 可跑，mutation 那一层对它完全看不见；`gui/`（#1429）与手机版替换层（#1430）也还没纳入。这些对象上「搬回旧树看红」仍只能由人跑，守卫用例与空覆盖仍只能靠 docstring 分清，所以这条不能跟着 mutation 一起删。"
+why = "#674 的读屏错误分流只断言了旧树也满足的性质，新旧两边都绿、看着有覆盖。代码侧从 #1415 起由 mutation 判据接管（dev.tests.mutation-kills-changed-lines），但 `recipes/` 的数据改动没有 mutant 可跑，mutation 那一层对它完全看不见；`gui/` 只进了 `tasks` / `adb`（#1429 余下四份仍待清），手机版替换层（#1430）也还没纳入。这些对象上「搬回旧树看红」仍只能由人跑，守卫用例与空覆盖仍只能靠 docstring 分清，所以这条不能跟着 mutation 一起删。"
 expires_if = "数据改动也有了能程序判定的等价判据（例如按结构派生的行为对拍能直接指出哪条用例抓住了这次差异）时删；`gui/` 与手机版替换层纳入 mutation 只缩短它的适用面，不构成删除条件。"
 
 [[rule]]

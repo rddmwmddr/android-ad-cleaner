@@ -4,6 +4,7 @@
 后并入的票号文件按主题接在下面，各自的来源与票号写在那段注释里。
 """
 import contextlib
+import hashlib
 import io
 import json
 import os
@@ -13,6 +14,7 @@ import sys
 import tempfile
 import types
 import unittest
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -1000,6 +1002,253 @@ class ClientKeepsGoingTests(unittest.TestCase):
         self.assertEqual(len(api.runner.spawn_calls), 2)      # 后面那一步照常起
         self.assertEqual(api.job.results[0]["rc"], 1)         # 读屏超时的那一步仍算失败
         self.assertNotIn("skipped", api.job.results[1])
+
+
+# ---------- gui/adb.py 的变异判据（#1429） ----------
+# 平台名、路径拼接、下载器状态与进度都在这一段断言：假 data 顶替磁盘、假响应顶替网络，
+# 被测的是「改了哪个常量或键名会变」。
+class AdbExeNameTests(unittest.TestCase):
+    def test_the_executable_name_follows_the_platform(self):
+        with patch.object(adb_mod, "_WINDOWS", True):
+            self.assertEqual(adb_mod.adb_exe(), "adb.exe")
+        with patch.object(adb_mod, "_WINDOWS", False):
+            self.assertEqual(adb_mod.adb_exe(), "adb")
+
+
+class AdbOkTests(unittest.TestCase):
+    def test_a_broken_invocation_is_not_a_usable_adb(self):
+        """起不来（文件没了、超时）不是「版本不够」，但结论一样：这份 adb 不能用。"""
+        with patch.object(adb_mod.toolpath.tool("adb_link"), "invoke", side_effect=OSError("boom")):
+            self.assertFalse(adb_mod.adb_ok("/some/adb"))
+
+
+class AdbFromInputTests(unittest.TestCase):
+    def test_empty_input_means_automatic_lookup(self):
+        self.assertEqual(adb_mod.adb_from_input(None), "")
+        self.assertEqual(adb_mod.adb_from_input("   "), "")
+
+    def test_quotes_are_peeled_and_the_path_made_absolute(self):
+        self.assertEqual(adb_mod.adb_from_input(' "/opt/sdk/adb" '), "/opt/sdk/adb")
+
+    def test_a_drive_letter_is_not_treated_as_a_quote(self):
+        self.assertEqual(adb_mod.adb_from_input("X:/sdk/adb.exe"), os.path.abspath("X:/sdk/adb.exe"))
+
+    def test_a_directory_gets_the_executable_name_appended(self):
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertEqual(adb_mod.adb_from_input(folder), os.path.join(folder, "adb"))
+
+
+class AdbPresentTests(unittest.TestCase):
+    def test_no_adb_is_never_present(self):
+        self.assertFalse(adb_mod.adb_present("", "S"))
+
+    def test_the_phone_gets_ten_seconds_to_come_back(self):
+        class Connection:
+            seen = None
+
+            def __init__(self, serial, adb=None):
+                self.serial, self.adb = serial, adb
+
+            def alive(self, wait=0):
+                Connection.seen = wait
+                return True
+
+        with patch.object(adb_mod.toolpath.tool("adb_link"), "Connection", new=Connection):
+            self.assertTrue(adb_mod.adb_present("/some/adb", "S"))
+        self.assertEqual(Connection.seen, 10)
+
+
+class FindAdbCandidateListTests(TempRoot):
+    def test_the_system_fallbacks_are_handed_over_verbatim(self):
+        """system SDK（Windows 的 LOCALAPPDATA）、homebrew、/usr/local 三段写错一个都不行（#311）。"""
+        seen = {}
+
+        # LOCALAPPDATA 只在 Windows 上有：不造一个值的话，去掉它的变异体与原文在本机同结果
+        with patch.dict(os.environ, {"LOCALAPPDATA": "C:/Users/someone"}), \
+                patch.object(adb_mod.toolpath.tool("adb_link"), "adb_candidates",
+                             side_effect=lambda **kwargs: seen.update(kwargs) or []), \
+                patch.object(adb_mod, "adb_ok", return_value=False):
+            self.assertIsNone(adb_mod.find_adb(self.platform_tools))
+        self.assertEqual(seen["first"], (self.downloaded,))
+        self.assertEqual(seen["last"], (
+            os.path.join("C:/Users/someone", "Android", "Sdk", "platform-tools", "adb.exe"),
+            "/opt/homebrew/bin/adb", "/usr/local/bin/adb"))
+
+    def test_without_localappdata_the_windows_fallback_starts_from_android(self):
+        """非 Windows 上没有这个变量：拼出来的是相对路径，别拿占位串当目录。"""
+        seen = {}
+
+        with patch.dict(os.environ, {}, clear=True), \
+                patch.object(adb_mod.toolpath.tool("adb_link"), "adb_candidates",
+                             side_effect=lambda **kwargs: seen.update(kwargs) or []), \
+                patch.object(adb_mod, "adb_ok", return_value=False):
+            adb_mod.find_adb(self.platform_tools)
+        self.assertEqual(seen["last"][0], os.path.join("", "Android", "Sdk", "platform-tools", "adb.exe"))
+
+    def test_a_manual_path_goes_in_front_of_the_downloaded_one(self):
+        seen = {}
+
+        with patch.object(adb_mod.toolpath.tool("adb_link"), "adb_candidates",
+                          side_effect=lambda **kwargs: seen.update(kwargs) or []), \
+                patch.object(adb_mod, "adb_ok", return_value=False):
+            adb_mod.find_adb(self.platform_tools, self.manual)
+        self.assertEqual(seen["first"], (self.manual, self.downloaded))
+
+
+PINNED = {"Darwin": ("platform-tools_r37-darwin.zip", "deadbeef")}
+MIRRORS = [("镜像甲", "https://mirror.test/")]
+LATEST = {"Darwin": "https://google.test/latest.zip"}
+
+
+class FakeDataRoot:
+    """下载器要的三处路径（生产侧是 `gui/app.py` 的 `ClientData`）。"""
+
+    def __init__(self, root):
+        self.root = root
+        self.adb_zip = os.path.join(root, "platform-tools.zip")
+        self.platform_tools = os.path.join(root, "platform-tools")
+        self.ensured = 0
+
+    def ensure(self):
+        self.ensured += 1
+        os.makedirs(self.root, exist_ok=True)
+
+
+class DownloaderBase(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = self._tmp.name
+        self.data = FakeDataRoot(self.root)
+        self.downloader = adb_mod.AdbDownloader(self.data, version="1.2.3",
+                                                pinned=PINNED, mirrors=MIRRORS, latest=LATEST)
+        system = patch.object(adb_mod.platform, "system", return_value="Darwin")
+        system.start()
+        self.addCleanup(system.stop)
+
+
+class DownloaderStateTests(DownloaderBase):
+    def test_a_fresh_downloader_reports_idle(self):
+        self.assertEqual(self.downloader.download_state(), {"state": "idle", "pct": 0, "msg": ""})
+
+    def test_the_sources_are_the_pinned_mirrors_then_googles_latest(self):
+        self.assertEqual(self.downloader.adb_sources(), [
+            ("镜像甲", "https://mirror.test/platform-tools_r37-darwin.zip", "deadbeef"),
+            ("Google 官网（最新版）", "https://google.test/latest.zip", None),
+        ])
+
+
+class FetchTests(DownloaderBase):
+    """`_fetch` 的落盘与进度：假响应按 `read(size)` 切片返回，记下每次读之前报的百分比。"""
+
+    def fetch(self, body: bytes, digest=None, *, length=True):
+        seen = []
+
+        class Response(io.BytesIO):
+            headers = {"Content-Length": str(len(body))} if length else {}
+
+            def read(self, size=-1):
+                seen.append((size, self.owner.downloader.dl["pct"]))
+                return super().read(size)
+
+        response = Response(body)
+        response.owner = self
+        opened = {}
+
+        def urlopen(request, timeout=None):
+            opened["request"], opened["timeout"] = request, timeout
+            return response
+
+        with patch.object(adb_mod.urllib.request, "urlopen", side_effect=urlopen):
+            self.downloader._fetch("镜像甲", "https://mirror.test/x.zip", digest, self.data.adb_zip)
+        return seen, opened
+
+    def test_the_body_is_streamed_in_64k_chunks(self):
+        seen, _ = self.fetch(b"A" * (65536 * 2 + 1))
+        self.assertEqual([size for size, _ in seen], [65536] * 4, "一次性 slurp 会让进度条没有中间值")
+
+    def test_progress_tracks_the_bytes_received_against_content_length(self):
+        seen, _ = self.fetch(b"A" * (65536 * 2 + 1))
+        self.assertEqual([pct for _, pct in seen][:3], [0, 49, 99])
+        self.assertEqual(self.downloader.download_state(),
+                         {"state": "running", "pct": 100, "msg": "正在从镜像甲下载 platform-tools……"})
+
+    def test_without_a_content_length_the_progress_stays_at_zero(self):
+        """服务端不给长度时算不出百分比：留 0，别拿「一个 chunk」当总量。"""
+        self.fetch(b"A" * 10, length=False)
+        self.assertEqual(self.downloader.download_state()["pct"], 0)
+
+    def test_the_request_names_the_client_version_and_times_out(self):
+        _, opened = self.fetch(b"A")
+        self.assertEqual(opened["request"].full_url, "https://mirror.test/x.zip")
+        self.assertEqual(opened["request"].get_header("User-agent"), "AndroidAdCleaner/1.2.3")
+        self.assertEqual(opened["timeout"], 20)
+
+    def test_the_archive_lands_byte_for_byte(self):
+        body = b"payload-bytes"
+        self.fetch(body)
+        with open(self.data.adb_zip, "rb") as handle:
+            self.assertEqual(handle.read(), body)
+
+    def test_a_digest_mismatch_refuses_the_archive(self):
+        with self.assertRaises(ValueError) as caught:
+            self.fetch(b"A", digest="0" * 64)
+        self.assertEqual(str(caught.exception), "文件校验不对，可能下载不完整或被改动")
+
+    def test_a_matching_digest_passes(self):
+        body = b"payload-bytes"
+        self.fetch(body, digest=hashlib.sha256(body).hexdigest())
+
+
+class DownloadTests(DownloaderBase):
+    SOURCE = ("镜像甲", "https://mirror.test/x.zip", "deadbeef")
+
+    def run_download(self, archive: bytes, *, failing=False, windows=False, sources=None):
+        calls = []
+
+        def fetch(label, url, digest, zp):
+            calls.append((label, url, digest))
+            if failing:
+                raise OSError("boom")
+            with open(zp, "wb") as handle:
+                handle.write(archive)
+
+        sources = sources or [self.SOURCE]
+        with patch.object(adb_mod.AdbDownloader, "_fetch", side_effect=fetch), \
+                patch.object(adb_mod.os, "chmod") as chmod, \
+                patch.object(adb_mod, "_WINDOWS", windows):
+            self.downloader._download(lambda: sources)
+        return calls, chmod
+
+    def archive(self) -> bytes:
+        path = os.path.join(self.root, "fixture.zip")
+        with zipfile.ZipFile(path, "w") as bundle:
+            bundle.writestr("platform-tools/adb", b"adb-binary")
+        with open(path, "rb") as handle:
+            return handle.read()
+
+    def test_a_good_archive_is_unpacked_made_executable_and_cleaned_up(self):
+        calls, chmod = self.run_download(self.archive())
+        adb = os.path.join(self.data.platform_tools, "adb")
+        self.assertEqual(self.downloader.adb, adb)
+        self.assertEqual(self.downloader.download_state(), {"state": "done", "pct": 100, "msg": "adb 已就绪"})
+        self.assertTrue(os.path.isfile(os.path.join(self.data.platform_tools, "adb")))
+        self.assertFalse(os.path.exists(self.data.adb_zip), "zip 解完要删掉")
+        self.assertEqual(chmod.call_args_list, [((adb, 0o755),)])
+        self.assertEqual(self.data.ensured, 1)
+        self.assertEqual(calls, [("镜像甲", "https://mirror.test/x.zip", "deadbeef")])
+
+    def test_windows_needs_no_chmod(self):
+        _, chmod = self.run_download(self.archive(), windows=True)
+        chmod.assert_not_called()
+
+    def test_every_source_failing_reports_the_reasons_it_tried(self):
+        sources = [self.SOURCE, ("镜像乙", "https://mirror.test/y.zip", None)]
+        calls, _ = self.run_download(b"", failing=True, sources=sources)
+        self.assertEqual(calls, sources)
+        self.assertEqual(self.downloader.download_state(),
+                         {"state": "error", "pct": 0, "msg": "下载失败：镜像甲：boom；镜像乙：boom"})
+        self.assertFalse(os.path.exists(self.data.adb_zip))
 
 
 if __name__ == "__main__":

@@ -16,8 +16,9 @@ mutmut 把「没被选中的测试能杀死的 mutant」报成存活 / 无测试
 `UNUSABLE` 列的是**在变异副本里跑不通**的测试：副本只有 `src/` 没有 `tool/`，所以起子进程
 `python tool/run.py`、`python -c "import host"`、读 `android/` 源码、整仓扫文本的用例都会红。
 红掉的用例会把碰过同一个函数的 mutant 误判成「杀死」，所以整份文件都跑不通的干脆不进表，
-只有个别类跑不通的按类 `--deselect` 摘掉——粒度到类而不是到文件，是因为这些文件里剩下的用例
-往往是该模块最大的覆盖来源（`test_vocab` 一个文件就覆盖 `recipe_source` 一半以上）。
+个别跑不通的按**方法** `--deselect` 摘掉——粒度到方法而不是到类或文件，是因为这些文件里剩下的
+用例往往是该模块最大的覆盖来源（`test_vocab` 一个文件就覆盖 `recipe_source` 一半以上；
+`PackagingEntryTests` 里只有起子进程那 3 条会红，按类摘会连带扔掉同类的布局断言）。
 """
 from collections.abc import Iterable, Sequence
 
@@ -137,6 +138,27 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_adb_link.py", "tests/test_page_and_link_regressions.py", "tests/test_phone_host.py",
         "tests/test_plan.py", "tests/test_job.py",
     ),
+    # gui 侧（#1429），同样由覆盖矩阵量出：任务编排被几乎所有跑计划的用例碰到。
+    "gui/tasks.py": (
+        "tests/test_plan.py", "tests/test_result_retry.py", "tests/test_job.py",
+        "tests/test_client_events.py", "tests/test_job_races.py", "tests/test_channel_outcomes.py",
+        "tests/test_layout_and_verdict_regressions.py", "tests/test_run_commands.py",
+        "tests/test_ui_session.py", "tests/test_error_report.py",
+        "tests/test_tap_notice_regressions.py", "tests/test_phone_host.py",
+        "tests/test_api_structure.py", "tests/test_adb_link.py",
+        "tests/test_lock_and_disconnect_regressions.py", "tests/test_summary.py",
+    ),
+    "gui/adb.py": (
+        "tests/test_adb_link.py", "tests/test_plan.py", "tests/test_result_retry.py",
+        "tests/test_channel_outcomes.py", "tests/test_client_events.py", "tests/test_run_commands.py",
+        "tests/test_tap_notice_regressions.py", "tests/test_layout_and_verdict_regressions.py",
+        "tests/test_packaging_entry.py", "tests/test_job.py", "tests/test_job_races.py",
+        "tests/test_phone_host.py", "tests/test_page_and_link_regressions.py",
+        "tests/test_issue_regressions.py", "tests/test_summary.py", "tests/test_updates.py",
+        "tests/test_lock_and_disconnect_regressions.py", "tests/test_release_regressions.py",
+        "tests/test_feedback_safety.py", "tests/test_ui_session.py", "tests/test_api_structure.py",
+        "tests/test_error_report.py",
+    ),
 }
 
 # 变异副本里跑不通的测试，按 pytest node id 摘掉。整份文件都跑不通的（`test_rules_guards`
@@ -153,6 +175,11 @@ UNUSABLE: dict[str, tuple[str, ...]] = {
         "tests/test_phone_host.py::DisconnectHintTests",
         "tests/test_phone_host.py::PhoneBootTests",
         "tests/test_phone_host.py::ClickerTests",
+    ),
+    "tests/test_packaging_entry.py": (
+        "tests/test_packaging_entry.py::PackagingEntryTests::test_module_entry_forwards_cli",
+        "tests/test_packaging_entry.py::PackagingEntryTests::test_app_script_entry_forwards_cli",
+        "tests/test_packaging_entry.py::PackagingEntryTests::test_launch_script_entry_forwards_cli",
     ),
     "tests/test_phone_navigator.py": ("tests/test_phone_navigator.py::CallGraphTests",),
     "tests/test_recipe_meta_module.py": ("tests/test_recipe_meta_module.py::ImportPurityTests",),
@@ -197,16 +224,20 @@ def unknown(modules: Iterable[str]) -> list[str]:
     return [module for module in modules if module not in MODULE_TESTS]
 
 
-def source_path(module: str) -> str:
-    """`tool/catalog/schema.py` → `src/catalog/schema.py`。
+SOURCE_PREFIXES = {"tool/": "src/", "gui/": "src/gui/"}
 
-    mutmut 按相对路径去 `src.` 前缀生成 mutant 名，工作目录里的 `src` 是指向 `tool` 的符号链接；
-    测试按顶层模块名 import（`from catalog.schema import …`），两边只在 `src` 这个视角上对齐。
+
+def source_path(module: str) -> str:
+    """`tool/catalog/schema.py` → `src/catalog/schema.py`，`gui/tasks.py` → `src/gui/tasks.py`。
+
+    mutmut 按相对路径去掉 `src.` 前缀生成 mutant 名，工作目录里的 `src` 是 `tool/` 与 `gui/` 的镜像；测试按
+    顶层模块名 import `tool/` 的包、按包名 import `gui/`（`from gui import tasks`），两边只在
+    `src` 这个视角上对齐。
     """
-    prefix = "tool/"
-    if not module.startswith(prefix):
-        raise ValueError(f"mutation 只接 tool/ 下的模块：{module}")
-    return "src/" + module[len(prefix):]
+    for prefix, view in SOURCE_PREFIXES.items():
+        if module.startswith(prefix):
+            return view + module[len(prefix):]
+    raise ValueError(f"mutation 不接这些位置之外的模块：{module}")
 
 
 def only_mutate(modules: Sequence[str]) -> list[str]:
