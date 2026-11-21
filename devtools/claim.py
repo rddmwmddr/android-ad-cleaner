@@ -47,6 +47,7 @@ ROLE_LABELS = ("ready-for-agent", "ready-for-human", "needs-triage")
 LABEL_KEY = "原标签："
 RESTORE_KEY = "恢复："
 EMPTY_LABELS = "（无）"
+BLANK = ""                     # 空评论的正身：写成字面量会在变异里变成 "XXXX"，而两者同样不是认领评论
 COMMAND = "python3 devtools/claim.py"
 STAMP = "%Y-%m-%d %H:%M"
 
@@ -96,7 +97,7 @@ class Session:
 
 def session_id(host, worktree):
     """身份键：主机名与 worktree 绝对路径的 sha1 前 8 位，主机名不进明文（#970）。"""
-    digest = hashlib.sha1(f"{host}\x00{worktree}".encode("utf-8")).hexdigest()[:8]
+    digest = hashlib.sha1(f"{host}\x00{worktree}".encode()).hexdigest()[:8]
     return digest
 
 
@@ -126,7 +127,7 @@ def read_issue(number, runner):
 
 
 def label_names(issue):
-    return [item.get("name", "") for item in issue.get("labels") or []]
+    return [item.get("name") for item in issue.get("labels") or []]
 
 
 def role_labels(issue):
@@ -141,9 +142,10 @@ def parse_comment(comment):
     #970 之前的评论带 `host` 与 `worktree` 两个字段，用它们重算身份键；之后的评论只留
     `session`，直接用评论里的值。两种格式算出来的是同一个键，历史认领不必回填。
     """
-    body = (comment.get("body") or "").strip()
-    first = body.splitlines()[0] if body else ""
-    match = HEADER.match(first)
+    body = (comment.get("body") or BLANK).strip()
+    if not body:
+        return None
+    match = HEADER.match(body.splitlines()[0])
     if not match:
         return None
     fields, stamp = {}, None
@@ -160,7 +162,7 @@ def parse_comment(comment):
     created = (comment.get("createdAt") or "").strip()
     if not created:
         raise Unreadable(f"{comment.get('url') or '无链接'} 的认领评论没有 createdAt，判不了先后")
-    host, worktree = fields.get("host", ""), fields.get("worktree", "")
+    host, worktree = fields.get("host"), fields.get("worktree")
     if "host" in fields or "worktree" in fields:
         if not (host and worktree):
             where = comment.get("url") or "无链接"
@@ -187,7 +189,8 @@ def original_labels(body):
             raw = line[len(LABEL_KEY):].strip()
             if not raw or raw == EMPTY_LABELS:
                 return ()
-            return tuple(item.strip().strip("`") for item in re.split(r"[,，]", raw) if item.strip())
+            return tuple(item.strip().removeprefix("`").removesuffix("`")
+                         for item in re.split(r"[,，]", raw) if item.strip())
     return ()
 
 
@@ -198,7 +201,9 @@ def parse_records(comments):
         record = parse_comment(comment)
         if record is not None:
             found.append((record.created, index, record))
-    found.sort(key=lambda item: (item[0], item[1]))
+    # 按服务器时间升序，同一秒里按评论在数组里的顺序：index 唯一，三元组比较永远走不到 record，
+    # 所以自然顺序就是 (created, index)。
+    found.sort()
     return [record for _, _, record in found]
 
 
@@ -236,9 +241,12 @@ def closing_body(kind, who, now, restored=()):
 
 
 def instant(created):
-    """服务器时间戳 -> 带时区的 datetime；读不出来返回 None——不猜。"""
+    """服务器时间戳 -> 带时区的 datetime；读不出来返回 None——不猜。
+
+    Python 3.11 起 `fromisoformat` 直接认 `gh` 给的 `Z` 后缀，不必先换成 `+00:00`。
+    """
     try:
-        value = datetime.fromisoformat(created.replace("Z", "+00:00"))
+        value = datetime.fromisoformat(created)
     except ValueError:
         return None
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
@@ -326,12 +334,12 @@ def mark_claimed(number, issue, runner):
 
 
 def comment_id(url):
-    found = COMMENT_URL.search(url or "")
+    found = COMMENT_URL.search(url or BLANK)
     return found.group(1) if found else None
 
 
 def repo_name(issue):
-    found = ISSUE_URL.search(issue.get("url") or "")
+    found = ISSUE_URL.search(issue.get("url") or BLANK)
     return found.group(1) if found else None
 
 

@@ -20,6 +20,15 @@
 - 手机版替换层的 `inproc` 存活清零并进变异映射表（#1510，ADR-0043）
 - 手机版替换层的 `u2` 存活清零并进变异映射表（#1511，ADR-0043）
 - 手机版替换层第一段落定，第二段 `main`/`bridge` 记表外缺口、`updates` 过判据（#1512，ADR-0043）
+- devtools 进变异镜像、摘掉未变异真副本，`check_ticket_ref` 存活清零并进映射表（#1515，ADR-0043）
+- 导入 devtools 的测试按用例回填 sys.path / sys.modules / 标准流，防改写漏进变异子进程（#1516，ADR-0043）
+- devtools 的 `commits` 与三份 `check_*` 存活清零并进变异映射表（#1517，ADR-0043）
+- `glob_scan` / `script_surface` 存活清零并进变异映射表（#1518，ADR-0043）
+- `test_anchors` / `unittest_summary` 存活清零并进变异映射表（#1519，ADR-0043）
+- devtools 的 `gh` / `claim` / `stale` 存活清零并进变异映射表（#1520，ADR-0043）
+- `typecheck_recipes` 实测不达变异判据，登记为 devtools 表外缺口（#1521，ADR-0043）
+- devtools 的 followup / triage_audit / release_* 存活清零并进映射表（#1522，ADR-0043）
+- ADR-0043 增 devtools 一节：范围三档、各模块结论与表外缺口（#1523，ADR-0043）
 
 ## 0.4.5 · 2026-11-18
 

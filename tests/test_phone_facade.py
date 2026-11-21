@@ -15,12 +15,13 @@
 import ast
 import contextlib
 import inspect
+import io
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -540,6 +541,40 @@ class ScriptSurfaceTests(unittest.TestCase):
         with _script_tree({"recipe_lib/honor.py": "def go(p):\n    p.vivo_seen = True\n"}) as root:
             found = script_surface.violations(root)
         self.assertEqual(found, [("recipe_lib/honor.py", 2, "vivo_seen")])
+
+    def test_scripts_are_read_as_utf8(self):
+        """编码在 ASCII 输入上没有可观察差异，只能从调用参数上钉住：换成 locale 默认会在非 UTF-8 环境变结论。"""
+        real = Path.read_text
+        seen = []
+
+        def spy(path_self, *args, **kwargs):
+            seen.append(kwargs)
+            return real(path_self, *args, **kwargs)
+
+        with _script_tree({"recipe_lib/honor.py": "def go(p):\n    p.click(1, 2)\n"}) as root:
+            with patch.object(Path, "read_text", spy):
+                script_surface.violations(root)
+        self.assertEqual(seen, [{"encoding": "utf-8"}])
+
+    def test_main_reports_each_undeclared_name_and_returns_nonzero(self):
+        with _script_tree({"recipes/honor/X1/X1.py": "def step(p, rt):\n    p.serial.strip()\n"}) as root:
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                code = script_surface.main([str(root)])
+        self.assertEqual(code, 1)
+        self.assertEqual(out.getvalue().splitlines(), [
+            "recipes/honor/X1/X1.py:2  p.serial 不在脚本面声明里（tool/phone/surface.py）",
+            "1 份脚本，声明外名字 1 处",
+        ])
+
+    def test_main_defaults_to_the_repository_root_and_returns_zero_when_clean(self):
+        """不带实参时按模块自己的位置往上两级找仓库根，入口挂在 `devtools/` 下一级。"""
+        with _script_tree({"devtools/script_surface.py": "",
+                           "recipe_lib/honor.py": "def go(p):\n    p.click(1, 2)\n"}) as root:
+            with patch.object(script_surface, "__file__", str(root / "devtools" / "script_surface.py")):
+                with contextlib.redirect_stdout(io.StringIO()) as out:
+                    code = script_surface.main()
+        self.assertEqual(code, 0)
+        self.assertEqual(out.getvalue().splitlines(), ["1 份脚本，声明外名字 0 处"])
 
 
 if __name__ == "__main__":

@@ -84,6 +84,22 @@ class ReadEntriesTests(unittest.TestCase):
 
     def test_missing_block_reads_as_empty(self):
         self.assertEqual(release_assets.read_entries("<html></html>"), (None, []))
+        # 有卡片却没有 version：`not found or not entries` 只认「缺任一」为读不出，别退成 `and`
+        broken = 'const REL = {\n  files: [\n    { id: "a", file: "A" },\n  ],\n};\n'
+        self.assertEqual(release_assets.read_entries(broken), (None, []))
+
+
+class MapEntriesTests(unittest.TestCase):
+    """`map_entries` 拼回的文本必须逐字等于原文：卡片边界按 `id:` 切，回填只动 `fn` 返回的那段。"""
+
+    def test_a_round_trip_keeps_every_byte(self):
+        # 三张卡片：只两张时「取下一张的起点」与「取上一张的起点」对首尾两侧恰好相同，测不出错位
+        block = ('version: "1.2.3",\nfiles: [\n'
+                 '    { id: "a", file: "A", sha: "1" },\n'
+                 '    { id: "b", file: "B", sha: "2" },\n'
+                 '    { id: "c", file: "C", sha: "3" },\n  ],\n')
+        self.assertEqual(release_assets.map_entries(block, lambda _id, chunk: chunk), block)
+
 
 
 class HumanSizeTests(unittest.TestCase):
@@ -124,6 +140,23 @@ class FetchTests(unittest.TestCase):
         runner = FakeRunner(runs=OSError("no gh"))
         with self.assertRaises(release_assets.GhError):
             release_assets.fetch_release("v1", runner.run)
+
+    def test_failure_names_the_gh_command(self):
+        """报错里要看出是哪条 `gh` 命令失败：source 漏传就只剩「None 退出码非零」。"""
+        runner = FakeRunner(runs=("boom", "API rate limit exceeded", 1))
+        with self.assertRaises(release_assets.GhError) as caught:
+            release_assets.fetch_release("v1", runner.run)
+        self.assertIn("`gh release view v1`", str(caught.exception))
+
+    def test_bad_asset_shape_names_the_tag_and_leaves_name_size_defaults(self):
+        """行缺 name / size 时留空串与 0；整份形状读不出时报错要带 tag。"""
+        runner = FakeRunner(runs=(json.dumps({"assets": [{"digest": "sha256:abcd"}]}), "", 0))
+        self.assertEqual(release_assets.fetch_release("v1", runner.run),
+                         [release_assets.Asset("", 0, "sha256:abcd")])
+        runner = FakeRunner(runs=(json.dumps({"assets": 5}), "", 0))
+        with self.assertRaises(release_assets.GhError) as caught:
+            release_assets.fetch_release("v1", runner.run)
+        self.assertIn("读不出 v1 的附件", str(caught.exception))
 
     def test_fetch_assets_is_the_name_projection_and_forwards_the_runner(self):
         """名字清单降成 `fetch_release` 的一行投影，注入的执行器要一路传下去。"""
@@ -265,15 +298,31 @@ class MainTests(unittest.TestCase):
     def test_consistent_exits_zero(self):
         code, out, err = self.run_main(self.assets(*self.page_files, "SHA256SUMS.txt"))
         self.assertEqual(code, release_assets.EXIT_OK, err)
-        self.assertIn("一致", out)
+        self.assertIn("REL.files 一致。", out)
 
     def test_mismatch_exits_one_and_names_both_lists(self):
         code, _, err = self.run_main(self.assets("App-1.2.3-mac.dmg"), argv=("v9.9.9",))
         self.assertEqual(code, release_assets.EXIT_MISMATCH)
         self.assertIn("v9.9.9", err)
+        self.assertIn("index.html", err, "报错里要点出比的是哪一页")
         self.assertIn("页面有、Release 没有：App-1.2.3-arm64.apk", err)
         _, _, reverse = self.run_main(self.assets(*self.page_files, "extra.zip"))
         self.assertIn("Release 有、页面没有：extra.zip", reverse)
+
+    def test_several_names_on_one_side_are_joined(self):
+        """一侧缺两个名字时用「、」连接：单个名字看不出分隔符被改坏。"""
+        code, _, err = self.run_main(self.assets())
+        self.assertEqual(code, release_assets.EXIT_MISMATCH)
+        self.assertIn("页面有、Release 没有：App-1.2.3-arm64.apk、App-1.2.3-mac.dmg", err)
+        # Release 多两个名字的那一侧同样要连接
+        _, _, extra = self.run_main(self.assets(*self.page_files, "a.zip", "b.zip"))
+        self.assertIn("Release 有、页面没有：a.zip、b.zip", extra)
+
+    def test_a_duplicate_tag_argument_exits_two_with_usage(self):
+        code, _, err = self.run_main(self.assets(), argv=("v1", "v2"))
+        self.assertEqual(code, release_assets.EXIT_UNREACHABLE)
+        self.assertIn("多余的参数：v2", err)
+        self.assertIn("用法", err)
 
     def test_fetch_failure_exits_two_and_says_so(self):
         """取不到数不等于对不上：网络抖动、API 限额与真的不一致要看得出区别。"""
@@ -295,6 +344,20 @@ class MainTests(unittest.TestCase):
         code, _, err = self.run_main(self.assets(*self.page_files))
         self.assertEqual(code, release_assets.EXIT_OK, err)
         self.assertEqual(self.calls, ["v1.2.3"])
+
+    def test_the_page_is_read_as_utf8(self):
+        """编码在 ASCII 页面上没有可观察差异，只能从调用参数上钉住（#1522）。"""
+        reads = []
+        real = Path.read_text
+
+        def spy(target, *args, **kwargs):
+            reads.append(kwargs)
+            return real(target, *args, **kwargs)
+
+        with mock.patch.object(Path, "read_text", spy):
+            code, _, err = self.run_main(self.assets(*self.page_files))
+        self.assertEqual(code, release_assets.EXIT_OK, err)
+        self.assertEqual(reads, [{"encoding": "utf-8"}])
 
 
 class ShaMainTests(unittest.TestCase):
@@ -322,7 +385,7 @@ class ShaMainTests(unittest.TestCase):
     def test_matching_name_size_and_sha_exits_zero(self):
         code, out, err = self.run_main(matching_assets())
         self.assertEqual(code, release_assets.EXIT_OK, err)
-        self.assertIn("名字、大小、sha", out)
+        self.assertIn("REL.files 的名字、大小、sha 一致。", out)
 
     def test_sha_mismatch_exits_one_and_shows_both_sides(self):
         other = "c" * 64
@@ -330,7 +393,7 @@ class ShaMainTests(unittest.TestCase):
         assets[1] = assets[1]._replace(digest="sha256:" + other)
         code, _, err = self.run_main(assets)
         self.assertEqual(code, release_assets.EXIT_MISMATCH)
-        self.assertIn("sha 对不上", err)
+        self.assertIn("  sha 对不上：\n", err)
         self.assertIn(f"{APK_FILE}：页面 {APK_SHA} / Release {other}", err)
         self.assertNotIn("大小对不上", err)
 
@@ -339,7 +402,7 @@ class ShaMainTests(unittest.TestCase):
         assets[1] = assets[1]._replace(size=53_000_000)
         code, _, err = self.run_main(assets)
         self.assertEqual(code, release_assets.EXIT_MISMATCH)
-        self.assertIn("大小对不上", err)
+        self.assertIn("  大小对不上：\n", err)
         self.assertIn(f"{APK_FILE}：页面 52.8 MB / Release 53.0 MB", err)
         self.assertNotIn("sha 对不上", err)
 
@@ -366,9 +429,19 @@ class ShaMainTests(unittest.TestCase):
         assets[1] = assets[1]._replace(digest="")
         code, _, err = self.run_main(assets)
         self.assertEqual(code, release_assets.EXIT_UNREACHABLE)
-        self.assertIn("摘要", err)
+        self.assertIn("\n  Release 没给出这些附件的摘要，sha 比不了：",
+                      "\n" + err, "整行以两个空格开头，不能被包上 XX")
         self.assertIn(APK_FILE, err)
         self.assertNotIn("对不上", err)
+
+    def test_several_unverified_assets_are_joined(self):
+        """缺摘要的附件多于一个时用「、」连接：单个名字看不出分隔符被改坏。"""
+        assets = matching_assets()
+        assets[0] = assets[0]._replace(digest="")
+        assets[1] = assets[1]._replace(digest="")
+        code, _, err = self.run_main(assets)
+        self.assertEqual(code, release_assets.EXIT_UNREACHABLE)
+        self.assertIn(f"{APK_FILE}、{MAC_FILE}", err)
 
     def test_mismatch_wins_over_an_unverified_asset(self):
         """同一轮既有对不上又有附件缺摘要：差异已确证按 1 报，缺摘要那句照打。"""

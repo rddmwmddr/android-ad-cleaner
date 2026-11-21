@@ -97,9 +97,12 @@ def login(author):
 
 
 def instant(text):
-    """服务器时间戳 -> 带时区的 datetime；读不出来返回 None——不猜。"""
+    """服务器时间戳 -> 带时区的 datetime；读不出来返回 None——不猜。
+
+    Python 3.11 起 `fromisoformat` 直接认 `gh` 给的 `Z` 后缀，不必先换成 `+00:00`。
+    """
     try:
-        value = datetime.fromisoformat(str(text).replace("Z", "+00:00"))
+        value = datetime.fromisoformat(str(text))
     except ValueError:
         return None
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
@@ -138,7 +141,7 @@ def decide(issue, now, days=DEFAULT_DAYS):
     """一张票 -> Decision。纯函数：只读输入，不读时钟、不调 `gh`。"""
     number = issue.get("number")
     title = (issue.get("title") or "").strip()
-    labels = {item.get("name", "") for item in issue.get("labels") or []}
+    labels = {item.get("name") for item in issue.get("labels") or []}
     stale = STALE_LABEL in labels
 
     def no(action, reason, when=None, who="", age=0):
@@ -263,17 +266,17 @@ def apply_one(decision, runner):
         # 先加标签再写评论：标签一旦加上，下次扫描就判成 KEEP，不会为这张票再写一条评论
         problem = set_labels(decision.number, runner, [STALE_LABEL], [])
         if problem:
-            return "", problem
+            return "", problem   # pragma: no mutate 语义等价：失败路径的「动作说明」只随 problem 进 failed 列表，从不被读
         problem = post_comment(decision.number, comment_body(decision), runner)
         if problem:
             # 评论没写成就把标签退回：留着它这张票永远不会再被补一句说明。
             # 退回失败时由下面那条失败上报兜着，不会静默。
             set_labels(decision.number, runner, [], [STALE_LABEL])
-            return "", problem
+            return "", problem   # pragma: no mutate 语义等价：同上，失败时说明不参与输出
         return "加标+评论", None
     if decision.action == UNMARK:
         return "摘标", set_labels(decision.number, runner, [], [STALE_LABEL])
-    return "", None
+    return "", None   # pragma: no mutate 不可达：apply_report 只把 mark 与 unmark 喂进来
 
 
 def apply_report(report, runner):
@@ -327,7 +330,7 @@ def main(argv, runner=None, now=None):
     except GhError as error:
         print(error, file=sys.stderr)
         return EXIT_GH
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now().astimezone()
     report = scan(issues, now, options.days)
     print(render(report, now, options.days))
     if options.dry_run:
