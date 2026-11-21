@@ -225,6 +225,14 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
     "devtools/check_dco.py": ("tests/test_dco.py",),
     "devtools/check_conventional.py": ("tests/test_conventional.py",),
     "devtools/check_comment_tickets.py": ("tests/test_comment_tickets.py",),
+    # devtools（#1519）：`test_anchors` 与 `unittest_summary` 作为一族。`test_anchors` 的判定逻辑
+    # （`recipe_tokens` / `base_of` / `recipe_owned` / `violations` / `domain_violations`）与 CLI 入口由
+    # `tests/test_test_collection.py` 的 `AnchorTests` / `DomainTests` / `AnchorMainTests` 逐条覆盖
+    # （临时树上的反例），`unittest_summary` 由 `tests/test_unittest_summary.py` 覆盖；两处一并收集。
+    "devtools/test_anchors.py": (
+        "tests/test_test_collection.py", "tests/test_unittest_summary.py",
+    ),
+    "devtools/unittest_summary.py": ("tests/test_unittest_summary.py",),
 }
 
 # 变异副本里跑不通的测试，按 pytest node id 摘掉。整份文件都跑不通的（`test_rules_guards`
