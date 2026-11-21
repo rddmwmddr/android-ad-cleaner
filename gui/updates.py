@@ -87,7 +87,7 @@ class HttpsRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         if urllib.parse.urlsplit(newurl).scheme != "https":
             raise UpdateError("更新下载被重定向到不安全的地址")
-        return super().redirect_request(req, fp, code, msg, headers, newurl)   # pragma: no mutate 语义等价：CPython 的 HTTPRedirectHandler 只用 req 与 code 重建请求，fp / msg / headers 的取值不进入结果
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 def open_https(request, timeout=30):
@@ -309,7 +309,7 @@ class Updates:
         error = self.claim()
         if error:
             raise UpdateError(error)
-        handed_off = False   # pragma: no mutate 语义等价：只按真假用，None 与 False 同假
+        handed_off = bool()   # pragma: no mutate 语义等价：只按真假用，None 与 False 同假
         try:
             try:
                 verify_file(self.path, self.offer)
@@ -324,7 +324,7 @@ class Updates:
                 try:
                     self.installer.close()
                 except Exception:
-                    handed_off = False   # pragma: no mutate 语义等价：只按真假用，None 与 False 同假
+                    handed_off = bool()   # pragma: no mutate 语义等价：只按真假用，None 与 False 同假
                     self.installer.abort()
                     raise
         finally:

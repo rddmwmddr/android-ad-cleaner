@@ -39,7 +39,7 @@ mutmut 3.8 对代码做小改动（mutant）再跑测试：测试仍然全绿的
 
 - `tool/` 与进表的 `gui/` 里落在映射表内的代码改动，由新规则 `dev.tests.mutation-kills-changed-lines`（`check = "ci:mutation"`）判定；
 - `recipes/` 的数据改动没有 mutant 可跑，mutation 那一层对它完全看不见，仍由原规则人工判；
-- `gui/` 的界壳文件、harmony 三份与手机版替换层在各自纳入 mutation 之前，也仍走原规则。
+- `gui/` 的界壳文件（`app` / `launch` / `shots`）、harmony 三份、手机版替换层（#1430）以及 `gui/` 其余非实体模块（`winpreflight` / `startup` / `toolpath` 等）在各自纳入 mutation 之前，也仍走原规则。
 
 原规则的 id 与锚点不动，因为它被 `doc.issue.close-on-evidence` 等处按 id 引用；改的是适用范围与到期条件。它仍是 `manual`：数据侧没有等价的机器判据，这条债不是靠把它标成 `dead` 消掉的。
 
@@ -52,6 +52,6 @@ mutmut 3.8 对代码做小改动（mutant）再跑测试：测试仍然全绿的
 - **判据只在映射表内说话**：表当前是 19 个模块（mypy 严格档的 12 个加 `catalog/schema.py`，加 `gui/` 的六份实体模块 `tasks.py` / `adb.py` / `dispatcher.py` / `reporter.py` / `updates.py` / `update_install.py`），表外的改动只看得见、不判。这是刻意的收窄：每一行都要用覆盖矩阵量出来，收全仓会让「尺子有多宽」变成不可复核的东西。
 - **未清完的模块会挡住所有改它的 PR**：判据是「该模块存活 = 0」，存量存活没清完之前，改到它的 PR 会红。那是清理票要消掉的东西，不是误报。
 - **`reader.py` 没有可变异节点**：`Reader` 是 Protocol、方法体只有 `...`，保留一行映射只为让 mutmut 有得收集；它的 `no_tests` 是预期结论，靠代码里没人碰它来满足，不硬补测试。
-- **变异副本里跑不通的测试要摘掉**：副本只有 `src/`，起子进程、读 `android/` 源码、整仓扫文本的用例都会红，而红掉的用例会把碰过同一函数的 mutant 误判成杀死。整份文件跑不通的不进表，个别方法跑不通的按方法 `--deselect`（`mutation_scope.UNUSABLE`）。
-- **待办**：仍在表外的是 `gui/` 的界壳文件（`app` / `launch` / `shots`）、harmony 三份（`harmony_engine` / `harmony_client` / `harmony_vocab`）与手机版替换层（#1430），尚未纳入；缺席是登记的，不是遗忘的，纳入之前，它们的行为变化仍由原规则人工守。
+- **变异副本里跑不通的测试要摘掉**：副本只有 `src/`，起子进程、读 `android/` 源码、整仓扫文本的用例都会红，而红掉的用例会把碰过同一函数的 mutant 误判成杀死。整份文件跑不通的不进表；个别跑不通的按方法摘，整类都受影响的按类摘（`mutation_scope.UNUSABLE`）。
+- **待办**：仍在表外的是 `gui/` 的界壳文件（`app` / `launch` / `shots`）、harmony 三份（`harmony_engine` / `harmony_client` / `harmony_vocab`）、手机版替换层（#1430），以及 `gui/` 其余非实体模块（`winpreflight` / `startup` / `toolpath` 等），尚未纳入；缺席是登记的，不是遗忘的，纳入之前，它们的行为变化仍由原规则人工守。
 - **不建台账、不设周期 job**：存量的终态是可验证的数字（存活 = 0），不是一份「已知存活」清单；增量由 PR 长期维持，没有负责人就不会荒废。

@@ -238,7 +238,7 @@ class InstallTests(unittest.TestCase):
     def test_failed_recovery_keeps_the_backup_and_reports_where(self):
         self.child.poll.return_value = 1
         backup = self.target / ('.aac-old-' + self.plan['token'])
-        with patch.object(install.Replacement, 'rollback', side_effect=OSError('locked')):
+        with patch.object(install.Replacement, 'rollback', autospec=True, side_effect=OSError('locked')):
             self.assertEqual(self.run_helper(), 1)
         self.assertEqual(self.receipt(), {
             'ok': False, 'version': '0.4.2',
@@ -737,6 +737,8 @@ class ValidatePlanTests(unittest.TestCase):
     def test_bad_schema_or_token_is_reported_as_a_bad_format(self):
         self.rejects(dict(self.win_plan, schema=2), '更新任务格式无效')
         self.rejects(dict(self.win_plan, token='z' * 32), '更新任务格式无效')
+        # 非字符串要在正则之前挡住：re.fullmatch 收到 int 抛的是 TypeError，不是更新任务格式错误
+        self.rejects(dict(self.win_plan, token=123), '更新任务格式无效')
         missing = dict(self.win_plan)
         missing.pop('token')
         self.rejects(missing, '更新任务格式无效')

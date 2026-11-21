@@ -15,10 +15,11 @@ mutmut 把「没被选中的测试能杀死的 mutant」报成存活 / 无测试
 
 `UNUSABLE` 列的是**在变异副本里跑不通**的测试：副本只有 `src/` 没有 `tool/`，所以起子进程
 `python tool/run.py`、`python -c "import host"`、读 `android/` 源码、整仓扫文本的用例都会红。
-红掉的用例会把碰过同一个函数的 mutant 误判成「杀死」，所以整份文件都跑不通的干脆不进表，
-个别跑不通的按**方法** `--deselect` 摘掉——粒度到方法而不是到类或文件，是因为这些文件里剩下的
-用例往往是该模块最大的覆盖来源（`test_vocab` 一个文件就覆盖 `recipe_source` 一半以上；
-`PackagingEntryTests` 里只有起子进程那 3 条会红，按类摘会连带扔掉同类的布局断言）。
+红掉的用例会把碰过同一个函数的 mutant 误判成「杀死」，所以整份文件都跑不通的干脆不进表；
+个别跑不通的按**方法** `--deselect` 摘掉，整类都受影响的按类摘——粒度尽量到方法而不是到类或
+文件，是因为这些文件里剩下的用例往往是该模块最大的覆盖来源（`test_vocab` 一个文件就覆盖
+`recipe_source` 一半以上；`PackagingEntryTests` 里只有起子进程那 3 条会红，按类摘会连带扔掉
+同类的布局断言）。
 """
 from collections.abc import Iterable, Sequence
 

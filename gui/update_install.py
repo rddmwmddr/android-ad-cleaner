@@ -1,4 +1,5 @@
 """桌面更新安装：先准备新程序，旧程序退出后由独立副本替换、启动并等待界面确认。"""
+import functools
 import json
 from contextlib import contextmanager
 import os
@@ -24,6 +25,10 @@ CLI_FILES = ("aac-cli.exe", "aac-cli.exe.config")
 WINDOWS_FILES = ("AndroidAdCleaner.exe", "aac-cli.exe", "AndroidAdCleaner.exe.config", "aac-cli.exe.config", REQUIRED_DIR)
 BUNDLE_ID = "com.rddmwmddr.androidadcleaner"
 MAX_EXPANDED = 2 * 1024 * 1024 * 1024
+TEMP_SUFFIX = ".tmp"
+# `ensure_ascii=False` 钉在函数体外：内联进函数时，它落在一整句 pragma 的豁免范围里，同一句的
+# `text=None`、`data→None` 这些不等价变异会跟着被放过。
+JSON_DUMPS = functools.partial(json.dumps, ensure_ascii=False)
 HANDOFF_FILE = "handoff.json"
 ERROR_FILE = "error.json"
 CONTENTS = "Contents"
@@ -41,8 +46,8 @@ DITTO = "/usr/bin/ditto"
 
 def write_json(path, data):
     path = Path(path)
-    temporary = path.with_suffix(path.suffix + ".tmp")  # pragma: no mutate — semantic equivalence: the temp file is renamed over the target, so its name is never observed
-    text = json.dumps(data, ensure_ascii=False)  # pragma: no mutate — semantic equivalence: ensure_ascii=None is falsy, same output as False
+    temporary = path.with_suffix(path.suffix + TEMP_SUFFIX)
+    text = JSON_DUMPS(data)
     temporary.write_bytes(text.encode())
     os.replace(temporary, path)
 
@@ -370,7 +375,7 @@ def confirm_started(root, current, executable):
 
 def validate_plan(path):
     path = Path(path).resolve()
-    # 按字节读：json.loads 自己按 UTF-8 解码，省掉一份会随 locale 漂的编码参数。
+    # 按字节读：json.loads 收到 bytes 会自己识别 BOM；先按 text 模式解码会把 BOM 留在串首，解析失败。
     plan = json.loads(path.read_bytes())
     work = path.parent
     token = plan.get("token")

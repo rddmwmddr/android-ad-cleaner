@@ -292,6 +292,8 @@ class ReporterInjectionTests(unittest.TestCase):
         self.reporter.remember_error("读屏检查", None, "第一行\n第二行")
         self.assertEqual([path.name for path in folder.iterdir()], ["last-error.txt"])   # 文件名大小写也要对（APFS 不区分）
         self.assertEqual(logs.read_text(encoding="utf-8"), "客户端 9.9.9 · 读屏检查\n第一行\n第二行\n")
+        # 按字节写、不转平台换行：Windows 上也必须是 LF，文本模式的 read_text 会把 CRLF 读回 LF，看不住
+        self.assertEqual(logs.read_bytes(), "客户端 9.9.9 · 读屏检查\n第一行\n第二行\n".encode())
         self.assertEqual(self.reporter.last_error, {"operation": "读屏检查", "detail": "第一行\n第二行"})
         self.reporter.remember_error("连接手机", None, "更新后的原因")
         self.assertEqual(logs.read_text(encoding="utf-8"), "客户端 9.9.9 · 连接手机\n更新后的原因\n")
@@ -338,8 +340,10 @@ class ReporterInjectionTests(unittest.TestCase):
                  ({"steps": [{"title": "收尾"}], "log": ""}, {"ok": True, "id": "x"}))
         for payload, expected in cases:
             self.reporter.report_times = []
-            with patch.object(reporter.urllib.request, "urlopen", side_effect=reply):
+            with patch.object(reporter.urllib.request, "urlopen", side_effect=reply) as call:
                 self.assertEqual(self.reporter.send_report(payload), expected)
+            # 空报告在本地就挡住了，连一次请求都不发
+            self.assertEqual(call.call_count, 0 if "error" in expected else 1)
 
     def test_server_refusals_name_the_code_and_the_message(self):
         payload = self.reporter.report_payload({}, self.view(lines=["▶ 收尾"]))

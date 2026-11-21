@@ -805,6 +805,14 @@ class TransportTests(unittest.TestCase):
         result = handler.redirect_request(request, None, 302, '', {'X-Test': '1'}, 'https://gitee.com/b')
         self.assertEqual(result.full_url, 'https://gitee.com/b')
         self.assertEqual(result.get_method(), 'GET')
+        # 只有 301/302/303 放行 POST；307 会被基类拒绝，拒绝时 msg、响应头与 fp 都要原样带进 HTTPError
+        post = updates.urllib.request.Request('https://gitee.com/a', method='POST')
+        fp, hdrs = io.BytesIO(b'body'), {'X-Test': '1'}
+        with self.assertRaises(updates.urllib.error.HTTPError) as rejected:
+            handler.redirect_request(post, fp, 307, 'temporary redirect', hdrs, 'https://gitee.com/b')
+        self.assertEqual(rejected.exception.msg, 'temporary redirect')
+        self.assertIs(rejected.exception.hdrs, hdrs)
+        self.assertIs(rejected.exception.fp, fp)
 
 
 class WindowsLockTests(unittest.TestCase):

@@ -4,8 +4,15 @@
 （`gui/app.py` 仍是这几个常量的单一来源），宿主措辞与排查提示也由构造方给取值函数——手机版会
 把它们整段换掉。
 """
-import json, os, platform, re, time, urllib.error, urllib.request, uuid
+import functools, json, os, platform, re, time, urllib.error, urllib.request, uuid
 from pathlib import Path
+
+CONTENT_TYPE = "application/json"
+CONTENT_TYPE_HEADER = "Content-Type"
+USER_AGENT_HEADER = "User-Agent"
+# `ensure_ascii=False` 钉在函数体外：内联进函数时，它落在一整句 pragma 的豁免范围里，同一句的
+# `text=None`、`body→None` 这些不等价变异会跟着被放过。
+JSON_DUMPS = functools.partial(json.dumps, ensure_ascii=False)
 
 PRIVATE = (
     (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "<邮箱>"),
@@ -122,10 +129,8 @@ class Reporter:
         if not payload.get("steps") and not str(payload.get("log") or "").strip():
             return {"error": self.empty_report}
         body = dict(payload, install_id=self._install_id())
-        content_type = "application/json"
-        agent = f"AndroidAdCleaner/{self.version}"
-        headers = {"Content-Type": content_type, "User-Agent": agent}   # pragma: no mutate 语义等价：urllib 把 header 名按 capitalize 归一，"content-type" 与 "CONTENT-TYPE" 落成同一个键
-        text = json.dumps(body, ensure_ascii=False)   # pragma: no mutate 语义等价：ensure_ascii 只按真假取用，None 与 False 写出相同字节
+        headers = {CONTENT_TYPE_HEADER: CONTENT_TYPE, USER_AGENT_HEADER: f"AndroidAdCleaner/{self.version}"}
+        text = JSON_DUMPS(body)
         request = urllib.request.Request(
             self.report_url, data=text.encode(), method="POST", headers=headers)
         try:
@@ -138,7 +143,7 @@ class Reporter:
             try:
                 message = json.loads(e.read().decode()).get("message") or ""
             except (ValueError, OSError):
-                message = ""   # pragma: no mutate 语义等价：这里只要空串，None 在下面的真假判断里同路
+                return {"error": f"服务器拒绝了这次上报（{e.code}）"}
             return {"error": f"服务器拒绝了这次上报（{e.code}{'：' + message if message else ''}）"}
         except (urllib.error.URLError, OSError, ValueError) as e:
             return {"error": f"连不上上报服务器：{getattr(e, 'reason', e)}"}
