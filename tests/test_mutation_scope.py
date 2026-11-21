@@ -6,11 +6,14 @@
 """
 import ast
 import json
+import os
+import shutil
 import sys
 import tempfile
 import tomllib
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -136,9 +139,67 @@ class SelectionTests(unittest.TestCase):
     def test_only_mutate_uses_the_src_view(self):
         self.assertEqual(mutation_scope.only_mutate(["tool/catalog/schema.py"]), ["src/catalog/schema.py"])
 
-    def test_source_path_rejects_modules_outside_tool(self):
+    def test_source_path_keeps_gui_under_its_package(self):
+        """`gui/` 的模块在副本里按包名 import（`from gui import tasks`），所以落在 `src/gui/` 下。"""
+        self.assertEqual(mutation_scope.source_path("gui/tasks.py"), "src/gui/tasks.py")
+
+    def test_source_path_rejects_modules_outside_the_source_view(self):
         with self.assertRaises(ValueError):
-            mutation_scope.source_path("gui/app.py")
+            mutation_scope.source_path("devtools/mutation.py")
+
+
+class WorkdirTests(unittest.TestCase):
+    def test_workdir_for_keeps_the_gui_prefix_in_the_slug(self):
+        """`gui/tasks.py` 与 `tool/tasks.py` 若同日出现，别共用一个工作目录。"""
+        self.assertEqual(mutation.workdir_for(["gui/tasks.py"]).name, "gui_tasks")
+        self.assertEqual(mutation.workdir_for(["tool/summary.py"]).name, "summary")
+
+
+@unittest.skipIf(os.name == "nt", "建符号链接要开发者模式；变异 job 只在 Linux 上跑")
+class SourceMirrorTests(unittest.TestCase):
+    """副本里的 `src` 是镜像：目录真建、文件逐条链接，两个包都 import 得到。
+
+    mutmut 的 `os.walk` 不跟随目录符号链接，所以不能只放一条 `src -> tool`；`gui/` 的模块要
+    落在 `src/gui/` 下，测试才能按 `from gui import tasks` 取到被变异的文件。
+    """
+
+    def setUp(self):
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.workdir = root / ".mutmut" / "sample"
+        mutation.link_sources(self.workdir)
+        self.src = self.workdir / "src"
+
+    def test_src_is_a_real_directory(self):
+        self.assertFalse(self.src.is_symlink())
+        self.assertTrue(self.src.is_dir())
+
+    def test_every_tool_entry_is_mirrored_at_the_src_root(self):
+        missing = [name for name in (ROOT / "tool").iterdir()
+                   if name.name != "__pycache__" and not (self.src / name.name).exists()]
+        self.assertEqual(missing, [])
+
+    def test_every_gui_entry_is_mirrored_under_the_gui_package(self):
+        missing = [name for name in (ROOT / "gui").iterdir()
+                   if name.name != "__pycache__" and not (self.src / "gui" / name.name).exists()]
+        self.assertEqual(missing, [])
+
+    def test_the_mirror_skips_bytecode_cache(self):
+        self.assertEqual(sorted(self.src.rglob("__pycache__")), [])
+
+    def test_files_are_linked_not_copied(self):
+        """链接让源码只有一份：改了仓库里的模块，副本立刻跟上。"""
+        self.assertTrue((self.src / "gui" / "tasks.py").is_symlink())
+        self.assertEqual((self.src / "catalog" / "schema.py").resolve(),
+                         (ROOT / "tool" / "catalog" / "schema.py").resolve())
+
+    def test_relinking_replaces_a_stale_src_link(self):
+        """旧的 `src -> tool` 形态要能被下一次运行换掉，不然副本里没有 `gui`。"""
+        stale = self.workdir / "src"
+        shutil.rmtree(stale)
+        stale.symlink_to(Path("..") / ".." / "tool")
+        mutation.link_sources(self.workdir)
+        self.assertFalse(self.src.is_symlink())
+        self.assertTrue((self.src / "gui" / "tasks.py").exists())
 
 
 class PatchScopeTests(unittest.TestCase):
@@ -150,9 +211,31 @@ class PatchScopeTests(unittest.TestCase):
         paths = ["tool/plan.py", "tool/plan.py", "tool/summary.py"]
         self.assertEqual(mutation_scope.modules_in_paths(paths), ["tool/plan.py", "tool/summary.py"])
 
+    def test_modules_in_paths_reads_gui_modules(self):
+        self.assertEqual(mutation_scope.modules_in_paths(["gui/tasks.py", "gui/app.py"]),
+                         ["gui/tasks.py"])
+
     def test_modules_in_paths_ignores_paths_outside_tool(self):
         self.assertEqual(mutation_scope.modules_in_paths(["recipes/a/b/c.toml", "tests/test_plan.py"]),
                          [])
+
+
+class ScopeReportTests(unittest.TestCase):
+    """改到 `gui/` 但落在表外时报出来：缺席要看得见，不是遗忘的（#1429）。"""
+
+    def scope(self, paths):
+        with mock.patch.object(mutation, "changed_paths", return_value=paths):
+            return mutation.scope_of("origin/main")
+
+    def test_unmapped_gui_modules_are_reported(self):
+        modules, unmapped = self.scope(["gui/app.py", "gui/web/app.js", "tests/test_plan.py"])
+        self.assertEqual(modules, [])
+        self.assertEqual(unmapped, ["gui/app.py"])
+
+    def test_mapped_gui_modules_are_not_reported_as_skipped(self):
+        modules, unmapped = self.scope(["gui/tasks.py"])
+        self.assertEqual(modules, ["gui/tasks.py"])
+        self.assertEqual(unmapped, [])
 
 
 class SummaryTests(unittest.TestCase):

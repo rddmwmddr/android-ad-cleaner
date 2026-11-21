@@ -78,7 +78,7 @@ def plan_tasks(serial, plan, offered=None):
     steps = list(plan.steps)
     if steps:
         title = "关闭各 App 里的广告开关"
-        total = len(offered.get("steps") or []) if offered else 0
+        total = len((offered or {}).get("steps") or [])
         if total > len(steps):
             title += f"（{len(steps)} / {total} 段）"
         tasks.append(Task(title, "run.py",
@@ -133,15 +133,17 @@ def retry_plan(plan, results):
     plan_mod = toolpath.tool("plan")
     plan = plan_mod.Plan.from_json(plan or {})
     kind = plan_mod.StepKind
-    again = {r.get("kind"): retryable(r) for r in results if r.get("kind")}
-    recipe = next((r for r in results if r.get("kind") == kind.RECIPE), {})
-    steps = list(recipe.get("failed_steps") or plan.steps) if again.get(kind.RECIPE) else []
-    out = plan_mod.Plan(backup=again.get(kind.BACKUP, False),
+    retry = {r.get("kind") for r in results if r.get("kind") and retryable(r)}
+    steps = []   # pragma: no mutate 语义等价：`Plan` 把 list 字段收成 []，None 与 [] 同值
+    if kind.RECIPE in retry:
+        recipe = next(r for r in results if r.get("kind") == kind.RECIPE)
+        steps = list(recipe.get("failed_steps") or plan.steps)
+    out = plan_mod.Plan(backup=kind.BACKUP in retry,
                         steps=steps, ref=plan.ref, model=plan.model,
-                        channels=list(plan.channels) if again.get(kind.CHANNELS) else [],
-                        quickapp=plan.quickapp and again.get(kind.QUICKAPP, False),
-                        ads=list(plan.ads) if again.get(kind.ADS) else [],
-                        finish=again.get(kind.FINISH, False))
+                        channels=list(plan.channels) if kind.CHANNELS in retry else [],
+                        quickapp=plan.quickapp and kind.QUICKAPP in retry,
+                        ads=list(plan.ads) if kind.ADS in retry else [],
+                        finish=kind.FINISH in retry)
     if not any((out.backup, out.steps, out.channels, out.quickapp, out.ads, out.finish)):
         return None
     return out

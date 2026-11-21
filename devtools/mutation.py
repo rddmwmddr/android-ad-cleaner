@@ -16,8 +16,8 @@
 三条约束沿用 #1410 的实测结论：
 
 - mutmut 3.8 的 mutant 名是「相对路径去掉 `src.` 前缀」，而测试按顶层模块名 import
-  （`from catalog.schema import …`）。工作目录里放一个 `src -> tool` 符号链接，两边在同一
-  视角上对齐，测试一行不改。
+  （`from catalog.schema import …`、`from gui import tasks`）。工作目录里的 `src` 是 `tool/`
+  与 `gui/` 的镜像（目录真建、文件逐条链接），两边在同一视角上对齐，测试一行不改。
 - mutmut 把 cwd 切到 `mutants/` 再跑 pytest，而测试要读仓库根的 `recipes/`、`docs/` 等
   数据目录，所以它们得进 `also_copy`。
 - 缓存落在工作目录的 `mutants/` 下，跟着 `.mutmut/` 一起忽略，不在仓库根留下痕迹。
@@ -27,6 +27,8 @@
 PR 判据是两条都过，等价变异体是 mutation 侧唯一的豁免。
 """
 import json
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -40,6 +42,10 @@ except ImportError:             # 直接跑文件时 sys.path[0] 就是 devtools
 # 一个模块组一个工作目录：mutmut 用 mtime 判「这份副本还没变异」，共用目录时上一轮拷成
 # 普通副本的文件会被当成都已变异，直接跑出 0 个 mutant。
 WORKDIR = Path(".mutmut")
+# 仓库根：`src` 镜像按它生成链接，测试传临时目录时仍然指回真源码。
+ROOT = Path(__file__).resolve().parents[1]
+# 进 `src` 视角的两个包（#1429）。
+SOURCE_PACKAGES = ("tool", "gui")
 # 工作目录里指向仓库根的符号链接：mutmut 只认识 cwd 下的相对路径。
 LINKS = {
     "tool": "tool",
@@ -84,19 +90,67 @@ def write_config(workdir: Path, modules: list[str]) -> None:
 
 
 def workdir_for(modules: Sequence[str]) -> Path:
-    """一个模块组一个工作目录：`tool/catalog/schema.py` → `.mutmut/catalog_schema`。"""
-    slug = "-".join(
-        module.removeprefix("tool/").removesuffix(".py").replace("/", "_") for module in modules
-    )
-    return WORKDIR / slug
+    """一个模块组一个工作目录：`tool/catalog/schema.py` → `.mutmut/catalog_schema`。
+
+    `gui/` 的模块保留前缀（`.mutmut/gui_tasks`）：两侧可能出现同名模块，共用目录会让上一轮的
+    副本被当成已变异。
+    """
+    return WORKDIR / "-".join(_slug(module) for module in modules)
+
+
+def _slug(module: str) -> str:
+    name = module.removesuffix(".py")
+    if name.startswith("tool/"):
+        name = name[len("tool/"):]
+    elif name.startswith("gui/"):
+        name = "gui_" + name[len("gui/"):]
+    return name.replace("/", "_")
 
 
 def link_sources(workdir: Path) -> None:
-    """在工作目录里放好 `src -> tool` 与测试 / 数据目录的链接。"""
+    """在工作目录里放好 `src` 镜像与测试 / 数据目录的链接。"""
     workdir.mkdir(parents=True, exist_ok=True)
     for name, target in LINKS.items():
         _link(workdir / name, Path("..") / ".." / target)
-    _link(workdir / "src", Path("..") / ".." / "tool")
+    _mirror_sources(workdir / "src")
+
+
+def _mirror_sources(src: Path) -> None:
+    """`tool/` 与 `gui/` 的镜像：目录真建、文件逐条链接，跳过 `__pycache__`。
+
+    mutmut 的 `os.walk` 不跟随目录符号链接（`followlinks=False`），所以不能放一条 `src -> tool`
+    或 `src -> gui`：目录链接下它会报「0 files mutated」。镜像把两个包放进同一个视角——`tool/`
+    的条目落在 `src/` 根上（测试按顶层包名 import），`gui/` 的条目落在 `src/gui/`（测试按
+    `from gui import …`）。每次按目录列表现生成，新增顶层模块自动进来。
+    """
+    if src.is_symlink() or src.is_file():
+        src.unlink()
+    elif src.exists():
+        shutil.rmtree(src)
+    src.mkdir(parents=True)
+    for package in SOURCE_PACKAGES:
+        base = ROOT / package
+        top = src if package == "tool" else src / package
+        for path in sorted(base.rglob("*")):
+            if "__pycache__" in path.relative_to(base).parts:
+                continue
+            destination = top / path.relative_to(base)
+            if path.is_dir():
+                destination.mkdir(parents=True, exist_ok=True)
+                continue
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.symlink_to(_relative(path, destination.parent))
+
+
+def _relative(path: Path, folder: Path) -> str:
+    """链接目标按物理路径算：macOS 的 `/var` 与 `/Volumes` 在逻辑路径上可能没有同一前缀。
+
+    跨盘符（Windows 上仓库与临时目录各在一个盘）没有相对路径，退回绝对路径。
+    """
+    try:
+        return os.path.relpath(path, folder.resolve())
+    except ValueError:
+        return str(path)
 
 
 def _link(path: Path, target: Path) -> None:
@@ -187,11 +241,15 @@ def changed_paths(ref: str) -> list[str]:
 
 
 def scope_of(ref: str) -> tuple[list[str], list[str]]:
-    """改动面分成两份：落进映射表的模块，以及没落的 `tool/` 模块（后者只作可见性提示）。"""
+    """改动面分成两份：落进映射表的模块，以及没落的 `tool/` / `gui/` 模块（后者只作可见性提示）。
+
+    `gui/` 里界壳文件、harmony 三份与还没有行的模块都会逐条报出来：缺席要看得见（#1429）。
+    """
     paths = changed_paths(ref)
     modules = mutation_scope.modules_in_paths(paths)
     unmapped = [path for path in paths
-                if path.startswith("tool/") and path.endswith(".py") and path not in modules]
+                if path.startswith(("tool/", "gui/")) and path.endswith(".py")
+                and path not in modules]
     return modules, unmapped
 
 

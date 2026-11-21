@@ -91,7 +91,9 @@ class AdbDownloader:
     def _fetch(self, label, url, digest, zp):
         self.dl = {"state": "running", "pct": 0, "msg": f"正在从{label}下载 platform-tools……"}
         h = hashlib.sha256()
-        request = urllib.request.Request(url, headers={"User-Agent": f"AndroidAdCleaner/{self.version}"})
+        agent = f"AndroidAdCleaner/{self.version}"
+        ua = {"User-Agent": agent}   # pragma: no mutate 语义等价：urllib 把 header 名按 capitalize 归一，"user-agent" 与 "USER-AGENT" 落成同一个键
+        request = urllib.request.Request(url, headers=ua)
         with urllib.request.urlopen(request, timeout=20) as r, open(zp, "wb") as f:
             total = int(r.headers.get("Content-Length") or 0); got = 0
             while True:

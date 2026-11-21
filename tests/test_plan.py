@@ -290,12 +290,32 @@ class PlanTasksTests(unittest.TestCase):
 
     def test_quickapp_and_ads_say_why_they_did_nothing(self):
         closed = app.plan_tasks("S", {"backup": False}, offered_577(quickapps=[{"name": "x", "closed": True}]))
+        kept = app.plan_tasks("S", {"backup": False},
+                              offered_577(quickapps=[{"name": "x", "closed": False, "keep": True}]))
         absent = app.plan_tasks("S", {"backup": False}, offered_577())
         hung = app.plan_tasks("S", {"backup": False}, offered_577(ads=[{"pkg": "p", "suspended": True}]))
         self.assertEqual(self.reason_of(closed, "关闭快应用"), "可关闭的快应用组件都已关闭")
+        self.assertEqual(self.reason_of(kept, "关闭快应用"), "可关闭的快应用组件都已关闭")
         self.assertEqual(self.reason_of(absent, "关闭快应用"), "没有检测到快应用组件")
         self.assertEqual(self.reason_of(absent, "挂起广告组件"), "没有已知的广告组件")
         self.assertEqual(self.reason_of(hung, "挂起广告组件"), "广告组件已经挂起")
+
+    def test_the_recipe_and_channel_steps_declare_they_use_the_screen(self):
+        """这两步要连读屏：前一步因读屏被占用失败时，它们才会被跳过（#638）。"""
+        plan = {"backup": False, "steps": ["桌面"],
+                "channels": [{"pkg": "p", "id": "1", "name": "活动"}]}
+        tasks = app.plan_tasks("S", plan, offered_577(steps=("桌面",), channels=[{"pkg": "p"}]))
+        channel_row = next(t for t in tasks if t.kind == "channels")
+        self.assertTrue(self.recipe_row(tasks).uses_ui)
+        self.assertTrue(channel_row.uses_ui)
+        self.assertEqual(channel_row.channels, plan["channels"], "勾选的渠道要带到子进程")
+
+    def test_a_plan_without_a_reference_adds_no_ref_flag(self):
+        tasks = app.plan_tasks("S", {"backup": False, "steps": ["桌面"]}, offered_577(steps=("桌面",)))
+        self.assertNotIn("--ref", self.recipe_row(tasks).args)
+
+    def test_a_not_run_row_without_a_kind_stays_unlabeled(self):
+        self.assertEqual(app.not_run("某一步", "没有跑").kind, "")
 
     def test_rows_keep_the_order_the_run_would_have_had(self):
         tasks = app.plan_tasks("S", {"backup": True}, offered_577())
@@ -345,6 +365,7 @@ class WorkTests(unittest.TestCase):
         self.assertEqual(len(api.runner.spawn_calls), 1, "没勾的项不该起子进程")
         first = api.job.results[0]
         self.assertEqual(first["rc"], 0, "没执行不算失败")
+        self.assertEqual(first["sec"], 0, "没执行不占时长")
         self.assertTrue(first["skipped"])
         self.assertEqual(first["tail"], ["未勾选，本次没有执行"])
 

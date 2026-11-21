@@ -230,7 +230,7 @@ jobs:
       # `.mutmut/` 里是上一轮的判定缓存（`mutants/mutmut-stats.json` 记着每个函数的哈希与
       # 配置指纹），没动的函数直接复用旧裁决，只重跑统计阶段与改动行的 mutant。
       # key 必须覆盖「测试怎么跑」：根 pyproject（pytest 配置）、tests/（含 conftest）、
-      # tool/（被测源码）、devtools/mutation*.py（映射表与工作目录布局）；`recipes/` 这类
+      # tool/ 与 gui/（被测源码）、devtools/mutation*.py（映射表与工作目录布局）；`recipes/` 这类
       # 数据不进货 key——它们由 mutmut 自己的 git 比对抓，配置里 on_dependency_change = "rerun"
       # 让数据一变就整轮重跑。restore-keys 回退到同前缀的旧缓存：源码改了也值得复用，
       # 没动过的函数判定仍然有效；解释器档位（`py313`，硬编码，与 `.python-version` 及本 job 的
@@ -241,7 +241,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .mutmut
-          key: mutmut-3.8.1-py313-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'tests/**', 'tool/**', 'devtools/mutation*.py') }}
+          key: mutmut-3.8.1-py313-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'tests/**', 'tool/**', 'gui/**', 'devtools/mutation*.py') }}
           restore-keys: |
             mutmut-3.8.1-py313-${{ runner.os }}-
       - uses: actions/setup-python@v6

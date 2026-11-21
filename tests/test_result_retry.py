@@ -85,6 +85,13 @@ class RetryPlanTests(unittest.TestCase):
         self.assertIsNone(app.retry_plan(PLAN, [row("recipe", 1, stopped=True),
                                                 row("channels", 0, skipped=True)]))
 
+    def test_absent_rows_leave_every_flag_false_not_unset(self):
+        """上一轮没出现的步骤是「不需要跑」，重试计划里落 None 会让下游读到空值。"""
+        plan = app.retry_plan(PLAN, [row("channels", 1)])
+        self.assertIs(plan["backup"], False)
+        self.assertIs(plan["quickapp"], False)
+        self.assertIs(plan["finish"], False)
+
 
 class PlanTasksKindTests(unittest.TestCase):
     def test_every_step_carries_its_own_kind(self):
