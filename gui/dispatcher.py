@@ -229,7 +229,7 @@ class Dispatcher:
 
     def _work(self, tasks):
         j = self.job
-        ui_busy = False
+        ui_ok = True                    # 读屏一被占用就置否，此后带界面的步骤不再起（#603）
         done = 0                        # 真正跑过的步数：没执行的项不进「第 N / M 步」
         self.resume()                   # 上次没清掉的暂停标记不能带进这次
         for i, task in enumerate(tasks):
@@ -257,7 +257,7 @@ class Dispatcher:
             with j.lock:
                 j.idx, j.title = done, task.title
             self._log(f"\n▶ {task.title}", j)
-            if ui_busy and task.uses_ui:
+            if not ui_ok and task.uses_ui:
                 reason = "读屏服务仍被占用，跳过本步骤；请先解决读屏连接再重试。"
                 self._log(reason, j)
                 j.add_result(step_result(task, rc=3, skipped=True, sec=0, tail=[reason]))
@@ -268,13 +268,15 @@ class Dispatcher:
             if task.channels is not None:
                 d = self.backups_of().snapshot(j.model)
                 fn = os.path.join(d, "channels.tsv")
-                with open(fn, "w", encoding="utf-8") as f:
-                    f.write("# 包名\t渠道id\t渠道名\t应用名（客户端勾选）\n")
-                    for c in task.channels:
-                        name = re.sub(r"[\t\r\n]+", " ", str(c.get("app") or "")).strip()
-                        f.write(f"{c['pkg']}\t{c['id']}\t{c['name']}\t{name}\n")
+                rows = ["# 包名\t渠道id\t渠道名\t应用名（客户端勾选）\n"]
+                for c in task.channels:
+                    name = re.sub(r"[\t\r\n]+", " ", str(c.get("app") or "")).strip()
+                    rows.append(f"{c['pkg']}\t{c['id']}\t{c['name']}\t{name}\n")
+                # 按字节写：`str.encode()` 默认就是 UTF-8，`chan_fast.load` 按 utf-8-sig 读得回来，
+                # 换行也不需要经平台转一次
+                Path(fn).write_bytes("".join(rows).encode())
                 args = ["-s", j.serial, "off", fn]
-            killed = False
+            killed = False   # pragma: no mutate 语义等价：只当布尔用，None 与 False 同值
             try:
                 p = self.runner_of().spawn(script, *args, env_extra={"AAC_PAUSE_FILE": self.data.pause,
                                                                      "AAC_EVENTS": "1"})
@@ -301,7 +303,7 @@ class Dispatcher:
                                      failed_steps=list(j.failed_steps)))
             if rc:
                 detail = "\n".join(j.lines[line_start:])
-                ui_busy = ui_busy or "ui_busy" in j.step_events
+                ui_ok = ui_ok and "ui_busy" not in j.step_events
                 if "link_lost" in j.step_events and not self.adb_present(self.adb_of(), j.serial):
                     # 手机已断开：后面每一步都会报同一段排查说明（错误日志 10-27），不再执行
                     self.on_error(task.title, j.serial, detail)

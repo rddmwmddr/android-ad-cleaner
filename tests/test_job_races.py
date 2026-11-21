@@ -4,12 +4,17 @@
 """
 import os
 os.environ.setdefault("AAC_NO_SOUND", "1")     # 客户端提示音：测试里不出声
+import json
 import tempfile
 import unittest
 from unittest.mock import patch
 
-from fixtures import FakeRunner, job_stub
+from fixtures import FakeProc, FakeRunner, job_stub
 from gui import app
+
+
+def event(kind):
+    return "#aac:event " + json.dumps({"kind": kind})
 
 
 class ObservingLock:
@@ -77,6 +82,78 @@ class StopRaceTests(Base):
         api._work([app.Task("关闭营销通知", "chan_fast.py"), app.Task("收尾", "run.py", always_run=True)])
         self.assertTrue(api.runner.procs[0].terminated, "停止后这次执行启动的引擎进程没有被终止")
         self.assertTrue(api.job.results[0].get("stopped"), api.job.results[0])
+
+
+class JobScopingTests(Base):
+    """`_work()` 写日志、记事件、落结果都认它开始时那一次的 Job：新一轮执行顶上来之后，
+    旧执行剩下的话不能写进新一页（#452 的第三条）。"""
+
+    def test_every_line_of_a_run_lands_in_the_job_it_started_with(self):
+        api = self.api(total=2)
+        old, nxt = api.job, job_stub(serial="next")
+        api.runner = FakeRunner(spawns=[
+            FakeProc(event("ui_busy") + "\nUIAUTOMATION_BUSY：已占用\n", rc=1), FakeProc()])
+        old.lock = ObservingLock(old.lock, lambda: setattr(api, "job", nxt))
+        api._work([app.Task("广告开关", "run.py", uses_ui=True),
+                   app.Task("通知", "chan_fast.py", uses_ui=True),
+                   app.Task("收尾", "run.py", always_run=True)])
+        self.assertEqual(nxt.lines, [], "新的那次执行接收到了旧执行的日志")
+        self.assertEqual(nxt.results, [], "旧执行的结果落进了新一页")
+        self.assertEqual(nxt.step_events, set())
+        self.assertIn("读屏服务仍被占用，跳过本步骤；请先解决读屏连接再重试。", old.lines)
+        self.assertTrue(any("执行结束，用时" in line for line in old.lines), old.lines)
+
+    def test_a_spawn_that_raises_is_logged_into_the_job_the_run_started_with(self):
+        api = self.api(total=1)
+        old, nxt = api.job, job_stub(serial="next")
+        api.runner = FakeRunner()
+
+        def boom(script, *args, env_extra=None):
+            raise OSError("没有这个脚本")
+
+        api.runner.spawn = boom
+        old.lock = ObservingLock(old.lock, lambda: setattr(api, "job", nxt))
+        api._work([app.Task("广告开关", "run.py")])
+        self.assertIn("✗ 没有这个脚本", old.lines)
+        self.assertEqual(nxt.lines, [])
+
+    def test_the_steps_skipped_after_a_disconnect_log_into_the_job_the_run_started_with(self):
+        api = self.api(total=1)
+        old, nxt = api.job, job_stub(serial="next")
+        api.runner = FakeRunner(spawns=[
+            FakeProc(event("link_lost") + "\n手机和电脑的 adb 连接断开了\n", rc=1)])
+        api.dispatcher.adb_present = lambda adb, serial: False
+        old.lock = ObservingLock(old.lock, lambda: setattr(api, "job", nxt))
+        api._work([app.Task("广告开关", "run.py"), app.Task("收尾", "run.py", always_run=True)])
+        self.assertTrue(any(line.startswith("\n▶ 收尾") for line in old.lines), old.lines)
+        self.assertEqual(nxt.lines, [])
+
+    def test_the_pause_boundary_writes_to_the_job_it_started_with(self):
+        api = self.api(total=2)
+        old, nxt = api.job, job_stub(serial="next")
+        swapped, slept, paused = [], [], []
+
+        def on_spawn():
+            if swapped:
+                return
+            swapped.append(True)
+            api.pause()             # 第一步执行中点「暂停」：暂停点落在下一步的边界上
+            api.job = nxt
+
+        def wake(seconds):
+            slept.append(seconds)
+            paused.append(old.paused)
+            old.clear_pause()
+
+        api.runner = FakeRunner(spawns=[FakeProc(), FakeProc()], on_spawn=on_spawn)
+        with patch.object(app.time, "sleep", side_effect=wake), patch.object(app, "chime"):
+            api._work([app.Task("广告开关", "run.py"), app.Task("收尾", "run.py", always_run=True)])
+        self.assertEqual(slept, [0.5], "等待期间按半秒一轮看「继续」有没有被点")
+        self.assertEqual(paused, [True], "等待期间要告诉界面「已暂停」")
+        self.assertIs(old.paused, False, "继续之后要撤掉暂停标记")
+        self.assertIn("⏸ 已暂停：现在可以操作手机。操作完回到桌面、保持解锁，再点「继续」", old.lines)
+        self.assertIn("▶ 继续执行", old.lines)
+        self.assertEqual(nxt.lines, [], "旧执行的暂停提示写进了新一页")
 
 
 class FinalLineTests(Base):

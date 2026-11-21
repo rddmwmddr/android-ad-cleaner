@@ -385,6 +385,131 @@ class WorkTests(unittest.TestCase):
                        self.skip_task("关闭快应用"),
                        app.Task("收尾", "run.py", always_run=True)])
         self.assertEqual(api.job.results[1]["tail"], ["未勾选，本次没有执行"])
+        self.assertEqual([r["title"] for r in api.job.results], ["广告开关", "关闭快应用", "收尾"],
+                         "断线之后每一步都要各占一行，不能停在第一个没勾的项上")
+
+    def test_two_executed_steps_count_up_to_two(self):
+        # 「第 N / M 步」里的 N 是真的跑过的步数，不能停在 1
+        api = self.make_api()
+        api.job.total = 2
+        api._work([app.Task("广告开关", "run.py"), app.Task("收尾", "run.py", always_run=True)])
+        self.assertEqual((api.job.idx, api.job.title), (2, "收尾"))
+
+    def test_a_busy_skip_row_is_a_failure_with_no_time(self):
+        api = self.make_api(spawns=[FakeProc(event_577("ui_busy") + "\nUIAUTOMATION_BUSY：已占用\n", rc=1),
+                                    FakeProc()])
+        api._work([app.Task("广告开关", "run.py", uses_ui=True),
+                   app.Task("通知", "chan_fast.py", uses_ui=True)])
+        row = api.job.results[1]
+        self.assertEqual((row["rc"], row["skipped"], row["sec"]), (3, True, 0))
+
+    def test_the_channels_step_writes_the_selection_tsv_and_passes_it(self):
+        api = self.make_api()
+        channels = [{"pkg": "com.a", "id": "1", "name": "活动"},
+                    {"pkg": "com.b", "id": "2", "name": "开屏", "app": " 开\t屏 "}]
+        api._work([app.Task("关闭营销通知", "chan_fast.py", channels=channels)])
+        args = api.runner.spawn_calls[0].args
+        self.assertEqual(args[:3], ("-s", "test", "off"))
+        self.assertEqual(os.path.basename(args[3]), "channels.tsv")
+        lines = Path(args[3]).read_text(encoding="utf-8").splitlines()
+        self.assertEqual(lines[0], "# 包名\t渠道id\t渠道名\t应用名（客户端勾选）")
+        # 没有应用名时留空；应用名里的制表符与首尾空白压成一个空格，别把列撑开
+        self.assertEqual(lines[1:], ["com.a\t1\t活动\t", "com.b\t2\t开屏\t开 屏"])
+
+    def test_the_step_tail_keeps_the_last_eighty_lines(self):
+        output = "".join(f"第{i}行\n" for i in range(85))
+        api = self.make_api(spawns=[FakeProc(output, rc=1)])
+        api._work([app.Task("广告开关", "run.py")])
+        tail = api.job.results[0]["tail"]
+        self.assertEqual(len(tail), 80)
+        self.assertEqual((tail[0], tail[-1]), ("第5行", "第84行"))
+
+    def test_each_failing_step_reports_only_its_own_output(self):
+        seen = []
+        api = self.make_api(spawns=[FakeProc("第一步的输出\n"),
+                                    FakeProc("第二步的输出甲\n第二步的输出乙\n", rc=1)])
+        api.dispatcher.on_error = lambda operation, serial, detail: seen.append(
+            (operation, serial, detail)) or ""
+        api._work([app.Task("第一步", "run.py"), app.Task("第二步", "run.py")])
+        self.assertEqual(seen, [("第二步", "test", "第二步的输出甲\n第二步的输出乙")],
+                         "诊断只带这一步自己的输出，不是整场的")
+
+    def test_the_recovery_hint_comes_back_from_the_failing_step(self):
+        seen = []
+        api = self.make_api(spawns=[FakeProc("✗ 没收尾\n", rc=1)])
+        api.dispatcher.on_error = lambda operation, serial, detail: seen.append(
+            (operation, serial)) or "再试一次"
+        api._work([app.Task("收尾", "run.py")])
+        self.assertEqual(seen, [("收尾", "test")])
+        self.assertEqual(api.job.recovery, "再试一次")
+
+    def test_the_disconnect_check_asks_about_the_adb_that_is_in_use(self):
+        seen = []
+        api = self.make_api(spawns=[FakeProc(event_577("link_lost") + "\n手机和电脑的 adb 连接断开了\n", rc=1)])
+        api.adb = "/tmp/下载回来的/adb"
+        api.dispatcher.adb_present = lambda adb, serial: seen.append((adb, serial)) or False
+        api._work([app.Task("广告开关", "run.py"), app.Task("收尾", "run.py", always_run=True)])
+        self.assertEqual(seen, [("/tmp/下载回来的/adb", "test")])
+
+    def test_a_confirmed_disconnect_records_every_later_step_once(self):
+        seen = []
+        api = self.make_api(spawns=[FakeProc(event_577("link_lost") + "\n手机和电脑的 adb 连接断开了\n", rc=1)])
+        api.dispatcher.on_error = lambda operation, serial, detail: seen.append(
+            (operation, serial)) or ""
+        with patch.object(app, "adb_present", return_value=False):
+            api._work([app.Task("广告开关", "run.py"),
+                       app.Task("收尾", "run.py", always_run=True),
+                       app.Task("再来一步", "run.py")])
+        rows = api.job.results
+        self.assertEqual([r["title"] for r in rows], ["广告开关", "收尾", "再来一步"])
+        self.assertEqual([r["rc"] for r in rows[1:]], [3, 3])
+        self.assertEqual(seen, [("广告开关", "test")])
+
+    def test_a_runner_that_cannot_start_the_engine_fails_the_step_once(self):
+        def boom(script, *args, env_extra=None):
+            raise OSError("没有这个脚本")
+        api = self.make_api()
+        api.runner.spawn = boom
+        api._work([app.Task("广告开关", "run.py")])
+        row = api.job.results[0]
+        self.assertEqual((row["rc"], row["tail"]), (-1, ["没有这个脚本"]))
+        self.assertIn("✗ 没有这个脚本", api.job.lines)
+
+    def test_a_stopped_step_is_recorded_as_stopped_with_its_return_code(self):
+        api = self.make_api()
+        api.runner = FakeRunner(spawns=[FakeProc("引擎说了一句\n", rc=-15)],
+                                on_spawn=lambda: api.job.request_stop())
+        with patch.object(app.time, "time", return_value=100):
+            api._work([app.Task("广告开关", "run.py")])
+        self.assertEqual(api.job.results[0], {"title": "广告开关", "kind": "", "rc": -15,
+                                              "stopped": True, "sec": 0, "tail": ["引擎说了一句"]})
+        self.assertEqual(api.job.lines[-1], "\n已停止")
+
+    def test_stop_during_the_run_terminates_the_registered_process(self):
+        api = self.make_api()
+
+        def stop_after_registration():
+            api.job.request_stop()
+            return 0
+
+        api.runner = FakeRunner(spawns=[FakeProc("", wait=stop_after_registration)])
+        api._work([app.Task("广告开关", "run.py")])
+        self.assertTrue(api.runner.procs[0].terminated, "点了停止要杀掉这次执行起的引擎进程")
+        # 进程自己正常退出：这不是「已停止」，用户点的停止只影响了后面的步骤
+        self.assertEqual(api.job.results[0]["rc"], 0)
+        self.assertFalse(api.job.results[0].get("stopped", False))
+
+    def test_a_successful_step_records_its_own_duration(self):
+        api = self.make_api()
+        api.job.t0 = 10
+        with patch.object(app.time, "time", return_value=42):
+            api._work([app.Task("收尾", "run.py", always_run=True)])
+        self.assertEqual(api.job.results[0],
+                         {"title": "收尾", "kind": "", "rc": 0, "sec": 0, "tail": [],
+                          "failed_steps": []})
+        self.assertEqual(api.job.lines[-1], "\n执行结束，用时 32 秒")
+        self.assertIs(api.job.running, False)
+        self.assertIsNone(api.job.proc)
 
 
 class StartTests(unittest.TestCase):
@@ -428,6 +553,41 @@ class StartTests(unittest.TestCase):
         api.last_status = {"info": {"brand": "Xiaomi"}}
         tasks = self.started_tasks(api, {"backup": False})
         self.assertEqual([t.title for t in tasks], ["收尾"])
+
+    def test_start_hands_the_job_the_model_and_the_coverage(self):
+        api = app.Api(self._dir.name, runner=FakeRunner())
+        api.last_status = {"recipe_coverage": "部分"}
+        with patch.object(app.threading, "Thread", autospec=True):
+            result = api.start("SER", {"backup": False, "model": "M1"})
+        self.assertEqual(result, {"ok": True, "total": 1})
+        self.assertEqual((api.job.serial, api.job.model, api.job.total), ("SER", "M1", 1))
+        self.assertEqual(api.job.recipe_coverage, "部分")
+
+    def test_a_start_without_a_detection_leaves_the_coverage_empty(self):
+        # `Api.start()` 每次都显式传档位；默认值只对直接调调度器的宿主成立
+        api = app.Api(self._dir.name, runner=FakeRunner())
+        with patch.object(app.threading, "Thread", autospec=True):
+            api.dispatcher.start("SER", {"backup": False})
+        self.assertEqual(api.dispatcher.job.recipe_coverage, "")
+
+    def test_start_runs_the_work_on_a_daemon_thread(self):
+        api = app.Api(self._dir.name, runner=FakeRunner())
+        with patch.object(app.threading, "Thread", autospec=True) as thread:
+            api.start("SER", {"backup": False})
+        kwargs = thread.call_args.kwargs
+        self.assertIs(kwargs["target"].__func__, app.Dispatcher._work)
+        self.assertIs(kwargs["daemon"], True)
+        self.assertEqual([t.title for t in kwargs["args"][0]], ["收尾"])
+        thread.return_value.start.assert_called_once()
+
+    def test_the_job_is_built_with_the_planner_the_dispatcher_was_given(self):
+        # 手机版整段换掉 `plan_of`：`start()` 起的这一次执行要跟着换，不能退回模块默认（#1383）
+        api = app.Api(self._dir.name, runner=FakeRunner())
+        real, calls = api.dispatcher.plan_of, []
+        api.dispatcher.plan_of = lambda: calls.append(1) or real()
+        with patch.object(app.threading, "Thread", autospec=True):
+            api.start("SER", {"backup": False})
+        self.assertEqual(len(calls), 2, "一次是 start 收规格，一次是 Job 取同一个规划器")
 
 
 class DiagnosticsTests(unittest.TestCase):
