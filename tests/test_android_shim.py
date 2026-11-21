@@ -353,6 +353,21 @@ class BackgroundScreenTest(unittest.TestCase):
         cmd = screen.rewrite("dumpsys window | grep isKeyguardShowing")
         self.assertIn("mDisplayId=7[ (]", cmd)
         self.assertNotIn("isKeyguardShowing=false", cmd)
+        self.assertIn("on'; } | grep isKeyguardShowing", cmd, "不加锁屏回答，也不能多出别的字符")
+
+    def test_the_rewritten_queries_keep_their_structure(self):
+        """分段改写要原样拼回去：前缀、锁屏回答与收尾都不能被吃掉，否则读屏拿到的是别的命令。"""
+        unlocked = screen.rewrite("dumpsys window | grep isKeyguardShowing")
+        self.assertTrue(unlocked.startswith("{ dumpsys window displays | awk '/Display: mDisplayId=/"), unlocked)
+        self.assertIn("on'; echo '  isKeyguardShowing=false'; } | grep isKeyguardShowing", unlocked)
+        activity = screen.rewrite("dumpsys activity activities | grep topResumedActivity")
+        self.assertTrue(activity.startswith("dumpsys activity activities | awk '/^Display #/"), activity)
+        self.assertIn(")} on' | grep topResumedActivity", activity)
+
+    def test_an_uppercase_hex_flag_still_gets_the_task_bits(self):
+        """Vd 上的标记是十六进制：大写字母（0x…A…）也算，别只认小写。"""
+        self.assertEqual(screen.rewrite("am start -f 0x10A00000 -n a/.B"),
+                         "am start --display 7 -f 0x18a00000 -n a/.B")
 
     def test_untouched_without_background_screen(self):
         screen.active = None
@@ -461,6 +476,17 @@ class BackgroundScreenTest(unittest.TestCase):
             u2._Rpc().setText({}, "x")
 
 
+class ScreenStateTest(unittest.TestCase):
+    """刚建出来的屏：还没借出去、还没丢，标记按 Vd 报的原样存着（#1509）。"""
+
+    def test_a_fresh_screen_borrows_nothing_and_is_not_lost(self):
+        s = screen.Screen(7, "11")
+        self.assertEqual((s.display, s.sf, s.flags), (7, "11", 0))
+        self.assertEqual(s.holders, 0, "还没有入口借它，计数从 0 起")
+        self.assertIs(s.lost, False)
+        self.assertFalse(s.unlocked)
+
+
 class ScreenBridge:
     """screen.start() / stop() 用的假通道：按命令回答，按顺序记下调用。"""
 
@@ -468,23 +494,33 @@ class ScreenBridge:
         self.log, self.sf_id = log, sf_id
         self.pid = False        # PID_FILE 在不在
         self.stale = False      # 上一次的 Vd 还占着，SurfaceFlinger 里还有一块同名屏
+        self.stubborn = False   # kill 不掉的 Vd：拆除之后它那块屏还在
         self.built = False      # 本次的 Vd 起来了
         self.deciding_when_spawned = None   # 拉起 Vd 那一刻界面的说法：应当还在等结论
         self.cmds = []
+        self.calls = []         # (命令, stdin, 超时)：每条命令带的是什么参数
+        self.daemon_cmd = None
+        self.paths = "package:/data/app/x/base.apk\n"
+        self.size = "Physical size: 1080x2400\n"
+        self.density = "Physical density: 440\n"
+        self.dump_bytes = None  # SurfaceFlinger 回包的原始字节（喂坏字节用）
 
     def exec(self, cmd, stdin=None, timeout=None):
         self.cmds.append(cmd)
-        if cmd.startswith("kill $(cat"):
+        self.calls.append((cmd, stdin, timeout))
+        if "kill $(cat" in cmd and not self.stubborn:
             self.pid, self.stale = False, False     # 进程死了，它那块屏随之消失
         if cmd.startswith("pm path"):
-            out = "package:/data/app/x/base.apk"
+            out = self.paths
         elif cmd == "wm size":
-            out = "Physical size: 1080x2400"
+            out = self.size
         elif cmd == "wm density":
-            out = "Physical density: 440"
+            out = self.density
         elif cmd.startswith("cat /data/local/tmp/aac-vd.log"):
             out = self.log
         elif cmd.startswith("dumpsys SurfaceFlinger"):
+            if self.dump_bytes is not None:
+                return bridge.Result(0, self.dump_bytes, b"")
             out = ('Virtual Display 3\n  name="aac-bg"\n' if self.stale else "") + \
                   (f'Virtual Display {self.sf_id}\n  name="aac-bg"\n' if self.built else "")
         elif cmd.startswith("[ -f /data/local/tmp/aac-vd.pid ]"):
@@ -495,12 +531,52 @@ class ScreenBridge:
 
     def daemon(self, name, cmd):
         self.cmds.append(f"daemon {name}")
+        self.daemon_cmd = cmd
         self.deciding_when_spawned = screen.starting
         self.built, self.pid = True, True
         return True
 
     def stop_daemon(self, name):
         self.cmds.append(f"stop_daemon {name}")
+
+
+class FakeClock:
+    """建屏 / 清残留里的等待环用假钟：不真等，还能数出轮询了几次。"""
+
+    def __init__(self):
+        self.now = 0.0
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now = round(self.now + seconds, 6)     # 0.2 累加有浮点漂移，取整后截止时刻才判得准
+
+
+def fake_time(clock):
+    """把 screen 的等待环接到假钟上：用例不真等，卡在循环里的变异也当轮就有结论。"""
+    return mock.patch.object(screen, "time", clock)
+
+
+class ScreenSizeTest(unittest.TestCase):
+    """主屏的逻辑尺寸与密度：后台屏同尺寸；读不到时按 0 处理，让建屏直接放弃（#1509）。"""
+
+    def setUp(self):
+        self.saved = bridge._bridge
+        self.fake = ScreenBridge()
+        bridge._bridge = self.fake
+
+    def tearDown(self):
+        bridge._bridge = self.saved
+
+    def test_size_takes_the_last_match_and_the_last_number(self):
+        self.fake.size = "Physical size: 1080x2400\nOverride size: 720x1600\n"
+        self.fake.density = "Physical density: 440\nOverride density: 480\n"
+        self.assertEqual(screen._size(self.fake), (720, 1600, 480))
+
+    def test_missing_size_and_density_read_as_zero(self):
+        self.fake.size, self.fake.density = "", ""
+        self.assertEqual(screen._size(self.fake), (0, 0, 0))
 
 
 class ScreenLifecycleTest(unittest.TestCase):
@@ -511,6 +587,10 @@ class ScreenLifecycleTest(unittest.TestCase):
         screen.active, screen.starting = None, False
         self.fake = ScreenBridge()
         bridge._bridge = self.fake
+        self.clock = FakeClock()
+        patcher = fake_time(self.clock)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def tearDown(self):
         screen.active, screen.starting, bridge._bridge = self.saved
@@ -531,6 +611,7 @@ class ScreenLifecycleTest(unittest.TestCase):
         self.assertFalse(screen.starting, "建屏结束后界面不该还停在等结论的状态")
         self.assertTrue(s.unlocked)
         self.assertIn("daemon vd", self.fake.cmds)
+        self.assertIn("pm path com.ahuamiao.adcleaner", self.fake.cmds, "要按调用方给的包名找 APK")
         screen.stop()
         self.assertIsNone(screen.active)
         self.assertEqual(self.fake.cmds[-2], "stop_daemon vd")
@@ -539,11 +620,90 @@ class ScreenLifecycleTest(unittest.TestCase):
         self.fake.log = "DISPLAY 7 flags=0x1c9\n"
         self.assertFalse(screen.start("com.ahuamiao.adcleaner").unlocked)
 
+    def test_a_display_line_without_flags_reads_as_no_flags(self):
+        """降级档的 Vd 不一定打印 flags：这时按 0 算，不能替这块屏答「没锁」。"""
+        self.fake.log = "DISPLAY 7\n"
+        s = screen.start("com.ahuamiao.adcleaner")
+        self.assertEqual(s.flags, 0)
+        self.assertFalse(s.unlocked)
+
+    def test_display_zero_is_a_real_screen_not_a_failure(self):
+        """建屏失败时 Vd 打印 DISPLAY -1；0 是合法编号，不能被当成失败跳过。"""
+        self.fake.log = "DISPLAY 0 flags=0x1f5c9\n"
+        s = screen.start("com.ahuamiao.adcleaner")
+        self.assertEqual(s.display, 0)
+        self.assertEqual(screen.rewrite("input tap 1 2"), "input -d 0 tap 1 2")
+
+    def test_the_daemon_is_told_the_apk_size_and_density(self):
+        screen.start("com.ahuamiao.adcleaner")
+        self.assertIn("CLASSPATH=/data/app/x/base.apk", self.fake.daemon_cmd)
+        self.assertIn("com.ahuamiao.adcleaner.Vd 1080 2400 440", self.fake.daemon_cmd)
+        self.assertIn("> /data/local/tmp/aac-vd.log 2>&1", self.fake.daemon_cmd)
+
     def test_the_screen_is_deciding_while_vd_starts(self):
         """界面在结论出来前要一直问：这条状态只有 start() 里那一处置真。"""
         screen.start("com.ahuamiao.adcleaner")
         self.assertTrue(self.fake.deciding_when_spawned)
-        self.assertFalse(screen.starting)
+        self.assertIs(screen.starting, False, "界面读的是布尔字段，None 会在报文里变成 null")
+
+    def test_a_fresh_start_tears_nothing_down_twice(self):
+        """没有在跑的屏时不该走「拆掉已有的那块」：拆除命令只由清残留那一次发。"""
+        screen.start("com.ahuamiao.adcleaner")
+        self.assertEqual(self.fake.cmds.count("stop_daemon vd"), 1)
+
+    def test_every_shell_call_carries_a_timeout(self):
+        """通道卡住时每条命令都要靠超时回来：漏掉一个就把整段执行挂在手机上。"""
+        self.fake.pid, self.fake.stale = True, True
+        screen.start("com.ahuamiao.adcleaner")
+        screen.dead()
+        self.assertTrue(self.fake.calls)
+        for cmd, stdin, timeout in self.fake.calls:
+            self.assertIsNone(stdin, cmd)
+            self.assertEqual(timeout, 5 if cmd.startswith(f"cat {screen.LOG_FILE}") else 10, cmd)
+
+    def test_reclaim_waits_three_seconds_for_the_old_screen_to_vanish(self):
+        """#662：旧 Vd 杀不掉时不能马上建新屏——每 0.2 秒问一次 SurfaceFlinger，最多等 3 秒。"""
+        self.fake.pid, self.fake.stale, self.fake.stubborn = True, True, True
+        screen._reclaim()
+        polls = [c for c in self.fake.cmds if c.startswith("dumpsys SurfaceFlinger")]
+        self.assertEqual(len(polls), 15)
+        self.assertEqual(self.clock.now, 3.0)
+
+    def test_reclaim_reads_a_dump_that_is_not_clean_utf8(self):
+        """SurfaceFlinger 的回包不是干净 UTF-8 时按替换符读：一个坏字节不能让清残留抛错。"""
+        self.fake.pid, self.fake.stale, self.fake.stubborn = True, True, True
+        self.fake.dump_bytes = b'\xff\xfe\nVirtual Display 3\n  name="aac-bg"\n'
+        screen._reclaim()
+        polls = [c for c in self.fake.cmds if c.startswith("dumpsys SurfaceFlinger")]
+        self.assertEqual(len(polls), 15)
+
+    def test_a_surface_flinger_dump_with_bad_bytes_does_not_break_building(self):
+        self.fake.dump_bytes = b"\xff\xfe not utf-8\n"
+        self.assertIsNone(screen._build("com.ahuamiao.adcleaner"))
+
+    def test_build_gives_up_after_eight_seconds_without_a_display(self):
+        """Vd 起来了却不打印 DISPLAY：等 8 秒就放弃，别一直轮询日志。"""
+        self.fake.log = ""
+        self.assertIsNone(screen._build("com.ahuamiao.adcleaner"))
+        reads = [c for c in self.fake.cmds if c.startswith(f"cat {screen.LOG_FILE}")]
+        self.assertEqual(len(reads), 40)
+        self.assertEqual(self.clock.now, 8.0)
+
+    def test_no_base_apk_gives_up_before_starting_vd(self):
+        """拆分 APK 的机型只有 split_*.apk：找不到 base.apk 就别拉起 Vd。"""
+        self.fake.paths = "package:/data/app/x/split_config.arm64_v8a.apk\n"
+        self.assertIsNone(screen._build("com.ahuamiao.adcleaner"))
+        self.assertNotIn("daemon vd", self.fake.cmds)
+
+    def test_missing_size_gives_up_before_starting_vd(self):
+        self.fake.size = ""
+        self.assertIsNone(screen._build("com.ahuamiao.adcleaner"))
+        self.assertNotIn("daemon vd", self.fake.cmds)
+
+    def test_missing_density_gives_up_before_starting_vd(self):
+        self.fake.density = ""
+        self.assertIsNone(screen._build("com.ahuamiao.adcleaner"))
+        self.assertNotIn("daemon vd", self.fake.cmds)
 
     def test_second_start_reuses_the_running_screen(self):
         first = screen.start("com.ahuamiao.adcleaner")
@@ -661,6 +821,9 @@ class InFrontTest(unittest.TestCase):
         self.saved = (main.native, bridge._bridge, screen.active, screen.starting, main.SESSION)
         main.native, bridge._bridge, screen.active, screen.starting = self.native, self.fake, None, False
         main.SESSION = main.Session()
+        patcher = fake_time(FakeClock())
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def tearDown(self):
         main.native, bridge._bridge, screen.active, screen.starting, main.SESSION = self.saved
