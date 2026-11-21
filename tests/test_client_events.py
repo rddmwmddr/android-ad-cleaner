@@ -51,6 +51,12 @@ class LogTests(Base):
             self.api._log(event("locked"))
         self.assertEqual(chime.call_count, 1)
 
+    def test_only_the_line_feed_is_trimmed(self):
+        # 日志行按原样留存：只去掉读回来的行尾换行，别的空白是引擎输出的一部分
+        self.api._log("人话  ")
+        self.api._log("后缀X")
+        self.assertEqual(self.api.job.lines, ["人话  ", "后缀X"])
+
     def test_the_human_sentence_alone_no_longer_changes_state(self):
         self.api._log("⏸ 已暂停：现在可以操作手机。")
         self.api._log("  ! 手机锁屏了：请解锁手机并保持亮屏，解锁后自动继续（最多等 90 秒）")
@@ -67,6 +73,32 @@ class LogTests(Base):
         self.api._log(PREFIX + json.dumps({"kind": "mystery"}))
         self.assertEqual(self.api.job.lines, [])
         self.assertEqual(self.api.job.step_events, set())
+
+
+class ExplicitJobTests(Base):
+    """工作线程把自己那一次的 `Job` 传进来：它比 `Api.job` 活得久，收尾时不能写进下一次执行。"""
+
+    def test_a_line_goes_to_the_job_the_worker_named(self):
+        other = job_stub(serial="next")
+        self.api._log("人话", other)
+        self.assertEqual(other.lines, ["人话"])
+        self.assertEqual(self.api.job.lines, [])
+
+    def test_an_event_without_a_named_job_lands_in_the_current_one(self):
+        self.api._event({"kind": "paused"})
+        self.assertTrue(self.api.job.paused)
+
+    def test_an_event_goes_to_the_job_the_worker_named(self):
+        other = job_stub(serial="next")
+        self.api._log(event("paused"), other)
+        self.assertTrue(other.paused)
+        self.assertFalse(self.api.job.paused)
+
+    def test_a_payload_goes_to_the_job_the_worker_named(self):
+        other = job_stub(serial="next")
+        self.api._log("#aac:payload 骨架 v1", other)
+        self.assertEqual(other.payloads, ["骨架 v1"])
+        self.assertEqual(self.api.job.payloads, [])
 
 
 class StepPauseTests(Base):

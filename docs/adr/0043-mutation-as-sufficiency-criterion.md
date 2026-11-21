@@ -12,7 +12,7 @@
 
 ### 判据从「有测试跑过」换成「改动行产生的 mutant 全部被杀死」
 
-mutmut 3.8 对代码做小改动（mutant）再跑测试：测试仍然全绿的那一处改动就是存活。判据落在改动面而不是整个仓库——PR 上 `python devtools/mutation.py --since <base>` 只跑 `git diff --name-only` 里落进映射表（`devtools/mutation_scope.py`，15 个模块）的那些，行级筛选交给 mutmut 自己的内容哈希 + span 缓存（实测单行 0.75 s，单模块冷缓存 8.1 s）。
+mutmut 3.8 对代码做小改动（mutant）再跑测试：测试仍然全绿的那一处改动就是存活。判据落在改动面而不是整个仓库——PR 上 `python devtools/mutation.py --since <base>` 只跑 `git diff --name-only` 里落进映射表（`devtools/mutation_scope.py`，16 个模块）的那些，行级筛选交给 mutmut 自己的内容哈希 + span 缓存（实测单行 0.75 s，单模块冷缓存 8.1 s）。
 
 门槛是 100%，不设比例：允许比例会立刻出现卡阈值的写法。存活之外，`no_tests`（没有测试碰到这处变异）、`suspicious`、`segfault` 同样返红。映射表把测试范围收窄到「执行过该模块的那些文件」，因为它决定尺子的宽度——窄了会把没被选中的测试能杀死的 mutant 报成存活，所以 `mutation_scope` 除 `reader` 外每一行由 coverage 的 `dynamic_context` 矩阵量出来，不按 import 反推（`reader` 那行只为让 mutmut 有得收集，见 Consequences）。
 
@@ -49,9 +49,9 @@ mutmut 3.8 对代码做小改动（mutant）再跑测试：测试仍然全绿的
 
 ## Consequences
 
-- **判据只在映射表内说话**：表当前是 15 个模块（mypy 严格档的 12 个加 `catalog/schema.py`，加 `gui/tasks.py` 与 `gui/adb.py`），表外的改动只看得见、不判。这是刻意的收窄：每一行都要用覆盖矩阵量出来，收全仓会让「尺子有多宽」变成不可复核的东西。
+- **判据只在映射表内说话**：表当前是 16 个模块（mypy 严格档的 12 个加 `catalog/schema.py`，加 `gui/tasks.py`、`gui/adb.py` 与 `gui/dispatcher.py`），表外的改动只看得见、不判。这是刻意的收窄：每一行都要用覆盖矩阵量出来，收全仓会让「尺子有多宽」变成不可复核的东西。
 - **未清完的模块会挡住所有改它的 PR**：判据是「该模块存活 = 0」，存量存活没清完之前，改到它的 PR 会红。那是清理票要消掉的东西，不是误报。
 - **`reader.py` 没有可变异节点**：`Reader` 是 Protocol、方法体只有 `...`，保留一行映射只为让 mutmut 有得收集；它的 `no_tests` 是预期结论，靠代码里没人碰它来满足，不硬补测试。
 - **变异副本里跑不通的测试要摘掉**：副本只有 `src/`，起子进程、读 `android/` 源码、整仓扫文本的用例都会红，而红掉的用例会把碰过同一函数的 mutant 误判成杀死。整份文件跑不通的不进表，个别类跑不通的按类 `--deselect`（`mutation_scope.UNUSABLE`）。
-- **待办**：`gui/` 余下四份实体模块（`dispatcher` / `reporter` / `updates` / `update_install`，仍归 #1429）与手机版替换层（#1430）尚未纳入，缺席是登记的，不是遗忘的；纳入之前，它们的行为变化仍由原规则人工守。
+- **待办**：`gui/` 余下三份实体模块（`reporter` / `updates` / `update_install`，仍归 #1429）与手机版替换层（#1430）尚未纳入，缺席是登记的，不是遗忘的；纳入之前，它们的行为变化仍由原规则人工守。
 - **不建台账、不设周期 job**：存量的终态是可验证的数字（存活 = 0），不是一份「已知存活」清单；增量由 PR 长期维持，没有负责人就不会荒废。

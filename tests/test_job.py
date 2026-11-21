@@ -3,10 +3,49 @@ import tempfile
 import threading
 import time
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from fixtures import FakeRunner
 from gui import app
+
+
+class JobDefaultsTests(unittest.TestCase):
+    """不经过 `Dispatcher`、直接构造 `Job` 的通路（用例、手机版）只有这些默认值可依（ADR-0010）。"""
+
+    def test_a_fresh_job_is_empty_and_running(self):
+        job = app.Job(t0=0)
+        self.assertEqual((job.serial, job.model, job.total, job.recipe_coverage), ("", "", 0, ""))
+        self.assertEqual((job.idx, job.title), (0, ""))
+        self.assertEqual((job.lines, job.results, job.payloads, job.failed_steps), ([], [], [], []))
+        self.assertEqual(job.step_events, set())
+        self.assertIsNone(job.proc)
+        self.assertFalse(job.cancel)
+        self.assertFalse(job.paused)
+        self.assertFalse(job.pause)
+        self.assertEqual(job.recovery, "")
+        self.assertTrue(job.running)
+
+    def test_the_start_time_is_the_clock_only_when_none_is_given(self):
+        with patch.object(app.time, "time", return_value=500):
+            self.assertEqual(app.Job().t0, 500)
+            self.assertEqual(app.Job(t0=7).t0, 7)
+
+
+class AddResultTests(unittest.TestCase):
+    def test_a_retried_row_keeps_the_title_of_the_previous_round(self):
+        # 标题说的是用户勾了哪几段，重试轮只跑其中一两段，不能按这一轮重算（#638）
+        job = app.Job(serial="s", t0=0)
+        job.results.append({"kind": "recipe", "title": "关闭各 App 里的广告开关（2 / 3 段）", "rc": 1})
+        job.add_result({"kind": "recipe", "title": "关闭各 App 里的广告开关", "rc": 0})
+        self.assertEqual(job.results, [
+            {"kind": "recipe", "title": "关闭各 App 里的广告开关（2 / 3 段）", "rc": 0}])
+
+    def test_a_previous_row_without_a_title_takes_the_new_one(self):
+        # 上一轮那一行没有标题时，取新行的；不能把标题抹成空
+        job = app.Job(serial="s", t0=0)
+        job.results.append({"kind": "recipe"})
+        job.add_result({"kind": "recipe", "title": "重试", "rc": 0})
+        self.assertEqual(job.results[0]["title"], "重试")
 
 
 class SnapshotTests(unittest.TestCase):
@@ -16,6 +55,25 @@ class SnapshotTests(unittest.TestCase):
         snap = job.snapshot(2)
         self.assertEqual(snap["lines"], ["三"])
         self.assertEqual(snap["next"], 3)
+
+    def test_snapshot_carries_every_line_by_default(self):
+        job = app.Job(serial="s", t0=0)
+        job.lines.extend(["一", "二", "三"])
+        snap = job.snapshot()
+        self.assertEqual(snap["lines"], ["一", "二", "三"])
+        self.assertEqual(snap["next"], 3)
+
+    def test_the_snapshot_dict_is_the_frontend_contract(self):
+        with patch.object(app.time, "time", return_value=1000):
+            job = app.Job(serial="s", total=2, t0=990)
+            job.lines = ["一", "二"]
+            job.results = [{"kind": "backup", "rc": 0}]
+            job.idx, job.title, job.recovery = 1, "备份", "再试一次"
+            self.assertEqual(job.snapshot(), {
+                "running": True, "lines": ["一", "二"], "next": 2, "idx": 1, "total": 2,
+                "title": "备份", "results": [{"kind": "backup", "rc": 0}], "sec": 10,
+                "cancel": False, "recovery": "再试一次", "recipe_coverage": "",
+                "pause": False, "paused": False, "retry": 0})
 
     def test_snapshot_carries_the_pause_flags(self):
         job = app.Job(serial="s", t0=0)
@@ -48,6 +106,36 @@ class PollTests(unittest.TestCase):
     def test_poll_before_any_run_is_idle(self):
         with tempfile.TemporaryDirectory() as directory:
             self.assertEqual(app.Api(directory).poll(), {"running": False, "lines": [], "next": 0})
+
+    def test_poll_starts_at_the_first_line_by_default(self):
+        # `Api.poll()` 每次都显式传 since；默认值只对直接调调度器的宿主成立，所以这里直接问它
+        with tempfile.TemporaryDirectory() as directory:
+            api = app.Api(directory)
+            api.job = app.Job(serial="s", t0=0)
+            api.job.lines.extend(["一", "二"])
+            api.job.running = False
+            self.assertEqual(api.dispatcher.poll()["lines"], ["一", "二"])
+            self.assertEqual(api.dispatcher.poll()["next"], 2)
+
+    def test_poll_hides_the_coverage_note_while_running(self):
+        # 结果页还没出来，这一行没有意义（#1188）；键仍在，前端不必判有没有
+        with tempfile.TemporaryDirectory() as directory:
+            api = app.Api(directory)
+            api.job = app.Job(serial="s", t0=0)
+            self.assertEqual(api.poll()["coverage_note"], "")
+            self.assertEqual(api.poll()["results"], [])
+
+    def test_poll_hands_the_note_function_the_desktop_host_explicitly(self):
+        # `on_phone` 只影响措辞；宿主显式传 False，不读环境——用户 shell 里导出 AAC_HOST=phone
+        # 不该改桌面措辞（#747）
+        with tempfile.TemporaryDirectory() as directory:
+            api = app.Api(directory)
+            api.job = app.Job(serial="s", t0=0)
+            api.job.running = False
+            note = Mock(return_value="")
+            api.dispatcher.coverage_note = Mock(note=note)
+            self.assertEqual(api.poll()["coverage_note"], "")
+        self.assertEqual(note.call_args.kwargs, {"on_phone": False})
 
     def test_diagnostics_shows_results_that_poll_hides_while_running(self):
         # 执行中点「复制完整诊断」要看已完成步骤；界面轮询执行中不显示结果

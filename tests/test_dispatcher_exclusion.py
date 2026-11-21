@@ -3,9 +3,11 @@
 手机版上两件事都被 `in_front()` 包着（开前台服务、悬浮胶囊、后台屏）。以前还原不看是否在执行：
 执行页「更多 → 还原改动」照样能点，还原先结束就把执行的保活撤了（小米会冻结它），两边还在同一块屏上点按。
 """
+import os
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
 from fixtures import FakeRunner, job_stub
 from gui import app
@@ -88,6 +90,57 @@ class RestoreExclusionTests(unittest.TestCase):
         self.assertEqual(self.api.dispatcher.claim("还原"), "", "出错后位置要放出来")
 
 
+class StartRefusalTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.api = app.Api(self.tmp.name, runner=FakeRunner())
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_a_fresh_dispatcher_has_no_job_and_no_side_operation(self):
+        self.assertIsNone(self.api.dispatcher.job)
+        self.assertEqual(self.api.dispatcher.side, "")
+        self.assertFalse(self.api.dispatcher.busy())
+
+    def test_a_second_start_is_refused(self):
+        self.api.dispatcher.job = job_stub(running=True)
+        self.assertEqual(self.api.dispatcher.start("test", {"backup": False}),
+                         {"error": "已有任务在运行"})
+
+    def test_a_start_is_refused_while_a_restore_is_going(self):
+        self.api.dispatcher.side = "还原"
+        self.assertEqual(self.api.dispatcher.start("test", {"backup": False}),
+                         {"error": "「还原」还没做完，请稍后再开始"})
+
+
+class PauseMarkerTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.api = app.Api(self.tmp.name, runner=FakeRunner())
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_pause_writes_an_empty_marker_where_the_engine_looks(self):
+        # 引擎按这个文件停，内容不参与判断；客户端按仓库口径写空 UTF-8
+        self.api.dispatcher.job = job_stub(running=True)
+        written = []
+        with patch.object(app.Path, "write_text", autospec=True,
+                          side_effect=lambda path, data, **kw: written.append((data, kw))):
+            self.assertTrue(self.api.pause())
+        self.assertEqual(written, [("", {"encoding": "utf-8"})])
+        self.assertTrue(self.api.dispatcher.job.pause)
+
+    def test_resume_clears_the_marker_and_the_flag(self):
+        self.api.dispatcher.job = job_stub(running=True)
+        self.api.pause()
+        self.assertTrue(os.path.exists(self.api.data.pause))
+        self.assertIs(self.api.resume(), True)
+        self.assertFalse(os.path.exists(self.api.data.pause))
+        self.assertFalse(self.api.dispatcher.job.pause)
+
+
 class StopPauseTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -105,6 +158,11 @@ class StopPauseTests(unittest.TestCase):
     def test_pause_refused_after_stop(self):
         self.api.dispatcher.job = job_stub(running=True, cancel=True)
         self.assertFalse(self.api.pause())
+
+    def test_stop_on_a_running_job_reports_success(self):
+        self.api.dispatcher.job = job_stub(running=True)
+        self.assertIs(self.api.stop(), True)
+        self.assertTrue(self.api.dispatcher.job.cancel)
 
     def wait_for_the_dispatcher_lock(self, call):
         """别人持着锁时这条调用必须等：立刻返回就说明「取 job、判 running、置标记」不在锁里。"""
