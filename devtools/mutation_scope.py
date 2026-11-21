@@ -210,6 +210,7 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
     "android/app/src/main/python/aac_android/view.py": (
         "tests/test_android_view.py", "tests/test_android_shim.py", "tests/test_summary.py",
     ),
+    "android/app/src/main/python/aac_android/adb.py": ("tests/test_android_shim.py",),
 }
 
 # 变异副本里跑不通的测试，按 pytest node id 摘掉。整份文件都跑不通的（`test_rules_guards`

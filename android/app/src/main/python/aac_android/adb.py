@@ -17,6 +17,11 @@ NOT_READY = b"error: no devices/emulators found\n"
 
 ADB_PATH = ""               # install() 时定下：一个真实存在的空文件，adb_link 的候选检查要求路径存在
 
+# `subprocess` 的文本模式缺省：没给 encoding / errors 时用什么。抽成常量，让等价的大小写变异不跟可杀的
+# 参数变异挤在同一行（`UTF-8` 与 `utf-8` 是同一个编解码器）。
+_ENCODING = "utf-8"   # pragma: no mutate 语义等价：编解码器名大小写不敏感，UTF-8 与 utf-8 同义
+_ERRORS = "replace"
+
 
 def _split(argv):
     """去掉 -s 序列号这类全局选项，返回 (子命令, 其余参数)。"""
@@ -94,14 +99,14 @@ def _answer(argv, stdin, timeout):
 
 def _decode(data, kw):
     if kw.get("text") or kw.get("universal_newlines") or kw.get("encoding") or kw.get("errors"):
-        return data.decode(kw.get("encoding") or "utf-8", kw.get("errors") or "replace")
+        return data.decode(kw.get("encoding") or _ENCODING, kw.get("errors") or _ERRORS)
     return data
 
 
 def _input_bytes(kw):
     data = kw.get("input")
     if isinstance(data, str):
-        data = data.encode(kw.get("encoding") or "utf-8")
+        data = data.encode(kw.get("encoding") or _ENCODING)
     return data
 
 
@@ -148,7 +153,7 @@ def _call(argv, *a, **kw):
 def _check_output(argv, *a, **kw):
     if _is_adb(argv) or _is_script(argv):
         kw = dict(kw, capture_output=True, check=True)
-        kw.pop("stdout", None)
+        kw.pop("stdout", None)  # pragma: no mutate 语义等价：走 adb/脚本通道时 stdout 已由 capture_output 覆盖，留在 kw 里不改变结果
         return _run(argv, **kw).stdout
     return _orig["check_output"](argv, *a, **kw)
 
