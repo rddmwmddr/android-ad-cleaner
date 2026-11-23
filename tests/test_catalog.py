@@ -2863,5 +2863,832 @@ class StartOrSkipLandingTests(unittest.TestCase):
         self.assertNotIsInstance(caught.exception, recipe_runtime.SkipStep)
 
 
+class FlushCountingStdout(io.StringIO):
+    """数 flush：解释器打人话的每一句都要 `flush=True`，客户端按行读管道才立刻看得见。"""
+
+    def __init__(self):
+        super().__init__()
+        self.flushes = 0
+
+    def flush(self):
+        self.flushes += 1
+        super().flush()
+
+
+def _spy_py():
+    """本机例外 `.py`：不在 `LIBRARY` 里的助手，名字只能经装载器给的命名空间解析。"""
+    return (
+        "def seed_lib(p, rt):\n"
+        "    return 'SEED'\n"
+        "def empty_lib(p, rt):\n"
+        "    return ''\n"
+        "def spy_let(p, rt, *args, **kwargs):\n"
+        "    p.let_seen = (rt, args, kwargs)\n"
+        "    return 'GOT'\n"
+        "def spy_lib(p, rt, *args, **kwargs):\n"
+        "    p.lib_seen = (rt, args, kwargs)\n"
+        "def spy_req(p, rt, *args, **kwargs):\n"
+        "    p.req_seen = (rt, args, kwargs)\n"
+        "    return False\n"
+        "def spy_ret(p, rt, *args, **kwargs):\n"
+        "    p.ret_seen = (rt, args, kwargs)\n"
+        "    return getattr(p, 'ret_result', True)\n"
+        "def spy_code(p, rt, *args):\n"
+        "    p.code_seen = (rt, args)\n"
+        "def spy_if(p, rt, *args, **kwargs):\n"
+        "    p.if_seen = (rt, args, kwargs)\n"
+        "    return getattr(p, 'if_result', True)\n"
+        "def spy_any(p, rt, *args, **kwargs):\n"
+        "    p.any_seen = (rt, args, kwargs)\n"
+        "    return getattr(p, 'any_result', True)\n"
+        "def hit(p, rt):\n"
+        "    p.hits = getattr(p, 'hits', 0) + 1\n"
+        "    p.hit_rt = rt\n"
+    )
+
+
+class ArgExpressionTests(unittest.TestCase):
+    """实参里的动态取值在每个收实参的 op 上都照原样求值（#1373、#1371）。
+
+    `{expr = "focus"}` 读手机、`{expr = "var"}` 读本段绑定、`{ops = […]}` 包成回调交给库——
+    这三样是解释器唯一会去读 `p` / `rt` / 命名空间的地方，换成别的东西都不该通过。库助手一律
+    写成例外 `.py` 里的函数：名字先查 `LIBRARY` 再查命名空间的那条路才走得到。"""
+
+    PY = _spy_py()
+
+    def _run(self, toml, **patches):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml, self.PY)
+            phone.focus = lambda *a, **k: "焦点"
+            phone.tree = lambda: "树"
+            for name, value in patches.items():
+                setattr(phone, name, value)
+            with contextlib.redirect_stdout(io.StringIO()):
+                recipe.run()
+        return recipe, phone
+
+    LET = ('[[segment]]\nname="a"\nops=[\n'
+           '{kind="let", name="seed", lib="seed_lib"},\n'
+           '{kind="let", name="got", lib="spy_let", args=["字面", {expr="focus"},'
+           ' {expr="var", name="seed"}, {ops=[{kind="code", name="hit"}]}],'
+           ' kwargs={page={expr="tree"}, bound={expr="var", name="seed"},'
+           ' cb={ops=[{kind="code", name="hit"}]}, size=3}},\n'
+           '{kind="lib", name="spy_lib", args=[{expr="var", name="got"},'
+           ' {ops=[{kind="code", name="hit"}]}],'
+           ' kwargs={cb={ops=[{kind="code", name="hit"}]}}},\n'
+           ']\n')
+
+    def test_let_binds_the_return_of_every_argument_form(self):
+        recipe, phone = self._run(self.LET)
+        rt, args, kwargs = phone.let_seen
+        self.assertIs(rt, recipe.rt)
+        self.assertEqual(args[:3], ("字面", "焦点", "SEED"))
+        callback = kwargs.pop("cb")
+        self.assertEqual(kwargs, {"page": "树", "bound": "SEED", "size": 3})
+        args[3]()
+        callback()
+        self.assertEqual(phone.hits, 2, "实参块回调没跑到，或块里的 op 拿不到命名空间")
+
+    def test_lib_forwards_variable_references_and_callback_blocks(self):
+        recipe, phone = self._run(self.LET)
+        rt, args, kwargs = phone.lib_seen
+        self.assertIs(rt, recipe.rt)
+        self.assertEqual(args[0], "GOT")
+        args[1]()
+        kwargs["cb"]()
+        self.assertEqual(phone.hits, 2)
+
+    def test_code_forwards_the_same_argument_forms(self):
+        toml = ('[[segment]]\nname="a"\nops=[\n'
+                '{kind="let", name="seed", lib="seed_lib"},\n'
+                '{kind="code", name="spy_code", args=["字面", {expr="focus"},'
+                ' {expr="var", name="seed"}, {ops=[{kind="code", name="hit"}]}]},\n]\n')
+        recipe, phone = self._run(toml)
+        rt, args = phone.code_seen
+        self.assertIs(rt, recipe.rt)
+        self.assertEqual(args[:3], ("字面", "焦点", "SEED"))
+        args[3]()
+        self.assertEqual(phone.hits, 1)
+
+    REQUIRE_LIB = ('[[segment]]\nname="a"\nops=[\n'
+                   '{kind="let", name="seed", lib="seed_lib"},\n'
+                   '{kind="require_lib", name="spy_req", args=["字面", {expr="focus"},'
+                   ' {expr="var", name="seed"}, {ops=[{kind="code", name="hit"}]}],'
+                   ' kwargs={page={expr="tree"}, bound={expr="var", name="seed"},'
+                   ' cb={ops=[{kind="code", name="hit"}]}},'
+                   ' miss_print="不成立", miss_back=2},\n]\n')
+
+    def test_require_lib_forwards_arguments_and_backs_out_on_miss(self):
+        backs = []
+        recipe, phone = self._run(self.REQUIRE_LIB, back=lambda n=1: backs.append(n))
+        rt, args, kwargs = phone.req_seen
+        self.assertIs(rt, recipe.rt)
+        self.assertEqual(args[:3], ("字面", "焦点", "SEED"))
+        callback = kwargs.pop("cb")
+        self.assertEqual(kwargs, {"page": "树", "bound": "SEED"})
+        args[3]()
+        callback()
+        self.assertEqual(phone.hits, 2)
+        self.assertEqual(backs, [2])
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+
+    RETURN_LIB = ('[[segment]]\nname="a"\nops=[\n'
+                  '{kind="let", name="seed", lib="seed_lib"},\n'
+                  '{kind="return_lib", name="spy_ret", args=["字面", {expr="focus"},'
+                  ' {expr="var", name="seed"}, {ops=[{kind="code", name="hit"}]}],'
+                  ' kwargs={page={expr="tree"}, bound={expr="var", name="seed"},'
+                  ' cb={ops=[{kind="code", name="hit"}]}}},\n]\n')
+
+    def test_return_lib_forwards_arguments_and_takes_the_result(self):
+        recipe, phone = self._run(self.RETURN_LIB, ret_result=True)
+        rt, args, kwargs = phone.ret_seen
+        self.assertIs(rt, recipe.rt)
+        self.assertEqual(args[:3], ("字面", "焦点", "SEED"))
+        callback = kwargs.pop("cb")
+        self.assertEqual(kwargs, {"page": "树", "bound": "SEED"})
+        args[3]()
+        callback()
+        self.assertEqual(phone.hits, 2)
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+
+    def test_return_lib_without_arguments_takes_the_result_as_the_outcome(self):
+        recipe, _phone = self._run(
+            '[[segment]]\nname="a"\nops=[{kind="return_lib", name="spy_ret"}]\n',
+            ret_result=True)
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+
+    START_OR_SKIP = ('[[segment]]\nname="a"\nops=[\n'
+                     '{kind="let", name="seed", lib="seed_lib"},\n'
+                     '{kind="start_or_skip", pkg="p", activity="a", dead_ends=%s,'
+                     ' reason="r"},\n]\n')
+
+    def test_start_or_skip_forwards_dead_ends_built_from_expressions(self):
+        cases = (
+            ('{expr="focus"}', "焦点", 0),
+            ('{expr="var", name="seed"}', "SEED", 0),
+            ('{ops=[{kind="code", name="hit"}]}', None, 1),
+        )
+        for dead_ends, expected, hits in cases:
+            with self.subTest(dead_ends=dead_ends):
+                seen = []
+                with tempfile.TemporaryDirectory() as tmp:
+                    recipe, phone, _calls = _load_tmp(
+                        tmp, self.START_OR_SKIP % dead_ends, self.PY)
+                    phone.focus = lambda *a, **k: "焦点"
+                    recipe.rt.start_or_skip = lambda pkg, activity, _seen=seen, **kw: _seen.append(
+                        (pkg, activity, kw))
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        recipe.run()
+                pkg, activity, kw = seen[0]
+                self.assertEqual((pkg, activity), ("p", "a"))
+                self.assertEqual(kw["reason"], "r")
+                if expected is None:
+                    kw["dead_ends"]()
+                    self.assertEqual(phone.hits, hits)
+                else:
+                    self.assertEqual(kw["dead_ends"], expected)
+
+    PAGE = ('[[segment]]\nname="a"\nops=[\n'
+            '{kind="let", name="seed", lib="seed_lib"},\n'
+            '{kind="page", args=["落点", {expr="focus"}, {expr="var", name="seed"},'
+            ' {ops=[{kind="code", name="hit"}]}], kwargs={timeout={expr="tree"},'
+            ' pkg={expr="var", name="seed"}, cb={ops=[{kind="code", name="hit"}]}}},\n]\n')
+
+    def test_page_forwards_positional_and_keyword_forms(self):
+        seen = []
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.PAGE, self.PY)
+            phone.focus = lambda *a, **k: "焦点"
+            phone.tree = lambda: "树"
+            recipe.rt.page = lambda *a, **kw: seen.append((a, kw))
+            with contextlib.redirect_stdout(io.StringIO()):
+                recipe.run()
+        args, kwargs = seen[0]
+        self.assertEqual(args[:3], ("落点", "焦点", "SEED"))
+        callback = kwargs.pop("cb")
+        self.assertEqual(kwargs, {"timeout": "树", "pkg": "SEED"})
+        args[3]()
+        callback()
+        self.assertEqual(phone.hits, 2)
+
+    EXPECT = ('[[segment]]\nname="a"\nops=[\n'
+              '{kind="let", name="seed", lib="seed_lib"},\n'
+              '{kind="require_expect", calls=[{args=[{expr="focus"}, {expr="var", name="seed"},'
+              ' {ops=[{kind="code", name="hit"}]}],'
+              ' kwargs={timeout={expr="tree"}, bound={expr="var", name="seed"},'
+              ' cb={ops=[{kind="code", name="hit"}]}}}],'
+              ' miss_print="没开"},\n]\n')
+
+    def test_require_expect_forwards_arguments_built_from_expressions(self):
+        seen = []
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, self.EXPECT, self.PY)
+            phone.focus = lambda *a, **k: "焦点"
+            phone.tree = lambda: "树"
+            phone.expect_page = lambda *a, **kw: seen.append((a, kw)) or True
+            with contextlib.redirect_stdout(io.StringIO()):
+                recipe.run()
+        args, kwargs = seen[0]
+        self.assertEqual(args[:2], ("焦点", "SEED"))
+        self.assertEqual((kwargs["timeout"], kwargs["bound"]), ("树", "SEED"))
+        args[2]()
+        kwargs["cb"]()
+        self.assertEqual(phone.hits, 2)
+
+    IF_LIB = ('[[segment]]\nname="a"\nops=[\n'
+              '{kind="let", name="seed", lib="seed_lib"},\n'
+              '{kind="if_lib", name="spy_if", args=["字面", {expr="focus"},'
+              ' {expr="var", name="seed"}, {ops=[{kind="code", name="hit"}]}],'
+              ' kwargs={page={expr="tree"}, bound={expr="var", name="seed"},'
+              ' cb={ops=[{kind="code", name="hit"}]}}, ops=[{kind="code", name="hit"}],'
+              ' else_ops=[{kind="code", name="hit"}]},\n]\n')
+
+    def test_if_lib_forwards_arguments_and_runs_the_else_block(self):
+        recipe, phone = self._run(self.IF_LIB, if_result=False)
+        rt, args, kwargs = phone.if_seen
+        self.assertIs(rt, recipe.rt)
+        self.assertEqual(args[:3], ("字面", "焦点", "SEED"))
+        callback = kwargs.pop("cb")
+        self.assertEqual(kwargs, {"page": "树", "bound": "SEED"})
+        args[3]()
+        callback()
+        self.assertEqual(phone.hits, 3, "实参回调一次 + 关键字回调一次 + else 块一次")
+        self.assertIs(phone.hit_rt, recipe.rt)
+
+    IF_ANY = ('[[segment]]\nname="a"\nops=[\n'
+              '{kind="let", name="seed", lib="seed_lib"},\n'
+              '{kind="if_lib_any", calls=[{name="spy_any", args=["字面", {expr="focus"},'
+              ' {expr="var", name="seed"}, {ops=[{kind="code", name="hit"}]}],'
+              ' kwargs={page={expr="tree"}, bound={expr="var", name="seed"},'
+              ' cb={ops=[{kind="code", name="hit"}]}}}], ops=[{kind="code", name="hit"}],'
+              ' else_ops=[{kind="code", name="hit"}]},\n]\n')
+
+    def test_if_lib_any_forwards_arguments_and_runs_the_else_block(self):
+        recipe, phone = self._run(self.IF_ANY, any_result=False)
+        rt, args, kwargs = phone.any_seen
+        self.assertIs(rt, recipe.rt)
+        self.assertEqual(args[:3], ("字面", "焦点", "SEED"))
+        callback = kwargs.pop("cb")
+        self.assertEqual(kwargs, {"page": "树", "bound": "SEED"})
+        args[3]()
+        callback()
+        self.assertEqual(phone.hits, 3, "实参回调一次 + 关键字回调一次 + else 块一次")
+        self.assertIs(phone.hit_rt, recipe.rt)
+
+    def test_an_unknown_expression_names_itself_in_the_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="lib", name="spy_lib",'
+                     ' args=[{expr="bogus"}]}]\n', _spy_py())
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                recipe.run()
+        self.assertEqual(recipe.rt.failed_steps, ["a"])
+        self.assertIn("未知的实参表达式 expr='bogus'", out.getvalue())
+
+
+class InterpreterDefaultsTests(unittest.TestCase):
+    """op 的缺省形态：不写 `scrolls` / `ops` / `else_ops` 时下发什么、走哪一支。"""
+
+    def _run(self, toml, py_text=None, **patches):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml, py_text)
+            for name, value in patches.items():
+                setattr(phone, name, value)
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                recipe.run()
+        return recipe, phone, out.getvalue()
+
+    def test_entry_defaults_its_scrolls_to_six(self):
+        seen = []
+        self._run('[[segment]]\nname="a"\nops=[{kind="entry", text="设置"},'
+                  ' {kind="entry", text="隐私", scrolls=4}]\n',
+                  entry=lambda text, **kw: seen.append((text, kw)) or True)
+        self.assertEqual(seen, [("设置", {"scrolls": 6}), ("隐私", {"scrolls": 4})])
+
+    def test_require_entry_misses_with_the_default_scrolls_and_backs_out(self):
+        seen, backs = [], []
+        recipe, _phone, out = self._run(
+            '[[segment]]\nname="a"\nops=[{kind="require_entry", text="设置",'
+            ' miss_print="没有设置", miss_back=2}, {kind="back", n=1}]\n',
+            entry=lambda text, **kw: seen.append((text, kw)) or False,
+            back=lambda n=1: backs.append(n))
+        self.assertEqual(seen, [("设置", {"scrolls": 6})])
+        self.assertEqual(backs, [2])
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+        self.assertIn("没有设置", out)
+
+    def test_gated_stops_at_the_first_missing_entry(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="gated", entries=["甲", "乙"],'
+                ' ops=[{kind="code", name="hit"}]}]\n')
+        seen = []
+        recipe, phone, _out = self._run(
+            toml, _spy_py(), entry=lambda text, **kw: seen.append((text, kw)) or text == "甲")
+        self.assertEqual(seen, [("甲", {"scrolls": 6}), ("乙", {"scrolls": 6})])
+        self.assertFalse(hasattr(phone, "hits"), "有一处没认到就不该进块")
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+
+    def test_gated_runs_the_block_when_every_entry_is_found(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="gated", entries=["甲", "乙"], scrolls=3,'
+                ' ops=[{kind="code", name="hit"}]}]\n')
+        seen = []
+        recipe, phone, _out = self._run(
+            toml, _spy_py(), entry=lambda text, **kw: seen.append((text, kw)) or True)
+        self.assertEqual(seen, [("甲", {"scrolls": 3}), ("乙", {"scrolls": 3})])
+        self.assertEqual(phone.hits, 1)
+        self.assertIs(phone.hit_rt, recipe.rt)
+
+    def test_gated_without_ops_is_harmless(self):
+        recipe, _phone, _out = self._run(
+            '[[segment]]\nname="a"\nops=[{kind="gated", entries=["甲"]}]\n',
+            entry=lambda text, **kw: True)
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+
+    def test_scoped_without_ops_only_restores_the_attribute(self):
+        recipe, phone, _out = self._run(
+            '[[segment]]\nname="a"\nops=[{kind="scoped", systemui_text=true}]\n')
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+        self.assertEqual(phone.screen.systemui_text, False)
+
+    def test_scoped_runs_a_body_that_reads_the_runtime(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="scoped", systemui_text=true,'
+                ' ops=[{kind="code", name="hit"}]}]\n')
+        recipe, phone, _out = self._run(toml, _spy_py())
+        self.assertEqual(phone.hits, 1)
+        self.assertIs(phone.hit_rt, recipe.rt)
+        self.assertEqual(phone.screen.systemui_text, False)
+
+    def test_if_var_takes_the_hit_branch_without_a_block(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="let", name="v", lib="seed_lib"},'
+                ' {kind="if_var", name="v"}]\n')
+        recipe, _phone, _out = self._run(toml, _spy_py())
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+
+    def test_if_var_takes_the_miss_branch_without_else_ops(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="let", name="v", lib="empty_lib"},'
+                ' {kind="if_var", name="v", ops=[{kind="code", name="hit"}]}]\n')
+        recipe, phone, _out = self._run(toml, _spy_py())
+        self.assertFalse(hasattr(phone, "hits"))
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+
+    def test_if_var_blocks_run_with_the_runtime(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="let", name="v", lib="seed_lib"},'
+                ' {kind="if_var", name="v", not_none=true, ops=[{kind="code", name="hit"}],'
+                ' else_ops=[{kind="code", name="hit"}]}]\n')
+        recipe, phone, _out = self._run(toml, _spy_py())
+        self.assertEqual(phone.hits, 1)
+        self.assertIs(phone.hit_rt, recipe.rt)
+
+    def test_if_tap_miss_runs_the_else_block(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="if_tap", text="设置",'
+                ' else_ops=[{kind="code", name="hit"}]}]\n')
+        recipe, phone, _out = self._run(toml, _spy_py(), tap=lambda text, **kw: False)
+        self.assertEqual(phone.hits, 1)
+        self.assertIs(phone.hit_rt, recipe.rt)
+
+    def test_if_setting_miss_takes_the_else_block(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="if_setting", kw="广告服务",'
+                ' ops=[{kind="code", name="hit"}], else_ops=[{kind="code", name="hit"}]}]\n')
+        recipe, phone, _out = self._run(toml, _spy_py(), setting=lambda kw, entry=None: False)
+        self.assertEqual(phone.hits, 1)
+        self.assertIs(phone.hit_rt, recipe.rt)
+
+    def test_if_setting_hit_runs_the_block_with_the_runtime(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="if_setting", kw="广告服务",'
+                ' ops=[{kind="code", name="hit"}], else_ops=[{kind="code", name="hit"}]}]\n')
+        recipe, phone, _out = self._run(toml, _spy_py(), setting=lambda kw, entry=None: True)
+        self.assertEqual(phone.hits, 1)
+        self.assertIs(phone.hit_rt, recipe.rt)
+
+    def test_if_setting_without_blocks_is_harmless(self):
+        recipe, _phone, _out = self._run(
+            '[[segment]]\nname="a"\nops=[{kind="if_setting", kw="广告服务"}]\n',
+            setting=lambda kw, entry=None: False)
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+
+    def test_if_lib_else_block_runs_with_the_runtime(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="if_lib", name="spy_if",'
+                ' ops=[{kind="code", name="hit"}], else_ops=[{kind="code", name="hit"}]}]\n')
+        recipe, phone, _out = self._run(toml, _spy_py(), if_result=False)
+        self.assertEqual(phone.hits, 1)
+        self.assertIs(phone.hit_rt, recipe.rt)
+
+    def test_if_lib_any_hit_runs_the_block_and_else_runs_the_other(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="if_lib_any", calls=[{name="spy_any"}],'
+                ' ops=[{kind="code", name="hit"}], else_ops=[{kind="code", name="hit"}]}]\n')
+        _recipe, phone, _out = self._run(toml, _spy_py(), any_result=True)
+        self.assertEqual(phone.hits, 1)
+        hit_recipe, phone, _out = self._run(toml, _spy_py(), any_result=False)
+        self.assertEqual(phone.hits, 1)
+        self.assertIs(phone.hit_rt, hit_recipe.rt)
+
+    def test_if_find_forwards_nav_and_runs_both_blocks(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="if_find", text="城市管理", nav=true,'
+                ' ops=[{kind="code", name="hit"}], else_ops=[{kind="code", name="hit"}]}]\n')
+        seen = []
+        recipe, phone, _out = self._run(
+            toml, _spy_py(), find=lambda text, **kw: seen.append((text, kw)) or True)
+        self.assertEqual(seen, [("城市管理", {"nav": True})])
+        self.assertEqual(phone.hits, 1)
+        self.assertIs(phone.hit_rt, recipe.rt)
+        miss_recipe, phone, _out = self._run(toml, _spy_py(), find=lambda text, **kw: False)
+        self.assertEqual(phone.hits, 1)
+        self.assertIs(phone.hit_rt, miss_recipe.rt)
+
+    def test_if_focus_body_runs_with_the_runtime(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="if_focus", text="设置",'
+                ' ops=[{kind="code", name="hit"}], else_ops=[{kind="code", name="hit"}]}]\n')
+        recipe, phone, _out = self._run(toml, _spy_py(), focus=lambda *a, **k: "设置页")
+        self.assertEqual(phone.hits, 1)
+        self.assertIs(phone.hit_rt, recipe.rt)
+
+    def test_if_entry_defaults_scrolls_and_runs_both_blocks(self):
+        toml = ('[[segment]]\nname="a"\nops=[{kind="if_entry", text="设置",'
+                ' ops=[{kind="code", name="hit"}], else_ops=[{kind="code", name="hit"}]}]\n')
+        seen = []
+        recipe, phone, _out = self._run(
+            toml, _spy_py(), entry=lambda text, **kw: seen.append((text, kw)) or True)
+        self.assertEqual(seen, [("设置", {"scrolls": 6})])
+        self.assertEqual(phone.hits, 1)
+        self.assertIs(phone.hit_rt, recipe.rt)
+        miss_recipe, phone, _out = self._run(toml, _spy_py(), entry=lambda text, **kw: False)
+        self.assertEqual(phone.hits, 1)
+        self.assertIs(phone.hit_rt, miss_recipe.rt)
+
+
+class ToggleAndStartOpDefaultsTests(unittest.TestCase):
+    """开关与拉起那几支 op 的实参形状：缺省按钮 / `max_screens` / `only_code` / 等待键 / `n`。"""
+
+    def _run(self, toml, py_text=None, **patches):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml, py_text)
+            for name, value in patches.items():
+                setattr(phone, name, value)
+            with contextlib.redirect_stdout(io.StringIO()):
+                recipe.run()
+        return recipe, phone
+
+    def _close_all(self, op):
+        taps, confirms = [], []
+        recipe, _phone = self._run(
+            f'[[segment]]\nname="a"\nops=[{op}]\n',
+            tap=lambda text, **kw: taps.append((text, kw)),
+            confirm=lambda: confirms.append(True))
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+        self.assertEqual(confirms, [True], "全部关闭之后要回读确认一次")
+        return taps
+
+    def test_close_all_defaults_to_the_named_button(self):
+        self.assertEqual(self._close_all('{kind="close_all", page="广告"}'),
+                         [("全部关闭", {"exact": True})])
+
+    def test_close_all_honours_a_custom_button(self):
+        self.assertEqual(self._close_all('{kind="close_all", page="广告", button="全部关闭服务"}'),
+                         [("全部关闭服务", {"exact": True})])
+
+    def test_off_forwards_max_screens_and_keep_and_counts_the_readback(self):
+        calls = []
+        recipe, _phone = self._run(
+            '[[segment]]\nname="a"\nops=[{kind="off", page="首页", only=["乙"], keep=["甲"],'
+            ' max_screens=2}]\n',
+            off=lambda **kw: calls.append(kw) or 3)
+        self.assertEqual(calls, [{"page": "首页", "only": ["乙"], "keep": ["甲"], "max_screens": 2}])
+        self.assertEqual(recipe.rt.verified, 3, "回读确认到 3 项要记进这次执行")
+
+    def test_off_only_code_calls_the_policy_with_the_runtime(self):
+        toml = ('[const]\nONLY = ["乙"]\n'
+                '[[segment]]\nname="a"\nops=[{kind="off", page="首页", only_code="policy"}]\n')
+        calls = []
+        self._run(toml, "def policy(p, rt):\n    return list(rt.constants['ONLY'])\n",
+                  off=lambda **kw: calls.append(kw))
+        self.assertEqual(calls, [{"page": "首页", "only": ["乙"]}])
+
+    def test_start_forwards_the_wait_keys(self):
+        seen = []
+        self._run('[[segment]]\nname="a"\nops=[{kind="start", pkg="com.x", settle=1,'
+                  ' foreground=["广告"], expect="广告页", budget=5}]\n',
+                  start=lambda *a, **kw: seen.append((a, kw)))
+        self.assertEqual(seen, [(("com.x",), {"settle": 1, "foreground": ["广告"],
+                                              "expect": "广告页", "budget": 5})])
+
+    def test_top_forwards_n_and_takes_none(self):
+        seen = []
+        self._run('[[segment]]\nname="a"\nops=[{kind="top", n=2}, {kind="top"}]\n',
+                  top=lambda *a: seen.append(a))
+        self.assertEqual(seen, [(2,), ()])
+
+    def test_tap_forwards_the_extra_kwargs(self):
+        seen = []
+        self._run('[[segment]]\nname="a"\nops=[{kind="tap", text="设置", exact=true,'
+                  ' kwargs={scrolls=0, edge_ok="tab"}}]\n',
+                  tap=lambda text, **kw: seen.append((text, kw)))
+        self.assertEqual(seen, [("设置", {"exact": True, "scrolls": 0, "edge_ok": "tab"})])
+
+
+class MinorOpTests(unittest.TestCase):
+    """单句 op 的转发与锁屏门：`press` / `app_stop` / `miss_reset` / `print` / `require_*`。"""
+
+    def _run(self, toml, py_text=None, **patches):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml, py_text)
+            for name, value in patches.items():
+                setattr(phone, name, value)
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                recipe.run()
+        return recipe, phone, out.getvalue()
+
+    def test_press_forwards_the_key(self):
+        seen = []
+        recipe, _phone, _out = self._run(
+            '[[segment]]\nname="a"\nops=[{kind="press", key="HOME"}]\n',
+            press=lambda key: seen.append(key))
+        self.assertEqual(seen, ["HOME"])
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+
+    def test_app_stop_forwards_the_package(self):
+        seen = []
+        self._run('[[segment]]\nname="a"\nops=[{kind="app_stop", pkg="com.x"}]\n',
+                  app_stop=lambda pkg: seen.append(pkg))
+        self.assertEqual(seen, ["com.x"])
+
+    def test_miss_reset_zeroes_the_counter(self):
+        _recipe, phone, _out = self._run(
+            '[[segment]]\nname="a"\nops=[{kind="miss_reset"}]\n')
+        self.assertEqual(phone.miss, 0)
+
+    def test_print_appends_the_foreground_only_when_asked(self):
+        _recipe, _phone, out = self._run(
+            '[[segment]]\nname="a"\nops=[{kind="print", text="文案"},'
+            ' {kind="print", text="文案", focus=true}]\n',
+            focus=lambda *a, **k: "焦点")
+        lines = [line for line in out.splitlines() if line.startswith("文案")]
+        self.assertEqual(lines, ["文案", "文案焦点"])
+
+    def test_require_unlocked_passes_when_the_phone_is_not_locked(self):
+        recipe, _phone, _out = self._run(
+            '[[segment]]\nname="a"\nops=[{kind="require_unlocked"}]\n',
+            locked=lambda: False)
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+
+    def test_require_unlocked_raises_with_the_default_text(self):
+        # 段包装先查一次锁屏（放行），op 自己再查一次（锁上）：两次读数要给不同的答案。
+        states = iter([False, True])
+        recipe, _phone, out = self._run(
+            '[[segment]]\nname="a"\nops=[{kind="require_unlocked"}]\n',
+            locked=lambda: next(states))
+        self.assertEqual(recipe.rt.failed_steps, ["a"])
+        self.assertIn("  ✗ 未完成：手机锁屏，请机主解锁", out)
+
+    def test_require_unlocked_uses_a_custom_text(self):
+        states = iter([False, True])
+        recipe, _phone, out = self._run(
+            '[[segment]]\nname="a"\nops=[{kind="require_unlocked", miss_print="请先解锁"}]\n',
+            locked=lambda: next(states))
+        self.assertEqual(recipe.rt.failed_steps, ["a"])
+        self.assertIn("请先解锁", out)
+
+    def test_require_setting_forwards_the_entry(self):
+        seen = []
+        self._run('[[segment]]\nname="a"\nops=[{kind="require_setting", kw="广告服务",'
+                  ' entry="隐私", miss_print="没找到"}]\n',
+                  setting=lambda kw, entry=None: seen.append((kw, entry)) or True)
+        self.assertEqual(seen, [("广告服务", "隐私")])
+
+    def test_require_setting_miss_fails_with_the_text(self):
+        recipe, _phone, out = self._run(
+            '[[segment]]\nname="a"\nops=[{kind="require_setting", kw="广告服务",'
+            ' miss_print="没找到广告服务"}]\n',
+            setting=lambda kw, entry=None: False)
+        self.assertEqual(recipe.rt.failed_steps, ["a"])
+        self.assertIn("没找到广告服务", out)
+
+    def test_require_focus_asserts_the_contains(self):
+        recipe, _phone, _out = self._run(
+            '[[segment]]\nname="a"\nops=[{kind="require_focus", contains="Settings",'
+            ' miss_print="不在设置"}]\n',
+            focus=lambda *a, **k: "com.android.Settings/.Main")
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+        recipe, _phone, out = self._run(
+            '[[segment]]\nname="a"\nops=[{kind="require_focus", contains="Settings",'
+            ' miss_print="不在设置"}]\n',
+            focus=lambda *a, **k: "com.android.browser/.Main")
+        self.assertEqual(recipe.rt.failed_steps, ["a"])
+        self.assertIn("不在设置", out)
+
+    def test_require_find_forwards_exact_and_uses_it(self):
+        seen = []
+        recipe, _phone, _out = self._run(
+            '[[segment]]\nname="a"\nops=[{kind="require_find", text="广告", exact=true,'
+            ' miss_print="没有广告"}]\n',
+            find=lambda text, **kw: seen.append((text, kw)) or True)
+        self.assertEqual(seen, [("广告", {"exact": True})])
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+
+    def test_require_find_miss_fails_with_the_text(self):
+        recipe, _phone, out = self._run(
+            '[[segment]]\nname="a"\nops=[{kind="require_find", text="广告", miss_print="没有广告"}]\n',
+            find=lambda text, **kw: False)
+        self.assertEqual(recipe.rt.failed_steps, ["a"])
+        self.assertIn("没有广告", out)
+
+
+class AtFocusMessageTests(unittest.TestCase):
+    """`at_focus=true` 的现场尾巴（`…；停在 <前台>`）：五个 `require_*` 都要接上。"""
+
+    CASES = {
+        "require_lib": ('{kind="require_lib", name="spy_req", miss_print="文案", at_focus=true}',
+                        ""),
+        "require_tab": ('{kind="require_tab", name="我的", miss_print="文案", at_focus=true}',
+                        "  ✗ 未完成："),
+        "require_go": ('{kind="require_go", text="我的", expect="页面", miss_print="文案",'
+                       ' at_focus=true}', "  ✗ 未完成："),
+        "require_tap": ('{kind="require_tap", text="我的", miss_print="文案", at_focus=true}',
+                        "  ✗ 未完成："),
+        "require_expect": ('{kind="require_expect", calls=[{args=["X"]}], miss_print="文案",'
+                           ' at_focus=true}', "  ✗ 未完成："),
+    }
+
+    def test_every_require_op_appends_the_foreground_to_its_message(self):
+        for kind, (op, prefix) in self.CASES.items():
+            with self.subTest(kind=kind):
+                with tempfile.TemporaryDirectory() as tmp:
+                    recipe, phone, _calls = _load_tmp(
+                        tmp, f'[[segment]]\nname="a"\nops=[{op}]\n', _spy_py())
+                    phone.focus = lambda *a, **k: "com.x/.Main"
+                    phone.tab = lambda name: False
+                    phone.go = lambda text, expect: False
+                    phone.tap = lambda text, **kw: False
+                    phone.expect_page = lambda *a, **kw: False
+                    with contextlib.redirect_stdout(io.StringIO()) as out:
+                        recipe.run()
+                self.assertIn(prefix + "文案；停在 com.x/.Main", out.getvalue(), kind)
+                if kind == "require_lib":
+                    self.assertEqual(recipe.rt.results, [("a", "完成")], kind)
+                else:
+                    self.assertEqual(recipe.rt.failed_steps, ["a"], kind)
+
+    def test_require_expect_reads_the_foreground_even_when_a_call_hits(self):
+        """`break` 在 `at_focus` 下要落到那句读取上：提前 `return` 会让对拍少一条前台读。"""
+        reads = []
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="require_expect", calls=[{args=["X"]}],'
+                     ' miss_print="文案", at_focus=true}]\n')
+            phone.focus = lambda *a, **k: reads.append(1) or "com.x/.Main"
+            phone.expect_page = lambda *a, **kw: True
+            with contextlib.redirect_stdout(io.StringIO()):
+                recipe.run()
+        self.assertEqual(reads, [1])
+        self.assertEqual(recipe.rt.results, [("a", "完成")])
+
+
+class OutputFlushTests(unittest.TestCase):
+    """解释器打人话的每一句都 `flush=True`：管道按行读，攒在缓冲里客户端就卡住。
+
+    每段固定三次 flush：段标题、op 那一句、耗时行；解释器少打一次 flush 就只剩两次。"""
+
+    def _flushes(self, toml, py_text=None, **patches):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml, py_text)
+            for name, value in patches.items():
+                setattr(phone, name, value)
+            sink = FlushCountingStdout()
+            with contextlib.redirect_stdout(sink):
+                recipe.run()
+        return sink.flushes
+
+    def test_the_print_op_flushes_its_line(self):
+        self.assertEqual(
+            self._flushes('[[segment]]\nname="a"\nops=[{kind="print", text="一行"}]\n'), 3)
+
+    def test_require_lib_miss_flushes(self):
+        self.assertEqual(self._flushes(
+            '[[segment]]\nname="a"\nops=[{kind="require_lib", name="spy_req",'
+            ' miss_print="没找到"}]\n', _spy_py()), 3)
+
+    def test_skip_unless_installed_flushes(self):
+        self.assertEqual(self._flushes(
+            '[[segment]]\nname="a"\nops=[{kind="skip_unless_installed", command="pm path com.x",'
+            ' contains="package:", text="  · 没有主题管理包"}]\n',
+            shell=lambda command, timeout=None: ""), 3)
+
+    def test_require_entry_miss_flushes(self):
+        self.assertEqual(self._flushes(
+            '[[segment]]\nname="a"\nops=[{kind="require_entry", text="设置",'
+            ' miss_print="没有设置"}]\n', entry=lambda text, **kw: False), 3)
+
+    def test_tap_id_miss_flushes(self):
+        self.assertEqual(self._flushes(
+            '[[segment]]\nname="a"\nops=[{kind="tap_id", resource_id="com.x:id/none",'
+            ' miss_print="  ✗ 没找到"}]\n'), 3)
+
+
+class ReadbackAndConfirmTests(unittest.TestCase):
+    """回读确认与名单核对（`off_required` / `close_listed`）：跨翻页读数、`contains` 与 `rt.confirm`。"""
+
+    def _run(self, toml, py_text=None, **patches):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(tmp, toml, py_text)
+            for name, value in patches.items():
+                setattr(phone, name, value)
+            with contextlib.redirect_stdout(io.StringIO()):
+                recipe.run()
+        return recipe, phone
+
+    def test_off_required_stops_scanning_at_the_bottom(self):
+        scans = []
+        self._run(
+            '[[segment]]\nname="a"\nops=[{kind="off_required", only=["甲"], page="主题·设置"}]\n',
+            switches=lambda root=None: scans.append(1) or [("甲", True, (0, 0))],
+            scroll_more=lambda: False, top=lambda *a: None, off=lambda **kw: 2)
+        self.assertEqual(len(scans), 1, "到底之后不该再扫一遍")
+
+    def test_off_required_scans_at_most_twice(self):
+        scans = []
+        self._run(
+            '[[segment]]\nname="a"\nops=[{kind="off_required", only=["甲"], page="主题·设置"}]\n',
+            switches=lambda root=None: scans.append(1) or [("甲", True, (0, 0))],
+            scroll_more=lambda: True, top=lambda *a: None, off=lambda **kw: 2)
+        self.assertEqual(len(scans), 2, "两屏读齐就够：再扫一遍说明循环次数写宽了")
+
+    def test_off_required_forwards_the_checked_names_and_confirms(self):
+        seen = []
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="off_required", only=["甲"], keep=["乙"],'
+                     ' page="主题·设置"}]\n')
+            phone.switches = lambda root=None: [("甲", True, (0, 0))]
+            phone.scroll_more = lambda: False
+            phone.top = lambda *a: None
+            phone.off = lambda **kw: 2
+            recipe.rt.require_switches = lambda before, names, title, **kw: seen.append(
+                (before, names, title, kw))
+            with contextlib.redirect_stdout(io.StringIO()):
+                recipe.run()
+        self.assertEqual(seen, [({"甲": True}, ["甲"], "主题·设置", {"contains": False})])
+        self.assertEqual(recipe.rt.verified, 2)
+
+    def test_require_switches_hands_the_bound_table_names_and_title_to_the_runtime(self):
+        seen = []
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="let", name="s", lib="seed_lib"},'
+                     ' {kind="require_switches", before={expr="var", name="s"},'
+                     ' names=["甲"], title="资讯服务"}]\n', _spy_py())
+            recipe.rt.require_switches = lambda before, names, title, **kw: seen.append(
+                (before, names, title))
+            with contextlib.redirect_stdout(io.StringIO()):
+                recipe.run()
+        self.assertEqual(seen, [("SEED", ["甲"], "资讯服务")])
+
+    def test_off_required_forwards_contains(self):
+        seen = []
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="off_required", only=["甲"],'
+                     ' page="主题·设置", contains=true}]\n')
+            phone.switches = lambda root=None: [("甲", True, (0, 0))]
+            phone.scroll_more = lambda: False
+            phone.top = lambda *a: None
+            phone.off = lambda **kw: 2
+            recipe.rt.require_switches = lambda before, names, title, **kw: seen.append(kw)
+            with contextlib.redirect_stdout(io.StringIO()):
+                recipe.run()
+        self.assertEqual(seen, [{"contains": True}])
+
+    def test_close_listed_hands_the_phone_and_runtime_to_the_library(self):
+        seen = []
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="close_listed", names=["甲"],'
+                     ' page="服务管理", miss_print="没识别到"}]\n')
+
+            def read_switches(p, rt, page):
+                seen.append(("read", p, rt))
+                return {"甲": True}
+
+            def close_named(p, rt, names, page, **kw):
+                seen.append(("close", p, rt))
+
+            patch_library(self, read_switches=read_switches, close_named=close_named)
+            with contextlib.redirect_stdout(io.StringIO()):
+                recipe.run()
+        self.assertEqual([item[0] for item in seen], ["read", "close"])
+        for item in seen:
+            self.assertIs(item[1], phone)
+            self.assertIs(item[2], recipe.rt)
+
+    def test_close_listed_empty_filter_prints_its_reason(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="close_listed", names=["甲"],'
+                     ' page="服务管理", miss_print="没识别到「甲」"}]\n')
+            patch_library(self, read_switches=lambda p, rt, page: {},
+                          close_named=lambda p, rt, *a, **k: None)
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                recipe.run()
+        self.assertIn("没识别到「甲」", out.getvalue())
+        self.assertEqual(recipe.rt.failed_steps, ["a"])
+
+
 if __name__ == "__main__":
     unittest.main()
