@@ -97,8 +97,64 @@ class TriesTests(unittest.TestCase):
         self.assertEqual(len(sample.seen_at), 3)
 
     def test_needs_a_budget(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError) as caught:
             wait.until(lambda: "page")
+        self.assertEqual(str(caught.exception), "until() 需要 timeout 或 tries")
+
+
+class BudgetDefaultTests(unittest.TestCase):
+    """没有给判据时的那几个默认值本身也是行为：轮询间隔决定读屏频率。"""
+
+    def test_the_default_poll_interval_is_a_hundred_and_fifty_milliseconds(self):
+        clock = Clock()
+        sample = samples([None, None, "page"], clock)
+        self.assertEqual(wait.until(sample, timeout=2.0, now=clock.now, sleep=clock.sleep), "page")
+        self.assertEqual(clock.slept, [0.15, 0.15])
+
+    def test_a_stable_window_of_almost_zero_returns_the_first_sample(self):
+        # 稳定窗口小到 1e-9 时首轮即成立：epsilon 让「稳稳站住」在零窗口下不额外等一轮
+        clock = Clock()
+        sample = samples(["page"], clock)
+        self.assertEqual(wait.until(sample, timeout=1.0, stable=1e-9,
+                                    now=clock.now, sleep=clock.sleep), "page")
+        self.assertEqual(clock.slept, [])
+
+
+class RoundCapTests(unittest.TestCase):
+    """sleep 不推进时间时（真机的挂钟先到，这里是测试的假钟不推进），靠轮数上限退出。"""
+
+    def test_a_wall_clock_budget_stops_by_round_count_when_time_does_not_move(self):
+        # 1 秒预算、每 0.25 秒一采样：上限是 5 轮，第 6 次采样就该是 bug
+        seen = []
+
+        def sample():
+            seen.append(len(seen))
+            if len(seen) > 5:
+                raise AssertionError("超预算还在采样")
+            return None
+
+        self.assertIsNone(wait.until(sample, timeout=1.0, poll=0.25,
+                                     now=lambda: 0.0, sleep=lambda seconds: None))
+        self.assertEqual(len(seen), 5)
+
+    def test_a_sample_budget_stops_by_count(self):
+        seen = []
+
+        def sample():
+            seen.append(len(seen))
+            if len(seen) > 3:
+                raise AssertionError("超预算还在采样")
+            return None
+
+        self.assertIsNone(wait.until(sample, tries=3, now=lambda: 0.0, sleep=lambda seconds: None))
+        self.assertEqual(len(seen), 3)
+
+    def test_a_budget_that_is_already_spent_does_not_sample_at_all(self):
+        # timeout 与 poll 同量级时 start 那一刻就已到期：一轮都不读屏
+        seen = []
+        self.assertIsNone(wait.until(lambda: seen.append(1) or "page", timeout=1e-9, poll=0.1,
+                                     now=lambda: 0.0, sleep=lambda seconds: None))
+        self.assertEqual(seen, [])
 
 
 class ChangedTests(unittest.TestCase):
@@ -255,6 +311,12 @@ class UnlockedTests(unittest.TestCase):
         self.assertFalse(result)
         self.assertEqual(len(self.clock.slept), 60)
         self.assertEqual(human, LOCKED_TEXT.replace("90", "60"))
+
+    def test_the_locked_line_is_flushed_so_a_piped_client_sees_it_at_once(self):
+        # 客户端把引擎当子进程跑：不 flush 时那句「请解锁」会留在管道缓冲里
+        with patch("builtins.print") as out:
+            self.assertFalse(wait.wait_unlocked(lambda: True, lambda: None, timeout=0))
+        out.assert_called_once_with(wait.UNLOCK_TEXT.format(0), flush=True)
 
 
 if __name__ == "__main__":

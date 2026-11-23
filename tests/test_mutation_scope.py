@@ -294,7 +294,8 @@ class SourceMirrorTests(unittest.TestCase):
 
 class PatchScopeTests(unittest.TestCase):
     def test_modules_in_paths_keeps_only_mapped_modules(self):
-        self.assertEqual(mutation_scope.modules_in_paths(["tool/summary.py", "tool/row.py"]),
+        # `tool/chan_fast.py` 是 ADR-0043 登记的「表外已知缺口」，进表之前一直是表外的例子。
+        self.assertEqual(mutation_scope.modules_in_paths(["tool/summary.py", "tool/chan_fast.py"]),
                          ["tool/summary.py"])
 
     def test_modules_in_paths_dedupes_and_keeps_order(self):
@@ -340,6 +341,14 @@ class ReverseLookupTests(unittest.TestCase):
         both = mutation_scope.modules_for_tests(["tests/test_ticket_ref.py", "tests/test_dco.py"])
         self.assertEqual(both, first + ["devtools/commits.py", "devtools/check_dco.py"])
 
+    def test_a_row_test_pulls_the_read_basics_that_are_in_the_table(self):
+        """`test_row` 同时是这三份的覆盖者：改它会把三行一起拉起（#1536）。
+
+        `tool/row.py` 自己不在表内（表外已知缺口），不在这组里。"""
+        pulled = mutation_scope.modules_for_tests(["tests/test_row.py"])
+        self.assertLessEqual({"tool/fast.py", "tool/wait.py", "tool/captures.py"}, set(pulled))
+        self.assertNotIn("tool/row.py", pulled)
+
 
 class ScopeReportTests(unittest.TestCase):
     """改到 `gui/` 但落在表外时报出来：缺席要看得见，不是遗忘的（#1429）。"""
@@ -347,6 +356,17 @@ class ScopeReportTests(unittest.TestCase):
     def scope(self, paths):
         with mock.patch.object(mutation, "changed_paths", return_value=paths):
             return mutation.scope_of("origin/main")
+
+    def test_unmapped_tool_modules_are_reported(self):
+        """表外的 `tool/` 模块逐条报「本次不判」：`row` 是已登记的表外缺口（#1536）。"""
+        scope = self.scope(["tool/row.py", "tool/chan_fast.py"])
+        self.assertEqual(scope.modules, [])
+        self.assertEqual(scope.unmapped, ["tool/row.py", "tool/chan_fast.py"])
+
+    def test_mapped_tool_modules_are_not_reported_as_skipped(self):
+        scope = self.scope(["tool/wait.py"])
+        self.assertEqual(scope.modules, ["tool/wait.py"])
+        self.assertEqual(scope.unmapped, [])
 
     def test_unmapped_gui_modules_are_reported(self):
         scope = self.scope(["gui/app.py", "gui/web/app.js"])

@@ -46,8 +46,9 @@ class GiveUp(Exception):
     """这一页永远认不出来，别再等到超时（vivo 直达的渠道页按规则不能直接用）。"""
 
 
-def until(sample, timeout=None, poll=0.15, stable=0.0, same=0, tries=None,
-          changed_from=UNSET, blocked=None, now=time.monotonic, sleep=time.sleep):
+def until(sample, timeout=None, poll=0.15, stable=0.0,
+          same=0,   # pragma: no mutate 语义等价：首个真值采样在两条路上都立即返回，0 与 1 的默认值不可区分
+          tries=None, changed_from=UNSET, blocked=None, now=time.monotonic, sleep=time.sleep):
     """等 sample() 认出来：返回认出的那个采样值；超时、到次数、或采样器抛 GiveUp，返回 None。
 
     每轮先问 blocked（锁屏），只取一次时钟，采样后睡 poll。blocked 返回异常实例就原样抛出，
@@ -80,7 +81,7 @@ def until(sample, timeout=None, poll=0.15, stable=0.0, same=0, tries=None,
         except GiveUp:
             return None
         if value and (changed_from is UNSET or value != changed_from):
-            if stable <= 0 and same <= 0:
+            if stable <= 0 and same <= 0:   # pragma: no mutate 语义等价：两条路都返回同一个采样值，0 的边界不可区分
                 return value
             if value != steady:
                 steady, held, streak = value, t, 1
@@ -89,7 +90,7 @@ def until(sample, timeout=None, poll=0.15, stable=0.0, same=0, tries=None,
             if streak >= same and t - held >= stable - 1e-9:
                 return value
         else:
-            steady, held, streak = UNSET, None, 0
+            steady, held, streak = UNSET, None, 0   # pragma: no mutate 语义等价：steady 同时回到 UNSET，下一次真值采样必把 streak 重设成 1
         sleep(poll)
         rounds += 1
 
