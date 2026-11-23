@@ -432,7 +432,7 @@ def landed(p, d):
     if not focus or "/" not in focus:
         return False
     got_pkg, got_act = focus.split("/", 1)  # pragma: no mutate：页面名本身不含 "/"，maxsplit 的各种写法同值（语义等价）
-    got_act = full(got_pkg, got_act) if got_act.startswith(".") else got_act  # pragma: no mutate：full() 对已带包名的页面名是恒等，两个分支同值（语义等价）
+    got_act = full(got_pkg, got_act)  # full() 自带 startswith(".") 判断，非点号页面名原样返回
     return got_pkg.lower() == d.pkg.lower() and got_act.lower() == full(d.pkg, d.activity).lower()
 
 

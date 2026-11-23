@@ -977,6 +977,18 @@ class ExecuteTests(unittest.TestCase):
         result = self.run_execute(device, [self.item()])
         self.assertEqual(result.failed, ["样例应用 / 营销通知：最终复查未达目标"])
 
+    def test_a_blocked_channel_is_not_a_failed_final_check(self):
+        """被禁的应用在关闭模式下没被碰过，最终复查不能把它记为失败（另一个应用被正常关闭）。"""
+        device = OfflineDevice()
+        device.channels[("com.example.b", "b1")] = ("推广通知", 1, False)
+        device.apps = {"com.example.a": False, "com.example.b": True}
+        device.modes = {"com.example.a": "default", "com.example.b": "allow"}
+        result = self.run_execute(device, [
+            self.item(),
+            self.item(package="com.example.b", channel="b1", name="推广通知", app="样例应用二"),
+        ])
+        self.assertEqual((result.changed, result.blocked, result.failed), (1, 1, []))
+
 
 if __name__ == "__main__":
     unittest.main()

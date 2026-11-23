@@ -2803,6 +2803,12 @@ class PageContractTests(unittest.TestCase):
         self.rt.page("设置", "com.android.settings")
         self.assertEqual(self.misses, [])
 
+    def test_the_activity_check_reads_the_whole_segment_after_the_first_slash(self):
+        """三段窗口名里 Activity 判据看第一个 `/` 之后的整段；只取最后一段（`rsplit`）会漏判。"""
+        self.phone.focus = lambda: "com.android.settings/.Settings/extra"
+        self.rt.page("设置", "com.android.settings", ".Settings")
+        self.assertEqual(self.misses, [])
+
     def test_a_missing_title_lists_every_wanted_wording(self):
         self.phone.find = lambda text, exact=False, **kw: self.finds.append((text, exact)) or False
         with self.assertRaises(RuntimeError) as caught:

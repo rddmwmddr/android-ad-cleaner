@@ -199,7 +199,7 @@ class Runtime:
 
         if package and where.partition("/")[0] != package:
             miss(package, "未进入目标应用，未操作开关")
-        activity_part = where.split("/", 1)[-1]   # pragma: no mutate 语义等价：focus 至多一个 `/`（`包名/页面名` 或裸窗口名），maxsplit / rsplit 变体取同值
+        activity_part = where.partition("/")[2]
         if activity and activity not in activity_part:
             miss(activity, "未进入目标设置页，未操作开关")
         if not any(p.find(t, exact=True) for t in titles):

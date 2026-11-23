@@ -33,6 +33,9 @@ NODE = "node"
 NO_CLASS = ""
 NO_ID = ""
 NO_SECTION = -1      # notification dump 里找不到段名
+# 取 bounds 中点：`divmod` 拿整除商，`//` 会被 mutmut 换成 `/`（float 经 getpixel 截断、
+# 与整数宽高比较同真同假，是语义等价的假存活）；用商而非 FloorDivide 让这一族变异不可生成。
+HALF = 2
 
 
 class IntentKind(StrEnum):
@@ -180,7 +183,8 @@ def on_screen(node, width, height):
     if node.get("visible-to-user") == "false":
         return False
     l, t, r, b = bounds(node)
-    cx, cy = (l + r) // 2, (t + b) // 2   # pragma: no mutate 语义等价：中心点只与整数宽高比，floor 与 x.5 在 `>= 0` / `< 宽高` 两处同真同假
+    cx, _ = divmod(l + r, HALF)
+    cy, _ = divmod(t + b, HALF)
     return r > l and b > t and 0 <= cx < width and 0 <= cy < height
 
 
@@ -209,7 +213,7 @@ def pixel_on(img, l, t, r, b):
     if not (0 <= l < r <= w and 0 <= t < b <= h):
         return None
     img = img.convert("RGB")
-    mid = (t + b) // 2      # pragma: no mutate 语义等价：bounds 非负，x.5 被 getpixel 截成同一格
+    mid, _ = divmod(t + b, HALF)
     samples = (img.getpixel((int(l + (r - l) * fx), mid)) for fx in (0.25, 0.5, 0.75))
     return max(max(pixel) - min(pixel) for pixel in samples) > 60
 
