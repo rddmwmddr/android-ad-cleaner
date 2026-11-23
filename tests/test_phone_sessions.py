@@ -46,6 +46,14 @@ class SessionTests(unittest.TestCase):
         session.set_app("com.android.vending")
         self.assertEqual(session.promoted, set())
 
+    def test_a_fresh_launch_session_has_no_app_yet(self):
+        """空串是「还没拉起过任何 App」：`Dismisser.promoted_click()` 拿它与推广位的 App 比。"""
+        self.assertEqual(self.p.launch_session.app, "")
+
+    def test_a_fresh_channel_session_has_not_seen_the_vivo_page(self):
+        """初始 `False` 表示还没见过 vivo 通知页（只从应用列表进）：判据是布尔，不是「没设过」。"""
+        self.assertIs(self.p.channel_session.vivo_seen, False)
+
     def test_missed_is_the_live_list(self):
         self.assertIs(self.p.missed, self.p.lost_note.missed)
         self.p.missed.append(("系统·广告服务", "个性化推荐"))
