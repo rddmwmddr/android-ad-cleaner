@@ -115,6 +115,12 @@ class SourceTest(unittest.TestCase):
         self.assertIsNotNone(entries.lookup("REDMI", "系统广告"))
         self.assertIsNone(entries.lookup("google", "系统广告"))
 
+    def test_unknown_or_missing_brand_has_no_family(self):
+        """认不出的品牌（含空串与 None）返回空串：返回 None 会让调用方在 `in ENTRIES` 上崩。"""
+        self.assertEqual(entries.family("google"), "")
+        self.assertEqual(entries.family(""), "")
+        self.assertEqual(entries.family(None), "")
+
     def test_freeme_family_collects_coolpad_and_5g(self):
         """#1293：酷派 CPDAY3 读 `coolpad`、#455 那台读 `5G`，两台 `ro.build.freeme.label` 一致，同属卓易系。"""
         self.assertEqual(entries.family("coolpad"), "freeme")
@@ -285,6 +291,29 @@ class SourceTest(unittest.TestCase):
             ''', brand="xiaomi")
         self.assertEqual(entries.used_by(d), {})
 
+    def test_used_by_reads_activity_passed_as_a_keyword(self):
+        """`p.start(pkg, activity=".X")` 把页面名走关键字：只认位置实参会把这条直达漏掉。"""
+        d = self._one_script('''\
+            def _(p, rt):
+                p.start("com.example.client", activity=".ui.Main")
+            ''')
+        self.assertEqual(entries.used_by(d),
+                         {("direct", "com.example.client",
+                           "com.example.client.ui.Main"): {"T1"}})
+
+    def test_open_app_settings_reads_the_activity_argument(self):
+        """`open_app_settings(包名, 页面, …)` 的页面是第二个实参：读更靠后的实参会把这条 Intent 读丢。"""
+        d = self._one_script('''\
+            def open_app_settings(package, activity, title=""):
+                return None
+
+
+            def _(p, rt):
+                open_app_settings("com.example.store", ".ui.Settings", title=helper())
+            ''')
+        self.assertEqual(entries.used_by(d),
+                         {("intent", entries.APP_SETTINGS_ACTION, "com.example.store"): {"T1"}})
+
     def test_open_app_settings_needs_two_arguments(self):
         """只传了包名的 open_app_settings 不算出处：把包名当成页面会给这台机凭空挂一条 Intent。"""
         import tempfile
@@ -400,6 +429,13 @@ class ReachTest(unittest.TestCase):
         self.assertFalse(entries.landed(p, entries.Direct("com.a", ".One")))
         r.current = "com.a/.One"
         self.assertTrue(entries.landed(p, entries.Direct("com.a", ".One")))
+
+    def test_landing_needs_a_focus_that_has_a_page(self):
+        """前台读不到（空串 / None / 没有页面分隔符）都不算到了。"""
+        p = phone(FakeReader())
+        for focus in ("", None, "com.a.Only"):
+            p.focus = lambda focus=focus: focus
+            self.assertFalse(entries.landed(p, entries.Direct("com.a", ".One")), focus)
 
     def test_allow_search_false_never_opens_the_settings_search(self):
         """只试直达档：设置搜索会把设备交给系统设置，入口必须留在本 App 里时不能走（#912）。"""
@@ -550,6 +586,99 @@ class ReachTest(unittest.TestCase):
             return FakeReader.shell(r, cmd, timeout)
         r.shell = boom
         self.assertEqual(self.reach(phone(r)), "direct")
+
+    def test_a_dead_entry_does_not_stop_the_next_direct(self):
+        """一条直达打不开只换下一档：break 会连带跳过后面还能打开的直达。"""
+        r = FakeReader(lands={"com.b/com.b.P2"})
+
+        def boom_or_shell(cmd, timeout=None):
+            if ".P1" in cmd:
+                raise RuntimeError("boom")
+            return FakeReader.shell(r, cmd, timeout)
+        r.shell = boom_or_shell
+        entry = entries.Entry(menu="…", direct=(
+            entries.Direct("com.b", ".P1", keep_task=True),
+            entries.Direct("com.b", ".P2", keep_task=True)))
+        self.assertEqual(self.reach(phone(r), entry), "direct")
+
+    def test_a_dead_entry_logs_the_page_it_tried(self):
+        """打不开时日志写的是这一档的页面，不能是 None 或另一档的写法。"""
+        p = phone(FakeReader())
+        p.setting = lambda *a, **k: False
+
+        def gone(*a, **k):
+            raise RuntimeError("boom")
+        p.start = gone
+        entry = entries.Entry(menu="…", direct=(entries.Direct("com.a", ".One"),))
+        lines = []
+        self.assertIsNone(entries.reach(p, entry, log=lines.append, sleep=no_wait, settle=0))
+        self.assertTrue(any("· 直达 com.a.One 打不开" in line for line in lines), lines)
+
+    def test_a_dead_intent_entry_logs_the_launch_command(self):
+        """Intent 档打不开时日志写拉起命令（动作 + 包），不是页面名。"""
+        r = FakeReader()
+        entry = entries.Entry(menu="…", direct=(
+            entries.Direct("com.a", ".Market", action="oppo.intent.action.APP_SETTINGS"),))
+
+        def gone(cmd, timeout=None):
+            raise RuntimeError("boom")
+        r.shell = gone
+        p = phone(r)
+        p.setting = lambda *a, **k: False
+        lines = []
+        self.assertIsNone(entries.reach(p, entry, log=lines.append, sleep=no_wait, settle=0))
+        self.assertTrue(any("· 直达 am start" in line and "-a oppo.intent.action.APP_SETTINGS" in line
+                            for line in lines), lines)
+
+    def test_a_miss_is_logged_as_not_landing(self):
+        """落在别的页面要报「没落在这一页」，不能只报「打不开」或什么都不报。"""
+        p = phone(FakeReader())
+        p.setting = lambda *a, **k: False
+        entry = entries.Entry(menu="…", direct=(entries.Direct("com.a", ".One"),))
+        lines = []
+        self.assertIsNone(entries.reach(p, entry, log=lines.append, sleep=no_wait, settle=0))
+        self.assertTrue(any("没落在这一页" in line for line in lines), lines)
+
+    def test_a_landing_wait_uses_the_injected_clock_and_budget(self):
+        """在注入的钟上，未落地的直达按 timeout / poll 封顶轮询：轮数由这两项决定。"""
+        p = phone(FakeReader())
+        p.setting = lambda *a, **k: False
+        entry = entries.Entry(menu="…", direct=(entries.Direct("com.a", ".One"),))
+        samples = []
+        original = p.focus
+        p.focus = lambda: samples.append(1) or original()
+        entries.reach(p, entry, log=lambda *a: None, sleep=no_wait, settle=0, now=lambda: 0.0)
+        self.assertEqual(len(samples), 21)
+
+    def test_the_landing_wait_reads_the_clock_it_was_given(self):
+        """注入的钟一下越过 4 秒预算：一次采样都不做，不能偷偷用真实时钟。"""
+        p = phone(FakeReader())
+        p.setting = lambda *a, **k: False
+        entry = entries.Entry(menu="…", direct=(entries.Direct("com.a", ".One"),))
+        ticks = iter(range(0, 10000, 10))
+        samples = []
+        original = p.focus
+        p.focus = lambda: samples.append(1) or original()
+        entries.reach(p, entry, log=lambda *a: None, sleep=no_wait, settle=0, now=lambda: next(ticks))
+        self.assertEqual(samples, [])
+
+    def test_reach_forwards_the_settle_it_was_given(self):
+        """调用点给的 settle 要传到 Phone.start：放宽等待只该由调用点决定。"""
+        p = phone(FakeReader(lands={"com.a/com.a.One"}))
+        seen = []
+        original = p.start
+        p.start = lambda pkg, act, **kw: (seen.append(kw), original(pkg, act, **kw))[1]
+        self.assertEqual(entries.reach(p, self.ENTRY, log=lambda *a: None, sleep=no_wait, settle=0), "direct")
+        self.assertEqual(seen, [{"settle": 0}])
+
+    def test_reach_default_settle_is_the_shared_fast_path(self):
+        """不传 settle 时用 1.2：这一档与 open_direct 的默认值同源。"""
+        p = phone(FakeReader(lands={"com.a/com.a.One"}))
+        seen = []
+        original = p.start
+        p.start = lambda pkg, act, **kw: (seen.append(kw), original(pkg, act, **kw))[1]
+        self.assertEqual(entries.reach(p, self.ENTRY, log=lambda *a: None, sleep=no_wait), "direct")
+        self.assertEqual(seen, [{"settle": 1.2}])
 
 
 # ---------- 来源 tests/test_assistant_entry_901.py ----------
@@ -1434,6 +1563,64 @@ class OpenDirectTest(unittest.TestCase):
         p = fixtures.phone_mock()
         entries.open_direct(p, entries.Direct("com.android.settings", ".ad.AdServiceSettings"))
         self.assertEqual(p.start.call_args.args, ("com.android.settings", ".ad.AdServiceSettings"))
+
+    def test_settle_default_is_forwarded_to_phone_start(self):
+        """`open_direct` 自己的默认 settle 也传给 Phone.start。"""
+        r = FakeReader(lands={"com.a/com.a.One"})
+        p = phone(r)
+        seen = []
+        original = p.start
+        p.start = lambda pkg, act, **kw: (seen.append(kw), original(pkg, act, **kw))[1]
+        entries.open_direct(p, entries.Direct("com.a", ".One"))
+        self.assertEqual(seen, [{"settle": 1.2}])
+
+    def test_bare_launch_failure_names_the_page_and_keeps_the_output_tail(self):
+        """报错写清哪一页打不开、只留输出最后 200 字，长输出不把整段日志刷掉。"""
+        r = FakeReader()
+        long = "x" * 260 + "TAILMARK"
+        r.shell = lambda cmd, timeout=None: types.SimpleNamespace(output=long, exit_code=1)
+        direct = entries.Direct("com.b", ".Page", keep_task=True)
+        with self.assertRaises(RuntimeError) as caught:
+            entries.open_direct(phone(r), direct)
+        message = str(caught.exception)
+        self.assertTrue(message.startswith("无法打开 com.b.Page："), message)
+        self.assertTrue(message.endswith("TAILMARK"), message)
+        self.assertEqual(len(message.split("：", 1)[1]), 200)
+
+    def test_bare_launch_failure_with_no_output_reports_an_empty_tail(self):
+        """输出读不到时错误里不留占位串，只留页面名。"""
+        r = FakeReader()
+        r.shell = lambda cmd, timeout=None: types.SimpleNamespace(output=None, exit_code=1)
+        direct = entries.Direct("com.b", ".Page", keep_task=True)
+        with self.assertRaises(RuntimeError) as caught:
+            entries.open_direct(phone(r), direct)
+        self.assertEqual(str(caught.exception), "无法打开 com.b.Page：")
+
+    def test_error_text_in_a_successful_exit_still_fails(self):
+        """退出码为 0 但输出里有 Error：拉不起来仍是失败（`or` 不能写成 `and`）。"""
+        r = FakeReader()
+        r.shell = lambda cmd, timeout=None: types.SimpleNamespace(
+            output="Error: Activity not started", exit_code=0)
+        direct = entries.Direct("com.b", ".Page", keep_task=True)
+        with self.assertRaises(RuntimeError):
+            entries.open_direct(phone(r), direct)
+
+    def test_nonzero_exit_with_clean_output_fails(self):
+        """退出码非 0 就算输出干净也算失败。"""
+        r = FakeReader()
+        r.shell = lambda cmd, timeout=None: types.SimpleNamespace(
+            output="Starting: Intent { }", exit_code=1)
+        direct = entries.Direct("com.b", ".Page", keep_task=True)
+        with self.assertRaises(RuntimeError):
+            entries.open_direct(phone(r), direct)
+
+    def test_clean_output_with_zero_exit_passes(self):
+        """输出干净、退出码 0 的裸启动不抛：正常成功的这一档不能被当成失败。"""
+        r = FakeReader()
+        r.shell = lambda cmd, timeout=None: types.SimpleNamespace(
+            output="Starting: Intent { }", exit_code=0)
+        direct = entries.Direct("com.b", ".Page", keep_task=True)
+        entries.open_direct(phone(r), direct)   # 不抛就是通过
 
 
 # ---------- 来源 tests/test_entry_hops_286.py ----------
