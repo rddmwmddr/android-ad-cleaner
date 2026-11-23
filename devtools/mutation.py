@@ -8,8 +8,9 @@
 退出码：0 全部杀死、1 有存活 / 无测试 / 可疑 / 段错误、2 用错或 mutmut 自己没跑完。
 `--summary <文件>` 把一节 markdown（含 pragma 计数）追加进去，CI 用它写 job summary。
 
-`--since <ref>` 只跑 `git diff --name-only <ref>` 里落进映射表的模块；改动落在表外时
-逐条报出来（数据改动与未立项的模块不在判据范围内，但要看得到）。行级筛选交给 mutmut 自己：
+`--since <ref>` 跑 `git diff --name-only <ref>` 里落进映射表的模块，加上由改动测试文件按
+映射表反查拉起的模块（#1531）；改动落在表外时逐条报出来（数据改动与未立项的模块不在判据
+范围内，但要看得到），两类来源分开写到 stderr。行级筛选交给 mutmut 自己：
 它按文件内容哈希重算 mutant、按 span 比对新旧，有缓存时只重测试改动行产生的那些（实测单行
 0.75 s）；冷缓存时退化成该模块的全量（实测 schema 8.1 s）。
 
@@ -33,6 +34,7 @@ import subprocess
 import sys
 from pathlib import Path
 from collections.abc import Sequence
+from typing import NamedTuple
 
 try:
     from . import mutation_scope
@@ -264,19 +266,47 @@ def changed_paths(ref: str) -> list[str]:
     return [line for line in completed.stdout.splitlines() if line]
 
 
-def scope_of(ref: str) -> tuple[list[str], list[str]]:
-    """改动面分成两份：落进映射表的模块，以及没落的 `tool/` / `gui/` / 手机版 / `devtools/` 模块（后者只作可见性提示）。
+class Scope(NamedTuple):
+    """`--since` 的改动面：两类来源分开留，输出才能说清是模块改动还是测试改动拉起来的（#1531）。"""
+
+    changed: list[str]
+    pulled: list[str]
+    unmapped: list[str]
+
+    @property
+    def modules(self) -> list[str]:
+        """本次要跑的模块：先模块路径改到的，再测试文件反查补上的，两类之间已去重。"""
+        return self.changed + self.pulled
+
+
+def scope_of(ref: str) -> Scope:
+    """改动面：落进映射表的模块（含由改动测试文件反查拉起的），以及没落的模块（后者只作可见性提示）。
 
     `gui/` 里界壳文件、harmony 三份、手机版替换层里还没有行的模块、`devtools/` 的生成器与自指两份
-    都会逐条报出来：缺席要看得见（#1429、#1430、#1515）。
+    都会逐条报出来：缺席要看得见（#1429、#1430、#1515）。只改 `tests/` 的 PR 靠反查看不见模块路径，
+    反查结果因此与模块改动取并集，去重时模块路径在前（#1531）。
     """
     paths = changed_paths(ref)
-    modules = mutation_scope.modules_in_paths(paths)
+    changed = mutation_scope.modules_in_paths(paths)
+    pulled = [module for module in mutation_scope.modules_for_tests(paths)
+              if module not in changed]
     roots = ("tool/", "gui/", "devtools/", mutation_scope.ANDROID_PREFIX)
     unmapped = [path for path in paths
                 if path.startswith(roots) and path.endswith(".py")
-                and path not in modules]
-    return modules, unmapped
+                and path not in changed]
+    return Scope(changed, pulled, unmapped)
+
+
+def scope_notes(scope: Scope) -> list[str]:
+    """`--since` 写到 stderr 的诊断行：表外逐条报，两类来源分开列，失败时知道该看哪一侧的 diff。"""
+    notes = []
+    if scope.unmapped:
+        notes.append(f"改动里有不在映射表的模块（本次不判）：{' '.join(scope.unmapped)}")
+    if scope.changed:
+        notes.append(f"改到的模块：{' '.join(scope.changed)}")
+    if scope.pulled:
+        notes.append(f"由测试改动拉起的模块：{' '.join(scope.pulled)}")
+    return notes
 
 
 PRAGMA = "# pragma: no mutate"
@@ -327,14 +357,14 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         summary_path = Path(args[at + 1])
         del args[at:at + 2]
-    unmapped: list[str] = []
     if args[:1] == ["--since"]:
         if len(args) != 2:
             print("--since 要带一个 ref", file=sys.stderr)
             return 2
-        modules, unmapped = scope_of(args[1])
-        if unmapped:
-            print(f"改动里有不在映射表的模块（本次不判）：{' '.join(unmapped)}", file=sys.stderr)
+        scope = scope_of(args[1])
+        for note in scope_notes(scope):
+            print(note, file=sys.stderr)
+        modules = scope.modules
         if not modules:
             print("改动没有落在映射表里的模块，没有要跑的 mutant")
             return 0
