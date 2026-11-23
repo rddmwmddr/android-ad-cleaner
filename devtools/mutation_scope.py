@@ -155,6 +155,33 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_adb_link.py", "tests/test_page_and_link_regressions.py", "tests/test_phone_host.py",
         "tests/test_plan.py", "tests/test_job.py",
     ),
+    # 手机拨动族（#1534）：`session` 只有三个 `__init__` 与 `set_app()` 被执行，44 份用例里绝大多数
+    # 的接触来自 `Phone` 装配。`toggler` 不进表（实测见 ADR-0043「tool/ 其余模块（#1445）」）：
+    # 纯函数与索引已被 13 份用例守住，存活集中在该模块自己的编排段（`off` 34、`confirm` 3）。
+    "tool/phone/session.py": (
+        # 矩阵把 `recipe_case.py` 里写的用例归到它自己名下，但那是只有被继承才跑得起来的基类
+        # （单独收集时子类不给 `RECIPE`，`RecipeSafetyCase` 12 条全红）；按实际所有者换成三个子类文件。
+        "tests/test_k70_recipe.py", "tests/test_k80pro_recipe.py",
+        "tests/test_xiaomi_24129pn74c_recipe.py", "tests/test_adb_link.py", "tests/test_captures.py",
+        "tests/test_catalog.py", "tests/test_channel_arrive.py", "tests/test_channel_decide.py",
+        "tests/test_channel_outcomes.py", "tests/test_channel_page.py",
+        "tests/test_channel_snapshot.py", "tests/test_engine_events.py", "tests/test_entries.py",
+        "tests/test_fixtures.py", "tests/test_honor_recipe.py", "tests/test_honor_wkl_recipe.py",
+        "tests/test_issue_regressions.py", "tests/test_layout_and_verdict_regressions.py",
+        "tests/test_lock_and_disconnect_regressions.py", "tests/test_main_switch_bar.py",
+        "tests/test_off_title_fallback.py", "tests/test_oneplus_plz110_recipe.py",
+        "tests/test_oppo_pmx110_recipe.py", "tests/test_page_and_link_regressions.py",
+        "tests/test_phk110_recipe.py", "tests/test_phone_dismisser.py",
+        "tests/test_phone_facade.py", "tests/test_phone_host.py", "tests/test_phone_interface.py",
+        "tests/test_phone_launcher.py", "tests/test_phone_navigator.py",
+        "tests/test_phone_sessions.py", "tests/test_phone_settings_search.py",
+        "tests/test_phone_toggler.py", "tests/test_recipe_call_snapshots.py",
+        "tests/test_recipe_nav.py", "tests/test_regressions.py",
+        "tests/test_release_regressions.py", "tests/test_rmx3700_recipe.py", "tests/test_row.py",
+        "tests/test_tap_notice_regressions.py", "tests/test_ui_session.py",
+        "tests/test_vivo_2417_browser_entry.py", "tests/test_vivo_2547da_android17_recipe.py",
+        "tests/test_xiaomi_25060rk16c_recipe.py",
+    ),
     # gui 侧（#1429），同样由覆盖矩阵量出：任务编排被几乎所有跑计划的用例碰到。
     "gui/dispatcher.py": (
         "tests/test_layout_and_verdict_regressions.py", "tests/test_client_events.py",
