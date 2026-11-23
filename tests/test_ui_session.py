@@ -2,12 +2,14 @@
 import os
 os.environ.setdefault("AAC_NO_SOUND", "1")     # 客户端提示音：测试里不出声
 import contextlib
+import hashlib
 import io
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import threading
+import types
 import unittest
 import uuid
 from unittest.mock import Mock, patch
@@ -178,6 +180,195 @@ class TaskTests(unittest.TestCase):
     def test_finish_does_not_claim_ad_changes_succeeded(self):
         self.assertNotIn("去广告已经做完", run.DEV_REMINDER)
         self.assertIn("先核对执行结果", run.DEV_REMINDER)
+
+
+class Watch:
+    """`time` 的替身：sleep 与 monotonic 共用同一个假钟，等释放循环按它算预算。"""
+
+    def __init__(self):
+        self.t = 0.0
+        self.sleeps = []
+
+    def monotonic(self):
+        return self.t
+
+    def sleep(self, seconds):
+        self.sleeps.append(seconds)
+        self.t = round(self.t + seconds, 3)     # 假钟按毫秒取整：20 次 0.2 落在整 5.0 上
+
+
+def fake_msvcrt():
+    """Windows 锁的替身：记住每次调用时的文件描述符、模式与当前文件位置。"""
+    calls = []
+
+    def locking(fd, mode, length):
+        calls.append((fd, mode, length, os.lseek(fd, 0, os.SEEK_CUR)))
+
+    module = types.SimpleNamespace(LK_NBLCK="NBLCK", LK_UNLCK="UNLCK", locking=locking)
+    return module, calls
+
+
+class DeviceLockTests(unittest.TestCase):
+    """锁文件的口径：文件名、内容与互斥；win32 那支用假 msvcrt 走到。"""
+
+    def serial(self):
+        return "lock-" + uuid.uuid4().hex
+
+    def test_the_lock_file_is_derived_from_the_serial(self):
+        serial = self.serial()
+        lock = session.DeviceLock(serial, wait=0)
+        try:
+            expected = (Path(tempfile.gettempdir()) / "android-ad-cleaner-locks"
+                        / (hashlib.sha256(serial.encode("utf-8")).hexdigest() + ".lock"))
+            self.assertEqual(Path(lock.file.name), expected)
+            self.assertEqual(expected.read_bytes(), b"0")
+        finally:
+            lock.close()
+
+    def test_a_fresh_lock_carries_one_seed_byte(self):
+        lock = session.DeviceLock(self.serial(), wait=0)
+        try:
+            self.assertEqual(Path(lock.file.name).read_bytes(), b"0")
+        finally:
+            lock.close()
+
+    def test_reopening_the_lock_does_not_append_another_seed(self):
+        serial = self.serial()
+        session.DeviceLock(serial, wait=0).close()
+        lock = session.DeviceLock(serial, wait=0)
+        try:
+            self.assertEqual(Path(lock.file.name).read_bytes(), b"0")
+        finally:
+            lock.close()
+
+    def test_the_same_serial_is_held_until_the_owner_closes(self):
+        serial = self.serial()
+        held = session.DeviceLock(serial, wait=0)
+        try:
+            with self.assertRaises(session.DeviceBusyError):
+                session.DeviceLock(serial, wait=0)
+        finally:
+            held.close()
+        session.DeviceLock(serial, wait=0).close()
+
+    def test_another_serial_is_not_blocked(self):
+        first = session.DeviceLock(self.serial(), wait=0)
+        try:
+            session.DeviceLock(self.serial(), wait=0).close()
+        finally:
+            first.close()
+
+    def test_the_default_wait_is_twenty_seconds(self):
+        serial = self.serial()
+        held = session.DeviceLock(serial, wait=0)
+        clock = Clock()
+        try:
+            with patch.object(session, "time", clock), self.assertRaises(session.DeviceBusyError) as busy:
+                session.DeviceLock(serial)
+            self.assertEqual(str(busy.exception),
+                             "本电脑另一个去广告任务正在使用这台手机的读屏服务，请结束该任务后重试。")
+            self.assertEqual(clock.t, 20.0)
+        finally:
+            held.close()
+
+    def test_windows_locks_and_unlocks_the_first_byte(self):
+        module, calls = fake_msvcrt()
+        with patch.dict(sys.modules, {"msvcrt": module}), \
+             patch.object(session.sys, "platform", "win32"):
+            lock = session.DeviceLock(self.serial(), wait=0)
+            fd = lock.file.fileno()
+            lock.close()
+        self.assertEqual(calls, [(fd, "NBLCK", 1, 0), (fd, "UNLCK", 1, 0)])
+
+
+class CheckAliveTests(unittest.TestCase):
+    def device(self):
+        d = session.ManagedDevice.__new__(session.ManagedDevice)
+        d._dev = types.SimpleNamespace()
+        d._device_server_port = 7912
+        return d
+
+    def test_the_ping_contract(self):
+        d = self.device()
+        with patch.object(session, "_http_request",
+                          return_value=types.SimpleNamespace(content=b"pong")) as ping:
+            self.assertTrue(d._check_alive())
+        ping.assert_called_once_with(d._dev, 7912, "GET", "/ping", timeout=1)
+
+    def test_a_short_answer_is_not_alive(self):
+        with patch.object(session, "_http_request",
+                          return_value=types.SimpleNamespace(content=b"pong!")):
+            self.assertFalse(self.device()._check_alive())
+
+    def test_a_transport_error_is_not_alive(self):
+        for error in (OSError("down"), session.HTTPError("boom")):
+            with patch.object(session, "_http_request", side_effect=error):
+                self.assertFalse(self.device()._check_alive())
+
+
+class ManagedDeviceTests(unittest.TestCase):
+    def device(self, process=None, alive=False):
+        d = session.ManagedDevice.__new__(session.ManagedDevice)
+        d._lock = threading.Lock()
+        d._process = process
+        d._session_lock = Mock()
+        d._check_alive = Mock(return_value=alive)
+        return d
+
+    def test_connect_builds_a_managed_device_for_the_serial(self):
+        with patch.object(session, "ManagedDevice") as device:
+            self.assertIs(session.connect("SERIAL"), device.return_value)
+        device.assert_called_once_with("SERIAL")
+
+    def test_the_serial_goes_to_the_lock_and_the_upstream_device(self):
+        with patch.object(session, "DeviceLock", return_value=Mock()) as lock, \
+             patch.object(session.u2.Device, "__init__", return_value=None) as init, \
+             patch.object(session.atexit, "unregister") as unregister, \
+             patch.object(session.atexit, "register") as register:
+            device = session.ManagedDevice("SERIAL")
+        lock.assert_called_once_with("SERIAL")
+        self.assertEqual(init.call_args.args, ("SERIAL",))
+        self.assertEqual(unregister.call_args.args, (device.stop_uiautomator,))
+        self.assertEqual(register.call_args.args, (device.close,))
+
+    def test_a_reused_service_closes_the_lock_and_nothing_else(self):
+        d = session.ManagedDevice.__new__(session.ManagedDevice)   # 没有 `_process`：复用来的服务
+        d._session_lock = Mock()
+        with patch.object(session.atexit, "unregister") as unregister:
+            d.close()
+        d._session_lock.close.assert_called_once_with()
+        unregister.assert_called_once_with(d.close)
+
+    def test_an_unreleased_process_names_the_retry_stop(self):
+        process = Mock()
+        process.pool.return_value = None
+        d = self.device(process)
+        with self.assertRaises(RuntimeError) as stopped:
+            d.stop_uiautomator()
+        self.assertEqual(str(stopped.exception),
+                         "本次读屏进程未退出，停止重连；请退出客户端并重启手机后重试。")
+
+    def test_a_service_that_releases_within_one_poll_returns(self):
+        process = Mock()
+        process.pool.return_value = 0
+        d = self.device(process, alive=True)
+        d._check_alive = Mock(side_effect=[True, False])
+        watch = Watch()
+        with patch.object(session, "time", watch):
+            d.stop_uiautomator()
+        self.assertEqual(watch.sleeps, [.2])
+        self.assertIsNone(d._process)
+
+    def test_the_release_budget_is_five_seconds(self):
+        process = Mock()
+        process.pool.return_value = 0
+        d = self.device(process, alive=True)
+        watch = Watch()
+        with patch.object(session, "time", watch), self.assertRaises(RuntimeError) as stuck:
+            d.stop_uiautomator()
+        self.assertEqual(str(stuck.exception),
+                         "本次读屏服务未释放，停止重连；请退出客户端并重启手机后重试。")
+        self.assertEqual(watch.t, 5.0)
 
 
 if __name__ == "__main__":

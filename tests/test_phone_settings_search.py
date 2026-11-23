@@ -250,5 +250,407 @@ class PreferenceGearLandingTests(unittest.TestCase):
         p.screen.back.assert_not_called()
 
 
+class SearchPhaseContractTests(unittest.TestCase):
+    """搜索阶段自身的边界（#1540）：读数、打字、直达页、退场与结果挑选，逐条钉行为。
+
+    这些用例只造 `SettingsSearch` + `screen_stub()`，不经过门面；等待全部走假钟，
+    所以超时、轮询与几处固定停顿按推进后的时间断言，不锁调用序列。
+    """
+
+    HOME_ROW = ("搜索设置项", (50, 100, 1100, 200))
+    RESULT_ROW = ("广告", (50, 400, 1000, 500))
+    INPUT_ROW = ("广告", (50, 100, 1000, 200))
+
+    def phase(self, page=SEARCH_BOX):
+        conn = Mock()
+        screen = screen_stub(page, conn=conn)
+        lost = Mock()
+        return fast.SettingsSearch(screen, lost), screen, conn, lost
+
+    def rows(self, *pairs, cls="android.widget.TextView"):
+        node = ET.fromstring(f'<node class="{cls}"/>')
+        return [(text, bounds, node) for text, bounds in pairs]
+
+    def typed(self, page=SEARCH_BOX):
+        phase, screen, conn, lost = self.phase(page)
+        phase.edit_ready = Mock(return_value=True)
+        phase.focused_text = Mock(return_value="广告")
+        conn.reader.return_value.selector = "SEL"
+        return phase, conn
+
+    # ---- 会话装配与读数 ----
+
+    def test_the_session_keeps_the_connection_and_the_miss_ledger(self):
+        phase, screen, conn, lost = self.phase()
+        self.assertIs(phase.conn, conn)
+        self.assertIs(phase.lost_note, lost)
+        self.assertIs(phase.reader, conn.reader)
+
+    def test_a_focused_node_that_is_not_an_input_is_not_the_search_box(self):
+        page = '<hierarchy><node class="android.widget.Button" focused="true" text="确定"/></hierarchy>'
+        phase, *_ = self.phase(page)
+        self.assertIsNone(phase.focused_text())
+        self.assertFalse(phase.edit_ready())
+
+    def test_an_input_without_text_reads_as_empty(self):
+        page = '<hierarchy><node class="android.widget.EditText" focused="true"/></hierarchy>'
+        phase, *_ = self.phase(page)
+        self.assertEqual(phase.focused_text(), "")
+
+    def test_an_offscreen_input_is_not_the_search_box(self):
+        page = '<hierarchy><node class="android.widget.EditText" focused="true" text="广告"/></hierarchy>'
+        phase, screen, *_ = self.phase(page)
+        screen.on_screen = lambda n: False
+        self.assertIsNone(phase.focused_text())
+        self.assertFalse(phase.edit_ready())
+
+    def test_a_focused_input_counts_even_when_read_in_a_different_order(self):
+        page = ('<hierarchy><node focused="true" class="android.widget.EditText" text="广告"/>'
+                '</hierarchy>')
+        phase, *_ = self.phase(page)
+        self.assertTrue(phase.edit_ready())
+        self.assertEqual(phase.focused_text(), "广告")
+
+    # ---- 打字 ----
+
+    def test_the_selector_targets_a_focused_edit_box(self):
+        phase, conn = self.typed()
+        with patch.object(fast.time, "sleep"):
+            self.assertTrue(phase.type_text("广告"))
+        conn.reader.assert_called_once_with(
+            classNameMatches=r".*(EditText|AutoCompleteTextView)$", focused=True)
+
+    def test_type_text_uses_the_default_timeout_for_the_rpc(self):
+        phase, conn = self.typed()
+        with patch.object(fast.time, "sleep"):
+            self.assertTrue(phase.type_text("广告"))
+        conn.reader.jsonrpc.setText.assert_called_once_with("SEL", "广告", http_timeout=4.0)
+
+    def test_a_typed_value_is_verified_after_the_echo_delay(self):
+        phase, _ = self.typed()
+        clock = clocked(self, fast, Clock())
+        self.assertTrue(phase.type_text("广告"))
+        self.assertEqual(clock.t, 0.4)
+
+    def test_type_text_returns_false_without_a_ready_input(self):
+        phase, screen, conn, lost = self.phase('<hierarchy></hierarchy>')
+        with patch.object(fast.time, "sleep") as sleep:
+            self.assertFalse(phase.type_text("广告"))
+        sleep.assert_not_called()
+        conn.reader.assert_not_called()
+
+    def test_a_wrong_echo_clears_the_box_before_pasting(self):
+        phase, screen, conn, lost = self.phase()
+        phase.focused_text = Mock(side_effect=["", "广告"])
+        conn.reader.return_value.selector = "SEL"
+        with patch.object(fast.time, "sleep"):
+            self.assertTrue(phase.type_text("广告", timeout=0.5))
+        conn.reader.jsonrpc.clearTextField.assert_called_once_with("SEL", http_timeout=0.5)
+        conn.reader.jsonrpc.setClipboard.assert_called_once_with(None, "广告", http_timeout=0.5)
+        conn.reader.shell.assert_called_once_with("input keyevent KEYCODE_PASTE", timeout=0.5)
+
+    def test_a_second_wrong_echo_gives_up_after_clearing_again(self):
+        phase, screen, conn, lost = self.phase()
+        phase.focused_text = Mock(return_value="")
+        conn.reader.return_value.selector = "SEL"
+        with patch.object(fast.time, "sleep"):
+            self.assertFalse(phase.type_text("广告"))
+        self.assertEqual(conn.reader.jsonrpc.clearTextField.call_count, 2)
+
+    def test_the_box_closing_after_a_wrong_echo_ends_the_attempt(self):
+        phase, screen, conn, lost = self.phase()
+        phase.edit_ready = Mock(side_effect=[True, False])
+        phase.focused_text = Mock(return_value="")
+        conn.reader.return_value.selector = "SEL"
+        with patch.object(fast.time, "sleep"):
+            self.assertFalse(phase.type_text("广告"))
+        conn.reader.jsonrpc.setClipboard.assert_not_called()
+
+    # ---- 直达搜索页 ----
+
+    def direct(self, result):
+        phase, screen, conn, lost = self.phase()
+        conn.reader.shell = Mock(return_value=result)
+        return phase, conn
+
+    def test_a_missing_exit_code_counts_as_success(self):
+        phase, _ = self.direct(types.SimpleNamespace(output="Starting: Intent"))
+        with patch.object(fast.time, "sleep"):
+            self.assertTrue(phase._search_page())
+
+    def test_a_missing_output_counts_as_no_output(self):
+        phase, _ = self.direct(types.SimpleNamespace(exit_code=0))
+        with patch.object(fast.time, "sleep"):
+            self.assertTrue(phase._search_page())
+
+    def test_an_error_line_alone_is_not_a_page(self):
+        phase, _ = self.direct(types.SimpleNamespace(exit_code=0, output="Error: nope"))
+        with patch.object(fast.time, "sleep"):
+            self.assertFalse(phase._search_page())
+
+    def test_an_unresolved_intent_line_alone_is_not_a_page(self):
+        phase, _ = self.direct(types.SimpleNamespace(exit_code=0, output="unable to resolve Intent"))
+        with patch.object(fast.time, "sleep"):
+            self.assertFalse(phase._search_page())
+
+    def test_the_direct_action_waits_a_bounded_time_for_the_input(self):
+        phase, _ = self.direct(types.SimpleNamespace(exit_code=0, output="Starting: Intent"))
+        phase.edit_ready = Mock(return_value=False)
+        clock = clocked(self, fast, Clock())
+        self.assertFalse(phase._search_page())
+        self.assertAlmostEqual(clock.t, 2.55)
+
+    def test_the_direct_action_times_out_on_the_injected_clock(self):
+        phase, _ = self.direct(types.SimpleNamespace(exit_code=0, output="Starting: Intent"))
+        clock = clocked(self, fast, Clock())
+        samples = []
+        def never_ready():
+            samples.append(clock.t)
+            clock.sleep(10)
+            return False
+        phase.edit_ready = never_ready
+        self.assertFalse(phase._search_page())
+        self.assertEqual(len(samples), 1)
+
+    # ---- 退场 ----
+
+    def test_leaving_when_already_off_the_search_page_is_a_success(self):
+        phase, screen, conn, lost = self.phase(SETTINGS_HOME)
+        self.assertTrue(phase._leave_search())
+        conn.reader.shell.assert_not_called()
+
+    def test_leaving_the_search_page_returns_to_the_settings_home(self):
+        phase, screen, conn, lost = self.phase()
+        clock = clocked(self, fast, Clock())
+        states = {"page": SEARCH_BOX}
+        screen.tree = lambda: ET.fromstring(states["page"])
+        screen.back = Mock(side_effect=lambda *a, **k: states.update(page=SETTINGS_HOME))
+        self.assertTrue(phase._leave_search())
+        self.assertEqual(screen.back.call_count, 1)
+        conn.reader.shell.assert_called_once_with(
+            "am start -f 0x10008000 -a android.settings.SETTINGS")
+        self.assertEqual(clock.t, 0.5)
+
+    def test_three_failed_backs_give_up_leaving(self):
+        phase, screen, conn, lost = self.phase()
+        screen.back = Mock()
+        self.assertFalse(phase._leave_search())
+        self.assertEqual(screen.back.call_count, 3)
+        conn.reader.shell.assert_not_called()
+
+    # ---- 搜索结果 ----
+
+    def setting_phase(self, page=SEARCH_BOX):
+        phase, screen, conn, lost = self.phase(page)
+        screen.say = Mock()
+        clicks = []
+        screen.click = Mock(side_effect=lambda x, y: clicks.append((x, y)))
+        screen.back = Mock()
+        conn.reader.shell = Mock(return_value=types.SimpleNamespace(
+            exit_code=0, output="Starting: Intent"))
+        return phase, screen, conn, lost, clicks
+
+    def fallback(self, *, after_typing=None):
+        phase, screen, conn, lost, clicks = self.setting_phase()
+        phase._search_page = Mock(return_value=False)
+        phase.type_text = Mock(return_value=True)
+        def texts(root=None):
+            return self.rows(*((after_typing if phase.type_text.called else (self.HOME_ROW,))
+                               or (self.HOME_ROW,)))
+        screen.texts = texts
+        screen.focus = lambda: "settings/result" if len(clicks) >= 2 else "settings/search"
+        return phase, screen, conn, lost, clicks
+
+    def test_the_fallback_clicks_the_box_and_the_result_and_waits_out_the_pauses(self):
+        phase, screen, conn, lost, clicks = self.fallback(after_typing=(self.RESULT_ROW,))
+        clock = clocked(self, fast, Clock())
+        self.assertTrue(phase.setting("广告"))
+        self.assertEqual(clicks, [(575, 150), (525, 450)])
+        self.assertTrue(all(isinstance(v, int) for xy in clicks for v in xy))
+        self.assertEqual(clock.t, 0.7)
+        self.assertEqual(lost.miss, 0)
+
+    def test_a_named_box_does_not_fall_back_to_the_generic_pattern(self):
+        phase, screen, conn, lost, clicks = self.setting_phase()
+        phase._search_page = Mock(return_value=False)
+        phase.type_text = Mock(return_value=True)
+        screen.texts = Mock(return_value=self.rows(self.HOME_ROW))
+        screen.focus = Mock(return_value="settings/search")
+        clocked(self, fast, Clock())
+        self.assertFalse(phase.setting("广告", box="不存在的框"))
+        self.assertEqual(clicks, [])
+        self.assertTrue(any("设置搜索框没打开" in c.args[0] for c in screen.say.call_args_list))
+
+    def test_a_missing_box_skips_the_retries_immediately(self):
+        phase, screen, conn, lost, clicks = self.setting_phase()
+        phase._search_page = Mock(return_value=False)
+        screen.texts = Mock(return_value=[])
+        clocked(self, fast, Clock())
+        self.assertFalse(phase.setting("广告"))
+        self.assertEqual(clicks, [])
+        self.assertTrue(any("设置搜索框没打开" in c.args[0] for c in screen.say.call_args_list))
+
+    def test_the_box_lookup_gives_up_on_the_injected_clock(self):
+        phase, screen, conn, lost, clicks = self.setting_phase()
+        phase._search_page = Mock(return_value=False)
+        screen.texts = Mock(return_value=[])
+        clock = clocked(self, fast, Clock())
+        self.assertFalse(phase.setting("广告"))
+        self.assertAlmostEqual(clock.t, 3.0)
+
+    def test_the_box_lookup_stops_when_the_injected_clock_has_moved(self):
+        phase, screen, conn, lost, clicks = self.setting_phase()
+        phase._search_page = Mock(return_value=False)
+        clock = clocked(self, fast, Clock())
+        screen.texts = Mock(side_effect=lambda root=None: clock.sleep(10) or [])
+        self.assertFalse(phase.setting("广告"))
+        self.assertEqual(screen.texts.call_count, 1)
+
+    def test_the_input_check_gives_up_on_the_injected_clock(self):
+        phase, screen, conn, lost, clicks = self.setting_phase('<hierarchy></hierarchy>')
+        phase._search_page = Mock(return_value=False)
+        screen.texts = Mock(return_value=self.rows(self.HOME_ROW))
+        clock = clocked(self, fast, Clock())
+        self.assertFalse(phase.setting("广告"))
+        self.assertAlmostEqual(clock.t, 10.0)
+
+    def test_the_input_check_stops_when_the_injected_clock_has_moved(self):
+        phase, screen, conn, lost, clicks = self.setting_phase()
+        phase._search_page = Mock(return_value=False)
+        screen.texts = Mock(return_value=self.rows(self.HOME_ROW))
+        clock = clocked(self, fast, Clock())
+        samples = []
+        def never_ready():
+            samples.append(clock.t)
+            clock.sleep(10)
+            return False
+        phase.edit_ready = never_ready
+        self.assertFalse(phase.setting("广告"))
+        self.assertEqual(len(samples), 5)
+
+    def test_the_result_lookup_gives_up_on_the_injected_clock(self):
+        phase, screen, conn, lost, clicks = self.setting_phase()
+        phase._search_page = Mock(return_value=True)
+        phase.type_text = Mock(return_value=True)
+        screen.texts = Mock(return_value=self.rows(self.INPUT_ROW, cls="android.widget.EditText"))
+        clock = clocked(self, fast, Clock())
+        self.assertFalse(phase.setting("广告"))
+        self.assertAlmostEqual(clock.t, 3.0)
+
+    def test_the_result_lookup_stops_when_the_injected_clock_has_moved(self):
+        phase, screen, conn, lost, clicks = self.setting_phase()
+        phase._search_page = Mock(return_value=True)
+        phase.type_text = Mock(return_value=True)
+        clock = clocked(self, fast, Clock())
+        screen.texts = Mock(side_effect=lambda root=None: clock.sleep(10) or [])
+        self.assertFalse(phase.setting("广告"))
+        self.assertEqual(screen.texts.call_count, 1)
+
+    def test_the_page_change_wait_gives_up_on_the_injected_clock(self):
+        phase, screen, conn, lost, clicks = self.setting_phase()
+        phase._search_page = Mock(return_value=True)
+        phase.type_text = Mock(return_value=True)
+        screen.texts = Mock(return_value=self.rows(self.RESULT_ROW))
+        screen.focus = Mock(return_value="settings/search")
+        clock = clocked(self, fast, Clock())
+        self.assertFalse(phase.setting("广告"))
+        self.assertAlmostEqual(clock.t, 3.0)
+
+    def test_the_page_change_wait_leans_on_the_injected_clock(self):
+        phase, screen, conn, lost, clicks = self.setting_phase()
+        phase._search_page = Mock(return_value=True)
+        phase.type_text = Mock(return_value=True)
+        screen.texts = Mock(return_value=self.rows(self.RESULT_ROW))
+        clock = clocked(self, fast, Clock())
+        screen.focus = Mock(side_effect=lambda: clock.sleep(10) or "settings/search")
+        self.assertFalse(phase.setting("广告"))
+        self.assertLessEqual(screen.focus.call_count, 5)
+
+    def test_setting_clears_the_miss_ledger_before_searching(self):
+        phase, screen, conn, lost, clicks = self.fallback(after_typing=(self.RESULT_ROW,))
+        lost.miss = 5
+        clocked(self, fast, Clock())
+        phase.setting("广告")
+        self.assertEqual(lost.miss, 0)
+
+    def test_a_named_box_is_picked_by_its_text(self):
+        phase, screen, conn, lost, clicks = self.fallback(after_typing=(self.RESULT_ROW,))
+        clocked(self, fast, Clock())
+        self.assertTrue(phase.setting("广告", box="搜索设置"))
+        self.assertEqual(clicks[0], (575, 150))
+        self.assertEqual(phase.type_text.call_args.args, ("广告",))
+
+    def test_the_box_is_matched_automatically_when_no_text_is_given(self):
+        phase, screen, conn, lost, clicks = self.setting_phase()
+        phase._search_page = Mock(return_value=False)
+        phase.type_text = Mock(return_value=False)
+        screen.texts = Mock(return_value=self.rows(self.HOME_ROW))
+        clocked(self, fast, Clock())
+        self.assertFalse(phase.setting("广告"))
+        self.assertEqual(clicks, [(575, 150)])
+
+    def test_a_box_that_never_opens_is_clicked_four_times_then_skipped(self):
+        phase, screen, conn, lost, clicks = self.setting_phase('<hierarchy></hierarchy>')
+        phase._search_page = Mock(return_value=False)
+        phase.type_text = Mock(return_value=True)
+        screen.texts = Mock(return_value=self.rows(self.HOME_ROW))
+        clock = clocked(self, fast, Clock())
+        self.assertFalse(phase.setting("广告"))
+        self.assertEqual(len(clicks), 4)
+        self.assertAlmostEqual(clock.t, 10.0)
+        self.assertTrue(any("设置搜索框没打开" in c.args[0] for c in screen.say.call_args_list))
+
+    def test_an_untyped_keyword_skips_the_result_lookup(self):
+        phase, screen, conn, lost, clicks = self.setting_phase()
+        phase._search_page = Mock(return_value=True)
+        phase.type_text = Mock(return_value=False)
+        screen.texts = Mock(return_value=self.rows(self.RESULT_ROW))
+        clocked(self, fast, Clock())
+        self.assertFalse(phase.setting("广告"))
+        self.assertEqual(clicks, [])
+        self.assertTrue(any("设置搜索框输入「广告」失败" in c.args[0] for c in screen.say.call_args_list))
+
+    def test_a_missing_result_names_the_keyword_and_leaves(self):
+        phase, screen, conn, lost, clicks = self.setting_phase()
+        phase._search_page = Mock(return_value=True)
+        phase.type_text = Mock(return_value=True)
+        screen.texts = Mock(return_value=self.rows(self.INPUT_ROW, cls="android.widget.EditText"))
+        clocked(self, fast, Clock())
+        self.assertFalse(phase.setting("广告"))
+        self.assertTrue(any("没搜到「广告」" in c.args[0] for c in screen.say.call_args_list))
+        self.assertTrue(screen.back.called)
+
+    def test_a_result_that_does_not_open_is_reported(self):
+        phase, screen, conn, lost, clicks = self.setting_phase()
+        phase._search_page = Mock(return_value=True)
+        phase.type_text = Mock(return_value=True)
+        screen.texts = Mock(return_value=self.rows(self.RESULT_ROW))
+        screen.focus = Mock(return_value="settings/search")
+        clocked(self, fast, Clock())
+        self.assertFalse(phase.setting("广告"))
+        self.assertTrue(any("搜索结果「广告」没有打开" in c.args[0] for c in screen.say.call_args_list))
+
+    def test_the_entry_name_is_what_is_searched_and_reported(self):
+        phase, screen, conn, lost, clicks = self.setting_phase()
+        phase._search_page = Mock(return_value=True)
+        phase.type_text = Mock(return_value=True)
+        screen.texts = Mock(return_value=self.rows((("广告服务", (50, 400, 1000, 500)))))
+        screen.focus = Mock(side_effect=["settings/search", "settings/result"])
+        clocked(self, fast, Clock())
+        self.assertTrue(phase.setting("广告", entry="广告服务"))
+        self.assertEqual(phase.type_text.call_args.args, ("广告",))
+        self.assertEqual(clicks, [(525, 450)])
+
+    def test_a_result_at_the_end_does_not_look_past_the_list(self):
+        phase, screen, conn, lost, clicks = self.setting_phase()
+        phase._search_page = Mock(return_value=True)
+        phase.type_text = Mock(return_value=True)
+        screen.texts = Mock(return_value=self.rows(self.RESULT_ROW))
+        clocked(self, fast, Clock())
+        self.assertFalse(phase.setting("广告", path="隐私 > 广告"))
+        self.assertEqual(clicks, [])
+        self.assertTrue(any("没搜到「广告」" in c.args[0] for c in screen.say.call_args_list))
+
+
 if __name__ == "__main__":
     unittest.main()

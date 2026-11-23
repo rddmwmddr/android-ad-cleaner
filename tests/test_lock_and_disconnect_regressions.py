@@ -12,6 +12,9 @@ import unittest
 from unittest.mock import Mock, patch
 import xml.etree.ElementTree as ET
 
+import adbutils
+import uiautomator2 as u2
+
 from gui import app
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,7 +23,7 @@ import adb_link
 import chan_fast as chan
 import fast
 from phone import connection as phone_connection
-from fixtures import FakeProc, FakeRunner, job_stub, phone_stub
+from fixtures import Clock, FakeProc, FakeRunner, job_stub, phone_stub
 import run
 
 
@@ -338,6 +341,278 @@ class ScrubTests(unittest.TestCase):
             self.assertEqual(len(api.runner.spawn_calls), 1)
             self.assertEqual([r.get("skipped", False) for r in api.job.results], [False, True, True])
             self.assertEqual("\n".join(api.job.lines).count("adb 连接断开了"), 1)
+
+
+class Recorder(io.StringIO):
+    """标准流替身：既收文本，也数 flush —— 连接层的提示必须当场推给客户端。"""
+
+    def __init__(self):
+        super().__init__()
+        self.flushes = 0
+
+    def flush(self):
+        self.flushes += 1
+
+
+def reader_stub(shell_output=""):
+    reader = Mock()
+    reader.settings = {}
+    reader.shell = Mock(return_value=out(shell_output))
+    return reader
+
+
+def make_connection(*, log=False, reader=None, serial="SER"):
+    reader = reader or reader_stub(SETTINGS)
+    with patch.object(phone_connection, "connect", return_value=reader):
+        conn = phone_connection.Connection(serial, log=log)
+    return conn, reader
+
+
+class ConsoleRegressionTests(unittest.TestCase):
+    DOMAIN = "connection"
+
+    def test_the_banner_is_flushed_by_default(self):
+        reader = reader_stub(SETTINGS)
+        with contextlib.redirect_stdout(Recorder()) as printed, \
+             patch.object(phone_connection, "connect", return_value=reader):
+            conn = phone_connection.Connection("SER")
+        self.assertEqual(printed.getvalue(), "正在连接手机读屏服务……\n")
+        self.assertGreaterEqual(printed.flushes, 1)
+        self.assertIs(conn.log, True)
+        with contextlib.redirect_stdout(Recorder()) as said:
+            conn.say("还要能说话")
+        self.assertEqual(said.getvalue(), "还要能说话\n")
+
+    def test_say_prints_and_flushes_what_it_is_given(self):
+        conn, _ = make_connection()
+        conn.log = True
+        with contextlib.redirect_stdout(Recorder()) as printed:
+            conn.say("第一行", "第二行")
+        self.assertEqual(printed.getvalue(), "第一行 第二行\n")
+        self.assertGreaterEqual(printed.flushes, 1)
+
+    def test_say_is_silent_when_logging_is_off(self):
+        conn, _ = make_connection(log=False)
+        self.assertFalse(conn.log)
+
+    def test_pause_point_prints_flushes_and_waits_for_the_file_to_go(self):
+        with tempfile.NamedTemporaryFile() as handle, \
+             patch.dict(os.environ, {"AAC_PAUSE_FILE": handle.name}), \
+             patch.object(phone_connection, "time", Clock()) as clock, \
+             patch.object(phone_connection.os.path, "exists",
+                          side_effect=[True, True, False]), \
+             contextlib.redirect_stdout(Recorder()) as printed:
+            self.assertTrue(phone_connection.pause_point())
+        self.assertIn("已暂停", printed.getvalue())
+        self.assertIn("继续执行", printed.getvalue())
+        self.assertGreaterEqual(printed.flushes, 2)
+        self.assertEqual(clock.t, 0.5)
+
+    def test_without_a_pause_file_nothing_happens(self):
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("AAC_PAUSE_FILE", None)
+            self.assertFalse(phone_connection.pause_point())
+
+
+class ShellTransportRegressionTests(unittest.TestCase):
+    DOMAIN = "connection"
+
+    def send(self, shell):
+        return phone_connection._shell_transport(shell)
+
+    def test_a_plain_call_keeps_the_command_only(self):
+        calls = []
+        self.send(lambda *a, **k: calls.append((a, k)))("ls")
+        self.assertEqual(calls, [(("ls",), {})])
+
+    def test_a_timeout_is_forwarded(self):
+        calls = []
+        self.send(lambda *a, **k: calls.append((a, k)))("ls", timeout=5)
+        self.assertEqual(calls, [(("ls",), {"timeout": 5})])
+
+    def test_a_dead_transport_becomes_link_broken(self):
+        def dead(command):
+            raise u2.exceptions.AdbShellError("shell output invalid: b''")
+        with self.assertRaises(adb_link.LinkBroken):
+            self.send(dead)("ls")
+
+    def test_another_shell_error_is_not_a_disconnect(self):
+        def broken(command):
+            raise u2.exceptions.AdbShellError("permission denied")
+        with self.assertRaises(u2.exceptions.AdbShellError):
+            self.send(broken)("ls")
+
+    def test_an_unrelated_error_is_raised_unchanged(self):
+        def broken(command):
+            raise ValueError("boom")
+        with self.assertRaises(ValueError):
+            self.send(broken)("ls")
+
+
+class ReaderFailureRegressionTests(unittest.TestCase):
+    DOMAIN = "connection"
+
+    def test_a_gone_screen_is_not_blamed_on_the_reader_service(self):
+        with patch.object(phone_connection.adb_link, "screen_gone", return_value=True):
+            error = phone_connection.reader_failure("SER", OSError("no screen"))
+        message = str(error)
+        self.assertIn(adb_link.SCREEN_GONE_CONNECT, message)
+        self.assertIn("OSError: no screen", message)
+
+    def test_other_failures_point_at_the_accessibility_service(self):
+        with patch.object(phone_connection.adb_link, "screen_gone", return_value=False), \
+             patch.object(phone_connection, "accessibility_summary", return_value="检查结果"):
+            error = phone_connection.reader_failure("SER", OSError("boom"))
+        message = str(error)
+        self.assertTrue(message.startswith("手机读屏服务（UiAutomation）启动失败，本次未点击开关。"))
+        self.assertIn("检查结果", message)
+        self.assertIn(phone_connection.UI_RECOVERY, message)
+        self.assertIn("OSError: boom", message)
+
+
+class ConnectionWiringRegressionTests(unittest.TestCase):
+    DOMAIN = "connection"
+
+    def test_the_reader_is_used_and_its_shell_is_wrapped(self):
+        conn, reader = make_connection()
+        self.assertIs(conn.reader, reader)
+        self.assertEqual(conn.reader.shell, conn._resilient_shell)
+
+    def test_the_link_keeps_the_serial_and_no_reader_retry(self):
+        conn, _ = make_connection()
+        self.assertEqual(conn.link.serial, "SER")
+        self.assertIs(conn.link.lost_on_retry, False)
+
+    def test_the_operation_delay_is_cleared_on_the_device(self):
+        conn, reader = make_connection()
+        self.assertEqual(reader.settings["operation_delay"], (0, 0))
+
+    def test_pause_is_offered_between_segments(self):
+        conn, _ = make_connection()
+        self.assertTrue(conn.pause_at_lock_check)
+
+    def test_the_connection_asks_for_the_serial(self):
+        with patch.object(phone_connection, "connect", return_value=reader_stub()) as connect:
+            phone_connection.Connection("SER", log=False)
+        connect.assert_called_once_with("SER")
+
+    def test_the_resilient_shell_forwards_every_argument(self):
+        conn, _ = make_connection()
+        conn.link.shell = Mock(return_value="ok")
+        self.assertEqual(conn._resilient_shell("ls", timeout=5), "ok")
+        conn.link.shell.assert_called_once_with("ls", timeout=5)
+
+    def test_a_busy_reader_is_reported_with_recovery_steps(self):
+        with patch.object(phone_connection, "connect",
+                          side_effect=u2.exceptions.AccessibilityServiceAlreadyRegisteredError("first cause")), \
+             patch.object(phone_connection, "accessibility_summary", return_value="检查结果") as summary:
+            with self.assertRaises(RuntimeError) as caught:
+                phone_connection.Connection("SER", log=False)
+        self.assertEqual(str(caught.exception),
+                         "UIAUTOMATION_BUSY：手机读屏服务已被占用，本次未点击开关。"
+                         "已清理本次失败的启动并重试一次，仍无法连接。"
+                         "请退出旧版客户端，只保留一个客户端。\n"
+                         f"检查结果\n{phone_connection.UI_RECOVERY}\n"
+                         "原始异常：AccessibilityServiceAlreadyRegisteredError: first cause")
+        summary.assert_called_once_with("SER")
+
+    def test_a_broken_reader_is_translated_for_the_serial(self):
+        error = u2.exceptions.UiAutomationError("broken")
+        with patch.object(phone_connection, "connect", side_effect=error), \
+             patch.object(phone_connection, "reader_failure", return_value=RuntimeError("x")) as failure:
+            with self.assertRaises(RuntimeError):
+                phone_connection.Connection("SER", log=False)
+        failure.assert_called_once_with("SER", error)
+
+    def test_a_push_failure_with_the_phone_gone_is_a_disconnect(self):
+        error = u2.exceptions.AdbShellError("FAIL: push")
+        with patch.object(phone_connection, "connect", side_effect=error), \
+             patch.object(phone_connection.adb_link, "present", return_value=False) as present:
+            with self.assertRaises(adb_link.DeviceLost) as caught:
+                phone_connection.Connection("SER", log=False)
+        present.assert_called_once_with("SER")
+        self.assertIn("AdbShellError: FAIL: push", str(caught.exception))
+
+    def test_a_push_failure_with_the_phone_still_here_names_the_install(self):
+        detail = "x" * 250
+        error = adbutils.AdbError(detail)
+        with patch.object(phone_connection, "connect", side_effect=error), \
+             patch.object(phone_connection.adb_link, "present", return_value=True):
+            with self.assertRaises(RuntimeError) as caught:
+                phone_connection.Connection("SER", log=False)
+        detail_expected = "AdbError: " + "x" * 200
+        self.assertEqual(str(caught.exception),
+                         phone_connection.UI_INSTALL_FAILED + "\n原始异常：" + detail_expected)
+
+
+class CheckInputRegressionTests(unittest.TestCase):
+    DOMAIN = "switch"
+
+    def test_the_probe_sends_a_noop_key_and_translates_a_block(self):
+        conn, reader = make_connection()
+        reader.shell = Mock(return_value=out("blocked"))
+        with patch.object(phone_connection, "input_blocked", return_value=True) as blocked:
+            with self.assertRaises(RuntimeError) as caught:
+                conn.check_input()
+        reader.shell.assert_called_once_with("input keyevent 0")
+        blocked.assert_called_once_with("blocked")
+        self.assertIn("INPUT_BLOCKED", str(caught.exception))
+        self.assertIn(phone_connection.TAPPED, str(caught.exception))
+        self.assertIn(phone_connection.XIAOMI_INPUT, str(caught.exception))
+
+    def test_an_allowed_probe_stays_quiet(self):
+        conn, reader = make_connection()
+        with patch.object(phone_connection, "input_blocked", return_value=False):
+            conn.check_input()
+
+
+class LockedProbeRegressionTests(unittest.TestCase):
+    DOMAIN = "device_state"
+
+    def test_the_keyguard_command_is_read(self):
+        conn, reader = make_connection()
+        conn.pause_at_lock_check = False
+        reader.shell = Mock(return_value=out(SETTINGS))
+        self.assertFalse(conn.locked())
+        self.assertEqual(reader.shell.call_args.args, (adb_link.KEYGUARD_CMD,))
+
+    def test_pause_is_only_asked_for_when_enabled(self):
+        conn, reader = make_connection()
+        conn.pause_at_lock_check = False
+        reader.shell = Mock(return_value=out(SETTINGS))
+        with patch.object(phone_connection, "pause_point") as pause:
+            conn.locked()
+        pause.assert_not_called()
+
+    def test_a_real_lock_screen_is_not_collapsed(self):
+        conn, reader = make_connection()
+        conn.pause_at_lock_check = False
+        reader.shell = Mock(return_value=out(SHADE + "    isKeyguardShowing=true\n"))
+        with patch.object(phone_connection.time, "sleep"):
+            self.assertTrue(conn.locked())
+        self.assertNotIn("cmd statusbar collapse",
+                         [c.args[0] for c in reader.shell.call_args_list])
+
+    def test_the_collapse_waits_for_the_shade_to_go(self):
+        conn, reader = make_connection()
+        conn.pause_at_lock_check = False
+        reader.shell = Mock(side_effect=[out(SHADE + "      mIsShowing=false\n"), out(""), out(SETTINGS)])
+        clock = Clock()
+        with patch.object(phone_connection, "time", clock):
+            self.assertFalse(conn.locked())
+        self.assertEqual(clock.t, 0.4)
+        self.assertEqual([c.args[0] for c in reader.shell.call_args_list],
+                         [adb_link.KEYGUARD_CMD, "cmd statusbar collapse", adb_link.KEYGUARD_CMD])
+
+    def test_the_unlock_wait_passes_its_budget_and_clock(self):
+        conn, reader = make_connection()
+        conn.locked = Mock(return_value=True)
+        clock = Clock()
+        with patch.object(phone_connection.time, "time", clock.time), \
+             patch.object(phone_connection.time, "sleep", clock.sleep), \
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertFalse(conn.wait_unlocked(timeout=1))
+        self.assertEqual(clock.t, 1.0)
 
 
 if __name__ == "__main__":

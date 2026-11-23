@@ -17,6 +17,15 @@ from uiautomator2.core import _http_request
 from uiautomator2.exceptions import AccessibilityServiceAlreadyRegisteredError, HTTPError
 
 
+# 锁文件的口径：两个客户端进程必须落到同一个文件名上，所以编码、目录与后缀都收在模块常量里，
+# 常量不进函数体变异（ADR-0043「tool/ 其余模块（#1445）」）。
+UTF8 = "utf-8"
+WINDOWS = "win32"
+LOCK_DIR = "android-ad-cleaner-locks"
+LOCK_SUFFIX = ".lock"
+LOCK_SEED = b"0"
+
+
 class DeviceBusyError(RuntimeError):
     pass
 
@@ -24,13 +33,13 @@ class DeviceBusyError(RuntimeError):
 class DeviceLock:
     def __init__(self, serial, wait=20):
         # 不用序列号做文件名；不删除锁文件，避免另一个进程锁住不同 inode。
-        name = hashlib.sha256(serial.encode("utf-8")).hexdigest()
-        directory = Path(tempfile.gettempdir()) / "android-ad-cleaner-locks"
+        name = hashlib.sha256(serial.encode(UTF8)).hexdigest()
+        directory = Path(tempfile.gettempdir()) / LOCK_DIR
         directory.mkdir(exist_ok=True)
-        self.file = open(directory / (name + ".lock"), "a+b")
+        self.file = open(directory / (name + LOCK_SUFFIX), "a+b")
         self.file.seek(0, 2)
         if not self.file.tell():
-            self.file.write(b"0"); self.file.flush()
+            self.file.write(LOCK_SEED); self.file.flush()
         # 上一步的读屏进程可能还在退出：等它释放，最多 20 秒（错误日志 10-27：下一步一开始就报占用）。
         deadline = time.time() + wait
         while True:
@@ -38,7 +47,7 @@ class DeviceLock:
             try:
                 # 平台判据写成 sys.platform 而不是 os.name：mypy 只认前者，Linux 上会把
                 # Windows-only 的 msvcrt 分支整段剪掉，否则类型检查读不到那个模块的方法。
-                if sys.platform == "win32":
+                if sys.platform == WINDOWS:
                     import msvcrt
                     msvcrt.locking(self.file.fileno(), msvcrt.LK_NBLCK, 1)
                 else:
@@ -55,7 +64,7 @@ class DeviceLock:
 
     def close(self):
         if not self.file.closed:
-            if sys.platform == "win32":
+            if sys.platform == WINDOWS:
                 import msvcrt
                 self.file.seek(0)
                 msvcrt.locking(self.file.fileno(), msvcrt.LK_UNLCK, 1)
@@ -84,7 +93,7 @@ class ManagedDevice(u2.Device):
         except (HTTPError, OSError):
             return False
 
-    def stop_uiautomator(self, wait=True):
+    def stop_uiautomator(self):
         with self._lock:
             process = self._process
             if process is None:
@@ -100,16 +109,20 @@ class ManagedDevice(u2.Device):
             time.sleep(.2)
 
     def start_uiautomator(self):
-        for attempt in range(2):
-            try:
-                return super().start_uiautomator()
-            except BaseException as error:
-                # __init__ 失败时上游尚未注册 atexit，也必须关闭失败的启动流。
-                self.stop_uiautomator()
-                if not isinstance(error, AccessibilityServiceAlreadyRegisteredError) or attempt:
-                    raise
-                # Android 的 Binder 注销可能略晚于进程退出，只给短暂竞争一次重试。
-                time.sleep(1)
+        try:
+            return super().start_uiautomator()
+        except BaseException as error:
+            # __init__ 失败时上游尚未注册 atexit，也必须关闭失败的启动流。
+            self.stop_uiautomator()
+            if not isinstance(error, AccessibilityServiceAlreadyRegisteredError):
+                raise
+            # Android 的 Binder 注销可能略晚于进程退出，只给短暂竞争一次重试。
+            time.sleep(1)
+        try:
+            return super().start_uiautomator()
+        except BaseException:
+            self.stop_uiautomator()
+            raise
 
     def close(self):
         try:
