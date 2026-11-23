@@ -76,6 +76,8 @@ class LibraryViewTests(unittest.TestCase):
     def test_labels_binds_only_the_phone(self):
         self.phone.texts = Mock(return_value=[("甲", "1", (0, 0)), ("乙", "2", (0, 1))])
         self.assertEqual(self.scope["labels"](), {"甲", "乙"})
+        # `labels(p, root=None)` 只绑手机：装载器把 rt 也绑进去时这里收到的是 rt 而不是 None。
+        self.phone.texts.assert_called_once_with(None)
 
     def test_library_implementations_bind_phone_and_runtime(self):
         stub = Mock(return_value={"甲": True})
@@ -84,10 +86,114 @@ class LibraryViewTests(unittest.TestCase):
         self.assertEqual(stub.call_args.args, (self.phone, self.scope["rt"], "设置页"))
 
     def test_an_unknown_name_is_a_key_error(self):
-        with self.assertRaises(KeyError):
+        with self.assertRaises(KeyError) as caught:
             self.scope["no_such_library_name"]
+        self.assertEqual(caught.exception.args, ("no_such_library_name",))
         with self.assertRaises(KeyError):      # 兼容壳的垫片内部名不是库名，别在这里冒出来
             self.scope["_root"]
+
+
+class ScopeContractTests(unittest.TestCase):
+    """装载器给出的命名空间（#1541）：字典初始化、`rt` 视图与 `ONLY` / `HALTED` 的写回。
+
+    视图是测试读这次执行的唯一读缝（解释器自己查 `interpreter.LIBRARY`），所以读到的正是
+    「这个名字该是什么」；写 `ONLY` / `HALTED` 必须落到 `rt` 上，否则用例改了名单不生效。"""
+
+    def setUp(self):
+        import catalog.loader as loader
+        self.loader = loader
+        self.phone = fixtures.fake_phone(clock=fixtures.Clock(), fast_mod=fast)
+        self.rt = recipe_runtime.Runtime(self.phone, [], fixtures.Clock())
+        self.scope = loader.CatalogScope({"preset": 1}, other=2, rt=self.rt)
+
+    def test_positional_and_keyword_entries_both_land_in_the_scope(self):
+        self.assertEqual(dict(self.scope), {"preset": 1, "other": 2})
+        self.assertIs(self.scope.rt, self.rt)
+
+    def test_the_runtime_names_come_from_this_execution(self):
+        for name in ("page", "require", "skip", "require_switches",
+                     "skip_in_safe_mode", "start_or_skip"):
+            with self.subTest(name=name):
+                self.assertEqual(self.scope[name], getattr(self.rt, name))
+
+    def test_only_and_halted_write_through_to_the_runtime(self):
+        self.scope["ONLY"] = ["a"]
+        self.assertEqual(self.scope["ONLY"], ["a"])
+        self.assertEqual(self.rt.only, ["a"])
+        self.scope["HALTED"] = True
+        self.assertTrue(self.scope["HALTED"])
+        self.assertTrue(self.rt.halted)
+        action = Mock()
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.rt.run_step("a", action)
+        action.assert_not_called()
+        self.assertEqual(self.rt.halted_steps, ["a"])
+
+
+class LoaderInputTests(unittest.TestCase):
+    """装载入口的输入边界（#1541）：目录取唯一 `.toml`、同名例外 `.py`、常量与钩子绑定。"""
+
+    TOML = '[[segment]]\nname="a"\nops=[]\n'
+
+    def phone(self):
+        return fixtures.fake_phone(clock=fixtures.Clock(), fast_mod=fast)
+
+    def test_a_directory_with_one_toml_is_loaded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp) / "M.toml"
+            data.write_text(self.TOML, encoding="utf-8")
+            recipe = catalog.load(Path(tmp), self.phone())
+        self.assertEqual(recipe.path, str(data))
+        self.assertEqual([step.name for step in recipe.steps], ["a"])
+
+    def test_a_directory_with_two_tomls_is_rejected_with_the_count(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "A.toml").write_text(self.TOML, encoding="utf-8")
+            (Path(tmp) / "B.toml").write_text(self.TOML, encoding="utf-8")
+            with self.assertRaises(FileNotFoundError) as caught:
+                catalog.load(Path(tmp), self.phone())
+        self.assertEqual(str(caught.exception), f"{Path(tmp)} 里应当恰有一份 .toml，实际 2 份")
+
+    def test_an_empty_directory_is_rejected_with_the_count(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(FileNotFoundError) as caught:
+                catalog.load(Path(tmp), self.phone())
+        self.assertEqual(str(caught.exception), f"{Path(tmp)} 里应当恰有一份 .toml，实际 0 份")
+
+    def test_a_broken_companion_points_at_its_own_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "M.toml").write_text(self.TOML, encoding="utf-8")
+            companion = Path(tmp) / "M.py"
+            companion.write_text("def broken(:\n", encoding="utf-8")
+            with self.assertRaises(SyntaxError) as caught:
+                catalog.load(companion.with_suffix(".toml"), self.phone())
+        self.assertEqual(caught.exception.filename, str(companion))
+
+    def test_the_callers_namespace_reaches_the_loaded_scope(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp) / "M.toml"
+            data.write_text(self.TOML, encoding="utf-8")
+            recipe = catalog.load(data, self.phone(), namespace={"PRESET": 7})
+        self.assertEqual(recipe.namespace["PRESET"], 7)
+
+    def test_only_uppercase_non_callables_become_constants(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(
+                tmp, '[const]\nFROM_TOML = 2\n' + self.TOML,
+                "import functools\nNO = 1\ndef PRINTER(p, rt):\n    pass\n")
+        self.assertEqual(dict(recipe.rt.constants), {"FROM_TOML": 2, "NO": 1})
+
+    def test_every_declared_hook_is_bound_under_its_runtime_name(self):
+        hooks = ("tail", "guard", "detail", "wrap")
+        toml = "".join(f'{hook} = "{hook}_fn"\n' for hook in hooks) + self.TOML
+        py_text = "".join(
+            f"def {hook}_fn(p, rt):\n    return None\n" for hook in hooks)
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(tmp, toml, py_text)
+        self.assertEqual(dict(recipe.rt.constants), {})
+        for hook in hooks:
+            with self.subTest(hook=hook):
+                self.assertIs(recipe.namespace[hook], recipe.namespace[f"{hook}_fn"])
 
 
 class ValidatorTests(unittest.TestCase):
@@ -249,8 +355,10 @@ class LoadTimeNameTests(unittest.TestCase):
         self.assertIn("第 1 个 op 的 else_ops 第 2 个 op", message)
 
     def test_an_if_lib_any_name_call_is_checked(self):
-        self._bad('[[segment]]\nname="a"\nops=[{kind="if_lib_any", calls=[{name="no_such_helper"}],'
-                  ' ops=[], else_ops=[]}]\n', "'no_such_helper'")
+        message = self._bad(
+            '[[segment]]\nname="a"\nops=[{kind="if_lib_any", calls=[{name="no_such_helper"}],'
+            ' ops=[], else_ops=[]}]\n', "'no_such_helper'")
+        self.assertIn("第 1 个 call", message)
 
     def test_an_if_lib_any_method_call_is_a_facade_method_not_a_library_name(self):
         """带 `method` 的调用是 Phone 门面方法（另一套集合，属门面），不按库名校验。"""
@@ -265,6 +373,14 @@ class LoadTimeNameTests(unittest.TestCase):
         message = self._bad(
             '[[segment]]\nname="a"\nops=[{kind="lib", name="close_named", args=[["行"]],'
             ' kwargs={reopen={ops=[{kind="lib", name="no_such_helper"}]}}}]\n',
+            "'no_such_helper'")
+        self.assertIn("第 1 个 op 的实参块 第 1 个 op", message)
+
+    def test_a_name_inside_a_callback_argument_list_is_rejected(self):
+        """`args` 里的实参块与 `kwargs` 里的同一规则：位置实参里藏着的错名装载期也报。"""
+        message = self._bad(
+            '[[segment]]\nname="a"\nops=[{kind="lib", name="close_named",'
+            ' args=["行", {ops=[{kind="lib", name="no_such_helper"}]}]}]\n',
             "'no_such_helper'")
         self.assertIn("第 1 个 op 的实参块 第 1 个 op", message)
 
@@ -286,6 +402,23 @@ class LoadTimeNameTests(unittest.TestCase):
         message = self._bad('[[segment]]\nname="a"\nops=[{kind="lib", name="zzzqqqxxx"}]\n',
                             "'zzzqqqxxx'")
         self.assertNotIn("相近的名字", message, "没有近似名时不该硬凑候选")
+        self.assertTrue(message.endswith("也不是本机例外函数"), message)
+
+    def test_the_hint_lists_three_close_names_at_most(self):
+        """`difflib` 的默认 n 就是 3：候选更多时只列三个，且用「、」连起来。"""
+        py_text = "".join(f"def abc{number}(p, rt):\n    pass\n" for number in range(1, 5))
+        message = self._bad(
+            '[[segment]]\nname="a"\nops=[{kind="lib", name="abc"}]\n', "'abc'", py_text=py_text)
+        hint = message.split("相近的名字：", 1)[1]
+        self.assertEqual(len(hint.split("、")), 3, hint)
+        self.assertNotIn("XX", hint, "候选之间的分隔符只能是「、」")
+
+    def test_a_dunder_defined_by_the_exception_module_is_not_a_legal_name(self):
+        """`__` 开头的名字是模块私名：`exec` 把它写进命名空间，但数据点名它仍要在装载期报。"""
+        message = self._bad(
+            '[[segment]]\nname="a"\nops=[{kind="lib", name="__helper"}]\n', "'__helper'",
+            py_text="def __helper(p, rt):\n    pass\n")
+        self.assertIn("也不是本机例外函数", message)
 
 
 class BindingLoadTimeTests(unittest.TestCase):
@@ -314,7 +447,55 @@ class BindingLoadTimeTests(unittest.TestCase):
 
     def test_a_reference_to_an_unbound_name_is_rejected(self):
         self._bad('[[segment]]\nname="a"\nops=[{kind="lib", name="tap",'
-                  ' args=[{expr="var", name="pkg"}]}]\n', "'pkg'", "第 1 个 op")
+                  ' args=[{expr="var", name="pkg"}]}]\n', "'pkg'", "第 1 个 op",
+                  "；本段还没有绑定任何名字（先写一条 let）")
+
+    def test_the_message_names_what_is_already_bound(self):
+        message = self._bad(
+            '[[segment]]\nname="a"\nops=[{kind="let", name="pkg", lib="browser_settings"},'
+            '{kind="lib", name="tap", args=[{expr="var", name="ghost"}]}]\n', "'ghost'")
+        self.assertIn("本段这一处已绑定的是 ['pkg']", message)
+
+    def test_every_reference_is_checked_after_a_bound_one(self):
+        """同一 op 里前一个引用已绑过，不能连同这一 op 后面那个未绑的一起放过。"""
+        self._bad('[[segment]]\nname="a"\nops=[{kind="let", name="pkg", lib="browser_settings"},'
+                  '{kind="lib", name="tap", args=[{expr="var", name="pkg"},'
+                  ' {expr="var", name="ghost"}]}]\n', "'ghost'")
+
+    def test_a_reference_nested_deeper_in_a_table_is_rejected(self):
+        """变量引用不只在实参表顶层：套在 kwargs 里的表一样按引用核对。"""
+        self._bad('[[segment]]\nname="a"\nops=[{kind="lib", name="tap",'
+                  ' kwargs={outer={expr="var", name="pkg"}}}]\n', "'pkg'")
+
+    def test_a_name_bound_inside_a_branch_is_visible_to_a_later_op_in_that_branch(self):
+        """分支里先绑后用的名字属于这一支：父块不该把它当成自己的未绑定引用。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="if_tap", text="X",'
+                     ' ops=[{kind="let", name="pkg", lib="browser_settings"},'
+                     '{kind="lib", name="tap", args=[{expr="var", name="pkg"}]}]}]\n')
+        self.assertEqual([step.name for step in recipe.steps], ["a"])
+
+    def test_the_same_holds_inside_an_else_branch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe, _phone, _calls = _load_tmp(
+                tmp, '[[segment]]\nname="a"\nops=[{kind="if_tap", text="X", ops=[],'
+                     ' else_ops=[{kind="let", name="pkg", lib="browser_settings"},'
+                     '{kind="lib", name="tap", args=[{expr="var", name="pkg"}]}]}]\n')
+        self.assertEqual([step.name for step in recipe.steps], ["a"])
+
+    def test_a_nested_block_is_checked_for_unbound_names(self):
+        message = self._bad(
+            '[[segment]]\nname="a"\nops=[{kind="if_tap", text="X", ops=[{kind="lib",'
+            ' name="tap", args=[{expr="var", name="ghost"}]}]}]\n', "'ghost'")
+        self.assertIn("第 1 个 op 的 ops 第 1 个 op", message)
+
+    def test_an_else_block_is_checked_for_unbound_names(self):
+        message = self._bad(
+            '[[segment]]\nname="a"\nops=[{kind="if_tap", text="X", ops=[],'
+            ' else_ops=[{kind="lib", name="tap", args=[{expr="var", name="ghost"}]}]}]\n',
+            "'ghost'")
+        self.assertIn("第 1 个 op 的 else_ops 第 1 个 op", message)
 
     def test_a_name_bound_in_the_previous_segment_is_not_visible(self):
         self._bad('[[segment]]\nname="a"\nops=[{kind="let", name="pkg", lib="browser_settings"}]\n'

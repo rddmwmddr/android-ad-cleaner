@@ -40,6 +40,7 @@
 - 手机导航、弹窗与启动落点三份模块存活清零并进变异映射表（#1539，ADR-0043）
 - 脚本工具面四份 `adapt`/`explore`/`recipe_audit`/`verify_ledger` 清零进映射表（#1545，ADR-0043）
 - `phone/connection` / `settings_search` / `ui_session` 存活清零进表（#1540，ADR-0043）
+- catalog 装载内核 `loader` 存活清零并进变异映射表（#1541，ADR-0043）
 
 ## 0.4.5 · 2026-11-18
 
