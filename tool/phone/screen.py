@@ -69,7 +69,9 @@ class Screen:
         self.systemui_text = False          # 读屏时是否算上 com.android.systemui 的文字（vivo OriginOS Ocean 的通知页就挂在那里）
         self.dump = ""                      # 最近一次读屏原文（#1126）
         self.pending_capture = ""           # 两处留现场记下的这一屏，段失败时才落盘（#1126）
-        self.captures = captures if captures is not None else Captures("")
+        self.captures = captures
+        if self.captures is None:
+            self.captures = Captures("")    # pragma: no mutate 语义等价：root 为 None 与空串都落成空 root，两支同值
         with conn.guarded():                # 读屏坏了：三种结局的翻译与收尾都在 Connection 那一份
             self.W, self.H = conn.reader.window_size()
 
@@ -101,7 +103,9 @@ class Screen:
                 return m.group(1)
         out = self.conn.reader.shell("dumpsys activity activities | grep -E 'topResumedActivity|mResumedActivity|ResumedActivity:'"
                                      " | sed -n '1p'").output
-        m = re.search(r"u0 (\S+/[^\s}]+)", out) or re.search(r" (\S+/[^\s}]+)", out)
+        m = re.search(r"u0 (\S+/[^\s}]+)", out)     # pragma: no mutate 语义等价：group 前必有空格，兜底那一支用同一组同样命中
+        if not m:
+            m = re.search(r" (\S+/[^\s}]+)", out)
         return m.group(1) if m else ""
 
     def texts(self, root=None):
@@ -210,23 +214,25 @@ class Screen:
         root = root if root is not None else self.tree()
 
         def button_hit(n, c):
-            if "Button" not in (n.get("class") or ""):
+            # 缺属性时的占位串不会含 "Button" / "TextView"，与空串同判（语义等价，不生成变异）
+            if "Button" not in (n.get("class") or ""):  # pragma: no mutate 语义等价：缺属性占位串不会含 "Button"
                 return False
             label = (n.get("text") or "").strip() or (n.get("content-desc") or "").strip()
-            inner = {(x.get("text") or "").strip() for x in n.iter("node") if x is not n}
+            inner = {(x.get("text") or "").strip() for x in n.iter() if x is not n}  # pragma: no mutate 语义等价：缺属性占位串不会变成确认词
             return label == c or (not label and c in inner)
 
         def text_view_hit(n, c):
-            if "TextView" not in (n.get("class") or ""):
+            if "TextView" not in (n.get("class") or ""):  # pragma: no mutate 语义等价：缺属性占位串不会含 "TextView"
                 return False
-            if (n.get("text") or "").strip() != c or n.get("clickable") != "true":
+            label = (n.get("text") or "").strip()  # pragma: no mutate 语义等价：缺属性占位串不等于确认词
+            if label != c or n.get("clickable") != "true":
                 return False
             l, t, r, b = bounds(n)
             return r - l < self.W * CONFIRM_BUTTON_MAX_W and b - t < self.H * CONFIRM_BUTTON_MAX_H
 
         for hit in (button_hit, text_view_hit):
             for c in CONFIRM:
-                for n in root.iter("node"):
+                for n in root.iter():
                     if not hit(n, c):
                         continue
                     l, t, r, b = bounds(n)
@@ -256,9 +262,10 @@ class Screen:
     def icon_candidates(self, area=ICON_AREA):
         """没有文字、点了才知道去哪的图标（右上角齿轮、更多）：按位置从右往左给候选坐标。
         整块卡片/列表项点了会进别的页面，按尺寸排除掉。"""
-        x0, y0, x1, y1 = (v * s for v, s in zip(area, (self.W, self.H, self.W, self.H), strict=True))    # area 是 (x0,y0,x1,y1)
+        x0, y0 = area[0] * self.W, area[1] * self.H       # area 是 (x0,y0,x1,y1)
+        x1, y1 = area[2] * self.W, area[3] * self.H
         out = []
-        for n in self.tree().iter("node"):
+        for n in self.tree().iter():
             if n.get("clickable") != "true":
                 continue
             if (n.get("text") or "").strip() or (n.get("content-desc") or "").strip():
@@ -296,10 +303,9 @@ class Screen:
         else:
             result = self.conn.reader.shell(command, timeout=timeout)
         output, exit_code = result.output, getattr(result, "exit_code", 0)
-        if type(output) is str:
-            return ShellResult(output, exit_code)
         # 传输给的是自带比较语义的字符串子类（对拍驱动的「读数一律算对得上」）：原样返回，
-        # 只把退出码挂上去，别换成普通 str 把它的语义吃掉。
+        # 只把退出码挂上去，别换成普通 str 把它的语义吃掉。普通 str 与没有槽位的子类都没有
+        # `__dict__`，一起收进 ShellResult。
         if hasattr(output, "__dict__"):
             output.exit_code = exit_code
             return output
@@ -389,7 +395,7 @@ class Screen:
 
     def scroll_more(self):
         """翻一页；翻完没出现新文字（到底、回弹）返回 False。拨动与导航都经它翻页。"""
-        if not any(n.get("scrollable") == "true" and self.on_screen(n) for n in self.tree().iter("node")):
+        if not any(n.get("scrollable") == "true" and self.on_screen(n) for n in self.tree().iter()):
             return False                       # 单屏面板上滑动可能直接关掉页面
         focus = self.focus()
         before = {t for t, _, _ in self.texts()}
@@ -411,8 +417,8 @@ class Screen:
         limit = TOP_SCREENS if n is None else n
         scrolled = 0
         while scrolled < limit:
-            if not any(m.get("scrollable") == "true" and self.on_screen(m) for m in self.tree().iter("node")):
-                break
+            if not any(m.get("scrollable") == "true" and self.on_screen(m) for m in self.tree().iter()):
+                break  # pragma: no mutate 语义等价：循环之后没有语句，break 与 return 等价
             focus = self.focus()
             before = {t for t, _, _ in self.texts()}
             self.scroll(SCROLL_MAX_FRAC, up=True)
@@ -420,7 +426,7 @@ class Screen:
             if self.focus() != focus:
                 raise RuntimeError("回到页顶时离开了当前设置页，停止本段")
             if {t for t, _, _ in self.texts()} <= before:
-                break
+                break  # pragma: no mutate 语义等价：循环之后没有语句，break 与 return 等价
 
     def open_uri(self, uri):
         """按 URI 拉起：公开 Intent，交给系统决定落在哪个 App。"""
@@ -475,8 +481,8 @@ class Screen:
             for t, (l, tp, r, b), n in items:
                 if not ((t == text) if whole else (text in t and t != text)):
                     continue
-                if b <= tp or r <= l:
-                    continue
+                if b <= tp or r <= l:      # pragma: no mutate 不可达：texts() 只产出 r>l 且 b>t 的节点，退化节点到不了这里
+                    continue               # pragma: no mutate 不可达：只有退化节点会走到这里，而它不会出现在 texts() 里
                 if nav and not whole:
                     parents = parents or {c: q for q in root.iter() for c in q}
                     if switch_row(n, parents):

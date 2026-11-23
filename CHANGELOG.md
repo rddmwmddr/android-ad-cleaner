@@ -37,6 +37,7 @@
 - 读屏基础族：`fast` / `wait` / `captures` 存活清零并进映射表，`row` 记表外缺口（#1536，ADR-0043）
 - 渠道判定族二：批处理 / 拨动 / 隐藏名单 / 屏幕快照四份存活清零并进映射表（#1537，ADR-0043）
 - 数据与词表：`entries` / `vocab` 存活清零并进映射表（#1544，ADR-0043）
+- 观测基座 `phone/screen` 存活清零并进映射表（#1538，ADR-0043）
 - 手机导航、弹窗与启动落点三份模块存活清零并进变异映射表（#1539，ADR-0043）
 - 脚本工具面四份 `adapt`/`explore`/`recipe_audit`/`verify_ledger` 清零进映射表（#1545，ADR-0043）
 - `phone/connection` / `settings_search` / `ui_session` 存活清零进表（#1540，ADR-0043）
