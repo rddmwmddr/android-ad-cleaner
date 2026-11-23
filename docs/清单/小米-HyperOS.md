@@ -64,7 +64,7 @@ Xiaomi Pad 7 是平板，设置首页左右分栏，差异单独列在文末的[
 
 REDMI K80 至尊版（HyperOS 2 / Android 16）结构差异：「隐私与安全」首页是权限中心，没有「更多安全设置」，广告服务用设置顶部搜索直达；商店冷启动可能落「福利推广页」，先点「回到首页」再走「我的」；主题商店直接拉 com.android.thememanager/.ThemeResourceProxyTabActivity 最稳（themestore 冷启动的重定向过渡窗会让引擎前台校验误判）；主题/商店底部标签的无障碍名带「未选中,」前缀，用 `p.tab()` 点（只认屏幕底部带，带内按精确 → 逗号末段等于 → 包含找）。
 
-**OS4.0.3.0.XONCNXM / Android 17（CP2A.260605.016）复测差异（2026-11-23，#1527）**：浏览器 20.32.1021111 主界面只有「菜单」（后退 / 窗口 / AI搜索 / 菜单 / 书签 / 搜索框），没有工具栏「设置」齿轮，也没有底部「我的」；主设置走「菜单 → 弹窗里的设置」，落 `com.android.browser/.BrowserSettingsActivity`，也可 `am start -n com.android.browser/.BrowserSettingsActivity` 直达。「隐私和安全」在设置页最底部，要往下翻；这版有「个性化内容推荐 / 个性化广告推荐 / 显示猜你想搜模块 / 小说 / 我的网盘 / 自动开启畅读」，没有「我的视频」，「宫格位推送」出厂即关。
+**OS4.0.3.0.XONCNXM / Android 17（CP2A.260605.016）复测差异（2026-11-23，#1527）**：浏览器 20.32.1021111 主界面只有「菜单」（后退 / 窗口 / AI搜索 / 菜单 / 书签 / 搜索框），没有工具栏「设置」齿轮，也没有底部「我的」；主设置走「菜单 → 弹窗里的设置」，落 `com.android.browser/.BrowserSettingsActivity`，也可 `am start -n com.android.browser/.BrowserSettingsActivity` 直达。这段差异落在 `25060RK16C-os4.toml` 变体（`build = "OS4.0"`），`25060RK16C.toml` 主本仍是 HyperOS 2 的工具栏路径。「隐私和安全」在设置页最底部，要往下翻；这版有「个性化内容推荐 / 个性化广告推荐 / 显示猜你想搜模块 / 小说 / 我的网盘 / 自动开启畅读」，没有「我的视频」，「宫格位推送」出厂即关。
 
 13 Ultra 和 14 Pro 是 HyperOS 3，共用 `recipes/xiaomi/2304FPN6DC`，入口和 18 系列的 OS4 不完全一样，差异单独列在文末的[「13 Ultra 差异」](#xiaomi-13-ultraos30308的差异)。
 

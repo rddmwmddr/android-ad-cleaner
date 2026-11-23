@@ -318,17 +318,5 @@ class Xiaomi24129PN74CRecipeTests(recipe_case.RecipeSafetyCase):
         self.assertIn("日历·用户体验计划", pages)
 
 
-class K80UltraBrowserFlowTests(unittest.TestCase):
-    """#1527：OS4.0.3.0 上 K80 Ultra 的浏览器设置入口是「菜单 → 设置」。
-
-    旧树写的是 `toolbar`（工具栏齿轮 / 底部「我的」），这台上两个入口都不存在，
-    浏览器段必挂。断言直接落在被改的那句常量上，去掉这次改动就会红。
-    """
-
-    def test_k80_ultra_uses_menu_browser_entry(self):
-        source = (ROOT / "recipes/xiaomi/25060RK16C/25060RK16C.toml").read_text(encoding="utf-8")
-        self.assertIn('BROWSER_FLOW = "menu"', source)
-
-
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,5 @@
 {
-  "reason": "vocab family: freeze the per-script word tables as case ids (#1400)",
+  "reason": "vocab family: freeze the per-script word tables as case ids (#1400); 25060RK16C OS4 变体补齐 HOT 后未新增 unresolved-only (#1527)",
   "ids": [
     "dict-notes/honor/WKL-AN20/WKL-AN20.toml",
     "silent/oppo/PHK110/PHK110-android15.toml",

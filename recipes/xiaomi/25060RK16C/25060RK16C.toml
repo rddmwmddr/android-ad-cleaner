@@ -6,15 +6,13 @@
 # BUILD 置空：只录到底包，没记到 HyperOS 版本号；底包跨机型共享、不能进 BUILD（#942）。
 # 2026-11-14 转页面树（浏览器的四个子页按页展开）；2026-11-16：系统广告的兜底链也落成数据
 # （`if_setting` 分岔 + 三级可选探测），本机没有 `code =` 例外函数。
-# 2026-11-23 在 OS4.0.3.0.XONCNXM / Android 17 复测（#1527）：浏览器主界面既没有工具栏齿轮、
-#   也没有底部「我的」，只有「菜单」；设置入口改成「菜单 → 弹窗里的设置」（沿用 #833 / #586 的做法）。
 model = "25060RK16C"
 models = ["25060RK16C"]
 build = ""
 
-# 浏览器设置入口：底栏「菜单」→ 弹窗里的「设置」；工具栏齿轮进的是首页编辑面板，不能走。
+# 浏览器设置入口：先看工具栏齿轮，再点底部「我的」找齿轮。
 [const]
-BROWSER_FLOW = "menu"
+BROWSER_FLOW = "toolbar"
 
 [[segment]]
 name = "系统广告"
@@ -139,11 +137,8 @@ ops = [
     { kind = "print", text = "  · 浏览器处在基本模式，设置入口不在这条路径上，本段跳过" },
     { kind = "return" },
   ] },
-  # menu 流程在家族库里成功时返回 None，用 require_lib 判真假会把「进去了」误判成「没找到」；
-  # 与已实测的 24129PN74C 一致改用 lib，入口失败仍由 menu_flow 自己抛（#1527）。
-  { kind = "lib", name = "browser_settings" },
-  # 「隐私和安全」在设置页最底部（同底包机型实测要滚 8 屏，沿用 24129PN74C 的 scrolls=12）。
-  { kind = "if_entry", text = "隐私和安全", scrolls = 12, ops = [
+  { kind = "require_lib", name = "browser_settings", miss_print = "浏览器设置入口未找到；未点击正文中的文字", fail = true },
+  { kind = "if_entry", text = "隐私和安全", ops = [
     { kind = "off", only = ["个性化内容推荐", "个性化广告推荐"], page = "浏览器·隐私和安全" },
     { kind = "back" },
   ] },
