@@ -63,6 +63,22 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_huawei_channels.py", "tests/test_channel_page.py", "tests/test_adb_link.py",
         "tests/test_phone_host.py", "tests/test_tap_notice_regressions.py",
     ),
+    # 渠道判定族一（#1533），同样由覆盖矩阵量出：认页 / 到达的纯函数被大量读屏用例执行到。
+    "tool/channel_decide.py": (
+        "tests/test_adb_link.py", "tests/test_channel_arrive.py", "tests/test_channel_decide.py",
+        "tests/test_channel_outcomes.py", "tests/test_channel_page.py", "tests/test_issue_regressions.py",
+        "tests/test_layout_and_verdict_regressions.py", "tests/test_lock_and_disconnect_regressions.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_phone_interface.py",
+        "tests/test_phone_toggler.py", "tests/test_row.py", "tests/test_tap_notice_regressions.py",
+    ),
+    "tool/channel_arrive.py": (
+        "tests/test_adb_link.py", "tests/test_channel_arrive.py", "tests/test_channel_classification.py",
+        "tests/test_channel_decide.py", "tests/test_channel_outcomes.py", "tests/test_channel_page.py",
+        "tests/test_feedback_safety.py", "tests/test_huawei_channels.py", "tests/test_issue_regressions.py",
+        "tests/test_layout_and_verdict_regressions.py", "tests/test_lock_and_disconnect_regressions.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_release_regressions.py", "tests/test_row.py",
+        "tests/test_tap_notice_regressions.py",
+    ),
     "tool/host.py": (
         "tests/test_coverage_note.py", "tests/test_android_view.py", "tests/test_phone_host.py",
         "tests/test_summary.py", "tests/test_result_retry.py", "tests/test_job.py",
@@ -250,6 +266,11 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
     # 门面测试的 `ScriptSurfaceTests`。两份都要在副本里对真实仓库求值/读根级目录的用例摘掉，见 `UNUSABLE`。
     "devtools/glob_scan.py": ("tests/test_glob_scan.py",),
     "devtools/script_surface.py": ("tests/test_phone_facade.py",),
+    # `tool/chan_fast.py` 在表外（#1533，ADR-0043「tool/ 其余模块（#1445）」）：实测 1804 个
+    # mutant，杀死 1331、存活 462、无测试 6、超时 5。存活集中在整批编排段（`run` 112、`toggle` 57，
+    # 加上 `_enter_app_page` 47、`_skeleton` 35、`undo_message` 20 等）；`run` / `toggle` 的清零要造
+    # 整套 `Phone` / `ShellPhone` / `UiHidden` 替身并锁调用序列，落在成本闸门之外。模块整体才进表，
+    # 故整份登记为表外已知缺口。
     # `devtools/typecheck_recipes.py` 在表外（#1521，ADR-0043）：实测 179 个 mutant，存活 8、无测试 154。
     # 唯一覆盖是 `test_catalog` 的一个方法，只碰到 `_check_catalog`，且它还有 8 个存活；`recipes` /
     # `_check_python` / `main` 分别 54 / 28 / 72 个 mutant 全无测试。`_check_python` 起 mypy 子进程、

@@ -408,33 +408,33 @@ class NamedNodesTests(unittest.TestCase):
 
     def test_a_name_only_in_the_top_band_is_the_page_title(self):
         root, parents = page(TITLE_ONLY)
-        self.assertEqual(row.named_nodes(root, parents, on_screen(), NAME, 2340), [])
+        self.assertEqual(row.named_nodes(root, on_screen(), NAME, 2340), [])
 
     def test_the_band_edge_is_the_top_22_percent_of_the_screen(self):
         root, parents = page(BAND_EDGE)
-        found = row.named_nodes(root, parents, on_screen(), NAME, 2340)
+        found = row.named_nodes(root, on_screen(), NAME, 2340)
         self.assertEqual([b for _, b, _ in found], [(60, 515, 600, 561)])
 
     def test_a_name_in_the_list_area_is_the_only_candidate_on_that_row(self):
         # 开关的 content-desc 常常也是渠道名：checkable 的那一个不算，只剩标题节点
         root, parents = page(APP_PAGE)
-        found = row.named_nodes(root, parents, on_screen(), NAME, 2340)
+        found = row.named_nodes(root, on_screen(), NAME, 2340)
         self.assertEqual(found, [(NAME, (60, 900, 600, 960), text_node(root, NAME))])
 
     def test_two_rows_with_the_same_name_stay_two_candidates(self):
         root, parents = page(TWO_ROWS)
-        found = row.named_nodes(root, parents, on_screen(), NAME, 2340)
+        found = row.named_nodes(root, on_screen(), NAME, 2340)
         self.assertEqual([b[1] for _, b, _ in found], [900, 1300])
 
     def test_the_same_control_twice_in_the_dump_is_one_candidate(self):
         root, parents = page(DUPLICATE)
-        self.assertEqual(len(row.named_nodes(root, parents, on_screen(), NAME, 2340)), 1)
+        self.assertEqual(len(row.named_nodes(root, on_screen(), NAME, 2340)), 1)
 
     def test_whitespace_around_the_page_text_still_matches(self):
         root, parents = page('''<hierarchy><node bounds="[0,0][1080,2340]">
           <node text="  营销通知  " bounds="[60,900][600,960]"/>
         </node></hierarchy>''')
-        found = row.named_nodes(root, parents, on_screen(), NAME, 2340)
+        found = row.named_nodes(root, on_screen(), NAME, 2340)
         self.assertEqual([t for t, _, _ in found], [NAME])
 
     def test_a_copy_on_the_other_screen_is_not_a_candidate(self):
@@ -443,13 +443,13 @@ class NamedNodesTests(unittest.TestCase):
           <node text="营销通知" visible-to-user="false" bounds="[60,900][600,960]"/>
           <node text="营销通知" bounds="[60,2500][600,2560]"/>
         </node></hierarchy>''')
-        self.assertEqual(row.named_nodes(root, parents, on_screen(), NAME, 2340), [])
+        self.assertEqual(row.named_nodes(root, on_screen(), NAME, 2340), [])
 
     def test_systemui_text_is_off_unless_the_page_asks_for_it(self):
         root, parents = page(SYSTEMUI_NAME)
-        self.assertEqual([b[1] for _, b, _ in row.named_nodes(root, parents, on_screen(), NAME, 2340)],
+        self.assertEqual([b[1] for _, b, _ in row.named_nodes(root, on_screen(), NAME, 2340)],
                          [1300])
-        both = row.named_nodes(root, parents, on_screen(), NAME, 2340, systemui_text=True)
+        both = row.named_nodes(root, on_screen(), NAME, 2340, systemui_text=True)
         self.assertEqual([b[1] for _, b, _ in both], [900, 1300])
 
 
@@ -460,7 +460,6 @@ def real_candidates(method, xml, focus, **kwargs):
     同名取舍）这一段停止。两处调用点自身已改成调 `named_nodes()`，这里比的是调用点有没有把
     候选集与 `systemui_text` 原样转发下去；`named_nodes()` 自己的三条筛选由 `NamedNodesTests` 直接守。"""
     root = ET.fromstring(xml)
-    parents = {c: n for n in root.iter() for c in n}
     p = phone_stub("test", reader=Mock(), W=1080, H=2340)
     p.screen.focus = Mock(return_value=focus)
     p.screen.tree = Mock(return_value=root)
@@ -474,7 +473,7 @@ def real_candidates(method, xml, focus, **kwargs):
 
     with patch.object(channel_decide, "own", recording):
         method(chan_fast.ChannelPage(p, NAME, pk="com.example.app"))
-    want = [n for _, _, n in row.named_nodes(root, parents, p.on_screen, NAME, p.H, **kwargs)]
+    want = [n for _, _, n in row.named_nodes(root, p.on_screen, NAME, p.H, **kwargs)]
     return seen, want
 
 

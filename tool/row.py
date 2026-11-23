@@ -225,7 +225,7 @@ def switch_row(node, parents, depth=SWITCH_ROW_DEPTH):
     return any("RadioButton" not in (n.get("class") or "") for n in boxes)
 
 
-def named_nodes(root, parents, on_screen, name, screen_h, top_band=TOP_BAND, systemui_text=False):
+def named_nodes(root, on_screen, name, screen_h, top_band=TOP_BAND, systemui_text=False):
     """按名字筛「可能是这一行」的文字节点：[(文字, bounds, 节点)]。
 
     与 `Screen.texts()` 同一套取值，再叠三条认行的前置筛选：名字完全相等、顶边不在顶部带
@@ -236,8 +236,7 @@ def named_nodes(root, parents, on_screen, name, screen_h, top_band=TOP_BAND, sys
     通知页整页挂在那里，`_focus()` 会把它置真。
 
     纯函数：不读屏、不点击、不认识渠道语义。行高上限、行内开关数、同名行取舍由调用方按
-    `own()` 的结果判定；`parents` 与 `on_screen` 照 `own()` 的入参顺序一并给出，筛选用到
-    后者的可视判定。"""
+    `own()` 的结果判定；`on_screen` 是调用方与 `own()` 共用的那份可视判定。"""
     out = []
     for n in unique(root.iter("node")):
         if n.get("package") == "com.android.systemui" and not systemui_text:

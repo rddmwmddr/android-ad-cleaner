@@ -31,6 +31,7 @@
 - devtools 的 followup / triage_audit / release_* 存活清零并进映射表（#1522，ADR-0043）
 - ADR-0043 增 devtools 一节：范围三档、各模块结论与表外缺口（#1523，ADR-0043）
 - 只改测试的 PR 按映射表反查拉起受影响模块并跑变异（#1531，ADR-0043）
+- 渠道判定族：`channel_decide` / `channel_arrive` 进映射表，`chan_fast` 记表外缺口（#1533，ADR-0043）
 
 ## 0.4.5 · 2026-11-18
 
