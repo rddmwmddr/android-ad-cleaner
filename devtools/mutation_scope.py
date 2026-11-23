@@ -414,6 +414,35 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_issue_regressions.py", "tests/test_plan.py", "tests/test_recipe_audit.py",
         "tests/test_run_commands.py", "tests/test_verify_ledger.py",
     ),
+    # 杂项三份（#1546），按覆盖矩阵量出：`troubleshooting` 与 `backups` 被读屏失败、快照路径的
+    # 用例广泛执行到，行很宽；`stdio` 最窄，只有少数入口用例碰它。`run.py` 不进表（实测见
+    # ADR-0043「tool/ 其余模块（#1445）」）：它的输出契约在子进程对拍里，副本跑不到那套驱动器。
+    "tool/troubleshooting.py": (
+        "tests/test_adb_link.py", "tests/test_channel_outcomes.py", "tests/test_client_events.py",
+        "tests/test_feedback_safety.py", "tests/test_honor_wkl_recipe.py",
+        "tests/test_issue_regressions.py", "tests/test_job_races.py",
+        "tests/test_lock_and_disconnect_regressions.py", "tests/test_page_and_link_regressions.py",
+        "tests/test_phone_host.py", "tests/test_phone_interface.py", "tests/test_plan.py",
+        "tests/test_release_regressions.py", "tests/test_result_retry.py",
+        "tests/test_run_commands.py", "tests/test_ui_session.py",
+    ),
+    "tool/backups.py": (
+        "tests/test_adb_link.py", "tests/test_api_structure.py", "tests/test_backups.py",
+        "tests/test_channel_outcomes.py", "tests/test_client_events.py", "tests/test_error_report.py",
+        "tests/test_feedback_safety.py", "tests/test_issue_regressions.py", "tests/test_job.py",
+        "tests/test_job_races.py", "tests/test_layout_and_verdict_regressions.py",
+        "tests/test_lock_and_disconnect_regressions.py", "tests/test_packaging_entry.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_phone_host.py",
+        "tests/test_phone_interface.py", "tests/test_plan.py", "tests/test_recipe_audit.py",
+        "tests/test_regressions.py", "tests/test_release_regressions.py",
+        "tests/test_result_retry.py", "tests/test_run_commands.py", "tests/test_summary.py",
+        "tests/test_tap_notice_regressions.py", "tests/test_ui_session.py", "tests/test_updates.py",
+        "tests/test_verify_ledger.py",
+    ),
+    "tool/stdio.py": (
+        "tests/test_issue_regressions.py", "tests/test_packaging_entry.py", "tests/test_stdio.py",
+        "tests/test_unittest_summary.py",
+    ),
     # gui 侧（#1429），同样由覆盖矩阵量出：任务编排被几乎所有跑计划的用例碰到。
     "gui/dispatcher.py": (
         "tests/test_layout_and_verdict_regressions.py", "tests/test_client_events.py",
