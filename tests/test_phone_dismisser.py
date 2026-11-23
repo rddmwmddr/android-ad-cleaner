@@ -494,5 +494,281 @@ class DismissCloseRowTests(unittest.TestCase):
         p.click.assert_called_once_with(1075, 1275)
 
 
+# ---------- 变异判据（ADR-0043、#1539）：四条退化链各自的判据与边界 ----------
+def popup(**attrs):
+    """一个只带给定属性的弹窗 ✕ 节点（bounds 默认落在屏幕中部的小图标上）。"""
+    attrs.setdefault("bounds", "[900,600][990,690]")
+    body = " ".join(f'{k}="{v}"' for k, v in attrs.items())
+    return f'<node {body}/>'
+
+
+def page(*nodes):
+    return '<hierarchy rotation="0">' + "".join(nodes) + "</hierarchy>"
+
+
+class PermissionDismissTests(unittest.TestCase):
+    """运行时权限页只点明确的拒绝键：词表、按钮类名、坐标与等待。"""
+
+    def setUp(self):
+        self.clock = clocked(self, fast, Clock())
+
+    def permission_page(self, text, **attrs):
+        attrs.setdefault("class", "android.widget.Button")
+        attrs.setdefault("package", "com.android.permissioncontroller")
+        attrs.setdefault("bounds", "[580,1800][980,1940]")
+        attrs["text"] = text
+        body = " ".join(f'{k}="{v}"' for k, v in attrs.items())
+        return page(f'<node package="com.android.permissioncontroller" bounds="[0,0][1080,2340]">'
+                    f"<node {body}/></node>")
+
+    def test_every_deny_wording_takes_the_explicit_button(self):
+        for word in ("拒绝", "不允许", "Deny", "Don't allow"):
+            with self.subTest(word=word):
+                self.clock.t = 0.0
+                stage, clicks, _ = bare_dismisser(
+                    self.permission_page(word),
+                    focus="com.android.permissioncontroller/.GrantPermissionsActivity")
+                stage.screen.say = Mock()
+                self.assertEqual(stage.dismiss(), "拒绝权限")
+                self.assertEqual(clicks, [(780, 1870)])
+                self.assertTrue(all(isinstance(v, int) for v in clicks[0]))
+                self.assertAlmostEqual(self.clock.t, 0.4)
+                stage.screen.say.assert_called_once_with("  · 已拒绝运行时权限申请，未授予权限")
+
+    def test_a_deny_node_without_a_button_class_is_not_clicked(self):
+        """没有 class 属性的拒绝节点不是按钮：默认值不能把它当成 Button。"""
+        body = page('<node package="com.android.permissioncontroller" bounds="[0,0][1080,2340]">'
+                    '<node package="com.android.permissioncontroller" text="拒绝" '
+                    'bounds="[580,1800][980,1940]"/></node>')
+        stage, clicks, _ = bare_dismisser(
+            body, focus="com.android.permissioncontroller/.GrantPermissionsActivity")
+        self.assertIsNone(stage.dismiss())
+        self.assertEqual(clicks, [])
+
+    def test_only_node_elements_count_as_permission_buttons(self):
+        """带权限包名但不是 `<node>` 的元素不算按钮：判据认的是页面树里的控件。"""
+        body = page('<node package="com.android.permissioncontroller" bounds="[0,0][1080,2340]"/>',
+                    '<button package="com.android.permissioncontroller" class="android.widget.Button" '
+                    'text="拒绝" bounds="[580,1800][980,1940]"/>')
+        stage, clicks, _ = bare_dismisser(
+            body, focus="com.android.permissioncontroller/.GrantPermissionsActivity")
+        self.assertIsNone(stage.dismiss())
+        self.assertEqual(clicks, [])
+
+    def test_a_frame_with_the_permission_package_does_not_make_a_permission_page(self):
+        """权限包名出现在非控件元素上时不算权限页：走回普通弹窗词表。"""
+        body = page('<node package="com.example" bounds="[0,0][1080,2340]">'
+                    '<node text="取消" bounds="[580,1800][980,1940]"/></node>',
+                    '<frame package="com.android.permissioncontroller"/>')
+        stage, _, _ = bare_dismisser(
+            body, focus="com.android.permissioncontroller/.GrantPermissionsActivity")
+        self.assertEqual(stage.dismiss(), "取消")
+
+
+class CloseIconCullTests(unittest.TestCase):
+    """纯图标弹窗的 ✕：key 取自 desc+id、排除列表内的、排除开关行、按尺寸与屏内判。"""
+
+    def setUp(self):
+        self.clock = clocked(self, fast, Clock())
+
+    def test_the_click_uses_the_desc_and_the_resource_id(self):
+        stage, clicks, _ = bare_dismisser(
+            page(popup(**{"package": "com.x", "resource-id": "com.x:id/iv_close",
+                          "clickable": "true"})))
+        stage.screen.say = Mock()
+        self.assertEqual(stage.dismiss(), "✕")
+        self.assertEqual(clicks, [(945, 645)])
+        self.assertTrue(all(isinstance(v, int) for v in clicks[0]))
+        stage.screen.say.assert_called_once_with("  · 弹窗点了 ✕（com.x:id/iv_close）")
+
+    def test_a_close_id_beside_a_label_is_not_a_popup_close(self):
+        """✕ 必须是纯图标：同一节点上还有文字就不是（`关闭` 二字可能是正文）。"""
+        stage, clicks, _ = bare_dismisser(
+            page(popup(**{"package": "com.x", "resource-id": "com.x:id/iv_close",
+                          "text": "关闭", "clickable": "true"})))
+        self.assertIsNone(stage.dismiss())
+        self.assertEqual(clicks, [])
+
+    def test_the_systemui_package_is_left_alone(self):
+        stage, clicks, _ = bare_dismisser(
+            page(popup(**{"package": "com.android.systemui", "content-desc": "关闭",
+                          "clickable": "true"})))
+        self.assertIsNone(stage.dismiss())
+        self.assertEqual(clicks, [])
+
+    def test_a_close_inside_a_scrollable_list_is_left_alone(self):
+        """列表里卡片的 ✕ 点了会打开别的页面：从候选往上走到滚动容器就跳过。"""
+        body = page('<node package="com.x" class="androidx.recyclerview.widget.RecyclerView" '
+                    'scrollable="true" bounds="[0,0][1080,2340]">'
+                    '<node class="android.widget.FrameLayout" bounds="[100,500][1000,800]">'
+                    '<node content-desc="关闭" clickable="true" bounds="[900,600][990,690]"/></node></node>')
+        stage, clicks, _ = bare_dismisser(body)
+        self.assertIsNone(stage.dismiss())
+        self.assertEqual(clicks, [])
+
+    def test_the_icon_size_bounds_are_strict(self):
+        cases = [
+            ("[100,100][101,200]", False),     # 宽度 1：太大/太小都不行，0 < w 成立
+            ("[100,100][100,200]", True),      # 宽度 0：不可点
+            ("[100,100][424,200]", True),      # 正好 30% 屏宽：不含
+            ("[100,100][600,200]", True),      # 超过 30% 屏宽：不算图标
+            ("[100,100][200,101]", False),
+            ("[100,100][200,100]", True),
+            ("[100,100][200,500]", True),      # 超过 12% 屏高
+        ]
+        for bounds, should_skip in cases:
+            with self.subTest(bounds=bounds):
+                stage, clicks, _ = bare_dismisser(
+                    page(popup(**{"package": "com.x", "content-desc": "关闭",
+                                  "clickable": "true", "bounds": bounds})))
+                result = stage.dismiss()
+                if should_skip:
+                    self.assertIsNone(result)
+                    self.assertEqual(clicks, [])
+                else:
+                    self.assertEqual(result, "✕")
+
+    def test_the_height_limit_is_the_shared_constant(self):
+        stage, clicks, _ = bare_dismisser(
+            page(popup(**{"package": "com.x", "content-desc": "关闭", "clickable": "true",
+                          "bounds": "[100,100][200,400]"})), size=(1000, 2500))
+        self.assertIsNone(stage.dismiss())          # 高度正好 12% 屏高：不含
+        self.assertEqual(clicks, [])
+
+    def test_an_icon_outside_the_screen_is_skipped(self):
+        stage, clicks, _ = bare_dismisser(
+            page(popup(**{"package": "com.x", "content-desc": "关闭", "clickable": "true"})))
+        stage.screen.on_screen = lambda n: False
+        self.assertIsNone(stage.dismiss())
+        self.assertEqual(clicks, [])
+
+    def test_a_non_node_close_mark_is_not_a_popup_close(self):
+        stage, clicks, _ = bare_dismisser(
+            page('<close package="com.x" content-desc="关闭" clickable="true" bounds="[900,600][990,690]"/>'))
+        self.assertIsNone(stage.dismiss())
+        self.assertEqual(clicks, [])
+
+    def test_the_log_truncates_a_long_key_at_forty_characters(self):
+        stage, _, _ = bare_dismisser(
+            page(popup(**{"package": "com.x", "content-desc": "关闭",
+                          "resource-id": "com.x:id/" + "x" * 60, "clickable": "true"})))
+        stage.screen.say = Mock()
+        self.assertEqual(stage.dismiss(), "✕")
+        key = "关闭 " + "com.x:id/" + "x" * 60
+        stage.screen.say.assert_called_once_with(f"  · 弹窗点了 ✕（{key[:40]}）")
+
+
+class DismissWordListTests(unittest.TestCase):
+    """按文字认拒绝类按钮的那条链：词表、开关/列表守卫、文字行数的上界。"""
+
+    def setUp(self):
+        self.clock = clocked(self, fast, Clock())
+
+    def test_a_refuse_word_is_clicked_and_waited_for(self):
+        stage, clicks, _ = bare_dismisser(
+            page('<node package="com.x" text="取消" bounds="[540,900][900,1000]"/>'))
+        stage.screen.say = Mock()
+        self.assertEqual(stage.dismiss(), "取消")
+        self.assertEqual(clicks, [(720, 950)])
+        self.assertTrue(all(isinstance(v, int) for v in clicks[0]))
+        self.assertAlmostEqual(self.clock.t, 0.6)
+        stage.screen.say.assert_called_once_with("  · 弹窗点了「取消」")
+
+    def test_a_switch_row_with_close_wording_is_a_switch_not_a_popup(self):
+        stage, clicks, _ = bare_dismisser(
+            page('<node package="com.x" class="android.widget.Switch" checkable="true" '
+                 'text="取消" bounds="[0,0][1080,2340]"/>'))
+        self.assertIsNone(stage.dismiss())
+        self.assertEqual(clicks, [])
+
+    def test_a_page_with_exactly_sixteen_texts_still_counts(self):
+        rows = "".join(f'<node package="com.x" text="行{i}" bounds="[0,{100 + i * 40}][900,{130 + i * 40}]"/>'
+                       for i in range(15))
+        stage, clicks, _ = bare_dismisser(
+            page(rows, '<node package="com.x" text="取消" bounds="[540,900][900,1000]"/>'))
+        self.assertEqual(stage.dismiss(), "取消")
+        self.assertEqual(clicks, [(720, 950)])
+
+    def test_seventeen_texts_is_too_busy_to_be_a_popup(self):
+        rows = "".join(f'<node package="com.x" text="行{i}" bounds="[0,{100 + i * 40}][900,{130 + i * 40}]"/>'
+                       for i in range(16))
+        stage, clicks, _ = bare_dismisser(
+            page(rows, '<node package="com.x" text="取消" bounds="[540,900][900,1000]"/>'))
+        self.assertIsNone(stage.dismiss())
+        self.assertEqual(clicks, [])
+
+    def test_a_scrollable_page_is_not_a_popup_however_it_reads(self):
+        """带滚动列表的页面不能只凭文字当弹窗关掉。"""
+        stage, clicks, _ = bare_dismisser(
+            page('<node package="com.x" class="android.widget.ScrollView" scrollable="true" '
+                 'bounds="[0,0][1080,2340]"/>',
+                 '<node package="com.x" text="取消" bounds="[540,900][900,1000]"/>'))
+        self.assertIsNone(stage.dismiss())
+        self.assertEqual(clicks, [])
+
+    def test_only_node_elements_count_as_scrollable(self):
+        stage, clicks, _ = bare_dismisser(
+            page('<list scrollable="true" bounds="[0,0][1080,2340]"/>',
+                 '<node package="com.x" text="取消" bounds="[540,900][900,1000]"/>'))
+        self.assertEqual(stage.dismiss(), "取消")
+
+    def test_the_texts_are_read_from_the_same_snapshot_as_the_candidates(self):
+        """`refuse()` 用的是这一拍开始时的页面快照，不重新读一次树。"""
+        first = ET.fromstring(page('<node package="com.x" text="首页" bounds="[0,100][900,200]"/>'))
+        second = ET.fromstring(page('<node package="com.x" text="取消" bounds="[540,900][900,1000]"/>'))
+        stage, clicks, _ = bare_dismisser(page())
+        stage.screen.tree = Mock(side_effect=[first, second])
+        self.assertIsNone(stage.dismiss())
+        self.assertEqual(clicks, [])
+
+
+class PromotedSessionTests(unittest.TestCase):
+    """推广位的退回：等待时长、两次返回、key 的截断。"""
+
+    def setUp(self):
+        self.clock = clocked(self, fast, Clock())
+
+    def promoted(self, focus, key="关闭 com.promo:id/iv_close"):
+        session = fast.LaunchSession()
+        session.app = "com.promo"
+        stage, clicks, backs = bare_dismisser(
+            CLOSE_POPUP, focus=Mock(side_effect=list(focus)), session=session)
+        stage.screen.say = Mock()
+        return stage, clicks, backs, key
+
+    def test_the_click_and_the_return_each_wait_their_own_moment(self):
+        stage, clicks, backs, key = self.promoted(
+            ["com.promo/Main", "com.shop/Promo", "com.promo/Main"])
+        self.assertTrue(stage.promoted_click(10, 20, key))
+        self.assertAlmostEqual(self.clock.t, 1.0)      # 点击后 0.6 秒 + 退回后 0.4 秒
+
+    def test_a_second_return_is_needed_when_the_first_one_lands_elsewhere(self):
+        stage, clicks, backs, key = self.promoted(
+            ["com.promo/Main", "com.shop/Promo", "com.shop/Main", "com.promo/Main"])
+        self.assertTrue(stage.promoted_click(10, 20, key))
+        self.assertEqual(len(backs), 2)
+        self.assertAlmostEqual(self.clock.t, 1.4)      # 0.6 + 0.4 + 0.4
+
+    def test_the_package_is_split_at_the_first_slash(self):
+        stage, clicks, backs, key = self.promoted(
+            ["com.promo/Main", "com.shop/Promo", "com.promo/Main"])
+        self.assertTrue(stage.promoted_click(10, 20, key))
+
+    def test_a_whitespace_padded_foreground_is_not_the_target_app(self):
+        """焦点串没经过 strip：包名按第一个 / 之前的部分切，带前导空白的串对不上目标 App。"""
+        stage, clicks, backs, key = self.promoted(
+            [" com.promo/Main", "com.shop/Promo", " com.promo/Main"])
+        self.assertFalse(stage.promoted_click(10, 20, key))
+        self.assertEqual(backs, [])
+
+    def test_the_log_truncates_the_key_at_forty_characters(self):
+        key = "关闭 " + "com.promo:id/" + "x" * 60
+        stage, clicks, backs, _ = self.promoted(
+            ["com.promo/Main", "com.shop/Promo", "com.promo/Main"])
+        self.assertTrue(stage.promoted_click(10, 20, key))
+        stage.screen.say.assert_called_once_with(
+            f"  · 点了 ✕ 后跳到 com.shop，疑似推广位，已退回（{key[:40]}）")
+
+
 if __name__ == "__main__":
     unittest.main()

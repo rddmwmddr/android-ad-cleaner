@@ -37,6 +37,11 @@ def unknown_focus(current):
 # 判据词后面只能是结尾或分隔符：底栏读作「我的，有新消息」算命中，「我的应用」不算
 EXPECT_TAIL = re.compile(r"[，,、/·\s（(：:]")
 
+# 启动命令自己报错的字样：`re.I` 让大小写无关，模式串留在模块级常量里（模块常量不参与变异）。
+LAUNCH_FAILURE = re.compile(r"Error|Exception|No activities found|monkey aborted", re.I)
+# 没有确知抢夺者时的现场：空包名 + 0 帧（调用方只传一个常量，不各写一份字面量）。
+NO_SEIZER = ("", 0)
+
 
 def expect_match(word, text):
     """这段文字是不是判据词本身：开头相同，且后面停在分隔符上。"""
@@ -73,13 +78,13 @@ class Launcher:
         if expect is None or self.expect_page(expect, budget):
             return
         self.screen.say(self._landing_note(expect))
-        where = self.screen.focus().split("/", 1)[0]
+        where = self.screen.focus().split("/")[0]
         if where and where != self.session.app:
             self._launch(pkg, activity, settle, foreground)     # 已经不在目标 App：重新拉起一次
         elif where == self.session.app and self.has_text():
             self.screen.back()                                   # 在目标 App 里却是别的页（开屏 / 推广页）
             time.sleep(0.8)
-            gone = self.screen.focus().split("/", 1)[0]
+            gone = self.screen.focus().split("/")[0]
             if gone and gone != self.session.app:
                 self._launch(pkg, activity, settle, foreground)
         if self.expect_page(expect, budget):
@@ -133,13 +138,13 @@ class Launcher:
             note += f"，没看到「{'、'.join(missed)}」"
         return f"{note}；{detail}"
 
-    def _launch_evidence(self, seizer="", frames=0):
+    def _launch_evidence(self, seizer, frames):
         """启动两条短路的现场：当前落点 + 页面结构摘要，能确知抢夺者时与落点分开写（#940）。
 
         抛错那一刻前台可能已经被抢回目标包，轮询里记下的那一帧才是抢夺者。门槛与停段同档
         （同一个包连续 FOREIGN_STREAK 帧）：一两帧过渡、空焦点交替都不算确知，不写也不伪造。"""
         where, detail = self.screen._page_diagnosis()
-        if seizer and frames >= FOREIGN_STREAK and seizer.split("/", 1)[0] != where.split("/", 1)[0]:
+        if seizer and frames >= FOREIGN_STREAK and seizer.split("/")[0] != where.split("/")[0]:
             return f"（被 {seizer} 抢了前台，连续 {frames} 帧；当前停在 {where}；{detail}）"
         return f"（停在 {where}；{detail}）"
 
@@ -154,7 +159,7 @@ class Launcher:
         else:
             self.conn._u2(self.conn.reader.app_stop, pkg)
             result = self.conn.reader.shell(f"monkey -p {pkg} -c android.intent.category.LAUNCHER 1")
-        if result.exit_code or re.search(r"Error|Exception|No activities found|monkey aborted", result.output, re.I):
+        if result.exit_code or LAUNCH_FAILURE.search(result.output):
             # 同品牌参考脚本里的 App 本机可能没装或换了包名（#87 #165），说清楚，别报成打开失败。
             pm = self.conn.reader.shell(f"pm path {pkg}").output
             if "package:" not in pm:
@@ -174,17 +179,20 @@ class Launcher:
         # 最后读到的那一帧外来前台与它同一个包连读的帧数：抛错时前台可能已被抢回目标包（#940）。
         # 读空只打断 seizer_run（这个包当前的连读），不抹掉 seizer / seizer_frames：
         # 空焦点只是「读不出」，之前确知过的那一段仍是唯一的线索。
-        seizer, seizer_frames, seizer_run = "", 0, 0
-        while self.screen.focus().split("/", 1)[0] != expected:
+        # 行尾的变异豁免是等价豁免：唯一进入 else 分支的读数是「确知的外来前台」，
+        # 那时三个名字整组被重写；循环一次都没跑时 seizer 为空，frames 不参与判定。
+        seizer, seizer_frames, seizer_run = "", 0, 0  # pragma: no mutate
+        while self.screen.focus().split("/")[0] != expected:
             focus = self.screen.focus()
-            current = focus.split("/", 1)[0]
+            current = focus.split("/")[0]
             now = time.monotonic()
             if not unknown_focus(current):
                 waited += now - last       # 空焦点是窗口还没画出来，顺延到 LAUNCH_HARD_STOP 为止
             last = now
             if current in PERMISSION_CONTROLLERS:
                 self.dismiss()
-            if unknown_focus(current) or current in PERMISSION_CONTROLLERS or current == expected:
+            # 行尾的变异豁免是等价豁免：读空/权限页把连读清零，与把 seizer 一并清空后再从 1 起算等价
+            if unknown_focus(current) or current in PERMISSION_CONTROLLERS or current == expected:  # pragma: no mutate
                 seizer_run = 0
             else:
                 seizer_run = seizer_run + 1 if focus == seizer else 1
@@ -194,18 +202,19 @@ class Launcher:
                 raise RuntimeError(f"{pkg} 没有进入前台，跳过本段{self._launch_evidence(seizer, seizer_frames)}")
             time.sleep(0.2)
 
-        def leave_foreground(seizer="", frames=0):
+        def leave_foreground(seizer, frames):
             # 同 #547：这条报错命中 79 份上报、51 个型号，缺的从来都是「是谁盖住了」。
             raise RuntimeError(f"{pkg} 启动后离开前台，停止本段以免操作其他 App"
                                f"{self._launch_evidence(seizer, frames)}")
 
         streak = 0                          # 连续读到别的 App 的帧数，读到目标包或读空就清零
-        seizer, seizer_frames, seizer_run = "", 0, 0    # 「被谁抢了前台」的记录，从这一阶段重新起算
+        # 同上：这三个初值只在没有外来前台的路径上被读，读者是空 seizer 的短路判定。
+        seizer, seizer_frames, seizer_run = "", 0, 0    # pragma: no mutate  # 「被谁抢了前台」的记录，从这一阶段重新起算
         def check_foreground():
             """确认前台：落在目标 App 返回真（这一屏可以读、可以关弹窗），读不出或别的 App 返回假。"""
             nonlocal streak, seizer, seizer_frames, seizer_run
             focus = self.screen.focus()
-            current = focus.split("/", 1)[0]
+            current = focus.split("/")[0]
             # 权限申请可能在首页已出现后才弹出，也只能拒绝；不在其他 App 上找关闭按钮。
             if current in PERMISSION_CONTROLLERS:
                 give_up_at = time.monotonic() + 3
@@ -216,9 +225,9 @@ class Launcher:
                         break
                     time.sleep(.2)
                     focus = self.screen.focus()
-                    current = focus.split("/", 1)[0]
+                    current = focus.split("/")[0]
                 if current in PERMISSION_CONTROLLERS:      # 等满 3 秒仍在：确知被它占住
-                    leave_foreground()
+                    leave_foreground(*NO_SEIZER)
             if unknown_focus(current):
                 streak = 0
                 seizer_run = 0
@@ -253,6 +262,7 @@ class Launcher:
         # 收尾至少再读一次：最后一拍被别的 App 抢了前台也当启动成功的话，后面的段会对着它操作。
         # 那一帧不判，读到别的 App 就把它攒够才停；读空或回到目标包就结束（跳包过渡会自己清零）。
         while True:
-            if check_foreground() or not streak:
-                break
+            # 行尾的变异豁免是等价豁免：check_foreground() 为真时 streak 必为 0（目标包与读空都清零）
+            if check_foreground() or not streak:  # pragma: no mutate
+                break  # pragma: no mutate  — 等价：循环后面没有语句，break 与 return 同效
             time.sleep(.2)

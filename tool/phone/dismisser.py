@@ -48,9 +48,11 @@ class Dismisser:
         root = screen.tree()
         # Android 运行时权限页只点明确的拒绝按钮，不替用户授予权限或修改“不再询问”。
         if (any(n.get("package") in PERMISSION_CONTROLLERS for n in root.iter("node"))
-                and screen.focus().split("/", 1)[0] in PERMISSION_CONTROLLERS):
+                and screen.focus().split("/")[0] in PERMISSION_CONTROLLERS):
             for n in root.iter("node"):
-                if (n.get("package") in PERMISSION_CONTROLLERS and "Button" in n.get("class", "")
+                # 行尾的变异豁免是等价豁免：兜底串 "XXXX" 与空串都不含 "Button"，判定不变
+                klass = n.get("class", "")  # pragma: no mutate
+                if (n.get("package") in PERMISSION_CONTROLLERS and "Button" in klass
                         and n.get("text") in ("拒绝", "不允许", "Deny", "Don't allow") and screen.on_screen(n)):
                     l, t, r, b = bounds(n)
                     screen.click((l+r)//2, (t+b)//2); time.sleep(.4)
@@ -118,19 +120,19 @@ class Dismisser:
         点前不在目标 App（抢焦点的广告浮层）或点后读不到前台时不算推广位，调用方照旧算关闭。
         返回真表示这次没关掉弹窗。"""
         screen, session = self.screen, self.session
-        before = screen.focus().split("/", 1)[0]
+        before = screen.focus().split("/")[0]
         if before and (before, key) in session.promoted:
             return True                     # 这个 App 的这一处点过并跳走了：再点还是跳
         screen.click(x, y); time.sleep(0.6)
-        after = screen.focus().split("/", 1)[0]
+        after = screen.focus().split("/")[0]
         if not (before and after and before == session.app and after != before):
             return False
         session.promoted.add((before, key))
         screen.back(); time.sleep(.4)
-        where = screen.focus().split("/", 1)[0]
+        where = screen.focus().split("/")[0]
         if where and where != before:        # 一次返回还没退回来，再退一次
             screen.back(); time.sleep(.4)
-            where = screen.focus().split("/", 1)[0]
+            where = screen.focus().split("/")[0]
         if where and where != before:
             # 退不回来就停：不能把用户留在别的 App 里，也不能在陌生页面上接着找入口
             raise RuntimeError(f"点 ✕ 后跳到了 {after}，返回两次仍停在 {where}，停止本段以免操作其他 App")

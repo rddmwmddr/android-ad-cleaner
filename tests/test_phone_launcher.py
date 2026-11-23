@@ -10,7 +10,9 @@
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import Mock
+from types import SimpleNamespace
+from unittest.mock import Mock, call, patch
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -19,7 +21,9 @@ sys.path.insert(0, str(ROOT / "tests"))
 import adb_link  # noqa: E402
 import fast  # noqa: E402
 import recipe_kit  # noqa: E402
-from fixtures import EMPTY_PAGE, Clock, clocked, fake_phone, phone_stub, stub  # noqa: E402
+from fixtures import (EMPTY_PAGE, Clock, clocked, fake_phone, phone_stub, screen_stub,  # noqa: E402
+                      shell_result, stub)
+from phone import launcher as launcher_module  # noqa: E402
 
 # ---------- #581：主题商店的前台归属 ----------
 THEME_PKG = "com.miui.themestore"
@@ -132,7 +136,8 @@ class LaunchForegroundTests(unittest.TestCase):
     def test_unreadable_focus_forever_fails_within_the_upper_bound(self):
         """#581 空焦点一直不出现目标包：有界失败，文案与原来一致，且是顺延到上限才放弃。
         旧实现在 5 秒就报错，这里要求等过 7 秒——空焦点不能提前花掉启动预算。"""
-        p, clock = self.phone([(0.0, EMPTY_PAGE)], focus=((0.0, ""),))
+        # 9 秒后换成确知的外来 App：正常在 8 秒硬上限就停，边界差一的实现才走得到后面
+        p, clock = self.phone([(0.0, EMPTY_PAGE)], focus=((0.0, ""), (9.0, THEME_OTHER)))
         with self.assertRaisesRegex(RuntimeError, "没有进入前台"):
             p.start(THEME_PKG, settle=0)
         self.assertLessEqual(clock.t, 8.4)
@@ -182,7 +187,7 @@ class LaunchSeizerTests(unittest.TestCase):
     def test_unreadable_focus_never_names_a_seizer(self):
         """#940 只读到空焦点：确知不了是谁，落点仍是「未知页面」，不写伪造的抢夺者。
         旧树也绿，守的是不回退。"""
-        p = self.phone()
+        p = self.phone(focus=((0.0, ""), (9.0, THEME_OTHER)))
         with self.assertRaises(RuntimeError) as caught:
             p.start(MARKET_PKG, settle=0)
         msg = str(caught.exception)
@@ -193,7 +198,7 @@ class LaunchSeizerTests(unittest.TestCase):
     def test_single_foreign_frame_is_not_named_as_a_seizer(self):
         """#940 启动时桌面闪一帧、之后一直读空：一两帧是过渡，不算确知（#581），不写抢夺者。
         旧树也绿，守的是不回退。"""
-        p = self.phone(focus=((0.0, ""), (0.2, MARKET_LAUNCHER), (0.4, "")))
+        p = self.phone(focus=((0.0, ""), (0.2, MARKET_LAUNCHER), (0.4, ""), (9.0, THEME_OTHER)))
         with self.assertRaises(RuntimeError) as caught:
             p.start(MARKET_PKG, settle=0)
         msg = str(caught.exception)
@@ -213,7 +218,7 @@ class LaunchSeizerTests(unittest.TestCase):
 
     def test_never_entered_foreground_still_names_a_seizer_it_saw(self):
         """#940 一直没进目标包、最后一帧又读空：之前记下的抢夺者仍要报出来（#940 的另一条短路）。"""
-        p = self.phone(focus=((0.0, MARKET_OTHER), (4.9, "")))
+        p = self.phone(focus=((0.0, MARKET_OTHER), (4.9, ""), (9.0, THEME_OTHER)))
         with self.assertRaisesRegex(
                 RuntimeError,
                 r"没有进入前台.*被 com\.oplus\.securitypermission/\.XActivity 抢了前台，连续 \d+ 帧；"
@@ -321,6 +326,425 @@ class LandingTests(unittest.TestCase):
         p.lost = True
         with self.assertRaises(adb_link.DeviceLost):
             p.expect_page("我的", timeout=1)
+
+
+
+# ---------- 变异判据（ADR-0043、#1539）：启动命令、等待预算与落点现场 ----------
+def launch_stage(*, shell=None, focus="com.x/.A", texts=("首页",), serial="S"):
+    """只造启动阶段：观测基座与传输都可数，不造整台 Phone。"""
+    reader = Mock(name="reader")
+    reader.shell = Mock(side_effect=shell or (lambda command, **kw: shell_result("")))
+    reader.app_stop = Mock()
+    conn = SimpleNamespace(check_alive=Mock(return_value=None), reader=reader, serial=serial,
+                           _u2=lambda fn, *a, **kw: fn(*a, **kw))
+    screen = screen_stub(EMPTY_PAGE, conn=conn)
+    screen.focus = focus if callable(focus) else (lambda: focus)
+    screen.texts = Mock(return_value=[(text, (0, 0, 1, 1), None) for text in texts])
+    screen._page_diagnosis = Mock(return_value=("com.x/.A", "标题：X"))
+    screen.say = Mock()
+    screen.back = Mock()
+    lost = fast.LostNote()
+    stage = fast.Launcher(screen, lost, fast.LaunchSession(), Mock(return_value=None))
+    return stage, screen, reader
+
+
+def shell_by_command(main, pm=""):
+    """按命令回不同的 shell 结果：启动命令给 `main`，`pm path` 给 `pm`。"""
+    def run(command, **kw):
+        if command.startswith("pm path"):
+            return shell_result(pm)
+        return main
+    return run
+
+
+def scripted_time(values, axis="monotonic"):
+    """一个读数按给定序列走、sleep 只记账的时钟：边界值不被浮点累加吃掉。"""
+    it = iter(values)
+    walker = Mock(side_effect=lambda: next(it))
+    clock = SimpleNamespace(time=Mock(return_value=0.0), monotonic=Mock(return_value=0.0), sleep=Mock())
+    setattr(clock, axis, walker)
+    return clock
+
+
+class LauncherWiringTests(unittest.TestCase):
+    """构造只转发：screen / conn / 会话 / 弹窗接口各落一处。"""
+
+    def test_the_constructor_wires_the_screen_and_the_sessions(self):
+        screen = screen_stub(EMPTY_PAGE)
+        lost, session, dismiss = fast.LostNote(), fast.LaunchSession(), Mock()
+        stage = fast.Launcher(screen, lost, session, dismiss)
+        self.assertIs(stage.screen, screen)
+        self.assertIs(stage.conn, screen.conn)
+        self.assertIs(stage.lost_note, lost)
+        self.assertIs(stage.session, session)
+        self.assertIs(stage.dismiss, dismiss)
+
+    def test_a_criterion_word_needs_a_separator_after_it(self):
+        self.assertTrue(launcher_module.expect_match("我的", "我的，有新消息"))
+        self.assertTrue(launcher_module.expect_match("我的", "我的"))
+        self.assertFalse(launcher_module.expect_match("我的", "我的应用"))
+
+    def test_a_broken_dump_reads_as_no_text(self):
+        stage, screen, _ = launch_stage()
+        screen.texts = Mock(side_effect=ET.ParseError)
+        self.assertFalse(stage.has_text())
+
+
+class LaunchCommandTests(unittest.TestCase):
+    """`_launch()` 下发的命令与启动失败的三条出口。"""
+
+    def test_a_launch_without_an_activity_uses_monkey_and_clears_the_note(self):
+        stage, _, reader = launch_stage()
+        stage.lost_note.miss = 3
+        stage._launch("com.x", None, 0, None)
+        reader.app_stop.assert_called_once_with("com.x")
+        reader.shell.assert_called_once_with(
+            "monkey -p com.x -c android.intent.category.LAUNCHER 1")
+        self.assertEqual(stage.lost_note.miss, 0)
+
+    def test_a_launch_with_an_activity_quotes_the_component(self):
+        stage, _, reader = launch_stage()
+        stage._launch("com.x", "A$B", 0, None)
+        reader.shell.assert_called_once_with("am start -f 0x10008000 -n 'com.x/A$B'")
+
+    def error_launch(self, main, pm=""):
+        stage, screen, reader = launch_stage(shell=shell_by_command(main, pm))
+        return stage
+
+    def test_a_client_error_is_reported_as_device_lost(self):
+        stage = self.error_launch(shell_result("error: no devices", 1))
+        with patch.object(adb_link, "detached", side_effect=lambda serial: False), \
+                self.assertRaises(adb_link.DeviceLost) as caught:
+            stage._launch("com.x", None, 0, None)
+        self.assertIn("error: no devices", str(caught.exception))
+
+    def test_a_library_error_is_reported_as_device_lost(self):
+        stage = self.error_launch(shell_result("device 'S' not found", 1))
+        with patch.object(adb_link, "detached", side_effect=lambda serial: False), \
+                self.assertRaises(adb_link.DeviceLost):
+            stage._launch("com.x", None, 0, None)
+
+    def test_a_detached_serial_is_reported_as_device_lost(self):
+        stage = self.error_launch(shell_result("boom", 1))
+        with patch.object(adb_link, "detached", side_effect=lambda serial: serial == "S"), \
+                self.assertRaises(adb_link.DeviceLost):
+            stage._launch("com.x", None, 0, None)
+
+    def test_the_package_probe_output_also_names_the_disconnect(self):
+        """启动命令自己没给输出时，`pm path` 那句原始错误要进报错。"""
+        stage = self.error_launch(shell_result("", 1), pm="device offline")
+        with patch.object(adb_link, "detached", side_effect=lambda serial: False), \
+                self.assertRaises(adb_link.DeviceLost) as caught:
+            stage._launch("com.x", None, 0, None)
+        self.assertIn("device offline", str(caught.exception))
+
+    def test_a_missing_package_is_a_skip_not_a_failure(self):
+        stage = self.error_launch(shell_result("boom", 1))
+        with patch.object(adb_link, "detached", side_effect=lambda serial: False), \
+                self.assertRaises(recipe_kit.MissingPackage):
+            stage._launch("com.x", None, 0, None)
+
+    def test_any_other_launch_failure_keeps_the_last_two_hundred_fifty_chars(self):
+        output = "x" * 300
+        stage = self.error_launch(shell_result(output, 1), pm="package:/data/app/x")
+        with patch.object(adb_link, "detached", side_effect=lambda serial: False), \
+                self.assertRaises(RuntimeError) as caught:
+            stage._launch("com.x", None, 0, None)
+        self.assertEqual(str(caught.exception), f"无法打开 com.x：{output.strip()[-250:]}")
+
+
+class LaunchBudgetTests(unittest.TestCase):
+    """等前台的预算只计「确知不是它」的时间；空焦点顺延到硬上限。"""
+
+    def setUp(self):
+        self.clock = clocked(self, fast, Clock())
+
+    def stage(self, focus):
+        stage, _, reader = launch_stage(focus=focus)
+        return stage
+
+    def test_known_foreign_frames_spend_the_launch_budget(self):
+        stage = self.stage(lambda: "com.other/.A")
+        with self.assertRaisesRegex(RuntimeError, "没有进入前台"):
+            stage._launch("com.x", None, 0, None)
+        self.assertGreater(self.clock.t, 4.5)          # 只计「确知是别的 App」的帧
+        self.assertLess(self.clock.t, 5.5)
+
+    def test_the_launch_wait_boundary_is_reached_exactly(self):
+        """5 秒整就停：假钟给精确的 0.25 秒步长，边界差一要多读一帧。"""
+        focus = Mock(return_value="com.other/.A")
+        stage = self.stage(focus)
+        clock = scripted_time([0.0] + [0.25 * i for i in range(1, 60)])
+        with patch.object(launcher_module, "time", clock), \
+                self.assertRaises(RuntimeError):
+            stage._launch("com.x", None, 0, None)
+        self.assertEqual(focus.call_count, 40)   # 每个循环读两次焦点
+
+    def test_unreadable_focus_defers_to_the_hard_stop(self):
+        focus = Mock(return_value="")
+        stage = self.stage(focus)
+        clock = scripted_time([0.0] + [0.25 * i for i in range(1, 60)])
+        with patch.object(launcher_module, "time", clock), \
+                self.assertRaisesRegex(RuntimeError, "没有进入前台"):
+            stage._launch("com.x", None, 0, None)
+        self.assertEqual(focus.call_count, 64)       # 正好 8.0 秒：32 轮，每轮读两次
+
+    def unpacked(self, inside):
+        """焦点读两次一轮（条件一次、循环体一次）：条件那次给固定外来包，循环体按给定序列。"""
+        state = {"n": 0}
+        it = iter(inside)
+
+        def focus():
+            state["n"] += 1
+            if state["n"] % 2:
+                return "com.z/.Z"
+            return next(it, inside[-1])
+        return focus
+
+    def test_alternating_foreign_apps_never_add_up_to_a_seizer(self):
+        stage = self.stage(self.unpacked(["com.a/.A", "com.b/.B"] * 40))
+        with self.assertRaises(RuntimeError) as caught:
+            stage._launch("com.x", None, 0, None)
+        self.assertNotIn("抢了前台", str(caught.exception))
+
+    def test_sustained_foreign_frames_count_from_one(self):
+        stage = self.stage(lambda: "com.a/.A")
+        with self.assertRaises(RuntimeError) as caught:
+            stage._launch("com.x", None, 0, None)
+        self.assertIn("连续 26 帧", str(caught.exception))
+
+    def test_a_blank_read_between_two_runs_splits_the_frame_count(self):
+        """读空只打断当前连读：同一包再连占的帧数从新算，不把读空前后的帧加在一起。"""
+        stage = self.stage(self.unpacked(["com.a/.A", "com.a/.A", "", "com.a/.A"]))
+        with self.assertRaises(RuntimeError) as caught:
+            stage._launch("com.x", None, 0, None)
+        self.assertIn("连续 24 帧", str(caught.exception))   # 空白那一帧不计，之后读到预算耗尽
+
+    def test_the_page_hard_stop_boundary_is_reached_exactly(self):
+        """读不到字的那 8 秒上限：正好 8.0 秒就放弃。"""
+        stage, screen, _ = launch_stage(texts=(), focus=lambda: "com.x/.A")
+        clock = scripted_time([0.0] + [0.25 * i for i in range(1, 60)], axis="time")
+        with patch.object(launcher_module, "time", clock), \
+                self.assertRaisesRegex(RuntimeError, "8 秒仍读不到页面"):
+            stage._launch("com.x", None, 0, None)
+        self.assertEqual(stage.dismiss.call_count, 31)
+
+
+class LandingNoteTests(unittest.TestCase):
+    """落点不对时的现场：命中哪些判据词、缺哪些、页面结构摘要。"""
+
+    def setUp(self):
+        self.clock = clocked(self, fast, Clock())
+
+    def test_the_note_lists_the_hits_the_misses_and_the_structure(self):
+        stage, screen, _ = launch_stage(texts=("首页",))
+        self.assertEqual(
+            stage._landing_note(["首页", "我的", "设置"]),
+            "  · 启动后没落在预期页面：停在 com.x/.A；期望看到「首页、我的、设置」，"
+            "没看到「我的、设置」；标题：X")
+
+    def test_a_single_criterion_is_not_split_into_characters(self):
+        stage, screen, _ = launch_stage(texts=("首页",))
+        self.assertIn("期望看到「我的」", stage._landing_note("我的"))
+
+    def test_a_broken_dump_still_yields_a_note(self):
+        stage, screen, _ = launch_stage()
+        screen.texts = Mock(side_effect=ET.ParseError)
+        note = stage._landing_note(["我的"])          # 半截 dump 当作什么都没命中，不抛
+        self.assertIn("期望看到「我的」", note)
+        self.assertIn("没看到「我的」", note)
+
+    def test_the_evidence_names_the_seizer_only_after_the_streak(self):
+        stage, screen, _ = launch_stage()
+        screen._page_diagnosis = Mock(return_value=("com.x/.A", "标题：X"))
+        self.assertIn("被 com.b/.B 抢了前台，连续 3 帧",
+                      stage._launch_evidence("com.b/.B", 3))
+        self.assertNotIn("抢了前台", stage._launch_evidence("com.b/.B", 2))
+
+
+class StartRecoveryTests(unittest.TestCase):
+    """`start()` 的落点恢复：退一次、重新拉起一次、仍不对才停段。"""
+
+    def setUp(self):
+        self.clock = clocked(self, fast, Clock())
+
+    def stage(self, focus, texts=("首页",)):
+        stage, screen, _ = launch_stage(focus=focus, texts=texts)
+        stage._launch = Mock()
+        stage.expect_page = Mock()
+        return stage, screen
+
+    def test_the_defaults_go_to_the_launch_and_to_the_landing_check(self):
+        stage, screen = self.stage(lambda: "com.x/.A")
+        stage.expect_page.side_effect = [False, True]
+        stage.start("com.x", expect=("首页",))
+        stage._launch.assert_called_once_with("com.x", None, 1.2, None)
+        self.assertEqual(stage.expect_page.call_args_list, [call(("首页",), 6.0), call(("首页",), 6.0)])
+        self.assertEqual(screen.say.call_args.args[0],
+                         "  · 退出非预期页面重进后，已落在 com.x 的预期页面")
+
+    def test_a_landing_in_another_app_relaunches_with_the_same_arguments(self):
+        focuses = iter(["com.other/.A", "com.x/.A"])
+        stage, screen = self.stage(lambda: next(focuses, "com.x/.A"))
+        stage.expect_page.side_effect = [False, True]
+        stage.start("com.x", activity="A.B", settle=3.3, foreground="fg", expect=("首页",))
+        self.assertEqual(stage._launch.call_args_list,
+                         [call("com.x", "A.B", 3.3, "fg"), call("com.x", "A.B", 3.3, "fg")])
+
+    def test_a_promo_page_is_left_and_the_app_is_relaunched_only_when_back_leaves_it(self):
+        focuses = iter(["com.x/.A", "com.other/.A", "com.x/.A"])
+        stage, screen = self.stage(lambda: next(focuses, "com.x/.A"))
+        stage.expect_page.side_effect = [False, True]
+        stage.start("com.x", activity="A.B", settle=1.2, foreground="com.x", expect=("首页",))
+        screen.back.assert_called_once()
+        self.assertEqual(stage._launch.call_args_list,
+                         [call("com.x", "A.B", 1.2, "com.x"), call("com.x", "A.B", 1.2, "com.x")])
+        self.assertAlmostEqual(self.clock.t, 0.8)
+
+    def test_back_that_stays_in_the_app_needs_no_relaunch(self):
+        stage, screen = self.stage(lambda: "com.x/.A")
+        stage.expect_page.side_effect = [False, True]
+        stage.start("com.x", activity="A.B", settle=1.2, foreground="com.x", expect=("首页",))
+        screen.back.assert_called_once()
+        self.assertEqual(stage._launch.call_count, 1)
+
+    def test_back_into_an_unreadable_foreground_needs_no_relaunch(self):
+        focuses = iter(["com.x/.A", "", "com.x/.A"])
+        stage, screen = self.stage(lambda: next(focuses, "com.x/.A"))
+        stage.expect_page.side_effect = [False, True]
+        stage.start("com.x", activity="A.B", settle=1.2, foreground="com.x", expect=("首页",))
+        self.assertEqual(stage._launch.call_count, 1)
+
+    def test_a_landing_that_never_recovers_stops_the_step(self):
+        stage, screen = self.stage(lambda: "com.x/.A")
+        stage.expect_page.return_value = False
+        with self.assertRaisesRegex(RuntimeError, "非预期页面"):
+            stage.start("com.x", expect=("首页",))
+        self.assertEqual(screen.say.call_count, 2)
+
+
+class ExpectPageTests(unittest.TestCase):
+    """等落点：默认预算、断线上抛、判据词全中才算数。"""
+
+    def setUp(self):
+        self.clock = clocked(self, fast, Clock())
+
+    def test_a_page_that_never_shows_the_words_times_out_at_the_default_budget(self):
+        stage, screen, _ = launch_stage(texts=("别的",))
+        self.assertFalse(stage.expect_page("我的"))
+        self.assertEqual(screen.texts.call_count, 20)
+        self.assertAlmostEqual(self.clock.t, 4.0)
+
+    def test_a_single_word_is_not_split_into_characters(self):
+        stage, screen, _ = launch_stage(texts=("我的",))
+        self.assertTrue(stage.expect_page("我的"))
+
+    def test_every_word_is_needed(self):
+        stage, screen, _ = launch_stage(texts=("我的",))
+        self.assertFalse(stage.expect_page(("我的", "设置")))
+        self.assertEqual(screen.texts.call_count, 20)
+
+    def test_a_confirmed_disconnect_is_raised_not_swallowed(self):
+        stage, screen, reader = launch_stage(texts=("别的",))
+        stage.conn.check_alive = Mock(side_effect=adb_link.DeviceLost("掉线了"))
+        with self.assertRaises(adb_link.DeviceLost):
+            stage.expect_page("我的")
+
+
+
+
+class ForeignStreakTests(unittest.TestCase):
+    """启动后连续读到别的 App 才停段：帧数怎么数、什么时候停。"""
+
+    def setUp(self):
+        self.clock = clocked(self, fast, Clock())
+
+    def run_stage(self, inside, texts=("首页",), settle=0):
+        screen_state = {"started": False}
+        it = iter(inside)
+
+        def focus():
+            if not screen_state["started"]:      # 第一段只看一次就承认进了前台
+                screen_state["started"] = True
+                return "com.x/.A"
+            return next(it, inside[-1])
+
+        stage, screen, _ = launch_stage(focus=focus, texts=texts)
+        try:
+            stage._launch("com.x", None, settle, None)
+        except RuntimeError as error:
+            return stage, screen, str(error)
+        return stage, screen, None
+
+    def test_a_blank_read_resets_the_streak(self):
+        stage, screen, message = self.run_stage(
+            ["com.a/.A", "com.a/.A", "", "com.a/.A", "com.a/.A", "com.x/.A"])
+        self.assertIsNone(message)                    # 读空把连读清零，后两帧不足以停段
+
+    def test_a_blank_read_splits_the_frame_count(self):
+        stage, screen, message = self.run_stage(
+            ["com.a/.A", "com.a/.A", "", "com.a/.A", "com.a/.A", "com.a/.A"])
+        self.assertIn("连续 3 帧", message)
+
+    def test_the_target_package_resets_the_streak(self):
+        stage, screen, message = self.run_stage(
+            ["com.a/.A", "com.a/.A", "com.x/.A", "com.a/.A", "com.a/.A", "com.a/.A"])
+        self.assertIn("连续 3 帧", message)
+
+    def test_a_blank_foreground_is_never_confirmed(self):
+        stage, screen, message = self.run_stage([""] * 60 + ["com.a/.A"] * 60)
+        self.assertIn("8 秒仍读不到页面", message)
+
+    def test_the_last_reads_are_checked_before_success(self):
+        """settle 收尾后至少再读一次：最后一拍被抢也要停段。"""
+        stage, screen, message = self.run_stage(
+            ["com.x/.A", "com.a/.A", "com.a/.A", "com.a/.A"])
+        self.assertIn("连续 3 帧", message)
+        self.assertAlmostEqual(self.clock.t, 0.4)      # 两拍等待之后第三拍才停
+
+    def test_a_permission_page_is_waited_on_then_stops_the_step(self):
+        state = {"started": False}
+
+        def focus():
+            if not state["started"]:
+                state["started"] = True
+                return "com.x/.A"
+            return "com.android.permissioncontroller/.G"
+
+        stage, screen, _ = launch_stage(focus=focus)
+        stage.dismiss = Mock(return_value=True)
+        with self.assertRaisesRegex(RuntimeError, "离开前台"):
+            stage._launch("com.x", None, 0, None)
+        self.assertAlmostEqual(self.clock.t, 3.0)
+
+    def test_the_permission_deadline_is_reached_exactly(self):
+        state = {"started": False}
+
+        def focus():
+            if not state["started"]:
+                state["started"] = True
+                return "com.x/.A"
+            return "com.android.permissioncontroller/.G"
+
+        stage, screen, _ = launch_stage(focus=focus)
+        stage.dismiss = Mock(return_value=True)
+        clock = scripted_time([0.0] + [0.25 * i for i in range(1, 40)])
+        with patch.object(launcher_module, "time", clock), \
+                self.assertRaises(RuntimeError):
+            stage._launch("com.x", None, 0, None)
+        self.assertEqual(stage.dismiss.call_count, 11)   # 0.25 秒一拍，正好 3.0 秒放弃
+
+    def test_the_settle_loop_closes_popups_every_four_tenths(self):
+        stage, screen, _ = launch_stage(focus=lambda: "com.x/.A")
+        stage._launch("com.x", None, 1.2, None)
+        self.assertEqual(stage.dismiss.call_count, 3)
+        self.assertAlmostEqual(self.clock.t, 1.2)
+
+    def test_the_blank_page_hard_stop_is_reached_exactly(self):
+        stage, screen, _ = launch_stage(focus=lambda: "com.x/.A", texts=())
+        with self.assertRaisesRegex(RuntimeError, "8 秒仍读不到页面"):
+            stage._launch("com.x", None, 0, None)
+        self.assertAlmostEqual(self.clock.t, 8.0)
 
 
 if __name__ == "__main__":

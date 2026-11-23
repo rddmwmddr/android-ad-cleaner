@@ -79,6 +79,26 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_page_and_link_regressions.py", "tests/test_release_regressions.py", "tests/test_row.py",
         "tests/test_tap_notice_regressions.py",
     ),
+    # 手机导航与落点三份（#1539），同样由覆盖矩阵量出：三者被同一批读屏用例执行，成组清零。
+    "tool/phone/navigator.py": (
+        "tests/test_entries.py", "tests/test_honor_recipe.py", "tests/test_oneplus_plz110_recipe.py",
+        "tests/test_oppo_pmx110_recipe.py", "tests/test_oppo_pyb110_recipe.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_phone_interface.py",
+        "tests/test_phone_launcher.py", "tests/test_phone_navigator.py",
+        "tests/test_phone_settings_search.py", "tests/test_phone_toggler.py",
+        "tests/test_recipe_call_snapshots.py", "tests/test_recipe_nav.py", "tests/test_regressions.py",
+        "tests/test_ui_session.py", "tests/test_xiaomi_24129pn74c_recipe.py",
+        "tests/test_xiaomi_25060rk16c_recipe.py",
+    ),
+    "tool/phone/dismisser.py": (
+        "tests/test_entries.py", "tests/test_page_and_link_regressions.py",
+        "tests/test_phone_dismisser.py", "tests/test_phone_interface.py", "tests/test_regressions.py",
+        "tests/test_ui_session.py",
+    ),
+    "tool/phone/launcher.py": (
+        "tests/test_entries.py", "tests/test_issue_regressions.py", "tests/test_phone_interface.py",
+        "tests/test_phone_launcher.py", "tests/test_regressions.py", "tests/test_ui_session.py",
+    ),
     "tool/host.py": (
         "tests/test_coverage_note.py", "tests/test_android_view.py", "tests/test_phone_host.py",
         "tests/test_summary.py", "tests/test_result_retry.py", "tests/test_job.py",

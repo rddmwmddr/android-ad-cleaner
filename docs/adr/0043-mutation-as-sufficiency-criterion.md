@@ -146,8 +146,12 @@ pragma 全部写明「语义等价」或「不可达」，理由随源码行。�
 | `channel_decide` | 500 | 0 | 0 | 1 |
 | `channel_arrive` | 147 | 0 | 0 | 0 |
 | `chan_fast` | 1804 | 462 | 6 | 0 |
+| `phone/navigator` | 373 | 0 | 0 | 0 |
+| `phone/dismisser` | 244 | 0 | 0 | 1 |
+| `phone/launcher` | 292 | 0 | 0 | 5 |
 
 - **`channel_decide` / `channel_arrive` 进表**，与表内模块同口径。`channel_decide` 的唯一 pragma 是 `gap = tol = 0`：`boxes` 为空时 `ok` 必假，这两个初值不进 notes、也不进同带取舍（不可达）。清零过程中顺带收掉两处死参数：`row.named_nodes()` 的 `parents` 与 `channel_decide.allow_switches` / `page_hint` 的 `systemui_text`（都从不被读），并把缺属性时的空值收进一个模块常量，消掉 `.get(k) or ""` 与 `.get(k, "")` 一类在真实 dump 上区分不出来的等价变异。
+- **`phone/navigator` / `phone/dismisser` / `phone/launcher` 进表**（#1539）：三者被同一批读屏用例执行，成组清零、成组进表，实测存活 0、无测试 0。清零时收掉了几处只在死路径上成立的写法：`tap()` 的翻页回路里 `edge` 恒为假、`range(2 if scrolls else 1)` 的 else 分支进不去（`scrolls=0` 已提前返回），`launcher` / `dismisser` 的 `split("/", 1)[0]` 去掉没人用到的 `maxsplit`，启动失败的正则提成模块常量。`launcher` 的 5 条 pragma 是等价豁免：两处「被谁抢了前台」的初值只在没有外来前台的路径上被读，收尾循环的 `or not streak` 与 `break` 各自与相邻写法同效（循环后面没有语句）。`dismisser` 的 1 条 pragma 同样是等价豁免：`class` 缺失时的兜底串与空串都不含 `Button`。本票没有表外缺口。
 - **`chan_fast` 不进表（表外已知缺口）**：本票实测 1804 个 mutant、杀死 1331、存活 462、无测试 6、超时 5。存活集中在整批编排段——`run` 112、`toggle` 57，加上 `_enter_app_page` 47、`_skeleton` 35、`undo_message` 20、`recognise` 19、`mismatch_probe` 14 等。`run` / `toggle` 的清零要造整套 `Phone` / `ShellPhone` / `UiHidden` 替身并锁住调用序列，成本闸门明确排除；而模块只有整体才进表，所以整份登记为缺口。它下次纳入时按同一口径逐份清到零。
 
 ## Consequences
