@@ -146,9 +146,14 @@ pragma 全部写明「语义等价」或「不可达」，理由随源码行。�
 | `channel_decide` | 500 | 0 | 0 | 1 |
 | `channel_arrive` | 147 | 0 | 0 | 0 |
 | `chan_fast` | 1804 | 462 | 6 | 0 |
+| `channel_batch` | 196 | 0 | 0 | 0 |
+| `channel_toggle` | 43 | 0 | 0 | 0 |
+| `ui_hidden` | 55 | 0 | 0 | 0 |
+| `screen_snapshot` | 689 | 0 | 0 | 3 |
 
 - **`channel_decide` / `channel_arrive` 进表**，与表内模块同口径。`channel_decide` 的唯一 pragma 是 `gap = tol = 0`：`boxes` 为空时 `ok` 必假，这两个初值不进 notes、也不进同带取舍（不可达）。清零过程中顺带收掉两处死参数：`row.named_nodes()` 的 `parents` 与 `channel_decide.allow_switches` / `page_hint` 的 `systemui_text`（都从不被读），并把缺属性时的空值收进一个模块常量，消掉 `.get(k) or ""` 与 `.get(k, "")` 一类在真实 dump 上区分不出来的等价变异。
 - **`chan_fast` 不进表（表外已知缺口）**：本票实测 1804 个 mutant、杀死 1331、存活 462、无测试 6、超时 5。存活集中在整批编排段——`run` 112、`toggle` 57，加上 `_enter_app_page` 47、`_skeleton` 35、`undo_message` 20、`recognise` 19、`mismatch_probe` 14 等。`run` / `toggle` 的清零要造整套 `Phone` / `ShellPhone` / `UiHidden` 替身并锁住调用序列，成本闸门明确排除；而模块只有整体才进表，所以整份登记为缺口。它下次纳入时按同一口径逐份清到零。
+- **渠道判定族二四份全部进表**（`channel_batch` / `channel_toggle` / `ui_hidden` / `screen_snapshot`；初始实测 198 / 43 / 57 / 764 个 mutant，存活 9 / 9 / 17 / 137）。清零靠补行为断言，不锁 mock 调用序列：批次记账与拨动决定补的是清单形状与结局细节（`Pending.item`、`ChannelList` 的两份空集合、受保护判据吃渠道 ID 而不是显示名），`ui_hidden` 补的是名单文件口径（BOM、首个制表符、注释行、同一键在一批里只写一次、写不进去不算失败、落盘字节），`screen_snapshot` 补的是屏幕快照的边界（`on_screen` 的中心与退化盒子、`pixel_on` 的通道与取样位置、JSON 缺字段的默认值、`parse_notification_dump` 的 UID 边界与两条读数合并）。三处 pragma 都是语义等价：`on_screen` 的中心只与整数宽高比（`//` 与 `/` 同真同假）、`pixel_on` 的取样行经 getpixel 截断成同一格、自绘开关回写的类名只经 `"Switch" in cls` 读且 checkable 已置真。清零途中收掉的死代码都属本模块：`switch_row_data` 里两处尺寸守卫在 `shown()` 之后恒真、`snapshot_from_tree` 的 `activity if sep else ""` 两支同值、`parse_notification_dump` 的 `fixed` 初值在读它之前必被重写；缺属性时的空值收进 `NODE` / `NO_CLASS` / `NO_ID` / `NO_SECTION` 四个常量。四份的映射行按同一份覆盖矩阵量出，与 `chan_fast` 的行有交集，但 `chan_fast` 仍是表外已知缺口。
 
 ## Consequences
 
