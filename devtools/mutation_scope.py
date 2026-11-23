@@ -155,6 +155,34 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_adb_link.py", "tests/test_page_and_link_regressions.py", "tests/test_phone_host.py",
         "tests/test_plan.py", "tests/test_job.py",
     ),
+    # 连接宿主（#1535），由覆盖矩阵量出：`Connection` / `wait_for` / `present` 被几乎所有跑读取的
+    # 用例执行到，所以行很宽（51 个文件）。`tests/recipe_case.py` 是只有基类的助手模块（`RECIPE`
+    # 为 None），pytest 按路径收集它时基类用例直接红，整份不进行；它的用例由 `_recipe.py`
+    # 子类文件跑（同一条用例在真实数据上执行），不少杀。
+    "tool/adb_link.py": (
+        "tests/test_adb_link.py", "tests/test_captures.py",
+        "tests/test_catalog.py", "tests/test_channel_arrive.py", "tests/test_channel_classification.py",
+        "tests/test_channel_decide.py", "tests/test_channel_outcomes.py", "tests/test_channel_page.py",
+        "tests/test_channel_snapshot.py", "tests/test_engine_events.py", "tests/test_entries.py",
+        "tests/test_feedback_safety.py", "tests/test_fixtures.py", "tests/test_honor_recipe.py",
+        "tests/test_honor_wkl_recipe.py", "tests/test_huawei_channels.py", "tests/test_issue_regressions.py",
+        "tests/test_layout_and_verdict_regressions.py",
+        "tests/test_lock_and_disconnect_regressions.py", "tests/test_main_switch_bar.py",
+        "tests/test_off_title_fallback.py", "tests/test_oneplus_plz110_recipe.py",
+        "tests/test_oppo_pmx110_recipe.py", "tests/test_page_and_link_regressions.py",
+        "tests/test_phk110_recipe.py", "tests/test_phone_base.py", "tests/test_phone_dismisser.py",
+        "tests/test_phone_facade.py", "tests/test_phone_host.py", "tests/test_phone_interface.py",
+        "tests/test_phone_launcher.py", "tests/test_phone_navigator.py", "tests/test_phone_sessions.py",
+        "tests/test_phone_settings_search.py", "tests/test_phone_toggler.py",
+        "tests/test_recipe_call_snapshots.py", "tests/test_recipe_nav.py", "tests/test_recipe_variants.py",
+        "tests/test_regressions.py", "tests/test_release_regressions.py", "tests/test_rmx3700_recipe.py",
+        "tests/test_row.py", "tests/test_run_commands.py", "tests/test_tap_notice_regressions.py",
+        "tests/test_ui_session.py", "tests/test_vivo_2417_browser_entry.py",
+        "tests/test_vivo_2547da_android17_recipe.py", "tests/test_vivo_v2303a_recipe.py",
+        "tests/test_vivo_v2417a_recipe.py", "tests/test_xiaomi_24129pn74c_recipe.py",
+        "tests/test_xiaomi_25060rk16c_recipe.py",
+    ),
+    "tool/huawei_channels.py": ("tests/test_huawei_channels.py",),
     # gui 侧（#1429），同样由覆盖矩阵量出：任务编排被几乎所有跑计划的用例碰到。
     "gui/dispatcher.py": (
         "tests/test_layout_and_verdict_regressions.py", "tests/test_client_events.py",
