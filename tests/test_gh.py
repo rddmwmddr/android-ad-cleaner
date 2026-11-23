@@ -7,9 +7,11 @@
 这里的假件不复用 `fixtures.FakeRunner`：那是带 `.run()` 的客户端对象，而 `devtools/gh.py` 的注入面
 是一个裸可调用体 `(script, *args) -> (标准输出, 错误输出, 返回码)`，两者形状不同。
 """
+import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tool"))
@@ -30,6 +32,11 @@ def missing(script, *args):
 class CallTests(unittest.TestCase):
     def test_success_takes_stdout(self):
         text, code = gh.call(runner("  open\n"), "issue", "list")
+        self.assertEqual((text, code), ("open", 0))
+
+    def test_success_keeps_stdout_even_when_stderr_has_text(self):
+        # 成功时只看标准输出：`out if rc == 0 else (err or out)` 塌成一个分支会在这里红。
+        text, code = gh.call(runner("  open\n", "warning: something\n", 0), "issue", "list")
         self.assertEqual((text, code), ("open", 0))
 
     def test_failure_takes_stderr(self):
@@ -66,12 +73,46 @@ class JsonTests(unittest.TestCase):
     def test_nonzero_exit_without_text_still_says_something(self):
         with self.assertRaises(gh.GhError) as caught:
             gh.json_of(runner("", "", 2), "issue", "list", source="复测队列")
-        self.assertIn("gh 返回非零", str(caught.exception))
+        self.assertEqual(str(caught.exception), "复测队列 退出码非零：gh 返回非零")
 
     def test_output_that_is_not_json(self):
         with self.assertRaises(gh.GhError) as caught:
             gh.json_of(runner("not json\n"), "issue", "list", source="复测队列")
         self.assertIn("复测队列 的输出不是 JSON", str(caught.exception))
+
+
+class RunnerTests(unittest.TestCase):
+    """`runner_for()` 是唯一真起进程的地方：参数与解码口径钉在这里（#1520）。
+
+    `subprocess.run` 是仓外边界，假它是为了看它收到了什么；进程本身的行为不在本仓判据内。
+    """
+
+    def call(self, **kwargs):
+        done = subprocess.CompletedProcess(["gh"], 0, stdout=" out\n", stderr=" err\n")
+        with mock.patch.object(gh.subprocess, "run", return_value=done) as run:
+            result = gh.runner_for(**kwargs)("gh", "issue", "list")
+        return run.call_args, result
+
+    def test_the_command_is_gh_plus_the_arguments(self):
+        call_args, _ = self.call()
+        self.assertEqual(call_args.args[0], ["gh", "issue", "list"])
+
+    def test_cwd_and_timeout_are_forwarded(self):
+        call_args, _ = self.call(cwd="/repo", timeout=7)
+        self.assertEqual(call_args.args[0], ["gh", "issue", "list"])
+        self.assertEqual((call_args.kwargs["cwd"], call_args.kwargs["timeout"]), ("/repo", 7))
+
+    def test_output_is_captured_as_replaceable_utf8_text(self):
+        # Windows 控制台 / 管道不是 UTF-8：解码要显式钉住，坏字节用 `replace` 兜住而不是崩。
+        call_args, _ = self.call()
+        kwargs = call_args.kwargs
+        self.assertEqual(
+            (kwargs["capture_output"], kwargs["text"], kwargs["encoding"], kwargs["errors"]),
+            (True, True, "utf-8", "replace"))
+
+    def test_the_three_streams_come_back_as_a_tuple(self):
+        _, result = self.call()
+        self.assertEqual(result, (" out\n", " err\n", 0))
 
 
 if __name__ == "__main__":

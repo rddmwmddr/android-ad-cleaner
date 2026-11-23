@@ -30,6 +30,8 @@ from devtools import test_anchors
 RAN = re.compile(r"^Ran (\d+) tests? in ([\d.]+)s", re.MULTILINE)
 VERDICT = re.compile(r"^(OK|FAILED)\b(.*)$", re.MULTILINE)
 ASSERTION = re.compile(r"^(assert[A-Za-z_]*|fail)$")
+# 用例目录名只此一处：`suite_size` 与 `budget_rows` 都用它定位 `tests/`。
+TESTS_DIR = "tests"
 
 
 def parse(text):
@@ -52,7 +54,7 @@ def suite_size(root=None):
 
     `root` 缺省取仓库根（本文件在 `devtools/` 下），不依赖 cwd；单测注入临时目录构造。"""
     base = Path(root) if root is not None else Path(__file__).resolve().parents[1]
-    tests = base / "tests"
+    tests = base / TESTS_DIR
     if not tests.is_dir():
         return None
     cases = files = lines = 0
@@ -61,7 +63,7 @@ def suite_size(root=None):
             text = path.read_text(encoding="utf-8", errors="replace")
             files += 1
             lines += len(text.splitlines())
-            for node in ast.walk(ast.parse(text, filename=str(path))):
+            for node in ast.walk(ast.parse(text, filename=str(path))):   # pragma: no mutate 语义等价：filename 只进 SyntaxError 文案，而这里的 SyntaxError 被吞、结论恒为 None。
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_"):
                     cases += 1
     except (OSError, SyntaxError, ValueError):
@@ -106,7 +108,7 @@ def budget_rows(root=None, anchors=None):
     `tests/` 读不到或文件解析失败时返回 None；超限只是可见，不算违规。
     `anchors` 缺省取锚点登记，单测注入临时表。"""
     anchors = test_anchors.ANCHORS if anchors is None else anchors
-    tests = (REPO if root is None else Path(root)) / "tests"
+    tests = (REPO if root is None else Path(root)) / TESTS_DIR
     if not tests.is_dir():
         return None
     rows, measured_count = [], 0
@@ -130,7 +132,7 @@ BUDGET_HEAD = "### 锚点体量（断言数）"
 
 
 def budget_section(root=None, anchors=None):
-    anchors = test_anchors.ANCHORS if anchors is None else anchors
+    # `anchors` 的默认值只由 `budget_rows` 解析一次，这里不再重复。
     counted = budget_rows(root, anchors)
     if counted is None or not counted[1]:
         return (f"{BUDGET_HEAD}\n\n"
@@ -175,7 +177,9 @@ def main(argv):
     label = argv[2] if len(argv) > 2 else "unittest"
     sha = argv[3] if len(argv) > 3 else ""
     log = Path(argv[1])
-    text = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
+    text = ""   # pragma: no mutate 语义等价：读不到日志时空串与任意不可解析文本在 render 里同走「没找到」分支。
+    if log.is_file():
+        text = log.read_text(encoding="utf-8", errors="replace")
     sys.stdout.write(render(label, text, sha))
     return 0
 

@@ -214,6 +214,46 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
     "android/app/src/main/python/aac_android/screen.py": ("tests/test_android_shim.py",),
     "android/app/src/main/python/aac_android/inproc.py": ("tests/test_android_shim.py",),
     "android/app/src/main/python/aac_android/u2.py": ("tests/test_android_shim.py",),
+    # devtools（#1515）：`check_ticket_ref` 单模块单测试文件。`WorkflowTest` 读
+    # `.github/workflows/ticket-checks.yml`，副本里没有根级 `.github/`，按类摘掉（见 `UNUSABLE`）。
+    "devtools/check_ticket_ref.py": ("tests/test_ticket_ref.py",),
+    # devtools（#1517）：`commits` 没有独立测试文件，三份 `check_*` 共同 import 它、共同覆盖它。
+    # 三份 `check_*` 各由自己的测试文件覆盖；读根级 `.github/` 与 `CLAUDE.md` 的类见 `UNUSABLE`。
+    "devtools/commits.py": (
+        "tests/test_dco.py", "tests/test_conventional.py", "tests/test_comment_tickets.py",
+    ),
+    "devtools/check_dco.py": ("tests/test_dco.py",),
+    "devtools/check_conventional.py": ("tests/test_conventional.py",),
+    "devtools/check_comment_tickets.py": ("tests/test_comment_tickets.py",),
+    # devtools（#1520）：`gh` 被 `claim` / `stale` 共用，三份测试文件都真实执行它。
+    # 另外几份执行 `gh` 的测试（`followup` / `triage_audit` / `release_*`）属于各自模块的行，
+    # 这里不收：它们把副本里跑不通的根级读取一并拖进这一段。
+    "devtools/gh.py": ("tests/test_gh.py", "tests/test_claim.py", "tests/test_stale_scan.py"),
+    "devtools/claim.py": ("tests/test_claim.py",),
+    "devtools/stale.py": ("tests/test_stale_scan.py",),
+    # devtools（#1522）：`followup` / `triage_audit` / `release_assets` / `release_meta` 都经 `gh` 取数，
+    # 但各有独立测试文件、互不共享；`gh` 已由上面那行进表，这里只收各自的行。副本里跑不通的根级读取
+    # （`release_meta` 读 `index.html`、`followup` 读模块相对路径下不存在的 `docs/`）见 `UNUSABLE`。
+    "devtools/followup.py": ("tests/test_followup.py",),
+    "devtools/triage_audit.py": ("tests/test_triage_audit.py",),
+    "devtools/release_assets.py": ("tests/test_release_assets.py",),
+    "devtools/release_meta.py": ("tests/test_release_meta.py",),
+    # devtools（#1519）：`test_anchors` 与 `unittest_summary` 作为一族。`test_anchors` 的判定逻辑
+    # （`recipe_tokens` / `base_of` / `recipe_owned` / `violations` / `domain_violations`）与 CLI 入口由
+    # `tests/test_test_collection.py` 的 `AnchorTests` / `DomainTests` / `AnchorMainTests` 逐条覆盖
+    # （临时树上的反例），`unittest_summary` 由 `tests/test_unittest_summary.py` 覆盖；两处一并收集。
+    "devtools/test_anchors.py": (
+        "tests/test_test_collection.py", "tests/test_unittest_summary.py",
+    ),
+    "devtools/unittest_summary.py": ("tests/test_unittest_summary.py",),
+    # devtools（#1518）：`glob_scan` 单模块单测试文件；`script_surface` 的唯一覆盖者就是手机版
+    # 门面测试的 `ScriptSurfaceTests`。两份都要在副本里对真实仓库求值/读根级目录的用例摘掉，见 `UNUSABLE`。
+    "devtools/glob_scan.py": ("tests/test_glob_scan.py",),
+    "devtools/script_surface.py": ("tests/test_phone_facade.py",),
+    # `devtools/typecheck_recipes.py` 在表外（#1521，ADR-0043）：实测 179 个 mutant，存活 8、无测试 154。
+    # 唯一覆盖是 `test_catalog` 的一个方法，只碰到 `_check_catalog`，且它还有 8 个存活；`recipes` /
+    # `_check_python` / `main` 分别 54 / 28 / 72 个 mutant 全无测试。`_check_python` 起 mypy 子进程、
+    # `main` 扫全部 recipes，补到存活 0、无测试 0 需要新建 harness，不是补一条断言——登记为表外已知缺口。
 }
 
 # 变异副本里跑不通的测试，按 pytest node id 摘掉。整份文件都跑不通的（`test_rules_guards`
@@ -221,6 +261,28 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
 UNUSABLE: dict[str, tuple[str, ...]] = {
     "tests/test_adapt_cli.py": ("tests/test_adapt_cli.py::AdaptCliParityTests",),
     "tests/test_adb_link.py": ("tests/test_adb_link.py::BackendMissingTextTests",),
+    # 副本里没有根级 `CLAUDE.md`：只摘读它的那条方法。退出码与命令名两条断言拆在同类另一条里，
+    # 仍在变异里跑（#1520）。
+    "tests/test_claim.py": (
+        "tests/test_claim.py::PinnedContractTests::test_the_command_is_documented_in_claude_md",
+    ),
+    # 副本里没有根级 `.github/`：整类读 workflow 文件的用例按类摘掉（#1517）。
+    "tests/test_comment_tickets.py": ("tests/test_comment_tickets.py::WorkflowTest",),
+    # 副本里没有根级 `.github/`（`WorkflowTest`）与 `CLAUDE.md`（`DocumentedTypesTest`）：两类一起摘（#1517）。
+    "tests/test_conventional.py": (
+        "tests/test_conventional.py::WorkflowTest",
+        "tests/test_conventional.py::DocumentedTypesTest",
+    ),
+    # 副本里没有根级 `.github/`：整类读 workflow 文件的用例按类摘掉（#1517）。
+    "tests/test_dco.py": ("tests/test_dco.py::WorkflowTest",),
+    # `RealQueueTests` 读 `followup.DOC`，它是模块相对路径 `…/docs/agents/release-followup.md`：副本里
+    # 模块在 `mutants/src/devtools/` 下，`mutants/src/docs/` 不存在（`docs/` 只拷到 `mutants/` 根）。
+    # 整类两条都在读它，按类摘掉（#1522）。
+    "tests/test_followup.py": ("tests/test_followup.py::RealQueueTests",),
+    # 副本里没有根级 `index.html`：只摘读它比对卡片顺序的那条方法，同类的清单生成断言照跑（#1522）。
+    "tests/test_release_meta.py": (
+        "tests/test_release_meta.py::PlanSumsTests::test_manifest_order_is_the_download_card_order",
+    ),
     # 副本里没有 `android/` 的 Kotlin 源码：唯一读它的两条按方法摘掉，其余用例照跑（#1430）。
     # `test_modules_are_fresh_per_top_level_run` 依赖真产品路径的模块 purge，在 `src` 视角的副本里
     # 判定不同（重跑读到 `2` 而不是 `1`），也与被测模块无关，按方法摘掉。
@@ -228,6 +290,13 @@ UNUSABLE: dict[str, tuple[str, ...]] = {
         "tests/test_android_shim.py::ShellFacadeTest::test_facade_exposes_the_names_python_calls",
         "tests/test_android_shim.py::ShellFacadeTest::test_result_lives_on_the_facade",
         "tests/test_android_shim.py::InprocTest::test_modules_are_fresh_per_top_level_run",
+    ),
+    # 副本里 `ROOT` 是 `mutants/`：没有根级 `tool/`、`devtools/`。`RepoTests` 整类对真实仓库求值
+    # （`scan(ROOT)`、读 `tests/test_source_text.py`）；`ExemptionTests` 里那条「豁免仍对得上空匹配」
+    # 同样 `scan(ROOT)`，按方法摘掉，同类的负例用例照跑（#1518）。
+    "tests/test_glob_scan.py": (
+        "tests/test_glob_scan.py::RepoTests",
+        "tests/test_glob_scan.py::ExemptionTests::test_every_exemption_still_matches_nothing_on_the_real_repo",
     ),
     "tests/test_harmony_client.py": ("tests/test_harmony_client.py::PackageTests",),
     "tests/test_layout_and_verdict_regressions.py": (
@@ -249,6 +318,8 @@ UNUSABLE: dict[str, tuple[str, ...]] = {
     "tests/test_recipe_nav.py": ("tests/test_recipe_nav.py::DriverTests",),
     "tests/test_result_retry.py": ("tests/test_result_retry.py::EngineEmitsFailedStepsTests",),
     "tests/test_run_commands.py": ("tests/test_run_commands.py::CliParityTests",),
+    # 副本里没有根级 `.github/`：整类读 workflow 文件的用例按类摘掉（#1515）。
+    "tests/test_ticket_ref.py": ("tests/test_ticket_ref.py::WorkflowTest",),
     "tests/test_ui_session.py": (
         "tests/test_ui_session.py::LockTests::test_other_process_is_blocked_until_owner_exits",
     ),
@@ -289,17 +360,23 @@ def unknown(modules: Iterable[str]) -> list[str]:
 
 # 手机版替换层不在仓库根，按产品路径（Chaquopy 的 sourceSets 要求它留在原处）换个前缀映射到 `src`。
 ANDROID_PREFIX = "android/app/src/main/python/aac_android/"
-SOURCE_PREFIXES = {"tool/": "src/", "gui/": "src/gui/", ANDROID_PREFIX: "src/aac_android/"}
+SOURCE_PREFIXES = {
+    "tool/": "src/",
+    "gui/": "src/gui/",
+    "devtools/": "src/devtools/",
+    ANDROID_PREFIX: "src/aac_android/",
+}
 
 
 def source_path(module: str) -> str:
     """`tool/catalog/schema.py` → `src/catalog/schema.py`，`gui/tasks.py` → `src/gui/tasks.py`，
+    `devtools/check_ticket_ref.py` → `src/devtools/check_ticket_ref.py`，
     `android/…/aac_android/view.py` → `src/aac_android/view.py`。
 
-    mutmut 按相对路径去掉 `src.` 前缀生成 mutant 名，工作目录里的 `src` 是 `tool/`、`gui/` 与
-    `aac_android/` 的镜像；测试按顶层模块名 import `tool/` 的包、按包名 import `gui/`（`from gui
-    import tasks`）、按包名 import `aac_android`（`from aac_android import view`），两边只在 `src`
-    这个视角上对齐。
+    mutmut 按相对路径去掉 `src.` 前缀生成 mutant 名，工作目录里的 `src` 是 `tool/`、`gui/`、
+    `devtools/` 与 `aac_android/` 的镜像；测试按顶层模块名 import `tool/` 的包、按包名 import
+    `gui/`（`from gui import tasks`）、`devtools/`（`from devtools import check_ticket_ref`）与
+    `aac_android`（`from aac_android import view`），两边只在 `src` 这个视角上对齐。
     """
     for prefix, view in SOURCE_PREFIXES.items():
         if module.startswith(prefix):

@@ -45,6 +45,66 @@ def doc(*rows, queue=HEADER, batch=()):
     ])
 
 
+class CellsTests(unittest.TestCase):
+    """`cells` / `is_rule`：表格切分只在边界的几种写法上出错，带空格的用例掩盖了它们。"""
+
+    def test_strips_exactly_one_leading_and_trailing_pipe(self):
+        self.assertEqual(followup.cells("|a|b|"), ["a", "b"])
+
+    def test_a_trailing_escaped_pipe_is_content_not_a_delimiter(self):
+        self.assertEqual(followup.cells("|a|b\\|"), ["a", "b|"])
+
+    def test_an_escaped_pipe_inside_a_cell_becomes_a_literal_pipe(self):
+        self.assertEqual(followup.cells("|a\\|b|"), ["a|b"])
+
+    def test_a_dash_inside_prose_is_not_a_rule(self):
+        self.assertFalse(followup.is_rule("a-b"))
+        self.assertTrue(followup.is_rule("| --- |"))
+
+
+class BoundsTests(unittest.TestCase):
+    def test_a_table_right_after_the_heading_still_parses(self):
+        # 队列小节是文档最后一段、表头紧跟标题：section_bounds 的起点与终点两条边界都在这里露头
+        text = "## 当前队列\n| Issue |\n| --- |\n| #10 |\n"
+        self.assertEqual(followup.table_of(text).issues, (10,))
+
+    def test_a_section_without_a_table_is_unreadable(self):
+        with self.assertRaises(followup.Unreadable) as caught:
+            followup.table_of("## 当前队列\n一段没有表的说明\n")
+        self.assertIn("没有可识别的 Markdown 表", str(caught.exception))
+
+    def test_a_table_without_a_separator_row_is_unreadable(self):
+        # 第二行是数据不是分隔行：表头认不出，不能悄悄当成空表
+        with self.assertRaises(followup.Unreadable) as caught:
+            followup.table_of("## 当前队列\n| Issue |\n| #10 |\n")
+        self.assertIn("没有表头", str(caught.exception))
+
+    def test_a_lone_header_line_is_unreadable(self):
+        # 只有一行表头，紧跟的 `---` 不以 `|` 开头、不算同一张表；单行不成表
+        with self.assertRaises(followup.Unreadable):
+            followup.table_of("## 当前队列\n| Issue |\n---\n")
+
+    def test_columns_come_from_the_first_table(self):
+        text = ("## 当前队列\n| Issue | 报告者 |\n| --- | --- |\n| #1 | @a |\n"
+                "### 另一批\n| Issue | 机型 |\n| --- | --- |\n| #2 | @b |\n")
+        table = followup.table_of(text)
+        self.assertEqual(table.columns, ("Issue", "报告者"))
+        self.assertEqual(table.issues, (1, 2))
+
+
+class RowMessageTests(unittest.TestCase):
+    def test_the_wrong_column_message_names_the_join(self):
+        text = "## 当前队列\n| 票号 | 报告者 |\n| --- | --- |\n| #1 | @a |\n"
+        with self.assertRaises(followup.Unreadable) as caught:
+            followup.table_of(text)
+        self.assertIn("没有 `Issue` 列：票号 | 报告者", str(caught.exception))
+
+    def test_a_non_numeric_issue_cell_names_the_row(self):
+        with self.assertRaises(followup.Unreadable) as caught:
+            followup.table_of("## 当前队列\n| Issue |\n| --- |\n| 待定 |\n")
+        self.assertIn("读不成票号", str(caught.exception))
+
+
 class TableTests(unittest.TestCase):
     def test_only_tables_inside_the_queue_section_count(self):
         text = doc("| #10 | @a | 机型 | PR #1 | 输出 |",
@@ -56,8 +116,9 @@ class TableTests(unittest.TestCase):
 
     def test_a_missing_queue_section_is_unreadable(self):
         text = doc("| #10 | @a | 机型 | PR #1 | 输出 |").replace("## 当前队列", "## 队列")
-        with self.assertRaises(followup.Unreadable):
+        with self.assertRaises(followup.Unreadable) as caught:
             followup.table_of(text)
+        self.assertIn("找不到「## 当前队列」小节", str(caught.exception))
 
     def test_a_header_without_the_issue_column_is_unreadable(self):
         text = doc("| #10 | @a | 机型 | PR #1 | 输出 |",
@@ -98,7 +159,7 @@ class DiffTests(unittest.TestCase):
     def test_an_issue_without_an_author_is_still_listed(self):
         result = followup.scan(doc(), [{"number": 7, "author": None}])
         self.assertEqual(result.missing, ((7, ""),))
-        self.assertIn("#7", followup.render(result))
+        self.assertIn("#7  （无作者）", followup.render(result))
 
     def test_an_issue_payload_without_the_author_key_is_still_listed(self):
         result = followup.scan(doc(), [{"number": 7}])
@@ -121,12 +182,28 @@ class DiffTests(unittest.TestCase):
         self.assertEqual((result.blocked, result.parked), (1, 1))
         self.assertIn("| #1125 | @s | 机型 | 0.4.4 | 输出 |", followup.apply(text, result))
 
+    def test_a_blocked_ticket_does_not_stop_the_ones_after_it(self):
+        """被排除的票跳过就够，后面的票还得继续进队列（别退成 `break`）。"""
+        blocked = {"number": 7, "labels": [{"name": "blocked-on-device"}]}
+        result = followup.scan(doc("| #8 | @b | 机型 | PR #1 | 输出 |"),
+                               [blocked, {"number": 8, "author": {"login": "b"}}])
+        self.assertEqual((result.labeled, result.blocked), (1, 1))
+        self.assertEqual(result.expired, (), "blocked 后面的 #8 仍要算进队列")
+
+    def test_the_report_keeps_the_blocked_count_and_the_parked_note(self):
+        """parked 的说明接在 blocked 后面，整行读得通（别把 `+=` 退成 `=`）。"""
+        text = doc("| #1125 | @s | 机型 | 0.4.4 | 输出 |")
+        out = followup.render(followup.scan(text, [{"number": 1125,
+                                                    "labels": [{"name": "blocked-on-device"}]}]))
+        self.assertIn("blocked-on-device 1 张不进队列，已有行的 1 张原样留着、不再催。", out)
+
 
 class RenderTests(unittest.TestCase):
     def test_the_report_gives_each_difference_with_its_count(self):
         text = doc("| #11 | @b | 机型 | PR #2 | 输出 |")
         out = followup.render(followup.scan(text, [{"number": 7, "author": {"login": "s"}},
                                                    {"number": 8}]))
+        self.assertEqual(out.splitlines()[0], "waiting-for-verify 2 张进队列，队列里登记 1 张")
         self.assertIn("缺行 2", out)
         self.assertIn("过期行 1", out)
         self.assertIn("#7  @s", out)
@@ -135,8 +212,9 @@ class RenderTests(unittest.TestCase):
     def test_a_matching_pair_says_so_without_listing_anything(self):
         text = doc("| #11 | @b | 机型 | PR #2 | 输出 |")
         out = followup.render(followup.scan(text, [{"number": 11}]))
-        self.assertIn("一致", out)
-        self.assertEqual(len(out.splitlines()), 2, "一致时只有标题行与结论行，没有清单")
+        self.assertEqual(out, "waiting-for-verify 1 张进队列，队列里登记 1 张\n"
+                              "一致：没有缺行，也没有过期行。",
+                         "一致时只有标题行与结论行，两行以单个换行相连")
 
 
 class FakeGh:
@@ -221,6 +299,13 @@ class ApplyTests(unittest.TestCase):
         once = followup.apply(text, followup.scan(text, issues))
         self.assertEqual(followup.apply(once, followup.scan(once, issues)), once)
 
+    def test_a_two_column_queue_gets_no_extra_placeholder(self):
+        """列数正好等于已填字段数（票号 + 报告者）时，补出的行不带多余的 `—`。"""
+        text = ("# 发版后复测清单\n## 当前队列\n| Issue | 报告者 |\n| --- | --- |\n| #11 | @b |\n")
+        out = followup.apply(text, followup.scan(text, [{"number": 11},
+                                                        {"number": 7, "author": {"login": "s"}}]))
+        self.assertIn("\n| #7 | @s |\n", out)
+
 
 class DocumentCase(unittest.TestCase):
     """跑 `main()` 的基线：临时目录里一份样例文档 + 假 `gh`。"""
@@ -260,7 +345,13 @@ class CommandTests(DocumentCase):
         code, out, err = self.run_main(doc(), FakeGh(out=json.dumps([banned])))
         self.assertEqual(code, 2)
         self.assertEqual(out, "")
-        self.assertIn("labels 不是对象数组", err)
+        self.assertIn("#1125 的 labels 不是对象数组", err)
+
+    def test_a_payload_that_is_not_a_ticket_list_is_unreadable(self):
+        code, out, err = self.run_main(doc(), FakeGh(out=json.dumps({"message": "boom"})))
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "")
+        self.assertEqual(err.splitlines()[0], "`gh issue list` 的输出不是票的列表")
 
     def test_a_consistent_queue_exits_zero(self):
         code, out, _ = self.run_main(doc("| #11 | @b | 机型 | PR #2 | 输出 |"),
@@ -286,8 +377,7 @@ class CommandTests(DocumentCase):
         text = doc("| #11 | @b | 机型 | PR #2 | 输出 |")
         code, out, err = self.run_main(text, FakeGh(rc=1))
         self.assertEqual(code, 2)
-        self.assertIn("gh issue list", err)
-        self.assertIn("退出码非零", err)
+        self.assertIn("`gh issue list` 退出码非零", err)
         self.assertEqual(out, "")
         self.assertEqual(self.path.read_text(encoding="utf-8"), text)
         self.assertEqual(list(Path(self.tmp.name).iterdir()), [self.path], "没有写出别的文件")
@@ -296,9 +386,19 @@ class CommandTests(DocumentCase):
         text = doc("| 待定 | @a | 机型 | PR #1 | 输出 |")
         code, out, err = self.run_main(text, FakeGh([{"number": 11}]))
         self.assertEqual(code, 2)
-        self.assertIn("结构认不出", err)
+        self.assertEqual(err.splitlines()[0].split("：")[0], "复测队列文档的结构认不出")
         self.assertEqual(out, "")
         self.assertEqual(self.path.read_text(encoding="utf-8"), text)
+
+    def test_a_missing_document_exits_two(self):
+        """读文档这一步就失败：报错要写在 stderr 上、带出「读不到」，不是崩掉。"""
+        gh = FakeGh()
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = followup.main([], runner=gh.runner.run, doc=Path(self.tmp.name) / "missing.md")
+        self.assertEqual(code, 2)
+        self.assertEqual(out.getvalue(), "")
+        self.assertEqual(err.getvalue().splitlines()[0].split("：")[0], "读不到复测队列文档")
 
     def test_a_hung_gh_call_exits_two_instead_of_hanging(self):
         def hung(script, *args):
@@ -332,6 +432,16 @@ class CommandTests(DocumentCase):
             code = followup.main(["--dry-run"], runner=gh.runner.run, doc=self.path)
         self.assertEqual(code, 2)
         self.assertEqual(gh.runner.run_calls, [], "参数不合规时不碰 gh")
+        self.assertEqual(out.getvalue(), "", "命令行错误一律写 stderr")
+        self.assertEqual(err.getvalue().splitlines()[0], "不认识的参数：--dry-run")
+
+    def test_several_arguments_are_listed_space_separated(self):
+        gh = FakeGh()
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = followup.main(["--a", "--b"], runner=gh.runner.run, doc=self.path)
+        self.assertEqual(code, 2)
+        self.assertIn("不认识的参数：--a --b", err.getvalue())
 
 
 class WriteTests(DocumentCase):
@@ -341,8 +451,8 @@ class WriteTests(DocumentCase):
         code, out, _ = self.run_main(doc("| #11 | @b | 机型 | PR #2 | 输出 |"), gh,
                                      argv=["--write"])
         self.assertEqual(code, 0, "写回后再核对一遍，应当一致")
-        self.assertIn("补 1 行", out)
-        self.assertIn("一致", out)
+        self.assertIn("补 1 行，删 0 行", out)
+        self.assertIn("一致：没有缺行，也没有过期行。", out, "写回后的第二次核对结果要打出来")
         stored = self.path.read_text(encoding="utf-8")
         self.assertIn("| #7 | @s | — | — | — |", stored)
 
@@ -354,6 +464,29 @@ class WriteTests(DocumentCase):
         self.assertIn("| #1125 | @s | 机型 | 0.4.4 | 输出 |",
                       self.path.read_text(encoding="utf-8"),
                       "机型、版本与要观察的输出留原处；解阻后不必重填")
+
+    def test_an_unwritable_document_exits_two(self):
+        """有差异但要写盘时失败：报错写在 stderr 上、带「写不回」，不吞掉。"""
+        text = doc("| #11 | @b | 机型 | PR #2 | 输出 |")
+        gh = FakeGh([{"number": 11, "author": {"login": "b"}},
+                     {"number": 7, "author": {"login": "s"}}])   # 缺 #7，必须写回
+        self.path.write_text(text, encoding="utf-8")
+        # 权限位在 Windows 上不挡写，改成注入：只让这一份文档的写入失败。
+        target = self.path
+        real_write_text = Path.write_text
+
+        def write_text(path, *args, **kwargs):
+            if path == target:
+                raise PermissionError("read-only")
+            return real_write_text(path, *args, **kwargs)
+
+        out, err = io.StringIO(), io.StringIO()
+        with patch.object(Path, "write_text", write_text), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = followup.main(["--write"], runner=gh.runner.run, doc=self.path)
+        self.assertEqual(code, 2)
+        self.assertEqual(err.getvalue().splitlines()[0].split("：")[0], "写不回复测队列文档")
+        self.assertEqual(self.path.read_text(encoding="utf-8"), text, "写失败不该动原文档")
 
     def test_write_drops_an_expired_row_from_the_batch_table(self):
         text = doc("| #11 | @b | 机型 | PR #2 | 输出 |",
@@ -410,6 +543,34 @@ class WriteTests(DocumentCase):
         self.assertIn("过期行 1", out)
         self.assertIn("| #193 / #581 | @a | 机型 | PR #1 | 输出 |",
                       self.path.read_text(encoding="utf-8"))
+
+    def test_the_document_is_read_and_written_as_utf8_with_lf(self):
+        """编码 / 换行在 ASCII 文档上没有可观察差异，只能从调用参数上钉住：`encoding=None`
+        取本机 locale、`newline=None` 在 Windows 写 CRLF，同一份文档结论会变（#1522）。"""
+        text = doc("| #11 | @b | 机型 | PR #2 | 输出 |")
+        gh = FakeGh([{"number": 11, "author": {"login": "b"}},
+                     {"number": 7, "author": {"login": "s"}}])   # 缺 #7，会走写回
+        self.path.write_text(text, encoding="utf-8")
+        reads, writes = [], []
+        real_read, real_write = Path.read_text, Path.write_text
+
+        def spy_read(target, *args, **kwargs):
+            reads.append(kwargs)
+            return real_read(target, *args, **kwargs)
+
+        def spy_write(target, *args, **kwargs):
+            writes.append(kwargs)
+            return real_write(target, *args, **kwargs)
+
+        out, err = io.StringIO(), io.StringIO()
+        with patch.object(Path, "read_text", spy_read), \
+                patch.object(Path, "write_text", spy_write), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = followup.main(["--write"], runner=gh.runner.run, doc=self.path)
+        self.assertEqual(code, 0, err.getvalue())
+        self.assertTrue(reads and all(kw == {"encoding": "utf-8"} for kw in reads), reads)
+        self.assertTrue(writes and all(kw == {"encoding": "utf-8", "newline": "\n"}
+                                       for kw in writes), writes)
 
 
 class RealQueueTests(unittest.TestCase):
