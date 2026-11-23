@@ -12,7 +12,7 @@ import sys
 from types import SimpleNamespace
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import fast  # noqa: E402
+import wait  # noqa: E402
 from phone import navigator  # noqa: E402
 from fixtures import (SIZES, Clock, EMPTY_PAGE, clocked, load_recipe, phone_stub,  # noqa: E402
                       screen_stub, stub)
@@ -475,6 +476,401 @@ class GearLandingTests(unittest.TestCase):
                 p = gear_phone(NO_GEAR)
                 p.tap.return_value = True
                 self.assertFalse(gear(p, path))
+
+
+# ---------- 变异判据（ADR-0043、#1539）：翻页回路与各默认值留下的可观察效果 ----------
+def loop_navigator(*, find=None, dismiss=None, scroll_more=True, miss=0):
+    """翻页回路用的导航阶段：观测基座的每次查找、点击、翻页都可数，等待走假钟。"""
+    screen = screen_stub(EMPTY_PAGE)
+    screen.say = Mock()
+    screen.sig = Mock(return_value="sig")
+    screen.settle = Mock(return_value=True)
+    screen.click = Mock()
+    screen.back = Mock()
+    screen.focus = lambda: HOME
+    screen.find = Mock(side_effect=find or (lambda *a, **k: None))
+    screen.scroll_more = Mock(return_value=scroll_more)
+    screen.scroll_top = Mock()
+    stage = fast.Navigator(screen, fast.LostNote(), dismiss or Mock(return_value=None))
+    stage.lost_note.miss = miss
+    return stage, screen
+
+
+class TapLoopTests(unittest.TestCase):
+    """`tap()` 的翻页回路：默认值、两轮循环、弹窗与会话的交互都是对外可见的。"""
+
+    def setUp(self):
+        self.clock = clocked(self, fast, Clock())
+
+    def test_a_plain_word_is_matched_loosely_by_default(self):
+        """默认按包含匹配找：精确匹配不到的「我的，有新消息」也要点中。"""
+        stage, screen = loop_navigator(
+            find=lambda text, exact=False, **kw: None if exact else (10, 20))
+        self.assertTrue(stage.tap("我的"))
+        screen.click.assert_called_once_with(10, 20)
+
+    def test_a_hit_settles_from_the_signature_taken_before_the_click(self):
+        stage, screen = loop_navigator(
+            find=lambda text, exact=False, edge_ok=False, nav=False:
+            (5, 6) if (exact is True and nav is True and edge_ok is False) else None)
+        seen = []
+        self.assertTrue(stage.tap("设置", exact=True, scrolls=2, seen=seen))
+        screen.settle.assert_called_once_with("sig", 1.0)
+        self.assertEqual(seen, ["sig"])
+
+    def test_the_fast_path_after_a_miss_resets_the_note(self):
+        """本段已经走丢：只看当前这一屏，命中就清零，并把点击前的签名记进 seen。"""
+        stage, screen = loop_navigator(
+            find=lambda text, exact=False, nav=False:
+            (3, 4) if (exact is True and nav is True) else None, miss=2)
+        seen = []
+        self.assertTrue(stage.tap("设置", exact=True, seen=seen))
+        self.assertEqual(stage.lost_note.miss, 0)
+        screen.settle.assert_called_once_with("sig", 1.0)
+        self.assertEqual(seen, ["sig"])
+
+    def test_a_failed_fast_path_counts_the_miss(self):
+        stage, _ = loop_navigator(miss=2)
+        self.assertFalse(stage.tap("设置", exact=True))
+        self.assertEqual(stage.lost_note.miss, 3)
+
+    def test_a_zero_scroll_tap_closes_popups_and_rereads_immediately(self):
+        """刚关掉弹窗就立刻重读（一秒也不等），并只在底栏带里找。"""
+        found = []
+
+        def find(text, exact=False, edge_ok=False, nav=False):
+            hit = (1, 2) if (exact is True and edge_ok == "tab" and nav is True) else None
+            found.append(hit)
+            return None if len(found) == 1 else hit
+
+        stage, screen = loop_navigator(find=find, dismiss=Mock(side_effect=[True] + [None] * 40))
+        self.assertTrue(stage.tap("我的", exact=True, scrolls=0))
+        self.assertEqual(self.clock.t, 0.0)
+        screen.click.assert_called_once_with(1, 2)
+        screen.settle.assert_called_once_with("sig", 1.0)
+
+    def test_a_zero_scroll_tap_polls_every_two_tenths_of_a_second(self):
+        """什么都没关掉时按 0.2 秒的间隔重看，6 秒预算用完就报没找到。"""
+        stage, screen = loop_navigator(dismiss=Mock(side_effect=[None] * 30 + [True] * 5))
+        self.assertFalse(stage.tap("我的", scrolls=0))
+        self.assertAlmostEqual(self.clock.t, 6.0)
+        self.assertEqual(screen.find.call_count, 30)
+        screen.say.assert_called_once_with("  ✗ 没找到「我的」")
+
+    def test_the_six_second_budget_stops_on_the_boundary(self):
+        """6.0 秒整不算「还在预算内」：假钟按整秒读数，边界差一就会多找一次。"""
+        stage, screen = loop_navigator()
+        stage.dismiss = Mock(return_value=None)
+        scripted = SimpleNamespace(
+            time=Mock(side_effect=[0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),
+            sleep=Mock())
+        with patch.object(navigator, "time", scripted):
+            self.assertFalse(stage.tap("我的", scrolls=0))
+        self.assertEqual(screen.find.call_count, 6)
+
+    def test_the_scroll_loop_tries_seven_finds_per_round_and_returns_to_the_top(self):
+        """默认 scrolls=6：每轮 7 次查找、6 次翻页，两轮之间回一次页顶。"""
+        stage, screen = loop_navigator()
+        rounds = []
+        screen.scroll_top = Mock(side_effect=lambda n: rounds.append((n, screen.find.call_count)))
+        self.assertFalse(stage.tap("我的"))
+        self.assertEqual(screen.find.call_count, 14)
+        self.assertEqual(screen.scroll_more.call_count, 12)
+        self.assertEqual(rounds, [(8, 7)])          # 第一轮翻完就回页顶，第二轮不再回
+
+    def test_a_closed_popup_triggers_one_more_find_before_scrolling(self):
+        calls = []
+
+        def find(text, exact=False, nav=False, **kw):
+            calls.append((text, exact, nav, kw))
+            return (7, 8) if (len(calls) > 1 and nav is True and screen.scroll_more.call_count == 0) else None
+
+        stage, screen = loop_navigator(find=find, dismiss=Mock(return_value=True))
+        self.assertTrue(stage.tap("设置", exact=True))
+        self.assertEqual(screen.find.call_count, 2)
+        self.assertEqual(calls[1], ("设置", True, True, {}))
+        screen.settle.assert_called_once_with("sig", 1.0)
+
+    def test_a_popup_does_not_trigger_a_second_find_after_a_hit(self):
+        """找到了就不为弹窗再找一次：`xy 与 dismiss` 只有缺字时才成立。"""
+        stage, screen = loop_navigator(
+            find=lambda *a, **k: (1, 1), dismiss=Mock(return_value=True))
+        self.assertTrue(stage.tap("设置"))
+        self.assertEqual(screen.find.call_count, 1)
+
+    def test_a_miss_after_the_last_scroll_looks_in_the_edge_band_once(self):
+        """翻不动时在边缘带再找一遍，找到就点、按 wait 等，但不改动丢失计数。"""
+        stage, screen = loop_navigator(
+            find=lambda text, exact=False, edge_ok=False, nav=False:
+            (9, 9) if (exact is True and edge_ok is True and nav is True) else None,
+            scroll_more=False)
+        seen = []
+        self.assertTrue(stage.tap("设置", exact=True, scrolls=1, seen=seen))
+        screen.click.assert_called_once_with(9, 9)
+        self.assertEqual(self.clock.t, 0.6)
+        self.assertEqual(seen, ["sig"])
+        screen.settle.assert_not_called()
+
+    def test_a_successful_scroll_does_not_take_the_edge_band_fallback(self):
+        stage, screen = loop_navigator(
+            find=lambda text, exact=False, edge_ok=False, nav=False:
+            (9, 9) if edge_ok is True else None, scroll_more=True)
+        self.assertFalse(stage.tap("设置", scrolls=1))
+        screen.click.assert_not_called()
+
+    def test_the_long_loop_reports_the_miss_once(self):
+        stage, screen = loop_navigator()
+        self.assertFalse(stage.tap("我的", scrolls=1))
+        self.assertEqual(stage.lost_note.miss, 1)
+        screen.say.assert_called_once_with("  ✗ 没找到「我的」")
+
+
+class AwaitPageDefaultsTests(unittest.TestCase):
+    """`await_page()` 的默认预算与节奏：给假钟看它什么时候返回。"""
+
+    def setUp(self):
+        self.clock = clocked(self, fast, Clock())
+
+    def test_a_settled_page_is_returned_after_two_samples(self):
+        stage, screen = loop_navigator()
+        screen.sig = Mock(return_value="settled")
+        self.assertEqual(stage.await_page(), "settled")
+        self.assertEqual(screen.sig.call_count, 2)
+        self.assertEqual(self.clock.t, 0.2)
+
+    def test_a_page_that_keeps_changing_times_out_at_the_budget(self):
+        stage, screen = loop_navigator()
+        screen.sig = Mock(side_effect=iter(range(100)))
+        self.assertIsNone(stage.await_page())
+        self.assertEqual(screen.sig.call_count, 12)
+        self.assertAlmostEqual(self.clock.t, 2.4)
+
+
+class EntryDefaultsTests(unittest.TestCase):
+    """`entry()` 的两轮重试：后一轮等「与上一轮不同」的页面，预算摊到各轮。"""
+
+    def setUp(self):
+        self.clock = clocked(self, fast, Clock())
+
+    def test_a_failed_entry_retries_twice_with_a_changed_page(self):
+        stage, screen = loop_navigator()
+        stage.lost_note.miss = 5
+        seen_miss = []
+
+        def tap(*args, **kw):
+            seen_miss.append(stage.lost_note.miss)
+            return False
+
+        stage.tap = Mock(side_effect=tap)
+        stage.await_page = Mock()
+        screen.note_miss = Mock()
+        self.assertFalse(stage.entry("设置", scrolls=2))
+        self.assertEqual(seen_miss, [0, 0])          # 每轮进 tap 前丢失记录都是清零的
+        self.assertEqual(stage.await_page.call_args_list,
+                         [call(1.2, 0.2, changed_from=wait.UNSET),
+                          call(1.2, 0.2, changed_from="sig")])
+        stage.tap.assert_called_with("设置", exact=True, scrolls=2, quiet=True)
+        self.assertEqual(stage.tap.call_count, 2)
+        screen.note_miss.assert_called_once_with("设置")
+        self.assertEqual(stage.lost_note.miss, 0)
+
+    def test_a_found_entry_reports_success_and_clears_the_note(self):
+        stage, screen = loop_navigator()
+        stage.tap = Mock(return_value=True)
+        stage.await_page = Mock()
+        screen.note_miss = Mock()
+        self.assertTrue(stage.entry("设置"))
+        self.assertEqual(stage.tap.call_args.kwargs["scrolls"], 6)   # 默认翻六屏
+        screen.note_miss.assert_not_called()
+        self.assertEqual(stage.lost_note.miss, 0)
+
+
+def give_up_after_one_look():
+    """第一次返回「还没画出来」，之后判定这一页永远认不出：把失败路径的等待压到一拍。"""
+    calls = []
+
+    def find(text=None, exact=False, **kw):
+        calls.append(text)
+        if len(calls) % 2 == 0:
+            raise wait.GiveUp
+        return None
+    return find
+
+
+class TapIconTests(unittest.TestCase):
+    """点没有文字的图标入口：候选取几个、等多久、失败时报什么。"""
+
+    def setUp(self):
+        self.clock = clocked(self, fast, Clock())
+
+    def test_a_string_expect_is_one_criterion(self):
+        stage, screen = loop_navigator(
+            find=lambda text, exact=False, **kw: (5, 5) if (text == "设置" and exact is True) else None)
+        screen.icon_candidates = Mock(return_value=[(800, 100)])
+        screen.page_text = Mock(return_value="首页")
+        self.assertTrue(stage.tap_icon("设置"))
+        screen.click.assert_called_once_with(800, 100)
+        screen.say.assert_called_once_with("  · 点开了右上角图标（出现「设置」）")
+
+    def test_a_list_expect_matches_any_of_its_words(self):
+        stage, screen = loop_navigator(
+            find=lambda text, exact=False, **kw: (5, 5) if text == "个人" else None)
+        screen.icon_candidates = Mock(return_value=[(800, 100)])
+        screen.page_text = Mock(return_value="首页")
+        self.assertTrue(stage.tap_icon(("设置", "个人")))
+        screen.say.assert_called_once_with("  · 点开了右上角图标（出现「设置」）")
+
+    def test_only_the_first_three_icons_are_tried(self):
+        stage, screen = loop_navigator(find=give_up_after_one_look())
+        screen.icon_candidates = Mock(return_value=[(1, 1), (2, 2), (3, 3), (4, 4)])
+        screen.page_text = Mock(return_value="首页")
+        self.assertFalse(stage.tap_icon("设置"))
+        self.assertEqual(screen.click.call_count, 3)
+
+    def test_the_failure_note_lists_the_current_page_text(self):
+        stage, screen = loop_navigator(find=give_up_after_one_look())
+        screen.icon_candidates = Mock(return_value=[(1, 1)])
+        screen.page_text = Mock(return_value="屏幕上的字")
+        self.assertFalse(stage.tap_icon("设置"))
+        screen.say.assert_called_once_with("  · 当前页文字：屏幕上的字")
+
+    def test_the_icon_window_is_the_two_point_four_second_budget(self):
+        stage, screen = loop_navigator()
+        screen.icon_candidates = Mock(return_value=[(1, 1)])
+        screen.page_text = Mock(return_value="首页")
+        self.assertFalse(stage.tap_icon("设置"))
+        self.assertEqual(screen.find.call_count, 4)
+        self.assertAlmostEqual(self.clock.t, 2.4)
+
+    def test_a_wrong_page_is_left_with_the_animation_wait(self):
+        stage, screen = loop_navigator(find=give_up_after_one_look())
+        screen.icon_candidates = Mock(return_value=[(1, 1), (2, 2)])
+        screen.focus = Mock(side_effect=[HOME, "other/.Main", HOME, HOME])
+        screen.page_text = Mock(return_value="首页")
+        self.assertFalse(stage.tap_icon("设置"))
+        screen.back.assert_called_once()
+        self.assertAlmostEqual(self.clock.t, 1.8)      # 每候选一次 0.6 秒轮询，加上退回后的 0.6 秒
+
+
+class EnterTests(unittest.TestCase):
+    """`enter()` 只给会换页的入口用：精确匹配优先，找不到退回包含匹配。"""
+
+    def setUp(self):
+        self.clock = clocked(self, fast, Clock())
+
+    def test_exact_match_is_preferred_when_the_entry_is_on_screen(self):
+        stage, screen = loop_navigator(
+            find=lambda text, exact=False, edge_ok=False, nav=False:
+            (1, 1) if (text == "设置" and exact is True and edge_ok == "tab" and nav is True) else None)
+        stage.tap = Mock(side_effect=lambda text, **kw: (kw["seen"].append("sig"), True)[1])
+        self.assertIsNone(stage.enter("设置"))
+        kwargs = stage.tap.call_args.kwargs
+        self.assertIs(kwargs["exact"], True)
+        self.assertEqual(kwargs["scrolls"], 0)
+        screen.settle.assert_called_once_with("sig", 2.0)
+
+    def test_a_bottom_tab_suffix_falls_back_to_contains(self):
+        stage, screen = loop_navigator(
+            find=lambda text, exact=False, edge_ok=False, nav=False:
+            (1, 1) if (text == "我的" and exact is False and edge_ok == "tab" and nav is True) else None)
+        stage.tap = Mock(side_effect=lambda text, **kw: (kw["seen"].append("sig"), True)[1])
+        self.assertIsNone(stage.enter("我的"))
+        self.assertIs(stage.tap.call_args.kwargs["exact"], False)
+
+
+class GoTests(unittest.TestCase):
+    """`go()` 的落点重试：5 次找 expect、3 轮重点、精确不行退回包含。"""
+
+    def setUp(self):
+        self.clock = clocked(self, fast, Clock())
+
+    def test_the_default_probes_exact_first_then_taps_loose(self):
+        stage, screen = loop_navigator(
+            find=lambda text, exact=False, edge_ok=False, nav=False: (2, 2) if text == "设置" else None)
+        stage.tap = Mock(return_value=True)
+        self.assertTrue(stage.go("我的", "设置"))
+        self.assertIs(screen.find.call_args_list[0].kwargs["exact"], True)   # 默认先精确探一次
+        stage.tap.assert_called_once_with("我的", exact=False, scrolls=0)
+
+    def test_an_explicit_exact_probe_stays_exact(self):
+        def find(text, exact=False, edge_ok=False, nav=False):
+            if text == "设置":
+                return (2, 2)
+            return (1, 1) if (exact is True and edge_ok == "tab" and nav is True) else None
+
+        stage, screen = loop_navigator(find=find)
+        stage.tap = Mock(return_value=True)
+        self.assertTrue(stage.go("我的", "设置", exact=True))
+        stage.tap.assert_called_once_with("我的", exact=True, scrolls=0)
+
+    def test_a_landing_text_on_the_bottom_band_counts(self):
+        stage, screen = loop_navigator(
+            find=lambda text, exact=False, edge_ok=False, nav=False:
+            (3, 3) if (text == "设置" and edge_ok == "tab") else None)
+        stage.tap = Mock(return_value=True)
+        self.assertTrue(stage.go("我的", "设置"))
+
+    def test_three_tries_of_five_looks_each(self):
+        stage, screen = loop_navigator()
+        stage.tap = Mock(return_value=True)
+        self.assertFalse(stage.go("我的", "设置"))
+        self.assertEqual(screen.find.call_count, 31)      # 一次精确探测加三轮各五次两种查找
+        self.assertAlmostEqual(self.clock.t, 4.5)
+        screen.say.assert_called_once_with("  ✗ 点「我的」后没出现「设置」")
+
+
+class TabTimingTests(unittest.TestCase):
+    """`tab()` 的等待预算与点击前的签名。"""
+
+    def setUp(self):
+        self.clock = clocked(self, fast, Clock())
+
+    def test_the_bottom_band_label_is_settled_from_the_signature_taken_first(self):
+        p = tab_phone(tab_node(text="我的"))
+        self.assertTrue(p.tab("我的"))
+        p.screen.settle.assert_called_once_with("page", 1.0)
+
+    def test_a_missing_tab_waits_six_seconds_by_default(self):
+        """阶段的默认预算（门面总会显式传 6.0，默认值只有直接调阶段时才生效）。"""
+        stage, screen = loop_navigator()
+        screen.texts = Mock(return_value=[])
+        stage.dismiss = Mock(return_value=None)
+        lines = []
+        screen.say = Mock(side_effect=lambda text: lines.append(text))
+        self.assertFalse(stage.tab("我的"))
+        self.assertAlmostEqual(self.clock.t, 6.0)
+        self.assertEqual(screen.texts.call_count, 31)
+        self.assertEqual(lines, ["  ✗ 底部没有「我的」标签"])
+
+    def test_the_maxwait_deadline_is_reached_exactly(self):
+        """6.0 秒整判超时：边界差一就会多看一眼、多等一拍。"""
+        stage, screen = loop_navigator()
+        screen.texts = Mock(return_value=[])
+        stage.dismiss = Mock(return_value=None)
+        screen.say = Mock()
+        scripted = SimpleNamespace(
+            time=Mock(side_effect=[0.0, 0.0, 3.0, 6.0, 9.0]), sleep=Mock())
+        with patch.object(navigator, "time", scripted):
+            self.assertFalse(stage.tab("我的", maxwait=6.0))
+        self.assertEqual(screen.texts.call_count, 3)
+
+    def test_a_closed_popup_does_not_delay_the_next_look(self):
+        p = tab_phone()
+        p.screen.texts = Mock(side_effect=[[], [("我的", (0, 2200, 216, 2300), None)]])
+        p.dismiss = Mock(return_value=True)
+        self.assertTrue(p.tab("我的"))
+        self.assertEqual(self.clock.t, 0.0)
+        p.screen.click.assert_called_once_with(108, 2250)
+
+    def test_the_band_boundary_is_exclusive(self):
+        p = tab_phone(tab_node(text="我的", area="[0,2040][216,2100]"))
+        self.assertFalse(p.tab("我的", maxwait=0))
+        p.screen.click.assert_not_called()
+
+    def test_an_exact_label_wins_over_an_earlier_contains_match(self):
+        p = tab_phone(tab_node(text="我的，设置x"), tab_node(text="我的，设置", area=TAB_RIGHT))
+        self.assertTrue(p.tab("我的，设置"))
+        p.screen.click.assert_called_once_with(972, 2250)
 
 
 class CallGraphTests(unittest.TestCase):

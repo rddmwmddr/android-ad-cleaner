@@ -64,12 +64,12 @@ class Navigator:
             if not quiet:
                 screen.say(f"  ✗ 没找到「{text}」（快速放弃）" + screen.residual_note())
             return False
-        for rnd in range(2 if scrolls else 1):
+        for rnd in range(2):
             for i in range(scrolls + 1):
-                edge = "tab" if scrolls == 0 else False
-                xy = screen.find(text, exact, edge_ok=edge, nav=True)
+                # scrolls=0 已经在上面返回，这一路不认底栏带（edge_ok 取默认的假）
+                xy = screen.find(text, exact, nav=True)
                 if not xy and self.dismiss():
-                    xy = screen.find(text, exact, edge_ok=edge, nav=True)
+                    xy = screen.find(text, exact, nav=True)
                 if xy:
                     b = screen.sig(); screen.click(*xy); screen.settle(b, wait + 0.4)
                     if seen is not None:
@@ -84,9 +84,9 @@ class Navigator:
                         screen.click(*xy); time.sleep(wait)
                         return True
                     break
-            if rnd == 0 and scrolls:
+            if rnd == 0:
                 self.top(scrolls + 2)
-        self.lost_note.miss += 1
+        self.lost_note.miss = 1         # 走到这里 miss 必为 0（非零在上面已经快退）
         if not quiet:
             screen.say(f"  ✗ 没找到「{text}」" + screen.residual_note())
         return False
