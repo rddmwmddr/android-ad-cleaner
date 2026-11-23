@@ -154,6 +154,10 @@ pragma 全部写明「语义等价」或「不可达」，理由随源码行。�
 | `wait` | 80 | 0 | 0 | 3 |
 | `captures` | 100 | 0 | 0 | 5 |
 | `row` | 1256 | 181 | 0 | 0 |
+| `adapt` | 798 | 0 | 0 | 4 |
+| `explore` | 274 | 0 | 0 | 1 |
+| `recipe_audit` | 578 | 0 | 0 | 3 |
+| `verify_ledger` | 296 | 0 | 0 | 2 |
 
 - **`channel_decide` / `channel_arrive` 进表**，与表内模块同口径。`channel_decide` 的唯一 pragma 是 `gap = tol = 0`：`boxes` 为空时 `ok` 必假，这两个初值不进 notes、也不进同带取舍（不可达）。清零过程中顺带收掉两处死参数：`row.named_nodes()` 的 `parents` 与 `channel_decide.allow_switches` / `page_hint` 的 `systemui_text`（都从不被读），并把缺属性时的空值收进一个模块常量，消掉 `.get(k) or ""` 与 `.get(k, "")` 一类在真实 dump 上区分不出来的等价变异。
 - **`adb_link` / `huawei_channels` 进表**（#1535），与表内模块同口径。两处覆盖矩阵都需要收窄测试范围：`tests/recipe_case.py` 是只有基类（`RECIPE = None`）的助手模块，pytest 按路径收集时基类用例直接红，整份不进 `adb_link` 的行（同一条用例由 `_recipe.py` 子类在真实数据上跑，不少杀）；其余 51 份照矩阵全收。清零时把 `present` / `detached` 各写一份的 `get-state` 子进程调用收进 `_adb_run`，并把「占位串不可能命中本模块正则 / 只当真假用」的等价变异收成行内 pragma（共 5 条：`_matches` 一处覆盖 `client_gone` / `lib_gone` / `read_failed`，`screen_gone` / `focus_window` / `keyguard_showing` 各一处，`Connection.shell` 的 `for attempt` 一处）。`adb_link` 的 4 个超时是 `lost_from` 的异常链环检测：成环的链只有让 mutant 死循环才有行为差异，一条成环用例把它跑到 SIGXCPU（mutmut 记 timeout，算检测到，不进存活）。`huawei_channels` 的 4 条 pragma 是：两处 `(node.get(attr) or "")` 的缺属性占位（占位串不会等于真实渠道名）、`locate` 的 `break`（循环之后没有语句，与 `return` 等价）、收尾复查里那个 `banned`（走到那里时总开关已被 `guard`、权限模式已被复查钉回，恒为假）。清零还顺带把 `read_text` 改成 `read_bytes().decode()`、`write_text(encoding=...)` 改成 `write_bytes(...encode())`、把 JSON 格式收进一个模块常量，消掉只在非 UTF-8 locale 上才区分得出来的等价变异。
@@ -162,6 +166,7 @@ pragma 全部写明「语义等价」或「不可达」，理由随源码行。�
 - **`chan_fast` 不进表（表外已知缺口）**：本票实测 1804 个 mutant、杀死 1331、存活 462、无测试 6、超时 5。存活集中在整批编排段——`run` 112、`toggle` 57，加上 `_enter_app_page` 47、`_skeleton` 35、`undo_message` 20、`recognise` 19、`mismatch_probe` 14 等。`run` / `toggle` 的清零要造整套 `Phone` / `ShellPhone` / `UiHidden` 替身并锁住调用序列，成本闸门明确排除；而模块只有整体才进表，所以整份登记为缺口。它下次纳入时按同一口径逐份清到零。
 - **`phone/session` 进表**：三个会话对象的 `__init__` 初值与 `set_app()` 的「换 App 清推广位记忆」共 14 个 mutant，靠 `test_phone_sessions` 里的初值断言清零（空串、`False`、活集合各一条）。覆盖矩阵把 `tests/recipe_case.py` 里写的用例归到它自己名下，但那是只有被继承才跑得起来的基类；映射行按实际所有者换成三个子类文件，范围不窄于矩阵。
 - **`phone/toggler` 不进表（表外已知缺口）**：实测 519 个 mutant、杀死 481、存活 37、无测试 0、超时 1。纯函数与构造初值（`match_key` / `in_band` / `plan_switches` / `Toggler.__init__`）本票补断言后清零；存活全在该模块自己的编排段——`off` 34、`confirm` 3（另 `confirm` 去掉注入的 `sleep` 的一条超时）。是首屏等待的 `tries` / `poll` / `sleep` 实参、`shift` 初值与重排分支、回读与补点里的 `continue` / `break` / `return` 之分、`screen.switches()` 的实参、两处 `|=` 累加，以及几处 sleep 节奏常量。逐条杀掉要按场景锁住替身的调用序列与节奏，成本闸门排除；模块只有整体才进表，故整份登记为缺口。
+- **`adapt` / `explore` / `recipe_audit` / `verify_ledger` 进表**（#1545），与表内模块同口径，没有新的表外缺口。这四份是开发者脚本面（适配生成、探路、脚本审计、验证台账），覆盖行从矩阵原样收下；`explore` 与 `adapt` 的 70 + 26 个「无测试」之首就是它们的 `main` / `cmd_explore`，靠进程内用例清零——替身手机、临时目录与 `contextlib.chdir`、`sys.argv` 注入、`script_cmd` 与 `subprocess.call` 换成 spy（不起子进程，也不碰真设备）。其余存活来自显示文案、参数装配与 `continue`→`break`：消息逐字断言、选项逐个走真分支、多条目场景让第二个条目必须被处理。9 条 pragma 全是同一类：5 处 `encoding=` 的 codec 别名 / 省略（判定平台默认 UTF-8）、`_footer` 与 `parse_tsv` 的 `zip(..., strict=)`（两序列恒等长）、`_installed_packages` 的空表占位（占位串不含 `package:`）。清零时顺带把几种「同一行上混着可杀与不可杀」的写法收成模块常量或显式查表：codec / JSON 选项 / 例外后缀（`EXT_SUFFIX`）进了模块级常量，`ensure_ascii` 的 `None` 写法与大小写变体不再生成；`script.split("/", 1)[0]` 换成 `partition("/")[0]`、`now.split("/", 1)[0]` 换成 `now.startswith(pkg + "/")`；`rows()` 的 falsy 默认值（`builds.get(path, "")` / `hashes.get(path, "")` / `body_hash` 缺键）改成显式 `in` 判定，占位串与空串不再等价；`_launch_failed()` 改读 `result.exit_code`（`p.shell()` 恒给 `ShellResult`），去掉 `getattr` 默认值那一类变异。
 
 ## Consequences
 

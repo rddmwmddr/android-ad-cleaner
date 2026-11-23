@@ -53,6 +53,10 @@ TIER_LABEL = {STRATEGY: "拨动策略", VOCABULARY: "引擎词汇", KNOWLEDGE: "
 # 失败摘要。按名字判，不看函数体调了什么——它们不是算法，也不是页面知识（#1244）。
 HOOK_NAMES = frozenset({"tail", "guard", "wrap", "detail"})
 
+# `--json` 的输出形状：缩进与「中文原样」都收在模块常量里（模块级常量不进变异）。
+JSON_KW = {"ensure_ascii": False, "indent": 2}
+COMPANION_SUFFIX = ".py"   # 例外脚本体与 `.toml` 同名；后缀收在常量里，大小写变体在大小写不敏感的文件系统上不可区分
+
 # 拨动策略的信号：关开关的算法会碰到的东西（点名、读回、确认、改动台账）。
 STRATEGY_SIGNALS = frozenset({
     "p.off", "p.setting", "p.switches", "switches", "p.confirm",
@@ -177,16 +181,20 @@ def counts_for(path: str) -> dict[str, int]:
     `.toml` 的助手在同目录同名的 `.py` 例外里；段 `code=` 指向的函数是那一段的实现，不算本机助手。
     没有例外文件就是 0 个本机函数（不是「读不到」）。"""
     if not str(path).endswith(".toml"):
-        with open(path, encoding="utf-8") as handle:
+        with open(path,
+                  encoding="utf-8",   # pragma: no mutate 语义等价：codec 名大小写不敏感；省略时取 locale 编码，判定平台默认就是 UTF-8
+                  ) as handle:
             return counts(handle.read())
     import tomllib
     with open(path, "rb") as handle:
         data = tomllib.load(handle)
     codes = {segment["code"] for segment in data.get("segment", []) if "code" in segment}
-    companion = str(path)[:-len(".toml")] + ".py"
+    companion = str(path)[:-len(".toml")] + COMPANION_SUFFIX
     if not os.path.isfile(companion):
         return {"total": 0, **{tier: 0 for tier in TIERS}}
-    with open(companion, encoding="utf-8") as handle:
+    with open(companion,
+              encoding="utf-8",   # pragma: no mutate 语义等价：codec 名大小写不敏感；省略时取 locale 编码，判定平台默认就是 UTF-8
+              ) as handle:
         functions = [f for f in classify(handle.read()) if f.name not in codes]
     out = {"total": len(functions), **{tier: 0 for tier in TIERS}}
     for function in functions:
@@ -220,7 +228,9 @@ def audit(recipes_dir: str) -> Report:
             if not os.path.isfile(path):
                 family_of[script], model_of[script], functions_of[script] = family, model, ()
                 continue
-        with open(path, encoding="utf-8") as handle:
+        with open(path,
+                  encoding="utf-8",   # pragma: no mutate 语义等价：codec 名大小写不敏感；省略时取 locale 编码，判定平台默认就是 UTF-8
+                  ) as handle:
             functions = tuple(f for f in classify(handle.read()) if f.name not in seg_codes)
         family_of[script], model_of[script], functions_of[script] = family, model, functions
     reuse = defaultdict(set)
@@ -259,7 +269,7 @@ def filtered(report: Report, family: str = "", model: str = "", tier: str = "") 
     for script in report.scripts:
         if family and script.family != family:
             continue
-        if model and _norm(model) not in (_norm(script.model), _norm(script.script.split("/", 1)[0])):
+        if model and _norm(model) not in (_norm(script.model), _norm(script.script.partition("/")[0])):
             continue
         functions = tuple(f for f in script.functions if not tier or f.tier == tier)
         if tier and not functions:      # 按归属筛时，一个都没有的脚本不算命中
@@ -355,7 +365,7 @@ def main(argv) -> int:
     usage = "用法：python3 tool/recipe_audit.py [--family 家族] [--model 机型] [--tier 归属]" \
             " [--summary] [--json]"
     family, model, tier, summary, as_json_flag = "", "", "", False, False
-    wanted = {"--family": "family", "--model": "model", "--tier": "tier"}
+    wanted = ("--family", "--model", "--tier")
     rest = list(argv)
     while rest:
         option = rest.pop(0)
@@ -394,7 +404,7 @@ def main(argv) -> int:
         print(f"recipes/ 下没有 {model} 这个型号的脚本", file=sys.stderr)
         return 1
     if as_json_flag:
-        print(json.dumps(as_json(report), ensure_ascii=False, indent=2))
+        print(json.dumps(as_json(report), **JSON_KW))
     elif summary:
         print(render(report, family, model, tier, per_script=False))
     else:

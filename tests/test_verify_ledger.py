@@ -16,6 +16,7 @@
 末尾还有 `status-json` 那一段（#1124）：覆盖度、证据来源与验证日期由引擎现读台账再透传给客户端。
 """
 import contextlib
+import hashlib
 import io
 import json
 import os
@@ -548,6 +549,112 @@ class StatusJsonVerificationTests(unittest.TestCase):
         load.assert_not_called()
         self.assertEqual((st["recipe_coverage"], st["recipe_evidence"], st["recipe_verified"]),
                          (verify_ledger.UNRECORDED, verify_ledger.UNKNOWN_EVIDENCE, ""))
+
+
+# ---------- 段体归一、例外脚本与台账行的细部 ----------
+
+class StepBodiesDetailTests(unittest.TestCase):
+    def write(self, directory, text):
+        path = Path(directory) / "A.toml"
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_a_nameless_segment_gets_an_empty_name(self):
+        with tempfile.TemporaryDirectory() as d:
+            segments = verify_ledger.step_bodies(self.write(d, '[[segment]]\nops = []\n'))
+        self.assertEqual(segments, [("", '{"ops": []}')])
+
+    def test_chinese_is_not_escaped_in_the_normalised_body(self):
+        text = '[[segment]]\nname = "系统广告"\nops = [{kind = "off", only = ["个性化推荐"]}]\n'
+        with tempfile.TemporaryDirectory() as d:
+            [(name, dump)] = verify_ledger.step_bodies(self.write(d, text))
+        self.assertEqual(name, "系统广告")
+        self.assertIn("个性化推荐", dump)
+        self.assertIn("系统广告", dump)
+
+
+class ExactBodyHashTests(unittest.TestCase):
+    def test_the_hash_is_the_documented_formula(self):
+        text = ('[[segment]]\nname = "甲"\nops = [{kind = "start", pkg = "com.a"}]\n\n'
+                '[[segment]]\nname = "乙"\nops = []\n')
+        first = {"name": "甲", "ops": [{"kind": "start", "pkg": "com.a"}]}
+        second = {"name": "乙", "ops": []}
+        parts = [f"{segment['name']}\n{json.dumps(segment, ensure_ascii=False, sort_keys=True)}"
+                 for segment in sorted((first, second), key=lambda segment: segment["name"])]
+        expected = hashlib.sha256("\n\n".join(parts).encode()).hexdigest()[:verify_ledger.HASH_LEN]
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "A.toml"
+            path.write_text(text, encoding="utf-8")
+            self.assertEqual(verify_ledger.body_hash(path), expected)
+
+
+class ExceptionSyntaxTests(unittest.TestCase):
+    def test_a_syntax_error_is_attributed_to_the_companion_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            toml = Path(d) / "A.toml"
+            toml.write_text('model = "A"\n', encoding="utf-8")
+            companion = Path(d) / "A.py"
+            companion.write_text("def broken(:\n", encoding="utf-8")
+            with self.assertRaises(SyntaxError) as raised:
+                verify_ledger._exception_body(toml)
+        self.assertIn("A.py", str(raised.exception))
+
+
+class RowsDefaultsTests(RowsTest):
+    def test_a_matching_record_build_is_not_a_mismatch(self):
+        self.recipe("xiaomi/A/A.toml")
+        records = {"xiaomi/A/A.toml": {"build": "PMX110_17.0.0", "date": "2026-11-08",
+                                          "by": "机主", "tier": "全部"}}
+        [row] = verify_ledger.rows(self.dir, records, TODAY,
+                                   builds={"xiaomi/A/A.toml": "PMX110_17.0"})
+        self.assertFalse(row.build_mismatch)
+
+    def test_a_record_without_a_build_key_is_checked_as_an_empty_string(self):
+        self.recipe("xiaomi/A/A.toml")
+        records = {"xiaomi/A/A.toml": {"date": "2026-11-08", "by": "机主", "tier": "全部"}}
+        [row] = verify_ledger.rows(self.dir, records, TODAY, builds={"xiaomi/A/A.toml": "X"})
+        self.assertTrue(row.build_mismatch)
+
+    def test_a_script_build_missing_from_the_map_is_not_a_mismatch(self):
+        self.recipe("xiaomi/A/A.toml")
+        records = {"xiaomi/A/A.toml": {"build": "OS9", "date": "2026-11-08", "by": "机主",
+                                          "tier": "全部"}}
+        [row] = verify_ledger.rows(self.dir, records, TODAY, builds={})
+        self.assertFalse(row.build_mismatch)
+
+    def test_a_missing_record_hash_uses_the_empty_default(self):
+        self.recipe("xiaomi/A/A.toml")
+        records = {"xiaomi/A/A.toml": {"build": "OS9", "date": "2026-11-08", "by": "机主",
+                                          "tier": "全部"}}
+        [row] = verify_ledger.rows(self.dir, records, TODAY, hashes={"xiaomi/A/A.toml": "deadbeef"})
+        self.assertFalse(row.review)
+
+    def test_a_script_hash_missing_from_the_map_is_not_marked_for_review(self):
+        self.recipe("xiaomi/A/A.toml")
+        records = {"xiaomi/A/A.toml": {"build": "OS9", "date": "2026-11-08", "by": "机主",
+                                          "tier": "全部", "body_hash": "deadbeef"}}
+        [row] = verify_ledger.rows(self.dir, records, TODAY, hashes={})
+        self.assertFalse(row.review)
+
+    def test_a_record_without_a_date_has_no_day_count(self):
+        self.recipe("xiaomi/A/A.toml")
+        records = {"xiaomi/A/A.toml": {"build": "OS9", "by": "机主", "tier": "全部"}}
+        [row] = verify_ledger.rows(self.dir, records, TODAY)
+        self.assertIsNone(row.days)
+
+    def test_zero_days_sorts_after_one_day(self):
+        self.recipes("xiaomi/A/A.toml", "xiaomi/B/B.toml")
+        records = {
+            "xiaomi/A/A.toml": {"build": "OS9", "date": "2026-11-09", "by": "机主", "tier": "全部"},
+            "xiaomi/B/B.toml": {"build": "OS9", "date": "2026-11-08", "by": "机主", "tier": "全部"},
+        }
+        self.assertEqual([row.path for row in verify_ledger.rows(self.dir, records, TODAY)],
+                         ["xiaomi/B/B.toml", "xiaomi/A/A.toml"])
+
+
+class RecipesDirTests(unittest.TestCase):
+    def test_the_ledger_reads_the_repository_recipes(self):
+        self.assertEqual(verify_ledger._recipes_dir(), str(ROOT / "recipes"))
 
 
 if __name__ == "__main__":

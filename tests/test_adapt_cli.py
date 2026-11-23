@@ -34,6 +34,7 @@ import explore  # noqa: E402
 import recipe_loader  # noqa: E402
 import run  # noqa: E402
 import vocab  # noqa: E402
+import wait  # noqa: E402
 from fixtures import shell_result, Clock, fake_adb, phone_mock  # noqa: E402
 
 BASELINE = ROOT / "tests" / "baselines" / "adapt_cli.json"
@@ -258,7 +259,9 @@ class DraftGenTests(unittest.TestCase):
                 code = adapt.cmd_gen([str(path), "-o", str(Path(d) / "x.toml")])
             self.assertFalse((Path(d) / "x.toml").exists())
         self.assertEqual(code, 1)
-        self.assertIn("没有勾选任何开关", err.getvalue())
+        self.assertEqual(err.getvalue(),
+                         "没有勾选任何开关：在 TSV 末列「人工勾选」写「关」，或用 --pick 给清单文件。"
+                         "工具不自动决定关哪些开关。\n")
 
     def test_successful_generation_returns_zero(self):
         with tempfile.TemporaryDirectory() as d:
@@ -793,6 +796,1050 @@ class DispatchTest(unittest.TestCase):
         _code, spy = self.forward(["adapt", "survey", "-s", "FAKE"])
         spy.assert_called_once_with("adapt.py", "survey", "-s", "FAKE")
         self.shell.assert_not_called()              # 老写法仍由 adapt.py 自己管设备
+
+
+# ---------- explore.py：条目筛选、读页、进设置、探路与 main ----------
+
+def xnode(text="", package="com.example"):
+    attrs = f'text="{text}" bounds="[0,0][0,0]"'
+    if package is not None:
+        attrs += f' package="{package}"'
+    return ET.fromstring(f"<node {attrs}/>")
+
+
+def xtexts(*items, package="com.example"):
+    """[(文字, (左, 上, 右, 下), 包名?)] → `p.texts()` 的形状；包名写 None 表示节点没有这个属性。"""
+    rows = []
+    for item in items:
+        text, bounds = item[0], item[1]
+        rows.append((text, bounds, xnode(text, item[2] if len(item) > 2 else package)))
+    return rows
+
+
+class ExploreEntriesTests(unittest.TestCase):
+    def listing(self, items, switches=(), W=1000, H=1000, pkg="com.example"):
+        p = Mock()
+        p.W, p.H = W, H
+        p.switches.return_value = switches
+        p.texts.return_value = xtexts(*items)
+        return explore.entries(p, pkg)
+
+    def test_plain_titles_are_kept_and_noise_is_dropped(self):
+        out = self.listing([
+            ("隐私", (100, 300, 300, 360)),
+            ("通知", (100, 900, 300, 960)),
+            ("返回", (100, 700, 300, 760)),                  # ENTRY_SKIP
+            ("这是一个超过十二个字的页面标题啊", (100, 800, 300, 860)),
+            ("我", (100, 400, 300, 460)),                    # 太短
+            ("在顶部", (100, 0, 300, 20)),                   # 屏幕顶部 10% 以内
+            ("别的包", (100, 500, 300, 560), "com.other"),    # 别的窗口的字
+            ("右侧取值", (600, 500, 800, 560)),              # 右侧的取值文字
+            ("开启", (100, 600, 300, 660)),                  # 只有状态词
+            ("12.5%", (100, 650, 300, 710)),                # 只有数字
+            ("隐私", (100, 300, 300, 360)),                  # 去重
+        ])
+        self.assertEqual(out, ["隐私", "通知"])
+
+    def test_length_boundary_is_twelve_and_top_band_is_inclusive(self):
+        twelve = "一二三四五六七八九十甲乙"
+        thirteen = "一二三四五六七八九十甲乙丙"
+        out = self.listing([
+            (twelve, (100, 300, 300, 360)),
+            (thirteen, (100, 320, 300, 380)),                # 13 个字：超过上限
+            ("顶边", (100, 90, 300, 110)),                    # cy 正好是 H*0.1
+        ])
+        self.assertEqual(out, [twelve, "顶边"])
+
+    def test_left_edge_at_half_width_is_inside_and_anything_past_it_is_not(self):
+        out = self.listing([
+            ("正好一半", (500, 300, 700, 360)),
+            ("右侧", (600, 500, 800, 560)),
+        ])
+        self.assertEqual(out, ["正好一半"])
+
+    def test_titles_on_a_switch_row_are_left_for_the_switch_reader(self):
+        out = self.listing([
+            ("普通开关", (100, 360, 300, 370)),               # cy=365：与 y=365 的开关同一行
+            ("跨组的标题", (100, 330, 300, 350)),             # cy=340：在上一组
+        ], switches=[("x", True, (360, 365))])                # 365//60=6，365//61=5
+        self.assertEqual(out, ["跨组的标题"])
+
+    def test_half_pixel_from_the_centre_line_is_still_in_the_top_band(self):
+        """`(tp + b) // 2` 与 `/ 2` 只在 H*0.1 落在半个像素上时分得开。"""
+        out = self.listing([("低处", (100, 171, 200, 172))], W=1000, H=1712)   # 171 < 171.2 ≤ 171.5
+        self.assertEqual(out, [])
+
+    def test_a_filtered_title_does_not_stop_later_titles(self):
+        out = self.listing([
+            ("这是一个超过十二个字的页面标题啊", (100, 300, 300, 360)),
+            ("隐私", (100, 400, 300, 460)),
+        ])
+        self.assertEqual(out, ["隐私"])
+        out = self.listing([("开启", (100, 300, 300, 360)), ("通知", (100, 400, 300, 460))])
+        self.assertEqual(out, ["通知"])
+
+    def test_a_node_without_a_package_is_not_this_page(self):
+        self.assertEqual(self.listing([("无包名", (100, 300, 300, 360), None)]), [])
+
+
+class ExploreReadPageTests(unittest.TestCase):
+    def read(self, pages, path=("设置",), pkg="com.example"):
+        p = Mock()
+        p.switches.side_effect = pages
+        p.scroll_more.side_effect = [True] * (len(pages) - 1) + [False]
+        rows = []
+        explore.read_page(p, list(path), rows, pkg)
+        return rows, p
+
+    def test_rows_carry_page_state_and_the_ad_star(self):
+        rows, p = self.read([[("广告推荐", True, (0, 0)), ("隐私", False, (0, 60))],
+                             [("首页精选", False, (0, 120))]])
+        self.assertEqual(rows, [
+            ("com.example", "设置", "广告推荐", "开", "★", ""),
+            ("com.example", "设置", "隐私", "关", "", ""),
+            ("com.example", "设置", "首页精选", "关", "★", ""),
+        ])
+        self.assertEqual(p.switches.call_count, 2)
+        p.top.assert_called_once_with(6)
+
+    def test_the_same_switch_survives_only_once(self):
+        rows, _p = self.read([[("隐私", False, (0, 0)), ("隐私", True, (0, 60))]])
+        self.assertEqual(rows, [("com.example", "设置", "隐私", "关", "", "")])
+
+    def test_empty_switch_titles_are_not_rows(self):
+        rows, _p = self.read([[(None, False, (0, 0)), ("通知", True, (0, 60))]])
+        self.assertEqual([row[2] for row in rows], ["通知"])
+
+    def test_a_page_that_never_stops_scrolling_is_bounded(self):
+        p = Mock()
+        p.switches.return_value = []
+        p.scroll_more.return_value = True
+        explore.read_page(p, ["设置"], [], "com.example")
+        self.assertEqual(p.switches.call_count, 8)
+        p.top.assert_called_once_with(6)
+
+    def test_scroll_more_false_ends_the_loop_after_one_read(self):
+        rows, p = self.read([[("隐私", False, (0, 0))]], path=("设置", "隐私"))
+        self.assertEqual(rows, [("com.example", "设置 > 隐私", "隐私", "关", "", "")])
+        self.assertEqual(p.switches.call_count, 1)
+
+
+class ExploreOpenSettingsTests(unittest.TestCase):
+    def phone(self, texts, find=False, tap=False):
+        p = Mock()
+        p.texts.return_value = [(text, (0, 0, 1, 1), xnode(text)) for text in texts]
+        p.find.return_value = find
+        p.tap.return_value = tap
+        return p
+
+    def test_settings_entry_is_found_through_the_search_fallbacks(self):
+        p = self.phone(["首页"], tap=False)
+        p.tap.side_effect = [False, True]                    # 第一档「设置」没找到，第二档「设置中心」进得去
+        self.assertIsNone(explore.open_settings(p, "com.example"))
+        p.start.assert_called_once_with("com.example", settle=2.5)
+        self.assertEqual([call.args[0] for call in p.tap.call_args_list], ["设置", "设置中心"])
+        for call in p.tap.call_args_list:
+            self.assertEqual(call.kwargs, {"exact": True, "scrolls": 3})
+
+    def test_me_tab_is_tapped_once_with_the_tab_edge(self):
+        p = self.phone(["首页"])
+        p.find.side_effect = lambda text, **kwargs: text == "我的"
+        p.tap.return_value = True
+        self.assertIsNone(explore.open_settings(p, "com.example"))
+        me_calls = [call for call in p.tap.call_args_list if call.args[0] == "我的"]
+        self.assertEqual(len(me_calls), 1)
+        self.assertEqual(me_calls[0].kwargs, {"exact": True, "scrolls": 0})
+        self.assertEqual(p.find.call_args.kwargs, {"exact": True, "edge_ok": "tab"})
+
+    def test_agreement_page_is_named_and_left_alone(self):
+        p = self.phone(["同意", "隐私政策"], find=True, tap=True)
+        self.assertEqual(explore.open_settings(p, "com.example"), "协议页")
+        p.tap.assert_not_called()
+
+    def test_thirty_texts_is_no_longer_an_agreement_page(self):
+        p = self.phone(["同意"] + ["x"] * 29, tap=False)       # 正好 30 条
+        self.assertEqual(explore.open_settings(p, "com.example"), "没找到设置入口")
+
+    def test_missing_settings_entry_is_reported(self):
+        self.assertEqual(explore.open_settings(self.phone(["首页"], tap=False), "com.example"),
+                         "没找到设置入口")
+
+
+class ExploreBackToTests(unittest.TestCase):
+    def test_already_home_returns_none_without_pressing_back(self):
+        p = Mock()
+        p.focus.return_value = "com.example/.Settings"
+        self.assertIsNone(explore.back_to(p, "com.example/.Settings"))
+        p.back.assert_not_called()
+
+    def test_returning_home_on_the_last_read_returns_none(self):
+        p = Mock()
+        home = "com.example/.Settings"
+        # 循环三次都没回到首页；循环之后那一次读到了首页
+        p.focus.side_effect = ["com.example/.Sub"] * 3 + [home, home]
+        self.assertIsNone(explore.back_to(p, home, tries=3))
+
+    def test_unknown_page_is_named_in_the_reason(self):
+        p = Mock()
+        p.focus.side_effect = ["", "", "", "", ""]        # 3 次循环 + 判等 + 报错文案各读一次
+        reason = explore.back_to(p, "com.example/.Settings", tries=3)
+        self.assertEqual(reason, "返回 3 次后仍停在 未知页面，不在设置首页")
+
+
+class ExploreWalkTests(unittest.TestCase):
+    def test_each_entry_gets_its_own_read_and_failed_taps_are_skipped(self):
+        p = Mock()
+        p.focus.return_value = "com.example/.Settings"
+        p.tap.side_effect = [False, True, True]              # 第一项点不开，后两项点得开
+        rows, reads, opens = [], Mock(), Mock()
+        opens.return_value = None
+        out = io.StringIO()
+        with patch.object(explore, "entries", return_value=["甲", "乙", "丙"]), \
+                patch.object(explore, "read_page", reads), \
+                patch.object(explore, "open_settings", opens), \
+                contextlib.redirect_stdout(out):
+            explore.explore(p, "com.example", rows)
+        self.assertIn("### com.example", out.getvalue())
+        opens.assert_called_once_with(p, "com.example")
+        self.assertEqual([call.args[1] for call in reads.call_args_list], [["设置"], ["设置", "乙"], ["设置", "丙"]])
+        for call in reads.call_args_list:
+            self.assertEqual(call.args[0], p)
+            self.assertIs(call.args[2], rows)
+            self.assertEqual(call.args[3], "com.example")
+        for call in p.tap.call_args_list:
+            self.assertEqual(call.kwargs, {"exact": True, "scrolls": 4})
+        p.app_stop.assert_called_once_with("com.example")
+
+    def test_entries_after_the_twenty_fifth_are_left_for_the_next_run(self):
+        p = Mock()
+        p.focus.return_value = "com.example/.Settings"
+        p.tap.return_value = True
+        reads = Mock()
+        with patch.object(explore, "entries", return_value=[f"项{i}" for i in range(26)]), \
+                patch.object(explore, "read_page", reads), \
+                patch.object(explore, "open_settings", return_value=None), \
+                contextlib.redirect_stdout(io.StringIO()):
+            explore.explore(p, "com.example", [])
+        self.assertEqual(reads.call_count, 26)               # 首次读设置页 + 25 个子页
+
+    def test_an_entry_that_was_already_walked_is_not_walked_twice(self):
+        p = Mock()
+        p.focus.return_value = "com.example/.Settings"
+        p.tap.return_value = True
+        reads = Mock()
+        with patch.object(explore, "entries", return_value=["甲", "甲", "乙"]), \
+                patch.object(explore, "read_page", reads), \
+                patch.object(explore, "open_settings", return_value=None), \
+                contextlib.redirect_stdout(io.StringIO()):
+            explore.explore(p, "com.example", [])
+        self.assertEqual([call.args[1] for call in reads.call_args_list],
+                         [["设置"], ["设置", "甲"], ["设置", "乙"]])
+
+    def test_an_unopenable_settings_page_is_one_placeholder_row(self):
+        rows, out = [], io.StringIO()
+        nested = ("com.example", "", "（协议页）", "", "", "")
+        with patch.object(explore, "open_settings", return_value="协议页"), contextlib.redirect_stdout(out):
+            explore.explore(Mock(), "com.example", rows)
+        self.assertEqual(rows, [nested])
+        self.assertIn("  协议页", out.getvalue())
+
+    def test_recovery_message_names_the_failure_and_reports_the_reopened_page(self):
+        p = Mock()
+        p.focus.side_effect = (["com.example/.Settings"] + ["com.example/.Sub"] * 6)
+        p.tap.return_value = True
+        out = io.StringIO()
+        with patch.object(explore, "entries", return_value=["甲"]), \
+                patch.object(explore, "read_page"), \
+                patch.object(explore, "open_settings", side_effect=[None, "协议页"]) as opens, \
+                contextlib.redirect_stdout(out):
+            explore.explore(p, "com.example", [])
+        self.assertTrue(all(call.args == (p, "com.example") for call in opens.call_args_list))
+        self.assertIn("失败：协议页", out.getvalue())
+        self.assertNotIn("后页面也不对", out.getvalue())
+
+    def test_recovery_with_a_wrong_page_says_so(self):
+        p = Mock()
+        # 首次焦点=设置首页；back_to 失败那 4 次读焦点都不在首页；重进后落到别的包
+        p.focus.side_effect = (["com.example/.Settings"] + ["com.example/.Sub"] * 5
+                               + ["com.other/.X"])
+        p.tap.return_value = True
+        out = io.StringIO()
+        with patch.object(explore, "entries", return_value=["甲"]), \
+                patch.object(explore, "read_page"), \
+                patch.object(explore, "open_settings", return_value=None) as opens, \
+                contextlib.redirect_stdout(out):
+            explore.explore(p, "com.example", [])
+        self.assertTrue(all(call.args == (p, "com.example") for call in opens.call_args_list))
+        self.assertIn("后页面也不对，本 App 探路到此为止", out.getvalue())
+
+
+class ExploreMainTests(unittest.TestCase):
+    def phone(self):
+        p = Mock()
+        p.shell.side_effect = lambda command: {
+            "cmd package query-activities --brief -a android.intent.action.MAIN"
+            " -c android.intent.category.LAUNCHER": "com.miui.securitycenter/.Main\ncom.android.settings/.Settings\n",
+            "getprop ro.product.model": "PJA110\n",
+        }.get(command, "")
+        return p
+
+    def run_main(self, argv, phone, walk=None):
+        fake = walk or (lambda p, pkg, rows: rows.extend([
+            (pkg, "设置", "广告推荐", "开", "★", ""),
+            (pkg, "设置", "推送通知", "关", "★", ""),
+            (pkg, "设置", "隐私", "开", "", ""),
+        ]))
+        out = io.StringIO()
+        with tempfile.TemporaryDirectory() as work, contextlib.chdir(work):
+            with patch.object(explore, "Phone", return_value=phone) as factory, \
+                    patch.object(sys, "argv", ["explore.py", *argv]), \
+                    patch.object(explore, "explore", side_effect=fake) as walker, \
+                    patch.object(explore.time, "time", side_effect=[100.0, 137.0]), \
+                    contextlib.redirect_stdout(out):
+                explore.main()
+            files = sorted(Path(work).iterdir())
+            text = files[0].read_text(encoding="utf-8") if files else ""
+        return out.getvalue(), text, files, factory, walker
+
+    def test_vendor_apps_are_discovered_and_the_report_is_written(self):
+        out, text, files, factory, walker = self.run_main(["-s", "SER"], phone := self.phone())
+        factory.assert_called_once_with("SER", log=False)
+        self.assertIs(walker.call_args.args[0], phone)
+        self.assertEqual([path.name for path in files], ["探路-PJA110.tsv"])
+        self.assertEqual(text.splitlines(), [
+            "包名\t页面\t开关\t状态\t像广告\t人工勾选",
+            "# 在末列写「关」挑出要关的开关，再跑：python3 tool/run.py adapt gen 探路-PJA110.tsv",
+            "com.miui.securitycenter\t设置\t广告推荐\t开\t★\t",
+            "com.miui.securitycenter\t设置\t推送通知\t关\t★\t",
+            "com.miui.securitycenter\t设置\t隐私\t开\t\t",
+        ])
+        self.assertIn("探了 1 个 App，37 秒；开着的疑似广告开关 1 个 → 探路-PJA110.tsv", out)
+        self.assertIn("  com.miui.securitycenter  设置  「广告推荐」", out)
+        self.assertIn("在 探路-PJA110.tsv 末列「人工勾选」写「关」", out)
+
+    def test_a_crashing_package_is_reported_and_the_rest_continue(self):
+        def walk(p, pkg, rows):
+            if pkg == "com.broken":
+                raise RuntimeError("断线了")
+            rows.append((pkg, "设置", "隐私", "开", "", ""))
+
+        out, text, _files, _factory, walker = self.run_main(
+            ["-s", "SER", "com.example", "com.broken"], phone := self.phone(), walk)
+        self.assertIs(walker.call_args.args[0], phone)
+        self.assertIn("  ✗ 断线了", out)
+        self.assertIn("com.example\t设置\t隐私\t开\t\t", text)
+        self.assertNotIn("com.broken", text)
+
+
+# ---------- adapt.py：生成 / 自检 / 试入口 / 子命令分派的细部断言 ----------
+
+class ExploreCommandTests(unittest.TestCase):
+    def test_usage_when_serial_is_missing(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(adapt.cmd_explore([]), 1)
+        self.assertEqual(err.getvalue(), "用法：run.py adapt explore -s <序列号> [包名 …]\n")
+
+    def test_short_rest_is_usage_not_an_index_error(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(adapt.cmd_explore(["-s"]), 1)
+        self.assertIn("用法", err.getvalue())
+
+    def test_a_bare_serial_is_a_valid_call(self):
+        with patch.object(adapt, "script_cmd", return_value=["py", "explore.py"]) as command, \
+                patch.object(adapt.subprocess, "call", return_value=0):
+            self.assertEqual(adapt.cmd_explore(["-s", "SER"]), 0)
+        command.assert_called_once_with("explore.py", "-s", "SER")
+
+    def test_serial_and_packages_are_forwarded_to_the_explore_script(self):
+        with patch.object(adapt, "script_cmd", return_value=["py", "explore.py"]) as command, \
+                patch.object(adapt.subprocess, "call", return_value=3) as call:
+            self.assertEqual(adapt.cmd_explore(["-s", "SER", "com.a", "com.b"]), 3)
+        command.assert_called_once_with("explore.py", "-s", "SER", "com.a", "com.b")
+        call.assert_called_once_with(["py", "explore.py"])
+
+
+class DispatchCallsTests(unittest.TestCase):
+    def test_each_subcommand_receives_the_remaining_arguments(self):
+        for name, attribute in (("survey", "cmd_survey"), ("explore", "cmd_explore"),
+                                ("gen", "cmd_gen"), ("check", "cmd_check")):
+            with self.subTest(name), patch.object(adapt, attribute, return_value=7) as command:
+                self.assertEqual(adapt.main([name, "alpha", "beta"]), 7)
+            command.assert_called_once_with(["alpha", "beta"])
+
+
+class TsvPickEncodingTests(unittest.TestCase):
+    def test_indented_comment_is_not_a_row(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "x.tsv"
+            path.write_text("  # 注\ncom.a\t设置\t开\t★\t\t\n", encoding="utf-8")
+            rows = adapt.parse_tsv(path)
+        self.assertEqual([row["pkg"] for row in rows], ["com.a"])
+
+    def test_pick_file_tolerates_bom_and_indented_comments(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "pick.txt"
+            path.write_bytes(b"\xef\xbb\xbf" + "  广告推荐\n # 注\n\n隐私\n".encode("utf-8"))
+            titles, error = adapt.read_pick_file(path)
+        self.assertIsNone(error)
+        self.assertEqual(titles, ["广告推荐", "隐私"])
+
+
+class SelectRowsDetailTests(unittest.TestCase):
+    def row(self, title, pick="", ad="", pkg="com.a", page="设置"):
+        return {"pkg": pkg, "page": page, "title": title, "state": "开", "ad": ad, "pick": pick}
+
+    def test_empty_title_is_a_placeholder_and_counts_no_ad(self):
+        groups, protection, ad_left = adapt.select_rows([self.row("", ad="★")])
+        self.assertEqual((groups, protection, ad_left), ([], [], 0))
+
+    def test_placeholder_after_the_failure_marker_is_skipped_even_when_picked(self):
+        rows = [self.row("（没找到设置入口）", pick="关"), self.row("隐私", pick="关")]
+        groups, _protection, _ad = adapt.select_rows(rows)
+        self.assertEqual(groups, [("com.a", "设置", ["隐私"])])
+
+    def test_uppercase_marks_are_selected(self):
+        groups, _p, _a = adapt.select_rows([self.row("隐私", pick="Y")])
+        self.assertEqual(groups, [("com.a", "设置", ["隐私"])])
+
+    def test_protection_switch_is_reported_when_picked_by_an_uppercase_mark(self):
+        groups, protection, _a = adapt.select_rows([self.row("限制广告跟踪", pick="Y")])
+        self.assertEqual((groups, protection), ([], ["限制广告跟踪"]))
+
+    def test_protection_switch_matched_by_pick_list_is_reported(self):
+        _groups, protection, _a = adapt.select_rows([self.row("限制广告跟踪")], ["限制广告跟踪"])
+        self.assertEqual(protection, ["限制广告跟踪"])
+
+    def test_unselected_ad_switches_are_counted_not_overwritten(self):
+        _groups, _p, ad_left = adapt.select_rows([self.row("甲", ad="★"), self.row("乙", ad="★")])
+        self.assertEqual(ad_left, 2)
+
+
+class StepNameTests(unittest.TestCase):
+    def test_quotes_backslashes_and_newlines_are_removed(self):
+        self.assertEqual(adapt.step_name('com."a"', 'x\\y\r\nz'), "com.a · xyz")
+
+
+class DraftHeaderTests(unittest.TestCase):
+    def render(self, groups=None, model="PJA110", build="", source="探路-PJA110.tsv"):
+        groups = groups or [("com.heytap.market", "设置 > 隐私", ["个性化推荐"])]
+        return adapt.render_catalog_draft(groups, model=model, build=build, source=source)
+
+    def test_header_lines_name_the_generator_and_its_limits(self):
+        src = self.render()
+        self.assertIn("# ===================== 待验证草稿（页面树）· adapt gen 生成 =====================", src)
+        self.assertIn("# 自检：python3 tool/run.py -s <序列号> adapt check <本文件>", src)
+        self.assertIn("# 页面树只装机型知识；失败怎么收场、顺序、重试、台账归运行时（ADR-0038）。", src)
+        self.assertIn("来源：探路-PJA110.tsv", src)
+
+    def test_generation_time_is_a_readable_minute_stamp(self):
+        src = self.render()
+        self.assertRegex(src, r"# 生成时间：\d{4}-\d{2}-\d{2} \d{2}:\d{2}；来源：")
+
+    def test_non_ascii_data_is_written_raw(self):
+        src = self.render(groups=[("com.example", "设置 > 隐私", ["个性化推荐"])], model="小米")
+        self.assertIn('model = "小米"', src)
+        self.assertIn('models = ["小米"]', src)
+        self.assertIn('"个性化推荐"', src)
+        self.assertIn('page = "设置 > 隐私"', src)
+
+    def test_no_model_yields_an_empty_models_list(self):
+        src = self.render(model="")
+        self.assertIn("models = []", src)
+
+    def test_non_ascii_build_and_package_are_written_raw_too(self):
+        src = self.render(groups=[("小米.商店", "设置", ["广告"])], build="小米 OS 1.0")
+        self.assertIn('build = "小米 OS 1.0"', src)
+        self.assertIn('pkg = "小米.商店"', src)
+        self.assertIn('name = "小米.商店 · 设置"', src)
+
+
+class GenArgumentTests(unittest.TestCase):
+    def run_gen(self, argv):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = adapt.cmd_gen(argv)
+        return code, out.getvalue(), err.getvalue()
+
+    def test_an_option_at_the_end_is_reported_by_name(self):
+        with tempfile.TemporaryDirectory() as d:
+            for option in ("-o", "--pick", "--model", "--build"):
+                with self.subTest(option):
+                    code, _out, err = self.run_gen([str(write_tsv(d)), option])
+                    self.assertEqual(code, 1)
+                    self.assertEqual(err, f"选项 {option} 后面要跟值\n")
+
+    def test_unknown_option_names_the_usage(self):
+        code, _out, err = self.run_gen(["--bogus", "x.tsv"])
+        self.assertEqual(code, 1)
+        self.assertIn("不认识的选项 --bogus。用法：run.py adapt gen <探路-型号.tsv> [-o 输出.toml] "
+                      "[--pick 清单.txt] [--model 型号] [--build 录制版本]", err)
+
+    def test_only_one_tsv_is_accepted(self):
+        code, _out, err = self.run_gen(["a.tsv", "b.tsv"])
+        self.assertEqual(code, 1)
+        self.assertEqual(err, "只收一个探路 TSV 文件；要合并多份结果请先手工合并\n")
+
+    def test_missing_tsv_shows_the_usage(self):
+        code, _out, err = self.run_gen([])
+        self.assertEqual(code, 1)
+        self.assertEqual(err, "用法：run.py adapt gen <探路-型号.tsv> [-o 输出.toml] [--pick 清单.txt] "
+                              "[--model 型号] [--build 录制版本]\n")
+
+    def test_missing_file_is_named(self):
+        code, _out, err = self.run_gen(["/nope/探路.tsv"])
+        self.assertEqual((code, err), (1, "找不到 /nope/探路.tsv\n"))
+
+    def test_empty_tsv_is_named(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "empty.tsv"
+            path.write_text("包名\t页面\t开关\t状态\t像广告\t人工勾选\n", encoding="utf-8")
+            code, _out, err = self.run_gen([str(path)])
+        self.assertEqual((code, err), (1, f"{path} 里没有数据行\n"))
+
+    def test_pick_option_reads_the_list_and_selects_by_title(self):
+        with tempfile.TemporaryDirectory() as d:
+            tsv = Path(d) / "探路-PJA110.tsv"
+            tsv.write_text("com.a\t设置\t个性化推荐\t开\t★\t\n", encoding="utf-8")
+            pick = Path(d) / "pick.txt"
+            pick.write_text("个性化推荐\n", encoding="utf-8")
+            out = Path(d) / "草稿.toml"
+            code, stdout, _err = self.run_gen([str(tsv), "--pick", str(pick), "-o", str(out)])
+            src = out.read_text(encoding="utf-8")
+        self.assertEqual(code, 0)
+        self.assertIn('only = ["个性化推荐"]', src)
+        self.assertIn("草稿已生成", stdout)
+
+    def test_missing_pick_file_is_reported(self):
+        with tempfile.TemporaryDirectory() as d:
+            code, _out, err = self.run_gen([str(write_tsv(d)), "--pick", "/nope/pick.txt"])
+        self.assertEqual((code, err), (1, "找不到勾选清单 /nope/pick.txt\n"))
+
+    def test_unknown_pick_titles_are_reported(self):
+        with tempfile.TemporaryDirectory() as d:
+            pick = Path(d) / "pick.txt"
+            pick.write_text("不存在甲\n不存在乙\n", encoding="utf-8")
+            code, stdout, _err = self.run_gen([str(write_tsv(d)), "--pick", str(pick),
+                                               "-o", str(Path(d) / "x.toml")])
+        self.assertEqual(code, 0)
+        self.assertIn("⚠ 勾选清单里这些开关在探路结果里找不到，未写进草稿：不存在乙、不存在甲", stdout)
+
+    def test_protection_and_unpicked_ad_switches_are_reported(self):
+        text = TSV.replace(
+            "com.heytap.market\t设置 > 隐私\t应用安全\t开\t\t",
+            "com.heytap.market\t设置 > 隐私\t应用安全\t开\t\t\n"
+            "com.heytap.market\t设置\t限制广告跟踪\t开\t★\t关\n")
+        with tempfile.TemporaryDirectory() as d:
+            code, stdout, _err = self.run_gen([str(write_tsv(d, text=text)), "-o", str(Path(d) / "x.toml")])
+        self.assertEqual(code, 0)
+        self.assertIn("⚠ 这些是保护类开关（打开才是保护），没有写进草稿：限制广告跟踪、限制广告跟踪", stdout)
+        self.assertIn("另有 1 个疑似广告开关没有勾选，未写进草稿（工具不自动决定关哪些）", stdout)
+
+
+class GenOutputTests(unittest.TestCase):
+    def run_gen(self, argv):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = adapt.cmd_gen(argv)
+        return code, out.getvalue(), err.getvalue()
+
+    def test_default_output_uses_the_model_from_the_tsv_name(self):
+        with tempfile.TemporaryDirectory() as d, contextlib.chdir(d):
+            code, stdout, _err = self.run_gen([str(write_tsv(d))])
+            files = sorted(path.name for path in Path(d).iterdir())
+        self.assertEqual(code, 0)
+        self.assertIn("草稿-PJA110.toml", files)
+        self.assertIn("草稿已生成：草稿-PJA110.toml（2 段，2 个开关，均为待验证）", stdout)
+
+    def test_default_output_without_a_model_is_the_plain_draft_name(self):
+        with tempfile.TemporaryDirectory() as d, contextlib.chdir(d):
+            tsv = Path(d) / "results.tsv"
+            tsv.write_text("com.a\t设置\t个性化推荐\t开\t★\t关\n", encoding="utf-8")
+            code, stdout, _err = self.run_gen([str(tsv)])
+            files = sorted(path.name for path in Path(d).iterdir())
+        self.assertEqual(code, 0)
+        self.assertIn("草稿.toml", files)
+        self.assertIn("没能从文件名认出型号，MODELS 为空；补型号用 --model，或直接把文件名改成 探路-<型号>.tsv\n",
+                      stdout)
+
+    def test_missing_build_warns_and_next_steps_are_printed(self):
+        with tempfile.TemporaryDirectory() as d, contextlib.chdir(d):
+            code, stdout, _err = self.run_gen([str(write_tsv(d))])
+        self.assertEqual(code, 0)
+        self.assertIn("BUILD 为空：自检时不比对系统版本；转正式脚本前请填上录制版本"
+                      "（小米系填 ro.mi.os.version.incremental，别填 ro.build.display.id 的 Android 底包）", stdout)
+        self.assertIn("下一步：python3 tool/run.py -s <序列号> adapt check 草稿-PJA110.toml", stdout)
+        self.assertIn("自检通过也不等于适配完成：请人工在手机上核对每一步，再决定是否转为正式机型脚本。\n",
+                      stdout)
+
+    def test_given_model_and_build_silence_the_two_warnings(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "x.toml"
+            code, stdout, _err = self.run_gen([str(write_tsv(d, name="results.tsv")), "-o", str(out),
+                                               "--model", "PJA110", "--build", "PJA110_14"])
+            src = out.read_text(encoding="utf-8")
+        self.assertEqual(code, 0)
+        self.assertNotIn("没能从文件名认出型号", stdout)
+        self.assertNotIn("BUILD 为空", stdout)
+        self.assertIn('build = "PJA110_14"', src)
+
+    def test_option_before_the_tsv_still_works(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "x.toml"
+            code, _stdout, _err = self.run_gen(["-o", str(out), str(write_tsv(d))])
+            self.assertEqual(code, 0)
+            self.assertTrue(out.exists())
+
+    def test_write_failure_names_the_target(self):
+        with tempfile.TemporaryDirectory() as d:
+            target = Path(d) / "missing-dir" / "x.toml"
+            code, _out, err = self.run_gen([str(write_tsv(d)), "-o", str(target)])
+        self.assertEqual(code, 1)
+        self.assertIn(f"写不出 {target}：", err)
+
+    def test_source_file_name_lands_in_the_header(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "x.toml"
+            self.run_gen([str(write_tsv(d)), "-o", str(out)])
+            src = out.read_text(encoding="utf-8")
+        self.assertIn("来源：探路-PJA110.tsv", src)
+
+
+class CheckDraftShellTests(unittest.TestCase):
+    def draft(self, directory, build=""):
+        out = Path(directory) / "草稿.toml"
+        extra = ["--build", build] if build else []
+        with contextlib.redirect_stdout(io.StringIO()):
+            adapt.cmd_gen([str(write_tsv(directory)), "-o", str(out), *extra])
+        return out
+
+    def phone(self, build="PJA110_14.0.0.812", osv="OS2.0.1.0"):
+        p = draft_phone([[]] * 10)
+        p.off.return_value = 1
+        answers = {"getprop ro.build.display.id": build,
+                   "getprop ro.mi.os.version.incremental": osv}
+
+        def shell(command):
+            return shell_result(answers[command])
+
+        p.shell.side_effect = shell
+        return p
+
+    def run_draft(self, path, phone):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            report = adapt.check_draft(phone, str(path))
+        return report, out.getvalue()
+
+    def test_capture_task_and_both_version_commands(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = self.phone()
+            self.run_draft(self.draft(d), p)
+        self.assertEqual(p.screen.captures.task, "adapt")
+        commands = [call.args[0] for call in p.shell.call_args_list]
+        self.assertEqual(commands, ["getprop ro.build.display.id", "getprop ro.mi.os.version.incremental"])
+
+    def test_matching_display_id_produces_no_warning(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = self.draft(d, build="PJA110_14")
+            _report, out = self.run_draft(path, self.phone())
+        self.assertNotIn("⚠", out)
+
+    def test_matching_os_version_produces_no_warning(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = self.draft(d, build="OS2.0")
+            _report, out = self.run_draft(path, self.phone())
+        self.assertNotIn("⚠", out)
+
+    def test_mismatch_warns_with_the_system_value(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = self.draft(d, build="XXX")
+            _report, out = self.run_draft(path, self.phone(osv=""))
+        self.assertIn("⚠ 草稿标注 BUILD XXX，这台是 PJA110_14.0.0.812：按安全模式跑（只关点名的开关）", out)
+
+    def test_draft_without_build_is_not_compared(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = self.draft(d, build="")
+            _report, out = self.run_draft(path, self.phone())
+        self.assertNotIn("⚠", out)
+
+    def test_a_draft_without_a_build_key_uses_no_placeholder(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "草稿.toml"
+            path.write_text('[[segment]]\nname = "x"\nops = [{kind = "start", pkg = "com.a"}]\n',
+                            encoding="utf-8")
+            _report, out = self.run_draft(path, self.phone())
+        self.assertNotIn("⚠", out)
+
+
+class ReportOutputTests(unittest.TestCase):
+    def render(self, report):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ok = adapt.print_report(report)
+        return ok, out.getvalue()
+
+    def test_all_closed_is_a_pass_with_the_caveat(self):
+        ok, text = self.render({"verified": 1, "failed_steps": []})
+        self.assertTrue(ok)
+        self.assertEqual(text.splitlines(), [
+            "",
+            "================ 适配报告（草稿 · 安全模式自检） ================",
+            "  回读确认关闭：1 项",
+            "  未完成步骤：0 个",
+            "结论：自检通过——勾选的开关都已找到并回读确认关闭。",
+            "      这仍不代表适配完成：请人工在手机上核对入口和效果，再决定是否转为正式机型脚本。",
+            "==================================================================",
+        ])
+
+    def test_partial_completion_lists_the_failed_steps(self):
+        ok, text = self.render({"verified": 2, "failed_steps": ["甲", "乙"]})
+        self.assertFalse(ok)
+        self.assertIn("  未完成步骤：2 个（甲、乙）\n", text)
+        self.assertIn("结论：部分完成——已确认关闭的项见上；没做成的那几步必须人工在手机上核对，\n", text)
+        self.assertIn("      不能把部分完成当成适配成功。\n", text)
+        self.assertNotIn("XX", text)
+
+    def test_zero_readbacks_is_a_failure_without_a_failed_list_tail(self):
+        ok, text = self.render({"verified": 0, "failed_steps": []})
+        self.assertFalse(ok)
+        self.assertIn("  未完成步骤：0 个", text)
+        self.assertNotIn("XXXX", text)
+        self.assertIn("结论：自检未通过——没有回读确认关闭任何开关。请把上面的开关名和步骤名交给人工核对。\n", text)
+        self.assertNotIn("XX", text)
+
+
+class CheckCommandTests(unittest.TestCase):
+    def draft(self, directory):
+        out = Path(directory) / "草稿.toml"
+        with contextlib.redirect_stdout(io.StringIO()):
+            adapt.cmd_gen([str(write_tsv(directory)), "-o", str(out)])
+        return out
+
+    def phone(self, stay="7"):
+        p = draft_phone([[]] * 10)
+        p.off.return_value = 1
+        p.locked.return_value = False
+
+        def shell(command):
+            return shell_result(stay if command.endswith("stay_on_while_plugged_in") else "PJA110_14")
+
+        p.shell.side_effect = shell
+        return p
+
+    def run_check(self, argv, phone=None):
+        p = phone or self.phone()
+        out, err = io.StringIO(), io.StringIO()
+        with patch.object(adapt, "Phone") as factory, \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            factory.return_value.__enter__.return_value = p
+            code = adapt.main(["check", *argv])
+        return code, out.getvalue(), err.getvalue(), factory, p
+
+    def test_usage_when_the_serial_is_missing(self):
+        code, _out, err, factory, _p = self.run_check([])
+        self.assertEqual(code, 1)
+        self.assertEqual(err, "用法：run.py adapt check -s <序列号> <草稿.toml> [段名 …]\n")
+        factory.assert_not_called()
+
+    def test_short_rest_is_usage_not_an_index_error(self):
+        code, _out, err, _factory, _p = self.run_check(["-s", "SER"])
+        self.assertEqual(code, 1)
+        self.assertIn("用法", err)
+
+    def test_serial_and_draft_reach_the_phone_and_the_loader(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = self.draft(d)
+            p = self.phone()
+            with patch.object(adapt, "check_draft", return_value={"verified": 1, "failed_steps": []}) as draft:
+                code, _out, _err, factory, _p = self.run_check(
+                    ["-s", "SER", str(path), "段甲"], p)
+        self.assertEqual(code, 0)
+        factory.assert_called_once_with("SER")
+        draft.assert_called_once_with(p, str(path), ["段甲"])
+
+    def test_missing_draft_is_named(self):
+        code, _out, err, _factory, _p = self.run_check(["-s", "SER", "/nope/草稿.toml"])
+        self.assertEqual((code, err), (1, "找不到 /nope/草稿.toml\n"))
+
+    def test_safety_mode_notice_is_printed(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = self.draft(d)
+            _code, out, _err, _factory, _p = self.run_check(["-s", "SER", str(path)])
+        self.assertIn("⚠ 安全模式自检：这份是待验证草稿，只关 only= 点名的开关，找不到就如实报告。\n", out)
+        self.assertNotIn("XX", out)
+
+    def test_stay_awake_value_is_restored(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = self.draft(d)
+            _code, _out, _err, _factory, p = self.run_check(["-s", "SER", str(path)], self.phone(stay="7"))
+        commands = [call.args[0] for call in p.shell.call_args_list]
+        self.assertEqual(commands[:2], ["settings get global stay_on_while_plugged_in",
+                                        "settings put global stay_on_while_plugged_in 7"])
+        self.assertEqual(commands[-1], "settings put global stay_on_while_plugged_in 7")
+
+    def test_non_numeric_stay_awake_value_restores_zero(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = self.draft(d)
+            _code, _out, _err, _factory, p = self.run_check(["-s", "SER", str(path)], self.phone(stay="abc"))
+        self.assertEqual(p.shell.call_args_list[-1].args[0],
+                         "settings put global stay_on_while_plugged_in 0")
+
+
+class InstalledPackagesTests(unittest.TestCase):
+    def test_package_lines_are_split_once_and_noise_is_ignored(self):
+        p = phone_mock()
+        p.shell.return_value = shell_result("package:com.a package:com.b\nnoise\npackage:com.c\n")
+        self.assertEqual(adapt._installed_packages(p),
+                         {"com.a package:com.b", "com.c"})
+        p.shell.assert_called_once_with("pm list packages")
+
+    def test_an_empty_listing_is_an_empty_set(self):
+        p = phone_mock()
+        p.shell.return_value = shell_result("")
+        self.assertEqual(adapt._installed_packages(p), set())
+
+
+class OutputOnly:
+    """拉起结果的最小形状：`output` 与 `exit_code`。"""
+
+    def __init__(self, output, exit_code=0):
+        self.output = output
+        self.exit_code = exit_code
+
+
+class LaunchFailureTests(unittest.TestCase):
+    def test_output_without_an_exit_code_is_judged_by_its_text(self):
+        self.assertFalse(adapt._launch_failed(OutputOnly("landed")))
+        self.assertTrue(adapt._launch_failed(OutputOnly("EXCEPTION: nope")))
+        self.assertTrue(adapt._launch_failed(OutputOnly("", 1)))
+
+    def test_error_words_are_case_insensitive(self):
+        self.assertTrue(adapt._has_launch_error("Error: nope"))
+        self.assertTrue(adapt._has_launch_error("java.lang.exception"))
+        self.assertFalse(adapt._has_launch_error(""))
+
+    def test_nonzero_exit_code_fails_even_with_quiet_output(self):
+        self.assertTrue(adapt._launch_failed(shell_result("", 1)))
+        self.assertFalse(adapt._launch_failed(shell_result("", 0)))
+
+
+TWO_FAMILY = {"xiaomi": {
+    "系统广告": entries.Entry(menu="设置 → 广告服务", direct=(
+        entries.Direct("com.a", ".A"),), app="com.app1",
+        search=(entries.Search("广告", "广告"),)),
+    "全局搜索": entries.Entry(menu="设置 → 搜索", direct=(
+        entries.Direct("com.b", ".B"),), search=(entries.Search("隐私", "隐私"),)),
+}}
+
+
+class SurveyDetailTests(unittest.TestCase):
+    def survey(self, p, words=(), family="xiaomi", family_map=ONE_FAMILY):
+        clock = Clock()
+        out = io.StringIO()
+        with patch.object(entries, "ENTRIES", family_map), contextlib.redirect_stdout(out):
+            rows = adapt.survey(p, family, list(words), now=clock.time, sleep=clock.sleep)
+        return rows, out.getvalue()
+
+    def test_landed_row_carries_all_five_fields(self):
+        p = survey_phone(focus="com.android.settings/.ad.AdServiceSettings",
+                         texts=("个性化 广告推荐",))
+        rows, _out = self.survey(p, [word("个性化广告推荐")])
+        self.assertEqual(rows, [{"group": "系统广告", "page": "com.android.settings.ad.AdServiceSettings",
+                                 "landed": True, "expect": True, "words": ["个性化广告推荐"]}])
+
+    def test_unopenable_row_carries_all_five_fields(self):
+        p = survey_phone(start=("Error: Activity not started", 0))
+        rows, _out = self.survey(p)
+        self.assertEqual(rows, [{"group": "系统广告", "page": "com.android.settings.ad.AdServiceSettings",
+                                 "landed": False, "expect": False, "words": []}])
+
+    def test_landed_but_unexpected_page_carries_all_five_fields(self):
+        p = survey_phone(focus="com.android.settings/.ad.AdServiceSettings", texts=("别的",))
+        p.expect_page.return_value = False
+        rows, _out = self.survey(p)
+        self.assertEqual(rows, [{"group": "系统广告", "page": "com.android.settings.ad.AdServiceSettings",
+                                 "landed": True, "expect": False, "words": []}])
+
+    def test_unknown_family_is_an_empty_run(self):
+        p = survey_phone()
+        rows, out = self.survey(p, family="nope", family_map=ONE_FAMILY)
+        self.assertEqual(rows, [])
+        self.assertIn("设置搜索词可试：无", out)
+
+    def one_entry(self, *directs):
+        return {"xiaomi": {"系统广告": entries.Entry(menu="m", direct=directs)}}
+
+    def test_a_failed_entry_does_not_stop_the_next_direct(self):
+        fmap = self.one_entry(entries.Direct("com.a", ".A"), entries.Direct("com.b", ".B"))
+        p = survey_phone(focus="com.b/.B")
+        base = survey_phone().shell.side_effect
+
+        def shell(command, timeout=None):
+            if command.startswith("am start") and "com.a/" in command:
+                return shell_result("Error: nope")
+            return base(command, timeout)
+
+        p.shell.side_effect = shell
+        rows, _out = self.survey(p, family_map=fmap)
+        self.assertEqual([row["landed"] for row in rows], [False, True])
+
+    def test_a_wait_failure_row_carries_all_five_fields_and_does_not_stop(self):
+        fmap = self.one_entry(entries.Direct("com.b", ".B"), entries.Direct("com.c", ".C"))
+        p = survey_phone(focus="com.c/.C")
+        with patch.object(entries, "ENTRIES", fmap), \
+                patch.object(wait, "until", side_effect=[False, True]), \
+                contextlib.redirect_stdout(io.StringIO()):
+            clock = Clock()
+            rows = adapt.survey(p, "xiaomi", [], now=clock.time, sleep=clock.sleep)
+        self.assertEqual(rows[0], {"group": "系统广告", "page": "com.b.B", "landed": False,
+                                   "expect": False, "words": []})
+        self.assertEqual([row["landed"] for row in rows], [False, True])
+
+    def test_a_landed_but_unexpected_entry_does_not_stop_the_next_direct(self):
+        fmap = self.one_entry(entries.Direct("com.b", ".B", "要看见甲"), entries.Direct("com.b", ".B"))
+        p = survey_phone(focus="com.b/.B", texts=("没有判据文字",))
+        p.expect_page.side_effect = [False]
+        rows, _out = self.survey(p, family_map=fmap)
+        self.assertEqual([(row["landed"], row["expect"]) for row in rows], [(True, False), (True, True)])
+        p.expect_page.assert_called_once_with("要看见甲", 3)
+
+    def test_wait_until_is_called_with_the_survey_budget(self):
+        p = survey_phone(focus="com.android.settings/.ad.AdServiceSettings")
+        clock = Clock()
+        with patch.object(entries, "ENTRIES", ONE_FAMILY), \
+                patch.object(wait, "until", return_value=True) as until, \
+                contextlib.redirect_stdout(io.StringIO()):
+            adapt.survey(p, "xiaomi", [], now=clock.time, sleep=clock.sleep)
+        kwargs = until.call_args.kwargs
+        self.assertEqual(kwargs, {"timeout": 4, "poll": 0.2, "now": clock.time, "sleep": clock.sleep})
+
+    def test_unknown_page_text_is_named_in_the_log(self):
+        p = survey_phone(focus="")
+        _rows, out = self.survey(p)
+        self.assertIn("落在别处（实际 未知页面）  系统广告 com.android.settings.ad.AdServiceSettings", out)
+
+    def test_agreement_is_annotated_only_when_present(self):
+        p = survey_phone(focus="com.android.settings/.ad.AdServiceSettings", texts=("同意",))
+        _rows, out = self.survey(p)
+        self.assertIn("✓ 系统广告 com.android.settings.ad.AdServiceSettings（弹着协议，没有点）", out)
+
+    def test_no_agreement_means_no_annotation(self):
+        p = survey_phone(focus="com.android.settings/.ad.AdServiceSettings", texts=("别的文字",))
+        _rows, out = self.survey(p)
+        self.assertIn("✓ 系统广告 com.android.settings.ad.AdServiceSettings\n", out)
+        self.assertNotIn("弹着协议", out)
+        self.assertNotIn("XXXX", out)
+
+    def test_hits_are_joined_and_deduplicated(self):
+        p = survey_phone(focus="com.android.settings/.ad.AdServiceSettings",
+                         texts=("个性化广告推荐", "系统工具广告", "推荐"))
+        rows, out = self.survey(p, [word("个性化广告推荐"), word("个性化广告推荐"), word("系统工具广告")])
+        self.assertIn("同组词条：个性化广告推荐、系统工具广告", out)
+        self.assertEqual(rows[0]["words"], ["个性化广告推荐", "系统工具广告"])
+
+    def test_app_and_search_tail_lines(self):
+        p = survey_phone(focus="com.a/.A", packages="package:com.a\n")
+        _rows, out = self.survey(p, family_map=TWO_FAMILY)
+        self.assertIn("同族脚本用过的 App：装了 1 / 3 个（没装：com.app1、com.b）", out)
+        self.assertIn("设置搜索词可试：广告、隐私", out)
+
+    def test_a_family_without_apps_does_not_ask_the_phone(self):
+        fmap = {"xiaomi": {"甲": entries.Entry(menu="m")}}
+        p = survey_phone()
+        _rows, out = self.survey(p, family_map=fmap)
+        self.assertNotIn("pm list packages", shell_calls(p))
+        self.assertIn("同族脚本用过的 App：装了 0 / 0 个", out)
+        self.assertIn("设置搜索词可试：无", out)
+
+    def test_nothing_missing_leaves_no_missing_tail(self):
+        p = survey_phone(focus="com.a/.A", packages="package:com.a\npackage:com.app1\npackage:com.b\n")
+        _rows, out = self.survey(p, family_map=TWO_FAMILY)
+        self.assertIn("同族脚本用过的 App：装了 3 / 3 个\n", out)
+        self.assertNotIn("没装", out)
+
+
+class SurveyCommandDetailTests(unittest.TestCase):
+    def run_cmd(self, phone, argv=("-s", "FAKE"), scanned=None, family_map=ONE_FAMILY,
+                label=None, brand="xiaomi"):
+        scanned = [word("个性化广告推荐")] if scanned is None else scanned
+        labels = {"xiaomi": "小米", "huawei": "华为"} if label is None else label
+        out, err = io.StringIO(), io.StringIO()
+        with patch.object(adapt, "Phone") as factory, \
+                patch.object(adapt.vocab, "scan", return_value=types.SimpleNamespace(words=scanned)) as scan, \
+                patch.object(entries, "ENTRIES", family_map), \
+                patch.object(entries, "LABEL", labels), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            factory.return_value.__enter__.return_value = phone
+            code = adapt.cmd_survey(list(argv))
+        return code, out.getvalue(), err.getvalue(), scan
+
+    def test_recipes_directory_is_passed_to_the_vocabulary_scan(self):
+        p = survey_phone(focus="com.android.settings/.ad.AdServiceSettings", texts=("个性化广告推荐",))
+        code, _out, _err, scan = self.run_cmd(p)
+        self.assertEqual(code, 0)
+        scan.assert_called_once_with(str(ROOT / "recipes"))
+
+    def test_short_rest_is_usage_not_an_index_error(self):
+        code, _out, err, _scan = self.run_cmd(survey_phone(), argv=("-s",))
+        self.assertEqual(code, 1)
+        self.assertIn("用法：run.py -s <序列号> adapt survey", err)
+
+    def test_usage_message_is_verbatim(self):
+        code, _out, err, _scan = self.run_cmd(survey_phone(), argv=[])
+        self.assertEqual((code, err), (1, "用法：run.py -s <序列号> adapt survey\n"))
+
+    def test_locked_phone_message_is_verbatim(self):
+        p = survey_phone()
+        p.locked.return_value = True
+        code, _out, err, _scan = self.run_cmd(p)
+        self.assertEqual((code, err), (1, "手机锁屏了，请机主解锁后再跑\n"))
+
+    def test_unknown_brand_names_the_empty_brand(self):
+        code, _out, err, _scan = self.run_cmd(survey_phone(brand=""), family_map=ONE_FAMILY)
+        self.assertEqual(code, 1)
+        self.assertIn("认不出品牌「空」：入口速查只收了小米的机型", err)
+
+    def test_family_without_direct_entries_uses_the_label(self):
+        p = survey_phone(brand="huawei")
+        code, _out, err, _scan = self.run_cmd(p, family_map={"huawei": {"系统广告": entries.Entry(menu="m")}})
+        self.assertEqual(code, 1)
+        self.assertIn("华为还没有直达入口记录：用 adapt explore 探路", err)
+
+    def test_empty_vocabulary_uses_the_label(self):
+        code, _out, err, _scan = self.run_cmd(survey_phone(), scanned=[])
+        self.assertEqual(code, 1)
+        self.assertIn("小米的词库是空的：还没有这个家族的机型脚本，先用 adapt explore 探路", err)
+
+    def test_headline_counts_the_direct_entries(self):
+        p = survey_phone(focus="com.android.settings/.ad.AdServiceSettings", texts=("个性化广告推荐",))
+        _code, out, _err, _scan = self.run_cmd(p)
+        self.assertIn("小米：试 1 个直达入口，屏幕会跳，不要碰手机。", out)
+
+    def test_missing_label_falls_back_to_the_family_name(self):
+        p = survey_phone(brand="huawei")
+        code, _out, err, _scan = self.run_cmd(
+            p, family_map={"huawei": {"系统广告": entries.Entry(menu="m")}}, label={})
+        self.assertEqual(code, 1)
+        self.assertIn("huawei还没有直达入口记录：用 adapt explore 探路", err)
+
+    def test_empty_vocabulary_without_a_label_falls_back_to_the_family_name(self):
+        code, _out, err, _scan = self.run_cmd(survey_phone(), scanned=[], label={})
+        self.assertEqual(code, 1)
+        self.assertIn("xiaomi的词库是空的：还没有这个家族的机型脚本，先用 adapt explore 探路", err)
+
+    def test_headline_without_a_label_falls_back_to_the_family_name(self):
+        p = survey_phone(focus="com.android.settings/.ad.AdServiceSettings", texts=("个性化广告推荐",))
+        _code, out, _err, _scan = self.run_cmd(p, label={})
+        self.assertIn("xiaomi：试 1 个直达入口", out)
+
+    def test_unknown_brand_lists_the_labels_of_every_family(self):
+        family_map = {"xiaomi": ONE_FAMILY["xiaomi"],
+                      "huawei": {"系统广告": entries.Entry(menu="m")}}
+        code, _out, err, _scan = self.run_cmd(survey_phone(brand="nokia"), family_map=family_map)
+        self.assertEqual(code, 1)
+        self.assertIn("入口速查只收了小米、华为的机型", err)
 
 
 if __name__ == "__main__":
