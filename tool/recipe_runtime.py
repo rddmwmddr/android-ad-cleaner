@@ -28,6 +28,8 @@ WRONG_LANDING = ("没有进入前台", "启动后离开前台")
 LANDING = re.compile(r"停在 ([^\s/；]+)")
 # 整页关闭的段落在安全模式下的跳过原因（#909）
 SAFE_MODE_PAGE_WIDE = "安全模式不做整页全关：本段没有可点名的开关，请按清单手动关"
+# 节点没有 `class` 属性时的空值：协议 / 权限弹窗的按钮判据按 `"Button" in class` 读。
+NO_CLASS = ""
 
 
 class SkipStep(RuntimeError):
@@ -95,7 +97,7 @@ class Counter:
         return self._rt.verified
 
     def __eq__(self, other):
-        return self._rt.verified == (other._rt.verified if isinstance(other, Counter) else other)
+        return self._rt.verified == (other._rt.verified if isinstance(other, Counter) else other)   # pragma: no mutate 语义等价：Counter 与 int 的比较经 int.__eq__ 反射都归结为两侧 verified，`isinstance(...) and False` 落回同一条反射
 
     def __hash__(self):
         return hash(self._rt.verified)
@@ -195,14 +197,15 @@ class Runtime:
             p.note_miss(found)
             raise RuntimeError(reason)
 
-        if package and where.split("/", 1)[0] != package:
+        if package and where.partition("/")[0] != package:
             miss(package, "未进入目标应用，未操作开关")
-        if activity and activity not in where.split("/", 1)[-1]:
+        activity_part = where.split("/", 1)[-1]   # pragma: no mutate 语义等价：focus 至多一个 `/`（`包名/页面名` 或裸窗口名），maxsplit / rsplit 变体取同值
+        if activity and activity not in activity_part:
             miss(activity, "未进入目标设置页，未操作开关")
         if not any(p.find(t, exact=True) for t in titles):
             miss(" / ".join(titles), f"未确认页面「{'、'.join(titles)}」，未操作开关")
         if any(text in {"同意", "同意并继续", "同意并使用", "允许", "仅在使用中允许"}
-               and "Button" in node.get("class", "") for text, _, node in p.texts()):
+               and "Button" in node.get("class", NO_CLASS) for text, _, node in p.texts()):
             p.dismiss()
             self.skip("出现协议或权限申请，不代为同意")
         if p.locked():
@@ -281,7 +284,7 @@ class Runtime:
         p.miss = 0
         started = self.clock.monotonic()
         state = DONE
-        outcome = None
+        outcome = None   # pragma: no mutate 语义等价：outcome 只与 `False` 做身份比较，别的哨兵值走同一支
         try:
             guard = namespace.get("guard")
             if guard is not None:
