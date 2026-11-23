@@ -133,11 +133,28 @@ pragma 全部写明「语义等价」或「不可达」，理由随源码行。�
 - 造不出跨 mutant 判决翻转是结构使然：mutmut 3.8 的 `ForkServerRunner` 只让 fork server import 一次 pytest / 测试模块，之后每个 mutant 再 fork 一个孙进程，跨 mutant 的全局状态本来就不共享；回填守的是同一 mutant 会话内、用例之间的污染，不是没做实验。
 - spec「副本内跑不通的测试」表里列的 `test_mutation_scope` 中依赖 `ROOT/tool` 与 `pyproject.toml` 的类**没有**进 `UNUSABLE`：该文件不在任何 `MODULE_TESTS` 行里，`tests_for()` 从不收集它，副本里跑不到，加了也是空转。
 
+### tool/ 其余模块（#1445）
+
+范围与基线：2026-11-23 时 `tool/` 59 个 `.py`，映射表内 13、表外 46（含 `catalog/__init__.py` 与 `phone/__init__.py` 两个壳）。顺序按该模块承载的无结构来源短用例数降序（研究 #1396），单模块冷缓存耗时只做闸门与次级比较，不写乘积分。映射行由 coverage `dynamic_context = test_function` 矩阵量出：执行过该模块的测试文件都进这一行，副本里跑不通的按方法或按类进 `UNUSABLE`，不按 import 反推——窄行会把没被选中的测试能杀死的 mutant 报成存活。共享同一批测试文件的模块按连通分量成组清零、成组进表（`channel_decide` / `channel_arrive` / `chan_fast` 同属一组，本批先清前两份）。成本闸门沿用 #1444：只补断言能清零的才纳入；要新建 harness（起子进程、造整套替身、锁 mock 调用序列）的登记为表外已知缺口，理由写实测数字。
+
+**删除检测的边界**：「只删测试、不改模块的 PR 不触发变异」——`--since` 只看改动路径里有没有落进映射表的模块，删用例的 PR 没有模块路径可判，所以「表内 = 删除必被发现」只对同时改了模块的 PR 成立。这个洞已单开 #1531（先实测按映射表反查改动测试文件会拉起哪几个模块、各多久，再定修法），本票只在文档写清边界，不修。
+
+本票实测：
+
+| 模块 | mutant | 存活 | 无测试 | pragma |
+|---|---|---|---|---|
+| `channel_decide` | 500 | 0 | 0 | 1 |
+| `channel_arrive` | 147 | 0 | 0 | 0 |
+| `chan_fast` | 1804 | 462 | 6 | 0 |
+
+- **`channel_decide` / `channel_arrive` 进表**，与表内模块同口径。`channel_decide` 的唯一 pragma 是 `gap = tol = 0`：`boxes` 为空时 `ok` 必假，这两个初值不进 notes、也不进同带取舍（不可达）。清零过程中顺带收掉两处死参数：`row.named_nodes()` 的 `parents` 与 `channel_decide.allow_switches` / `page_hint` 的 `systemui_text`（都从不被读），并把缺属性时的空值收进一个模块常量，消掉 `.get(k) or ""` 与 `.get(k, "")` 一类在真实 dump 上区分不出来的等价变异。
+- **`chan_fast` 不进表（表外已知缺口）**：本票实测 1804 个 mutant、杀死 1331、存活 462、无测试 6、超时 5。存活集中在整批编排段——`run` 112、`toggle` 57，加上 `_enter_app_page` 47、`_skeleton` 35、`undo_message` 20、`recognise` 19、`mismatch_probe` 14 等。`run` / `toggle` 的清零要造整套 `Phone` / `ShellPhone` / `UiHidden` 替身并锁住调用序列，成本闸门明确排除；而模块只有整体才进表，所以整份登记为缺口。它下次纳入时按同一口径逐份清到零。
+
 ## Consequences
 
-- **判据只在映射表内说话**：表当前是 40 个模块（mypy 严格档的 12 个加 `catalog/schema.py`，加 `gui/` 的六份实体模块 `tasks.py` / `adb.py` / `dispatcher.py` / `reporter.py` / `updates.py` / `update_install.py`，加手机版替换层第一段的 `view.py` / `adb.py` / `screen.py` / `inproc.py` / `u2.py`，加 `devtools/` 的 16 份 `gh` / `claim` / `stale` / `followup` / `triage_audit` / `release_assets` / `release_meta` / `commits` / `check_dco` / `check_conventional` / `check_comment_tickets` / `check_ticket_ref` / `glob_scan` / `test_anchors` / `unittest_summary` / `script_surface`），表外的改动只看得见、不判。这是刻意的收窄：每一行都要用覆盖矩阵量出来，收全仓会让「尺子有多宽」变成不可复核的东西。
+- **判据只在映射表内说话**：表当前是 42 个模块（mypy 严格档的 12 个加 `catalog/schema.py`，加 `gui/` 的六份实体模块 `tasks.py` / `adb.py` / `dispatcher.py` / `reporter.py` / `updates.py` / `update_install.py`，加手机版替换层第一段的 `view.py` / `adb.py` / `screen.py` / `inproc.py` / `u2.py`，加 `devtools/` 的 16 份 `gh` / `claim` / `stale` / `followup` / `triage_audit` / `release_assets` / `release_meta` / `commits` / `check_dco` / `check_conventional` / `check_comment_tickets` / `check_ticket_ref` / `glob_scan` / `test_anchors` / `unittest_summary` / `script_surface`，加 `tool/` 其余模块的 `channel_decide.py` / `channel_arrive.py`），表外的改动只看得见、不判。这是刻意的收窄：每一行都要用覆盖矩阵量出来，收全仓会让「尺子有多宽」变成不可复核的东西。
 - **未清完的模块会挡住所有改它的 PR**：判据是「该模块存活 = 0」，存量存活没清完之前，改到它的 PR 会红。那是清理票要消掉的东西，不是误报。
 - **`reader.py` 没有可变异节点**：`Reader` 是 Protocol、方法体只有 `...`，保留一行映射只为让 mutmut 有得收集；它的 `no_tests` 是预期结论，靠代码里没人碰它来满足，不硬补测试。
 - **变异副本里跑不通的测试要摘掉**：副本只有 `src/`，起子进程、读 `android/` 源码、整仓扫文本的用例都会红，而红掉的用例会把碰过同一函数的 mutant 误判成杀死。整份文件跑不通的不进表；个别跑不通的按方法摘，整类都受影响的按类摘（`mutation_scope.UNUSABLE`）。
-- **待办**：仍在表外的是 `gui/` 的界壳文件（`app` / `launch` / `shots`）、harmony 三份（`harmony_engine` / `harmony_client` / `harmony_vocab`）、手机版替换层第二段（`main` / `bridge` / `updates`，实测与结论见上「手机版替换层（#1430）」：`main` / `bridge` 是表外已知缺口，`updates` 过判据待实现），以及 `gui/` 其余非实体模块（`winpreflight` / `startup` / `toolpath` 等），还有 `devtools/` 的 `typecheck_recipes`（实测不达判据，见上）与刻意不纳入的自指两份（`mutation.py` / `mutation_scope.py`）、生成器三份（`gen_adr_index` / `gen_brand_taps` / `gen_site_css`），尚未纳入；缺席是登记的，不是遗忘的，纳入之前，它们的行为变化仍由原规则人工守。
+- **待办**：仍在表外的是 `gui/` 的界壳文件（`app` / `launch` / `shots`）、harmony 三份（`harmony_engine` / `harmony_client` / `harmony_vocab`）、手机版替换层第二段（`main` / `bridge` / `updates`，实测与结论见上「手机版替换层（#1430）」：`main` / `bridge` 是表外已知缺口，`updates` 过判据待实现）、`gui/` 其余非实体模块（`winpreflight` / `startup` / `toolpath` 等），以及刻意不纳入的 `devtools/` 自指两份（`mutation.py` / `mutation_scope.py`）与生成器三份（`gen_adr_index` / `gen_brand_taps` / `gen_site_css`）。`tool/` 其余模块正按 #1445 分批纳入，当前进度与逐批实测数字以「tool/ 其余模块（#1445）」一节为准（`devtools/typecheck_recipes` 与 `tool/chan_fast` 已登记为表外已知缺口）；缺席是登记的，不是遗忘的，纳入之前，它们的行为变化仍由原规则人工守。
 - **不建台账、不设周期 job**：存量的终态是可验证的数字（存活 = 0），不是一份「已知存活」清单；增量由 PR 长期维持，没有负责人就不会荒废。

@@ -30,6 +30,7 @@
 - `typecheck_recipes` 实测不达变异判据，登记为 devtools 表外缺口（#1521，ADR-0043）
 - devtools 的 followup / triage_audit / release_* 存活清零并进映射表（#1522，ADR-0043）
 - ADR-0043 增 devtools 一节：范围三档、各模块结论与表外缺口（#1523，ADR-0043）
+- 渠道判定族：`channel_decide` / `channel_arrive` 进映射表，`chan_fast` 记表外缺口（#1533，ADR-0043）
 
 ## 0.4.5 · 2026-11-18
 

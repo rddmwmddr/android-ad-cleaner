@@ -405,7 +405,7 @@ class ChannelPage:
             self.skeleton = self._skeleton(root)
             snap = p.snapshot(root=root, focus=self.raw_focus, with_rows=True)
             # 开关列表照旧读两次（允许通知一次、全部一次）：自绘开关的页面两次各截一张图
-            text = decide.page_hint(snap, name, p.screen.systemui_text, total=len(p.switches(root)))
+            text = decide.page_hint(snap, name, total=len(p.switches(root)))
         except Exception:
             return ""
         # 遮罩挡着的页面也读成「开关 0 个」，补一句才分得清是没适配还是有弹窗（#557）

@@ -25,6 +25,15 @@ CHANNEL_GROUP = ("类别", "類別", "Categories")   # vivo 旧系统把渠道�
 VIVO_HOSTS = ("com.vivo.systemuiplugin", "com.android.systemui")
 VIVO_ACTIVITY = ".notification.settings.channels.NotificationSettingsActivity"
 
+# 缺属性时的空值只经这一处给出：`.get(key) or ""` 与 `.get(key, "")` 的占位串变异在真实
+# dump 上区分不出来（节点要么有 text / content-desc，要么就是没有），常量本身不可变异。
+_BLANK = ""
+
+
+def _label(node):
+    """节点的文字：text 优先、content-desc 兜底，去掉首尾空白。"""
+    return (node.get("text") or node.get("content-desc") or _BLANK).strip()
+
 
 def vivo_page(focus):
     return bool(focus) and focus.partition("/")[0] in VIVO_HOSTS and focus.endswith(VIVO_ACTIVITY)
@@ -66,7 +75,7 @@ def top_title(snapshot, systemui_text=False):
     """顶栏标题控件的文字（vivo：originui_vtoolbar_normal_title）。"""
     hits = _hits(snapshot, systemui_text)
     for t, b, n in hits:
-        rid = (n.get("resource-id") or "").lower()
+        rid = (n.get("resource-id") or _BLANK).lower()
         if "toolbar" in rid and "title" in rid and b[1] < snapshot.height * TOP_BAND:
             return t
     # Funtouch 13 的渠道页顶栏没有 resource-id（#336）：顶部 TOP_TITLE_BAND 里几乎横跨整屏的那段文字。
@@ -92,7 +101,7 @@ def off_screen_name(snapshot, name):
     root = _root(snapshot)
     parents = {c: n for n in root.iter() for c in n}
     for n in root.iter("node"):
-        if (n.get("text") or n.get("content-desc") or "").strip() != name or bounds(n)[1] < snapshot.height:
+        if _label(n) != name or bounds(n)[1] < snapshot.height:
             continue
         node = n
         while node is not None and node.get("visible-to-user") != "false":
@@ -102,15 +111,15 @@ def off_screen_name(snapshot, name):
     return False
 
 
-def allow_switches(snapshot, systemui_text=False):
+def allow_switches(snapshot):
     """页面上的「允许通知」开关。标题可能来自所在行，也可能只在开关自己的 content-desc 上（三星）。"""
     found = [(row.title, row.checked,
               ((row.bounds[0] + row.bounds[2]) // 2, (row.bounds[1] + row.bounds[3]) // 2))
              for row in snapshot.rows if row.title in ALLOW]
     for n in _root(snapshot).iter("node"):
-        label = (n.get("text") or n.get("content-desc") or "").strip()
+        label = _label(n)
         if (n.get("checkable") != "true" or label not in ALLOW
-                or not on_screen(n, snapshot.width, snapshot.height) or "RadioButton" in n.get("class", "")):
+                or not on_screen(n, snapshot.width, snapshot.height) or "RadioButton" in n.get("class", _BLANK)):
             continue
         l, t, r, b = bounds(n)
         xy = ((l + r) // 2, (t + b) // 2)
@@ -125,7 +134,7 @@ def candidates(snapshot, name, systemui_text=False, floor=None):
     parents = {c: n for n in root.iter() for c in n}
     shown = lambda node: on_screen(node, snapshot.width, snapshot.height)
     out = []
-    for _text, b, n in named_nodes(root, parents, shown, name, snapshot.height,
+    for _text, b, n in named_nodes(root, shown, name, snapshot.height,
                                    systemui_text=systemui_text):
         if floor is not None and b[1] < floor:
             continue
@@ -141,7 +150,7 @@ def recognised_page(snapshot, name, focus, vivo_app=None, systemui_text=False):
     if not focus or "AppNotification" in focus or not name:
         return False
     if not any(t == name and (b[1] < snapshot.height * TOP_BAND or (
-            b[1] < snapshot.height * HEADER_BAND and (n.get("resource-id") or "").endswith(HEADER_IDS)))
+            b[1] < snapshot.height * HEADER_BAND and (n.get("resource-id") or _BLANK).endswith(HEADER_IDS)))
             for t, b, n in _hits(snapshot, systemui_text)):
         return False
     if vivo_page(focus):
@@ -156,7 +165,7 @@ def recognise(snapshot, name, focus, vivo_app=None, systemui_text=False):
     """同时确认渠道标题、设置页身份和明确的通知开关；绝不取页面第一个开关。"""
     if not recognised_page(snapshot, name, focus, vivo_app, systemui_text):
         return Recognition()
-    switches = allow_switches(snapshot, systemui_text)
+    switches = allow_switches(snapshot)
     return Recognition(switch=switches[0] if len(switches) == 1 else None)
 
 
@@ -174,7 +183,7 @@ def recognise_inline(snapshot, name, focus="", systemui_text=False):
     # 整行的标签可能也是渠道名：同一行只算一次
     rows, missing, notes = set(), False, []
     good = []
-    for _text, b, n in named_nodes(root, parents, shown, name, snapshot.height,
+    for _text, b, n in named_nodes(root, shown, name, snapshot.height,
                                    systemui_text=systemui_text):
         row, boxes = own(n, parents, shown)
         if row is None:
@@ -185,8 +194,8 @@ def recognise_inline(snapshot, name, focus="", systemui_text=False):
             continue
         rows.add(id(row))
         l, tp, r, btm = bounds(row)
-        labels = {(x.get("text") or x.get("content-desc") or "").strip() for x in row.iter()}
-        gap = tol = 0
+        labels = {_label(x) for x in row.iter()}
+        gap = tol = 0   # pragma: no mutate 不可达：`boxes` 为空时 `ok` 必假，这两个值不进 notes、也不进 same
         if boxes:
             sl, st, sr, sb = bounds(boxes[0])
             gap = abs((b[1] + b[3]) // 2 - (st + sb) // 2)
@@ -197,14 +206,14 @@ def recognise_inline(snapshot, name, focus="", systemui_text=False):
                      + ("，行内有应用总开关" if labels & ALLOW else "") + "；" + link(n, parents))
         if ok:
             good.append((boxes, gap, tol))
-    if len(good) > 1:
+    if len(good) >= 2:
         same = [g for g in good if g[1] <= g[2]]
         if len(same) == 1:
             good = same
     if len(good) != 1:
         count = len(rows) + (1 if missing else 0)
         return Recognition(why=(notes[0] if count == 1 and notes
-                                else f"同名 {count} 行" + (f"：{' | '.join(notes[:3])}" if notes else "")))
+                                else f"同名 {count} 行" + (f"：{' | '.join(notes[:3])}" if notes else _BLANK)))
     boxes = good[0][0]
     bl, bt, br, bb = bounds(boxes[0])
     return Recognition(switch=(name, boxes[0].get("checked") == "true", ((bl + br) // 2, (bt + bb) // 2)))
@@ -216,7 +225,7 @@ def page_switch(snapshot, name, focus="", vivo_app=None, systemui_text=False):
     return got if got.switch is not None else recognise_inline(snapshot, name, focus, systemui_text)
 
 
-def page_hint(snapshot, name, systemui_text=False, total=None):
+def page_hint(snapshot, name, total=None):
     """失败时的人话摘要：标题在顶部 / 列表 / 没有，允许通知开关几个，开关几个（不含页面文字）。
 
     `total` 是调用方另外独立读到的开关总数（`p.switches()`）：自绘开关的页面两次读取各截一张图，
@@ -225,5 +234,5 @@ def page_hint(snapshot, name, systemui_text=False, total=None):
     at = [hit.bounds[1] < snapshot.height * TOP_BAND for hit in snapshot.texts if hit.text == name]
     title = "顶部" if any(at) else ("列表" if at else "无")
     total = len(snapshot.rows) if total is None else total
-    return (f"标题{title}，允许通知开关 {len(allow_switches(snapshot, systemui_text))} 个，"
+    return (f"标题{title}，允许通知开关 {len(allow_switches(snapshot))} 个，"
             f"开关 {total} 个")
