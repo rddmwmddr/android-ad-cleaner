@@ -275,6 +275,15 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "9d85fa3e32489326"
 
+# OS4 变体（#1527）：2026-11-23 由报告者在本机复测浏览器段，其余段沿用主本、未单独复跑。
+["xiaomi/25060RK16C/25060RK16C-os4.toml"]
+build = "OS4.0"
+date = "2026-11-23"
+by = "ZeeJune"
+tier = "部分"
+evidence = "报告者自述"
+body_hash = "2ca20faa88db87fc"
+
 # 形态迁移于 #1262（catalog 页面树 + 本机例外 code=），等价证据：调用序列快照零差异 + 词库/入口投影不变；
 # 用到 code= 兜底、非纯数据，标回「待复核」等真机复测。
 ["samsung/SM-N9760/SM-N9760.toml"]
