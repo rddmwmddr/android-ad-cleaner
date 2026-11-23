@@ -149,6 +149,7 @@ https://t.me/+A5X3Mxzs-Cg3NjYx
 | vivo（iQOO） | Z11 Turbo（V2536A） | OriginOS 6<br>Android 16 | — | ✅ | — |
 | vivo | V2309A | OriginOS 6<br>Android 16 | ✅ 11-03 | ✅ | — |
 | vivo | V2303A | OriginOS 7<br>Android 17 | ⚠️ 11-04 | ✅ | — |
+| vivo | V2502A | Android 17 | ⚠️ 11-23 | ✅ | ✅ 20 |
 | 一加 | Ace 2（PHK110） | ColorOS 16.0.5<br>Android 16 | ✅ 10-25 | ✅ | ⚠️ 11 |
 | 一加 | Ace 2（PHK110） | ColorOS 15.0.0.601<br>Android 15 | ⚠️ 10-29 | 部分 | — |
 | realme | GT Neo5 SE（RMX3700） | ColorOS 16.0.5.1300<br>Android 16 | ✅ 11-02 | ✅ | — |
@@ -215,6 +216,7 @@ https://t.me/+A5X3Mxzs-Cg3NjYx
 - **vivo（iQOO）Z11 Turbo（V2536A）**：系统 OriginOS 6 / Android 16（PD2536B_A_16.0.12.8.W10）；无专用脚本，用 `--ref` 安全模式实测。手动清单见[清单差异](docs/清单/vivo-OriginOS.md)。
 - **vivo V2309A**：系统 OriginOS 6 / Android 16（PD2309E_A_16.2.15.0.W10）；社区实测 11-03 从开启状态七段整段跑通，26 个开关逐个关闭、回读核对（213 秒），复跑轮调整 0 项（165 秒）；维护方未在本机复跑；商店「个性化推荐」子页的开关此前读不到（同坐标去重并掉），修复已合入 `main`，11-04 已在该机复测通过（[#531](https://github.com/rddmwmddr/android-ad-cleaner/issues/531)）；[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530)。手动清单见[清单差异](docs/清单/vivo-OriginOS.md)。
 - **vivo V2303A**：系统 OriginOS 7 / Android 17（CP2A.260605.016）；2026-11-04 社区实测，七段安全模式自检关闭 25 项、逐段回读确认；维护方未在本机复跑，整轮用时未测（[#579](https://github.com/rddmwmddr/android-ad-cleaner/issues/579)）。手动清单见[清单差异](docs/清单/vivo-OriginOS.md)。
+- **vivo V2502A**：系统 Android 17（PD2502B_A_17.1.13.6.W10），机主真机、**简体中文界面**实测；2026-11-23 `recipe --ref` 新关 8 个（商店 个性化广告推荐；浏览器 下载热门应用 / 下载热榜 / 个性化内容 / 第三方应用来源个性化推荐 / 个性化广告推荐；i管家 应用个性化推荐 / 清理个性化推荐），系统广告 / 全局搜索 / 阅图锁屏 / 天气目标开关本已 [关]；专用脚本 `recipes/vivo/V2502A/` 的 `adapt check` 七段全部可达、未完成步骤 0 个（回读确认 0 = 已干净、无东西可关）。商店 `AppstoreSettingsActivity` 未导出、齿轮 `content-desc='设置'`（text 空）可点进入；「服务管理」子页存在（FunctionManagerActivity，商店 V10.6.21.0）但为只读标题、无标准 Switch，`off()` 不命中。⚠️ 界面为繁体（persist.sys.locale=zh-HK，非 zh-TW）时七段逐段「没找到」、0 改动，切简体后才生效——判据层语言问题，见 [#1526](https://github.com/rddmwmddr/android-ad-cleaner/issues/1526)；商店入口缺口 [#1530](https://github.com/rddmwmddr/android-ad-cleaner/issues/1530)。快应用 com.vivo.hybrid 本机系统拒绝写入（AGENTS §6）。营销通知 `chan-off` 关 20 个、复查仍开 0（Copilot「产品建议」本机无入口跳过），天气预警 / 订阅 / 地图服务类保留。见[适配说明](recipes/vivo/V2502A/README.md)。手动清单见[清单差异](docs/清单/vivo-OriginOS.md)。
 - **一加 Ace 2（PHK110）· ColorOS 16.0.5**：2026-10-25 路径实测、整段重跑约 85 秒。营销通知 11 个关闭，1 个受限。
 - **一加 Ace 2（PHK110）· ColorOS 15.0.0.601**：2026-10-29 手动路径实测；自动脚本尚未整段真机验证。手动清单部分路径；营销通知渠道按独立流程处理。
 - **realme GT Neo5 SE（RMX3700）**：2026-11-02 六段真机实测通过（广告跟踪、软件商店、浏览器、下拉搜索、小布建议、应用建议）；下拉搜索重跑 83 秒、幂等。
