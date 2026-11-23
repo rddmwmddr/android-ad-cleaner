@@ -1815,7 +1815,7 @@ class SurveyCommandDetailTests(unittest.TestCase):
     def test_headline_counts_the_direct_entries(self):
         p = survey_phone(focus="com.android.settings/.ad.AdServiceSettings", texts=("个性化广告推荐",))
         _code, out, _err, _scan = self.run_cmd(p)
-        self.assertIn("小米：试 1 个直达入口，屏幕会跳，不要碰手机。", out)
+        self.assertIn("小米：试 1 个直达入口，屏幕会跳，不要碰手机。\n", out)      # 收尾带换行，别把首行结果并到这一行
 
     def test_missing_label_falls_back_to_the_family_name(self):
         p = survey_phone(brand="huawei")

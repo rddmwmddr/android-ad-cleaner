@@ -398,7 +398,7 @@ def cmd_survey(rest):
         if not any(word.family == family for word in words):
             return fail(f"{entries.LABEL.get(family, family)}的词库是空的：还没有这个家族的机型脚本，先用 adapt explore 探路")
         sys.stdout.write(f"{entries.LABEL.get(family, family)}：试 {sum(len(e.direct) for e in groups.values())} 个直达入口，"
-                         "屏幕会跳，不要碰手机。")
+                         "屏幕会跳，不要碰手机。\n")
         sys.stdout.flush()
         rows = survey(p, family, words)
         p.press("home")
