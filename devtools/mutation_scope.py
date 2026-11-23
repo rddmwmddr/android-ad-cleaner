@@ -79,6 +79,78 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_page_and_link_regressions.py", "tests/test_release_regressions.py", "tests/test_row.py",
         "tests/test_tap_notice_regressions.py",
     ),
+    # 读屏基础族（#1536），同样由覆盖矩阵量出：这几份是认页 / 拨动的底座，几乎每个读屏用例
+    # 都会执行到其中一两份，所以行很宽（`fast` 47 个测试文件、`wait` 40、`captures` 46）。
+    # `tests/recipe_case.py` 不在任何行里：矩阵把继承来的 case 记在定义处（该文件），但它是助手
+    # 模块，基类的 `RECIPE = None`，按文件目标收集会拿空数据跑出红（实测 `RecipeSafetyCase`）。
+    # 真正跑这些 case 的是子类文件，下面按子类逐个列出——比矩阵里那一条更宽，不会把杀得掉的 mutant 报成存活。
+    "tool/fast.py": (
+        "tests/test_adb_link.py", "tests/test_captures.py",
+        "tests/test_catalog.py", "tests/test_channel_arrive.py", "tests/test_channel_classification.py",
+        "tests/test_channel_decide.py", "tests/test_channel_outcomes.py", "tests/test_channel_page.py",
+        "tests/test_channel_snapshot.py", "tests/test_engine_events.py", "tests/test_entries.py",
+        "tests/test_fixtures.py", "tests/test_honor_recipe.py", "tests/test_honor_wkl_recipe.py",
+        "tests/test_issue_regressions.py", "tests/test_k70_recipe.py", "tests/test_k80pro_recipe.py",
+        "tests/test_k90ultra_recipe.py", "tests/test_layout_and_verdict_regressions.py",
+        "tests/test_lock_and_disconnect_regressions.py", "tests/test_main_switch_bar.py",
+        "tests/test_off_title_fallback.py", "tests/test_oneplus_plz110_recipe.py",
+        "tests/test_oneplus_recipe.py", "tests/test_oppo_pkt110_recipe.py",
+        "tests/test_oppo_pmx110_recipe.py", "tests/test_oppo_pyb110_recipe.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_phk110_recipe.py",
+        "tests/test_phone_dismisser.py", "tests/test_phone_facade.py", "tests/test_phone_host.py",
+        "tests/test_phone_interface.py", "tests/test_phone_launcher.py",
+        "tests/test_phone_navigator.py", "tests/test_phone_sessions.py",
+        "tests/test_phone_settings_search.py", "tests/test_phone_toggler.py",
+        "tests/test_recipe_call_snapshots.py", "tests/test_recipe_nav.py", "tests/test_regressions.py",
+        "tests/test_release_regressions.py", "tests/test_rmx3700_recipe.py", "tests/test_row.py",
+        "tests/test_tap_notice_regressions.py", "tests/test_ui_session.py",
+        "tests/test_vivo_2417_browser_entry.py", "tests/test_vivo_2547da_android17_recipe.py",
+        "tests/test_vivo_v2417a_recipe.py", "tests/test_xiaomi_24129pn74c_recipe.py",
+        "tests/test_xiaomi_2505apx7bc_recipe.py", "tests/test_xiaomi_25060rk16c_recipe.py"
+    ),
+    "tool/wait.py": (
+        "tests/test_adapt_cli.py", "tests/test_adb_link.py", "tests/test_channel_arrive.py",
+        "tests/test_channel_decide.py", "tests/test_channel_outcomes.py", "tests/test_channel_page.py",
+        "tests/test_engine_events.py", "tests/test_entries.py", "tests/test_fixtures.py",
+        "tests/test_huawei_channels.py", "tests/test_issue_regressions.py",
+        "tests/test_layout_and_verdict_regressions.py", "tests/test_lock_and_disconnect_regressions.py",
+        "tests/test_off_title_fallback.py", "tests/test_oneplus_plz110_recipe.py",
+        "tests/test_oppo_plp120_coloros17.py", "tests/test_oppo_plp120_search.py",
+        "tests/test_oppo_pmx110_recipe.py", "tests/test_oppo_pyb110_recipe.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_phone_base.py",
+        "tests/test_phone_dismisser.py", "tests/test_phone_interface.py",
+        "tests/test_phone_launcher.py", "tests/test_phone_navigator.py",
+        "tests/test_phone_settings_search.py", "tests/test_phone_toggler.py",
+        "tests/test_pja110_android16_recipe.py", "tests/test_recipe_call_snapshots.py",
+        "tests/test_recipe_nav.py", "tests/test_redmi_k90_2510drk44c.py", "tests/test_regressions.py",
+        "tests/test_row.py", "tests/test_tap_notice_regressions.py", "tests/test_vivo_v2417a_recipe.py",
+        "tests/test_wait.py", "tests/test_xiaomi_14pro_recipe.py",
+        "tests/test_xiaomi_24129pn74c_recipe.py", "tests/test_xiaomi_2505apx7bc_recipe.py",
+        "tests/test_xiaomi_25060rk16c_recipe.py"
+    ),
+    "tool/captures.py": (
+        "tests/test_adb_link.py", "tests/test_captures.py",
+        "tests/test_catalog.py", "tests/test_channel_arrive.py", "tests/test_channel_decide.py",
+        "tests/test_channel_outcomes.py", "tests/test_channel_page.py",
+        "tests/test_channel_snapshot.py", "tests/test_engine_events.py", "tests/test_entries.py",
+        "tests/test_fixtures.py", "tests/test_honor_recipe.py", "tests/test_honor_wkl_recipe.py",
+        "tests/test_issue_regressions.py", "tests/test_k70_recipe.py", "tests/test_k80pro_recipe.py",
+        "tests/test_k90ultra_recipe.py", "tests/test_layout_and_verdict_regressions.py",
+        "tests/test_lock_and_disconnect_regressions.py", "tests/test_main_switch_bar.py",
+        "tests/test_off_title_fallback.py", "tests/test_oneplus_plz110_recipe.py",
+        "tests/test_oneplus_recipe.py", "tests/test_oppo_pkt110_recipe.py",
+        "tests/test_oppo_pmx110_recipe.py", "tests/test_page_and_link_regressions.py",
+        "tests/test_phk110_recipe.py", "tests/test_phone_base.py", "tests/test_phone_dismisser.py",
+        "tests/test_phone_facade.py", "tests/test_phone_host.py", "tests/test_phone_interface.py",
+        "tests/test_phone_launcher.py", "tests/test_phone_navigator.py", "tests/test_phone_sessions.py",
+        "tests/test_phone_settings_search.py", "tests/test_phone_toggler.py",
+        "tests/test_recipe_call_snapshots.py", "tests/test_recipe_nav.py", "tests/test_regressions.py",
+        "tests/test_release_regressions.py", "tests/test_rmx3700_recipe.py", "tests/test_row.py",
+        "tests/test_run_commands.py", "tests/test_tap_notice_regressions.py",
+        "tests/test_ui_session.py", "tests/test_vivo_2417_browser_entry.py",
+        "tests/test_vivo_2547da_android17_recipe.py", "tests/test_xiaomi_24129pn74c_recipe.py",
+        "tests/test_xiaomi_2505apx7bc_recipe.py", "tests/test_xiaomi_25060rk16c_recipe.py"
+    ),
     "tool/host.py": (
         "tests/test_coverage_note.py", "tests/test_android_view.py", "tests/test_phone_host.py",
         "tests/test_summary.py", "tests/test_result_retry.py", "tests/test_job.py",
@@ -326,6 +398,12 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
     # 加上 `_enter_app_page` 47、`_skeleton` 35、`undo_message` 20 等）；`run` / `toggle` 的清零要造
     # 整套 `Phone` / `ShellPhone` / `UiHidden` 替身并锁调用序列，落在成本闸门之外。模块整体才进表，
     # 故整份登记为表外已知缺口。
+    # `tool/row.py` 在表外（#1536，ADR-0043「tool/ 其余模块（#1445）」）：实测 1256 个 mutant，杀死 1075、
+    # 存活 181、无测试 0。存活都在纯函数里（`skeleton` 48、`title_label` 46、`summary` 29、`path` 16、
+    # `switch_row` / `dedupe` 各 9），但同一语句上同时挂着可杀与不可区分（语义等价 / 边界等价）的变异
+    # （`//2` 与 `/2`、`rsplit(...)[-1]` 的各种 maxsplit、`or ""` 的占位串），清零要先按行拆开这些语句、
+    # 再给每条边界构造专用页面——那是改写读屏算术去适配尺子，不在本票的成本内。模块整体才进表，故整份
+    # 登记为表外已知缺口。
     # `devtools/typecheck_recipes.py` 在表外（#1521，ADR-0043）：实测 179 个 mutant，存活 8、无测试 154。
     # 唯一覆盖是 `test_catalog` 的一个方法，只碰到 `_check_catalog`，且它还有 8 个存活；`recipes` /
     # `_check_python` / `main` 分别 54 / 28 / 72 个 mutant 全无测试。`_check_python` 起 mypy 子进程、

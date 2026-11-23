@@ -34,6 +34,7 @@
 - 渠道判定族：`channel_decide` / `channel_arrive` 进映射表，`chan_fast` 记表外缺口（#1533，ADR-0043）
 - `phone/session` 存活清零进映射表，`phone/toggler` 记表外缺口（#1534，ADR-0043）
 - `adb_link` / `huawei_channels` 存活清零并进变异映射表（#1535，ADR-0043）
+- 读屏基础族：`fast` / `wait` / `captures` 存活清零并进映射表，`row` 记表外缺口（#1536，ADR-0043）
 
 ## 0.4.5 · 2026-11-18
 
