@@ -349,6 +349,17 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_xiaomi_25060rk16c_recipe.py",
     ),
     "tool/huawei_channels.py": ("tests/test_huawei_channels.py",),
+    # 开发者脚本面（#1545），由覆盖矩阵量出：适配生成 / 探路 / 脚本审计 / 台账各自只有少量
+    # 专用用例执行到它们，行都很窄。
+    "tool/adapt.py": ("tests/test_adapt_cli.py", "tests/test_catalog.py"),
+    "tool/explore.py": ("tests/test_adapt_cli.py", "tests/test_phone_interface.py"),
+    "tool/recipe_audit.py": (
+        "tests/test_recipe_audit.py", "tests/test_recipe_variants.py", "tests/test_verify_ledger.py",
+    ),
+    "tool/verify_ledger.py": (
+        "tests/test_issue_regressions.py", "tests/test_plan.py", "tests/test_recipe_audit.py",
+        "tests/test_run_commands.py", "tests/test_verify_ledger.py",
+    ),
     # gui 侧（#1429），同样由覆盖矩阵量出：任务编排被几乎所有跑计划的用例碰到。
     "gui/dispatcher.py": (
         "tests/test_layout_and_verdict_regressions.py", "tests/test_client_events.py",

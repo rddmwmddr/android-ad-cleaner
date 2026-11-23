@@ -311,5 +311,338 @@ class RunOutputTests(unittest.TestCase):
         self.assertNotIn("本机策略", listing.getvalue())     # 这一行读不出就不打印
 
 
+# ---------- 判据细部：调用名、行号、计数、占位与输出形状 ----------
+
+def tl(name, tier, line=1, signals=(), calls=(), models=()):
+    return recipe_audit.LocalFunction(name, line, tier, signals, calls, models)
+
+
+def sample_report():
+    return recipe_audit.Report((
+        recipe_audit.Script("other/M2/x.toml", "", "M2", (
+            tl("open", "knowledge", 9, (), (), ("M2", "M1")),
+        )),
+        recipe_audit.Script("xiaomi/M1/M1.toml", "xiaomi", "M1", (
+            tl("open", "strategy", 3, ("p.off",), ("p.off",), ("M2", "M1")),
+            tl("nav", "vocabulary", 4, ("p.start",), ("p.start",), ("M1",)),
+            tl("hook", "hook", 5, (), (), ("M1",)),
+        )),
+    ))
+
+
+class CallFactsTests(unittest.TestCase):
+    def test_rt_prefix_is_stripped_and_the_definition_line_is_kept(self):
+        found = recipe_audit.classify('''def close():\n    rt.require_switches()\n    p.off()\n''')[0]
+        self.assertEqual((found.name, found.line), ("close", 1))
+        self.assertEqual(found.calls, ("p.off", "require_switches"))
+        self.assertEqual(found.tier, "strategy")
+
+    def test_counts_sum_every_function_of_a_tier(self):
+        src = '''def one():\n    p.off()\n\ndef two():\n    p.setting()\n'''
+        self.assertEqual(recipe_audit.counts(src)["strategy"], 2)
+
+
+class CountsForTests(unittest.TestCase):
+    def write(self, directory, name, text):
+        path = Path(directory) / name
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_a_python_script_is_counted_from_its_source(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = self.write(d, "recipe.py", '''def a():\n    p.off()\n\ndef b():\n    p.start()\n''')
+            counts = recipe_audit.counts_for(str(path))
+        self.assertEqual(counts, {"total": 2, "strategy": 1, "vocabulary": 1,
+                                  "knowledge": 0, "hook": 0})
+
+    def test_toml_without_a_companion_has_no_local_functions(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = self.write(d, "M1.toml", '[[segment]]\nname = "x"\nops = []\n')
+            counts = recipe_audit.counts_for(str(path))
+        self.assertEqual(counts, {"total": 0, "strategy": 0, "vocabulary": 0,
+                                  "knowledge": 0, "hook": 0})
+
+    def test_toml_without_a_segment_key_has_no_code_functions(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = self.write(d, "M1.toml", 'model = "M1"\n')
+            self.write(d, "M1.py", "def a():\n    p.off()\n\ndef b():\n    p.start()\n")
+            counts = recipe_audit.counts_for(str(path))
+        self.assertEqual(counts, {"total": 2, "strategy": 1, "vocabulary": 1,
+                                  "knowledge": 0, "hook": 0})
+
+    def test_toml_companion_drops_the_code_functions(self):
+        toml = ('[[segment]]\nname = "x"\ncode = "impl"\nops = []\n')
+        companion = '''def impl():\n    p.off()\n\ndef helper1():\n    p.start()\n\ndef helper2():\n    p.tap()\n'''
+        with tempfile.TemporaryDirectory() as d:
+            path = self.write(d, "M1.toml", toml)
+            self.write(d, "M1.py", companion)
+            counts = recipe_audit.counts_for(str(path))
+        self.assertEqual(counts, {"total": 2, "strategy": 0, "vocabulary": 2,
+                                  "knowledge": 0, "hook": 0})
+
+
+class PlaceTests(unittest.TestCase):
+    def test_family_and_model_come_from_the_two_path_segments(self):
+        self.assertEqual(recipe_audit._place("xiaomi/M154FF/M154FF.toml"),
+                         ("xiaomi", "M154FF"))
+
+    def test_unregistered_family_is_empty(self):
+        self.assertEqual(recipe_audit._place("other/M1/x.toml"), ("", "M1"))
+
+    def test_a_single_segment_path_uses_it_for_both(self):
+        self.assertEqual(recipe_audit._place("single.toml"), ("", "single.toml"))
+
+    def test_a_two_segment_path_takes_the_second_as_the_model(self):
+        self.assertEqual(recipe_audit._place("xiaomi/M1"), ("xiaomi", "M1"))
+
+
+class FilteredDetailTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.report = recipe_audit.audit(str(fake_tree(tmp.name)))
+
+    def test_family_filter_skips_the_first_unrelated_script(self):
+        kept = recipe_audit.filtered(self.report, family="xiaomi")
+        self.assertEqual([script.family for script in kept.scripts], ["xiaomi", "xiaomi"])
+
+    def test_model_matches_the_family_segment_too(self):
+        kept = recipe_audit.filtered(self.report, model="xiaomi")
+        self.assertEqual([script.model for script in kept.scripts], ["FAKEA", "FAKEB"])
+
+    def test_norm_lowercases_and_drops_punctuation(self):
+        self.assertEqual(recipe_audit._norm("A-b C"), "abc")
+
+
+class CatalogAuditTests(unittest.TestCase):
+    def test_code_functions_are_not_local_helpers_and_a_missing_companion_does_not_stop(self):
+        with tempfile.TemporaryDirectory() as d:
+            recipes = Path(d, "recipes")
+            (recipes / "aaa" / "M1").mkdir(parents=True)
+            (recipes / "aaa" / "M1" / "M1.toml").write_text(
+                '[[segment]]\nname = "x"\ncode = "impl"\nops = []\n', encoding="utf-8")
+            (recipes / "aaa" / "M1" / "M1.py").write_text(
+                "def impl():\n    p.off()\n\ndef helper():\n    p.start()\n", encoding="utf-8")
+            (recipes / "aab" / "M0").mkdir(parents=True)
+            (recipes / "aab" / "M0" / "M0.toml").write_text('model = "M0"\n', encoding="utf-8")
+            (recipes / "aab" / "M0" / "M0.py").write_text("def lone():\n    p.off()\n", encoding="utf-8")
+            (recipes / "aac" / "M9").mkdir(parents=True)
+            (recipes / "aac" / "M9" / "M9.toml").write_text('model = "M9"\n', encoding="utf-8")
+            (recipes / "xiaomi" / "M2").mkdir(parents=True)
+            (recipes / "xiaomi" / "M2" / "recipe.py").write_text(
+                "def close():\n    p.setting()\n", encoding="utf-8")
+            report = recipe_audit.audit(str(recipes))
+        by_script = {script.script: script for script in report.scripts}
+        self.assertEqual([f.name for f in by_script["aaa/M1/M1.toml"].functions], ["helper"])
+        self.assertEqual([f.name for f in by_script["aab/M0/M0.toml"].functions], ["lone"])
+        self.assertEqual(by_script["aac/M9/M9.toml"].functions, ())   # 没有同名例外：0 个本机函数，也不拦住后面的脚本
+        self.assertEqual([f.name for f in by_script["xiaomi/M2/recipe.py"].functions], ["close"])
+
+
+class FamilyTotalsTests(unittest.TestCase):
+    def test_each_family_row_has_counts_and_a_label(self):
+        with tempfile.TemporaryDirectory() as d:
+            rows = recipe_audit._family_totals(recipe_audit.audit(str(fake_tree(d))))
+        self.assertEqual(rows, [
+            {"family": "vivo", "label": "vivo", "scripts": 1, "total": 0,
+             "strategy": 0, "vocabulary": 0, "knowledge": 0, "hook": 0},
+            {"family": "xiaomi", "label": "小米", "scripts": 2, "total": 4,
+             "strategy": 1, "vocabulary": 2, "knowledge": 1, "hook": 0},
+        ])
+
+    def test_unregistered_family_is_labelled_未登记(self):
+        with tempfile.TemporaryDirectory() as d:
+            recipes = Path(d, "recipes")
+            (recipes / "other" / "M1").mkdir(parents=True)
+            (recipes / "other" / "M1" / "recipe.py").write_text("def f():\n    p.off()\n", encoding="utf-8")
+            rows = recipe_audit._family_totals(recipe_audit.audit(str(recipes)))
+        self.assertEqual(rows[0]["family"], "")
+        self.assertEqual(rows[0]["label"], "未登记")
+
+
+class JsonShapeTests(unittest.TestCase):
+    def test_json_carries_every_field(self):
+        data = recipe_audit.as_json(sample_report())
+        self.assertEqual(data, {
+            "totals": {"scripts": 2, "total": 4, "strategy": 1, "vocabulary": 1,
+                       "knowledge": 1, "hook": 1, "names": 3, "shared": 1},
+            "families": [
+                {"family": "", "label": "未登记", "scripts": 1, "total": 1,
+                 "strategy": 0, "vocabulary": 0, "knowledge": 1, "hook": 0},
+                {"family": "xiaomi", "label": "小米", "scripts": 1, "total": 3,
+                 "strategy": 1, "vocabulary": 1, "knowledge": 0, "hook": 1},
+            ],
+            "scripts": [
+                {"script": "other/M2/x.toml", "family": "", "model": "M2", "functions": [
+                    {"name": "open", "line": 9, "tier": "knowledge", "signals": [],
+                     "calls": [], "models": ["M2", "M1"]},
+                ]},
+                {"script": "xiaomi/M1/M1.toml", "family": "xiaomi", "model": "M1", "functions": [
+                    {"name": "open", "line": 3, "tier": "strategy", "signals": ["p.off"],
+                     "calls": ["p.off"], "models": ["M2", "M1"]},
+                    {"name": "nav", "line": 4, "tier": "vocabulary", "signals": ["p.start"],
+                     "calls": ["p.start"], "models": ["M1"]},
+                    {"name": "hook", "line": 5, "tier": "hook", "signals": [], "calls": [],
+                     "models": ["M1"]},
+                ]},
+            ],
+        })
+
+
+class EvidenceTests(unittest.TestCase):
+    def test_hook_is_named_as_engine_called(self):
+        self.assertEqual(recipe_audit._evidence(tl("tail", "hook")),
+                         "声明式钩子，由引擎调用")
+
+    def test_knowledge_lists_what_it_called(self):
+        self.assertEqual(recipe_audit._evidence(tl("f", "knowledge", calls=("p.shell", "p.focus"))),
+                         "没有判据信号，只调了 p.shell、p.focus")
+
+    def test_function_without_calls_says_so(self):
+        self.assertEqual(recipe_audit._evidence(tl("f", "knowledge")), "函数体没有调用")
+
+
+class RenderTextTests(unittest.TestCase):
+    EXPECTED = "\n".join([
+        "本机函数：4 个（拨动策略 1、引擎词汇 1、真机型知识 1、声明式钩子 1） · 2 份脚本"
+        " · 3 个名字，其中 1 个出现在 ≥2 台机型",
+        "",
+        "## 按家族",
+        "",
+        "| 家族 | 脚本 | 本机函数 | 拨动策略 | 引擎词汇 | 真机型知识 | 声明式钩子 |",
+        "|---|---|---|---|---|",
+        "| 未登记 | 1 | 1 | 0 | 0 | 1 | 0 |",
+        "| 小米 | 1 | 3 | 1 | 1 | 0 | 1 |",
+        "",
+        "## 按脚本",
+        "",
+        "### other/M2/x.toml（未登记 M2）",
+        "",
+        "本机函数 1 个（拨动策略 0、引擎词汇 0、真机型知识 1、声明式钩子 0）",
+        "",
+        "- `open`：真机型知识（函数体没有调用） · 机型 2 台 · 行 9",
+        "",
+        "### xiaomi/M1/M1.toml（小米 M1）",
+        "",
+        "本机函数 3 个（拨动策略 1、引擎词汇 1、真机型知识 0、声明式钩子 1）",
+        "",
+        "- `open`：拨动策略（命中 p.off） · 机型 2 台 · 行 3",
+        "- `nav`：引擎词汇（命中 p.start） · 机型 1 台 · 行 4",
+        "- `hook`：声明式钩子（声明式钩子，由引擎调用） · 机型 1 台 · 行 5",
+        "",
+    ])
+
+    def test_full_report_is_verbatim(self):
+        self.assertEqual(recipe_audit.render(sample_report()), self.EXPECTED)
+
+    def test_summary_is_the_table_only(self):
+        text = recipe_audit.render(sample_report(), per_script=False)
+        self.assertEqual(text, "\n".join(self.EXPECTED.splitlines()[:8]) + "\n")
+        self.assertNotIn("## 按脚本", text)
+
+    def test_filter_line_names_the_three_conditions(self):
+        text = recipe_audit.render(sample_report(), family="xiaomi", model="M1", tier="strategy")
+        self.assertTrue(text.startswith("过滤：家族 小米、机型 M1、归属 拨动策略\n\n本机函数："))
+
+    def test_empty_report_says_nothing_matched(self):
+        text = recipe_audit.render(recipe_audit.Report(()))
+        self.assertEqual(text, "\n".join([
+            "本机函数：0 个（拨动策略 0、引擎词汇 0、真机型知识 0、声明式钩子 0） · 0 份脚本"
+            " · 0 个名字，其中 0 个出现在 ≥2 台机型",
+            "", "## 按家族", "",
+            "| 家族 | 脚本 | 本机函数 | 拨动策略 | 引擎词汇 | 真机型知识 | 声明式钩子 |",
+            "|---|---|---|---|---|",
+            "", "## 按脚本", "", "没有匹配的脚本。", "",
+        ]))
+
+    def test_family_filter_line_falls_back_to_the_argument(self):
+        text = recipe_audit.render(sample_report(), family="nope")
+        self.assertTrue(text.startswith("过滤：家族 nope\n\n本机函数："))
+
+
+class MainTests(unittest.TestCase):
+    USAGE = ("用法：python3 tool/recipe_audit.py [--family 家族] [--model 机型] [--tier 归属]"
+             " [--summary] [--json]")
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.recipes = fake_tree(tmp.name)
+        patcher = patch.object(recipe_audit, "_recipes_dir", return_value=str(self.recipes))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def run_cli(self, argv):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = recipe_audit.main(argv)
+        return rc, out.getvalue(), err.getvalue()
+
+    def test_help_prints_the_usage_and_exits_zero(self):
+        for argv in (["-h"], ["--help"]):
+            with self.subTest(argv):
+                self.assertEqual(self.run_cli(argv), (0, self.USAGE + "\n", ""))
+
+    def test_no_arguments_runs_the_whole_audit(self):
+        rc, out, _err = self.run_cli([])
+        self.assertEqual(rc, 0)
+        self.assertIn("## 按脚本", out)
+
+    def test_unknown_option_is_usage_error_two(self):
+        self.assertEqual(self.run_cli(["--bogus"]),
+                         (2, "", f"不认识的参数 --bogus\n{self.USAGE}\n"))
+
+    def test_option_without_a_value_is_usage_error_two(self):
+        self.assertEqual(self.run_cli(["--family"]),
+                         (2, "", f"--family 后面要跟一个值\n{self.USAGE}\n"))
+
+    def test_unknown_family_lists_the_available_ones(self):
+        rc, _out, err = self.run_cli(["--family", "nope"])
+        self.assertEqual(rc, 1)
+        self.assertEqual(err, "认不出家族 nope；可用的："
+                              + "、".join(sorted(set(recipe_audit.FAMILY.values()))) + "\n")
+
+    def test_unknown_tier_lists_the_available_ones(self):
+        rc, _out, err = self.run_cli(["--tier", "nope"])
+        self.assertEqual(rc, 1)
+        self.assertEqual(err, "认不出归属 nope；可用的：strategy（拨动策略）、vocabulary（引擎词汇）、"
+                              "knowledge（真机型知识）、hook（声明式钩子）\n")
+
+    def test_summary_then_json_still_reaches_json(self):
+        rc, out, _err = self.run_cli(["--summary", "--json"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(out)["totals"]["total"], 4)
+
+    def test_an_option_after_json_is_still_parsed(self):
+        rc, _out, err = self.run_cli(["--summary", "--json", "--bogus"])
+        self.assertEqual(rc, 2)
+        self.assertIn("不认识的参数 --bogus", err)
+
+    def test_filtered_gets_all_three_conditions(self):
+        with patch.object(recipe_audit, "filtered", wraps=recipe_audit.filtered) as filtered:
+            self.run_cli(["--family", "小米", "--model", "FAKEA", "--tier", "拨动策略"])
+        self.assertEqual(filtered.call_args.args[1:], ("xiaomi", "FAKEA", "strategy"))
+
+    def test_json_output_is_indented_and_keeps_chinese_raw(self):
+        rc, out, _err = self.run_cli(["--json"])
+        self.assertEqual(rc, 0)
+        self.assertTrue(out.startswith('{\n  "totals"'))
+        self.assertIn("小米", out)
+
+    def test_summary_and_full_render_get_the_same_positional_conditions(self):
+        with patch.object(recipe_audit, "render", return_value="") as render:
+            self.run_cli([])
+            self.assertEqual(render.call_args.kwargs, {})
+            self.assertEqual(render.call_args.args[1:], ("", "", ""))
+            self.run_cli(["--summary"])
+        self.assertIs(render.call_args.kwargs["per_script"], False)
+        self.assertEqual(render.call_args.args[1:], ("", "", ""))
+
+
+class RecipesDirTests(unittest.TestCase):
+    def test_the_audit_reads_the_repository_recipes(self):
+        self.assertEqual(recipe_audit._recipes_dir(), str(ROOT / "recipes"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -18,6 +18,7 @@ ENTRY_SKIP = re.compile(r"侧边栏|返回|关于|检查更新|版本|清单|协
 ME = ("我的", "我", "个人中心", "更多")
 SET = ("设置", "设置中心")
 # 不给包名时的厂商 App 粗筛：认错只是多探一个 App，不产出入口条目。
+TSV_WRITE_ENCODING = "utf-8"   # codec 名收在模块常量里，别名写法在变异里辨不出来
 VENDOR = re.compile(r"^(com\.(hihonor|honor|huawei|oplus|coloros|heytap|nearme|oppo|vivo|bbk|iqoo|miui|xiaomi|mi"
                     r"|android\.browser|freeme|zhuoyi|feimi|droi)|cn\.honor)")
 
@@ -100,7 +101,7 @@ def explore(p, pkg, rows):
             recoveries += 1
             err = open_settings(p, pkg)
             now = p.focus()
-            if err or recoveries > 2 or now.split("/", 1)[0] != pkg:
+            if err or recoveries > 2 or not now.startswith(pkg + "/"):
                 print(f"  （从「{e}」{reason}；重进设置页"
                       f"{'失败：' + err if err else '后页面也不对'}，本 App 探路到此为止，换下一个 App）")
                 break
@@ -124,7 +125,9 @@ def main():
         except Exception as e:
             print(f"  ✗ {e}")
     fn = f"探路-{model}.tsv"
-    with open(fn, "w", encoding="utf-8") as f:
+    with open(fn,
+              "w",
+              encoding=TSV_WRITE_ENCODING) as f:   # pragma: no mutate 语义等价：省略或置 None 时取平台默认编码，判定平台（Linux / macOS）就是 UTF-8
         f.write("包名\t页面\t开关\t状态\t像广告\t人工勾选\n")
         f.write("# 在末列写「关」挑出要关的开关，再跑：python3 tool/run.py adapt gen " + fn + "\n")
         for r in rows:
