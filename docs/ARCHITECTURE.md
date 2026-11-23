@@ -109,7 +109,7 @@ glob，放进哪个目录就决定了它会不会进包（[ADR-0041](adr/0041-to
 | `devtools/check_conventional.py` | PR 的提交主题校验：`type(scope): subject`，类型清单 `TYPES` 也在这里（#849） |
 | `devtools/check_ticket_ref.py` | PR 的票号校验：分支名以 `-<票号>` 结尾、正文有 `Refs #N` / `Closes #N` 且是同一张（#1001） |
 | `devtools/check_comment_tickets.py` | PR 新增行里的票号要在正文引用的范围内，`docs/adr/` 与含「沿用」的行豁免（#1001） |
-| `devtools/mutation.py` | 一个模块的变异测试：搭工作目录、跑 mutmut、读回结局；`--since` 按改动面挑模块（#1411） |
+| `devtools/mutation.py` | 一个模块的变异测试：搭工作目录、跑 mutmut、读回结局；`--since` 按模块改动与测试文件反查挑模块（#1411、#1531） |
 
 `devtools/commits.py` 不是命令：它是上面几条 PR 校验共用的 `base..head` 读取与 UTF-8 控制台，沿用 #848、#849 起的那份设计。其余工具链脚本（`claim` / `followup` / `stale` / `triage_audit` / `gh` / `release_assets` / `release_meta` / `glob_scan` / `test_anchors` / `typecheck_recipes` / `unittest_summary` / `mutation_scope`）的指路在 `docs/agents/` 与 [ADR-0036](adr/0036-tool-gh-session.md)。
 

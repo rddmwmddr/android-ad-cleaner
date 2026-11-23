@@ -353,6 +353,23 @@ def modules_in_paths(paths: Iterable[str]) -> list[str]:
     return list(ordered)
 
 
+def modules_for_tests(paths: Iterable[str]) -> list[str]:
+    """改到的测试文件覆盖哪些模块：把 `MODULE_TESTS` 反过来读，按首次出现的顺序去重。
+
+    改测试文件的 PR 里没有模块路径可看，删除用例检测就落在这里：文件出现在哪几行，
+    那几行对应的模块本次都要跑（#1531）。索引现建现用——表只有几十行，爱惜它不如让它不会漂。
+    """
+    by_test: dict[str, list[str]] = {}
+    for module, targets in MODULE_TESTS.items():
+        for target in targets:
+            by_test.setdefault(target, []).append(module)
+    ordered: dict[str, None] = {}
+    for path in paths:
+        for module in by_test.get(path, ()):
+            ordered.setdefault(module, None)
+    return list(ordered)
+
+
 def unknown(modules: Iterable[str]) -> list[str]:
     """不在表里的模块。调用方据此报错，而不是静默跑出 0 个 mutant。"""
     return [module for module in modules if module not in MODULE_TESTS]
