@@ -146,6 +146,10 @@ pragma 全部写明「语义等价」或「不可达」，理由随源码行。�
 | `channel_decide` | 500 | 0 | 0 | 1 |
 | `channel_arrive` | 147 | 0 | 0 | 0 |
 | `chan_fast` | 1804 | 462 | 6 | 0 |
+| `channel_batch` | 196 | 0 | 0 | 0 |
+| `channel_toggle` | 43 | 0 | 0 | 0 |
+| `ui_hidden` | 55 | 0 | 0 | 0 |
+| `screen_snapshot` | 689 | 0 | 0 | 3 |
 | `phone/session` | 14 | 0 | 0 | 0 |
 | `phone/toggler` | 519 | 37 | 0 | 0 |
 | `adb_link` | 323 | 0 | 0 | 5 |
@@ -162,6 +166,7 @@ pragma 全部写明「语义等价」或「不可达」，理由随源码行。�
 - **`chan_fast` 不进表（表外已知缺口）**：本票实测 1804 个 mutant、杀死 1331、存活 462、无测试 6、超时 5。存活集中在整批编排段——`run` 112、`toggle` 57，加上 `_enter_app_page` 47、`_skeleton` 35、`undo_message` 20、`recognise` 19、`mismatch_probe` 14 等。`run` / `toggle` 的清零要造整套 `Phone` / `ShellPhone` / `UiHidden` 替身并锁住调用序列，成本闸门明确排除；而模块只有整体才进表，所以整份登记为缺口。它下次纳入时按同一口径逐份清到零。
 - **`phone/session` 进表**：三个会话对象的 `__init__` 初值与 `set_app()` 的「换 App 清推广位记忆」共 14 个 mutant，靠 `test_phone_sessions` 里的初值断言清零（空串、`False`、活集合各一条）。覆盖矩阵把 `tests/recipe_case.py` 里写的用例归到它自己名下，但那是只有被继承才跑得起来的基类；映射行按实际所有者换成三个子类文件，范围不窄于矩阵。
 - **`phone/toggler` 不进表（表外已知缺口）**：实测 519 个 mutant、杀死 481、存活 37、无测试 0、超时 1。纯函数与构造初值（`match_key` / `in_band` / `plan_switches` / `Toggler.__init__`）本票补断言后清零；存活全在该模块自己的编排段——`off` 34、`confirm` 3（另 `confirm` 去掉注入的 `sleep` 的一条超时）。是首屏等待的 `tries` / `poll` / `sleep` 实参、`shift` 初值与重排分支、回读与补点里的 `continue` / `break` / `return` 之分、`screen.switches()` 的实参、两处 `|=` 累加，以及几处 sleep 节奏常量。逐条杀掉要按场景锁住替身的调用序列与节奏，成本闸门排除；模块只有整体才进表，故整份登记为缺口。
+- **渠道判定族二四份全部进表**（`channel_batch` / `channel_toggle` / `ui_hidden` / `screen_snapshot`；初始实测 198 / 43 / 57 / 764 个 mutant，存活 9 / 9 / 17 / 137）。清零靠补行为断言，不锁 mock 调用序列：批次记账与拨动决定补的是清单形状与结局细节（`Pending.item`、`ChannelList` 的两份空集合、受保护判据吃渠道 ID 而不是显示名），`ui_hidden` 补的是名单文件口径（BOM、首个制表符、注释行、同一键在一批里只写一次、写不进去不算失败、落盘字节），`screen_snapshot` 补的是屏幕快照的边界（`on_screen` 的中心与退化盒子、`pixel_on` 的通道与取样位置、JSON 缺字段的默认值、`parse_notification_dump` 的 UID 边界与两条读数合并）。三处 pragma 都是语义等价：`on_screen` 的中心只与整数宽高比（`//` 与 `/` 同真同假）、`pixel_on` 的取样行经 getpixel 截断成同一格、自绘开关回写的类名只经 `"Switch" in cls` 读且 checkable 已置真。清零途中收掉的死代码都属本模块：`switch_row_data` 里两处尺寸守卫在 `shown()` 之后恒真、`snapshot_from_tree` 的 `activity if sep else ""` 两支同值、`parse_notification_dump` 的 `fixed` 初值在读它之前必被重写；缺属性时的空值收进 `NODE` / `NO_CLASS` / `NO_ID` / `NO_SECTION` 四个常量。四份的映射行按同一份覆盖矩阵量出，与 `chan_fast` 的行有交集，但 `chan_fast` 仍是表外已知缺口。
 
 ## Consequences
 

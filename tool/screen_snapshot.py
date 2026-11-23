@@ -28,6 +28,12 @@ FG_SERVICE_MARKS = ("mFgServiceShown=true", "mUserVisibleTaskShown=true")
 _UNSET = object()
 _NO_SHOT = object()
 
+# dump 的 XML 词汇：只认 `<node>` 元素；缺属性时的空值收成常量，免得同一件事在三处各写一份字面量。
+NODE = "node"
+NO_CLASS = ""
+NO_ID = ""
+NO_SECTION = -1      # notification dump 里找不到段名
+
 
 class IntentKind(StrEnum):
     """对设备的动作种类；等待与重试不属于意图。"""
@@ -174,7 +180,7 @@ def on_screen(node, width, height):
     if node.get("visible-to-user") == "false":
         return False
     l, t, r, b = bounds(node)
-    cx, cy = (l + r) // 2, (t + b) // 2
+    cx, cy = (l + r) // 2, (t + b) // 2   # pragma: no mutate 语义等价：中心点只与整数宽高比，floor 与 x.5 在 `>= 0` / `< 宽高` 两处同真同假
     return r > l and b > t and 0 <= cx < width and 0 <= cy < height
 
 
@@ -182,7 +188,7 @@ def text_hits(root, width, height, systemui_text=False):
     """[(文字, bounds, 节点)]：`Screen.texts()` 与屏幕快照共用的那一份筛选。"""
     out = []
     # 华为 HarmonyOS 4 把同一个控件吐出两次；按节点身份数行时会变成「同名 2 行」（#510）
-    for n in unique(root.iter("node")):
+    for n in unique(root.iter(NODE)):
         if n.get("package") == "com.android.systemui" and not systemui_text:
             continue                      # 状态栏/通知栏文字不算
         t = (n.get("text") or n.get("content-desc") or "").strip()
@@ -193,8 +199,8 @@ def text_hits(root, width, height, systemui_text=False):
 
 def can_scroll(root):
     """这一屏还能不能往下滚：有节点标了可滚动，或出现列表容器类名。"""
-    return any(n.get("scrollable") == "true" or LISTS.search(n.get("class") or "")
-               for n in root.iter("node"))
+    return any(n.get("scrollable") == "true" or LISTS.search(n.get("class") or NO_CLASS)
+               for n in root.iter(NODE))
 
 
 def pixel_on(img, l, t, r, b):
@@ -203,11 +209,9 @@ def pixel_on(img, l, t, r, b):
     if not (0 <= l < r <= w and 0 <= t < b <= h):
         return None
     img = img.convert("RGB")
-    sat = 0
-    for fx in (0.25, 0.5, 0.75):
-        R, G, B = img.getpixel((int(l + (r - l) * fx), (t + b) // 2))
-        sat = max(sat, max(R, G, B) - min(R, G, B))
-    return sat > 60
+    mid = (t + b) // 2      # pragma: no mutate 语义等价：bounds 非负，x.5 被 getpixel 截成同一格
+    samples = (img.getpixel((int(l + (r - l) * fx), mid)) for fx in (0.25, 0.5, 0.75))
+    return max(max(pixel) - min(pixel) for pixel in samples) > 60
 
 
 def _self_drawn_on(shot, width, height, box):
@@ -230,36 +234,34 @@ def switch_row_data(root, width, height, screenshot=None):
 
     out = []
     shot = _UNSET
-    for n in unique(root.iter("node")):
-        if not shown(n) or "RadioButton" in n.get("class", ""):
+    for n in unique(root.iter(NODE)):
+        if not shown(n) or "RadioButton" in n.get("class", NO_CLASS):
             continue
         if n.get("checkable") != "true":
-            rid = (n.get("resource-id") or "").lower()
+            rid = (n.get("resource-id") or NO_ID).lower()
             # 自绘开关：看颜色；TextSwitcher 是文字轮播。里面已经有真开关的（AOSP 渠道页的 main_switch_bar）不算：
             # 按颜色猜出的状态会盖过里面那个真开关，关着的渠道被读成开着，还原营销通知失败（0.3.1 发版前模拟器发现）
             if ("switch" in rid and "switcher" not in rid and n.get("clickable") == "true"
                     and not any(c is not n and c.get("checkable") == "true" for c in n.iter("node"))):
+                # 盒子已经过 `shown()`：自有面积、中心在屏内，这里不必再判尺寸
                 l, t, r, b = bounds(n)
-                if r - l > 0 and b - t > 0:
-                    if shot is _UNSET:
-                        # 纯构造不给取图函数时按「没有这一支」处理；给了就照旧取一次（真机截图不会是 None）
-                        shot = screenshot() if screenshot is not None else _NO_SHOT
-                    if shot is _NO_SHOT:
-                        continue
-                    # UI 坐标与截图可能来自不同分辨率/旋转状态。不能越界取样，也不能把未知状态当关。
-                    on = _self_drawn_on(shot, width, height, (l, t, r, b))
-                    if on is None:
-                        continue
-                    n.set("checked", "true" if on else "false")
-                    n.set("checkable", "true")
-                    n.set("class", "SelfDrawnSwitch")
+                if shot is _UNSET:
+                    # 纯构造不给取图函数时按「没有这一支」处理；给了就照旧取一次（真机截图不会是 None）
+                    shot = screenshot() if screenshot is not None else _NO_SHOT
+                if shot is _NO_SHOT:
+                    continue
+                # UI 坐标与截图可能来自不同分辨率/旋转状态。不能越界取样，也不能把未知状态当关。
+                on = _self_drawn_on(shot, width, height, (l, t, r, b))
+                if on is None:
+                    continue
+                n.set("checked", str(on).lower())
+                n.set("checkable", "true")
+                n.set("class", "SelfDrawnSwitch")   # pragma: no mutate 语义等价：回写的类名只经 `"Switch" in cls` 读，checkable 已置真，三档变异都落到同一行
+
             if n.get("checkable") != "true":
                 continue
-        cls = n.get("class", "")
+        cls = n.get("class", NO_CLASS)
         if not any(k in cls for k in ("Switch", "CheckBox", "ToggleButton", "Compound")) and n.get("clickable") != "true":
-            continue
-        l, t, r, b = bounds(n)
-        if r - l <= 0 or b - t <= 0 or not shown(n):
             continue
         ctrl = control(n, shown)       # 卡片整体 checkable 时点在卡片中心不生效
         l, t, r, b = bounds(ctrl)
@@ -292,11 +294,11 @@ def snapshot_from_tree(root, width, height, focus, systemui_text=False, *,
     `Screen.snapshot()` 与用例里的 `ET.fromstring(dump)` 都走它，装配只此一处。
     `with_rows=False` 时不算开关行：自绘开关要在这一步截图，只认标题 / 认行的路径不该多截一张。
     """
-    package, sep, activity = focus.partition("/")
+    package, _, activity = focus.partition("/")     # 没有 `/` 时 activity 本来就是空串
     hits = text_hits(root, width, height, systemui_text)
     return ScreenSnapshot(
         package=package,
-        activity=activity if sep else "",
+        activity=activity,
         width=width,
         height=height,
         rows=rows_from_tree(root, width, height, screenshot) if with_rows else (),
@@ -318,11 +320,13 @@ def parse_notification_dump(text):
     foreground 收集前台服务的常驻通知渠道（#459）。两份都只收当前文本里的证据。
     """
     # 安卓 8 / 9 的段名是「per-package config:」（RankingHelper），10 起是「PackagePreferences:」（#258 海信 Android 9）
-    start = next((k for k in (text.find("PackagePreferences:"), text.find("per-package config:")) if k >= 0), -1)
+    start = next((k for k in (text.find("PackagePreferences:"), text.find("per-package config:")) if k >= 0),
+                 NO_SECTION)
     if start < 0:
         raise RuntimeError("读不到通知渠道状态，停止操作；请检查 USB 调试连接和系统权限")
     text = text[start:]
-    cur, fixed, app_off, channels = None, False, {}, {}
+    # `fixed` 不在这里起手：它只在 AppSettings 行里赋值，而读它那一条要 `cur` 为真（同一次迭代里才可能）。
+    cur, app_off, channels = None, {}, {}
     locked, foreground = set(), set()
     for line in text.splitlines():
         m = re.match(r"\s*AppSettings: (\S+)(?: \((\d+)\))?", line)

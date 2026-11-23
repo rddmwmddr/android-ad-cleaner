@@ -58,6 +58,15 @@ GREY_PAGE = page(text(NAME, "[0,111][1080,360]"),
 VANISHED_PAGE = page(text(NAME, "[0,111][1080,360]"))
 
 
+class RowOfTests(unittest.TestCase):
+    def test_a_recognised_switch_becomes_a_clickable_row_unchanged(self):
+        got = toggling.row_of((NAME, True, XY))
+        self.assertEqual(got, snap.Row(title=NAME, bounds=(XY[0], XY[1], XY[0], XY[1]),
+                                       checked=True, clickable=True))
+        self.assertFalse(got.disabled)      # 灰态只由 greyed() 判，拨动这一层不猜
+        self.assertEqual(toggling.row_of((NAME, False, XY)).checked, False)
+
+
 class ClickTests(unittest.TestCase):
     def test_a_row_already_at_the_target_is_not_clicked(self):
         self.assertTrue(toggling.can_click(make(OFF_PAGE).rows[0], True))
@@ -105,6 +114,13 @@ class GreyedTests(unittest.TestCase):
         self.assertTrue(toggling.greyed(grey, XY))
         self.assertTrue(grey.rows[0].disabled)      # 同一份判据：行上的灰态与 greyed() 一致
         self.assertFalse(toggling.greyed(make(ON_PAGE), XY))
+
+    def test_a_snapshot_without_its_tree_is_refused_with_the_way_back(self):
+        bare = make(ON_PAGE).with_tree(None)
+        with self.assertRaises(ValueError) as caught:
+            toggling.greyed(bare, XY)
+        self.assertEqual(str(caught.exception),
+                         "判灰要页面树：先用 ScreenSnapshot.with_tree() 把 tree 装回")
 
 
 class SideEffectTests(unittest.TestCase):

@@ -664,6 +664,62 @@ class HiddenModelTests(unittest.TestCase):
         self.assertEqual(chan.phone_model(reader), "")
 
 
+class HiddenStoreFormatTests(unittest.TestCase):
+    """名单文件的读写口径：BOM、制表符、注释行、重复与写不进去的目录。
+
+    这些都是「下一轮扫描不再列出」那条验收的输入面：读错一行就等于把一个渠道又列回去，
+    或者把一条注释当成渠道。
+    """
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.root = Path(self.dir.name)
+
+    def write(self, text):
+        (self.root / f"ui-hidden-{HIDDEN_MODEL}.tsv").write_bytes(text.encode("utf-8"))
+
+    def test_a_bom_comment_lines_and_blank_fields_are_not_keys(self):
+        self.write(f"\ufeff{HIDDEN_PK}\t{HIDDEN_CID}\n"
+                   "#commented\tcid\n"
+                   "   #indented\tcid2\n"
+                   "com.empty\t\n"
+                   "no-tab-here\n")
+        self.assertEqual(chan.UiHidden(self.root, HIDDEN_MODEL).load(), {(HIDDEN_PK, HIDDEN_CID)})
+
+    def test_the_first_tab_splits_the_package_from_the_channel_id(self):
+        self.write("com.a\tb\tc\n")
+        self.assertEqual(chan.UiHidden(self.root, HIDDEN_MODEL).load(), {("com.a", "b\tc")})
+
+    def test_no_model_means_no_file_and_nothing_remembered(self):
+        store = chan.UiHidden(self.root, "")
+        self.assertFalse(store.available)
+        self.assertEqual(store.load(), set())
+        self.assertEqual(store.remember([(HIDDEN_PK, HIDDEN_CID)]), 0)
+        self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_the_same_key_twice_in_one_call_is_written_once(self):
+        store = chan.UiHidden(self.root, HIDDEN_MODEL)
+        self.assertEqual(store.remember([(HIDDEN_PK, HIDDEN_CID), (HIDDEN_PK, HIDDEN_CID)]), 1)
+        self.assertEqual(store.load(), {(HIDDEN_PK, HIDDEN_CID)})
+
+    def test_a_key_with_a_blank_field_is_dropped(self):
+        store = chan.UiHidden(self.root, HIDDEN_MODEL)
+        self.assertEqual(store.remember([("", HIDDEN_CID), (HIDDEN_PK, " ")]), 0)
+        self.assertEqual(store.load(), set())
+
+    def test_a_root_that_cannot_be_written_is_not_a_failure(self):
+        blocker = self.root / "blocked"
+        blocker.write_text("not a directory", encoding="utf-8")
+        store = chan.UiHidden(blocker / "sub", HIDDEN_MODEL)
+        self.assertEqual(store.remember([(HIDDEN_PK, HIDDEN_CID)]), 0)
+
+    def test_the_file_is_utf8_bytes_with_one_key_per_line(self):
+        chan.UiHidden(self.root, HIDDEN_MODEL).remember([(HIDDEN_PK, HIDDEN_CID)])
+        raw = (self.root / f"ui-hidden-{HIDDEN_MODEL}.tsv").read_bytes()
+        self.assertEqual(raw, f"{HIDDEN_PK}\t{HIDDEN_CID}\n".encode("utf-8"))
+
+
 # ---- failure_context_582 ----
 # #582 渠道失败行带上包名，MISMATCH 另附一条判据读数：同名渠道分属不同 App 时能区分。
 #

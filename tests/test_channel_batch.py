@@ -37,6 +37,31 @@ def outcomes(planned):
     return [(row.pk, None if row.queued else row.outcome.kind) for row in planned]
 
 
+# 找机位只在渠道 ID 里出现：保护判据吃的是 ID，不是清单里那一列显示名
+CID_SPOT = ("com.photo", "找机位推广", "推荐")
+
+
+class ListingTests(unittest.TestCase):
+    def test_the_channel_list_carries_entries_and_no_made_up_sets(self):
+        read = listing(ON_A, app_off=[A[0]])
+        self.assertEqual(read.channels[(A[0], A[1])], batch.ChannelEntry(*ON_A[2:]))
+        self.assertEqual(read.app_off, {A[0]: True})
+        self.assertEqual((read.locked, read.foreground), (frozenset(), frozenset()))
+
+    def test_the_app_switch_column_is_copied_not_shared(self):
+        source = {A[0]: False}
+        read = batch.channel_list_of({}, source)
+        source[A[0]] = True
+        self.assertEqual(read.app_off, {A[0]: False})
+
+
+class PredicateTests(unittest.TestCase):
+    def test_failed_answers_for_the_closing_direction_unless_asked_otherwise(self):
+        self.assertTrue(batch.failed(batch.Outcome(batch.NO_CHANNEL)))
+        self.assertFalse(batch.failed(batch.Outcome(batch.APP_OFF)))
+        self.assertTrue(batch.failed(batch.Outcome(batch.APP_OFF), want_on=True))
+
+
 class QueueTests(unittest.TestCase):
     def test_channels_in_the_target_direction_are_queued_and_nothing_else_is(self):
         planned = batch.plan_queue([A, B], listing(ON_A, ON_B), False)
@@ -59,6 +84,14 @@ class QueueTests(unittest.TestCase):
         self.assertEqual((on.outcome.kind, on.outcome.detail), (batch.PROTECTED, "当前状态 ON"))
         restoring = batch.plan_queue([SPOT], listing((*SPOT, 0, False)), True)[0]
         self.assertTrue(restoring.queued)
+
+    def test_protection_reads_the_channel_id_not_the_display_label(self):
+        planned = batch.plan_queue([CID_SPOT], listing((*CID_SPOT, 3, False)), False)[0]
+        self.assertEqual(planned.outcome.kind, batch.PROTECTED)
+
+    def test_an_out_of_the_way_item_keeps_its_whole_identity(self):
+        done = batch.plan_queue([A], listing(OFF_A), False)[0]
+        self.assertEqual(done.item, A)
 
     def test_missing_deleted_and_app_off_are_prefiltered_as_their_own_outcomes(self):
         cases = {
@@ -148,6 +181,14 @@ class RecheckTests(unittest.TestCase):
     def test_protected_is_reported_even_when_the_channel_is_on(self):
         row = batch.recheck_row(listing((*SPOT, 3, False)), *SPOT, frozenset())
         self.assertEqual((row.state, row.protected), ("ON", True))
+
+    def test_protection_reads_the_channel_id_not_the_display_label(self):
+        row = batch.recheck_row(listing((*CID_SPOT, 3, False)), *CID_SPOT, frozenset())
+        self.assertEqual((row.protected, row.still_open), (True, False))
+
+    def test_a_channel_missing_from_the_list_is_not_open_and_not_protected(self):
+        row = batch.recheck_row(listing(), *A, frozenset())
+        self.assertEqual((row.state, row.protected, row.still_open), ("--", False, False))
 
 
 class StateTests(unittest.TestCase):

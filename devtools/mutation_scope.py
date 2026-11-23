@@ -151,6 +151,45 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_vivo_2547da_android17_recipe.py", "tests/test_xiaomi_24129pn74c_recipe.py",
         "tests/test_xiaomi_2505apx7bc_recipe.py", "tests/test_xiaomi_25060rk16c_recipe.py"
     ),
+    # 渠道判定族二（#1537），同样由覆盖矩阵量出：批处理记账、拨动决定、隐藏名单与屏幕快照被
+    # 读屏与回归用例执行到；`screen_snapshot` 是这一族的数据层，覆盖面最宽（38 个测试文件）。
+    "tool/channel_batch.py": (
+        "tests/test_adb_link.py", "tests/test_channel_arrive.py", "tests/test_channel_batch.py",
+        "tests/test_channel_classification.py", "tests/test_channel_outcomes.py",
+        "tests/test_channel_page.py", "tests/test_feedback_safety.py", "tests/test_issue_regressions.py",
+        "tests/test_layout_and_verdict_regressions.py", "tests/test_lock_and_disconnect_regressions.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_phone_host.py",
+        "tests/test_tap_notice_regressions.py",
+    ),
+    "tool/channel_toggle.py": (
+        "tests/test_channel_outcomes.py", "tests/test_channel_page.py", "tests/test_channel_toggle.py",
+        "tests/test_feedback_safety.py", "tests/test_issue_regressions.py",
+        "tests/test_page_and_link_regressions.py",
+    ),
+    "tool/ui_hidden.py": (
+        "tests/test_channel_classification.py", "tests/test_channel_outcomes.py",
+        "tests/test_feedback_safety.py", "tests/test_issue_regressions.py",
+        "tests/test_layout_and_verdict_regressions.py", "tests/test_page_and_link_regressions.py",
+        "tests/test_release_regressions.py",
+    ),
+    "tool/screen_snapshot.py": (
+        "tests/test_adb_link.py", "tests/test_catalog.py", "tests/test_channel_arrive.py",
+        "tests/test_channel_classification.py", "tests/test_channel_decide.py",
+        "tests/test_channel_outcomes.py", "tests/test_channel_page.py", "tests/test_channel_snapshot.py",
+        "tests/test_channel_toggle.py", "tests/test_entries.py", "tests/test_fixtures.py",
+        "tests/test_honor_recipe.py", "tests/test_honor_wkl_recipe.py", "tests/test_issue_regressions.py",
+        "tests/test_layout_and_verdict_regressions.py", "tests/test_lock_and_disconnect_regressions.py",
+        "tests/test_main_switch_bar.py", "tests/test_off_title_fallback.py",
+        "tests/test_oneplus_plz110_recipe.py", "tests/test_oppo_pmx110_recipe.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_phone_base.py",
+        "tests/test_phone_dismisser.py", "tests/test_phone_interface.py", "tests/test_phone_launcher.py",
+        "tests/test_phone_navigator.py", "tests/test_phone_settings_search.py",
+        "tests/test_phone_toggler.py", "tests/test_recipe_call_snapshots.py", "tests/test_recipe_nav.py",
+        "tests/test_regressions.py", "tests/test_release_regressions.py", "tests/test_row.py",
+        "tests/test_tap_notice_regressions.py", "tests/test_vivo_2417_browser_entry.py",
+        "tests/test_vivo_2547da_android17_recipe.py", "tests/test_xiaomi_24129pn74c_recipe.py",
+        "tests/test_xiaomi_25060rk16c_recipe.py",
+    ),
     "tool/host.py": (
         "tests/test_coverage_note.py", "tests/test_android_view.py", "tests/test_phone_host.py",
         "tests/test_summary.py", "tests/test_result_retry.py", "tests/test_job.py",
