@@ -266,6 +266,14 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_adb_link.py", "tests/test_page_and_link_regressions.py", "tests/test_phone_host.py",
         "tests/test_plan.py", "tests/test_job.py",
     ),
+    # 数据与词表（#1544），同样由覆盖矩阵量出：`entries` 被入口速查 / 词库 / adapt 的用例执行到，
+    # `vocab` 只被它自己的用例与 `test_adapt_cli` 执行到。
+    "tool/entries.py": (
+        "tests/test_adapt_cli.py", "tests/test_catalog.py", "tests/test_entries.py",
+        "tests/test_recipe_call_snapshots.py", "tests/test_vocab.py",
+        "tests/test_xiaomi_24129pn74c_recipe.py",
+    ),
+    "tool/vocab.py": ("tests/test_adapt_cli.py", "tests/test_vocab.py"),
     # 手机拨动族（#1534）：`session` 只有三个 `__init__` 与 `set_app()` 被执行，44 份用例里绝大多数
     # 的接触来自 `Phone` 装配。`toggler` 不进表（实测见 ADR-0043「tool/ 其余模块（#1445）」）：
     # 纯函数与索引已被 13 份用例守住，存活集中在该模块自己的编排段（`off` 34、`confirm` 3）。

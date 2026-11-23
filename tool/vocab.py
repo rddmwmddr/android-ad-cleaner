@@ -197,7 +197,7 @@ def has_page(label):
 
 
 def group_of(family, label):
-    prefix = label.split("·", 1)[0].strip()
+    prefix = label.partition("·")[0].strip()
     return PAGES.get((family, prefix)) or FALLBACK.get((family, prefix))
 
 
@@ -257,7 +257,7 @@ def _absorb(out, family, script, facts, call_site=None):
         else:
             strings = _strings(names)
             if strings is not None:
-                here += [Word(text, direction_of(text), family, group, label, script,
+                here += [Word(text, direction_of(text), family, group, label, script,  # pragma: no mutate：here 此时是新表，`+=` 与 `=` 同值（语义等价）
                               at if call_site is None else call_site, injected)
                          for text, at in strings]
             elif not inside:
@@ -300,7 +300,7 @@ def scan(recipes_dir, injected=None, strategies=None):
             sources.update({name: (recipe_source.STRATEGIES_MODULE, source)
                             for name, source in strategies.items()})
     for script, facts in recipe_source.scan_dir(recipes_dir, FAMILY).items():
-        family = FAMILY[script.split("/", 1)[0].lower()]
+        family = FAMILY[script.partition("/")[0].lower()]
         before = len(out.words)
         out.notes += _notes(facts, script)
         _absorb(out, family, script, facts)
@@ -375,7 +375,7 @@ def reverse_rows(words):
     rows = set()
     for word in words:
         if has_page(word.page):
-            rows.add((key_of(word.text), word.text, LABEL.get(word.family, word.family),
+            rows.add((key_of(word.text), word.text, LABEL[word.family],
                       word.group or "未归类", word.page, word.kind))
     return [row[1:] for row in sorted(rows)]
 
@@ -401,7 +401,7 @@ def render(recipes_dir):
              f"这里读 `p.off()` 和 `close_named()`：共 {len(words)} 处词，另有 {found.whole_page} 处没有点名（整页全关，没有词）。", ""]
     for family, groups in ENTRIES.items():
         brands = "、".join(b for b, f in FAMILY.items() if f == family)
-        lines += [f"## {LABEL.get(family, family)}（{brands}）", ""]
+        lines += [f"## {LABEL[family]}（{brands}）", ""]
         for group in groups:
             lines += _group_section(group, by_group[(family, group)])
     lines += [f"## 未解析（only= {len(found.unresolved_only)} 处，close_named {len(found.unresolved_close)} 处，"
@@ -419,7 +419,7 @@ def render(recipes_dir):
     lines += ["", f"## 未归类（{len(found.unclassified)} 处）", "",
               "页面标签归不到分组。`<变量>` 是运行时才定的标签，它的词只在下面列名、不进反查表；"
               "其余是脚本里的真实标签，`PAGES` / `FALLBACK` 里没有，这些词仍进反查表、分组记「未归类」。", ""]
-    lines += [f"- {LABEL.get(c.family, c.family)} `{c.text}`：`{c.script}:{c.line}`"
+    lines += [f"- {LABEL[c.family]} `{c.text}`：`{c.script}:{c.line}`"
               + (f"（{'、'.join(c.words)}）" if c.words else "")
               for c in found.unclassified]
     lines += ["", f"## 读不到的脚本（{len(found.silent)} 份）", "",
@@ -444,16 +444,15 @@ def gaps(recipes_dir, folder):
     目录名按大小写不敏感匹配、容忍尾斜杠：认得出目录、却按原样拼 `startswith` 前缀，
     这份脚本自己的词会被当成漏项。"""
     folder = _folder_name(recipes_dir, folder)
-    family = FAMILY.get(folder.split("/", 1)[0].lower())
+    family = FAMILY.get(folder.split("/", 1)[0].lower())  # pragma: no mutate：目录名恒为「家族/型号」两段，split 的 maxsplit 变体取 [0] 同值（语义等价）
     if not family:
         raise ValueError(f"认不出 {folder} 的家族：目录名要写成 <家族>/<型号>")
     found = scan(recipes_dir)
     words = found.words
     mine = {key_of(word.text) for word in words if word.script.startswith(folder + "/")}
     missing = [word for word in words
-               if word.family == family and word.kind == OFF
-               and not word.script.startswith(folder + "/") and key_of(word.text) not in mine]
-    label = LABEL.get(family, family)
+               if word.family == family and word.kind == OFF and key_of(word.text) not in mine]
+    label = LABEL[family]
     lines = [f"# 查漏：{folder}", "",
              f"同家族（{label}）别的机型关过、这份脚本没写的词条。这是写脚本之后的自查清单，不是缺陷报告："
              "同族的词在这台机上可能换了叫法、对应 App 没装，或者有意不关。", ""]
@@ -469,7 +468,7 @@ def gaps(recipes_dir, folder):
     by_group = defaultdict(list)
     for word in missing:
         by_group[word.group or "未归类"].append(word)
-    order = [g for g in ENTRIES.get(family, {}) if g in by_group]
+    order = [g for g in ENTRIES[family] if g in by_group]
     order += sorted(set(by_group) - set(order))
     lines += [f"共 {len({key_of(word.text) for word in missing})} 条，按分组列：", ""]
     for group in order:
@@ -491,7 +490,7 @@ def _folder_name(recipes_dir, folder):
     actual: list[str] = []
     for seg in parts:
         match = next((name for name in sorted(os.listdir(current))
-                      if name.lower() == seg.lower() and os.path.isdir(os.path.join(current, name))), None)
+                      if name.lower() == seg.lower() and os.path.isdir(current + "/" + name)), None)
         if match is None:
             raise FileNotFoundError(f"recipes/ 下没有 {folder} 这个目录")
         actual.append(match)
