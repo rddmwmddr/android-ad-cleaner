@@ -190,6 +190,21 @@ pragma 全部写明「语义等价」或「不可达」，理由随源码行。�
 - **`catalog/loader` 进表**（#1541），与表内模块同口径；映射行由覆盖矩阵量出（51 个测试文件、61385 行），`tests/recipe_case.py` 按同一手法换成十二个继承子类文件。初始实测 409 个 mutant、存活 73、无测试 0，全在装载入口的输入边界与命名空间视图上：目录取唯一 `.toml` 的整条分支此前没有用例（9 条）、`ONLY` / `HALTED` 写回与六个 `rt` 视图名（14 条）、`difflib` 候选数与提示分隔符、`args` 里的再入块、嵌套实参表里的变量引用、分支内绑定的可见性与 `where` 下标链、四个钩子名的别名绑定、常量的 `isupper()` / `callable` 过滤。清零只靠补断言，没有新建 harness。两条 pragma 都是语义等价：两处 `read_text(encoding="utf-8")` 的 codec 名大小写与省略编码在判定平台上不可区分。另外把 `get_close_matches` 的 `n=3` 去掉（默认就是 3），顺带消掉两条分不出行为的 mutant。两个超时是 `Runtime(p, only, clock)` 去掉注入的假钟：改回真 `time` 后有用例真的等，mutmut 记 timeout，算检测到、不进存活。
 - **`stdio` / `troubleshooting` / `backups` 进表**（#1546），与表内模块同口径；映射行按覆盖矩阵量出（`stdio` 4 个测试文件、`troubleshooting` 16 个、`backups` 27 个），三份都清到存活 0、无测试 0。初始实测 18 / 100 / 60 个 mutant，存活 1 / 36 / 3。清零靠补行为断言：`stdio` 补「一个流没有 `reconfigure()` 时只跳过它、后面的流转常转」（`continue` 退化成 `break` 就漏转 stderr）；`troubleshooting` 补识别词表逐条（6 个标记各一条）与只读检查的四类失败 / 成功文案，以及 `subprocess.run` 的固定参数（`capture_output` / `text` / `encoding` / `errors` / `timeout`，`os.name == "nt"` 下还有 `creationflags`）；`backups` 补 `create()` 在同一分钟重复调用落进同一个目录、不抛错（`exist_ok` 退化成 `None` / `False` 时第二次会 `FileExistsError`）。清零途中把 `accessibility_summary` 的 `configured in {"", "null"}` 收成 `configured == "null"`：返回值先 `strip()` 再 `splitlines()`，末尾空行已被吃掉，空串那个成员不可达（消掉两条等价变异）。
 - **`run` 不进表（表外已知缺口，本票实测）**：2395 个 mutant、杀死 1514、存活 816、无测试 64、超时 1（`cmd_backup` 反转包列表探测条件的那一只走到真 adb 上等超时，按检测到算）。存活集中在命令的渲染与编排：`cmd_quickapp` 146、`cmd_check` 80、`cmd_status_json` 72、`msa_net` 63、`cmd_backup` 61、`cmd_devices` 47、`cmd_chan_scan` 43、`cmd_unsuspend` 39、`cmd_recipe` 31、`cmd_suspend` 29、`cmd_finish` 29、`quickapps` 29、`info` 26、`set_quickapp_service` 20、`dispatch` 14，其余 ≤11。64 个无测试全落在 5 个函数上：`quickapp_switch` 22、`cmd_dev_off` 20、`latest_backup` 12、`sh_all` 6、`py` 4——它们在这批用例里都被上层 patch 掉，唯一的直呼者是子进程对拍。原因是 `run.py` 的对外契约（30 条用例的 rc / stdout / stderr 逐字节）由 `tests/test_run_commands.py::CliParityTests` 守着，而那套驱动器起 `python tool/run.py` 子进程：副本里没有 `tool/` 视角，整类在 `UNUSABLE` 里摘掉，所以这些输出语句与只在子进程里跑到的入口在副本里既无覆盖也无断言。要在副本里拿回同一份 oracle，得把 30 条用例改写成进程内假 adb 驱动器（新造一套替身）或给 CLI 入口在副本里接一条 `src` 视角（改产品代码），成本闸门排除；管线本身（`src` 镜像、`scope_of`）不必动。模块只有整体才进表，故整份登记为缺口；下次纳入时按同一口径逐份清到零。
+- **零变异节点 9 份实测登记**（#1547）：`geometry` / `phone/__init__` / `catalog/__init__` / `phone/errors` / `phone/surface` / `recipe_kit` / `recipe_nav` / `recipe_steps` / `recipe_strategies` 逐份跑 `devtools/mutation.py`，mutmut 原文结论统一是「无可变异节点：<模块> 里没有函数体可改」，`.mutmut/<组>/mutants/src/<模块>.meta` 里 `hash_by_function_name` 与 `exit_code_by_key` 都是空表——**mutant 0、存活 0、无测试 0、pragma 0**。九份的 AST 里 `def` 全为 0，`phone/errors.py` 的 `ScreenLocked` 是零方法的异常类，mutmut 生成不出可判节点，所以这不是「有 mutant 但缺测试」的表外缺口，而是**无可变异节点**。映射行只为让 mutmut 收集临时挂上、跑完即撤（零节点模块不入表；`reader` 的保留行是唯一例外，理由见 Consequences）。成因只有三类：
+
+| 模块 | mutant | 存活 | 无测试 | 结论 / 理由 |
+|---|---|---|---|---|
+| `geometry` | 0 | 0 | 0 | 常量数据：一屏比例字面量（`TOP_BAND` … `TAPPABLE_BAND`），模块体只有赋值 |
+| `phone/surface` | 0 | 0 | 0 | 常量数据：`DEVICE_PROPERTIES` / `DEVICE_VERBS` 两个 `frozenset` 与 `SCRIPT_SURFACE` 的并集 |
+| `phone/errors` | 0 | 0 | 0 | 异常类：`ScreenLocked(RuntimeError)` 只有一句 docstring，零方法 |
+| `phone/__init__` | 0 | 0 | 0 | 转发壳：包 docstring 声明子模块边界，无代码 |
+| `catalog/__init__` | 0 | 0 | 0 | 转发壳：`from .loader` / `from .schema` 的 re-export 与 `__all__` |
+| `recipe_kit` | 0 | 0 | 0 | 转发壳：从 `recipe_runtime` re-export 的 11 个名字 |
+| `recipe_nav` | 0 | 0 | 0 | 转发壳：`sys.path` 注入 + `from recipe_lib import *` |
+| `recipe_steps` | 0 | 0 | 0 | 转发壳：同 `recipe_nav` |
+| `recipe_strategies` | 0 | 0 | 0 | 转发壳：同 `recipe_nav` |
+
+  这三种成因下 mutation 没有判据价值：常量数据的对错是数值本身（`GeometryGuards` 守比例字面量只出现在 `geometry.py`），转发壳的对错是名字面（`ScriptSurfaceTests` 守脚本面、`test_recipe_nav` 的 `SurfaceTests` 守 re-export 名单），异常类的对错是类型层级。它们都不补测试、不入表，也不构成表外缺口——纳入一个零节点的模块只会让 mutmut 每轮空转一次收集。
 
 ## Consequences
 
