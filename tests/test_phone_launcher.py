@@ -563,7 +563,11 @@ class LandingNoteTests(unittest.TestCase):
 
 
 class StartRecoveryTests(unittest.TestCase):
-    """`start()` 的落点恢复：退一次、重新拉起一次、仍不对才停段。"""
+    """`start()` 的落点恢复：退一次、重新拉起一次、仍不对才停段。
+
+    这里断言 `_launch` 的转发实参而不是设备命令：`settle` / `foreground` 只在该函数内部
+    当等待预算与目标前台用，不下发成设备命令，外部效果看不到它们，锁在这一层是唯一能钉住
+    这两项转发的地方（`activity` 虽进 `am start`，但与它们在同一处转发、同一层断言）。"""
 
     def setUp(self):
         self.clock = clocked(self, fast, Clock())
@@ -584,6 +588,7 @@ class StartRecoveryTests(unittest.TestCase):
                          "  · 退出非预期页面重进后，已落在 com.x 的预期页面")
 
     def test_a_landing_in_another_app_relaunches_with_the_same_arguments(self):
+        """落在别的 App 用同一组实参重拉；activity/settle/foreground 只在该层转发，外部命令看不出。"""
         focuses = iter(["com.other/.A", "com.x/.A"])
         stage, screen = self.stage(lambda: next(focuses, "com.x/.A"))
         stage.expect_page.side_effect = [False, True]
@@ -592,6 +597,7 @@ class StartRecoveryTests(unittest.TestCase):
                          [call("com.x", "A.B", 3.3, "fg"), call("com.x", "A.B", 3.3, "fg")])
 
     def test_a_promo_page_is_left_and_the_app_is_relaunched_only_when_back_leaves_it(self):
+        """推广页退一次、回不去才重拉；重拉的实参与调用次数只能在这一层观察（同上的理由）。"""
         focuses = iter(["com.x/.A", "com.other/.A", "com.x/.A"])
         stage, screen = self.stage(lambda: next(focuses, "com.x/.A"))
         stage.expect_page.side_effect = [False, True]
@@ -602,6 +608,7 @@ class StartRecoveryTests(unittest.TestCase):
         self.assertAlmostEqual(self.clock.t, 0.8)
 
     def test_back_that_stays_in_the_app_needs_no_relaunch(self):
+        """返回后仍在目标 App 不重拉；`call_count` 是这条「不重拉」判据在本层最直接的观察点。"""
         stage, screen = self.stage(lambda: "com.x/.A")
         stage.expect_page.side_effect = [False, True]
         stage.start("com.x", activity="A.B", settle=1.2, foreground="com.x", expect=("首页",))
@@ -609,6 +616,7 @@ class StartRecoveryTests(unittest.TestCase):
         self.assertEqual(stage._launch.call_count, 1)
 
     def test_back_into_an_unreadable_foreground_needs_no_relaunch(self):
+        """返回后前台读不出（空串）不算离开、不重拉；同按调用次数锁「不重拉」。"""
         focuses = iter(["com.x/.A", "", "com.x/.A"])
         stage, screen = self.stage(lambda: next(focuses, "com.x/.A"))
         stage.expect_page.side_effect = [False, True]

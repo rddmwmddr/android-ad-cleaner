@@ -300,9 +300,8 @@ def execute(serial, items, want_on=False, verify=False, phone=None, reader=None)
         raise RuntimeError("候选应用通知权限模式发生变化，请按快照核对")
     for item in items:
         value = current.get(item.key)
-        # 走到这里时应用总开关已被 guard 钉回、权限模式已被上面那次复查钉回，
-        # 这一项恒为假，外层两种写法区分不出来（不可达）。
-        banned = not want_on and (apps.get(item.package) or modes[item.package] in BLOCKED)  # pragma: no mutate 不可达
+        # 被禁的应用（总开关关着或权限模式在 BLOCKED）本次没有碰，最终复查不能把它算成失败。
+        banned = not want_on and (apps.get(item.package) or modes[item.package] in BLOCKED)
         if value and not value[2] and (value[1] != 0) != want_on and not banned:
             result.failed.append(item.app + " / " + value[0] + "：最终复查未达目标")
     return result

@@ -235,7 +235,7 @@ def check_draft(p, recipe_path, only=()):
     build = p.shell("getprop ro.build.display.id").strip()
     osv = p.shell("getprop ro.mi.os.version.incremental").strip()
     recorded = str(data.get("build", ""))
-    if recorded and _build_mismatch(recorded, build, osv):   # pragma: no mutate 语义等价：recorded 为空时 startswith("") 恒真，helper 也恒假
+    if recorded and _build_mismatch(recorded, build, osv):
         print(f"⚠ 草稿标注 BUILD {recorded}，这台是 {osv or build}：按安全模式跑（只关点名的开关）")
     recipe = recipe_loader.run(recipe_path, p, only=list(only))
     return {"verified": recipe.rt.verified, "failed_steps": list(recipe.rt.failed_steps)}

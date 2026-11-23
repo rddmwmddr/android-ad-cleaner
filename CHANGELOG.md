@@ -31,7 +31,7 @@
 - devtools 的 followup / triage_audit / release_* 存活清零并进映射表（#1522，ADR-0043）
 - ADR-0043 增 devtools 一节：范围三档、各模块结论与表外缺口（#1523，ADR-0043）
 - 只改测试的 PR 按映射表反查拉起受影响模块并跑变异（#1531，ADR-0043）
-- 渠道判定族：`channel_decide` / `channel_arrive` 进映射表，`chan_fast` 记表外缺口（#1533，ADR-0043）
+- 渠道判定族：`channel_decide` / `channel_arrive` 进表，`chan_fast` 记表外缺口（#1533，ADR-0043）
 - `phone/session` 存活清零进映射表，`phone/toggler` 记表外缺口（#1534，ADR-0043）
 - `adb_link` / `huawei_channels` 存活清零并进变异映射表（#1535，ADR-0043）
 - 读屏基础族：`fast` / `wait` / `captures` 存活清零并进映射表，`row` 记表外缺口（#1536，ADR-0043）
@@ -39,7 +39,7 @@
 - 数据与词表：`entries` / `vocab` 存活清零并进映射表（#1544，ADR-0043）
 - 观测基座 `phone/screen` 存活清零并进映射表（#1538，ADR-0043）
 - 手机导航、弹窗与启动落点三份模块存活清零并进变异映射表（#1539，ADR-0043）
-- 脚本工具面四份 `adapt`/`explore`/`recipe_audit`/`verify_ledger` 清零进映射表（#1545，ADR-0043）
+- 脚本工具面四份 `adapt`/`explore`/`recipe_audit`/`verify_ledger` 清零进表（#1545，ADR-0043）
 - `phone/connection` / `settings_search` / `ui_session` 存活清零进表（#1540，ADR-0043）
 - catalog 装载内核 `loader` 存活清零并进变异映射表（#1541，ADR-0043）
 - 杂项：`stdio`/`troubleshooting`/`backups` 清零进表，`run` 记表外缺口（#1546，ADR-0043）

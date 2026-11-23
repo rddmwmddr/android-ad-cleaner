@@ -14,6 +14,8 @@ import os
 ENV = "AAC_CAPTURES"
 PAGE = "page.xml"
 META = "meta.json"
+# 写现场时不做换行转换。空串留在模块常量里，免得行级 pragma 连带压掉 `""`→`"XX"` 这个可杀变异。
+NO_NEWLINE = ""
 
 # 目录名里不能出现的字符：路径分隔符会让段名跑出 captures/，Windows 的冒号等写不进去。
 _BAD = set('<>:"/\\|?*')
@@ -68,7 +70,7 @@ class Captures:
             os.makedirs(folder, exist_ok=True)
             with open(os.path.join(folder, PAGE), "w",
                       encoding="utf-8",   # pragma: no mutate 语义等价：codec 名大小写不敏感；省略它时取 locale 编码，判定平台（Linux / macOS）的默认就是 UTF-8
-                      newline="") as f:   # pragma: no mutate 语义等价：判定平台是 POSIX，`newline=None` 的换行转换不改变字节
+                      newline=NO_NEWLINE) as f:   # pragma: no mutate 语义等价：判定平台是 POSIX，`newline=None` 的换行转换不改变字节
                 f.write(page)
             with open(os.path.join(folder, META), "w",
                       encoding="utf-8"   # pragma: no mutate 语义等价：同上，`UTF-8` 与省略都写出同一份字节
