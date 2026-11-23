@@ -70,7 +70,8 @@ def accessibility_summary(serial, adb=None):
         if result.returncode or len(lines) != 2 or lines[0].strip() not in {"0", "1"}:
             return "未能读取无障碍服务状态；仍可按下方步骤排查。"
         configured = lines[1].strip()
-        services = set() if configured in {"", "null"} else set(configured.split(":"))
+        # `strip()` 会吃掉末尾的空行，`configured` 不可能是空串：未设置时系统给的是 `null`。
+        services = set() if configured == "null" else set(configured.split(":"))
         if any(not re.fullmatch(r"[\w.]+/[\w.$]+", value) for value in services):
             return "未能识别无障碍服务状态；仍可按下方步骤排查。"
         if lines[0].strip() == "0":
