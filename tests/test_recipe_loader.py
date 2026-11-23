@@ -8,7 +8,7 @@
 import ast
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import fixtures
 
@@ -25,6 +25,7 @@ MODEL_DIRS = tuple(sorted(d for d in (ROOT / "recipes").glob("*/*")
                                                 if f.is_file())))
 
 fixtures.load_tool()
+import catalog  # noqa: E402
 import recipe_loader  # noqa: E402
 
 
@@ -84,6 +85,27 @@ def module_body_offenders(source, filename="<script>"):
             continue
         found.append((node.lineno, type(node).__name__))
     return found
+
+
+class LoaderEntryTests(unittest.TestCase):
+    """唯一装载入口的两条契约（#1543）：`.py` 明确拒绝；`only` / `clock` / `namespace` 原样交给 catalog。"""
+
+    def test_a_py_path_is_rejected_with_the_migration_message(self):
+        with self.assertRaisesRegex(ValueError, "不再装载 .py 脚本"):
+            recipe_loader.load("旧脚本.py", Mock())
+
+    def test_run_forwards_every_option_and_returns_the_loaded_recipe(self):
+        phone = Mock(name="phone")
+        clock = fixtures.Clock()
+        loaded = Mock(name="recipe")
+        with patch.object(catalog, "load", return_value=loaded) as load:
+            got = recipe_loader.run("草稿.toml", phone,
+                                    only=["甲"], clock=clock, namespace={"tail": 1})
+        self.assertIs(got, loaded)
+        loaded.run.assert_called_once_with()
+        self.assertEqual(load.call_args.args, ("草稿.toml", phone))
+        self.assertEqual(load.call_args.kwargs,
+                         {"only": ["甲"], "clock": clock, "namespace": {"tail": 1}})
 
 
 class RecipeLoaderGuardTests(unittest.TestCase):

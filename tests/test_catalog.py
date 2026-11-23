@@ -2484,5 +2484,384 @@ class CatalogAttributionTests(unittest.TestCase):
         self.assertEqual([call.name for call in facts.calls], ["gear"])
 
 
+class _Flushed(io.StringIO):
+    """记 flush 次数：客户端按行读引擎的进度输出，`print(..., flush=True)` 是唯一让它立刻看见的手段。"""
+
+    def __init__(self):
+        super().__init__()
+        self.flushes = 0
+
+    def flush(self):
+        self.flushes += 1
+        super().flush()
+
+
+def runtime_stand_in():
+    """一台不连手机的 Phone 加这次执行：段包装与落点判据的用例共用这一份装配。"""
+    phone = fixtures.phone_stub("test", fast_mod=fast, W=1080, H=2340)
+    return phone, recipe_runtime.Runtime(phone, [], fixtures.Clock())
+
+
+def wrapped(rt, body, name="甲"):
+    """跑一次段包装，连同 stdout 原文与 flush 次数一起交出。"""
+    out = _Flushed()
+    with contextlib.redirect_stdout(out):
+        result = rt.run_step(name, body)
+    return result, out.getvalue(), out.flushes
+
+
+class RuntimeStateTests(unittest.TestCase):
+    """一次执行的初值与回读台账（#1543）：脚本读的默认值、`confirm()` 的唯一写入口与 Counter 的四种读数。"""
+
+    def setUp(self):
+        self.phone, self.rt = runtime_stand_in()
+
+    def test_a_fresh_run_has_empty_ledgers_and_no_page_landing(self):
+        rt = self.rt
+        self.assertEqual(rt.only, [])
+        self.assertIsNone(rt.namespace)
+        self.assertIs(rt.halted, False)
+        self.assertEqual(dict(rt.constants), {})
+        self.assertEqual(rt.target, "")
+        self.assertEqual(rt.bindings, {})
+        self.assertEqual(rt.steps, [])
+        self.assertEqual(rt.results, [])
+        self.assertEqual(rt.failed_steps, [])
+        self.assertEqual(rt.skipped_steps, [])
+        self.assertEqual(rt.halted_steps, [])
+        self.assertEqual(rt.verified, 0)
+
+    def test_confirm_defaults_to_one_and_only_counts_truthy_batches(self):
+        self.rt.confirm()
+        self.assertEqual(self.rt.verified, 1)
+        self.rt.confirm(4)
+        self.assertEqual(self.rt.verified, 5)
+        self.rt.confirm(0)
+        self.assertEqual(self.rt.verified, 5)
+
+    def test_the_counter_reads_and_writes_the_runtime_ledger(self):
+        counter = self.rt.counter
+        counter += 3
+        self.assertEqual(self.rt.verified, 3)
+        self.assertEqual(int(counter), 3)
+        self.assertEqual(repr(counter), "3")
+        self.assertEqual(hash(counter), hash(3))
+        self.assertEqual(counter, 3)
+        other = recipe_runtime.Runtime(self.phone, [], fixtures.Clock())
+        other.confirm(3)
+        self.assertEqual(counter, other.counter)
+        other.confirm(1)
+        self.assertNotEqual(counter, other.counter)
+
+
+class ActiveCredentialTests(unittest.TestCase):
+    """`activate()` 的独占凭据（#1543）：返回的就是这次执行；第二个开始要报错，退出后可再进入。"""
+
+    def setUp(self):
+        self.phone, self.rt = runtime_stand_in()
+
+    def test_activate_hands_back_this_runtime_and_blocks_a_second_one(self):
+        with self.rt.activate() as held:
+            self.assertIs(held, self.rt)
+            with self.assertRaises(RuntimeError) as caught:
+                self.rt.activate().__enter__()
+        self.assertEqual(str(caught.exception), "同一时刻只允许一个活动执行：上一个机型脚本还没跑完")
+        with self.rt.activate() as again:
+            self.assertIs(again, self.rt)
+
+
+class StepRegistrationTests(unittest.TestCase):
+    """段装饰器（#1543）：只登记、不执行；两个段按声明顺序排队，段名重复在装饰那一刻报错。"""
+
+    def setUp(self):
+        self.phone, self.rt = runtime_stand_in()
+
+    def test_decorating_registers_without_running_and_keeps_the_action(self):
+        def body():
+            return "ran"
+
+        decorated = self.rt.step("甲")(body)
+        self.assertIs(decorated, body)
+        self.assertEqual(self.rt.steps,
+                         [recipe_runtime.Step("甲", body, body.__code__.co_firstlineno)])
+
+    def test_two_distinct_segments_queue_in_declaration_order(self):
+        def first():
+            pass
+
+        def second():
+            pass
+
+        self.rt.step("甲")(first)
+        self.rt.step("乙")(second)
+        self.assertEqual([(step.name, step.action, step.line) for step in self.rt.steps],
+                         [("甲", first, first.__code__.co_firstlineno),
+                          ("乙", second, second.__code__.co_firstlineno)])
+
+    def test_a_duplicate_name_is_rejected_at_decoration_time(self):
+        self.rt.step("甲")(lambda: None)
+        with self.assertRaises(recipe_runtime.DuplicateStep) as caught:
+            self.rt.step("甲")(lambda: None)
+        self.assertIn("段名重复：'甲'", str(caught.exception))
+
+
+class TailHookTests(unittest.TestCase):
+    """`run()` 的收尾钩子（#1543）：段跑完后把手机与这次执行交给命名空间里的 `tail`；没有就不做。"""
+
+    def setUp(self):
+        self.phone, self.rt = runtime_stand_in()
+        self.phone.locked = lambda: False
+
+    def test_tail_runs_after_every_segment_with_the_phone_and_this_run(self):
+        seen, order = [], []
+        self.rt.namespace = {"tail": lambda p, rt: seen.append((p, rt))}
+        self.rt.step("甲")(lambda: order.append("甲"))
+        with contextlib.redirect_stdout(_Flushed()):
+            self.rt.run()
+        self.assertEqual(order, ["甲"])
+        self.assertEqual(seen, [(self.phone, self.rt)])
+
+    def test_a_missing_or_non_callable_tail_is_skipped(self):
+        for namespace in (None, {}, {"tail": "not-callable"}):
+            with self.subTest(namespace=namespace):
+                self.rt.namespace = namespace
+                with contextlib.redirect_stdout(_Flushed()):
+                    self.rt.run()
+
+
+class StepWrapperTests(unittest.TestCase):
+    """段包装（#1543）：结局、跳过出口、中止、可选钩子与每秒一次的进度行都只在这里定义。"""
+
+    def setUp(self):
+        self.phone, self.rt = runtime_stand_in()
+        self.phone.locked = lambda: False
+
+    def test_a_normal_segment_records_done_resets_misses_and_reports_seconds(self):
+        clock = self.rt.clock
+        clock.t = 1.0
+
+        def body():
+            clock.t = 4.0
+
+        result, text, flushes = wrapped(self.rt, body)
+        self.assertIs(result, body)
+        self.assertEqual(self.rt.results, [("甲", "完成")])
+        self.assertIn("== 甲", text)
+        self.assertIn("(3 秒)", text)
+        self.assertEqual(self.phone.miss, 0)
+        self.assertEqual(flushes, 2)
+
+    def test_the_observer_sees_every_segment_name_even_when_filtered_out(self):
+        seen = []
+        self.rt.only = ["乙"]
+        with patch.object(recipe_runtime, "OBSERVER", seen.append):
+            with contextlib.redirect_stdout(_Flushed()):
+                self.rt.run_step("甲", lambda: seen.append("body"))
+        self.assertEqual(seen, ["甲"])
+
+    def test_after_a_halt_the_remaining_segments_are_recorded_not_run(self):
+        self.rt.halted = True
+        ran = []
+
+        def body():
+            ran.append(1)
+
+        result, text, flushes = wrapped(self.rt, body)
+        self.assertIs(result, body)
+        self.assertEqual(ran, [])
+        self.assertEqual(self.rt.results, [("甲", "未执行")])
+        self.assertEqual(self.rt.failed_steps, ["甲"])
+        self.assertEqual(self.rt.halted_steps, ["甲"])
+        self.assertIn("== 甲", text)
+        self.assertIn("  · 未执行：前一段中止了整批", text.splitlines())
+        self.assertEqual(flushes, 2)
+
+    def test_a_declared_skip_records_the_segment_as_skipped(self):
+        def body():
+            self.rt.skip("型号不符")
+
+        result, text, flushes = wrapped(self.rt, body)
+        self.assertEqual(self.rt.results, [("甲", "跳过")])
+        self.assertEqual(self.rt.skipped_steps, ["甲"])
+        self.assertIn("跳过：型号不符", text)
+        self.assertEqual(flushes, 3)
+
+    def test_a_failed_segment_saves_the_scene_and_lists_the_step(self):
+        saves = []
+        self.phone.screen.save_capture = lambda: saves.append(True)
+
+        def body():
+            raise RuntimeError("开关没找到")
+
+        result, text, flushes = wrapped(self.rt, body)
+        self.assertEqual(saves, [True])
+        self.assertEqual(self.rt.results, [("甲", "未完成")])
+        self.assertEqual(self.rt.failed_steps, ["甲"])
+        self.assertIs(self.rt.halted, False)
+        self.assertIn("✗ 未完成：开关没找到", text)
+        self.assertEqual(flushes, 3)
+
+    def test_the_detail_hook_gets_the_phone_and_this_run_after_a_failure(self):
+        seen = []
+        self.rt.namespace = {"detail": lambda p, rt: seen.append((p, rt)) or "下一轮看这里"}
+
+        def body():
+            raise RuntimeError("断了")
+
+        result, text, flushes = wrapped(self.rt, body)
+        self.assertEqual(seen, [(self.phone, self.rt)])
+        self.assertIn("· 下一轮看这里", text)
+        self.assertEqual(flushes, 4)
+
+    def test_the_wrap_hook_wraps_the_segment_body_and_gets_the_runtime(self):
+        seen = []
+
+        @contextlib.contextmanager
+        def wrap(p, rt):
+            seen.append(("enter", p, rt))
+            yield
+            seen.append(("exit",))
+
+        self.rt.namespace = {"wrap": wrap}
+        ran = []
+
+        def body():
+            ran.append(1)
+
+        wrapped(self.rt, body)
+        self.assertEqual(ran, [1])
+        self.assertEqual([item[0] for item in seen], ["enter", "exit"])
+        self.assertEqual(seen[0][1:], (self.phone, self.rt))
+        self.assertEqual(self.rt.results, [("甲", "完成")])
+
+    def test_the_script_may_swap_the_skip_class(self):
+        class Mine(RuntimeError):
+            pass
+
+        self.rt.namespace = {"SkipStep": Mine}
+
+        def body():
+            raise Mine("按宿主约定跳过")
+
+        wrapped(self.rt, body)
+        self.assertEqual(self.rt.results, [("甲", "跳过")])
+        self.assertEqual(self.rt.skipped_steps, ["甲"])
+        self.assertEqual(self.rt.failed_steps, [])
+
+    def test_a_locked_screen_halts_the_batch_with_the_lock_message(self):
+        self.phone.locked = lambda: True
+        ran = []
+
+        def body():
+            ran.append(1)
+
+        _, text, _ = wrapped(self.rt, body)
+        self.assertEqual(ran, [])
+        self.assertIs(self.rt.halted, True)
+        self.assertEqual(self.rt.results, [("甲", "未完成")])
+        self.assertIn("  ✗ 未完成：手机锁屏了，请机主解锁后重跑", text.splitlines())
+
+
+class PageContractTests(unittest.TestCase):
+    """`Runtime.page()` 的落点判据（#1543）：三段判据各自的现场行、标题逐字、协议 / 权限弹窗与锁屏。"""
+
+    def setUp(self):
+        self.phone, self.rt = runtime_stand_in()
+        self.awaits, self.finds, self.misses, self.dismissed = [], [], [], []
+        self.phone.await_page = lambda **kw: self.awaits.append(kw)
+        self.phone.focus = lambda: "com.android.settings/.Settings"
+        self.phone.find = lambda text, exact=False, **kw: self.finds.append((text, exact)) or True
+        self.phone.texts = lambda root=None: []
+        self.phone.locked = lambda: False
+        self.phone.note_miss = lambda text: self.misses.append(text)
+        self.phone.dismiss = lambda: self.dismissed.append(True)
+
+    def test_landing_on_the_expected_page_reads_titles_with_exact_match(self):
+        self.rt.page("设置", "com.android.settings", ".Settings")
+        self.assertEqual(self.awaits, [{"budget": 6}])
+        self.assertEqual(self.finds, [("设置", True)])
+        self.assertEqual(self.misses, [])
+        self.assertEqual(self.dismissed, [])
+
+    def test_a_wrong_package_reports_where_it_stopped_and_names_the_package(self):
+        self.phone.focus = lambda: "com.other/.Settings"
+        with self.assertRaises(RuntimeError) as caught:
+            self.rt.page("设置", "com.android.settings", ".Settings")
+        self.assertEqual(str(caught.exception), "未进入目标应用，未操作开关")
+        self.assertEqual(self.misses, ["com.android.settings"])
+
+    def test_a_wrong_activity_names_the_activity_in_the_scene_line(self):
+        self.phone.focus = lambda: "com.android.settings/.Other"
+        with self.assertRaises(RuntimeError) as caught:
+            self.rt.page("设置", "com.android.settings", ".Settings")
+        self.assertEqual(str(caught.exception), "未进入目标设置页，未操作开关")
+        self.assertEqual(self.misses, [".Settings"])
+
+    def test_the_package_is_the_first_segment_of_a_deeper_window_name(self):
+        """`focus()` 的窗口名正常是 `包名/页面名`，但读屏正则允许更多段：包名仍按第一个 `/` 前那一段判。"""
+        self.phone.focus = lambda: "com.android.settings/.Settings/extra"
+        self.rt.page("设置", "com.android.settings")
+        self.assertEqual(self.misses, [])
+
+    def test_a_missing_title_lists_every_wanted_wording(self):
+        self.phone.find = lambda text, exact=False, **kw: self.finds.append((text, exact)) or False
+        with self.assertRaises(RuntimeError) as caught:
+            self.rt.page(["设置", "设定"], "com.android.settings")
+        self.assertEqual(str(caught.exception), "未确认页面「设置、设定」，未操作开关")
+        self.assertEqual(self.misses, ["设置 / 设定"])
+
+    def test_each_consent_wording_on_a_button_dismisses_and_skips(self):
+        for wording in ("同意", "同意并继续", "同意并使用", "允许", "仅在使用中允许"):
+            with self.subTest(wording=wording):
+                self.dismissed.clear()
+                self.phone.texts = lambda root=None, text=wording: [
+                    (text, "", {"class": "android.widget.Button"})]
+                with self.assertRaises(recipe_runtime.SkipStep) as caught:
+                    self.rt.page("设置", "com.android.settings")
+                self.assertEqual(self.dismissed, [True])
+                self.assertEqual(str(caught.exception), "出现协议或权限申请，不代为同意")
+
+    def test_a_consent_wording_that_is_not_a_button_is_ignored(self):
+        self.phone.texts = lambda root=None: [("同意", "", {})]
+        self.rt.page("设置", "com.android.settings")
+        self.assertEqual(self.dismissed, [])
+
+    def test_a_button_with_another_wording_does_not_count_as_consent(self):
+        self.phone.texts = lambda root=None: [("确定", "", {"class": "android.widget.Button"})]
+        self.rt.page("设置", "com.android.settings")
+        self.assertEqual(self.dismissed, [])
+
+    def test_a_locked_screen_raises_screen_locked_with_the_unlock_instruction(self):
+        self.phone.locked = lambda: True
+        with self.assertRaises(recipe_runtime.ScreenLocked) as caught:
+            self.rt.page("设置", "com.android.settings")
+        self.assertEqual(str(caught.exception), "手机锁屏，请机主解锁")
+
+
+class StartOrSkipLandingTests(unittest.TestCase):
+    """`start_or_skip()` 的落点豁免（#1543）：只有「停在死胡同」与「落点不对」同时成立才按跳过。"""
+
+    def setUp(self):
+        self.phone, self.rt = runtime_stand_in()
+
+    def test_a_dead_end_landing_with_a_wrong_page_marker_skips(self):
+        def start(pkg, activity=None, **kw):
+            raise RuntimeError("停在 com.android.vending；没有进入前台")
+
+        self.phone.start = start
+        with self.assertRaises(recipe_runtime.SkipStep) as caught:
+            self.rt.start_or_skip("com.pkg", ".X", {"com.android.vending"}, "缺商店")
+        self.assertEqual(str(caught.exception), "缺商店（停在 com.android.vending）")
+
+    def test_a_plain_start_failure_still_raises_instead_of_skipping(self):
+        def start(pkg, activity=None, **kw):
+            raise RuntimeError("停在 com.android.vending；启动失败")
+
+        self.phone.start = start
+        with self.assertRaises(RuntimeError) as caught:
+            self.rt.start_or_skip("com.pkg", ".X", {"com.android.vending"}, "缺商店")
+        self.assertNotIsInstance(caught.exception, recipe_runtime.SkipStep)
+
+
 if __name__ == "__main__":
     unittest.main()
