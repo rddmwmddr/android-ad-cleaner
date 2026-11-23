@@ -274,6 +274,44 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_xiaomi_24129pn74c_recipe.py",
     ),
     "tool/vocab.py": ("tests/test_adapt_cli.py", "tests/test_vocab.py"),
+    # 观测基座（#1538）：读屏 adapter、认行、动作原语，是机型脚本与编排段共同的下沉底座，覆盖
+    # 矩阵量出 66 个测试文件执行过它（219 行），是表外最大的单模块。`tests/recipe_case.py` 同样是
+    # 只有基类的助手模块（`RECIPE` 为 None），按实际所有者换成三个 `RecipeSafetyCase` 子类文件；
+    # `tests/test_phone_screen.py` 是本票补的可观察行为用例，同样进这一行（范围只宽不窄）。
+    "tool/phone/screen.py": (
+        "tests/test_adapt_cli.py", "tests/test_adb_link.py", "tests/test_captures.py",
+        "tests/test_catalog.py", "tests/test_channel_arrive.py", "tests/test_channel_decide.py",
+        "tests/test_channel_outcomes.py", "tests/test_channel_page.py",
+        "tests/test_channel_snapshot.py", "tests/test_entries.py", "tests/test_fixtures.py",
+        "tests/test_honor_cle_an00.py", "tests/test_honor_recipe.py",
+        "tests/test_honor_wkl_recipe.py", "tests/test_issue_regressions.py",
+        "tests/test_k70_recipe.py", "tests/test_k80pro_recipe.py", "tests/test_k90ultra_recipe.py",
+        "tests/test_layout_and_verdict_regressions.py",
+        "tests/test_lock_and_disconnect_regressions.py", "tests/test_main_switch_bar.py",
+        "tests/test_meizu_recipe.py", "tests/test_off_title_fallback.py",
+        "tests/test_oneplus_plz110_recipe.py", "tests/test_oneplus_recipe.py",
+        "tests/test_oppo_plp120_browser.py", "tests/test_oppo_plp120_coloros17.py",
+        "tests/test_oppo_plp120_search.py", "tests/test_oppo_pma110_recipe.py",
+        "tests/test_oppo_pmx110_recipe.py", "tests/test_oppo_pyb110_recipe.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_phk110_recipe.py",
+        "tests/test_phone_base.py", "tests/test_phone_dismisser.py", "tests/test_phone_facade.py",
+        "tests/test_phone_host.py", "tests/test_phone_interface.py", "tests/test_phone_launcher.py",
+        "tests/test_phone_navigator.py", "tests/test_phone_screen.py",
+        "tests/test_phone_settings_search.py",
+        "tests/test_phone_toggler.py", "tests/test_pja110_android16_recipe.py",
+        "tests/test_recipe_call_snapshots.py", "tests/test_recipe_nav.py",
+        "tests/test_recipe_setting_checked.py", "tests/test_recipe_strategies.py",
+        "tests/test_regressions.py", "tests/test_release_regressions.py",
+        "tests/test_rmx3700_recipe.py", "tests/test_rmx3888_recipe.py", "tests/test_row.py",
+        "tests/test_tap_notice_regressions.py", "tests/test_ui_session.py",
+        "tests/test_vivo_2417_browser_entry.py", "tests/test_vivo_2547da_android17_recipe.py",
+        "tests/test_vivo_v2303a_recipe.py", "tests/test_vivo_v2309a_recipe.py",
+        "tests/test_vivo_v2417a_recipe.py", "tests/test_vivo_v2545a_recipe.py",
+        "tests/test_vivo_v2547a_recipe.py", "tests/test_xiaomi_24129pn74c_recipe.py",
+        "tests/test_xiaomi_2505apx7bc_recipe.py", "tests/test_xiaomi_25060rk16c_recipe.py",
+        "tests/test_xiaomi_ads_recipe.py", "tests/test_xiaomi_store_recipe.py",
+        "tests/test_xiaomi_theme_recipe.py",
+    ),
     # 手机拨动族（#1534）：`session` 只有三个 `__init__` 与 `set_app()` 被执行，44 份用例里绝大多数
     # 的接触来自 `Phone` 装配。`toggler` 不进表（实测见 ADR-0043「tool/ 其余模块（#1445）」）：
     # 纯函数与索引已被 13 份用例守住，存活集中在该模块自己的编排段（`off` 34、`confirm` 3）。
