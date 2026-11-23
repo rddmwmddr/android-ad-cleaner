@@ -17,7 +17,7 @@ import unittest
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from gui import adb as adb_mod
 from gui import app
@@ -1249,6 +1249,241 @@ class DownloadTests(DownloaderBase):
         self.assertEqual(self.downloader.download_state(),
                          {"state": "error", "pct": 0, "msg": "下载失败：镜像甲：boom；镜像乙：boom"})
         self.assertFalse(os.path.exists(self.data.adb_zip))
+
+
+# ---------- #1535：变异判据补的断言 ----------
+# 这些函数原先只被间接 patch 掉，命令行与默认值本身没有断言；mutant 在
+# 「改了参数但结论不变」的路径上存活。这里把每条命令对外可见的部分（argv、
+# 解码参数、默认超时）钉住，阈值语义仍由上面的用例守。
+
+
+class AdbRunCommandTests(unittest.TestCase):
+    """`_adb_run` 是 present / detached / wait_for / alive 共用的那条命令行。"""
+
+    def test_the_capture_flags_and_the_timeout_are_part_of_the_contract(self):
+        done = SimpleNamespace(stdout="ok", stderr="warn", returncode=3)
+        with patch.object(adb_link.subprocess, "run", return_value=done) as ran:
+            result = adb_link._adb_run("/usr/bin/adb", ["-s", "S", "shell", "x"], 7)
+        self.assertEqual(ran.call_args, call(
+            ["/usr/bin/adb", "-s", "S", "shell", "x"], capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=7, creationflags=adb_link.NOWIN))
+        self.assertEqual((result.stdout, result.stderr, result.returncode), ("ok", "warn", 3))
+        self.assertEqual(result.output, "ok")
+
+
+class StateQueryTests(unittest.TestCase):
+    """present / detached 共用 `get-state`：argv 与超时相同，只有结论不同。"""
+
+    def query(self, function, adb="/usr/bin/adb", **fields):
+        done = adb_link.ShellResult(**fields)
+        with patch.object(adb_link, "_adb_run", return_value=done) as ran:
+            answer = function("S", adb)
+        self.assertEqual(ran.call_args, call(adb, ["-s", "S", "get-state"], 8))
+        return answer
+
+    def test_present_only_accepts_the_device_state(self):
+        self.assertTrue(self.query(adb_link.present, stdout="device\n"))
+        self.assertFalse(self.query(adb_link.present, stdout="offline\n"))
+
+    def test_present_treats_a_missing_or_failing_query_as_absent(self):
+        with patch.object(adb_link, "adb_path", return_value=None), \
+             patch.object(adb_link, "_adb_run") as ran:
+            self.assertFalse(adb_link.present("S"))
+        ran.assert_not_called()
+        for error in (OSError("gone"), subprocess.TimeoutExpired("adb", 8)):
+            with patch.object(adb_link, "_adb_run", side_effect=error):
+                self.assertFalse(adb_link.present("S", "/usr/bin/adb"))
+
+    def test_the_automatic_lookup_is_used_when_no_adb_is_given(self):
+        with patch.object(adb_link, "adb_path", return_value="/found/adb"), \
+             patch.object(adb_link, "_adb_run", return_value=adb_link.ShellResult("device")) as ran:
+            self.assertTrue(adb_link.present("S"))
+        self.assertEqual(ran.call_args.args[0], "/found/adb")
+
+    def test_detached_needs_both_a_bad_exit_and_a_client_message(self):
+        self.assertTrue(self.query(adb_link.detached, returncode=1, stderr="adb: device 'S' not found"))
+        self.assertTrue(self.query(adb_link.detached, returncode=1, stdout="error: device offline\n"))
+        self.assertFalse(self.query(adb_link.detached, returncode=0, stdout="device\n", stderr=""))
+        self.assertFalse(self.query(adb_link.detached, returncode=0, stderr="adb: device 'S' not found"))
+        self.assertFalse(self.query(adb_link.detached, returncode=1, stdout="", stderr=""))
+
+    def test_detached_is_unknown_without_an_adb_or_when_the_query_fails(self):
+        with patch.object(adb_link, "adb_path", return_value=None):
+            self.assertFalse(adb_link.detached("S"))
+        with patch.object(adb_link, "_adb_run", side_effect=OSError("gone")):
+            self.assertFalse(adb_link.detached("S", "/usr/bin/adb"))
+
+
+class WaitForCommandTests(unittest.TestCase):
+    """等手机回来只有一条 `wait-for-device`，退出码 0 才算回来。"""
+
+    def wait(self, returncode=0, adb="/usr/bin/adb", timeout=15):
+        done = SimpleNamespace(returncode=returncode)
+        with patch.object(adb_link.subprocess, "run", return_value=done) as ran:
+            answer = adb_link.wait_for("S", adb, timeout)
+        self.assertEqual(ran.call_args, call(
+            [adb, "-s", "S", "wait-for-device"], capture_output=True,
+            timeout=timeout, creationflags=adb_link.NOWIN))
+        return answer
+
+    def test_the_wait_names_the_serial_and_reads_the_exit_code(self):
+        self.assertTrue(self.wait(0))
+        self.assertFalse(self.wait(1))
+
+    def test_the_default_wait_is_fifteen_seconds(self):
+        with patch.object(adb_link.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as ran:
+            self.assertTrue(adb_link.wait_for("S", "/usr/bin/adb"))
+        self.assertEqual(ran.call_args.kwargs["timeout"], 15)
+
+    def test_the_automatic_lookup_is_used_when_no_adb_is_given(self):
+        with patch.object(adb_link, "adb_path", return_value="/found/adb"), \
+             patch.object(adb_link.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as ran:
+            self.assertTrue(adb_link.wait_for("S"))
+        self.assertEqual(ran.call_args.args[0][0], "/found/adb")
+
+    def test_no_adb_is_not_waited_for(self):
+        with patch.object(adb_link, "adb_path", return_value=None), \
+             patch.object(adb_link.subprocess, "run") as ran:
+            self.assertFalse(adb_link.wait_for("S"))
+        ran.assert_not_called()
+
+    def test_a_failed_or_slow_wait_is_not_a_return(self):
+        for error in (OSError("no adb"), subprocess.TimeoutExpired("adb", 15)):
+            with patch.object(adb_link.subprocess, "run", side_effect=error):
+                self.assertFalse(adb_link.wait_for("S", "/usr/bin/adb"))
+
+
+class DefaultTimeoutTests(unittest.TestCase):
+    """`invoke` / `push` 的默认超时同样是命令的一部分（调用方不传就按它走）。"""
+
+    def test_invoke_defaults_to_twenty_seconds(self):
+        done = SimpleNamespace(stdout="", stderr="", returncode=0)
+        with patch.object(adb_link.subprocess, "run", return_value=done) as ran:
+            adb_link.invoke("/opt/adb", "devices")
+        self.assertEqual(ran.call_args.kwargs["timeout"], 20)
+
+    def test_push_defaults_to_thirty_seconds(self):
+        done = SimpleNamespace(stdout="", stderr="", returncode=0)
+        with patch.object(adb_link.subprocess, "run", return_value=done) as ran:
+            adb_link.Connection("S", adb="/usr/bin/adb").push("a.dex", "/data/local/tmp/a.dex")
+        self.assertEqual(ran.call_args.kwargs["timeout"], 30)
+        self.assertEqual(ran.call_args.args[0][-2:], ["a.dex", "/data/local/tmp/a.dex"])
+
+
+class ValueObjectTests(unittest.TestCase):
+    def test_shell_result_defaults_to_an_empty_success(self):
+        result = adb_link.ShellResult()
+        self.assertEqual((result.stdout, result.stderr, result.returncode), ("", "", 0))
+
+    def test_link_broken_keeps_the_message_and_the_original(self):
+        original = RuntimeError("drops")
+        broken = adb_link.LinkBroken(original)
+        self.assertEqual(str(broken), "drops")
+        self.assertIs(broken.error, original)
+        plain = adb_link.LinkBroken("text")
+        self.assertEqual(str(plain), "text")
+        self.assertIsInstance(plain.error, RuntimeError)
+
+
+class TransportTimeoutTests(unittest.TestCase):
+    def test_the_timeout_reaches_the_injected_transport(self):
+        seen = []
+
+        def transport(command, timeout=None):
+            seen.append((command, timeout))
+            return adb_link.ShellResult("ok")
+
+        adb_link.Connection("S", transport=transport).shell("getprop x", timeout=7)
+        self.assertEqual(seen, [("getprop x", 7)])
+
+    def test_the_retry_waits_with_the_configured_adb(self):
+        adb = FakeAdb(BROKEN, ("ok", "", 0))
+        link = adb_link.Connection("S", adb="/usr/bin/adb", transport=adb)
+        with patch.object(adb_link, "wait_for", return_value=True) as waited:
+            link.shell("getprop x")
+        waited.assert_called_once_with("S", "/usr/bin/adb")
+
+    def test_a_missing_adb_names_the_install_doc(self):
+        with patch.object(adb_link, "adb_path", return_value=None):
+            with self.assertRaisesRegex(RuntimeError, "找不到 adb"):
+                adb_link.Connection("S").shell("getprop x")
+
+
+class CandidateLookupTests(unittest.TestCase):
+    def test_the_which_lookup_and_the_well_known_homes_are_pinned(self):
+        looked, expanded = [], []
+        with patch.object(adb_link.shutil, "which", side_effect=lambda name: looked.append(name)), \
+             patch.object(adb_link.os.path, "expanduser", side_effect=lambda path: expanded.append(path) or "/nope"), \
+             patch.object(adb_link.os.path, "exists", return_value=False), \
+             patch.dict(os.environ, {**HOME_ENV}, clear=True):
+            self.assertEqual(adb_link.adb_candidates(), [])
+        self.assertEqual(looked, ["adb"])
+        self.assertEqual(expanded, ["~/Library/Android/sdk/platform-tools/adb", "~/platform-tools/adb",
+                                    "~/android-tools/platform-tools/adb"])
+
+    def test_no_candidate_is_no_path(self):
+        with patch.object(adb_link, "adb_candidates", return_value=[]):
+            self.assertIsNone(adb_link.adb_path())
+
+
+class LostMessageTests(unittest.TestCase):
+    def test_no_detail_leaves_the_hint_alone(self):
+        self.assertEqual(str(adb_link.lost()), adb_link.HINT)
+        self.assertEqual(str(adb_link.lost(None)), adb_link.HINT)
+        self.assertEqual(str(adb_link.lost("   ")), adb_link.HINT)
+
+    def test_the_detail_is_the_last_two_hundred_characters(self):
+        detail = "PREFIX" + "z" * 199 + "TAIL"
+        self.assertEqual(str(adb_link.lost(detail)), adb_link.HINT + "\n原始错误：" + detail[-200:])
+
+
+class FocusWindowTests(unittest.TestCase):
+    def test_the_window_hash_form_is_read(self):
+        self.assertEqual(adb_link.focus_window("  mCurrentFocus=Window{4c2 com.a/.A}"), "com.a/.A")
+
+    def test_no_focus_field_is_empty(self):
+        self.assertEqual(adb_link.focus_window(""), "")
+        self.assertEqual(adb_link.focus_window(None), "")
+
+
+class KeyguardFieldTests(unittest.TestCase):
+    def test_mishowing_alone_is_locked_even_with_an_unlock_field(self):
+        out = ("  mCurrentFocus=Window{1 u0 NotificationShade}\n"
+               "  mIsShowing=true isKeyguardShowing=false\n")
+        self.assertTrue(adb_link.keyguard_showing(out))
+
+
+class FailureMessageAdbTests(unittest.TestCase):
+    def test_the_adb_override_reaches_the_presence_check(self):
+        error = RuntimeError("device 'S' not found")
+        with patch.object(adb_link, "present", side_effect=lambda serial, adb=None: adb is None):
+            message = adb_link.failure_message(error, "S", "/usr/bin/adb")
+        self.assertTrue(message.startswith(adb_link.HINT))
+
+
+class LostFromChainTests(unittest.TestCase):
+    def test_the_cause_chain_is_walked(self):
+        inner = RuntimeError("device 'S' not found")
+        outer = RuntimeError("wrapper")
+        outer.__cause__ = inner
+        with patch.object(adb_link, "present", return_value=False):
+            found = adb_link.lost_from(outer, "S")
+        self.assertIsInstance(found, adb_link.DeviceLost)
+        self.assertIn("RuntimeError: wrapper", str(found))
+
+    def test_the_presence_check_uses_the_same_serial_and_adb(self):
+        error = RuntimeError("device 'S' not found")
+
+        def present(serial, adb=None):
+            return (serial, adb) != ("S", "/usr/bin/adb")
+
+        with patch.object(adb_link, "present", side_effect=present):
+            self.assertIsInstance(adb_link.lost_from(error, "S", "/usr/bin/adb"), adb_link.DeviceLost)
+
+    def test_a_cycled_chain_terminates_without_a_link_error(self):
+        error = RuntimeError("读屏失败")
+        error.__cause__ = error
+        self.assertIsNone(adb_link.lost_from(error, "S"))
 
 
 if __name__ == "__main__":

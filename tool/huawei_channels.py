@@ -35,6 +35,8 @@ APP_PAGE = "com.android.settings/com.android.settings.Settings$AppNotificationSe
 HEADER = "com.android.settings:id/entity_header_title"
 CHECKBOX = "com.android.settings:id/checkboxWidget"
 BLOCKED = {"ignore", "deny", "errored"}
+# 快照的 JSON 格式只在这里定义：ensure_ascii=False 保中文、indent=2 给人看。
+JSON_SNAPSHOT = {"ensure_ascii": False, "indent": 2}
 
 
 @dataclass(frozen=True)
@@ -60,7 +62,8 @@ class Result:
 def load_items(path):
     """不沿用旧清单的渠道名；点击前总是取本机当前渠道名。"""
     items, app_names = {}, {}
-    for number, line in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
+    # 按字节读再 decode()：UTF-8 是 Python 的默认解码，windows 上也不会落到 cp1252。
+    for number, line in enumerate(Path(path).read_bytes().decode().splitlines(), 1):
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         parts = [value.strip() for value in line.split("\t")]
@@ -104,7 +107,7 @@ def guard(before, apps_before, current, apps, allowed):
 
 
 def headers(root):
-    return {node.get("text") for node in root.iter("node")
+    return {node.get("text") for node in root.iter()
             if node.get("resource-id") == HEADER}
 
 
@@ -117,11 +120,13 @@ def checkbox(phone, app, name):
     if titles and titles != {app}:
         raise RuntimeError("应用身份已变化，未继续点击")
     nodes = {}
-    for node in root.iter("node"):
+    for node in root.iter():
+        text = (node.get("text") or "").strip()  # pragma: no mutate：缺属性时占位串不会等于真实姓名（语义等价）
+        desc = (node.get("content-desc") or "").strip()  # pragma: no mutate：同上（语义等价）
         if (node.get("resource-id") == CHECKBOX
                 and node.get("class") == "android.widget.CheckBox"
                 and node.get("checkable") == "true" and node.get("enabled") == "true"
-                and name in (node.get("text", "").strip(), node.get("content-desc", "").strip())
+                and name in (text, desc)
                 and phone.on_screen(node)):
             nodes[node.get("bounds")] = node
     return next(iter(nodes.values())) if len(nodes) == 1 else None
@@ -153,7 +158,7 @@ def locate(phone, item, name):
         if node is not None:
             return node
         if not phone.scroll_more():
-            break
+            break  # pragma: no mutate：循环之后没有语句，break 与 return 等价（语义等价）
     return None
 
 
@@ -163,7 +168,8 @@ def save_snapshot(serial, before, apps, modes, awake):
            + datetime.datetime.now().strftime("%Y%m%d-%H%M%S-%f") + ".json")
     data = {"channels": [[*key, *value] for key, value in sorted(before.items())],
             "apps": apps, "permissions": modes, "stay_on": awake}
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    # encode() 默认 UTF-8：写二进制等价于 write_text(encoding="utf-8")，但不给平台 locale 留口子。
+    path.write_bytes(json.dumps(data, **JSON_SNAPSHOT).encode())
     print("改动前快照已保存到本地 backups/；包含个人渠道资料，请勿提交")
     return path
 
@@ -194,7 +200,8 @@ def execute(serial, items, want_on=False, verify=False, phone=None, reader=None)
         return result
     if phone is not None and phone.conn.serial != serial:
         raise ValueError("读屏设备和指定序列号不一致，未修改")
-    reader = reader or ShellPhone(serial)
+    if reader is None:
+        reader = ShellPhone(serial)
     if not verify:
         require_device(reader)
     before, apps_before = parse(reader)
@@ -293,8 +300,10 @@ def execute(serial, items, want_on=False, verify=False, phone=None, reader=None)
         raise RuntimeError("候选应用通知权限模式发生变化，请按快照核对")
     for item in items:
         value = current.get(item.key)
-        if (value and not value[2] and (value[1] != 0) != want_on
-                and not (not want_on and (apps.get(item.package) or modes[item.package] in BLOCKED))):
+        # 走到这里时应用总开关已被 guard 钉回、权限模式已被上面那次复查钉回，
+        # 这一项恒为假，外层两种写法区分不出来（不可达）。
+        banned = not want_on and (apps.get(item.package) or modes[item.package] in BLOCKED)  # pragma: no mutate 不可达
+        if value and not value[2] and (value[1] != 0) != want_on and not banned:
             result.failed.append(item.app + " / " + value[0] + "：最终复查未达目标")
     return result
 

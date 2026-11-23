@@ -78,24 +78,28 @@ def adb_path(first=()):
     return found[0] if found else None
 
 
+def _matches(pattern, text):
+    return bool(pattern.search(text or ""))  # pragma: no mutate：占位串对这四条正则都不命中，与空串等价（语义等价）
+
+
 def client_gone(stderr):
-    return bool(CLIENT_GONE.search(stderr or ""))
+    return _matches(CLIENT_GONE, stderr)
 
 
 def lib_gone(message):
-    return bool(LIB_GONE.search(message or ""))
+    return _matches(LIB_GONE, message)
 
 
 def read_failed(error):
     """读屏这一次没读成、连接还在时给人看的一句；不是这种失败返回 None（#731）。
     与 lost_from 同一个形状：调用方拿到什么就直接用，不用再判断。"""
-    return f"这一步没有完成：{error}" if READ_TIMEOUT.search(str(error) or "") else None
+    return f"这一步没有完成：{error}" if _matches(READ_TIMEOUT, str(error)) else None
 
 
 def screen_gone(message):
     """后台屏没了的整句（带上原始错误，与 lost() 同一个形状）；不是这一族返回 None。
     `Phone` 构造与段入口共用这一份判定，只是结尾不同（#928）。"""
-    message = str(message or "")
+    message = str(message or "")  # pragma: no mutate：占位串不会命中 SCREEN_GONE，与空串等价（语义等价）
     return f"{SCREEN_GONE_STEP}\n原始错误：{message}" if SCREEN_GONE.search(message) else None
 
 
@@ -135,9 +139,7 @@ def present(serial, adb=None):
     if not adb:
         return False
     try:
-        result = subprocess.run([adb, "-s", serial, "get-state"], capture_output=True, text=True, encoding="utf-8", errors="replace",
-                                timeout=8, creationflags=NOWIN)
-        return result.stdout.strip() == "device"
+        return _adb_run(adb, ["-s", serial, "get-state"], 8).stdout.strip() == "device"
     except (OSError, subprocess.TimeoutExpired):
         return False
 
@@ -149,11 +151,10 @@ def detached(serial, adb=None):
     if not adb:
         return False
     try:
-        result = subprocess.run([adb, "-s", serial, "get-state"], capture_output=True, text=True, encoding="utf-8", errors="replace",
-                                timeout=8, creationflags=NOWIN)
+        result = _adb_run(adb, ["-s", serial, "get-state"], 8)
     except (OSError, subprocess.TimeoutExpired):
         return False
-    return result.returncode != 0 and client_gone(result.stderr or result.stdout or "")
+    return result.returncode != 0 and client_gone(result.stderr or result.stdout)
 
 
 # 锁屏判断。只认字段名，不整行找 true（HyperOS 3 同一行有别的 =true 字段，#115）。
@@ -170,7 +171,8 @@ SHADE_WINDOWS = {"NotificationShade", "StatusBar", "Keyguard", "KeyguardBouncer"
 
 
 def focus_window(out):
-    m = re.search(r"mCurrentFocus=.*? u0 ([^\s}]+)", out or "") or re.search(r"mCurrentFocus=Window\{\S+ ([^\s}]+)\}", out or "")
+    out = out or ""  # pragma: no mutate：占位串对两条正则都不命中，与空串等价（语义等价）
+    m = re.search(r"mCurrentFocus=.*? u0 ([^\s}]+)", out) or re.search(r"mCurrentFocus=Window\{\S+ ([^\s}]+)\}", out)
     return m.group(1) if m else ""
 
 
@@ -180,7 +182,7 @@ UNLOCK_FIELD = re.compile(r"isKeyguardShowing[=:]\s*false|\bmIsShowing=false")
 
 def keyguard_showing(out):
     """KEYGUARD_CMD 的输出 → 是否锁屏。焦点在通知栏窗口时：有锁屏字段按字段判断；字段都没有，按锁屏处理。"""
-    out = out or ""
+    out = out or ""  # pragma: no mutate：占位串不会命中这三个正则，与空串等价（语义等价）
     if LOCK_FIELD.search(out):
         return True
     if focus_window(out) not in SHADE_WINDOWS:
@@ -248,7 +250,7 @@ class Connection:
 
     def shell(self, command, timeout=None):
         self.check_alive()
-        for attempt in (0, 1):
+        for attempt in (0, 1):  # pragma: no mutate：attempt 只当真假用，换成 (0, 2) 行为相同（语义等价）
             try:
                 return self._send(command, timeout)
             except LinkBroken as broken:
