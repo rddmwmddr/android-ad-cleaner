@@ -191,8 +191,7 @@ class Launcher:
             last = now
             if current in PERMISSION_CONTROLLERS:
                 self.dismiss()
-            # 行尾的变异豁免是等价豁免：读空/权限页把连读清零，与把 seizer 一并清空后再从 1 起算等价
-            if unknown_focus(current) or current in PERMISSION_CONTROLLERS or current == expected:  # pragma: no mutate
+            if unknown_focus(current) or current in PERMISSION_CONTROLLERS or current == expected:
                 seizer_run = 0
             else:
                 seizer_run = seizer_run + 1 if focus == seizer else 1
@@ -262,7 +261,6 @@ class Launcher:
         # 收尾至少再读一次：最后一拍被别的 App 抢了前台也当启动成功的话，后面的段会对着它操作。
         # 那一帧不判，读到别的 App 就把它攒够才停；读空或回到目标包就结束（跳包过渡会自己清零）。
         while True:
-            # 行尾的变异豁免是等价豁免：check_foreground() 为真时 streak 必为 0（目标包与读空都清零）
-            if check_foreground() or not streak:  # pragma: no mutate
+            if check_foreground() or not streak:
                 break  # pragma: no mutate  — 等价：循环后面没有语句，break 与 return 同效
             time.sleep(.2)

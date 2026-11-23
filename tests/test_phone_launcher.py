@@ -702,6 +702,21 @@ class ForeignStreakTests(unittest.TestCase):
         self.assertIn("连续 3 帧", message)
         self.assertAlmostEqual(self.clock.t, 0.4)      # 两拍等待之后第三拍才停
 
+    def test_the_final_check_accepts_a_blank_frame_without_polling_again(self):
+        """收尾复核读到空焦点即结束：读空不是别的 App 抢了前台，当拍收尾、不补读也不空转一拍。"""
+        stage, screen, message = self.run_stage(["com.x/.A", "", "com.x/.A"])
+        self.assertIsNone(message)
+        self.assertAlmostEqual(self.clock.t, 0.0)      # 空焦点当拍收尾，没有补一拍的 .2 秒
+
+    def test_a_permission_page_during_launch_is_not_named_as_the_seizer(self):
+        """启动等待里读到权限页：它被 dismiss，不算「抢了前台的外来 App」，报错现场不把它写成 seizer。"""
+        pcb = "com.android.permissioncontroller/.G"
+        stage, screen, _ = launch_stage(focus=frames(tail=pcb), texts=("首页",))
+        with self.assertRaises(RuntimeError) as caught:
+            stage._launch("com.x", None, 0, None)
+        self.assertIn("没有进入前台", str(caught.exception))
+        self.assertNotIn("抢了前台", str(caught.exception))
+
     def test_a_permission_page_is_waited_on_then_stops_the_step(self):
         state = {"started": False}
 
