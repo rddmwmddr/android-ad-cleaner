@@ -395,7 +395,7 @@ class ConsoleRegressionTests(unittest.TestCase):
         conn, _ = make_connection(log=False)
         self.assertFalse(conn.log)
 
-
+    def test_pause_point_prints_flushes_and_waits_for_the_file_to_go(self):
         with tempfile.NamedTemporaryFile() as handle, \
              patch.dict(os.environ, {"AAC_PAUSE_FILE": handle.name}), \
              patch.object(phone_connection, "time", Clock()) as clock, \
