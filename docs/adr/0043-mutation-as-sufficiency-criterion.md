@@ -170,6 +170,21 @@ pragma 全部写明「语义等价」或「不可达」，理由随源码行。�
 - **`phone/toggler` 不进表（表外已知缺口）**：实测 519 个 mutant、杀死 481、存活 37、无测试 0、超时 1。纯函数与构造初值（`match_key` / `in_band` / `plan_switches` / `Toggler.__init__`）本票补断言后清零；存活全在该模块自己的编排段——`off` 34、`confirm` 3（另 `confirm` 去掉注入的 `sleep` 的一条超时）。是首屏等待的 `tries` / `poll` / `sleep` 实参、`shift` 初值与重排分支、回读与补点里的 `continue` / `break` / `return` 之分、`screen.switches()` 的实参、两处 `|=` 累加，以及几处 sleep 节奏常量。逐条杀掉要按场景锁住替身的调用序列与节奏，成本闸门排除；模块只有整体才进表，故整份登记为缺口。
 - **渠道判定族二四份全部进表**（`channel_batch` / `channel_toggle` / `ui_hidden` / `screen_snapshot`；初始实测 198 / 43 / 57 / 764 个 mutant，存活 9 / 9 / 17 / 137）。清零靠补行为断言，不锁 mock 调用序列：批次记账与拨动决定补的是清单形状与结局细节（`Pending.item`、`ChannelList` 的两份空集合、受保护判据吃渠道 ID 而不是显示名），`ui_hidden` 补的是名单文件口径（BOM、首个制表符、注释行、同一键在一批里只写一次、写不进去不算失败、落盘字节），`screen_snapshot` 补的是屏幕快照的边界（`on_screen` 的中心与退化盒子、`pixel_on` 的通道与取样位置、JSON 缺字段的默认值、`parse_notification_dump` 的 UID 边界与两条读数合并）。三处 pragma 都是语义等价：`on_screen` 的中心只与整数宽高比（`//` 与 `/` 同真同假）、`pixel_on` 的取样行经 getpixel 截断成同一格、自绘开关回写的类名只经 `"Switch" in cls` 读且 checkable 已置真。清零途中收掉的死代码都属本模块：`switch_row_data` 里两处尺寸守卫在 `shown()` 之后恒真、`snapshot_from_tree` 的 `activity if sep else ""` 两支同值、`parse_notification_dump` 的 `fixed` 初值在读它之前必被重写；缺属性时的空值收进 `NODE` / `NO_CLASS` / `NO_ID` / `NO_SECTION` 四个常量。四份的映射行按同一份覆盖矩阵量出，与 `chan_fast` 的行有交集，但 `chan_fast` 仍是表外已知缺口。
 - **`entries` / `vocab` 进表**（#1544），与表内模块同口径；映射行按覆盖矩阵量出（`entries` 6 个测试文件、`vocab` 2 个），两份都清到存活 0、无测试 0，没有表外缺口。存活全在数据 / 词表的纯函数边界，靠补断言清零：`family()` 的空品牌、`landed()` 的空 / 无页面焦点、`open_direct()` 的错误文本（页面名、输出尾部 200 字、退出码与 `Error` 文本两支）、`reach()` 的 settle 转发与轮询预算（按注入钟数采样轮数）、`_scan_entries()` 的关键字 `activity=` 与 `open_app_settings` 的第二实参、`group_of()` 的分组前缀、`_positional()` 的越界，以及 `gaps()` 的表头文案、分隔符、同词多机型与「没写页面」。清零顺带消掉几处区分不出来的写法：`LABEL.get(fam, fam)` 改成 `LABEL[fam]`（每个家族都在 `LABEL` 里，`test_every_family_has_entries_and_a_label` 守着）、`used.get(key, ())` 改成 `used[key]`（同一表达式已按成员判定守卫）、`gaps()` 里与 `mine` 集重复的 `startswith` 过滤直接删掉、`glob` 三层通配下 `len(parts) != 3` 恒假。`entries` 的 3 个 pragma 是：`landed()` 的 `split("/", 1)`（页面名不含 `/`，maxsplit 变体同值）、`landed()` 的 `full() if startswith(".")`（已带包名的页面名经 `full()` 恒等）、`speedups()` 的 `continue`（三层通配下不可达）；`vocab` 的 2 个是 `_absorb()` 的 `here +=`（每次调用新建的空表，`+=` 与 `=` 同值）与 `gaps()` 的 `folder.split("/", 1)`（`_folder_name()` 保证目录名两段）。`entries` 的 2 个超时是 `reach()` 去掉注入的 `sleep` 的那两支：改成真睡后被 mutmut 记 timeout，算检测到、不进存活。
+- **零变异节点 9 份实测登记**（#1547）：`geometry` / `phone/__init__` / `catalog/__init__` / `phone/errors` / `phone/surface` / `recipe_kit` / `recipe_nav` / `recipe_steps` / `recipe_strategies` 逐份跑 `devtools/mutation.py`，mutmut 原文结论统一是「无可变异节点：<模块> 里没有函数体可改」，`.mutmut/<组>/mutants/src/<模块>.meta` 里 `hash_by_function_name` 与 `exit_code_by_key` 都是空表——**mutant 0、存活 0、无测试 0、pragma 0**。九份的 AST 里 `def` 全为 0，`phone/errors.py` 的 `ScreenLocked` 是零方法的异常类，mutmut 生成不出可判节点，所以这不是「有 mutant 但缺测试」的表外缺口，而是**无可变异节点**。映射行只为让 mutmut 收集临时挂上、跑完即撤（零节点模块不入表；`reader` 的保留行是唯一例外，理由见 Consequences）。成因只有三类：
+
+| 模块 | mutant | 存活 | 无测试 | 结论 / 理由 |
+|---|---|---|---|---|
+| `geometry` | 0 | 0 | 0 | 常量数据：一屏比例字面量（`TOP_BAND` … `TAPPABLE_BAND`），模块体只有赋值 |
+| `phone/surface` | 0 | 0 | 0 | 常量数据：`DEVICE_PROPERTIES` / `DEVICE_VERBS` 两个 `frozenset` 与 `SCRIPT_SURFACE` 的并集 |
+| `phone/errors` | 0 | 0 | 0 | 异常类：`ScreenLocked(RuntimeError)` 只有一句 docstring，零方法 |
+| `phone/__init__` | 0 | 0 | 0 | 转发壳：包 docstring 声明子模块边界，无代码 |
+| `catalog/__init__` | 0 | 0 | 0 | 转发壳：`from .loader` / `from .schema` 的 re-export 与 `__all__` |
+| `recipe_kit` | 0 | 0 | 0 | 转发壳：从 `recipe_runtime` re-export 的 11 个名字 |
+| `recipe_nav` | 0 | 0 | 0 | 转发壳：`sys.path` 注入 + `from recipe_lib import *` |
+| `recipe_steps` | 0 | 0 | 0 | 转发壳：同 `recipe_nav` |
+| `recipe_strategies` | 0 | 0 | 0 | 转发壳：同 `recipe_nav` |
+
+  这三种成因下 mutation 没有判据价值：常量数据的对错是数值本身（`GeometryGuards` 守比例字面量只出现在 `geometry.py`），转发壳的对错是名字面（`ScriptSurfaceTests` 守脚本面、`test_recipe_nav` 的 `SurfaceTests` 守 re-export 名单），异常类的对错是类型层级。它们都不补测试、不入表，也不构成表外缺口——纳入一个零节点的模块只会让 mutmut 每轮空转一次收集。
 
 ## Consequences
 
