@@ -38,6 +38,7 @@ import sys
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
+from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import recipe_source
@@ -54,7 +55,7 @@ TIER_LABEL = {STRATEGY: "拨动策略", VOCABULARY: "引擎词汇", KNOWLEDGE: "
 HOOK_NAMES = frozenset({"tail", "guard", "wrap", "detail"})
 
 # `--json` 的输出形状：缩进与「中文原样」都收在模块常量里（模块级常量不进变异）。
-JSON_KW = {"ensure_ascii": False, "indent": 2}
+JSON_KW: dict[str, Any] = {"ensure_ascii": False, "indent": 2}
 COMPANION_SUFFIX = ".py"   # 例外脚本体与 `.toml` 同名；后缀收在常量里，大小写变体在大小写不敏感的文件系统上不可区分
 
 # 拨动策略的信号：关开关的算法会碰到的东西（点名、读回、确认、改动台账）。

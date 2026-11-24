@@ -34,6 +34,7 @@ import json
 import os
 import sys
 import tomllib
+from typing import Any
 from dataclasses import dataclass
 from datetime import date
 
@@ -47,7 +48,7 @@ UNKNOWN_EVIDENCE = EVIDENCE_KINDS[-1]
 BUCKETS = ("30 天以内", "31–90 天", "90 天以上")
 REVIEW = "待复核"
 BUILD_MISMATCH = "build 不符"
-JSON_KW = {"ensure_ascii": False, "sort_keys": True}   # 段体归一化的 JSON 写法（模块级常量不进变异）
+JSON_KW: dict[str, Any] = {"ensure_ascii": False, "sort_keys": True}   # 段体归一化的 JSON 写法（模块级常量不进变异）
 EXT_SUFFIX = ".py"                 # 同名例外脚本的后缀（收在常量里，大小写变体在大小写不敏感的文件系统上不可区分）
 HASH_LEN = 16               # sha256 前 16 个十六进制字符：够区分，也不至于把台账写得太宽
 

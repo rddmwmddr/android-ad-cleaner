@@ -13,6 +13,7 @@ import re
 import shlex
 import sys
 import time
+from typing import Any
 
 import adb_link
 from chan_fast import ShellPhone, parse, truncated
@@ -36,7 +37,7 @@ HEADER = "com.android.settings:id/entity_header_title"
 CHECKBOX = "com.android.settings:id/checkboxWidget"
 BLOCKED = {"ignore", "deny", "errored"}
 # 快照的 JSON 格式只在这里定义：ensure_ascii=False 保中文、indent=2 给人看。
-JSON_SNAPSHOT = {"ensure_ascii": False, "indent": 2}
+JSON_SNAPSHOT: dict[str, Any] = {"ensure_ascii": False, "indent": 2}
 
 
 @dataclass(frozen=True)

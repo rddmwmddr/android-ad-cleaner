@@ -214,6 +214,11 @@ class DeviceLockTests(unittest.TestCase):
     def serial(self):
         return "lock-" + uuid.uuid4().hex
 
+    def seed_bytes(self, lock):
+        """锁文件此刻的内容：Windows 上另开一个句柄读会被共享模式挡住，只能读自己持有那个句柄。"""
+        lock.file.seek(0)
+        return lock.file.read()
+
     def test_the_lock_file_is_derived_from_the_serial(self):
         serial = self.serial()
         lock = session.DeviceLock(serial, wait=0)
@@ -221,14 +226,14 @@ class DeviceLockTests(unittest.TestCase):
             expected = (Path(tempfile.gettempdir()) / "android-ad-cleaner-locks"
                         / (hashlib.sha256(serial.encode("utf-8")).hexdigest() + ".lock"))
             self.assertEqual(Path(lock.file.name), expected)
-            self.assertEqual(expected.read_bytes(), b"0")
+            self.assertEqual(self.seed_bytes(lock), b"0")
         finally:
             lock.close()
 
     def test_a_fresh_lock_carries_one_seed_byte(self):
         lock = session.DeviceLock(self.serial(), wait=0)
         try:
-            self.assertEqual(Path(lock.file.name).read_bytes(), b"0")
+            self.assertEqual(self.seed_bytes(lock), b"0")
         finally:
             lock.close()
 
@@ -237,7 +242,7 @@ class DeviceLockTests(unittest.TestCase):
         session.DeviceLock(serial, wait=0).close()
         lock = session.DeviceLock(serial, wait=0)
         try:
-            self.assertEqual(Path(lock.file.name).read_bytes(), b"0")
+            self.assertEqual(self.seed_bytes(lock), b"0")
         finally:
             lock.close()
 

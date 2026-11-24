@@ -13,6 +13,7 @@
 """
 import datetime, json, os, re, subprocess, sys, tomllib
 import xml.etree.ElementTree as ET
+from typing import Any
 from stdio import use_utf8_console
 
 use_utf8_console()
@@ -32,7 +33,7 @@ SELECT_MARKS = {"关", "是", "y", "yes", "1", "√", "✓", "选中", "true"}
 TSV_READ_ENCODING = "utf-8-sig"
 TSV_WRITE_ENCODING = "utf-8"
 # 草稿里的数据字面量按非 ASCII 原样写（型号 / 包名 / 开关标题都可能是中文）。
-JSON_DATA = {"ensure_ascii": False}
+JSON_DATA: dict[str, Any] = {"ensure_ascii": False}
 
 
 # ---------- 探路 TSV ----------

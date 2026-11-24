@@ -20,7 +20,6 @@ from uiautomator2.exceptions import AccessibilityServiceAlreadyRegisteredError, 
 # 锁文件的口径：两个客户端进程必须落到同一个文件名上，所以编码、目录与后缀都收在模块常量里，
 # 常量不进函数体变异（ADR-0043「tool/ 其余模块（#1445）」）。
 UTF8 = "utf-8"
-WINDOWS = "win32"
 LOCK_DIR = "android-ad-cleaner-locks"
 LOCK_SUFFIX = ".lock"
 LOCK_SEED = b"0"
@@ -45,9 +44,9 @@ class DeviceLock:
         while True:
             self.file.seek(0)
             try:
-                # 平台判据写成 sys.platform 而不是 os.name：mypy 只认前者，Linux 上会把
-                # Windows-only 的 msvcrt 分支整段剪掉，否则类型检查读不到那个模块的方法。
-                if sys.platform == WINDOWS:
+                # 平台判据写成 sys.platform 与字面量 "win32"：mypy 只认这种字样才会把
+                # Windows-only 的 msvcrt 分支整段剪掉，换成常量就得在 Linux 上解析那个模块。
+                if sys.platform == "win32":
                     import msvcrt
                     msvcrt.locking(self.file.fileno(), msvcrt.LK_NBLCK, 1)
                 else:
@@ -64,7 +63,7 @@ class DeviceLock:
 
     def close(self):
         if not self.file.closed:
-            if sys.platform == WINDOWS:
+            if sys.platform == "win32":
                 import msvcrt
                 self.file.seek(0)
                 msvcrt.locking(self.file.fileno(), msvcrt.LK_UNLCK, 1)
