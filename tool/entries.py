@@ -264,7 +264,9 @@ ENTRIES = {
 
 
 def family(brand):
-    return FAMILY.get((brand or "").strip().lower(), "")
+    if not brand:
+        return ""
+    return FAMILY.get(brand.strip().lower(), "")
 
 
 def lookup(brand, group):
@@ -304,6 +306,8 @@ def source_key(d):
     return ("direct", d.pkg, full(d.pkg, d.activity))
 
 
+# 裸启动输出里判定失败的子串：大小写不敏感，`Error` / `error` 都算。
+_SHELL_ERROR = re.compile(r"Error|Exception", re.I)
 # 一条拉起命令里的页面与公开 Intent：脚本里的几种写法（字面量、拼接变量、模板常量的
 # `.format(…)`）由事实层先把字符串还原出来，这里只认还原后的整条命令。
 _AM_PAGE = re.compile(r"am start\b[^\n]*?-n\s+([\w.]+)/([\w.$]+)")
@@ -416,18 +420,19 @@ def open_direct(p, d, settle=1.2):
         return
     page = full(d.pkg, d.activity)
     result = p.shell(start_command(d))
-    if getattr(result, "exit_code", 0) or re.search(r"Error|Exception", result.output or "", re.I):
-        raise RuntimeError(f"无法打开 {page}：{(result.output or '').strip()[-200:]}")
+    output = result.output or ""
+    if result.exit_code or _SHELL_ERROR.search(output):
+        raise RuntimeError(f"无法打开 {page}：{output.strip()[-200:]}")
 
 
 def landed(p, d):
     """前台是不是就是这一页：包名与页面名都要对上。只比类名尾段会让别的 App 的同名页面命中，
     22 条直达里 20 条只有这一条判据。"""
-    focus = p.focus() or ""
-    if "/" not in focus:
+    focus = p.focus()
+    if not focus or "/" not in focus:
         return False
-    got_pkg, got_act = focus.split("/", 1)
-    got_act = full(got_pkg, got_act) if got_act.startswith(".") else got_act
+    got_pkg, got_act = focus.split("/", 1)  # pragma: no mutate：页面名本身不含 "/"，maxsplit 的各种写法同值（语义等价）
+    got_act = full(got_pkg, got_act)  # full() 自带 startswith(".") 判断，非点号页面名原样返回
     return got_pkg.lower() == d.pkg.lower() and got_act.lower() == full(d.pkg, d.activity).lower()
 
 
@@ -479,7 +484,7 @@ def speedups(recipes_dir):
             continue
         parts = os.path.relpath(f, recipes_dir).split(os.sep)
         if len(parts) != 3:
-            continue
+            continue  # pragma: no mutate：glob 的三层通配决定这里恒为三段，continue 换 break 不可达（不可达）
         family, model = parts[0], parts[1]
         if FAMILY.get(family.lower()) == family.lower():
             models.setdefault(family, set()).add(model)
@@ -503,7 +508,7 @@ def markdown(recipes_dir):
              "「用过的机型」从机型脚本里现算；没写机型的条目出自同品牌的手动清单。快应用按包名处理，不在这张表里。", ""]
     for fam, groups in ENTRIES.items():
         brands = "、".join(b for b, f in FAMILY.items() if f == fam)
-        lines += [f"## {LABEL.get(fam, fam)}（{brands}）", "",
+        lines += [f"## {LABEL[fam]}（{brands}）", "",
                   "| 分组 | 直达 | 设置搜索 | 菜单路径 | 注意 |", "|---|---|---|---|---|"]
         for name, e in groups.items():
             cells = []
@@ -513,7 +518,7 @@ def markdown(recipes_dir):
             direct = "<br>".join(cells) or "—"
             search = "<br>".join(
                 f"搜「{s.keyword}」点「{s.result}」" + (f"（位置：{s.path}）" if s.path else "")
-                + (f"（{'、'.join(sorted(used.get(('search', s.keyword, s.result), ())))}）"
+                + (f"（{'、'.join(sorted(used[('search', s.keyword, s.result)]))}）"
                    if used.get(("search", s.keyword, s.result)) else "")
                 for s in e.search) or "—"
             menu = e.menu + (f"（先拉起 `{e.app}`）" if e.app else "")
@@ -522,7 +527,7 @@ def markdown(recipes_dir):
     lines += ["## 可提速提示", "",
               "同家族里有机型的脚本用过这条直达，下面这些机型的脚本还没有。脚本未走这条直达 ≠ 缺陷："
               "页面可能没导出、版本不同或者没装这个 App，要换先真机试。", ""]
-    lines += [f"- {LABEL.get(fam, fam)} / {name} / {'、'.join(missing)} / {describe(d)}"
+    lines += [f"- {LABEL[fam]} / {name} / {'、'.join(missing)} / {describe(d)}"
               for fam, name, missing, d in speedups(recipes_dir)]
     lines.append("")
     return "\n".join(lines)

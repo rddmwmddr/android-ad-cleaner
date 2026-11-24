@@ -219,6 +219,25 @@ class WorkdirTests(unittest.TestCase):
         self.assertEqual(mutation.workdir_for(["devtools/check_ticket_ref.py"]).name,
                          "devtools_check_ticket_ref")
 
+    def test_a_long_group_name_falls_back_to_a_digest(self):
+        """一次判几十个模块（改到一大片 `tool/` 的 PR）时，拼出来的目录名会超过文件名上限（#1445）。"""
+        modules = [f"tool/module_{index:02d}.py" for index in range(60)]
+        name = mutation.workdir_for(modules).name
+        self.assertLessEqual(len(name), mutation.MAX_SLUG)
+        self.assertTrue(name.startswith("group-"))
+
+    def test_the_digest_does_not_depend_on_the_module_order(self):
+        """同一组每轮同名，判定缓存才复用得上：`--since` 的输出顺序变了不该换目录。"""
+        first = [f"tool/module_{index:02d}.py" for index in range(60)]
+        self.assertEqual(mutation.workdir_for(first).name,
+                         mutation.workdir_for(list(reversed(first))).name)
+
+    def test_two_different_long_groups_get_different_directories(self):
+        first = [f"tool/module_{index:02d}.py" for index in range(60)]
+        second = [f"tool/other_{index:02d}.py" for index in range(60)]
+        self.assertNotEqual(mutation.workdir_for(first).name,
+                            mutation.workdir_for(second).name)
+
 
 @unittest.skipIf(os.name == "nt", "建符号链接要开发者模式；变异 job 只在 Linux 上跑")
 class SourceMirrorTests(unittest.TestCase):
@@ -294,7 +313,8 @@ class SourceMirrorTests(unittest.TestCase):
 
 class PatchScopeTests(unittest.TestCase):
     def test_modules_in_paths_keeps_only_mapped_modules(self):
-        self.assertEqual(mutation_scope.modules_in_paths(["tool/summary.py", "tool/row.py"]),
+        # `tool/chan_fast.py` 是 ADR-0043 登记的「表外已知缺口」，进表之前一直是表外的例子。
+        self.assertEqual(mutation_scope.modules_in_paths(["tool/summary.py", "tool/chan_fast.py"]),
                          ["tool/summary.py"])
 
     def test_modules_in_paths_dedupes_and_keeps_order(self):
@@ -319,6 +339,36 @@ class PatchScopeTests(unittest.TestCase):
                          [])
 
 
+class ReverseLookupTests(unittest.TestCase):
+    """改测试文件也要拉起它覆盖的模块：反向索引由映射表现建，不落第二份清单（#1531）。"""
+
+    def test_a_test_file_pulls_the_modules_whose_row_names_it(self):
+        self.assertEqual(mutation_scope.modules_for_tests(["tests/test_ticket_ref.py"]),
+                         ["devtools/check_ticket_ref.py"])
+
+    def test_a_file_outside_every_row_pulls_nothing(self):
+        # `test_mutation_scope` 自己刻意不在任何映射行里（ADR-0043），改它不拉起模块。
+        self.assertEqual(mutation_scope.modules_for_tests(["tests/test_mutation_scope.py"]), [])
+
+    def test_repeated_files_are_deduped(self):
+        once = mutation_scope.modules_for_tests(["tests/test_dco.py"])
+        twice = mutation_scope.modules_for_tests(["tests/test_dco.py", "tests/test_dco.py"])
+        self.assertEqual(twice, once)
+
+    def test_files_are_read_in_order(self):
+        first = mutation_scope.modules_for_tests(["tests/test_ticket_ref.py"])
+        both = mutation_scope.modules_for_tests(["tests/test_ticket_ref.py", "tests/test_dco.py"])
+        self.assertEqual(both, first + ["devtools/commits.py", "devtools/check_dco.py"])
+
+    def test_a_row_test_pulls_the_read_basics_that_are_in_the_table(self):
+        """`test_row` 同时是这三份的覆盖者：改它会把三行一起拉起（#1536）。
+
+        `tool/row.py` 自己不在表内（表外已知缺口），不在这组里。"""
+        pulled = mutation_scope.modules_for_tests(["tests/test_row.py"])
+        self.assertLessEqual({"tool/fast.py", "tool/wait.py", "tool/captures.py"}, set(pulled))
+        self.assertNotIn("tool/row.py", pulled)
+
+
 class ScopeReportTests(unittest.TestCase):
     """改到 `gui/` 但落在表外时报出来：缺席要看得见，不是遗忘的（#1429）。"""
 
@@ -326,39 +376,107 @@ class ScopeReportTests(unittest.TestCase):
         with mock.patch.object(mutation, "changed_paths", return_value=paths):
             return mutation.scope_of("origin/main")
 
+    def test_unmapped_tool_modules_are_reported(self):
+        """表外的 `tool/` 模块逐条报「本次不判」：`row` 是已登记的表外缺口（#1536）。"""
+        scope = self.scope(["tool/row.py", "tool/chan_fast.py"])
+        self.assertEqual(scope.modules, [])
+        self.assertEqual(scope.unmapped, ["tool/row.py", "tool/chan_fast.py"])
+
+    def test_mapped_tool_modules_are_not_reported_as_skipped(self):
+        scope = self.scope(["tool/wait.py"])
+        self.assertEqual(scope.modules, ["tool/wait.py"])
+        self.assertEqual(scope.unmapped, [])
+
     def test_unmapped_gui_modules_are_reported(self):
-        modules, unmapped = self.scope(["gui/app.py", "gui/web/app.js", "tests/test_plan.py"])
-        self.assertEqual(modules, [])
-        self.assertEqual(unmapped, ["gui/app.py"])
+        scope = self.scope(["gui/app.py", "gui/web/app.js"])
+        self.assertEqual(scope.modules, [])
+        self.assertEqual(scope.unmapped, ["gui/app.py"])
 
     def test_mapped_gui_modules_are_not_reported_as_skipped(self):
-        modules, unmapped = self.scope(["gui/tasks.py"])
-        self.assertEqual(modules, ["gui/tasks.py"])
-        self.assertEqual(unmapped, [])
+        scope = self.scope(["gui/tasks.py"])
+        self.assertEqual(scope.modules, ["gui/tasks.py"])
+        self.assertEqual(scope.changed, ["gui/tasks.py"])
+        self.assertEqual(scope.pulled, [])
+        self.assertEqual(scope.unmapped, [])
 
     def test_unmapped_android_modules_are_reported(self):
         """手机版替换层落表前的模块逐条报「本次不判」，缺席要看得见（#1430）。"""
         module = "android/app/src/main/python/aac_android/main.py"
-        modules, unmapped = self.scope([module, "tests/test_android_view.py"])
-        self.assertEqual(modules, [])
-        self.assertEqual(unmapped, [module])
+        scope = self.scope([module])
+        self.assertEqual(scope.modules, [])
+        self.assertEqual(scope.unmapped, [module])
 
     def test_mapped_android_modules_are_not_reported_as_skipped(self):
         module = "android/app/src/main/python/aac_android/view.py"
-        modules, unmapped = self.scope([module])
-        self.assertEqual(modules, [module])
-        self.assertEqual(unmapped, [])
+        scope = self.scope([module])
+        self.assertEqual(scope.modules, [module])
+        self.assertEqual(scope.unmapped, [])
 
     def test_unmapped_devtools_modules_are_reported(self):
         """表外的 devtools 模块逐条报「本次不判」：`--since` 要看得见（#1515）。"""
-        modules, unmapped = self.scope(["devtools/gen_site_css.py", "tests/test_doc_consistency.py"])
-        self.assertEqual(modules, [])
-        self.assertEqual(unmapped, ["devtools/gen_site_css.py"])
+        scope = self.scope(["devtools/gen_site_css.py"])
+        self.assertEqual(scope.modules, [])
+        self.assertEqual(scope.unmapped, ["devtools/gen_site_css.py"])
 
     def test_mapped_devtools_modules_are_not_reported_as_skipped(self):
-        modules, unmapped = self.scope(["devtools/check_ticket_ref.py"])
-        self.assertEqual(modules, ["devtools/check_ticket_ref.py"])
-        self.assertEqual(unmapped, [])
+        scope = self.scope(["devtools/check_ticket_ref.py"])
+        self.assertEqual(scope.modules, ["devtools/check_ticket_ref.py"])
+        self.assertEqual(scope.unmapped, [])
+
+    def test_a_changed_test_file_pulls_the_modules_it_covers(self):
+        """只改测试的 PR 也要跑受影响模块的变异（#1531）。"""
+        scope = self.scope(["tests/test_ticket_ref.py"])
+        self.assertEqual(scope.changed, [])
+        self.assertEqual(scope.pulled, ["devtools/check_ticket_ref.py"])
+        self.assertEqual(scope.modules, ["devtools/check_ticket_ref.py"])
+
+    def test_a_test_file_outside_the_map_pulls_nothing(self):
+        """表外模块零成本：测试文件反查不到行就不拉起模块（#1531）。"""
+        scope = self.scope(["tests/test_mutation_scope.py", "recipes/x/y.toml"])
+        self.assertEqual(scope.modules, [])
+        self.assertEqual(scope.unmapped, [])
+
+    def test_a_module_and_its_test_are_deduped_with_module_paths_first(self):
+        scope = self.scope(["tool/summary.py", "tests/test_summary.py"])
+        self.assertEqual(scope.changed, ["tool/summary.py"])
+        self.assertNotIn("tool/summary.py", scope.pulled)
+        self.assertEqual(scope.modules[0], "tool/summary.py")
+        self.assertEqual(len(scope.modules), len(set(scope.modules)))
+
+    def test_pulled_modules_are_not_reported_as_unmapped(self):
+        scope = self.scope(["gui/app.py", "tests/test_job.py"])
+        self.assertEqual(scope.unmapped, ["gui/app.py"])
+        self.assertTrue(scope.pulled)
+        self.assertEqual(set(scope.unmapped) & set(scope.modules), set())
+
+
+class ScopeNotesTests(unittest.TestCase):
+    """`--since` 的诊断要区分两类来源：失败时知道该看模块 diff 还是测试 diff（#1531）。"""
+
+    def notes(self, paths):
+        with mock.patch.object(mutation, "changed_paths", return_value=paths):
+            return mutation.scope_notes(mutation.scope_of("origin/main"))
+
+    def test_the_two_sources_are_named_separately(self):
+        notes = self.notes(["tool/summary.py", "tests/test_ticket_ref.py"])
+        self.assertTrue(any("改到的模块" in note and "tool/summary.py" in note for note in notes))
+        self.assertTrue(any("测试改动" in note and "devtools/check_ticket_ref.py" in note
+                            for note in notes))
+
+    def test_a_module_in_both_sources_is_named_once(self):
+        notes = self.notes(["tool/summary.py", "tests/test_summary.py"])
+        changed = [note for note in notes if "改到的模块" in note]
+        pulled = [note for note in notes if "测试改动" in note]
+        self.assertEqual(len(changed), 1)
+        self.assertEqual(len(pulled), 1)
+        self.assertNotIn("tool/summary.py", pulled[0])
+
+    def test_unmapped_modules_keep_their_line(self):
+        self.assertEqual(self.notes(["devtools/gen_site_css.py"]),
+                         ["改动里有不在映射表的模块（本次不判）：devtools/gen_site_css.py"])
+
+    def test_a_test_file_outside_the_map_says_nothing(self):
+        self.assertEqual(self.notes(["tests/test_mutation_scope.py"]), [])
 
 
 class CopyWiringTests(unittest.TestCase):

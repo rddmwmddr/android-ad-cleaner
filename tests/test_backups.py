@@ -158,6 +158,13 @@ class CreateTests(unittest.TestCase):
         self.assertEqual(os.path.basename(made), f"{MODEL}-20261030-0905")
         self.assertTrue(os.path.isdir(made))
 
+    def test_create_is_idempotent_within_the_same_minute(self):
+        """同一分钟再建一次落进同一个目录、不报错：`snapshot()` 在没新建快照时靠这个落盘。"""
+        backups = Backups(self.root)
+        first = backups.create(MODEL, when=self.now)
+        self.assertEqual(backups.create(MODEL, when=self.now), first)
+        self.assertEqual(os.listdir(self.root), [os.path.basename(first)])
+
     def test_create_always_starts_a_new_directory_even_when_backups_exist(self):
         # run.py 的 create=True 不返回旧目录，而是再建一份 —— 对拍守住这一点
         Path(self.root, f"{MODEL}-20260101-1000").mkdir()

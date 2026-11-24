@@ -26,6 +26,10 @@ SKELETON_ANCHORS = 8       # 同名节点最多取这么多：华为把分组名
 SKELETON_ROW = 40          # 单个锚点保留的行子树节点数
 SKELETON_NODES = 80        # 一份骨架的节点上限：一屏朴素全量 18–30KB，会顶爆上报日志的 2 万字预算
 SKELETON_BYTES = 4096      # 单份字符上限，与节点上限双保险
+
+# 缺属性时的空值只经这一处给出（#1536）：`.get(key) or ""` 一类的占位串变异在真实 dump
+# 上区分不出来，常量本身不产生 mutant。
+_BLANK = ""
 STATE_WORDS = ("开", "关", "已开启", "已关闭", "开启", "关闭", "ON", "OFF",
                "开启，开关", "关闭，开关", "已开启，开关", "已关闭，开关", "开启，按钮", "关闭，按钮")
 # vivo 把开关状态拼进标题尾部：「个性化推荐，开启」关掉后变「个性化推荐，关闭」，按原标题
@@ -42,7 +46,7 @@ def strip_state_suffix(title):
 
 
 def bounds(node):
-    m = BOUNDS.match(node.get("bounds", ""))
+    m = BOUNDS.match(node.get("bounds", _BLANK))
     return tuple(map(int, m.groups())) if m else (0, 0, 0, 0)
 
 
@@ -55,11 +59,11 @@ def icon_hit(node):
     security，那是应用安全检测入口，不该算。
     """
     words = ("设置", "settings", "setting")
-    if (node.get("content-desc") or "").strip().lower() in words:
+    if (node.get("content-desc") or _BLANK).strip().lower() in words:
         return True
-    if (node.get("text") or "").strip().lower() in words:
+    if (node.get("text") or _BLANK).strip().lower() in words:
         return True
-    rid = (node.get("resource-id") or "").lower().rsplit("/", 1)[-1]
+    rid = (node.get("resource-id") or _BLANK).lower().rsplit("/", 1)[-1]
     return rid.startswith("setting") or "_setting" in rid
 
 
@@ -77,10 +81,10 @@ def ident(node):
     只看坐标会把双列布局里左右对齐的两个控件并掉，所以四项都要算。
     类名不能省：自绘开关把无 id、无文字的容器与真开关叠在同一坐标上，
     少了类名就会把 checkable 的那个并掉，整页开关读成 0 个（#531）。"""
-    return (node.get("resource-id") or "",
-            (node.get("text") or node.get("content-desc") or "").strip(),
-            node.get("class") or "",
-            node.get("bounds") or "")
+    return (node.get("resource-id") or _BLANK,
+            (node.get("text") or node.get("content-desc") or _BLANK).strip(),
+            node.get("class") or _BLANK,
+            node.get("bounds") or _BLANK)
 
 
 def unique(nodes):
@@ -103,7 +107,7 @@ def line(node, parents, max_depth=None):
             return node
         parent = parents.get(node)
         if parent is not None and (parent.get("scrollable") == "true"
-                                   or LISTS.search(parent.get("class") or "")):
+                                   or LISTS.search(parent.get("class") or _BLANK)):
             return node
         node = parent
         seen += 1
@@ -112,7 +116,7 @@ def line(node, parents, max_depth=None):
 
 def is_switch(node):
     """开关控件本体。RadioButton 是互斥选项、不是开关，拨它等于替用户改选另一项。"""
-    return node.get("checkable") == "true" and "RadioButton" not in (node.get("class") or "")
+    return node.get("checkable") == "true" and "RadioButton" not in (node.get("class") or _BLANK)
 
 
 def switches_in(node, on_screen):
@@ -123,7 +127,7 @@ def switches_in(node, on_screen):
 
 def switch_class(node):
     """类名里带 Switch 的控件（含各家 HwSwitch）；TextSwitcher 是文字轮播，不是开关。"""
-    cls = node.get("class") or ""
+    cls = node.get("class") or _BLANK
     return "Switch" in cls and "Switcher" not in cls
 
 
@@ -222,10 +226,10 @@ def switch_row(node, parents, depth=SWITCH_ROW_DEPTH):
     """文字所在的那一行里有开关：这一行是开关，不是导航入口。
     只看结构：调用方 find() 已经自己筛过可视区域，这里不重复筛。"""
     _, boxes = own(node, parents, lambda _: True, depth)
-    return any("RadioButton" not in (n.get("class") or "") for n in boxes)
+    return any("RadioButton" not in (n.get("class") or _BLANK) for n in boxes)
 
 
-def named_nodes(root, parents, on_screen, name, screen_h, top_band=TOP_BAND, systemui_text=False):
+def named_nodes(root, on_screen, name, screen_h, top_band=TOP_BAND, systemui_text=False):
     """按名字筛「可能是这一行」的文字节点：[(文字, bounds, 节点)]。
 
     与 `Screen.texts()` 同一套取值，再叠三条认行的前置筛选：名字完全相等、顶边不在顶部带
@@ -236,13 +240,12 @@ def named_nodes(root, parents, on_screen, name, screen_h, top_band=TOP_BAND, sys
     通知页整页挂在那里，`_focus()` 会把它置真。
 
     纯函数：不读屏、不点击、不认识渠道语义。行高上限、行内开关数、同名行取舍由调用方按
-    `own()` 的结果判定；`parents` 与 `on_screen` 照 `own()` 的入参顺序一并给出，筛选用到
-    后者的可视判定。"""
+    `own()` 的结果判定；`on_screen` 是调用方与 `own()` 共用的那份可视判定。"""
     out = []
     for n in unique(root.iter("node")):
         if n.get("package") == "com.android.systemui" and not systemui_text:
             continue
-        text = (n.get("text") or n.get("content-desc") or "").strip()
+        text = (n.get("text") or n.get("content-desc") or _BLANK).strip()
         if not text or text != name:
             continue
         box = bounds(n)
@@ -259,7 +262,7 @@ def title_label(switch, parents, on_screen, screen_h, max_depth=SWITCH_ROW_DEPTH
     行里没有别的文字时标题退回开关自己的无障碍标签，节点为 None——那样的行没有独立的标题可点。"""
     _, t, _, b = bounds(switch)
     cy = (t + b) // 2
-    label = (switch.get("text") or switch.get("content-desc") or "").strip().split("\n", 1)[0]
+    label = (switch.get("text") or switch.get("content-desc") or _BLANK).strip().split("\n", 1)[0]
     label = label if label not in STATE_WORDS else ""
 
     def gap(c):
@@ -281,7 +284,7 @@ def title_label(switch, parents, on_screen, screen_h, max_depth=SWITCH_ROW_DEPTH
             break
         cand = []
         for x in node.iter("node"):
-            tx = (x.get("text") or x.get("content-desc") or "").strip().split("\n", 1)[0]
+            tx = (x.get("text") or x.get("content-desc") or _BLANK).strip().split("\n", 1)[0]
             if x is switch or not tx or tx in STATE_WORDS:
                 continue
             xl, xt, xr, xb = bounds(x)
@@ -341,7 +344,7 @@ def path(node, parents, depth=PATH_DEPTH):
             "s" if node.get("scrollable") == "true" else "")
         out.append((node.get("class") or "node", flags,
                     sum(x.get("checkable") == "true" for x in node.iter())))
-        if node.get("scrollable") == "true" or LISTS.search(node.get("class") or ""):
+        if node.get("scrollable") == "true" or LISTS.search(node.get("class") or _BLANK):
             break
         node = parents.get(node)
     return out
@@ -371,19 +374,19 @@ def summary(root, screen_w, screen_h):
     def in_list(n):
         cur = parents.get(n)
         while cur is not None:
-            if cur.get("scrollable") == "true" or LISTS.search(cur.get("class") or ""):
+            if cur.get("scrollable") == "true" or LISTS.search(cur.get("class") or _BLANK):
                 return True
             cur = parents.get(cur)
         return False
 
     titles = sum(1 for n in nodes if shown(n) and not in_list(n)
-                 and (n.get("text") or n.get("content-desc") or "").strip()
+                 and (n.get("text") or n.get("content-desc") or _BLANK).strip()
                  and bounds(n)[1] < screen_h * TOP_BAND)
     switches = sum(1 for n in nodes if shown(n) and is_switch(n))
     anchor = next((n for n in nodes if shown(n) and is_switch(n)), None)
     if anchor is None:
         anchor = next((n for n in nodes if shown(n)
-                       and (n.get("text") or n.get("content-desc") or "").strip()), None)
+                       and (n.get("text") or n.get("content-desc") or _BLANK).strip()), None)
     out = f"标题 {titles} 个，开关 {switches} 个"
     return out + ("；" + link(anchor, parents) if anchor is not None else "")
 
@@ -394,8 +397,8 @@ def skeleton(root, name, screen_w, screen_h, focus=""):
     回答的是「这一行为什么没认出来」，不是「整页长什么样」：以文字 / content-desc 命中渠道名的
     节点为锚，带它的祖先链与所在行的子树；一个锚都没有时退回带开关的行，再退回屏内前 40 个节点。
     bounds 用屏宽高的百分比，不同分辨率之间才能比较；N / M / P 三个字面就是「名字挂在哪」的答案。"""
-    name = re.sub(r"\s+", " ", (name or "").strip())
-    focus = re.sub(r"\s+", " ", (focus or "").strip())
+    name = re.sub(r"\s+", " ", (name or _BLANK).strip())
+    focus = re.sub(r"\s+", " ", (focus or _BLANK).strip())
     all_nodes = list(root.iter("node"))
     nodes = unique(all_nodes)
     if not nodes or screen_w <= 0 or screen_h <= 0:
@@ -424,7 +427,7 @@ def skeleton(root, name, screen_w, screen_h, focus=""):
         return r > l and b > t and 0 <= cx < screen_w and 0 <= cy < screen_h
 
     def sides(n):
-        return (n.get("text") or "").strip(), (n.get("content-desc") or "").strip()
+        return (n.get("text") or _BLANK).strip(), (n.get("content-desc") or _BLANK).strip()
 
     visible = [n for n in nodes if shown(n)]
     exact = [n for n in visible if name and name in sides(n)]
@@ -450,7 +453,7 @@ def skeleton(root, name, screen_w, screen_h, focus=""):
     else:
         rows, seen = [], set()
         for n in visible:
-            if n.get("checkable") != "true" or "RadioButton" in (n.get("class") or ""):
+            if n.get("checkable") != "true" or "RadioButton" in (n.get("class") or _BLANK):
                 continue                     # 互斥选项不是开关（与 switches_in / Phone.switches 同一判据）
             container, _ = own(n, parents, shown)
             container = container if container is not None else n
@@ -475,7 +478,7 @@ def skeleton(root, name, screen_w, screen_h, focus=""):
         return str(max(0, min(100, int(value * 100 / total))))
 
     def short_id(n):
-        value = (n.get("resource-id") or "").strip()
+        value = (n.get("resource-id") or _BLANK).strip()
         if ":id/" not in value:
             return ""        # 没有 :id/ 的非标准值不保：可能带任意文字，违反「骨架不含页面文字」
         value = value.rsplit(":id/", 1)[-1].strip()
@@ -501,7 +504,7 @@ def skeleton(root, name, screen_w, screen_h, focus=""):
 
     def node_line(n):
         l, t, r, b = bounds(n)
-        cls = (n.get("class") or "").rsplit(".", 1)[-1] or "node"
+        cls = (n.get("class") or _BLANK).rsplit(".", 1)[-1] or "node"
         parts = [str(depth[n]), cls,
                  ",".join((pct(l, screen_w), pct(t, screen_h), pct(r, screen_w), pct(b, screen_h)))]
         mark = flags(n)

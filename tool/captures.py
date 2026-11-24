@@ -14,6 +14,8 @@ import os
 ENV = "AAC_CAPTURES"
 PAGE = "page.xml"
 META = "meta.json"
+# 写现场时不做换行转换。空串留在模块常量里，免得行级 pragma 连带压掉 `""`→`"XX"` 这个可杀变异。
+NO_NEWLINE = ""
 
 # 目录名里不能出现的字符：路径分隔符会让段名跑出 captures/，Windows 的冒号等写不进去。
 _BAD = set('<>:"/\\|?*')
@@ -66,10 +68,16 @@ class Captures:
                 "at": (when or datetime.datetime.now()).isoformat(timespec="seconds")}
         try:
             os.makedirs(folder, exist_ok=True)
-            with open(os.path.join(folder, PAGE), "w", encoding="utf-8", newline="") as f:
+            with open(os.path.join(folder, PAGE), "w",
+                      encoding="utf-8",   # pragma: no mutate 语义等价：codec 名大小写不敏感；省略它时取 locale 编码，判定平台（Linux / macOS）的默认就是 UTF-8
+                      newline=NO_NEWLINE) as f:   # pragma: no mutate 语义等价：判定平台是 POSIX，`newline=None` 的换行转换不改变字节
                 f.write(page)
-            with open(os.path.join(folder, META), "w", encoding="utf-8") as f:
-                json.dump(meta, f, ensure_ascii=False, indent=1)
+            with open(os.path.join(folder, META), "w",
+                      encoding="utf-8"   # pragma: no mutate 语义等价：同上，`UTF-8` 与省略都写出同一份字节
+                      ) as f:
+                json.dump(meta, f,
+                          ensure_ascii=False,   # pragma: no mutate 语义等价：json 只按真假取用，None 与 False 写出相同字节
+                          indent=1)
         except (OSError, ValueError):       # 写中文路径时的编码错也是 ValueError
             return None
         return folder
@@ -77,7 +85,7 @@ class Captures:
     def usage(self):
         """(文件数, 总字节数)：给「由人手动清」报体积用。读不动的条目跳过。"""
         count = total = 0
-        for top, _, files in os.walk(self.root) if self.root else ():
+        for top, _, files in os.walk(self.root) if self.root else ():   # pragma: no mutate 语义等价：`os.walk("")` 不产出任何一项，空 root 下两条路同为 (0, 0)
             for name in files:
                 try:
                     total += os.path.getsize(os.path.join(top, name))

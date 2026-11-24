@@ -56,6 +56,14 @@ class UseUtf8ConsoleTests(unittest.TestCase):
         with streams(io.StringIO(), io.StringIO()):
             use_utf8_console()   # 不抛异常即通过
 
+    def test_stream_without_reconfigure_does_not_stop_the_next_one(self):
+        """缺少 `reconfigure()` 只跳过那一个流：后面的照常转（`StringIO` 顶上 stdout 时，
+        stderr 仍要拿到 UTF-8 设置）。"""
+        err = FixedStream()
+        with streams(io.StringIO(), err):
+            use_utf8_console()
+        self.assertEqual(err.calls, [{"encoding": "utf-8", "errors": "replace"}])
+
     def test_refusing_stream_does_not_raise(self):
         err = FixedStream()
         with streams(AngryStream(), err):

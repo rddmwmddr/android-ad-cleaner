@@ -408,33 +408,33 @@ class NamedNodesTests(unittest.TestCase):
 
     def test_a_name_only_in_the_top_band_is_the_page_title(self):
         root, parents = page(TITLE_ONLY)
-        self.assertEqual(row.named_nodes(root, parents, on_screen(), NAME, 2340), [])
+        self.assertEqual(row.named_nodes(root, on_screen(), NAME, 2340), [])
 
     def test_the_band_edge_is_the_top_22_percent_of_the_screen(self):
         root, parents = page(BAND_EDGE)
-        found = row.named_nodes(root, parents, on_screen(), NAME, 2340)
+        found = row.named_nodes(root, on_screen(), NAME, 2340)
         self.assertEqual([b for _, b, _ in found], [(60, 515, 600, 561)])
 
     def test_a_name_in_the_list_area_is_the_only_candidate_on_that_row(self):
         # 开关的 content-desc 常常也是渠道名：checkable 的那一个不算，只剩标题节点
         root, parents = page(APP_PAGE)
-        found = row.named_nodes(root, parents, on_screen(), NAME, 2340)
+        found = row.named_nodes(root, on_screen(), NAME, 2340)
         self.assertEqual(found, [(NAME, (60, 900, 600, 960), text_node(root, NAME))])
 
     def test_two_rows_with_the_same_name_stay_two_candidates(self):
         root, parents = page(TWO_ROWS)
-        found = row.named_nodes(root, parents, on_screen(), NAME, 2340)
+        found = row.named_nodes(root, on_screen(), NAME, 2340)
         self.assertEqual([b[1] for _, b, _ in found], [900, 1300])
 
     def test_the_same_control_twice_in_the_dump_is_one_candidate(self):
         root, parents = page(DUPLICATE)
-        self.assertEqual(len(row.named_nodes(root, parents, on_screen(), NAME, 2340)), 1)
+        self.assertEqual(len(row.named_nodes(root, on_screen(), NAME, 2340)), 1)
 
     def test_whitespace_around_the_page_text_still_matches(self):
         root, parents = page('''<hierarchy><node bounds="[0,0][1080,2340]">
           <node text="  营销通知  " bounds="[60,900][600,960]"/>
         </node></hierarchy>''')
-        found = row.named_nodes(root, parents, on_screen(), NAME, 2340)
+        found = row.named_nodes(root, on_screen(), NAME, 2340)
         self.assertEqual([t for t, _, _ in found], [NAME])
 
     def test_a_copy_on_the_other_screen_is_not_a_candidate(self):
@@ -443,13 +443,13 @@ class NamedNodesTests(unittest.TestCase):
           <node text="营销通知" visible-to-user="false" bounds="[60,900][600,960]"/>
           <node text="营销通知" bounds="[60,2500][600,2560]"/>
         </node></hierarchy>''')
-        self.assertEqual(row.named_nodes(root, parents, on_screen(), NAME, 2340), [])
+        self.assertEqual(row.named_nodes(root, on_screen(), NAME, 2340), [])
 
     def test_systemui_text_is_off_unless_the_page_asks_for_it(self):
         root, parents = page(SYSTEMUI_NAME)
-        self.assertEqual([b[1] for _, b, _ in row.named_nodes(root, parents, on_screen(), NAME, 2340)],
+        self.assertEqual([b[1] for _, b, _ in row.named_nodes(root, on_screen(), NAME, 2340)],
                          [1300])
-        both = row.named_nodes(root, parents, on_screen(), NAME, 2340, systemui_text=True)
+        both = row.named_nodes(root, on_screen(), NAME, 2340, systemui_text=True)
         self.assertEqual([b[1] for _, b, _ in both], [900, 1300])
 
 
@@ -460,7 +460,6 @@ def real_candidates(method, xml, focus, **kwargs):
     同名取舍）这一段停止。两处调用点自身已改成调 `named_nodes()`，这里比的是调用点有没有把
     候选集与 `systemui_text` 原样转发下去；`named_nodes()` 自己的三条筛选由 `NamedNodesTests` 直接守。"""
     root = ET.fromstring(xml)
-    parents = {c: n for n in root.iter() for c in n}
     p = phone_stub("test", reader=Mock(), W=1080, H=2340)
     p.screen.focus = Mock(return_value=focus)
     p.screen.tree = Mock(return_value=root)
@@ -474,7 +473,7 @@ def real_candidates(method, xml, focus, **kwargs):
 
     with patch.object(channel_decide, "own", recording):
         method(chan_fast.ChannelPage(p, NAME, pk="com.example.app"))
-    want = [n for _, _, n in row.named_nodes(root, parents, p.on_screen, NAME, p.H, **kwargs)]
+    want = [n for _, _, n in row.named_nodes(root, p.on_screen, NAME, p.H, **kwargs)]
     return seen, want
 
 
@@ -826,6 +825,531 @@ class UntitledMasterSwitchTests(unittest.TestCase):
                                 ("营销通知", True, (1130, 1052))])
         plan = fast.plan_switches(rows, only=["营销通知"], screen_h=2720)
         self.assertEqual([xy for _, xy, _ in plan.targets], [(1130, 897), (1130, 1052)])
+
+
+def element(**attrs):
+    """按属性造一个 `<node>`：不需要页面上下文时比写 XML 更好读。"""
+    node = ET.Element("node")
+    for key, value in attrs.items():
+        node.set(key.replace("_", "-"), value)
+    return node
+
+
+class ResidualNoteTests(unittest.TestCase):
+    def test_the_default_separator_is_the_em_dash_pair(self):
+        self.assertEqual(row.residual_note("确认"), "——屏上还挂着没点掉的确认框「确认」")
+
+    def test_a_missing_confirm_box_is_an_empty_string(self):
+        self.assertEqual(row.residual_note(""), "")
+
+
+class NodeValueTests(unittest.TestCase):
+    """节点字段怎么读：状态尾缀、坐标、身份与类名的边界（#1536）。"""
+
+    def test_a_title_that_is_only_the_state_word_is_left_alone(self):
+        self.assertEqual(row.strip_state_suffix("，开启"), "，开启")
+
+    def test_stripping_the_suffix_keeps_the_leading_space(self):
+        # 只剥尾部：标题产出处调用它，前面那段文字一个字都不动
+        self.assertEqual(row.strip_state_suffix(" 内容推广，开启"), " 内容推广")
+
+    def test_a_node_without_bounds_is_all_zero(self):
+        self.assertEqual(row.bounds(element()), (0, 0, 0, 0))
+
+    def test_a_malformed_bounds_string_is_all_zero(self):
+        self.assertEqual(row.bounds(element(bounds="不是坐标")), (0, 0, 0, 0))
+
+    def test_identity_is_rid_text_class_and_bounds(self):
+        node = element(resource_id="com.x:id/a", text=" 甲 ", bounds="[1,2][3,4]",
+                       **{"class": "android.widget.Switch"})
+        self.assertEqual(row.ident(node), ("com.x:id/a", "甲", "android.widget.Switch", "[1,2][3,4]"))
+
+    def test_content_desc_is_the_text_when_text_is_missing(self):
+        self.assertEqual(row.ident(element(content_desc="乙"))[1], "乙")
+
+    def test_a_missing_attribute_reads_as_the_empty_string(self):
+        self.assertEqual(row.ident(element()), ("", "", "", ""))
+
+    def test_the_class_name_keeps_two_stacked_controls_apart(self):
+        # 自绘开关：无 id、无文字的容器与真开关叠在同一个坐标上（#531）
+        shared = dict(text="开关", checkable="true", bounds="[0,0][10,10]")
+        first, second = element(**shared), element(**shared)
+        first.set("class", "android.widget.Switch")
+        second.set("class", "android.widget.FrameLayout")
+        self.assertEqual(len(row.unique([first, second])), 2)
+
+
+class IconHitTests(unittest.TestCase):
+    """设置入口的齿轮 / 文字判据：正好是那个词才算，句子与复合 id 都不算（#305 / #374）。"""
+
+    def test_the_word_settings_in_any_case_is_the_entry(self):
+        for text in ("设置", "Settings", "SETTING"):
+            with self.subTest(text=text):
+                self.assertTrue(row.icon_hit(element(text=text)))
+
+    def test_the_description_counts_too(self):
+        self.assertTrue(row.icon_hit(element(content_desc="Settings")))
+
+    def test_a_sentence_containing_the_word_is_not_the_entry(self):
+        for text in ("去功能设置里重新开启", "设置壁纸"):
+            with self.subTest(text=text):
+                self.assertFalse(row.icon_hit(element(text=text)))
+
+    def test_only_the_last_segment_of_a_resource_id_counts(self):
+        for rid in ("com.x:id/setting_page", "com.x:id/_setting"):
+            with self.subTest(rid=rid):
+                self.assertTrue(row.icon_hit(element(resource_id=rid)))
+
+    def test_a_resource_id_that_only_starts_with_the_word_inside_an_earlier_segment_is_not_the_entry(self):
+        self.assertFalse(row.icon_hit(element(resource_id="com.x:id/settings/other")))
+        self.assertFalse(row.icon_hit(element(resource_id="com.settings:id/switch")))
+        self.assertFalse(row.icon_hit(element(resource_id="com.x:id/securitySettingSwitchLayout")))
+
+
+class LineWalkTests(unittest.TestCase):
+    """`line()` 往上找行的四种停法：节点自己可点 / 可勾选、父节点可滚动、父节点是列表。"""
+
+    def chain(self, **outer):
+        """text 在四层容器里，最外层带给定属性。"""
+        root = ET.fromstring(
+            '<hierarchy><node bounds="[0,0][1080,2340]"><node bounds="[0,300][1080,900]">'
+            '<node bounds="[0,310][1080,500]"><node bounds="[0,320][1080,430]">'
+            '<node text="行" bounds="[60,330][600,400]"/></node></node></node></node></hierarchy>')
+        ancestors = [n for n in root.iter() if n.tag == "node"]
+        parents = {c: p for p in ancestors for c in p}
+        return text_node(root, "行"), parents
+
+    def test_a_clickable_node_is_its_own_line(self):
+        node = element(clickable="true")
+        self.assertIs(row.line(node, {node: element()}), node)
+
+    def test_a_checkable_node_is_its_own_line(self):
+        node = element(checkable="true")
+        self.assertIs(row.line(node, {node: element()}), node)
+
+    def test_a_scrollable_parent_ends_the_walk_at_its_child(self):
+        parent, child = element(scrollable="true"), element()
+        self.assertIs(row.line(child, {child: parent}), child)
+
+    def test_a_list_view_parent_ends_the_walk_at_its_child(self):
+        # ListView 的行常常不可点，点击由列表处理；父节点没有 scrollable 属性也算
+        parent, child = element(**{"class": "android.widget.ListView"}), element()
+        self.assertIs(row.line(child, {child: parent}), child)
+
+    def test_a_max_depth_of_one_only_checks_the_node_itself(self):
+        text, parents = self.chain()
+        clickable = next(n for n in parents.values() if n is parents[text])
+        clickable.set("clickable", "true")
+        self.assertIsNone(row.line(text, parents, max_depth=1))
+        self.assertIs(row.line(text, parents, max_depth=2), clickable)
+
+
+class SwitchKindTests(unittest.TestCase):
+    def test_a_radio_button_is_not_a_switch(self):
+        self.assertFalse(row.is_switch(element(checkable="true", **{"class": "android.widget.RadioButton"})))
+        self.assertTrue(row.is_switch(element(checkable="true", **{"class": "android.widget.Switch"})))
+
+    def test_switch_class_recognises_vendor_switches_but_not_text_switchers(self):
+        for cls in ("android.widget.Switch", "com.huawei.uikit.hwswitch.widget.HwSwitch"):
+            with self.subTest(cls=cls):
+                self.assertTrue(row.switch_class(element(**{"class": cls})))
+        for cls in ("android.widget.TextSwitcher", "android.widget.RadioButton"):
+            with self.subTest(cls=cls):
+                self.assertFalse(row.switch_class(element(**{"class": cls})))
+
+
+class DisabledEdgeTests(unittest.TestCase):
+    """`disabled_at()` 的落点边界、向上找灰态的深度与节点筛选（#333）。"""
+
+    def grey(self, bounds="[900,700][1000,800]"):
+        return ET.fromstring(f'<hierarchy><node class="android.widget.Switch" checkable="true" '
+                             f'checked="true" enabled="false" bounds="{bounds}"/></hierarchy>')
+
+    def test_the_four_edges_of_the_box_count_as_hits(self):
+        for xy in ((900, 700), (1000, 800), (900, 800), (1000, 700)):
+            with self.subTest(xy=xy):
+                self.assertTrue(row.disabled_at(self.grey(), xy))
+
+    def test_a_radio_button_at_the_point_is_not_skipped(self):
+        page = ET.fromstring('<hierarchy><node class="android.widget.RadioButton" checkable="true" '
+                             'enabled="false" bounds="[900,700][1000,800]"/></hierarchy>')
+        self.assertTrue(row.disabled_at(page, (950, 750)))
+
+    def test_a_non_switch_node_before_the_switch_does_not_stop_the_scan(self):
+        page = ET.fromstring('<hierarchy><node text="说明" bounds="[0,0][100,100]"/>'
+                             '<node class="android.widget.Switch" checkable="true" enabled="false" '
+                             'bounds="[900,700][1000,800]"/></hierarchy>')
+        self.assertTrue(row.disabled_at(page, (950, 750)))
+
+    def test_the_root_element_is_not_a_candidate(self):
+        # dump 的根是 `<hierarchy>`：它不是 node，不该被当成落点上的开关
+        page = ET.fromstring('<hierarchy class="android.widget.Switch" enabled="false" bounds="[900,700][1000,800]"/>')
+        self.assertFalse(row.disabled_at(page, (950, 750)))
+
+    def chain(self, depth, disabled_at_step):
+        """开关外面套 depth 层容器，第 disabled_at_step 层 disabled=false。"""
+        attrs = 'enabled="false"' if disabled_at_step == 0 else ""
+        inner = f'<node class="android.widget.Switch" checkable="true" bounds="[900,700][1000,800]" {attrs}/>'
+        for step in range(1, depth + 1):
+            mark = 'enabled="false"' if step == disabled_at_step else ""
+            inner = f'<node bounds="[900,700][1000,800]" {mark}>{inner}</node>'
+        return ET.fromstring(f"<hierarchy>{inner}</hierarchy>")
+
+    def test_the_switch_itself_counts(self):
+        self.assertTrue(row.disabled_at(self.chain(0, 0), (950, 750)))
+
+    def test_a_grey_ancestor_one_level_up_counts(self):
+        self.assertTrue(row.disabled_at(self.chain(2, 1), (950, 750)))
+
+    def test_the_default_depth_reaches_the_sixth_ancestor(self):
+        self.assertTrue(row.disabled_at(self.chain(6, 6), (950, 750)))
+
+    def test_an_ancestor_beyond_the_depth_limit_does_not_count(self):
+        self.assertFalse(row.disabled_at(self.chain(8, 7), (950, 750)))
+
+
+class ControlDepthTests(unittest.TestCase):
+    def test_the_deepest_switch_inside_the_card_wins(self):
+        page = ET.fromstring("""<hierarchy>
+          <node class="android.widget.FrameLayout" checkable="true" bounds="[0,300][1080,900]">
+            <node class="android.widget.Switch" checkable="true" bounds="[900,320][1000,380]">
+              <node class="android.widget.Switch" checkable="true" bounds="[900,330][1000,370]"/>
+            </node>
+          </node>
+        </hierarchy>""")
+        card = page[0]
+        self.assertEqual(row.bounds(row.control(card, on_screen())), (900, 330, 1000, 370))
+
+    def test_two_switches_at_the_same_depth_fall_back_to_the_card(self):
+        page = ET.fromstring("""<hierarchy>
+          <node class="android.widget.FrameLayout" checkable="true" bounds="[0,300][1080,900]">
+            <node class="android.widget.Switch" checkable="true" bounds="[900,320][1000,380]"/>
+            <node class="android.widget.Switch" checkable="true" bounds="[900,500][1000,560]"/>
+          </node>
+        </hierarchy>""")
+        card = page[0]
+        self.assertIs(row.control(card, on_screen()), card)
+
+
+class SameLineGeometryTests(unittest.TestCase):
+    def test_the_band_edges_are_exactly_thirty_pixels(self):
+        self.assertTrue(row.same_line((0, 300, 10, 340), (0, 329, 10, 369)))
+        self.assertFalse(row.same_line((0, 300, 10, 340), (0, 331, 10, 371)))
+
+    def test_exactly_thirty_pixels_of_integer_centres_is_already_apart(self):
+        self.assertFalse(row.same_line((0, 300, 10, 340), (0, 330, 10, 370)))
+
+    def test_integer_centres_keep_an_odd_pair_apart(self):
+        # 整数中心线相差 30（不算同带）；浮点中心线相差 29.5（会算同带）
+        self.assertFalse(row.same_line((0, 300, 10, 339), (0, 330, 10, 368)))
+
+    def test_integer_centres_keep_an_odd_pair_apart_on_either_side(self):
+        # 反过来：下边那条是奇数高
+        self.assertFalse(row.same_line((0, 330, 10, 368), (0, 300, 10, 339)))
+
+    def test_overlapping_columns_are_the_same_row(self):
+        self.assertTrue(row.same_row((0, 0, 100, 10), (50, 0, 150, 10), "甲", "乙"))
+
+    def test_touching_columns_are_not_the_same_row(self):
+        self.assertFalse(row.same_row((0, 0, 100, 10), (100, 0, 200, 10), "甲", "乙"))
+
+    def test_a_row_without_a_title_merges_with_its_neighbour(self):
+        self.assertTrue(row.same_row((0, 0, 100, 10), (500, 0, 600, 10), "", "乙"))
+
+
+class DedupeGeometryTests(unittest.TestCase):
+    """`dedupe()` 用整数中心线排序与比左右：奇数坐标与两列卡片都要能区分。"""
+
+    def test_the_rightmost_candidate_wins(self):
+        rows = row.dedupe([("甲", True, (0, 300, 1040, 341)), ("甲", True, (600, 300, 1040, 341))])
+        self.assertEqual(rows, [("甲", True, (600, 300, 1040, 341))])
+
+    def test_the_left_candidate_never_replaces_the_right_one(self):
+        rows = row.dedupe([("甲", True, (600, 300, 1040, 341)), ("甲", True, (0, 300, 1040, 341))])
+        self.assertEqual(rows, [("甲", True, (600, 300, 1040, 341))])
+
+    def test_a_titleless_candidate_keeps_the_earlier_title(self):
+        rows = row.dedupe([("甲", True, (0, 300, 1040, 341)), ("", False, (600, 300, 1040, 341))])
+        self.assertEqual(rows, [("甲", False, (600, 300, 1040, 341))])
+
+    def test_extra_items_travel_with_the_kept_row(self):
+        rows = row.dedupe([("甲", True, (0, 300, 1040, 341), "落点甲"),
+                           ("甲", True, (600, 300, 1040, 341), "落点乙")])
+        self.assertEqual(rows, [("甲", True, (600, 300, 1040, 341), "落点乙")])
+
+    def test_rows_are_sorted_by_integer_centre(self):
+        # 中心线用 (上 + 下) // 2：300+341=641→320，331+371=702→351
+        rows = row.dedupe([("乙", False, (0, 331, 100, 371)), ("甲", True, (0, 300, 100, 341))])
+        self.assertEqual([t for t, _, _ in rows], ["甲", "乙"])
+
+
+class OwnDepthTests(unittest.TestCase):
+    def test_a_max_depth_is_passed_to_the_line_walk(self):
+        root, parents = page(NESTED)
+        text = text_node(root, "边下边玩")
+        line, boxes = row.own(text, parents, on_screen(), max_depth=1)
+        self.assertIsNone(line)
+        self.assertEqual(boxes, [])
+        self.assertEqual(row.bounds(row.own(text, parents, on_screen(), max_depth=None)[0]),
+                         (0, 400, 1080, 560))
+
+    def test_a_checkable_container_without_a_switch_is_its_own_row(self):
+        root, parents = page('''<hierarchy><node bounds="[0,0][1080,2340]">
+          <node clickable="true" checkable="true" bounds="[0,300][1080,900]">
+            <node text="营销通知" bounds="[60,320][600,400]"/>
+          </node></node></hierarchy>''')
+        line, boxes = row.own(text_node(root, "营销通知"), parents, on_screen())
+        self.assertEqual(row.bounds(line), (0, 300, 1080, 900))
+        self.assertEqual([row.bounds(b) for b in boxes], [(0, 300, 1080, 900)])
+
+    def test_a_card_with_one_switch_returns_the_card_and_that_switch(self):
+        root, parents = page(CARD)
+        line, boxes = row.own(text_node(root, "订单通知"), parents, on_screen())
+        self.assertEqual(row.bounds(line), (40, 760, 1040, 1000))
+        self.assertEqual([row.bounds(b) for b in boxes], [(900, 840, 1000, 920)])
+
+
+class SwitchRowClassTests(unittest.TestCase):
+    def test_a_radio_button_only_row_is_not_a_switch_row(self):
+        root, parents = page('''<hierarchy><node bounds="[0,0][1080,2340]">
+          <node clickable="true" bounds="[0,300][1080,400]">
+            <node class="android.widget.RadioButton" checkable="true" bounds="[900,320][1000,380]"/>
+            <node text="甲" bounds="[60,320][600,380]"/>
+          </node></node></hierarchy>''')
+        self.assertFalse(row.switch_row(text_node(root, "甲"), parents))
+
+    def test_a_vendor_switch_makes_the_row_a_switch_row(self):
+        root, parents = page('''<hierarchy><node bounds="[0,0][1080,2340]">
+          <node clickable="true" bounds="[0,300][1080,400]">
+            <node class="com.huawei.uikit.hwswitch.widget.HwSwitch" checkable="true" bounds="[900,320][1000,380]"/>
+            <node text="甲" bounds="[60,320][600,380]"/>
+          </node></node></hierarchy>''')
+        self.assertTrue(row.switch_row(text_node(root, "甲"), parents))
+
+
+class NamedNodesFallbackTests(unittest.TestCase):
+    def test_a_candidate_whose_name_lives_only_in_content_desc_is_found(self):
+        root, _ = page('''<hierarchy><node bounds="[0,0][1080,2340]">
+          <node content-desc="营销通知" bounds="[60,900][600,960]"/>
+        </node></hierarchy>''')
+        self.assertEqual([b for _, b, _ in row.named_nodes(root, on_screen(), NAME, 2340)],
+                         [(60, 900, 600, 960)])
+
+    def test_the_top_band_edge_itself_is_still_a_title(self):
+        root, _ = page(BAND_EDGE)
+        found = row.named_nodes(root, on_screen(), NAME, 2340)
+        self.assertEqual([b[1] for _, b, _ in found], [515])
+
+
+class TitleLabelBranchTests(unittest.TestCase):
+    def test_the_switch_own_label_is_the_first_line_only(self):
+        root, parents = page('''<hierarchy><node bounds="[0,0][1080,2340]">
+          <node class="android.widget.Switch" checkable="true" content-desc="内容推广&#10;推荐相关内容"
+                bounds="[900,400][1050,500]"/>
+        </node></hierarchy>''')
+        self.assertEqual(row.title_of(switch_at(root, 400), parents, on_screen(), 2340), "内容推广")
+
+    def test_a_label_on_a_list_with_several_switches_is_used_without_walking_up(self):
+        # 公共列表里不只一个开关：自己的标签就是标题，不去借相邻行的文字（#1448）
+        root, parents = page('''<hierarchy><node bounds="[0,0][1080,2340]">
+          <node bounds="[0,300][1080,900]">
+            <node text="别的行" bounds="[60,310][400,360]"/>
+            <node class="android.widget.Switch" checkable="true" content-desc="内容推广" bounds="[900,440][1000,520]"/>
+            <node class="android.widget.Switch" checkable="true" content-desc="天气预警提醒" bounds="[900,560][1000,640]"/>
+          </node></node></hierarchy>''')
+        self.assertEqual(row.title_of(switch_at(root, 440), parents, on_screen(), 2340), "内容推广")
+
+    def test_the_title_hit_point_is_the_centre_of_the_title_text(self):
+        root, parents = page(ONE_ROW)
+        title, xy = row.title_hit(switch_at(root, 760), parents, on_screen(), 2340)
+        self.assertEqual((title, xy), ("个性化广告推荐", (380, 725)))
+
+    def test_title_of_forwards_the_depth_limit(self):
+        root, parents = page("""<hierarchy>
+          <node bounds="[0,0][1080,2340]">
+            <node bounds="[0,600][1080,900]">
+              <node bounds="[0,620][1080,880]"><node text="深层标题" bounds="[60,700][600,750]"/></node>
+              <node class="android.widget.Switch" checkable="true" bounds="[900,700][1000,800]"/>
+            </node>
+          </node>
+        </hierarchy>""")
+        switch = switch_at(root, 700)
+        self.assertEqual(row.title_of(switch, parents, on_screen(), 2340, 1), "")
+        self.assertEqual(row.title_of(switch, parents, on_screen(), 2340), "深层标题")
+
+    def test_a_title_too_far_below_has_no_hit_point(self):
+        root, parents = page(TALL_ONLY_BELOW)
+        title, xy = row.title_hit(switch_at(root, 1000), parents, on_screen(), 2340)
+        self.assertEqual((title, xy), ("本行开关", None))
+
+
+class PathLinkTests(unittest.TestCase):
+    def test_the_path_walks_up_to_the_scroll_container(self):
+        root, parents = page(NESTED)
+        found = row.path(text_node(root, "边下边玩"), parents)
+        self.assertGreater(len(found), 1)
+        self.assertEqual(found[0], ("node", "", 0))
+
+    def test_the_path_depth_caps_the_chain(self):
+        root, parents = page(NESTED)
+        self.assertEqual(len(row.path(text_node(root, "边下边玩"), parents, depth=2)), 2)
+
+    def test_link_prints_class_flags_and_switch_count(self):
+        root, parents = page(FLAT_CARD)
+        self.assertEqual(row.link(text_node(root, "营销通知"), parents),
+                         "结构 node#0 < LinearLayout#2 < ListView:s#2")
+
+    def test_a_class_without_a_namespace_is_printed_as_is(self):
+        node = element(**{"class": "SelfDrawn"})
+        self.assertEqual(row.link(node, {}), "结构 SelfDrawn#0")
+
+
+class SummaryShapeTests(unittest.TestCase):
+    def page_with(self, *body, size=(1080, 2340)):
+        root = ET.fromstring(f'<hierarchy><node bounds="[0,0][{size[0]},{size[1]}]">'
+                             + "".join(body) + "</node></hierarchy>")
+        return root
+
+    def test_counts_titles_switches_and_appends_one_chain(self):
+        root = self.page_with('<node text="标题" bounds="[60,100][400,160]"/>',
+                              '<node class="android.widget.Switch" checkable="true" bounds="[900,300][1000,380]"/>')
+        out = row.summary(root, 1080, 2340)
+        self.assertTrue(out.startswith("标题 1 个，开关 1 个；结构 "), out)
+        self.assertIn("Switch#1", out)
+
+    def test_an_off_screen_node_is_not_counted(self):
+        root = self.page_with('<node text="标题" bounds="[60,100][400,160]"/>',
+                              '<node class="android.widget.Switch" checkable="true" bounds="[900,3000][1000,3080]"/>')
+        self.assertTrue(row.summary(root, 1080, 2340).startswith("标题 1 个，开关 0 个"))
+
+    def test_a_zero_area_node_is_not_counted(self):
+        root = self.page_with('<node text="标题" bounds="[60,100][400,160]"/>',
+                              '<node text="零宽" bounds="[300,300][300,400]"/>')
+        self.assertIn("标题 1 个", row.summary(root, 1080, 2340))
+
+    def test_a_title_inside_a_list_is_not_counted(self):
+        root = self.page_with('<node class="android.widget.ListView" scrollable="true" bounds="[0,200][1080,900]">'
+                              '<node text="行内标题" bounds="[60,300][400,360]"/></node>')
+        self.assertTrue(row.summary(root, 1080, 2340).startswith("标题 0 个，开关 0 个"))
+
+    def test_a_systemui_title_is_not_counted(self):
+        root = self.page_with('<node package="com.android.systemui" text="状态栏" bounds="[60,100][400,160]"/>')
+        self.assertEqual(row.summary(root, 1080, 2340), "标题 0 个，开关 0 个")
+
+    def test_the_anchor_is_the_first_visible_switch(self):
+        root = self.page_with('<node class="android.widget.Switch" checkable="true" bounds="[0,300][10,400]"/>')
+        self.assertIn("；结构 Switch#", row.summary(root, 1080, 2340))
+
+    def test_without_a_switch_the_first_visible_text_is_the_anchor(self):
+        root = self.page_with('<node text="甲" bounds="[60,300][400,360]"/>')
+        self.assertIn("；结构 node#", row.summary(root, 1080, 2340))
+
+
+SKELETON_RICH = """<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][1000,2000]">
+    <node class="android.widget.Switch" text="营销通知" content-desc="营销通知" clickable="true"
+          checkable="true" checked="true" scrollable="true" enabled="false"
+          resource-id="com.x:id/sw" bounds="[0,100][1000,300]"/>
+    <node class="android.widget.TextView" text="别的" bounds="[0,400][1000,600]"/>
+  </node>
+</hierarchy>"""
+
+
+class SkeletonExactTests(unittest.TestCase):
+    """骨架的每一行都逐字钉住：深度、类名、百分比、标志位与 id（#1536）。"""
+
+    def test_the_lines_carry_depth_class_percent_bounds_flags_and_id(self):
+        text = row.skeleton(ET.fromstring(SKELETON_RICH), "营销通知", 1000, 2000, "com.x/.A")
+        self.assertEqual(text.split("\n"), [
+            "骨架 v1 页=com.x/.A 目标=营销通知 锚=名1 节点=2 剪枝=0 屏=1000x2000",
+            "0 FrameLayout 0,0,100,100",
+            "1 Switch 0,5,100,15 ckvseTDNM id=sw",
+        ])
+
+    def test_a_partial_match_is_marked_as_contained(self):
+        page = ('<hierarchy><node bounds="[0,0][1000,2000]">'
+                '<node text="营销通知（推荐）" bounds="[0,100][500,200]"/></node></hierarchy>')
+        text = row.skeleton(ET.fromstring(page), "营销通知", 1000, 2000, "com.x/.A")
+        head, body = text.split("\n", 1)
+        self.assertIn("锚=含1", head)
+        self.assertIn("TP", body)                    # 有文字，且只是包含、不相等
+
+    def test_the_fallback_lists_at_most_three_switch_rows(self):
+        rows_xml = "".join(
+            f'<node clickable="true" bounds="[0,{300 + i * 100}][1000,{380 + i * 100}]">'
+            f'<node class="android.widget.CheckBox" checkable="true" checked="true" '
+            f'bounds="[900,{310 + i * 100}][990,{370 + i * 100}]"/></node>'
+            for i in range(5))
+        text = row.skeleton(ET.fromstring(f"<hierarchy>{rows_xml}</hierarchy>"), "营销通知", 1000, 2000, "")
+        head = text.split("\n", 1)[0]
+        self.assertIn("页=未知页面 目标=营销通知", head)      # 没给焦点页时的占位
+        self.assertIn("锚=回退列表3", head)
+
+    def test_a_page_without_any_node_returns_nothing(self):
+        self.assertEqual(row.skeleton(ET.fromstring("<hierarchy/>"), "营销通知", 1000, 2000, ""), "")
+
+    def test_a_zero_width_or_zero_height_screen_has_no_skeleton(self):
+        page = ET.fromstring('<hierarchy><node text="甲" bounds="[0,100][500,200]"/></hierarchy>')
+        self.assertEqual(row.skeleton(page, "营销通知", 0, 2000, ""), "")
+        self.assertEqual(row.skeleton(page, "营销通知", 1000, 0, ""), "")
+
+    def test_a_one_pixel_wide_screen_still_produces_a_skeleton(self):
+        page = ET.fromstring('<hierarchy><node text="甲" bounds="[0,0][1,1]"/></hierarchy>')
+        self.assertNotEqual(row.skeleton(page, "营销通知", 1, 2000, ""), "")
+
+    def test_a_systemui_status_bar_is_hidden_when_another_app_has_the_focus(self):
+        page = ('<hierarchy><node package="com.android.systemui" class="android.widget.StatusBar" '
+                'text="营销通知" bounds="[0,100][500,200]"/>'
+                '<node class="android.widget.TextView" text="营销通知" bounds="[0,400][500,500]"/></hierarchy>')
+        body = row.skeleton(ET.fromstring(page), "营销通知", 1000, 2000, "com.x/.A").split("\n", 1)[1]
+        self.assertNotIn("StatusBar", body)
+        body = row.skeleton(ET.fromstring(page), "营销通知", 1000, 2000,
+                            "com.android.systemui/.Bar").split("\n", 1)[1]
+        self.assertIn("StatusBar", body)
+
+    def test_an_invisible_node_is_not_shown(self):
+        page = ('<hierarchy><node class="android.widget.Hidden" visible-to-user="false" '
+                'bounds="[0,100][500,200]"/><node class="android.widget.Shown" bounds="[0,400][500,500]"/></hierarchy>')
+        body = row.skeleton(ET.fromstring(page), "别的名字", 1000, 2000, "").split("\n", 1)[1]
+        self.assertNotIn("Hidden", body)
+        self.assertIn("Shown", body)
+
+    def test_an_off_screen_node_is_not_shown(self):
+        page = ('<hierarchy><node class="android.widget.OffScreen" bounds="[2000,100][3000,200]"/>'
+                '<node class="android.widget.Shown" bounds="[0,400][500,500]"/></hierarchy>')
+        body = row.skeleton(ET.fromstring(page), "别的名字", 1000, 2000, "").split("\n", 1)[1]
+        self.assertNotIn("OffScreen", body)
+        self.assertIn("Shown", body)
+
+    def test_the_percentages_clamp_at_a_hundred(self):
+        page = ('<hierarchy><node class="android.widget.Wide" text="甲" bounds="[0,0][1010,100]"/></hierarchy>')
+        body = row.skeleton(ET.fromstring(page), "别的名字", 1000, 2000, "").split("\n", 1)[1]
+        self.assertIn("0,0,100,5", body)
+        self.assertNotIn("101", body)
+
+    def test_a_resource_id_is_cut_only_when_longer_than_forty(self):
+        at_forty = "x" * 40
+        page = (f'<hierarchy><node class="android.widget.A" resource-id="com.x:id/{at_forty}" '
+                f'bounds="[0,100][500,200]"/>'
+                f'<node class="android.widget.B" resource-id="com.x:id/{at_forty}y" '
+                f'bounds="[0,400][500,500]"/></hierarchy>')
+        body = row.skeleton(ET.fromstring(page), "别的名字", 1000, 2000, "").split("\n", 1)[1]
+        self.assertIn(f"id={at_forty}\n", body)
+        self.assertIn(f"id={at_forty}…", body)
+
+    def test_the_picked_count_and_the_trim_count_add_up_to_the_picked_nodes(self):
+        # 没有同名文字也没有开关：退回「屏内前 40 个」，长类名把正文顶过字节上限
+        nodes_xml = "".join(
+            f'<node class="android.widget.{"L" * 200}{i}" bounds="[{i},100][{i + 1},200]"/>'
+            for i in range(60))
+        page = f"<hierarchy><node bounds=\"[0,0][1000,2000]\">{nodes_xml}</node></hierarchy>"
+        text = row.skeleton(ET.fromstring(page), "别的名字", 1000, 2000, "")
+        head = text.split("\n", 1)[0]
+        self.assertIn("锚=回退前40", head)
+        nodes = int(head.split("节点=")[1].split()[0])
+        pruned = int(head.split("剪枝=")[1].split()[0])
+        self.assertEqual(nodes + pruned, 40)
+        self.assertGreater(pruned, 1)
 
 
 if __name__ == "__main__":

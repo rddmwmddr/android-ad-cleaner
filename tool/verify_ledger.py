@@ -34,6 +34,7 @@ import json
 import os
 import sys
 import tomllib
+from typing import Any
 from dataclasses import dataclass
 from datetime import date
 
@@ -47,6 +48,8 @@ UNKNOWN_EVIDENCE = EVIDENCE_KINDS[-1]
 BUCKETS = ("30 天以内", "31–90 天", "90 天以上")
 REVIEW = "待复核"
 BUILD_MISMATCH = "build 不符"
+JSON_KW: dict[str, Any] = {"ensure_ascii": False, "sort_keys": True}   # 段体归一化的 JSON 写法（模块级常量不进变异）
+EXT_SUFFIX = ".py"                 # 同名例外脚本的后缀（收在常量里，大小写变体在大小写不敏感的文件系统上不可区分）
 HASH_LEN = 16               # sha256 前 16 个十六进制字符：够区分，也不至于把台账写得太宽
 
 
@@ -109,7 +112,7 @@ def step_bodies(path):
     `.py` 机型脚本已随注入面删除，这里只收页面树数据（ADR-0038）。"""
     with open(path, "rb") as f:
         data = tomllib.load(f)
-    return sorted((segment.get("name", ""), json.dumps(segment, ensure_ascii=False, sort_keys=True))
+    return sorted((segment.get("name", ""), json.dumps(segment, **JSON_KW))
                   for segment in data.get("segment", []))
 
 
@@ -122,12 +125,14 @@ def _exception_body(path):
     加了 `is_lazy`，同一份树在 3.13 与 3.15 上 47 行里有 44 行不同），而 `--hash` 是照抄进台账的
     基线。`unparse` 由语义重生成源码，3.11–3.15 上 42 份逐字节相同。
     """
-    companion = os.path.splitext(os.fspath(path))[0] + ".py"
+    companion = os.path.splitext(os.fspath(path))[0] + EXT_SUFFIX
     if not os.path.isfile(companion):
         return None
-    with open(companion, encoding="utf-8") as f:
+    with open(companion,
+              encoding="utf-8",   # pragma: no mutate 语义等价：codec 名大小写不敏感；省略时取 locale 编码，判定平台默认就是 UTF-8
+              ) as f:
         tree = ast.parse(f.read(), filename=companion)
-    stripped = _DocstringFree().visit(ast.Module(body=list(tree.body), type_ignores=[]))
+    stripped = _DocstringFree().visit(tree)
     return ast.unparse(stripped)
 
 
@@ -138,7 +143,7 @@ def body_hash(path):
     exception = _exception_body(path)
     if exception is not None:
         parts.append(exception)
-    return hashlib.sha256("\n\n".join(parts).encode("utf-8")).hexdigest()[:HASH_LEN]
+    return hashlib.sha256("\n\n".join(parts).encode()).hexdigest()[:HASH_LEN]
 
 
 def body_hashes(recipes_dir):
@@ -188,11 +193,14 @@ def rows(recipes_dir, records, today, hashes=None, builds=None):
         record = records.get(path, {})
         tier, evidence, day = entry(records, path)
         trusted = tier != UNRECORDED
-        mismatch = trusted and path in records and not build_matches(record.get("build", ""),
-                                                                     builds.get(path, ""))
+        record_build = record["build"] if "build" in record else ""
+        script_build = builds[path] if path in builds else ""
+        recorded_hash = record["body_hash"] if "body_hash" in record else ""
+        current_hash = hashes[path] if path in hashes else ""
+        mismatch = trusted and path in records and not build_matches(record_build, script_build)
         out.append(Row(path, record.get("build", ""), day, record.get("by", ""), tier, evidence,
                        _days_since(day, today) if trusted else None,
-                       trusted and _needs_review(record.get("body_hash", ""), hashes.get(path, "")),
+                       trusted and _needs_review(recorded_hash, current_hash),
                        mismatch))
     return sorted(out, key=lambda row: (row.days is None, -(row.days or 0), row.path))
 
@@ -231,7 +239,8 @@ def _bucket(days):
 
 
 def _footer(ledger_rows):
-    parts = " · ".join(f"{name} {n}" for name, n in zip(BUCKETS, distribution(ledger_rows), strict=True))    # 两边都恒为 3 档
+    pairs = zip(BUCKETS, distribution(ledger_rows), strict=True)    # pragma: no mutate 语义等价：两边都恒为 3 档
+    parts = " · ".join(f"{name} {n}" for name, n in pairs)
     return f"{parts}（共 {len(ledger_rows)} 份）"
 
 

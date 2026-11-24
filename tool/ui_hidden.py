@@ -11,6 +11,9 @@ chan-scan 读这份名单把这些渠道排除在外，只报一句计数 ——
 import os
 
 PREFIX = "ui-hidden-"
+# 读侧吃掉 BOM（记事本存过的名单），写侧按 UTF-8 落盘：读写都按字节进出，不靠平台默认编码。
+READ_ENCODING = "utf-8-sig"
+WRITE_ENCODING = "utf-8"
 
 
 class UiHidden:
@@ -30,8 +33,8 @@ class UiHidden:
         if not self.available:
             return set()
         try:
-            with open(self.path, encoding="utf-8-sig") as f:
-                lines = f.read().splitlines()
+            with open(self.path, "rb") as f:
+                lines = f.read().decode(READ_ENCODING).splitlines()
         except (OSError, ValueError):
             return set()
         keys = set()
@@ -56,9 +59,9 @@ class UiHidden:
             return 0
         try:
             os.makedirs(self.root, exist_ok=True)
-            with open(self.path, "a", encoding="utf-8") as f:
+            with open(self.path, "ab") as f:
                 for pk, cid in new:
-                    f.write(f"{pk}\t{cid}\n")
+                    f.write(f"{pk}\t{cid}\n".encode(WRITE_ENCODING))
         except OSError:
             return 0
         return len(new)

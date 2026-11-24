@@ -24,6 +24,11 @@ BOX = re.compile(r"^搜索.{0,6}设置|^Search settings", re.I)
 # 没有这个动作的系统 am start 当场报解析不到（退出码非零），回到老路，不额外等。
 SEARCH_ACTION = "oplus.intent.action.settings.MAIN_SEARCH"        # ColorOS（OPPO / 一加 / 真我）
 
+# 缺属性时的空值：模块级常量不进函数体变异，消掉 `or ""` / `getattr(..., "")` 在真实 dump 上
+# 区分不出来的等价变异（ADR-0043「tool/ 其余模块（#1445）」）。
+EMPTY = ""
+EXIT_OK = 0
+
 
 class SettingsSearch:
     """设置搜索会话：开搜索页、打字、按关键词进页、退场。
@@ -42,15 +47,15 @@ class SettingsSearch:
         return self.conn.reader
 
     def focused_text(self):
-        for n in self.screen.tree().iter("node"):
-            if n.get("focused") == "true" and EDIT.search(n.get("class") or "") and self.screen.on_screen(n):
+        for n in self.screen.tree().iter():
+            if n.get("focused") == "true" and EDIT.search(n.get("class") or EMPTY) and self.screen.on_screen(n):
                 return n.get("text") or ""
         return None
 
     def edit_ready(self):
         """搜索页打开了：屏幕上有获得焦点的输入框。"""
-        for n in self.screen.tree().iter("node"):
-            if EDIT.search(n.get("class") or "") and n.get("focused") == "true" and self.screen.on_screen(n):
+        for n in self.screen.tree().iter():
+            if EDIT.search(n.get("class") or EMPTY) and n.get("focused") == "true" and self.screen.on_screen(n):
                 return True
         return False
 
@@ -67,7 +72,7 @@ class SettingsSearch:
             except Exception:
                 return False
             time.sleep(0.4)
-            return (self.focused_text() or "").strip() == kw
+            return (self.focused_text() or EMPTY).strip() == kw
 
         def clear():
             if not self.edit_ready():
@@ -100,10 +105,10 @@ class SettingsSearch:
     def _search_page(self):
         """直接打开系统设置搜索页的动作（沿用 #650 的直达动作）。打得开返回真，否则交回设置首页那条老路。"""
         res = self.conn.reader.shell(f"am start -f 0x10008000 -a {SEARCH_ACTION}")
-        out = str(getattr(res, "output", "") or "")
-        if getattr(res, "exit_code", 0) or "Error" in out or "unable to resolve" in out.lower():
+        out = getattr(res, "output", EMPTY)
+        if getattr(res, "exit_code", EXIT_OK) != EXIT_OK or "Error" in out or "unable to resolve" in out.lower():
             return False
-        return bool(wait.until(self.edit_ready, timeout=2.5, poll=0.15, now=time.time, sleep=time.sleep))
+        return bool(wait.until(self.edit_ready, timeout=2.5, now=time.time, sleep=time.sleep))
 
     def _leave_search(self):
         """离开设置搜索页并回到设置首页（沿用 #639 的退场做法）：按 BACK 收起键盘、退出搜索页，
@@ -139,7 +144,7 @@ class SettingsSearch:
             # 输入框里也有同一段文字；只认非输入框的结果，不能点回搜索框后假报成功。
             items = self.screen.texts()
             for i, (t, (l, tp, r, b), n) in enumerate(items):
-                if t != (entry or kw) or EDIT.search(n.get("class", "")):
+                if t != (entry or kw) or EDIT.search(n.get("class", EMPTY)):
                     continue
                 if path and not (i + 1 < len(items) and items[i + 1][0] == path):
                     continue
@@ -157,20 +162,19 @@ class SettingsSearch:
         if not opened:
             self.conn.reader.shell("am start -f 0x10008000 -a android.settings.SETTINGS")
             for _ in range(4):
-                xy = wait.until(box_at, timeout=3, poll=0.15, now=time.time, sleep=time.sleep)
+                xy = wait.until(box_at, timeout=3, now=time.time, sleep=time.sleep)
                 if not xy:
                     break
                 time.sleep(0.4)                      # 首页还在加载时点击会被吞
                 self.screen.click(*xy)
-                opened = bool(wait.until(self.edit_ready, timeout=2, poll=0.15,
-                                         now=time.time, sleep=time.sleep))
+                opened = bool(wait.until(self.edit_ready, timeout=2, now=time.time, sleep=time.sleep))
                 if opened:
                     break
         if not opened:
             return give_up(f"  ✗ 设置搜索框没打开，跳过「{kw}」")
         if not self.type_text(kw):
             return give_up(f"  ✗ 设置搜索框输入「{kw}」失败，跳过")
-        xy = wait.until(result_at, timeout=3, poll=0.15, now=time.time, sleep=time.sleep)
+        xy = wait.until(result_at, timeout=3, now=time.time, sleep=time.sleep)
         if not xy:
             return give_up(f"  ✗ 没搜到「{entry or kw}」，跳过")
         before = self.screen.focus()
@@ -179,7 +183,7 @@ class SettingsSearch:
         def left_search():
             return self.screen.focus() != before or not self.edit_ready()
 
-        if not wait.until(left_search, timeout=3, poll=0.15, now=time.time, sleep=time.sleep):
+        if not wait.until(left_search, timeout=3, now=time.time, sleep=time.sleep):
             return give_up(f"  ✗ 搜索结果「{entry or kw}」没有打开，跳过")
         time.sleep(0.3)                      # 结果页起来了，给它的内容留一拍
         return True

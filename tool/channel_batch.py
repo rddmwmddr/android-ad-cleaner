@@ -15,6 +15,8 @@ from channel_policy import protected_channel
 from screen_snapshot import ChannelEntry, ChannelList
 
 RETRY_MAX = 10      # 第二遍最多重试这么多项：再多说明这一批根本没被认出，白等一轮
+# 清单里没有这一项时的显示名：受保护判据仍要吃一个名字，空名不命中词表。
+NO_NAME = ""
 
 
 class OutcomeKind(StrEnum):
@@ -160,7 +162,7 @@ def plan_queue(items, channels, want_on):
     for pk, cid, label in items:
         st = state(channels, pk, cid)
         entry = channels.channels.get((pk, cid))
-        if not want_on and protected_channel(entry.name if entry else "", cid, label):
+        if not want_on and protected_channel(entry.name if entry else NO_NAME, cid, label):
             outcome = Outcome(PROTECTED, f"当前状态 {st}")
         elif st in ("--", "del", "app"):
             outcome = Outcome(kind_of_state(st))
@@ -233,5 +235,5 @@ def recheck_row(channels, pk, cid, label, exemptions):
     """收尾复查：仍开着 = 记录是 ON、不是受保护渠道、也不在本批豁免名单里。"""
     st = state(channels, pk, cid)
     entry = channels.channels.get((pk, cid))
-    protected = protected_channel(entry.name if entry else "", cid, label)
+    protected = protected_channel(entry.name if entry else NO_NAME, cid, label)
     return Recheck(st, protected, st == "ON" and not protected and (pk, cid) not in exemptions)

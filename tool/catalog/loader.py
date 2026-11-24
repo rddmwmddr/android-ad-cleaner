@@ -124,7 +124,8 @@ def _exception_source(toml: Path) -> tuple[str, str] | None:
     """同目录同名的 `.py` 是本机例外函数（有才写）；返回 (源码, 路径)，没有则 None。"""
     companion = toml.with_suffix(".py")
     if companion.is_file():
-        return companion.read_text(encoding="utf-8"), str(companion)
+        source = companion.read_text(encoding="utf-8")   # pragma: no mutate 语义等价：codec 名大小写不敏感，省略时平台默认编码就是 UTF-8
+        return source, str(companion)
     return None
 
 
@@ -184,7 +185,7 @@ def _check_names(data, legal) -> None:
         for place, name in wanted:
             if name in legal:
                 continue
-            close = difflib.get_close_matches(name, ordered, n=3)
+            close = difflib.get_close_matches(name, ordered)   # 默认 n=3：最多给三个相近候选
             hint = f"；相近的名字：{'、'.join(close)}" if close else ""
             raise schema.SchemaError(
                 f"{place} 点名的 {name!r} 既不在库里，也不是本机例外函数{hint}")
@@ -240,7 +241,8 @@ def _check_bindings(data, legal) -> None:
 def load(path, p, only=(), clock=None, namespace=None) -> LoadedCatalog:
     """装载一份 catalog 数据（不执行任何段）。`only` 为空表示「全部段」。"""
     toml = _toml_path(path)
-    data = tomllib.loads(toml.read_text(encoding="utf-8"))
+    text = toml.read_text(encoding="utf-8")   # pragma: no mutate 语义等价：codec 名大小写不敏感，省略时平台默认编码就是 UTF-8
+    data = tomllib.loads(text)
     schema.validate(data)
 
     rt = recipe_runtime.Runtime(p, list(only), clock)

@@ -49,6 +49,76 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_oppo_pma110_recipe.py", "tests/test_phk110_android15_recipe.py",
         "tests/test_family.py", "tests/test_recipe_nav.py",
     ),
+    # catalog 装载内核（#1541）：51 个测试文件执行过它。`tests/recipe_case.py` 换成继承它的子类
+    # 文件（同 #1536）：矩阵把继承来的 case 记在定义处，而基类的 `RECIPE = None` 按文件收集会红；
+    # 真正跑那些 case 的十二个子类本来就在矩阵里，行不比矩阵窄。
+    "tool/catalog/loader.py": (
+        "tests/test_adapt_cli.py", "tests/test_catalog.py", "tests/test_entries.py",
+        "tests/test_honor_cle_an00.py", "tests/test_honor_recipe.py", "tests/test_honor_wkl_recipe.py",
+        "tests/test_k70_recipe.py", "tests/test_k80pro_recipe.py", "tests/test_k90ultra_recipe.py",
+        "tests/test_meizu_recipe.py", "tests/test_oneplus_plz110_recipe.py",
+        "tests/test_oneplus_recipe.py", "tests/test_oppo_pkt110_recipe.py",
+        "tests/test_oppo_plg110_recipe.py", "tests/test_oppo_plp120_browser.py",
+        "tests/test_oppo_plp120_coloros17.py", "tests/test_oppo_plp120_search.py",
+        "tests/test_oppo_pma110_recipe.py", "tests/test_oppo_pmx110_recipe.py",
+        "tests/test_oppo_pyb110_recipe.py", "tests/test_phk110_android15_recipe.py",
+        "tests/test_phk110_recipe.py", "tests/test_phone_dismisser.py",
+        "tests/test_phone_interface.py", "tests/test_phone_navigator.py",
+        "tests/test_phone_settings_search.py", "tests/test_pja110_android16_recipe.py",
+        "tests/test_recipe_call_snapshots.py", "tests/test_recipe_loader.py", "tests/test_recipe_nav.py",
+        "tests/test_recipe_setting_checked.py", "tests/test_redmi_24094rad4c_recipe.py",
+        "tests/test_regressions.py", "tests/test_release_regressions.py",
+        "tests/test_rmx3700_recipe.py", "tests/test_rmx3888_recipe.py",
+        "tests/test_vivo_2417_browser_entry.py", "tests/test_vivo_2547da_android17_recipe.py",
+        "tests/test_vivo_v1986a_recipe.py", "tests/test_vivo_v2303a_recipe.py",
+        "tests/test_vivo_v2309a_recipe.py", "tests/test_vivo_v2417a_recipe.py",
+        "tests/test_vivo_v2545a_recipe.py", "tests/test_vivo_v2547a_recipe.py",
+        "tests/test_xiaomi_24129pn74c_recipe.py", "tests/test_xiaomi_2505apx7bc_recipe.py",
+        "tests/test_xiaomi_25060rk16c_recipe.py", "tests/test_xiaomi_ads_recipe.py",
+        "tests/test_xiaomi_store_recipe.py", "tests/test_xiaomi_theme_recipe.py",
+    ),
+    # catalog 解释与启动（#1542），同样由覆盖矩阵量出：解释器的每个 op 处理函数都被执行过它的
+    # 脚本用例逐条碰到；`tests/recipe_case.py` 也在这里出现，按同一手法换成继承它的子类文件
+    # （同 #1541），行不比矩阵窄。`launch` 只有拼命令那两条路径被执行到，行窄得多（25 个文件）。
+    "tool/catalog/interpreter.py": (
+        "tests/test_adapt_cli.py", "tests/test_catalog.py", "tests/test_entries.py",
+        "tests/test_honor_cle_an00.py", "tests/test_honor_recipe.py", "tests/test_honor_wkl_recipe.py",
+        "tests/test_k70_recipe.py", "tests/test_k80pro_recipe.py", "tests/test_k90ultra_recipe.py",
+        "tests/test_meizu_recipe.py", "tests/test_oneplus_plz110_recipe.py",
+        "tests/test_oneplus_recipe.py", "tests/test_oppo_pkt110_recipe.py",
+        "tests/test_oppo_plg110_recipe.py", "tests/test_oppo_plp120_browser.py",
+        "tests/test_oppo_plp120_coloros17.py", "tests/test_oppo_plp120_search.py",
+        "tests/test_oppo_pma110_recipe.py", "tests/test_oppo_pmx110_recipe.py",
+        "tests/test_oppo_pyb110_recipe.py", "tests/test_phk110_android15_recipe.py",
+        "tests/test_phk110_recipe.py", "tests/test_phone_dismisser.py",
+        "tests/test_phone_interface.py", "tests/test_phone_navigator.py",
+        "tests/test_phone_settings_search.py", "tests/test_pja110_android16_recipe.py",
+        "tests/test_recipe_call_snapshots.py", "tests/test_recipe_loader.py", "tests/test_recipe_nav.py",
+        "tests/test_recipe_setting_checked.py", "tests/test_redmi_24094rad4c_recipe.py",
+        "tests/test_regressions.py", "tests/test_release_regressions.py",
+        "tests/test_rmx3700_recipe.py", "tests/test_rmx3888_recipe.py",
+        "tests/test_vivo_2417_browser_entry.py", "tests/test_vivo_2547da_android17_recipe.py",
+        "tests/test_vivo_v1986a_recipe.py", "tests/test_vivo_v2303a_recipe.py",
+        "tests/test_vivo_v2309a_recipe.py", "tests/test_vivo_v2417a_recipe.py",
+        "tests/test_vivo_v2545a_recipe.py", "tests/test_vivo_v2547a_recipe.py",
+        "tests/test_xiaomi_24129pn74c_recipe.py", "tests/test_xiaomi_2505apx7bc_recipe.py",
+        "tests/test_xiaomi_25060rk16c_recipe.py", "tests/test_xiaomi_ads_recipe.py",
+        "tests/test_xiaomi_store_recipe.py", "tests/test_xiaomi_theme_recipe.py",
+    ),
+    "tool/catalog/launch.py": (
+        "tests/test_adapt_cli.py", "tests/test_catalog.py", "tests/test_entries.py",
+        "tests/test_honor_cle_an00.py", "tests/test_honor_recipe.py", "tests/test_honor_wkl_recipe.py",
+        "tests/test_k70_recipe.py", "tests/test_k90ultra_recipe.py",
+        "tests/test_oppo_pkt110_recipe.py", "tests/test_oppo_plp120_browser.py",
+        "tests/test_oppo_pyb110_recipe.py", "tests/test_recipe_call_snapshots.py",
+        "tests/test_recipe_nav.py", "tests/test_recipe_setting_checked.py",
+        "tests/test_rmx3888_recipe.py", "tests/test_vivo_2417_browser_entry.py",
+        "tests/test_vivo_2547da_android17_recipe.py", "tests/test_vivo_v2303a_recipe.py",
+        "tests/test_vivo_v2309a_recipe.py", "tests/test_vivo_v2417a_recipe.py",
+        "tests/test_vivo_v2547a_recipe.py", "tests/test_xiaomi_24129pn74c_recipe.py",
+        "tests/test_xiaomi_2505apx7bc_recipe.py", "tests/test_xiaomi_ads_recipe.py",
+        "tests/test_xiaomi_store_recipe.py",
+    ),
     "tool/polarity.py": (
         "tests/test_regressions.py", "tests/test_vocab.py", "tests/test_phone_interface.py",
         "tests/test_switch_plan.py", "tests/test_adapt_cli.py", "tests/test_off_title_fallback.py",
@@ -62,6 +132,153 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_layout_and_verdict_regressions.py", "tests/test_lock_and_disconnect_regressions.py",
         "tests/test_huawei_channels.py", "tests/test_channel_page.py", "tests/test_adb_link.py",
         "tests/test_phone_host.py", "tests/test_tap_notice_regressions.py",
+    ),
+    # 渠道判定族一（#1533），同样由覆盖矩阵量出：认页 / 到达的纯函数被大量读屏用例执行到。
+    "tool/channel_decide.py": (
+        "tests/test_adb_link.py", "tests/test_channel_arrive.py", "tests/test_channel_decide.py",
+        "tests/test_channel_outcomes.py", "tests/test_channel_page.py", "tests/test_issue_regressions.py",
+        "tests/test_layout_and_verdict_regressions.py", "tests/test_lock_and_disconnect_regressions.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_phone_interface.py",
+        "tests/test_phone_toggler.py", "tests/test_row.py", "tests/test_tap_notice_regressions.py",
+    ),
+    "tool/channel_arrive.py": (
+        "tests/test_adb_link.py", "tests/test_channel_arrive.py", "tests/test_channel_classification.py",
+        "tests/test_channel_decide.py", "tests/test_channel_outcomes.py", "tests/test_channel_page.py",
+        "tests/test_feedback_safety.py", "tests/test_huawei_channels.py", "tests/test_issue_regressions.py",
+        "tests/test_layout_and_verdict_regressions.py", "tests/test_lock_and_disconnect_regressions.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_release_regressions.py", "tests/test_row.py",
+        "tests/test_tap_notice_regressions.py",
+    ),
+    # 读屏基础族（#1536），同样由覆盖矩阵量出：这几份是认页 / 拨动的底座，几乎每个读屏用例
+    # 都会执行到其中一两份，所以行很宽（`fast` 47 个测试文件、`wait` 40、`captures` 46）。
+    # `tests/recipe_case.py` 不在任何行里：矩阵把继承来的 case 记在定义处（该文件），但它是助手
+    # 模块，基类的 `RECIPE = None`，按文件目标收集会拿空数据跑出红（实测 `RecipeSafetyCase`）。
+    # 真正跑这些 case 的是子类文件，下面按子类逐个列出——比矩阵里那一条更宽，不会把杀得掉的 mutant 报成存活。
+    "tool/fast.py": (
+        "tests/test_adb_link.py", "tests/test_captures.py",
+        "tests/test_catalog.py", "tests/test_channel_arrive.py", "tests/test_channel_classification.py",
+        "tests/test_channel_decide.py", "tests/test_channel_outcomes.py", "tests/test_channel_page.py",
+        "tests/test_channel_snapshot.py", "tests/test_engine_events.py", "tests/test_entries.py",
+        "tests/test_fixtures.py", "tests/test_honor_recipe.py", "tests/test_honor_wkl_recipe.py",
+        "tests/test_issue_regressions.py", "tests/test_k70_recipe.py", "tests/test_k80pro_recipe.py",
+        "tests/test_k90ultra_recipe.py", "tests/test_layout_and_verdict_regressions.py",
+        "tests/test_lock_and_disconnect_regressions.py", "tests/test_main_switch_bar.py",
+        "tests/test_off_title_fallback.py", "tests/test_oneplus_plz110_recipe.py",
+        "tests/test_oneplus_recipe.py", "tests/test_oppo_pkt110_recipe.py",
+        "tests/test_oppo_pmx110_recipe.py", "tests/test_oppo_pyb110_recipe.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_phk110_recipe.py",
+        "tests/test_phone_dismisser.py", "tests/test_phone_facade.py", "tests/test_phone_host.py",
+        "tests/test_phone_interface.py", "tests/test_phone_launcher.py",
+        "tests/test_phone_navigator.py", "tests/test_phone_sessions.py",
+        "tests/test_phone_settings_search.py", "tests/test_phone_toggler.py",
+        "tests/test_recipe_call_snapshots.py", "tests/test_recipe_nav.py", "tests/test_regressions.py",
+        "tests/test_release_regressions.py", "tests/test_rmx3700_recipe.py", "tests/test_row.py",
+        "tests/test_tap_notice_regressions.py", "tests/test_ui_session.py",
+        "tests/test_vivo_2417_browser_entry.py", "tests/test_vivo_2547da_android17_recipe.py",
+        "tests/test_vivo_v2417a_recipe.py", "tests/test_xiaomi_24129pn74c_recipe.py",
+        "tests/test_xiaomi_2505apx7bc_recipe.py", "tests/test_xiaomi_25060rk16c_recipe.py"
+    ),
+    "tool/wait.py": (
+        "tests/test_adapt_cli.py", "tests/test_adb_link.py", "tests/test_channel_arrive.py",
+        "tests/test_channel_decide.py", "tests/test_channel_outcomes.py", "tests/test_channel_page.py",
+        "tests/test_engine_events.py", "tests/test_entries.py", "tests/test_fixtures.py",
+        "tests/test_huawei_channels.py", "tests/test_issue_regressions.py",
+        "tests/test_layout_and_verdict_regressions.py", "tests/test_lock_and_disconnect_regressions.py",
+        "tests/test_off_title_fallback.py", "tests/test_oneplus_plz110_recipe.py",
+        "tests/test_oppo_plp120_coloros17.py", "tests/test_oppo_plp120_search.py",
+        "tests/test_oppo_pmx110_recipe.py", "tests/test_oppo_pyb110_recipe.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_phone_base.py",
+        "tests/test_phone_dismisser.py", "tests/test_phone_interface.py",
+        "tests/test_phone_launcher.py", "tests/test_phone_navigator.py",
+        "tests/test_phone_settings_search.py", "tests/test_phone_toggler.py",
+        "tests/test_pja110_android16_recipe.py", "tests/test_recipe_call_snapshots.py",
+        "tests/test_recipe_nav.py", "tests/test_redmi_k90_2510drk44c.py", "tests/test_regressions.py",
+        "tests/test_row.py", "tests/test_tap_notice_regressions.py", "tests/test_vivo_v2417a_recipe.py",
+        "tests/test_wait.py", "tests/test_xiaomi_14pro_recipe.py",
+        "tests/test_xiaomi_24129pn74c_recipe.py", "tests/test_xiaomi_2505apx7bc_recipe.py",
+        "tests/test_xiaomi_25060rk16c_recipe.py"
+    ),
+    "tool/captures.py": (
+        "tests/test_adb_link.py", "tests/test_captures.py",
+        "tests/test_catalog.py", "tests/test_channel_arrive.py", "tests/test_channel_decide.py",
+        "tests/test_channel_outcomes.py", "tests/test_channel_page.py",
+        "tests/test_channel_snapshot.py", "tests/test_engine_events.py", "tests/test_entries.py",
+        "tests/test_fixtures.py", "tests/test_honor_recipe.py", "tests/test_honor_wkl_recipe.py",
+        "tests/test_issue_regressions.py", "tests/test_k70_recipe.py", "tests/test_k80pro_recipe.py",
+        "tests/test_k90ultra_recipe.py", "tests/test_layout_and_verdict_regressions.py",
+        "tests/test_lock_and_disconnect_regressions.py", "tests/test_main_switch_bar.py",
+        "tests/test_off_title_fallback.py", "tests/test_oneplus_plz110_recipe.py",
+        "tests/test_oneplus_recipe.py", "tests/test_oppo_pkt110_recipe.py",
+        "tests/test_oppo_pmx110_recipe.py", "tests/test_page_and_link_regressions.py",
+        "tests/test_phk110_recipe.py", "tests/test_phone_base.py", "tests/test_phone_dismisser.py",
+        "tests/test_phone_facade.py", "tests/test_phone_host.py", "tests/test_phone_interface.py",
+        "tests/test_phone_launcher.py", "tests/test_phone_navigator.py", "tests/test_phone_sessions.py",
+        "tests/test_phone_settings_search.py", "tests/test_phone_toggler.py",
+        "tests/test_recipe_call_snapshots.py", "tests/test_recipe_nav.py", "tests/test_regressions.py",
+        "tests/test_release_regressions.py", "tests/test_rmx3700_recipe.py", "tests/test_row.py",
+        "tests/test_run_commands.py", "tests/test_tap_notice_regressions.py",
+        "tests/test_ui_session.py", "tests/test_vivo_2417_browser_entry.py",
+        "tests/test_vivo_2547da_android17_recipe.py", "tests/test_xiaomi_24129pn74c_recipe.py",
+        "tests/test_xiaomi_2505apx7bc_recipe.py", "tests/test_xiaomi_25060rk16c_recipe.py"
+    ),
+    # 渠道判定族二（#1537），同样由覆盖矩阵量出：批处理记账、拨动决定、隐藏名单与屏幕快照被
+    # 读屏与回归用例执行到；`screen_snapshot` 是这一族的数据层，覆盖面最宽（38 个测试文件）。
+    "tool/channel_batch.py": (
+        "tests/test_adb_link.py", "tests/test_channel_arrive.py", "tests/test_channel_batch.py",
+        "tests/test_channel_classification.py", "tests/test_channel_outcomes.py",
+        "tests/test_channel_page.py", "tests/test_feedback_safety.py", "tests/test_issue_regressions.py",
+        "tests/test_layout_and_verdict_regressions.py", "tests/test_lock_and_disconnect_regressions.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_phone_host.py",
+        "tests/test_tap_notice_regressions.py",
+    ),
+    "tool/channel_toggle.py": (
+        "tests/test_channel_outcomes.py", "tests/test_channel_page.py", "tests/test_channel_toggle.py",
+        "tests/test_feedback_safety.py", "tests/test_issue_regressions.py",
+        "tests/test_page_and_link_regressions.py",
+    ),
+    "tool/ui_hidden.py": (
+        "tests/test_channel_classification.py", "tests/test_channel_outcomes.py",
+        "tests/test_feedback_safety.py", "tests/test_issue_regressions.py",
+        "tests/test_layout_and_verdict_regressions.py", "tests/test_page_and_link_regressions.py",
+        "tests/test_release_regressions.py",
+    ),
+    "tool/screen_snapshot.py": (
+        "tests/test_adb_link.py", "tests/test_catalog.py", "tests/test_channel_arrive.py",
+        "tests/test_channel_classification.py", "tests/test_channel_decide.py",
+        "tests/test_channel_outcomes.py", "tests/test_channel_page.py", "tests/test_channel_snapshot.py",
+        "tests/test_channel_toggle.py", "tests/test_entries.py", "tests/test_fixtures.py",
+        "tests/test_honor_recipe.py", "tests/test_honor_wkl_recipe.py", "tests/test_issue_regressions.py",
+        "tests/test_layout_and_verdict_regressions.py", "tests/test_lock_and_disconnect_regressions.py",
+        "tests/test_main_switch_bar.py", "tests/test_off_title_fallback.py",
+        "tests/test_oneplus_plz110_recipe.py", "tests/test_oppo_pmx110_recipe.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_phone_base.py",
+        "tests/test_phone_dismisser.py", "tests/test_phone_interface.py", "tests/test_phone_launcher.py",
+        "tests/test_phone_navigator.py", "tests/test_phone_settings_search.py",
+        "tests/test_phone_toggler.py", "tests/test_recipe_call_snapshots.py", "tests/test_recipe_nav.py",
+        "tests/test_regressions.py", "tests/test_release_regressions.py", "tests/test_row.py",
+        "tests/test_tap_notice_regressions.py", "tests/test_vivo_2417_browser_entry.py",
+        "tests/test_vivo_2547da_android17_recipe.py", "tests/test_xiaomi_24129pn74c_recipe.py",
+        "tests/test_xiaomi_25060rk16c_recipe.py",
+    ),
+    # 手机导航与落点三份（#1539），同样由覆盖矩阵量出：三者被同一批读屏用例执行，成组清零。
+    "tool/phone/navigator.py": (
+        "tests/test_entries.py", "tests/test_honor_recipe.py", "tests/test_oneplus_plz110_recipe.py",
+        "tests/test_oppo_pmx110_recipe.py", "tests/test_oppo_pyb110_recipe.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_phone_interface.py",
+        "tests/test_phone_launcher.py", "tests/test_phone_navigator.py",
+        "tests/test_phone_settings_search.py", "tests/test_phone_toggler.py",
+        "tests/test_recipe_call_snapshots.py", "tests/test_recipe_nav.py", "tests/test_regressions.py",
+        "tests/test_ui_session.py", "tests/test_xiaomi_24129pn74c_recipe.py",
+        "tests/test_xiaomi_25060rk16c_recipe.py",
+    ),
+    "tool/phone/dismisser.py": (
+        "tests/test_entries.py", "tests/test_page_and_link_regressions.py",
+        "tests/test_phone_dismisser.py", "tests/test_phone_interface.py", "tests/test_regressions.py",
+        "tests/test_ui_session.py",
+    ),
+    "tool/phone/launcher.py": (
+        "tests/test_entries.py", "tests/test_issue_regressions.py", "tests/test_phone_interface.py",
+        "tests/test_phone_launcher.py", "tests/test_regressions.py", "tests/test_ui_session.py",
     ),
     "tool/host.py": (
         "tests/test_coverage_note.py", "tests/test_android_view.py", "tests/test_phone_host.py",
@@ -119,6 +336,64 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_vivo_v2303a_recipe.py", "tests/test_vivo_v2309a_recipe.py",
         "tests/test_vivo_v2417a_recipe.py", "tests/test_run_commands.py",
     ),
+    # 脚本运行时（#1543）：52 个测试文件执行过它，行按覆盖矩阵原样收下。`tests/recipe_case.py`
+    # 换成继承它的十二个子类文件（同 #1536 / #1541）：矩阵把继承来的 case 记在定义处，基类的
+    # `RECIPE = None` 按文件收集会红；十二个子类本来就在矩阵里，行不比矩阵窄。
+    "tool/recipe_runtime.py": (
+        "tests/test_adapt_cli.py", "tests/test_captures.py", "tests/test_catalog.py",
+        "tests/test_entries.py", "tests/test_honor_cle_an00.py", "tests/test_honor_recipe.py",
+        "tests/test_honor_wkl_recipe.py", "tests/test_k70_recipe.py",
+        "tests/test_k80pro_recipe.py", "tests/test_k90ultra_recipe.py",
+        "tests/test_meizu_recipe.py", "tests/test_oneplus_plz110_recipe.py",
+        "tests/test_oneplus_recipe.py", "tests/test_oppo_pkt110_recipe.py",
+        "tests/test_oppo_plg110_recipe.py", "tests/test_oppo_plp120_browser.py",
+        "tests/test_oppo_plp120_coloros17.py", "tests/test_oppo_plp120_search.py",
+        "tests/test_oppo_pma110_recipe.py", "tests/test_oppo_pmx110_recipe.py",
+        "tests/test_oppo_pyb110_recipe.py", "tests/test_phk110_android15_recipe.py",
+        "tests/test_phk110_recipe.py", "tests/test_phone_dismisser.py",
+        "tests/test_phone_interface.py", "tests/test_phone_navigator.py",
+        "tests/test_phone_settings_search.py", "tests/test_pja110_android16_recipe.py",
+        "tests/test_recipe_call_snapshots.py", "tests/test_recipe_loader.py",
+        "tests/test_recipe_nav.py", "tests/test_recipe_setting_checked.py",
+        "tests/test_recipe_strategies.py", "tests/test_redmi_24094rad4c_recipe.py",
+        "tests/test_regressions.py", "tests/test_release_regressions.py",
+        "tests/test_rmx3700_recipe.py", "tests/test_rmx3888_recipe.py",
+        "tests/test_vivo_2417_browser_entry.py", "tests/test_vivo_2547da_android17_recipe.py",
+        "tests/test_vivo_v1986a_recipe.py", "tests/test_vivo_v2303a_recipe.py",
+        "tests/test_vivo_v2309a_recipe.py", "tests/test_vivo_v2417a_recipe.py",
+        "tests/test_vivo_v2545a_recipe.py", "tests/test_vivo_v2547a_recipe.py",
+        "tests/test_xiaomi_24129pn74c_recipe.py", "tests/test_xiaomi_2505apx7bc_recipe.py",
+        "tests/test_xiaomi_25060rk16c_recipe.py", "tests/test_xiaomi_ads_recipe.py",
+        "tests/test_xiaomi_store_recipe.py", "tests/test_xiaomi_theme_recipe.py"
+    ),
+    # 唯一装载入口（#1543）：矩阵里 49 个测试文件执行过它。同样换掉 `tests/recipe_case.py`，
+    # 十二个子类全收起（`test_oppo_plg110_recipe` 在矩阵里没有、由子类替换补上，行不比矩阵窄）。
+    "tool/recipe_loader.py": (
+        "tests/test_adapt_cli.py", "tests/test_entries.py", "tests/test_honor_cle_an00.py",
+        "tests/test_honor_recipe.py", "tests/test_honor_wkl_recipe.py", "tests/test_k70_recipe.py",
+        "tests/test_k80pro_recipe.py", "tests/test_k90ultra_recipe.py",
+        "tests/test_meizu_recipe.py", "tests/test_oneplus_plz110_recipe.py",
+        "tests/test_oneplus_recipe.py", "tests/test_oppo_pkt110_recipe.py",
+        "tests/test_oppo_plg110_recipe.py", "tests/test_oppo_plp120_browser.py",
+        "tests/test_oppo_plp120_coloros17.py", "tests/test_oppo_plp120_search.py",
+        "tests/test_oppo_pma110_recipe.py", "tests/test_oppo_pmx110_recipe.py",
+        "tests/test_oppo_pyb110_recipe.py", "tests/test_phk110_android15_recipe.py",
+        "tests/test_phk110_recipe.py", "tests/test_phone_dismisser.py",
+        "tests/test_phone_interface.py", "tests/test_phone_navigator.py",
+        "tests/test_phone_settings_search.py", "tests/test_pja110_android16_recipe.py",
+        "tests/test_recipe_call_snapshots.py", "tests/test_recipe_loader.py",
+        "tests/test_recipe_nav.py", "tests/test_recipe_setting_checked.py",
+        "tests/test_redmi_24094rad4c_recipe.py", "tests/test_regressions.py",
+        "tests/test_release_regressions.py", "tests/test_rmx3700_recipe.py",
+        "tests/test_rmx3888_recipe.py", "tests/test_vivo_2417_browser_entry.py",
+        "tests/test_vivo_2547da_android17_recipe.py", "tests/test_vivo_v1986a_recipe.py",
+        "tests/test_vivo_v2303a_recipe.py", "tests/test_vivo_v2309a_recipe.py",
+        "tests/test_vivo_v2417a_recipe.py", "tests/test_vivo_v2545a_recipe.py",
+        "tests/test_vivo_v2547a_recipe.py", "tests/test_xiaomi_24129pn74c_recipe.py",
+        "tests/test_xiaomi_2505apx7bc_recipe.py", "tests/test_xiaomi_25060rk16c_recipe.py",
+        "tests/test_xiaomi_ads_recipe.py", "tests/test_xiaomi_store_recipe.py",
+        "tests/test_xiaomi_theme_recipe.py",
+    ),
     # Protocol，方法体是 `...`：见模块文档，保留一个目标只为让 mutmut 有得收集。
     "tool/reader.py": ("tests/test_phone_interface.py",),
     "tool/plan.py": (
@@ -138,6 +413,173 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
         "tests/test_diagnostics.py", "tests/test_run_commands.py", "tests/test_channel_outcomes.py",
         "tests/test_adb_link.py", "tests/test_page_and_link_regressions.py", "tests/test_phone_host.py",
         "tests/test_plan.py", "tests/test_job.py",
+    ),
+    # 数据与词表（#1544），同样由覆盖矩阵量出：`entries` 被入口速查 / 词库 / adapt 的用例执行到，
+    # `vocab` 只被它自己的用例与 `test_adapt_cli` 执行到。
+    "tool/entries.py": (
+        "tests/test_adapt_cli.py", "tests/test_catalog.py", "tests/test_entries.py",
+        "tests/test_recipe_call_snapshots.py", "tests/test_vocab.py",
+        "tests/test_xiaomi_24129pn74c_recipe.py",
+    ),
+    "tool/vocab.py": ("tests/test_adapt_cli.py", "tests/test_vocab.py"),
+    # 观测基座（#1538）：读屏 adapter、认行、动作原语，是机型脚本与编排段共同的下沉底座，覆盖
+    # 矩阵量出 66 个测试文件执行过它（219 行），是表外最大的单模块。`tests/recipe_case.py` 同样是
+    # 只有基类的助手模块（`RECIPE` 为 None），按实际所有者换成三个 `RecipeSafetyCase` 子类文件；
+    # `tests/test_phone_screen.py` 是本票补的可观察行为用例，同样进这一行（范围只宽不窄）。
+    "tool/phone/screen.py": (
+        "tests/test_adapt_cli.py", "tests/test_adb_link.py", "tests/test_captures.py",
+        "tests/test_catalog.py", "tests/test_channel_arrive.py", "tests/test_channel_decide.py",
+        "tests/test_channel_outcomes.py", "tests/test_channel_page.py",
+        "tests/test_channel_snapshot.py", "tests/test_entries.py", "tests/test_fixtures.py",
+        "tests/test_honor_cle_an00.py", "tests/test_honor_recipe.py",
+        "tests/test_honor_wkl_recipe.py", "tests/test_issue_regressions.py",
+        "tests/test_k70_recipe.py", "tests/test_k80pro_recipe.py", "tests/test_k90ultra_recipe.py",
+        "tests/test_layout_and_verdict_regressions.py",
+        "tests/test_lock_and_disconnect_regressions.py", "tests/test_main_switch_bar.py",
+        "tests/test_meizu_recipe.py", "tests/test_off_title_fallback.py",
+        "tests/test_oneplus_plz110_recipe.py", "tests/test_oneplus_recipe.py",
+        "tests/test_oppo_plp120_browser.py", "tests/test_oppo_plp120_coloros17.py",
+        "tests/test_oppo_plp120_search.py", "tests/test_oppo_pma110_recipe.py",
+        "tests/test_oppo_pmx110_recipe.py", "tests/test_oppo_pyb110_recipe.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_phk110_recipe.py",
+        "tests/test_phone_base.py", "tests/test_phone_dismisser.py", "tests/test_phone_facade.py",
+        "tests/test_phone_host.py", "tests/test_phone_interface.py", "tests/test_phone_launcher.py",
+        "tests/test_phone_navigator.py", "tests/test_phone_screen.py",
+        "tests/test_phone_settings_search.py",
+        "tests/test_phone_toggler.py", "tests/test_pja110_android16_recipe.py",
+        "tests/test_recipe_call_snapshots.py", "tests/test_recipe_nav.py",
+        "tests/test_recipe_setting_checked.py", "tests/test_recipe_strategies.py",
+        "tests/test_regressions.py", "tests/test_release_regressions.py",
+        "tests/test_rmx3700_recipe.py", "tests/test_rmx3888_recipe.py", "tests/test_row.py",
+        "tests/test_tap_notice_regressions.py", "tests/test_ui_session.py",
+        "tests/test_vivo_2417_browser_entry.py", "tests/test_vivo_2547da_android17_recipe.py",
+        "tests/test_vivo_v2303a_recipe.py", "tests/test_vivo_v2309a_recipe.py",
+        "tests/test_vivo_v2417a_recipe.py", "tests/test_vivo_v2545a_recipe.py",
+        "tests/test_vivo_v2547a_recipe.py", "tests/test_xiaomi_24129pn74c_recipe.py",
+        "tests/test_xiaomi_2505apx7bc_recipe.py", "tests/test_xiaomi_25060rk16c_recipe.py",
+        "tests/test_xiaomi_ads_recipe.py", "tests/test_xiaomi_store_recipe.py",
+        "tests/test_xiaomi_theme_recipe.py",
+    ),
+    # 手机拨动族（#1534）：`session` 只有三个 `__init__` 与 `set_app()` 被执行，44 份用例里绝大多数
+    # 的接触来自 `Phone` 装配。`toggler` 不进表（实测见 ADR-0043「tool/ 其余模块（#1445）」）：
+    # 纯函数与索引已被 13 份用例守住，存活集中在该模块自己的编排段（`off` 34、`confirm` 3）。
+    "tool/phone/session.py": (
+        # 矩阵把 `recipe_case.py` 里写的用例归到它自己名下，但那是只有被继承才跑得起来的基类
+        # （单独收集时子类不给 `RECIPE`，`RecipeSafetyCase` 12 条全红）；按实际所有者换成三个子类文件。
+        "tests/test_k70_recipe.py", "tests/test_k80pro_recipe.py",
+        "tests/test_xiaomi_24129pn74c_recipe.py", "tests/test_adb_link.py", "tests/test_captures.py",
+        "tests/test_catalog.py", "tests/test_channel_arrive.py", "tests/test_channel_decide.py",
+        "tests/test_channel_outcomes.py", "tests/test_channel_page.py",
+        "tests/test_channel_snapshot.py", "tests/test_engine_events.py", "tests/test_entries.py",
+        "tests/test_fixtures.py", "tests/test_honor_recipe.py", "tests/test_honor_wkl_recipe.py",
+        "tests/test_issue_regressions.py", "tests/test_layout_and_verdict_regressions.py",
+        "tests/test_lock_and_disconnect_regressions.py", "tests/test_main_switch_bar.py",
+        "tests/test_off_title_fallback.py", "tests/test_oneplus_plz110_recipe.py",
+        "tests/test_oppo_pmx110_recipe.py", "tests/test_page_and_link_regressions.py",
+        "tests/test_phk110_recipe.py", "tests/test_phone_dismisser.py",
+        "tests/test_phone_facade.py", "tests/test_phone_host.py", "tests/test_phone_interface.py",
+        "tests/test_phone_launcher.py", "tests/test_phone_navigator.py",
+        "tests/test_phone_sessions.py", "tests/test_phone_settings_search.py",
+        "tests/test_phone_toggler.py", "tests/test_recipe_call_snapshots.py",
+        "tests/test_recipe_nav.py", "tests/test_regressions.py",
+        "tests/test_release_regressions.py", "tests/test_rmx3700_recipe.py", "tests/test_row.py",
+        "tests/test_tap_notice_regressions.py", "tests/test_ui_session.py",
+        "tests/test_vivo_2417_browser_entry.py", "tests/test_vivo_2547da_android17_recipe.py",
+        "tests/test_xiaomi_25060rk16c_recipe.py",
+    ),
+    # 手机连接与搜索（#1540），由覆盖矩阵量出。`connection` 是 `Phone` 装配的必经点，几乎每个读屏
+    # 用例都执行到它，所以行很宽（36 个文件）；`settings_search` 只被设置搜索与「构造 `Phone`」的
+    # 那几份碰到；`ui_session` 只有它自己的用例与事件用例执行到。
+    "tool/phone/settings_search.py": (
+        "tests/test_page_and_link_regressions.py", "tests/test_phone_interface.py",
+        "tests/test_phone_settings_search.py", "tests/test_recipe_call_snapshots.py",
+        "tests/test_regressions.py", "tests/test_ui_session.py",
+    ),
+    "tool/phone/connection.py": (
+        "tests/test_adb_link.py", "tests/test_captures.py", "tests/test_catalog.py",
+        "tests/test_channel_arrive.py", "tests/test_channel_classification.py",
+        "tests/test_channel_outcomes.py", "tests/test_engine_events.py", "tests/test_entries.py",
+        "tests/test_feedback_safety.py", "tests/test_fixtures.py", "tests/test_honor_wkl_recipe.py",
+        "tests/test_issue_regressions.py", "tests/test_layout_and_verdict_regressions.py",
+        "tests/test_lock_and_disconnect_regressions.py", "tests/test_off_title_fallback.py",
+        "tests/test_oneplus_plz110_recipe.py", "tests/test_oppo_pmx110_recipe.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_phone_base.py",
+        "tests/test_phone_dismisser.py", "tests/test_phone_facade.py", "tests/test_phone_host.py",
+        "tests/test_phone_interface.py", "tests/test_phone_launcher.py",
+        "tests/test_phone_navigator.py", "tests/test_phone_settings_search.py",
+        "tests/test_phone_toggler.py", "tests/test_recipe_call_snapshots.py",
+        "tests/test_recipe_nav.py", "tests/test_regressions.py", "tests/test_release_regressions.py",
+        "tests/test_row.py", "tests/test_tap_notice_regressions.py", "tests/test_ui_session.py",
+        "tests/test_xiaomi_24129pn74c_recipe.py", "tests/test_xiaomi_25060rk16c_recipe.py",
+    ),
+    "tool/ui_session.py": ("tests/test_engine_events.py", "tests/test_ui_session.py"),
+    # 连接宿主（#1535），由覆盖矩阵量出：`Connection` / `wait_for` / `present` 被几乎所有跑读取的
+    # 用例执行到，所以行很宽（51 个文件）。`tests/recipe_case.py` 是只有基类的助手模块（`RECIPE`
+    # 为 None），pytest 按路径收集它时基类用例直接红，整份不进行；它的用例由 `_recipe.py`
+    # 子类文件跑（同一条用例在真实数据上执行），不少杀。
+    "tool/adb_link.py": (
+        "tests/test_adb_link.py", "tests/test_captures.py",
+        "tests/test_catalog.py", "tests/test_channel_arrive.py", "tests/test_channel_classification.py",
+        "tests/test_channel_decide.py", "tests/test_channel_outcomes.py", "tests/test_channel_page.py",
+        "tests/test_channel_snapshot.py", "tests/test_engine_events.py", "tests/test_entries.py",
+        "tests/test_feedback_safety.py", "tests/test_fixtures.py", "tests/test_honor_recipe.py",
+        "tests/test_honor_wkl_recipe.py", "tests/test_huawei_channels.py", "tests/test_issue_regressions.py",
+        "tests/test_layout_and_verdict_regressions.py",
+        "tests/test_lock_and_disconnect_regressions.py", "tests/test_main_switch_bar.py",
+        "tests/test_off_title_fallback.py", "tests/test_oneplus_plz110_recipe.py",
+        "tests/test_oppo_pmx110_recipe.py", "tests/test_page_and_link_regressions.py",
+        "tests/test_phk110_recipe.py", "tests/test_phone_base.py", "tests/test_phone_dismisser.py",
+        "tests/test_phone_facade.py", "tests/test_phone_host.py", "tests/test_phone_interface.py",
+        "tests/test_phone_launcher.py", "tests/test_phone_navigator.py", "tests/test_phone_sessions.py",
+        "tests/test_phone_settings_search.py", "tests/test_phone_toggler.py",
+        "tests/test_recipe_call_snapshots.py", "tests/test_recipe_nav.py", "tests/test_recipe_variants.py",
+        "tests/test_regressions.py", "tests/test_release_regressions.py", "tests/test_rmx3700_recipe.py",
+        "tests/test_row.py", "tests/test_run_commands.py", "tests/test_tap_notice_regressions.py",
+        "tests/test_ui_session.py", "tests/test_vivo_2417_browser_entry.py",
+        "tests/test_vivo_2547da_android17_recipe.py", "tests/test_vivo_v2303a_recipe.py",
+        "tests/test_vivo_v2417a_recipe.py", "tests/test_xiaomi_24129pn74c_recipe.py",
+        "tests/test_xiaomi_25060rk16c_recipe.py",
+    ),
+    "tool/huawei_channels.py": ("tests/test_huawei_channels.py",),
+    # 开发者脚本面（#1545），由覆盖矩阵量出：适配生成 / 探路 / 脚本审计 / 台账各自只有少量
+    # 专用用例执行到它们，行都很窄。
+    "tool/adapt.py": ("tests/test_adapt_cli.py", "tests/test_catalog.py"),
+    "tool/explore.py": ("tests/test_adapt_cli.py", "tests/test_phone_interface.py"),
+    "tool/recipe_audit.py": (
+        "tests/test_recipe_audit.py", "tests/test_recipe_variants.py", "tests/test_verify_ledger.py",
+    ),
+    "tool/verify_ledger.py": (
+        "tests/test_issue_regressions.py", "tests/test_plan.py", "tests/test_recipe_audit.py",
+        "tests/test_run_commands.py", "tests/test_verify_ledger.py",
+    ),
+    # 杂项三份（#1546），按覆盖矩阵量出：`troubleshooting` 与 `backups` 被读屏失败、快照路径的
+    # 用例广泛执行到，行很宽；`stdio` 最窄，只有少数入口用例碰它。`run.py` 不进表（实测见
+    # ADR-0043「tool/ 其余模块（#1445）」）：它的输出契约在子进程对拍里，副本跑不到那套驱动器。
+    "tool/troubleshooting.py": (
+        "tests/test_adb_link.py", "tests/test_channel_outcomes.py", "tests/test_client_events.py",
+        "tests/test_feedback_safety.py", "tests/test_honor_wkl_recipe.py",
+        "tests/test_issue_regressions.py", "tests/test_job_races.py",
+        "tests/test_lock_and_disconnect_regressions.py", "tests/test_page_and_link_regressions.py",
+        "tests/test_phone_host.py", "tests/test_phone_interface.py", "tests/test_plan.py",
+        "tests/test_release_regressions.py", "tests/test_result_retry.py",
+        "tests/test_run_commands.py", "tests/test_ui_session.py",
+    ),
+    "tool/backups.py": (
+        "tests/test_adb_link.py", "tests/test_api_structure.py", "tests/test_backups.py",
+        "tests/test_channel_outcomes.py", "tests/test_client_events.py", "tests/test_error_report.py",
+        "tests/test_feedback_safety.py", "tests/test_issue_regressions.py", "tests/test_job.py",
+        "tests/test_job_races.py", "tests/test_layout_and_verdict_regressions.py",
+        "tests/test_lock_and_disconnect_regressions.py", "tests/test_packaging_entry.py",
+        "tests/test_page_and_link_regressions.py", "tests/test_phone_host.py",
+        "tests/test_phone_interface.py", "tests/test_plan.py", "tests/test_recipe_audit.py",
+        "tests/test_regressions.py", "tests/test_release_regressions.py",
+        "tests/test_result_retry.py", "tests/test_run_commands.py", "tests/test_summary.py",
+        "tests/test_tap_notice_regressions.py", "tests/test_ui_session.py", "tests/test_updates.py",
+        "tests/test_verify_ledger.py",
+    ),
+    "tool/stdio.py": (
+        "tests/test_issue_regressions.py", "tests/test_packaging_entry.py", "tests/test_stdio.py",
+        "tests/test_unittest_summary.py",
     ),
     # gui 侧（#1429），同样由覆盖矩阵量出：任务编排被几乎所有跑计划的用例碰到。
     "gui/dispatcher.py": (
@@ -250,6 +692,17 @@ MODULE_TESTS: dict[str, tuple[str, ...]] = {
     # 门面测试的 `ScriptSurfaceTests`。两份都要在副本里对真实仓库求值/读根级目录的用例摘掉，见 `UNUSABLE`。
     "devtools/glob_scan.py": ("tests/test_glob_scan.py",),
     "devtools/script_surface.py": ("tests/test_phone_facade.py",),
+    # `tool/chan_fast.py` 在表外（#1533，ADR-0043「tool/ 其余模块（#1445）」）：实测 1804 个
+    # mutant，杀死 1331、存活 462、无测试 6、超时 5。存活集中在整批编排段（`run` 112、`toggle` 57，
+    # 加上 `_enter_app_page` 47、`_skeleton` 35、`undo_message` 20 等）；`run` / `toggle` 的清零要造
+    # 整套 `Phone` / `ShellPhone` / `UiHidden` 替身并锁调用序列，落在成本闸门之外。模块整体才进表，
+    # 故整份登记为表外已知缺口。
+    # `tool/row.py` 在表外（#1536，ADR-0043「tool/ 其余模块（#1445）」）：实测 1256 个 mutant，杀死 1075、
+    # 存活 181、无测试 0。存活都在纯函数里（`skeleton` 48、`title_label` 46、`summary` 29、`path` 16、
+    # `switch_row` / `dedupe` 各 9），但同一语句上同时挂着可杀与不可区分（语义等价 / 边界等价）的变异
+    # （`//2` 与 `/2`、`rsplit(...)[-1]` 的各种 maxsplit、`or ""` 的占位串），清零要先按行拆开这些语句、
+    # 再给每条边界构造专用页面——那是改写读屏算术去适配尺子，不在本票的成本内。模块整体才进表，故整份
+    # 登记为表外已知缺口。
     # `devtools/typecheck_recipes.py` 在表外（#1521，ADR-0043）：实测 179 个 mutant，存活 8、无测试 154。
     # 唯一覆盖是 `test_catalog` 的一个方法，只碰到 `_check_catalog`，且它还有 8 个存活；`recipes` /
     # `_check_python` / `main` 分别 54 / 28 / 72 个 mutant 全无测试。`_check_python` 起 mypy 子进程、
@@ -350,6 +803,23 @@ def modules_in_paths(paths: Iterable[str]) -> list[str]:
     for path in paths:
         if path in MODULE_TESTS:
             ordered.setdefault(path, None)
+    return list(ordered)
+
+
+def modules_for_tests(paths: Iterable[str]) -> list[str]:
+    """改到的测试文件覆盖哪些模块：把 `MODULE_TESTS` 反过来读，按首次出现的顺序去重。
+
+    改测试文件的 PR 里没有模块路径可看，删除用例检测就落在这里：文件出现在哪几行，
+    那几行对应的模块本次都要跑（#1531）。索引现建现用——表只有几十行，爱惜它不如让它不会漂。
+    """
+    by_test: dict[str, list[str]] = {}
+    for module, targets in MODULE_TESTS.items():
+        for target in targets:
+            by_test.setdefault(target, []).append(module)
+    ordered: dict[str, None] = {}
+    for path in paths:
+        for module in by_test.get(path, ()):
+            ordered.setdefault(module, None)
     return list(ordered)
 
 

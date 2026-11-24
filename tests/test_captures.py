@@ -6,6 +6,7 @@
 两态都钉住：给了捕获目录就在 `<任务>-<段>/` 下留一份那一屏的原文，不给就一个字节都不写。
 """
 import contextlib
+import datetime
 import io
 import json
 import os
@@ -70,6 +71,120 @@ def run_step(fast_mod, store, body, name="主题"):
     with contextlib.redirect_stdout(io.StringIO()):
         scope["rt"].run_step(name, 段体)
     return phone
+
+
+class SlugTests(unittest.TestCase):
+    """目录名的一段：路径分隔符与控制字符替换掉，首尾的空格 / 点剥掉，空串落到 `-`。"""
+
+    def test_path_separators_and_control_characters_become_underscores(self):
+        self.assertEqual(captures.slug("主题 子\n/页"), "主题 子__页")
+
+    def test_leading_and_trailing_spaces_and_dots_are_stripped(self):
+        # 只剥空格与点：名字里的 X 原样保留（路径末尾的点在 Windows 上会被吃掉）
+        self.assertEqual(captures.slug(" .名字X. "), "名字X")
+
+    def test_an_empty_name_falls_back_to_a_dash(self):
+        self.assertEqual(captures.slug(""), "-")
+        self.assertEqual(captures.slug(" . "), "-")
+
+
+class HumanSizeTests(unittest.TestCase):
+    """体积给人看：B 取整、KB / MB 一位小数、超过 MB 的落回最后一个单位。"""
+
+    def test_bytes_are_whole_numbers_with_an_upper_b_unit(self):
+        self.assertEqual(captures.human_size(512), "512 B")
+        self.assertEqual(captures.human_size(1023), "1023 B")
+
+    def test_a_kilobyte_is_where_the_unit_changes(self):
+        self.assertEqual(captures.human_size(1024), "1.0 KB")
+
+    def test_a_megabyte_is_not_divided_a_second_time(self):
+        self.assertEqual(captures.human_size(1024 * 1024), "1.0 MB")
+
+    def test_megabytes_are_three_million_byte_scale(self):
+        self.assertEqual(captures.human_size(3 * 1024 * 1024), "3.0 MB")
+
+    def test_gigabytes_fall_back_to_the_last_unit(self):
+        self.assertEqual(captures.human_size(2 * 1024 ** 3), "2.0 GB")
+
+
+class CapturesDefaultsTests(unittest.TestCase):
+    def test_a_store_starts_without_a_task_or_step(self):
+        store = captures.Captures("/tmp/root")
+        self.assertEqual((store.task, store.step), ("", ""))
+
+
+class SaveTests(unittest.TestCase):
+    """`save()` 直接落盘：空页面不建目录、同段重跑覆盖、meta 的形状固定。"""
+
+    def setUp(self):
+        self.root = self.enterContext(tempfile.TemporaryDirectory())
+        self.store = captures.Captures(self.root)
+        self.store.task, self.store.step = "recipe", "主题"
+
+    @property
+    def folder(self):
+        return Path(self.root, "recipe-主题")
+
+    def test_an_empty_page_is_not_saved(self):
+        self.assertIsNone(self.store.save(""))
+        self.assertEqual(list(Path(self.root).iterdir()), [])
+
+    def test_the_meta_defaults_to_a_zero_size(self):
+        self.store.save("<x/>")
+        meta = json.loads((self.folder / captures.META).read_text(encoding="utf-8"))
+        self.assertEqual((meta["w"], meta["h"]), (0, 0))
+
+    def test_the_timestamp_is_second_precision_iso(self):
+        self.store.save("<x/>", when=datetime.datetime(2026, 1, 2, 3, 4, 5))
+        meta = json.loads((self.folder / captures.META).read_text(encoding="utf-8"))
+        self.assertEqual(meta["at"], "2026-01-02T03:04:05")
+
+    def test_saving_the_same_step_again_overwrites_the_folder(self):
+        # `exist_ok=False` 时第二次保存会抛 FileExistsError、被当成写不进去，现场就丢了
+        self.assertEqual(self.store.save("<a/>"), str(self.folder))
+        self.assertEqual(self.store.save("<b/>"), str(self.folder))
+        self.assertEqual((self.folder / captures.PAGE).read_text(encoding="utf-8"), "<b/>")
+
+    def test_the_page_is_raw_utf8_and_the_meta_is_readable_json(self):
+        page = '<node text="营销通知"/>'
+        self.store.save(page)
+        self.assertEqual((self.folder / captures.PAGE).read_bytes(), page.encode("utf-8"))
+        meta_text = (self.folder / captures.META).read_text(encoding="utf-8")
+        self.assertTrue(meta_text.startswith('{\n "w": 0,'), meta_text)
+        self.assertIn('"task": "recipe"', meta_text)
+        self.assertIn('"step": "主题"', meta_text)      # ensure_ascii=False：中文原样，不转 \uXXXX
+
+
+class UsageTests(unittest.TestCase):
+    """体积统计：文件数与总字节数；读不动的条目跳过但不拦后面的。"""
+
+    def test_files_are_counted_and_sized(self):
+        root = self.enterContext(tempfile.TemporaryDirectory())
+        Path(root, "a").write_bytes(b"x" * 10)
+        Path(root, "b").write_bytes(b"y" * 5)
+        self.assertEqual(captures.Captures(root).usage(), (2, 15))
+
+    def test_an_unreadable_entry_is_skipped_and_the_rest_is_still_counted(self):
+        """读不动的只跳过这一条：`continue` 换成 `break` 会丢掉同目录里排在后面的条目。
+
+        用假 `getsize` 让「读不动的是第一条」，不靠目录顺序——靠顺序的话，排到最后的那次
+        换成 `break` 与跳过同结果，Linux 的 ext4 上就判不出来（CI 上是这样活下来的）。
+        """
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        for name, size in (("a", 3), ("b", 4), ("c", 5)):
+            (root / name).write_bytes(b"x" * size)
+        real = os.path.getsize
+        seen = []
+
+        def flaky(path):
+            seen.append(path)
+            if len(seen) == 1:
+                raise OSError(13, "denied")
+            return real(path)
+
+        with patch("os.path.getsize", flaky):
+            self.assertEqual(captures.Captures(str(root)).usage(), (2, 9))
 
 
 class CaptureTests(unittest.TestCase):

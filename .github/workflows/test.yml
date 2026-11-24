@@ -217,11 +217,15 @@ jobs:
   # 整步在一分钟内；行级筛选由 mutmut 自己的内容哈希 + span 缓存完成。
   # 判据是「该模块存活 mutant = 0」，所以某个模块的存量还没清完之前，改到它的 PR 会被存量存活
   # 挡红——那是清理票要消掉的东西，不是误报。
+  # 上限给到 45 分钟：上面那句「一分钟」是带缓存时的常态，而一次改到一大片模块的 PR（#1445 的
+  # 批量清零就是这样）会先把整组当冷缓存跑——实测 17336 个 mutant，30 分钟到 16360（94%），整轮
+  # 约 32 分钟。这一轮过后 `mutants/` 的判定按本树写进缓存，常态仍是一分钟内；10 / 30 分钟的上限
+  # 只会把这种一次性冷启动判成假红。缓存 key 含 `tests/**`，所以改测试也会整体失效、重新冷跑。
   # 只在 PR 上跑：--since 要一个基点，main push 没有 base。
   mutation:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
         with:

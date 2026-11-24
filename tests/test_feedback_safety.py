@@ -18,6 +18,22 @@ import chan_fast as chan
 import troubleshooting as help_ui
 
 
+class ConnectionErrorMarkerTests(unittest.TestCase):
+    """读屏连接失败的识别词表：每个标记各自守一条，写错一个字符就漏报。"""
+
+    MARKERS = ("UIAUTOMATION_BUSY", "AccessibilityServiceAlreadyRegisteredError",
+               "LaunchUiAutomationError", "UiAutomationNotConnectedError",
+               "UiAutomationService", "手机读屏服务（UiAutomation）启动失败")
+
+    def test_every_marker_is_recognised(self):
+        for marker in self.MARKERS:
+            with self.subTest(marker):
+                self.assertTrue(help_ui.is_ui_connection_error("检查失败：" + marker + "\n"))
+
+    def test_unrelated_failure_is_not_a_connection_error(self):
+        self.assertFalse(help_ui.is_ui_connection_error("permission denied"))
+
+
 class AccessibilityTests(unittest.TestCase):
     def test_probe_is_bounded_read_only_and_does_not_disclose_service_names(self):
         output = "1\ncom.private.app/.Service:com.reader/.Service:com.private.app/.Service\n"
@@ -48,6 +64,56 @@ class AccessibilityTests(unittest.TestCase):
                 message = help_ui.accessibility_summary("test", "adb-test")
                 self.assertIn("排查", message)
                 self.assertNotIn("0 项服务", message)
+
+    def test_no_adb_means_the_readonly_check_is_skipped(self):
+        with patch.object(help_ui.adb_link, "adb_path", return_value=""):
+            message = help_ui.accessibility_summary("test")
+        self.assertEqual(message, "未找到可用于只读检查的 adb；仍可按下方步骤排查。")
+
+    def test_unreadable_state_messages_are_reported_verbatim(self):
+        """退出码、行数与总开关三处任一不成立都是「未能读取」；服务标识不像包名 / 类名时另说。"""
+        unreadable = "未能读取无障碍服务状态；仍可按下方步骤排查。"
+        cases = (
+            (SimpleNamespace(returncode=1, stdout="1\ncom.example/.Service\n"), unreadable),
+            (SimpleNamespace(returncode=0, stdout="1\ncom.example/.Service\nextra\n"), unreadable),
+            (SimpleNamespace(returncode=0, stdout="2\ncom.example/.Service\n"), unreadable),
+            (SimpleNamespace(returncode=0, stdout="1\ninvalid service output\n"),
+             "未能识别无障碍服务状态；仍可按下方步骤排查。"),
+        )
+        for result, expected in cases:
+            with self.subTest(stdout=result.stdout), \
+                 patch.object(help_ui.subprocess, "run", return_value=result):
+                self.assertEqual(help_ui.accessibility_summary("test", "adb-test"), expected)
+
+    def test_timeout_and_os_error_share_one_message(self):
+        for error in (subprocess.TimeoutExpired(["adb"], 3), OSError("adb 不见了")):
+            with self.subTest(error=error), patch.object(help_ui.subprocess, "run", side_effect=error):
+                self.assertEqual(help_ui.accessibility_summary("test", "adb-test"),
+                                 "无障碍状态读取超时或失败；仍可按下方步骤排查。")
+
+    def test_switch_and_service_count_are_reported_verbatim(self):
+        cases = (
+            ("1\ncom.example/.Service:com.reader/.Service\n", "无障碍总开关已开启，配置了 2 项服务"),
+            ("0\ncom.example/.Service\n", "无障碍总开关为关闭"),
+            # settings get 在 unset 时给的是 null，不是 0 项配置的标识
+            ("1\nnull\n", "无障碍总开关已开启，配置了 0 项服务"),
+        )
+        for stdout, status in cases:
+            with self.subTest(stdout=stdout), \
+                 patch.object(help_ui.subprocess, "run",
+                              return_value=SimpleNamespace(returncode=0, stdout=stdout)):
+                message = help_ui.accessibility_summary("test", "adb-test")
+                self.assertIn(f"只读检查：{status}。", message)
+
+    def test_probe_arguments_are_fixed(self):
+        """超时、解码方式与 Windows 上隐藏控制台窗口都是这条只读检查的契约。"""
+        with patch.object(help_ui.subprocess, "run",
+                          return_value=SimpleNamespace(returncode=0, stdout="1\ncom.example/.Service\n")) as shell, \
+             patch.object(help_ui.os, "name", "nt"):
+            help_ui.accessibility_summary("S", "/opt/adb")
+        self.assertEqual(shell.call_args.kwargs,
+                         {"capture_output": True, "text": True, "encoding": "utf-8",
+                          "errors": "replace", "timeout": 3, "creationflags": 0x08000000})
 
 
 class PhotoSpotTests(unittest.TestCase):

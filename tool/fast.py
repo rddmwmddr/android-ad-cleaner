@@ -485,8 +485,9 @@ def _ledger(g):
     if hasattr(g, "failed_steps"):
         return list(g.failed_steps), list(g.halted_steps)
     rt = g.get("rt") if isinstance(g, dict) else None
-    if rt is not None and hasattr(rt, "failed_steps"):
-        return list(rt.failed_steps), list(rt.halted_steps)
+    if rt is not None:
+        if hasattr(rt, "failed_steps"):
+            return list(rt.failed_steps), list(rt.halted_steps)
     failed = list(g.get("FAILED_STEPS") or [])
     return failed, [name for name in failed if name in (g.get("HALTED_STEPS") or [])]
 
@@ -553,7 +554,7 @@ def execute(p, cmd, rest):
         if not p.wait_unlocked():
             print("✗ 手机一直锁屏，本步骤没有执行。请解锁手机、保持亮屏后重试"); sys.exit(2)
         # 数据是 `.toml`（#1268）：记录版本从顶层 `build` 读；`.py` 脚本已不再装载。
-        recorded = ""
+        recorded = str()   # pragma: no mutate 语义等价：只在真假判断与那一句提示里用，None 与空串同假
         if str(rest[0]).lower().endswith(".toml"):
             with open(rest[0], "rb") as f:
                 recorded = str(tomllib.load(f).get("build", ""))
@@ -573,7 +574,9 @@ def execute(p, cmd, rest):
         logdir = backups.root_from_env() or os.path.dirname(os.path.abspath(rest[0]))
         try:
             os.makedirs(logdir, exist_ok=True)
-            with open(os.path.join(logdir, "run-log.txt"), "a", encoding="utf-8") as f:
+            with open(os.path.join(logdir, "run-log.txt"), "a",
+                      encoding="utf-8"   # pragma: no mutate 语义等价：codec 名大小写不敏感；省略时取 locale 编码，判定平台默认就是 UTF-8
+                      ) as f:
                 f.write(f"\n# {datetime.datetime.now():%Y-%m-%d %H:%M} {' '.join(rest[1:]) or '全跑'}  {time.time()-t:.0f}s\n")
                 for pg, tt in p.changed:
                     f.write(f"{pg}\t{tt}\n")

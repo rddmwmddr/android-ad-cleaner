@@ -185,6 +185,13 @@ class RealRecipesTest(unittest.TestCase):
                          [("广告", vocab.OFF), ("减少动画", vocab.NOOP)])
         self.assertIn("| 减少动画 | 小米 | 应用商店 | 商店·设置 | 不碰 |", vocab.render(tmp.name))
 
+    def test_default_recipes_dir_is_the_repository_recipes(self):
+        """CLI 缺省扫的那份目录：与本模块同级往上两级的 `recipes/`。"""
+        path = Path(vocab._recipes_dir())
+        self.assertTrue(path.is_absolute(), path)
+        self.assertEqual(path.name, "recipes")
+        self.assertTrue((path / "xiaomi").is_dir())
+
     def test_scripts_without_any_word_are_named(self):
         """整份脚本一条词条都读不出来时，文档必须点名，不能让人以为这台机没有词。"""
         silent = silent_scripts()
@@ -405,6 +412,39 @@ class ParseTest(unittest.TestCase):
         found = self.scan('p.off(only=["词"], page=page)')
         self.assertEqual(found.words[0].page, "<page>")
         self.assertEqual(vocab.reverse_rows(found.words), [])
+
+    def test_group_prefix_is_the_segment_before_the_first_dot(self):
+        """页面标签的 `·` 前面那段是分组前缀，取第一段；从右边切会把二级页名算进前缀。"""
+        self.assertEqual(vocab.group_of("xiaomi", "商店·设置·二级"), "应用商店")
+
+    def test_off_and_close_named_on_one_line_keep_off_first(self):
+        """同一行先 `p.off()` 再 `close_named()`（沿用旧口径）：排序键反过来会把两档的词倒过来。"""
+        found = self.scan('close_named(["甲"], "音乐·页"); p.off(only=["乙"], page="音乐·页")')
+        self.assertEqual([w.text for w in found.words], ["乙", "甲"])
+
+    def test_close_named_with_only_keyword_arguments_has_no_list(self):
+        """`close_named` 的名单只按关键字给时位置实参为空：按位置硬取会 IndexError。"""
+        found = self.scan('close_named(names=names, title="音乐·页")')
+        self.assertEqual(found.words, [])
+        self.assertEqual([c.text for c in found.unresolved_close], ["names"])
+
+    def test_unresolved_keep_records_the_family(self):
+        """读不出的 keep= 也要记家族与出处，只留文本会让查漏分不清是哪一家。"""
+        found = self.scan('p.off(only=["广告"], keep=names, page="商店·页")')
+        self.assertEqual([(c.family, c.script, c.line, c.text) for c in found.unresolved_keep],
+                         [("xiaomi", "xiaomi/A1/recipe.py", 1, "names")])
+
+    def test_missing_page_is_named_in_the_unclassified_list(self):
+        """没写页面的点名列在「未归类」，文本写「（没写页面）」。"""
+        found = self.scan('p.off(only=["词"])')
+        self.assertEqual([c.text for c in found.unclassified], ["（没写页面）"])
+
+    def test_scan_ignores_directories_that_are_not_families(self):
+        """认不出品牌的目录不进库（沿用 scan 的家族过滤）：扫进来会在 FAMILY 查表时 KeyError。"""
+        tmp = recipes(**{"honor-A1": 'p.off(only=["甲"], page="音乐·页")',
+                         "unknownbrand-X": 'p.off(only=["乙"], page="商店·页")'})
+        self.addCleanup(tmp.cleanup)
+        self.assertEqual({w.script for w in vocab.scan(tmp.name).words}, {"honor/A1/recipe.py"})
 
 
 class InjectedStepTest(unittest.TestCase):
@@ -661,6 +701,15 @@ class SpeedupTest(unittest.TestCase):
     def test_direct_nobody_used_is_not_a_hint(self):
         self.assertTrue(all(d.activity == ".ad.AdServiceSettings" for _f, _g, _m, d in entries.speedups(self.tmp.name)))
 
+    def test_a_file_that_is_not_a_recipe_or_catalog_is_not_a_model(self):
+        """`recipeX.txt` 既不是 `recipe*.py` 也不是 `*.toml`：当成型号会让提速提示凭空多一台。"""
+        model_dir = Path(self.tmp.name, "xiaomi", "X9")
+        model_dir.mkdir()
+        (model_dir / "recipeX.txt").write_text("", encoding="utf-8")
+        found = [(f, g, m) for f, g, m, d in entries.speedups(self.tmp.name)
+                 if d.activity == ".ad.AdServiceSettings"]
+        self.assertEqual(found, [("xiaomi", "系统广告", ["B2"])])
+
     def test_doc_says_it_is_not_a_defect(self):
         doc = entries.markdown(self.tmp.name)
         hints = doc.split("## 可提速提示", 1)[1]
@@ -722,18 +771,19 @@ class GapsTest(unittest.TestCase):
         })
         self.assertIn("## 音乐", text)
         self.assertIn("乙", text)
-        self.assertIn("honor/B2/recipe.py:1", text)
-        self.assertIn("B2", text)
-        self.assertIn("音乐·广告推荐", text)
+        self.assertIn("`honor/B2/recipe.py:1`（B2 · 音乐·广告推荐）", text)
         self.assertNotIn("甲", text)
+        self.assertNotIn("XXXX", text)
 
     def test_spacing_variants_are_not_a_gap(self):
         text = self.gaps(**{
             "honor-A1": 'p.off(only=["WiFi 连接"], page="音乐·页")',
             "honor-B2": 'p.off(only=["WiFi连接"], page="音乐·页")',
         })
-        self.assertIn("没有差异", text)
+        self.assertIn("没有差异：同家族别的机型关过的词条，这份脚本都写了。", text.splitlines())
         self.assertNotIn("WiFi", text)
+        self.assertNotIn("XXXX", text)
+        self.assertEqual(text.splitlines()[0], "# 查漏：honor/A1")
 
     def test_only_words_meant_to_be_closed_are_compared(self):
         """同页保留项与「要开」的保护类开关不算漏：它们不在这台机上独立成立。"""
@@ -758,7 +808,7 @@ class GapsTest(unittest.TestCase):
                          "honor-B2": 'p.off(only=["甲", "乙"], page="音乐·页")'})
         self.addCleanup(tmp.cleanup)
         exact = vocab.gaps(tmp.name, "honor/A1" )
-        for variant in ("honor/A1/", "HONOR/A1"):
+        for variant in ("honor/A1/", "HONOR/A1", "./honor/A1"):
             self.assertEqual(vocab.gaps(tmp.name, variant), exact, variant)
 
     def test_script_with_no_readable_words_is_flagged(self):
@@ -769,17 +819,29 @@ class GapsTest(unittest.TestCase):
     def test_unresolvable_peer_calls_are_named_not_silently_ignored(self):
         text = self.gaps(**{"honor-A1": 'p.off(only=["甲"], page="音乐·页")',
                             "honor-B2": 'p.off(only=names, page="音乐·页")'})
-        self.assertIn("没参与比对", text)
-        self.assertIn("`honor/B2/recipe.py:1`", text)
+        self.assertTrue(text.startswith("# 查漏：honor/A1"), text)
+        self.assertIn("同族另有 1 处点名是变量或运行时才算，读不出词、没参与比对："
+                      "`honor/B2/recipe.py:1`", text)
+        self.assertNotIn("XXXX", text)
+
+    def test_several_peer_calls_are_joined_in_one_line(self):
+        """同族多处未解析用「、」连成一行；分隔符被改写会把出处挤成一串。"""
+        text = self.gaps(**{"honor-A1": 'p.off(only=["甲"], page="音乐·页")',
+                            "honor-B2": 'p.off(only=names, page="音乐·页")',
+                            "honor-C3": 'p.off(only=names, page="音乐·页")'})
+        self.assertIn("同族另有 2 处点名是变量或运行时才算，读不出词、没参与比对："
+                      "`honor/B2/recipe.py:1`、`honor/C3/recipe.py:1`", text)
 
     def test_unknown_folder_and_brand_are_distinct_errors(self):
         tmp = recipes(**{"honor-A1": 'p.off(only=["甲"], page="音乐·页")',
                          "unknownbrand-A1": 'p.off(only=["甲"], page="音乐·页")'})
         self.addCleanup(tmp.cleanup)
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaises(FileNotFoundError) as missing:
             vocab.gaps(tmp.name, "honor/NOPE" )
-        with self.assertRaises(ValueError):
+        self.assertIn("honor/NOPE", str(missing.exception))
+        with self.assertRaises(ValueError) as unknown:
             vocab.gaps(tmp.name, "unknownbrand/A1")
+        self.assertIn("认不出 unknownbrand/A1 的家族", str(unknown.exception))
 
     def test_group_order_follows_the_entry_sheet_and_uncategorized_goes_last(self):
         text = self.gaps(**{
@@ -787,6 +849,50 @@ class GapsTest(unittest.TestCase):
             "honor-B2": 'p.off(only=["乙"], page="音乐·页")\np.off(only=["丙"], page="没见过·页")',
         })
         self.assertLess(text.index("## 音乐"), text.index("## 未归类"))
+
+    def test_the_report_header_is_fixed(self):
+        """表头三行是给人看的固定文案：空行、句子与大家族写法都不许被改写。"""
+        text = self.gaps(**{"honor-A1": 'p.off(only=["甲"], page="音乐·页")'})
+        self.assertEqual(text.splitlines()[:4], [
+            "# 查漏：honor/A1",
+            "",
+            "同家族（荣耀）别的机型关过、这份脚本没写的词条。这是写脚本之后的自查清单，不是缺陷报告："
+            "同族的词在这台机上可能换了叫法、对应 App 没装，或者有意不关。",
+            "",
+        ])
+
+    def test_the_silent_script_warning_keeps_the_report_header(self):
+        text = self.gaps(**{"honor-A1": 'p.off(only=names, page="音乐·页")',
+                            "honor-B2": 'p.off(only=["乙"], page="音乐·页")'})
+        self.assertTrue(text.startswith("# 查漏：honor/A1"), text)
+        self.assertIn("⚠ 这份脚本一条词条都没读出来（见词库的「读不到的脚本」），下面的清单不能当查漏结果用。",
+                      text.splitlines())
+        self.assertNotIn("XXXX", text)
+
+    def test_this_scripts_own_unresolved_calls_are_not_peers(self):
+        """同族对比只看别的机型：这份脚本自己的未解析调用来当「同族另有」会自相矛盾。"""
+        text = self.gaps(**{"honor-A1": 'p.off(only=names, page="音乐·页")',
+                            "honor-B2": 'p.off(only=["乙"], page="音乐·页")'})
+        self.assertNotIn("没参与比对", text)
+
+    def test_unresolved_calls_of_other_families_are_not_peers(self):
+        text = self.gaps(**{"honor-A1": 'p.off(only=["甲"], page="音乐·页")',
+                            "xiaomi-M1": 'p.off(only=names, page="商店·页")'})
+        self.assertNotIn("没参与比对", text)
+
+    def test_missing_list_rows_keep_their_source_line(self):
+        """每条漏项写清出处与页面；同词的几台机用「、」连起来，没写页面的记「没写页面」。"""
+        text = self.gaps(**{
+            "honor-A1": 'p.off(only=["甲"], page="音乐·页")',
+            "honor-B2": 'p.off(only=["乙"], page="音乐·页")',
+            "honor-C3": 'p.off(only=["乙"], page="音乐·页")',
+            "honor-D4": 'p.off(only=["丁"])',
+        })
+        self.assertIn("- 乙：`honor/B2/recipe.py:1`（B2 · 音乐·页）、"
+                      "`honor/C3/recipe.py:1`（C3 · 音乐·页）", text)
+        self.assertIn("- 丁：`honor/D4/recipe.py:1`（D4 · 没写页面）", text)
+        self.assertNotIn("XXXX", text)
+        self.assertEqual(text.splitlines()[0], "# 查漏：honor/A1")
 
 
 class GapsCommandLineTest(unittest.TestCase):

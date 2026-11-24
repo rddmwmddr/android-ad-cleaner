@@ -206,5 +206,141 @@ class FailureTests(unittest.TestCase):
         self.assertEqual(intents(p), [arrive.channel_intent(PK, CID)])
 
 
+# 系统界面顶栏：vivo 通知页整页挂在 com.android.systemui 下（#336）
+SYSTEM_TOOLBAR = ('<node package="com.android.systemui" class="android.widget.TextView"'
+                  ' resource-id="com.android.systemui:id/originui_vtoolbar_normal_title"'
+                  f' text="{NAME}" bounds="[0,50][1080,120]"/>')
+CATEGORY = '<node class="android.widget.TextView" text="类别" bounds="[0,700][400,776]"/>'
+NAME_ROW = ('<node clickable="true" bounds="[0,800][1080,960]">'
+            f'<node class="android.widget.TextView" text="{NAME}" bounds="[60,820][700,900]"/>'
+            '<node class="android.widget.Switch" checkable="true" checked="true"'
+            ' bounds="[900,820][1040,900]"/></node>')
+ABOVE_FLOOR = ('<node clickable="true" bounds="[0,600][1080,690]">'
+               f'<node class="android.widget.TextView" text="{NAME}" bounds="[60,610][700,680]"/></node>')
+OFF_SCREEN = page(
+    '<node class="android.widget.TextView" text="示例应用" bounds="[0,111][1080,360]"/>',
+    f'<node class="android.widget.TextView" text="{NAME}" bounds="[60,2420][700,2500]"/>')
+
+
+class IntentLiteralTests(unittest.TestCase):
+    """深链照真实字符串钉住：拿 `arrive.channel_intent()` 自己当期望值，删字段照样绿。"""
+
+    def test_the_channel_link_carries_package_and_channel(self):
+        self.assertEqual(
+            arrive.channel_intent(PK, CID),
+            snap.Intent(snap.IntentKind.SETTINGS, target=arrive.CHANNEL_SETTINGS,
+                        extras=(("android.provider.extra.APP_PACKAGE", PK),
+                                ("android.provider.extra.CHANNEL_ID", CID))))
+
+    def test_the_app_page_link_carries_only_the_package(self):
+        self.assertEqual(
+            arrive.app_page_intent(PK),
+            snap.Intent(snap.IntentKind.SETTINGS, target="android.settings.APP_NOTIFICATION_SETTINGS",
+                        extras=(("android.provider.extra.APP_PACKAGE", PK),)))
+
+
+class StepTests(unittest.TestCase):
+    """逐帧的下一步是纯函数：喂快照，断言整个 `Step`。"""
+
+    def test_an_ellipsis_marks_a_truncated_id(self):
+        self.assertTrue(arrive.truncated("com.example…"))
+        self.assertTrue(arrive.truncated("com.ex..."))
+        self.assertFalse(arrive.truncated(CID))
+
+    def test_a_dead_frame_stops_with_the_seen_flag_it_was_given(self):
+        got = arrive.page_step(None, name=NAME, seen=True, vivo_app=PK)
+        self.assertEqual(got, arrive.Step(arrive.StepAction.STOP, stage=arrive.LEFT_PAGE,
+                                         seen=True, vivo_app=PK))
+
+    def test_a_live_flag_with_no_snapshot_still_stops(self):
+        got = arrive.page_step(None, name=NAME, alive=True)
+        self.assertEqual(got, arrive.Step(arrive.StepAction.STOP, stage=arrive.LEFT_PAGE))
+
+    def test_an_inline_row_on_the_app_page_is_handed_to_recognition(self):
+        got = arrive.page_step(make_snapshot(INLINE_PAGE, APP_FOCUS), name=NAME,
+                               seen=True, vivo_app=PK)
+        self.assertEqual(got, arrive.Step(arrive.StepAction.RECOGNISE, stage=arrive.ROW_BOXES,
+                                         seen=True, vivo_app=PK))
+
+    def test_a_navigation_row_is_tapped_with_integer_coordinates(self):
+        got = arrive.page_step(make_snapshot(APP_PAGE, APP_FOCUS), name=NAME,
+                               seen=True, vivo_app=PK)
+        self.assertEqual(got, arrive.Step(
+            arrive.StepAction.TAP,
+            intent=snap.Intent(snap.IntentKind.TAP, at=(380, 760)),
+            seen=True, vivo_app=PK))
+        self.assertIsInstance(got.intent.at[0], int)
+        self.assertIsInstance(got.intent.at[1], int)
+
+    def test_a_page_without_the_name_scrolls(self):
+        got = arrive.page_step(make_snapshot(DEEP_PAGE, DEEP_FOCUS), name=NAME,
+                               seen=True, vivo_app=PK)
+        self.assertEqual(got, arrive.Step(arrive.StepAction.SCROLL, seen=True, vivo_app=PK))
+
+    def test_the_category_floor_is_only_applied_to_vivo(self):
+        snapshot = make_snapshot(page(
+            '<node class="android.widget.TextView" text="示例应用" bounds="[0,111][1080,360]"/>',
+            ABOVE_FLOOR, CATEGORY), APP_FOCUS)
+        got = arrive.page_step(snapshot, name=NAME)
+        self.assertEqual(got.kind, arrive.StepAction.TAP)
+        self.assertEqual(got.intent.at, (380, 645))
+
+    def test_a_vivo_frame_remembers_the_systemui_toolbar_title(self):
+        snapshot = make_snapshot(page(SYSTEM_TOOLBAR, CATEGORY), VIVO_FOCUS)
+        got = arrive.page_step(snapshot, name=NAME, vivo=True, systemui_text=True)
+        self.assertEqual(got, arrive.Step(arrive.StepAction.SCROLL, vivo_app=NAME))
+
+    def test_a_vivo_tap_refreshes_the_app_name_from_the_systemui_title(self):
+        snapshot = make_snapshot(page(SYSTEM_TOOLBAR, NAME_ROW), VIVO_FOCUS)
+        got = arrive.page_step(snapshot, name=NAME, vivo=True, systemui_text=True)
+        self.assertEqual(got.kind, arrive.StepAction.TAP)
+        self.assertEqual(got.vivo_app, NAME)
+
+    def test_systemui_rows_are_not_candidates_unless_asked(self):
+        row_xml = ('<node package="com.android.systemui" clickable="true" bounds="[0,800][1080,960]">'
+                   '<node package="com.android.systemui" class="android.widget.TextView"'
+                   f' text="{NAME}" bounds="[60,820][700,900]"/>'
+                   '<node package="com.android.systemui" class="android.widget.Switch"'
+                   ' checkable="true" checked="true" bounds="[900,820][1040,900]"/></node>')
+        snapshot = make_snapshot(page(row_xml), VIVO_FOCUS)
+        # 默认不算系统界面的文字：渠道行读不到，只能接着翻页
+        self.assertEqual(arrive.page_step(snapshot, name=NAME, vivo=True).kind,
+                         arrive.StepAction.SCROLL)
+
+
+class AfterActionTests(unittest.TestCase):
+    def test_an_unsettled_click_on_a_non_vivo_page_stops(self):
+        self.assertEqual(arrive.after_click(settled=False, vivo=False),
+                         arrive.Step(arrive.StepAction.STOP, stage=arrive.CLICK_NO_CHANGE))
+
+    def test_an_unsettled_click_on_vivo_still_recognises(self):
+        self.assertEqual(arrive.after_click(settled=False, vivo=True),
+                         arrive.Step(arrive.StepAction.RECOGNISE, stage=arrive.CLICK_NO_CHANGE))
+
+    def test_a_settled_click_recognises(self):
+        self.assertEqual(arrive.after_click(settled=True, vivo=False),
+                         arrive.Step(arrive.StepAction.RECOGNISE, stage=arrive.CLICK_NO_PAGE))
+
+    def test_a_scroll_without_movement_is_the_end(self):
+        self.assertEqual(arrive.after_scroll(stayed=True),
+                         arrive.Step(arrive.StepAction.STOP))
+
+    def test_a_scroll_that_moved_keeps_scrolling(self):
+        self.assertEqual(arrive.after_scroll(stayed=True, moved=True),
+                         arrive.Step(arrive.StepAction.SCROLL))
+
+    def test_a_left_page_stops_the_scroll(self):
+        self.assertEqual(arrive.after_scroll(stayed=False, moved=True),
+                         arrive.Step(arrive.StepAction.STOP, stage=arrive.LEFT_PAGE))
+
+
+class ScrollFallbackTests(unittest.TestCase):
+    def test_an_off_screen_name_justifies_one_vivo_page(self):
+        self.assertTrue(arrive.scroll_fallback(make_snapshot(OFF_SCREEN, APP_FOCUS), NAME,
+                                               vivo=True))
+        self.assertFalse(arrive.scroll_fallback(make_snapshot(OFF_SCREEN, APP_FOCUS), NAME,
+                                                vivo=False))
+
+
 if __name__ == "__main__":
     unittest.main()

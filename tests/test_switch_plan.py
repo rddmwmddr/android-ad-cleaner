@@ -101,6 +101,25 @@ class TargetSelectionTests(unittest.TestCase):
         self.assertEqual(plan.targets, ())
         self.assertEqual((plan.checked, plan.kept), (frozenset(), frozenset()))
 
+    def test_a_non_switch_row_does_not_end_the_page_scan(self):
+        """一行判成「不碰」只跳过这一行：它后面的广告行照旧进 targets（不是整页作废）。"""
+        plan = fast.plan_switches([("关闭推送", True, (500, 800)),
+                                   ("广告推荐", True, (500, 1000))], screen_h=2340)
+        self.assertEqual(plan.targets, (("广告推荐", (500, 1000), False),))
+        self.assertEqual(plan.checked, frozenset({"广告推荐"}))
+
+
+class MatchKeyTests(unittest.TestCase):
+    """`match_key()`：keep / only 的归一化匹配键（#559）。"""
+
+    def test_a_missing_title_normalizes_to_the_empty_key(self):
+        """没有标题时是空键：`None` 与空串同一条路，不是某个占位串。"""
+        self.assertEqual((fast.match_key(None), fast.match_key("")), ("", ""))
+
+    def test_the_key_is_lowercased(self):
+        # 名单词与标题两侧都走这个键，大小写不同的同名开关仍要命中。
+        self.assertEqual(fast.match_key("Ａｄ推荐"), "ad推荐")
+
     def test_keep_matches_after_normalizing_colons_and_spaces(self):
         # #559 / PMX110：脚本保留词「首页 AI 搜索」，页面实际标题「首页：AI搜索」
         # （全角冒号、无空格）。归一化后保留词命中，功能性入口不被当广告位关掉。
@@ -203,6 +222,14 @@ class ScreenBandTests(unittest.TestCase):
         plan = fast.plan_switches([("上边缘", True, (500, 170)),
                                    ("下边缘", True, (500, 1900))], screen_h=2000)
         self.assertEqual([t for t, _, _ in plan.targets], ["上边缘", "下边缘"])
+
+    def test_the_band_edges_themselves_are_inside(self):
+        """两个边界点是闭区间：正好落在 0.08H 与 0.985H 上的行能拨，越过一点就不能。"""
+        screen_h = 1000
+        self.assertTrue(fast.in_band((500, 80), screen_h))
+        self.assertTrue(fast.in_band((500, 985), screen_h))
+        self.assertFalse(fast.in_band((500, 79), screen_h))
+        self.assertFalse(fast.in_band((500, 986), screen_h))
 
 
 if __name__ == "__main__":

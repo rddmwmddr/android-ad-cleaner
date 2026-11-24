@@ -72,6 +72,26 @@ class FacadeForwardingTests(unittest.TestCase):
         self.assertNotIn("__getattr__", vars(type(self.p.toggler)))
 
 
+class NewTogglerTests(unittest.TestCase):
+    """拨动会话的初始状态：屏与丢失记录按引用接住，安全模式默认关、改动账本默认空。
+
+    `off()` 读 `lost_note.miss` 判「本段已走丢」，写 `changed` 与 `lost_note.missed`；
+    这三样必须是调用方给的那份 / 各自独立的空值，不能在构造时换一份。
+    """
+
+    def test_a_new_toggler_keeps_the_screen_and_the_lost_note_by_reference(self):
+        screen, note = Mock(), fast.LostNote()
+        toggler = fast.Toggler(screen, note)
+        self.assertIs(toggler.screen, screen)
+        self.assertIs(toggler.lost_note, note)
+
+    def test_a_new_toggler_is_not_in_safe_mode_and_has_an_empty_log(self):
+        toggler = fast.Toggler(Mock(), fast.LostNote())
+        self.assertIs(toggler.safe_mode, False)
+        self.assertEqual(toggler.changed, [])
+        self.assertIsNot(toggler.changed, fast.Toggler(Mock(), fast.LostNote()).changed)
+
+
 class ResidualNoteTests(unittest.TestCase):
     def test_the_sentence_is_a_pure_function(self):
         self.assertEqual(row.residual_note("确认关闭", "；"), "；屏上还挂着没点掉的确认框「确认关闭」")

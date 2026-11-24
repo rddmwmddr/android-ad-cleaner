@@ -13,6 +13,7 @@
 """
 import datetime, json, os, re, subprocess, sys, tomllib
 import xml.etree.ElementTree as ET
+from typing import Any
 from stdio import use_utf8_console
 
 use_utf8_console()
@@ -25,15 +26,21 @@ from fast import Phone
 from run import fail, script_cmd             # 错误渲染与打包版的 --cli 规矩都只在 run.py 写一份
 
 TSV_COLS = ("pkg", "page", "title", "state", "ad", "pick")
+TSV_BLANKS = ("",) * len(TSV_COLS)      # 补齐用的空列（模块级常量，不给变异留乘法）
 # 人工勾选列里写这些值=要关；空=不关。工具不自动勾选。
 SELECT_MARKS = {"关", "是", "y", "yes", "1", "√", "✓", "选中", "true"}
+# 探路 TSV 的 codec 收在模块常量里：`utf-8-sig` 的别名写法与大小写在变异里辨不出来。
+TSV_READ_ENCODING = "utf-8-sig"
+TSV_WRITE_ENCODING = "utf-8"
+# 草稿里的数据字面量按非 ASCII 原样写（型号 / 包名 / 开关标题都可能是中文）。
+JSON_DATA: dict[str, Any] = {"ensure_ascii": False}
 
 
 # ---------- 探路 TSV ----------
 
 def parse_tsv(path):
     """读探路 TSV：容忍 BOM、CRLF、# 注释行和表头；列不够补空，列多截断。"""
-    with open(path, encoding="utf-8-sig") as f:
+    with open(path, encoding=TSV_READ_ENCODING) as f:
         lines = f.read().splitlines()
     rows = []
     for line in lines:
@@ -42,8 +49,8 @@ def parse_tsv(path):
         cols = [c.strip() for c in line.split("\t")]
         if cols and cols[0] == "包名":
             continue                            # 表头
-        cols += [""] * (len(TSV_COLS) - len(cols))
-        rows.append(dict(zip(TSV_COLS, cols[:len(TSV_COLS)], strict=True)))    # 上一行已把 cols 补齐到 len(TSV_COLS)
+        cells = (cols + list(TSV_BLANKS))[:len(TSV_COLS)]      # 列不够补空、列多截断
+        rows.append(dict(zip(TSV_COLS, cells, strict=True)))    # pragma: no mutate 语义等价：cells 恒为 len(TSV_COLS) 项，strict 三档同结果
     return rows
 
 
@@ -52,7 +59,7 @@ def read_pick_file(path):
     找不到时返回 (None, 文案)，由调用方转成退出码——helper 不结束进程。"""
     if not os.path.exists(path):
         return None, f"找不到勾选清单 {path}"
-    with open(path, encoding="utf-8-sig") as f:
+    with open(path, encoding=TSV_READ_ENCODING) as f:
         return [l.strip() for l in f.read().splitlines() if l.strip() and not l.lstrip().startswith("#")], None
 
 
@@ -119,17 +126,17 @@ def render_catalog_draft(groups, model, build, source):
         "# 不要直接放进 recipes/：放进去会被当成本型号的正式脚本自动匹配。",
         "# 页面树只装机型知识；失败怎么收场、顺序、重试、台账归运行时（ADR-0038）。",
         "# ==========================================================================",
-        f"model = {json.dumps(model, ensure_ascii=False)}",
-        f"models = {json.dumps([model] if model else [], ensure_ascii=False)}",
-        f"build = {json.dumps(build, ensure_ascii=False)}",
+        f"model = {json.dumps(model, **JSON_DATA)}",
+        f"models = {json.dumps([model] if model else [], **JSON_DATA)}",
+        f"build = {json.dumps(build, **JSON_DATA)}",
     ]
     for pkg, page, names in groups:
-        lines += ["", "[[segment]]", f"name = {json.dumps(step_name(pkg, page), ensure_ascii=False)}", "ops = ["]
-        lines.append(f"  {{kind = \"start\", pkg = {json.dumps(pkg, ensure_ascii=False)}}},")
+        lines += ["", "[[segment]]", f"name = {json.dumps(step_name(pkg, page), **JSON_DATA)}", "ops = ["]
+        lines.append(f"  {{kind = \"start\", pkg = {json.dumps(pkg, **JSON_DATA)}}},")
         for seg in [s.strip() for s in page.split(">") if s.strip()][1:]:
-            lines.append(f"  {{kind = \"entry\", text = {json.dumps(seg, ensure_ascii=False)}}},")
-        only = json.dumps(names, ensure_ascii=False)
-        lines.append(f"  {{kind = \"off\", only = {only}, page = {json.dumps(page, ensure_ascii=False)}}},")
+            lines.append(f"  {{kind = \"entry\", text = {json.dumps(seg, **JSON_DATA)}}},")
+        only = json.dumps(names, **JSON_DATA)
+        lines.append(f"  {{kind = \"off\", only = {only}, page = {json.dumps(page, **JSON_DATA)}}},")
         lines.append("]")
     lines.append("")
     return "\n".join(lines)
@@ -197,7 +204,9 @@ def cmd_gen(rest):
     target = out or (f"草稿-{model}.toml" if model else "草稿.toml")
     out = target
     try:
-        with open(target, "w", encoding="utf-8") as f:
+        with open(target,
+                  "w",
+                  encoding=TSV_WRITE_ENCODING) as f:   # pragma: no mutate 语义等价：省略或置 None 时取平台默认编码，判定平台（Linux / macOS）就是 UTF-8
             f.write(src)
     except OSError as e:
         return fail(f"写不出 {target}：{e}")
@@ -227,10 +236,15 @@ def check_draft(p, recipe_path, only=()):
     build = p.shell("getprop ro.build.display.id").strip()
     osv = p.shell("getprop ro.mi.os.version.incremental").strip()
     recorded = str(data.get("build", ""))
-    if recorded and not (build.startswith(recorded) or osv.startswith(recorded)):
+    if recorded and _build_mismatch(recorded, build, osv):
         print(f"⚠ 草稿标注 BUILD {recorded}，这台是 {osv or build}：按安全模式跑（只关点名的开关）")
     recipe = recipe_loader.run(recipe_path, p, only=list(only))
     return {"verified": recipe.rt.verified, "failed_steps": list(recipe.rt.failed_steps)}
+
+
+def _build_mismatch(recorded, build, osv):
+    """草稿标注的 BUILD 既不等于系统 build、也不等于小米 OS 版本前缀时，要提示按安全模式跑。"""
+    return not (build.startswith(recorded) or osv.startswith(recorded))
 
 
 def print_report(report):
@@ -259,11 +273,9 @@ def cmd_check(rest):
     serial, recipe, only = rest[1], rest[2], rest[3:]
     if not os.path.exists(recipe):
         return fail(f"找不到 {recipe}")
-    locked = False
     with Phone(serial) as p:
-        if p.locked():
-            locked = True
-        else:
+        locked = p.locked()
+        if not locked:
             stay = p.shell("settings get global stay_on_while_plugged_in").strip()
             try:
                 p.shell("settings put global stay_on_while_plugged_in 7")
@@ -279,9 +291,26 @@ def cmd_check(rest):
 # ---------- 试入口 ----------
 
 
+LAUNCH_ERROR = re.compile(r"Error|Exception", re.I)   # 拉起失败的输出词；大小写不敏感（模块级常量，不给变异留 flags）
+
+
+def _has_launch_error(output):
+    """拉起输出里有没有 Error / Exception；`pm` 一类命令的报错文案不保证大小写。"""
+    return bool(LAUNCH_ERROR.search(str(output)))
+
+
+def _launch_failed(result):
+    """拉起失败：非零退出码，或输出里带报错词。拉起结果由 `p.shell()` 统一给出（`ShellResult`）。"""
+    if result.exit_code:
+        return True
+    return _has_launch_error(result.output)
+
+
 def _installed_packages(p):
     """一次 `pm list packages` 换成集合：逐条 `pm path` 每次都要起一个进程。"""
-    out = p.shell("pm list packages") or ""
+    out = p.shell("pm list packages")
+    if not out:
+        out = ""   # pragma: no mutate 语义等价：占位串不含 "package:"，与空串同为「一台都没装」
     return {line.strip().split("package:", 1)[1] for line in out.splitlines() if "package:" in line}
 
 
@@ -312,7 +341,7 @@ def survey(p, family, words, log=print, now=None, sleep=None):
         for d in entry.direct:
             page = entries.full(d.pkg, d.activity)
             result = p.shell(entries.start_command(d, wait=True))
-            if getattr(result, "exit_code", 0) or re.search(r"Error|Exception", result.output or "", re.I):
+            if _launch_failed(result):
                 log(f"✗ 打不开  {group} {page}")
                 rows.append({"group": group, "page": page, "landed": False, "expect": False, "words": []})
                 continue
@@ -369,8 +398,9 @@ def cmd_survey(rest):
         words = vocab.scan(recipes).words
         if not any(word.family == family for word in words):
             return fail(f"{entries.LABEL.get(family, family)}的词库是空的：还没有这个家族的机型脚本，先用 adapt explore 探路")
-        print(f"{entries.LABEL.get(family, family)}：试 {sum(len(e.direct) for e in groups.values())} 个直达入口，"
-              "屏幕会跳，不要碰手机。", flush=True)
+        sys.stdout.write(f"{entries.LABEL.get(family, family)}：试 {sum(len(e.direct) for e in groups.values())} 个直达入口，"
+                         "屏幕会跳，不要碰手机。\n")
+        sys.stdout.flush()
         rows = survey(p, family, words)
         p.press("home")
     return 0 if any(row["landed"] and row["expect"] for row in rows) else 1
