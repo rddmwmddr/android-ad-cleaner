@@ -166,11 +166,25 @@ class UsageTests(unittest.TestCase):
         self.assertEqual(captures.Captures(root).usage(), (2, 15))
 
     def test_an_unreadable_entry_is_skipped_and_the_rest_is_still_counted(self):
+        """读不动的只跳过这一条：`continue` 换成 `break` 会丢掉同目录里排在后面的条目。
+
+        用假 `getsize` 让「读不动的是第一条」，不靠目录顺序——靠顺序的话，排到最后的那次
+        换成 `break` 与跳过同结果，Linux 的 ext4 上就判不出来（CI 上是这样活下来的）。
+        """
         root = Path(self.enterContext(tempfile.TemporaryDirectory()))
-        (root / "a").write_bytes(b"x" * 3)
-        (root / "broken").symlink_to(root / "missing")     # getsize 抛 OSError
-        (root / "b").write_bytes(b"y" * 4)
-        self.assertEqual(captures.Captures(str(root)).usage(), (2, 7))
+        for name, size in (("a", 3), ("b", 4), ("c", 5)):
+            (root / name).write_bytes(b"x" * size)
+        real = os.path.getsize
+        seen = []
+
+        def flaky(path):
+            seen.append(path)
+            if len(seen) == 1:
+                raise OSError(13, "denied")
+            return real(path)
+
+        with patch("os.path.getsize", flaky):
+            self.assertEqual(captures.Captures(str(root)).usage(), (2, 9))
 
 
 class CaptureTests(unittest.TestCase):
