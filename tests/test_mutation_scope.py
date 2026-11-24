@@ -219,6 +219,25 @@ class WorkdirTests(unittest.TestCase):
         self.assertEqual(mutation.workdir_for(["devtools/check_ticket_ref.py"]).name,
                          "devtools_check_ticket_ref")
 
+    def test_a_long_group_name_falls_back_to_a_digest(self):
+        """一次判几十个模块（改到一大片 `tool/` 的 PR）时，拼出来的目录名会超过文件名上限（#1445）。"""
+        modules = [f"tool/module_{index:02d}.py" for index in range(60)]
+        name = mutation.workdir_for(modules).name
+        self.assertLessEqual(len(name), mutation.MAX_SLUG)
+        self.assertTrue(name.startswith("group-"))
+
+    def test_the_digest_does_not_depend_on_the_module_order(self):
+        """同一组每轮同名，判定缓存才复用得上：`--since` 的输出顺序变了不该换目录。"""
+        first = [f"tool/module_{index:02d}.py" for index in range(60)]
+        self.assertEqual(mutation.workdir_for(first).name,
+                         mutation.workdir_for(list(reversed(first))).name)
+
+    def test_two_different_long_groups_get_different_directories(self):
+        first = [f"tool/module_{index:02d}.py" for index in range(60)]
+        second = [f"tool/other_{index:02d}.py" for index in range(60)]
+        self.assertNotEqual(mutation.workdir_for(first).name,
+                            mutation.workdir_for(second).name)
+
 
 @unittest.skipIf(os.name == "nt", "建符号链接要开发者模式；变异 job 只在 Linux 上跑")
 class SourceMirrorTests(unittest.TestCase):

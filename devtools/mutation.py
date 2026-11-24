@@ -27,6 +27,7 @@
 生成不出可杀的 mutant；mutation 回答「执行到的代码有没有断言守得住」，空覆盖只有它看得见。
 PR 判据是两条都过，等价变异体是 mutation 侧唯一的豁免。
 """
+import hashlib
 import json
 import os
 import shutil
@@ -44,6 +45,9 @@ except ImportError:             # 直接跑文件时 sys.path[0] 就是 devtools
 # 一个模块组一个工作目录：mutmut 用 mtime 判「这份副本还没变异」，共用目录时上一轮拷成
 # 普通副本的文件会被当成都已变异，直接跑出 0 个 mutant。
 WORKDIR = Path(".mutmut")
+# 组名超过这个长度就换成模块集合的摘要：一次判几十个模块时拼出来的目录名会超过文件名上限。
+MAX_SLUG = 80
+GROUP_DIGEST = 12
 # 仓库根：`src` 镜像按它生成链接，测试传临时目录时仍然指回真源码。
 ROOT = Path(__file__).resolve().parents[1]
 # 进 `src` 视角的四个包（#1429、#1430、#1515）：`tool` 落在 `src/` 根上，`gui` 落在 `src/gui/`，
@@ -113,8 +117,16 @@ def workdir_for(modules: Sequence[str]) -> Path:
 
     `gui/` 的模块保留前缀（`.mutmut/gui_tasks`）：两侧可能出现同名模块，共用目录会让上一轮的
     副本被当成已变异。
+
+    组名超长时改用模块集合的摘要：一次判几十个模块（改到一大片 `tool/` 的 PR 就是）拼出来的
+    目录名会超过文件名上限（Linux 单段 255 字节，报 `Errno 36`）。摘要按集合算、不看顺序，
+    同一组每轮同名，判定缓存照旧复用。
     """
-    return WORKDIR / "-".join(_slug(module) for module in modules)
+    slug = "-".join(_slug(module) for module in modules)
+    if len(slug) > MAX_SLUG:
+        digest = hashlib.sha1("\0".join(sorted(_slug(module) for module in modules)).encode())
+        slug = "group-" + digest.hexdigest()[:GROUP_DIGEST]
+    return WORKDIR / slug
 
 
 def _slug(module: str) -> str:
