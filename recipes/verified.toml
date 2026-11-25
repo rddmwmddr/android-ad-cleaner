@@ -378,6 +378,17 @@ tier = "部分"
 evidence = "机主自测"
 body_hash = "b7d9a1180fff0c45"
 
+# V2502A 是机主在自己机器上现场实测，非 #1263 那批迁移、body_hash 用现算法算出。
+# 证据：adapt check 七段全部可达、未完成步骤 0；另存页面 XML / dumpsys / explore TSV / check 报告（evidence=现场）。
+# 覆盖度记「部分」：未从全开状态整轮复跑（多数开关已 [关]），且商店「服务管理」本机为只读标题、off 不命中。
+["vivo/V2502A/V2502A.toml"]
+build = "PD2502B_A_17.1.13.6.W10"
+date = "2026-11-23"
+by = "机主"
+tier = "部分"
+evidence = "现场"
+body_hash = "63aa075f291cf2bc"
+
 # 10-29 那次是 14 Pro 社区实测（Issue #317），头注没留验证人 ID。
 ["xiaomi/2304FPN6DC/2304FPN6DC.toml"]
 build = "OS3.0.308.0.WNBCNXM"

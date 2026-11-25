@@ -1,0 +1,106 @@
+# vivo V2502A Android 17 页面树（catalog）。结构沿用同族 V2547DA-android17.toml（#1263 / #220），
+# 身份字段改成本机；入口在 2026-11-23 本机（PD2502B_A_17.1.13.6.W10，简体界面）经 `recipe --ref` 验证：
+# 系统广告 / 全局搜索 / 阅图锁屏 / 天气 直达可读，应用商店 / 浏览器 / i管家 各段关掉点名的开关（本轮新关 8 个）。
+# 与 V2547DA 的差别：这版商店 AppstoreSettingsActivity 未导出（am start 抛 SecurityException: not exported），
+# 「我的」页有齿轮但 text 为空、文字在 content-desc（engine screen.py 会在 text 空时回退匹配 content-desc），
+# 所以 store_settings_direct 失败后走「我的 → 齿轮」回退可用；服务管理子页存在（`FunctionManagerActivity`，商店 V10.6.21.0）但每项是只读标题、无标准 Switch 控件，engine `off()` 读不到 → 核对 0，安全跳过（详见 README）。
+# vocab gaps 本机只读探（fast.py 逐屏读屏）：阅图锁屏页除参考点名的 2 项外还有标准 Switch「轮播壁纸」（本机已 [关]，纳入下方 only）；
+# 负一屏 `com.vivo.hiboard/.settings.AppletSettingActivity` adb 直达抛 SecurityException（同族同样只能桌面左滑，参考脚本也没这段，本机不脚本）；
+# 商店设置主页没有可点的「消息提醒/通知」类入口（V2324HA/V2309A 有的路径本机没有），本机不脚本。
+model = "V2502A"
+models = ["V2502A"]
+build = "PD2502B_A_17.1.13.6"
+
+[const]
+GEAR_STYLE = "vivo_landing"
+
+[[segment]]
+name = "系统广告"
+ops = [
+  # 广告与隐私页能直达就直达；不通才走 设置 → 安全 / 安全与隐私 → 更多安全设置。
+  { kind = "if_lib", name = "direct_page", args = ["com.android.settings", ".Settings$AdAndPrivacyActivityForOsTwo"], kwargs = { expect = "智能推荐服务" }, ops = [
+    { kind = "off", only = ["个性化广告", "个性化推荐", "智能推荐服务"], page = "系统·广告与隐私" },
+    { kind = "return" },
+  ], else_ops = [
+    { kind = "lib", name = "system_ads_branch" },
+  ]},
+]
+
+[[segment]]
+name = "全局搜索"
+ops = [
+  # 设置页能直达就直达，不通再从设置首页走「系统管理与升级 → 全局搜索」；两级都认不出才收段。
+  { kind = "if_lib", name = "global_search_entry", args = ["com.vivo.globalsearch", ".view.SearchSettingsActivity", "首页展示内容"], else_ops = [
+    { kind = "return" },
+  ]},
+  { kind = "if_entry", text = "首页展示内容", ops = [
+    { kind = "off", only = ["搜索框推荐词", "推荐卡片"], page = "全局搜索·首页展示内容" },
+    { kind = "back" },
+  ]},
+  # Android 17 上没有「推荐热搜榜单」这个入口（沿用 #220）；本机确实没有，if_find 认不到即跳过。
+  { kind = "if_find", text = "推荐热搜榜单", exact = true, ops = [
+    { kind = "if_entry", text = "推荐热搜榜单", scrolls = 0, ops = [
+      { kind = "off", only = ["热门搜索"], page = "全局搜索·热搜榜单" },
+      { kind = "back" },
+    ]},
+  ]},
+  # 历史记录、应用建议保留。
+  { kind = "if_entry", text = "个性化内容", ops = [
+    { kind = "off", only = ["广告个性化"], page = "全局搜索·个性化内容" },
+    { kind = "back" },
+  ]},
+]
+
+[[segment]]
+name = "阅图锁屏"
+ops = [
+  # 阅图锁屏页是独立 Activity，直达最稳；没导出这一页的版本退回 设置 → 桌面、锁屏与壁纸 → 锁屏设置。
+  { kind = "if_lib", name = "direct_page", args = ["com.vivo.magazine", ".ui.MagazineSettings"], kwargs = { expect = "锁屏横滑进入阅图" }, ops = [
+    { kind = "off", only = ["阅图锁屏", "锁屏横滑进入阅图", "轮播壁纸"], page = "阅图锁屏" },
+    { kind = "return" },
+  ], else_ops = [
+    { kind = "lib", name = "lock_screen_magazine" },
+  ]},
+]
+
+[[segment]]
+name = "应用商店"
+ops = [
+  # 本机 AppstoreSettingsActivity 未导出 → 直达必抛 SecurityException，按约定不中断、走「我的 → 齿轮」。
+  # 「我的」页齿轮是 text 为空、文字在 content-desc='设置' 的可点 Button（非没有入口）；engine 会回退匹配 desc。
+  { kind = "if_lib", name = "store_settings_direct", args = ["com.bbk.appstore", ".ui.menu.AppstoreSettingsActivity", "AppstoreSettingsActivity"], else_ops = [
+    { kind = "start", pkg = "com.bbk.appstore", expect = ["我的"] },
+    { kind = "require_tab", name = "我的", miss_print = "商店底部「我的」标签没找到" },
+    { kind = "sleep", seconds = 0.8 },
+    { kind = "lib", name = "gear" },
+  ]},
+  { kind = "if_entry", text = "关于", ops = [
+    { kind = "if_entry", text = "个性化推荐", ops = [
+      { kind = "off", only = ["个性化推荐", "个性化广告推荐"], page = "商店·个性化推荐" },
+      # off 会往下翻；这一页的开关在上面时别错过
+      { kind = "top" },
+      { kind = "lib", name = "off_unnamed", args = ["商店·个性化推荐"] },
+      { kind = "back" },
+      { kind = "sleep", seconds = 0.5 },
+    ]},
+    # 服务管理子页存在（FunctionManagerActivity，商店 V10.6.21.0），但每项是只读标题、无标准 Switch 控件，off 读不到 → 核对 0、安全跳过；「悬浮窗」本机无此项，保留项「我的服务」本机叫「我的页-我的服务」。
+    { kind = "if_entry", text = "服务管理", ops = [
+      { kind = "off", only = ["签到有礼", "顶部轮播图", "顶部栏目", "开屏", "摇一摇", "悬浮窗", "限时推广"], keep = ["我的服务", "空间清理"], page = "商店·服务管理" },
+      { kind = "back" },
+    ]},
+    { kind = "back" },
+  ]},
+  { kind = "back", n = 2 },
+]
+
+[[segment]]
+name = "浏览器"
+ops = [{ kind = "lib", name = "browser_recommendations" }]
+
+[[segment]]
+name = "i管家"
+ops = [{ kind = "lib", name = "i_manager_ads" }]
+
+[[segment]]
+name = "天气"
+ops = [{ kind = "lib", name = "weather_service" }]

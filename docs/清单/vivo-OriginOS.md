@@ -9,6 +9,7 @@
 - iQOO Z11 Turbo（V2536A，OriginOS 6，Android 16），2026-11-01，无专用脚本，`--ref` 安全模式实测。
 - vivo V2309A（OriginOS 6，Android 16，`PD2309E_A_16.2.15.0.W10`，商店 V10.5.31.0），2026-11-03，社区实测（[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530)），专用脚本 `recipes/vivo/V2309A/`。
 - vivo V2303A（OriginOS 7，Android 17，`CP2A.260605.016`），2026-11-04，社区实测（[#579](https://github.com/rddmwmddr/android-ad-cleaner/issues/579)），专用脚本 `recipes/vivo/V2303A/`，维护方未在本机复跑。
+- vivo V2502A（Android 17，`PD2502B_A_17.1.13.6.W10`，商店 V10.6.21.0），2026-11-23，机主真机、简体界面实测，专用脚本 `recipes/vivo/V2502A/`（入口缺口 [#1530](https://github.com/rddmwmddr/android-ad-cleaner/issues/1530)，繁体判据 [#1526](https://github.com/rddmwmddr/android-ad-cleaner/issues/1526)）。
 
 iQOO 结构相近。当前源码有 `recipes/vivo/V2547DA/`、`recipes/vivo/V2547A/`、`recipes/vivo/V2545A/`、`recipes/vivo/V2309A/`、`recipes/vivo/V2303A/` 五份机型脚本，均已真机跑过（V2547DA 124 秒，V2547A 126 秒，V2545A 121 秒，V2309A 167 秒，整轮均通过；V2303A 只做了七段安全模式自检，整轮用时未测；其中 V2309A 与 V2303A 为社区实测、维护方未在本机复跑）；V2547DA 的商店段与齿轮判据在 2026-11-03 改动过（[#530](https://github.com/rddmwmddr/android-ad-cleaner/issues/530)），齿轮落地校验与浏览器段的入口重写在 2026-11-07 又改过（[#575](https://github.com/rddmwmddr/android-ad-cleaner/issues/575)、[#753](https://github.com/rddmwmddr/android-ad-cleaner/issues/753)），OriginOS 6 变体这几处都没在真机上复测。V2547DA 另有 Android 17 变体 `recipes/vivo/V2547DA/V2547DA-android17.toml`，系统版本对上 `PD2547D_A_17.1.10.2` 时自动选它（其余 17.x 小版本对不上，仍走 Android 16 脚本并进安全模式）；入口按 #220 的报告者实测写，2026-11-07 已在本机整段复测（见下文）。五份脚本对应不同机型与系统版本，入口差异见下文「OriginOS 7（Android 17）的不同之处」、「X Fold6 的差异」、「V2536A 的差异」、「V2309A 的差异」和「V2303A 的差异」；版本对不上时引擎会走安全模式。发布与验证范围见[归档记录](../归档/CHANGELOG-0.3.0及更早.md)。
 符号：🔴 关掉　🟢 保留　⚠️ 注意
@@ -325,3 +326,17 @@ V2547DA 的 Android 17 变体（`recipes/vivo/V2547DA/V2547DA-android17.toml`）
 | 全局搜索三个子页 | 一段串起来，子页抛异常（如「离开设置页」）会带掉后面的子页 | 每个子页先重新 `p.setting("全局搜索")` 回主页再钻，单页失败只跳过该页，并打印 `· <子页> 跳过：<原因>` |
 | 全局搜索 → 首页展示内容 | 有「搜索框推荐词」「推荐卡片」 | 只有「语音搜索」「应用建议」，应用建议属常用建议不关；`only=` 找不到即跳过 |
 | 全局搜索 → 推荐热搜榜单 | 存在该入口 | Android 17 上没有（同 #220），找不到即跳过 |
+
+## V2502A 的差异
+
+实测：vivo V2502A，Android 17，`PD2502B_A_17.1.13.6.W10`，商店 V10.6.21.0，2026-11-23（入口缺口 [#1530](https://github.com/rddmwmddr/android-ad-cleaner/issues/1530)、繁体判据 [#1526](https://github.com/rddmwmddr/android-ad-cleaner/issues/1526)），机主真机、简体中文界面实测。专用脚本 `recipes/vivo/V2502A/`，沿用同族 V2547DA-android17 结构；`adapt check` 七段全部可达、未完成步骤 0 个。上面 1–10 节的开关与 X300 Ultra 一致，差别如下：
+
+| 位置 | 其它 vivo 机型 | V2502A |
+|---|---|---|
+| 系统语言 | 多为简体 | 出厂 `zh-CN`，机主改成**繁体 `zh-HK`**（非 `zh-TW`）；脚本判据是简体，繁体界面下七段逐段「没找到」、0 改动，切简体才生效（引擎判据层语言问题，见 #1526） |
+| 商店设置入口 | 部分机型 Activity 可直达 | `com.bbk.appstore/.ui.menu.AppstoreSettingsActivity` **未导出**，`am start` 抛 `SecurityException: not exported from uid …`；改走「我的 → 齿轮」——齿轮 `text=''`、`content-desc='设置'`（engine `screen.py` 在 text 空时回退匹配 `content-desc`），可用 |
+| 商店·服务管理 | 标准 Switch（V2324HA 7 个开关） | `com.bbk.appstore.manage.settings.about.FunctionManagerActivity` 里 6 项（签到有礼 / 顶部轮播图 / 顶部栏目 / 开屏 / 摇一摇 / 限时推广）**是只读标题、无标准 Switch 控件**，`off()` 读不到 → 核对 0 安全跳过（属「开关点不动」，非页面缺失、非语言）；**本机没有「悬浮窗」项**；保留项「我的服务」标题叫「我的页-我的服务」 |
+| 快应用 | 部分机型系统服务开关可关 | `com.vivo.hybrid` 本机系统拒绝写入（回读校验失败、保留原值），见 AGENTS §6 |
+| 阅图锁屏 | 参考只写「阅图锁屏 / 锁屏横滑进入阅图」 | 本机页面**另有标准 Switch「轮播壁纸」**（已 [关]），已加进脚本 `only` |
+| 负一屏 | 同族同样无 adb 直达，`--ref` 也走不到 | `AppletSettingActivity` **未导出**（adb 直达抛 `SecurityException`）；本机不脚本，人工做见 §2 |
+| 商店·消息提醒 | V2324HA/V2309A 在「设置 → 应用商店提醒类型 / 消息提醒」下有 9 个开关 | 本机设置主页**没有可点的「消息提醒/通知」类入口**，此路径本机不可达；不脚本 |
